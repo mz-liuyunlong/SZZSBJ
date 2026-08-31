@@ -6,22 +6,11 @@ globs:
 alwaysApply: false
 ---
 
+
 # Backend Architecture Rules
 
 Use Python + FastAPI + Pydantic + SQLAlchemy + Alembic + Redis + Celery.
 
-Layering:
+Layering: API Route -> Schema -> Service -> Repository -> Model.
 
-```text
-API Route -> Schema -> Service -> Repository -> Model
-```
-
-Rules:
-
-- API routes stay thin.
-- Services own business logic.
-- Repositories own database access.
-- Integrations own external API clients.
-- Celery tasks orchestrate background work.
-- Do not swallow exceptions silently.
-- Do not log secrets.
+Do not swallow exceptions silently. Do not log secrets.

@@ -1,0 +1,12 @@
+---
+description: Testing and acceptance rules for AI-generated changes.
+globs:
+  - "frontend/**/*"
+  - "backend/**/*"
+alwaysApply: false
+---
+
+
+# Testing Rules
+
+Do not fake test results. Report executed commands and non-executed checks. Every page must have acceptance criteria.

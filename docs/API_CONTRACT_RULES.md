@@ -48,20 +48,6 @@ GET /api/v1/ads/campaigns
   "message": "ok"
 }
 ```
-
-## Error
-
-```json
-{
-  "error": {
-    "code": "AD_CAMPAIGN_QUERY_FAILED",
-    "message": "广告活动查询失败",
-    "details": {}
-  }
-}
 ```
-```
-
-## 规则
 
 AI 开发页面前必须先输出 API 契约草案。用户确认后再写前后端代码。

@@ -14,14 +14,18 @@ jobs:
       - name: Check AI rule files
         run: |
           test -f AGENTS.md
+          test -f RULE_PACK_FILE_INDEX.md
           test -f docs/TECH_STACK.md
           test -f docs/OLD_SYSTEM_READONLY_RULES.md
           test -f docs/FEATURE_SLICE_DEVELOPMENT_RULES.md
           test -f docs/COMPONENT_AND_MODULE_RULES.md
+          test -f docs/DATA_SOURCE_AND_LINEAGE_RULES.md
+          test -f docs/FINANCIAL_CALCULATION_RULES.md
+          test -f skills/README.md
 
-      - name: Prevent old-system changes in PR by default
+      - name: old-system review note
         run: |
-          echo "Review old-system changes manually via CODEOWNERS."
+          echo "old-system is read-only reference. CODEOWNERS requires manual review for changes."
 
       # 前后端项目初始化后，可在这里追加：
       # - frontend lint/build/test

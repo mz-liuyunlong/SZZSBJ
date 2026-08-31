@@ -13,7 +13,17 @@
 | `feature-slice-planner` | 单功能 / 单页面任务规划 |
 | `react-component-architect` | 前端组件拆分与复用设计 |
 | `old-system-readonly-analyzer` | 只读分析旧系统 |
+| `rebuild-mapping-planner` | old-system 功能映射新系统 |
 | `backend-module-designer` | 后端模块分层设计 |
 | `background-task-designer` | Celery 后台任务设计 |
 | `api-contract-designer` | API 契约设计 |
+| `page-acceptance-checker` | 页面验收检查 |
+| `external-api-integration-designer` | 外部 API 接入设计 |
+| `llm-provider-adapter-designer` | LLM 调用层设计 |
+| `data-lineage-analyzer` | 数据来源和字段血缘分析 |
+| `data-sync-designer` | 数据同步任务设计 |
+| `financial-calculation-reviewer` | 财务公式审查 |
+| `performance-reviewer` | 性能审查 |
+| `permission-matrix-designer` | 权限矩阵设计 |
 | `code-review-checker` | PR 自检与风险检查 |
+| `rule-pack-maintainer` | 规则包维护，防止规则冲突 |

@@ -7,17 +7,11 @@ globs:
 alwaysApply: false
 ---
 
+
 # Frontend Architecture Rules
 
 Use React + TypeScript + Vite + Ant Design + ProComponents + React Router + Zustand + ECharts.
 
 Do not introduce another UI framework or frontend framework.
 
-Rules:
-
-- API calls go through api clients.
-- Pages should not contain complex business logic.
-- Use explicit TypeScript types.
-- Handle loading, empty, error, and pagination.
-- Shared components must stay business-neutral.
-- Update `docs/UI_COMPONENT_CATALOG.md` when adding shared components.
+Handle loading, empty, error, pagination. Update UI component catalog when adding shared components.

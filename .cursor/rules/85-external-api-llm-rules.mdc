@@ -1,0 +1,12 @@
+---
+description: External API and LLM provider adapter rules.
+globs:
+  - "backend/app/integrations/**/*"
+  - "backend/app/services/**/*"
+alwaysApply: false
+---
+
+
+# External API and LLM Rules
+
+External API clients belong in integrations. Frontend must not call sensitive external APIs. LLM calls must go through provider adapter; business services must not directly scatter SDK calls.

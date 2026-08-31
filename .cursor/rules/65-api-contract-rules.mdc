@@ -6,19 +6,7 @@ globs:
 alwaysApply: false
 ---
 
+
 # API Contract Rules
 
-Before implementing a frontend/backend page, define the API contract:
-
-- method
-- path
-- query
-- body
-- response
-- pagination
-- errors
-- permission
-- audit logging
-- celery task involvement
-
-Do not let frontend and backend invent fields separately.
+Before implementing a frontend/backend page, define method, path, query, body, response, pagination, errors, permission, audit logging, and Celery involvement.

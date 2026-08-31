@@ -6,18 +6,7 @@ globs:
 alwaysApply: false
 ---
 
+
 # Code Comment Rules
 
-Write maintainability comments that explain why and business meaning.
-
-Must comment:
-
-- file responsibilities
-- business rules
-- money/time calculations
-- Celery tasks
-- database fields
-- external API calls
-- AI prompts
-
-Do not write comments that merely repeat code.
+Write maintainability comments that explain why and business meaning. Do not write comments that merely repeat code.

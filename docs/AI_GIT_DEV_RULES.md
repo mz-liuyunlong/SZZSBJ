@@ -44,31 +44,8 @@ Commit 格式：
 type(scope): description
 ```
 
-类型包括：
-
-```text
-feat, fix, docs, refactor, test, chore, db, style, perf, build, ci
-```
-
-示例：
-
-```text
-feat(ads): add campaign list page
-fix(order): correct refund profit calculation
-docs(ai): update old-system readonly rules
-```
+类型包括：`feat, fix, docs, refactor, test, chore, db, style, perf, build, ci`。
 
 ## 禁止
 
-AI 禁止：
-
-- 直接 push 到 main/dev
-- force push
-- reset hard
-- clean -fd
-- 一个分支做多个模块
-- 一个 PR 混合功能、重构、依赖升级、格式化
-
-## PR 目标
-
-普通开发 PR 目标分支应为 `dev`，不要直接合并到 `main`。
+AI 禁止直接 push 到 main/dev、force push、reset hard、clean -fd、一个分支做多个模块、一个 PR 混合功能/重构/依赖升级/格式化。

@@ -3,23 +3,11 @@ description: Git workflow rules for AI-assisted development.
 alwaysApply: true
 ---
 
+
 # Git Workflow Rules
 
-Before changing files, inspect:
+Before changing files, inspect `git status` and `git branch`.
 
-```bash
-git status
-git branch
-```
+If on `main` or `dev`, create a task branch from `dev`.
 
-If on `main` or `dev`, create a task branch from `dev`:
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b ai/YYYYMMDD-task-name
-```
-
-One branch = one task = one PR.
-
-Do not force push, reset hard, clean files, or push directly to main/dev.
+One branch = one task = one PR. Do not force push, reset hard, clean files, or push directly to main/dev.

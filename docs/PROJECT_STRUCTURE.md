@@ -12,6 +12,7 @@ project-root/
 ├── .github/                  # GitHub 协作规则
 ├── .cursor/                  # Cursor 规则入口
 ├── AGENTS.md                 # AI 总规则
+├── AI_START_HERE.md          # AI 通用启动入口
 ├── CLAUDE.md                 # Claude 入口适配
 └── README_AI_RULES.md        # 人看的规则说明
 ```
@@ -34,20 +35,8 @@ from old_system.xxx import y
 
 ## 文档输出位置
 
-旧系统分析结果统一写入：
-
-```text
-docs/old-system-analysis/
-```
-
-架构决策写入：
-
-```text
-docs/adr/
-```
-
-任务交接写入：
-
-```text
-docs/handoffs/
-```
+旧系统分析结果统一写入：`docs/old-system-analysis/`。  
+架构决策写入：`docs/adr/`。  
+任务交接写入：`docs/handoffs/`。  
+页面需求写入：`docs/page-specs/`。  
+API 契约写入：`docs/api-contracts/`。

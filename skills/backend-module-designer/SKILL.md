@@ -17,21 +17,13 @@
 ## 后端模块设计方案
 
 ### API Route
-
 ### Pydantic Schema
-
 ### Service
-
 ### Repository
-
 ### Model / Migration
-
 ### Integration
-
 ### Celery Task
-
 ### 权限与操作日志
-
 ### 测试方案
 ```
 
@@ -42,4 +34,3 @@
 3. Repository 写数据访问。
 4. Task 只做任务编排。
 5. 外部 API 放入 integrations。
-6. 不在 Route 中写复杂 SQL。

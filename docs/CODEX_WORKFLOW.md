@@ -16,11 +16,3 @@
 8. Codex 输出 `git diff --stat`、测试结果、风险点。
 9. 用户审查。
 10. 提交 PR。
-
-## 分支示例
-
-```bash
-git checkout dev
-git pull origin dev
-git checkout -b ai/20260831-ads-campaign-list
-```

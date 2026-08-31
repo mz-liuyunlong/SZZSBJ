@@ -5,24 +5,11 @@ globs:
 alwaysApply: false
 ---
 
+
 # old-system Readonly Rules
 
 `old-system/` is read-only reference material.
 
-Allowed:
+Allowed: read files, search files, extract business rules, produce analysis in `docs/old-system-analysis/`.
 
-- Read files
-- Search files
-- Extract business rules
-- Produce analysis in `docs/old-system-analysis/`
-
-Forbidden:
-
-- Edit old-system files
-- Format old-system files
-- Delete old-system files
-- Install dependencies inside old-system
-- Run old-system scripts that may write data
-- Copy old-system code into frontend/backend
-
-If old-system is referenced, report exactly which files were read.
+Forbidden: edit, format, delete, install dependencies, run write scripts, or copy code into frontend/backend.

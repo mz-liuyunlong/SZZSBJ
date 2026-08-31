@@ -3,12 +3,7 @@ description: Documentation update rules.
 alwaysApply: true
 ---
 
+
 # Documentation Rules
 
-When adding a shared component, update `docs/UI_COMPONENT_CATALOG.md`.
-
-When adding a backend module, update `docs/BACKEND_MODULE_CATALOG.md`.
-
-When adding an API, update or create API contract documentation.
-
-When making a major architecture decision, add an ADR under `docs/adr/`.
+When adding shared components, backend modules, APIs, data models, tasks, or major decisions, update the corresponding docs.

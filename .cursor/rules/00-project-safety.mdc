@@ -3,6 +3,7 @@ description: Global safety rules for all AI-assisted development in this project
 alwaysApply: true
 ---
 
+
 # Project Safety Rules
 
 This project is a greenfield rebuild with `old-system/` as read-only reference.

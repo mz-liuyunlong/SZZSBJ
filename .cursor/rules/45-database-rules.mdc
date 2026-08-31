@@ -8,15 +8,9 @@ globs:
 alwaysApply: false
 ---
 
+
 # Database Rules
 
 All schema changes require Alembic migration.
 
-Rules:
-
-- Do not manually modify production database schema.
-- Do not delete applied migrations.
-- Money fields must include currency suffix.
-- Time fields must clarify meaning and timezone.
-- Large queries must paginate.
-- Common filters should consider indexes.
+Money fields must include currency suffix. Time fields must clarify meaning and timezone. Large queries must paginate.

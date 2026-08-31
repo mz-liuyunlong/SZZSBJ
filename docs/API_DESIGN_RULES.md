@@ -16,24 +16,11 @@ GET    /api/v1/ads/search-terms
 POST   /api/v1/ads/negative-keywords
 ```
 
-禁止：
-
-```text
-/getProduct
-/doAdThing
-/testApi
-/api1
-/newData
-```
+禁止使用含义不清的路径，如 `/getProduct`、`/doAdThing`、`/testApi`。
 
 ## 分页规范
 
-默认使用：
-
-```text
-page
-page_size
-```
+默认使用：`page`、`page_size`。
 
 响应结构建议：
 
@@ -53,12 +40,6 @@ page_size
 
 ## API Route 规则
 
-API Route 只做：
-
-- 接收请求
-- 权限检查
-- 参数校验
-- 调用 Service
-- 返回结果
+API Route 只做接收请求、权限检查、参数校验、调用 Service、返回结果。
 
 不要在 Route 里写复杂 SQL、复杂业务判断或外部 API 细节。

@@ -33,7 +33,11 @@
 - [ ] 数据库
 - [ ] Celery 后台任务
 - [ ] 外部 API
+- [ ] LLM 调用层
 - [ ] 权限 / 操作日志
+- [ ] 数据来源 / 字段血缘
+- [ ] 财务计算
+- [ ] 性能优化
 - [ ] 文档
 - [ ] 测试
 
@@ -50,6 +54,17 @@
 
 ---
 
+## 数据、财务、性能确认
+
+- [ ] 字段来源已说明。
+- [ ] 财务公式已确认。
+- [ ] 金额币种明确。
+- [ ] 时间时区明确。
+- [ ] 大表查询已分页或说明性能处理。
+- [ ] 外部 API 批量调用已考虑限流 / Celery。
+
+---
+
 ## Skill 使用确认
 
 - [ ] 本 PR 已读取相关项目规则。
@@ -58,6 +73,9 @@
 - [ ] 如涉及 old-system，已读取 `skills/old-system-readonly-analyzer/SKILL.md`。
 - [ ] 如涉及后端模块，已读取 `skills/backend-module-designer/SKILL.md`。
 - [ ] 如涉及后台任务，已读取 `skills/background-task-designer/SKILL.md`。
+- [ ] 如涉及数据血缘，已读取 `skills/data-lineage-analyzer/SKILL.md`。
+- [ ] 如涉及财务计算，已读取 `skills/financial-calculation-reviewer/SKILL.md`。
+- [ ] 如涉及性能，已读取 `skills/performance-reviewer/SKILL.md`。
 
 ---
 

@@ -20,14 +20,4 @@ frontend/src/mocks/
 backend/app/mocks/
 ```
 
-## 禁止
-
-禁止在页面里直接写大量假数据：
-
-```tsx
-const data = [
-  { sku: 'ABC', sales: 100 }
-]
-```
-
-如必须临时使用 mock，必须标记 TODO 并说明替换真实 API 的路径。
+禁止在页面里直接写大量假数据。如必须临时使用 mock，必须标记 TODO 并说明替换真实 API 的路径。

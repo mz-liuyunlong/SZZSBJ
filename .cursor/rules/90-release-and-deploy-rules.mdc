@@ -1,0 +1,14 @@
+---
+description: Release, rollback, deployment, and backup safety rules.
+globs:
+  - ".github/**/*"
+  - "docs/**/*"
+  - "backend/**/*"
+  - "frontend/**/*"
+alwaysApply: false
+---
+
+
+# Release and Deploy Rules
+
+Do not change production deployment or database rollback behavior without explicit approval. PRs need rollback notes.

@@ -36,12 +36,4 @@ except:
 
 ## 前端规则
 
-前端必须处理：
-
-- Loading
-- Empty
-- Error
-- Permission denied
-- Retry when applicable
-
-不允许接口失败后静默无提示。
+前端必须处理 Loading、Empty、Error、Permission denied、Retry when applicable。接口失败后不能静默无提示。

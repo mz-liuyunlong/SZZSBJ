@@ -4,14 +4,7 @@
 
 ## 技术栈
 
-- React
-- TypeScript
-- Vite
-- Ant Design
-- ProComponents
-- React Router
-- Zustand
-- ECharts
+React、TypeScript、Vite、Ant Design、ProComponents、React Router、Zustand、ECharts。
 
 ## 规则
 

@@ -3,18 +3,7 @@ description: Security and secret handling rules.
 alwaysApply: true
 ---
 
+
 # Security Rules
 
-Never commit secrets.
-
-Do not expose:
-
-- `.env`
-- API keys
-- database passwords
-- SSH private keys
-- tokens
-- cookies
-- sessions
-
-If a secret appears, stop and warn the user without printing the full secret.
+Never commit secrets. If a secret appears, stop and warn the user without printing the full secret.

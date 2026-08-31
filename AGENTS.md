@@ -2,7 +2,8 @@
 
 ## 文件用途
 
-本文件是本项目所有 AI 开发助手必须遵守的总规则。  
+本文件是本项目所有 AI 开发助手必须遵守的最高级项目规则。
+
 本项目不限定开发者使用哪一种 AI 工具。无论使用 Codex、Cursor、Claude Code、GitHub Copilot 或其他 AI，只要 AI 参与本项目的代码生成、修改、解释、测试、提交、PR 或 Code Review，都必须遵守本文件和项目内其他规则文档。
 
 规则只有一套。不同工具的入口文件只是为了让不同 AI 能读取同一套规则，不代表不同 AI 有不同标准。
@@ -25,8 +26,6 @@ AI 的目标不是快速堆代码，而是按固定技术栈，从第一行代�
 
 ## 2. AI 工具无关原则
 
-本项目不关心开发者具体使用哪个 AI 工具。只要 AI 参与开发，就必须遵守项目负责人制定的规则。
-
 AI 不允许因为工具不同、上下文没有自动加载、用户没有再次提醒，绕过以下规则：
 
 - Git 分支规则
@@ -38,10 +37,15 @@ AI 不允许因为工具不同、上下文没有自动加载、用户没有再�
 - API 契约规则
 - 数据库迁移规则
 - Celery 后台任务规则
+- 外部 API 接入规则
+- LLM 调用层规则
 - 权限与操作日志规则
 - 安全与密钥规则
-- PR 审核规则
 - 测试与验收规则
+- 数据来源与血缘规则
+- 财务计算规则
+- 性能规则
+- 发布与回滚规则
 - 文档更新规则
 
 如果规则冲突，AI 必须停止修改并向用户确认，不能自行选择更方便的规则。
@@ -101,7 +105,7 @@ AI 不允许因为工具不同、上下文没有自动加载、用户没有再�
 - Celery
 - LLM Provider Adapter，默认实现使用 OpenAI Python SDK
 
-AI 不允许自行改成 Vue、Next.js、Node.js、Express、Django、Flask、RQ、APScheduler、Node Worker 或其他替代技术，除非项目负责人明确批准。
+AI 不允许自行改成其他替代技术，除非项目负责人明确批准。
 
 详细说明见：`docs/TECH_STACK.md`。
 
@@ -130,15 +134,7 @@ AI 不允许自行改成 Vue、Next.js、Node.js、Express、Django、Flask、RQ
 
 `old-system/` 是旧系统代码归档目录，只允许只读分析。
 
-AI 可以读取 `old-system/` 来理解：
-
-- 旧页面结构
-- 旧 API 路由
-- 旧数据库字段
-- 旧业务计算规则
-- 旧导入导出逻辑
-- 旧定时任务
-- 旧第三方接口调用方式
+AI 可以读取 `old-system/` 来理解旧页面、旧 API、旧数据库字段、旧业务计算规则、旧导入导出逻辑、旧定时任务和旧第三方接口调用方式。
 
 AI 不允许：
 
@@ -152,7 +148,7 @@ AI 不允许：
 
 如果参考了旧系统，AI 必须先输出旧系统分析，再设计新系统实现方案，等待用户确认后才能开发。
 
-详细说明见：`docs/OLD_SYSTEM_READONLY_RULES.md`。
+详细说明见：`docs/OLD_SYSTEM_READONLY_RULES.md` 与 `docs/REBUILD_MAPPING_RULES.md`。
 
 ---
 
@@ -187,50 +183,7 @@ AI 开发页面前必须先评估组件和模块拆分方案。
 
 ---
 
-## 8. 注释要求
-
-AI 新增或修改代码时必须写维护型注释。注释应解释“为什么这样做”和“业务规则是什么”，而不是简单翻译代码本身。
-
-必须注释：
-
-- 新文件职责
-- 公共函数
-- 业务规则
-- 金额计算
-- 时间计算
-- 数据库字段
-- Celery 任务
-- 外部 API 调用
-- AI Prompt
-- 复杂判断
-
-禁止无意义注释、过期注释、与代码不一致的注释。
-
-详细说明见：`docs/CODE_COMMENT_RULES.md`。
-
----
-
-## 9. 后台任务规则
-
-本项目固定使用 Redis + Celery 作为后台任务方案。
-
-必须使用 Celery 的场景包括：
-
-- 执行超过 3 秒的任务
-- 批量同步平台数据
-- 大文件导入导出
-- 批量调用外部 API
-- 批量调用 AI 模型
-- 大报表生成
-- 需要失败重试的任务
-
-Celery 任务必须说明任务目的、输入参数、输出结果、幂等性、重试策略、副作用和失败展示方式。
-
-详细说明见：`docs/BACKGROUND_TASK_DEVELOPMENT_RULES.md`。
-
----
-
-## 10. 项目级 Skills
+## 8. 项目级 Skills
 
 本项目包含项目级 AI Skills，目录为：
 
@@ -245,14 +198,24 @@ skills/
 | 新增功能 / 页面 | `skills/feature-slice-planner/SKILL.md` |
 | 前端组件拆分 | `skills/react-component-architect/SKILL.md` |
 | 只读分析旧系统 | `skills/old-system-readonly-analyzer/SKILL.md` |
+| 旧功能映射新系统 | `skills/rebuild-mapping-planner/SKILL.md` |
 | 后端模块设计 | `skills/backend-module-designer/SKILL.md` |
 | 后台任务设计 | `skills/background-task-designer/SKILL.md` |
 | API 契约设计 | `skills/api-contract-designer/SKILL.md` |
+| 页面验收 | `skills/page-acceptance-checker/SKILL.md` |
+| 外部 API 接入 | `skills/external-api-integration-designer/SKILL.md` |
+| LLM 调用层设计 | `skills/llm-provider-adapter-designer/SKILL.md` |
+| 数据血缘分析 | `skills/data-lineage-analyzer/SKILL.md` |
+| 数据同步设计 | `skills/data-sync-designer/SKILL.md` |
+| 财务公式审查 | `skills/financial-calculation-reviewer/SKILL.md` |
+| 性能审查 | `skills/performance-reviewer/SKILL.md` |
+| 权限矩阵设计 | `skills/permission-matrix-designer/SKILL.md` |
 | PR 自检 | `skills/code-review-checker/SKILL.md` |
+| 规则包维护 | `skills/rule-pack-maintainer/SKILL.md` |
 
 ---
 
-## 11. 开工前必须输出计划
+## 9. 开工前必须输出计划
 
 AI 修改代码前，必须先输出：
 
@@ -263,17 +226,21 @@ AI 修改代码前，必须先输出：
 5. 前端组件拆分方案。
 6. 后端模块拆分方案。
 7. API 契约草案。
-8. 是否涉及数据库。
-9. 是否涉及 Celery。
-10. 是否涉及权限和操作日志。
-11. 风险点。
-12. 测试和验收方式。
+8. 数据来源和字段血缘。
+9. 是否涉及数据库。
+10. 是否涉及 Celery。
+11. 是否涉及外部 API。
+12. 是否涉及 LLM 调用。
+13. 是否涉及权限和操作日志。
+14. 财务/金额/时间口径。
+15. 性能风险。
+16. 测试和验收方式。
 
 用户确认前，不要修改代码。
 
 ---
 
-## 12. 完工后必须输出报告
+## 10. 完工后必须输出报告
 
 完成后必须执行或要求用户执行：
 
@@ -282,31 +249,4 @@ git status
 git diff --stat
 ```
 
-并输出：
-
-1. 当前分支。
-2. 修改文件清单。
-3. 每个文件修改原因。
-4. 封装了哪些组件 / 模块。
-5. 是否参考了 `old-system/`。
-6. 是否修改了共享代码。
-7. 是否有数据库变更。
-8. 是否有 Celery 任务。
-9. 是否有权限与操作日志。
-10. 测试命令和结果。
-11. 验收标准完成情况。
-12. 风险点。
-13. 回滚方式。
-14. 文档更新情况。
-
----
-
-## 13. 上下文与交接
-
-当任务较大、上下文变长或会话可能中断时，AI 必须写交接文档：
-
-```text
-docs/handoffs/YYYYMMDD-task-name.md
-```
-
-交接文档必须说明当前分支、任务目标、已完成内容、修改文件、未完成内容、风险、测试结果和下一步建议。
+并输出：当前分支、修改文件清单、每个文件修改原因、组件/模块封装、old-system 参考情况、共享代码影响、API 契约、数据库变更、Celery 任务、权限日志、数据血缘、测试结果、验收结果、风险点、回滚方式、文档更新情况。

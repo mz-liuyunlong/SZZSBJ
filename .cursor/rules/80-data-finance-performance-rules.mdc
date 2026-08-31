@@ -1,0 +1,13 @@
+---
+description: Data lineage, finance calculation, and performance rules.
+globs:
+  - "backend/**/*"
+  - "frontend/**/*"
+  - "docs/**/*"
+alwaysApply: false
+---
+
+
+# Data / Finance / Performance Rules
+
+For every page/report, clarify data source and field lineage. Financial calculations require confirmed formulas, currency, timezone, and tests. Large data must paginate and avoid full-table queries.

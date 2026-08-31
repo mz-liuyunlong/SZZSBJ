@@ -4,14 +4,7 @@
 
 ## 技术栈
 
-- Python
-- FastAPI
-- Pydantic
-- SQLAlchemy
-- Alembic
-- Redis
-- Celery
-- LLM Provider Adapter，默认 OpenAI Python SDK
+Python、FastAPI、Pydantic、SQLAlchemy、Alembic、Redis、Celery、LLM Provider Adapter。
 
 ## 分层
 
