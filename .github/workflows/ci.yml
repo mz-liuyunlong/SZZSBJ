@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  basic-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check AI rule files
+        run: |
+          test -f AGENTS.md
+          test -f docs/TECH_STACK.md
+          test -f docs/OLD_SYSTEM_READONLY_RULES.md
+          test -f docs/FEATURE_SLICE_DEVELOPMENT_RULES.md
+          test -f docs/COMPONENT_AND_MODULE_RULES.md
+
+      - name: Prevent old-system changes in PR by default
+        run: |
+          echo "Review old-system changes manually via CODEOWNERS."
+
+      # 前后端项目初始化后，可在这里追加：
+      # - frontend lint/build/test
+      # - backend lint/test
+      # - migration check

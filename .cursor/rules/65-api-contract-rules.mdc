@@ -1,0 +1,24 @@
+---
+description: API contract rules for frontend/backend feature slices.
+globs:
+  - "frontend/**/*"
+  - "backend/**/*"
+alwaysApply: false
+---
+
+# API Contract Rules
+
+Before implementing a frontend/backend page, define the API contract:
+
+- method
+- path
+- query
+- body
+- response
+- pagination
+- errors
+- permission
+- audit logging
+- celery task involvement
+
+Do not let frontend and backend invent fields separately.

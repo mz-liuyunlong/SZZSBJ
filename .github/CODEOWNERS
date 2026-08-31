@@ -1,0 +1,28 @@
+# 全项目默认负责人
+* @mz-liuyunlong
+
+# AI 规则和项目规则
+/AGENTS.md @mz-liuyunlong
+/README_AI_RULES.md @mz-liuyunlong
+/CODEX_START_HERE.md @mz-liuyunlong
+/CLAUDE.md @mz-liuyunlong
+/.cursor/ @mz-liuyunlong
+/skills/ @mz-liuyunlong
+/docs/ @mz-liuyunlong
+
+# GitHub 配置
+/.github/ @mz-liuyunlong
+
+# 前端与后端
+/frontend/ @mz-liuyunlong
+/backend/ @mz-liuyunlong
+
+# 数据库与安全高风险区域
+/backend/alembic/ @mz-liuyunlong
+/backend/app/models/ @mz-liuyunlong
+/backend/app/core/ @mz-liuyunlong
+/backend/app/integrations/ @mz-liuyunlong
+/backend/app/tasks/ @mz-liuyunlong
+
+# 旧系统只读参考目录
+/old-system/ @mz-liuyunlong

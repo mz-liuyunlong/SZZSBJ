@@ -1,0 +1,23 @@
+---
+description: Global safety rules for all AI-assisted development in this project.
+alwaysApply: true
+---
+
+# Project Safety Rules
+
+This project is a greenfield rebuild with `old-system/` as read-only reference.
+
+All AI tools must follow the same project rules.
+
+## Absolute rules
+
+- Do not modify `main` or `dev` directly.
+- Do not modify, format, delete, or add code under `old-system/`.
+- Do not copy old-system code into the new system.
+- Do not expose or commit secrets.
+- Do not change the fixed tech stack without approval.
+- Do not introduce a second backend task system.
+- Do not generate multiple modules or pages in one task.
+- Do not refactor unrelated files.
+
+Before editing, read `AGENTS.md` and the related docs.

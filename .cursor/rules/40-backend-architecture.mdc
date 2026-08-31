@@ -1,0 +1,27 @@
+---
+description: Backend architecture rules for FastAPI Pydantic SQLAlchemy Alembic Redis Celery.
+globs:
+  - "backend/**/*"
+  - "**/*.py"
+alwaysApply: false
+---
+
+# Backend Architecture Rules
+
+Use Python + FastAPI + Pydantic + SQLAlchemy + Alembic + Redis + Celery.
+
+Layering:
+
+```text
+API Route -> Schema -> Service -> Repository -> Model
+```
+
+Rules:
+
+- API routes stay thin.
+- Services own business logic.
+- Repositories own database access.
+- Integrations own external API clients.
+- Celery tasks orchestrate background work.
+- Do not swallow exceptions silently.
+- Do not log secrets.

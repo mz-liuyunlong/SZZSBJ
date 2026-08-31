@@ -1,0 +1,19 @@
+---
+description: One feature, one page, one branch, one PR development rule.
+alwaysApply: true
+---
+
+# Feature Slice Development
+
+Every AI task must be a small feature slice.
+
+Rules:
+
+- One task handles one feature.
+- One task modifies at most one page.
+- One task affects one business module.
+- One task must be independently testable and reversible.
+- Do not generate multiple business modules in one task.
+- Do not bundle refactor, feature, dependency update, and formatting together.
+
+Before editing, output the feature slice plan.

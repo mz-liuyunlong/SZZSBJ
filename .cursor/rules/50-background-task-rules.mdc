@@ -1,0 +1,31 @@
+---
+description: Celery background task development rules.
+globs:
+  - "backend/app/tasks/**/*"
+  - "backend/app/services/**/*"
+alwaysApply: false
+---
+
+# Background Task Rules
+
+Use Redis + Celery for background tasks.
+
+Use Celery for:
+
+- Long-running tasks
+- Batch sync
+- AI batch analysis
+- Large import/export
+- External API batch calls
+
+Task must document:
+
+- purpose
+- input
+- output
+- idempotency
+- retry policy
+- side effects
+- user-visible failure behavior
+
+Do not put complex business logic directly inside Celery task functions.

@@ -1,0 +1,28 @@
+---
+description: Frontend component and backend module encapsulation rules.
+globs:
+  - "frontend/**/*"
+  - "backend/**/*"
+alwaysApply: false
+---
+
+# Component and Module Rules
+
+Frontend:
+
+- Page composes components.
+- Feature components live under feature directories.
+- Shared components live under `frontend/src/components/`.
+- API calls must be encapsulated.
+- Types must be explicit.
+- Do not create huge page files.
+
+Backend:
+
+- Route stays thin.
+- Business logic lives in Service.
+- Database access lives in Repository.
+- Celery Task orchestrates only.
+- External API clients live in integrations.
+
+Before editing a page, provide component and module split plan.

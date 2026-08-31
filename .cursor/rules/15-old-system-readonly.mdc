@@ -1,0 +1,28 @@
+---
+description: Read-only rules for old-system reference code.
+globs:
+  - "old-system/**/*"
+alwaysApply: false
+---
+
+# old-system Readonly Rules
+
+`old-system/` is read-only reference material.
+
+Allowed:
+
+- Read files
+- Search files
+- Extract business rules
+- Produce analysis in `docs/old-system-analysis/`
+
+Forbidden:
+
+- Edit old-system files
+- Format old-system files
+- Delete old-system files
+- Install dependencies inside old-system
+- Run old-system scripts that may write data
+- Copy old-system code into frontend/backend
+
+If old-system is referenced, report exactly which files were read.

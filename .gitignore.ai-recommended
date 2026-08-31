@@ -1,0 +1,52 @@
+# 推荐追加到项目 .gitignore 中
+# 注意：这是建议片段，不会自动生效。请人工合并到你的 .gitignore。
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+
+# Node / 前端
+node_modules/
+dist/
+build/
+.vite/
+
+# Python / 后端
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 日志与缓存
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# 本地数据库
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+
+# 系统与编辑器
+.DS_Store
+.vscode/
+.idea/
+
+# old-system 默认只保留 README，不提交真实旧系统代码
+old-system/*
+!old-system/README.md
+
+# 如未来决定提交脱敏后的 old-system，请先人工审查密钥、日志、缓存、数据库文件。
