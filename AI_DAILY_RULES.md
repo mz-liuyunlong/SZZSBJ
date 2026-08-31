@@ -37,16 +37,124 @@ AI 每次开发前，默认只需要先读取：
 AGENTS.md
 AI_DAILY_RULES.md
 RULE_PACK_FILE_INDEX.md
+skills/README.md
 docs/TECH_STACK.md
 docs/FEATURE_SLICE_DEVELOPMENT_RULES.md
 docs/CODE_COMMENT_RULES.md
+docs/PONYTAIL_COMPATIBILITY_RULES.md
 ```
+
+其中 `docs/PONYTAIL_COMPATIBILITY_RULES.md` 是默认开启规则，不需要用户在每次任务里特意引用。
 
 不要每次全文读取整个 `docs/`、`skills/`、`.cursor/rules/`。
 
 规则文件是资料库，不是每次都要全部加载进上下文。
 
+
+
 ---
+
+## 2.0 AI 工具首次配置规则
+
+当开发者第一次拉取本项目、第一次让 AI 接手项目，或者当前环境尚未确认官方 Ponytail 插件时，AI 必须主动读取：
+
+```text
+AI_ONBOARDING.md
+docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md
+docs/tools/PONYTAIL_INSTALL_GUIDE.md
+```
+
+AI 不得假设开发者会自己阅读安装说明。
+
+如果当前 AI 具有终端执行能力，AI 应在用户确认后执行：
+
+```bash
+bash scripts/check-ai-tools.sh
+bash scripts/setup-ai-tools.sh
+```
+
+支持官方 Ponytail 插件的工具，应优先安装官方 Ponytail 插件。尤其是 Codex，应帮助执行：
+
+```bash
+codex plugin marketplace add DietrichGebert/ponytail
+codex plugin add ponytail@ponytail
+```
+
+安装后，AI 必须提醒用户进入 `/hooks` 手动审查并信任 hooks。AI 不得自动替用户信任 hooks。
+
+如果官方 Ponytail 插件未安装或安装失败，AI 必须明确说明当前使用项目内置 Ponytail 默认规则：
+
+```text
+docs/PONYTAIL_COMPATIBILITY_RULES.md
+```
+
+
+---
+
+## 2.1 Skill 自发现规则
+
+用户不需要记住项目里有哪些 Skill，也不需要手动指定本次使用哪个 Skill。
+
+每次开始开发任务前，AI 必须先读取：
+
+```text
+AI_DAILY_RULES.md
+RULE_PACK_FILE_INDEX.md
+skills/README.md
+```
+
+然后 AI 必须根据本次任务类型，自行判断需要读取哪些具体 Skill 和 docs。
+
+AI 不允许一次性全文读取所有 Skill，也不允许要求用户手动指定 Skill。AI 必须先看 Skill 索引，再按任务选择性读取。
+
+AI 修改代码前必须先输出：
+
+1. 本次任务类型判断。
+2. 本次准备读取哪些 Skill。
+3. 为什么选择这些 Skill。
+4. 哪些 Skill 本次不需要读取。
+5. 本次准备读取哪些 docs。
+6. 初步开发计划。
+
+用户确认前，AI 不得修改代码。
+
+固定顺序：
+
+```text
+读取入口规则
+↓
+读取 Skill 索引
+↓
+判断任务类型
+↓
+选择相关 Skill
+↓
+读取相关 Skill
+↓
+输出开发计划
+↓
+用户确认
+↓
+修改代码
+```
+
+---
+
+## 2.2 Ponytail 项目内置规则
+
+本项目已经把 Ponytail 的核心思想固化为项目规则：
+
+```text
+docs/PONYTAIL_COMPATIBILITY_RULES.md
+```
+
+所有 AI 工具都必须遵守该文件。用户不需要记住 Ponytail，也不需要手动提醒 AI，AI 不得因为用户没有提到 Ponytail 而跳过该规则。
+
+如果当前 AI 工具已经安装 Ponytail 插件，可以使用 Ponytail mode；如果没有安装，也必须按 `docs/PONYTAIL_COMPATIBILITY_RULES.md` 执行。
+
+AI 修改代码前输出计划时，必须包含 Ponytail 最小正确实现检查，但不得要求用户单独“调用 Ponytail”。
+
+Ponytail 只用于减少过度设计、优先复用、避免重复代码、实现最小正确闭环，不得覆盖项目安全、权限、old-system 只读、API 契约、数据库、Celery、财务、测试、注释等强制规则。
 
 ## 3. 按任务类型追加读取
 

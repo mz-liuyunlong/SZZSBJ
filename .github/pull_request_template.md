@@ -67,6 +67,9 @@
 
 ## Skill 使用确认
 
+- [ ] 本 PR 开发前已进行 Skill 自发现判断。
+- [ ] 本 PR 已说明本次使用了哪些 Skill 以及选择原因。
+- [ ] 本 PR 只读取了本次任务相关的 Skill，没有无意义全文读取全部 Skill。
 - [ ] 本 PR 已读取相关项目规则。
 - [ ] 如涉及页面开发，已读取 `skills/feature-slice-planner/SKILL.md`。
 - [ ] 如涉及组件拆分，已读取 `skills/react-component-architect/SKILL.md`。
@@ -152,3 +155,21 @@ AI 参与范围：
 ```bash
 git revert <commit-id>
 ```
+
+## Ponytail 默认开启 / 最小正确实现确认
+
+- [ ] 本 PR 已默认执行 `docs/PONYTAIL_COMPATIBILITY_RULES.md`，没有依赖用户额外提醒。
+- [ ] 本 PR 没有为未来可能用到的需求提前写代码。
+- [ ] 本 PR 优先复用了已有组件、Hook、Service、Repository 或工具函数。
+- [ ] 本 PR 没有无必要新增依赖。
+- [ ] 本 PR 没有为了少写代码而省略权限、校验、日志、错误处理、测试或注释。
+- [ ] 本 PR 已说明最小正确实现边界。
+
+
+## AI 工具与 Ponytail 官方插件确认
+
+- [ ] 本开发环境已执行或确认 `scripts/check-ai-tools.sh`。
+- [ ] 如使用 Codex / Claude Code / Copilot CLI / Gemini CLI，已安装或尝试安装官方 Ponytail 插件。
+- [ ] 如需要 hooks 信任，已由用户本人审查并确认。
+- [ ] 未把官方 Ponytail 安装写入 `npm install`、`postinstall`、CI、Docker、Vercel 或运行时脚本。
+- [ ] 即使官方插件不可用，本 PR 仍遵守 `docs/PONYTAIL_COMPATIBILITY_RULES.md`。

@@ -6,9 +6,13 @@
 |---|---|
 | `AGENTS.md` | 所有 AI 必须遵守的总规则 |
 | `AI_START_HERE.md` | 任何 AI 工具的通用启动入口 |
+| `AI_ONBOARDING.md` | 新开发者第一次让 AI 接手项目时的启动流程 |
+| `AI_DAILY_RULES.md` | 日常开发轻量入口，先读它再按任务选择 docs 和 skills |
 | `README_AI_RULES.md` | 人看的规则包说明 |
 | `RULE_PACK_FILE_INDEX.md` | 本文件，索引所有规则 |
 | `INSTALL_TO_PROJECT.md` | 如何把规则包放入项目 |
+| `docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md` | AI 首次接手项目时主动检测并协助安装官方 Ponytail 插件的规则 |
+| `docs/tools/PONYTAIL_INSTALL_GUIDE.md` | Codex / Claude Code 安装 Ponytail 插件的团队说明 |
 
 ## 项目建设和开发方式
 
@@ -23,6 +27,7 @@
 | `docs/CODE_COMMENT_RULES.md` | 维护型注释规则 |
 | `docs/AI_GIT_DEV_RULES.md` | Git 分支和提交规则 |
 | `docs/AI_TECH_DEV_RULES.md` | AI 技术实现规则 |
+| `docs/PONYTAIL_COMPATIBILITY_RULES.md` | 所有 AI 默认开启的 Ponytail 规则，防止过度设计、重复代码和无意义依赖 |
 
 ## old-system 与重建
 
@@ -75,6 +80,77 @@
 | `docs/DEPLOYMENT_RULES.md` | 部署规则模板 |
 | `docs/BACKUP_AND_RECOVERY_RULES.md` | 备份与恢复规则 |
 
+
+## Skill 自发现入口
+
+AI 不需要用户手动指定 Skill。
+
+每次任务开始前，AI 应先读取：
+
+1. `AI_DAILY_RULES.md`
+2. `skills/README.md`
+
+再根据任务类型选择具体 Skill。
+
+不要一次性读取全部 `skills/**/SKILL.md`，只读取本次任务相关的 Skill。
+
 ## Skills
 
 所有项目级 Skills 放在 `skills/`。如果 AI 工具不能自动识别 Skill，也必须把对应 `SKILL.md` 当普通规则文档读取。
+
+
+| Skill 文件 | 用途 |
+|---|---|
+| `skills/feature-slice-planner/SKILL.md` | 单功能 / 单页面任务规划 |
+| `skills/react-component-architect/SKILL.md` | React 组件拆分与复用设计 |
+| `skills/old-system-readonly-analyzer/SKILL.md` | 只读分析旧系统 |
+| `skills/rebuild-mapping-planner/SKILL.md` | old-system 功能映射新系统 |
+| `skills/backend-module-designer/SKILL.md` | 后端模块分层设计 |
+| `skills/background-task-designer/SKILL.md` | Celery 后台任务设计 |
+| `skills/api-contract-designer/SKILL.md` | API 契约设计 |
+| `skills/page-acceptance-checker/SKILL.md` | 页面验收检查 |
+| `skills/external-api-integration-designer/SKILL.md` | 外部 API 接入设计 |
+| `skills/llm-provider-adapter-designer/SKILL.md` | LLM 调用层设计 |
+| `skills/data-lineage-analyzer/SKILL.md` | 数据来源和字段血缘分析 |
+| `skills/data-sync-designer/SKILL.md` | 数据同步任务设计 |
+| `skills/financial-calculation-reviewer/SKILL.md` | 财务公式审查 |
+| `skills/performance-reviewer/SKILL.md` | 性能审查 |
+| `skills/permission-matrix-designer/SKILL.md` | 权限矩阵设计 |
+| `skills/code-review-checker/SKILL.md` | PR 自检与风险检查 |
+| `skills/rule-pack-maintainer/SKILL.md` | 规则包维护，防止规则冲突 |
+
+## Ponytail 默认开启入口
+
+本项目不依赖用户手动记住、手动引用或安装 Ponytail 才能执行简化原则。Ponytail 在本项目中默认开启。
+
+AI 开发代码时必须读取：
+
+```text
+docs/PONYTAIL_COMPATIBILITY_RULES.md
+```
+
+该文件用于所有 AI 工具：Codex、Cursor、Claude Code、GitHub Copilot 和其他 AI。
+
+如果当前工具已经安装 Ponytail 官方插件，可以使用插件；如果未安装，则按本项目文件执行默认开启规则。AI 不得把 Ponytail 当成可选 Skill，也不得因为用户没有提到 Ponytail 而跳过。
+
+
+---
+
+## AI 工具首次配置入口
+
+开发者第一次拉取项目后，AI 必须主动读取：
+
+```text
+AI_ONBOARDING.md
+docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md
+docs/tools/PONYTAIL_INSTALL_GUIDE.md
+```
+
+并在用户确认后协助执行：
+
+```bash
+bash scripts/check-ai-tools.sh
+bash scripts/setup-ai-tools.sh
+```
+
+支持官方 Ponytail 插件的工具优先安装官方插件；安装失败时使用 `docs/PONYTAIL_COMPATIBILITY_RULES.md` 兜底。

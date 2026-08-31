@@ -15,32 +15,44 @@
 
 ## 推荐先读顺序
 
-1. `AGENTS.md`
-2. `RULE_PACK_FILE_INDEX.md`
-3. `docs/TECH_STACK.md`
-4. `docs/PROJECT_BOOTSTRAP_RULES.md`
-5. `docs/FEATURE_SLICE_DEVELOPMENT_RULES.md`
-6. `docs/OLD_SYSTEM_READONLY_RULES.md`
-7. `docs/COMPONENT_AND_MODULE_RULES.md`
-8. `docs/CODE_COMMENT_RULES.md`
-9. `docs/API_CONTRACT_RULES.md`
-10. `docs/TESTING_RULES.md`
+日常开发不需要一次性读取全部规则文件。推荐顺序：
+
+1. `AI_DAILY_RULES.md`
+2. `AGENTS.md`
+3. `RULE_PACK_FILE_INDEX.md`
+4. `skills/README.md`
+5. `docs/PONYTAIL_COMPATIBILITY_RULES.md`
+
+其中 Ponytail 是默认开启规则，不需要用户在任务提示词里特意引用。
+
+然后由 AI 根据任务类型自行选择需要读取的具体 docs 和 Skill。
+
+用户不需要记住有哪些 Skill，也不需要手动指定 Skill。
 
 ## 给团队的统一启动提示词
 
 ```md
-你现在参与本项目开发。无论你是什么 AI 工具，都必须先读取并遵守：
+你现在参与本项目开发。无论你是什么 AI 工具，都必须先读取：
 
-1. AGENTS.md
-2. RULE_PACK_FILE_INDEX.md
-3. docs/TECH_STACK.md
-4. docs/FEATURE_SLICE_DEVELOPMENT_RULES.md
-5. docs/OLD_SYSTEM_READONLY_RULES.md
-6. docs/COMPONENT_AND_MODULE_RULES.md
-7. docs/CODE_COMMENT_RULES.md
-8. docs/API_CONTRACT_RULES.md
+1. AI_DAILY_RULES.md
+2. AGENTS.md
+3. RULE_PACK_FILE_INDEX.md
+4. skills/README.md
 
-本次开发必须一个功能一个模块，一个页面一个任务。修改前先输出技术实施计划，等我确认后再动手。
+然后根据项目规则自动开启 Ponytail 最小正确实现原则，并根据本次任务类型，自己判断需要读取哪些 docs 和 skills，不要一次性读取全部文件，也不要要求我手动指定 Skill。
+
+本次任务是：{填写任务}
+
+要求：
+1. 先判断本次任务类型。
+2. 先输出本次准备使用哪些 Skill，以及为什么选择。
+3. 先输出本次不需要读取哪些 Skill。
+4. Ponytail 默认开启，不需要我单独引用。
+5. 先输出 Ponytail 最小正确实现检查。
+6. 先输出初步开发计划。
+7. 等我确认后再修改代码。
+8. 一个任务只做一个功能，一个页面一个任务。
+9. 不允许修改 old-system，不允许复制 old-system 代码。
 ```
 
 ## 规则文件分工
@@ -58,3 +70,37 @@
 | `old-system/` | 旧系统只读参考目录 |
 
 工具入口文件只是为了适配不同 AI 的读取方式。核心规则是一套，不允许不同 AI 执行不同标准。
+
+## Ponytail 项目内置说明
+
+本项目已经内置 Ponytail 兼容规则：
+
+```text
+docs/PONYTAIL_COMPATIBILITY_RULES.md
+```
+
+这表示其他开发者即使没有安装官方 Ponytail 插件、没有主动提醒 AI、没有单独引用 Ponytail，AI 也必须按项目文件执行“避免过度设计、优先复用、最小正确实现”的规则。
+
+Codex / Claude Code 用户可以额外按 `docs/tools/PONYTAIL_INSTALL_GUIDE.md` 安装官方插件，但插件不是项目运行依赖，也不会通过 `npm install` 自动安装。
+
+
+---
+
+## 新开发者首次拉取项目
+
+开发者第一次拉取项目后，不要求人工阅读所有规则。
+
+直接把下面这段发给当前 AI：
+
+```md
+你现在第一次接手本项目。请先读取 AI_ONBOARDING.md、AI_DAILY_RULES.md、AGENTS.md、RULE_PACK_FILE_INDEX.md、skills/README.md、docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md。
+
+先不要开发业务代码。请先检查并帮助安装当前工具支持的官方 Ponytail 插件；如果需要 hooks 信任，请停下来让我确认。安装失败时，使用项目内置 Ponytail 默认规则。
+```
+
+本项目提供辅助脚本：
+
+```bash
+bash scripts/check-ai-tools.sh
+bash scripts/setup-ai-tools.sh
+```

@@ -47,8 +47,41 @@ AI 不允许因为工具不同、上下文没有自动加载、用户没有再�
 - 性能规则
 - 发布与回滚规则
 - 文档更新规则
+- Ponytail 项目兼容规则
 
 如果规则冲突，AI 必须停止修改并向用户确认，不能自行选择更方便的规则。
+
+
+
+---
+
+## 2.1 AI 工具首次配置与官方 Ponytail 安装
+
+本项目不依赖开发者手动阅读安装说明。
+
+当 AI 第一次接手本项目，或发现当前环境尚未确认官方 Ponytail 插件时，AI 必须主动读取：
+
+```text
+AI_ONBOARDING.md
+docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md
+docs/tools/PONYTAIL_INSTALL_GUIDE.md
+```
+
+如果当前 AI 具有终端能力，必须建议并在用户确认后执行：
+
+```bash
+bash scripts/check-ai-tools.sh
+bash scripts/setup-ai-tools.sh
+```
+
+支持官方 Ponytail 插件的 AI 工具，应优先安装官方 Ponytail 插件。官方插件安装属于开发者本机 AI 工具配置，不属于项目运行依赖。
+
+AI 不允许把官方 Ponytail 安装写进 `npm install`、`postinstall`、CI、Vercel、Docker 或项目启动脚本。
+
+AI 不得自动信任 hooks。Codex / Claude Code 等工具要求信任 hooks 时，必须由用户审查并确认。
+
+如果官方插件未安装、无法安装或当前工具不支持插件，AI 必须继续按 `docs/PONYTAIL_COMPATIBILITY_RULES.md` 执行项目内置 Ponytail 默认规则。
+
 
 ---
 
@@ -213,28 +246,81 @@ skills/
 | PR 自检 | `skills/code-review-checker/SKILL.md` |
 | 规则包维护 | `skills/rule-pack-maintainer/SKILL.md` |
 
+
+## 8.1 Skill 自发现强制规则
+
+用户不需要手动指定本次使用哪个 Skill，AI 必须自己完成 Skill 发现和选择。
+
+每次开始任务前，AI 必须先读取：
+
+1. `RULE_PACK_FILE_INDEX.md`
+2. `skills/README.md`
+
+然后根据任务类型自行选择需要读取的具体 Skill。
+
+AI 不得一次性全文读取所有 Skill。AI 只能读取本次任务需要的 Skill，除非用户明确要求进行完整规则包审查。
+
+AI 必须在修改代码前说明：
+
+1. 本次任务类型。
+2. 本次选择的 Skill。
+3. 选择原因。
+4. 本次不需要读取的 Skill。
+5. 本次相关 docs。
+6. 初步实施计划。
+
+如果 AI 没有完成 Skill 选择判断，不允许开始修改代码。
+
 ---
+
+## 8.2 Ponytail 项目兼容规则
+
+本项目已经内置 Ponytail 兼容规则，文件为：
+
+```text
+docs/PONYTAIL_COMPATIBILITY_RULES.md
+```
+
+无论 AI 是否安装官方 Ponytail 插件，都必须遵守该文件。用户没有提到 Ponytail 时，AI 也必须默认执行。
+
+Ponytail 在本项目中的作用是：
+
+1. 防止过度设计。
+2. 优先复用已有组件、Hook、Service、Repository、工具函数。
+3. 优先使用标准库、平台原生能力和项目已有依赖。
+4. 避免为简单需求新增依赖或复杂抽象。
+5. 只实现本次任务需要的最小正确闭环。
+
+Ponytail 不得覆盖本项目强制规则。AI 不允许因为追求简洁而省略权限、校验、错误处理、操作日志、API 契约、数据库迁移、Celery 幂等性、财务口径、测试、验收、维护型注释或 `old-system/` 只读边界。
+
+如果当前工具支持 Ponytail 插件，可以使用 Ponytail mode；如果不支持，必须按 `docs/PONYTAIL_COMPATIBILITY_RULES.md` 作为项目规则执行。
+
+AI 不得把 Ponytail 标记为“本次不需要”，也不得要求用户单独引用 Ponytail。
 
 ## 9. 开工前必须输出计划
 
 AI 修改代码前，必须先输出：
 
 1. 已读取哪些规则文件。
-2. 任务理解。
-3. 本次任务范围。
-4. 是否参考 `old-system/`。
-5. 前端组件拆分方案。
-6. 后端模块拆分方案。
-7. API 契约草案。
-8. 数据来源和字段血缘。
-9. 是否涉及数据库。
-10. 是否涉及 Celery。
-11. 是否涉及外部 API。
-12. 是否涉及 LLM 调用。
-13. 是否涉及权限和操作日志。
-14. 财务/金额/时间口径。
-15. 性能风险。
-16. 测试和验收方式。
+2. 本次任务类型判断。
+3. 已选择哪些 Skill 以及选择原因。
+4. 本次不需要读取哪些 Skill 以及原因。
+5. 任务理解。
+6. 本次任务范围。
+7. 是否参考 `old-system/`。
+8. 前端组件拆分方案。
+9. 后端模块拆分方案。
+10. API 契约草案。
+11. 数据来源和字段血缘。
+12. 是否涉及数据库。
+13. 是否涉及 Celery。
+14. 是否涉及外部 API。
+15. 是否涉及 LLM 调用。
+16. 是否涉及权限和操作日志。
+17. 财务/金额/时间口径。
+18. 性能风险。
+19. Ponytail 最小正确实现检查。
+20. 测试和验收方式。
 
 用户确认前，不要修改代码。
 
