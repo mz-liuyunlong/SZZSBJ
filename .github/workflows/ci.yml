@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check required rule files
         run: |
@@ -20,8 +22,10 @@ jobs:
       - name: Protect old-system from normal PR changes
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags --depth=1 origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
-          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          changed="$(git diff --name-only "$base_sha...$head_sha")"
           echo "$changed"
 
           protected_changed="$(printf '%s\n' "$changed" | awk '/^old-system\// && $0 != "old-system/README.md" { print }')"
