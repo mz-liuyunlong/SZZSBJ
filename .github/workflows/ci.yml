@@ -20,10 +20,14 @@ jobs:
       - name: Protect old-system from normal PR changes
         if: github.event_name == 'pull_request'
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          git fetch --no-tags --depth=1 origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
           echo "$changed"
-          if echo "$changed" | grep -E '^old-system/' | grep -v '^old-system/README.md$'; then
+
+          protected_changed="$(printf '%s\n' "$changed" | awk '/^old-system\// && $0 != "old-system/README.md" { print }')"
+
+          if [ -n "$protected_changed" ]; then
+            echo "$protected_changed"
             echo "old-system is read-only. Changes require explicit owner approval and must not be included in normal PRs." >&2
             exit 1
           fi
