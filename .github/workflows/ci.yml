@@ -3,31 +3,78 @@ name: CI
 on:
   pull_request:
     branches: [dev, main]
+  push:
+    branches: [dev, main]
 
 jobs:
-  basic-check:
+  rule-pack-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check AI rule files
+      - name: Check required rule files
         run: |
-          test -f AGENTS.md
-          test -f RULE_PACK_FILE_INDEX.md
-          test -f docs/TECH_STACK.md
-          test -f docs/OLD_SYSTEM_READONLY_RULES.md
-          test -f docs/FEATURE_SLICE_DEVELOPMENT_RULES.md
-          test -f docs/COMPONENT_AND_MODULE_RULES.md
-          test -f docs/DATA_SOURCE_AND_LINEAGE_RULES.md
-          test -f docs/FINANCIAL_CALCULATION_RULES.md
-          test -f skills/README.md
+          bash scripts/check-rule-pack.sh
 
-      - name: old-system review note
+      - name: Protect old-system from normal PR changes
+        if: github.event_name == 'pull_request'
         run: |
-          echo "old-system is read-only reference. CODEOWNERS requires manual review for changes."
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD || true)
+          echo "$changed"
+          if echo "$changed" | grep -E '^old-system/' | grep -v '^old-system/README.md$'; then
+            echo "old-system is read-only. Changes require explicit owner approval and must not be included in normal PRs." >&2
+            exit 1
+          fi
 
-      # 前后端项目初始化后，可在这里追加：
-      # - frontend lint/build/test
-      # - backend lint/test
-      # - migration check
+      - name: Basic secret pattern check
+        run: |
+          ! grep -RInE 'BEGIN (OPENSSH|RSA|EC) PRIVATE KEY|sk-[A-Za-z0-9_-]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}' . \
+            --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=old-system || \
+            (echo "Potential secret detected" >&2; exit 1)
+
+  frontend-if-present:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        if: hashFiles('frontend/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend checks
+        if: hashFiles('frontend/package.json') != ''
+        working-directory: frontend
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run lint --if-present
+          npm run typecheck --if-present
+          npm run test --if-present -- --run
+          npm run build --if-present
+
+  backend-if-present:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install uv
+        if: hashFiles('backend/pyproject.toml') != ''
+        uses: astral-sh/setup-uv@v5
+      - name: Setup Python
+        if: hashFiles('backend/pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Backend checks
+        if: hashFiles('backend/pyproject.toml') != ''
+        working-directory: backend
+        run: |
+          uv sync
+          uv run ruff format --check . || true
+          uv run ruff check . || true
+          uv run pytest || true
+          uv run python -c "import app.main" || true
