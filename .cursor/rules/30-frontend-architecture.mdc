@@ -1,5 +1,5 @@
 ---
-description: Frontend architecture rules for React TypeScript Vite Ant Design ProComponents.
+description: Frontend architecture, admin layout, and UI component rules.
 globs:
   - "frontend/**/*"
   - "**/*.tsx"
@@ -7,11 +7,26 @@ globs:
 alwaysApply: false
 ---
 
-
 # Frontend Architecture Rules
 
 Use React + TypeScript + Vite + Ant Design + ProComponents + React Router + Zustand + ECharts.
 
-Do not introduce another UI framework or frontend framework.
+Before frontend work, read and follow:
 
-Handle loading, empty, error, pagination. Update UI component catalog when adding shared components.
+- `docs/TECH_STACK.md`
+- `docs/ui/ADMIN_LAYOUT_RULES.md`
+- `docs/ui/UI_COMPONENT_USAGE_RULES.md`
+- `docs/PAGE_DEVELOPMENT_CHECKLIST.md`
+- `docs/UI_COMPONENT_CATALOG.md`
+
+Rules:
+
+- Business pages must use the unified admin layout.
+- Sidebar, Header, Tabbar, Breadcrumb, and page content must be managed by the unified layout.
+- Navigation, tabbar, breadcrumb, permission, status, and help metadata must come from shared configuration.
+- Use Ant Design + ProComponents as the approved UI component system.
+- Do not hand-code complex admin tables, forms, modals, cards, breadcrumbs, tabbars, filters, pagination, or status displays with raw HTML/CSS.
+- Do not introduce another frontend framework or UI component library.
+- Handle loading, empty, error, no-permission, and pagination states.
+- Update `docs/UI_COMPONENT_CATALOG.md` when adding shared components.
+- A page without unified layout, permissions, page states, and UI component compliance cannot be marked `ready`.

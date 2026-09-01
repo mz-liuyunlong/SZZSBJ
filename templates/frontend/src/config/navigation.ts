@@ -1,12 +1,33 @@
+/**
+ * Navigation template.
+ *
+ * This file is a project bootstrap template, not runtime code inside the rule pack.
+ *
+ * When the frontend project is created, copy this file to:
+ *
+ *   frontend/src/config/navigation.ts
+ *
+ * After copying, frontend/src/config/navigation.ts becomes the single source of truth for:
+ * - Sidebar menu
+ * - React Router route registration
+ * - Breadcrumb
+ * - Tabbar
+ * - Page permission keys
+ * - Page help links
+ *
+ * Rules:
+ * - Do not hand-code menus inside page components.
+ * - Do not create another navigation config.
+ * - Do not put emoji into title.
+ * - Icon can only be configured through the icon field.
+ * - New pages must be added here first.
+ */
+
 export type PageStatus =
   | 'planned'
   | 'building'
-  | 'readonly'
   | 'testing'
   | 'ready'
-  | 'legacy'
-  | 'iframe'
-  | 'deprecated'
   | 'disabled'
   | 'hidden';
 
@@ -40,7 +61,7 @@ export interface NavigationPage {
   status: PageStatus;
   source: PageSource;
   sourceTables: string[];
-  readonly: boolean;
+  readOnly: boolean;
   migrationMode: MigrationMode;
   permissionKey: string;
   actions?: PageAction[];
@@ -57,10 +78,10 @@ export interface NavigationGroup {
 
 const defaults = {
   phase: 1,
-  status: 'building' as PageStatus,
+  status: 'planned' as PageStatus,
   source: 'pending' as PageSource,
   sourceTables: [] as string[],
-  readonly: true,
+  readOnly: false,
   migrationMode: 'pending' as MigrationMode,
 };
 
@@ -88,7 +109,7 @@ const page = (
 export const navigation: NavigationGroup[] = [
   {
     key: 'dashboard',
-    title: '🏠 工作台',
+    title: '工作台',
     children: [
       page('dashboard', 'today_sales', '今日销售', '/dashboard/today-sales'),
       page('dashboard', 'today_profit', '今日利润', '/dashboard/today-profit'),
@@ -104,7 +125,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'products',
-    title: '📦 产品',
+    title: '产品',
     children: [
       page('products', 'product_management', '产品管理', '/products/management'),
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
@@ -116,7 +137,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'sales',
-    title: '📈 销售',
+    title: '销售',
     children: [
       page('sales', 'daily_sales', '每日销售', '/sales/daily-sales'),
       page('sales', 'order_profit', '订单利润', '/sales/order-profit'),
@@ -128,7 +149,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'ads',
-    title: '📢 广告',
+    title: '广告',
     children: [
       page('ads', 'overview', '广告总览', '/ads/overview'),
       page('ads', 'campaigns', '广告活动', '/ads/campaigns'),
@@ -143,7 +164,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'aftersales',
-    title: '🧾 售后',
+    title: '售后',
     children: [
       page('aftersales', 'refund_management', '退款管理', '/aftersales/refund-management'),
       page('aftersales', 'return_management', '退货管理', '/aftersales/return-management'),
@@ -156,7 +177,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'warehouse',
-    title: '🏭 仓库',
+    title: '仓库',
     children: [
       page('warehouse', 'inventory_detail', '库存明细', '/warehouse/inventory-detail'),
       page('warehouse', 'inventory_alert', '库存预警', '/warehouse/inventory-alert'),
@@ -171,7 +192,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'finance',
-    title: '💰 财务',
+    title: '财务',
     children: [
       page('finance', 'profit_center', '利润中心', '/finance/profit-center'),
       page('finance', 'sku_cash_profit', '单品现金利润', '/finance/sku-cash-profit'),
@@ -184,23 +205,20 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'operations',
-    title: '📝 运营',
+    title: '运营',
     children: [
       page('operations', 'log', '运营日志', '/operations/log'),
       page('operations', 'plan', '运营计划', '/operations/plan'),
       page('operations', 'todo', '运营待办', '/operations/todo'),
       page('operations', 'calendar', '运营日历', '/operations/calendar'),
       page('operations', 'promotion_center', '推广中心', '/operations/promotion-center', {
-        tabs: [
-          { key: 'review', title: '测评' },
-          { key: 'boost', title: '刷单' },
-        ],
+        tabs: [{ key: 'evaluation', title: '测评' }, { key: 'order_brushing', title: '刷单' }],
       }),
     ],
   },
   {
     key: 'purchase',
-    title: '🛒 采购',
+    title: '采购',
     children: [
       page('purchase', 'plan', '采购计划', '/purchase/plan'),
       page('purchase', 'order', '采购单', '/purchase/order'),
@@ -208,7 +226,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'ai_center',
-    title: '🤖 AI中心',
+    title: 'AI中心',
     children: [
       page('ai_center', 'assistant', 'AI助手', '/ai-center/assistant'),
       page('ai_center', 'ads_optimization', '广告优化', '/ai-center/ads-optimization'),
@@ -220,7 +238,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'data_center',
-    title: '🗄 数据中心',
+    title: '数据中心',
     children: [
       page('data_center', 'approval_workspace', '审批工作台', '/data-center/approval-workspace', {
         tabs: [{ key: 'pending', title: '待审批' }, { key: 'approved', title: '已审批' }, { key: 'rejected', title: '驳回记录' }],
@@ -250,7 +268,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'statistics',
-    title: '⭐ 统计',
+    title: '统计',
     children: [
       page('statistics', 'business_overview', '经营总览', '/statistics/business-overview'),
       page('statistics', 'account_health', '账号健康', '/statistics/account-health'),
@@ -264,7 +282,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     key: 'settings',
-    title: '⚙️ 设置',
+    title: '设置',
     children: [
       page('settings', 'user_management', '用户管理', '/settings/user-management', {
         tabs: [{ key: 'users', title: '用户列表' }, { key: 'roles', title: '分配角色' }, { key: 'org', title: '组织架构' }, { key: 'data-scope', title: '用户数据范围' }],

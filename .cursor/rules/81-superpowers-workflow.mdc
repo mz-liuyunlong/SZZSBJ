@@ -1,0 +1,6 @@
+---
+description: Superpowers usage boundary
+alwaysApply: false
+---
+
+Superpowers may be used for brainstorming, planning, TDD, code review, and branch finish workflows. It must not modify old-system, connect production DB, deploy, or override Project Rule Pack.

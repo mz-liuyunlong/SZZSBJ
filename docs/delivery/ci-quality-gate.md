@@ -20,6 +20,7 @@ old-system 被修改，不允许合并。
 | 静态检查 | eslint | ruff check |
 | 类型检查 | tsc | pyright / mypy |
 | 单元测试 | vitest | pytest |
+| E2E | Playwright | - |
 | 构建/导入 | vite build | import check |
 | 迁移检查 | - | alembic check |
 | API 契约 | OpenAPI diff | OpenAPI diff |
@@ -39,11 +40,27 @@ old-system 被修改，不允许合并。
 前后端初始化后：
 
 ```text
-frontend lint / typecheck / build / test
+frontend lint / typecheck / build / test / Playwright E2E
 backend ruff / pyright / pytest / alembic check
 ```
 
 ## 4. PR 合并标准
+
+## 3.1 Playwright E2E 门禁
+
+前端初始化并安装 Playwright 后，CI 必须支持 `npm run test:e2e`。
+
+规则：
+
+```text
+框架阶段：至少跑导航壳、PageShell、帮助入口、API文档入口 E2E。
+业务阶段：每个 ready 页面必须有对应 E2E。
+高危功能：必须有流程型 E2E。
+E2E 失败，不允许合并 ready 页面相关 PR。
+```
+
+详细规则见：`docs/delivery/e2e-playwright-standard.md`。
+
 
 PR 必须写清：
 

@@ -5,9 +5,9 @@
 | 账号 | 数据库 | 权限 | 用途 |
 |---|---|---|---|
 | legacy_readonly | 旧 MySQL | SELECT only | 旧库只读查询 |
-| skyc_v2_app | 新 PostgreSQL | SELECT/INSERT/UPDATE/DELETE | 应用运行 |
-| skyc_v2_migrator | 新 PostgreSQL | DDL | Alembic 迁移 |
-| skyc_v2_readonly | 新 PostgreSQL | SELECT only | 报表/排查 |
+| app_user | 新 PostgreSQL | SELECT/INSERT/UPDATE/DELETE | 应用运行 |
+| migration_user | 新 PostgreSQL | DDL | Alembic 迁移 |
+| readonly_user | 新 PostgreSQL | SELECT only | 报表/排查 |
 
 ## 2. 禁止事项
 

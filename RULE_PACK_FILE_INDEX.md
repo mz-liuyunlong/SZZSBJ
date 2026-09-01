@@ -1,91 +1,196 @@
-# SZZSBJ Rule Pack v2.0 文件索引
+# Rule Pack File Index — V1.0
 
-## 1. 最高优先级入口
+This index lists the files included in the rule pack.
 
-| 文件 | 用途 |
-|---|---|
-| `AGENTS.md` | 所有 AI 的总规则 |
-| `AI_DAILY_RULES.md` | 日常开发轻量入口 |
-| `README_AI_RULES.md` | 规则包使用说明 |
-| `docs/00_RULE_PACK_V2_OVERVIEW.md` | v2 总览和优先级 |
-| `docs/01_PROJECT_DECISIONS.md` | 项目决策日志 |
-
-## 2. 工程架构
-
-| 文件 | 用途 |
-|---|---|
-| `docs/architecture/frontend.md` | 前端架构、PageShell、导航、帮助入口 |
-| `docs/architecture/backend.md` | 后端分层、模块、任务 |
-| `docs/architecture/api.md` | API 返回、分页、错误码、OpenAPI |
-| `docs/architecture/database.md` | PostgreSQL、旧库只读、新库分层 |
-| `docs/architecture/security-secrets-integrations.md` | Token、飞书、Webhook、密钥管理 |
-
-## 3. 业务规则
-
-| 文件 | 用途 |
-|---|---|
-| `docs/business-rules/navigation-spec.md` | 最终导航、API文档位置、SOP入口 |
-| `docs/business-rules/permission-model.md` | 动态角色、权限点、审计 |
-| `docs/business-rules/organization-and-data-scope.md` | 组织架构、小组长、组员、数据范围 |
-| `docs/business-rules/fee-rules-versioning.md` | 佣金、汇率、费用规则版本化 |
-| `docs/business-rules/time-money-metric-rules.md` | 时间、金额、指标口径 |
-| `docs/business-rules/data-lineage-and-quality.md` | 数据血缘、质量、新鲜度 |
-
-## 4. 交付标准
-
-| 文件 | 用途 |
-|---|---|
-| `docs/delivery/api-documentation-standard.md` | API 文档和 API 文档页面 |
-| `docs/delivery/sop-help-standard.md` | 页面右上角帮助和 SOP |
-| `docs/delivery/codex-task-standard.md` | Codex 任务粒度与完成报告 |
-| `docs/delivery/ci-quality-gate.md` | CI 质量门禁 |
-| `docs/delivery/acceptance-checklist.md` | 功能验收清单 |
-
-## 5. 数据库细化
-
-| 文件 | 用途 |
-|---|---|
-| `docs/database/INITIAL_SCHEMA_PLAN.md` | 初始 schema 表清单 |
-| `docs/database/LEGACY_DB_READONLY_PLAN.md` | 旧库只读方案 |
-| `docs/database/ACCOUNT_PERMISSION_PLAN.md` | 数据库账号权限 |
-
-## 6. 运维规则
-
-| 文件 | 用途 |
-|---|---|
-| `docs/operations/deployment-environments.md` | local/staging/production 规则 |
-| `docs/operations/release-rollback-backup.md` | 发布、回滚、备份、锁账 |
-| `docs/operations/notification-todo-approval.md` | 通知、待办、审批 |
-
-## 7. 任务队列
-
-| 文件 | 用途 |
-|---|---|
-| `docs/tasks/FIRST_30_CODEX_TASKS.md` | 第一批 30 个 Codex 任务 |
-
-## 8. 模板
-
-| 文件 | 用途 |
-|---|---|
-| `templates/frontend/src/config/navigation.ts` | 最终导航配置模板 |
-| `templates/backend/app/core/response.py` | API Response 模板 |
-| `templates/backend/app/core/permissions.py` | 权限校验模板 |
-| `templates/backend/alembic/versions/0001_initial_skyc_v2_core_tables.py` | 初始 Alembic migration 草稿 |
-| `templates/bootstrap/.node-version` | Node 版本模板 |
-| `templates/bootstrap/.python-version` | Python 版本模板 |
-
-## 9. 规则冲突优先级
-
-如果旧文件和 v2 新文件冲突，以 v2 新文件为准。
-
-优先级：
-
-```text
-AGENTS.md
-AI_DAILY_RULES.md
-docs/00_RULE_PACK_V2_OVERVIEW.md
-docs/01_PROJECT_DECISIONS.md
-docs/architecture/*
-docs/business-rules/*
-docs/delivery/*
-```
+- `.cursor/rules/00-project-safety.mdc`
+- `.cursor/rules/10-git-workflow.mdc`
+- `.cursor/rules/15-old-system-readonly.mdc`
+- `.cursor/rules/20-feature-slice-development.mdc`
+- `.cursor/rules/20-planning-prp-workflow.mdc`
+- `.cursor/rules/25-component-and-module-rules.mdc`
+- `.cursor/rules/30-frontend-architecture.mdc`
+- `.cursor/rules/40-backend-architecture.mdc`
+- `.cursor/rules/45-database-rules.mdc`
+- `.cursor/rules/50-background-task-rules.mdc`
+- `.cursor/rules/55-code-comment-rules.mdc`
+- `.cursor/rules/60-security-rules.mdc`
+- `.cursor/rules/65-api-contract-rules.mdc`
+- `.cursor/rules/70-documentation-rules.mdc`
+- `.cursor/rules/75-testing-rules.mdc`
+- `.cursor/rules/76-context-engineering-prp.mdc`
+- `.cursor/rules/77-planning-with-files.mdc`
+- `.cursor/rules/78-context7-doc-lookup.mdc`
+- `.cursor/rules/79-external-skill-priority.mdc`
+- `.cursor/rules/80-data-finance-performance-rules.mdc`
+- `.cursor/rules/81-superpowers-workflow.mdc`
+- `.cursor/rules/82-vercel-agent-skills.mdc`
+- `.cursor/rules/83-ponytail-compatibility.mdc`
+- `.cursor/rules/85-external-api-llm-rules.mdc`
+- `.cursor/rules/90-release-and-deploy-rules.mdc`
+- `.github/CODEOWNERS`
+- `.github/copilot-instructions.md`
+- `.github/pull_request_template.md`
+- `.github/workflows/ci.yml`
+- `.gitignore.ai-recommended`
+- `.node-version`
+- `.python-version`
+- `AGENTS.md`
+- `AI_DAILY_RULES.md`
+- `AI_ONBOARDING.md`
+- `AI_START_HERE.md`
+- `CODEX_START_HERE.md`
+- `INSTALL_TO_PROJECT.md`
+- `PRPs/README.md`
+- `PRPs/templates/ai_task_prp.md`
+- `PRPs/templates/backend_api_prp.md`
+- `PRPs/templates/database_prp.md`
+- `PRPs/templates/frontend_page_prp.md`
+- `PRPs/templates/prp_base.md`
+- `README_AI_RULES.md`
+- `backend/AGENTS.md`
+- `docs/00_RULE_PACK_V1_0_OVERVIEW.md`
+- `docs/01_PROJECT_DECISIONS.md`
+- `docs/ACCEPTANCE_CRITERIA_RULES.md`
+- `docs/AI_FEATURE_SAFETY_RULES.md`
+- `docs/AI_GIT_DEV_RULES.md`
+- `docs/AI_TECH_DEV_RULES.md`
+- `docs/AI_TOKEN_EFFICIENCY_RULES.md`
+- `docs/API_CONTRACT_RULES.md`
+- `docs/API_DESIGN_RULES.md`
+- `docs/BACKEND_MODULE_CATALOG.md`
+- `docs/BACKGROUND_TASK_DEVELOPMENT_RULES.md`
+- `docs/BACKUP_AND_RECOVERY_RULES.md`
+- `docs/BUSINESS_GLOSSARY.md`
+- `docs/CODEX_PROMPT_TEMPLATES.md`
+- `docs/CODEX_WORKFLOW.md`
+- `docs/CODE_COMMENT_RULES.md`
+- `docs/CODE_REVIEW_CHECKLIST.md`
+- `docs/COMPONENT_AND_MODULE_RULES.md`
+- `docs/DATABASE_RULES.md`
+- `docs/DATA_MODELING_RULES.md`
+- `docs/DATA_QUALITY_RULES.md`
+- `docs/DATA_SOURCE_AND_LINEAGE_RULES.md`
+- `docs/DATA_SYNC_RULES.md`
+- `docs/DEPENDENCY_MANAGEMENT_RULES.md`
+- `docs/DEPLOYMENT_RULES.md`
+- `docs/DEVELOPMENT_PHASES.md`
+- `docs/DOCUMENTATION_UPDATE_RULES.md`
+- `docs/ENVIRONMENT_CONFIG_RULES.md`
+- `docs/ERROR_HANDLING_RULES.md`
+- `docs/EXTERNAL_API_INTEGRATION_RULES.md`
+- `docs/FEATURE_SLICE_DEVELOPMENT_RULES.md`
+- `docs/FINANCIAL_CALCULATION_RULES.md`
+- `docs/FORM_VALIDATION_RULES.md`
+- `docs/HANDOFF_TEMPLATE.md`
+- `docs/IMPORT_EXPORT_RULES.md`
+- `docs/LLM_PROVIDER_ADAPTER_RULES.md`
+- `docs/LOGGING_RULES.md`
+- `docs/MOCK_DATA_RULES.md`
+- `docs/OBSERVABILITY_RULES.md`
+- `docs/OLD_SYSTEM_READONLY_RULES.md`
+- `docs/PAGE_DEVELOPMENT_CHECKLIST.md`
+- `docs/PERFORMANCE_RULES.md`
+- `docs/PERMISSION_AND_AUDIT_RULES.md`
+- `docs/PONYTAIL_COMPATIBILITY_RULES.md`
+- `docs/PROJECT_BOOTSTRAP_RULES.md`
+- `docs/PROJECT_STRUCTURE.md`
+- `docs/README.md`
+- `docs/REBUILD_MAPPING_RULES.md`
+- `docs/RELEASE_AND_ROLLBACK_RULES.md`
+- `docs/REQUIREMENT_TEMPLATE.md`
+- `docs/ROLE_PERMISSION_MATRIX.md`
+- `docs/SEARCH_FILTER_SORT_RULES.md`
+- `docs/SECURITY_RULES.md`
+- `docs/STATUS_MODEL_RULES.md`
+- `docs/TECH_STACK.md`
+- `docs/TESTING_RULES.md`
+- `docs/TIMEZONE_AND_CURRENCY_RULES.md`
+- `docs/UI_COMPONENT_CATALOG.md`
+- `docs/UI_STYLE_RULES.md`
+- `docs/adr/README.md`
+- `docs/api-contracts/README.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `docs/architecture/api.md`
+- `docs/architecture/backend.md`
+- `docs/architecture/database.md`
+- `docs/architecture/frontend.md`
+- `docs/architecture/security-secrets-integrations.md`
+- `docs/business-rules/data-lineage-and-quality.md`
+- `docs/business-rules/fee-rules-versioning.md`
+- `docs/business-rules/navigation-spec.md`
+- `docs/business-rules/organization-and-data-scope.md`
+- `docs/business-rules/permission-model.md`
+- `docs/business-rules/time-money-metric-rules.md`
+- `docs/database/ACCOUNT_PERMISSION_PLAN.md`
+- `docs/database/INITIAL_SCHEMA_PLAN.md`
+- `docs/database/LEGACY_DB_READONLY_PLAN.md`
+- `docs/delivery/acceptance-checklist.md`
+- `docs/delivery/api-documentation-standard.md`
+- `docs/delivery/ci-quality-gate.md`
+- `docs/delivery/codex-task-standard.md`
+- `docs/delivery/context-engineering-prp-standard.md`
+- `docs/delivery/context7-doc-lookup-standard.md`
+- `docs/delivery/e2e-playwright-standard.md`
+- `docs/delivery/planning-with-files-standard.md`
+- `docs/delivery/sop-help-standard.md`
+- `docs/delivery/superpowers-agent-workflow-standard.md`
+- `docs/delivery/vercel-agent-skills-standard.md`
+- `docs/dev-handbook/README.md`
+- `docs/handoffs/README.md`
+- `docs/old-system-analysis/README.md`
+- `docs/openapi/README.md`
+- `docs/operations/deployment-environments.md`
+- `docs/operations/notification-todo-approval.md`
+- `docs/operations/release-rollback-backup.md`
+- `docs/page-specs/README.md`
+- `docs/sop/README.md`
+- `docs/sop/general/README.md`
+- `docs/tasks/FIRST_40_CODEX_TASKS.md`
+- `docs/tools/AI_SKILL_REGISTRY.md`
+- `docs/tools/AI_TOOL_INSTALL_GUIDE.md`
+- `docs/tools/AI_TOOL_PRIORITY_RULES.md`
+- `docs/tools/CONTEXT7_SETUP_GUIDE.md`
+- `docs/tools/PONYTAIL_SETUP_GUIDE.md`
+- `docs/tools/README.md`
+- `docs/ui/ADMIN_LAYOUT_RULES.md`
+- `docs/ui/UI_COMPONENT_USAGE_RULES.md`
+- `frontend/AGENTS.md`
+- `old-system/README.md`
+- `scripts/check-rule-pack.sh`
+- `skills/README.md`
+- `skills/api-contract-designer/SKILL.md`
+- `skills/backend-module-designer/SKILL.md`
+- `skills/background-task-designer/SKILL.md`
+- `skills/code-review-checker/SKILL.md`
+- `skills/data-lineage-analyzer/SKILL.md`
+- `skills/data-sync-designer/SKILL.md`
+- `skills/external-api-integration-designer/SKILL.md`
+- `skills/feature-slice-planner/SKILL.md`
+- `skills/financial-calculation-reviewer/SKILL.md`
+- `skills/llm-provider-adapter-designer/SKILL.md`
+- `skills/old-system-readonly-analyzer/SKILL.md`
+- `skills/page-acceptance-checker/SKILL.md`
+- `skills/performance-reviewer/SKILL.md`
+- `skills/permission-matrix-designer/SKILL.md`
+- `skills/ponytail-compatibility/SKILL.md`
+- `skills/react-component-architect/SKILL.md`
+- `skills/rebuild-mapping-planner/SKILL.md`
+- `skills/rule-pack-maintainer/SKILL.md`
+- `templates/CODEX_HANDOFF.md`
+- `templates/INITIAL_FEATURE.md`
+- `templates/README.md`
+- `templates/backend/alembic/versions/0001_initial_core_tables.py`
+- `templates/backend/app/core/permissions.py`
+- `templates/backend/app/core/response.py`
+- `templates/bootstrap/.node-version`
+- `templates/bootstrap/.python-version`
+- `templates/frontend/e2e/api-docs.spec.ts`
+- `templates/frontend/e2e/help-link.spec.ts`
+- `templates/frontend/e2e/navigation.spec.ts`
+- `templates/frontend/playwright.config.ts`
+- `templates/frontend/src/config/navigation.ts`
+- `templates/planning/findings.md`
+- `templates/planning/progress.md`
+- `templates/planning/task_plan.md`
+- `templates/prompts/use-context7-for-library-docs.md`

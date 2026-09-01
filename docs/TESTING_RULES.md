@@ -22,7 +22,10 @@
 npm run lint
 npm run typecheck
 npm run build
+npm run test:e2e
 ```
+
+Playwright E2E 详细规则见 `docs/delivery/e2e-playwright-standard.md`。
 
 如果使用 pnpm 或 yarn，以项目确认后的包管理器为准。
 

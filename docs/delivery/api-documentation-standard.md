@@ -3,7 +3,7 @@
 ## 1. API 文档页面位置
 
 ```text
-🗄 数据中心 → API文档
+数据中心 → API文档
 ```
 
 权限点：
@@ -65,7 +65,7 @@ Method
 显示接口列表
 按模块 / 方法 / 路径搜索
 点开接口显示请求参数、返回字段、错误码
-显示 source / sourceTables / readonly / highRisk / permission
+显示 source / sourceTables / readOnly / highRisk / permission
 提供 /docs 和 /redoc 跳转
 ```
 

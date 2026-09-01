@@ -1,0 +1,6 @@
+---
+description: Vercel Agent Skills boundary
+alwaysApply: false
+---
+
+Use Vercel Agent Skills only for React/UI/docs review or Vercel optimization after approved deployment. vercel-deploy-claimable is forbidden unless explicitly approved.

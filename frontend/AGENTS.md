@@ -20,3 +20,5 @@ React、TypeScript、Vite、Ant Design、ProComponents、React Router、Zustand�
 10. 不允许从 `old-system/` import 代码。
 
 开发页面前，先读取 `skills/react-component-architect/SKILL.md`。
+
+- Frontend admin layout and UI component usage must follow `docs/ui/ADMIN_LAYOUT_RULES.md`.

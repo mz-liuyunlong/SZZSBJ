@@ -5,7 +5,7 @@
 AI Token、飞书 Webhook、外部 API Key、App Secret 等敏感配置统一放在：
 
 ```text
-⚙️ 设置 → 系统配置 → 集成配置
+设置 → 系统配置 → 集成配置
 ```
 
 不新增第二套后台系统。

@@ -50,3 +50,18 @@ old-system/*
 !old-system/README.md
 
 # 如未来决定提交脱敏后的 old-system，请先人工审查密钥、日志、缓存、数据库文件。
+
+# AI local planning memory
+.planning/
+task_plan.md
+findings.md
+progress.md
+
+# Local AI tool secrets/config
+.context7/
+*.mcp.json
+*.mcp.local.json
+
+# Keep handoff and long-term decisions in git
+!CODEX_HANDOFF.md
+!docs/DECISION_LOG.md

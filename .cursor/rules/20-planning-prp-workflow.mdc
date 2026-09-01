@@ -1,0 +1,30 @@
+---
+description: Planning, PRP, documentation, and handoff workflow rules.
+globs:
+  - "**/*.md"
+  - "PRPs/**/*.md"
+  - "templates/**/*.md"
+  - "docs/**/*.md"
+alwaysApply: false
+---
+
+# Planning and PRP Workflow Rules
+
+For planning, PRP, documentation, and handoff work, read and follow:
+
+- `AGENTS.md`
+- `AI_DAILY_RULES.md`
+- `PRPs/README.md`
+- `templates/INITIAL_FEATURE.md`
+- `templates/CODEX_HANDOFF.md`
+
+Rules:
+
+- Complex features must not go directly into implementation.
+- Complex features require an approved PRP or approved task plan first.
+- A PRP is a plan, not permission to edit code.
+- The project owner must approve the PRP before implementation starts.
+- Long-running tasks must maintain planning notes when appropriate.
+- Stage handoff must be written to `CODEX_HANDOFF.md`.
+- Documentation must describe current project rules only.
+- Keep rule files current, actionable, and directly relevant to the blank project.

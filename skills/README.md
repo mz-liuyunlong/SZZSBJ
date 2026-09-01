@@ -42,6 +42,7 @@ AI 选择 Skill 时必须遵守：
 | 外部 API 接入 | `skills/external-api-integration-designer/SKILL.md` |
 | LLM 调用层 | `skills/llm-provider-adapter-designer/SKILL.md` |
 | PR 自检 | `skills/code-review-checker/SKILL.md` |
+| Ponytail 兼容 / 规则守卫 | `skills/ponytail-compatibility/SKILL.md` |
 | 规则包维护 | `skills/rule-pack-maintainer/SKILL.md` |
 
 AI 开始开发前必须先输出“本次 Skill 判断”，包括：任务类型、选择的 Skill、选择原因、不读取的 Skill、相关 docs、初步计划。
@@ -67,33 +68,4 @@ AI 开始开发前必须先输出“本次 Skill 判断”，包括：任务类�
 | `permission-matrix-designer` | 权限矩阵设计 |
 | `code-review-checker` | PR 自检与风险检查 |
 | `rule-pack-maintainer` | 规则包维护，防止规则冲突 |
-
-## Ponytail 兼容规则
-
-所有代码开发任务默认还必须遵守：
-
-```text
-docs/PONYTAIL_COMPATIBILITY_RULES.md
-```
-
-它不是某个具体业务 Skill，而是所有开发任务默认开启的通用规则：防止过度设计、优先复用、避免重复代码、控制新增依赖、只做最小正确实现。
-
-AI 不得把 Ponytail 放进“本次不需要读取的 Skill”里，也不得要求用户单独引用 Ponytail。
-
-Ponytail 兼容规则不能覆盖项目安全、权限、old-system 只读、API 契约、数据库、Celery、财务、测试和维护型注释规则。
-
-
----
-
-## 官方 Ponytail 插件不是业务 Skill
-
-Ponytail 不参与本目录的业务 Skill 选择。
-
-Ponytail 是默认开发原则和官方工具插件。AI 第一次接手项目时，应先按以下文件处理官方插件安装：
-
-```text
-AI_ONBOARDING.md
-docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md
-```
-
-然后再根据任务类型选择本目录下的业务 Skill。
+| `ponytail-compatibility` | Ponytail 兼容与规则守卫 |

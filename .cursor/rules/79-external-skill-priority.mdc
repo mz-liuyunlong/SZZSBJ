@@ -1,0 +1,6 @@
+---
+description: External AI skill priority
+alwaysApply: true
+---
+
+External skills are optional assistants. Priority: user latest instruction > AGENTS.md > AI_DAILY_RULES.md > approved PRP > planning files > external skills. Stop if there is a conflict.

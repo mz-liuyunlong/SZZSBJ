@@ -97,8 +97,8 @@ ai_usage_log
 
 ```text
 legacy_readonly：旧 MySQL，只能 SELECT
-skyc_v2_app：新 PostgreSQL 应用账号，只能 SELECT/INSERT/UPDATE/DELETE
-skyc_v2_migrator：新 PostgreSQL 迁移账号，允许 DDL，但只在人工审核迁移时使用
+app_user：新 PostgreSQL 应用账号，只能 SELECT/INSERT/UPDATE/DELETE
+migration_user：新 PostgreSQL 迁移账号，允许 DDL，但只在人工审核迁移时使用
 ```
 
 ## 5. 迁移规则

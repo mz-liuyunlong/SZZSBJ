@@ -1,6 +1,6 @@
-"""initial skyc v2 core tables draft
+"""initial core tables draft
 
-Revision ID: 0001_initial_skyc_v2
+Revision ID: 0001_initial_v2
 Revises: 
 Create Date: 2026-09-01
 
@@ -13,7 +13,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "0001_initial_skyc_v2"
+revision = "0001_initial_v2"
 down_revision = None
 branch_labels = None
 depends_on = None

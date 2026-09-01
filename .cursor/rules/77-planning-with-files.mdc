@@ -1,0 +1,6 @@
+---
+description: Persistent planning files
+alwaysApply: true
+---
+
+For long or multi-step tasks, maintain .planning/current/task_plan.md, findings.md, and progress.md. These files never override AGENTS.md or the user's latest instruction.

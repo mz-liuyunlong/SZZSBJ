@@ -1,4 +1,4 @@
-# 固定技术栈 v2.0
+# 固定技术栈
 
 ## 1. 最终选型
 
@@ -22,7 +22,7 @@
 | 后端 | 队列依赖 | Redis | Celery broker / result backend / cache |
 | 后端 | 后台任务 | Celery | 同步、导入、导出、AI 等耗时任务 |
 | 后端 | AI 调用 | LLM Provider Adapter | 统一封装模型供应商 |
-| 数据库 | 新库 | PostgreSQL | SKYC V2 新系统数据库 |
+| 数据库 | 新库 | PostgreSQL | 新系统数据库 |
 | 数据库 | 旧库 | MySQL readonly | 旧系统只读数据源 |
 
 ## 2. 版本文件

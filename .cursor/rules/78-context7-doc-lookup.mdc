@@ -1,0 +1,20 @@
+---
+description: Use Context7 only for third-party library documentation lookup.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Context7 文档查询规则
+
+当任务涉及第三方库 API、配置、升级、脚手架、SDK、CLI 时，先使用 Context7 或官方文档核对当前版本用法。
+
+Context7 只作为文档查询工具：
+
+- 不加入 frontend/backend 业务依赖。
+- 不加入 CI 必跑依赖。
+- 不加入 Dockerfile / postinstall。
+- 不提交 API Key / MCP Token / OAuth 信息。
+- 不覆盖 AGENTS.md 或项目安全边界。
+
+使用后必须在完成报告中说明查询库、版本、结论、不确定点。

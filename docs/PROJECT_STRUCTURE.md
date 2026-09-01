@@ -13,7 +13,6 @@ project-root/
 ├── .cursor/                  # Cursor 规则入口
 ├── AGENTS.md                 # AI 总规则
 ├── AI_START_HERE.md          # AI 通用启动入口
-├── CLAUDE.md                 # Claude 入口适配
 └── README_AI_RULES.md        # 人看的规则说明
 ```
 

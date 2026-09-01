@@ -1,6 +1,6 @@
 # SOP / 帮助文档目录
 
-页面 SOP 按模块存放，公司 SOP 放在 `company/`。
+页面 SOP 按模块存放，通用 SOP 放在 `general/`。
 
 ## SOP 模板
 

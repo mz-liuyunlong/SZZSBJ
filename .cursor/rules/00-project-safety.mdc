@@ -3,12 +3,21 @@ description: Global safety rules for all AI-assisted development in this project
 alwaysApply: true
 ---
 
-
 # Project Safety Rules
 
 This project is a greenfield rebuild with `old-system/` as read-only reference.
 
 All AI tools must follow the same project rules.
+
+## Required entry files
+
+Before editing, read:
+
+1. `AGENTS.md`
+2. `AI_DAILY_RULES.md`
+3. `RULE_PACK_FILE_INDEX.md`
+
+`AGENTS.md` is the highest project rule source. Do not create a second rule system inside `.cursor`.
 
 ## Absolute rules
 
@@ -20,48 +29,18 @@ All AI tools must follow the same project rules.
 - Do not introduce a second backend task system.
 - Do not generate multiple modules or pages in one task.
 - Do not refactor unrelated files.
-- Follow `docs/PONYTAIL_COMPATIBILITY_RULES.md` by default for all coding tasks; do not wait for the user to mention Ponytail.
+- Do not deploy, restart services, run production migrations, or connect to production systems unless explicitly approved.
 
-
-## Skill Discovery
+## Skill discovery
 
 Before editing code, identify the task type and read `skills/README.md`.
 
-Then select only the relevant Skill files for the current task.
-
-Do not read all Skill files unless the user explicitly asks for a full rule-pack review.
+Select only the relevant Skill files for the current task. Do not read all Skill files unless the user explicitly asks for a full rule-pack review.
 
 Before coding, report:
 
 1. Selected Skills.
 2. Why they are relevant.
-3. Skills not needed for this task.
-4. Related docs.
-5. Implementation plan.
-
-Before editing, read `AGENTS.md`, `AI_DAILY_RULES.md`, `RULE_PACK_FILE_INDEX.md`, `skills/README.md`, `docs/PONYTAIL_COMPATIBILITY_RULES.md`, and the related docs.
-
-## Ponytail Default-On
-
-For every coding task, apply `docs/PONYTAIL_COMPATIBILITY_RULES.md` by default.
-
-Ponytail is not an optional Skill in this project. Do not ask the user to invoke it and do not mark it as unnecessary.
-
-Use the smallest correct implementation, prefer existing project code and platform-native features, and avoid unrequested abstractions or dependencies.
-
-Do not use Ponytail/minimalism to skip validation, permissions, audit logs, API contracts, database migrations, Celery idempotency, tests, comments, or `old-system/` read-only rules.
-
-
-## First-run AI Tool Setup
-
-When first opening this repository, do not assume the developer has read setup docs.
-Read `AI_ONBOARDING.md` and `docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md`.
-If terminal access is available, suggest running:
-
-```bash
-bash scripts/check-ai-tools.sh
-bash scripts/setup-ai-tools.sh
-```
-
-Do not add official Ponytail installation to npm postinstall, CI, Docker, Vercel, or runtime scripts.
-Do not auto-trust hooks for the user.
+3. Related docs.
+4. Implementation plan.
+5. Risk points.

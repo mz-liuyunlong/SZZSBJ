@@ -50,10 +50,10 @@ frontend/
   title: string;
   path: string;
   phase: number;
-  status: 'planned' | 'building' | 'readonly' | 'testing' | 'ready' | 'legacy' | 'iframe' | 'deprecated' | 'disabled' | 'hidden';
+  status: 'planned' | 'building' | 'testing' | 'ready' | 'disabled' | 'hidden';
   source: 'pending' | 'legacy_mysql' | 'new_postgres' | 'cache' | 'openapi' | 'mixed';
   sourceTables: string[];
-  readonly: boolean;
+  readOnly: boolean;
   migrationMode: 'pending' | 'legacy' | 'iframe' | 'rewrite' | 'native';
   permissionKey: string;
   actions?: PageAction[];
@@ -109,3 +109,17 @@ API文档入口，如果有权限
 字段仍在调整
 抽象后更难读
 ```
+
+
+## 8. 页面状态与只读属性
+
+`status` 只表示页面建设状态。
+
+允许值固定为：
+
+```text
+planned / building / testing / ready / disabled / hidden
+```
+
+页面是否只读必须使用 `readOnly: true/false`，不得使用 `status: 'readonly'`。
+`legacy`、`iframe`、`deprecated` 不得作为 `PageStatus` 值。

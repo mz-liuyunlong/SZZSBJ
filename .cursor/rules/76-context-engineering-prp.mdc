@@ -1,0 +1,6 @@
+---
+description: Complex feature PRP workflow
+alwaysApply: true
+---
+
+Complex features must not go directly into code. Use templates/INITIAL_FEATURE.md and PRPs/templates/prp_base.md first. PRP must be approved by the project owner before implementation.

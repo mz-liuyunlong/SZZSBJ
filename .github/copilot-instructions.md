@@ -3,6 +3,7 @@
 Follow the project rules in:
 
 - `AGENTS.md`
+- `AI_DAILY_RULES.md`
 - `RULE_PACK_FILE_INDEX.md`
 - `docs/TECH_STACK.md`
 - `docs/FEATURE_SLICE_DEVELOPMENT_RULES.md`
@@ -11,7 +12,6 @@ Follow the project rules in:
 - `docs/CODE_COMMENT_RULES.md`
 - `docs/DATA_SOURCE_AND_LINEAGE_RULES.md`
 - `docs/FINANCIAL_CALCULATION_RULES.md`
-- `docs/PONYTAIL_COMPATIBILITY_RULES.md`
 
 ## Core requirements
 
@@ -27,30 +27,12 @@ Follow the project rules in:
 - Add maintainability comments for business logic.
 - Do not commit secrets.
 
-
 ## Skill self-discovery
 
 Before suggesting or generating code, read `skills/README.md`, infer the task type, and use only the relevant Skill instructions. Do not assume the user will manually specify the right Skill.
 
-## Ponytail default-on development
+## Context7 documentation lookup
 
-Apply `docs/PONYTAIL_COMPATIBILITY_RULES.md` by default for all coding suggestions. Do not wait for the user to mention Ponytail.
+When working with third-party library APIs, configuration, SDKs, CLIs, or upgrades, verify current usage through Context7 or official documentation first.
 
-Ponytail is not an optional skill in this repository. It is a default coding principle.
-
-Prefer reuse, standard library, native platform capabilities, and existing dependencies. Avoid unrequested abstractions, duplicate code, and new dependencies.
-
-Do not use minimalism to skip validation, permissions, audit logs, API contracts, database migrations, Celery idempotency, tests, maintainability comments, or `old-system/` read-only rules.
-
-
-## First-run setup behavior
-
-When helping a developer who just cloned this repository, first point them to `AI_ONBOARDING.md` and `docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md`.
-If they use GitHub Copilot CLI, help install official Ponytail with:
-
-```bash
-copilot plugin marketplace add DietrichGebert/ponytail
-copilot plugin install ponytail@ponytail
-```
-
-Never suggest adding Ponytail plugin installation to npm postinstall or CI.
+Context7 is documentation lookup only. Do not add it to production dependencies, CI, Dockerfile, or postinstall. Do not commit Context7 API keys, MCP tokens, or OAuth data.

@@ -21,7 +21,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin "${{ github.base_ref }}" --depth=1
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD || true)
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
           echo "$changed"
           if echo "$changed" | grep -E '^old-system/' | grep -v '^old-system/README.md$'; then
             echo "old-system is read-only. Changes require explicit owner approval and must not be included in normal PRs." >&2
@@ -55,6 +55,12 @@ jobs:
           npm run typecheck --if-present
           npm run test --if-present -- --run
           npm run build --if-present
+          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test:e2e'] ? 0 : 1)"; then
+            npx playwright install --with-deps
+            npm run test:e2e
+          else
+            echo "No test:e2e script yet; skipping Playwright E2E."
+          fi
 
   backend-if-present:
     runs-on: ubuntu-latest
@@ -74,7 +80,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run ruff format --check . || true
-          uv run ruff check . || true
-          uv run pytest || true
-          uv run python -c "import app.main" || true
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run pytest
+          uv run python -c "import app.main"

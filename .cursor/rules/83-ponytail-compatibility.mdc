@@ -1,0 +1,17 @@
+---
+description: Ponytail compatibility and rule-workflow guard
+alwaysApply: true
+---
+
+Ponytail-compatible behavior is part of the project rule workflow.
+
+Read and follow:
+
+1. `AGENTS.md`
+2. `AI_DAILY_RULES.md`
+3. `docs/PONYTAIL_COMPATIBILITY_RULES.md`
+4. `skills/ponytail-compatibility/SKILL.md`
+
+Ponytail is not a production dependency. Do not add it to package files, Docker, CI required jobs, postinstall scripts, or production servers.
+
+Ponytail must not override user instructions, `AGENTS.md`, PRP approval, safety boundaries, tests, or PR review.

@@ -1,15 +1,17 @@
-# 安装到项目中的方式
+# Install This Rule Pack Into a Project
 
-## 1. 解压位置
+## 1. Extract location
 
-把本规则包解压到你的项目根目录，要求与 `.git/` 同级。
+Extract this rule pack into the project root, next to `.git/`.
 
-正确示例：
+Example:
 
 ```text
 project-root/
 ├── .git/
 ├── AGENTS.md
+├── AI_DAILY_RULES.md
+├── CODEX_START_HERE.md
 ├── docs/
 ├── .github/
 ├── .cursor/
@@ -19,69 +21,44 @@ project-root/
 └── old-system/
 ```
 
-不要放进 `.git/` 目录。
+Do not place these files inside `.git/`.
 
-## 2. CODEOWNERS
 
-`.github/CODEOWNERS` 已默认使用：
 
-```text
-@mz-liuyunlong
-```
+## 3. Read-only legacy reference
 
-如 GitHub 用户名变化，请自行替换。
+If an old system is used as reference material, place it under `old-system/` and keep it read-only.
 
-## 3. old-system 默认建议
-
-初期建议不要把旧系统真实代码提交到远程仓库。可将旧系统代码放在本地 `old-system/` 中，并在 `.gitignore` 中使用推荐规则：
+Recommended `.gitignore` pattern:
 
 ```gitignore
 old-system/*
 !old-system/README.md
 ```
 
-旧系统分析结果写入：
+Analysis output should go under:
 
 ```text
 docs/old-system-analysis/
 ```
 
-## 4. 不建议直接覆盖已有文件
+## 4. Merge instead of blindly overwriting
 
-如果你的项目已经有 `.github/`、`.cursor/`、`docs/` 或其他文件，请先对比内容后合并，不要盲目覆盖。
+If the project already has `.github/`, `.cursor/`, `docs/`, `frontend/`, or `backend/`, compare and merge the files manually. Do not blindly overwrite existing project work.
 
-## Ponytail 项目兼容规则
+## 5. AI tools
 
-v1.4.2 起，规则包已经包含项目级 Ponytail 兼容规则：
+External AI tools and skills are developer-local aids. They must not be installed through `npm install`, `postinstall`, CI, Docker, or application runtime scripts unless explicitly approved.
 
-```text
-docs/PONYTAIL_COMPATIBILITY_RULES.md
-docs/tools/PONYTAIL_INSTALL_GUIDE.md
-```
-
-请将它们一并提交到 GitHub。这样其他人拉取项目后，即使没有安装官方 Ponytail 插件、没有阅读安装说明、没有主动提醒 AI，AI 也会通过项目规则默认执行 Ponytail 简化原则。
-
-不要把官方 Ponytail 插件安装写进 `npm install`、`postinstall`、CI、Vercel 或 Docker 构建流程。官方插件属于每个开发者自己的 AI 工具配置。
-
-
----
-
-## 新开发者 AI 工具首次配置
-
-v1.4.4 起，项目提供 AI 工具首次配置脚本：
-
-```bash
-bash scripts/check-ai-tools.sh
-bash scripts/setup-ai-tools.sh
-```
-
-开发者拉取项目后，应让 AI 先读取：
+For optional AI tool setup, read:
 
 ```text
-AI_ONBOARDING.md
-docs/tools/AI_TOOLS_FIRST_RUN_SETUP.md
+docs/tools/AI_TOOL_INSTALL_GUIDE.md
 ```
 
-然后由 AI 协助执行安装。
+Hooks, plugins, API keys, OAuth tokens, and MCP tokens must be reviewed and trusted by the developer, not silently accepted by AI.
 
-注意：不要把官方 Ponytail 插件安装写入 `npm install` 或 `postinstall`。官方插件是开发者本机 AI 工具配置，hooks 必须由用户审查并信任。
+
+## GitHub CODEOWNERS
+
+`.github/CODEOWNERS` is included as the code-owner review entry point. Add real GitHub users or teams after installing the rule pack, then enable code-owner review in branch protection. Do not leave fake owners in the file.
