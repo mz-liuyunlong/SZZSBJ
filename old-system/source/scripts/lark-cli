@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PATH="/usr/local/bin:/usr/bin:/bin:/root/.npm-global/bin:/root/.openclaw/bin:$PATH"
+
+if command -v lark-cli >/dev/null 2>&1; then
+  exec lark-cli "$@"
+fi
+
+for candidate in \
+  "/usr/local/bin/lark-cli" \
+  "/usr/bin/lark-cli" \
+  "/root/.npm-global/bin/lark-cli" \
+  "/root/.openclaw/bin/lark-cli" \
+  "$PROJECT_ROOT/.tools/lark-cli/bin/lark-cli"
+do
+  if [ -x "$candidate" ]; then
+    exec "$candidate" "$@"
+  fi
+done
+
+echo "lark-cli not found. Install it or update scripts/lark-cli PATH." >&2
+exit 127
