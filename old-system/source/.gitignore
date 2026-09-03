@@ -1,0 +1,16 @@
+.DS_Store
+target/
+*.log
+.idea/
+.vscode/
+node_modules/
+dist/
+.env
+.tools/
+.agents/
+_to_delete/
+_ai_patches/
+交付件/
+_bak/
+*.bak
+*.bak.*

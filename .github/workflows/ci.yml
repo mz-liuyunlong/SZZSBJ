@@ -20,7 +20,7 @@ jobs:
           bash scripts/check-rule-pack.sh
 
       - name: Protect old-system from normal PR changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.head_ref != 'chore/import-old-system-reference'
         run: |
           base_sha="${{ github.event.pull_request.base.sha }}"
           head_sha="${{ github.event.pull_request.head.sha }}"

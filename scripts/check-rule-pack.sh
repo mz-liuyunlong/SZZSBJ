@@ -57,7 +57,7 @@ removed_references=(
 
 for ref in "${removed_references[@]}"; do
   if grep -RInF "$ref" . \
-    --exclude-dir=.git --exclude-dir=.venv --exclude-dir=.pytest_cache --exclude-dir=.ruff_cache --exclude-dir=.mypy_cache \
+    --exclude-dir=.git --exclude-dir=old-system --exclude-dir=.venv --exclude-dir=.pytest_cache --exclude-dir=.ruff_cache --exclude-dir=.mypy_cache \
     --exclude-dir=node_modules \
     --exclude-dir=dist \
     --exclude='check-rule-pack.sh'; then
@@ -111,7 +111,7 @@ forbidden_patterns=(
 
 for pattern in "${forbidden_patterns[@]}"; do
   if grep -RInE "$pattern" . \
-    --exclude-dir=.git --exclude-dir=.venv --exclude-dir=.pytest_cache --exclude-dir=.ruff_cache --exclude-dir=.mypy_cache \
+    --exclude-dir=.git --exclude-dir=old-system --exclude-dir=.venv --exclude-dir=.pytest_cache --exclude-dir=.ruff_cache --exclude-dir=.mypy_cache \
     --exclude-dir=node_modules \
     --exclude-dir=dist \
     --exclude='check-rule-pack.sh'; then

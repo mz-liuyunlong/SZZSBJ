@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>公司内部系统 · 登录</title>
+<style>
+  :root{
+    --ink:#1e293b; --sub:#6b7280; --line:#e5e7eb; --field:#f8fafc;
+    --g1:#6366f1; --g2:#a855f7; --g3:#ec4899; --accent:#6366f1;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; display:grid; place-items:center; padding:24px;
+    font-family: system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);
+    background:#f6f7fb;
+    position:relative; overflow:hidden;
+  }
+  /* 有活力的流动色块背景 */
+  .blob{position:fixed; border-radius:50%; filter:blur(70px); opacity:.55; z-index:0; animation:float 14s ease-in-out infinite;}
+  .b1{width:420px;height:420px;background:#818cf8; top:-120px; left:-100px;}
+  .b2{width:380px;height:380px;background:#f472b6; bottom:-120px; right:-90px; animation-delay:-4s;}
+  .b3{width:300px;height:300px;background:#22d3ee; bottom:-80px; left:20%; animation-delay:-8s; opacity:.4;}
+  @keyframes float{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-26px) scale(1.06);}}
+
+  .card{
+    position:relative; z-index:1; width:min(380px,94vw);
+    background:rgba(255,255,255,.86); backdrop-filter:blur(14px);
+    border:1px solid rgba(255,255,255,.7);
+    border-radius:24px; padding:32px 28px;
+    box-shadow:0 20px 60px rgba(79,70,229,.18), 0 4px 14px rgba(0,0,0,.05);
+  }
+  .brand{display:flex; align-items:center; gap:12px; margin-bottom:4px;}
+  .logo{
+    width:44px;height:44px;border-radius:13px; display:grid; place-items:center;
+    background:linear-gradient(135deg,var(--g1),var(--g2) 55%,var(--g3));
+    box-shadow:0 8px 20px rgba(168,85,247,.35);
+  }
+  .logo svg{width:24px;height:24px;}
+  h1{font-size:19px; margin:0; letter-spacing:.5px;}
+  p.sub{margin:4px 0 0; font-size:13px; color:var(--sub);}
+  .culture{display:flex; flex-wrap:wrap; gap:7px; margin:18px 0 4px;}
+  .pill{font-size:11px; padding:4px 10px; border-radius:999px; font-weight:600;}
+  .p1{background:#eef2ff;color:#4f46e5;} .p2{background:#faf5ff;color:#9333ea;}
+  .p3{background:#fdf2f8;color:#db2777;} .p4{background:#ecfeff;color:#0891b2;}
+
+  label{display:block; font-size:12px; color:var(--sub); margin:16px 0 6px; font-weight:600;}
+  input{
+    width:100%; padding:12px 13px; border-radius:12px; border:1.5px solid var(--line);
+    background:var(--field); color:var(--ink); font-size:14px; transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus{outline:none; border-color:var(--accent); background:#fff; box-shadow:0 0 0 4px rgba(99,102,241,.14);}
+  button{
+    width:100%; margin-top:22px; padding:13px; border:0; border-radius:12px; color:#fff;
+    font-size:15px; font-weight:700; letter-spacing:2px; cursor:pointer;
+    background:linear-gradient(135deg,var(--g1),var(--g2) 55%,var(--g3));
+    box-shadow:0 10px 24px rgba(129,90,247,.35); transition:transform .12s, box-shadow .12s, filter .12s;
+  }
+  button:hover{transform:translateY(-1px); filter:brightness(1.05); box-shadow:0 14px 30px rgba(129,90,247,.42);}
+  button:active{transform:translateY(0);}
+  button:disabled{opacity:.6; cursor:default; transform:none;}
+  .link{margin-top:18px; text-align:center; font-size:13px;}
+  .link a{color:var(--accent); cursor:pointer; text-decoration:none; font-weight:600;}
+  .link a:hover{text-decoration:underline;}
+  .msg{margin-top:14px; font-size:13px; min-height:18px; line-height:1.5;}
+  .msg.err{color:#e11d48;} .msg.ok{color:#059669;}
+  .hidden{display:none;}
+  .hint{margin:2px 0 8px; font-size:12.5px; color:var(--sub); line-height:1.65;}
+</style>
+</head>
+<body>
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+  <!-- 登录 -->
+  <form class="card" id="loginForm" autocomplete="off">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>
+        </svg>
+      </div>
+      <div>
+        <h1>公司内部系统</h1>
+        <p class="sub">Welcome back 👋 请登录你的账号</p>
+      </div>
+    </div>
+    <div class="culture">
+      <span class="pill p1">真诚</span><span class="pill p2">聪明</span>
+      <span class="pill p3">皮实</span><span class="pill p4">进取</span>
+    </div>
+    <label for="u">用户名</label>
+    <input id="u" name="username" required autocomplete="username" />
+    <label for="p">密码</label>
+    <input id="p" name="password" type="password" required autocomplete="current-password" />
+    <button type="submit" id="btn">登 录</button>
+    <div class="msg" id="msg"></div>
+    <div class="link"><a id="toReset">首次登录 / 忘记密码？</a></div>
+  </form>
+
+  <!-- 首次登录 / 忘记密码：飞书卡片设置密码 -->
+  <form class="card hidden" id="resetForm" autocomplete="off">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <div>
+        <h1>首次登录 / 重置密码</h1>
+        <p class="sub">通过飞书验证你本人</p>
+      </div>
+    </div>
+    <p class="hint">输入你的<strong>真实飞书名</strong>，系统会给你本人的飞书发一张卡片，<br/>在卡片上直接设置新密码即可。卡片只会发到你本人的飞书。</p>
+    <label for="fn">飞书名</label>
+    <input id="fn" name="feishu_name" required placeholder="请输入你的真实姓名" />
+    <button type="submit" id="rbtn">发送设置密码卡片</button>
+    <div class="msg" id="rmsg"></div>
+    <div class="link"><a id="toLogin">← 返回登录</a></div>
+  </form>
+
+<script>
+  const loginForm=document.getElementById("loginForm"),resetForm=document.getElementById("resetForm");
+  const msg=document.getElementById("msg"),rmsg=document.getElementById("rmsg");
+  const btn=document.getElementById("btn"),rbtn=document.getElementById("rbtn");
+
+  document.getElementById("toReset").onclick=()=>{loginForm.classList.add("hidden");resetForm.classList.remove("hidden");rmsg.textContent="";rmsg.className="msg";};
+  document.getElementById("toLogin").onclick=()=>{resetForm.classList.add("hidden");loginForm.classList.remove("hidden");};
+
+  loginForm.addEventListener("submit",async(e)=>{
+    e.preventDefault(); msg.className="msg"; msg.textContent=""; btn.disabled=true;
+    try{
+      const res=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username:document.getElementById("u").value.trim(),password:document.getElementById("p").value})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok){msg.className="msg err";msg.textContent=data.error||("登录失败（"+res.status+"）");return;}
+      msg.className="msg ok"; msg.textContent="登录成功，正在进入…";
+      setTimeout(function(){ window.location.href="/admin/"; }, 600);
+    }catch(_){msg.className="msg err";msg.textContent="网络错误，请重试";}
+    finally{btn.disabled=false;}
+  });
+
+  resetForm.addEventListener("submit",async(e)=>{
+    e.preventDefault(); rmsg.className="msg"; rmsg.textContent=""; rbtn.disabled=true;
+    try{
+      // 后端 /api/auth/request-reset 为 Phase 2b（飞书卡片流程）待实现
+      const res=await fetch("/api/auth/request-reset",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({feishu_name:document.getElementById("fn").value.trim()})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok){rmsg.className="msg err";rmsg.textContent=data.error||"错误，请联系人事";return;}
+      rmsg.className="msg ok"; rmsg.textContent="卡片已发送到你本人的飞书，请在卡片上设置新密码。";
+    }catch(_){rmsg.className="msg err";rmsg.textContent="网络错误，请重试";}
+    finally{rbtn.disabled=false;}
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,1137 @@
+{
+  "title": "内部只读 API 接口文档（internal-readonly）",
+  "updated_at": "2026-07-27",
+  "note": "生产验证版。仅 超管 与 赖菊娜/刘云龙/翁骏 可访问。以代码真实逻辑为准。",
+  "common": {
+    "base": "/api/internal-readonly",
+    "public_base": "https://giginana.com/api/internal-readonly（亦见 gpt-api.giginana.com；经海外中转反代到 42.193.254.170:3001）",
+    "method": "仅 GET；非 GET 或路径含 sync/import/upload/update/delete → 403；PUT/PATCH/DELETE 一律拦截",
+    "auth": "Authorization: Bearer <INTERNAL_READONLY_API_TOKEN>；缺失/错误 → 401",
+    "pagination": "page（默认 1，最小 1）、page_size（默认 50，上限 500，超限截断，最小 1）",
+    "response_shell": "{ \"role\":\"readonly_admin\", \"total\":N, \"page\":P, \"page_size\":S, \"rows\":[...] }",
+    "empty": "HTTP 200，rows:[]，total:0",
+    "errors": "400 参数/日期非法 · 401 鉴权 · 403 非GET/写类 · 500 {\"error\":\"Query failed\"}（不外泄 SQL/表/路径/token）",
+    "and_or": "多条件之间 AND",
+    "unknown_params": "未识别参数静默忽略",
+    "sort": "仅 /sales-detail/list 支持 sort_by/sort_dir（白名单）；其余接口排序固定",
+    "range": "范围查询仅 /ads/keyword-daily（日期区间）与 /sales-detail/list（多种区间）支持",
+    "redaction": "返回自动脱敏字段名含 password/token/secret/authorization/cookie/file_path/server_path/env 及值中的 Bearer xxx",
+    "common_filters": "addCommonFilters：date（该接口有日期列时生效，精确）、store/store_name（→store_name 精确）、store_id、item_id、msku（均精确）"
+  },
+  "groups": [
+    {
+      "name": "销售",
+      "endpoints": [
+        {
+          "key": "sales-detail",
+          "name": "业务明细（主力）",
+          "method": "GET",
+          "path": "/sales-detail/list",
+          "source": "fact_sales_daily + 广告(item级聚合)/fact_profit_daily/fact_inventory_daily/dim_product/dim_product_business_state（platform=walmart）",
+          "desc": "每日经营明细。date 单日优先；date_start/date_end 闭区间、单边有效；都不传默认最近 7 天。广告 item_level 口径；ad_ratio=ad_spend/NULLIF(sales_amount,0)；gross_margin=fact_profit_daily.profit_rate（比率口径，可负、可<-1，前端传比率如 0.15）。",
+          "params": [
+            {
+              "name": "page",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "页码"
+            },
+            {
+              "name": "page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "每页，上限500"
+            },
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "单日 YYYY-MM-DD，优先级最高"
+            },
+            {
+              "name": "date_start",
+              "type": "date",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "区间下界（含）"
+            },
+            {
+              "name": "date_end",
+              "type": "date",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "区间上界（含）"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "sku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "SKU"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "owner",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "负责人 COALESCE(bs.owner,p.owner)"
+            },
+            {
+              "name": "lifecycle_stage",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "生命周期"
+            },
+            {
+              "name": "profit_level",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "利润等级"
+            },
+            {
+              "name": "product_management_status",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "默认排除 archived；all 不限"
+            },
+            {
+              "name": "sales_amount_min/max",
+              "type": "number",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "销售额区间"
+            },
+            {
+              "name": "orders_min/max",
+              "type": "number",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "订单区间 s.order_count"
+            },
+            {
+              "name": "gross_margin_min/max",
+              "type": "number",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "毛利率区间（外层过滤）"
+            },
+            {
+              "name": "ad_ratio_min/max",
+              "type": "number",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "广告占比区间（外层，null 行被排除）"
+            },
+            {
+              "name": "sort_by",
+              "type": "enum",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "stat_date|sales_amount|sales_qty|ad_spend|ad_ratio|gross_margin|gross_profit|available_stock（默认 stat_date）"
+            },
+            {
+              "name": "sort_dir",
+              "type": "enum",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "asc|desc（默认 desc）"
+            }
+          ],
+          "returns": "stat_date, store_id, store_name, item_id, sku, msku, product_name, owner, sales_qty, sales_amount, ad_spend, ad_sales, ad_orders, ad_ratio, ad_metric_scope, gross_profit, gross_margin, available_stock, wfs_available_stock, inventory_status, lifecycle_stage, profit_level, problem_tags",
+          "notes": [
+            "广告为 ItemID 商品级（ad_metric_scope=item_level），非 MSKU 精确值。",
+            "非白名单 sort_by/sort_dir → 400。"
+          ],
+          "example": "/api/internal-readonly/sales-detail/list?date_start=2026-07-01&date_end=2026-07-05&store_id=WM01&sort_by=sales_amount&sort_dir=desc&page=1&page_size=50"
+        },
+        {
+          "key": "daily-overview",
+          "name": "销售总览",
+          "method": "GET",
+          "path": "/lingxing-sales/daily-overview",
+          "source": "fact_sales_daily（walmart）+ 广告花费/WFS库存/负责人/成本 LEFT JOIN",
+          "desc": "date 必填（缺失 400）。排序 sales_amount DESC, item_id ASC。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": true,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "必填，单日"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "stat_date, store_name, item_id, msku, sales_qty, sales_amount, ad_spend, wfs_available_stock, owner_name, purchase_cost, logistics_cost",
+          "notes": [
+            "date 为必填，其余为可选筛选。"
+          ],
+          "example": "/api/internal-readonly/lingxing-sales/daily-overview?date=2026-07-05&store_id=WM01&page=1&page_size=20"
+        }
+      ]
+    },
+    {
+      "name": "广告",
+      "endpoints": [
+        {
+          "key": "walmart-ads",
+          "name": "Walmart 广告商品明细",
+          "method": "GET",
+          "path": "/walmart-ads/list",
+          "source": "fact_ads_product_daily（walmart）",
+          "desc": "排序固定 stat_date DESC, id DESC。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "单日"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU（生产全空，不建议按此筛）"
+            },
+            {
+              "name": "advertiser_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "广告主ID"
+            },
+            {
+              "name": "campaign_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "广告活动ID"
+            },
+            {
+              "name": "campaign_name",
+              "type": "string",
+              "required": false,
+              "match": "模糊",
+              "range": false,
+              "multi": "可选",
+              "desc": "广告活动名 LIKE"
+            },
+            {
+              "name": "ad_group_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "广告组ID"
+            },
+            {
+              "name": "ad_group_name",
+              "type": "string",
+              "required": false,
+              "match": "模糊",
+              "range": false,
+              "multi": "可选",
+              "desc": "广告组名 LIKE"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "id, stat_date, store_id, store_name, advertiser_id, campaign_id, campaign_name, campaign_type, ad_group_id, ad_group_name, item_id, msku, impressions, clicks, ctr, ad_spend, orders, total_sales, acos, cpc, cvr, roas, source_system, created_at, updated_at",
+          "notes": [
+            "不支持：date_start/date_end、sort_by/sort_dir、limit/offset、keyword、match_type、ad_type、各类 *_min/*_max（静默忽略）。",
+            "campaign_type 生产观测仅 sponsoredProducts。"
+          ],
+          "example": "/api/internal-readonly/walmart-ads/list?date=2026-07-05&campaign_id=123&page=1&page_size=20"
+        },
+        {
+          "key": "keyword-daily",
+          "name": "Walmart 关键词广告（含 BID）",
+          "method": "GET",
+          "path": "/ads/keyword-daily",
+          "source": "fact_ads_keyword_daily（walmart）",
+          "desc": "date 单日优先；date_start/date_end 闭区间、单边有效；都不传保持旧行为（无默认窗口）。排序固定 stat_date DESC, ad_spend DESC。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "单日，优先"
+            },
+            {
+              "name": "date_start",
+              "type": "date",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "区间下界"
+            },
+            {
+              "name": "date_end",
+              "type": "date",
+              "required": false,
+              "match": "-",
+              "range": true,
+              "multi": "可选",
+              "desc": "区间上界"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "keyword",
+              "type": "string",
+              "required": false,
+              "match": "模糊",
+              "range": false,
+              "multi": "可选",
+              "desc": "keyword/normalized_keyword LIKE"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "stat_date, store_name, campaign_id, campaign_name, ad_group_id, ad_group_name, item_id, item_name, msku, keyword, normalized_keyword, match_type, keyword_type, impressions, clicks, ctr, ad_spend, orders, conversion_rate, total_sales, acos, cpc, cvr, roas, keyword_bid, source_type",
+          "notes": [
+            "keyword_bid = 当天 BID（decimal(10,4)）；source_type=walmart_auto_csv（自动广告）当前恒 null，manual_kw 有值。",
+            "date_start/date_end 非法格式 → 400。"
+          ],
+          "example": "/api/internal-readonly/ads/keyword-daily?date_start=2026-07-02&date_end=2026-07-08&item_id=20025166385&page=1&page_size=500"
+        },
+        {
+          "key": "ads-product-daily",
+          "name": "Walmart 广告商品（简版）",
+          "method": "GET",
+          "path": "/ads/product-daily",
+          "source": "fact_ads_product_daily（walmart）",
+          "desc": "排序固定 stat_date DESC, ad_spend DESC。无 campaign/ad_group 专项筛选（那是 /walmart-ads/list）。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "单日"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "stat_date, store_name, advertiser_id, campaign_id, campaign_name, campaign_type, ad_group_id, ad_group_name, item_id, msku, impressions, clicks, ctr, ad_spend, orders, total_sales, acos, cpc, cvr, roas",
+          "notes": [],
+          "example": "/api/internal-readonly/ads/product-daily?date=2026-07-05&item_id=20025166385&page=1&page_size=20"
+        }
+      ]
+    },
+    {
+      "name": "库存 / 产品 / 负责人 / 关键词",
+      "endpoints": [
+        {
+          "key": "inventory-daily",
+          "name": "库存日快照",
+          "method": "GET",
+          "path": "/inventory/daily",
+          "source": "fact_inventory_daily（walmart）",
+          "desc": "排序 snapshot_date DESC, store_name, item_id。date 对应 snapshot_date。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "snapshot_date 单日"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "snapshot_date, store_name, item_id, msku, sku, available_stock, non_wfs_available_stock, wfs_available_stock, warehouse_stock, inbound_stock, reserved_stock, stock_days",
+          "notes": [],
+          "example": "/api/internal-readonly/inventory/daily?date=2026-07-05&item_id=20025166385&page=1&page_size=20"
+        },
+        {
+          "key": "products",
+          "name": "商品维度",
+          "method": "GET",
+          "path": "/products",
+          "source": "dim_product（walmart）",
+          "desc": "无日期列（传 date 无效）。排序 updated_at DESC。",
+          "params": [
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "owner",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "负责人"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "store_id, store_name, item_id, msku, sku, asin, product_name, item_name, category, brand, owner, status, fulfillment_type, source_system, updated_at",
+          "notes": [],
+          "example": "/api/internal-readonly/products?owner=张三&page=1&page_size=20"
+        },
+        {
+          "key": "owners",
+          "name": "负责人维度",
+          "method": "GET",
+          "path": "/owners",
+          "source": "dim_owner",
+          "desc": "排序 owner_name ASC。",
+          "params": [
+            {
+              "name": "owner / owner_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "负责人名"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "owner_id, owner_name, department, role_name, feishu_user_id, status, updated_at",
+          "notes": [],
+          "example": "/api/internal-readonly/owners?page=1&page_size=50"
+        },
+        {
+          "key": "keywords",
+          "name": "关键词维度",
+          "method": "GET",
+          "path": "/keywords",
+          "source": "dim_keyword（walmart）",
+          "desc": "排序 last_seen_at DESC, keyword_id DESC。",
+          "params": [
+            {
+              "name": "keyword",
+              "type": "string",
+              "required": false,
+              "match": "模糊",
+              "range": false,
+              "multi": "可选",
+              "desc": "keyword_text/normalized_keyword LIKE"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "keyword_id, keyword_text, normalized_keyword, keyword_type, platform, first_seen_at, last_seen_at, updated_at",
+          "notes": [],
+          "example": "/api/internal-readonly/keywords?keyword=chair&page=1&page_size=20"
+        }
+      ]
+    },
+    {
+      "name": "事件 / AI",
+      "endpoints": [
+        {
+          "key": "events",
+          "name": "业务事件（EVENT 层）",
+          "method": "GET",
+          "path": "/events",
+          "source": "biz_event（walmart，生产 834 行）",
+          "desc": "排序 event_date DESC, event_id DESC。date 对应 event_date。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "event_date 单日"
+            },
+            {
+              "name": "store / store_name",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "event_type",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "事件类型"
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "状态"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "event_id, event_date, event_type, severity, store_id, store_name, item_id, msku, keyword, campaign_id, ad_group_id, owner, title, reason, suggestion, status, source_table, source_key, detected_by, created_at, updated_at, resolved_at",
+          "notes": [],
+          "example": "/api/internal-readonly/events?event_type=xxx&page=1&page_size=20"
+        },
+        {
+          "key": "ai-analysis",
+          "name": "AI 分析层",
+          "method": "GET",
+          "path": "/ai-analysis",
+          "source": "ai_analysis_result（生产 0 行，表就绪暂无数据）",
+          "desc": "排序 analysis_date DESC。date 对应 analysis_date。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "analysis_date 单日"
+            },
+            {
+              "name": "store_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "店铺ID"
+            },
+            {
+              "name": "item_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "商品ID"
+            },
+            {
+              "name": "msku",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "MSKU"
+            },
+            {
+              "name": "analysis_type",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "分析类型"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "analysis_id, analysis_date, analysis_type, platform, store_id, item_id, msku, keyword, model_name, prompt_version, conclusion, recommendation, risk_score, confidence, source_event_id, created_at",
+          "notes": [
+            "当前 0 行。"
+          ],
+          "example": "/api/internal-readonly/ai-analysis?page=1&page_size=20"
+        }
+      ]
+    },
+    {
+      "name": "同步 / RAW",
+      "endpoints": [
+        {
+          "key": "sync-tasks",
+          "name": "同步任务日志",
+          "method": "GET",
+          "path": "/lingxing-sales/sync-tasks",
+          "source": "sync_task_log",
+          "desc": "排序 started_at DESC。2026-07-27 修复双挂载前缀豁免，现正常 200（此前恒 403）。表无 store/item/msku 列，建议仅用 status。",
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "任务状态"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "task_id, task_name, source_system, target_table, started_at, finished_at, status, pulled_count, inserted_count, updated_count, failed_count, error_message",
+          "notes": [
+            "sync_task_log 无业务列，只用 status 筛选。"
+          ],
+          "example": "/api/internal-readonly/lingxing-sales/sync-tasks?status=success&page=1&page_size=20"
+        },
+        {
+          "key": "feishu-raw-sales",
+          "name": "飞书 RAW 原始查看",
+          "method": "GET",
+          "path": "/feishu-raw-sales/data",
+          "source": "raw_feishu_table",
+          "desc": "RAW 查询接口（原始/排查/审计），非业务明细。排序 id DESC。业务筛选请走 /sales-detail/list。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "data_date 单日"
+            },
+            {
+              "name": "sheet_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "表格ID"
+            },
+            {
+              "name": "sheet_name",
+              "type": "string",
+              "required": false,
+              "match": "模糊",
+              "range": false,
+              "multi": "可选",
+              "desc": "表格名 LIKE"
+            },
+            {
+              "name": "keyword",
+              "type": "string",
+              "required": false,
+              "match": "模糊",
+              "range": false,
+              "multi": "可选",
+              "desc": "row_json LIKE"
+            },
+            {
+              "name": "row_index",
+              "type": "int",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "行号"
+            },
+            {
+              "name": "source_system",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "来源系统"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "id, source_system, sheet_id, sheet_name, row_index, row_json, data_date, pulled_at, created_at, updated_at",
+          "notes": [
+            "store/store_name/store_id/item_id/msku → 400（unsupported_params，2026-07-27 根治，原 500）。业务筛选走 /sales-detail/list。"
+          ],
+          "example": "/api/internal-readonly/feishu-raw-sales/data?sheet_id=<REDACTED_FEISHU_SHEET_ID>&keyword=YC&page=1&page_size=20"
+        },
+        {
+          "key": "raw-feishu",
+          "name": "飞书 RAW 留存",
+          "method": "GET",
+          "path": "/raw/feishu",
+          "source": "raw_feishu_table",
+          "desc": "排序 id DESC。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "data_date 单日"
+            },
+            {
+              "name": "sheet_id",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "表格ID"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "id, source_system, sheet_id, sheet_name, row_index, row_json, data_date, pulled_at, created_at, updated_at",
+          "notes": [
+            "store/store_id/item_id/msku → 400（已根治，原 500）。"
+          ],
+          "example": "/api/internal-readonly/raw/feishu?sheet_id=<REDACTED_FEISHU_SHEET_ID>&page=1&page_size=20"
+        },
+        {
+          "key": "raw-lingxing",
+          "name": "领星 RAW 留存",
+          "method": "GET",
+          "path": "/raw/lingxing",
+          "source": "raw_lingxing_api",
+          "desc": "排序 id DESC。",
+          "params": [
+            {
+              "name": "date",
+              "type": "date",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "data_date 单日"
+            },
+            {
+              "name": "api_path",
+              "type": "string",
+              "required": false,
+              "match": "精确",
+              "range": false,
+              "multi": "可选",
+              "desc": "领星 API 路径"
+            },
+            {
+              "name": "page/page_size",
+              "type": "int",
+              "required": false,
+              "match": "-",
+              "range": false,
+              "multi": "可选",
+              "desc": "分页"
+            }
+          ],
+          "returns": "id, source_system, api_path, request_method, request_params_json, response_json, response_code, is_success, error_message, data_date, pulled_at, created_at, updated_at",
+          "notes": [
+            "store/store_id/item_id/msku → 400（已根治，原 500）。"
+          ],
+          "example": "/api/internal-readonly/raw/lingxing?date=2026-06-25&page=1&page_size=20"
+        }
+      ]
+    }
+  ]
+}

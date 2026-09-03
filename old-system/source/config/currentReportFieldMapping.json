@@ -1,0 +1,305 @@
+{
+  "spreadsheetToken": "<REDACTED_FEISHU_SPREADSHEET_TOKEN>",
+  "sheets": {
+    "当日数据": "<REDACTED_FEISHU_SHEET_ID>",
+    "5月销售明细": "<REDACTED_FEISHU_SHEET_ID>",
+    "5月销售明细_复盘": "<REDACTED_FEISHU_SHEET_ID>",
+    "ItemID负责人": "<REDACTED_FEISHU_SHEET_ID>",
+    "近期利润与广告": "<REDACTED_FEISHU_SHEET_ID>",
+    "每日运营跟进日志": "<REDACTED_FEISHU_SHEET_ID>",
+    "AI诊断配置": "<REDACTED_FEISHU_SHEET_ID>",
+    "AI诊断提示词配置": "<REDACTED_FEISHU_SHEET_ID>",
+    "悦斯AI诊断配置": "<REDACTED_FEISHU_SHEET_ID>",
+    "悦斯测品汇总": "<REDACTED_FEISHU_SHEET_ID>",
+    "悦斯测品运营日志": "<REDACTED_FEISHU_SHEET_ID>",
+    "表格操作日志": "<REDACTED_FEISHU_SHEET_ID>"
+  },
+  "salesDetailSheet": {
+    "sheetName": "5月销售明细_复盘",
+    "sheetId": "<REDACTED_FEISHU_SHEET_ID>",
+    "legacySheetName": "5月销售明细"
+  },
+  "externalSheets": {
+    "autoAdSearchTermAnalysis": {
+      "spreadsheetToken": "<REDACTED_FEISHU_SPREADSHEET_TOKEN>",
+      "sheetId": "<REDACTED_FEISHU_SHEET_ID>",
+      "sheetName": "自动广告搜索词聚合分析"
+    }
+  },
+  "dailySheet": {
+    "sheetName": "当日数据",
+    "sheetId": "<REDACTED_FEISHU_SHEET_ID>",
+    "writeMode": "daily_replace_keep_header",
+    "timezoneRule": {
+      "businessTimezone": "America/New_York",
+      "runTimeLocal": "05:00",
+      "dataDateRule": "美国时间当天减2天",
+      "exchangeRate": 6.7
+    },
+    "columns": [
+      {
+        "column": "A",
+        "name": "日期",
+        "sourceType": "generated",
+        "valueRule": "dataDate，美国时间当天减2天"
+      },
+      {
+        "column": "B",
+        "name": "店铺",
+        "sourceType": "api",
+        "api": "walmartList",
+        "path": "/basicOpen/multiplatform/walmart/list",
+        "field": "store_name",
+        "confirmed": true
+      },
+      {
+        "column": "C",
+        "name": "商品ID",
+        "sourceType": "api",
+        "api": "walmartList",
+        "path": "/basicOpen/multiplatform/walmart/list",
+        "field": "item_id",
+        "confirmed": true
+      },
+      {
+        "column": "D",
+        "name": "MSKU",
+        "sourceType": "api",
+        "api": "walmartList",
+        "path": "/basicOpen/multiplatform/walmart/list",
+        "field": "msku",
+        "confirmed": true
+      },
+      {
+        "column": "E",
+        "name": "SKU",
+        "sourceType": "api",
+        "api": "walmartList",
+        "path": "/basicOpen/multiplatform/walmart/list",
+        "field": "local_sku",
+        "confirmed": true
+      },
+      {
+        "column": "F",
+        "name": "品名",
+        "sourceType": "api",
+        "api": "walmartList",
+        "path": "/basicOpen/multiplatform/walmart/list",
+        "field": "local_name",
+        "fallbackField": "local_sku",
+        "rule": "local_name为空时使用local_sku",
+        "confirmed": true
+      },
+      {
+        "column": "G",
+        "name": "负责人",
+        "sourceType": "sheet_lookup",
+        "sheet": "ItemID负责人",
+        "matchKey": "商品ID",
+        "field": "负责人",
+        "confirmed": true
+      },
+      {
+        "column": "H",
+        "name": "毛利润（$）",
+        "sourceType": "formula",
+        "formulaRule": "K - L - N - O - P/R - Q/R",
+        "confirmed": true
+      },
+      {
+        "column": "I",
+        "name": "毛利率",
+        "sourceType": "formula",
+        "formulaRule": "IFERROR(H/K,0)",
+        "confirmed": true
+      },
+      {
+        "column": "J",
+        "name": "今日销量",
+        "sourceType": "api",
+        "api": "platformSaleStat",
+        "path": "/basicOpen/platformStatisticsV2/saleStat/pageList",
+        "requestRule": {
+          "result_type": "1",
+          "date_unit": "4",
+          "data_type": "4"
+        },
+        "field": "volumeTotal",
+        "matchRule": "store_id + SKU/MSKU + dataDate",
+        "confirmed": true
+      },
+      {
+        "column": "K",
+        "name": "今日销售额（$）",
+        "sourceType": "api",
+        "api": "platformSaleStat",
+        "path": "/basicOpen/platformStatisticsV2/saleStat/pageList",
+        "requestRule": {
+          "result_type": "3",
+          "date_unit": "4",
+          "data_type": "4"
+        },
+        "field": "volumeTotal",
+        "matchRule": "store_id + SKU/MSKU + dataDate",
+        "confirmed": true
+      },
+      {
+        "column": "L",
+        "name": "广告花费（$）",
+        "sourceType": "api",
+        "api": "walmartSpAd",
+        "path": "Walmart广告SP接口，当前待接入具体文档路径",
+        "field": "cost",
+        "matchRule": "report_date + sku/item_id",
+        "remark": "先只做SP广告，后续再加SB/SV",
+        "confirmed": true
+      },
+      {
+        "column": "M",
+        "name": "广告占比",
+        "sourceType": "formula",
+        "formulaRule": "IFERROR(L/K,0)",
+        "confirmed": true
+      },
+      {
+        "column": "N",
+        "name": "WFS配送费（$）",
+        "sourceType": "sheet_lookup",
+        "sheet": "ItemID负责人",
+        "matchKey": "商品ID",
+        "field": "WFS费用",
+        "confirmed": true
+      },
+      {
+        "column": "O",
+        "name": "销售佣金",
+        "sourceType": "formula",
+        "formulaRule": "K*12%",
+        "confirmed": true
+      },
+      {
+        "column": "P",
+        "name": "采购成本(￥)",
+        "sourceType": "api",
+        "api": "batchGetProductInfo",
+        "path": "/erp/sc/routing/data/local_inventory/batchGetProductInfo",
+        "requestField": "skus",
+        "matchKey": "SKU",
+        "field": "cg_price",
+        "confirmed": true
+      },
+      {
+        "column": "Q",
+        "name": "头程成本(￥)",
+        "sourceType": "api",
+        "api": "batchGetProductInfo",
+        "path": "/erp/sc/routing/data/local_inventory/batchGetProductInfo",
+        "requestField": "skus",
+        "matchKey": "SKU",
+        "field": "product_logistics_relation.US_cg_transport_costs",
+        "confirmed": true
+      },
+      {
+        "column": "R",
+        "name": "汇率",
+        "sourceType": "fixed",
+        "value": 6.7,
+        "confirmed": true
+      },
+      {
+        "column": "S",
+        "name": "备注",
+        "sourceType": "manual",
+        "confirmed": true
+      },
+      {
+        "column": "T",
+        "name": "WFS可售库存",
+        "sourceType": "api",
+        "api": "walmartList",
+        "path": "/basicOpen/multiplatform/walmart/list",
+        "field": "wfs_available_quantity",
+        "confirmed": true
+      },
+      {
+        "column": "U",
+        "name": "源表毛利润（$）",
+        "sourceType": "unused",
+        "remark": "当前阶段先不用",
+        "confirmed": true
+      },
+      {
+        "column": "V",
+        "name": "利润差异",
+        "sourceType": "unused",
+        "remark": "当前阶段先不用",
+        "confirmed": true
+      }
+    ]
+  },
+  "walmartStores": [
+    {
+      "store_id": "110687423514268160",
+      "store_name": "CN2601-瑞盈龙盛(刘云龙）"
+    },
+    {
+      "store_id": "110687427724845056",
+      "store_name": "CN2501-掌上便捷(陈佳聪）"
+    },
+    {
+      "store_id": "110687428693128704",
+      "store_name": "CN2502-悦斯电子(陈文胜）"
+    },
+    {
+      "store_id": "110689966555011584",
+      "store_name": "CN2602-添详商贸(邓添祥)"
+    },
+    {
+      "store_id": "110704863834580480",
+      "store_name": "CN2603-四颗洋葱(林翔）"
+    },
+    {
+      "store_id": "110704872940532224",
+      "store_name": "HK2612-张李华(賽藝境）"
+    }
+  ],
+  "filterRules": {
+    "zeroActivityItemFilter": {
+      "enabled": true,
+      "description": "当今日销量=0、WFS可售库存=0、广告花费=0时，不写入当日数据",
+      "conditions": [
+        "todaySalesQty === 0",
+        "wfsAvailableQuantity === 0",
+        "adCost === 0"
+      ],
+      "reason": "无销量、无库存、无广告消耗的 ItemID 暂不统计，后续排查处理"
+    }
+  },
+  "apiFetchStrategy": {
+    "walmartList": {
+      "strategy": "single_store_pagination",
+      "length": 20,
+      "timeoutMs": 120000,
+      "retry": 3,
+      "remark": "不要一次请求多个店铺，避免超时"
+    },
+    "platformSaleStat": {
+      "strategy": "single_store_single_result_type",
+      "timeoutMs": 120000,
+      "retry": 3,
+      "remark": "销量和销售额分别请求 result_type=1 和 result_type=3"
+    },
+    "batchGetProductInfo": {
+      "strategy": "batch_by_sku",
+      "batchSize": 50,
+      "timeoutMs": 120000,
+      "retry": 3
+    },
+    "walmartSpAd": {
+      "strategy": "single_ad_type_first",
+      "timeoutMs": 120000,
+      "retry": 3,
+      "remark": "当前只接SP，后续补SB/SV"
+    }
+  }
+}
