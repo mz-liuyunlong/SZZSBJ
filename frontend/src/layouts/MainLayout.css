@@ -1,0 +1,233 @@
+.main-layout {
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-layout__primary,
+.main-layout__secondary {
+  top: 0;
+  height: 100dvh;
+  overflow: auto;
+  border-inline-end: 1px solid #f0f0f0;
+}
+
+.main-layout__primary {
+  position: sticky;
+  z-index: 101;
+}
+
+.main-layout__secondary {
+  z-index: 100;
+  visibility: hidden;
+  opacity: 0;
+  background: #fff;
+  box-shadow: 8px 0 24px rgb(0 0 0 / 12%);
+  transform: translateX(-8px);
+  pointer-events: none;
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1),
+    visibility 0s linear 180ms;
+}
+
+.main-layout__secondary--open {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.main-layout__backdrop {
+  position: fixed;
+  inset-block: 0;
+  right: 0;
+  z-index: 99;
+  padding: 0;
+  border: 0;
+  visibility: hidden;
+  opacity: 0;
+  background: rgb(15 23 42 / 14%);
+  cursor: default;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease-out,
+    visibility 0s linear 180ms;
+}
+
+.main-layout__backdrop--open {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+
+.main-layout__backdrop:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: -2px;
+}
+
+.main-layout__primary .ant-layout-sider-children,
+.main-layout__secondary .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-layout__brand,
+.main-layout__secondary-title {
+  display: flex;
+  flex: 0 0 56px;
+  align-items: center;
+  padding-inline: 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.main-layout__brand {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  background: #fff;
+  border-inline: 0;
+  border-block-start: 0;
+  cursor: pointer;
+}
+
+.main-layout__brand:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: -2px;
+}
+
+.main-layout__brand-logo {
+  display: inline-flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: #fff;
+  font-size: 18px;
+  background: #163a5f;
+  border-radius: 8px;
+}
+
+.main-layout__brand-text {
+  margin-inline-start: 10px;
+}
+
+.main-layout__primary-menu,
+.main-layout__secondary-menu {
+  flex: 1;
+  overflow-y: auto;
+  border-inline-end: 0 !important;
+}
+
+.main-layout__primary-menu.ant-menu-inline-collapsed {
+  width: 64px;
+}
+
+.main-layout__primary-label {
+  white-space: nowrap;
+}
+
+.main-layout--collapsed .main-layout__primary-label {
+  display: none;
+}
+
+.main-layout--collapsed .main-layout__brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.main-layout__workspace {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.main-layout__header {
+  display: flex;
+  flex: 0 0 48px;
+  height: 48px;
+  align-items: center;
+  padding-inline: 16px;
+  background: #fff;
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.main-layout__tabbar {
+  flex: 0 0 48px;
+  min-height: 48px;
+  overflow: hidden;
+  background: #fff;
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.main-layout__tabbar .ant-tabs {
+  height: 100%;
+}
+
+.main-layout__tabbar .ant-tabs-nav {
+  min-height: 48px;
+  margin: 0;
+}
+
+.main-layout__tabbar .ant-tabs-nav::before {
+  border-block-end: 0;
+}
+
+.main-layout__tabbar .ant-tabs-tab {
+  margin: 0 !important;
+  padding-inline: 16px !important;
+  background: #fff !important;
+  border: 0 !important;
+  border-inline-end: 1px solid #f0f0f0 !important;
+  border-radius: 0 !important;
+}
+
+.main-layout__tabbar .ant-tabs-tab-active {
+  background: #e6f4ff !important;
+}
+
+.main-layout__tabbar .ant-tabs-tab-remove {
+  margin-inline-start: 8px;
+}
+
+.main-layout__breadcrumb {
+  flex: 1;
+  min-width: 0;
+  margin-inline-start: 8px;
+}
+
+.main-layout__breadcrumb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.main-layout__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 24px 24px;
+  padding: 24px;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 6px;
+}
+
+.main-layout__page-title {
+  margin-block-start: 0 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-layout__secondary,
+  .main-layout__backdrop {
+    transition: none;
+    animation: none;
+  }
+}
