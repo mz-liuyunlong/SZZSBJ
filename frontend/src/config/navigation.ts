@@ -23,6 +23,23 @@
  * - New pages must be added here first.
  */
 
+import {
+  AppstoreOutlined,
+  BarChartOutlined,
+  CustomerServiceOutlined,
+  DashboardOutlined,
+  DatabaseOutlined,
+  DollarOutlined,
+  InboxOutlined,
+  RobotOutlined,
+  ScheduleOutlined,
+  SettingOutlined,
+  ShoppingCartOutlined,
+  ShoppingOutlined,
+  SoundOutlined,
+} from '@ant-design/icons';
+import { createElement, type ReactElement } from 'react';
+
 export type PageStatus =
   | 'planned'
   | 'building'
@@ -72,7 +89,7 @@ export interface NavigationPage {
 export interface NavigationGroup {
   key: string;
   title: string;
-  icon?: string;
+  icon: ReactElement;
   children: NavigationPage[];
 }
 
@@ -110,6 +127,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'dashboard',
     title: '工作台',
+    icon: createElement(DashboardOutlined, { 'aria-hidden': true }),
     children: [
       page('dashboard', 'today_sales', '今日销售', '/dashboard/today-sales'),
       page('dashboard', 'today_profit', '今日利润', '/dashboard/today-profit'),
@@ -126,6 +144,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'products',
     title: '产品',
+    icon: createElement(AppstoreOutlined, { 'aria-hidden': true }),
     children: [
       page('products', 'product_management', '产品管理', '/products/management'),
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
@@ -138,6 +157,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'sales',
     title: '销售',
+    icon: createElement(ShoppingCartOutlined, { 'aria-hidden': true }),
     children: [
       page('sales', 'daily_sales', '每日销售', '/sales/daily-sales'),
       page('sales', 'order_profit', '订单利润', '/sales/order-profit'),
@@ -150,6 +170,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'ads',
     title: '广告',
+    icon: createElement(SoundOutlined, { 'aria-hidden': true }),
     children: [
       page('ads', 'overview', '广告总览', '/ads/overview'),
       page('ads', 'campaigns', '广告活动', '/ads/campaigns'),
@@ -165,6 +186,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'aftersales',
     title: '售后',
+    icon: createElement(CustomerServiceOutlined, { 'aria-hidden': true }),
     children: [
       page('aftersales', 'refund_management', '退款管理', '/aftersales/refund-management'),
       page('aftersales', 'return_management', '退货管理', '/aftersales/return-management'),
@@ -178,6 +200,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'warehouse',
     title: '仓库',
+    icon: createElement(InboxOutlined, { 'aria-hidden': true }),
     children: [
       page('warehouse', 'inventory_detail', '库存明细', '/warehouse/inventory-detail'),
       page('warehouse', 'inventory_alert', '库存预警', '/warehouse/inventory-alert'),
@@ -193,6 +216,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'finance',
     title: '财务',
+    icon: createElement(DollarOutlined, { 'aria-hidden': true }),
     children: [
       page('finance', 'profit_center', '利润中心', '/finance/profit-center'),
       page('finance', 'sku_cash_profit', '单品现金利润', '/finance/sku-cash-profit'),
@@ -206,6 +230,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'operations',
     title: '运营',
+    icon: createElement(ScheduleOutlined, { 'aria-hidden': true }),
     children: [
       page('operations', 'log', '运营日志', '/operations/log'),
       page('operations', 'plan', '运营计划', '/operations/plan'),
@@ -219,6 +244,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'purchase',
     title: '采购',
+    icon: createElement(ShoppingOutlined, { 'aria-hidden': true }),
     children: [
       page('purchase', 'plan', '采购计划', '/purchase/plan'),
       page('purchase', 'order', '采购单', '/purchase/order'),
@@ -227,6 +253,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'ai_center',
     title: 'AI中心',
+    icon: createElement(RobotOutlined, { 'aria-hidden': true }),
     children: [
       page('ai_center', 'assistant', 'AI助手', '/ai-center/assistant'),
       page('ai_center', 'ads_optimization', '广告优化', '/ai-center/ads-optimization'),
@@ -239,6 +266,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'data_center',
     title: '数据中心',
+    icon: createElement(DatabaseOutlined, { 'aria-hidden': true }),
     children: [
       page('data_center', 'approval_workspace', '审批工作台', '/data-center/approval-workspace', {
         tabs: [{ key: 'pending', title: '待审批' }, { key: 'approved', title: '已审批' }, { key: 'rejected', title: '驳回记录' }],
@@ -269,6 +297,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'statistics',
     title: '统计',
+    icon: createElement(BarChartOutlined, { 'aria-hidden': true }),
     children: [
       page('statistics', 'business_overview', '经营总览', '/statistics/business-overview'),
       page('statistics', 'account_health', '账号健康', '/statistics/account-health'),
@@ -283,6 +312,7 @@ export const navigation: NavigationGroup[] = [
   {
     key: 'settings',
     title: '设置',
+    icon: createElement(SettingOutlined, { 'aria-hidden': true }),
     children: [
       page('settings', 'user_management', '用户管理', '/settings/user-management', {
         tabs: [{ key: 'users', title: '用户列表' }, { key: 'roles', title: '分配角色' }, { key: 'org', title: '组织架构' }, { key: 'data-scope', title: '用户数据范围' }],
