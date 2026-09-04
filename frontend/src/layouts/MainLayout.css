@@ -103,15 +103,11 @@
 }
 
 .main-layout__brand-logo {
-  display: inline-flex;
+  display: block;
   flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
   width: 32px;
   height: 32px;
-  color: #fff;
-  font-size: 18px;
-  background: #163a5f;
+  object-fit: contain;
   border-radius: 8px;
 }
 

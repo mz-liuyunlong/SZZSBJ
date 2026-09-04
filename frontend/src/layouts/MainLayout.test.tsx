@@ -118,8 +118,11 @@ describe("MainLayout", () => {
       screen.getByRole("region", { name: "页面标签栏" }),
     ).toBeInTheDocument();
     expect(content).toBeInTheDocument();
-    expect(screen.getByLabelText("运营数据系统标识")).toBeVisible();
-    expect(screen.getByText("运营数据系统")).toBeVisible();
+    expect(screen.getByRole("img", { name: "掌上便捷标识" })).toHaveAttribute(
+      "src",
+      "/favicon.ico",
+    );
+    expect(screen.getByText("掌上便捷")).toBeVisible();
 
     const adsGroupItem = within(primaryNavigation).getByRole("menuitem", {
       name: adsGroup.title,
@@ -276,8 +279,8 @@ describe("MainLayout", () => {
     ).toBeInTheDocument();
     expectSecondaryClosed();
     expect(primaryTitle).not.toBeVisible();
-    expect(screen.getByLabelText("运营数据系统标识")).toBeVisible();
-    expect(screen.queryByText("运营数据系统")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "掌上便捷标识" })).toBeVisible();
+    expect(screen.queryByText("掌上便捷")).not.toBeInTheDocument();
     expect(primaryNavigation.querySelectorAll(".anticon")).toHaveLength(
       navigation.length,
     );
@@ -293,7 +296,7 @@ describe("MainLayout", () => {
       todaySales.title,
     );
     expectSecondaryClosed();
-    expect(screen.getByLabelText("运营数据系统标识")).toBeVisible();
-    expect(screen.queryByText("运营数据系统")).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "掌上便捷标识" })).toBeVisible();
+    expect(screen.queryByText("掌上便捷")).not.toBeInTheDocument();
   });
 });
