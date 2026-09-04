@@ -1,11 +1,7 @@
 /**
  * Provides the shared application frame; routing, permissions, and page state live elsewhere.
  */
-import {
-  BarChartOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
-} from "@ant-design/icons";
+import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, Tabs, Typography } from "antd";
 import { useState, type ReactNode } from "react";
 import { navigation, type NavigationGroup } from "../config/navigation";
@@ -162,16 +158,16 @@ function MainLayout({ children }: { children?: ReactNode }) {
           aria-label="回到工作台今日销售"
           onClick={resetToDefaultPage}
         >
-          <span
+          <img
             className="main-layout__brand-logo"
-            role="img"
-            aria-label="运营数据系统标识"
-          >
-            <BarChartOutlined aria-hidden="true" />
-          </span>
+            src="/favicon.ico"
+            alt="掌上便捷标识"
+            width={32}
+            height={32}
+          />
           {!collapsed && (
             <Typography.Text strong className="main-layout__brand-text">
-              运营数据系统
+              掌上便捷
             </Typography.Text>
           )}
         </button>
