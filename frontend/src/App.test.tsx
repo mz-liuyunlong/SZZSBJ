@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { REMEMBERED_USERNAME_KEY } from "./pages/auth/LoginPage";
@@ -25,6 +26,7 @@ beforeAll(() => {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  window.history.replaceState(null, "", "#/login");
 });
 
 afterEach(() => {
@@ -50,22 +52,22 @@ const openLogoutDialog = async () => {
   return screen.findByRole("dialog");
 };
 
+const renderApp = () =>
+  render(
+    <HashRouter useTransitions={false}>
+      <App />
+    </HashRouter>,
+  );
+
 describe("App", () => {
-  it("starts on the LoginPage and makes no network request", () => {
+  it("routes a memory-only mock login to the default business page", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<App />);
+    renderApp();
 
     expect(screen.getByRole("heading", { name: "欢迎回来 👋" })).toBeVisible();
     expect(screen.queryByRole("main", { name: "内容区" })).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("enters the default today-sales shell after active mock submission", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    render(<App />);
 
     await logIn();
 
@@ -75,14 +77,17 @@ describe("App", () => {
     expect(screen.getByRole("navigation", { name: "面包屑" })).toHaveTextContent(
       "工作台",
     );
+    expect(window.location.hash).toBe("#/dashboard/today-sales");
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("keeps the current login after logout is cancelled or closed", async () => {
+  it("keeps login when logout is dismissed and routes confirmed logout to login", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    render(<App />);
-    await logIn();
+    renderApp();
+    await logIn(true);
 
     await openLogoutDialog();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
@@ -93,19 +98,13 @@ describe("App", () => {
     if (!closeButton) throw new Error("Missing modal close button");
     fireEvent.click(closeButton);
     expect(screen.getByRole("main", { name: "内容区" })).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("returns to LoginPage after logout confirmation and keeps the remembered username", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    render(<App />);
-    await logIn(true);
 
     await openLogoutDialog();
     fireEvent.click(screen.getByRole("button", { name: "确认" }));
     expect(await screen.findByRole("heading", { name: "欢迎回来 👋" })).toBeVisible();
+    expect(window.location.hash).toBe("#/login");
     expect(localStorage.getItem(REMEMBERED_USERNAME_KEY)).toBe("admin");
+    expect(sessionStorage.length).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
-  });
+  }, 10_000);
 });

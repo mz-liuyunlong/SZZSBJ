@@ -96,3 +96,12 @@
 - 决策：集成配置放在 `设置 > 系统配置 > 集成配置`。
 - 原因：需要页面管理 AI Token、飞书群、Webhook、外部 API，但必须安全。
 - 影响：密钥加密存储，页面只显示脱敏值，所有变更审计。
+
+---
+
+## D-012：前端先建立 Hash Router 路由基础
+
+- 日期：2026-09-05
+- 决策：静态前端使用 HashRouter，URL 作为 active page 权威状态源；route resolver 从 `navigation.ts` 统一判断合法路径并提供页面 metadata。
+- 原因：先固定路由状态源可避免 MainLayout、Breadcrumb、Tabbar 和后续页面壳重复维护 active page。
+- 影响：Routing Foundation 可受控优先于 PageShell、ComingSoonPage 和 LegacyPageWrapper；该调整不授权提前实现后续任务。

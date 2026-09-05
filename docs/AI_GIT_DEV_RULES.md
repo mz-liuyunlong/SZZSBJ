@@ -9,13 +9,15 @@ git status
 git branch
 ```
 
-如果当前在 `main` 或 `dev`，不得直接修改。必须从 `dev` 新建任务分支：
+如果当前在 `main` 或 `dev`，均不得直接修改。必须从最新、干净的 `main` 新建任务分支：
 
 ```bash
-git checkout dev
-git pull origin dev
-git checkout -b ai/YYYYMMDD-task-name
+git switch main
+git pull --ff-only origin main
+git switch -c ai/YYYYMMDD-task-name
 ```
+
+`main` 是当前集成基线。Routing Foundation 优先于 PageShell、ComingSoonPage 和 LegacyPageWrapper 是负责人批准的受控顺序调整，不改变一个任务一个分支、一个 PR 的规则。
 
 ## 分支命名
 
