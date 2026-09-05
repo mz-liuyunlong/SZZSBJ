@@ -38,7 +38,7 @@
 - [ ] 退出确认 Modal；确认后仅通过 callback 通知 App。
 - [ ] “掌上便捷”响应式 LoginPage 与 `admin/admin` 前端 mock 校验。
 - [ ] App 使用 React 内存 state 在 LoginPage 和 MainLayout 间切换。
-- [ ] 记住账号时只持久化 username 到 `szzsbj_mock_username`。
+- [ ] 记住账号时只持久化 username 到 `mock_login_remembered_username`。
 - [ ] Vitest、lint、build、diff check 和桌面/窄屏人工视觉验收。
 
 ### Out of scope
@@ -122,7 +122,7 @@ external APIs：none
 - `admin/admin` 不是 Secret、不是生产凭据、不得用于正式认证。
 - password 只存在于当前表单运行时，不进入 localStorage/sessionStorage。
 - App 的登录状态只存在于 React 内存 state，刷新后重新登录是预期行为。
-- 勾选“记住账号”只保存 username 到 `szzsbj_mock_username`；未勾选时删除旧 username。
+- 勾选“记住账号”只保存 username 到 `mock_login_remembered_username`；未勾选时删除旧 username。
 - 不保存 auth boolean、完整用户、role、permissions、Token、Cookie 或 Session。
 
 ### Mock current user
@@ -378,7 +378,7 @@ PRPs/frontend-ui-shell-polish.md
 
 - 本任务为一次性综合前端 PR，回滚方式为整体 revert 该 PR。
 - 无数据库、迁移、后端、环境变量、Vercel、外部 API 或持久化认证状态需要回滚。
-- 记住账号仅使用 `szzsbj_mock_username`；如回滚后浏览器仍有该值，可由用户清理 localStorage，不涉及密码或认证状态。
+- 记住账号仅使用 `mock_login_remembered_username`；如回滚后浏览器仍有该值，可由用户清理 localStorage，不涉及密码或认证状态。
 - 不拆分部分回滚，以避免 App/LoginPage/MainLayout/TopbarActions 状态契约不一致。
 
 ## 15. Acceptance Checklist

@@ -19,7 +19,7 @@ import {
 } from "../../mocks/auth";
 import "./LoginPage.css";
 
-export const REMEMBERED_USERNAME_KEY = "szzsbj_mock_username";
+export const REMEMBERED_USERNAME_KEY = "mock_login_remembered_username";
 
 interface LoginValues {
   username: string;
