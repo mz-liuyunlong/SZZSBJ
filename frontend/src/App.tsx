@@ -1,11 +1,14 @@
-import { Typography } from 'antd'
+import { useState } from 'react'
 import MainLayout from './layouts/MainLayout'
+import LoginPage from './pages/auth/LoginPage'
 
 function App() {
-  return (
-    <MainLayout>
-      <Typography.Text type="secondary">内容区</Typography.Text>
-    </MainLayout>
+  const [mockLoggedIn, setMockLoggedIn] = useState(false)
+
+  return mockLoggedIn ? (
+    <MainLayout onLogout={() => setMockLoggedIn(false)} />
+  ) : (
+    <LoginPage onLogin={() => setMockLoggedIn(true)} />
   )
 }
 

@@ -1,0 +1,129 @@
+.login-page {
+  display: flex;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.login-page__visual,
+.login-page__form-panel {
+  min-width: 0;
+}
+
+.login-page__visual {
+  display: flex;
+  flex: 1 1 52%;
+  flex-direction: column;
+  padding: 32px 48px;
+  overflow: hidden;
+  background: linear-gradient(145deg, #f0f8ff 0%, #dbeafe 55%, #eef6ff 100%);
+}
+
+.login-page__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-page__brand img {
+  display: block;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 9px;
+}
+
+.login-page__brand .ant-typography {
+  margin: 0;
+}
+
+.login-page__illustration {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.login-page__illustration svg {
+  display: block;
+  width: min(90%, 560px);
+  max-height: 48dvh;
+}
+
+.login-page__visual-copy {
+  max-width: 520px;
+  padding-block-end: 16px;
+}
+
+.login-page__visual-copy .ant-typography {
+  margin-block: 0 8px;
+}
+
+.login-page__form-panel {
+  display: flex;
+  flex: 1 1 48%;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  overflow-y: auto;
+}
+
+.login-page__form-card {
+  width: min(100%, 420px);
+}
+
+.login-page__form-card > .ant-typography {
+  margin-block: 0 8px;
+}
+
+.login-page__disclaimer {
+  margin-block: 24px;
+}
+
+.login-page__options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-block: -4px 12px;
+}
+
+.login-page__options .ant-btn {
+  height: auto;
+  padding-inline: 0;
+}
+
+.login-page__feedback {
+  display: block;
+  margin-block-end: 16px;
+}
+
+.login-page__submit {
+  margin-block-start: 4px;
+}
+
+@media (max-width: 760px) {
+  .login-page {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .login-page__visual {
+    flex: 0 0 auto;
+    padding: 20px 24px;
+  }
+
+  .login-page__illustration,
+  .login-page__visual-copy {
+    display: none;
+  }
+
+  .login-page__form-panel {
+    flex: 1 0 auto;
+    align-items: flex-start;
+    padding: 40px 24px;
+    overflow: visible;
+  }
+}

@@ -1,0 +1,173 @@
+.topbar-actions {
+  position: relative;
+  z-index: 102;
+  flex: 0 0 auto;
+}
+
+.topbar-actions__button,
+.topbar-actions__avatar-button {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.topbar-actions__button:hover,
+.topbar-actions__avatar-button:hover {
+  background: #f0f5ff !important;
+}
+
+.topbar-actions__avatar-button {
+  width: 36px;
+  padding: 4px;
+}
+
+.topbar-actions__avatar-button .ant-avatar {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline-color 160ms ease-out;
+}
+
+.topbar-actions__avatar-button .ant-avatar img,
+.topbar-actions__user-summary .ant-avatar img {
+  object-fit: cover;
+}
+
+.topbar-actions__avatar-button:hover .ant-avatar,
+.topbar-actions__avatar-button:focus-visible .ant-avatar {
+  outline-color: #91caff;
+}
+
+.topbar-actions__popover .ant-popover-inner {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgb(15 23 42 / 14%);
+}
+
+.topbar-actions__panel {
+  background: #fff;
+}
+
+.topbar-actions__notification-panel {
+  width: min(360px, calc(100vw - 32px));
+}
+
+.topbar-actions__panel-title,
+.topbar-actions__panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.topbar-actions__panel-title {
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.topbar-actions__panel-footer {
+  border-block-start: 1px solid #f0f0f0;
+}
+
+.topbar-actions__notification-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.topbar-actions__notification-list .ant-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.topbar-actions__notification--unread {
+  background: #f6ffed;
+}
+
+.topbar-actions__notification-icon {
+  display: inline-flex;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  color: #1677ff;
+  background: #e6f4ff;
+  border-radius: 9px;
+}
+
+.topbar-actions__notification-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+
+.topbar-actions__notification-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topbar-actions__notification-time {
+  font-size: 12px;
+}
+
+.topbar-actions__local-message {
+  display: block;
+  padding: 10px 16px 0;
+  text-align: center;
+}
+
+.topbar-actions__user-panel {
+  width: 248px;
+}
+
+.topbar-actions__user-summary {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-block-end: 1px solid #f0f0f0;
+}
+
+.topbar-actions__user-summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.topbar-actions__user-summary .ant-typography {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-actions__user-menu {
+  display: grid;
+  padding: 6px;
+}
+
+.topbar-actions__user-menu .ant-btn {
+  justify-content: flex-start;
+  height: 38px;
+  text-align: start;
+}
+
+@media (max-width: 640px) {
+  .topbar-actions__ai-button span:last-child {
+    display: none;
+  }
+
+  .topbar-actions__ai-button {
+    width: 36px;
+    padding-inline: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-actions__avatar-button .ant-avatar {
+    transition: none;
+  }
+}
