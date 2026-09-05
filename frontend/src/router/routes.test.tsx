@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,10 @@ vi.mock("../pages/auth/LoginPage", () => ({
       模拟登录
     </button>
   ),
+}));
+
+vi.mock("../pages/auth/ForgotPasswordPage", () => ({
+  default: () => <h1>模拟忘记密码页</h1>,
 }));
 
 vi.mock("../layouts/MainLayout", () => ({
@@ -51,16 +55,49 @@ const renderRoutes = (path: string, initialLoggedIn = false) =>
   );
 
 describe("AppRoutes", () => {
-  it("renders the login route", () => {
+  it("renders login inside the shared auth layout", () => {
     renderRoutes("/login");
 
     expect(screen.getByRole("button", { name: "模拟登录" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "掌上便捷" })).toBeVisible();
+    expect(screen.getByRole("img", { name: "掌上便捷标识" })).toHaveAttribute(
+      "src",
+      "/favicon.ico",
+    );
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+  });
+
+  it("renders forgot-password inside the same auth layout", () => {
+    renderRoutes("/forgot-password");
+
+    expect(screen.getByRole("heading", { name: "模拟忘记密码页" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "掌上便捷" })).toBeVisible();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/forgot-password");
+  });
+
+  it("routes a successful mock login to the default business entry", async () => {
+    renderRoutes("/login");
+
+    fireEvent.click(screen.getByRole("button", { name: "模拟登录" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH);
+    });
+    expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
   });
 
   it("redirects unauthenticated business visits to login", async () => {
     renderRoutes("/finance/ad-bill");
 
+    expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+  });
+
+  it("does not restore mock auth in a new runtime", async () => {
+    const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
+    expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+
+    unmount();
+    renderRoutes(DEFAULT_BUSINESS_PATH);
     expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
   });
@@ -73,6 +110,19 @@ describe("AppRoutes", () => {
     renderRoutes("/data-center/documentation", true);
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/data-center/documentation");
+  });
+
+  it("redirects logged-in auth routes to the default business entry", async () => {
+    const { unmount } = renderRoutes("/login", true);
+    await waitFor(() => {
+      expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH);
+    });
+
+    unmount();
+    renderRoutes("/forgot-password", true);
+    await waitFor(() => {
+      expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH);
+    });
   });
 
   it("temporarily redirects unknown paths to the default business entry", async () => {

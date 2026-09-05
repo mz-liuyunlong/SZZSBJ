@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import LoginPage, { REMEMBERED_USERNAME_KEY } from "./LoginPage";
 
@@ -24,13 +25,25 @@ beforeAll(() => {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  vi.stubGlobal("fetch", vi.fn());
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
   sessionStorage.clear();
+  vi.unstubAllGlobals();
 });
+
+const renderLogin = (onLogin = vi.fn()) =>
+  render(
+    <MemoryRouter initialEntries={["/login"]} useTransitions={false}>
+      <Routes>
+        <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
+        <Route path="/forgot-password" element={<div>忘记密码页占位</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
 
 const submitCredentials = (username: string, password: string) => {
   fireEvent.change(screen.getByLabelText("账号"), { target: { value: username } });
@@ -39,15 +52,10 @@ const submitCredentials = (username: string, password: string) => {
 };
 
 describe("LoginPage", () => {
-  it("shows the brand and mock disclaimer without logging in automatically", () => {
+  it("shows the mock disclaimer without logging in automatically", () => {
     const onLogin = vi.fn();
-    render(<LoginPage onLogin={onLogin} />);
+    renderLogin(onLogin);
 
-    expect(screen.getByRole("heading", { name: "掌上便捷" })).toBeVisible();
-    expect(screen.getByRole("img", { name: "掌上便捷标识" })).toHaveAttribute(
-      "src",
-      "/favicon.ico",
-    );
     expect(
       screen.getByText("演示登录，仅用于前端界面验证，不提供真实身份认证。"),
     ).toBeVisible();
@@ -59,7 +67,7 @@ describe("LoginPage", () => {
 
   it("accepts admin/admin and stores only a remembered username", async () => {
     const onLogin = vi.fn();
-    render(<LoginPage onLogin={onLogin} />);
+    renderLogin(onLogin);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "记住账号" }));
     submitCredentials("admin", "admin");
@@ -73,11 +81,12 @@ describe("LoginPage", () => {
     expect(localStorage.getItem("permission")).toBeNull();
     expect(localStorage.getItem("auth")).toBeNull();
     expect(sessionStorage.length).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("shows one error for invalid credentials and removes an unchecked remembered username", async () => {
     const onLogin = vi.fn();
-    render(<LoginPage onLogin={onLogin} />);
+    renderLogin(onLogin);
 
     submitCredentials("admin", "wrong-password");
     expect(await screen.findByText("账号或密码错误")).toBeVisible();
@@ -85,7 +94,7 @@ describe("LoginPage", () => {
 
     cleanup();
     localStorage.setItem(REMEMBERED_USERNAME_KEY, "admin");
-    render(<LoginPage onLogin={onLogin} />);
+    renderLogin(onLogin);
     expect(screen.getByLabelText("账号")).toHaveValue("admin");
     fireEvent.change(screen.getByLabelText("密码"), { target: { value: "admin" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "记住账号" }));
@@ -96,15 +105,14 @@ describe("LoginPage", () => {
     expect(sessionStorage.length).toBe(0);
   });
 
-  it("keeps password recovery local", () => {
-    render(<LoginPage onLogin={vi.fn()} />);
+  it("navigates to the forgot-password route without storage or network activity", () => {
+    renderLogin();
 
-    fireEvent.click(screen.getByRole("button", { name: "忘记密码" }));
+    fireEvent.click(screen.getByRole("link", { name: "忘记密码" }));
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Mock 环境暂不提供密码找回",
-    );
+    expect(screen.getByText("忘记密码页占位")).toBeVisible();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
