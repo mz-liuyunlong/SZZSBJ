@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import MainLayout from './layouts/MainLayout'
-import LoginPage from './pages/auth/LoginPage'
+import AppRoutes from './router/routes'
 
 function App() {
   const [mockLoggedIn, setMockLoggedIn] = useState(false)
 
-  return mockLoggedIn ? (
-    <MainLayout onLogout={() => setMockLoggedIn(false)} />
-  ) : (
-    <LoginPage onLogin={() => setMockLoggedIn(true)} />
+  return (
+    <AppRoutes
+      mockLoggedIn={mockLoggedIn}
+      onLogin={() => setMockLoggedIn(true)}
+      onLogout={() => setMockLoggedIn(false)}
+    />
   )
 }
 

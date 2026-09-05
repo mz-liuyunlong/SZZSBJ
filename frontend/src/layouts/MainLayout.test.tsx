@@ -2,13 +2,16 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { isValidElement } from "react";
+import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { navigation } from "../config/navigation";
 import MainLayout from "./MainLayout";
@@ -80,7 +83,14 @@ const getCloseTabButton = (title: string) => {
   });
 };
 
-const renderLayout = () => render(<MainLayout onLogout={vi.fn()} />);
+const renderLayout = (path = "/dashboard/today-sales") => {
+  window.history.replaceState(null, "", `#${path}`);
+  return render(
+    <HashRouter useTransitions={false}>
+      <MainLayout onLogout={vi.fn()} />
+    </HashRouter>,
+  );
+};
 
 describe("MainLayout", () => {
   it("starts on today sales with the complete topbar and sidebar structure", () => {
@@ -143,7 +153,7 @@ describe("MainLayout", () => {
     expect(screen.getByText("掌上便捷")).toBeVisible();
   });
 
-  it("opens a secondary page and switches local tabs without routing", () => {
+  it("keeps tabs, breadcrumb, and content synced to hash history", async () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -154,7 +164,6 @@ describe("MainLayout", () => {
     const todaySales = requiredPage("dashboard", "dashboard_today_sales");
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
-    const initialUrl = window.location.href;
 
     const adsGroupItem = within(primaryNavigation).getByRole("menuitem", {
       name: adsGroup.title,
@@ -183,12 +192,13 @@ describe("MainLayout", () => {
       "true",
     );
     expectSecondaryClosed();
-    expect(window.location.href).toBe(initialUrl);
+    expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
 
     fireEvent.click(getTab(todaySales.title));
     expect(currentPage).toHaveTextContent(todaySales.title);
     expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
     expect(within(breadcrumb).getByText(dashboardGroup.title)).toBeVisible();
+    expect(window.location.hash).toBe(`#${todaySales.path}`);
 
     fireEvent.click(getTab(keywordLibrary.title));
     expect(currentPage).toHaveTextContent(keywordLibrary.title);
@@ -196,10 +206,22 @@ describe("MainLayout", () => {
       "aria-selected",
       "true",
     );
-    expect(window.location.href).toBe(initialUrl);
-  });
+    expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
 
-  it("closes tabs locally and restores today sales from the brand", () => {
+    act(() => window.history.back());
+    await waitFor(() => {
+      expect(currentPage).toHaveTextContent(todaySales.title);
+    });
+    expect(window.location.hash).toBe(`#${todaySales.path}`);
+
+    act(() => window.history.forward());
+    await waitFor(() => {
+      expect(currentPage).toHaveTextContent(keywordLibrary.title);
+    });
+    expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
+  }, 10_000);
+
+  it("closes tabs in memory and restores the default hash from the brand", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -207,7 +229,6 @@ describe("MainLayout", () => {
     const todaySales = requiredPage("dashboard", "dashboard_today_sales");
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
-    const initialUrl = window.location.href;
 
     fireEvent.click(
       within(primaryNavigation).getByRole("menuitem", { name: adsGroup.title }),
@@ -234,6 +255,7 @@ describe("MainLayout", () => {
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
       todaySales.title,
     );
+    expect(window.location.hash).toBe(`#${todaySales.path}`);
     expectSecondaryClosed();
 
     fireEvent.click(getTab(keywordLibrary.title));
@@ -245,7 +267,7 @@ describe("MainLayout", () => {
 
     fireEvent.click(getCloseTabButton(todaySales.title));
     expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
-    expect(window.location.href).toBe(initialUrl);
+    expect(window.location.hash).toBe(`#${todaySales.path}`);
   });
 
   it("switches an open flyout on hover and closes it from the backdrop", () => {
@@ -348,7 +370,6 @@ describe("MainLayout", () => {
       "data_center",
       "data_center_documentation",
     );
-    const initialUrl = window.location.href;
 
     fireEvent.click(
       within(primaryNavigation).getByRole("menuitem", {
@@ -365,6 +386,7 @@ describe("MainLayout", () => {
     expect(within(breadcrumb).getByText("AI中心")).toBeVisible();
     expect(within(content).getByText("AI助手内容区")).toBeVisible();
     expect(getTab(aiAssistant.title)).toHaveAttribute("aria-selected", "true");
+    expect(window.location.hash).toBe(`#${aiAssistant.path}`);
 
     fireEvent.click(screen.getByRole("button", { name: aiAssistant.title }));
     expect(
@@ -409,6 +431,6 @@ describe("MainLayout", () => {
     );
     expect(within(breadcrumb).getByText(dataCenterGroup.title)).toBeVisible();
     expect(within(content).getByText("文档内容区")).toBeVisible();
-    expect(window.location.href).toBe(initialUrl);
+    expect(window.location.hash).toBe(`#${documentation.path}`);
   });
 });

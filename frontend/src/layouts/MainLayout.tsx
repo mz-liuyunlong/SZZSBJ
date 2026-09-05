@@ -4,12 +4,17 @@
 import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, Tabs, Typography } from "antd";
 import { useState, type ReactNode } from "react";
-import { navigation, type NavigationGroup } from "../config/navigation";
+import { useLocation, useNavigate } from "react-router-dom";
+import { navigation } from "../config/navigation";
+import {
+  DEFAULT_BUSINESS_ROUTE,
+  findRouteByKey,
+  getSidebarPages,
+  isRoutableStatus,
+  resolveRoute,
+} from "../router/routeResolver";
 import TopbarActions from "./components/TopbarActions";
 import "./MainLayout.css";
-
-const visiblePages = (group: NavigationGroup) =>
-  group.children.filter((page) => page.status !== "hidden");
 
 function requireNavigationItem<T>(value: T | undefined, message: string): T {
   if (value === undefined) {
@@ -18,31 +23,18 @@ function requireNavigationItem<T>(value: T | undefined, message: string): T {
   return value;
 }
 
-const findNavigationPage = (pageKey: string) => {
-  for (const group of navigation) {
-    const page = group.children.find((item) => item.key === pageKey);
-    if (page) return { group, page };
-  }
-};
-
-const defaultGroup = requireNavigationItem(
-  navigation.find((group) => group.key === "dashboard"),
-  "MainLayout default navigation group is missing",
-);
-const defaultPage = requireNavigationItem(
-  defaultGroup.children.find((page) => page.key === "dashboard_today_sales"),
-  "MainLayout default navigation page is missing",
-);
+const defaultGroup = DEFAULT_BUSINESS_ROUTE.group;
+const defaultPage = DEFAULT_BUSINESS_ROUTE.page;
 const aiAssistantPage = requireNavigationItem(
-  findNavigationPage("ai_center_assistant"),
+  findRouteByKey("ai_center_assistant"),
   "MainLayout AI assistant navigation page is missing",
 ).page;
 const personalCenterPage = requireNavigationItem(
-  findNavigationPage("settings_personal_center"),
+  findRouteByKey("settings_personal_center"),
   "MainLayout personal center navigation page is missing",
 ).page;
 const documentationPage = requireNavigationItem(
-  findNavigationPage("data_center_documentation"),
+  findRouteByKey("data_center_documentation"),
   "MainLayout documentation navigation page is missing",
 ).page;
 
@@ -52,28 +44,34 @@ interface MainLayoutProps {
 }
 
 function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
-  const [activeGroupKey, setActiveGroupKey] = useState(defaultGroup.key);
-  const [activePageKey, setActivePageKey] = useState(defaultPage.key);
-  const [openTabs, setOpenTabs] = useState([defaultPage.key]);
-  const activePageSelection = findNavigationPage(activePageKey) ?? {
-    group: defaultGroup,
-    page: defaultPage,
-  };
+  const [flyoutGroupKey, setFlyoutGroupKey] = useState(defaultGroup.key);
+  const [openTabs, setOpenTabs] = useState([defaultPage.path]);
+  const routeResolution = resolveRoute(location.pathname);
+  const activePageSelection =
+    routeResolution.kind === "allowed"
+      ? routeResolution.route
+      : DEFAULT_BUSINESS_ROUTE;
   const activePageGroup = activePageSelection.group;
   const activePage = activePageSelection.page;
-  const activeGroup =
-    navigation.find((group) => group.key === activeGroupKey) ?? activePageGroup;
-  const secondaryPages = visiblePages(activeGroup);
-  const tabItems = openTabs.flatMap((pageKey) => {
-    const selection = findNavigationPage(pageKey);
-    return selection
+  const activeGroup = secondaryOpen
+    ? navigation.find((group) => group.key === flyoutGroupKey) ?? activePageGroup
+    : activePageGroup;
+  const secondaryPages = getSidebarPages(activeGroup);
+  const tabPaths = openTabs.includes(activePage.path)
+    ? openTabs
+    : [...openTabs, activePage.path];
+  const tabItems = tabPaths.flatMap((path) => {
+    const resolution = resolveRoute(path);
+    return resolution.kind === "allowed"
       ? [
           {
-            key: pageKey,
-            label: selection.page.title,
-            icon: selection.group.icon,
+            key: path,
+            label: resolution.route.page.title,
+            icon: resolution.route.group.icon,
             closable: true,
           },
         ]
@@ -84,7 +82,7 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
     const group = navigation.find((item) => item.key === key);
     if (!group) return;
 
-    setActiveGroupKey(key);
+    setFlyoutGroupKey(key);
     setSecondaryOpen(true);
   };
 
@@ -93,24 +91,27 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
   };
 
   const dismissSecondaryMenu = () => {
-    setActiveGroupKey(activePageGroup.key);
     closeSecondaryMenu();
   };
 
   const openPageByKey = (pageKey: string) => {
-    const selection = findNavigationPage(pageKey);
+    const selection = findRouteByKey(pageKey);
     if (!selection) return;
+    const resolution = resolveRoute(selection.page.path);
+    if (resolution.kind !== "allowed") return;
 
-    setActiveGroupKey(selection.group.key);
-    setActivePageKey(selection.page.key);
     setOpenTabs((tabs) =>
-      tabs.includes(selection.page.key) ? tabs : [...tabs, selection.page.key],
+      tabs.includes(selection.page.path) ? tabs : [...tabs, selection.page.path],
     );
+    navigate(selection.page.path);
     closeSecondaryMenu();
   };
 
-  const activateTab = (pageKey: string) => {
-    openPageByKey(pageKey);
+  const activateTab = (path: string) => {
+    const resolution = resolveRoute(path);
+    if (resolution.kind !== "allowed") return;
+    navigate(path);
+    closeSecondaryMenu();
   };
 
   const selectPage = (pageKey: string) => {
@@ -120,12 +121,12 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
     openPageByKey(page.key);
   };
 
-  const closeTab = (pageKey: string) => {
-    const tabIndex = openTabs.indexOf(pageKey);
+  const closeTab = (path: string) => {
+    const tabIndex = tabPaths.indexOf(path);
     if (tabIndex < 0) return;
 
-    const remainingTabs = openTabs.filter((key) => key !== pageKey);
-    if (pageKey !== activePageKey) {
+    const remainingTabs = tabPaths.filter((openPath) => openPath !== path);
+    if (path !== activePage.path) {
       setOpenTabs(remainingTabs);
       return;
     }
@@ -134,22 +135,20 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
       remainingTabs[Math.min(tabIndex, remainingTabs.length - 1)];
     if (adjacentTab) {
       setOpenTabs(remainingTabs);
-      activateTab(adjacentTab);
+      navigate(adjacentTab);
       return;
     }
 
-    setOpenTabs([defaultPage.key]);
-    setActiveGroupKey(defaultGroup.key);
-    setActivePageKey(defaultPage.key);
+    setOpenTabs([defaultPage.path]);
+    navigate(defaultPage.path);
     closeSecondaryMenu();
   };
 
   const resetToDefaultPage = () => {
-    setActiveGroupKey(defaultGroup.key);
-    setActivePageKey(defaultPage.key);
     setOpenTabs((tabs) =>
-      tabs.includes(defaultPage.key) ? tabs : [...tabs, defaultPage.key],
+      tabs.includes(defaultPage.path) ? tabs : [...tabs, defaultPage.path],
     );
+    navigate(defaultPage.path);
     closeSecondaryMenu();
   };
 
@@ -237,7 +236,7 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
               ),
               title: group.title,
               onMouseEnter: () => {
-                if (secondaryOpen && activeGroupKey !== group.key) {
+                if (secondaryOpen && flyoutGroupKey !== group.key) {
                   selectGroup(group.key);
                 }
               },
@@ -274,12 +273,12 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
             className="main-layout__secondary-menu"
             aria-label={`${activeGroup.title}二级导航`}
             mode="inline"
-            selectedKeys={activePageKey ? [activePageKey] : []}
+            selectedKeys={[activePage.key]}
             onClick={({ key }) => selectPage(key)}
             items={secondaryPages.map((page) => ({
               key: page.key,
               label: page.title,
-              disabled: page.status === "disabled",
+              disabled: !isRoutableStatus(page.status),
             }))}
           />
         </Layout.Sider>
@@ -303,7 +302,7 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
               type="editable-card"
               size="small"
               hideAdd
-              activeKey={activePage.key}
+              activeKey={activePage.path}
               items={tabItems}
               locale={{ removeAriaLabel: "关闭标签页" }}
               onChange={activateTab}

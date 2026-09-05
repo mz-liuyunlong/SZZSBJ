@@ -123,3 +123,10 @@ planned / building / testing / ready / disabled / hidden
 
 页面是否只读必须使用 `readOnly: true/false`，不得使用 `status: 'readonly'`。
 `legacy`、`iframe`、`deprecated` 不得作为 `PageStatus` 值。
+
+## 9. 路由状态源
+
+- 当前静态部署使用 `HashRouter`，不依赖服务端 rewrite。
+- URL 是 active page 的权威状态源；菜单、Tab、Breadcrumb 和 Content 必须随 URL 同步。
+- 合法业务路径、hidden/disabled 状态和页面 metadata 统一由 route resolver 从 `navigation.ts` 派生，禁止复制第二套路由配置。
+- Routing Foundation 是负责人批准的受控顺序调整，不代表提前实施 PageShell、ComingSoonPage 或后续 Tab 生命周期。
