@@ -5,6 +5,7 @@ import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, Tabs, Typography } from "antd";
 import { useState, type ReactNode } from "react";
 import { navigation, type NavigationGroup } from "../config/navigation";
+import TopbarActions from "./components/TopbarActions";
 import "./MainLayout.css";
 
 const visiblePages = (group: NavigationGroup) =>
@@ -32,8 +33,25 @@ const defaultPage = requireNavigationItem(
   defaultGroup.children.find((page) => page.key === "dashboard_today_sales"),
   "MainLayout default navigation page is missing",
 );
+const aiAssistantPage = requireNavigationItem(
+  findNavigationPage("ai_center_assistant"),
+  "MainLayout AI assistant navigation page is missing",
+).page;
+const personalCenterPage = requireNavigationItem(
+  findNavigationPage("settings_personal_center"),
+  "MainLayout personal center navigation page is missing",
+).page;
+const documentationPage = requireNavigationItem(
+  findNavigationPage("data_center_documentation"),
+  "MainLayout documentation navigation page is missing",
+).page;
 
-function MainLayout({ children }: { children?: ReactNode }) {
+interface MainLayoutProps {
+  children?: ReactNode;
+  onLogout?: () => void;
+}
+
+function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [activeGroupKey, setActiveGroupKey] = useState(defaultGroup.key);
@@ -79,24 +97,27 @@ function MainLayout({ children }: { children?: ReactNode }) {
     closeSecondaryMenu();
   };
 
-  const activateTab = (pageKey: string) => {
+  const openPageByKey = (pageKey: string) => {
     const selection = findNavigationPage(pageKey);
     if (!selection) return;
 
     setActiveGroupKey(selection.group.key);
     setActivePageKey(selection.page.key);
+    setOpenTabs((tabs) =>
+      tabs.includes(selection.page.key) ? tabs : [...tabs, selection.page.key],
+    );
     closeSecondaryMenu();
+  };
+
+  const activateTab = (pageKey: string) => {
+    openPageByKey(pageKey);
   };
 
   const selectPage = (pageKey: string) => {
     const page = activeGroup.children.find((item) => item.key === pageKey);
     if (!page) return;
 
-    setActivePageKey(page.key);
-    setOpenTabs((tabs) =>
-      tabs.includes(page.key) ? tabs : [...tabs, page.key],
-    );
-    closeSecondaryMenu();
+    openPageByKey(page.key);
   };
 
   const closeTab = (pageKey: string) => {
@@ -140,21 +161,12 @@ function MainLayout({ children }: { children?: ReactNode }) {
   return (
     <Layout
       className={`main-layout${collapsed ? " main-layout--collapsed" : ""}`}
-      hasSider
     >
-      <Layout.Sider
-        className="main-layout__primary"
-        width={168}
-        collapsedWidth={64}
-        collapsed={collapsed}
-        collapsible
-        trigger={null}
-        theme="light"
-        aria-label="一级导航栏"
-      >
+      <Layout.Header className="main-layout__header" aria-label="顶部栏">
         <button
           type="button"
           className="main-layout__brand"
+          style={{ width: collapsed ? 64 : 168 }}
           aria-label="回到工作台今日销售"
           onClick={resetToDefaultPage}
         >
@@ -162,8 +174,8 @@ function MainLayout({ children }: { children?: ReactNode }) {
             className="main-layout__brand-logo"
             src="/favicon.ico"
             alt="掌上便捷标识"
-            width={32}
-            height={32}
+            width={40}
+            height={40}
           />
           {!collapsed && (
             <Typography.Text strong className="main-layout__brand-text">
@@ -171,78 +183,7 @@ function MainLayout({ children }: { children?: ReactNode }) {
             </Typography.Text>
           )}
         </button>
-        <Menu
-          className="main-layout__primary-menu"
-          aria-label="一级导航"
-          mode="inline"
-          inlineCollapsed={collapsed}
-          selectedKeys={[activeGroup.key]}
-          onClick={({ key }) => selectGroup(key)}
-          items={navigation.map((group) => ({
-            key: group.key,
-            icon: group.icon,
-            label: (
-              <span className="main-layout__primary-label">{group.title}</span>
-            ),
-            title: group.title,
-            onMouseEnter: () => {
-              if (secondaryOpen && activeGroupKey !== group.key) {
-                selectGroup(group.key);
-              }
-            },
-          }))}
-        />
-      </Layout.Sider>
-
-      <Layout.Sider
-        className={`main-layout__secondary${
-          secondaryOpen ? " main-layout__secondary--open" : ""
-        }`}
-        width={240}
-        theme="light"
-        aria-label="二级菜单浮层"
-        aria-hidden={!secondaryOpen}
-        inert={!secondaryOpen}
-        style={{ position: "fixed", left: collapsed ? 64 : 168 }}
-      >
-        <div className="main-layout__secondary-title">
-          <Typography.Text strong>{activeGroup.title}</Typography.Text>
-        </div>
-        <Menu
-          className="main-layout__secondary-menu"
-          aria-label={`${activeGroup.title}二级导航`}
-          mode="inline"
-          selectedKeys={activePageKey ? [activePageKey] : []}
-          onClick={({ key }) => selectPage(key)}
-          items={secondaryPages.map((page) => ({
-            key: page.key,
-            label: page.title,
-            disabled: page.status === "disabled",
-          }))}
-        />
-      </Layout.Sider>
-
-      <button
-        type="button"
-        className={`main-layout__backdrop${
-          secondaryOpen ? " main-layout__backdrop--open" : ""
-        }`}
-        style={{ left: (collapsed ? 64 : 168) + 240 }}
-        aria-label="关闭二级菜单"
-        aria-hidden={!secondaryOpen}
-        disabled={!secondaryOpen}
-        tabIndex={secondaryOpen ? 0 : -1}
-        onClick={dismissSecondaryMenu}
-      />
-
-      <Layout className="main-layout__workspace">
-        <Layout.Header className="main-layout__header" aria-label="顶部栏">
-          <Button
-            type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
-            onClick={toggleSidebar}
-          />
+        <div className="main-layout__header-main">
           <Breadcrumb
             className="main-layout__breadcrumb"
             aria-label="面包屑"
@@ -259,33 +200,135 @@ function MainLayout({ children }: { children?: ReactNode }) {
               { title: activePage.title },
             ]}
           />
-        </Layout.Header>
-        <section className="main-layout__tabbar" aria-label="页面标签栏">
-          <Tabs
-            type="editable-card"
-            size="small"
-            hideAdd
-            activeKey={activePage.key}
-            items={tabItems}
-            locale={{ removeAriaLabel: "关闭标签页" }}
-            onChange={activateTab}
-            onEdit={(targetKey, action) => {
-              if (action === "remove" && typeof targetKey === "string") {
-                closeTab(targetKey);
-              }
-            }}
+          <TopbarActions
+            aiAssistantPage={aiAssistantPage}
+            personalCenterPage={personalCenterPage}
+            documentationPage={documentationPage}
+            onOpenPage={openPageByKey}
+            onRequestOverlayClose={dismissSecondaryMenu}
+            onLogout={onLogout}
           />
-        </section>
-        <Layout.Content className="main-layout__content" aria-label="内容区">
-          <Typography.Title
-            level={4}
-            className="main-layout__page-title"
-            aria-label="当前页面"
-          >
-            {activePage.title}
-          </Typography.Title>
-          {children}
-        </Layout.Content>
+        </div>
+      </Layout.Header>
+
+      <Layout className="main-layout__body" hasSider>
+        <Layout.Sider
+          className="main-layout__primary"
+          width={168}
+          collapsedWidth={64}
+          collapsed={collapsed}
+          collapsible
+          trigger={null}
+          theme="light"
+          aria-label="一级导航栏"
+        >
+          <Menu
+            className="main-layout__primary-menu"
+            aria-label="一级导航"
+            mode="inline"
+            inlineCollapsed={collapsed}
+            selectedKeys={[activeGroup.key]}
+            onClick={({ key }) => selectGroup(key)}
+            items={navigation.map((group) => ({
+              key: group.key,
+              icon: group.icon,
+              label: (
+                <span className="main-layout__primary-label">{group.title}</span>
+              ),
+              title: group.title,
+              onMouseEnter: () => {
+                if (secondaryOpen && activeGroupKey !== group.key) {
+                  selectGroup(group.key);
+                }
+              },
+            }))}
+          />
+          <div className="main-layout__sidebar-footer">
+            <Button
+              className="main-layout__collapse-button"
+              type="text"
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+              onClick={toggleSidebar}
+            >
+              {!collapsed && "收起侧栏"}
+            </Button>
+          </div>
+        </Layout.Sider>
+
+        <Layout.Sider
+          className={`main-layout__secondary${
+            secondaryOpen ? " main-layout__secondary--open" : ""
+          }`}
+          width={240}
+          theme="light"
+          aria-label="二级菜单浮层"
+          aria-hidden={!secondaryOpen}
+          inert={!secondaryOpen}
+          style={{ position: "fixed", left: collapsed ? 64 : 168 }}
+        >
+          <div className="main-layout__secondary-title">
+            <Typography.Text strong>{activeGroup.title}</Typography.Text>
+          </div>
+          <Menu
+            className="main-layout__secondary-menu"
+            aria-label={`${activeGroup.title}二级导航`}
+            mode="inline"
+            selectedKeys={activePageKey ? [activePageKey] : []}
+            onClick={({ key }) => selectPage(key)}
+            items={secondaryPages.map((page) => ({
+              key: page.key,
+              label: page.title,
+              disabled: page.status === "disabled",
+            }))}
+          />
+        </Layout.Sider>
+
+        <button
+          type="button"
+          className={`main-layout__backdrop${
+            secondaryOpen ? " main-layout__backdrop--open" : ""
+          }`}
+          style={{ left: (collapsed ? 64 : 168) + 240 }}
+          aria-label="关闭二级菜单"
+          aria-hidden={!secondaryOpen}
+          disabled={!secondaryOpen}
+          tabIndex={secondaryOpen ? 0 : -1}
+          onClick={dismissSecondaryMenu}
+        />
+
+        <Layout className="main-layout__workspace">
+          <section className="main-layout__tabbar" aria-label="页面标签栏">
+            <Tabs
+              type="editable-card"
+              size="small"
+              hideAdd
+              activeKey={activePage.key}
+              items={tabItems}
+              locale={{ removeAriaLabel: "关闭标签页" }}
+              onChange={activateTab}
+              onEdit={(targetKey, action) => {
+                if (action === "remove" && typeof targetKey === "string") {
+                  closeTab(targetKey);
+                }
+              }}
+            />
+          </section>
+          <Layout.Content className="main-layout__content" aria-label="内容区">
+            <Typography.Title
+              level={4}
+              className="main-layout__page-title"
+              aria-label="当前页面"
+            >
+              {activePage.title}
+            </Typography.Title>
+            {children ?? (
+              <Typography.Text type="secondary">
+                {activePage.title}内容区
+              </Typography.Text>
+            )}
+          </Layout.Content>
+        </Layout>
       </Layout>
     </Layout>
   );

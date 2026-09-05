@@ -292,6 +292,9 @@ export const navigation: NavigationGroup[] = [
         permissionKey: 'data_center.api_docs.view',
         tabs: [{ key: 'api-list', title: '接口列表' }, { key: 'openapi', title: 'OpenAPI' }, { key: 'error-codes', title: '错误码' }, { key: 'permissions', title: '权限说明' }],
       }),
+      page('data_center', 'documentation', '文档', '/data-center/documentation', {
+        status: 'hidden',
+      }),
     ],
   },
   {
@@ -327,6 +330,9 @@ export const navigation: NavigationGroup[] = [
       }),
       page('settings', 'logs', '日志', '/settings/logs', {
         tabs: [{ key: 'operation', title: '操作日志' }, { key: 'system', title: '系统日志' }, { key: 'api', title: '接口日志' }, { key: 'permission', title: '权限变更日志' }, { key: 'fee-rule', title: '费用规则日志' }],
+      }),
+      page('settings', 'personal_center', '个人中心', '/settings/personal-center', {
+        status: 'hidden',
       }),
     ],
   },
