@@ -314,17 +314,19 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
             />
           </section>
           <Layout.Content className="main-layout__content" aria-label="内容区">
-            <Typography.Title
-              level={4}
-              className="main-layout__page-title"
-              aria-label="当前页面"
-            >
-              {activePage.title}
-            </Typography.Title>
             {children ?? (
-              <Typography.Text type="secondary">
-                {activePage.title}内容区
-              </Typography.Text>
+              <>
+                <Typography.Title
+                  level={4}
+                  className="main-layout__page-title"
+                  aria-label="当前页面"
+                >
+                  {activePage.title}
+                </Typography.Title>
+                <Typography.Text type="secondary">
+                  {activePage.title}内容区
+                </Typography.Text>
+              </>
             )}
           </Layout.Content>
         </Layout>

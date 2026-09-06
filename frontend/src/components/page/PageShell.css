@@ -1,0 +1,41 @@
+.page-shell {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.page-shell__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-shell__heading {
+  min-width: 0;
+}
+
+.page-shell__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-shell__title,
+.page-shell__description {
+  margin-block: 0 !important;
+}
+
+.page-shell__description {
+  margin-block-start: 8px !important;
+}
+
+.page-shell__help {
+  flex: 0 0 auto;
+}
+
+.page-shell__content {
+  min-width: 0;
+}

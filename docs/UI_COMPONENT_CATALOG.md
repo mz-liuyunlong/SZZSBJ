@@ -20,6 +20,8 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 |---|---|---|---|---|
 | PageContainer | Shared | `frontend/src/components/layout/PageContainer.tsx` | 页面统一容器 | 所有后台页面 |
 | PageHeader | Shared | `frontend/src/components/layout/PageHeader.tsx` | 页面标题区 | 标题、描述、操作区 |
+| PageShell | Shared | `frontend/src/components/page/PageShell.tsx` | 页面标题、状态、帮助与内容容器 | 后台业务页面统一基础壳 |
+| ComingSoonPage | Shared | `frontend/src/pages/ComingSoonPage.tsx` | 未就绪页面的统一 no-API 占位 | 当前业务导航页面 |
 | StatusTag | Shared | `frontend/src/components/common/StatusTag.tsx` | 状态标签 | 订单/广告/库存等状态 |
 | MoneyText | Shared | `frontend/src/components/common/MoneyText.tsx` | 金额展示 | 涉及金额字段 |
 | PercentText | Shared | `frontend/src/components/common/PercentText.tsx` | 百分比展示 | 广告、利润、退款率 |
