@@ -1,0 +1,164 @@
+﻿system_module,applicable_page,interface_id,interface_name,document_path,business_use,priority,phase_one_recommended,api_path,http_method,review_status,notes
+销售,销售与订单页,LX-71422945ADAC,查询Listing标签列表,/docs/Sale/globalTagPageList.md,查询Listing标签列表,P0,是,/basicOpen/globalTag/listing/page/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-71422945ADAC,查询Listing标签列表,/docs/Sale/globalTagPageList.md,查询Listing标签列表,P0,是,/basicOpen/globalTag/listing/page/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-EB69D6DC93FB,查询Listing操作日志列表,/docs/Sale/listingOperateLogPageList.md,查询Listing操作日志列表,P0,是,/basicOpen/listingManage/listingOperateLog/pageList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-EB69D6DC93FB,查询Listing操作日志列表,/docs/Sale/listingOperateLogPageList.md,查询Listing操作日志列表,P0,是,/basicOpen/listingManage/listingOperateLog/pageList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-C76D747AD0DA,刊登管理-获取指定 productType 的 JSON Schema,/docs/Sale/PublishManageGetProductType.md,刊登管理-获取指定 productType 的 JSON Schema,P0,是,/basicOpen/openapi/publish/manage/getProductType,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-C76D747AD0DA,刊登管理-获取指定 productType 的 JSON Schema,/docs/Sale/PublishManageGetProductType.md,刊登管理-获取指定 productType 的 JSON Schema,P0,是,/basicOpen/openapi/publish/manage/getProductType,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-F560D3DA6DF1,查询优惠券详情+listing+订单(批量),/docs/Sale/promotionCouponAllDetailBatch.md,查询优惠券详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/couponAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-F560D3DA6DF1,查询优惠券详情+listing+订单(批量),/docs/Sale/promotionCouponAllDetailBatch.md,查询优惠券详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/couponAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-D92C9E37C544,查询管理促销详情+listing+订单(批量),/docs/Sale/promotionManagementAllDetailBatch.md,查询管理促销详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/managementAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-D92C9E37C544,查询管理促销详情+listing+订单(批量),/docs/Sale/promotionManagementAllDetailBatch.md,查询管理促销详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/managementAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-324AF6B69AEF,查询会员折扣or价格折扣详情+listing+订单(批量),/docs/Sale/promotionPrimeDiscountAllDetailBatch.md,查询会员折扣or价格折扣详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/primeDiscountAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-324AF6B69AEF,查询会员折扣or价格折扣详情+listing+订单(批量),/docs/Sale/promotionPrimeDiscountAllDetailBatch.md,查询会员折扣or价格折扣详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/primeDiscountAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-72966FDD4C29,查询秒杀详情+listing+订单(批量),/docs/Sale/promotionSecKillAllDetailBatch.md,查询秒杀详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/secKillAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-72966FDD4C29,查询秒杀详情+listing+订单(批量),/docs/Sale/promotionSecKillAllDetailBatch.md,查询秒杀详情+listing+订单(批量),P0,是,/promotionApi/open/promotion/secKillAllDetailBatch,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-D1E4B7906B42,查询商品折扣列表,/docs/Sale/promotionListingList.md,查询商品折扣列表,P0,是,/basicOpen/promotion/listingList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-D1E4B7906B42,查询商品折扣列表,/docs/Sale/promotionListingList.md,查询商品折扣列表,P0,是,/basicOpen/promotion/listingList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-03449E2EC06C,查询商品折扣详情-列表-优惠卷,/docs/Sale/promotionListingDetailCoupon.md,查询商品折扣详情-列表-优惠卷,P0,是,/basicOpen/promotion/listingDetailCoupon,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-03449E2EC06C,查询商品折扣详情-列表-优惠卷,/docs/Sale/promotionListingDetailCoupon.md,查询商品折扣详情-列表-优惠卷,P0,是,/basicOpen/promotion/listingDetailCoupon,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-020A91A14B42,查询商品折扣详情-列表-管理促销,/docs/Sale/promotionListingDetailManage.md,查询商品折扣详情-列表-管理促销,P0,是,/basicOpen/promotion/listingDetailManage,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-020A91A14B42,查询商品折扣详情-列表-管理促销,/docs/Sale/promotionListingDetailManage.md,查询商品折扣详情-列表-管理促销,P0,是,/basicOpen/promotion/listingDetailManage,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-FE476B81237F,查询商品折扣详情-列表-会员折扣,/docs/Sale/promotionListingDetailPrimeDiscount.md,查询商品折扣详情-列表-会员折扣,P0,是,/basicOpen/promotion/listingDetailPrimeDiscount,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-FE476B81237F,查询商品折扣详情-列表-会员折扣,/docs/Sale/promotionListingDetailPrimeDiscount.md,查询商品折扣详情-列表-会员折扣,P0,是,/basicOpen/promotion/listingDetailPrimeDiscount,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-A404B2104669,查询商品折扣详情-列表-秒杀,/docs/Sale/promotionListingDetailSecKill.md,查询商品折扣详情-列表-秒杀,P0,是,/basicOpen/promotion/listingDetailSecKill,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-A404B2104669,查询商品折扣详情-列表-秒杀,/docs/Sale/promotionListingDetailSecKill.md,查询商品折扣详情-列表-秒杀,P0,是,/basicOpen/promotion/listingDetailSecKill,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-44D4A6C312C6,获取UPC编码列表,/docs/Product/UpcList.md,获取UPC编码列表,P0,是,/listing/publish/api/upc/upcList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-3F1F087FF8A1,查询本地产品列表,/docs/Product/ProductLists.md,支持查询产品列表，对应系统【产品】>【产品管理】数据,P0,是,/erp/sc/routing/data/local_inventory/productList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-DCB0C142100B,查询本地产品详情,/docs/Product/ProductDetails.md,支持查询本地产品详细信息，对应系统【产品】>【产品管理】数据,P0,是,/erp/sc/routing/data/local_inventory/productInfo,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-BB8D0DF598AF,批量查询本地产品详情,/docs/Product/batchGetProductInfo.md,批量查询本地产品详情,P0,是,/erp/sc/routing/data/local_inventory/batchGetProductInfo,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-A4D3F436FF1F,查询产品属性列表,/docs/Product/attributeList.md,查询产品属性列表,P0,是,/erp/sc/routing/storage/attribute/attributeList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-5AFC6979F657,查询多属性产品列表,/docs/Product/spuList.md,查询多属性产品列表,P0,是,/erp/sc/routing/storage/spu/spuList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-30AF347E45FE,查询多属性产品详情,/docs/Product/spuInfo.md,查询多属性产品详情,P0,是,/erp/sc/routing/storage/spu/info,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-DA189364D1B7,查询捆绑产品关系列表,/docs/Product/bundledProductList.md,查询捆绑产品关系列表,P0,是,/erp/sc/routing/data/local_inventory/bundledProductList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-BD16C6D25A0D,查询产品辅料列表,/docs/Product/productAuxList.md,查询产品辅料列表,P0,是,/erp/sc/routing/data/local_inventory/productAuxList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-82FF3AF996D2,查询产品品牌列表,/docs/Product/Brand.md,支持查询本地产品品牌列表，对应系统【产品】>【品牌管理】数据,P0,是,/erp/sc/data/local_inventory/brand,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-75F4963569A6,查询产品分类列表,/docs/Product/Category.md,支持查询本地产品的分类列表，对应【产品】>【产品分类】数据,P0,是,/erp/sc/routing/data/local_inventory/category,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-226730376E6B,查询产品标签,/docs/Product/GetProductTag.md,查询产品标签,P0,是,/label/operation/v1/label/product/list,GET,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-6F96FE519F29,查询操作日志,/docs/Product/GetPagingLogLists.md,查询操作日志,P0,是,/basicOpen/product/getPagingLogLists,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-F6A548F96FD0,产品管理-查询透明计划商品列表,/docs/Product/getTransparencyProductList.md,产品管理-查询透明计划商品列表,P0,是,/basicOpen/product/getTransparencyProductList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-D332F931885E,查询采购单列表,/docs/Purchase/PurchaseOrderList.md,支持查询采购单列表，对应系统【采购】>【采购单】数据,P0,是,/erp/sc/routing/data/local_inventory/purchaseOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-D332F931885E,查询采购单列表,/docs/Purchase/PurchaseOrderList.md,支持查询采购单列表，对应系统【采购】>【采购单】数据,P0,是,/erp/sc/routing/data/local_inventory/purchaseOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-853A6501F0BF,查询采购退货单列表,/docs/Purchase/getPurchaseReturnOrderList.md,查询采购退货单列表,P0,是,/erp/sc/routing/purchase/purchase_return_order/getPurchaseReturnOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-853A6501F0BF,查询采购退货单列表,/docs/Purchase/getPurchaseReturnOrderList.md,查询采购退货单列表,P0,是,/erp/sc/routing/purchase/purchase_return_order/getPurchaseReturnOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-853A6501F0BF,查询采购退货单列表,/docs/Purchase/getPurchaseReturnOrderList.md,查询采购退货单列表,P0,是,/erp/sc/routing/purchase/purchase_return_order/getPurchaseReturnOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-B31DFDC39206,查询采购变更单列表,/docs/Purchase/changeOrderList.md,查询采购变更单列表,P0,是,/erp/sc/routing/purchase/purchaseChangeOrder/changeOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-B31DFDC39206,查询采购变更单列表,/docs/Purchase/changeOrderList.md,查询采购变更单列表,P0,是,/erp/sc/routing/purchase/purchaseChangeOrder/changeOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-9BF4536568D4,查询委外订单列表,/docs/Purchase/getOrders.md,查询委外订单列表,P0,是,/erp/sc/routing/purchase/purchaseOutsourceOrder/getOrders,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-9BF4536568D4,查询委外订单列表,/docs/Purchase/getOrders.md,查询委外订单列表,P0,是,/erp/sc/routing/purchase/purchaseOutsourceOrder/getOrders,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-96F32A1090F0,查询加工计划列表,/docs/Warehouse/WorkOrderPlanList.md,支持查询加工计划列表，对应系统【采购】加工计划列表数据。,P0,是,/basicOpen/openapi/workOrder/processPlanList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-96F32A1090F0,查询加工计划列表,/docs/Warehouse/WorkOrderPlanList.md,支持查询加工计划列表，对应系统【采购】加工计划列表数据。,P0,是,/basicOpen/openapi/workOrder/processPlanList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-96F32A1090F0,查询加工计划列表,/docs/Warehouse/WorkOrderPlanList.md,支持查询加工计划列表，对应系统【采购】加工计划列表数据。,P0,是,/basicOpen/openapi/workOrder/processPlanList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-41E509578C0D,查询仓库列表,/docs/Warehouse/WarehouseLists.md,支持查询本地仓库列表信息，对应系统【设置】>【仓库设置】仓库列表,P0,是,/erp/sc/data/local_inventory/warehouse,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-EC6F4C39346F,查询本地仓位列表,/docs/Warehouse/warehouseBin.md,查询本地仓位列表,P0,是,/erp/sc/routing/data/local_inventory/warehouseBin,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-CF87F80AD608,查询产品仓位列表,/docs/Warehouse/getEntryRecommendBinList.md,查询产品仓位列表,P0,是,/basicOpen/warehouseConfig/warehouseBin/getEntryRecommendBinList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-CF87F80AD608,查询产品仓位列表,/docs/Warehouse/getEntryRecommendBinList.md,查询产品仓位列表,P0,是,/basicOpen/warehouseConfig/warehouseBin/getEntryRecommendBinList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-A791179C9A78,查询AWD库存列表,/docs/Warehouse/AwdWarehouseDetail.md,查询AWD库存列表,P0,是,/basicOpen/openapi/storage/awdWarehouseDetail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-41B3AF612B29,查询仓库库存明细,/docs/Warehouse/InventoryDetails.md,支持查询本地仓/海外仓库存明细，对应系统【仓库】>【库存明细】数据,P0,是,/erp/sc/routing/data/local_inventory/inventoryDetails,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-47310BFA3E0D,查询仓位库存明细,/docs/Warehouse/inventoryBinDetails.md,查询仓位库存明细,P0,是,/erp/sc/routing/data/local_inventory/inventoryBinDetails,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-1181D4F827FB,查询批次明细,/docs/Warehouse/GetBatchDetailList.md,查询批次明细,P0,是,/erp/sc/routing/data/local_inventory/getBatchDetailList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-BCB9BCE2437F,查询批次流水,/docs/Warehouse/GetBatchStatementList.md,查询批次流水,P0,是,/erp/sc/routing/data/local_inventory/getBatchStatementList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-F0CE5B7F589B,查询库存流水（新）,/docs/Warehouse/WarehouseStatementNew.md,查询库存流水（新）,P0,是,/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-8DE4E360B561,查询仓位流水,/docs/Warehouse/wareHouseBinStatement.md,查询仓位流水,P0,是,/erp/sc/routing/data/local_inventory/wareHouseBinStatement,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-4B9473A2D2E1,查询收货单列表,/docs/Warehouse/PurchaseReceiptOrderList.md,查询收货单列表,P0,是,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-4B9473A2D2E1,查询收货单列表,/docs/Warehouse/PurchaseReceiptOrderList.md,查询收货单列表,P0,是,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-4B9473A2D2E1,查询收货单列表,/docs/Warehouse/PurchaseReceiptOrderList.md,查询收货单列表,P0,是,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-1C62776E886A,查询销售退货单列表,/docs/Warehouse/ReturnList.md,查询销售退货单列表,P0,是,/pb/mp/returns/v2/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-1C62776E886A,查询销售退货单列表,/docs/Warehouse/ReturnList.md,查询销售退货单列表,P0,是,/pb/mp/returns/v2/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-1C62776E886A,查询销售退货单列表,/docs/Warehouse/ReturnList.md,查询销售退货单列表,P0,是,/pb/mp/returns/v2/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-ECAEE8038F87,查询质检单列表,/docs/Warehouse/ReceiptOrderQcList.md,查询质检单列表,P0,是,/erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-ECAEE8038F87,查询质检单列表,/docs/Warehouse/ReceiptOrderQcList.md,查询质检单列表,P0,是,/erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-5D311ED3B89E,查询质检单详情,/docs/Warehouse/qualityInspectionOrderDetail.md,查询质检单详情,P0,是,/basicOpen/qualityInspectionOrder/detail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-5D311ED3B89E,查询质检单详情,/docs/Warehouse/qualityInspectionOrderDetail.md,查询质检单详情,P0,是,/basicOpen/qualityInspectionOrder/detail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-A78D6BB9DC24,查询入库单列表,/docs/Warehouse/inboundgetOrders.md,查询入库单列表,P0,是,/erp/sc/routing/storage/inbound/getOrders,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-A78D6BB9DC24,查询入库单列表,/docs/Warehouse/inboundgetOrders.md,查询入库单列表,P0,是,/erp/sc/routing/storage/inbound/getOrders,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-179D3B8A9F63,查询出库单列表,/docs/Warehouse/outboundgetOrders.md,查询出库单列表,P0,是,/erp/sc/routing/storage/outbound/getOrders,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-179D3B8A9F63,查询出库单列表,/docs/Warehouse/outboundgetOrders.md,查询出库单列表,P0,是,/erp/sc/routing/storage/outbound/getOrders,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-F23293A702BB,查询销售出库单详情,/docs/Warehouse/WmsOrderDetail.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单,P0,是,/basicOpen/wmsOrder/getWmsOrdersByOrderNumbers,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-F23293A702BB,查询销售出库单详情,/docs/Warehouse/WmsOrderDetail.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单,P0,是,/basicOpen/wmsOrder/getWmsOrdersByOrderNumbers,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-29AE97DABE08,加工单列表,/docs/Warehouse/getProcessOrderLists.md,加工单列表,P0,是,/erp/sc/routing/inventoryReceipt/StorageProcess/getOrderLists,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-29AE97DABE08,加工单列表,/docs/Warehouse/getProcessOrderLists.md,加工单列表,P0,是,/erp/sc/routing/inventoryReceipt/StorageProcess/getOrderLists,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-4E3A3DA2B70A,查询调拨单列表,/docs/Warehouse/getStorageAllocationList.md,支持查询本地仓库调拨单列表,P0,是,/erp/sc/routing/inventoryReceipt/StorageAllocation/getStorageAllocationList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-9909117FD1E7,查询调整单列表,/docs/Warehouse/getStorageAdjustOrderList.md,查询调整单列表,P0,是,/erp/sc/routing/inventoryReceipt/StorageAdjustment/getStorageAdjustOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-9909117FD1E7,查询调整单列表,/docs/Warehouse/getStorageAdjustOrderList.md,查询调整单列表,P0,是,/erp/sc/routing/inventoryReceipt/StorageAdjustment/getStorageAdjustOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-D5353A465E6D,查询盘点单列表,/docs/Warehouse/checkGetOrderList.md,查询盘点单列表,P0,是,/erp/sc/routing/inventoryReceipt/InventoryCheck/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-D5353A465E6D,查询盘点单列表,/docs/Warehouse/checkGetOrderList.md,查询盘点单列表,P0,是,/erp/sc/routing/inventoryReceipt/InventoryCheck/getOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-642D33967219,查询盘点单详情,/docs/Warehouse/checkGetOrderDetail.md,查询盘点单详情,P0,是,/erp/sc/routing/inventoryReceipt/InventoryCheck/getOrderDetail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-642D33967219,查询盘点单详情,/docs/Warehouse/checkGetOrderDetail.md,查询盘点单详情,P0,是,/erp/sc/routing/inventoryReceipt/InventoryCheck/getOrderDetail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-75157159D29E,获取自定义入库类型,/docs/Warehouse/inboundGetCustomTypes.md,获取自定义入库类型,P0,是,/erp/sc/routing/storage/inbound/getCustomTypes,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-10C1BC0E9648,获取自定义出库类型,/docs/Warehouse/outboundGetCustomTypes.md,获取自定义出库类型,P0,是,/erp/sc/routing/storage/outbound/getCustomTypes,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-7773B7A1FDF9,查询海外仓备货单列表,/docs/Warehouse/listInbound.md,支持查询海外仓备货单列表，对应系统【仓库】>【海外仓备货单】数据,P0,是,/erp/sc/routing/owms/inbound/listInbound,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-EB2B3813F515,查询备货单详情,/docs/Warehouse/OverSeasStockDetail.md,查询备货单详情,P0,是,/basicOpen/overSeaWarehouse/stockOrder/detail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-EBADE37CF17C,获取备货单号,/docs/Warehouse/listOrderNos.md,获取备货单号,P0,是,/erp/sc/routing/owms/inbound/listOrderNos,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-EBADE37CF17C,获取备货单号,/docs/Warehouse/listOrderNos.md,获取备货单号,P0,是,/erp/sc/routing/owms/inbound/listOrderNos,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-E5E2F516B966,查询备货单装箱信息,/docs/Warehouse/getPackingData.md,查询备货单装箱信息,P0,是,/erp/sc/routing/owms/inbound/getPackingData,GET,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-ACB0219BB470,查询备货单收货记录,/docs/Warehouse/GetReceiveGoodRecords.md,查询备货单收货记录,P0,是,/erp/sc/routing/owms/inbound/getReceiveGoodRecords,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-814E67414272,查询系统产品与第三方海外仓产品映射列表,/docs/Warehouse/matchSkuList.md,支持查询本地产品与第三方海外仓产品映射列表,P0,是,/erp/sc/routing/owms/inbound/matchSkuList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-814E67414272,查询系统产品与第三方海外仓产品映射列表,/docs/Warehouse/matchSkuList.md,支持查询本地产品与第三方海外仓产品映射列表,P0,是,/erp/sc/routing/owms/inbound/matchSkuList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-AAFAE3E2B6D6,获取第三方SKU标签PDF文件,/docs/Warehouse/productLabel.md,支持获取谷仓、西邮智仓、易仓的第三方SKU标签PDF文件,P0,是,/erp/sc/routing/owms/inbound/productLabel,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-AAFAE3E2B6D6,获取第三方SKU标签PDF文件,/docs/Warehouse/productLabel.md,支持获取谷仓、西邮智仓、易仓的第三方SKU标签PDF文件,P0,是,/erp/sc/routing/owms/inbound/productLabel,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-BED54283FB2B,获取第三方箱唛,/docs/Warehouse/packageLabel.md,支持获取谷仓、西邮智仓、易仓的箱唛PDF文件,P0,是,/erp/sc/routing/owms/inbound/packageLabel,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-DE77858CC887,查询移除入库单列表,/docs/Warehouse/removalInboundList.md,查询移除入库单列表,P0,是,/erp/sc/routing/owms/removalInbound/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-FD9302CF208A,查询销售出库单列表,/docs/Warehouse/WmsOrderList.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单【默认返回一个月内审核出库的数据，超过一个月请加上时间入参】,P0,是,/erp/sc/routing/wms/order/wmsOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-FD9302CF208A,查询销售出库单列表,/docs/Warehouse/WmsOrderList.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单【默认返回一个月内审核出库的数据，超过一个月请加上时间入参】,P0,是,/erp/sc/routing/wms/order/wmsOrderList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-F596F7E8C481,查询销售出库单物流面单,/docs/Warehouse/wmsOrderGetWmsLogisticsLabels.md,查询销售出库单物流面单,P0,是,/erp/sc/routing/wms/order/getWmsLogisticsLabels,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-F596F7E8C481,查询销售出库单物流面单,/docs/Warehouse/wmsOrderGetWmsLogisticsLabels.md,查询销售出库单物流面单,P0,是,/erp/sc/routing/wms/order/getWmsLogisticsLabels,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-8C46310BDBDA,装箱任务-任务详情,/docs/Warehouse/PackingTaskDetail.md,装箱任务-任务详情,P0,是,/basicOpen/packingTask/taskDetail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-EE7D15BC8C4F,装箱任务-单据列表,/docs/Warehouse/PackingTaskRelateSnList.md,查询可创建装箱任务的列表,P0,是,/basicOpen/packingTask/getRelateSnList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-051118326D63,装箱任务-任务列表,/docs/Warehouse/PackingTaskList.md,查询装箱任务列表，支持按仓库、装箱员、装箱情况、单据类型等条件筛选,P0,是,/basicOpen/packingTask/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-E67765C12B1D,查询利润报表-店铺,/docs/Finance/bdSeller.md,查询利润报表-店铺,P0,是,/bd/profit/report/open/report/seller/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-69B7BDB30BF3,查询利润报表-店铺月度汇总,/docs/Finance/bdSellerSummary.md,查询利润报表-店铺月度汇总,P0,是,/bd/profit/report/open/report/seller/summary/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-27FD5B4A5146,查询利润报表 - 订单维度transaction视图,/docs/Finance/profitReportOrderTranscationList.md,查询利润报表 - 订单维度transaction视图,P0,是,/basicOpen/finance/profitReport/order/transcation/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-27FD5B4A5146,查询利润报表 - 订单维度transaction视图,/docs/Finance/profitReportOrderTranscationList.md,查询利润报表 - 订单维度transaction视图,P0,是,/basicOpen/finance/profitReport/order/transcation/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-F30C3A5673B7,查询利润报表-订单,/docs/Finance/bdOrder.md,本接口即将下线【不再建议使用】，建议使用[查询利润报表 - 订单维度transaction视图](/docs/Finance/profitReportOrderTranscationList),P0,是,/bd/profit/report/open/report/order/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-F30C3A5673B7,查询利润报表-订单,/docs/Finance/bdOrder.md,本接口即将下线【不再建议使用】，建议使用[查询利润报表 - 订单维度transaction视图](/docs/Finance/profitReportOrderTranscationList),P0,是,/bd/profit/report/open/report/order/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-598C49EB1197,查询请款单列表,/docs/Finance/RequestFundsOrderList.md,查询请款单列表,P0,是,/basicOpen/finance/requestFunds/order/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-598C49EB1197,查询请款单列表,/docs/Finance/RequestFundsOrderList.md,查询请款单列表,P0,是,/basicOpen/finance/requestFunds/order/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-5470F505D06E,查询售后工单列表,/docs/Service/AfterSalesWorkOrderList.md,查询售后工单列表,P0,是,/pb/mp/returns/workOrder/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-5470F505D06E,查询售后工单列表,/docs/Service/AfterSalesWorkOrderList.md,查询售后工单列表,P0,是,/pb/mp/returns/workOrder/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-EA8918986608,查询店铺绩效列表,/docs/Service/storePerformanceList.md,查询店铺绩效列表,P0,是,/basicOpen/customerService/storeTarget/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-54F0AD822356,查询店铺绩效详情,/docs/Service/PerformanceNoticeDetail.md,查询店铺绩效详情,P0,是,/basicOpen/customerService/storeTarget/detail,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-8DD1FB86D648,查询预警消息列表-商品,/docs/Tools/warningMessageGoodsList.md,查询预警消息列表-商品,P0,是,/basicOpen/settings/warningMessage/goodsList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+仓库,仓库与库存页,LX-8F9A0C4E13C0,查询预警消息列表-库存,/docs/Tools/warningMessageInventoryList.md,查询预警消息列表-库存,P0,是,/basicOpen/settings/warningMessage/inventoryList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-8F9A0C4E13C0,查询预警消息列表-库存,/docs/Tools/warningMessageInventoryList.md,查询预警消息列表-库存,P0,是,/basicOpen/settings/warningMessage/inventoryList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-A5F6A7E6639A,查询利润统计-店铺,/docs/Statistics/statisticsOpenSeller.md,支持查询新版利润统计的店铺维度,P0,是,/bd/profit/statistics/open/seller/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-A5F6A7E6639A,查询利润统计-店铺,/docs/Statistics/statisticsOpenSeller.md,支持查询新版利润统计的店铺维度,P0,是,/bd/profit/statistics/open/seller/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-1C7C9C7B770D,查询店铺汇总销量,/docs/Statistics/StoreSales.md,支持按店铺维度查询店铺销量、销售额,P0,是,/erp/sc/data/sales_report/sales,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-1C7C9C7B770D,查询店铺汇总销量,/docs/Statistics/StoreSales.md,支持按店铺维度查询店铺销量、销售额,P0,是,/erp/sc/data/sales_report/sales,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,P0,是,/basicOpen/finance/mreport/OrderProfit,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,P0,是,/basicOpen/finance/mreport/OrderProfit,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,P0,是,/basicOpen/finance/mreport/OrderProfit,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,P0,是,/basicOpen/finance/mreport/OrderProfit,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-5891B9352423,库存报表-本地仓-新报表-汇总,/docs/Statistics/LocalAggregateListNew.md,库存报表-本地仓-新报表-汇总,P0,是,/inventory/center/openapi/storageReport/local/aggregate/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-FCDF84763AAF,库存报表-本地仓-新报表-明细,/docs/Statistics/LocalDetailListNew.md,库存报表-本地仓-新报表-明细,P0,是,/inventory/center/openapi/storageReport/local/detail/page,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-171BF687A225,库存报表-本地仓-历史报表-汇总,/docs/Statistics/LocalAggregateList.md,库存报表-本地仓-历史报表-汇总,P0,是,/erp/sc/routing/inventoryLog/WareHouseReport/getLocalWareHouseSummaryList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-0070B9951962,库存报表-本地仓-历史报表-明细,/docs/Statistics/LocalDetailList.md,库存报表-本地仓-历史报表-明细,P0,是,/erp/sc/routing/inventoryLog/WareHouseReport/getLocalWareHouseDetailList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-CD4E8AC1BDC2,库存报表-海外仓-新报表-汇总,/docs/Statistics/OverseasAggregateListNew.md,库存报表-海外仓-新报表-汇总,P0,是,/inventory/center/openapi/storageReport/overseas/aggregate/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-8116408E9FBA,库存报表-海外仓-新报表-明细,/docs/Statistics/OverseasDetailListNew.md,库存报表-海外仓-新报表-明细,P0,是,/inventory/center/openapi/storageReport/overseas/detail/page,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-A5CE884A505B,库存报表-海外仓-历史报表-汇总,/docs/Statistics/OverseasAggregateList.md,库存报表-海外仓-历史报表-汇总,P0,是,/erp/sc/routing/inventoryLog/WareHouseReport/getOverSeaSummaryList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-3D1F244FB7C8,库存报表-海外仓-历史报表-明细,/docs/Statistics/OverseasDetailList.md,库存报表-海外仓-历史报表-明细,P0,是,/erp/sc/routing/inventoryLog/WareHouseReport/getOverSeaDetailList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+采购,采购管理页,LX-95A42DA552D3,查询采购报表列表 - 产品,/docs/Statistics/PurchaseReportProductList.md,查询采购报表列表 - 产品,P0,是,/basicOpen/report/purchase/product/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-95A42DA552D3,查询采购报表列表 - 产品,/docs/Statistics/PurchaseReportProductList.md,查询采购报表列表 - 产品,P0,是,/basicOpen/report/purchase/product/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-95A42DA552D3,查询采购报表列表 - 产品,/docs/Statistics/PurchaseReportProductList.md,查询采购报表列表 - 产品,P0,是,/basicOpen/report/purchase/product/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-B5184BA8522B,统计-查询退货分析,/docs/Statistics/ReturnOrderAnalysisLists.md,支持统计-查询退货分析,P0,是,/basicOpen/salesAnalysis/returnOrder/analysisLists,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-B5184BA8522B,统计-查询退货分析,/docs/Statistics/ReturnOrderAnalysisLists.md,支持统计-查询退货分析,P0,是,/basicOpen/salesAnalysis/returnOrder/analysisLists,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-B5184BA8522B,统计-查询退货分析,/docs/Statistics/ReturnOrderAnalysisLists.md,支持统计-查询退货分析,P0,是,/basicOpen/salesAnalysis/returnOrder/analysisLists,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-C3C3157EC484,店铺维度-查询目标,/docs/TargetManage/StoreBatchSelect.md,店铺维度-查询目标,P0,是,/bd/goal/management/open/store/batchSelect,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+Walmart,Walmart 业务中心,LX-727003CFF7B4,Walmart-查询结算账单列表,/docs/MultiPlatform/WalmartBillStatementList.md,Walmart-查询结算账单列表，支持按订单、商品、账期、交易类型、金额类型和时间范围查询 Walmart 结算账单明细。,P0,是,/basicOpen/multiplatformFinance/walmart/bill/statement/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-727003CFF7B4,Walmart-查询结算账单列表,/docs/MultiPlatform/WalmartBillStatementList.md,Walmart-查询结算账单列表，支持按订单、商品、账期、交易类型、金额类型和时间范围查询 Walmart 结算账单明细。,P0,是,/basicOpen/multiplatformFinance/walmart/bill/statement/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-727003CFF7B4,Walmart-查询结算账单列表,/docs/MultiPlatform/WalmartBillStatementList.md,Walmart-查询结算账单列表，支持按订单、商品、账期、交易类型、金额类型和时间范围查询 Walmart 结算账单明细。,P0,是,/basicOpen/multiplatformFinance/walmart/bill/statement/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+Walmart,Walmart 业务中心,LX-63E99B54ED72,Walmart-查询回款明细列表,/docs/MultiPlatform/WalmartBillPayoutList.md,Walmart-查询回款明细列表，支持按店铺、站点、账期、时间和金额比较条件查询 Walmart 回款明细。,P0,是,/basicOpen/multiplatformFinance/walmart/bill/payout/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-63E99B54ED72,Walmart-查询回款明细列表,/docs/MultiPlatform/WalmartBillPayoutList.md,Walmart-查询回款明细列表，支持按店铺、站点、账期、时间和金额比较条件查询 Walmart 回款明细。,P0,是,/basicOpen/multiplatformFinance/walmart/bill/payout/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+财务,财务与对账页,LX-DB6D62E9EE37,查询结算利润（利润报表）-订单,/docs/MultiPlatform/V2/profitReportOrder.md,查询结算利润（利润报表）-订单,P0,是,/basicOpen/multiplatform/profit/report/order,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-DB6D62E9EE37,查询结算利润（利润报表）-订单,/docs/MultiPlatform/V2/profitReportOrder.md,查询结算利润（利润报表）-订单,P0,是,/basicOpen/multiplatform/profit/report/order,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+Walmart,Walmart 业务中心,LX-1524E1C3FF10,查询Walmart产品表现,/docs/MultiPlatform/WalmartProductAnalysisList.md,查询Walmart产品表现列表数据，对应系统【统计分析】>【多平台产品表现】>【Walmart】数据,P0,是,/basicOpen/platformStatistics/walmartProductAnalysis/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+产品,产品管理页,LX-1524E1C3FF10,查询Walmart产品表现,/docs/MultiPlatform/WalmartProductAnalysisList.md,查询Walmart产品表现列表数据，对应系统【统计分析】>【多平台产品表现】>【Walmart】数据,P0,是,/basicOpen/platformStatistics/walmartProductAnalysis/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+运营,运营分析页,LX-1524E1C3FF10,查询Walmart产品表现,/docs/MultiPlatform/WalmartProductAnalysisList.md,查询Walmart产品表现列表数据，对应系统【统计分析】>【多平台产品表现】>【Walmart】数据,P0,是,/basicOpen/platformStatistics/walmartProductAnalysis/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+Walmart,Walmart 业务中心,LX-571E669C2E50,多平台-Walmart售后订单列表,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,多平台-Walmart售后订单列表,P0,是,/basicOpen/openapi/multiplatform/walmart/returnOrder/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+售后,售后与客服页,LX-571E669C2E50,多平台-Walmart售后订单列表,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,多平台-Walmart售后订单列表,P0,是,/basicOpen/openapi/multiplatform/walmart/returnOrder/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-571E669C2E50,多平台-Walmart售后订单列表,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,多平台-Walmart售后订单列表,P0,是,/basicOpen/openapi/multiplatform/walmart/returnOrder/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+工作台,数据总览 / 待评估接口,LX-F8354824E040,查询多平台店铺信息,/docs/MultiPlatform/V2/StoreInfoV2.md,支持查询多平台店铺基础信息，其中store_id为多平台店铺唯一,P0,是,/pb/mp/shop/v2/getSellerList,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-5C93F09C1D1B,查询订单管理订单列表,/docs/MultiPlatform/V2/MultiPlatOrderV2.md,>数据对应多平台管理系统中【订单】>【订单管理】的订单数据，涵盖所有平台自发货订单数据,P0,是,/pb/mp/order/v2/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+工作台,数据总览 / 待评估接口,LX-531E7CE81EF4,查询WFS库存列表,/docs/MultiPlatform/V2/QueryWFSInventionPage.md,查询WFS库存列表,P0,是,/cepf/warehouse/api/openApi/queryWFSInventionPage,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+Walmart,Walmart 业务中心,LX-9212623D77EA,查询Walmart在线商品,/docs/MultiPlatform/V2/walmartList.md,查询Walmart在线商品,P0,是,/basicOpen/multiplatform/walmart/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。
+销售,销售与订单页,LX-C4DB859443E2,查询平台订单列表,/docs/MultiPlatform/V2/newPlatformOrderList.md,查询平台订单列表,P0,是,/cepfPlatformOrder/open-api/newPlatformOrder/list,POST,待负责人/架构师复核,规则初筛候选；接入前必须做 PRP 和真实 API 验证。

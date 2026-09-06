@@ -1,0 +1,491 @@
+﻿system_module,applicable_page,interface_id,interface_name,document_path,business_use,phase_one_recommended,priority,remarks
+工作台,数据总览 / 待评估接口,LX-9118DDA102D0,获取 access-token和refresh-token,/docs/Authorization/GetToken.md,获取 access-token和refresh-token,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-5852A627B6FE,续约接口令牌,/docs/Authorization/RefreshToken.md,给 access_token 延续有效期，每个refresh_token 只能使用一次,否,P3,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-1BE23A99A7E9,批量修改店铺名称,/docs/BasicData/SellerBatchRename.md,批量修改店铺名称,否,P2,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-04CE920F9507,查询ERP用户信息列表,/docs/BasicData/AccoutLists.md,查询得到企业开启的全部ERP账号数据,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-99132180876E,修改我的汇率,/docs/BasicData/ExchangeRateUpdate.md,修改我的汇率,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-320D9D20B37C,下载附件,/docs/BasicData/AttachmentDownload.md,支持下载产品附件,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-A07E627F7B70,定制化附件下载接口,/docs/BasicData/CustomAttachmentDownload.md,定制化附件下载接口,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-CDEC1BCCBD6A,获取国家下的州、省编码,/docs/BasicData/StateList.md,获取国家下的州、省编码,否,P1,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-04A6C56A7729,批量添加/编辑Listing配对,/docs/Sale/Productlink.md,支持推送Listing与本地仓库SKU的配对关系到领星ERP，实现SKU配对,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-04A6C56A7729,批量添加/编辑Listing配对,/docs/Sale/Productlink.md,支持推送Listing与本地仓库SKU的配对关系到领星ERP，实现SKU配对,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-04A6C56A7729,批量添加/编辑Listing配对,/docs/Sale/Productlink.md,支持推送Listing与本地仓库SKU的配对关系到领星ERP，实现SKU配对,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-04A6C56A7729,批量添加/编辑Listing配对,/docs/Sale/Productlink.md,支持推送Listing与本地仓库SKU的配对关系到领星ERP，实现SKU配对,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-A96852EA632C,批量修改Listing价格,/docs/Sale/pricingSubmit.md,支持批量修改Listing价格，价格幅度不超50%,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-A96852EA632C,批量修改Listing价格,/docs/Sale/pricingSubmit.md,支持批量修改Listing价格，价格幅度不超50%,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-80C0100C2D4F,查询Listing标记标签列表,/docs/Sale/queryListingRelationTagList.md,查询Listing标记标签列表,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-80C0100C2D4F,查询Listing标记标签列表,/docs/Sale/queryListingRelationTagList.md,查询Listing标记标签列表,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-71422945ADAC,查询Listing标签列表,/docs/Sale/globalTagPageList.md,查询Listing标签列表,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-71422945ADAC,查询Listing标签列表,/docs/Sale/globalTagPageList.md,查询Listing标签列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1C246F17173F,添加Listing标签,/docs/Sale/globalTagAddTag.md,添加Listing标签,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-1C246F17173F,添加Listing标签,/docs/Sale/globalTagAddTag.md,添加Listing标签,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-06BDDD3B9762,删除Listing标签,/docs/Sale/globalTagRemoveTag.md,删除Listing标签,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-06BDDD3B9762,删除Listing标签,/docs/Sale/globalTagRemoveTag.md,删除Listing标签,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-EB69D6DC93FB,查询Listing操作日志列表,/docs/Sale/listingOperateLogPageList.md,查询Listing操作日志列表,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-EB69D6DC93FB,查询Listing操作日志列表,/docs/Sale/listingOperateLogPageList.md,查询Listing操作日志列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-76CFCB697A50,修改B2B价格,/docs/Sale/b2bPriceModifyPrice.md,修改B2B价格,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-76CFCB697A50,修改B2B价格,/docs/Sale/b2bPriceModifyPrice.md,修改B2B价格,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-C79145A7BD7A,Listing新增商品标签,/docs/Sale/AddGoodsTag.md,Listing新增商品标签,否,P3,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-C79145A7BD7A,Listing新增商品标签,/docs/Sale/AddGoodsTag.md,Listing新增商品标签,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-2077895D6B9A,Listing删除商品标签,/docs/Sale/DeleteGoodsTag.md,Listing删除商品标签,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-2077895D6B9A,Listing删除商品标签,/docs/Sale/DeleteGoodsTag.md,Listing删除商品标签,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-DA41D6369A41,解除Listing配对,/docs/Sale/UnlinkListing.md,支持批量解除Listing配对,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-DA41D6369A41,解除Listing配对,/docs/Sale/UnlinkListing.md,支持批量解除Listing配对,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D806EDEB25E4,查询调价队列,/docs/Sale/adjustPriceAdjustPriceManual.md,查询调价队列,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-D806EDEB25E4,查询调价队列,/docs/Sale/adjustPriceAdjustPriceManual.md,查询调价队列,否,P1,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-C76D747AD0DA,刊登管理-获取指定 productType 的 JSON Schema,/docs/Sale/PublishManageGetProductType.md,刊登管理-获取指定 productType 的 JSON Schema,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-C76D747AD0DA,刊登管理-获取指定 productType 的 JSON Schema,/docs/Sale/PublishManageGetProductType.md,刊登管理-获取指定 productType 的 JSON Schema,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-074FA24909F1,刊登管理-获取运费模板,/docs/Sale/GetMerchantShippingGroup.md,刊登管理-获取运费模板,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-7D621DDB5AD5,SC订单-设置订单备注,/docs/Sale/ScOrderSetRemark.md,SC订单-设置订单备注,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-EFB08467128D,多渠道订单-交易明细,/docs/Sale/MutilChannelTransactionDetail.md,支持查询【销售】>【SC订单】>【多渠道订单】交易明细数据,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-8FB1CC9572F0,导入面单,/docs/Sale/UploadTracking.md,支持自发货订单导入面单,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-2EDE9B89E52C,查询促销活动列表-优惠券,/docs/Sale/promotionalActivitiesCouponList.md,查询促销活动列表-优惠券,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-14EF57136BD3,查询促销活动列表-秒杀,/docs/Sale/promotionalActivitiesSecKillList.md,查询促销活动列表-秒杀,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1DC5C91C2FE2,查询促销活动列表-管理促销,/docs/Sale/promotionalActivitiesManageList.md,查询促销活动列表-管理促销,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-4D53DF8CE668,查询促销活动列表-会员折扣/价格折扣,/docs/Sale/promotionalActivitiesVipDiscountList.md,查询促销活动列表-会员折扣/价格折扣,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F560D3DA6DF1,查询优惠券详情+listing+订单(批量),/docs/Sale/promotionCouponAllDetailBatch.md,查询优惠券详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-F560D3DA6DF1,查询优惠券详情+listing+订单(批量),/docs/Sale/promotionCouponAllDetailBatch.md,查询优惠券详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D92C9E37C544,查询管理促销详情+listing+订单(批量),/docs/Sale/promotionManagementAllDetailBatch.md,查询管理促销详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-D92C9E37C544,查询管理促销详情+listing+订单(批量),/docs/Sale/promotionManagementAllDetailBatch.md,查询管理促销详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-324AF6B69AEF,查询会员折扣or价格折扣详情+listing+订单(批量),/docs/Sale/promotionPrimeDiscountAllDetailBatch.md,查询会员折扣or价格折扣详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-324AF6B69AEF,查询会员折扣or价格折扣详情+listing+订单(批量),/docs/Sale/promotionPrimeDiscountAllDetailBatch.md,查询会员折扣or价格折扣详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-72966FDD4C29,查询秒杀详情+listing+订单(批量),/docs/Sale/promotionSecKillAllDetailBatch.md,查询秒杀详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-72966FDD4C29,查询秒杀详情+listing+订单(批量),/docs/Sale/promotionSecKillAllDetailBatch.md,查询秒杀详情+listing+订单(批量),是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D1E4B7906B42,查询商品折扣列表,/docs/Sale/promotionListingList.md,查询商品折扣列表,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-D1E4B7906B42,查询商品折扣列表,/docs/Sale/promotionListingList.md,查询商品折扣列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-03449E2EC06C,查询商品折扣详情-列表-优惠卷,/docs/Sale/promotionListingDetailCoupon.md,查询商品折扣详情-列表-优惠卷,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-03449E2EC06C,查询商品折扣详情-列表-优惠卷,/docs/Sale/promotionListingDetailCoupon.md,查询商品折扣详情-列表-优惠卷,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-020A91A14B42,查询商品折扣详情-列表-管理促销,/docs/Sale/promotionListingDetailManage.md,查询商品折扣详情-列表-管理促销,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-020A91A14B42,查询商品折扣详情-列表-管理促销,/docs/Sale/promotionListingDetailManage.md,查询商品折扣详情-列表-管理促销,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-FE476B81237F,查询商品折扣详情-列表-会员折扣,/docs/Sale/promotionListingDetailPrimeDiscount.md,查询商品折扣详情-列表-会员折扣,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-FE476B81237F,查询商品折扣详情-列表-会员折扣,/docs/Sale/promotionListingDetailPrimeDiscount.md,查询商品折扣详情-列表-会员折扣,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-A404B2104669,查询商品折扣详情-列表-秒杀,/docs/Sale/promotionListingDetailSecKill.md,查询商品折扣详情-列表-秒杀,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-A404B2104669,查询商品折扣详情-列表-秒杀,/docs/Sale/promotionListingDetailSecKill.md,查询商品折扣详情-列表-秒杀,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-0CF22467375C,创建UPC编码,/docs/Product/AddCommodityCode.md,创建UPC编码,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-44D4A6C312C6,获取UPC编码列表,/docs/Product/UpcList.md,获取UPC编码列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-3F1F087FF8A1,查询本地产品列表,/docs/Product/ProductLists.md,支持查询产品列表，对应系统【产品】>【产品管理】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-DCB0C142100B,查询本地产品详情,/docs/Product/ProductDetails.md,支持查询本地产品详细信息，对应系统【产品】>【产品管理】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-BB8D0DF598AF,批量查询本地产品详情,/docs/Product/batchGetProductInfo.md,批量查询本地产品详情,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-90CFB48DDD46,产品启用、禁用,/docs/Product/productOperateBatch.md,产品启用、禁用,否,P3,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-F00018116434,添加/编辑本地产品,/docs/Product/SetProduct.md,支持添加/编辑系统本地产品信息,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-D2402601914F,批量编辑本地信息,/docs/Product/EditOnSaleTimeAndRemark.md,支持批量编辑在线商品本地信息。,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-A4D3F436FF1F,查询产品属性列表,/docs/Product/attributeList.md,查询产品属性列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-3B1AB09F56B1,添加 / 编辑产品属性,/docs/Product/attributeSet.md,>1、接口对属性数据为覆盖式操作，入参属性值会全量覆盖系统里已存在属性内容,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-5AFC6979F657,查询多属性产品列表,/docs/Product/spuList.md,查询多属性产品列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-30AF347E45FE,查询多属性产品详情,/docs/Product/spuInfo.md,查询多属性产品详情,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-DC8F85A264F4,添加/编辑多属性产品,/docs/Product/spuSet.md,添加/编辑多属性产品,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-DA189364D1B7,查询捆绑产品关系列表,/docs/Product/bundledProductList.md,查询捆绑产品关系列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-1BDE9AFED615,添加 / 编辑捆绑产品,/docs/Product/SetBundled.md,添加 / 编辑捆绑产品,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-BD16C6D25A0D,查询产品辅料列表,/docs/Product/productAuxList.md,查询产品辅料列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-E5135AAB2CB9,添加 / 编辑辅料,/docs/Product/setAux.md,添加 / 编辑辅料,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-82FF3AF996D2,查询产品品牌列表,/docs/Product/Brand.md,支持查询本地产品品牌列表，对应系统【产品】>【品牌管理】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-E85460D3A0AD,添加/编辑产品品牌,/docs/Product/SetBrand.md,支持添加/编辑本地产品品牌信息,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-75F4963569A6,查询产品分类列表,/docs/Product/Category.md,支持查询本地产品的分类列表，对应【产品】>【产品分类】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-A8BA6E5445AA,添加 / 编辑产品分类,/docs/Product/SetCategory.md,支持添加/编辑本地产品分类,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-927D66FB6D5A,上传本地产品图片,/docs/Product/UploadPictures.md,支持本地产品图片上传到领星ERP系统内,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-226730376E6B,查询产品标签,/docs/Product/GetProductTag.md,查询产品标签,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-F6890246F185,创建产品标签,/docs/Product/CreateProductTag.md,创建产品标签,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-2046A9CB4520,标记产品标签,/docs/Product/SetProductTag.md,标记产品标签,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-147DA91911E3,删除产品标签,/docs/Product/DelProductTag.md,删除产品标签,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-6F96FE519F29,查询操作日志,/docs/Product/GetPagingLogLists.md,查询操作日志,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-F6A548F96FD0,产品管理-查询透明计划商品列表,/docs/Product/getTransparencyProductList.md,产品管理-查询透明计划商品列表,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-B70161F2CA8D,查询供应商列表,/docs/Purchase/Supplier.md,支持查询【采购】>【供应商】中的供应商信息,否,P1,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-D181D27E9336,添加/修改供应商,/docs/Purchase/SupplierEdit.md,支持添加、修改供应商信息到系统【采购】>【供应商】中,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-223398DA3539,查询采购方列表,/docs/Purchase/purchaserLists.md,查询采购方列表,否,P1,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-03B82747B50A,查询采购计划列表,/docs/Purchase/getPurchasePlans.md,查询采购计划列表,否,P1,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-A4E9258A3B23,创建待采购的采购计划,/docs/Purchase/createPurchasePlan.md,支持创建采购计划，状态为“待采购”,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-D332F931885E,查询采购单列表,/docs/Purchase/PurchaseOrderList.md,支持查询采购单列表，对应系统【采购】>【采购单】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D332F931885E,查询采购单列表,/docs/Purchase/PurchaseOrderList.md,支持查询采购单列表，对应系统【采购】>【采购单】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-583232734D6F,采购单下单,/docs/Purchase/SetOrders.md,支持将 “待下单” 状态采购单变更为 “待到货” 状态,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-583232734D6F,采购单下单,/docs/Purchase/SetOrders.md,支持将 “待下单” 状态采购单变更为 “待到货” 状态,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-0BAC0252E36F,作废采购单,/docs/Purchase/Cancel.md,允许作废处于 “待审核”、“待下单”、“待到货”、“已完成” 状态下的采购单,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-4674779EEB39,创建待到货的采购单,/docs/Purchase/CreatePurchaseOrder.md,支持创建采购单，状态为“待到货”,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-4674779EEB39,创建待到货的采购单,/docs/Purchase/CreatePurchaseOrder.md,支持创建采购单，状态为“待到货”,否,P2,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-853A6501F0BF,查询采购退货单列表,/docs/Purchase/getPurchaseReturnOrderList.md,查询采购退货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-853A6501F0BF,查询采购退货单列表,/docs/Purchase/getPurchaseReturnOrderList.md,查询采购退货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-853A6501F0BF,查询采购退货单列表,/docs/Purchase/getPurchaseReturnOrderList.md,查询采购退货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-AB7E08BE0696,创建已完成的采购退货单,/docs/Purchase/createPurchaseReturnOrder.md,支持创建采购退货单，状态为“已完成”,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-AB7E08BE0696,创建已完成的采购退货单,/docs/Purchase/createPurchaseReturnOrder.md,支持创建采购退货单，状态为“已完成”,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-AB7E08BE0696,创建已完成的采购退货单,/docs/Purchase/createPurchaseReturnOrder.md,支持创建采购退货单，状态为“已完成”,否,P2,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-C3A80433378D,作废采购/委外退货单,/docs/Purchase/CancelPurchaseReturnOrder.md,作废采购/委外退货单,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-C3A80433378D,作废采购/委外退货单,/docs/Purchase/CancelPurchaseReturnOrder.md,作废采购/委外退货单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-C3A80433378D,作废采购/委外退货单,/docs/Purchase/CancelPurchaseReturnOrder.md,作废采购/委外退货单,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-B31DFDC39206,查询采购变更单列表,/docs/Purchase/changeOrderList.md,查询采购变更单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-B31DFDC39206,查询采购变更单列表,/docs/Purchase/changeOrderList.md,查询采购变更单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-D58D9CF7D14C,创建已完成的采购变更单,/docs/Purchase/createPurchaseChangeOrder.md,支持创建已完成状态的采购变更单，即创建成功后采购单立即变更,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D58D9CF7D14C,创建已完成的采购变更单,/docs/Purchase/createPurchaseChangeOrder.md,支持创建已完成状态的采购变更单，即创建成功后采购单立即变更,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-9BF4536568D4,查询委外订单列表,/docs/Purchase/getOrders.md,查询委外订单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-9BF4536568D4,查询委外订单列表,/docs/Purchase/getOrders.md,查询委外订单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-0B7D3781D062,添加采购单物流信息,/docs/Purchase/addLogistics.md,支持对“待到货”或“已完成”状态的采购单，添加采购单物流信息,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-78F82D8A146C,作废采购计划,/docs/Purchase/PurchasePlanCancel.md,允许作废处于 “待审批”、“待采购”状态下的采购计划,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-5CD66DB6C0A0,编辑采购单备注,/docs/Purchase/OrderModifyRemark.md,支持快速编辑采购单的单据备注,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-5CD66DB6C0A0,编辑采购单备注,/docs/Purchase/OrderModifyRemark.md,支持快速编辑采购单的单据备注,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-09D9FC0B390B,编辑采购计划备注（批量）,/docs/Purchase/PlanModifyRemark.md,支持通过采购计划批次号或采购计划单号批量修改备注,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-500C4287A05E,采购单整单结束到货,/docs/Purchase/setOrderFinish.md,采购单整单结束到货,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-500C4287A05E,采购单整单结束到货,/docs/Purchase/setOrderFinish.md,采购单整单结束到货,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-96F32A1090F0,查询加工计划列表,/docs/Warehouse/WorkOrderPlanList.md,支持查询加工计划列表，对应系统【采购】加工计划列表数据。,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-96F32A1090F0,查询加工计划列表,/docs/Warehouse/WorkOrderPlanList.md,支持查询加工计划列表，对应系统【采购】加工计划列表数据。,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-96F32A1090F0,查询加工计划列表,/docs/Warehouse/WorkOrderPlanList.md,支持查询加工计划列表，对应系统【采购】加工计划列表数据。,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-41E509578C0D,查询仓库列表,/docs/Warehouse/WarehouseLists.md,支持查询本地仓库列表信息，对应系统【设置】>【仓库设置】仓库列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-0C9F53813C1C,添加/修改仓库,/docs/Warehouse/EditWarehouse.md,创建客户自定义仓库id与领星系统本地仓仓库id映射关系，添加/修改本地仓库基础信息,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-EC6F4C39346F,查询本地仓位列表,/docs/Warehouse/warehouseBin.md,查询本地仓位列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-4C457588B444,添加仓位,/docs/Warehouse/binCreate.md,添加仓位,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-A78F75179F06,启用、禁用仓位,/docs/Warehouse/switchStatus.md,启用、禁用仓位,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-EECD62D39B8C,海外仓sku配对,/docs/Warehouse/OverseaWarehouseProductMatch.md,支持海外仓商品进行sku配对,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-EECD62D39B8C,海外仓sku配对,/docs/Warehouse/OverseaWarehouseProductMatch.md,支持海外仓商品进行sku配对,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-208BCCE30B24,海外仓sku取消配对,/docs/Warehouse/OverseaWarehouseProductUnMatch.md,支持取消海外仓商品sku配对,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-208BCCE30B24,海外仓sku取消配对,/docs/Warehouse/OverseaWarehouseProductUnMatch.md,支持取消海外仓商品sku配对,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-CF87F80AD608,查询产品仓位列表,/docs/Warehouse/getEntryRecommendBinList.md,查询产品仓位列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-CF87F80AD608,查询产品仓位列表,/docs/Warehouse/getEntryRecommendBinList.md,查询产品仓位列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-A791179C9A78,查询AWD库存列表,/docs/Warehouse/AwdWarehouseDetail.md,查询AWD库存列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-41B3AF612B29,查询仓库库存明细,/docs/Warehouse/InventoryDetails.md,支持查询本地仓/海外仓库存明细，对应系统【仓库】>【库存明细】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-47310BFA3E0D,查询仓位库存明细,/docs/Warehouse/inventoryBinDetails.md,查询仓位库存明细,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-1181D4F827FB,查询批次明细,/docs/Warehouse/GetBatchDetailList.md,查询批次明细,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-BCB9BCE2437F,查询批次流水,/docs/Warehouse/GetBatchStatementList.md,查询批次流水,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-6F8ABDE7B566,查询库存流水（旧）,/docs/Warehouse/WarehouseStatement.md,支持查询本地仓库库存流水，对应系统【仓库】>【库存流水】数据,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-F0CE5B7F589B,查询库存流水（新）,/docs/Warehouse/WarehouseStatementNew.md,查询库存流水（新）,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-8DE4E360B561,查询仓位流水,/docs/Warehouse/wareHouseBinStatement.md,查询仓位流水,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-4B9473A2D2E1,查询收货单列表,/docs/Warehouse/PurchaseReceiptOrderList.md,查询收货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-4B9473A2D2E1,查询收货单列表,/docs/Warehouse/PurchaseReceiptOrderList.md,查询收货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-4B9473A2D2E1,查询收货单列表,/docs/Warehouse/PurchaseReceiptOrderList.md,查询收货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-AA0068524F96,创建待收货的收货单,/docs/Warehouse/createReceiptOrder.md,支持创建【仓库】>【收货管理】中的收货单，状态为“待收货”,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-AA0068524F96,创建待收货的收货单,/docs/Warehouse/createReceiptOrder.md,支持创建【仓库】>【收货管理】中的收货单，状态为“待收货”,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-E8B767C41774,收货单到货,/docs/Warehouse/Receive.md,收货单到货,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-FE893F657641,收货单快捷入库,/docs/Warehouse/FastReceive.md,收货单快捷入库,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-186837F0F7C4,收货单-编辑备注,/docs/Warehouse/receiptOrderUpdateOrderInfo.md,支持编辑指定收货单的备注信息。,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-186837F0F7C4,收货单-编辑备注,/docs/Warehouse/receiptOrderUpdateOrderInfo.md,支持编辑指定收货单的备注信息。,否,P2,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-1C62776E886A,查询销售退货单列表,/docs/Warehouse/ReturnList.md,查询销售退货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-1C62776E886A,查询销售退货单列表,/docs/Warehouse/ReturnList.md,查询销售退货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1C62776E886A,查询销售退货单列表,/docs/Warehouse/ReturnList.md,查询销售退货单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-ECAEE8038F87,查询质检单列表,/docs/Warehouse/ReceiptOrderQcList.md,查询质检单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-ECAEE8038F87,查询质检单列表,/docs/Warehouse/ReceiptOrderQcList.md,查询质检单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-5D311ED3B89E,查询质检单详情,/docs/Warehouse/qualityInspectionOrderDetail.md,查询质检单详情,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-5D311ED3B89E,查询质检单详情,/docs/Warehouse/qualityInspectionOrderDetail.md,查询质检单详情,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-BE1057CB168C,待收货退货单快捷入库,/docs/Warehouse/returnOrderFastStorageIn.md,待收货退货单快捷入库,否,P1,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-BE1057CB168C,待收货退货单快捷入库,/docs/Warehouse/returnOrderFastStorageIn.md,待收货退货单快捷入库,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-BE1057CB168C,待收货退货单快捷入库,/docs/Warehouse/returnOrderFastStorageIn.md,待收货退货单快捷入库,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-E6696C712FDB,订单退款,/docs/Sale/RefundOrder.md,订单退款,否,P1,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-E6696C712FDB,订单退款,/docs/Sale/RefundOrder.md,订单退款,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-E6696C712FDB,订单退款,/docs/Sale/RefundOrder.md,订单退款,否,P1,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-B6250EFFD833,添加入库单,/docs/Warehouse/OrderAdd.md,支持添加本地仓库入库单，并增加入库仓库库存,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-B6250EFFD833,添加入库单,/docs/Warehouse/OrderAdd.md,支持添加本地仓库入库单，并增加入库仓库库存,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-A78D6BB9DC24,查询入库单列表,/docs/Warehouse/inboundgetOrders.md,查询入库单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-A78D6BB9DC24,查询入库单列表,/docs/Warehouse/inboundgetOrders.md,查询入库单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-032E4A4848FB,撤销入库单,/docs/Warehouse/SetInboundOrderRevoke.md,撤销入库单,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-032E4A4848FB,撤销入库单,/docs/Warehouse/SetInboundOrderRevoke.md,撤销入库单,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-FEFC2C739C57,添加出库单,/docs/Warehouse/OrderAddOut.md,支持添加本地仓库出库单，推送成功后扣减出库仓库库存,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-FEFC2C739C57,添加出库单,/docs/Warehouse/OrderAddOut.md,支持添加本地仓库出库单，推送成功后扣减出库仓库库存,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-179D3B8A9F63,查询出库单列表,/docs/Warehouse/outboundgetOrders.md,查询出库单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-179D3B8A9F63,查询出库单列表,/docs/Warehouse/outboundgetOrders.md,查询出库单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-F23293A702BB,查询销售出库单详情,/docs/Warehouse/WmsOrderDetail.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F23293A702BB,查询销售出库单详情,/docs/Warehouse/WmsOrderDetail.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-C0FCAFE34051,撤销出库单,/docs/Warehouse/SetOutboundOrderRevoke.md,撤销出库单,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-C0FCAFE34051,撤销出库单,/docs/Warehouse/SetOutboundOrderRevoke.md,撤销出库单,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-5C1C08254572,创建加工单 / 拆分单,/docs/Warehouse/addStorageProcessOrder.md,创建加工单 / 拆分单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-5C1C08254572,创建加工单 / 拆分单,/docs/Warehouse/addStorageProcessOrder.md,创建加工单 / 拆分单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-29AE97DABE08,加工单列表,/docs/Warehouse/getProcessOrderLists.md,加工单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-29AE97DABE08,加工单列表,/docs/Warehouse/getProcessOrderLists.md,加工单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-4E3A3DA2B70A,查询调拨单列表,/docs/Warehouse/getStorageAllocationList.md,支持查询本地仓库调拨单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-41BB2D2886D2,创建待收货/已完成的调拨单,/docs/Warehouse/AddAllocationOrder.md,支持创建“待收货/已完成”状态调拨单，请求成功后，对应调拨单在列表“待收货/已完成”状态,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-41BB2D2886D2,创建待收货/已完成的调拨单,/docs/Warehouse/AddAllocationOrder.md,支持创建“待收货/已完成”状态调拨单，请求成功后，对应调拨单在列表“待收货/已完成”状态,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-A6E36DA67F9C,调拨单全部收货,/docs/Warehouse/receiveAllocationOrder.md,支持将系统“待收货“状态的调拨单全部收货，单据状态转为“已完成“，并增加入库仓的库存,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-A6E36DA67F9C,调拨单全部收货,/docs/Warehouse/receiveAllocationOrder.md,支持将系统“待收货“状态的调拨单全部收货，单据状态转为“已完成“，并增加入库仓的库存,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-C59B5D5BB158,调拨单分批收货,/docs/Warehouse/partlyReceiveAllocationOrder.md,支持将系统待收货状态的调拨单部分收货,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-C59B5D5BB158,调拨单分批收货,/docs/Warehouse/partlyReceiveAllocationOrder.md,支持将系统待收货状态的调拨单部分收货,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-375342860CAD,调拨单结束到货,/docs/Warehouse/finishReceiveAllocationOrder.md,调拨单结束到货,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-375342860CAD,调拨单结束到货,/docs/Warehouse/finishReceiveAllocationOrder.md,调拨单结束到货,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-50E3A9271BE9,删除调拨单,/docs/Warehouse/DeleteStorageAllocationList.md,支持操作删除状态为待审批，待配货，待调拨的调拨单,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-FC8B93582D77,撤销调拨单,/docs/Warehouse/CancelStorageAllocationList.md,撤销调拨单,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-9909117FD1E7,查询调整单列表,/docs/Warehouse/getStorageAdjustOrderList.md,查询调整单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-9909117FD1E7,查询调整单列表,/docs/Warehouse/getStorageAdjustOrderList.md,查询调整单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-E6238EC4E51A,创建已完成的数量调整单,/docs/Warehouse/addAdjustmentOrder.md,支持推送已完成的数量调整单至领星ERP，并调整对应数量,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-E6238EC4E51A,创建已完成的数量调整单,/docs/Warehouse/addAdjustmentOrder.md,支持推送已完成的数量调整单至领星ERP，并调整对应数量,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-A054BADFE10F,创建已完成的换标调整单,/docs/Warehouse/addRebrandAdjustmentOrder.md,创建已完成的换标调整单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-A054BADFE10F,创建已完成的换标调整单,/docs/Warehouse/addRebrandAdjustmentOrder.md,创建已完成的换标调整单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-8F4BA5E003C6,创建已完成的SKU调整单,/docs/Warehouse/addSkuAdjustmentOrder.md,创建已完成的SKU调整单,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-8F4BA5E003C6,创建已完成的SKU调整单,/docs/Warehouse/addSkuAdjustmentOrder.md,创建已完成的SKU调整单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-8F4BA5E003C6,创建已完成的SKU调整单,/docs/Warehouse/addSkuAdjustmentOrder.md,创建已完成的SKU调整单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-D5353A465E6D,查询盘点单列表,/docs/Warehouse/checkGetOrderList.md,查询盘点单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D5353A465E6D,查询盘点单列表,/docs/Warehouse/checkGetOrderList.md,查询盘点单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-642D33967219,查询盘点单详情,/docs/Warehouse/checkGetOrderDetail.md,查询盘点单详情,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-642D33967219,查询盘点单详情,/docs/Warehouse/checkGetOrderDetail.md,查询盘点单详情,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-2D7501EFFF14,创建已完成的盘点单,/docs/Warehouse/checkAddOrder.md,支持创建已完成的盘点单，盘点类型默认为“SKU+仓位”盘点,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-2D7501EFFF14,创建已完成的盘点单,/docs/Warehouse/checkAddOrder.md,支持创建已完成的盘点单，盘点类型默认为“SKU+仓位”盘点,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-2D7501EFFF14,创建已完成的盘点单,/docs/Warehouse/checkAddOrder.md,支持创建已完成的盘点单，盘点类型默认为“SKU+仓位”盘点,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-75157159D29E,获取自定义入库类型,/docs/Warehouse/inboundGetCustomTypes.md,获取自定义入库类型,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-10C1BC0E9648,获取自定义出库类型,/docs/Warehouse/outboundGetCustomTypes.md,获取自定义出库类型,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-5EBF326CAE51,创建待调拨的调拨单,/docs/Warehouse/submitAllocationOrder.md,创建待调拨的调拨单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-5EBF326CAE51,创建待调拨的调拨单,/docs/Warehouse/submitAllocationOrder.md,创建待调拨的调拨单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-F395006EFE91,入库单确认入库,/docs/Warehouse/InboundOrderConfirm.md,入库单确认入库,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F395006EFE91,入库单确认入库,/docs/Warehouse/InboundOrderConfirm.md,入库单确认入库,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-02B0DCBC4860,出库单确认出库,/docs/Warehouse/OutboundOrderConfirm.md,出库单确认出库,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-02B0DCBC4860,出库单确认出库,/docs/Warehouse/OutboundOrderConfirm.md,出库单确认出库,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-24115FEF3839,调整单确认调整,/docs/Warehouse/AdjustOrderConfirm.md,异步任务，查询结果请调用：[查询确认调整异步任务结果](docs/Warehouse/GetAdjustOrderConfirmResult.md),否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-24115FEF3839,调整单确认调整,/docs/Warehouse/AdjustOrderConfirm.md,异步任务，查询结果请调用：[查询确认调整异步任务结果](docs/Warehouse/GetAdjustOrderConfirmResult.md),否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-E726A7FC946C,查询调整单确认调整异步结果,/docs/Warehouse/GetAdjustOrderConfirmResult.md,查询调整单确认调整异步结果,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-E726A7FC946C,查询调整单确认调整异步结果,/docs/Warehouse/GetAdjustOrderConfirmResult.md,查询调整单确认调整异步结果,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-ECC5B6E072BC,删除出库单,/docs/Warehouse/outboundOrderDelete.md,删除出库单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-ECC5B6E072BC,删除出库单,/docs/Warehouse/outboundOrderDelete.md,删除出库单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-1FA55392B264,创建已完成的成本补录单,/docs/Warehouse/FinishCostChangeOrder.md,创建已完成的成本补录单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1FA55392B264,创建已完成的成本补录单,/docs/Warehouse/FinishCostChangeOrder.md,创建已完成的成本补录单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-7773B7A1FDF9,查询海外仓备货单列表,/docs/Warehouse/listInbound.md,支持查询海外仓备货单列表，对应系统【仓库】>【海外仓备货单】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-EB2B3813F515,查询备货单详情,/docs/Warehouse/OverSeasStockDetail.md,查询备货单详情,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-EBADE37CF17C,获取备货单号,/docs/Warehouse/listOrderNos.md,获取备货单号,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-EBADE37CF17C,获取备货单号,/docs/Warehouse/listOrderNos.md,获取备货单号,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-9AE1466FB085,删除备货单,/docs/Warehouse/DeleteOverSeaStockOrder.md,支持操作删除状态为待审批，待配货，待发货，已驳回的海外仓备货单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-9AE1466FB085,删除备货单,/docs/Warehouse/DeleteOverSeaStockOrder.md,支持操作删除状态为待审批，待配货，待发货，已驳回的海外仓备货单,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-01FE108B1B92,更新备货单,/docs/Warehouse/updateInbound.md,更新备货单,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-25557AAD1424,更新备货单物流信息,/docs/Warehouse/UpdateLogistics.md,更新备货单物流信息,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-E5E2F516B966,查询备货单装箱信息,/docs/Warehouse/getPackingData.md,查询备货单装箱信息,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-D8BC30F67A4B,上传备货单装箱信息,/docs/Warehouse/packing.md,创建“待发货/待收货/已完成”状态备货单时，支持上传备货单装箱信息。,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-ACB0219BB470,查询备货单收货记录,/docs/Warehouse/GetReceiveGoodRecords.md,查询备货单收货记录,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-3B84A6C4C9B4,海外仓备货单发货,/docs/Warehouse/SendInbound.md,支持将系统已有的海外仓备货单状态调整为“待收货”，并扣减发货仓库库存,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-87182E99B1B7,备货单分批收货,/docs/Warehouse/inboundBatchesReceipt.md,备货单分批收货,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-3E19FAF15A8D,备货单结束到货,/docs/Warehouse/inboundCompleteReceipt.md,备货单结束到货,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-5567B5700B78,创建待发货/待收货/已完成的备货单,/docs/Warehouse/CreateInbound.md,支持创建“待发货/待收货/已完成”状态备货单，请求成功后，对应备货单在列表“待发货/待收货/已完成”状态。,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-814E67414272,查询系统产品与第三方海外仓产品映射列表,/docs/Warehouse/matchSkuList.md,支持查询本地产品与第三方海外仓产品映射列表,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-814E67414272,查询系统产品与第三方海外仓产品映射列表,/docs/Warehouse/matchSkuList.md,支持查询本地产品与第三方海外仓产品映射列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-87EAA59FF5C7,查询海外仓sku配对列表,/docs/Warehouse/OverseaWarehouseMatchList.md,查询海外仓sku配对列表,否,P2,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-87EAA59FF5C7,查询海外仓sku配对列表,/docs/Warehouse/OverseaWarehouseMatchList.md,查询海外仓sku配对列表,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-AAFAE3E2B6D6,获取第三方SKU标签PDF文件,/docs/Warehouse/productLabel.md,支持获取谷仓、西邮智仓、易仓的第三方SKU标签PDF文件,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-AAFAE3E2B6D6,获取第三方SKU标签PDF文件,/docs/Warehouse/productLabel.md,支持获取谷仓、西邮智仓、易仓的第三方SKU标签PDF文件,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-BED54283FB2B,获取第三方箱唛,/docs/Warehouse/packageLabel.md,支持获取谷仓、西邮智仓、易仓的箱唛PDF文件,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-DE77858CC887,查询移除入库单列表,/docs/Warehouse/removalInboundList.md,查询移除入库单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-E8270027E4C1,备货单分配库存,/docs/Warehouse/overseaStockOrderAllocate.md,备货单分配库存,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-E8270027E4C1,备货单分配库存,/docs/Warehouse/overseaStockOrderAllocate.md,备货单分配库存,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-FD9302CF208A,查询销售出库单列表,/docs/Warehouse/WmsOrderList.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单【默认返回一个月内审核出库的数据，超过一个月请加上时间入参】,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-FD9302CF208A,查询销售出库单列表,/docs/Warehouse/WmsOrderList.md,支持查询ERP中【仓库】>【销售出库单】数据，即自发货订单销售出库单【默认返回一个月内审核出库的数据，超过一个月请加上时间入参】,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-A8841B7061A1,物流下单 - 编辑运单号/跟踪号,/docs/Warehouse/setTrackingNo.md,物流下单 - 编辑运单号/跟踪号,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-890B84A34002,设置包裹尺寸,/docs/Warehouse/setOrderPackageSize.md,设置包裹尺寸,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-890B84A34002,设置包裹尺寸,/docs/Warehouse/setOrderPackageSize.md,设置包裹尺寸,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-F596F7E8C481,查询销售出库单物流面单,/docs/Warehouse/wmsOrderGetWmsLogisticsLabels.md,查询销售出库单物流面单,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F596F7E8C481,查询销售出库单物流面单,/docs/Warehouse/wmsOrderGetWmsLogisticsLabels.md,查询销售出库单物流面单,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-330811625C41,销售出库单截单,/docs/Warehouse/cancelWmsOrder.md,注： 海外仓截单任务为异步执行。接口提交成功后，系统会将截单请求推送至海外仓处理。 可以通过调用[查询订单管理订单列表](docs/MultiPlatform/V2/MultiPlatOrderV2)接口，并查看返回数据中的 data>>list>>status 字段，以获取截单任务的最终执行状态和结果。,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-330811625C41,销售出库单截单,/docs/Warehouse/cancelWmsOrder.md,注： 海外仓截单任务为异步执行。接口提交成功后，系统会将截单请求推送至海外仓处理。 可以通过调用[查询订单管理订单列表](docs/MultiPlatform/V2/MultiPlatOrderV2)接口，并查看返回数据中的 data>>list>>status 字段，以获取截单任务的最终执行状态和结果。,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-633648A48963,装箱任务-生成装箱任务,/docs/Warehouse/PackingTaskAdd.md,装箱任务-生成装箱任务,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-9B0AEF588990,装箱任务-批量编辑装箱信息,/docs/Warehouse/PackingTaskBatchEdit.md,装箱任务-批量编辑装箱信息,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-5094B5DD4252,装箱任务-删除装箱任务,/docs/Warehouse/PackingTaskDel.md,装箱任务-删除装箱任务,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-8C46310BDBDA,装箱任务-任务详情,/docs/Warehouse/PackingTaskDetail.md,装箱任务-任务详情,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-DBA03B840847,装箱任务-标记已完成,/docs/Warehouse/PackingTaskFinish.md,装箱任务-标记已完成,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-EE7D15BC8C4F,装箱任务-单据列表,/docs/Warehouse/PackingTaskRelateSnList.md,查询可创建装箱任务的列表,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-051118326D63,装箱任务-任务列表,/docs/Warehouse/PackingTaskList.md,查询装箱任务列表，支持按仓库、装箱员、装箱情况、单据类型等条件筛选,是,P0,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-E95A3442D310,查询头程物流渠道列表,/docs/Logistics/ChannelList.md,对应系统【物流】-》【头程物流】-》【物流渠道】数据,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-725F26FDC523,查询物流-头程物流商,/docs/Logistics/QueryHeadLogisticsProvider.md,支持查询物流-头程物流商，默认返回已启用现结api对接的物流商。,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-F83A1BAC3521,批量添加头程物流商,/docs/Logistics/AddProviders.md,支持批量创建头程物流商到领星ERP,否,P2,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-AF600FDF4D6E,批量添加头程物流方式,/docs/Logistics/AddChannels.md,支持批量添加头程物流方式到领星ERP，对应系统功能【物流】>【头程物流】>【物流渠道】,否,P2,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-043952293C81,查询已启用的自发货物流方式,/docs/Logistics/listUsedLogisticsType.md,支持查询已启用的自发货物流方式，对应系统【物流】>【物流管理】当中的 API 物流、三方仓物流、平台物流、自定义物流列表,否,P2,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-7F9838344C2B,查询运输方式列表,/docs/Logistics/transportMethodList.md,支持查询自定义运输方式，对应系统【设置】>【业务配置】>【物流】当中的运输方式,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-081EC270CC8F,头程对账列表,/docs/Logistics/HeadLogisticsReconciliationList.md,查询头程物流对账列表，对应系统【供应链】>【头程物流对账】数据,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-EE2593BAC4F5,FBM物流对账-确认/批量确认,/docs/Logistics/LogisticsBillConfirm.md,对FBM物流账单进行确认或批量确认操作,否,P2,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-022E3FB1A8C6,查询费用类型列表,/docs/Finance/feeManagementType.md,查询费用类型列表,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-A623F7D01F1B,查询费用明细列表,/docs/Finance/feeManagementList.md,查询费用明细列表,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-7ED46019A235,创建费用单,/docs/Finance/feeManagementCreate.md,创建费用单,否,P2,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-20735537E141,编辑费用单,/docs/Finance/feeManagementEdit.md,编辑费用单,否,P2,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-6EA203F42077,作废费用单,/docs/Finance/feeManagementDiscard.md,作废费用单,否,P2,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-1E89A7A2DA3C,删除费用单,/docs/Finance/feeManagementDelete.md,支持删除 “待提交” 状态的费用单,否,P2,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-A453FAE8A107,查询利润报表-SKU,/docs/Finance/bdSKU.md,查询利润报表-SKU,否,P1,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-A453FAE8A107,查询利润报表-SKU,/docs/Finance/bdSKU.md,查询利润报表-SKU,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-E67765C12B1D,查询利润报表-店铺,/docs/Finance/bdSeller.md,查询利润报表-店铺,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-69B7BDB30BF3,查询利润报表-店铺月度汇总,/docs/Finance/bdSellerSummary.md,查询利润报表-店铺月度汇总,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-27FD5B4A5146,查询利润报表 - 订单维度transaction视图,/docs/Finance/profitReportOrderTranscationList.md,查询利润报表 - 订单维度transaction视图,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-27FD5B4A5146,查询利润报表 - 订单维度transaction视图,/docs/Finance/profitReportOrderTranscationList.md,查询利润报表 - 订单维度transaction视图,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-F30C3A5673B7,查询利润报表-订单,/docs/Finance/bdOrder.md,本接口即将下线【不再建议使用】，建议使用[查询利润报表 - 订单维度transaction视图](/docs/Finance/profitReportOrderTranscationList),是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F30C3A5673B7,查询利润报表-订单,/docs/Finance/bdOrder.md,本接口即将下线【不再建议使用】，建议使用[查询利润报表 - 订单维度transaction视图](/docs/Finance/profitReportOrderTranscationList),是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-C158E1CD652D,查询利润报表（旧） - MSKU,/docs/Finance/FianceProfitMsku.md,支持查询系统【财务】>【利润报表】中MSKU维度统计数据,否,P3,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-C158E1CD652D,查询利润报表（旧） - MSKU,/docs/Finance/FianceProfitMsku.md,支持查询系统【财务】>【利润报表】中MSKU维度统计数据,否,P3,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-C158E1CD652D,查询利润报表（旧） - MSKU,/docs/Finance/FianceProfitMsku.md,支持查询系统【财务】>【利润报表】中MSKU维度统计数据,否,P3,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-E9129B6BC59E,查询利润报表（旧）-结算明细,/docs/Finance/profitSettlement.md,支持查询系统【财务】>【利润报表】>【结算明细】数据,否,P3,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-2AD144D844C7,查询settlement下载URL,/docs/Finance/SettlementExportUrlGet.md,查询settlement下载URL,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-2454C40DBB80,查询广告发票列表,/docs/Finance/InvoiceList.md,查询广告发票列表,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-2454C40DBB80,查询广告发票列表,/docs/Finance/InvoiceList.md,查询广告发票列表,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-A8A460011763,查询广告发票活动列表,/docs/Finance/InvoiceCampaignList.md,查询广告发票活动列表,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-A8A460011763,查询广告发票活动列表,/docs/Finance/InvoiceCampaignList.md,查询广告发票活动列表,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-7106755764A4,查询广告发票基本信息,/docs/Finance/InvoiceDetail.md,查询广告发票基本信息,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-7106755764A4,查询广告发票基本信息,/docs/Finance/InvoiceDetail.md,查询广告发票基本信息,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-D797CA8C373A,立即重算-利润报表数据,/docs/Finance/ComputeManual.md,立即重算-利润报表数据,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-598C49EB1197,查询请款单列表,/docs/Finance/RequestFundsOrderList.md,查询请款单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-598C49EB1197,查询请款单列表,/docs/Finance/RequestFundsOrderList.md,查询请款单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-FF6962F51900,查询收款单列表,/docs/Finance/QueryReceiptFundsList.md,支持查询收款单列表,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-92FE8988B86C,查询请款池 - 货款现结,/docs/Finance/requestFundsPoolPurchaseList.md,查询请款池 - 货款现结,否,P1,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-92FE8988B86C,查询请款池 - 货款现结,/docs/Finance/requestFundsPoolPurchaseList.md,查询请款池 - 货款现结,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-62F91F9CB35B,查询请款池 - 货款月结,/docs/Finance/requestFundsPoolInboundList.md,查询请款池 - 货款月结,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-9C950113F6EA,查询请款池 - 货款预付款,/docs/Finance/requestFundsPoolPrepayList.md,查询请款池 - 货款预付款,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-A095838ED68E,查询请款池-物流请款,/docs/Finance/requestFundsPoolLogisticsList.md,查询请款池-物流请款,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-D0E648500CCA,查询请款池-其他应付款,/docs/Finance/requestFundsPoolCustomFeeList.md,查询请款池-其他应付款,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-0A3BA5A66954,查询请款池-其他费用,/docs/Finance/requestFundsPoolOtherFeeList.md,查询请款池-其他费用,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-CEFCD4ABAF61,应收报告-列表查询,/docs/Finance/receivableReportList.md,应收报告-列表查询,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-B30E9E6803D0,应收报告-详情-列表,/docs/Finance/reportListDetail.md,应收报告-详情-列表,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-0F0DF3FDD859,应收报告-详情-基础信息,/docs/Finance/reportListDetailInfo.md,应收报告-详情-基础信息,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-61BD491411AA,查询邮件列表,/docs/Service/lists.md,支持查询【邮件消息】列表,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-5F14BE8D2BD0,查询邮件详情,/docs/Service/detail.md,支持获取邮件内容详情,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-D27EF46B3ADF,查询评价管理 4-5星Feedback列表,/docs/Service/FeedbackList.md,查询评价管理 4-5星Feedback列表,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-2C7CF1CE8AAE,查询评价统计-Review列表,/docs/Service/reviewLists.md,查询评价统计-Review列表,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-2C7CF1CE8AAE,查询评价统计-Review列表,/docs/Service/reviewLists.md,查询评价统计-Review列表,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-2D4837A1809E,查询评价统计-Review每日新增数,/docs/Service/reviewDetail.md,查询评价统计-Review每日新增数,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-2D4837A1809E,查询评价统计-Review每日新增数,/docs/Service/reviewDetail.md,查询评价统计-Review每日新增数,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-B75C246341A6,查询评价统计-Feedback列表,/docs/Service/feedbackLists.md,查询评价统计-Feedback列表,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-B75C246341A6,查询评价统计-Feedback列表,/docs/Service/feedbackLists.md,查询评价统计-Feedback列表,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-BFDF4705FFBD,查询评价统计-Feedback每日新增数,/docs/Service/feedbackDetail.md,查询评价统计-Feedback每日新增数,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-BFDF4705FFBD,查询评价统计-Feedback每日新增数,/docs/Service/feedbackDetail.md,查询评价统计-Feedback每日新增数,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-C1830CE93E50,查询客户列表（旧）,/docs/Service/CustomerList.md,本接口即将下线，请尽快切换到：[查询客户列表（新）](docs/Service/customerServiceCrmcustomerIndex),否,P3,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-5470F505D06E,查询售后工单列表,/docs/Service/AfterSalesWorkOrderList.md,查询售后工单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-5470F505D06E,查询售后工单列表,/docs/Service/AfterSalesWorkOrderList.md,查询售后工单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-E18C1FFEB32C,提交售后工单,/docs/Service/AfterSalesWorkOrderAuditFlowSubmit.md,用于提交创建成功后的售后工单。,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-E18C1FFEB32C,提交售后工单,/docs/Service/AfterSalesWorkOrderAuditFlowSubmit.md,用于提交创建成功后的售后工单。,否,P2,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-51D280C19061,判断是否提交人自选,/docs/Service/AfterSalesWorkOrderAuditFlowIsUserSelect.md,判断售后工单审批流是否需要提交人自选审批人。,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-51D280C19061,判断是否提交人自选,/docs/Service/AfterSalesWorkOrderAuditFlowIsUserSelect.md,判断售后工单审批流是否需要提交人自选审批人。,否,P2,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-EA8918986608,查询店铺绩效列表,/docs/Service/storePerformanceList.md,查询店铺绩效列表,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-54F0AD822356,查询店铺绩效详情,/docs/Service/PerformanceNoticeDetail.md,查询店铺绩效详情,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-EF34B93FBA6A,查询买家之声列表,/docs/Service/voiceOfBuyerList.md,查询买家之声列表,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-A8485DB1E3D3,查询RMA管理,/docs/Service/customerServiceRmaManageList.md,查询RMA管理,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-95DD19D356E9,查询客户列表（新）,/docs/Service/customerServiceCrmcustomerIndex.md,查询客户列表（新）,否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-CD351FB7F89D,查询业绩通知列表,/docs/Service/PerformanceNoticeList.md,查询业绩通知列表,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-4EDA0C221DF4,关键词列表,/docs/Tools/GetKeywordList.md,关键词列表,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-001128D990D5,查询竞品监控列表,/docs/Tools/CompetitiveMonitorList.md,查询竞品监控列表,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-8DD1FB86D648,查询预警消息列表-商品,/docs/Tools/warningMessageGoodsList.md,查询预警消息列表-商品,是,P0,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-8F9A0C4E13C0,查询预警消息列表-库存,/docs/Tools/warningMessageInventoryList.md,查询预警消息列表-库存,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-8F9A0C4E13C0,查询预警消息列表-库存,/docs/Tools/warningMessageInventoryList.md,查询预警消息列表-库存,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-7A8CF9DA594A,创建报告,/docs/Statistics/CreateReport.md,此接口为异步创建,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-FC39BD159D05,查询报告,/docs/Statistics/GetReport.md,查询报告,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-F9F6C21DEC55,查询利润统计（旧）-MSKU,/docs/Statistics/ProfitMsku.md,支持查询系统【统计】>【利润统计】中MSKU维度数据,否,P3,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-F9F6C21DEC55,查询利润统计（旧）-MSKU,/docs/Statistics/ProfitMsku.md,支持查询系统【统计】>【利润统计】中MSKU维度数据,否,P3,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-F9F6C21DEC55,查询利润统计（旧）-MSKU,/docs/Statistics/ProfitMsku.md,支持查询系统【统计】>【利润统计】中MSKU维度数据,否,P3,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-3D58C3293860,查询利润统计-MSKU,/docs/Statistics/statisticsOpenMSKU.md,支持查询新版利润统计的MSKU维度,否,P1,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-3D58C3293860,查询利润统计-MSKU,/docs/Statistics/statisticsOpenMSKU.md,支持查询新版利润统计的MSKU维度,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-3D58C3293860,查询利润统计-MSKU,/docs/Statistics/statisticsOpenMSKU.md,支持查询新版利润统计的MSKU维度,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-A5F6A7E6639A,查询利润统计-店铺,/docs/Statistics/statisticsOpenSeller.md,支持查询新版利润统计的店铺维度,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-A5F6A7E6639A,查询利润统计-店铺,/docs/Statistics/statisticsOpenSeller.md,支持查询新版利润统计的店铺维度,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1C7C9C7B770D,查询店铺汇总销量,/docs/Statistics/StoreSales.md,支持按店铺维度查询店铺销量、销售额,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-1C7C9C7B770D,查询店铺汇总销量,/docs/Statistics/StoreSales.md,支持按店铺维度查询店铺销量、销售额,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-09FE9E838C58,查询订单利润-MSKU,/docs/Finance/OrderProfitListMSKU.md,唯一键说明：sid+msku,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-5891B9352423,库存报表-本地仓-新报表-汇总,/docs/Statistics/LocalAggregateListNew.md,库存报表-本地仓-新报表-汇总,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-FCDF84763AAF,库存报表-本地仓-新报表-明细,/docs/Statistics/LocalDetailListNew.md,库存报表-本地仓-新报表-明细,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-171BF687A225,库存报表-本地仓-历史报表-汇总,/docs/Statistics/LocalAggregateList.md,库存报表-本地仓-历史报表-汇总,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-0070B9951962,库存报表-本地仓-历史报表-明细,/docs/Statistics/LocalDetailList.md,库存报表-本地仓-历史报表-明细,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-CD4E8AC1BDC2,库存报表-海外仓-新报表-汇总,/docs/Statistics/OverseasAggregateListNew.md,库存报表-海外仓-新报表-汇总,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-8116408E9FBA,库存报表-海外仓-新报表-明细,/docs/Statistics/OverseasDetailListNew.md,库存报表-海外仓-新报表-明细,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-A5CE884A505B,库存报表-海外仓-历史报表-汇总,/docs/Statistics/OverseasAggregateList.md,库存报表-海外仓-历史报表-汇总,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-3D1F244FB7C8,库存报表-海外仓-历史报表-明细,/docs/Statistics/OverseasDetailList.md,库存报表-海外仓-历史报表-明细,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F8006AE8F077,创建移除订单,/docs/Statistics/CreateRemovalOrder.md,创建移除订单,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-F8006AE8F077,创建移除订单,/docs/Statistics/CreateRemovalOrder.md,创建移除订单,否,P2,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-95A42DA552D3,查询采购报表列表 - 产品,/docs/Statistics/PurchaseReportProductList.md,查询采购报表列表 - 产品,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-95A42DA552D3,查询采购报表列表 - 产品,/docs/Statistics/PurchaseReportProductList.md,查询采购报表列表 - 产品,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-95A42DA552D3,查询采购报表列表 - 产品,/docs/Statistics/PurchaseReportProductList.md,查询采购报表列表 - 产品,是,P0,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-766F8D291DF3,查询采购报表列表 - 供应商,/docs/Statistics/PurchaseReportSupplierList.md,查询采购报表列表 - 供应商,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-766F8D291DF3,查询采购报表列表 - 供应商,/docs/Statistics/PurchaseReportSupplierList.md,查询采购报表列表 - 供应商,否,P1,规则初判；全量接入前由业务负责人确认。
+采购,采购管理页,LX-DCA6FEF9EA75,查询采购报表列表 - 采购员,/docs/Statistics/PurchaseReportBuyerList.md,查询采购报表列表 - 采购员,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-DCA6FEF9EA75,查询采购报表列表 - 采购员,/docs/Statistics/PurchaseReportBuyerList.md,查询采购报表列表 - 采购员,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-93C1FB831AAA,查询运营日志,/docs/Statistics/operateLogList.md,查询运营日志,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-8F98CEB43A6D,查询运营日志(新),/docs/Statistics/operateLogV2List.md,查询运营日志(新),否,P1,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-B5184BA8522B,统计-查询退货分析,/docs/Statistics/ReturnOrderAnalysisLists.md,支持统计-查询退货分析,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-B5184BA8522B,统计-查询退货分析,/docs/Statistics/ReturnOrderAnalysisLists.md,支持统计-查询退货分析,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-B5184BA8522B,统计-查询退货分析,/docs/Statistics/ReturnOrderAnalysisLists.md,支持统计-查询退货分析,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-C3C3157EC484,店铺维度-查询目标,/docs/TargetManage/StoreBatchSelect.md,店铺维度-查询目标,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-532ADAD560E1,店铺维度-新增/更新目标,/docs/TargetManage/StoreBatchOperate.md,店铺维度-新增/更新目标,否,P3,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-65E684431831,店铺维度-删除目标,/docs/TargetManage/StoreBatchDelete.md,店铺维度-删除目标,否,P2,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-CEFFEEDBFB8D,负责人维度-查询目标,/docs/TargetManage/UserBatchSelect.md,负责人维度-查询目标,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-81721F0D55C3,负责人维度-新增/更新目标,/docs/TargetManage/UserBatchOperate.md,负责人维度-新增/更新目标,否,P3,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-D4AEBED1B7C5,负责人维度-删除目标,/docs/TargetManage/UserBatchDelete.md,负责人维度-删除目标,否,P2,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-1DC15769BD57,查询沃尔玛广告主列表,/docs/newAd/report/WalmartQueryAdvertiserList.md,查询沃尔玛广告主列表,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-1DC15769BD57,查询沃尔玛广告主列表,/docs/newAd/report/WalmartQueryAdvertiserList.md,查询沃尔玛广告主列表,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-541F3B11E6DE,查询沃尔玛-广告 - SV广告 - 广告组,/docs/MultiPlatform/Advertisement/walmart-AdGroupSvList_1.md,查询沃尔玛-广告 - SV广告 - 广告组,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-541F3B11E6DE,查询沃尔玛-广告 - SV广告 - 广告组,/docs/MultiPlatform/Advertisement/walmart-AdGroupSvList_1.md,查询沃尔玛-广告 - SV广告 - 广告组,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-058A66EC8E8E,查询沃尔玛-广告 - SP广告 - 广告活动,/docs/MultiPlatform/Advertisement/walmart-CampaignSpList_3.md,查询沃尔玛-广告 - SP广告 - 广告活动,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-058A66EC8E8E,查询沃尔玛-广告 - SP广告 - 广告活动,/docs/MultiPlatform/Advertisement/walmart-CampaignSpList_3.md,查询沃尔玛-广告 - SP广告 - 广告活动,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-31720B315BD9,查询沃尔玛-广告 - SP广告 - 广告组,/docs/MultiPlatform/Advertisement/walmart-GroupSpList_9.md,查询沃尔玛-广告 - SP广告 - 广告组,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-31720B315BD9,查询沃尔玛-广告 - SP广告 - 广告组,/docs/MultiPlatform/Advertisement/walmart-GroupSpList_9.md,查询沃尔玛-广告 - SP广告 - 广告组,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-5779B4C3F664,查询沃尔玛-广告 - SP广告 - 页面类型,/docs/MultiPlatform/Advertisement/walmart-PageTypeSPList_10.md,查询沃尔玛-广告 - SP广告 - 页面类型,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-5779B4C3F664,查询沃尔玛-广告 - SP广告 - 页面类型,/docs/MultiPlatform/Advertisement/walmart-PageTypeSPList_10.md,查询沃尔玛-广告 - SP广告 - 页面类型,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-7C855BFAF5AA,查询沃尔玛-广告 - SB广告 - 广告组,/docs/MultiPlatform/Advertisement/walmart-reportAdGroupSbList_15.md,查询沃尔玛-广告 - SB广告 - 广告组,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-7C855BFAF5AA,查询沃尔玛-广告 - SB广告 - 广告组,/docs/MultiPlatform/Advertisement/walmart-reportAdGroupSbList_15.md,查询沃尔玛-广告 - SB广告 - 广告组,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-EAFAEC4B71CF,查询沃尔玛-广告 - SB广告 - 广告,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSbList_16.md,查询沃尔玛-广告 - SB广告 - 广告,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-EAFAEC4B71CF,查询沃尔玛-广告 - SB广告 - 广告,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSbList_16.md,查询沃尔玛-广告 - SB广告 - 广告,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-0CB86D55776C,查询沃尔玛-广告 - SP广告 - 广告,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSpList_17.md,查询沃尔玛-广告 - SP广告 - 广告,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-0CB86D55776C,查询沃尔玛-广告 - SP广告 - 广告,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSpList_17.md,查询沃尔玛-广告 - SP广告 - 广告,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-40C3F27491DD,查询沃尔玛-广告 - SV广告 - 广告,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSvList_18.md,查询沃尔玛-广告 - SV广告 - 广告,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-40C3F27491DD,查询沃尔玛-广告 - SV广告 - 广告,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSvList_18.md,查询沃尔玛-广告 - SV广告 - 广告,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-FD59C74A55D7,查询沃尔玛-广告 - SB广告 - 广告活动,/docs/MultiPlatform/Advertisement/walmart-reportCampaignSbList_19.md,查询沃尔玛-广告 - SB广告 - 广告活动,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-FD59C74A55D7,查询沃尔玛-广告 - SB广告 - 广告活动,/docs/MultiPlatform/Advertisement/walmart-reportCampaignSbList_19.md,查询沃尔玛-广告 - SB广告 - 广告活动,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-86309AAB2BAC,查询沃尔玛-广告 - SV广告 - 广告活动,/docs/MultiPlatform/Advertisement/walmart-reportCampaignSvList_20.md,查询沃尔玛-广告 - SV广告 - 广告活动,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-86309AAB2BAC,查询沃尔玛-广告 - SV广告 - 广告活动,/docs/MultiPlatform/Advertisement/walmart-reportCampaignSvList_20.md,查询沃尔玛-广告 - SV广告 - 广告活动,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-1AD86690E18F,查询沃尔玛-广告 - SB广告 - 关键词,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSbList_21.md,查询沃尔玛-广告 - SB广告 - 关键词,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-1AD86690E18F,查询沃尔玛-广告 - SB广告 - 关键词,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSbList_21.md,查询沃尔玛-广告 - SB广告 - 关键词,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-434F316A392B,查询沃尔玛-广告 - SP广告 - 关键词,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSpList_22.md,查询沃尔玛-广告 - SP广告 - 关键词,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-434F316A392B,查询沃尔玛-广告 - SP广告 - 关键词,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSpList_22.md,查询沃尔玛-广告 - SP广告 - 关键词,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-DD135F34D7C2,查询沃尔玛-广告 - SV广告 - 关键词,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSvList_23.md,查询沃尔玛-广告 - SV广告 - 关键词,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-DD135F34D7C2,查询沃尔玛-广告 - SV广告 - 关键词,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSvList_23.md,查询沃尔玛-广告 - SV广告 - 关键词,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-6D6235392322,查询沃尔玛-广告 - SB广告 - 页面类型,/docs/MultiPlatform/Advertisement/walmart-reportPageTypeSbList_24.md,查询沃尔玛-广告 - SB广告 - 页面类型,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-6D6235392322,查询沃尔玛-广告 - SB广告 - 页面类型,/docs/MultiPlatform/Advertisement/walmart-reportPageTypeSbList_24.md,查询沃尔玛-广告 - SB广告 - 页面类型,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-83BBCE9FCB0E,查询沃尔玛-广告 - SV广告 - 页面类型,/docs/MultiPlatform/Advertisement/walmart-ReportPageTypeSvList_11.md,查询沃尔玛-广告 - SV广告 - 页面类型,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-83BBCE9FCB0E,查询沃尔玛-广告 - SV广告 - 页面类型,/docs/MultiPlatform/Advertisement/walmart-ReportPageTypeSvList_11.md,查询沃尔玛-广告 - SV广告 - 页面类型,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-5182D556071A,查询沃尔玛-广告 - SB广告 - 平台,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSbList_25.md,查询沃尔玛-广告 - SB广告 - 平台,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-5182D556071A,查询沃尔玛-广告 - SB广告 - 平台,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSbList_25.md,查询沃尔玛-广告 - SB广告 - 平台,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-646C5878A4CE,查询沃尔玛-广告 - SP广告 - 平台,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSpList_26.md,查询沃尔玛-广告 - SP广告 - 平台,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-646C5878A4CE,查询沃尔玛-广告 - SP广告 - 平台,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSpList_26.md,查询沃尔玛-广告 - SP广告 - 平台,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-F47DF22109CA,查询沃尔玛-广告 - SV广告 - 平台,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSvList_27.md,查询沃尔玛-广告 - SV广告 - 平台,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-F47DF22109CA,查询沃尔玛-广告 - SV广告 - 平台,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSvList_27.md,查询沃尔玛-广告 - SV广告 - 平台,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-48F40DDAE6D3,查询沃尔玛-词 - 沃尔玛热门搜索词,/docs/MultiPlatform/Advertisement/walmart-reportSearchTrendsList_28.md,查询沃尔玛-词 - 沃尔玛热门搜索词,否,P1,规则初判；全量接入前由业务负责人确认。
+广告,广告分析与投放页,LX-48F40DDAE6D3,查询沃尔玛-词 - 沃尔玛热门搜索词,/docs/MultiPlatform/Advertisement/walmart-reportSearchTrendsList_28.md,查询沃尔玛-词 - 沃尔玛热门搜索词,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-5D552F4D7A8D,利润报表-列表配置查询,/docs/Finance/ProfitReportConfig.md,利润报表-列表配置查询,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-0BB27D85E792,利润报表-明细列表查询,/docs/Finance/SettlementProfitList.md,利润报表-明细列表查询,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-727003CFF7B4,Walmart-查询结算账单列表,/docs/MultiPlatform/WalmartBillStatementList.md,Walmart-查询结算账单列表，支持按订单、商品、账期、交易类型、金额类型和时间范围查询 Walmart 结算账单明细。,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-727003CFF7B4,Walmart-查询结算账单列表,/docs/MultiPlatform/WalmartBillStatementList.md,Walmart-查询结算账单列表，支持按订单、商品、账期、交易类型、金额类型和时间范围查询 Walmart 结算账单明细。,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-727003CFF7B4,Walmart-查询结算账单列表,/docs/MultiPlatform/WalmartBillStatementList.md,Walmart-查询结算账单列表，支持按订单、商品、账期、交易类型、金额类型和时间范围查询 Walmart 结算账单明细。,是,P0,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-63E99B54ED72,Walmart-查询回款明细列表,/docs/MultiPlatform/WalmartBillPayoutList.md,Walmart-查询回款明细列表，支持按店铺、站点、账期、时间和金额比较条件查询 Walmart 回款明细。,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-63E99B54ED72,Walmart-查询回款明细列表,/docs/MultiPlatform/WalmartBillPayoutList.md,Walmart-查询回款明细列表，支持按店铺、站点、账期、时间和金额比较条件查询 Walmart 回款明细。,是,P0,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-DEF946C2CC04,查询结算利润（利润报表）-msku,/docs/MultiPlatform/V2/profitReportMsku.md,查询结算利润（利润报表）-msku,否,P1,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-DEF946C2CC04,查询结算利润（利润报表）-msku,/docs/MultiPlatform/V2/profitReportMsku.md,查询结算利润（利润报表）-msku,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-61200503BD63,查询结算利润（利润报表）-sku,/docs/MultiPlatform/V2/profitReportSku.md,查询结算利润（利润报表）-sku,否,P1,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-61200503BD63,查询结算利润（利润报表）-sku,/docs/MultiPlatform/V2/profitReportSku.md,查询结算利润（利润报表）-sku,否,P1,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-77BF3BD27008,查询结算利润（利润报表）-店铺（旧版）,/docs/MultiPlatform/V2/profitReportSeller.md,查询结算利润（利润报表）-店铺（旧版）,否,P3,规则初判；全量接入前由业务负责人确认。
+财务,财务与对账页,LX-DB6D62E9EE37,查询结算利润（利润报表）-订单,/docs/MultiPlatform/V2/profitReportOrder.md,查询结算利润（利润报表）-订单,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-DB6D62E9EE37,查询结算利润（利润报表）-订单,/docs/MultiPlatform/V2/profitReportOrder.md,查询结算利润（利润报表）-订单,是,P0,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-1524E1C3FF10,查询Walmart产品表现,/docs/MultiPlatform/WalmartProductAnalysisList.md,查询Walmart产品表现列表数据，对应系统【统计分析】>【多平台产品表现】>【Walmart】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-1524E1C3FF10,查询Walmart产品表现,/docs/MultiPlatform/WalmartProductAnalysisList.md,查询Walmart产品表现列表数据，对应系统【统计分析】>【多平台产品表现】>【Walmart】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-1524E1C3FF10,查询Walmart产品表现,/docs/MultiPlatform/WalmartProductAnalysisList.md,查询Walmart产品表现列表数据，对应系统【统计分析】>【多平台产品表现】>【Walmart】数据,是,P0,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-571E669C2E50,多平台-Walmart售后订单列表,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,多平台-Walmart售后订单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-571E669C2E50,多平台-Walmart售后订单列表,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,多平台-Walmart售后订单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-571E669C2E50,多平台-Walmart售后订单列表,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,多平台-Walmart售后订单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-F8354824E040,查询多平台店铺信息,/docs/MultiPlatform/V2/StoreInfoV2.md,支持查询多平台店铺基础信息，其中store_id为多平台店铺唯一,是,P0,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-5C93F09C1D1B,查询订单管理订单列表,/docs/MultiPlatform/V2/MultiPlatOrderV2.md,>数据对应多平台管理系统中【订单】>【订单管理】的订单数据，涵盖所有平台自发货订单数据,是,P0,规则初判；全量接入前由业务负责人确认。
+产品,产品管理页,LX-2C3EA8AD49D5,查询多平台配对列表,/docs/MultiPlatform/V2/PairListV2.md,获取多平台系统中【产品】>【配对列表】中数据已配对的数据。该模块数据为多平台MSKU与本地SKU的配对关系,否,P2,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-9A6E1D56E418,批量添加、编辑多平台配对关系,/docs/MultiPlatform/V2/pairMultiPlatformV2.md,批量添加、编辑多平台配对关系,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-06B2902A5005,预发货,/docs/MultiPlatform/PreShipment.md,订单管理预发货，对应系统中订单管理“待审核发货”类型的订单进行预发货,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-D0A92205A559,审核发货,/docs/MultiPlatform/BatchReview.md,订单管理审核发货，对应系统中订单管理“待审核发货”类型的订单进行审核发货,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1D4F82B9EC6C,创建订单,/docs/MultiPlatform/V2/CreateOrdersV2.md,创建多平台店铺手工单，包含自定义平台订单，对应系统中订单类型为“手工订单”类型,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-B6C99BAA3905,合并订单,/docs/MultiPlatform/V2/MergeOrder.md,合并订单,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F05BAD345036,拆分订单,/docs/MultiPlatform/V2/SplitOrder.md,拆分订单,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-25313630C917,标记订单不发货,/docs/MultiPlatform/V2/CancelOrder.md,标记订单不发货,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-3AE2636790C1,订单发货,/docs/MultiPlatform/V2/selfShipmentOrderDeliveryGoods.md,对应订单管理-》发货 操作，对系统订单标记出库，扣减库存,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-3AE2636790C1,订单发货,/docs/MultiPlatform/V2/selfShipmentOrderDeliveryGoods.md,对应订单管理-》发货 操作，对系统订单标记出库，扣减库存,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-715956D8FA89,订单称重,/docs/MultiPlatform/V2/setOrderWeighed.md,订单称重,否,P3,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-3BAA5CBA09DF,编辑订单,/docs/MultiPlatform/V2/EditOrderV2.md,编辑订单,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-DCEB8C231969,编辑/更新自发货订单,/docs/MultiPlatform/V2/UpdateOrderV2.md,批量编辑更新【订单管理】模块“待审核”状态订单,否,P2,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-F9AD2E4B84C4,更新订单客服备注,/docs/MultiPlatform/V2/mpOrderUpdateV2.md,支持更新订单内的【客服备注】,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-F9AD2E4B84C4,更新订单客服备注,/docs/MultiPlatform/V2/mpOrderUpdateV2.md,支持更新订单内的【客服备注】,否,P1,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-B1D5E5BD6509,快速出库,/docs/MultiPlatform/V2/FastOutboundV2.md,"创建一个""快速出库""请求的异步任务，如需获取快速出库结果，请在发送请求额外调用[获取快速出库结果](/docs/MultiPlatform/V2/GetFastOutboundResultV2.md)接口",否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-2B737D7329A7,获取快速出库结果,/docs/MultiPlatform/V2/GetFastOutboundResultV2.md,获取快速出库结果,否,P1,规则初判；全量接入前由业务负责人确认。
+运营,运营分析页,LX-A4FD6B748623,查询销量统计列表v2,/docs/Statistics/PlatformStatisticsSaleStatPageListV2.md,查询销量统计列表v2,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-B7DA9DE52C6A,查询可用报告列表 - Walmart Payment,/docs/MultiPlatform/V2/WalmartPaymentQueryReport.md,查询可用报告列表 - Walmart Payment,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-66894A74C546,查询报告详情 - Walmart Payment,/docs/MultiPlatform/V2/WalmartPaymentQueryPage.md,查询报告详情 - Walmart Payment,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-C99E2D00C76D,查询平台仓发货单列表,/docs/MultiPlatform/V2/QueryShippingListPage.md,该接口仅支持walmart，现已提供v2接口[查询平台仓发货单列表v2](docs/MultiPlatform/V2/QueryShippingListV2.md)，支持多平台下全部平台的平台仓发货单列表数据,否,P2,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-9D5A176AC470,查询平台仓发货单列表v2,/docs/MultiPlatform/V2/QueryShippingListV2.md,原接口接口仅支持walmart，现已提供v2接口，支持多平台下全部平台的平台仓发货单列表数据,否,P2,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-A8AF20B777AE,修改平台仓发货单备注,/docs/MultiPlatform/V2/ModifyPlatformRemark.md,修改平台仓发货单备注,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-C95DBD64F2A9,查询WFS货件列表,/docs/MultiPlatform/V2/QueryWFSCargoPage.md,查询WFS货件列表,否,P1,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-531E7CE81EF4,查询WFS库存列表,/docs/MultiPlatform/V2/QueryWFSInventionPage.md,查询WFS库存列表,是,P0,规则初判；全量接入前由业务负责人确认。
+售后,售后与客服页,LX-4BEBA8523762,查询退件地址列表,/docs/MultiPlatform/V2/addressReturnAddressList.md,查询退件地址列表,否,P1,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-1074DDF41A1A,查询WFS货件可添加商品列表,/docs/MultiPlatform/V2/addCargoGoodsList.md,支持查询可以在货件内添加所选店铺下可用于WFS配送的商品（需要商品的配送方式为Walmart Fulfilled以及WFS Eligible），数据来源为领星系统下的Walmart在线商品,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-1074DDF41A1A,查询WFS货件可添加商品列表,/docs/MultiPlatform/V2/addCargoGoodsList.md,支持查询可以在货件内添加所选店铺下可用于WFS配送的商品（需要商品的配送方式为Walmart Fulfilled以及WFS Eligible），数据来源为领星系统下的Walmart在线商品,否,P2,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-3A4304922BAA,WFS货件暂存,/docs/MultiPlatform/V2/multiplatformCargoStorage.md,WFS货件暂存,否,P3,规则初判；全量接入前由业务负责人确认。
+仓库,仓库与库存页,LX-72F91B3597A5,删除暂存货件,/docs/MultiPlatform/V2/DeleteCargoStorage.md,删除暂存货件,否,P2,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-9212623D77EA,查询Walmart在线商品,/docs/MultiPlatform/V2/walmartList.md,查询Walmart在线商品,是,P0,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-6476F601BDF1,Walmart修改库存,/docs/MultiPlatform/V2/WalmartPublishQueue.md,Walmart修改库存,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-E4F62AF71863,平台仓发货单分配库存,/docs/MultiPlatform/V2/shippingOrderAllocate.md,平台仓发货单分配库存,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-1AA8D77AEA04,平台仓发货单拣货,/docs/MultiPlatform/V2/shippingOrderPicking.md,平台仓发货单拣货,否,P2,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-0EF3921B4688,平台仓发货单发货,/docs/MultiPlatform/V2/shippingOrderDelivery.md,平台仓发货单发货,否,P2,规则初判；全量接入前由业务负责人确认。
+Walmart,Walmart 业务中心,LX-6EFCDB06A626,查询Walmart Review列表,/docs/MultiPlatform/WalmartCommentList.md,查询Walmart Review列表,否,P1,规则初判；全量接入前由业务负责人确认。
+销售,销售与订单页,LX-C4DB859443E2,查询平台订单列表,/docs/MultiPlatform/V2/newPlatformOrderList.md,查询平台订单列表,是,P0,规则初判；全量接入前由业务负责人确认。
+工作台,数据总览 / 待评估接口,LX-418571887440,查询平台仓发货单详情,/docs/MultiPlatform/V2/shippingDetailByCode.md,查询平台仓发货单详情,否,P2,规则初判；全量接入前由业务负责人确认。
