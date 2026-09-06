@@ -1,0 +1,330 @@
+﻿interface_id,priority,level_1_module,level_2_module,level_3_module,interface_name,http_method,api_path,document_path,doc_status,tested_status,tested_date,tested_by,requires_real_credential,has_sample_response,matches_old_db,usable_for_phase_1,notes
+LX-927D66FB6D5A,P2,产品,,,上传本地产品图片,POST,/erp/sc/routing/storage/product/uploadPictures,/docs/Product/UploadPictures.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-90CFB48DDD46,P3,产品,,,产品启用、禁用,POST,/basicOpen/product/productManager/product/operate/batch,/docs/Product/productOperateBatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F6A548F96FD0,P0,产品,,,产品管理-查询透明计划商品列表,POST,/basicOpen/product/getTransparencyProductList,/docs/Product/getTransparencyProductList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0CF22467375C,P2,产品,,,创建UPC编码,POST,/listing/publish/api/upc/addCommodityCode,/docs/Product/AddCommodityCode.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F6890246F185,P2,产品,,,创建产品标签,POST,/label/operation/v1/label/product/create,/docs/Product/CreateProductTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-147DA91911E3,P2,产品,,,删除产品标签,POST,/label/operation/v1/label/product/unmarkLabel,/docs/Product/DelProductTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-BB8D0DF598AF,P0,产品,,,批量查询本地产品详情,POST,/erp/sc/routing/data/local_inventory/batchGetProductInfo,/docs/Product/batchGetProductInfo.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D2402601914F,P2,产品,,,批量编辑本地信息,POST,/basicOpen/product/editOnSaleTimeAndRemark,/docs/Product/EditOnSaleTimeAndRemark.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-75F4963569A6,P0,产品,,,查询产品分类列表,POST,/erp/sc/routing/data/local_inventory/category,/docs/Product/Category.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-82FF3AF996D2,P0,产品,,,查询产品品牌列表,POST,/erp/sc/data/local_inventory/brand,/docs/Product/Brand.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A4D3F436FF1F,P0,产品,,,查询产品属性列表,POST,/erp/sc/routing/storage/attribute/attributeList,/docs/Product/attributeList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-226730376E6B,P0,产品,,,查询产品标签,GET,/label/operation/v1/label/product/list,/docs/Product/GetProductTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-BD16C6D25A0D,P0,产品,,,查询产品辅料列表,POST,/erp/sc/routing/data/local_inventory/productAuxList,/docs/Product/productAuxList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5AFC6979F657,P0,产品,,,查询多属性产品列表,POST,/erp/sc/routing/storage/spu/spuList,/docs/Product/spuList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-30AF347E45FE,P0,产品,,,查询多属性产品详情,POST,/erp/sc/routing/storage/spu/info,/docs/Product/spuInfo.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DA189364D1B7,P0,产品,,,查询捆绑产品关系列表,POST,/erp/sc/routing/data/local_inventory/bundledProductList,/docs/Product/bundledProductList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-6F96FE519F29,P0,产品,,,查询操作日志,POST,/basicOpen/product/getPagingLogLists,/docs/Product/GetPagingLogLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3F1F087FF8A1,P0,产品,,,查询本地产品列表,POST,/erp/sc/routing/data/local_inventory/productList,/docs/Product/ProductLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DCB0C142100B,P0,产品,,,查询本地产品详情,POST,/erp/sc/routing/data/local_inventory/productInfo,/docs/Product/ProductDetails.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2046A9CB4520,P2,产品,,,标记产品标签,POST,/label/operation/v1/label/product/mark,/docs/Product/SetProductTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A8BA6E5445AA,P2,产品,,,添加 / 编辑产品分类,POST,/erp/sc/routing/storage/category/set,/docs/Product/SetCategory.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3B1AB09F56B1,P2,产品,,,添加 / 编辑产品属性,POST,/erp/sc/routing/storage/attribute/set,/docs/Product/attributeSet.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1BDE9AFED615,P2,产品,,,添加 / 编辑捆绑产品,POST,/erp/sc/routing/storage/product/setBundled,/docs/Product/SetBundled.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E5135AAB2CB9,P2,产品,,,添加 / 编辑辅料,POST,/erp/sc/routing/storage/product/setAux,/docs/Product/setAux.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E85460D3A0AD,P2,产品,,,添加/编辑产品品牌,POST,/erp/sc/storage/brand/set,/docs/Product/SetBrand.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DC8F85A264F4,P2,产品,,,添加/编辑多属性产品,POST,/erp/sc/routing/storage/spu/set,/docs/Product/spuSet.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F00018116434,P2,产品,,,添加/编辑本地产品,POST,/erp/sc/routing/storage/product/set,/docs/Product/SetProduct.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-44D4A6C312C6,P0,产品,,,获取UPC编码列表,POST,/listing/publish/api/upc/upcList,/docs/Product/UpcList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A78F75179F06,P3,仓库,仓库设置,,启用、禁用仓位,POST,/erp/sc/routing/storage/wareHouseBin/switchStatus,/docs/Warehouse/switchStatus.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-CF87F80AD608,P0,仓库,仓库设置,,查询产品仓位列表,POST,/basicOpen/warehouseConfig/warehouseBin/getEntryRecommendBinList,/docs/Warehouse/getEntryRecommendBinList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-41E509578C0D,P0,仓库,仓库设置,,查询仓库列表,POST,/erp/sc/data/local_inventory/warehouse,/docs/Warehouse/WarehouseLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EC6F4C39346F,P0,仓库,仓库设置,,查询本地仓位列表,POST,/erp/sc/routing/data/local_inventory/warehouseBin,/docs/Warehouse/warehouseBin.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-208BCCE30B24,P2,仓库,仓库设置,,海外仓sku取消配对,POST,/basicOpen/overseaWarehouseSetting/productUnMatch,/docs/Warehouse/OverseaWarehouseProductUnMatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EECD62D39B8C,P2,仓库,仓库设置,,海外仓sku配对,POST,/basicOpen/overseaWarehouseSetting/productMatch,/docs/Warehouse/OverseaWarehouseProductMatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0C9F53813C1C,P2,仓库,仓库设置,,添加/修改仓库,POST,/erp/sc/storage/wareHouse/edit,/docs/Warehouse/EditWarehouse.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4C457588B444,P2,仓库,仓库设置,,添加仓位,POST,/erp/sc/routing/storage/wareHouseBin/create,/docs/Warehouse/binCreate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F395006EFE91,P2,仓库,出入库,,入库单确认入库,POST,/basicOpen/inboundOrder/inbound/setInbound,/docs/Warehouse/InboundOrderConfirm.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-02B0DCBC4860,P2,仓库,出入库,,出库单确认出库,POST,/basicOpen/outboundOrder/outbound/setOutbound,/docs/Warehouse/OutboundOrderConfirm.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5C1C08254572,P2,仓库,出入库,,创建加工单 / 拆分单,POST,/erp/sc/routing/inventoryReceipt/StorageProcess/addStorageProcessOrder,/docs/Warehouse/addStorageProcessOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8F4BA5E003C6,P2,仓库,出入库,,创建已完成的SKU调整单,POST,/erp/sc/routing/inventoryReceipt/StorageAdjustment/addSkuAdjustmentOrder,/docs/Warehouse/addSkuAdjustmentOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1FA55392B264,P2,仓库,出入库,,创建已完成的成本补录单,POST,/erp/sc/routing/inventoryReceipt/CostChangeOrder/finishCostChangeOrder,/docs/Warehouse/FinishCostChangeOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A054BADFE10F,P2,仓库,出入库,,创建已完成的换标调整单,POST,/erp/sc/routing/inventoryReceipt/StorageAdjustment/addRebrandAdjustmentOrder,/docs/Warehouse/addRebrandAdjustmentOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E6238EC4E51A,P2,仓库,出入库,,创建已完成的数量调整单,POST,/erp/sc/routing/inventoryReceipt/StorageAdjustment/addAdjustmentOrder,/docs/Warehouse/addAdjustmentOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2D7501EFFF14,P2,仓库,出入库,,创建已完成的盘点单,POST,/erp/sc/routing/inventoryReceipt/InventoryCheck/addOrder,/docs/Warehouse/checkAddOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-41BB2D2886D2,P2,仓库,出入库,,创建待收货/已完成的调拨单,POST,/erp/sc/routing/inventoryReceipt/StorageAllocation/addAllocationOrder,/docs/Warehouse/AddAllocationOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5EBF326CAE51,P2,仓库,出入库,,创建待调拨的调拨单,POST,/erp/sc/routing/inventoryReceipt/StorageAllocation/submitAllocationOrder,/docs/Warehouse/submitAllocationOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-ECC5B6E072BC,P2,仓库,出入库,,删除出库单,DELETE,/basicOpen/outboundOrder/outbound/delete,/docs/Warehouse/outboundOrderDelete.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-50E3A9271BE9,P3,仓库,出入库,,删除调拨单,DELETE,/basicOpen/storageAllocationList/delete,/docs/Warehouse/DeleteStorageAllocationList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-29AE97DABE08,P0,仓库,出入库,,加工单列表,POST,/erp/sc/routing/inventoryReceipt/StorageProcess/getOrderLists,/docs/Warehouse/getProcessOrderLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-032E4A4848FB,P3,仓库,出入库,,撤销入库单,POST,/basicOpen/inboundOrder/inbound/setOrderRevoke,/docs/Warehouse/SetInboundOrderRevoke.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C0FCAFE34051,P3,仓库,出入库,,撤销出库单,POST,/basicOpen/outboundOrder/outbound/setOrderRevoke,/docs/Warehouse/SetOutboundOrderRevoke.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FC8B93582D77,P3,仓库,出入库,,撤销调拨单,POST,/basicOpen/storageAllocationList/cancel,/docs/Warehouse/CancelStorageAllocationList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A78D6BB9DC24,P0,仓库,出入库,,查询入库单列表,POST,/erp/sc/routing/storage/inbound/getOrders,/docs/Warehouse/inboundgetOrders.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-179D3B8A9F63,P0,仓库,出入库,,查询出库单列表,POST,/erp/sc/routing/storage/outbound/getOrders,/docs/Warehouse/outboundgetOrders.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D5353A465E6D,P0,仓库,出入库,,查询盘点单列表,POST,/erp/sc/routing/inventoryReceipt/InventoryCheck/getOrderList,/docs/Warehouse/checkGetOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-642D33967219,P0,仓库,出入库,,查询盘点单详情,POST,/erp/sc/routing/inventoryReceipt/InventoryCheck/getOrderDetail,/docs/Warehouse/checkGetOrderDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4E3A3DA2B70A,P0,仓库,出入库,,查询调拨单列表,POST,/erp/sc/routing/inventoryReceipt/StorageAllocation/getStorageAllocationList,/docs/Warehouse/getStorageAllocationList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9909117FD1E7,P0,仓库,出入库,,查询调整单列表,POST,/erp/sc/routing/inventoryReceipt/StorageAdjustment/getStorageAdjustOrderList,/docs/Warehouse/getStorageAdjustOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E726A7FC946C,P2,仓库,出入库,,查询调整单确认调整异步结果,POST,/basicOpen/adjustOrder/adjust/getAdjustStatus,/docs/Warehouse/GetAdjustOrderConfirmResult.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F23293A702BB,P0,仓库,出入库,,查询销售出库单详情,POST,/basicOpen/wmsOrder/getWmsOrdersByOrderNumbers,/docs/Warehouse/WmsOrderDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B6250EFFD833,P2,仓库,出入库,,添加入库单,POST,/erp/sc/routing/storage/storage/orderAdd,/docs/Warehouse/OrderAdd.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FEFC2C739C57,P2,仓库,出入库,,添加出库单,POST,/erp/sc/routing/storage/storage/orderAddOut,/docs/Warehouse/OrderAddOut.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-75157159D29E,P0,仓库,出入库,,获取自定义入库类型,POST,/erp/sc/routing/storage/inbound/getCustomTypes,/docs/Warehouse/inboundGetCustomTypes.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-10C1BC0E9648,P0,仓库,出入库,,获取自定义出库类型,POST,/erp/sc/routing/storage/outbound/getCustomTypes,/docs/Warehouse/outboundGetCustomTypes.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A6E36DA67F9C,P3,仓库,出入库,,调拨单全部收货,POST,/erp/sc/routing/inventoryReceipt/StorageAllocation/receiveAllocationOrder,/docs/Warehouse/receiveAllocationOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C59B5D5BB158,P3,仓库,出入库,,调拨单分批收货,POST,/erp/sc/routing/inventoryReceipt/StorageAllocation/partlyReceiveAllocationOrder,/docs/Warehouse/partlyReceiveAllocationOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-375342860CAD,P3,仓库,出入库,,调拨单结束到货,POST,/erp/sc/routing/inventoryReceipt/StorageAllocation/finishReceiveAllocationOrder,/docs/Warehouse/finishReceiveAllocationOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-24115FEF3839,P2,仓库,出入库,,调整单确认调整,POST,/basicOpen/adjustOrder/adjust/setAdjust,/docs/Warehouse/AdjustOrderConfirm.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FD9302CF208A,P0,仓库,发货,,查询销售出库单列表,POST,/erp/sc/routing/wms/order/wmsOrderList,/docs/Warehouse/WmsOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F596F7E8C481,P0,仓库,发货,,查询销售出库单物流面单,POST,/erp/sc/routing/wms/order/getWmsLogisticsLabels,/docs/Warehouse/wmsOrderGetWmsLogisticsLabels.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A8841B7061A1,P2,仓库,发货,,物流下单 - 编辑运单号/跟踪号,POST,/basicOpen/logisticsOrdering/setTrackingNo,/docs/Warehouse/setTrackingNo.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-890B84A34002,P2,仓库,发货,,设置包裹尺寸,POST,/erp/sc/routing/wms/order/setOrderPackageSize,/docs/Warehouse/setOrderPackageSize.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-330811625C41,P3,仓库,发货,,销售出库单截单,POST,/basicOpen/wmsOrder/cancel,/docs/Warehouse/cancelWmsOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A791179C9A78,P0,仓库,库存&流水,,查询AWD库存列表,POST,/basicOpen/openapi/storage/awdWarehouseDetail,/docs/Warehouse/AwdWarehouseDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-47310BFA3E0D,P0,仓库,库存&流水,,查询仓位库存明细,POST,/erp/sc/routing/data/local_inventory/inventoryBinDetails,/docs/Warehouse/inventoryBinDetails.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8DE4E360B561,P0,仓库,库存&流水,,查询仓位流水,POST,/erp/sc/routing/data/local_inventory/wareHouseBinStatement,/docs/Warehouse/wareHouseBinStatement.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-41B3AF612B29,P0,仓库,库存&流水,,查询仓库库存明细,POST,/erp/sc/routing/data/local_inventory/inventoryDetails,/docs/Warehouse/InventoryDetails.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F0CE5B7F589B,P0,仓库,库存&流水,,查询库存流水（新）,POST,/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement,/docs/Warehouse/WarehouseStatementNew.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-6F8ABDE7B566,P3,仓库,库存&流水,,查询库存流水（旧）,POST,/erp/sc/routing/data/local_inventory/wareHouseStatement,/docs/Warehouse/WarehouseStatement.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1181D4F827FB,P0,仓库,库存&流水,,查询批次明细,POST,/erp/sc/routing/data/local_inventory/getBatchDetailList,/docs/Warehouse/GetBatchDetailList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-BCB9BCE2437F,P0,仓库,库存&流水,,查询批次流水,POST,/erp/sc/routing/data/local_inventory/getBatchStatementList,/docs/Warehouse/GetBatchStatementList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-AA0068524F96,P2,仓库,收货质检,,创建待收货的收货单,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/createReceiptOrder,/docs/Warehouse/createReceiptOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-BE1057CB168C,P1,仓库,收货质检,,待收货退货单快捷入库,POST,/basicOpen/return/order/fastStorageIn,/docs/Warehouse/returnOrderFastStorageIn.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-186837F0F7C4,P2,仓库,收货质检,,收货单-编辑备注,POST,/basicOpen/inboundOrder/receiptOrder/updateOrderInfo,/docs/Warehouse/receiptOrderUpdateOrderInfo.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E8B767C41774,P3,仓库,收货质检,,收货单到货,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/receive,/docs/Warehouse/Receive.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FE893F657641,P3,仓库,收货质检,,收货单快捷入库,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/fastReceive,/docs/Warehouse/FastReceive.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4B9473A2D2E1,P0,仓库,收货质检,,查询收货单列表,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList,/docs/Warehouse/PurchaseReceiptOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-ECAEE8038F87,P0,仓库,收货质检,,查询质检单列表,POST,/erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList,/docs/Warehouse/ReceiptOrderQcList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5D311ED3B89E,P0,仓库,收货质检,,查询质检单详情,POST,/basicOpen/qualityInspectionOrder/detail,/docs/Warehouse/qualityInspectionOrderDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1C62776E886A,P0,仓库,收货质检,,查询销售退货单列表,POST,/pb/mp/returns/v2/list,/docs/Warehouse/ReturnList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E6696C712FDB,P1,仓库,收货质检,,订单退款,POST,/basicOpen/openapi/salesOrder/refundOrder,/docs/Sale/RefundOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D8BC30F67A4B,P2,仓库,海外仓,,上传备货单装箱信息,POST,/erp/sc/routing/owms/inbound/packing,/docs/Warehouse/packing.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5567B5700B78,P2,仓库,海外仓,,创建待发货/待收货/已完成的备货单,POST,/erp/sc/routing/owms/inbound/createInbound,/docs/Warehouse/CreateInbound.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9AE1466FB085,P2,仓库,海外仓,,删除备货单,DELETE,/basicOpen/overSeaWarehouse/stockOrder/delete,/docs/Warehouse/DeleteOverSeaStockOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-87182E99B1B7,P3,仓库,海外仓,,备货单分批收货,POST,/erp/sc/routing/owms/inbound/batchesReceipt,/docs/Warehouse/inboundBatchesReceipt.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E8270027E4C1,P3,仓库,海外仓,,备货单分配库存,POST,/basicOpen/overSeaWarehouse/stockOrder/allocate,/docs/Warehouse/overseaStockOrderAllocate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3E19FAF15A8D,P3,仓库,海外仓,,备货单结束到货,POST,/erp/sc/routing/owms/inbound/completeReceipt,/docs/Warehouse/inboundCompleteReceipt.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-01FE108B1B92,P3,仓库,海外仓,,更新备货单,POST,/erp/sc/routing/owms/inbound/updateInbound,/docs/Warehouse/updateInbound.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-25557AAD1424,P3,仓库,海外仓,,更新备货单物流信息,POST,/erp/sc/routing/owms/inbound/updateLogistics,/docs/Warehouse/UpdateLogistics.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-ACB0219BB470,P0,仓库,海外仓,,查询备货单收货记录,POST,/erp/sc/routing/owms/inbound/getReceiveGoodRecords,/docs/Warehouse/GetReceiveGoodRecords.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E5E2F516B966,P0,仓库,海外仓,,查询备货单装箱信息,GET,/erp/sc/routing/owms/inbound/getPackingData,/docs/Warehouse/getPackingData.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EB2B3813F515,P0,仓库,海外仓,,查询备货单详情,POST,/basicOpen/overSeaWarehouse/stockOrder/detail,/docs/Warehouse/OverSeasStockDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-87EAA59FF5C7,P2,仓库,海外仓,,查询海外仓sku配对列表,POST,/basicOpen/overseaWarehouseSetting/matchList,/docs/Warehouse/OverseaWarehouseMatchList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7773B7A1FDF9,P0,仓库,海外仓,,查询海外仓备货单列表,POST,/erp/sc/routing/owms/inbound/listInbound,/docs/Warehouse/listInbound.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DE77858CC887,P0,仓库,海外仓,,查询移除入库单列表,POST,/erp/sc/routing/owms/removalInbound/list,/docs/Warehouse/removalInboundList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-814E67414272,P0,仓库,海外仓,,查询系统产品与第三方海外仓产品映射列表,POST,/erp/sc/routing/owms/inbound/matchSkuList,/docs/Warehouse/matchSkuList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3B84A6C4C9B4,P2,仓库,海外仓,,海外仓备货单发货,POST,/erp/sc/routing/owms/inbound/sendInbound,/docs/Warehouse/SendInbound.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EBADE37CF17C,P0,仓库,海外仓,,获取备货单号,POST,/erp/sc/routing/owms/inbound/listOrderNos,/docs/Warehouse/listOrderNos.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-AAFAE3E2B6D6,P0,仓库,海外仓,,获取第三方SKU标签PDF文件,POST,/erp/sc/routing/owms/inbound/productLabel,/docs/Warehouse/productLabel.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-BED54283FB2B,P0,仓库,海外仓,,获取第三方箱唛,POST,/erp/sc/routing/owms/inbound/packageLabel,/docs/Warehouse/packageLabel.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-051118326D63,P0,仓库,装箱管理,,装箱任务-任务列表,POST,/basicOpen/packingTask/list,/docs/Warehouse/PackingTaskList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8C46310BDBDA,P0,仓库,装箱管理,,装箱任务-任务详情,POST,/basicOpen/packingTask/taskDetail,/docs/Warehouse/PackingTaskDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5094B5DD4252,P2,仓库,装箱管理,,装箱任务-删除装箱任务,POST,/basicOpen/packingTask/delTask,/docs/Warehouse/PackingTaskDel.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EE7D15BC8C4F,P0,仓库,装箱管理,,装箱任务-单据列表,POST,/basicOpen/packingTask/getRelateSnList,/docs/Warehouse/PackingTaskRelateSnList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9B0AEF588990,P2,仓库,装箱管理,,装箱任务-批量编辑装箱信息,POST,/basicOpen/packingTask/batchEditPackingBox,/docs/Warehouse/PackingTaskBatchEdit.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DBA03B840847,P2,仓库,装箱管理,,装箱任务-标记已完成,POST,/basicOpen/packingTask/finishTask,/docs/Warehouse/PackingTaskFinish.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-633648A48963,P3,仓库,装箱管理,,装箱任务-生成装箱任务,POST,/basicOpen/packingTask/addTask,/docs/Warehouse/PackingTaskAdd.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-320D9D20B37C,P1,基础数据,,,下载附件,POST,/erp/sc/routing/common/file/download,/docs/BasicData/AttachmentDownload.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-99132180876E,P2,基础数据,,,修改我的汇率,POST,/basicOpen/settings/exchangeRate/update,/docs/BasicData/ExchangeRateUpdate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A07E627F7B70,P1,基础数据,,,定制化附件下载接口,POST,/erp/sc/routing/customized/file/download,/docs/BasicData/CustomAttachmentDownload.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1BE23A99A7E9,P2,基础数据,,,批量修改店铺名称,POST,/erp/sc/data/seller/batchEditSellerName,/docs/BasicData/SellerBatchRename.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-04CE920F9507,P1,基础数据,,,查询ERP用户信息列表,GET,/erp/sc/data/account/lists,/docs/BasicData/AccoutLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-CDEC1BCCBD6A,P1,基础数据,,,获取国家下的州、省编码,POST,/basicOpen/multiplatform/profit/report/stateList,/docs/BasicData/StateList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3A4304922BAA,P3,多平台,,,WFS货件暂存,POST,/basicOpen/multiplatform/cargo/storage,/docs/MultiPlatform/V2/multiplatformCargoStorage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-6476F601BDF1,P2,多平台,,,Walmart修改库存,POST,/basicOpen/multiplatform/walmart/publishQueue,/docs/MultiPlatform/V2/WalmartPublishQueue.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A8AF20B777AE,P2,多平台,,,修改平台仓发货单备注,POST,/cepf/warehouse/api/openApi/editPlatfromShippingRemark,/docs/MultiPlatform/V2/ModifyPlatformRemark.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1D4F82B9EC6C,P2,多平台,,,创建订单,POST,/pb/mp/order/v2/create,/docs/MultiPlatform/V2/CreateOrdersV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-72F91B3597A5,P2,多平台,,,删除暂存货件,POST,/basicOpen/multiplatform/deleteCargoStorage,/docs/MultiPlatform/V2/DeleteCargoStorage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B6C99BAA3905,P3,多平台,,,合并订单,POST,/pb/mp/order/v2/mergeOrder,/docs/MultiPlatform/V2/MergeOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D0A92205A559,P2,多平台,,,审核发货,POST,/basicOpen/openapi/multiplatform/order/review,/docs/MultiPlatform/BatchReview.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E4F62AF71863,P2,多平台,,,平台仓发货单分配库存,POST,/basicOpen/multiplatform/allocate/stock,/docs/MultiPlatform/V2/shippingOrderAllocate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0EF3921B4688,P2,多平台,,,平台仓发货单发货,POST,/basicOpen/multiplatform/shippingList/delivery,/docs/MultiPlatform/V2/shippingOrderDelivery.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1AA8D77AEA04,P2,多平台,,,平台仓发货单拣货,POST,/basicOpen/multiplatform/shippingList/picking,/docs/MultiPlatform/V2/shippingOrderPicking.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B1D5E5BD6509,P3,多平台,,,快速出库,POST,/pb/mp/order/v2/fastOutbound,/docs/MultiPlatform/V2/FastOutboundV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9A6E1D56E418,P2,多平台,,,批量添加、编辑多平台配对关系,POST,/pb/mp/listing/v2/pairMultiPlatform,/docs/MultiPlatform/V2/pairMultiPlatformV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F05BAD345036,P3,多平台,,,拆分订单,POST,/pb/mp/order/v2/splitOrder,/docs/MultiPlatform/V2/SplitOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F9AD2E4B84C4,P1,多平台,,,更新订单客服备注,POST,/pb/mp/order/setRemark,/docs/MultiPlatform/V2/mpOrderUpdateV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-531E7CE81EF4,P0,多平台,,,查询WFS库存列表,POST,/cepf/warehouse/api/openApi/queryWFSInventionPage,/docs/MultiPlatform/V2/QueryWFSInventionPage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C95DBD64F2A9,P1,多平台,,,查询WFS货件列表,POST,/cepf/warehouse/api/openApi/queryWFSCargoPage,/docs/MultiPlatform/V2/QueryWFSCargoPage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1074DDF41A1A,P2,多平台,,,查询WFS货件可添加商品列表,POST,/basicOpen/multiplatform/cargo/addCargoGoods/list,/docs/MultiPlatform/V2/addCargoGoodsList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-6EFCDB06A626,P1,多平台,,,查询Walmart Review列表,POST,/basicOpen/multiplatform/walmart/queryCommentList,/docs/MultiPlatform/WalmartCommentList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9212623D77EA,P0,多平台,,,查询Walmart在线商品,POST,/basicOpen/multiplatform/walmart/list,/docs/MultiPlatform/V2/walmartList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B7DA9DE52C6A,P1,多平台,,,查询可用报告列表 - Walmart Payment,POST,/cepf/fms/openapi/walmartPayment/queryReport,/docs/MultiPlatform/V2/WalmartPaymentQueryReport.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F8354824E040,P0,多平台,,,查询多平台店铺信息,POST,/pb/mp/shop/v2/getSellerList,/docs/MultiPlatform/V2/StoreInfoV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2C3EA8AD49D5,P2,多平台,,,查询多平台配对列表,POST,/pb/mp/listing/v2/getPairList,/docs/MultiPlatform/V2/PairListV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C99E2D00C76D,P2,多平台,,,查询平台仓发货单列表,POST,/cepf/warehouse/api/openApi/queryShippingListPage,/docs/MultiPlatform/V2/QueryShippingListPage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9D5A176AC470,P2,多平台,,,查询平台仓发货单列表v2,POST,/basicOpen/multiplatform/query/shippingList,/docs/MultiPlatform/V2/QueryShippingListV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-418571887440,P2,多平台,,,查询平台仓发货单详情,POST,/basicOpen/multiplatform/query/shippingDetail,/docs/MultiPlatform/V2/shippingDetailByCode.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C4DB859443E2,P0,多平台,,,查询平台订单列表,POST,/cepfPlatformOrder/open-api/newPlatformOrder/list,/docs/MultiPlatform/V2/newPlatformOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-66894A74C546,P1,多平台,,,查询报告详情 - Walmart Payment,POST,/cepf/fms/openapi/walmartPayment/queryPage,/docs/MultiPlatform/V2/WalmartPaymentQueryPage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5C93F09C1D1B,P0,多平台,,,查询订单管理订单列表,POST,/pb/mp/order/v2/list,/docs/MultiPlatform/V2/MultiPlatOrderV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4BEBA8523762,P1,多平台,,,查询退件地址列表,POST,/basicOpen/multiplatform/address/returnAddressList,/docs/MultiPlatform/V2/addressReturnAddressList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A4FD6B748623,P1,多平台,,,查询销量统计列表v2,POST,/basicOpen/platformStatisticsV2/saleStat/pageList,/docs/Statistics/PlatformStatisticsSaleStatPageListV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-25313630C917,P2,多平台,,,标记订单不发货,POST,/pb/mp/order/v2/cancelOrder,/docs/MultiPlatform/V2/CancelOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DCEB8C231969,P2,多平台,,,编辑/更新自发货订单,POST,/pb/mp/order/v2/updateOrder,/docs/MultiPlatform/V2/UpdateOrderV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3BAA5CBA09DF,P2,多平台,,,编辑订单,POST,/pb/mp/order/editOrder,/docs/MultiPlatform/V2/EditOrderV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2B737D7329A7,P1,多平台,,,获取快速出库结果,POST,/pb/mp/order/v2/getFastOutboundResult,/docs/MultiPlatform/V2/GetFastOutboundResultV2.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3AE2636790C1,P2,多平台,,,订单发货,POST,/basicOpen/selfShipmentOrder/deliveryGoods,/docs/MultiPlatform/V2/selfShipmentOrderDeliveryGoods.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-715956D8FA89,P3,多平台,,,订单称重,POST,/erp/sc/routing/wms/order/setOrderWeighed,/docs/MultiPlatform/V2/setOrderWeighed.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-06B2902A5005,P2,多平台,,,预发货,POST,/basicOpen/openapi/multiplatform/order/preShipment,/docs/MultiPlatform/PreShipment.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-571E669C2E50,P0,多平台,售后订单,,多平台-Walmart售后订单列表,POST,/basicOpen/openapi/multiplatform/walmart/returnOrder/list,/docs/MultiPlatform/V2/WalmartReturnOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1AD86690E18F,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SB广告 - 关键词,POST,/basicOpen/multiplatform/ads/reportKeywordSbList,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSbList_21.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5182D556071A,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SB广告 - 平台,POST,/basicOpen/multiplatform/ads/reportPlatformSbList,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSbList_25.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EAFAEC4B71CF,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SB广告 - 广告,POST,/basicOpen/multiplatform/ads/reportAdItemSbList,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSbList_16.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FD59C74A55D7,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SB广告 - 广告活动,POST,/basicOpen/multiplatform/ads/reportCampaignSbList,/docs/MultiPlatform/Advertisement/walmart-reportCampaignSbList_19.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7C855BFAF5AA,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SB广告 - 广告组,POST,/basicOpen/multiplatform/ads/reportAdGroupSbList,/docs/MultiPlatform/Advertisement/walmart-reportAdGroupSbList_15.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-6D6235392322,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SB广告 - 页面类型,POST,/basicOpen/multiplatform/ads/reportPageTypeSbList,/docs/MultiPlatform/Advertisement/walmart-reportPageTypeSbList_24.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-434F316A392B,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SP广告 - 关键词,POST,/basicOpen/multiplatform/ads/reportKeywordSpList,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSpList_22.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-646C5878A4CE,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SP广告 - 平台,POST,/basicOpen/multiplatform/ads/reportPlatformSpList,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSpList_26.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0CB86D55776C,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SP广告 - 广告,POST,/basicOpen/multiplatform/ads/reportAdItemSpList,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSpList_17.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-058A66EC8E8E,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SP广告 - 广告活动,POST,/basicOpen/multiplatform/ads/queryCampaignSpList,/docs/MultiPlatform/Advertisement/walmart-CampaignSpList_3.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-31720B315BD9,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SP广告 - 广告组,POST,/basicOpen/multiplatform/ads/queryGroupSpList,/docs/MultiPlatform/Advertisement/walmart-GroupSpList_9.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5779B4C3F664,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SP广告 - 页面类型,POST,/basicOpen/multiplatform/ads/queryPageTypeSPList,/docs/MultiPlatform/Advertisement/walmart-PageTypeSPList_10.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DD135F34D7C2,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SV广告 - 关键词,POST,/basicOpen/multiplatform/ads/reportKeywordSvList,/docs/MultiPlatform/Advertisement/walmart-reportKeywordSvList_23.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F47DF22109CA,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SV广告 - 平台,POST,/basicOpen/multiplatform/ads/reportPlatformSvList,/docs/MultiPlatform/Advertisement/walmart-reportPlatformSvList_27.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-40C3F27491DD,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SV广告 - 广告,POST,/basicOpen/multiplatform/ads/reportAdItemSvList,/docs/MultiPlatform/Advertisement/walmart-reportAdItemSvList_18.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-86309AAB2BAC,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SV广告 - 广告活动,POST,/basicOpen/multiplatform/ads/reportCampaignSvList,/docs/MultiPlatform/Advertisement/walmart-reportCampaignSvList_20.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-541F3B11E6DE,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SV广告 - 广告组,POST,/basicOpen/multiplatform/ads/queryAdGroupSvList,/docs/MultiPlatform/Advertisement/walmart-AdGroupSvList_1.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-83BBCE9FCB0E,P1,多平台,广告,Walmart广告,查询沃尔玛-广告 - SV广告 - 页面类型,POST,/basicOpen/multiplatform/ads/queryReportPageTypeSvList,/docs/MultiPlatform/Advertisement/walmart-ReportPageTypeSvList_11.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-48F40DDAE6D3,P1,多平台,广告,Walmart广告,查询沃尔玛-词 - 沃尔玛热门搜索词,POST,/basicOpen/multiplatform/ads/reportSearchTrendsList,/docs/MultiPlatform/Advertisement/walmart-reportSearchTrendsList_28.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1DC15769BD57,P1,多平台,广告,Walmart广告,查询沃尔玛广告主列表,POST,/basicOpen/adReport/advertiser/list,/docs/newAd/report/WalmartQueryAdvertiserList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1524E1C3FF10,P0,多平台,统计,,查询Walmart产品表现,POST,/basicOpen/platformStatistics/walmartProductAnalysis/list,/docs/MultiPlatform/WalmartProductAnalysisList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-63E99B54ED72,P0,多平台,财务,Walmart财务,Walmart-查询回款明细列表,POST,/basicOpen/multiplatformFinance/walmart/bill/payout/list,/docs/MultiPlatform/WalmartBillPayoutList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-727003CFF7B4,P0,多平台,财务,Walmart财务,Walmart-查询结算账单列表,POST,/basicOpen/multiplatformFinance/walmart/bill/statement/list,/docs/MultiPlatform/WalmartBillStatementList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5D552F4D7A8D,P1,多平台,财务,利润报表,利润报表-列表配置查询,POST,/basicOpen/finance/profitReport/config,/docs/Finance/ProfitReportConfig.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0BB27D85E792,P1,多平台,财务,利润报表,利润报表-明细列表查询,POST,/basicOpen/finance/settlement/profitList,/docs/Finance/SettlementProfitList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DEF946C2CC04,P1,多平台,财务,利润报表（旧）,查询结算利润（利润报表）-msku,POST,/basicOpen/multiplatform/profit/report/msku,/docs/MultiPlatform/V2/profitReportMsku.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-61200503BD63,P1,多平台,财务,利润报表（旧）,查询结算利润（利润报表）-sku,POST,/basicOpen/multiplatform/profit/report/sku,/docs/MultiPlatform/V2/profitReportSku.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-77BF3BD27008,P3,多平台,财务,利润报表（旧）,查询结算利润（利润报表）-店铺（旧版）,POST,/basicOpen/multiplatform/profit/report/seller,/docs/MultiPlatform/V2/profitReportSeller.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DB6D62E9EE37,P0,多平台,财务,利润报表（旧）,查询结算利润（利润报表）-订单,POST,/basicOpen/multiplatform/profit/report/order,/docs/MultiPlatform/V2/profitReportOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-51D280C19061,P2,客服,,,判断是否提交人自选,POST,/basicOpen/customerService/workOrder/auditFlow/isUserSelect,/docs/Service/AfterSalesWorkOrderAuditFlowIsUserSelect.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E18C1FFEB32C,P2,客服,,,提交售后工单,POST,/basicOpen/customerService/workOrder/auditFlow/summit,/docs/Service/AfterSalesWorkOrderAuditFlowSubmit.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A8485DB1E3D3,P1,客服,,,查询RMA管理,POST,/basicOpen/customerService/rmaManage/list,/docs/Service/customerServiceRmaManageList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-CD351FB7F89D,P1,客服,,,查询业绩通知列表,POST,/basicOpen/customerService/performanceNotice/list,/docs/Service/PerformanceNoticeList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EF34B93FBA6A,P1,客服,,,查询买家之声列表,POST,/basicOpen/customerService/voiceOfBuyer/list,/docs/Service/voiceOfBuyerList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5470F505D06E,P0,客服,,,查询售后工单列表,POST,/pb/mp/returns/workOrder/list,/docs/Service/AfterSalesWorkOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-95DD19D356E9,P1,客服,,,查询客户列表（新）,POST,/basicOpen/customerService/crm/customer/index,/docs/Service/customerServiceCrmcustomerIndex.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C1830CE93E50,P3,客服,,,查询客户列表（旧）,POST,/bd/crm/open/api/customer/list,/docs/Service/CustomerList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EA8918986608,P0,客服,,,查询店铺绩效列表,POST,/basicOpen/customerService/storeTarget/list,/docs/Service/storePerformanceList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-54F0AD822356,P0,客服,,,查询店铺绩效详情,POST,/basicOpen/customerService/storeTarget/detail,/docs/Service/PerformanceNoticeDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D27EF46B3ADF,P1,客服,,,查询评价管理 4-5星Feedback列表,POST,/erp/sc/cs/feedback/list,/docs/Service/FeedbackList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B75C246341A6,P1,客服,,,查询评价统计-Feedback列表,POST,/erp/sc/cs/feedbackReport/lists,/docs/Service/feedbackLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-BFDF4705FFBD,P1,客服,,,查询评价统计-Feedback每日新增数,POST,/erp/sc/cs/feedbackReport/detail,/docs/Service/feedbackDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2C7CF1CE8AAE,P1,客服,,,查询评价统计-Review列表,GET,/erp/sc/v2/cs/reviewReport/lists,/docs/Service/reviewLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2D4837A1809E,P1,客服,,,查询评价统计-Review每日新增数,POST,/erp/sc/cs/reviewReport/detail,/docs/Service/reviewDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-61BD491411AA,P1,客服,,,查询邮件列表,POST,/erp/sc/data/mail/lists,/docs/Service/lists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5F14BE8D2BD0,P1,客服,,,查询邮件详情,POST,/erp/sc/data/mail/detail,/docs/Service/detail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4EDA0C221DF4,P1,工具,,,关键词列表,POST,/erp/sc/routing/tool/toolKeywordRank/getKeywordList,/docs/Tools/GetKeywordList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-001128D990D5,P1,工具,,,查询竞品监控列表,POST,/basicOpen/tool/competitiveMonitor/list,/docs/Tools/CompetitiveMonitorList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8DD1FB86D648,P0,工具,,,查询预警消息列表-商品,POST,/basicOpen/settings/warningMessage/goodsList,/docs/Tools/warningMessageGoodsList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8F9A0C4E13C0,P0,工具,,,查询预警消息列表-库存,POST,/basicOpen/settings/warningMessage/inventoryList,/docs/Tools/warningMessageInventoryList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5852A627B6FE,P3,授权,,,续约接口令牌,POST,/api/auth-server/oauth/refresh,/docs/Authorization/RefreshToken.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9118DDA102D0,P1,授权,,,获取 access-token和refresh-token,POST,/api/auth-server/oauth/access-token,/docs/Authorization/GetToken.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EE2593BAC4F5,P2,物流,,,FBM物流对账-确认/批量确认,POST,/basicOpen/logistics/logisticsBill/confirm,/docs/Logistics/LogisticsBillConfirm.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-081EC270CC8F,P1,物流,,,头程对账列表,POST,/basicOpen/logistics/headLogisticsReconciliation/list,/docs/Logistics/HeadLogisticsReconciliationList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F83A1BAC3521,P2,物流,,,批量添加头程物流商,POST,/erp/sc/routing/tms/FirstVessel/addProviders,/docs/Logistics/AddProviders.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-AF600FDF4D6E,P2,物流,,,批量添加头程物流方式,POST,/erp/sc/routing/tms/FirstVessel/addChannels,/docs/Logistics/AddChannels.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E95A3442D310,P1,物流,,,查询头程物流渠道列表,POST,/erp/sc/data/local_inventory/channelList,/docs/Logistics/ChannelList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-043952293C81,P2,物流,,,查询已启用的自发货物流方式,POST,/erp/sc/routing/wms/WmsLogistics/listUsedLogisticsType,/docs/Logistics/listUsedLogisticsType.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-725F26FDC523,P1,物流,,,查询物流-头程物流商,POST,/basicOpen/logistics/headLogisticsProvider/query/list,/docs/Logistics/QueryHeadLogisticsProvider.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7F9838344C2B,P1,物流,,,查询运输方式列表,POST,/basicOpen/businessConfig/transportMethod/list,/docs/Logistics/transportMethodList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-65E684431831,P2,目标管理,,,店铺维度-删除目标,POST,/bd/goal/management/open/store/batchDelete,/docs/TargetManage/StoreBatchDelete.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-532ADAD560E1,P3,目标管理,,,店铺维度-新增/更新目标,POST,/bd/goal/management/open/store/batchOperate,/docs/TargetManage/StoreBatchOperate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C3C3157EC484,P0,目标管理,,,店铺维度-查询目标,POST,/bd/goal/management/open/store/batchSelect,/docs/TargetManage/StoreBatchSelect.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D4AEBED1B7C5,P2,目标管理,,,负责人维度-删除目标,POST,/bd/goal/management/open/user/batchDelete,/docs/TargetManage/UserBatchDelete.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-81721F0D55C3,P3,目标管理,,,负责人维度-新增/更新目标,POST,/bd/goal/management/open/user/batchOperate,/docs/TargetManage/UserBatchOperate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-CEFFEEDBFB8D,P1,目标管理,,,负责人维度-查询目标,POST,/bd/goal/management/open/user/batchSelect,/docs/TargetManage/UserBatchSelect.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7A8CF9DA594A,P2,统计,,,创建报告,POST,/openReport/report/task/createReport,/docs/Statistics/CreateReport.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F8006AE8F077,P2,统计,,,创建移除订单,POST,/erp/sc/statistic/removalOrder/createAndCommit,/docs/Statistics/CreateRemovalOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0070B9951962,P0,统计,,,库存报表-本地仓-历史报表-明细,POST,/erp/sc/routing/inventoryLog/WareHouseReport/getLocalWareHouseDetailList,/docs/Statistics/LocalDetailList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-171BF687A225,P0,统计,,,库存报表-本地仓-历史报表-汇总,POST,/erp/sc/routing/inventoryLog/WareHouseReport/getLocalWareHouseSummaryList,/docs/Statistics/LocalAggregateList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FCDF84763AAF,P0,统计,,,库存报表-本地仓-新报表-明细,POST,/inventory/center/openapi/storageReport/local/detail/page,/docs/Statistics/LocalDetailListNew.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5891B9352423,P0,统计,,,库存报表-本地仓-新报表-汇总,POST,/inventory/center/openapi/storageReport/local/aggregate/list,/docs/Statistics/LocalAggregateListNew.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3D1F244FB7C8,P0,统计,,,库存报表-海外仓-历史报表-明细,POST,/erp/sc/routing/inventoryLog/WareHouseReport/getOverSeaDetailList,/docs/Statistics/OverseasDetailList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A5CE884A505B,P0,统计,,,库存报表-海外仓-历史报表-汇总,POST,/erp/sc/routing/inventoryLog/WareHouseReport/getOverSeaSummaryList,/docs/Statistics/OverseasAggregateList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8116408E9FBA,P0,统计,,,库存报表-海外仓-新报表-明细,POST,/inventory/center/openapi/storageReport/overseas/detail/page,/docs/Statistics/OverseasDetailListNew.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-CD4E8AC1BDC2,P0,统计,,,库存报表-海外仓-新报表-汇总,POST,/inventory/center/openapi/storageReport/overseas/aggregate/list,/docs/Statistics/OverseasAggregateListNew.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-3D58C3293860,P1,统计,,,查询利润统计-MSKU,POST,/bd/profit/statistics/open/msku/list,/docs/Statistics/statisticsOpenMSKU.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A5F6A7E6639A,P0,统计,,,查询利润统计-店铺,POST,/bd/profit/statistics/open/seller/list,/docs/Statistics/statisticsOpenSeller.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F9F6C21DEC55,P3,统计,,,查询利润统计（旧）-MSKU,POST,/erp/sc/routing/finance/ProfitStatis/profitMsku,/docs/Statistics/ProfitMsku.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1C7C9C7B770D,P0,统计,,,查询店铺汇总销量,POST,/erp/sc/data/sales_report/sales,/docs/Statistics/StoreSales.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FC39BD159D05,P1,统计,,,查询报告,GET,/openReport/report/task/getReport,/docs/Statistics/GetReport.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-09FE9E838C58,P0,统计,,,查询订单利润-MSKU,POST,/basicOpen/finance/mreport/OrderProfit,/docs/Finance/OrderProfitListMSKU.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-93C1FB831AAA,P1,统计,,,查询运营日志,POST,/basicOpen/operateManage/operateLog/list,/docs/Statistics/operateLogList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8F98CEB43A6D,P1,统计,,,查询运营日志(新),POST,/basicOpen/operateManage/operateLog/list/v2,/docs/Statistics/operateLogV2List.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-95A42DA552D3,P0,统计,,,查询采购报表列表 - 产品,POST,/basicOpen/report/purchase/product/list,/docs/Statistics/PurchaseReportProductList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-766F8D291DF3,P1,统计,,,查询采购报表列表 - 供应商,POST,/basicOpen/report/purchase/supplier/list,/docs/Statistics/PurchaseReportSupplierList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DCA6FEF9EA75,P1,统计,,,查询采购报表列表 - 采购员,POST,/basicOpen/report/purchase/buyer/list,/docs/Statistics/PurchaseReportBuyerList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B5184BA8522B,P0,统计,,,统计-查询退货分析,POST,/basicOpen/salesAnalysis/returnOrder/analysisLists,/docs/Statistics/ReturnOrderAnalysisLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-6EA203F42077,P2,财务,,,作废费用单,POST,/bd/fee/management/open/feeManagement/otherFee/discard,/docs/Finance/feeManagementDiscard.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7ED46019A235,P2,财务,,,创建费用单,POST,/bd/fee/management/open/feeManagement/otherFee/create,/docs/Finance/feeManagementCreate.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1E89A7A2DA3C,P2,财务,,,删除费用单,DELETE,/bd/fee/management/open/feeManagement/otherFee/delete,/docs/Finance/feeManagementDelete.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-CEFCD4ABAF61,P1,财务,,,应收报告-列表查询,POST,/bd/sp/api/open/monthly/receivable/report/list,/docs/Finance/receivableReportList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B30E9E6803D0,P1,财务,,,应收报告-详情-列表,POST,/bd/sp/api/open/monthly/receivable/report/list/detail,/docs/Finance/reportListDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0F0DF3FDD859,P1,财务,,,应收报告-详情-基础信息,POST,/bd/sp/api/open/monthly/receivable/report/list/detail/info,/docs/Finance/reportListDetailInfo.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2AD144D844C7,P1,财务,,,查询settlement下载URL,GET,/bd/sp/api/open/settlement/export/url/get,/docs/Finance/SettlementExportUrlGet.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-27FD5B4A5146,P0,财务,,,查询利润报表 - 订单维度transaction视图,POST,/basicOpen/finance/profitReport/order/transcation/list,/docs/Finance/profitReportOrderTranscationList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A453FAE8A107,P1,财务,,,查询利润报表-SKU,POST,/bd/profit/report/open/report/sku/list,/docs/Finance/bdSKU.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E67765C12B1D,P0,财务,,,查询利润报表-店铺,POST,/bd/profit/report/open/report/seller/list,/docs/Finance/bdSeller.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-69B7BDB30BF3,P0,财务,,,查询利润报表-店铺月度汇总,POST,/bd/profit/report/open/report/seller/summary/list,/docs/Finance/bdSellerSummary.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F30C3A5673B7,P0,财务,,,查询利润报表-订单,POST,/bd/profit/report/open/report/order/list,/docs/Finance/bdOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C158E1CD652D,P3,财务,,,查询利润报表（旧） - MSKU,POST,/erp/sc/routing/finance/ProfitState/profitMsku,/docs/Finance/FianceProfitMsku.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-E9129B6BC59E,P3,财务,,,查询利润报表（旧）-结算明细,POST,/erp/sc/routing/finance/ProfitState/profitSettlement,/docs/Finance/profitSettlement.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2454C40DBB80,P1,财务,,,查询广告发票列表,POST,/bd/profit/report/open/report/ads/invoice/list,/docs/Finance/InvoiceList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7106755764A4,P1,财务,,,查询广告发票基本信息,POST,/bd/profit/report/open/report/ads/invoice/detail,/docs/Finance/InvoiceDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A8A460011763,P1,财务,,,查询广告发票活动列表,POST,/bd/profit/report/open/report/ads/invoice/campaign/list,/docs/Finance/InvoiceCampaignList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FF6962F51900,P1,财务,,,查询收款单列表,POST,/basicOpen/finance/queryReceiptFundsList,/docs/Finance/QueryReceiptFundsList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-598C49EB1197,P0,财务,,,查询请款单列表,POST,/basicOpen/finance/requestFunds/order/list,/docs/Finance/RequestFundsOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-62F91F9CB35B,P1,财务,,,查询请款池 - 货款月结,POST,/basicOpen/finance/requestFundsPool/inbound/list,/docs/Finance/requestFundsPoolInboundList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-92FE8988B86C,P1,财务,,,查询请款池 - 货款现结,POST,/basicOpen/finance/requestFundsPool/purchase/list,/docs/Finance/requestFundsPoolPurchaseList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9C950113F6EA,P1,财务,,,查询请款池 - 货款预付款,POST,/basicOpen/finance/requestFundsPool/prepay/list,/docs/Finance/requestFundsPoolPrepayList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D0E648500CCA,P1,财务,,,查询请款池-其他应付款,POST,/basicOpen/finance/requestFundsPool/customFee/list,/docs/Finance/requestFundsPoolCustomFeeList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0A3BA5A66954,P1,财务,,,查询请款池-其他费用,POST,/basicOpen/finance/requestFundsPool/otherFee/list,/docs/Finance/requestFundsPoolOtherFeeList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A095838ED68E,P1,财务,,,查询请款池-物流请款,POST,/basicOpen/finance/requestFundsPool/logistics/list,/docs/Finance/requestFundsPoolLogisticsList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A623F7D01F1B,P1,财务,,,查询费用明细列表,POST,/bd/fee/management/open/feeManagement/otherFee/list,/docs/Finance/feeManagementList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-022E3FB1A8C6,P1,财务,,,查询费用类型列表,POST,/bd/fee/management/open/feeManagement/otherFee/type,/docs/Finance/feeManagementType.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D797CA8C373A,P1,财务,,,立即重算-利润报表数据,POST,/bd/profit/report/open/report/settle/compute/manual,/docs/Finance/ComputeManual.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-20735537E141,P2,财务,,,编辑费用单,POST,/bd/fee/management/open/feeManagement/otherFee/edit,/docs/Finance/feeManagementEdit.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C3A80433378D,P2,采购,,,作废采购/委外退货单,POST,/basicOpen/purchase/cancelPurchaseReturnOrder,/docs/Purchase/CancelPurchaseReturnOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0BAC0252E36F,P2,采购,,,作废采购单,POST,/erp/sc/routing/purchase/purchase/cancel,/docs/Purchase/Cancel.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-78F82D8A146C,P2,采购,,,作废采购计划,POST,/basicOpen/purchase/planCancel,/docs/Purchase/PurchasePlanCancel.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D58D9CF7D14C,P2,采购,,,创建已完成的采购变更单,POST,/erp/sc/routing/purchase/purchaseChangeOrder/createPurchaseChangeOrder,/docs/Purchase/createPurchaseChangeOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-AB7E08BE0696,P2,采购,,,创建已完成的采购退货单,POST,/erp/sc/routing/purchase/purchase_return_order/createPurchaseReturnOrder,/docs/Purchase/createPurchaseReturnOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4674779EEB39,P2,采购,,,创建待到货的采购单,POST,/erp/sc/routing/purchase/purchase/createPurchaseOrder,/docs/Purchase/CreatePurchaseOrder.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A4E9258A3B23,P2,采购,,,创建待采购的采购计划,POST,/erp/sc/routing/data/local_inventory/createPurchasePlan,/docs/Purchase/createPurchasePlan.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B70161F2CA8D,P1,采购,,,查询供应商列表,POST,/erp/sc/data/local_inventory/supplier,/docs/Purchase/Supplier.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-96F32A1090F0,P0,采购,,,查询加工计划列表,POST,/basicOpen/openapi/workOrder/processPlanList,/docs/Warehouse/WorkOrderPlanList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-9BF4536568D4,P0,采购,,,查询委外订单列表,POST,/erp/sc/routing/purchase/purchaseOutsourceOrder/getOrders,/docs/Purchase/getOrders.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D332F931885E,P0,采购,,,查询采购单列表,POST,/erp/sc/routing/data/local_inventory/purchaseOrderList,/docs/Purchase/PurchaseOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-B31DFDC39206,P0,采购,,,查询采购变更单列表,POST,/erp/sc/routing/purchase/purchaseChangeOrder/changeOrderList,/docs/Purchase/changeOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-223398DA3539,P1,采购,,,查询采购方列表,POST,/erp/sc/routing/data/purchaser/lists,/docs/Purchase/purchaserLists.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-03B82747B50A,P1,采购,,,查询采购计划列表,POST,/erp/sc/routing/data/local_inventory/getPurchasePlans,/docs/Purchase/getPurchasePlans.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-853A6501F0BF,P0,采购,,,查询采购退货单列表,POST,/erp/sc/routing/purchase/purchase_return_order/getPurchaseReturnOrderList,/docs/Purchase/getPurchaseReturnOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D181D27E9336,P2,采购,,,添加/修改供应商,POST,/erp/sc/routing/storage/supplier/edit,/docs/Purchase/SupplierEdit.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-0B7D3781D062,P2,采购,,,添加采购单物流信息,POST,/erp/sc/routing/purchase/purchase/addLogistics,/docs/Purchase/addLogistics.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-5CD66DB6C0A0,P2,采购,,,编辑采购单备注,POST,/basicOpen/purchase/orderModifyRemark,/docs/Purchase/OrderModifyRemark.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-09D9FC0B390B,P2,采购,,,编辑采购计划备注（批量）,POST,/basicOpen/purchase/planModifyRemark,/docs/Purchase/PlanModifyRemark.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-583232734D6F,P2,采购,,,采购单下单,POST,/erp/sc/routing/purchase/purchase/setOrders,/docs/Purchase/SetOrders.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-500C4287A05E,P3,采购,,,采购单整单结束到货,POST,/basicOpen/purchase/setOrderFinish,/docs/Purchase/setOrderFinish.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2077895D6B9A,P2,销售,Listing,,Listing删除商品标签,POST,/basicOpen/listingManage/removeListingAndTag,/docs/Sale/DeleteGoodsTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C79145A7BD7A,P3,销售,Listing,,Listing新增商品标签,POST,/basicOpen/listingManage/bindListingAndTag,/docs/Sale/AddGoodsTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-76CFCB697A50,P2,销售,Listing,,修改B2B价格,POST,/basicOpen/b2bPrice/modifyPrice,/docs/Sale/b2bPriceModifyPrice.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-06BDDD3B9762,P2,销售,Listing,,删除Listing标签,POST,/basicOpen/globalTag/listing/removeTag,/docs/Sale/globalTagRemoveTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A96852EA632C,P2,销售,Listing,,批量修改Listing价格,POST,/erp/sc/listing/ProductPricing/pricingSubmit,/docs/Sale/pricingSubmit.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-04A6C56A7729,P2,销售,Listing,,批量添加/编辑Listing配对,POST,/erp/sc/storage/product/link,/docs/Sale/Productlink.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EB69D6DC93FB,P0,销售,Listing,,查询Listing操作日志列表,POST,/basicOpen/listingManage/listingOperateLog/pageList,/docs/Sale/listingOperateLogPageList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-71422945ADAC,P0,销售,Listing,,查询Listing标签列表,POST,/basicOpen/globalTag/listing/page/list,/docs/Sale/globalTagPageList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-80C0100C2D4F,P2,销售,Listing,,查询Listing标记标签列表,POST,/basicOpen/listingManage/queryListingRelationTagList,/docs/Sale/queryListingRelationTagList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D806EDEB25E4,P1,销售,Listing,,查询调价队列,POST,/basicOpen/module/adjustPrice/AdjustPriceManual,/docs/Sale/adjustPriceAdjustPriceManual.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1C246F17173F,P2,销售,Listing,,添加Listing标签,POST,/basicOpen/globalTag/listing/addTag,/docs/Sale/globalTagAddTag.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-DA41D6369A41,P2,销售,Listing,,解除Listing配对,POST,/basicOpen/listingManage/unLinkListingPairs,/docs/Sale/UnlinkListing.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-F560D3DA6DF1,P0,销售,促销管理,,查询优惠券详情+listing+订单(批量),POST,/promotionApi/open/promotion/couponAllDetailBatch,/docs/Sale/promotionCouponAllDetailBatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-324AF6B69AEF,P0,销售,促销管理,,查询会员折扣or价格折扣详情+listing+订单(批量),POST,/promotionApi/open/promotion/primeDiscountAllDetailBatch,/docs/Sale/promotionPrimeDiscountAllDetailBatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-2EDE9B89E52C,P1,销售,促销管理,,查询促销活动列表-优惠券,POST,/basicOpen/promotionalActivities/coupon/list,/docs/Sale/promotionalActivitiesCouponList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4D53DF8CE668,P1,销售,促销管理,,查询促销活动列表-会员折扣/价格折扣,POST,/basicOpen/promotionalActivities/vipDiscount/list,/docs/Sale/promotionalActivitiesVipDiscountList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-14EF57136BD3,P1,销售,促销管理,,查询促销活动列表-秒杀,POST,/basicOpen/promotionalActivities/secKill/list,/docs/Sale/promotionalActivitiesSecKillList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-1DC5C91C2FE2,P1,销售,促销管理,,查询促销活动列表-管理促销,POST,/basicOpen/promotionalActivities/manage/list,/docs/Sale/promotionalActivitiesManageList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D1E4B7906B42,P0,销售,促销管理,,查询商品折扣列表,POST,/basicOpen/promotion/listingList,/docs/Sale/promotionListingList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-03449E2EC06C,P0,销售,促销管理,,查询商品折扣详情-列表-优惠卷,POST,/basicOpen/promotion/listingDetailCoupon,/docs/Sale/promotionListingDetailCoupon.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-FE476B81237F,P0,销售,促销管理,,查询商品折扣详情-列表-会员折扣,POST,/basicOpen/promotion/listingDetailPrimeDiscount,/docs/Sale/promotionListingDetailPrimeDiscount.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-A404B2104669,P0,销售,促销管理,,查询商品折扣详情-列表-秒杀,POST,/basicOpen/promotion/listingDetailSecKill,/docs/Sale/promotionListingDetailSecKill.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-020A91A14B42,P0,销售,促销管理,,查询商品折扣详情-列表-管理促销,POST,/basicOpen/promotion/listingDetailManage,/docs/Sale/promotionListingDetailManage.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-72966FDD4C29,P0,销售,促销管理,,查询秒杀详情+listing+订单(批量),POST,/promotionApi/open/promotion/secKillAllDetailBatch,/docs/Sale/promotionSecKillAllDetailBatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-D92C9E37C544,P0,销售,促销管理,,查询管理促销详情+listing+订单(批量),POST,/promotionApi/open/promotion/managementAllDetailBatch,/docs/Sale/promotionManagementAllDetailBatch.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-C76D747AD0DA,P0,销售,刊登管理,,刊登管理-获取指定 productType 的 JSON Schema,POST,/basicOpen/openapi/publish/manage/getProductType,/docs/Sale/PublishManageGetProductType.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-074FA24909F1,P1,销售,刊登管理,,刊登管理-获取运费模板,POST,/basicOpen/openapi/publish/manage/getMerchantShippingGroup,/docs/Sale/GetMerchantShippingGroup.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-7D621DDB5AD5,P2,销售,平台订单,,SC订单-设置订单备注,POST,/basicOpen/platformOrder/scOrder/setRemark,/docs/Sale/ScOrderSetRemark.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-EFB08467128D,P3,销售,平台订单,,多渠道订单-交易明细,POST,/basicOpen/openapi/salesOrder/multi-channel/list/transaction,/docs/Sale/MutilChannelTransactionDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-8FB1CC9572F0,P3,销售,自发货管理,,导入面单,POST,/basicOpen/selfShipmentOrder/importLabel,/docs/Sale/UploadTracking.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
