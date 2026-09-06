@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AppRoutes from "./routes";
@@ -19,12 +19,23 @@ vi.mock("../pages/auth/ForgotPasswordPage", () => ({
   default: () => <h1>模拟忘记密码页</h1>,
 }));
 
+vi.mock("../pages/ComingSoonPage", () => ({
+  default: ({ page }: { page: { status: string; title: string } }) => (
+    <section aria-label="统一占位页">
+      <h1 aria-label="当前页面">{page.title}</h1>
+      <span aria-label={`页面状态：${page.status}`}>{page.status}</span>
+      <span>功能建设中</span>
+    </section>
+  ),
+}));
+
 vi.mock("../layouts/MainLayout", () => ({
-  default: ({ onLogout }: { onLogout: () => void }) => (
+  default: ({ children, onLogout }: { children?: ReactNode; onLogout: () => void }) => (
     <main aria-label="业务布局">
       <button type="button" onClick={onLogout}>
         模拟退出
       </button>
+      {children}
     </main>
   ),
 }));
@@ -105,10 +116,18 @@ describe("AppRoutes", () => {
   it("renders the default and hidden business routes when mock logged in", async () => {
     const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+      "今日销售",
+    );
+    expect(screen.getByText("功能建设中")).toBeVisible();
 
     unmount();
     renderRoutes("/data-center/documentation", true);
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+      "文档",
+    );
+    expect(screen.getByLabelText("页面状态：hidden")).toHaveTextContent("hidden");
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/data-center/documentation");
   });
 

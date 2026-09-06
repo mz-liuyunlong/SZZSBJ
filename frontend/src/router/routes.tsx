@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import type { ReactNode } from "react";
 import AuthLayout from "../layouts/auth/AuthLayout";
 import MainLayout from "../layouts/MainLayout";
+import ComingSoonPage from "../pages/ComingSoonPage";
 import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import LoginPage from "../pages/auth/LoginPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
@@ -60,7 +61,9 @@ function BusinessRoute({ mockLoggedIn, onLogout }: Pick<AppRoutesProps, "mockLog
         onLogout();
         navigate("/login", { replace: true });
       }}
-    />
+    >
+      <ComingSoonPage page={resolution.route.page} />
+    </MainLayout>
   );
 }
 
