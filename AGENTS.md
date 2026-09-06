@@ -226,6 +226,8 @@ AI Token、飞书 Webhook、外部 API Key、App Secret 等敏感配置放在：
 
 外部 AI Skill 只作为辅助，不属于生产运行依赖。默认不得写入 `frontend/package.json`、`backend/pyproject.toml`、Dockerfile、CI 必跑步骤或 `postinstall`。
 
+项目执行角色只有项目负责人、架构师、后端工程师、前端工程师。Agent Skill 是角色可使用的工作模式，不是人员或权限主体，不产生额外权限；每个任务只能有一个主执行角色。架构师必须在 PRP 或工程师 Prompt 中明确可用 Skill，工程师不得自行启用未分配的高风险 Skill。完整规则见 `docs/delivery/agent-role-skill-routing.md`。
+
 | Skill | 定位 | 默认状态 |
 |---|---|---|
 | planning-with-files | 长任务持久计划、防止上下文丢失 | P0 推荐 |
