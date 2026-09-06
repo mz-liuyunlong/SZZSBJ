@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import type { ReactNode } from "react";
 import AuthLayout from "../layouts/auth/AuthLayout";
 import MainLayout from "../layouts/MainLayout";
+import { readTabWorkspace } from "../layouts/useTabWorkspace";
 import ComingSoonPage from "../pages/ComingSoonPage";
 import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import LoginPage from "../pages/auth/LoginPage";
@@ -35,8 +36,9 @@ function LoginRoute({ mockLoggedIn, onLogin }: Pick<AppRoutesProps, "mockLoggedI
     <AuthRoute mockLoggedIn={mockLoggedIn}>
       <LoginPage
         onLogin={() => {
+          const { activePath } = readTabWorkspace();
           onLogin();
-          navigate(DEFAULT_BUSINESS_PATH, { replace: true });
+          navigate(activePath, { replace: true });
         }}
       />
     </AuthRoute>
@@ -66,9 +68,8 @@ function BusinessRoute({ mockLoggedIn, onLogout }: Pick<AppRoutesProps, "mockLog
         onLogout();
         navigate("/login", { replace: true });
       }}
-    >
-      <ComingSoonPage page={resolution.route.page} />
-    </MainLayout>
+      renderPage={(page) => <ComingSoonPage page={page} />}
+    />
   );
 }
 

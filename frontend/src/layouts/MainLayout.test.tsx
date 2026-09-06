@@ -10,11 +10,17 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { isValidElement } from "react";
+import { isValidElement, useState, type ReactNode } from "react";
 import { HashRouter } from "react-router-dom";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { navigation } from "../config/navigation";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { navigation, type NavigationPage } from "../config/navigation";
+import { DEFAULT_BUSINESS_PATH, resolveRoute } from "../router/routeResolver";
 import MainLayout from "./MainLayout";
+import {
+  MAX_OPEN_TABS,
+  TAB_WORKSPACE_STORAGE_KEY,
+  TAB_WORKSPACE_VERSION,
+} from "./useTabWorkspace";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -32,7 +38,14 @@ beforeAll(() => {
   });
 });
 
-afterEach(cleanup);
+beforeEach(() => {
+  sessionStorage.clear();
+});
+
+afterEach(() => {
+  cleanup();
+  sessionStorage.clear();
+});
 
 const expectSecondaryClosed = () => {
   expect(screen.getByLabelText("二级菜单浮层")).toHaveAttribute(
@@ -83,14 +96,31 @@ const getCloseTabButton = (title: string) => {
   });
 };
 
-const renderLayout = (path = "/dashboard/today-sales") => {
+const renderLayout = (
+  path = DEFAULT_BUSINESS_PATH,
+  renderPage?: (page: NavigationPage) => ReactNode,
+) => {
   window.history.replaceState(null, "", `#${path}`);
   return render(
     <HashRouter useTransitions={false}>
-      <MainLayout onLogout={vi.fn()} />
+      <MainLayout onLogout={vi.fn()} renderPage={renderPage} />
     </HashRouter>,
   );
 };
+
+function StatefulPageFixture({ page }: { page: NavigationPage }) {
+  const [value, setValue] = useState("");
+  return (
+    <label>
+      {page.title}测试状态
+      <input
+        aria-label={`${page.title}测试状态`}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      />
+    </label>
+  );
+}
 
 describe("MainLayout", () => {
   it("starts on today sales with the complete topbar and sidebar structure", () => {
@@ -194,6 +224,19 @@ describe("MainLayout", () => {
     expectSecondaryClosed();
     expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
 
+    fireEvent.click(adsGroupItem);
+    fireEvent.click(
+      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
+        name: keywordLibrary.title,
+      }),
+    );
+    expect(
+      within(screen.getByRole("region", { name: "页面标签栏" })).getAllByRole(
+        "tab",
+        { name: new RegExp(keywordLibrary.title) },
+      ),
+    ).toHaveLength(1);
+
     fireEvent.click(getTab(todaySales.title));
     expect(currentPage).toHaveTextContent(todaySales.title);
     expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
@@ -221,7 +264,7 @@ describe("MainLayout", () => {
     expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
   }, 10_000);
 
-  it("closes tabs in memory and restores the default hash from the brand", () => {
+  it("keeps Home fixed and closes active or inactive tabs predictably", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -239,12 +282,19 @@ describe("MainLayout", () => {
       }),
     );
 
-    fireEvent.click(getCloseTabButton(todaySales.title));
+    const homeTabContainer = getTab(todaySales.title).closest(".ant-tabs-tab");
+    if (!homeTabContainer) throw new Error("Missing Home tab container");
     expect(
-      screen.queryByRole("tab", { name: new RegExp(todaySales.title) }),
+      within(homeTabContainer as HTMLElement).queryByRole("tab", {
+        name: "关闭标签页",
+      }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "回到工作台今日销售" }));
+    fireEvent.click(getTab(todaySales.title));
+    fireEvent.click(getCloseTabButton(keywordLibrary.title));
+    expect(
+      screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
+    ).not.toBeInTheDocument();
 
     expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
     expect(
@@ -258,16 +308,218 @@ describe("MainLayout", () => {
     expect(window.location.hash).toBe(`#${todaySales.path}`);
     expectSecondaryClosed();
 
+    fireEvent.click(
+      within(primaryNavigation).getByRole("menuitem", { name: adsGroup.title }),
+    );
+    fireEvent.click(
+      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
+        name: keywordLibrary.title,
+      }),
+    );
     fireEvent.click(getTab(keywordLibrary.title));
     fireEvent.click(getCloseTabButton(keywordLibrary.title));
     expect(
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();
     expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
-
-    fireEvent.click(getCloseTabButton(todaySales.title));
-    expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
     expect(window.location.hash).toBe(`#${todaySales.path}`);
+  });
+
+  it("reopens a closed active tab when browser Back restores its URL", async () => {
+    const adsGroup = requiredGroup("ads");
+    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const keywordLibrary = requiredPage("ads", "ads_keyword_library");
+    renderLayout(DEFAULT_BUSINESS_PATH, (page) => (
+      <StatefulPageFixture page={page} />
+    ));
+
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "一级导航" })).getByRole(
+        "menuitem",
+        { name: adsGroup.title },
+      ),
+    );
+    fireEvent.click(
+      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
+        name: keywordLibrary.title,
+      }),
+    );
+    fireEvent.click(getCloseTabButton(keywordLibrary.title));
+    expect(window.location.hash).toBe(`#${todaySales.path}`);
+    expect(
+      screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
+    ).not.toBeInTheDocument();
+
+    act(() => window.history.back());
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
+      expect(getTab(keywordLibrary.title)).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    });
+    expect(
+      within(screen.getByRole("navigation", { name: "面包屑" })).getByText(
+        keywordLibrary.title,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByLabelText(`${keywordLibrary.title}测试状态`),
+    ).toBeVisible();
+    await waitFor(() => {
+      const stored = JSON.parse(
+        sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null",
+      );
+      expect(stored).toEqual({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: [todaySales.path, keywordLibrary.path],
+        activePath: keywordLibrary.path,
+      });
+      expect(Object.keys(stored)).toEqual([
+        "version",
+        "openPaths",
+        "activePath",
+      ]);
+    });
+  });
+
+  it("preserves mounted page state across tab switches and destroys it on close or refresh", async () => {
+    const adsGroup = requiredGroup("ads");
+    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const keywordLibrary = requiredPage("ads", "ads_keyword_library");
+    const renderPage = (page: NavigationPage) => (
+      <StatefulPageFixture page={page} />
+    );
+    const view = renderLayout(DEFAULT_BUSINESS_PATH, renderPage);
+    const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
+
+    fireEvent.change(screen.getByLabelText(`${todaySales.title}测试状态`), {
+      target: { value: "首页草稿" },
+    });
+    fireEvent.click(
+      within(primaryNavigation).getByRole("menuitem", { name: adsGroup.title }),
+    );
+    fireEvent.click(
+      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
+        name: keywordLibrary.title,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(`${keywordLibrary.title}测试状态`), {
+      target: { value: "词库草稿" },
+    });
+
+    fireEvent.click(getTab(todaySales.title));
+    expect(screen.getByLabelText(`${todaySales.title}测试状态`)).toHaveValue(
+      "首页草稿",
+    );
+    fireEvent.click(getTab(keywordLibrary.title));
+    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue(
+      "词库草稿",
+    );
+
+    fireEvent.click(getTab(todaySales.title));
+    fireEvent.click(getCloseTabButton(keywordLibrary.title));
+    fireEvent.click(
+      within(primaryNavigation).getByRole("menuitem", { name: adsGroup.title }),
+    );
+    fireEvent.click(
+      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
+        name: keywordLibrary.title,
+      }),
+    );
+    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue(
+      "",
+    );
+
+    fireEvent.change(screen.getByLabelText(`${keywordLibrary.title}测试状态`), {
+      target: { value: "刷新前草稿" },
+    });
+    await waitFor(() => {
+      expect(
+        JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null"),
+      ).toEqual({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: [todaySales.path, keywordLibrary.path],
+        activePath: keywordLibrary.path,
+      });
+    });
+
+    view.unmount();
+    renderLayout(keywordLibrary.path, renderPage);
+    expect(getTab(todaySales.title)).toBeInTheDocument();
+    expect(getTab(keywordLibrary.title)).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue(
+      "",
+    );
+    expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).not.toContain(
+      "刷新前草稿",
+    );
+  });
+
+  it("refuses a thirteenth tab without evicting the existing workspace", async () => {
+    const allowedSelections = navigation.flatMap((group) =>
+      group.children
+        .filter(
+          (page) =>
+            page.status !== "hidden" && resolveRoute(page.path).kind === "allowed",
+        )
+        .map((page) => ({ group, page })),
+    );
+    const initialSelections = allowedSelections.slice(0, MAX_OPEN_TABS);
+    const target = allowedSelections[MAX_OPEN_TABS];
+    if (!target) throw new Error("Missing thirteenth navigation fixture");
+    const initialPaths = initialSelections.map(({ page }) => page.path);
+    sessionStorage.setItem(
+      TAB_WORKSPACE_STORAGE_KEY,
+      JSON.stringify({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: initialPaths,
+        activePath: DEFAULT_BUSINESS_PATH,
+      }),
+    );
+    renderLayout();
+
+    fireEvent.click(
+      within(screen.getByRole("menu", { name: "一级导航" })).getByRole(
+        "menuitem",
+        { name: target.group.title },
+      ),
+    );
+    fireEvent.click(
+      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
+        name: target.page.title,
+      }),
+    );
+
+    expect(
+      await screen.findByText("最多打开 12 个标签页，请先关闭一个标签页。"),
+    ).toBeVisible();
+    expect(
+      document.querySelectorAll(".main-layout__tabbar .ant-tabs-tab"),
+    ).toHaveLength(MAX_OPEN_TABS);
+    expect(screen.queryByRole("tab", { name: new RegExp(target.page.title) })).not.toBeInTheDocument();
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
+    expect(
+      JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null")
+        .openPaths,
+    ).toEqual(initialPaths);
+
+    act(() => {
+      window.history.pushState(null, "", `#${target.page.path}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
+    });
+    expect(getTab(requiredPage("dashboard", "dashboard_today_sales").title)).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("main", { name: "内容区" })).not.toBeEmptyDOMElement();
   });
 
   it("switches an open flyout on hover and closes it from the backdrop", () => {

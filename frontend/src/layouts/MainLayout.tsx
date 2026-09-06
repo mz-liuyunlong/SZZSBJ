@@ -2,10 +2,10 @@
  * Provides the shared application frame; routing, permissions, and page state live elsewhere.
  */
 import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
-import { Breadcrumb, Button, Layout, Menu, Tabs, Typography } from "antd";
-import { useState, type ReactNode } from "react";
+import { Breadcrumb, Button, Layout, Menu, message, Tabs, Typography } from "antd";
+import { Activity, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { navigation } from "../config/navigation";
+import { navigation, type NavigationPage } from "../config/navigation";
 import {
   DEFAULT_BUSINESS_ROUTE,
   findRouteByKey,
@@ -14,6 +14,7 @@ import {
   resolveRoute,
 } from "../router/routeResolver";
 import TopbarActions from "./components/TopbarActions";
+import useTabWorkspace from "./useTabWorkspace";
 import "./MainLayout.css";
 
 function requireNavigationItem<T>(value: T | undefined, message: string): T {
@@ -41,42 +42,67 @@ const documentationPage = requireNavigationItem(
 interface MainLayoutProps {
   children?: ReactNode;
   onLogout?: () => void;
+  renderPage?: (page: NavigationPage) => ReactNode;
 }
 
-function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
+function MainLayout({
+  children,
+  onLogout = () => undefined,
+  renderPage,
+}: MainLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [messageApi, messageContextHolder] = message.useMessage();
   const [collapsed, setCollapsed] = useState(false);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [flyoutGroupKey, setFlyoutGroupKey] = useState(defaultGroup.key);
-  const [openTabs, setOpenTabs] = useState([defaultPage.path]);
   const routeResolution = resolveRoute(location.pathname);
-  const activePageSelection =
+  const requestedActivePath =
     routeResolution.kind === "allowed"
-      ? routeResolution.route
+      ? routeResolution.route.page.path
+      : DEFAULT_BUSINESS_ROUTE.page.path;
+  const {
+    openPaths,
+    activePath,
+    rejectedPath,
+    openPath,
+    closePath,
+    clearWorkspace,
+  } = useTabWorkspace(requestedActivePath);
+  const activeRouteResolution = resolveRoute(activePath);
+  const activePageSelection =
+    activeRouteResolution.kind === "allowed"
+      ? activeRouteResolution.route
       : DEFAULT_BUSINESS_ROUTE;
   const activePageGroup = activePageSelection.group;
   const activePage = activePageSelection.page;
+
+  useEffect(() => {
+    if (!rejectedPath) return;
+    void messageApi.warning("最多打开 12 个标签页，请先关闭一个标签页。");
+    navigate(activePath, { replace: true });
+  }, [activePath, messageApi, navigate, rejectedPath]);
   const activeGroup = secondaryOpen
     ? navigation.find((group) => group.key === flyoutGroupKey) ?? activePageGroup
     : activePageGroup;
   const secondaryPages = getSidebarPages(activeGroup);
-  const tabPaths = openTabs.includes(activePage.path)
-    ? openTabs
-    : [...openTabs, activePage.path];
-  const tabItems = tabPaths.flatMap((path) => {
+  const openRoutes = openPaths.flatMap((path) => {
     const resolution = resolveRoute(path);
     return resolution.kind === "allowed"
       ? [
           {
-            key: path,
-            label: resolution.route.page.title,
-            icon: resolution.route.group.icon,
-            closable: true,
+            path,
+            ...resolution.route,
           },
         ]
       : [];
   });
+  const tabItems = openRoutes.map(({ path, group, page }) => ({
+    key: path,
+    label: page.title,
+    icon: group.icon,
+    closable: path !== defaultPage.path,
+  }));
 
   const selectGroup = (key: string) => {
     const group = navigation.find((item) => item.key === key);
@@ -97,12 +123,14 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
   const openPageByKey = (pageKey: string) => {
     const selection = findRouteByKey(pageKey);
     if (!selection) return;
-    const resolution = resolveRoute(selection.page.path);
-    if (resolution.kind !== "allowed") return;
+    const openResult = openPath(selection.page.path);
+    if (openResult === "invalid") return;
+    if (openResult === "limit") {
+      void messageApi.warning("最多打开 12 个标签页，请先关闭一个标签页。");
+      closeSecondaryMenu();
+      return;
+    }
 
-    setOpenTabs((tabs) =>
-      tabs.includes(selection.page.path) ? tabs : [...tabs, selection.page.path],
-    );
     navigate(selection.page.path);
     closeSecondaryMenu();
   };
@@ -122,32 +150,12 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
   };
 
   const closeTab = (path: string) => {
-    const tabIndex = tabPaths.indexOf(path);
-    if (tabIndex < 0) return;
-
-    const remainingTabs = tabPaths.filter((openPath) => openPath !== path);
-    if (path !== activePage.path) {
-      setOpenTabs(remainingTabs);
-      return;
-    }
-
-    const adjacentTab =
-      remainingTabs[Math.min(tabIndex, remainingTabs.length - 1)];
-    if (adjacentTab) {
-      setOpenTabs(remainingTabs);
-      navigate(adjacentTab);
-      return;
-    }
-
-    setOpenTabs([defaultPage.path]);
-    navigate(defaultPage.path);
-    closeSecondaryMenu();
+    const nextPath = closePath(path);
+    if (nextPath !== activePage.path) navigate(nextPath);
   };
 
   const resetToDefaultPage = () => {
-    setOpenTabs((tabs) =>
-      tabs.includes(defaultPage.path) ? tabs : [...tabs, defaultPage.path],
-    );
+    openPath(defaultPage.path);
     navigate(defaultPage.path);
     closeSecondaryMenu();
   };
@@ -161,6 +169,7 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
     <Layout
       className={`main-layout${collapsed ? " main-layout--collapsed" : ""}`}
     >
+      {messageContextHolder}
       <Layout.Header className="main-layout__header" aria-label="顶部栏">
         <button
           type="button"
@@ -205,7 +214,10 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
             documentationPage={documentationPage}
             onOpenPage={openPageByKey}
             onRequestOverlayClose={dismissSecondaryMenu}
-            onLogout={onLogout}
+            onLogout={() => {
+              clearWorkspace();
+              onLogout();
+            }}
           />
         </div>
       </Layout.Header>
@@ -314,7 +326,18 @@ function MainLayout({ children, onLogout = () => undefined }: MainLayoutProps) {
             />
           </section>
           <Layout.Content className="main-layout__content" aria-label="内容区">
-            {children ?? (
+            {renderPage ? (
+              openRoutes.map(({ path, page }) => (
+                <Activity
+                  key={path}
+                  mode={path === activePage.path ? "visible" : "hidden"}
+                >
+                  <div className="main-layout__page-panel">{renderPage(page)}</div>
+                </Activity>
+              ))
+            ) : children ? (
+              children
+            ) : (
               <>
                 <Typography.Title
                   level={4}
