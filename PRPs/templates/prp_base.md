@@ -40,11 +40,22 @@ high-risk actions:
 ## 6. Data Source
 
 ```text
+data source decision file:
+decision status: READY_FOR_PRP / BLOCKED_BY_OWNER_DECISION
+dataset classifications:
+contains NEED_OWNER_DECISION: yes/no
+owner approval status:
+short-term strategy:
+long-term strategy:
+legacy exit criteria:
 old-system reference: yes/no
 legacy MySQL readonly tables:
 new PostgreSQL tables:
 cache / mart tables:
+sensitive or critical domains: 财务 / 利润 / 库存 / 广告 / 结算 / 退款 / 成本 / 敏感数据 / 无
 ```
+
+后端业务接口 PRP 必须引用已完成的数据源决策文件。存在未解决的 `NEED_OWNER_DECISION` 或总体状态不是 `READY_FOR_PRP` 时，本 PRP 不得进入实现。
 
 ## 7. API Contract
 

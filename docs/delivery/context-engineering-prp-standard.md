@@ -34,6 +34,8 @@ PRPs/templates/prp_base.md
 开发、测试、验收
 ```
 
+后端业务接口在上述流程前必须完成 `docs/delivery/backend-data-source-decision-gate.md`。接口 PRP 必须引用数据源决策文件、总体状态和负责人结论；未完成数据源决策的后端接口 PRP 不合格，存在未解决的 `NEED_OWNER_DECISION` 时不得进入实现。
+
 ## 4. Required PRP fields
 
 PRP 必须包含：
@@ -57,6 +59,8 @@ pytest / vitest / Playwright 验收
 回滚方案
 完成报告格式
 ```
+
+后端业务接口 PRP 还必须包含数据源决策文件链接、接口总体状态、数据集分类、`NEED_OWNER_DECISION` 状态和负责人批准结论。
 
 ## 5. Validation gates
 

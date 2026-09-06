@@ -280,6 +280,13 @@ CODEX_HANDOFF.md
 
 PRP 不等于批准开发。PRP 必须先由项目负责人确认后，Codex 才能执行。
 
+### 11.1 后端业务接口数据源决策门禁
+
+- 后端业务接口开发前，必须先完成《接口数据源决策》，未完成不得编写接口代码。
+- 数据源决策必须先于接口 PRP；接口 PRP 必须引用决策文件和最终结论。
+- `NEED_OWNER_DECISION` 是阻塞状态，未由项目负责人解决前不得编写接口代码或进入实现。
+- 完整流程与模板见 `docs/delivery/backend-data-source-decision-gate.md`。
+
 ---
 
 ## 12. Playwright E2E 页面验收

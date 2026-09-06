@@ -44,6 +44,8 @@ Ponytail 兼容：按 docs/PONYTAIL_COMPATIBILITY_RULES.md 做规则守卫，不
 
 ## 4. PRP 流程
 
+后端业务接口任务不能直接进入实现，必须先按 `docs/delivery/backend-data-source-decision-gate.md` 完成数据源决策，再编写并批准接口 PRP，最后才可实现。
+
 复杂功能必须：
 
 ```text

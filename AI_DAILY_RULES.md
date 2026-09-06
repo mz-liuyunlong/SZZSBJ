@@ -30,6 +30,8 @@ AI 必须确认：
 - 是否需要 Playwright / pytest / vitest
 ```
 
+涉及后端业务接口时，必须先检查是否已有数据源决策；没有则停止编码并先执行数据源决策门禁，结论为 `NEED_OWNER_DECISION` 时停止并等待负责人确认。规则入口：`docs/delivery/backend-data-source-decision-gate.md`。
+
 ## 3. 必须停止并询问的情况
 
 ```text
