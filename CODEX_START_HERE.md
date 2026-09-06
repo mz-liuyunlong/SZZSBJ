@@ -27,6 +27,8 @@ Ponytail 兼容：按 docs/PONYTAIL_COMPATIBILITY_RULES.md 做规则守卫，不
 页面 ready：必须补 Playwright E2E
 ```
 
+任务涉及指定 Agent Skill 时，先阅读 `docs/delivery/agent-role-skill-routing.md`。后端接口或数据源调查任务还必须阅读 `docs/delivery/backend-data-source-decision-gate.md`。
+
 ## 3. 禁止动作
 
 默认禁止：
