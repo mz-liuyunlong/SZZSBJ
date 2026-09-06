@@ -5,6 +5,7 @@ import MainLayout from "../layouts/MainLayout";
 import ComingSoonPage from "../pages/ComingSoonPage";
 import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import LoginPage from "../pages/auth/LoginPage";
+import NotFoundPage from "../pages/errors/NotFoundPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
 
 interface AppRoutesProps {
@@ -51,7 +52,11 @@ function BusinessRoute({ mockLoggedIn, onLogout }: Pick<AppRoutesProps, "mockLog
     return <Navigate replace to="/login" />;
   }
 
-  if (resolution.kind !== "allowed") {
+  if (resolution.kind === "unknown") {
+    return <NotFoundPage />;
+  }
+
+  if (resolution.kind === "disabled") {
     return <Navigate replace to={DEFAULT_BUSINESS_PATH} />;
   }
 
