@@ -130,3 +130,12 @@ planned / building / testing / ready / disabled / hidden
 - URL 是 active page 的权威状态源；菜单、Tab、Breadcrumb 和 Content 必须随 URL 同步。
 - 合法业务路径、hidden/disabled 状态和页面 metadata 统一由 route resolver 从 `navigation.ts` 派生，禁止复制第二套路由配置。
 - Routing Foundation 是负责人批准的受控顺序调整，不代表提前实施 PageShell、ComingSoonPage 或后续 Tab 生命周期。
+
+## 10. Tab 生命周期
+
+- `MainLayout` 相邻的 `useTabWorkspace` 是唯一 Tab workspace 状态所有者；URL 仍是 active page 的权威来源。
+- `sessionStorage` 只保存 `{ version, openPaths, activePath }`，展示 metadata 每次通过 route resolver 从 `navigation.ts` 重新解析。
+- 普通刷新保留合法路径列表，但不保留 mock 登录态或页面内部状态；重新 mock 登录后回到恢复的 active path。
+- 主动退出清除 Tab workspace，重新登录后只保留固定首页。
+- 当前会话切换时保留已打开页面的组件状态，关闭 Tab 时销毁对应状态。
+- 首页固定且不可关闭；最多打开 12 个 Tab，第 13 个 Tab 只提示关闭旧 Tab，不自动淘汰。

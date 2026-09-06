@@ -1,11 +1,16 @@
 /** Verifies the App-level memory-only mock login and logout flow. */
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import {
+  TAB_WORKSPACE_STORAGE_KEY,
+  TAB_WORKSPACE_VERSION,
+} from "./layouts/useTabWorkspace";
 import { REMEMBERED_USERNAME_KEY } from "./pages/auth/LoginPage";
+import { DEFAULT_BUSINESS_PATH } from "./router/routeResolver";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -79,7 +84,14 @@ describe("App", () => {
     );
     expect(window.location.hash).toBe("#/dashboard/today-sales");
     expect(localStorage.length).toBe(0);
-    expect(sessionStorage.length).toBe(0);
+    expect(JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null")).toEqual({
+      version: TAB_WORKSPACE_VERSION,
+      openPaths: [DEFAULT_BUSINESS_PATH],
+      activePath: DEFAULT_BUSINESS_PATH,
+    });
+    expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).not.toMatch(
+      /title|permission|role|user|token|auth|state/i,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -106,5 +118,13 @@ describe("App", () => {
     expect(localStorage.getItem(REMEMBERED_USERNAME_KEY)).toBe("admin");
     expect(sessionStorage.length).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
+
+    await logIn();
+    expect(
+      within(screen.getByRole("region", { name: "页面标签栏" })).getAllByRole(
+        "tab",
+      ),
+    ).toHaveLength(1);
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
   }, 10_000);
 });

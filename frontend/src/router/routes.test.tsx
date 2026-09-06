@@ -6,8 +6,12 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppErrorBoundary from "../components/errors/AppErrorBoundary";
 import ErrorFallbackPage from "../pages/errors/ErrorFallbackPage";
+import {
+  TAB_WORKSPACE_STORAGE_KEY,
+  TAB_WORKSPACE_VERSION,
+} from "../layouts/useTabWorkspace";
 import AppRoutes from "./routes";
-import { DEFAULT_BUSINESS_PATH } from "./routeResolver";
+import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
 
 vi.mock("../pages/auth/LoginPage", () => ({
   default: ({ onLogin }: { onLogin: () => void }) => (
@@ -32,14 +36,23 @@ vi.mock("../pages/ComingSoonPage", () => ({
 }));
 
 vi.mock("../layouts/MainLayout", () => ({
-  default: ({ children, onLogout }: { children?: ReactNode; onLogout: () => void }) => (
-    <main aria-label="业务布局">
-      <button type="button" onClick={onLogout}>
-        模拟退出
-      </button>
-      {children}
-    </main>
-  ),
+  default: function MockMainLayout({
+    onLogout,
+    renderPage,
+  }: {
+    onLogout: () => void;
+    renderPage: (page: { status: string; title: string }) => ReactNode;
+  }) {
+    const resolution = resolveRoute(useLocation().pathname);
+    return (
+      <main aria-label="业务布局">
+        <button type="button" onClick={onLogout}>
+          模拟退出
+        </button>
+        {resolution.kind === "allowed" && renderPage(resolution.route.page)}
+      </main>
+    );
+  },
 }));
 
 let renderCount = 0;
@@ -53,12 +66,14 @@ function ThrowingFixture(): ReactNode {
 
 beforeEach(() => {
   renderCount = 0;
+  sessionStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  sessionStorage.clear();
 });
 
 function LocationProbe() {
@@ -95,6 +110,7 @@ describe("AppRoutes", () => {
       "/favicon.ico",
     );
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+    expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).toBeNull();
   });
 
   it("renders forgot-password inside the same auth layout", () => {
@@ -103,6 +119,7 @@ describe("AppRoutes", () => {
     expect(screen.getByRole("heading", { name: "模拟忘记密码页" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "掌上便捷" })).toBeVisible();
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/forgot-password");
+    expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).toBeNull();
   });
 
   it("routes a successful mock login to the default business entry", async () => {
@@ -113,6 +130,30 @@ describe("AppRoutes", () => {
       expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH);
     });
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+  });
+
+  it("keeps mock auth in memory while restoring the path-only workspace after login", async () => {
+    const restoredPath = "/data-center/documentation";
+    sessionStorage.setItem(
+      TAB_WORKSPACE_STORAGE_KEY,
+      JSON.stringify({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: [DEFAULT_BUSINESS_PATH, restoredPath],
+        activePath: restoredPath,
+      }),
+    );
+    renderRoutes(restoredPath);
+
+    expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+
+    fireEvent.click(screen.getByRole("button", { name: "模拟登录" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("当前路径")).toHaveTextContent(restoredPath);
+    });
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+      "文档",
+    );
   });
 
   it("redirects unauthenticated business visits to login", async () => {
@@ -178,6 +219,7 @@ describe("AppRoutes", () => {
       expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH),
     );
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+    expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -203,6 +245,7 @@ describe("AppErrorBoundary", () => {
       expect(document.body).not.toHaveTextContent("private-user");
       expect(document.body).not.toHaveTextContent("production");
       expect(document.body).not.toHaveTextContent("internal-stack");
+      expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
 
       const settledRenderCount = renderCount;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { navigation } from "../config/navigation";
 import {
+  MAX_OPEN_TABS,
+  restoreTabWorkspace,
+  TAB_WORKSPACE_VERSION,
+} from "../layouts/useTabWorkspace";
+import {
   DEFAULT_BUSINESS_PATH,
   DEFAULT_BUSINESS_ROUTE,
   findRouteByKey,
@@ -41,5 +46,71 @@ describe("routeResolver", () => {
     expect(getSidebarPages(settings)).toEqual(
       settings.children.filter((page) => page.status !== "hidden"),
     );
+  });
+});
+
+describe("tab workspace restoration", () => {
+  const allowedPaths = navigation
+    .flatMap((group) => group.children)
+    .map((page) => page.path)
+    .filter((path) => resolveRoute(path).kind === "allowed");
+
+  it("falls back safely for missing, malformed, or unsupported storage", () => {
+    const fallback = {
+      version: TAB_WORKSPACE_VERSION,
+      openPaths: [DEFAULT_BUSINESS_PATH],
+      activePath: DEFAULT_BUSINESS_PATH,
+    };
+
+    expect(restoreTabWorkspace(null)).toEqual(fallback);
+    expect(restoreTabWorkspace("not-json")).toEqual(fallback);
+    expect(
+      restoreTabWorkspace(
+        JSON.stringify({
+          version: TAB_WORKSPACE_VERSION + 1,
+          openPaths: allowedPaths,
+          activePath: allowedPaths[1],
+        }),
+      ),
+    ).toEqual(fallback);
+  });
+
+  it("keeps only unique routable paths, injects Home, and validates activePath", () => {
+    const hiddenPath = "/settings/personal-center";
+    const otherPath = allowedPaths.find(
+      (path) => path !== DEFAULT_BUSINESS_PATH && path !== hiddenPath,
+    );
+    if (!otherPath) throw new Error("Missing routable workspace fixture");
+
+    const restored = restoreTabWorkspace(
+      JSON.stringify({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: [otherPath, hiddenPath, otherPath, "/unknown"],
+        activePath: "/unknown",
+        title: "不得恢复",
+        token: "不得恢复",
+      }),
+    );
+
+    expect(restored).toEqual({
+      version: TAB_WORKSPACE_VERSION,
+      openPaths: [DEFAULT_BUSINESS_PATH, otherPath, hiddenPath],
+      activePath: DEFAULT_BUSINESS_PATH,
+    });
+    expect(Object.keys(restored)).toEqual(["version", "openPaths", "activePath"]);
+  });
+
+  it("restores at most twelve tabs without evicting earlier paths", () => {
+    const restored = restoreTabWorkspace(
+      JSON.stringify({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: allowedPaths,
+        activePath: allowedPaths[MAX_OPEN_TABS],
+      }),
+    );
+
+    expect(restored.openPaths).toEqual(allowedPaths.slice(0, MAX_OPEN_TABS));
+    expect(restored.openPaths).toHaveLength(MAX_OPEN_TABS);
+    expect(restored.activePath).toBe(DEFAULT_BUSINESS_PATH);
   });
 });
