@@ -3,7 +3,9 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import AppErrorBoundary from "../components/errors/AppErrorBoundary";
+import ErrorFallbackPage from "../pages/errors/ErrorFallbackPage";
 import AppRoutes from "./routes";
 import { DEFAULT_BUSINESS_PATH } from "./routeResolver";
 
@@ -40,7 +42,24 @@ vi.mock("../layouts/MainLayout", () => ({
   ),
 }));
 
-afterEach(cleanup);
+let renderCount = 0;
+
+function ThrowingFixture(): ReactNode {
+  renderCount += 1;
+  throw new Error(
+    "token=secret-token user=private-user env=production stack=internal-stack",
+  );
+}
+
+beforeEach(() => {
+  renderCount = 0;
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 function LocationProbe() {
   return <output aria-label="当前路径">{useLocation().pathname}</output>;
@@ -144,12 +163,75 @@ describe("AppRoutes", () => {
     });
   });
 
-  it("temporarily redirects unknown paths to the default business entry", async () => {
+  it("shows a 404 for unknown paths and returns to the default business entry", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
     renderRoutes("/unknown", true);
 
-    await waitFor(() => {
-      expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH);
-    });
+    expect(screen.getByRole("main", { name: "404错误页面" })).toBeVisible();
+    expect(screen.getByText("页面不存在")).toBeVisible();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/unknown");
+
+    fireEvent.click(screen.getByRole("button", { name: "返回首页" }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH),
+    );
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("AppErrorBoundary", () => {
+  it.each(["/login", DEFAULT_BUSINESS_PATH])(
+    "shows the same safe fallback for a render error at %s",
+    (path) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const view = render(
+        <MemoryRouter initialEntries={[path]}>
+          <AppErrorBoundary>
+            <ThrowingFixture />
+          </AppErrorBoundary>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByRole("main", { name: "500错误页面" })).toBeVisible();
+      expect(screen.getByText("页面暂时无法显示")).toBeVisible();
+      expect(document.body).not.toHaveTextContent("secret-token");
+      expect(document.body).not.toHaveTextContent("private-user");
+      expect(document.body).not.toHaveTextContent("production");
+      expect(document.body).not.toHaveTextContent("internal-stack");
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const settledRenderCount = renderCount;
+      view.rerender(
+        <MemoryRouter initialEntries={[path]}>
+          <AppErrorBoundary>
+            <ThrowingFixture />
+          </AppErrorBoundary>
+        </MemoryRouter>,
+      );
+      expect(renderCount).toBe(settledRenderCount);
+    },
+  );
+
+  it("returns the 500 fallback to the safe default entry without a request", () => {
+    const fetchMock = vi.fn();
+    const onReset = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <MemoryRouter initialEntries={["/unknown"]}>
+        <ErrorFallbackPage onReset={onReset} />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "返回首页" }));
+
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent(DEFAULT_BUSINESS_PATH);
+    expect(onReset).toHaveBeenCalledOnce();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
