@@ -25,6 +25,30 @@
 
 AI 开发页面前，必须输出页面字段数据来源说明。涉及利润、回款、广告花费、退款率、库存预警等字段时，必须明确公式和数据来源。
 
+## 后端接口数据源决策
+
+后端业务接口进入 PRP 前，必须按 `docs/delivery/backend-data-source-decision-gate.md` 对每个数据集或字段组选择下列分类之一：
+
+| 分类 | 定义与边界 |
+|---|---|
+| `READ_LEGACY_TEMPORARILY` | 短期使用只读账号、明确表和受限查询读取旧 MySQL；必须给出退出条件和替换计划。 |
+| `REBUILD_SYNC` | 外部平台是权威来源，新系统重新建设 integration、Celery 同步、标准化存储和质量检查。不得在 API route 中实时批量拉取外部平台数据。 |
+| `MIGRATE_ONCE` | 有限的人工维护或历史主数据一次性迁入新 PostgreSQL；必须包含数量核对、字段映射、切换点和回滚方案，核对后切换所有权。 |
+| `NEW_SYSTEM_OWNED` | 新系统产生并维护的数据或配置，不依赖旧库作为持续权威来源。 |
+| `ARCHIVE_ONLY` | RAW、backup、临时、废弃或仅供审计观察的数据，不进入第一期业务接口。 |
+| `NEED_OWNER_DECISION` | 临时阻塞状态，不是最终数据策略；在负责人决定前禁止实现。 |
+
+聚合接口不得使用含糊的 `MIXED` 分类，必须按数据集或字段组分别分类。禁止默认双写，也不得把多个系统同时视为未定义优先级的权威来源。
+
+接口总体状态只能是：
+
+```text
+READY_FOR_PRP
+BLOCKED_BY_OWNER_DECISION
+```
+
+只有所有数据集均已形成可执行策略且不存在未解决的 `NEED_OWNER_DECISION` 时，才可标记 `READY_FOR_PRP`；否则必须标记 `BLOCKED_BY_OWNER_DECISION`。
+
 ## 模板
 
 | 页面字段 | 数据来源 | 源字段 | 转换/计算 | 展示口径 | 风险 |
