@@ -275,6 +275,13 @@
   overflow: hidden;
 }
 
+.main-layout__page-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
 .main-layout__breadcrumb-group {
   display: inline-flex;
   align-items: center;

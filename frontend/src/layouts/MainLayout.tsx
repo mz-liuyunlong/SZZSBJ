@@ -5,6 +5,7 @@ import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, message, Tabs, Typography } from "antd";
 import { Activity, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { PageHeaderOutletProvider } from "../components/page/PageShell";
 import { navigation, type NavigationPage } from "../config/navigation";
 import {
   DEFAULT_BUSINESS_ROUTE,
@@ -56,6 +57,7 @@ function MainLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [flyoutGroupKey, setFlyoutGroupKey] = useState(defaultGroup.key);
+  const [pageHeaderOutlet, setPageHeaderOutlet] = useState<HTMLDivElement | null>(null);
   const routeResolution = resolveRoute(location.pathname);
   const requestedActivePath =
     routeResolution.kind === "allowed"
@@ -166,9 +168,13 @@ function MainLayout({
   };
 
   return (
-    <Layout
-      className={`main-layout${collapsed ? " main-layout--collapsed" : ""}`}
+    <PageHeaderOutletProvider
+      activePageKey={activePage.key}
+      target={pageHeaderOutlet}
     >
+      <Layout
+        className={`main-layout${collapsed ? " main-layout--collapsed" : ""}`}
+      >
       {messageContextHolder}
       <Layout.Header className="main-layout__header" aria-label="顶部栏">
         <button
@@ -207,6 +213,12 @@ function MainLayout({
               },
               { title: activePage.title },
             ]}
+          />
+          <div
+            ref={setPageHeaderOutlet}
+            className="main-layout__page-actions"
+            role="group"
+            aria-label="页面级操作"
           />
           <TopbarActions
             aiAssistantPage={aiAssistantPage}
@@ -353,8 +365,9 @@ function MainLayout({
             )}
           </Layout.Content>
         </Layout>
+        </Layout>
       </Layout>
-    </Layout>
+    </PageHeaderOutletProvider>
   );
 }
 

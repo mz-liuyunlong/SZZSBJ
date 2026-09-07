@@ -15,6 +15,7 @@ import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { navigation, type NavigationPage } from "../config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "../router/routeResolver";
+import PageShell from "../components/page/PageShell";
 import MainLayout from "./MainLayout";
 import {
   MAX_OPEN_TABS,
@@ -181,6 +182,32 @@ describe("MainLayout", () => {
       "/favicon.ico",
     );
     expect(screen.getByText("掌上便捷")).toBeVisible();
+  });
+
+  it("hosts the active page help and actions beside the breadcrumb", async () => {
+    const productPage = requiredPage("products", "products_product_management");
+    renderLayout(productPage.path, (page) => (
+      <PageShell
+        page={page}
+        headerActions={<span>最后同步时间：待接入</span>}
+      >
+        <div>页面主体</div>
+      </PageShell>
+    ));
+
+    const topbar = screen.getByRole("banner", { name: "顶部栏" });
+    const pageActions = within(topbar).getByRole("group", { name: "页面级操作" });
+    await waitFor(() => {
+      expect(within(pageActions).getByText("最后同步时间：待接入")).toBeVisible();
+    });
+    expect(within(pageActions).getByRole("link", {
+      name: `在新标签页打开${productPage.help.title}`,
+    })).toHaveTextContent("帮助");
+    expect(screen.getAllByText("最后同步时间：待接入")).toHaveLength(1);
+    expect(screen.getAllByText("帮助")).toHaveLength(1);
+    const content = screen.getByRole("main", { name: "内容区" });
+    expect(within(content).queryByText("最后同步时间：待接入")).not.toBeInTheDocument();
+    expect(within(content).queryByText("帮助")).not.toBeInTheDocument();
   });
 
   it("keeps tabs, breadcrumb, and content synced to hash history", async () => {

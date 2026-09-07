@@ -7,6 +7,7 @@ import ComingSoonPage from "../pages/ComingSoonPage";
 import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import LoginPage from "../pages/auth/LoginPage";
 import NotFoundPage from "../pages/errors/NotFoundPage";
+import ProductManagementPage from "../pages/products/ProductManagementPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
 
 interface AppRoutesProps {
@@ -68,7 +69,13 @@ function BusinessRoute({ mockLoggedIn, onLogout }: Pick<AppRoutesProps, "mockLog
         onLogout();
         navigate("/login", { replace: true });
       }}
-      renderPage={(page) => <ComingSoonPage page={page} />}
+      renderPage={(page) =>
+        page.key === "products_product_management" ? (
+          <ProductManagementPage page={page} />
+        ) : (
+          <ComingSoonPage page={page} />
+        )
+      }
     />
   );
 }
