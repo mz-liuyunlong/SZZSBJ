@@ -35,6 +35,16 @@ vi.mock("../pages/ComingSoonPage", () => ({
   ),
 }));
 
+vi.mock("../pages/products/ProductManagementPage", () => ({
+  default: ({ page }: { page: { key: string; status: string; title: string } }) => (
+    <section aria-label="产品管理页面壳">
+      <h1 aria-label="当前页面">{page.title}</h1>
+      <span>{page.key}</span>
+      <span aria-label={`页面状态：${page.status}`}>{page.status}</span>
+    </section>
+  ),
+}));
+
 vi.mock("../layouts/MainLayout", () => ({
   default: function MockMainLayout({
     onLogout,
@@ -189,6 +199,30 @@ describe("AppRoutes", () => {
     );
     expect(screen.getByLabelText("页面状态：hidden")).toHaveTextContent("hidden");
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/data-center/documentation");
+  });
+
+  it("uses the product management shell only for its resolved navigation page", () => {
+    const { unmount } = renderRoutes("/products/management", true);
+
+    expect(screen.getByRole("region", { name: "产品管理页面壳" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+      "产品管理",
+    );
+    expect(screen.getByText("products_product_management")).toBeVisible();
+    expect(screen.getByLabelText("页面状态：planned")).toHaveTextContent(
+      "planned",
+    );
+    expect(screen.queryByRole("region", { name: "统一占位页" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent(
+      "/products/management",
+    );
+
+    unmount();
+    renderRoutes("/products/listing-management", true);
+    expect(screen.getByRole("region", { name: "统一占位页" })).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "产品管理页面壳" }),
+    ).not.toBeInTheDocument();
   });
 
   it("redirects logged-in auth routes to the default business entry", async () => {

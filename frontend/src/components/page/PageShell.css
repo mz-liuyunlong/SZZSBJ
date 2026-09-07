@@ -36,6 +36,14 @@
   flex: 0 0 auto;
 }
 
+.page-shell__header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 .page-shell__content {
   min-width: 0;
 }
