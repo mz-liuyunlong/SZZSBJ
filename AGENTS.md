@@ -289,6 +289,11 @@ PRP 不等于批准开发。PRP 必须先由项目负责人确认后，Codex 才
 - `NEED_OWNER_DECISION` 是阻塞状态，未由项目负责人解决前不得编写接口代码或进入实现。
 - 完整流程与模板见 `docs/delivery/backend-data-source-decision-gate.md`。
 
+### 11.2 数据库分层与字段标准化
+
+- 新数据表、同步任务、API PRP、mart/read model、AI 数据使用或文档知识索引必须先检查 `docs/data-sources/database-layering-standard.md`。
+- 新字段、API response 字段、清洗任务或数据映射必须先检查 `docs/data-sources/field-standardization-standard.md`。
+
 ---
 
 ## 12. Playwright E2E 页面验收

@@ -29,6 +29,8 @@ Ponytail 兼容：按 docs/PONYTAIL_COMPATIBILITY_RULES.md 做规则守卫，不
 
 任务涉及指定 Agent Skill 时，先阅读 `docs/delivery/agent-role-skill-routing.md`。后端接口或数据源调查任务还必须阅读 `docs/delivery/backend-data-source-decision-gate.md`。
 
+新数据表、同步任务、API PRP、mart/read model、AI 数据使用或文档知识索引必须先检查 `docs/data-sources/database-layering-standard.md`；新字段、API response 字段、清洗任务或数据映射必须先检查 `docs/data-sources/field-standardization-standard.md`。
+
 ## 3. 禁止动作
 
 默认禁止：
