@@ -20,6 +20,11 @@
 - `lingxing-walmart-api-to-system-data-map-draft.md`
 - `lingxing-walmart-api-to-system-data-map-draft.csv`
 
+## 数据架构标准
+
+- [Database Layering Standard](database-layering-standard.md)：新数据表、同步任务、API PRP、mart/read model、AI 数据使用和文档知识索引的分层边界。
+- [Field Standardization Standard](field-standardization-standard.md)：新字段、API response 字段、清洗任务和数据映射的标准化与血缘要求。
+
 ## 状态说明
 
 - `draft_candidate`：候选草稿，仅供讨论和盘点。

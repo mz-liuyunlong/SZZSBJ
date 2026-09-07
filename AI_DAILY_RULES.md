@@ -32,6 +32,8 @@ AI 必须确认：
 
 涉及后端业务接口时，必须先检查是否已有数据源决策；没有则停止编码并先执行数据源决策门禁，结论为 `NEED_OWNER_DECISION` 时停止并等待负责人确认。规则入口：`docs/delivery/backend-data-source-decision-gate.md`。
 
+涉及新数据表、同步任务、API PRP、mart/read model、AI 数据使用或文档知识索引时，必须检查 `docs/data-sources/database-layering-standard.md`；涉及新字段、API response 字段、清洗任务或数据映射时，必须检查 `docs/data-sources/field-standardization-standard.md`。
+
 ## 3. 必须停止并询问的情况
 
 ```text
