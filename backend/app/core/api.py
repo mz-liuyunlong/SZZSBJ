@@ -242,8 +242,7 @@ def _safe_http_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
 
 def _internal_error_response(request: Request, exc: Exception) -> JSONResponse:
     _LOGGER.error(
-        "api_error request_id=%s method=%s route=%s status=500 error_code=%s "
-        "exception_type=%s",
+        "api_error request_id=%s method=%s route=%s status=500 error_code=%s exception_type=%s",
         get_request_id(request),
         request.method,
         _route_template(request),

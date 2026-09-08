@@ -121,9 +121,7 @@ def test_permission_dependency_fails_closed_and_allows_matching_key() -> None:
     assert forbidden.status_code == 403
     assert forbidden.json()["error"]["code"] == ErrorCode.FORBIDDEN
 
-    application.dependency_overrides[get_optional_principal] = lambda: _principal(
-        VIEW_PERMISSION
-    )
+    application.dependency_overrides[get_optional_principal] = lambda: _principal(VIEW_PERMISSION)
     assert client.get("/permission-protected").status_code == 200
     application.dependency_overrides.clear()
 
