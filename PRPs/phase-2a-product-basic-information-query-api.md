@@ -1,9 +1,28 @@
-# Phase 2A Product Basic Information Query API PRP
+# Phase 2A Product Basic Information Query API PRP — Superseded Historical Reference
+
+> [!WARNING]
+> Superseded by `PRPs/data-platform-foundation.md` and the current `new-system-data-layer-first` owner decision.
+> This document is not implementation-ready under the current owner decision.
+> Do not use this PRP to implement legacy runtime reads.
+> New implementation must start from the Data Layer Foundation / Source Registry / RAW / ingestion / read model route.
+> All `READ_LEGACY_TEMPORARILY`, Legacy Readonly Repository, `legacy_mysql`, runtime contract, test and rollout language below is retained only as superseded historical context and field-discovery reference; none of it is current implementation authorization.
+
+Current replacement sequence:
 
 ```text
-Status: Approved
-Owner Approval Required: Yes
-Implementation Allowed Before Merge: No
+Data Layer Foundation Implementation PRP
+  -> Source Registry + RAW Storage
+  -> Lingxing ingestion
+  -> Product Core Data Model
+  -> Product read model
+  -> Product API reading new-system DB / read model
+```
+
+```text
+Status: Superseded — Historical Reference Only
+Historical Approval Status: Approved under the withdrawn legacy runtime route
+Owner Approval Required For Any Replacement: Yes
+Implementation Allowed: No
 Database Access Used In This PRP Task: No
 Server Access Used In This PRP Task: No
 External API Used In This PRP Task: No
@@ -11,7 +30,7 @@ External API Used In This PRP Task: No
 
 ## 1. Authorization Boundary
 
-This PRP defines the bounded scope for a later backend implementation of the Phase 2A product basic information read-only query API. It is not implementation authorization on this branch.
+This PRP preserves the bounded scope considered for the withdrawn Phase 2A legacy-read route. It is historical evidence, not a current implementation plan or authorization.
 
 - This PRP does not authorize API development before Architect review, owner approval and merge.
 - This PRP does not authorize connecting to a database or server during PRP authoring.
@@ -20,8 +39,8 @@ This PRP defines the bounded scope for a later backend implementation of the Pha
 - This PRP does not authorize creating a table, migration, ORM model, temporary table, mart or read model.
 - This PRP does not authorize Walmart, Lingxing, Feishu or other external API calls.
 - This PRP does not authorize frontend work, deployment or production configuration changes.
-- Only after the owner changes `Status` to `Approved` and merges this PRP may a Backend Engineer implement the read-only endpoint within the exact approved boundary.
-- Approval does not waive the implementation prerequisites or stop conditions in this PRP.
+- A Backend Engineer must not implement this PRP, regardless of its historical approval.
+- Any replacement product API requires the new-system data-layer sequence above, a current Source Decision, a separate implementation PRP and a separate owner execution prompt.
 
 ## 2. Governing Decisions and Evidence
 
@@ -39,13 +58,13 @@ This PRP is governed by:
 - `docs/architecture/backend.md`
 - `docs/delivery/api-documentation-standard.md`
 
-The Source Decision is `READY_FOR_PRP` only for the narrowed Phase 2A product basic information query. The approved first-stage classification is `READ_LEGACY_TEMPORARILY`.
+At the time of historical approval, the Source Decision was `READY_FOR_PRP` for the narrowed Phase 2A product basic information query and used `READ_LEGACY_TEMPORARILY`. Both statements are retained only to explain the superseded route and do not describe the current implementation state.
 
-OD-9 established that `dim_product`, `dim_store` and `dim_store_config` exist, but the approved runtime source for this endpoint is only `dim_product`. The store tables were evidence sources for OD-3 and are not runtime query dependencies for this API.
+Under the superseded design, OD-9 established that `dim_product`, `dim_store` and `dim_store_config` exist, and only `dim_product` had been approved as the proposed runtime source. This is historical evidence, not current runtime authorization.
 
-## 3. Goal
+## 3. Historical Goal (Superseded)
 
-Implement one authenticated, permission-protected, read-only FastAPI endpoint that returns a paginated subset of legacy `dim_product` through a dedicated Legacy Readonly Repository.
+The superseded route proposed one authenticated, permission-protected, read-only FastAPI endpoint returning a paginated subset of legacy `dim_product` through a dedicated Legacy Readonly Repository. This proposal must not be implemented.
 
 The endpoint must:
 
@@ -597,7 +616,9 @@ The temporary read path must be retired when these approved milestones are met:
 
 No default dual read or dual write is allowed during transition. A cutover requires a separate PRP with reconciliation and rollback.
 
-## 18. Owner Approval Checklist
+## 18. Historical Owner Approval Checklist (Superseded)
+
+The checklist below records the withdrawn route's former approval criteria. It is non-operative and must not be used to approve or start implementation.
 
 - [ ] Confirm `Status` remains `Draft` until review is complete.
 - [ ] Confirm the endpoint is `GET /api/v1/products/basic-information`.
@@ -617,7 +638,7 @@ No default dual read or dual write is allowed during transition. A cutover requi
 - [ ] Confirm the canonical response/request-ID prerequisite must be delivered separately before implementation.
 - [ ] Choose and approve section 8 option 1 or option 2 for the legacy connection prerequisite.
 - [ ] Confirm API documentation and tests are required for completion.
-- [ ] After Architect Review PASS, change `Status` to `Approved`, then merge this PRP before implementation.
+- [ ] Historical only: do not restore `Approved` status or implement this superseded PRP.
 
 ## 19. PRP Authoring Validation
 

@@ -18,12 +18,15 @@
 
 ---
 
-## D-003：旧库 MySQL 只读接入
+## D-003：旧库 MySQL 只读接入（已取代）
 
-- 日期：2026-09-01
-- 决策：旧系统 MySQL 作为 legacy data source，只读接入。
-- 原因：旧库包含历史原始数据和已存在同步链路，不应在第一阶段复制或改写。
-- 影响：新系统第一阶段通过只读 API / Repository 查询旧库，不写旧库。
+- 原决策日期：2026-09-01
+- 当前状态：`Superseded`，由 2026-09-09 的 `new-system-data-layer-first` 负责人决定取代。
+- 历史决策：旧系统 MySQL 曾计划作为 `READ_LEGACY_TEMPORARILY` 运行时只读来源；该路线仅保留为历史背景，不再授权实现。
+- 当前决策：新系统业务 API 不得运行时读取 legacy MySQL，也不得把旧系统作为 runtime fallback、production read source 或 business API source。
+- 允许用途：legacy MySQL 与 `old-system/` 仅可作为 `legacy_reference`、source investigation evidence、field meaning reference、reconciliation input 和 migration acceptance evidence。
+- 当前运行时：新系统业务 API 后续必须读取获批的 new-system DB / read model。
+- 依据：`PRPs/data-platform-foundation.md`。任何 Source Registry、RAW、ingestion、Core、read model 或 API 实现仍需独立 PRP 和负责人授权。
 
 ---
 
