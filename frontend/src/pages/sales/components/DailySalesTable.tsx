@@ -6,6 +6,7 @@ import type { Key } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
+import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import {
   CopyableTextCell,
@@ -91,22 +92,6 @@ const totalIntegerKeys = new Set([
   "returnCount",
   "wfsAvailableInventory",
 ]);
-const totalNumericKeys = new Set([
-  ...totalMoneyKeys,
-  ...totalIntegerKeys,
-  "returnRate30Days",
-  "adRatio",
-  "profitMargin",
-  "roi",
-]);
-const numericColumnKeys = new Set([
-  ...totalNumericKeys,
-  "wfsDeliveryUnitPrice",
-  "purchaseUnitPriceCny",
-  "firstLegUnitPriceCny",
-  "storageUnitPrice",
-]);
-
 function TotalCell({
   columnKey,
   currency,
@@ -262,7 +247,7 @@ function DailySalesTable({
     const minWidth = Math.max(key === "image" || key === "analysis" ? 72 : 88, title.length * 14 + 28);
     return [{
       ...column,
-      align: numericColumnKeys.has(key) ? "right" : column.align,
+      align: "left" as const,
       width,
       onHeaderCell: () => ({ className: "report-table-resizable-header-cell daily-sales__resizable-header-cell" }),
       title: (
@@ -300,7 +285,7 @@ function DailySalesTable({
                   <Table.Summary.Cell
                     key={key}
                     index={index + 1}
-                    align={numericColumnKeys.has(key) ? "right" : "left"}
+                    align="left"
                     className={`daily-sales__total-cell daily-sales__total-cell--${key}`}
                   >
                     <TotalCell columnKey={key} currency={currency} rows={rows} />
@@ -322,7 +307,7 @@ function DailySalesTable({
           total: rows.length,
           showSizeChanger: true,
           showQuickJumper: true,
-          pageSizeOptions: ["10", "20", "50", "100"],
+          pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS,
           showTotal: (total) => `共 ${total} 条`,
           onChange: (nextPage, nextPageSize) => {
             if (nextPageSize !== pageSize) {

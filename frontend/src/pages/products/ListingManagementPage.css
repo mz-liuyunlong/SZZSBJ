@@ -1,0 +1,82 @@
+.page-shell:has(> .page-shell__content .listing-management) {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-shell:has(> .page-shell__content .listing-management) > .page-shell__header > .page-shell__heading {
+  display: none;
+}
+
+.page-shell:has(> .page-shell__content .listing-management) > .page-shell__content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.listing-management {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.listing-management__toolbar-card {
+  flex: 0 0 auto;
+  min-width: 0;
+  border-color: #dce3ed;
+}
+
+.listing-management__toolbar-card .ant-card-body {
+  padding: 10px 12px;
+}
+
+.listing-management__toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.listing-management__toolbar > .ant-select {
+  width: 112px;
+  flex: 0 0 112px;
+}
+
+.listing-management__search {
+  width: 360px;
+  flex: 0 0 360px;
+}
+
+.listing-management__toolbar-spacer {
+  flex: 1 0 12px;
+}
+
+.listing-management__toolbar > .ant-btn {
+  flex: 0 0 auto;
+}
+
+.listing-management__table {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+@media (max-width: 720px) {
+  .listing-management {
+    gap: 8px;
+  }
+
+  .listing-management__toolbar-card .ant-card-body {
+    padding: 8px;
+  }
+
+  .listing-management__search {
+    width: 320px;
+    flex-basis: 320px;
+  }
+}

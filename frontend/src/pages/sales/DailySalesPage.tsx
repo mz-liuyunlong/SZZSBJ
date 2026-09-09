@@ -10,6 +10,10 @@ import { Button, Card, Tooltip, Typography, message } from "antd";
 import { useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
+import {
+  REPORT_TABLE_DEFAULT_PAGE_SIZE,
+  normalizeReportTablePageSize,
+} from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import DailySalesCharts from "@/pages/sales/components/DailySalesCharts";
 import DailySalesSummaryCards from "@/pages/sales/components/DailySalesSummaryCards";
@@ -78,7 +82,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [appliedColumnKeys, setAppliedColumnKeys] = useState(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<DailySalesRow>();
 
@@ -201,7 +205,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           }))}
           onCurrentPageChange={setCurrentPage}
           onPageSizeChange={(nextPageSize) => {
-            setPageSize(nextPageSize);
+            setPageSize(normalizeReportTablePageSize(nextPageSize));
             resetPageAndSelection();
           }}
           onSelectionChange={setSelectedRowKeys}

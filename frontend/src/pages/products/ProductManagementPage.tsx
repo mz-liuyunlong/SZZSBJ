@@ -34,6 +34,11 @@ import ConnectedSearch from "@/components/report-table/ConnectedSearch";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
+import {
+  REPORT_TABLE_DEFAULT_PAGE_SIZE,
+  REPORT_TABLE_PAGE_SIZE_OPTIONS,
+  normalizeReportTablePageSize,
+} from "@/components/report-table/pagination";
 import ResetButton from "@/components/report-table/ResetButton";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import RuntimeColumnConfigDrawer, {
@@ -480,7 +485,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [detailSection, setDetailSection] = useState<DetailSection>("basic");
   const [selectedProduct, setSelectedProduct] = useState(acceptanceProducts[0]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [tableResetKey, setTableResetKey] = useState(0);
 
   const copyText = async (text: string) => {
@@ -738,9 +743,12 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
                 </Popover>
               )}
             />
-            <Button icon={<SettingOutlined aria-hidden="true" />} onClick={openColumnConfig}>列配置</Button>
-            <Button onClick={openTagManagement}>标签管理</Button>
             <ResetButton onClick={resetFilters} />
+            <Button onClick={openTagManagement}>标签管理</Button>
+            <span className="product-management__toolbar-spacer" aria-hidden="true" />
+            <div className="product-management__toolbar-actions">
+              <Button icon={<SettingOutlined aria-hidden="true" />} onClick={openColumnConfig}>列配置</Button>
+            </div>
           </div>
         </Card>
 
@@ -774,12 +782,12 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
               total: filteredProducts.length,
               showSizeChanger: true,
               showQuickJumper: true,
-              pageSizeOptions: ["10", "20", "50", "100"],
+              pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS,
               showTotal: (total) => `共 ${total} 条`,
               onChange: (nextPage, nextPageSize) => {
                 const pageSizeChanged = nextPageSize !== pageSize;
                 setCurrentPage(pageSizeChanged ? 1 : nextPage);
-                setPageSize(nextPageSize);
+                setPageSize(normalizeReportTablePageSize(nextPageSize));
                 if (pageSizeChanged) setSelectedRowKeys([]);
               },
             }}
@@ -824,7 +832,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
             mode="multiple"
             showSearch
             className="report-filter-select"
-            classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+            classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
             aria-label="标记标签选择"
             value={draftMarkTags}
             options={tagSelectOptions}
