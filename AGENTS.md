@@ -421,3 +421,13 @@ API 文档完成
 
 - Frontend admin layout must follow `docs/ui/ADMIN_LAYOUT_RULES.md`.
 - Frontend UI component usage must follow `docs/ui/UI_COMPONENT_USAGE_RULES.md`.
+
+### 18.1 项目基础治理入口
+
+- Worktree、任务登记、审批、scope、DoD 和 handoff：`docs/AI_WORKTREE_COLLABORATION_RULES.md`、`docs/TASK_REGISTRY_RULES.md`、`docs/OWNER_APPROVAL_AND_ESCALATION_RULES.md`、`docs/PR_REVIEW_AND_SCOPE_GATE_RULES.md`、`docs/DEFINITION_OF_DONE_RULES.md`。
+- 读写、secret、验证和 AI 决策边界：`docs/READ_WRITE_PERMISSION_BOUNDARY_RULES.md`、`docs/SECRET_AND_ENVIRONMENT_RULES.md`、`docs/VALIDATION_AND_TESTING_RULES.md`、`docs/HUMAN_AI_DECISION_BOUNDARY_RULES.md`。
+- 数据接口登记：`docs/DATA_INTERFACE_REGISTRY_RULES.md` 和 `docs/data-registry/DATA_INTERFACE_REGISTRY.md`。
+- 前端设计与复用：`docs/DESIGN_SYSTEM_AND_COMPONENT_REUSE_RULES.md` 和 `docs/design-system/`。
+- 可复用任务 Prompt：`docs/ai-prompts/README.md`。
+
+默认执行方式：一个任务一个 worktree、分支和 PR；工作区不干净或实际状态不一致时停止。读取权限不等于修改权限，planned/mentioned 不等于 approved/implemented。AI 不依赖聊天记忆，不扩大当前任务范围。

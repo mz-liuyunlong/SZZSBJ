@@ -4,14 +4,11 @@
 
 本文件用于约束 AI 如何新增、删除和更新依赖。
 
-## 未确认项
+## 固定基线
 
-以下内容需要项目负责人确认，AI 不允许自行决定：
-
-- 前端包管理器：npm / pnpm / yarn。
-- 后端依赖管理：uv / Poetry / requirements.txt。
-- Node 版本。
-- Python 版本。
+- 前端使用 Node.js 24 LTS、npm 和已提交的 `package-lock.json`。
+- 后端使用 Python 3.13、uv、`pyproject.toml` 和 `uv.lock`。
+- 不得引入第二套包管理器、重复依赖清单或未批准 runtime。
 
 ## 新增依赖前必须说明
 
@@ -30,3 +27,10 @@
 3. 不能为一个小功能引入大型库。
 4. 不能新增与固定技术栈冲突的依赖。
 5. 不能在未确认情况下升级核心依赖大版本。
+6. 不得直接编辑 lock file 模拟依赖变更。
+7. 不得运行 install/sync 命令，除非当前任务明确授权；验证优先使用 frozen/locked 模式。
+8. 不得把 Agent Skill、开发工具或一次性脚本默认加入生产依赖。
+
+## Required Change Evidence
+
+依赖变更必须有独立范围并记录 owner approval、现有方案不足、选定版本、许可证/安全/维护/体积影响、lock diff、回滚和实际验证。依赖升级不得与无关功能、格式化或架构重构混入同一 PR。

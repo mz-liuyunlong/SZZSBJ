@@ -27,6 +27,13 @@ Ponytail 兼容：按 docs/PONYTAIL_COMPATIBILITY_RULES.md 做规则守卫，不
 页面 ready：必须补 Playwright E2E
 ```
 
+新任务先选择 `docs/ai-prompts/README.md` 中的对应模板。模板、当前 PRP 和任务 Prompt 共同定义任务，模板不扩大批准范围。
+
+- 前端任务必须读取 `docs/DESIGN_SYSTEM_AND_COMPONENT_REUSE_RULES.md`、`docs/design-system/` 和 `docs/UI_COMPONENT_CATALOG.md`，并先输出 Component Reuse Plan。
+- 数据、接口、表、read model、同步、导入导出或前端数据依赖任务必须读取 `docs/DATA_INTERFACE_REGISTRY_RULES.md`。
+- Worktree/分支任务必须读取 `docs/AI_WORKTREE_COLLABORATION_RULES.md`。
+- Agent/Skill 任务继续读取 `docs/delivery/agent-role-skill-routing.md`。
+
 任务涉及指定 Agent Skill 时，先阅读 `docs/delivery/agent-role-skill-routing.md`。后端接口或数据源调查任务还必须阅读 `docs/delivery/backend-data-source-decision-gate.md`。
 
 新数据表、同步任务、API PRP、mart/read model、AI 数据使用或文档知识索引必须先检查 `docs/data-sources/database-layering-standard.md`；新字段、API response 字段、清洗任务或数据映射必须先检查 `docs/data-sources/field-standardization-standard.md`。
@@ -65,3 +72,7 @@ PRPs/templates/prp_base.md
 ```
 
 PRP 未确认，不得动代码。
+
+## 5. Recovery Stop
+
+目录、分支、base、dirty 状态、allowlist、PRP 状态或验证事实不一致时，使用 `docs/ai-prompts/RECOVERY_STOP_PROMPT.md` 停止并报告，不自行切换、stash、reset、restore、clean、merge 或 rebase。

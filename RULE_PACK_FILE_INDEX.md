@@ -194,3 +194,107 @@ This index lists the files included in the rule pack.
 - `templates/planning/progress.md`
 - `templates/planning/task_plan.md`
 - `templates/prompts/use-context7-for-library-docs.md`
+
+## Project Foundation Rules Extension
+
+以下文件是项目基础治理入口。合并规则 PR 只批准规则，不代表其中描述的业务、数据、接口或平台能力已经实现。
+
+### Collaboration, lifecycle and review
+
+| File | Purpose |
+|---|---|
+| `docs/AI_WORKTREE_COLLABORATION_RULES.md` | Worktree、分支、preflight、recovery stop 与 handoff |
+| `docs/TASK_REGISTRY_RULES.md` | 任务登记、状态和证据规则 |
+| `docs/tasks/TASK_REGISTRY.md` | 仓库任务登记表 |
+| `docs/ARCHITECTURE_DECISION_RECORD_RULES.md` | ADR 创建、取代和批准边界 |
+| `docs/OWNER_APPROVAL_AND_ESCALATION_RULES.md` | 负责人批准和升级格式 |
+| `docs/PR_REVIEW_AND_SCOPE_GATE_RULES.md` | PR 单一范围和 Review 门禁 |
+| `docs/DEFINITION_OF_DONE_RULES.md` | 完成所需证据 |
+| `docs/STATUS_AND_LIFECYCLE_RULES.md` | 通用规划、实现和引用状态 |
+| `docs/CODEOWNERS_AND_REVIEWERS_RULES.md` | Owner 与 Reviewer 职责 |
+
+### Engineering quality and data boundaries
+
+| File | Purpose |
+|---|---|
+| `docs/CODE_COMMENT_AND_DOCSTRING_RULES.md` | 必要业务注释和 docstring |
+| `docs/NAMING_AND_ID_CONVENTION_RULES.md` | 命名、稳定 ID 与上下文边界 |
+| `docs/TEMPORARY_CODE_AND_TODO_RULES.md` | 临时代码、mock 和 TODO 生命周期 |
+| `docs/MODULE_CATALOG_AND_OWNERSHIP_RULES.md` | 模块 owner 与 catalog 更新 |
+| `docs/DATA_INTERFACE_REGISTRY_RULES.md` | 外部/内部接口与数据依赖登记规则 |
+| `docs/data-registry/DATA_INTERFACE_REGISTRY.md` | 数据接口、存储、页面和任务登记表 |
+| `docs/DATABASE_MIGRATION_RULES.md` | Alembic migration 安全与 Review |
+| `docs/SYNC_TASK_BOUNDARY_RULES.md` | 同步 run/batch、幂等和发布边界 |
+| `docs/CACHE_AND_DERIVED_DATA_BOUNDARY_RULES.md` | Cache、snapshot、read model 和派生数据 |
+| `docs/DATA_QUALITY_AND_FRESHNESS_RULES.md` | DQ、freshness 和发布状态 |
+| `docs/PERFORMANCE_AND_PAGINATION_RULES.md` | 服务端分页、查询规模和性能证据 |
+| `docs/VALIDATION_AND_TESTING_RULES.md` | 真实验证结果和分类测试要求 |
+
+### Security, external systems and operations
+
+| File | Purpose |
+|---|---|
+| `docs/SECRET_AND_ENVIRONMENT_RULES.md` | Secret、环境隔离和安全配置 |
+| `docs/SENSITIVE_DATA_AND_PERMISSION_RULES.md` | 敏感数据、permission 和 data scope |
+| `docs/OBSERVABILITY_AND_LOGGING_RULES.md` | 结构化日志、指标和告警 |
+| `docs/ERROR_HANDLING_AND_SAFE_MESSAGE_RULES.md` | 安全错误映射和 UI 状态 |
+| `docs/EXTERNAL_API_CLIENT_RULES.md` | Provider client、限流、重试和 RAW 边界 |
+| `docs/EXTERNAL_SYSTEM_BOUNDARY_RULES.md` | 外部平台、镜像和读写方向 |
+| `docs/READ_WRITE_PERMISSION_BOUNDARY_RULES.md` | Read 不自动授权 write |
+| `docs/BROWSER_AND_UI_OPERATION_RULES.md` | 浏览器/UI 自动化副作用和证据 |
+| `docs/INCIDENT_AND_ROLLBACK_RULES.md` | 事故证据、恢复和回滚授权 |
+
+### Business and AI authority
+
+| File | Purpose |
+|---|---|
+| `docs/HUMAN_AI_DECISION_BOUNDARY_RULES.md` | 负责人决定与 AI 建议边界 |
+| `docs/BUSINESS_CALCULATION_AUTHORITY_RULES.md` | 权威业务计算、版本和 grain |
+| `docs/FINANCIAL_TIME_AND_CURRENCY_BOUNDARY_RULES.md` | 财务时间、币种、汇率和历史锁定 |
+| `docs/MANUAL_OVERRIDE_BOUNDARY_RULES.md` | 来源值、人工值和有效值隔离 |
+| `docs/NOTIFICATION_BOUNDARY_RULES.md` | 通知与业务状态分离 |
+| `docs/AI_OUTPUT_REVIEW_RULES.md` | AI 输出、citation 与人工采纳 |
+
+### Frontend design and page governance
+
+| File | Purpose |
+|---|---|
+| `docs/DESIGN_SYSTEM_AND_COMPONENT_REUSE_RULES.md` | Design system 和 Shared 组件复用门禁 |
+| `docs/design-system/DESIGN_TOKENS.md` | Ant/theme token 语义边界 |
+| `docs/design-system/PAGE_LAYOUT_PATTERNS.md` | 页面类型与布局模式 |
+| `docs/design-system/COMPONENT_USAGE_GUIDE.md` | 组件复用/扩展/Page Local 决策 |
+| `docs/design-system/COMPONENT_EXAMPLES.md` | 组件选择示例 |
+| `docs/frontend/PAGE_REGISTRY.md` | 页面 route、依赖和状态登记表 |
+| `docs/frontend/PAGE_REGISTRY_RULES.md` | 页面登记触发和证据规则 |
+| `docs/frontend/FRONTEND_MODULE_STRUCTURE_RULES.md` | Page、feature、hook、Shared 模块边界 |
+| `docs/frontend/FRONTEND_DATA_ACCESS_RULES.md` | 前端只访问获批 FastAPI contract |
+| `docs/frontend/UI_COPY_AND_STATUS_TEXT_RULES.md` | 安全文案和状态语义 |
+| `docs/frontend/TABLE_COLUMN_AND_REPORT_RULES.md` | 表格、列、分页和 canonical renderer |
+| `docs/frontend/FRONTEND_VISUAL_EVIDENCE_RULES.md` | 视觉验收和敏感信息边界 |
+| `docs/frontend/PAGE_SCAFFOLD_RULES.md` | 新页面施工顺序 |
+| `docs/frontend/NAVIGATION_CHANGE_RULES.md` | 导航 owner approval 和单一 metadata 真源 |
+| `docs/frontend/FRONTEND_MOCK_AND_API_BOUNDARY_RULES.md` | no-api/mock/真实 API 状态边界 |
+
+### Files, release and documentation
+
+| File | Purpose |
+|---|---|
+| `docs/FILE_UPLOAD_AND_ATTACHMENT_RULES.md` | 上传、解析、留存和下载权限 |
+| `docs/RELEASE_AND_FEATURE_FLAG_RULES.md` | Merge/deploy/release/flag 分离 |
+| `docs/DEPRECATION_AND_REMOVAL_RULES.md` | 弃用、替代和安全删除 |
+| `docs/DOCUMENTATION_LIFECYCLE_RULES.md` | 文档状态、同步和历史保留 |
+| `docs/TEST_DATA_AND_FIXTURE_RULES.md` | Synthetic fixture 与测试隔离 |
+| `docs/AI_COST_AND_CONTEXT_RULES.md` | AI 最小上下文、预算和运行证据 |
+
+### Reusable AI prompts
+
+| File | Purpose |
+|---|---|
+| `docs/ai-prompts/README.md` | Prompt 模板入口 |
+| `docs/ai-prompts/PRP_AUTHOR_PROMPT.md` | Draft PRP 编写模板 |
+| `docs/ai-prompts/DOCS_ONLY_TASK_PROMPT.md` | Docs-only 执行模板 |
+| `docs/ai-prompts/BACKEND_IMPLEMENTATION_PROMPT.md` | 已批准后端实现模板 |
+| `docs/ai-prompts/FRONTEND_IMPLEMENTATION_PROMPT.md` | 前端实现和 Component Reuse Plan 模板 |
+| `docs/ai-prompts/POST_MERGE_CLEANUP_PROMPT.md` | 合并后清理核对模板 |
+| `docs/ai-prompts/RECOVERY_STOP_PROMPT.md` | 状态异常停止模板 |
+| `docs/ai-prompts/TASK_HANDOFF_TEMPLATE.md` | 标准任务交接模板 |
