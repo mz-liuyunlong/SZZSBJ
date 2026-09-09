@@ -8,6 +8,7 @@ import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import LoginPage from "../pages/auth/LoginPage";
 import NotFoundPage from "../pages/errors/NotFoundPage";
 import ProductManagementPage from "../pages/products/ProductManagementPage";
+import DailySalesPage from "../pages/sales/DailySalesPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
 
 interface AppRoutesProps {
@@ -72,6 +73,8 @@ function BusinessRoute({ mockLoggedIn, onLogout }: Pick<AppRoutesProps, "mockLog
       renderPage={(page) =>
         page.key === "products_product_management" ? (
           <ProductManagementPage page={page} />
+        ) : page.key === "sales_daily_sales" ? (
+          <DailySalesPage page={page} />
         ) : (
           <ComingSoonPage page={page} />
         )

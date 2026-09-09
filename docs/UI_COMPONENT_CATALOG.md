@@ -34,6 +34,11 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 | DataTableToolbar | Shared | `frontend/src/components/tables/DataTableToolbar.tsx` | 表格工具栏 | 有批量操作的表格 |
 | BatchActionBar | Shared | `frontend/src/components/tables/BatchActionBar.tsx` | 批量操作栏 | 多选表格 |
 | TaskStatusBadge | Shared | `frontend/src/components/common/TaskStatusBadge.tsx` | 后台任务状态 | 导入、同步、AI 分析 |
+| ReportTableShell | Shared | `frontend/src/components/report-table/ReportTableShell.tsx` | 固定表头、内部滚动与固定分页外壳 | 高密度运营报表 |
+| ConnectedSearch | Shared | `frontend/src/components/report-table/ConnectedSearch.tsx` | 搜索类型、输入、搜索与批量入口的连体控件 | 产品、销售及后续高密度报表工具栏 |
+| RuntimeColumnConfigDrawer | Shared | `frontend/src/components/report-table/RuntimeColumnConfigDrawer.tsx` | 仅运行时生效的列显示与顺序配置 | 可配置列的报表表格 |
+| ResizableColumnTitle | Shared | `frontend/src/components/report-table/ResizableColumnTitle.tsx` | 拖拽参考线预览、松开后应用且无持久化的可访问列宽调整 | 支持列宽调整的报表表格 |
+| ReportTableCells | Shared | `frontend/src/components/report-table/cells.tsx` | 图片、复制文本、金额、百分比和状态展示 | 产品与销售报表单元格 |
 
 ## 组件登记规则
 
