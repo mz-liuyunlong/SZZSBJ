@@ -17,8 +17,8 @@ import {
   isValidMockLogin,
   MOCK_PASSWORD,
   MOCK_USERNAME,
-} from "../../mocks/auth";
-import "./LoginPage.css";
+} from "@/mocks/auth";
+import "@/pages/auth/LoginPage.css";
 
 export const REMEMBERED_USERNAME_KEY = "mock_login_remembered_username";
 

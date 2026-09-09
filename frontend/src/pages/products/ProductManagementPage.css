@@ -88,166 +88,6 @@
   justify-content: center;
 }
 
-.product-management__table {
-  display: flex;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid #d9d9d9;
-  border-radius: 8px;
-}
-
-.product-management__table .ant-pro-table,
-.product-management__table .ant-pro-card,
-.product-management__table .ant-pro-card-body,
-.product-management__table .ant-table-wrapper,
-.product-management__table .ant-spin-nested-loading,
-.product-management__table .ant-spin-container,
-.product-management__table .ant-table,
-.product-management__table .ant-table-container {
-  min-height: 0;
-}
-
-.product-management__table .ant-pro-table,
-.product-management__table .ant-pro-card,
-.product-management__table .ant-pro-card-body,
-.product-management__table .ant-spin-nested-loading,
-.product-management__table .ant-spin-container {
-  display: flex;
-  width: 100%;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.product-management__table .ant-pro-card-body {
-  position: relative;
-  padding: 0;
-}
-
-.product-management__table .ant-table-wrapper,
-.product-management__table .ant-table,
-.product-management__table .ant-table-container {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.product-management__table .ant-table-container {
-  overflow: hidden;
-}
-
-.product-management__table .ant-table-header {
-  flex: 0 0 auto;
-}
-
-.product-management__table .ant-table-body {
-  min-height: 0;
-  max-height: none !important;
-  flex: 1 1 0;
-  overflow-y: auto !important;
-}
-
-.product-management__table .ant-table-thead > tr > th {
-  color: #1f2937;
-  font-weight: 600;
-  background: #f7f8fa;
-  border-block-end: 1px solid #e5e7eb;
-}
-
-.product-management__table .ant-table-thead > tr > th.ant-table-column-sort {
-  background: #f3f4f6;
-}
-
-.product-management__table .ant-table-tbody > tr > td {
-  color: #262626;
-  border-block-end-color: #d9d9d9;
-}
-
-.product-management__table .ant-table-tbody > tr.ant-table-row:hover > td {
-  background: #edf6ff;
-}
-
-.product-management__table .ant-table-tbody > tr.ant-table-row-selected > td {
-  background: #dceeff;
-}
-
-.product-management__table .ant-btn-link {
-  min-height: 32px;
-  padding-inline: 4px;
-  font-weight: 500;
-}
-
-.product-management__table .ant-btn-link:hover {
-  color: #003eb3;
-  text-decoration: underline;
-}
-
-.product-management__table .ant-pagination {
-  flex: 0 0 auto;
-  min-height: 48px;
-  align-items: center;
-  justify-content: flex-end;
-  margin: 0;
-  padding: 8px 12px 8px 160px;
-  background: #fff;
-  border-block-start: 1px solid #e5e7eb;
-}
-
-.product-management__table .ant-table-footer {
-  position: absolute;
-  z-index: 1;
-  inset-block-end: 0;
-  inset-inline-start: 0;
-  display: flex;
-  width: 160px;
-  height: 48px;
-  align-items: center;
-  padding: 8px 12px;
-  background: transparent;
-  border: 0;
-}
-
-.product-management__resizable-header-cell {
-  position: relative !important;
-}
-
-.product-management__resizable-header-cell .ant-table-column-sorters,
-.product-management__resizable-header-cell .ant-table-column-title,
-.product-management__resizable-title {
-  position: static;
-}
-
-.product-management__resizable-title {
-  display: flex;
-  width: 100%;
-  align-items: center;
-}
-
-.product-management__resize-handle {
-  position: absolute;
-  z-index: 3;
-  inset-block: 0;
-  inset-inline-end: -6px;
-  width: 12px;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.product-management__resize-handle::after {
-  position: absolute;
-  inset-block: 6px;
-  inset-inline-end: 5px;
-  width: 1px;
-  content: "";
-  background: transparent;
-}
-
-.product-management__resize-handle:hover::after,
-.product-management__resize-handle:focus-visible::after,
-.product-management__resize-handle[data-resizing="true"]::after {
-  background: #1677ff;
-}
-
 .product-management__image-placeholder,
 .product-management__detail-image {
   display: inline-flex;
@@ -425,6 +265,27 @@
   margin-block-end: 16px;
 }
 
+.product-management__tag-management-modal .ant-modal-content {
+  padding: 24px;
+}
+
+.product-management__tag-management-modal .ant-modal-title {
+  color: #1f2937;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.product-management__tag-management-modal .ant-modal-body {
+  padding-block: 18px 8px;
+}
+
+.product-management__tag-management-modal .product-management__new-tag {
+  padding: 16px;
+  background: #f7f9fc;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+}
+
 .product-management__new-tag-row,
 .product-management__tag-color-row {
   display: flex;
@@ -560,16 +421,6 @@
   .product-management__search-box {
     min-width: 280px;
     flex: 1 1 320px;
-  }
-
-  .product-management__table .ant-pagination {
-    min-height: 48px;
-    flex-wrap: wrap;
-    padding-inline-start: 112px;
-  }
-
-  .product-management__table .ant-table-footer {
-    width: 112px;
   }
 
   .product-management__column-drawer .ant-drawer-content-wrapper {

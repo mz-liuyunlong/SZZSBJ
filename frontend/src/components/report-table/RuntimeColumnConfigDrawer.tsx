@@ -1,8 +1,14 @@
 /** Edits visible report columns in memory; it never persists templates or user preferences. */
-import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons";
+import {
+  AppstoreOutlined,
+  ArrowDownOutlined,
+  ArrowUpOutlined,
+  DatabaseOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
 import { Button, Checkbox, Drawer, Input, Select, Space, Tag, Typography } from "antd";
 import { useMemo, useState, type DragEvent } from "react";
-import "./reportTable.css";
+import "@/components/report-table/reportTable.css";
 
 export interface RuntimeColumnField {
   key: string;
@@ -125,23 +131,33 @@ function RuntimeColumnConfigDrawer({
       )}
       onClose={closeDrawer}
     >
+      <Typography.Paragraph className="runtime-column-config__description" type="secondary">
+        选择并配置表格中显示的字段，支持调整字段顺序和固定列。
+      </Typography.Paragraph>
       <div className="runtime-column-config__tools">
+        <Typography.Text strong>选择模板</Typography.Text>
         <Select aria-label="选择模板" disabled placeholder="选择模板" options={[]} />
         <Button onClick={onSaveTemplate}>保存为新模板</Button>
       </div>
+      <Input
+        allowClear
+        className="runtime-column-config__search"
+        aria-label="搜索字段"
+        placeholder="搜索字段（支持字段名称模糊搜索）"
+        prefix={<SearchOutlined aria-hidden="true" />}
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
       <div className="runtime-column-config__editor">
-        <section className="runtime-column-config__available" aria-label="可选字段">
-          <Input
-            allowClear
-            aria-label="搜索字段"
-            placeholder="搜索字段"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <Space size={4}>
-            <Button size="small" onClick={() => setDraftKeys(withFixedColumns(allKeys, fixedKeys))}>
-              全选
-            </Button>
+        <section className="runtime-column-config__panel runtime-column-config__available" aria-label="可选字段">
+          <div className="runtime-column-config__panel-header">
+            <Typography.Text strong>
+              <AppstoreOutlined aria-hidden="true" /> 全部字段
+            </Typography.Text>
+            <Typography.Text type="secondary">共 {fields.length} 项</Typography.Text>
+          </div>
+          <Space className="runtime-column-config__select-actions" size={8}>
+            <Button size="small" onClick={() => setDraftKeys(withFixedColumns(allKeys, fixedKeys))}>全选</Button>
             <Button size="small" onClick={() => setDraftKeys(fixedKeys)}>取消全选</Button>
           </Space>
           {visibleGroups.map((group) => (
@@ -163,8 +179,13 @@ function RuntimeColumnConfigDrawer({
             </div>
           ))}
         </section>
-        <section aria-labelledby="selected-columns-title">
-          <Typography.Title id="selected-columns-title" level={5}>已选字段</Typography.Title>
+        <section className="runtime-column-config__panel" aria-labelledby="selected-columns-title">
+          <div className="runtime-column-config__panel-header">
+            <Typography.Text id="selected-columns-title" strong>
+              <DatabaseOutlined aria-hidden="true" /> 已选字段
+            </Typography.Text>
+            <Typography.Text type="secondary">共 {selectedFields.length} 项</Typography.Text>
+          </div>
           <ol className="runtime-column-config__selected">
             {selectedFields.map((field, index) => (
               <li
@@ -178,7 +199,12 @@ function RuntimeColumnConfigDrawer({
                 onDrop={(event) => dropColumn(field.key, event)}
                 onDragEnd={() => setDraggedKey(undefined)}
               >
-                <span>{field.title}</span>
+                <span className="runtime-column-config__selected-name">
+                  <span className="runtime-column-config__selected-index">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  {field.title}
+                </span>
                 {fixedKeys.includes(field.key) ? (
                   <Tag>固定</Tag>
                 ) : (

@@ -1,15 +1,15 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
-import AuthLayout from "../layouts/auth/AuthLayout";
-import MainLayout from "../layouts/MainLayout";
-import { readTabWorkspace } from "../layouts/useTabWorkspace";
-import ComingSoonPage from "../pages/ComingSoonPage";
-import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
-import LoginPage from "../pages/auth/LoginPage";
-import NotFoundPage from "../pages/errors/NotFoundPage";
-import ProductManagementPage from "../pages/products/ProductManagementPage";
-import DailySalesPage from "../pages/sales/DailySalesPage";
-import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
+import AuthLayout from "@/layouts/auth/AuthLayout";
+import MainLayout from "@/layouts/MainLayout";
+import { readTabWorkspace } from "@/layouts/useTabWorkspace";
+import ComingSoonPage from "@/pages/ComingSoonPage";
+import ForgotPasswordPage from "@/pages/auth/ForgotPasswordPage";
+import LoginPage from "@/pages/auth/LoginPage";
+import NotFoundPage from "@/pages/errors/NotFoundPage";
+import ProductManagementPage from "@/pages/products/ProductManagementPage";
+import DailySalesPage from "@/pages/sales/DailySalesPage";
+import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 
 interface AppRoutesProps {
   mockLoggedIn: boolean;

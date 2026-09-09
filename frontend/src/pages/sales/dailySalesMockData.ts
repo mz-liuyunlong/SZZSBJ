@@ -5,7 +5,7 @@ import type {
   DailySalesCurrency,
   DailySalesPlatform,
   DailySalesRow,
-} from "./dailySalesTypes";
+} from "@/pages/sales/dailySalesTypes";
 
 const platforms: DailySalesPlatform[] = ["Walmart", "TEMU", "Amazon"];
 const owners = ["林晓", "周宁", "陈岚", "王舟"];

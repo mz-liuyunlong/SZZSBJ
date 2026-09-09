@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import LoginPage, { REMEMBERED_USERNAME_KEY } from "./LoginPage";
+import LoginPage, { REMEMBERED_USERNAME_KEY } from "@/pages/auth/LoginPage";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {

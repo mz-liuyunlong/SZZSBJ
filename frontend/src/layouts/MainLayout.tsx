@@ -5,18 +5,18 @@ import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, message, Tabs, Typography } from "antd";
 import { Activity, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { PageHeaderOutletProvider } from "../components/page/PageShell";
-import { navigation, type NavigationPage } from "../config/navigation";
+import { PageHeaderOutletProvider } from "@/components/page/PageShell";
+import { navigation, type NavigationPage } from "@/config/navigation";
 import {
   DEFAULT_BUSINESS_ROUTE,
   findRouteByKey,
   getSidebarPages,
   isRoutableStatus,
   resolveRoute,
-} from "../router/routeResolver";
-import TopbarActions from "./components/TopbarActions";
-import useTabWorkspace from "./useTabWorkspace";
-import "./MainLayout.css";
+} from "@/router/routeResolver";
+import TopbarActions from "@/layouts/components/TopbarActions";
+import useTabWorkspace from "@/layouts/useTabWorkspace";
+import "@/layouts/MainLayout.css";
 
 function requireNavigationItem<T>(value: T | undefined, message: string): T {
   if (value === undefined) {

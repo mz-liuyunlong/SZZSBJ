@@ -1,10 +1,12 @@
 /** Dense no-API report table with the approved 35-column order. */
 import { BarChartOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Empty, Space, Table, Tooltip, Typography } from "antd";
+import { Button, Empty, Space, Table, Tooltip } from "antd";
 import type { Key } from "react";
-import ReportTableShell from "../../../components/report-table/ReportTableShell";
-import ResizableColumnTitle from "../../../components/report-table/ResizableColumnTitle";
+import ReportTableShell, {
+  ReportTableSelectionBar,
+} from "@/components/report-table/ReportTableShell";
+import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import {
   CopyableTextCell,
   ImageCell,
@@ -12,14 +14,14 @@ import {
   PercentCell,
   StatusTagCell,
   TrendPreviewCell,
-} from "../../../components/report-table/cells";
+} from "@/components/report-table/cells";
 import {
   MOCK_USD_TO_CNY_RATE,
   dailySalesColumnFields,
   type DailySalesCostStatus,
   type DailySalesCurrency,
   type DailySalesRow,
-} from "../dailySalesTypes";
+} from "@/pages/sales/dailySalesTypes";
 
 interface DailySalesTableProps {
   rows: DailySalesRow[];
@@ -33,6 +35,7 @@ interface DailySalesTableProps {
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
+  onBulkExport: () => void;
   onCopy: (text: string) => void;
   onOpenDetail: (row: DailySalesRow) => void;
 }
@@ -96,6 +99,13 @@ const totalNumericKeys = new Set([
   "profitMargin",
   "roi",
 ]);
+const numericColumnKeys = new Set([
+  ...totalNumericKeys,
+  "wfsDeliveryUnitPrice",
+  "purchaseUnitPriceCny",
+  "firstLegUnitPriceCny",
+  "storageUnitPrice",
+]);
 
 function TotalCell({
   columnKey,
@@ -118,18 +128,18 @@ function TotalCell({
   const salesAmount = sum(rows, "salesAmount");
   const adSpend = sum(rows, "adSpend");
   if (columnKey === "returnRate30Days") {
-    return salesVolume ? <PercentCell value={sum(rows, "returnCount") / salesVolume * 100} /> : <>-</>;
+    return salesVolume ? <PercentCell value={sum(rows, "returnCount") / salesVolume * 100} /> : null;
   }
   if (columnKey === "adRatio") {
-    return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : <>-</>;
+    return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : null;
   }
   if (columnKey === "profitMargin") {
-    return salesAmount ? <PercentCell value={sum(rows, "orderProfit") / salesAmount * 100} /> : <>-</>;
+    return salesAmount ? <PercentCell value={sum(rows, "orderProfit") / salesAmount * 100} /> : null;
   }
   if (columnKey === "roi") {
-    return adSpend ? <span className="report-table-metric">{(salesAmount / adSpend).toFixed(2)}</span> : <>-</>;
+    return adSpend ? <span className="report-table-metric">{(salesAmount / adSpend).toFixed(2)}</span> : null;
   }
-  return <>-</>;
+  return null;
 }
 
 const currencyColumnTitles: Partial<Record<string, string>> = {
@@ -238,6 +248,7 @@ function DailySalesTable({
   onCurrentPageChange,
   onPageSizeChange,
   onSelectionChange,
+  onBulkExport,
   onCopy,
   onOpenDetail,
 }: DailySalesTableProps) {
@@ -251,6 +262,7 @@ function DailySalesTable({
     const minWidth = Math.max(key === "image" || key === "analysis" ? 72 : 88, title.length * 14 + 28);
     return [{
       ...column,
+      align: numericColumnKeys.has(key) ? "right" : column.align,
       width,
       onHeaderCell: () => ({ className: "report-table-resizable-header-cell daily-sales__resizable-header-cell" }),
       title: (
@@ -288,7 +300,7 @@ function DailySalesTable({
                   <Table.Summary.Cell
                     key={key}
                     index={index + 1}
-                    align={totalNumericKeys.has(key) ? "right" : "left"}
+                    align={numericColumnKeys.has(key) ? "right" : "left"}
                     className={`daily-sales__total-cell daily-sales__total-cell--${key}`}
                   >
                     <TotalCell columnKey={key} currency={currency} rows={rows} />
@@ -298,9 +310,12 @@ function DailySalesTable({
             </Table.Summary.Row>
           </Table.Summary>
         )}
-        footer={() => selectedRowKeys.length > 0
-          ? <Typography.Text strong>已选择 {selectedRowKeys.length} 项</Typography.Text>
-          : null}
+        footer={() => (
+          <ReportTableSelectionBar
+            selectedCount={selectedRowKeys.length}
+            actions={[{ key: "export", label: "批量导出", onClick: onBulkExport }]}
+          />
+        )}
         pagination={{
           current: currentPage,
           pageSize,

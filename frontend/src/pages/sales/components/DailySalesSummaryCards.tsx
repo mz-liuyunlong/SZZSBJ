@@ -14,7 +14,7 @@ import {
   MOCK_USD_TO_CNY_RATE,
   type DailySalesCurrency,
   type DailySalesRow,
-} from "../dailySalesTypes";
+} from "@/pages/sales/dailySalesTypes";
 
 interface DailySalesSummaryCardsProps {
   rows: DailySalesRow[];

@@ -10,8 +10,8 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { navigation, type NavigationPage } from "../../config/navigation";
-import TopbarActions from "./TopbarActions";
+import { navigation, type NavigationPage } from "@/config/navigation";
+import TopbarActions from "@/layouts/components/TopbarActions";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {

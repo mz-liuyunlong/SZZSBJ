@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { navigation } from "../config/navigation";
+import { navigation } from "@/config/navigation";
 import {
   MAX_OPEN_TABS,
   restoreTabWorkspace,
   TAB_WORKSPACE_VERSION,
-} from "../layouts/useTabWorkspace";
+} from "@/layouts/useTabWorkspace";
 import {
   DEFAULT_BUSINESS_PATH,
   DEFAULT_BUSINESS_ROUTE,
@@ -12,7 +12,7 @@ import {
   getSidebarPages,
   isRoutableStatus,
   resolveRoute,
-} from "./routeResolver";
+} from "@/router/routeResolver";
 
 describe("routeResolver", () => {
   it("derives route metadata from navigation", () => {

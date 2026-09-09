@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { DEFAULT_BUSINESS_PATH } from "../../router/routeResolver";
-import { ErrorPage } from "./ErrorFallbackPage";
+import { DEFAULT_BUSINESS_PATH } from "@/router/routeResolver";
+import { ErrorPage } from "@/pages/errors/ErrorFallbackPage";
 
 function NotFoundPage() {
   const navigate = useNavigate();

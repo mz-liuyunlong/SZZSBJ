@@ -29,21 +29,23 @@ import {
   useState,
   type Key,
 } from "react";
-import PageShell from "../../components/page/PageShell";
-import ConnectedSearch from "../../components/report-table/ConnectedSearch";
-import ReportTableShell from "../../components/report-table/ReportTableShell";
-import ResizableColumnTitle from "../../components/report-table/ResizableColumnTitle";
+import PageShell from "@/components/page/PageShell";
+import ConnectedSearch from "@/components/report-table/ConnectedSearch";
+import ReportTableShell, {
+  ReportTableSelectionBar,
+} from "@/components/report-table/ReportTableShell";
+import ResetButton from "@/components/report-table/ResetButton";
+import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
-} from "../../components/report-table/RuntimeColumnConfigDrawer";
-import { CopyableTextCell, ImageCell } from "../../components/report-table/cells";
-import type { NavigationPage } from "../../config/navigation";
-import "./ProductManagementPage.css";
+} from "@/components/report-table/RuntimeColumnConfigDrawer";
+import { CopyableTextCell, ImageCell } from "@/components/report-table/cells";
+import type { NavigationPage } from "@/config/navigation";
+import "@/pages/products/ProductManagementPage.css";
 
 const SYNC_PENDING = "同步接口待接入";
 const TAG_PENDING = "标签接口待接入";
 const TEMPLATE_PENDING = "列模板接口待接入";
-const PLEASE_SELECT_PRODUCT = "请先选择产品";
 const LABEL_NAME_REQUIRED = "请输入标签名称";
 const MAX_BATCH_SKUS = 1_000;
 const fixedColumnKeys = ["image", "sku"];
@@ -194,8 +196,6 @@ const operationMessages: Record<string, string> = {
   edit: "产品编辑接口待接入",
   delete: "产品删除接口待接入",
 };
-
-const moreItems: MenuProps["items"] = [{ key: "mark", label: "标记" }];
 
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 
@@ -561,14 +561,6 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
     setEditingTag(name);
   };
 
-  const handleMoreAction = () => {
-    if (selectedRowKeys.length === 0) {
-      void messageApi.info(PLEASE_SELECT_PRODUCT);
-      return;
-    }
-    openMarkTags();
-  };
-
   const openColumnConfig = () => {
     setColumnConfigOpen(true);
   };
@@ -691,6 +683,8 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           <div className="product-management__toolbar" role="search" aria-label="产品筛选与页面工具">
             <Select
               allowClear
+              className="report-filter-select"
+              classNames={{ popup: { root: "report-filter-select-dropdown" } }}
               aria-label="产品等级"
               placeholder="产品等级"
               value={productGrade}
@@ -702,6 +696,8 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
             />
             <Select
               allowClear
+              className="report-filter-select"
+              classNames={{ popup: { root: "report-filter-select-dropdown" } }}
               aria-label="标签"
               placeholder="标签"
               value={tag}
@@ -744,10 +740,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
             />
             <Button icon={<SettingOutlined aria-hidden="true" />} onClick={openColumnConfig}>列配置</Button>
             <Button onClick={openTagManagement}>标签管理</Button>
-            <Dropdown trigger={["click"]} menu={{ items: moreItems, onClick: handleMoreAction }}>
-              <Button>更多 <DownOutlined aria-hidden="true" /></Button>
-            </Dropdown>
-            <Button onClick={resetFilters}>重置</Button>
+            <ResetButton onClick={resetFilters} />
           </div>
         </Card>
 
@@ -769,9 +762,12 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
             tableAlertOptionRender={false}
             showSorterTooltip={{ target: "sorter-icon" }}
             scroll={{ x: "max-content", y: "max(240px, calc(100dvh - 390px))" }}
-            footer={() => selectedRowKeys.length > 0 ? (
-              <Typography.Text strong>已选择 {selectedRowKeys.length} 项</Typography.Text>
-            ) : null}
+            footer={() => (
+              <ReportTableSelectionBar
+                selectedCount={selectedRowKeys.length}
+                actions={[{ key: "mark", label: "批量标记", onClick: openMarkTags }]}
+              />
+            )}
             pagination={{
               current: currentPage,
               pageSize,
@@ -826,6 +822,9 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           <span>标签：</span>
           <Select
             mode="multiple"
+            showSearch
+            className="report-filter-select"
+            classNames={{ popup: { root: "report-filter-select-dropdown" } }}
             aria-label="标记标签选择"
             value={draftMarkTags}
             options={tagSelectOptions}
@@ -835,6 +834,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
       </Modal>
 
       <Modal
+        className="product-management__tag-management-modal"
         title="标签管理"
         open={tagManagementOpen}
         centered

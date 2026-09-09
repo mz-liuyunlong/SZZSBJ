@@ -1,6 +1,6 @@
 /** Renders an accessible native resize handle without coupling column width to storage. */
 import { useRef, type KeyboardEvent, type PointerEvent } from "react";
-import "./reportTable.css";
+import "@/components/report-table/reportTable.css";
 
 interface ResizableColumnTitleProps {
   label: string;

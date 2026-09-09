@@ -8,24 +8,24 @@ import {
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
 import { useMemo, useState, type Key } from "react";
-import PageShell from "../../components/page/PageShell";
-import RuntimeColumnConfigDrawer from "../../components/report-table/RuntimeColumnConfigDrawer";
-import type { NavigationPage } from "../../config/navigation";
-import DailySalesCharts from "./components/DailySalesCharts";
-import DailySalesSummaryCards from "./components/DailySalesSummaryCards";
-import DailySalesTable from "./components/DailySalesTable";
+import PageShell from "@/components/page/PageShell";
+import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
+import type { NavigationPage } from "@/config/navigation";
+import DailySalesCharts from "@/pages/sales/components/DailySalesCharts";
+import DailySalesSummaryCards from "@/pages/sales/components/DailySalesSummaryCards";
+import DailySalesTable from "@/pages/sales/components/DailySalesTable";
 import DailySalesToolbar, {
   type DailySalesFilters,
-} from "./components/DailySalesToolbar";
-import SalesDetailModal from "./components/SalesDetailModal";
-import { dailySalesMockData } from "./dailySalesMockData";
+} from "@/pages/sales/components/DailySalesToolbar";
+import SalesDetailModal from "@/pages/sales/components/SalesDetailModal";
+import { dailySalesMockData } from "@/pages/sales/dailySalesMockData";
 import {
   dailySalesColumnFields,
   dateRangeForPreset,
   fixedDailySalesColumnKeys,
   type DailySalesRow,
-} from "./dailySalesTypes";
-import "./DailySalesPage.css";
+} from "@/pages/sales/dailySalesTypes";
+import "@/pages/sales/DailySalesPage.css";
 
 const SYNC_PENDING = "同步接口待接入";
 const EXPORT_PENDING = "导出接口待接入";
@@ -205,6 +205,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             resetPageAndSelection();
           }}
           onSelectionChange={setSelectedRowKeys}
+          onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={setDetailRow}
         />

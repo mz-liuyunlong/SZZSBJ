@@ -2,7 +2,7 @@
 import { SearchOutlined } from "@ant-design/icons";
 import { Button, Input, Select, type SelectProps } from "antd";
 import type { ReactNode } from "react";
-import "./reportTable.css";
+import "@/components/report-table/reportTable.css";
 
 interface ConnectedSearchProps {
   className?: string;

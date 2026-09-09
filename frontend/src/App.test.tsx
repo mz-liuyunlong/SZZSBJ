@@ -4,13 +4,13 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import App from "./App";
+import App from "@/App";
 import {
   TAB_WORKSPACE_STORAGE_KEY,
   TAB_WORKSPACE_VERSION,
-} from "./layouts/useTabWorkspace";
-import { REMEMBERED_USERNAME_KEY } from "./pages/auth/LoginPage";
-import { DEFAULT_BUSINESS_PATH } from "./router/routeResolver";
+} from "@/layouts/useTabWorkspace";
+import { REMEMBERED_USERNAME_KEY } from "@/pages/auth/LoginPage";
+import { DEFAULT_BUSINESS_PATH } from "@/router/routeResolver";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {

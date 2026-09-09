@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import ErrorFallbackPage from "../../pages/errors/ErrorFallbackPage";
+import ErrorFallbackPage from "@/pages/errors/ErrorFallbackPage";
 
 interface AppErrorBoundaryProps {
   children: ReactNode;

@@ -50,16 +50,33 @@
 
 .daily-sales__toolbar > .ant-select {
   width: 112px;
+  flex: 0 0 112px;
 }
 
 .daily-sales__toolbar .ant-picker {
-  width: 228px;
+  width: 272px;
   height: 32px;
 }
 
+.daily-sales__date-presets {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .daily-sales__date-presets .ant-radio-button-wrapper {
+  min-width: 48px;
+  flex: 0 0 auto;
   height: 32px;
   line-height: 30px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.daily-sales__date-range.ant-picker {
+  min-width: 272px;
+  flex: 0 0 272px;
 }
 
 .daily-sales__search {
@@ -265,6 +282,78 @@
   white-space: nowrap;
 }
 
+.daily-sales-detail-modal .ant-modal-title {
+  color: #1f2937;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.daily-sales-detail-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.daily-sales-detail-modal__card {
+  --detail-accent: #1677ff;
+  --detail-bg: #e8f3ff;
+  border-color: #e5eaf3;
+}
+
+.daily-sales-detail-modal__card .ant-card-body {
+  display: flex;
+  min-height: 110px;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+}
+
+.daily-sales-detail-modal__card--green {
+  --detail-accent: #12b886;
+  --detail-bg: #e6faf4;
+}
+
+.daily-sales-detail-modal__card--purple {
+  --detail-accent: #7259e8;
+  --detail-bg: #f0edff;
+}
+
+.daily-sales-detail-modal__card--orange {
+  --detail-accent: #fa8c16;
+  --detail-bg: #fff3e2;
+}
+
+.daily-sales-detail-modal__card--red {
+  --detail-accent: #eb2f65;
+  --detail-bg: #fff0f5;
+}
+
+.daily-sales-detail-modal__card--gray {
+  --detail-accent: #667085;
+  --detail-bg: #f2f4f7;
+}
+
+.daily-sales-detail-modal__icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  color: var(--detail-accent);
+  font-size: 21px;
+  background: var(--detail-bg);
+  border-radius: 10px;
+}
+
+.daily-sales-detail-modal__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.5;
+}
+
 @media (max-height: 820px) {
   .daily-sales__chart-card {
     height: 160px;
@@ -279,6 +368,10 @@
   .daily-sales__summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .daily-sales-detail-modal__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 600px) {
@@ -287,22 +380,19 @@
   }
 
   .daily-sales__summary {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
   .daily-sales__summary-card .ant-card-body {
     min-height: 70px;
-    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
     padding: 7px 8px;
   }
 
   .daily-sales__summary-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    font-size: 18px;
+    display: none;
   }
 
   .daily-sales__summary-card strong {
@@ -313,5 +403,14 @@
   .daily-sales__summary-title,
   .daily-sales__summary-period {
     font-size: 11px;
+  }
+
+  .daily-sales-detail-modal__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .daily-sales-detail-modal__card .ant-card-body {
+    min-height: 92px;
+    padding: 14px;
   }
 }

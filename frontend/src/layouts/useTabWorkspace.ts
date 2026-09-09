@@ -1,6 +1,6 @@
 /** Owns the path-only tab workspace; URL routing and page metadata stay elsewhere. */
 import { useCallback, useEffect, useState } from "react";
-import { DEFAULT_BUSINESS_PATH, resolveRoute } from "../router/routeResolver";
+import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 
 export const TAB_WORKSPACE_STORAGE_KEY = "tab_workspace";
 export const TAB_WORKSPACE_VERSION = 1;

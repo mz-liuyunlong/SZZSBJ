@@ -3,7 +3,7 @@ import { CopyOutlined, PictureOutlined } from "@ant-design/icons";
 import { Button, Popover, Tag, Tooltip } from "antd";
 import ReactECharts from "echarts-for-react";
 import { useState, type MouseEvent, type ReactNode } from "react";
-import "./reportTable.css";
+import "@/components/report-table/reportTable.css";
 
 interface CopyableTextCellProps {
   text: string;

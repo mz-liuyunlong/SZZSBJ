@@ -4,16 +4,16 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { useState, type ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import AppErrorBoundary from "../components/errors/AppErrorBoundary";
-import ErrorFallbackPage from "../pages/errors/ErrorFallbackPage";
+import AppErrorBoundary from "@/components/errors/AppErrorBoundary";
+import ErrorFallbackPage from "@/pages/errors/ErrorFallbackPage";
 import {
   TAB_WORKSPACE_STORAGE_KEY,
   TAB_WORKSPACE_VERSION,
-} from "../layouts/useTabWorkspace";
-import AppRoutes from "./routes";
-import { DEFAULT_BUSINESS_PATH, resolveRoute } from "./routeResolver";
+} from "@/layouts/useTabWorkspace";
+import AppRoutes from "@/router/routes";
+import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 
-vi.mock("../pages/auth/LoginPage", () => ({
+vi.mock("@/pages/auth/LoginPage", () => ({
   default: ({ onLogin }: { onLogin: () => void }) => (
     <button type="button" onClick={onLogin}>
       模拟登录
@@ -21,11 +21,11 @@ vi.mock("../pages/auth/LoginPage", () => ({
   ),
 }));
 
-vi.mock("../pages/auth/ForgotPasswordPage", () => ({
+vi.mock("@/pages/auth/ForgotPasswordPage", () => ({
   default: () => <h1>模拟忘记密码页</h1>,
 }));
 
-vi.mock("../pages/ComingSoonPage", () => ({
+vi.mock("@/pages/ComingSoonPage", () => ({
   default: ({ page }: { page: { status: string; title: string } }) => (
     <section aria-label="统一占位页">
       <h1 aria-label="当前页面">{page.title}</h1>
@@ -35,7 +35,7 @@ vi.mock("../pages/ComingSoonPage", () => ({
   ),
 }));
 
-vi.mock("../pages/products/ProductManagementPage", () => ({
+vi.mock("@/pages/products/ProductManagementPage", () => ({
   default: ({ page }: { page: { key: string; status: string; title: string } }) => (
     <section aria-label="产品管理页面壳">
       <h1 aria-label="当前页面">{page.title}</h1>
@@ -45,7 +45,7 @@ vi.mock("../pages/products/ProductManagementPage", () => ({
   ),
 }));
 
-vi.mock("../pages/sales/DailySalesPage", () => ({
+vi.mock("@/pages/sales/DailySalesPage", () => ({
   default: ({ page }: { page: { key: string; status: string; title: string } }) => (
     <section aria-label="每日销售页面壳">
       <h1 aria-label="当前页面">{page.title}</h1>
@@ -55,7 +55,7 @@ vi.mock("../pages/sales/DailySalesPage", () => ({
   ),
 }));
 
-vi.mock("../layouts/MainLayout", () => ({
+vi.mock("@/layouts/MainLayout", () => ({
   default: function MockMainLayout({
     onLogout,
     renderPage,

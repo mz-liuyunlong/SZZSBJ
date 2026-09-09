@@ -3,8 +3,8 @@ import { QuestionCircleOutlined } from "@ant-design/icons";
 import { Button, Tag, Typography } from "antd";
 import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { NavigationPage, PageStatus } from "../../config/navigation";
-import "./PageShell.css";
+import type { NavigationPage, PageStatus } from "@/config/navigation";
+import "@/components/page/PageShell.css";
 
 const statusLabels: Record<PageStatus, string> = {
   planned: "规划中",
