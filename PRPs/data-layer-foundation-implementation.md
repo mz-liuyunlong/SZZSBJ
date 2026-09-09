@@ -1,17 +1,33 @@
 # Data Layer Foundation Implementation
 
-Status: Draft
-Owner Approval Required: Yes
-Implementation Allowed: No until the owner changes Status to Approved and issues a separate implementation prompt
+Status: Approved
+Owner Approval Required: Yes — satisfied by the Owner Approval Record below
+Implementation Allowed: Yes — only after a separate owner-issued implementation prompt and only within this PRP's approved Data Layer Foundation scope
 Database Access Authorized: No
 Migration Execution Authorized: No
 Production Access Authorized: No
 
+## Owner Approval Record
+
+- Approved by: Project Owner
+- Approved date: 2026-09-09
+- Approval scope: `PRPs/data-layer-foundation-implementation.md` only
+- Approval type: implementation authorization
+
+Owner decisions:
+
+- Approved: use `TEST_DATABASE_URL` for isolated PostgreSQL integration tests.
+- Approved: add `backend/.env.example` with placeholder values only.
+- Approved: minimally update `.gitignore` to protect `.env` files while keeping `.env.example` trackable.
+- Not approved in this implementation PR: `.github` CI PostgreSQL setup; it requires a separate PRP and PR.
+
+This authorization permits only the Data Layer Foundation defined by this PRP. It does not authorize business tables, Product API, Source Registry, RAW Storage, external API integration, frontend work, or an `old-system` runtime data source.
+
 ## 1. Authorization Boundary
 
-This PRP is an implementation plan, not implementation authorization.
+This PRP is an approved implementation plan. The Owner Approval Record authorizes only a later, separately prompted implementation within its exact scope; this docs-only approval task does not implement it.
 
-This authoring task may create only this PRP. It does not authorize database or server connections, SQL execution, migration creation or execution, ORM models, business tables, production configuration, secrets, backend code, frontend code, external API calls, background jobs, or data movement.
+This approval task may modify only this PRP and its required Task Registry record. It does not authorize this branch to connect to a database or server, execute SQL, create or run migrations, create ORM models or business tables, change production configuration, access secrets, modify backend or frontend code, call external APIs, run background jobs, or move data.
 
 Approval of this PRP permits only a later, separately approved implementation PR for the database foundation described here. That implementation must use a new branch based on the latest clean `main`, remain independently reviewable and reversible, and stay within an owner-approved file allowlist.
 
@@ -88,7 +104,7 @@ Use the existing project names:
 
 - `APP_ENV` for environment identity.
 - `DATABASE_URL` for the application database URL.
-- `TEST_DATABASE_URL` only for isolated database integration tests, if the owner approves this test setting before implementation.
+- `TEST_DATABASE_URL` only for isolated database integration tests, as approved in the Owner Approval Record.
 
 Do not introduce `APP_DATABASE_URL` as a second alias. One canonical name avoids split configuration behavior.
 
@@ -238,7 +254,7 @@ Database integration tests require a disposable, isolated PostgreSQL database be
 Requirements:
 
 - `APP_ENV=test` must be explicit.
-- `TEST_DATABASE_URL` must be explicit if that name is approved.
+- `TEST_DATABASE_URL` must be explicit, as approved in the Owner Approval Record.
 - missing test configuration must skip or fail with a clear safe message; it must never fall back to a development or production URL.
 - fixtures should isolate tests with a transaction and roll it back.
 - destructive commands and business data are prohibited.
@@ -446,7 +462,7 @@ No skill may expand the file allowlist, connect to a database, run a migration, 
 
 ## 24. Owner Approval Checklist
 
-Before changing this PRP to `Approved`, the owner must confirm:
+Before issuing the separate implementation prompt, the owner must confirm:
 
 - synchronous SQLAlchemy 2.x with psycopg is the approved first boundary.
 - canonical settings are `APP_ENV`, `DATABASE_URL`, and, if accepted, test-only `TEST_DATABASE_URL`.
