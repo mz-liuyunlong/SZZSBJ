@@ -3,7 +3,7 @@ import {
   type NavigationGroup,
   type NavigationPage,
   type PageStatus,
-} from "../config/navigation";
+} from "@/config/navigation";
 
 export interface NavigationRoute {
   group: NavigationGroup;

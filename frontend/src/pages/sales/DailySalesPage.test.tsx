@@ -4,10 +4,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import dayjs from "dayjs";
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { navigation } from "../../config/navigation";
-import DailySalesPage from "./DailySalesPage";
-import { dailySalesMockData } from "./dailySalesMockData";
-import { dailySalesColumnFields } from "./dailySalesTypes";
+import { navigation } from "@/config/navigation";
+import DailySalesPage from "@/pages/sales/DailySalesPage";
+import { dailySalesMockData } from "@/pages/sales/dailySalesMockData";
+import { dailySalesColumnFields } from "@/pages/sales/dailySalesTypes";
 
 const messageInfo = vi.fn();
 const messageSuccess = vi.fn();
@@ -24,6 +24,7 @@ vi.mock("antd", async (importOriginal) => {
 
   const Select = ({
     allowClear,
+    classNames,
     maxTagCount,
     maxTagPlaceholder,
     mode,
@@ -31,6 +32,7 @@ vi.mock("antd", async (importOriginal) => {
     optionRender,
     options = [],
     placeholder,
+    showSearch,
     value,
     ...props
   }: {
@@ -46,8 +48,10 @@ vi.mock("antd", async (importOriginal) => {
     [key: string]: unknown;
   }) => {
     void allowClear;
+    void classNames;
     void maxTagCount;
     void maxTagPlaceholder;
+    void showSearch;
     const multiple = mode === "multiple";
     return (
       <>
@@ -483,6 +487,7 @@ describe("DailySalesPage", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /选择行/ }));
     expect(screen.getByLabelText("当前页")).toHaveTextContent("2");
     expect(screen.getByText("已选择 1 项")).toBeVisible();
+    expect(screen.getByRole("button", { name: /批量操作/ })).toBeVisible();
 
     for (const size of [10, 20, 50, 100, 10]) {
       fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: String(size) } });
@@ -531,6 +536,10 @@ describe("DailySalesPage", () => {
     expect(totalRow).toHaveTextContent(
       todayRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
     );
+    expect(totalRow.querySelector(".daily-sales__total-cell--analysis")).toBeEmptyDOMElement();
+    expect(totalRow.querySelector(".daily-sales__total-cell--date")).toBeEmptyDOMElement();
+    expect(totalRow.querySelector(".daily-sales__total-cell--salesVolume"))
+      .toHaveAttribute("align", "right");
     expect(totalRow.querySelector(".daily-sales__total-cell--salesAmount")).toHaveTextContent("$");
 
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));

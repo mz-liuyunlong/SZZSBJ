@@ -13,15 +13,15 @@ import {
 import { isValidElement, useState, type ReactNode } from "react";
 import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { navigation, type NavigationPage } from "../config/navigation";
-import { DEFAULT_BUSINESS_PATH, resolveRoute } from "../router/routeResolver";
-import PageShell from "../components/page/PageShell";
-import MainLayout from "./MainLayout";
+import { navigation, type NavigationPage } from "@/config/navigation";
+import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
+import PageShell from "@/components/page/PageShell";
+import MainLayout from "@/layouts/MainLayout";
 import {
   MAX_OPEN_TABS,
   TAB_WORKSPACE_STORAGE_KEY,
   TAB_WORKSPACE_VERSION,
-} from "./useTabWorkspace";
+} from "@/layouts/useTabWorkspace";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {

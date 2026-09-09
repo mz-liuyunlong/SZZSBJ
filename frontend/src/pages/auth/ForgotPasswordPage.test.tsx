@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import ForgotPasswordPage from "./ForgotPasswordPage";
+import ForgotPasswordPage from "@/pages/auth/ForgotPasswordPage";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {

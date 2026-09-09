@@ -11,7 +11,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NavigationPage } from "../../config/navigation";
+import type { NavigationPage } from "@/config/navigation";
 
 const SYNC_PENDING = "同步接口待接入";
 const TAG_PENDING = "标签接口待接入";
@@ -21,7 +21,9 @@ vi.mock("@ant-design/icons", () => {
   return {
     ArrowDownOutlined: Icon,
     ArrowUpOutlined: Icon,
+    AppstoreOutlined: Icon,
     CopyOutlined: Icon,
+    DatabaseOutlined: Icon,
     DownOutlined: Icon,
     PictureOutlined: Icon,
     SearchOutlined: Icon,
@@ -31,7 +33,7 @@ vi.mock("@ant-design/icons", () => {
   };
 });
 
-vi.mock("../../components/page/PageShell", () => ({
+vi.mock("@/components/page/PageShell", () => ({
   default: ({
     page,
     description,
@@ -99,9 +101,10 @@ vi.mock("antd", async () => {
     </button>
   );
 
-  interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "prefix"> {
     allowClear?: boolean;
     onPressEnter?: () => void;
+    prefix?: ReactNode;
   }
 
   interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -109,9 +112,10 @@ vi.mock("antd", async () => {
   }
 
   const Input = Object.assign(
-    ({ allowClear, onPressEnter, onKeyDown, ...props }: InputProps) => (
+    ({ allowClear, onPressEnter, onKeyDown, prefix, ...props }: InputProps) => (
       <input
         data-allow-clear={allowClear || undefined}
+        data-has-prefix={Boolean(prefix) || undefined}
         {...props}
         onKeyDown={(event) => {
           onKeyDown?.(event);
@@ -124,23 +128,30 @@ vi.mock("antd", async () => {
 
   interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "onChange"> {
     allowClear?: boolean;
+    classNames?: unknown;
     mode?: "multiple";
     onChange?: (value: string | string[] | undefined) => void;
     options?: { label: ReactNode; value: string }[];
     placeholder?: ReactNode;
+    showSearch?: boolean;
     value?: string | string[];
   }
 
   const Select = ({
     allowClear,
+    classNames,
     mode,
     onChange,
     options = [],
     placeholder,
+    showSearch,
     value,
     ...props
-  }: SelectProps) => (
-    <>
+  }: SelectProps) => {
+    void classNames;
+    void showSearch;
+    return (
+      <>
       <select
         data-allow-clear={allowClear || undefined}
         multiple={mode === "multiple"}
@@ -160,8 +171,9 @@ vi.mock("antd", async () => {
       {mode === "multiple" && (
         <span hidden>{options.map((option) => <span key={option.value}>{option.label}</span>)}</span>
       )}
-    </>
-  );
+      </>
+    );
+  };
 
   interface DialogProps {
     children: ReactNode;
@@ -241,16 +253,18 @@ vi.mock("antd", async () => {
   const Dropdown = ({
     children,
     menu,
+    placement,
   }: {
     children: ReactElement;
+    placement?: string;
     menu: {
-      items: { danger?: boolean; key: string; label: ReactNode }[];
+      items: { danger?: boolean; disabled?: boolean; key: string; label: ReactNode }[];
       onClick: (info: { key: string }) => void;
     };
   }) => {
     const [open, setOpen] = React.useState(false);
     return (
-      <span>
+      <span data-placement={placement}>
         <span onClick={() => setOpen((current) => !current)}>{children}</span>
         {open && (
           <div role="menu">
@@ -260,6 +274,7 @@ vi.mock("antd", async () => {
                 type="button"
                 role="menuitem"
                 data-danger={item.danger || undefined}
+                disabled={item.disabled}
                 onClick={() => {
                   menu.onClick({ key: item.key });
                   setOpen(false);
@@ -582,7 +597,7 @@ vi.mock("@ant-design/pro-components", () => ({
   },
 }));
 
-import ProductManagementPage from "./ProductManagementPage";
+import ProductManagementPage from "@/pages/products/ProductManagementPage";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -657,9 +672,7 @@ describe("ProductManagementPage", () => {
     expect(within(toolbar).getByRole("combobox", { name: "标签" })).toBeVisible();
     expect(within(toolbar).getByRole("combobox", { name: "搜索类型" })).toHaveValue("sku");
     expect(within(toolbar).getByRole("button", { name: "批量搜索 SKU" })).toBeVisible();
-    const moreButton = within(toolbar).getByRole("button", { name: /更多/ });
-    expect(moreButton).toBeVisible();
-    expect(moreButton.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
+    expect(within(toolbar).queryByRole("button", { name: /更多/ })).not.toBeInTheDocument();
     expect(within(toolbar).getByRole("button", { name: "重置" })).toBeVisible();
     expect(within(toolbar).queryByRole("combobox", { name: "WFS费用" })).not.toBeInTheDocument();
     expect(within(toolbar).queryByText("最后同步时间：待接入")).not.toBeInTheDocument();
@@ -875,13 +888,11 @@ describe("ProductManagementPage", () => {
     expect(within(dialog).getByLabelText("批量 SKU 输入")).toHaveValue("");
   });
 
-  it("selects only the current page and gates the top more-menu mark action", () => {
+  it("selects only the current page and opens batch marking from the shared upward menu", () => {
     sessionStorage.setItem("tab_workspace", "keep");
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: /更多/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "标记" }));
-    expect(screen.getByText("请先选择产品")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /批量操作/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "选择当前页" }));
     expect(screen.getByText("已选择 10 项")).toBeVisible();
@@ -892,8 +903,10 @@ describe("ProductManagementPage", () => {
     expect(screen.queryByRole("button", { name: "清空选择" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "第 2 页" }));
     expect(screen.getByRole("checkbox", { name: "选择当前页" })).not.toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: /更多/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "标记" }));
+    const bulkActionButton = screen.getByRole("button", { name: /批量操作/ });
+    expect(bulkActionButton.closest('[data-placement="topLeft"]')).toBeInTheDocument();
+    fireEvent.click(bulkActionButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "批量标记" }));
     const dialog = screen.getByRole("dialog", { name: "标记标签" });
     const tagSelect = within(dialog).getByRole("listbox", { name: "标记标签选择" });
     expect(tagSelect).toBeVisible();

@@ -2,7 +2,7 @@
 import { Alert, Button, Form, Input, Typography } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "./ForgotPasswordPage.css";
+import "@/pages/auth/ForgotPasswordPage.css";
 
 interface ForgotPasswordValues {
   name: string;

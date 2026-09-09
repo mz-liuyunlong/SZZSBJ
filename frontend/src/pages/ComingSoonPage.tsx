@@ -1,7 +1,7 @@
 /** Provides the single no-API placeholder for navigation pages that are not ready. */
 import { Result } from "antd";
-import PageShell from "../components/page/PageShell";
-import type { NavigationPage } from "../config/navigation";
+import PageShell from "@/components/page/PageShell";
+import type { NavigationPage } from "@/config/navigation";
 
 interface ComingSoonPageProps {
   page: NavigationPage;

@@ -3,12 +3,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ComingSoonPage from "../../pages/ComingSoonPage";
+import ComingSoonPage from "@/pages/ComingSoonPage";
 import {
   DEFAULT_BUSINESS_ROUTE,
   resolveRoute,
-} from "../../router/routeResolver";
-import PageShell from "./PageShell";
+} from "@/router/routeResolver";
+import PageShell from "@/components/page/PageShell";
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn());

@@ -6,13 +6,14 @@ import dayjs, { type Dayjs } from "dayjs";
 import "dayjs/locale/zh-cn";
 import updateLocale from "dayjs/plugin/updateLocale";
 import { useState, type ReactNode } from "react";
-import ConnectedSearch from "../../../components/report-table/ConnectedSearch";
+import ConnectedSearch from "@/components/report-table/ConnectedSearch";
+import ResetButton from "@/components/report-table/ResetButton";
 import {
   dateRangeForPreset,
   type DailySalesCurrency,
   type DailySalesDatePreset,
   type DailySalesPlatform,
-} from "../dailySalesTypes";
+} from "@/pages/sales/dailySalesTypes";
 
 dayjs.extend(updateLocale);
 dayjs.locale("zh-cn");
@@ -136,6 +137,9 @@ function DailySalesToolbar({
     <div className="daily-sales__toolbar" role="search" aria-label="每日销售筛选">
       <Select
         mode="multiple"
+        showSearch
+        className="report-filter-select"
+        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         aria-label="平台"
         placeholder="全部平台"
         value={filters.platforms}
@@ -147,6 +151,9 @@ function DailySalesToolbar({
       />
       <Select
         mode="multiple"
+        showSearch
+        className="report-filter-select"
+        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         aria-label="负责人"
         placeholder="负责人"
         value={filters.owners}
@@ -158,6 +165,9 @@ function DailySalesToolbar({
       />
       <Select
         mode="multiple"
+        showSearch
+        className="report-filter-select"
+        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         aria-label="店铺"
         placeholder="全部店铺"
         value={filters.stores}
@@ -185,6 +195,7 @@ function DailySalesToolbar({
         }}
       />
       <DatePicker.RangePicker
+        className="daily-sales__date-range"
         aria-label="日期范围"
         locale={datePickerLocale}
         value={filters.dateRange
@@ -202,6 +213,8 @@ function DailySalesToolbar({
         })}
       />
       <Select
+        className="report-filter-select"
+        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         aria-label="币种"
         value={filters.currency}
         options={["USD", "CNY"].map((value) => ({ label: value, value }))}
@@ -253,7 +266,7 @@ function DailySalesToolbar({
           </Popover>
         )}
       />
-      <Button onClick={onReset}>重置</Button>
+      <ResetButton onClick={onReset} />
       <span className="daily-sales__toolbar-spacer" aria-hidden="true" />
       <div className="daily-sales__toolbar-actions">{actions}</div>
     </div>

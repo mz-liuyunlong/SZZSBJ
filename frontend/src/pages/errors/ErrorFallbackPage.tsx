@@ -1,7 +1,7 @@
 import { Button, Result } from "antd";
 import { useNavigate } from "react-router-dom";
-import { DEFAULT_BUSINESS_PATH } from "../../router/routeResolver";
-import "./ErrorPages.css";
+import { DEFAULT_BUSINESS_PATH } from "@/router/routeResolver";
+import "@/pages/errors/ErrorPages.css";
 
 interface ErrorPageProps {
   actionLabel: string;

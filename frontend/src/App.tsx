@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import AppErrorBoundary from './components/errors/AppErrorBoundary'
-import AppRoutes from './router/routes'
+import AppErrorBoundary from '@/components/errors/AppErrorBoundary'
+import AppRoutes from '@/router/routes'
 
 function App() {
   const [mockLoggedIn, setMockLoggedIn] = useState(false)

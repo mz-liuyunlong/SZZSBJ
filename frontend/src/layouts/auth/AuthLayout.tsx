@@ -1,7 +1,7 @@
 /** Provides the shared brand and responsive frame for frontend-only auth pages. */
 import { Typography } from "antd";
 import type { ReactNode } from "react";
-import "./AuthLayout.css";
+import "@/layouts/auth/AuthLayout.css";
 
 interface AuthLayoutProps {
   children: ReactNode;

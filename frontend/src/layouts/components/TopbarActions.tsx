@@ -19,13 +19,13 @@ import {
   Typography,
 } from "antd";
 import { useEffect, useRef, useState, type FocusEvent } from "react";
-import type { NavigationPage } from "../../config/navigation";
-import { mockCurrentUser } from "../../mocks/currentUser";
+import type { NavigationPage } from "@/config/navigation";
+import { mockCurrentUser } from "@/mocks/currentUser";
 import {
   mockNotifications,
   type MockNotification,
-} from "../../mocks/notifications";
-import "./TopbarActions.css";
+} from "@/mocks/notifications";
+import "@/layouts/components/TopbarActions.css";
 
 interface TopbarActionsProps {
   aiAssistantPage: NavigationPage;
