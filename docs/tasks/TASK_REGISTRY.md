@@ -6,6 +6,7 @@ Registry Status: `draft; approved only after owner review and merge`
 
 | Task ID | Task | Main Role | Status | Worktree | Branch | Base Commit | PRP | Allowed Scope | PR | Merge Commit | Validation | Cleanup Status | Explicitly Not Implemented | Next Task | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| data-layer-foundation-prp-approval | Approve Data Layer Foundation implementation PRP | Project Owner | approved | `<project-worktrees-root>/docs/<project-root-name>-approve-data-layer-foundation-prp` | `docs/approve-data-layer-foundation-prp` | `4214e57` | `PRPs/data-layer-foundation-implementation.md` | PRP approval metadata and this task registry record only |  |  | `git diff --check`: PASS; scope check: PASS; rule-pack script: known worktree `.git` pointer false positive, not bypassed; no real secrets; no forbidden implementation changes | active | Backend/frontend code, database access, migrations, business tables, Product API, Source Registry, RAW Storage, external APIs, CI PostgreSQL, and Git publishing | Owner-issued Data Layer Foundation implementation prompt | Owner approval recorded 2026-09-09; rule-pack worktree compatibility requires a separate PR; implementation is not recorded as complete |
 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 
 ## Update Checklist
