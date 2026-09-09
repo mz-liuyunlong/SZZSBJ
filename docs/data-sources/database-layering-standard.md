@@ -15,7 +15,7 @@ This standard defines where data belongs and which layers may depend on it. It i
 - Data-source authority is decided separately through `docs/delivery/backend-data-source-decision-gate.md`.
 - A page may query a MART / READ MODEL, but that read model is not the authoritative source.
 - Frontend-facing business APIs must not query RAW directly.
-- A legacy database may only be used through an approved `READ_LEGACY_TEMPORARILY` read-only transition with a defined exit condition.
+- Under the current owner decision, new-system business APIs must not query legacy databases at runtime or use them as a fallback. Legacy data is `legacy_reference` only: source-investigation evidence, field-meaning reference, reconciliation input or migration-acceptance evidence.
 - AI output may be stored as a suggestion or analysis artifact, but must not automatically overwrite business master or fact data.
 - SOPs, policies, manuals, PRPs and rules must be versioned, statused and permission-controlled when indexed or served as knowledge.
 - Every new backend API PRP must state the queried layer, authoritative source, lineage, permissions and data-quality risks.
@@ -96,7 +96,13 @@ Governance planes apply across layers; they are not additional storage layers.
 
 This example illustrates intended layering; it does not approve tables or implementation.
 
-### 6.1 Short-term transition
+### 6.1 Historical short-term transition (superseded)
+
+> [!WARNING]
+> This section is not implementation-ready under the current owner decision.
+> Do not use this section to implement legacy runtime reads.
+> New implementation must start from Data Layer Foundation / Source Registry / RAW / ingestion / read model.
+> Legacy is limited to historical/source investigation, reconciliation and migration acceptance.
 
 ```text
 Frontend Product Management
@@ -105,22 +111,23 @@ Frontend Product Management
   → legacy dim_product / dim_store / dim_store_config
 ```
 
-- This path is allowed only after the interface Source Decision is approved and OD-9 database inventory is completed.
-- Access must remain read-only and limited to the approved product-basic-information scope, pagination and performance boundaries.
-- It must carry a measurable exit condition; it does not make the legacy database the permanent new-system authority.
+- This diagram records the withdrawn `READ_LEGACY_TEMPORARILY` proposal and must not be implemented.
+- OD-9 evidence remains usable for field semantics, reconciliation and migration acceptance only.
+- New-system APIs must not depend on legacy MySQL as a production read source or runtime fallback.
 
-### 6.2 Long-term target
+### 6.2 Current new-system-data-layer-first target
 
 ```text
-Frontend Product Management
+External source
+  → Source Registry + Landing / RAW
+  → governed ingestion and standardization
+  → Product Core / approved DIM
+  → optional product read model
   → Backend API
-  → mart_product_management_list
-  → dim_products / dim_product_listings / dim_stores
-  → fact_inventory_daily / fact_sales_daily / fact_ads_daily / fact_profit_daily
-  → manual_product_overrides
-  → audit / data quality / lineage
+  → Frontend Product Management
 ```
 
+- Business APIs read only an approved new-system database layer or justified read model; they never query legacy runtime data.
 - `mart_product_management_list` is a page read model, not the source of truth.
 - `dim_products` and related master tables must not absorb sales, inventory, advertising, profit, refunds or settlement facts.
 - Owners, tags, lifecycle decisions, notes and corrections belong in MANUAL / OVERRIDE with permissions and audit, not in external-sync fields.
@@ -144,7 +151,7 @@ Any affected PRP must declare:
 | Permissions | Page/action/data/field scope and sensitive fields. |
 | Data quality | Null, duplicate, validity, reconciliation and alert thresholds. |
 | Retention/audit | Required history, actor/reason and deletion/archival boundary. |
-| Rollback/exit | How to disable, rebuild, revert or leave a temporary legacy source. |
+| Rollback/exit | How to disable, rebuild or revert the new-system path; legacy runtime is not an available transition under the current owner decision. |
 
 ## 8. Prohibited patterns
 
@@ -155,6 +162,7 @@ Any affected PRP must declare:
 - AI output must not automatically write or overwrite master/fact data.
 - A MART / READ MODEL must not be the only truth source.
 - Legacy databases must not receive new-system writes, migrations or temporary tables.
+- New-system business APIs must not read a legacy database at runtime or use it as a fallback.
 - New tables, migrations, ORM models or synchronization jobs must not be created without an approved PRP.
 - A business API must not be implemented without field lineage and a completed Source Decision.
 - Cost, profit, procurement, settlement and similarly sensitive fields must not be exposed without field permissions and an approved scope.

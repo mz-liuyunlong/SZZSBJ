@@ -1,5 +1,23 @@
 # Phase 2A：产品管理 / 产品基础信息只读查询 Source Discovery PRP
 
+> [!WARNING]
+> Historical Reference Only — Superseded for runtime route.
+> This document or section is not implementation-ready under the current owner decision.
+> Do not use this section to implement legacy runtime reads.
+> New implementation must start from Data Layer Foundation / Source Registry / RAW / ingestion / read model route.
+> Legacy is limited to historical/source investigation, reconciliation and migration acceptance.
+
+Current replacement sequence:
+
+```text
+Data Layer Foundation Implementation PRP
+  -> Source Registry + RAW Storage
+  -> Lingxing ingestion
+  -> Product Core Data Model
+  -> Product read model
+  -> Product API reading new-system DB / read model
+```
+
 ## 1. Title
 
 Phase 2A：产品管理 / 产品基础信息只读查询 Source Discovery
@@ -15,34 +33,34 @@ Phase 2A：产品管理 / 产品基础信息只读查询 Source Discovery
 ## 2. Status
 
 ```text
-Status: Approved
-Owner Approval Required: Yes
-Investigation Execution Allowed: No until owner changes Status to Approved
+Status: Historical Reference Only — Superseded for runtime route
+Historical Investigation Status: Completed
+Owner Approval Required For Any Replacement: Yes
+Investigation Execution Allowed: No
+Implementation Allowed: No
 ```
 
-- `Draft` 状态不允许开始调查。
-- 负责人批准后，必须将 `Status` 明确改为 `Approved`。
-- PRP 存在不等于调查已获授权。
-- 本轮工程师不得自行将状态改为 `Approved`。
-- 后续调查必须等待负责人另行下发 Source Discovery 执行 Prompt。
+- 本 PRP 仅保留已经完成的历史调查计划和证据边界，不授权新的调查或实现。
+- 历史批准不等于当前运行时路线获批。
+- 下文保留的调查步骤、批准条件和 future-tense 表述仅记录当时计划，均受本节历史状态覆盖，不可作为当前执行指令。
 - Source Discovery PRP 不等于后端接口 PRP。
-- 数据源决策完成也不等于允许编写接口；只有达到门禁要求后，才可另行准备并审批接口 PRP。
+- 任何替代调查、数据平台阶段或产品 API 均需独立 PRP、负责人批准和执行 Prompt。
 
 ## 3. Background
 
-产品基础信息只读查询在进入后端接口 PRP 前，必须先确认候选字段的业务含义、当前读写链路、权威来源、更新方式、短期策略、长期归属、风险和旧库退出条件。当前尚未执行证据调查，也没有形成数据源分类结论或负责人决定。
+本 PRP 编写时，产品基础信息只读查询尚未执行证据调查，也没有形成数据源分类结论或负责人决定。该历史调查现已完成；其结果与当前状态以 `docs/data-sources/decisions/products-basic-information-query-decision.md` 为准。
 
 本 PRP 仅规划一次受控的 Source Discovery，用于后续形成接口数据源决策，不预设旧系统、外部平台或新系统数据库中的任何一方为权威来源。
 
-## 4. Objective
+## 4. Historical Objective
 
-负责人批准本 PRP 并另行下发执行 Prompt 后，按批准范围收集只读证据，回答产品基础身份字段的数据来源问题，并形成唯一主要决策产物：
+本 PRP 当时规划在负责人批准并另行下发执行 Prompt 后，按批准范围收集只读证据，回答产品基础身份字段的数据来源问题，并形成唯一主要决策产物：
 
 ```text
 docs/data-sources/decisions/products-basic-information-query-decision.md
 ```
 
-该决策文件本轮不得创建。后续调查完成、负责人处理所有必要决定且接口总体状态达到 `READY_FOR_PRP` 后，方可另行准备后端接口 PRP。
+该决策文件现已存在，并已按当前 owner decision 标记产品 API 的新系统数据层阻塞。本 PRP 不授权重新执行调查、更新决策或准备产品 API。
 
 ## 5. Scope
 
@@ -213,6 +231,7 @@ notes
 
 分类规则：
 
+- `READ_LEGACY_TEMPORARILY` 仅为历史分类记录；当前负责人决定禁止将其用于新系统业务 API 的 legacy runtime route。
 - 本 PRP 不为任何候选字段预先选择分类。
 - `NEED_OWNER_DECISION` 是阻塞状态，不是最终策略。
 - 存在未解决的 `NEED_OWNER_DECISION` 时，总体状态必须为 `BLOCKED_BY_OWNER_DECISION`。
@@ -221,9 +240,9 @@ notes
 - 不得默认双写，也不得保留未定义优先级的多个权威来源。
 - `READY_FOR_PRP` 只表示可以准备后端接口 PRP，不表示可以编写接口。
 
-## 13. Expected Investigation Output
+## 13. Historical Expected Investigation Output
 
-批准并完成调查后的唯一主要决策产物为：
+历史调查的唯一主要决策产物为：
 
 ```text
 docs/data-sources/decisions/products-basic-information-query-decision.md
@@ -238,11 +257,11 @@ docs/data-sources/decisions/products-basic-information-query-decision.md
 - 短期策略、长期策略、风险和旧库退出条件。
 - 需负责人决定的事项和接口总体状态。
 
-本轮不创建该决策文件，不填写调查结论，不作数据源分类结论或负责人决定。只有后续调查完成、负责人处理必要决定且总体状态达到 `READY_FOR_PRP` 后，才能另行准备后端接口 PRP。
+该决策文件现已存在；当前状态与下一步只以其最新正文和 `PRPs/data-platform-foundation.md` 为准。本历史 PRP 不授权产品 API PRP 或实现。
 
-## 14. Validation Plan
+## 14. Historical Validation Plan
 
-本轮仅验证 Draft PRP 的文件边界、Markdown 完整性和规则合规性：
+以下内容仅记录本 PRP 初次编写时的 Draft 验证，不是当前执行计划：
 
 ```bash
 git status --short --untracked-files=all
@@ -266,7 +285,7 @@ sed -n '1,320p' PRPs/phase-2a-product-basic-information-source-discovery.md
 
 后续 Source Discovery 的验证方式必须由负责人批准的执行 Prompt 精确限定，且至少检查证据路径与行号、事实/推断/待确认区分、分类唯一性、`NEED_OWNER_DECISION` 阻塞规则和禁止操作合规性。
 
-## 15. Stop Conditions
+## 15. Historical Stop Conditions
 
 发生以下任一情况必须立即停止，不得扩大范围或猜测：
 
@@ -287,7 +306,7 @@ sed -n '1,320p' PRPs/phase-2a-product-basic-information-source-discovery.md
 
 未来 Source Discovery 也必须是只读调查。若发生越界，应立即停止，保留只读检查结果并报告；不得通过写入、迁移、同步或部署方式“修复”调查问题。
 
-## 17. Owner Approval Checklist
+## 17. Historical Owner Approval Checklist
 
 - [ ] 确认本 PRP 的 `Status` 当前为 `Draft`，且 PRP 存在不代表已授权调查。
 - [ ] 确认调查对象仅为产品基础身份字段候选范围。

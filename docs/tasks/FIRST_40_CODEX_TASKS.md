@@ -2,6 +2,9 @@
 
 这些任务用于新项目初始化阶段。Codex 必须按顺序、小步执行，不允许一次性生成整个系统。
 
+> [!WARNING]
+> 本清单中的历史任务不得覆盖当前负责人决定。新数据实现必须从 Data Layer Foundation / Source Registry / RAW / ingestion / read model 路线开始；legacy 仅可用于历史/source investigation、reconciliation 和 migration acceptance，不得成为新业务 API 的运行时来源。
+
 ## Phase 0 — Rule pack landing
 
 1. 复制规则包到新项目根目录。
@@ -35,7 +38,7 @@
 23. 建立统一响应格式。
 24. 建立 config / logging / request_id。
 25. 建立 permission helper。
-26. 建立 legacy MySQL readonly 连接占位。
+26. （已取代）将 legacy MySQL 限定为 `legacy_reference` 文档与调查证据；不得建立新业务 API 的运行时连接。
 27. 建立 PostgreSQL 连接占位。
 28. 建立 Alembic。
 29. 建立 OpenAPI metadata 规则。
