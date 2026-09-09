@@ -11,7 +11,7 @@
 | 模块 | 建议目录 | 用途 |
 |---|---|---|
 | Backend API Foundation | `backend/app/core/` | 请求关联、响应契约、异常、认证、权限与资源级数据范围 |
-| Config | `backend/app/core/config.py` | 配置读取 |
+| Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -35,3 +35,23 @@
 | Protected default | 其他业务路由默认需要可信 Principal；无可信认证时 fail closed |
 | Dependencies | 仅使用现有 FastAPI、Pydantic 与 Python 标准库；无数据库、无外部 API |
 | Not in scope | 产品 API、legacy MySQL、PyMySQL、ORM、migration、mart/read model、frontend |
+
+## Data Layer Foundation
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Data Layer Foundation |
+| Module key | `data-layer-foundation` |
+| Status | `approved`；实现待本 PR 合并及验证后登记为 `implemented` |
+| Purpose | 提供环境注入的 PostgreSQL 配置、单一 SQLAlchemy `Base`、延迟同步 engine、单一 sessionmaker、FastAPI DB dependency 和 Alembic scaffold |
+| Owned backend files | `backend/.env.example`, `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic.ini`, `backend/alembic/`, `backend/tests/db/` |
+| Shared integration point | `backend/app/main.py` 的 lifespan 仅在应用关闭时释放已创建 engine；导入应用和 `/health` 不初始化数据库连接 |
+| Public contract | `Base`, `get_engine`, `get_session_factory`, `get_db_session` |
+| Transaction boundary | Route 只注入 session；Service/use case 在写成功后 commit；异常由 dependency rollback 并始终 close；Repository 只接收已注入 session，禁止 commit/rollback 和创建 engine |
+| Persistence conventions | 瞬时时间使用 UTC-aware `DateTime(timezone=True)`；金额使用 Python `Decimal` 与 PostgreSQL `Numeric(18, 4)`；首个获批模型负责实际字段和校验 |
+| Audit convention | 未来模型可按其 PRP 定义 `created_at`, `created_by`, `updated_at`, `updated_by`, `request_id`；本模块不提供 mixin、不创建审计表 |
+| Dependencies | 仅复用锁文件已有 SQLAlchemy 2.x、Alembic、psycopg 3 和 pydantic-settings；未新增或升级依赖 |
+| Tests | `backend/tests/db/test_config.py`, `backend/tests/db/test_base.py`, `backend/tests/db/test_session.py`, `backend/tests/db/test_alembic_scaffold.py` |
+| PRP | `PRPs/data-layer-foundation-implementation.md` |
+| PR | `TBD` |
+| Not in scope | 业务 model/table/API、migration revision、SQL、Source Registry、RAW Storage、legacy MySQL、外部 API、worker、frontend |
