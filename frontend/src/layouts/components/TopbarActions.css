@@ -42,8 +42,9 @@
 .topbar-actions__popover .ant-popover-inner {
   padding: 0;
   overflow: hidden;
-  border-radius: 12px;
-  box-shadow: 0 10px 32px rgb(15 23 42 / 14%);
+  border: 1px solid #e5eaf3;
+  border-radius: 14px;
+  box-shadow: 0 14px 36px rgb(15 23 42 / 14%);
 }
 
 .topbar-actions__panel {
@@ -123,20 +124,21 @@
 }
 
 .topbar-actions__user-panel {
-  width: 248px;
+  width: 284px;
 }
 
 .topbar-actions__user-summary {
   display: flex;
-  gap: 12px;
-  padding: 16px;
-  border-block-end: 1px solid #f0f0f0;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-block-end: 1px solid #e5eaf3;
 }
 
 .topbar-actions__user-summary > div {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 3px;
 }
 
 .topbar-actions__user-summary .ant-typography {
@@ -144,15 +146,75 @@
   text-overflow: ellipsis;
 }
 
+.topbar-actions__user-summary .ant-typography:first-child {
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.topbar-actions__user-summary .ant-avatar {
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 4px #f4f8ff;
+}
+
+.topbar-actions__online-state {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  margin-block-start: 2px;
+  padding: 2px 9px;
+  color: #389e0d;
+  font-size: 12px;
+  background: #f0faeb;
+  border-radius: 999px;
+}
+
 .topbar-actions__user-menu {
   display: grid;
-  padding: 6px;
+  padding: 8px 0 0;
 }
 
 .topbar-actions__user-menu .ant-btn {
   justify-content: flex-start;
-  height: 38px;
+  height: 46px;
+  padding-inline: 18px;
+  color: #1f2937;
+  font-size: 14px;
   text-align: start;
+  border-radius: 0;
+}
+
+.topbar-actions__user-menu .ant-btn:hover {
+  color: #1677ff;
+  background: #f4f8ff;
+}
+
+.topbar-actions__user-menu .ant-btn .anticon:first-child {
+  width: 20px;
+  font-size: 18px;
+}
+
+.topbar-actions__user-menu-label {
+  flex: 1;
+  text-align: start;
+}
+
+.topbar-actions__user-menu-arrow {
+  color: #98a2b3;
+  font-size: 12px !important;
+}
+
+.topbar-actions__user-menu .ant-btn-dangerous {
+  height: 54px;
+  margin-block-start: 6px;
+  color: #ff4d4f;
+  border-block-start: 1px solid #e5eaf3;
+}
+
+.topbar-actions__user-menu .ant-btn-dangerous:hover {
+  color: #ff4d4f;
+  background: #fff2f0;
 }
 
 @media (max-width: 640px) {

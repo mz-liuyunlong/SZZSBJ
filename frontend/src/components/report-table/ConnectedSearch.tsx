@@ -1,6 +1,6 @@
 /** Shared connected search control for dense report toolbars. */
-import { SearchOutlined } from "@ant-design/icons";
-import { Button, Input, Select, type SelectProps } from "antd";
+import { FilterOutlined, SearchOutlined } from "@ant-design/icons";
+import { Button, Input, Select, Tooltip, type SelectProps } from "antd";
 import type { ReactNode } from "react";
 import "@/components/report-table/reportTable.css";
 
@@ -13,7 +13,12 @@ interface ConnectedSearchProps {
   inputPlaceholder: string;
   inputValue: string;
   searchAriaLabel?: string;
-  batchControl: ReactNode;
+  batchControl?: ReactNode;
+  filterAction?: {
+    ariaLabel: string;
+    tooltip?: string;
+    onClick: () => void;
+  };
   onTypeChange: (value: string) => void;
   onInputChange: (value: string) => void;
   onSearch: () => void;
@@ -29,6 +34,7 @@ function ConnectedSearch({
   inputValue,
   searchAriaLabel = "搜索",
   batchControl,
+  filterAction,
   onTypeChange,
   onInputChange,
   onSearch,
@@ -55,6 +61,16 @@ function ConnectedSearch({
         icon={<SearchOutlined aria-hidden="true" />}
         onClick={onSearch}
       />
+      {filterAction && (
+        <Tooltip title={filterAction.tooltip}>
+          <Button
+            className="report-table-connected-search__filter"
+            aria-label={filterAction.ariaLabel}
+            icon={<FilterOutlined aria-hidden="true" />}
+            onClick={filterAction.onClick}
+          />
+        </Tooltip>
+      )}
       {batchControl}
     </div>
   );

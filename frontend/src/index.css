@@ -8,11 +8,86 @@ body,
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #1f2937;
+  font-family: "PingFang SC", Inter, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  background: #f7f9fc;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.ant-btn,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-picker,
+.ant-select-selector {
+  border-radius: 6px !important;
+}
+
+.ant-btn {
+  box-shadow: none;
+}
+
+.ant-btn-default:not(:disabled):hover,
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-picker:hover,
+.ant-select:not(.ant-select-disabled):hover .ant-select-selector {
+  border-color: #1677ff !important;
+}
+
+.ant-select-focused:not(.ant-select-disabled) .ant-select-selector,
+.ant-input:focus,
+.ant-input-affix-wrapper-focused,
+.ant-picker-focused {
+  border-color: #1677ff !important;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 12%) !important;
+}
+
+.ant-select-dropdown,
+.ant-dropdown .ant-dropdown-menu,
+.ant-popover .ant-popover-inner {
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 12%);
+}
+
+.ant-select-dropdown {
+  padding: 8px;
+}
+
+.ant-select-dropdown .ant-select-item,
+.ant-dropdown .ant-dropdown-menu-item {
+  min-height: 38px;
+  align-items: center;
+  padding: 8px 10px;
+  color: #1f2937;
+  font-size: 14px;
+  border-radius: 7px;
+}
+
+.ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled),
+.ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled),
+.ant-dropdown .ant-dropdown-menu-item:hover {
+  color: #1677ff;
+  background: #e8f3ff;
+}
+
+.ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  font-weight: 600;
+}
+
+.ant-popover .ant-popover-inner {
+  padding: 12px;
 }

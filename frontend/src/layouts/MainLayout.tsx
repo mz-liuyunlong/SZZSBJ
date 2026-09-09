@@ -291,6 +291,9 @@ function MainLayout({
           style={{ position: "fixed", left: collapsed ? 64 : 168 }}
         >
           <div className="main-layout__secondary-title">
+            <span className="main-layout__secondary-title-icon" aria-hidden="true">
+              {activeGroup.icon}
+            </span>
             <Typography.Text strong>{activeGroup.title}</Typography.Text>
           </div>
           <Menu

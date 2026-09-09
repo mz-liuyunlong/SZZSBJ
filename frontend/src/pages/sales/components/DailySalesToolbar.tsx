@@ -139,7 +139,7 @@ function DailySalesToolbar({
         mode="multiple"
         showSearch
         className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+        classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
         aria-label="平台"
         placeholder="全部平台"
         value={filters.platforms}
@@ -153,7 +153,7 @@ function DailySalesToolbar({
         mode="multiple"
         showSearch
         className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+        classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
         aria-label="负责人"
         placeholder="负责人"
         value={filters.owners}
@@ -167,7 +167,7 @@ function DailySalesToolbar({
         mode="multiple"
         showSearch
         className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+        classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
         aria-label="店铺"
         placeholder="全部店铺"
         value={filters.stores}

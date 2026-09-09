@@ -247,6 +247,7 @@ interface MockTableProps<Row extends { id: string }> {
     current: number;
     onChange: (page: number, pageSize: number) => void;
     pageSize: number;
+    pageSizeOptions: string[];
   };
   rowSelection: {
     onChange: (keys: string[]) => void;
@@ -301,7 +302,9 @@ vi.mock("@ant-design/pro-components", () => ({
             value={pagination.pageSize}
             onChange={(event) => pagination.onChange(2, Number(event.target.value))}
           >
-            {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+            {pagination.pageSizeOptions.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
           </select>
         </footer>
       </div>
@@ -483,13 +486,17 @@ describe("DailySalesPage", () => {
   it("resets to page one and clears selection for every supported page size", () => {
     renderPage();
 
+    fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
     fireEvent.click(screen.getByRole("checkbox", { name: /选择行/ }));
     expect(screen.getByLabelText("当前页")).toHaveTextContent("2");
     expect(screen.getByText("已选择 1 项")).toBeVisible();
     expect(screen.getByRole("button", { name: /批量操作/ })).toBeVisible();
 
-    for (const size of [10, 20, 50, 100, 10]) {
+    expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
+      .map((option) => option.value)).toEqual(["50", "100", "200", "500", "1000"]);
+
+    for (const size of [50, 100, 200, 500, 1000, 50]) {
       fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: String(size) } });
       expect(screen.getByLabelText("当前页")).toHaveTextContent("1");
       expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
@@ -539,7 +546,7 @@ describe("DailySalesPage", () => {
     expect(totalRow.querySelector(".daily-sales__total-cell--analysis")).toBeEmptyDOMElement();
     expect(totalRow.querySelector(".daily-sales__total-cell--date")).toBeEmptyDOMElement();
     expect(totalRow.querySelector(".daily-sales__total-cell--salesVolume"))
-      .toHaveAttribute("align", "right");
+      .toHaveAttribute("align", "left");
     expect(totalRow.querySelector(".daily-sales__total-cell--salesAmount")).toHaveTextContent("$");
 
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));

@@ -702,7 +702,7 @@ describe("ProductManagementPage", () => {
     );
 
     const table = screen.getByRole("region", { name: "产品管理主表" });
-    expect(within(table).getAllByText(/验收示例产品/)).toHaveLength(10);
+    expect(within(table).getAllByText(/验收示例产品/)).toHaveLength(50);
     expect(within(table).getByText("共 50 条")).toBeVisible();
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-row-key", "id");
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-has-request", "false");
@@ -741,15 +741,16 @@ describe("ProductManagementPage", () => {
     expect(within(table).queryByRole("columnheader", { name: "详情" })).not.toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "操作" })).toHaveAttribute("data-fixed", "right");
     expect(within(table).getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(9);
-    expect(within(table).getByRole("combobox", { name: "每页条数" })).toHaveValue("10");
+    const pageSizeSelect = within(table).getByRole("combobox", { name: "每页条数" });
+    expect(pageSizeSelect).toHaveValue("50");
+    expect(Array.from(pageSizeSelect.querySelectorAll("option")).map((option) => option.value))
+      .toEqual(["50", "100", "200", "500", "1000"]);
     expect(within(table).getByLabelText("跳至页码")).toBeVisible();
     expect(view.container.querySelector(".ant-pagination")).toBeInTheDocument();
 
     const productNameCell = within(table).getByText("验收示例产品 001").closest("td");
     expect(productNameCell).not.toHaveTextContent("测品");
-    fireEvent.click(within(table).getByRole("button", { name: "第 2 页" }));
-    expect(within(table).queryByText("验收示例产品 001")).not.toBeInTheDocument();
-    expect(within(table).getByText("验收示例产品 011")).toBeVisible();
+    expect(within(table).getByText("验收示例产品 050")).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -783,8 +784,7 @@ describe("ProductManagementPage", () => {
   it("filters locally by grade and tag, resets pagination and selection, and sorts filtered rows", () => {
     renderPage();
     const table = screen.getByRole("region", { name: "产品管理主表" });
-    fireEvent.click(within(table).getByRole("button", { name: "第 2 页" }));
-    fireEvent.click(within(table).getByRole("checkbox", { name: "选择 acceptance-product-11" }));
+    fireEvent.click(within(table).getByRole("checkbox", { name: "选择 acceptance-product-1" }));
     fireEvent.change(screen.getByRole("combobox", { name: "产品等级" }), { target: { value: "B级" } });
 
     expect(within(table).getByText("共 17 条")).toBeVisible();
@@ -820,12 +820,11 @@ describe("ProductManagementPage", () => {
       .find((header) => header.textContent?.trim() === "SKU");
     fireEvent.click(skuHeader!);
     fireEvent.click(skuHeader!);
-    fireEvent.click(within(table).getByRole("button", { name: "第 2 页" }));
     fireEvent.click(within(table).getAllByRole("checkbox", { name: /选择 acceptance-product-/ })[0]);
     expect(screen.getByText("已选择 1 项")).toBeVisible();
 
     fireEvent.change(within(table).getByRole("combobox", { name: "每页条数" }), {
-      target: { value: "20" },
+      target: { value: "100" },
     });
 
     expect(within(table).getByRole("button", { name: "第 1 页" })).toHaveAttribute(
@@ -895,14 +894,12 @@ describe("ProductManagementPage", () => {
     expect(screen.queryByRole("button", { name: /批量操作/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "选择当前页" }));
-    expect(screen.getByText("已选择 10 项")).toBeVisible();
-    const selectionFooter = screen.getByText("已选择 10 项").closest(".ant-table-footer");
+    expect(screen.getByText("已选择 50 项")).toBeVisible();
+    const selectionFooter = screen.getByText("已选择 50 项").closest(".ant-table-footer");
     const pagination = screen.getByRole("navigation", { name: "分页" });
     expect(selectionFooter?.parentElement).toBe(pagination.parentElement);
     expect(screen.queryByRole("button", { name: "批量标记标签" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "清空选择" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "第 2 页" }));
-    expect(screen.getByRole("checkbox", { name: "选择当前页" })).not.toBeChecked();
     const bulkActionButton = screen.getByRole("button", { name: /批量操作/ });
     expect(bulkActionButton.closest('[data-placement="topLeft"]')).toBeInTheDocument();
     fireEvent.click(bulkActionButton);

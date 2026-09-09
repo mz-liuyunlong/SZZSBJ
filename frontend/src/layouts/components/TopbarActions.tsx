@@ -4,8 +4,12 @@
 import {
   BellOutlined,
   CheckCircleOutlined,
+  FileTextOutlined,
+  LogoutOutlined,
   NotificationOutlined,
+  RightOutlined,
   RobotOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import {
   Avatar,
@@ -186,7 +190,7 @@ function TopbarActions({
     >
       <div className="topbar-actions__user-summary">
         <Avatar
-          size={40}
+          size={48}
           src={mockCurrentUser.avatarSrc}
           alt="演示用户头像"
         >
@@ -195,18 +199,39 @@ function TopbarActions({
         <div>
           <Typography.Text strong>{mockCurrentUser.displayName}</Typography.Text>
           <Typography.Text type="secondary">{mockCurrentUser.account}</Typography.Text>
-          <Badge status={mockCurrentUser.online ? "success" : "default"} text="在线" />
+          <span className="topbar-actions__online-state">
+            <Badge status={mockCurrentUser.online ? "success" : "default"} />
+            在线
+          </span>
         </div>
       </div>
       <div className="topbar-actions__user-menu" role="menu" aria-label="用户菜单选项">
-        <Button type="text" role="menuitem" onClick={() => openPage(personalCenterPage.key)}>
-          {personalCenterPage.title}
+        <Button
+          type="text"
+          role="menuitem"
+          icon={<UserOutlined aria-hidden="true" />}
+          onClick={() => openPage(personalCenterPage.key)}
+        >
+          <span className="topbar-actions__user-menu-label">{personalCenterPage.title}</span>
+          <RightOutlined className="topbar-actions__user-menu-arrow" aria-hidden="true" />
         </Button>
-        <Button type="text" role="menuitem" onClick={() => openPage(documentationPage.key)}>
-          {documentationPage.title}
+        <Button
+          type="text"
+          role="menuitem"
+          icon={<FileTextOutlined aria-hidden="true" />}
+          onClick={() => openPage(documentationPage.key)}
+        >
+          <span className="topbar-actions__user-menu-label">{documentationPage.title}</span>
+          <RightOutlined className="topbar-actions__user-menu-arrow" aria-hidden="true" />
         </Button>
-        <Button danger type="text" role="menuitem" onClick={showLogout}>
-          退出
+        <Button
+          danger
+          type="text"
+          role="menuitem"
+          icon={<LogoutOutlined aria-hidden="true" />}
+          onClick={showLogout}
+        >
+          <span className="topbar-actions__user-menu-label">退出</span>
         </Button>
       </div>
     </section>
