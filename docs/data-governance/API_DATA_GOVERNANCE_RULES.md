@@ -6,6 +6,9 @@
 
 本文与 `docs/delivery/backend-data-source-decision-gate.md` 同时适用。业务数据 Source Decision 必须先达到限定范围的 `READY_FOR_PRP`，然后才能编写 API PRP；PRP 获批后才可实现。
 
+> [!WARNING]
+> 当前负责人决定禁止新系统业务 API 运行时读取 legacy 数据库或将其作为 fallback。旧系统只可作为 `legacy_reference`、source investigation evidence、field meaning reference、reconciliation input 或 migration acceptance evidence。任何历史例外都必须由负责人另行明确批准；当前没有获批例外。新实现必须从 Data Layer Foundation / Source Registry / RAW / ingestion / read model 路线开始。
+
 ## 通用前置清单
 
 | 检查项 | 必须回答 | Blocking condition |
@@ -32,14 +35,14 @@
 
 | Required decision | 要求 |
 | --- | --- |
-| 读取层 | 明确 DIM、FACT、MART、MANUAL 或 `legacy readonly`；RAW 默认禁止 |
-| 旧系统读取 | 必须有 `READ_LEGACY_TEMPORARILY` 决策、只读账号、表/字段 allowlist 和退出条件 |
+| 读取层 | 明确获批的新系统 DIM、FACT、MART 或 MANUAL；RAW 和 legacy runtime 默认禁止 |
+| 旧系统证据 | 仅限 `legacy_reference`、source investigation evidence、field meaning reference、reconciliation input 或 migration acceptance evidence；`READ_LEGACY_TEMPORARILY` 是历史已取代分类，不是当前实现建议，任何历史例外均需负责人另行明确批准 |
 | contract | Pydantic response model、字段语义/null/单位/时间/金额、pagination/filter contract |
 | security | permission key、resource key、data scope、字段级脱敏；fail closed |
 | platform | `request_id`、统一 error model、`{ success, data, error, meta, request_id }` envelope |
 | quality | 新鲜度、DQ warning、来源限制和 partial data 行为 |
 
-示例（candidate）：产品查询若获批只读旧库，只能读取 Source Decision 允许字段；不得顺手加入价格、库存或负责人字段。
+示例（candidate）：产品查询必须先通过 Source Registry、RAW、ingestion、Product Core 和必要 read model 建立获批的新系统数据路径；不得运行时读取旧库，也不得顺手加入价格、库存或负责人字段。
 
 ## B. 写入类 API
 
@@ -101,6 +104,7 @@
 - 没有 financial policy、metric definition、control totals 就计算利润或发布财务指标。
 - 没有 permission/data scope 就暴露业务或敏感字段。
 - API route 实时批量拉外部平台；frontend 直连数据库、RAW 或外部平台。
+- 新系统业务 API 运行时读取 legacy 数据库，或将旧系统作为 production read source / fallback。
 - 用 MART、cache、vector index 或 AI output 反推并覆盖权威数据。
 
 ## PRP 与 Release Gate
