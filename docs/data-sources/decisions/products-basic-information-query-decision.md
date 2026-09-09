@@ -1,35 +1,42 @@
 # Products Basic Information Query Source Decision
 
+> [!WARNING]
+> Current owner decision: `new-system-data-layer-first`.
+> This document is not implementation-ready under the current owner decision.
+> Do not use this decision or its superseded API PRP to implement legacy runtime reads.
+> New implementation must start from the Data Layer Foundation / Source Registry / RAW / ingestion / read model route, and the product API must read the new-system DB / read model.
+> Historical `READ_LEGACY_TEMPORARILY` findings are retained only as source investigation evidence; legacy MySQL may now be used only as `legacy_reference`, field meaning reference, reconciliation input and migration acceptance evidence.
+
 ## 1. Status
 
 ```text
 Investigation Date: 2026-09-07
-Decision Update Date: 2026-09-07
+Decision Update Date: 2026-09-09
 Investigator: Backend Engineer Codex
 Decision Update Author: Architect Codex
 Target method/path: 待定——本任务不定义后端接口契约
 Source Discovery Status: Completed
 OD-9 Readonly DB Inventory: Completed
-Overall Decision State: READY_FOR_PRP
-Contains NEED_OWNER_DECISION In Approved Phase 2A Scope: No
+Overall Decision State: BLOCKED_BY_OWNER_DECISION
+Contains NEED_OWNER_DECISION In Current Product API Scope: Yes
 Deferred Out-of-scope Decisions: Yes
-Owner Approval Status: Approved for the narrowed Phase 2A scope
+Owner Approval Status: New-system-data-layer-first direction approved; source, ingestion, Core and read-model decisions remain pending
 Owner Decision Approved By: Project Owner
-Owner Decision Approval Date: 2026-09-07
+Owner Decision Approval Date: 2026-09-09
 Database Access Used In This Update: No
 Server Access Used In This Update: No
 External API Used In This Update: No
 Decision File: docs/data-sources/decisions/products-basic-information-query-decision.md
-Subsequent Interface PRP: Allowed to create; not created
+Subsequent Interface PRP: Blocked; the existing legacy-read API PRP is superseded
 ```
 
-`READY_FOR_PRP` 只适用于下文明确列出的 Phase 2A 产品基础信息只读查询缩小范围，只允许下一步创建和审批接口 PRP，不授权接口实现、数据库变更、外部 API 调用、同步任务或部署。
+当前 `BLOCKED_BY_OWNER_DECISION` 表示产品 API 尚无获批的新系统运行时来源。下一步只能按 `PRPs/data-platform-foundation.md` 分阶段准备 Data Layer Foundation、Source Registry + RAW、Lingxing ingestion、Product Core Data Model 与 Product read model；不得继续旧库运行时查询路线，也不得直接编写或实现产品 API。
 
 本决策依据仓库静态调查和已合并的 OD-9 脱敏只读数据库盘点报告。OD-9 证明了批准范围内的表结构和聚合数据质量事实，但不能证明外部来源新鲜度、外部 API 可用性或长期权威来源已经完成验证。
 
 ## 2. Scope
 
-本次 `READY_FOR_PRP` 只覆盖以下第一阶段来源字段：
+历史 `READY_FOR_PRP` 曾只覆盖以下第一阶段来源字段；这些字段边界继续作为 discovery evidence，但当前产品 API 已回到 `BLOCKED_BY_OWNER_DECISION`：
 
 - `item_id`
 - `sku`
@@ -57,7 +64,7 @@ Subsequent Interface PRP: Allowed to create; not created
 
 OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数分别为 2,446、9、10；`item_id`、`msku`、`store_id` 缺失率为 0%，SKU 缺失 662 行、缺失率为 27.06%，并存在重复及交叉映射风险。店铺匹配统计的实际连接粒度无法确认，`store_name` 仍缺少唯一权威来源证据；更新时间字段也只能作为结构性风险证据，不能证明来源新鲜度。
 
-负责人已批准 OD-1：第一阶段按 `READ_LEGACY_TEMPORARILY` 临时只读旧库，并受本决策缩小字段范围约束。负责人已解决 OD-3 在本阶段的阻塞方式：排除 `store_name`，只保留 `store_id`。因此缩小后的产品基础信息查询达到 `READY_FOR_PRP`；未验证的外部接口、被排除字段和长期标准层均不在此次批准范围内。
+负责人曾批准 OD-1 的 `READ_LEGACY_TEMPORARILY` 路线，并通过排除 `store_name` 解决当时的 OD-3 范围问题；该运行时路线现已被 `new-system-data-layer-first` 决定取代。上述结论仅保留为历史调查背景。当前仍需完成并批准新系统来源、ingestion、Core 与 read model 决策，产品 API 才能重新达到限定范围的 `READY_FOR_PRP`。
 
 ## 4. Evidence Reviewed
 
@@ -113,14 +120,14 @@ OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数�
 | 人工写库入口 | 基础身份字段未发现当前页面写入口；页面写入的负责人、生命周期、WFS 费用、GPT 链接和产品管理状态均明确排除。旧飞书结构化写入已停用（`feishu_item_owner_sync.md:5`）。 |
 | 外部平台重新获取可能性 | 存在线索：Walmart 在线商品、本地产品列表/详情、品牌和分类候选接口；但 `api-verification-status.csv:8`、`:10`、`:11`、`:19`、`:20`、`:143` 全部为未验证。 |
 | 少量配置数据可行性 | 本阶段不适用。store alias、SKU mapping 和人工纠错写能力已由 OD-8 后置，不进入本期接口范围。 |
-| 短期策略 | 负责人已批准按 `READ_LEGACY_TEMPORARILY` 从 `dim_product` 读取本决策明确允许的五个字段；不读取或返回 `store_name`，不复制旧三表名称 fallback。 |
-| 长期策略 | 按 OD-10 先验证 Walmart Listing 来源，再按需评估 Lingxing local product；完成独立 Source Decision、PRP、标准层和同步任务后退出旧库。禁止 API route 实时批量拉取。 |
+| 短期策略 | 历史方案曾批准 `READ_LEGACY_TEMPORARILY` 从 `dim_product` 读取五个字段；该 superseded legacy runtime route 不得实施。旧表只保留为 `legacy_reference`、source investigation evidence、reconciliation input 和 migration acceptance evidence。 |
+| 长期策略 | 当前采用 `new-system-data-layer-first`：按 OD-10 验证来源后，经 Source Registry、RAW、Lingxing ingestion、Product Core Data Model 和 Product read model 进入新系统；产品 API 只读取 new-system DB / read model。 |
 
 ### 5.3 Read-path Tables
 
-| Candidate table | Role in current GET | Evidence |
+| Candidate table | Role under current decision | Evidence |
 |---|---|---|
-| `dim_product` | 第一阶段临时只读来源；后续 API PRP 只可讨论 `item_id`、`sku`、`msku`、`item_name`、`store_id`。 | `old-system/source/src/feishuRawSalesRoutes.ts:866`、`:1008`-`:1023`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:46` |
+| `dim_product` | 仅作为五个候选字段的 `legacy_reference`、source investigation evidence、reconciliation input 和 migration acceptance evidence；不得作为新系统 API 运行时来源。 | `old-system/source/src/feishuRawSalesRoutes.ts:866`、`:1008`-`:1023`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:46` |
 | `dim_store` | 仅作为 OD-9 店铺证据来源；因 `store_name` 排除，不自动授权第一阶段运行时查询或连接。 | `old-system/source/src/feishuRawSalesRoutes.ts:867`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:64` |
 | `dim_store_config` | 仅作为 OD-9 店铺证据来源；因 `store_name` 排除，不自动授权第一阶段运行时查询或连接。 | `old-system/source/src/feishuRawSalesRoutes.ts:868`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:76` |
 | `raw_lingxing_api` | 不被 GET 直接读取；仅为外部同步 RAW 留痕。 | `old-system/source/context/DATABASE_MAP.md:26` |
@@ -132,19 +139,19 @@ OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数�
 
 | field_or_dataset | business_meaning | candidate_source_table_or_api | classification | evidence_path | current_writer | current_reader | external_origin | freshness_or_update_chain | confidence_level | short_term_strategy | long_term_strategy | risk_level | owner_decision_needed | notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `item_id`, `msku`, `store_id` | 第一阶段外部商品、运营 SKU 与店铺身份字段 | Legacy `dim_product` | `READ_LEGACY_TEMPORARILY` | `old-system/source/src/feishuRawSalesRoutes.ts:1008`; `old-system/source/src/syncLingxingDailyToDb.ts:308`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:107`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:109`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:126` | 仓库静态证据指向 `syncLingxingDailyToDb.ts`；当前运行状态未由 OD-9 证明 | Legacy GET product-management | Lingxing 包装的 Walmart Listing 数据 | 旧表仅有行变更时间候选，不能证明来源新鲜度 | High for structure / freshness unknown | 通过只读账号、受限分页和 Legacy Readonly Repository 读取，不写旧库 | 先验证 Walmart Listing，再通过独立 PRP 同步到新系统标准层 | High | No for narrowed scope | `item_id`、`msku` 不等于内部 `product_id`；`store_id` 不得自动转换为 `store_name`。 |
-| `sku` | 第一阶段可空的本地 SKU 标识 | Legacy `dim_product.sku` | `READ_LEGACY_TEMPORARILY` | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:108`; `old-system/source/src/syncLingxingDailyToDb.ts:305` | 仓库静态证据指向旧日链 | Legacy GET product-management | Walmart Listing / Lingxing local product 历史链路 | 来源新鲜度未证明 | High for observed quality risk | 原值只读返回；允许为空，不推导、不丢弃产品、不作为全局唯一身份 | 按 OD-10 验证来源后重建同步，保留空值和歧义状态 | High | No for narrowed scope | OD-9：662 行缺失，缺失率 27.06%，且存在重复和交叉映射风险。 |
-| `item_name` | 第一阶段产品名称 | Legacy `dim_product.item_name` | `READ_LEGACY_TEMPORARILY` | `old-system/source/src/feishuRawSalesRoutes.ts:1015`; `old-system/source/src/syncLingxingDailyToDb.ts:308`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:58` | 仓库静态证据指向旧日链 | Legacy GET product-management | Walmart Listing 名称链路候选 | 来源新鲜度和空值率未由 OD-9 证明 | Medium | 优先返回 `item_name`；为空时保留空值或待确认，不 fallback `product_name` | 先验证 Walmart Listing 名称字段，再按需评估 Lingxing local product | High | No for narrowed scope | `product_name` 明确排除，不得恢复旧接口 fallback。 |
+| `item_id`, `msku`, `store_id` | 第一阶段外部商品、运营 SKU 与店铺身份候选字段 | Walmart Listing / Lingxing ingestion candidate; legacy `dim_product` is evidence only | `NEED_OWNER_DECISION` | `old-system/source/src/feishuRawSalesRoutes.ts:1008`; `old-system/source/src/syncLingxingDailyToDb.ts:308`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:107`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:109`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:126` | 仓库静态证据只说明旧 writer；新 ingestion 尚未批准 | 新系统尚无获批 reader | Lingxing 包装的 Walmart Listing 数据候选 | 来源接口、增量链与 freshness 尚待验证 | High for legacy structure / new-system source pending | 不实现产品 API；先完成 Source Registry、RAW 与 ingestion 决策 | 经获批 ingestion 写入 Product Core，再由 Product read model/API 读取 | High | Yes | `item_id`、`msku` 不等于内部 `product_id`；legacy 数据仅作 comparison / migration acceptance。 |
+| `sku` | 第一阶段可空的本地 SKU 候选字段 | Walmart Listing / Lingxing local product candidate; legacy `dim_product.sku` is evidence only | `NEED_OWNER_DECISION` | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:108`; `old-system/source/src/syncLingxingDailyToDb.ts:305` | 仓库静态证据只说明旧链；新 ingestion 尚未批准 | 新系统尚无获批 reader | Walmart Listing / Lingxing local product 候选 | 来源新鲜度未证明 | High for observed legacy quality risk | 不运行时读取旧库；先验证来源字段与 identity grain | 通过获批 ingestion/Core/read model 保留空值和歧义状态 | High | Yes | OD-9 的缺失、重复与映射风险继续作为 DQ 设计证据。 |
+| `item_name` | 第一阶段产品名称候选字段 | Walmart Listing name / Lingxing local product candidate; legacy `dim_product.item_name` is evidence only | `NEED_OWNER_DECISION` | `old-system/source/src/feishuRawSalesRoutes.ts:1015`; `old-system/source/src/syncLingxingDailyToDb.ts:308`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:58` | 仓库静态证据只说明旧链；新 ingestion 尚未批准 | 新系统尚无获批 reader | Walmart Listing 名称链路候选 | 来源新鲜度和空值率未证明 | Medium | 不运行时读取旧库；先验证新 ingestion 的名称字段 | 经 Product Core/read model 提供；不 fallback `product_name` | High | Yes | `product_name` 继续排除，字段调查结论仍有效。 |
 
 ### 6.1 Required Data Lineage Matrix
 
-本矩阵只批准来源范围，不定义最终 API 类型或数据库字段；后续接口 PRP 必须完成版本化数据契约和字段字典审批后才能实现。
+本矩阵只保留来源调查范围，不定义最终 API 类型或数据库字段；必须先由 Source Registry、ingestion 与 Product Core PRP 完成新系统来源和字段契约，再重新审查产品 API 是否可进入 PRP。
 
 | field_or_dataset | current_authoritative_source | raw_field | standard_field | transformation_or_formula | timezone | currency | evidence_path | risk_check | owner_decision_needed | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 商品身份（`item_id`、`msku`、`store_id`） | Legacy `dim_product`，仅为负责人批准的阶段性只读来源，不是长期权威主数据 | `dp.item_id`, `dp.msku`, `dp.store_id` | 同名 API 候选；最终数据类型和 nullability 由接口 PRP/数据契约批准 | 原值只读，不互相推导，不生成内部 `product_id` | 不适用 | 不适用 | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:107`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:109`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:126`; `old-system/source/src/feishuRawSalesRoutes.ts:1008` | 来源新鲜度未知；身份必须保留外部语义 | No for narrowed scope | `store_name` 不由 `store_id` 自动补齐。 |
-| `sku` | Legacy `dim_product`，仅为阶段性只读来源 | `dp.sku` | `sku` API 候选；契约必须允许 null | 原值只读；不得从 ItemID/MSKU 推导，不得用于丢弃产品 | 不适用 | 不适用 | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:108` | 缺失率 27.06%，存在重复和交叉映射风险 | No for narrowed scope | 不得声明唯一约束。 |
-| `item_name` | Legacy `dim_product`，仅为阶段性只读来源 | `dp.item_name` | `item_name` API 候选；最终契约待接口 PRP | 优先原值只读；空值不 fallback `product_name` | 不适用 | 不适用 | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:58`; `old-system/source/src/syncLingxingDailyToDb.ts:308` | 空值率和来源新鲜度未由 OD-9 证明 | No for narrowed scope | `product_name` 不进入第一阶段契约。 |
+| 商品身份（`item_id`、`msku`、`store_id`） | Pending new-system source decision; legacy `dim_product` is `legacy_reference` only | `dp.item_id`, `dp.msku`, `dp.store_id`（历史证据字段） | 新系统字段契约待 Source Registry / ingestion / Product Core PRP | 保留历史字段语义，不互相推导，不生成内部 `product_id` | 不适用 | 不适用 | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:107`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:109`; `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:126`; `old-system/source/src/feishuRawSalesRoutes.ts:1008` | 来源、freshness 与 identity grain 尚未获批 | Yes | `store_name` 不由 `store_id` 自动补齐。 |
+| `sku` | Pending new-system source decision; legacy `dim_product` is `legacy_reference` only | `dp.sku`（历史证据字段） | 新系统 `sku` 契约待批准，且必须允许 null | 不得从 ItemID/MSKU 推导，不得用于丢弃产品 | 不适用 | 不适用 | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:108` | 历史证据显示缺失率 27.06%，并存在重复和映射风险 | Yes | 不得声明唯一约束。 |
+| `item_name` | Pending new-system source decision; legacy `dim_product` is `legacy_reference` only | `dp.item_name`（历史证据字段） | 新系统 `item_name` 契约待批准 | 不 fallback `product_name`；新系统清洗规则待 ingestion/Core PRP | 不适用 | 不适用 | `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md:58`; `old-system/source/src/syncLingxingDailyToDb.ts:308` | 新系统来源、空值率和 freshness 未获批 | Yes | `product_name` 不进入第一阶段契约。 |
 
 ### 6.2 Risk Checklist
 
@@ -155,19 +162,19 @@ OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数�
 | 调用真实外部 API | No | 未调用 Lingxing、Walmart 或其他外部 API。 |
 | 读取 secrets 或 `.env` | No | 未读取或输出敏感配置。 |
 | 修改 `old-system/**` | No | 旧系统只读。 |
-| 临时只读来源是否已批准 | Yes | OD-1 已批准 `READ_LEGACY_TEMPORARILY`，仅限本决策五个字段和 Phase 2A 查询。 |
-| 外部 API 是否未经验证 | Yes, deferred | OD-10 只批准验证顺序；未验证外部 API 不阻塞当前临时只读范围。 |
-| 当前范围权威来源是否明确 | Yes | 五个字段只读 `dim_product`；被排除字段不得进入接口 PRP。 |
-| 字段契约是否完成 | No | 后续接口 PRP 必须定义 response schema、类型、nullability、字段字典和数据质量警告；未批准前不得实现。 |
-| 旧库性能边界 | Required in API PRP | 必须使用只读账号、受限服务端分页和有界查询；禁止全表加载、写入和未评估扫描。 |
+| 临时只读来源是否已批准 | No | OD-1 的历史 `READ_LEGACY_TEMPORARILY` 路线已被当前 owner decision superseded；不得运行时读取旧库。 |
+| 外部 API 是否未经验证 | Yes, blocking for product API | OD-10 只批准验证顺序；来源、字段契约和 ingestion 未验证前，产品 API 保持阻塞。 |
+| 当前范围权威来源是否明确 | No | legacy `dim_product` 仅为调查证据；新系统来源、ingestion、Core 与 read model 尚待独立决策和 PRP。 |
+| 字段契约是否完成 | No | Source Registry、ingestion 与 Product Core PRP 必须先定义来源字段、类型、nullability、字段字典和数据质量行为。 |
+| 旧库运行时性能边界 | Not applicable | 当前禁止 legacy runtime read；如需把旧库用于单独的 reconciliation 或 migration acceptance，必须另行批准只读任务及性能边界。 |
 | 时区 | 不适用 / 待确认 | 本次身份候选字段不含已确认时间字段；若后续纳入时间字段，需单独确认口径。 |
 | 币种 | 不适用 | 本次排除所有金额、成本、费用和汇率字段。 |
-| 当前缩小范围是否存在 `NEED_OWNER_DECISION` | No | OD-1 已批准；OD-3 通过排除 `store_name` 在本阶段解决；其他未决能力均已移出范围。 |
-| Overall Decision State | `READY_FOR_PRP` | 只允许创建产品基础信息查询 API PRP，不授权实现。 |
+| 当前缩小范围是否存在 `NEED_OWNER_DECISION` | Yes | 新系统来源、ingestion、Core 字段契约、read model 和 freshness 尚未获批。 |
+| Overall Decision State | `BLOCKED_BY_OWNER_DECISION` | 当前只允许准备前置数据平台阶段；不得创建或实现产品 API。 |
 
 ## 7. Explicitly Excluded Findings
 
-以下内容明确不在本次 `READY_FOR_PRP` 范围内：
+以下内容继续明确排除在未来缩小后的产品基础信息范围之外：
 
 - `store_name` 及旧系统多表名称 fallback；
 - `product_name` fallback；
@@ -181,7 +188,7 @@ OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数�
 - Walmart/Lingxing 外部 API 同步；
 - 后端或前端实现。
 
-这些项目已从第一阶段接口契约中排除，因此不再构成当前缩小范围的 `NEED_OWNER_DECISION`。任何项目重新进入范围，都必须另行更新 Source Decision，并按风险取得负责人批准和独立 PRP。
+这些项目不是当前产品 API 阻塞的原因；当前阻塞来自新系统来源、ingestion、Core 与 read model 尚未获批。任何排除项目重新进入范围，都必须另行更新 Source Decision，并按风险取得负责人批准和独立 PRP。
 
 以下内容在旧页面/接口中存在，但统一记录为“关联但不在本次范围”：
 
@@ -204,7 +211,7 @@ OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数�
 
 | ID | Final state | Approved Phase 2A boundary |
 |---|---|---|
-| OD-1 | Approved with restrictions | 第一阶段按 `READ_LEGACY_TEMPORARILY` 临时只读旧库，仅限本决策五个字段、只读账号、有界查询和明确退出里程碑；旧库不是长期主数据模型。 |
+| OD-1 | Superseded | 历史上曾批准 `READ_LEGACY_TEMPORARILY`；当前改为 `new-system-data-layer-first`，legacy 仅作 reference / comparison / migration acceptance。 |
 | OD-2 | Confirmed | 产品名称优先使用 `item_name`；为空时允许空值或待确认，不默认 fallback `product_name`。 |
 | OD-3 | Resolved for Phase 2A | 第一阶段只使用 `store_id`；`store_name` 不进入 response 或前端展示，后续如需使用必须另做 Source Decision / PRP。 |
 | OD-4 | Confirmed | SKU/MSKU/ItemID 可作为候选展示字段；SKU 可空、非全局唯一，不推导、不丢弃产品。 |
@@ -215,60 +222,59 @@ OD-9 已确认 `dim_product`、`dim_store`、`dim_store_config` 存在，行数�
 | OD-9 | Completed | 证据来自 `docs/data-sources/db-inventory/product-basic-information-od9-db-inventory.md`；三表结构、索引和批准聚合范围已完成盘点。 |
 | OD-10 | Confirmed sequence only | 长期先验证 Walmart Listing，再按需评估 Lingxing local product；未授权任何真实外部 API 调用。 |
 
-当前缩小范围不存在未解决的阻塞项。被排除或后置的能力不属于本期接口数据集，不得借 `READY_FOR_PRP` 重新带回。
+OD-2、OD-3、OD-4、OD-5、OD-6、OD-7、OD-8、OD-9、OD-10 的字段调查与排除结论继续有效；只有 OD-1 的运行时来源路线被取代。产品 API 当前存在新系统来源与数据层阻塞，不得借历史 `READY_FOR_PRP` 状态进入实现。
 
-## 9. Recommended Short-Term Strategy
+## 9. Superseded Short-Term Strategy (Historical Context)
 
-1. 第一阶段只通过 Legacy Readonly Repository 读取 `dim_product.item_id`、`sku`、`msku`、`item_name`、`store_id`。
-2. 不为第一阶段 response 连接 `dim_store` 或 `dim_store_config`；OD-9 对这两表的盘点只用于解决店铺证据，不构成运行时读取授权。
-3. 旧库访问必须使用只读账号、服务端受限分页和有界查询；禁止全表加载、前端全量筛选、写入、DDL、临时表或未评估扫描。准确 page-size、timeout、过滤和排序边界由接口 PRP 明确并在实现前审批。
-4. SKU 允许为空并必须保留；接口 PRP 必须定义缺失、重复和身份歧义的数据质量警告，不得自动补值或合并。
-5. `item_name` 为空时返回空值或待确认状态；不得 fallback `product_name`。
-6. 旧表更新时间只能标识行变更候选，接口不得将其宣称为外部来源新鲜度；具体 stale-data 提示由接口 PRP 定义。
-7. 本策略不创建新表、mart/read model、同步任务或写路径，也不使旧库成为长期权威来源。
+历史方案曾计划通过 Legacy Readonly Repository 读取 `dim_product` 的五个候选字段。该 superseded legacy runtime route 不得实施，也不得作为 production read source、business API source 或 fallback。
 
-## 10. Recommended Long-Term Strategy
+- OD-9 的结构与聚合结论继续用于字段语义、DQ 设计、reconciliation input 和 migration acceptance evidence。
+- `dim_store`、`dim_store_config` 与 `dim_product` 均不得因本历史方案成为新系统 API 运行时依赖。
+- SKU 可空且非全局唯一、`item_name` 不 fallback `product_name`、`store_name` 排除等字段边界继续有效。
 
-1. 先通过独立验证任务确认 Walmart Listing 的权限、字段、分页、限流、增量和错误行为；当前离线资料不等于验证或接入批准。
-2. 只有 Walmart Listing 无法满足批准字段时，才按需评估 Lingxing local product；不得默认建立双来源或双写。
-3. 如负责人批准重建，必须另行完成标准层/主数据层 Source Decision 与 PRP，再建设后台 integration、Celery 同步、RAW 留痕、标准化和数据质量检查。
-4. 正式查询最终读取新系统已同步且获批的数据层；禁止 API route 实时批量调用外部平台。
-5. 外部身份字段保持明确来源；人工运营状态、生命周期、负责人、成本等继续属于独立模块。
+## 10. Current New-System-Data-Layer-First Strategy
 
-### 10.1 Legacy readonly exit criteria
+当前获批方向按以下独立阶段推进；每一步仍需自己的 Source Decision/PRP、负责人授权、分支、PR、测试和回滚边界：
 
-旧库只读过渡以以下可验证里程碑为退出条件：
+```text
+Data Layer Foundation Implementation PRP
+  -> Source Registry + RAW Storage
+  -> Lingxing ingestion
+  -> Product Core Data Model
+  -> Product read model
+  -> Product API reading new-system DB / read model
+```
 
-1. Walmart Listing 来源验证完成。
-2. Lingxing local product 来源评估完成，如确有需要。
-3. 新系统标准层或主数据层设计完成并通过独立 PRP。
-4. 数据同步任务通过独立 PRP 和 Review。
-5. 新后端接口切换到新系统批准的权威数据源。
-6. 旧库产品基础信息查询下线。
+1. 来源验证仍按 OD-10：先验证 Walmart Listing 字段与契约，再按需评估 Lingxing local product；离线资料不等于接入批准。
+2. Source Registry、RAW 与 ingestion 必须明确 endpoint、版本、分页、限流、增量、失败、重放、credential 和 lineage 边界。
+3. Product Core Data Model 必须另行批准 grain、identity、字段契约、DQ、权限与 freshness；不得照搬 legacy 表结构。
+4. Product read model 只在明确查询或性能需求证明必要时建立，不是权威源。
+5. 产品 API 只能读取获批的 new-system DB / read model；禁止运行时读取 legacy、直接查询 RAW 或在 route 中实时批量调用外部平台。
+
+### 10.1 Legacy Evidence Boundary
+
+当前不存在获批的 legacy runtime 过渡路径，因此无需等待“切换”后才停止旧库查询：新产品 API 从一开始就不得读取 legacy MySQL。legacy 证据仅可在独立批准的只读任务中用于 source investigation、reconciliation 和 migration acceptance，且不得回写或成为运行时 fallback。
 
 ## 11. Remaining Stop Conditions
 
-- 本次缩小范围的数据源决策门禁已满足；这只允许创建接口 PRP，不允许直接实现。
-- 在产品基础信息查询 API PRP 经负责人批准并获得单独执行 Prompt 前，禁止编写接口、repository、schema、测试实现或运行数据库查询。
+- 当前产品 API 的数据源决策门禁未满足，整体状态为 `BLOCKED_BY_OWNER_DECISION`。
+- `PRPs/phase-2a-product-basic-information-query-api.md` 已 superseded，不得用于编写接口、legacy repository、schema 或测试实现。
 - 如果接口 PRP 需要加入 `store_name`、`product_name` fallback、brand、category、status、product_type 或其他排除字段，必须停止并先更新 Source Decision。
-- 如果方案需要查询 `dim_product` 之外的运行时业务表、写旧库、新表、migration、mart/read model、同步任务或真实外部 API，必须停止并另行取得对应 Source Decision、PRP 和负责人授权。
-- 如果只读查询的分页、过滤、排序、扫描或超时风险无法在接口 PRP 中界定，接口 PRP 必须保持阻塞，不得以 `READY_FOR_PRP` 代替性能审查。
+- 如果任何方案要求把 `dim_product` 或其他 legacy 表作为运行时业务来源，必须停止；当前 owner decision 不允许该路线。
+- 新系统表、migration、ingestion、Core、read model 与外部 API 验证均必须分别取得 Source Decision、PRP 和负责人授权。
 - 本轮未连接数据库、服务器或外部 API，未执行 SQL，也未读取或输出真实密钥。
 
 ## 12. Next Step
 
-下一步只允许创建“产品基础信息查询 API PRP”。该 PRP 必须引用本决策和 OD-9 报告，并仅讨论：
+下一步只允许创建并审批 `Data Layer Foundation Implementation PRP`。后续必须按以下顺序逐项推进，不得合并为一个超级 PR，也不得跳到产品 API：
 
-- 只读查询接口；
-- Legacy Readonly Repository；
-- `item_id`、`sku`、`msku`、`item_name`、`store_id`；
-- 权限和数据范围；
-- request/response schema、`response_model`、`request_id` 和错误码；
-- 服务端分页、过滤、排序、timeout 和查询性能边界；
-- 测试；
-- SKU 缺失/重复、身份歧义和来源新鲜度的数据质量警告。
+1. Source Registry + RAW Storage；
+2. Lingxing ingestion；
+3. Product Core Data Model；
+4. Product read model（仅在查询需求证明必要时）；
+5. Product API reading new-system DB / read model。
 
-该 PRP 不得授权写库、建表、migration、ORM model、mart/read model、外部 API、同步任务或任何被排除字段。只有接口 PRP 经架构师 Review、负责人批准并另行下发实现 Prompt 后，才可开始实现。
+上述阶段不得由本决策直接授权实现。只有相应 Source Decision/PRP 经架构师 Review、负责人批准并另行下发执行 Prompt 后才可开始；产品 API 还必须等待本决策重新达到精确范围的 `READY_FOR_PRP`。
 
 ## 13. Appendix: Source Discovery Commands Run
 
