@@ -45,3 +45,22 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 ## 组件登记规则
 
 新增 Shared 组件后，AI 必须更新本文件，说明组件用途、目录、使用场景和注意事项。
+
+## 组件登记扩展字段
+
+新增或修改 Shared 组件时，同 PR 补充以下信息；现有条目在 touched 时渐进补齐，不做机械重写。
+
+| 字段 | 说明 |
+|---|---|
+| Status | `planned` / `stable` / `deprecated` / `superseded`；必须有文件和测试证据才能为 stable |
+| Owner | 维护模块或角色 |
+| Used By | 已知真实消费者，不写未来假设 |
+| Props Stability | experimental / evolving / stable |
+| Design Token Compliance | compliant / partial / needs review，并说明例外 |
+| Notes | 可访问性、数据边界、迁移或限制 |
+
+- 新增 Shared 组件必须同 PR 更新本文件。
+- `stable` 组件必须优先复用；使用前仍需检查实际文件和契约。
+- `deprecated` 或 `superseded` 组件不得新增消费者。
+- Catalog 中只有路径建议而没有实际文件/测试的组件仍视为 `planned`，不得假装已实现。
+- 组件选择遵守 `docs/DESIGN_SYSTEM_AND_COMPONENT_REUSE_RULES.md`，前端任务必须提交 Component Reuse Plan。
