@@ -45,6 +45,16 @@ vi.mock("../pages/products/ProductManagementPage", () => ({
   ),
 }));
 
+vi.mock("../pages/sales/DailySalesPage", () => ({
+  default: ({ page }: { page: { key: string; status: string; title: string } }) => (
+    <section aria-label="每日销售页面壳">
+      <h1 aria-label="当前页面">{page.title}</h1>
+      <span>{page.key}</span>
+      <span aria-label={`页面状态：${page.status}`}>{page.status}</span>
+    </section>
+  ),
+}));
+
 vi.mock("../layouts/MainLayout", () => ({
   default: function MockMainLayout({
     onLogout,
@@ -223,6 +233,21 @@ describe("AppRoutes", () => {
     expect(
       screen.queryByRole("region", { name: "产品管理页面壳" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("uses the daily-sales shell only for its resolved navigation page", () => {
+    const { unmount } = renderRoutes("/sales/daily-sales", true);
+
+    expect(screen.getByRole("region", { name: "每日销售页面壳" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent("每日销售");
+    expect(screen.getByText("sales_daily_sales")).toBeVisible();
+    expect(screen.getByLabelText("页面状态：planned")).toHaveTextContent("planned");
+    expect(screen.queryByRole("region", { name: "统一占位页" })).not.toBeInTheDocument();
+
+    unmount();
+    renderRoutes("/sales/order-profit", true);
+    expect(screen.getByRole("region", { name: "统一占位页" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "每日销售页面壳" })).not.toBeInTheDocument();
   });
 
   it("redirects logged-in auth routes to the default business entry", async () => {

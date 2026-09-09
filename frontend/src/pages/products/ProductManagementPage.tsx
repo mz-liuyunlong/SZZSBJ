@@ -1,10 +1,6 @@
 import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
-  CopyOutlined,
   DownOutlined,
   PictureOutlined,
-  SearchOutlined,
   SettingOutlined,
   SyncOutlined,
   UnorderedListOutlined,
@@ -13,9 +9,7 @@ import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
   Button,
   Card,
-  Checkbox,
   Descriptions,
-  Drawer,
   Dropdown,
   Empty,
   Input,
@@ -32,15 +26,17 @@ import {
 } from "antd";
 import {
   useMemo,
-  useRef,
   useState,
-  type DragEvent,
   type Key,
-  type KeyboardEvent,
-  type MouseEvent,
-  type PointerEvent,
 } from "react";
 import PageShell from "../../components/page/PageShell";
+import ConnectedSearch from "../../components/report-table/ConnectedSearch";
+import ReportTableShell from "../../components/report-table/ReportTableShell";
+import ResizableColumnTitle from "../../components/report-table/ResizableColumnTitle";
+import RuntimeColumnConfigDrawer, {
+  type RuntimeColumnGroup,
+} from "../../components/report-table/RuntimeColumnConfigDrawer";
+import { CopyableTextCell, ImageCell } from "../../components/report-table/cells";
 import type { NavigationPage } from "../../config/navigation";
 import "./ProductManagementPage.css";
 
@@ -82,12 +78,7 @@ const tagColorOptions = [
   { name: "紫色", value: "#C65AD8" },
 ] as const;
 
-interface ColumnField {
-  key: string;
-  title: string;
-}
-
-const columnGroups: { fields: ColumnField[]; title: string }[] = [
+const columnGroups: RuntimeColumnGroup[] = [
   {
     title: "默认主表字段",
     fields: [
@@ -117,12 +108,6 @@ const columnGroups: { fields: ColumnField[]; title: string }[] = [
 
 const defaultColumnKeys = columnGroups[0].fields.map((field) => field.key);
 const allColumnFields = columnGroups.flatMap((group) => group.fields);
-const allColumnKeys = allColumnFields.map((field) => field.key);
-const isFixedColumn = (key: string) => fixedColumnKeys.includes(key);
-const keepFixedColumns = (keys: string[]) => [
-  ...fixedColumnKeys,
-  ...keys.filter((key) => !isFixedColumn(key)),
-];
 
 const defaultColumnWidths: Record<string, number> = {
   image: 72,
@@ -214,39 +199,6 @@ const moreItems: MenuProps["items"] = [{ key: "mark", label: "标记" }];
 
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 
-interface CopyableTextProps {
-  text: string;
-  label: string;
-  link?: boolean;
-  onCopy: (text: string) => void;
-  onOpen?: () => void;
-}
-
-function CopyableText({ text, label, link, onCopy, onOpen }: CopyableTextProps) {
-  const handleCopy = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    onCopy(text);
-  };
-
-  return (
-    <span className="product-management__copyable">
-      {link ? (
-        <Button className="product-management__sku-link" type="link" onClick={onOpen}>{text}</Button>
-      ) : (
-        <span className="product-management__copy-text">{text}</span>
-      )}
-      <Button
-        className="product-management__copy-button"
-        type="text"
-        size="small"
-        aria-label={`复制${label}：${text}`}
-        icon={<CopyOutlined aria-hidden="true" />}
-        onClick={handleCopy}
-      />
-    </span>
-  );
-}
-
 const renderTags = (tags: string[]) => {
   if (tags.length === 0) return "-";
   const visibleTags = tags.slice(0, 2);
@@ -271,11 +223,7 @@ function createDefaultColumns(
       title: "图片",
       key: "image",
       width: 72,
-      render: () => (
-        <span className="product-management__image-placeholder" aria-label="图片占位">
-          <PictureOutlined aria-hidden="true" />
-        </span>
-      ),
+      render: () => <ImageCell label="图片占位" />,
     },
     {
       title: "SKU",
@@ -284,7 +232,7 @@ function createDefaultColumns(
       width: 176,
       sorter: (left, right) => compareText(left.sku, right.sku),
       render: (_, record) => (
-        <CopyableText
+        <CopyableTextCell
           text={record.sku}
           label="SKU"
           link
@@ -299,7 +247,7 @@ function createDefaultColumns(
       key: "productName",
       width: 220,
       render: (_, record) => (
-        <CopyableText text={record.productName} label="产品名称" onCopy={copyText} />
+        <CopyableTextCell text={record.productName} label="产品名称" onCopy={copyText} />
       ),
     },
     {
@@ -522,13 +470,8 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [markTagsOpen, setMarkTagsOpen] = useState(false);
   const [draftMarkTags, setDraftMarkTags] = useState<string[]>([]);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [columnSearch, setColumnSearch] = useState("");
   const [appliedColumnKeys, setAppliedColumnKeys] = useState(defaultColumnKeys);
-  const [draftColumnKeys, setDraftColumnKeys] = useState(defaultColumnKeys);
-  const [draggedColumnKey, setDraggedColumnKey] = useState<string>();
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
-  const [resizingColumnKey, setResizingColumnKey] = useState<string>();
-  const resizeSession = useRef<{ key: string; startWidth: number; startX: number } | undefined>(undefined);
   const [tagManagementOpen, setTagManagementOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState<string>(tagColorOptions[0].value);
@@ -627,85 +570,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   };
 
   const openColumnConfig = () => {
-    setDraftColumnKeys(appliedColumnKeys);
-    setColumnSearch("");
     setColumnConfigOpen(true);
-  };
-
-  const closeColumnConfig = () => {
-    setDraftColumnKeys(appliedColumnKeys);
-    setColumnConfigOpen(false);
-  };
-
-  const toggleColumn = (key: string, checked: boolean) => {
-    if (isFixedColumn(key)) return;
-    setDraftColumnKeys((current) => keepFixedColumns(checked
-      ? [...current, key]
-      : current.filter((item) => item !== key)));
-  };
-
-  const moveColumn = (key: string, offset: -1 | 1) => {
-    if (isFixedColumn(key)) return;
-    setDraftColumnKeys((current) => {
-      const from = current.indexOf(key);
-      const to = from + offset;
-      if (from < 0 || to < fixedColumnKeys.length || to >= current.length) return current;
-      const next = [...current];
-      [next[from], next[to]] = [next[to], next[from]];
-      return next;
-    });
-  };
-
-  const dropColumn = (targetKey: string, event: DragEvent<HTMLLIElement>) => {
-    event.preventDefault();
-    if (!draggedColumnKey || draggedColumnKey === targetKey || isFixedColumn(targetKey)) return;
-    setDraftColumnKeys((current) => {
-      const next = current.filter((key) => key !== draggedColumnKey);
-      const targetIndex = next.indexOf(targetKey);
-      next.splice(targetIndex, 0, draggedColumnKey);
-      return next;
-    });
-    setDraggedColumnKey(undefined);
-  };
-
-  const startColumnResize = (key: string, event: PointerEvent<HTMLSpanElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    resizeSession.current = {
-      key,
-      startWidth: columnWidths[key],
-      startX: event.clientX,
-    };
-    setResizingColumnKey(key);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const resizeColumn = (key: string, event: PointerEvent<HTMLSpanElement>) => {
-    const session = resizeSession.current;
-    if (!session || session.key !== key) return;
-    event.stopPropagation();
-    setColumnWidths((current) => ({
-      ...current,
-      [key]: Math.max(key === "image" ? 64 : 96, session.startWidth + event.clientX - session.startX),
-    }));
-  };
-
-  const finishColumnResize = (event: PointerEvent<HTMLSpanElement>) => {
-    event.stopPropagation();
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    resizeSession.current = undefined;
-    setResizingColumnKey(undefined);
-  };
-
-  const resizeColumnWithKeyboard = (key: string, event: KeyboardEvent<HTMLSpanElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    event.stopPropagation();
-    const offset = event.key === "ArrowLeft" ? -8 : 8;
-    setColumnWidths((current) => ({
-      ...current,
-      [key]: Math.max(key === "image" ? 64 : 96, current[key] + offset),
-    }));
   };
 
   const defaultColumns = createDefaultColumns(
@@ -721,30 +586,19 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
     return {
       ...column,
       width,
-      onHeaderCell: () => ({ className: "product-management__resizable-header-cell" }),
+      onHeaderCell: () => ({
+        className: "report-table-resizable-header-cell product-management__resizable-header-cell",
+      }),
       title: (
-        <span className="product-management__resizable-title">
-          <span>{fieldTitle}</span>
-          <span
-            className="product-management__resize-handle"
-            role="separator"
-            tabIndex={0}
-            aria-label={`调整列宽：${fieldTitle}`}
-            aria-orientation="vertical"
-            aria-valuemin={key === "image" ? 64 : 96}
-            aria-valuenow={width}
-            data-resizing={resizingColumnKey === key || undefined}
-            onPointerDown={(event) => startColumnResize(key, event)}
-            onPointerMove={(event) => resizeColumn(key, event)}
-            onPointerUp={finishColumnResize}
-            onPointerCancel={finishColumnResize}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            onKeyDown={(event) => resizeColumnWithKeyboard(key, event)}
-          />
-        </span>
+        <ResizableColumnTitle
+          label={fieldTitle}
+          minWidth={key === "image" ? 64 : 96}
+          width={width}
+          onWidthChange={(nextWidth) => setColumnWidths((current) => ({
+            ...current,
+            [key]: nextWidth,
+          }))}
+        />
       ),
     };
   });
@@ -769,16 +623,6 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
     }),
     ...(actionColumn ? [actionColumn] : []),
   ];
-  const selectedColumnFields = draftColumnKeys.flatMap((key) => {
-    const field = allColumnFields.find((item) => item.key === key);
-    return field ? [field] : [];
-  });
-  const visibleColumnGroups = columnGroups
-    .map((group) => ({
-      ...group,
-      fields: group.fields.filter((field) => field.title.includes(columnSearch.trim())),
-    }))
-    .filter((group) => group.fields.length > 0);
   const batchSkuSet = useMemo(() => new Set(batchSearchSkus), [batchSearchSkus]);
   const filteredProducts = useMemo(() => {
     const normalizedKeyword = activeKeyword.toLocaleLowerCase();
@@ -867,45 +711,37 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
                 resetPageAndSelection();
               }}
             />
-            <div className="product-management__search-box">
-              <Select
-                aria-label="搜索类型"
-                value={searchType}
-                options={[{ label: "SKU", value: "sku" }]}
-                onChange={setSearchType}
-              />
-              <Input
-                allowClear
-                aria-label="搜索内容"
-                placeholder="请输入搜索内容"
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                onPressEnter={searchSku}
-              />
-              <Tooltip title="搜索">
-                <Button
-                  aria-label="搜索产品"
-                  icon={<SearchOutlined aria-hidden="true" />}
-                  onClick={searchSku}
-                />
-              </Tooltip>
-              <Popover
-                content={batchSearchContent}
-                trigger="click"
-                placement="bottomRight"
-                open={batchSearchOpen}
-                onOpenChange={(open) => open ? setBatchSearchOpen(true) : closeBatchSearch()}
-              >
-                <Tooltip title="批量搜索 SKU">
-                  <Button
-                    className="product-management__batch-trigger"
-                    aria-label="批量搜索 SKU"
-                    aria-expanded={batchSearchOpen}
-                    icon={<UnorderedListOutlined aria-hidden="true" />}
-                  />
-                </Tooltip>
-              </Popover>
-            </div>
+            <ConnectedSearch
+              className="product-management__search-box"
+              typeAriaLabel="搜索类型"
+              typeOptions={[{ label: "SKU", value: "sku" }]}
+              typeValue={searchType}
+              inputAriaLabel="搜索内容"
+              inputPlaceholder="请输入搜索内容"
+              inputValue={keyword}
+              searchAriaLabel="搜索产品"
+              onTypeChange={setSearchType}
+              onInputChange={setKeyword}
+              onSearch={searchSku}
+              batchControl={(
+                <Popover
+                  content={batchSearchContent}
+                  trigger="click"
+                  placement="bottomRight"
+                  open={batchSearchOpen}
+                  onOpenChange={(open) => open ? setBatchSearchOpen(true) : closeBatchSearch()}
+                >
+                  <Tooltip title="批量搜索 SKU">
+                    <Button
+                      className="report-table-connected-search__batch product-management__batch-trigger"
+                      aria-label="批量搜索 SKU"
+                      aria-expanded={batchSearchOpen}
+                      icon={<UnorderedListOutlined aria-hidden="true" />}
+                    />
+                  </Tooltip>
+                </Popover>
+              )}
+            />
             <Button icon={<SettingOutlined aria-hidden="true" />} onClick={openColumnConfig}>列配置</Button>
             <Button onClick={openTagManagement}>标签管理</Button>
             <Dropdown trigger={["click"]} menu={{ items: moreItems, onClick: handleMoreAction }}>
@@ -915,7 +751,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           </div>
         </Card>
 
-        <section className="product-management__table" aria-label="产品管理主表">
+        <ReportTableShell className="product-management__table" label="产品管理主表">
           <ProTable<ProductTableRow>
             key={tableResetKey}
             columns={columns}
@@ -955,113 +791,19 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
               emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无匹配产品" />,
             }}
           />
-        </section>
+        </ReportTableShell>
       </div>
 
-      <Drawer
-        rootClassName="product-management__column-drawer"
-        title="列配置"
-        placement="right"
-        size="large"
+      <RuntimeColumnConfigDrawer
         open={columnConfigOpen}
-        destroyOnHidden
-        footer={
-          <div className="product-management__drawer-footer">
-            <Button onClick={() => setDraftColumnKeys(defaultColumnKeys)}>恢复默认</Button>
-            <Space>
-              <Button onClick={closeColumnConfig}>取消</Button>
-              <Button
-                type="primary"
-                onClick={() => {
-                  setAppliedColumnKeys(keepFixedColumns(draftColumnKeys));
-                  setColumnConfigOpen(false);
-                }}
-              >
-                保存并应用
-              </Button>
-            </Space>
-          </div>
-        }
-        onClose={closeColumnConfig}
-      >
-        <div className="product-management__drawer-tools">
-          <Select aria-label="选择模板" disabled placeholder="选择模板" options={[]} />
-          <Button onClick={() => void messageApi.info(TEMPLATE_PENDING)}>保存为新模板</Button>
-        </div>
-        <div className="product-management__column-editor">
-          <section className="product-management__available-columns" aria-label="可选字段">
-            <Input
-              allowClear
-              aria-label="搜索字段"
-              placeholder="搜索字段"
-              value={columnSearch}
-              onChange={(event) => setColumnSearch(event.target.value)}
-            />
-            <Space size={4}>
-              <Button size="small" onClick={() => setDraftColumnKeys(allColumnKeys)}>全选</Button>
-              <Button size="small" onClick={() => setDraftColumnKeys(fixedColumnKeys)}>取消全选</Button>
-            </Space>
-            {visibleColumnGroups.map((group) => (
-              <div key={group.title} className="product-management__column-group">
-                <Typography.Text strong>{group.title}</Typography.Text>
-                <div className="product-management__column-checks">
-                  {group.fields.map((field) => (
-                    <Checkbox
-                      key={field.key}
-                      aria-label={`显示列：${field.title}`}
-                      checked={draftColumnKeys.includes(field.key)}
-                      disabled={isFixedColumn(field.key)}
-                      onChange={(event) => toggleColumn(field.key, event.target.checked)}
-                    >
-                      {field.title}
-                    </Checkbox>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </section>
-          <section aria-labelledby="selected-columns-title">
-            <Typography.Title id="selected-columns-title" level={5}>已选字段</Typography.Title>
-            <ol className="product-management__selected-columns">
-              {selectedColumnFields.map((field, index) => (
-                <li
-                  key={field.key}
-                  draggable={!isFixedColumn(field.key)}
-                  aria-label={isFixedColumn(field.key) ? `固定字段：${field.title}` : `拖动字段：${field.title}`}
-                  onDragStart={() => setDraggedColumnKey(field.key)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => dropColumn(field.key, event)}
-                  onDragEnd={() => setDraggedColumnKey(undefined)}
-                >
-                  <span>{field.title}</span>
-                  {isFixedColumn(field.key) ? (
-                    <Tag>固定</Tag>
-                  ) : (
-                    <Space size={0}>
-                      <Button
-                        type="text"
-                        size="small"
-                        disabled={index === fixedColumnKeys.length}
-                        aria-label={`上移字段：${field.title}`}
-                        icon={<ArrowUpOutlined aria-hidden="true" />}
-                        onClick={() => moveColumn(field.key, -1)}
-                      />
-                      <Button
-                        type="text"
-                        size="small"
-                        disabled={index === selectedColumnFields.length - 1}
-                        aria-label={`下移字段：${field.title}`}
-                        icon={<ArrowDownOutlined aria-hidden="true" />}
-                        onClick={() => moveColumn(field.key, 1)}
-                      />
-                    </Space>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </section>
-        </div>
-      </Drawer>
+        groups={columnGroups}
+        fixedKeys={fixedColumnKeys}
+        defaultKeys={defaultColumnKeys}
+        appliedKeys={appliedColumnKeys}
+        onApply={setAppliedColumnKeys}
+        onClose={() => setColumnConfigOpen(false)}
+        onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
+      />
 
       <Modal
         className="product-management__mark-modal"

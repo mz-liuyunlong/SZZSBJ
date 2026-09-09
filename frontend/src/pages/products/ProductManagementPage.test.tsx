@@ -51,10 +51,12 @@ vi.mock("../../components/page/PageShell", () => ({
         )}
       </div>
       <section className="page-shell" aria-label="当前页面">
-        <header>
-          <h1 aria-label="当前页面">{page.title}</h1>
-          <span aria-label={`页面状态：${page.status}`}>规划中</span>
-          {description && <p>{description}</p>}
+        <header className="page-shell__header">
+          <div className="page-shell__heading">
+            <h1 aria-label="当前页面">{page.title}</h1>
+            <span aria-label={`页面状态：${page.status}`}>规划中</span>
+            {description && <p>{description}</p>}
+          </div>
         </header>
         <div className="page-shell__content">{children}</div>
       </section>
@@ -641,7 +643,9 @@ describe("ProductManagementPage", () => {
     const view = renderPage();
 
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(productPage.title);
-    expect(screen.getByLabelText(`页面状态：${productPage.status}`)).toHaveTextContent("规划中");
+    expect(view.container.querySelector(
+      ".page-shell:has(> .page-shell__content .product-management) > .page-shell__header > .page-shell__heading",
+    )).not.toBeNull();
     expect(screen.queryByText(productPage.permissionKey)).not.toBeInTheDocument();
     expect(screen.queryByText(/前端静态验收示例数据/)).not.toBeInTheDocument();
     expect(screen.queryByText(/不来自 API/)).not.toBeInTheDocument();
@@ -974,8 +978,14 @@ describe("ProductManagementPage", () => {
     expect(skuHeader).toHaveAttribute("data-width", "176");
     fireEvent.pointerDown(skuHandle, { clientX: 100, pointerId: 1 });
     fireEvent.pointerMove(skuHandle, { clientX: 148, pointerId: 1 });
+    expect(skuHeader).toHaveAttribute("data-width", "176");
+    expect(skuHandle.querySelector(".report-table-resize-guide")).toHaveStyle({
+      visibility: "visible",
+      transform: "translateX(48px)",
+    });
     fireEvent.pointerUp(skuHandle, { clientX: 148, pointerId: 1 });
     expect(skuHeader).toHaveAttribute("data-width", "224");
+    expect(skuHandle.querySelector(".report-table-resize-guide")).toHaveStyle({ visibility: "hidden" });
     fireEvent.click(skuHandle);
     expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0])
       .toHaveTextContent("UI-SAMPLE-001");

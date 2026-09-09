@@ -1,0 +1,460 @@
+.report-table-shell {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+}
+
+.report-table-shell .ant-pro-table,
+.report-table-shell .ant-pro-card,
+.report-table-shell .ant-pro-card-body,
+.report-table-shell .ant-table-wrapper,
+.report-table-shell .ant-spin-nested-loading,
+.report-table-shell .ant-spin-container,
+.report-table-shell .ant-table,
+.report-table-shell .ant-table-container {
+  min-height: 0;
+}
+
+.report-table-shell .ant-pro-table,
+.report-table-shell .ant-pro-card,
+.report-table-shell .ant-pro-card-body,
+.report-table-shell .ant-spin-nested-loading,
+.report-table-shell .ant-spin-container {
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.report-table-shell .ant-pro-card-body {
+  position: relative;
+  padding: 0;
+}
+
+.report-table-shell .ant-table-wrapper,
+.report-table-shell .ant-table,
+.report-table-shell .ant-table-container {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.report-table-shell .ant-table-container {
+  overflow: hidden;
+}
+
+.report-table-shell .ant-table-header {
+  flex: 0 0 auto;
+}
+
+.report-table-shell .ant-table-body {
+  min-height: 0;
+  max-height: none !important;
+  flex: 1 1 0;
+  overflow-y: auto !important;
+}
+
+.report-table-shell .ant-table-thead > tr > th {
+  height: 44px;
+  padding: 8px;
+  color: #1f2937;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  background: #f7f8fa;
+  border-block-end: 1px solid #d9dee7;
+  border-inline-end: 1px solid #d9dee7;
+}
+
+.report-table-shell .ant-table-thead > tr > th.ant-table-column-sort {
+  background: #f3f4f6;
+}
+
+.report-table-shell .ant-table-tbody > tr > td {
+  height: 40px;
+  padding: 2px 5px !important;
+  color: #262626;
+  line-height: 1.35;
+  border-block-end-color: #d9dee7;
+  border-inline-end: 0;
+}
+
+.report-table-shell .ant-table-thead > tr > th:last-child,
+.report-table-shell .ant-table-tbody > tr > td:last-child {
+  border-inline-end: 0;
+}
+
+.report-table-shell .ant-table-cell-fix-left-last::after {
+  box-shadow: none !important;
+}
+
+.report-table-shell .ant-table-cell-fix-left-last {
+  border-inline-end: 1px solid #d6dce5 !important;
+}
+
+.report-table-shell .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: #edf6ff;
+}
+
+.report-table-shell .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: #dceeff;
+}
+
+.report-table-shell .ant-btn-link {
+  min-height: 32px;
+  padding-inline: 4px;
+  font-weight: 500;
+}
+
+.report-table-shell .ant-btn-link:hover {
+  color: #003eb3;
+  text-decoration: underline;
+}
+
+.report-table-shell .ant-pagination {
+  flex: 0 0 auto;
+  min-height: 48px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 8px 12px 8px 160px;
+  background: #fff;
+  border-block-start: 1px solid #e5e7eb;
+}
+
+.report-table-shell .ant-table-footer {
+  position: absolute;
+  z-index: 1;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  display: flex;
+  width: 160px;
+  height: 48px;
+  align-items: center;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+}
+
+.report-table-resizable-header-cell {
+  position: relative !important;
+}
+
+.report-table-resizable-header-cell .ant-table-column-sorters,
+.report-table-resizable-header-cell .ant-table-column-title,
+.report-table-resizable-title {
+  position: static;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.report-table-resizable-title {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  overflow: visible;
+}
+
+.report-table-resize-handle {
+  position: absolute;
+  z-index: 3;
+  inset-block: 0;
+  inset-inline-end: -6px;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.report-table-resize-handle::after {
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-end: 5px;
+  width: 1px;
+  content: "";
+  background: transparent;
+}
+
+.report-table-resize-handle:hover::after,
+.report-table-resize-handle:focus-visible::after,
+.report-table-resize-handle[data-resizing="true"]::after {
+  background: #1677ff;
+}
+
+.report-table-resize-guide {
+  position: fixed;
+  z-index: 1200;
+  width: 2px;
+  pointer-events: none;
+  visibility: hidden;
+  background: #1677ff;
+  transform: translateX(0);
+  will-change: transform;
+}
+
+.report-table-connected-search {
+  display: flex;
+  min-width: 280px;
+}
+
+.report-table-connected-search > .ant-select {
+  width: 92px;
+  flex: 0 0 92px;
+}
+
+.report-table-connected-search > .ant-select .ant-select-selector {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.report-table-connected-search > .ant-input-affix-wrapper {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin-inline-start: -1px;
+  border-radius: 0;
+}
+
+.report-table-connected-search > .ant-btn,
+.report-table-connected-search > .ant-tooltip-wrapper > .ant-btn {
+  width: 38px;
+  min-width: 38px;
+  flex: 0 0 38px;
+  margin-inline-start: -1px;
+  padding-inline: 0;
+  border-radius: 0;
+}
+
+.report-table-connected-search > .ant-btn:last-child,
+.report-table-connected-search > .ant-tooltip-wrapper:last-child > .ant-btn {
+  border-start-end-radius: 6px;
+  border-end-end-radius: 6px;
+}
+
+.report-table-shell .ant-table-summary > tr > td {
+  height: 40px;
+  padding: 2px 5px;
+  color: #1f2937;
+  font-weight: 600;
+  background: #f7f8fa;
+  border-block-start: 1px solid #cfd6df;
+  border-block-end: 0;
+  border-inline-end: 0;
+}
+
+.report-table-shell .ant-table-summary .ant-table-cell-fix-left-last {
+  border-inline-end: 1px solid #d6dce5 !important;
+}
+
+.report-table-summary-label {
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.report-table-copyable {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 2px;
+}
+
+.report-table-copyable__link {
+  height: auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-table-copyable__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-table-copyable__button {
+  opacity: 0;
+  transition: opacity 120ms ease-out, color 120ms ease-out;
+}
+
+.report-table-copyable:hover .report-table-copyable__button,
+.report-table-copyable:focus-within .report-table-copyable__button {
+  opacity: 1;
+}
+
+.report-table-image {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  color: #595959;
+  font-size: 20px;
+  background: #f0f2f5;
+  border: 1px solid #bfbfbf;
+  border-radius: 6px;
+  cursor: zoom-in;
+  overflow: hidden;
+  outline: none;
+}
+
+.report-table-image:focus-visible {
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 25%);
+}
+
+.report-table-image img,
+.report-table-image-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.report-table-image__fallback,
+.report-table-image-preview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-table-image-preview {
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 96px);
+  color: #595959;
+  font-size: 72px;
+  background: #f5f5f5;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.report-table-trend-cell {
+  display: block;
+  width: 90px;
+  height: 32px;
+  color: #1677ff;
+  cursor: help;
+  outline: none;
+}
+
+.report-table-trend-cell:focus-visible {
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 25%);
+}
+
+.report-table-trend-preview {
+  width: min(520px, calc(100vw - 64px));
+  height: min(340px, calc(100vh - 120px)) !important;
+}
+
+.report-table-metric {
+  color: #1f2937;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.runtime-column-config__tools,
+.runtime-column-config__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtime-column-config__tools {
+  justify-content: flex-start;
+  margin-block-end: 16px;
+}
+
+.runtime-column-config__tools .ant-select {
+  width: 180px;
+}
+
+.runtime-column-config__editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  gap: 20px;
+}
+
+.runtime-column-config__available {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.runtime-column-config__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.runtime-column-config__checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.runtime-column-config__checks .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+}
+
+.runtime-column-config__selected {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.runtime-column-config__selected li {
+  display: flex;
+  min-height: 36px;
+  cursor: grab;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.runtime-column-config__selected li:active {
+  cursor: grabbing;
+}
+
+.runtime-column-config__selected li[draggable="false"] {
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-table-copyable__button {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .report-table-shell .ant-pagination {
+    min-height: 48px;
+    flex-wrap: wrap;
+    padding-inline-start: 112px;
+  }
+
+  .report-table-shell .ant-table-footer {
+    width: 112px;
+  }
+
+  .runtime-column-config .ant-drawer-content-wrapper {
+    width: 100% !important;
+  }
+
+  .runtime-column-config__editor,
+  .runtime-column-config__checks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
