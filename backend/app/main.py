@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Request
@@ -5,10 +7,17 @@ from pydantic import BaseModel
 
 from app.core.api import SuccessEnvelope, install_api_foundation, success_response
 from app.core.auth import enforce_protected_by_default
+from app.db.session import dispose_engine
 
 
 class HealthData(BaseModel):
     status: Literal["ok"] = "ok"
+
+
+@asynccontextmanager
+async def app_lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    dispose_engine()
 
 
 def create_app() -> FastAPI:
@@ -16,6 +25,7 @@ def create_app() -> FastAPI:
         title="YC System API",
         dependencies=[Depends(enforce_protected_by_default)],
         docs_url=None,
+        lifespan=app_lifespan,
         redoc_url=None,
         openapi_url=None,
     )

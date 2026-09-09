@@ -8,6 +8,9 @@ backend/.coverage
 backend/htmlcov/
 **/__pycache__/
 *.py[cod]
+.env
+.env.*
+!.env.example
 
 # macOS
 .DS_Store

@@ -24,7 +24,7 @@ Registry Status: `draft; approved only after owner review and merge`
 
 | Storage ID | Layer | Object Name | Purpose | Authority Level | Source Interface | Write Owner | Read Owner | Retention | Permission / Sensitivity | Status | PRP | PR | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-|  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `storage-application-postgresql-foundation` | Infrastructure | Application PostgreSQL data layer | 提供环境注入的 PostgreSQL 连接、SQLAlchemy metadata/session 与 Alembic scaffold 边界 | Foundation only；不承载业务权威数据 | N/A | 未来获批 Service/use case | 未来获批 Repository | N/A | URL 仅通过环境 secret 注入；本层不存储业务数据 | `approved` | `PRPs/data-layer-foundation-implementation.md` | `TBD` | 无 table/read model/migration revision；合并并验证后才可标记 `implemented` |
 
 ## Frontend Usage Registry
 
