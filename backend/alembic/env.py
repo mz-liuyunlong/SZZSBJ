@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import URL, Connection
 
+import app.modules.products.models  # noqa: F401  # Register approved model metadata.
 from alembic import context
 from app.core.config import AppEnvironment, SettingsError, get_database_url, get_settings
 from app.db.base import Base
