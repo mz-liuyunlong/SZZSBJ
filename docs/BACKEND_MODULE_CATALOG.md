@@ -64,7 +64,7 @@
 |---|---|
 | Module name | Product Management Backend MVP |
 | Module key | `product-management-backend-mvp` |
-| Status | `approved`；实现分支已通过本地验证，尚无 PR 合并证据，不得标记 `implemented` |
+| Status | `implemented`；PR #41 已合并（`fab3aef`） |
 | Purpose | 通过受保护的 `/api/v1/products` 接口维护新系统权威的内部 SKU 产品和 platform/store/MSKU 销售关系 |
 | Source authority | `products` 与 `product_platform_listings` 均为 `NEW_SYSTEM_OWNED`；`old-system/**` 不得作为 runtime datasource |
 | Backend files | `backend/app/modules/products/`, one Alembic revision, scoped tests, and minimal router/metadata registration |
@@ -73,7 +73,7 @@
 | Data scope | Future `platform + store_name`; module seam must fail closed until a trusted provider is supplied; full RBAC deferred |
 | Sensitive fields | `purchase_price`, `wfs_fee`, `shipping_cost`; Decimal/Numeric(18,4), required currency companion, no values in logs/errors |
 | API documentation | `docs/api/product-management-backend-mvp.md` |
-| Validation evidence | Implementation branch passes frozen dependency sync, Ruff format/lint, mypy, and DB-disabled pytest (`63 passed, 1 skipped`); PostgreSQL integration remains skipped without an authorized `TEST_DATABASE_URL` |
+| Validation evidence | PR #41 merged after frozen dependency sync, Ruff format/lint, mypy, and DB-disabled pytest (`63 passed, 1 skipped`) passed; PostgreSQL integration was skipped without an authorized `TEST_DATABASE_URL` |
 | PRP | `PRPs/product-management-backend-mvp.md` |
-| PR | TBD |
+| PR | `#41`；merge commit `fab3aef` |
 | Not in scope | Frontend, legacy migration/runtime reads, external APIs/sync, import/export, workers, calculations, mart/read model, production DB, deployment, CI PostgreSQL |

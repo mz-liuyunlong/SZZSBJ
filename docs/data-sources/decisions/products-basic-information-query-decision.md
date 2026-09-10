@@ -14,6 +14,8 @@ Implementation authorized by this decision: No
 Database access used for this update: No
 Server access used for this update: No
 External API used for this update: No
+Approval PR: #40 (`ce423754`)
+Implementation PR: #41 (`fab3aef`), merged
 ```
 
 `READY_FOR_PRP` applies only to the Product Management Backend MVP scope defined below. It permits an interface PRP to be written and approved; it does not itself authorize code, a migration, a database connection, an external API call, or deployment.
@@ -256,4 +258,4 @@ Approval scope: Product Management Backend MVP only
 
 All datasets in the approved scope have executable classifications and no unresolved `NEED_OWNER_DECISION`; therefore the overall state is `READY_FOR_PRP`.
 
-The only immediate next step is to create and approve `PRPs/product-management-backend-mvp.md`. Implementation may begin only after that Approved PRP is merged and the Project Owner issues a separate implementation Prompt with an exact worktree, branch, file allowlist and validation boundary.
+`PRPs/product-management-backend-mvp.md` was approved in PR #40 (`ce423754`), and its bounded implementation was merged in PR #41 (`fab3aef`). This records implementation evidence only: it does not authorize frontend integration, production migration execution, legacy migration/runtime reads, external API synchronization, mart/read-model creation, DELETE, full RBAC or any other deferred scope.
