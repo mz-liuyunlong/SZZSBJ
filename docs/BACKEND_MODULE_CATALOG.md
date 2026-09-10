@@ -14,6 +14,7 @@
 | Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
+| Lingxing Token Manager | `backend/app/integrations/lingxing/`（candidate） | 后端内部获取、缓存与单次刷新领星访问令牌的安全边界；尚未实现 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -98,3 +99,19 @@
 | PRP | `PRPs/lingxing-raw-foundation.md` |
 | Approval evidence | Project Owner 于 2026-09-10 批准 implementation gate；规划 PR #43 已合并（`6c955d9`）；审批 PR #44 已合并（`0c7508a`）；implementation PR TBD |
 | Not in scope | 真实 Lingxing API 调用/采样、DIM/FACT/Core/read model、frontend、full sync、定时任务、历史回补、RAW read API、自动删除、production migration、部署、secret 读取或输出 |
+
+## Lingxing Token Manager
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Lingxing Token Manager |
+| Module key | `lingxing-token-manager` |
+| Status | `candidate`；仅完成官方文档取证，PRP 为 Draft，未授权实现 |
+| Purpose | 在后端内部安全获取、缓存和刷新 Lingxing access_token，并隔离 AppSecret/Token 与日志、RAW、前端和业务响应 |
+| Proposed location | `backend/app/integrations/lingxing/`；具体文件 allowlist 需后续 Approved PRP/Prompt 确认 |
+| Official contracts | `POST /api/auth-server/oauth/access-token`；`POST /api/auth-server/oauth/refresh`；均为 `multipart/form-data` |
+| Evidence | `docs/integrations/lingxing-auth-token-spec.md` |
+| PRP | `PRPs/lingxing-token-manager.md`（Draft） |
+| Dependencies | 现有 Lingxing integration boundary；真实凭据只能通过后端 `secret_ref` 注入，不新增明文配置 |
+| Security boundary | Token/AppSecret 不得进入日志、RAW、前端、错误响应、测试夹具、文档或 Git；真实调用默认关闭 |
+| Not in scope | 当前代码实现、真实 Token 获取、业务 API、RAW 写入、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |
