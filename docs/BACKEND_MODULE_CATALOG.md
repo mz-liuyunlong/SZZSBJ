@@ -12,6 +12,7 @@
 |---|---|---|
 | Backend API Foundation | `backend/app/core/` | 请求关联、响应契约、异常、认证、权限与资源级数据范围 |
 | Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
+| Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -56,3 +57,21 @@
 | PR | `#38` |
 | Merge commit | `63b281b` |
 | Not in scope | 业务 model/table、Product API 或其他业务 API、migration revision、SQL、Source Registry、RAW Storage、legacy MySQL、外部 API、worker、frontend、生产数据库连接、CI PostgreSQL |
+
+## Product Management Backend MVP
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Product Management Backend MVP |
+| Module key | `product-management-backend-mvp` |
+| Status | `approved`；尚未实现 |
+| Purpose | 通过受保护的 `/api/v1/products` 接口维护新系统权威的内部 SKU 产品和 platform/store/MSKU 销售关系 |
+| Source authority | `products` 与 `product_platform_listings` 均为 `NEW_SYSTEM_OWNED`；`old-system/**` 不得作为 runtime datasource |
+| Candidate backend files | `backend/app/modules/products/`, one Alembic revision, scoped tests, and minimal router/metadata registration |
+| API scope | 8 个已批准的产品与 listing GET/POST/PATCH 端点；无 DELETE、bulk、import/export |
+| Permission keys | `products:read`, `products:create`, `products:update`, `product_listings:read`, `product_listings:create`, `product_listings:update` |
+| Data scope | Future `platform + store_name`; module seam must fail closed until a trusted provider is supplied; full RBAC deferred |
+| Sensitive fields | `purchase_price`, `wfs_fee`, `shipping_cost`; Decimal/Numeric(18,4), required currency companion, no values in logs/errors |
+| PRP | `PRPs/product-management-backend-mvp.md` |
+| PR | TBD |
+| Not in scope | Frontend, legacy migration/runtime reads, external APIs/sync, import/export, workers, calculations, mart/read model, production DB, deployment, CI PostgreSQL |
