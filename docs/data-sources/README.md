@@ -19,6 +19,8 @@
 
 - `lingxing-walmart-api-to-system-data-map-draft.md`
 - `lingxing-walmart-api-to-system-data-map-draft.csv`
+- `legacy-lingxing-lineage-review.md`：旧系统领星 lineage matrix 的仓库静态证据复核。
+- `legacy-lingxing-migration-priority.md`：P0/P1/P2/P3 调查与迁移候选顺序；不授权实现。
 
 ## 数据架构标准
 
