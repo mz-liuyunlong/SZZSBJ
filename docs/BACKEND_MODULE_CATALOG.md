@@ -13,6 +13,7 @@
 | Backend API Foundation | `backend/app/core/` | 请求关联、响应契约、异常、认证、权限与资源级数据范围 |
 | Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
+| Lingxing RAW Foundation | 独立 implementation Prompt 确认 | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -77,3 +78,23 @@
 | PRP | `PRPs/product-management-backend-mvp.md` |
 | PR | `#41`；merge commit `fab3aef` |
 | Not in scope | Frontend, legacy migration/runtime reads, external APIs/sync, import/export, workers, calculations, mart/read model, production DB, deployment, CI PostgreSQL |
+
+## Lingxing RAW Foundation
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Lingxing RAW Foundation |
+| Module key | `lingxing-raw-foundation` |
+| Status | `approved`；尚未 implemented，implementation PR TBD |
+| Main role | Backend Engineer |
+| Purpose | 为 5 个获批 P0 endpoint 提供 readonly client shell，并将成功/失败分页响应经递归脱敏后写入 `raw_lingxing_api` L2 RAW 证据层 |
+| Owned backend files | 由独立 backend implementation Prompt 给出 exact allowlist；仅限一个 migration/model、Lingxing client、RAW repository/service/writer 和 scoped tests |
+| Public contract | 内部写入边界；不新增业务 API、RAW read API 或前端入口 |
+| Endpoint allowlist | `POST /basicOpen/multiplatform/walmart/list`；`POST /basicOpen/platformStatisticsV2/saleStat/pageList`；`POST /erp/sc/routing/data/local_inventory/batchGetProductInfo`；`POST /pb/mp/shop/v2/getSellerList`；`POST /basicOpen/multiplatform/profit/report/order` |
+| Store/page boundary | store scope 不硬编码；未来真实运行必须显式传入非空 store allowlist；默认 `page_size <= 3`、`max_pages = 1`；full sync 禁止 |
+| Writers/readers | `lingxing_raw:write` 预留给批准的 RAW writer；`lingxing_raw:read` 仅预留，读取默认拒绝并需后续独立批准 |
+| Dependencies | 已实现的 Data Layer Foundation；使用现有锁定依赖；真实 credential 仅通过 `secret_ref` 边界注入 |
+| Tests | 只使用 synthetic/mock HTTP，覆盖 redaction、hash、pagination、success/failure response 和禁止结构化写入 |
+| PRP | `PRPs/lingxing-raw-foundation.md` |
+| Approval evidence | Project Owner 于 2026-09-10 批准 implementation gate；规划 PR #43 已合并（`6c955d9`）；本 approval patch PR 与 implementation PR 均 TBD |
+| Not in scope | 真实 Lingxing API 调用/采样、DIM/FACT/Core/read model、frontend、full sync、定时任务、历史回补、RAW read API、自动删除、production migration、部署、secret 读取或输出 |

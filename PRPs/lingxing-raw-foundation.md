@@ -2,8 +2,8 @@
 
 ```text
 Status: Approved
-Owner Approval Required: Completed for this PRP approval.
-Implementation Allowed: Yes, but only for the Lingxing RAW Foundation scope defined in this PRP, and only after the owner issues a separate implementation prompt.
+Owner Approval Required: Completed for Lingxing RAW Foundation implementation gate.
+Implementation Allowed: Yes, but only for raw_lingxing_api + Lingxing readonly client + RAW writer, and only through a separate backend implementation prompt.
 Main execution role after approval: Backend Engineer
 ```
 
@@ -19,24 +19,44 @@ RAW 是可回放、可审计的来源证据层，不是业务事实层，也不�
 - `docs/data-sources/legacy-lingxing-lineage-review.md`
 - `docs/data-sources/legacy-lingxing-migration-priority.md`
 
-## 2. 批准前阻塞项
+## 2. Owner 决策已完成的 implementation gate
 
-本 PRP 保持 Draft，以下 Owner 决策未完成前不得改为 Approved：
+Owner 已于 2026-09-10 完成本 PRP 的实现门禁决策。批准仅覆盖独立后端实现 PR 中的 L2 RAW 表、readonly client shell、RAW writer/service/repository 和 synthetic/mock 测试，不批准真实领星调用、真实采样、生产数据库操作或部署。
 
-1. 是否允许真实领星业务响应写入新系统 RAW。
-2. 从 P0 中选择首批精确 endpoint allowlist；不得授权任意路径调用。
-3. 明确允许的 platform/store 范围、单次页数上限和采样次数。
-4. 是否允许保存经凭据脱敏后的完整 `response_json`。
-5. RAW 原始 JSON 的保留周期、归档和删除规则。
-6. 可以读取 RAW 的角色、permission key、字段限制和审计要求。
-7. `raw_hash` 是否只建普通索引；是否有充分证据需要唯一约束。
+### 2.1 精确 endpoint allowlist
+
+后续代码只能支持以下 P0 endpoint；不得提供任意路径调用能力：
+
+- `POST /basicOpen/multiplatform/walmart/list`
+- `POST /basicOpen/platformStatisticsV2/saleStat/pageList`
+- `POST /erp/sc/routing/data/local_inventory/batchGetProductInfo`
+- `POST /pb/mp/shop/v2/getSellerList`
+- `POST /basicOpen/multiplatform/profit/report/order`
+
+### 2.2 已批准的实现边界
+
+- store scope 不得硬编码。未来真实调用必须由运行参数显式传入 store allowlist；空 store allowlist 必须 fail closed。
+- 默认 `page_size <= 3`，默认 `max_pages = 1`；full sync 默认禁止。
+- 允许保存脱敏后的完整业务 `response_json`。request params/body 必须先脱敏；response 中出现 access token、refresh token、app secret、authorization、webhook、signature 等敏感字段时必须脱敏或拒绝保存。
+- 认证响应中的明文 credential 不得保存。
+- MVP 不实现自动删除；RAW 作为审计证据保留，archive/delete/retention 变更必须由后续 Owner 任务批准。本 PRP 不授权删除 RAW。
+- RAW 默认拒绝读取，不新增前端或业务 API；预留 `lingxing_raw:write`、`lingxing_raw:read`，读取能力必须由后续独立 PRP/任务批准。
+- `raw_hash` 只批准普通索引，不批准唯一约束；唯一约束需基于后续真实采样和重复写入策略另行批准。
+
+### 2.3 仍需单独批准的运行边界
+
+- 任何真实领星 API 调用或采样；
+- 每次真实运行的 store allowlist、环境、次数和执行人；
+- 生产数据库连接、production migration 或部署；
+- RAW 读取接口、前端页面、导出、归档、删除或保留期变更；
+- 全量同步、定时任务、历史回补或扩大 endpoint allowlist。
 
 ## 3. 范围
 
 ### 3.1 In scope（仅在后续独立实现任务获批后）
 
-- 设计并实现 `raw_lingxing_api` 或经 Owner 确认的等价 L2 RAW 表。
-- 设计单一 Lingxing readonly provider client，只允许调用 Owner 批准的 endpoint allowlist。
+- 设计并实现 `raw_lingxing_api` L2 RAW 表、ORM model 和一个 Alembic migration。
+- 设计单一 Lingxing readonly provider client shell，只支持第 2.1 节 endpoint allowlist；实现 PR 只使用 synthetic/mock HTTP，不真实调用领星。
 - 设计 RAW repository、service 和 writer 边界。
 - 保存成功和失败响应、分页信息、run/batch、trace 和审计元数据。
 - 请求、响应、错误和日志写入前执行凭据脱敏。
@@ -79,7 +99,7 @@ RAW 是可回放、可审计的来源证据层，不是业务事实层，也不�
 
 ## 6. 建议表结构
 
-最终列名和类型需在 Approved implementation PRP/Prompt 中确认。所有 JSON 字段都是脱敏后的持久化值。
+后续独立 implementation Prompt 必须遵守本节，精确文件 allowlist 不得扩大这里的数据边界。所有 JSON 字段都是脱敏后的持久化值。
 
 | 字段                  | 建议类型                           | Nullable | 语义与限制                                              |
 | --------------------- | ---------------------------------- | -------: | ------------------------------------------------------- |
@@ -150,7 +170,7 @@ api_path
 
 - JSON canonicalization 必须固定 key 顺序和编码，数组顺序按来源原样保留。
 - `raw_hash` 用于内容比对、重复检测和回放核验，不自动表示同一次请求。
-- **默认不建议唯一约束**：RAW 是 append-only 执行证据，相同内容在不同 run、重试或时间再次获得仍可能需要保留；唯一约束会丢失执行历史。
+- **本次只批准普通索引，不批准唯一约束**：RAW 是 append-only 执行证据，相同内容在不同 run、重试或时间再次获得仍可能需要保留；唯一约束会丢失执行历史。
 - 若 Owner 后续要求物理去重，必须说明失败重试、分页、run/batch 审计和 collision 处理，并通过独立 schema review；不得只对 `raw_hash` 建全局唯一约束。
 - writer 必须保证单页写入原子性；重复处理规则不得通过覆盖旧 RAW 实现。
 
@@ -166,7 +186,9 @@ api_path
 
 - 每页响应独立一条或一个受控 envelope RAW，保存相同 `run_id` / `batch_id` 和各自 `page_no` / `page_size`。
 - 页码必须单调、可核对；缺页、重复页、空页和 provider total 变化必须记录为执行结果。
-- 全量同步默认禁止。首批任务只能使用 Owner 批准的 endpoint、店铺、页数上限和运行次数。
+- client 默认 `page_size <= 3`、`max_pages = 1`；不得通过调用方绕过上限。
+- store scope 不得硬编码；未来真实调用必须显式传入非空 store allowlist，否则拒绝执行。
+- 全量同步默认禁止。实现 PR 只验证第 2.1 节 endpoint allowlist 和分页边界，不授权真实调用。
 - payload 超过批准大小时停止，不截断后冒充完整 RAW；需记录安全错误并请求新决策。
 - 业务 API route 不得实时触发批量外部拉取。
 
@@ -180,12 +202,13 @@ api_path
 ## 12. 权限、审计与保留
 
 - RAW 默认高敏、默认不可见、default deny。
-- 读取必须有单独 permission key、data scope、字段白名单、原因和审计记录；具体 key 由 Owner 决定。
+- 预留 `lingxing_raw:write` 和 `lingxing_raw:read`；本次实现只可使用 write 边界，不实现 read API、前端读取或导出。
+- 未来读取必须另行批准，并定义 data scope、字段白名单、原因和审计记录。
 - 不提供通用“下载全部 JSON”能力。
-- 保留期未批准前，不得开展真实采集；删除/归档只能由后续 retention PRP 决定。
+- MVP 不实现自动删除；RAW 作为审计证据保留，删除、归档和 retention 变更只能由后续 Owner 批准的任务决定。
 - 每次写入可追踪至 endpoint、run、batch、trace、时间、代码版本和执行结果。
 
-## 13. 实现文件边界（待 Owner 批准后细化）
+## 13. 实现文件边界（由独立 backend implementation Prompt 精确限定）
 
 后续实现 Prompt 才可列出精确文件。预期领域仅包括：
 
@@ -211,14 +234,14 @@ api_path
 
 ## 15. 验收标准
 
-当前 docs-only PR：
+本次 docs-only approval patch：
 
-- [ ] lineage review 对 36 条链路标记静态证据状态。
-- [ ] migration priority 覆盖 P0/P1/P2/P3 和采样边界。
-- [ ] 本 PRP 保持 Draft，并列出 Owner 决策点。
-- [ ] Data Interface Registry 和 Task Registry 只登记 candidate/approved docs task，不声称实现。
-- [ ] 没有 backend/frontend/migration/SQL 或外部调用。
-- [ ] 没有读取或提交 secret。
+- [x] PRP 状态和 Owner Approval Record 已更新为 `Approved`。
+- [x] endpoint、store/page、payload、retention、permission 和 `raw_hash` 决策已限定。
+- [x] Task Registry 已记录规划 PR #43 合并事实和独立 implementation task。
+- [x] Data Interface Registry 仅更新为 `approved`，明确尚未 `implemented`。
+- [x] 没有 backend/frontend/migration/SQL 或外部调用。
+- [x] 没有读取或提交 secret。
 
 后续实现 PR（仅在另行批准后）：
 
@@ -232,29 +255,38 @@ api_path
 
 出现以下任一情况必须停止并请求 Owner：
 
-- 需要调用尚未批准的 endpoint、店铺或超过页数/次数限制；
+- 需要调用第 2.1 节以外的 endpoint，或需要硬编码 store scope；
+- 需要在未获独立运行授权时真实调用领星，或真实运行参数没有非空 store allowlist；
+- 需要 `page_size > 3`、`max_pages > 1`、full sync、定时任务或历史回补；
 - 需要读取 `.env`、真实 credential 或在对话/日志中回显 secret；
 - response 无法在保持业务证据的同时安全脱敏；
 - 需要保存 token/认证响应；
 - 需要写 DIM/FACT/Core/read model 或连接前端；
-- 需要全量、定时、历史回补或生产执行；
+- 需要任何 production execution；
 - 需要修改 `old-system/**` 或复制旧实现；
-- payload、限流、保留期、权限或数据地区边界不明确；
+- payload 无法安全脱敏，或需要实现 RAW 读取、导出、删除、归档或 retention 变更；
 - 需要连接生产数据库、执行 production migration 或部署。
 
 ## 17. 回滚边界
 
-当前 docs-only PR 可通过回滚本 PR 的三份新增文档和候选 registry/task 条目独立撤销，不影响现有代码或数据库。
+当前 docs-only approval patch 可通过回滚 PRP 审批字段、implementation task、registry `approved` 状态和模块候选登记独立撤销，不影响 PR #43 已合并的证据文档，也不影响代码或数据库。
 
 后续实现 PR 的回滚必须在实施前单独设计：停止 client/writer、保留已写 RAW 作为审计证据、禁止自动删除数据，并为 migration 提供在隔离环境验证过的 downgrade/forward-fix 方案。该段不授权执行回滚或删除 RAW。
 
 ## 18. Owner Approval Record
 
 ```text
-Approved by: Pending
-Approved date: Pending
-Approval type: Pending
-Approval scope: Pending exact endpoint/store/page/retention/reader boundary
+Approved by: Project Owner
+Approved date: 2026-09-10
+Approval type: RAW Foundation implementation gate
+Approval scope:
+- implement raw_lingxing_api L2 RAW table
+- implement Lingxing readonly client shell
+- implement RAW writer/service/repository
+- implement redaction/hash/pagination/failure-response tests
+- no DIM/FACT/Core/read model/frontend/full sync
+- no real Lingxing API call in implementation PR
+- no .env or secret read/output
 ```
 
-PRP 通过 Review 不等于批准实现。只有 Owner 把状态改为 `Approved`、补全本节并下发独立实现 Prompt 后，才能开始实现。
+本 PRP 已完成实现门禁审批，但仍必须由 Owner 下发独立 backend implementation Prompt 后才能开始；本审批不授权真实 API、真实采样、生产 migration、部署或 RAW 读取能力。
