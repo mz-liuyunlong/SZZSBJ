@@ -64,14 +64,16 @@
 |---|---|
 | Module name | Product Management Backend MVP |
 | Module key | `product-management-backend-mvp` |
-| Status | `approved`；尚未实现 |
+| Status | `approved`；实现分支已通过本地验证，尚无 PR 合并证据，不得标记 `implemented` |
 | Purpose | 通过受保护的 `/api/v1/products` 接口维护新系统权威的内部 SKU 产品和 platform/store/MSKU 销售关系 |
 | Source authority | `products` 与 `product_platform_listings` 均为 `NEW_SYSTEM_OWNED`；`old-system/**` 不得作为 runtime datasource |
-| Candidate backend files | `backend/app/modules/products/`, one Alembic revision, scoped tests, and minimal router/metadata registration |
+| Backend files | `backend/app/modules/products/`, one Alembic revision, scoped tests, and minimal router/metadata registration |
 | API scope | 8 个已批准的产品与 listing GET/POST/PATCH 端点；无 DELETE、bulk、import/export |
 | Permission keys | `products:read`, `products:create`, `products:update`, `product_listings:read`, `product_listings:create`, `product_listings:update` |
 | Data scope | Future `platform + store_name`; module seam must fail closed until a trusted provider is supplied; full RBAC deferred |
 | Sensitive fields | `purchase_price`, `wfs_fee`, `shipping_cost`; Decimal/Numeric(18,4), required currency companion, no values in logs/errors |
+| API documentation | `docs/api/product-management-backend-mvp.md` |
+| Validation evidence | Implementation branch passes frozen dependency sync, Ruff format/lint, mypy, and DB-disabled pytest (`63 passed, 1 skipped`); PostgreSQL integration remains skipped without an authorized `TEST_DATABASE_URL` |
 | PRP | `PRPs/product-management-backend-mvp.md` |
 | PR | TBD |
 | Not in scope | Frontend, legacy migration/runtime reads, external APIs/sync, import/export, workers, calculations, mart/read model, production DB, deployment, CI PostgreSQL |
