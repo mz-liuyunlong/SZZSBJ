@@ -15,3 +15,7 @@ PRPs/templates/ai_task_prp.md
 ## Rule
 
 PRP 不等于批准开发。PRP 与 `AGENTS.md` 冲突时，以 `AGENTS.md` 为准。
+
+## Current Drafts
+
+- `lingxing-raw-foundation.md`：领星 L2 RAW 留痕、脱敏、hash、分页和审计边界；当前状态以文件正文为准。
