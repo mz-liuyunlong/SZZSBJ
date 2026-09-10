@@ -42,7 +42,7 @@
 |---|---|
 | Module name | Data Layer Foundation |
 | Module key | `data-layer-foundation` |
-| Status | `approved`；实现待本 PR 合并及验证后登记为 `implemented` |
+| Status | `implemented`；PR #38 已合并 |
 | Purpose | 提供环境注入的 PostgreSQL 配置、单一 SQLAlchemy `Base`、延迟同步 engine、单一 sessionmaker、FastAPI DB dependency 和 Alembic scaffold |
 | Owned backend files | `backend/.env.example`, `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic.ini`, `backend/alembic/`, `backend/tests/db/` |
 | Shared integration point | `backend/app/main.py` 的 lifespan 仅在应用关闭时释放已创建 engine；导入应用和 `/health` 不初始化数据库连接 |
@@ -53,5 +53,6 @@
 | Dependencies | 仅复用锁文件已有 SQLAlchemy 2.x、Alembic、psycopg 3 和 pydantic-settings；未新增或升级依赖 |
 | Tests | `backend/tests/db/test_config.py`, `backend/tests/db/test_base.py`, `backend/tests/db/test_session.py`, `backend/tests/db/test_alembic_scaffold.py` |
 | PRP | `PRPs/data-layer-foundation-implementation.md` |
-| PR | `TBD` |
-| Not in scope | 业务 model/table/API、migration revision、SQL、Source Registry、RAW Storage、legacy MySQL、外部 API、worker、frontend |
+| PR | `#38` |
+| Merge commit | `63b281b` |
+| Not in scope | 业务 model/table、Product API 或其他业务 API、migration revision、SQL、Source Registry、RAW Storage、legacy MySQL、外部 API、worker、frontend、生产数据库连接、CI PostgreSQL |
