@@ -56,7 +56,14 @@ def test_test_database_url_rejects_non_test_environment() -> None:
 def test_environment_loading_fails_closed_with_safe_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for name in ("APP_ENV", "DATABASE_URL", "TEST_DATABASE_URL"):
+    for name in (
+        "APP_ENV",
+        "DATABASE_URL",
+        "TEST_DATABASE_URL",
+        "LINGXING_ENABLE_REAL_CALLS",
+        "LINGXING_ALLOW_STRUCTURED_WRITE",
+        "LINGXING_ALLOW_FULL_SYNC",
+    ):
         monkeypatch.delenv(name, raising=False)
     get_settings.cache_clear()
 
@@ -80,3 +87,47 @@ def test_environment_loading_rejects_non_postgresql_url_without_echoing_it(
 
     assert invalid_url not in str(error.value)
     get_settings.cache_clear()
+
+
+def test_lingxing_settings_default_to_dry_run_and_deny_dangerous_actions() -> None:
+    settings = _settings("test", test_database_url=SYNTHETIC_DATABASE_URL)
+
+    assert settings.lingxing_enable_real_calls is False
+    assert settings.lingxing_dry_run is True
+    assert settings.lingxing_allow_raw_write is False
+    assert settings.lingxing_allow_structured_write is False
+    assert settings.lingxing_allow_full_sync is False
+    assert settings.lingxing_sample_page_size == 3
+    assert settings.lingxing_max_sample_pages == 1
+    assert settings.lingxing_max_response_bytes == 1_048_576
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["LINGXING_ALLOW_STRUCTURED_WRITE", "LINGXING_ALLOW_FULL_SYNC"],
+)
+def test_lingxing_settings_reject_unapproved_write_modes(name: str) -> None:
+    values = {
+        "APP_ENV": "test",
+        "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+        name: True,
+    }
+
+    with pytest.raises(ValidationError):
+        Settings.model_validate(values)
+
+
+def test_lingxing_base_url_rejects_credentials_and_masks_secret_fields() -> None:
+    marker = "credential-fixture"
+    values = {
+        "APP_ENV": "test",
+        "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+        "LINGXING_BASE_URL": f"https://user:{marker}@provider.invalid",
+        "LINGXING_APP_SECRET": marker,
+        "LINGXING_ACCESS_TOKEN": marker,
+    }
+
+    with pytest.raises(ValidationError) as error:
+        Settings.model_validate(values)
+
+    assert marker not in str(error.value)

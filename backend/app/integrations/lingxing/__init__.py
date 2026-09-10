@@ -1,0 +1,1 @@
+"""Lingxing readonly capture boundary."""
