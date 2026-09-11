@@ -120,5 +120,6 @@
 | Security boundary | Token/AppSecret 使用 `SecretStr` 或等价封装，不得进入 repr、日志、异常、RAW、前端、测试夹具、文档或 Git；默认 `LINGXING_ENABLE_TOKEN_REQUESTS=false` |
 | Tests | 仅使用 `httpx.MockTransport` 与 synthetic values；覆盖精确 multipart 字段、string/number TTL、提前刷新、原子轮换、已消费 refresh token 不重用、`2001003`/`2001008`/`2001009`/`3001008`、默认拒绝和并发刷新 single-flight |
 | Approval | Project Owner 于 2026-09-11 批准 implementation gate 并下发后端 Prompt；implementation PR #48 已合并（merge commit `a78af4d`） |
-| Controlled validation | 当前 docs-only 记录任务的 PR/merge 仍为 TBD；不表示业务 API 已接入或 P0 endpoint sampling 已完成 |
+| Controlled validation | 脱敏记录已在 PR #49 合并（merge commit `0032e4e`）；不表示业务 API 已接入或 P0 endpoint sampling 已完成 |
+| Business client integration gate | `PRPs/lingxing-business-client-token-integration.md` 已获批；只允许后续独立实现 readonly client 的 Token Manager 注入与 `2001003` 单次恢复重放；implementation PR/merge TBD，不授权真实业务 API 或 P0 sampling |
 | Not in scope | 真实 Token 获取/验证、业务 API、RAW 写入、Redis/共享存储、多实例协调、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |
