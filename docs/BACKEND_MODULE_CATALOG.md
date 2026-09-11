@@ -14,7 +14,7 @@
 | Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
-| Lingxing Token Manager | `backend/app/integrations/lingxing/`（candidate） | 后端内部获取、缓存与单次刷新领星访问令牌的安全边界；尚未实现 |
+| Lingxing Token Manager | `backend/app/integrations/lingxing/`（planned） | 已批准的后端内部 Token client、单进程内存缓存与安全刷新边界；尚未实现 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -106,12 +106,17 @@
 |---|---|
 | Module name | Lingxing Token Manager |
 | Module key | `lingxing-token-manager` |
-| Status | `candidate`；仅完成官方文档取证，PRP 为 Draft，未授权实现 |
+| Status | `approved`；实现门禁已批准，尚未实现，PR/merge 为 TBD |
+| Main role | Backend Engineer |
 | Purpose | 在后端内部安全获取、缓存和刷新 Lingxing access_token，并隔离 AppSecret/Token 与日志、RAW、前端和业务响应 |
-| Proposed location | `backend/app/integrations/lingxing/`；具体文件 allowlist 需后续 Approved PRP/Prompt 确认 |
+| Proposed location | `backend/app/integrations/lingxing/`；具体文件 allowlist 由负责人后续实现 Prompt 确认 |
 | Official contracts | `POST /api/auth-server/oauth/access-token`；`POST /api/auth-server/oauth/refresh`；均为 `multipart/form-data` |
 | Evidence | `docs/integrations/lingxing-auth-token-spec.md` |
-| PRP | `PRPs/lingxing-token-manager.md`（Draft） |
+| PRP | `PRPs/lingxing-token-manager.md`（Approved） |
+| Storage | MVP 仅单进程内存缓存；不落库、不写 Redis、不写 `raw_lingxing_api` |
+| Refresh | 以集中封装的 `expires_in` 为准；正常剩余 10 分钟刷新，短 TTL 按剩余总有效期的 20% 提前；refresh_token 单次使用并原子轮换 |
+| Retry/concurrency | 一次恢复链在初始请求后最多再请求 2 次，切换 endpoint 不重置预算；短退避、无无限循环；单进程 lock/single-flight |
 | Dependencies | 现有 Lingxing integration boundary；真实凭据只能通过后端 `secret_ref` 注入，不新增明文配置 |
-| Security boundary | Token/AppSecret 不得进入日志、RAW、前端、错误响应、测试夹具、文档或 Git；真实调用默认关闭 |
-| Not in scope | 当前代码实现、真实 Token 获取、业务 API、RAW 写入、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |
+| Security boundary | Token/AppSecret 使用 `SecretStr` 或等价封装，不得进入 repr、日志、异常、RAW、前端、测试夹具、文档或 Git；默认 `LINGXING_ENABLE_TOKEN_REQUESTS=false` |
+| Approval | Project Owner 于 2026-09-11 批准 implementation gate；实现仍需单独后端 Prompt；PR/merge TBD |
+| Not in scope | 真实 Token 获取/验证、业务 API、RAW 写入、Redis/共享存储、多实例协调、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |

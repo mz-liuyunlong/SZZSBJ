@@ -1,16 +1,18 @@
 # Lingxing Token Manager PRP
 
-Status: `Draft — Pending Owner Review`
+Status: `Approved`
 
-Owner Approval Required: `Yes`
+Owner Approval Required: `Completed for Token Manager implementation gate.`
 
-Implementation Allowed: `No until owner changes Status to Approved and issues a separate implementation prompt`
+Implementation Allowed: `Yes, but only for Lingxing Token Manager backend implementation, and only after the owner issues a separate backend implementation prompt.`
+
+Main Execution Role After Approval: `Backend Engineer`
 
 ## 1. Goal
 
 为后端规划最小 Lingxing Token Manager：按官方 Authorization 契约获取、缓存和刷新 access_token，同时确保 AppSecret、access_token 与 refresh_token 不进入日志、RAW、前端、测试夹具或 Git。
 
-本 PRP 当前只定义后续实现边界，不授权写代码、获取真实 Token 或调用领星业务 OpenAPI。
+本 PRP 已批准后续单独实现 Token Manager，但本次 docs-only approval gate 不写代码。实现仍需负责人另行下发后端工程师 Prompt；真实 Token 请求和领星业务 OpenAPI 调用不在本批准范围内。
 
 ## 2. Evidence
 
@@ -23,9 +25,9 @@ Implementation Allowed: `No until owner changes Status to Approved and issues a 
 - 官方示例 `expires_in` 为 `7199`，但未明确承诺固定两小时；
 - refresh_token 独立有效期、Token 持久化方式和提前刷新窗口均未由官方确认。
 
-## 3. Future implementation scope
+## 3. Approved implementation scope
 
-负责人批准后，单独实现 PR 可以包含：
+负责人另行下发实现 Prompt 后，单独后端实现 PR 可以包含：
 
 1. 后端内部 Token Manager，不暴露业务 API 或前端接口。
 2. 获取 Token 与刷新 Token 的 endpoint-specific client contract。
@@ -36,10 +38,11 @@ Implementation Allowed: `No until owner changes Status to Approved and issues a 
 7. 全链路 secret redaction 与安全错误映射。
 8. synthetic/mock HTTP 测试；CI 不调用真实领星。
 9. 必要的 Registry、后端模块清单和 API/运维文档同步。
+10. 默认关闭的 `LINGXING_ENABLE_TOKEN_REQUESTS=false` 或等价安全开关。
 
 ## 4. Explicitly out of scope
 
-- 当前 docs PR 中的任何后端或前端实现；
+- 本次 docs PR 中的任何后端或前端实现；
 - 真实 access_token / refresh_token 获取；
 - 领星业务 OpenAPI 调用；
 - `raw_lingxing_api` 写入或任何 Token RAW 留痕；
@@ -49,6 +52,7 @@ Implementation Allowed: `No until owner changes Status to Approved and issues a 
 - 生产数据库连接、migration、ORM model 或新表；
 - 新增依赖，除非后续 PRP 修订与负责人明确批准；
 - 在仓库、日志、错误响应或文档保存真实凭据。
+- Redis、共享缓存、加密共享存储或多实例 Token 协调。
 
 ## 5. Proposed internal contract
 
@@ -63,35 +67,38 @@ Token Manager 后续至少提供内部能力：
 ## 6. Security requirements
 
 - AppID/AppSecret 必须通过后端环境 secret boundary 注入；配置文件只允许 placeholder 或 `secret_ref`。
+- AppSecret、access_token 和 refresh_token 必须使用 `SecretStr` 或等价安全封装，禁止通过 `repr`、日志或异常暴露。
 - access_token、refresh_token、AppSecret 不得进入日志、异常文本、metrics label、trace attribute、RAW、数据库审计 payload、测试 snapshot 或文档。
+- access_token、refresh_token、AppSecret 不得进入 `raw_lingxing_api` 的 `response_json`、`request_body_json`、`extra_json` 或任何其他 RAW 字段。
+- `.env.example` 只允许变量名和不可用 placeholder，不得包含示例凭据值。
 - 前端不得接收、持有或刷新任何领星 Token。
 - Token 请求不得复用通用业务 RAW writer。
 - 官方错误 `2001001`、`2001002`、`2001005`、`2001008`、`2001009` 必须 fail closed；日志只记录脱敏错误类别。
 - 必须防止并发重复使用同一个 refresh_token。
-- 默认必须关闭真实调用；启用真实 Token 请求需要单独负责人授权和明确环境。
+- 默认必须设置 `LINGXING_ENABLE_TOKEN_REQUESTS=false` 或等价安全开关；实现 PR 不得启用真实 Token 请求。
+- 真实 Token 验证必须另开 controlled validation task，由负责人明确环境、操作人和安全边界。
 
 ## 7. Lifetime and refresh rules
 
 - TTL 必须读取并校验响应 `expires_in`，不得硬编码固定两小时。
 - 响应字段表与示例存在 string/number 差异，解析层必须接受官方已展示的两种表示并归一化为受限正整数。
-- 提前刷新必须使用负责人批准的安全窗口，不能从官方示例自行推导。
+- `expires_in` 的单位仍按官方文档未完全确认处理；单位解释和期限换算必须集中封装，便于后续取证后修正，不能散落在 client/cache 调用方。
+- MVP 提前刷新窗口：正常情况下在剩余 10 分钟时刷新；若 Token 总有效期小于 10 分钟，则在剩余总有效期的 20% 时刷新。窗口基于集中封装后的期限值计算。
 - refresh_token 只能使用一次；并发请求必须共享一个刷新结果或等待同一刷新动作。
-- `2001003` 可触发一次受控刷新与业务请求重试；具体业务请求集成另行批准。
-- `2001008` / `2001009` 是否自动回退到 AppID/AppSecret 重新获取，须由负责人决定。
-- `3001008` 采用有上限退避；不得无限重试或形成获取风暴。
+- 刷新成功后必须原子替换内存中的 access_token 与 refresh_token，旧 refresh_token 不得再次使用。
+- `2001003` 可触发 refresh/fallback 恢复；Token Manager 本身不负责重放业务请求。未来若单独批准业务请求重放，同一业务操作只能在初始请求后最多重试 2 次，非幂等请求仍需独立契约。
+- `2001008` / `2001009` 允许回退到 GetToken；一次恢复链在初始 Token 请求后最多再请求 2 次，切换 endpoint 不得重置重试预算。
+- Token endpoint 的其他可重试失败共用上述预算并使用短退避；不得无限循环或形成获取风暴。
 
 ## 8. Storage boundary
 
-当前不批准 Token 持久化，也不创建 Token 表。负责人必须在实现前选择：
+MVP 已批准使用单进程内存缓存，不持久化 Token，不创建 Token 表，不写 Redis，不写 `raw_lingxing_api`，不输出 Token 日志。
 
-- 单进程、内存缓存的最小 MVP；或
-- 经单独安全设计批准的加密共享存储。
-
-如果部署形态为多 worker 或多实例，内存缓存不能自动视为安全的共享方案；应先解决 single-flight、刷新令牌单次使用和跨实例原子替换问题。
+单进程内必须使用 lock/single-flight 防止并发刷新风暴，并保证 refresh_token 单次使用及 Token 对原子替换。多 worker/多实例共享、Redis 或加密共享存储后置为独立 PRP/任务，不得由本实现范围顺带加入。
 
 ## 9. Implementation files
 
-具体 allowlist 必须由后续实现 Prompt 在当前仓库结构上确定。不得借本 PRP 修改 Lingxing RAW Foundation、产品模块、前端或数据库层。
+具体文件 allowlist 必须由后续实现 Prompt 在当前仓库结构上确定。实现只允许 Token client、单进程内存缓存、刷新逻辑、secret redaction、安全设置占位和 mock 测试；不得借本 PRP 修改 Lingxing RAW Foundation、产品模块、前端或数据库层。
 
 ## 10. Test plan
 
@@ -105,6 +112,7 @@ Token Manager 后续至少提供内部能力：
 - `2001003`、`2001008`、`2001009` 和 `3001008` 的有界处理；
 - AppSecret、Token 和表单值不出现在日志、错误、RAW 或 snapshot；
 - 默认关闭真实 HTTP；
+- `LINGXING_ENABLE_TOKEN_REQUESTS=false` 时 transport 调用次数为零；
 - 不调用领星业务 endpoint；
 - 不新增 Token 数据库表或 migration。
 
@@ -121,18 +129,26 @@ Token Manager 后续至少提供内部能力：
 
 未运行的检查必须写 `Not run` 与原因，禁止用 “should pass” 代替真实结果。
 
-## 12. Owner decisions required
+## 12. Owner approval record
 
-在本 PRP 可改为 Approved 前，负责人必须明确：
+| Item | Decision |
+|---|---|
+| Status | `Approved` |
+| Approval date | `2026-09-11` |
+| Approval type | Token Manager implementation gate |
+| Main execution role | Backend Engineer |
+| Storage | 单进程内存缓存；不落库、不写 Redis、不写 RAW、不记录 Token 日志 |
+| Real requests | 实现 PR 只使用 MockTransport/synthetic response；真实 Token 验证另开 controlled validation task |
+| Default gate | `LINGXING_ENABLE_TOKEN_REQUESTS=false` 或等价安全开关 |
+| Lifetime | 以 `expires_in` 为准；不把 `7199` 写死为 SLA；单位仍未完全确认，解释与换算集中封装 |
+| Early refresh | 剩余 10 分钟时刷新；总有效期小于 10 分钟时按剩余总有效期的 20% 提前刷新 |
+| Refresh rotation | refresh_token 单次使用；刷新成功后原子替换内存中的两个 Token |
+| Fallback | `2001008` / `2001009` 可回退 GetToken；一次恢复链在初始请求后最多再请求 2 次，切换 endpoint 不重置预算 |
+| Rate limiting | 官方令牌桶容量 100，维度为 `appId + 接口 URL`；短退避、无无限循环 |
+| Concurrency | 单进程 lock/single-flight；多实例共享后置独立任务 |
+| Deferred | Redis/加密共享存储、多实例协调、真实 Token 请求、业务 API 调用、业务请求重放策略 |
 
-1. 首版使用单进程内存缓存，还是设计加密共享存储；
-2. 允许真实 Token 请求的环境、操作人和启用开关；
-3. 提前刷新安全窗口；
-4. `2001008` / `2001009` 后是否允许自动重新获取及最大次数；
-5. `3001008` 的退避和重试上限；
-6. 多 worker/多实例下的 single-flight 与原子替换方案；
-7. Token 读取权限、审计事件和告警接收方；
-8. 官方文档未确认项是否需在受控环境做单独验证任务。
+批准只覆盖 Token Manager 后端实现。PRP Approved 不自动启动实现，仍需负责人下发独立后端实现 Prompt。
 
 ## 13. Stop conditions
 
@@ -144,20 +160,19 @@ Token Manager 后续至少提供内部能力：
 - 需要让前端接收 Token；
 - 需要新增依赖、修改 CI/部署或连接生产环境；
 - 官方契约与取证文档不一致；
-- 负责人决策尚未完成；
+- 未收到负责人单独下发的后端实现 Prompt；
 - 实际 worktree、分支或 allowlist 与批准 Prompt 不一致。
 
 ## 14. Rollback boundary
 
-本 docs PR 可通过撤销两份新增文档和三处 candidate/planned 登记回滚。未来实现 PR 必须独立、可回滚，且不得影响已合并的 Lingxing RAW Foundation。
+本 approval gate 可通过撤销 PRP 状态/Owner 决策和对应 Registry/Catalog 状态更新回滚。未来实现 PR 必须独立、可回滚，且不得影响已合并的 Lingxing RAW Foundation。
 
 ## 15. Acceptance checklist
 
-- [ ] PRP 仍为 Draft，尚未授权实现。
+- [ ] PRP 为 Approved，但实现必须等待负责人单独下发后端 Prompt。
 - [ ] 官方事实与项目安全决策已分开记录。
 - [ ] 没有把 `7199` 写成固定两小时 SLA。
 - [ ] 没有真实 Token、AppSecret、访问凭据或业务数据。
-- [ ] Registry/Catalog 仅登记 `candidate` / `planned`。
+- [ ] Token Manager 实现条目仅登记 `approved`；只有已合并的取证任务可登记 `implemented`。
 - [ ] 没有修改 backend、frontend、old-system、依赖、脚本或 CI。
 - [ ] 没有获取 Token 或调用业务 API。
-
