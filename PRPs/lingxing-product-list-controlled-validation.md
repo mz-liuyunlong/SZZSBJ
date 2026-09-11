@@ -1,14 +1,14 @@
 # PRP: Lingxing ProductLists Python Mock-Only Implementation Gate
 
-Status: `Approved for Python Mock-Only Implementation`
+Status: `Python Mock-Only Implementation Merged; Controlled Full Local RAW Capture Completed`
 
-Owner Approval Required: `Completed for Python mock-only implementation gate`
+Owner Approval Required: `Completed for Python mock-only implementation and one controlled full local RAW capture`
 
-Implementation Allowed: `Yes, but only for Python backend mock-only implementation and only after the Owner issues a separate backend implementation prompt in an independent backend worktree`
+Implementation Allowed: `Python backend mock-only implementation completed in PR #57; no standing authorization for further real calls or server imports`
 
-Real Business API Validation Allowed: `No`
+Real Business API Validation Allowed: `Completed once for ProductLists-only controlled full local RAW capture under a later explicit Owner instruction`
 
-ProductLists Real Call Allowed: `No`
+ProductLists Real Call Allowed: `Completed once; additional real calls require new explicit Owner authorization`
 
 P0 Sampling Allowed: `No`
 
@@ -17,6 +17,10 @@ Dependency Approval: `Approved to add cryptography in the later backend implemen
 Main Execution Role After Approval: `Backend Engineer`
 
 Owner approval date: `2026-09-12`
+
+Implementation PR: `#57`; merge commit: `63ad40b`
+
+Controlled local RAW validation run: `lingxing_product_list_20260911T195715Z_636b2f7d`
 
 ## 1. 目标
 
@@ -27,7 +31,7 @@ Owner approval date: `2026-09-12`
 3. 复用现有 `LingxingTokenManager` 获取 access token。
 4. `MockTransport`、synthetic credential 与确定性签名测试。
 
-本 PRP 不批准真实 ProductLists 调用、真实 Token 请求、P0 sampling、RAW/DB/Redis 写入或任何业务数据落地。
+本 PRP 的原始 implementation gate 不批准真实 ProductLists 调用、真实 Token 请求、P0 sampling、RAW/DB/Redis 写入或任何业务数据落地。后续 Owner 通过独立执行指令一次性批准了 ProductLists controlled full local RAW capture；该批准不追溯扩大原 implementation PR，也不形成持续调用、数据库写入或服务端导入授权。
 
 ## 2. 证据定位与 Owner 判断
 
@@ -141,13 +145,31 @@ Python 实现必须集中封装排序、序列化、字节编码、摘要、padd
 - [x] Owner 已批准 Python backend mock-only implementation gate。
 - [x] Owner 已批准在缺少现有 AES 支持时，由后续 backend PR 增加 `cryptography`。
 - [x] Node/reference boundary 与 Python-only 实现要求明确。
-- [x] Real Business API Validation、ProductLists Real Call 与 P0 Sampling 均保持 `No`。
+- [x] 原始 mock implementation gate 中 Real Business API Validation、ProductLists Real Call 与 P0 Sampling 均保持 `No`；后续一次性 controlled capture 不追溯扩大该 gate。
 - [x] 认证材料的非持久化、非日志和非 envelope 边界明确。
-- [ ] Owner 另行下发 backend implementation Prompt。
-- [ ] 后续 implementation PR 完成 Python 代码、mock-only tests 与 registry/catalog 更新。
-- [ ] implementation PR 经 Review 并合并。
-- [ ] 如需真实 ProductLists validation，另建 controlled validation gate 并由 Owner 明确批准。
+- [x] Owner 另行下发 backend implementation Prompt。
+- [x] 后续 implementation PR 完成 Python 代码、mock-only tests 与 registry/catalog 更新。
+- [x] implementation PR 经 Review 并在 PR #57 合并（`63ad40b`）。
+- [x] Owner 通过后续独立执行指令明确批准一次 ProductLists controlled full local RAW capture。
 
-## 11. 下一步
+## 11. Controlled Full Local RAW Capture 记录
 
-Owner 在独立 backend worktree 下发实现 Prompt，由 Backend Engineer 按本 PRP 用 Python 完成 mock-only ProductLists contract 与 query-sign adapter。真实业务 API 调用继续禁止，不能由本批准自动推进。
+本节只基于 Owner 提供的脱敏执行摘要登记结果；本次 docs-only 任务未读取 `pages/*.json`，也未输出任何商品字段、credential、Token 或签名。
+
+| 项目 | 脱敏结果 |
+|---|---|
+| Validation run ID | `lingxing_product_list_20260911T195715Z_636b2f7d` |
+| Endpoint scope | 仅 `/erp/sc/routing/data/local_inventory/productList` |
+| Capture mode | `controlled_full_local_raw_capture`；不是 P0 sampling，不是定时/full sync |
+| Pagination | 从 `offset=0`、`length=1000` 串行执行；2 页 attempted、2 页 written；最后 offset 为 `1000` |
+| Completion | `total_value=1188`，`total_captured=1188`，停止原因为 `total_reached` |
+| Local artifacts | 4 个本地文件，2 个 response hash；位于 `LINGXING_LOCAL_RAW_DIR/<validation_run_id>/`，不进入 Git |
+| Write boundary | 只写本地 RAW 文件；未连接或写入数据库，未写 `raw_lingxing_api`、业务表或 Redis |
+| Output boundary | 未输出完整 response、商品字段、credential、Token、sign 或 Authorization |
+| Validation | pre-call 30 tests PASS；runner format/lint/self-test PASS；post-call 30 tests PASS；`git diff --check` PASS；执行后仓库状态 clean |
+
+该结果确认本次账号范围内 ProductLists query-sign 调用和串行分页在该次运行中可用，但不把官方证据缺口改写为已完整消除，也不批准其他 endpoint、重复真实调用、定时同步或服务端写入。
+
+## 12. 下一步
+
+下一阶段是独立设计并实现 `local RAW -> server RAW import`。该阶段必须另行明确导入目标、完整性校验、幂等键、敏感数据保护、权限、失败恢复和审计边界，并取得 Owner 批准；本次任务不实现导入、不连接服务器或数据库，也不提交本地 RAW 文件。
