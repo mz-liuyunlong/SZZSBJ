@@ -1,12 +1,14 @@
 # 领星 Authorization Token 接口取证规格
 
-Status: `Evidence Captured — Pending Owner Review`
+Status: `Evidence Captured — Controlled Validation Completed`
 
 Evidence date: `2026-09-10`
 
+Controlled validation date: `2026-09-11`
+
 ## 1. 文档定位
 
-本文仅记录实现 Lingxing Token Manager 前所需的官方接口事实与尚未确认项，不是接口调用授权，也不是实现说明。
+本文记录 Lingxing Token Manager 所依据的官方接口事实、尚未确认项，以及负责人完成的脱敏受控验证结果。官方文档事实与受控运行观察必须区分；本文不授权业务 API 调用。
 
 - 本次只读取领星官方 OpenAPI 文档，没有获取真实 Token，没有调用业务 OpenAPI。
 - 本文不保存访问文档所需的凭据、企业 AppID/AppSecret、Token 或请求样例值。
@@ -164,6 +166,22 @@ Token Manager 必须避免并发刷新和重复获取风暴；具体锁、缓存
 | U-7 | 限流后的退避、最大重试次数和告警 | 阻塞自动重试策略 |
 | U-8 | Token 接口是否还有页面外的签名或 IP 环境前置条件 | 实现前需在受控环境复核；本任务不调用接口 |
 
-## 10. 取证结论
+## 10. Controlled validation 记录
 
-官方文档足以支持编写一个 **Draft Token Manager PRP**，但不足以授权实现或真实获取 Token。后续必须先由负责人确认存储、刷新安全窗口、多实例并发、真实调用环境和失败策略，再决定是否批准实现。
+负责人于 `2026-09-11` 在本机完成仅限 GetToken 与 RefreshToken 的 controlled validation。以下内容仅为脱敏事实，不包含凭据、完整请求体或完整响应体。
+
+| 项目 | 脱敏观察 |
+|---|---|
+| 验证范围 | 仅 GetToken 与 RefreshToken；未调用任何 Lingxing 业务 API |
+| GetToken | 成功；access token 与 refresh token 字段均存在；观察到的 `expires_in` 为 `7199` 和 `7092`；已计算 `refresh_after` |
+| RefreshToken | 成功；新 access token 与新 refresh token 字段均存在；refresh token 与内存 snapshot 已轮换；旧 refresh token 未复用 |
+| access token 字符串 | 立即刷新时未变化；实现不得以 access token 字符串是否变化作为刷新成功条件 |
+| TTL 解释 | 观察值为 numeric TTL-like value，与当前按秒集中处理兼容；`7199` 不得视为固定两小时 SLA |
+| 数据与存储边界 | 未写 RAW、数据库或 Redis；未读取 `.env` 文件；未输出任何 secret |
+| 后续边界 | 真实业务 API 集成和 P0 endpoint 采样仍是独立未来任务 |
+
+本次受控验证只确认已批准 Token Manager 对 GetToken/RefreshToken 的最小真实交互，不证明任何业务 API、RAW 写入、同步任务或 P0 endpoint 已验证。
+
+## 11. 取证结论
+
+官方文档取证已用于批准 `PRPs/lingxing-token-manager.md`，Lingxing Token Manager Backend MVP 已在 PR #48 合并。本次 controlled validation 补充了 GetToken/RefreshToken 的脱敏运行证据，但不扩大到业务 API、RAW、数据库、Redis、P0 endpoint 采样或同步能力。
