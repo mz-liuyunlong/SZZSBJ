@@ -122,5 +122,5 @@
 | Approval | Project Owner 于 2026-09-11 批准 implementation gate 并下发后端 Prompt；implementation PR #48 已合并（merge commit `a78af4d`） |
 | Controlled validation | 脱敏记录已在 PR #49 合并（merge commit `0032e4e`）；不表示业务 API 已接入或 P0 endpoint sampling 已完成 |
 | Business client integration | PR #51 已合并（merge commit `e946503`）：readonly client 已完成 Token Manager provider 注入、逐请求认证 header 构造与 `2001003` 单次恢复重放；全部为 fake provider/MockTransport 验证，不表示真实业务 API 或 P0 sampling 已验证 |
-| productList controlled validation | `/erp/sc/routing/data/local_inventory/productList` 当前不在 client contract；Owner Review 确认 endpoint JSON body/envelope evidence 足以形成未来 mock-only proposal，但完整 query-sign algorithm、复杂 body canonicalization 与 `app_key` 来源映射证据不足；PRP 为 `Blocked — Pending Query-Sign Auth Evidence`，不得实现或真实调用，PR/merge TBD |
+| productList controlled validation | `/erp/sc/routing/data/local_inventory/productList` 当前不在 client contract；官方 evidence 已确认 Query Params、APP ID 来源、高层排序/拼接、MD5 uppercase、AES/ECB/PKCS5PADDING、URL encoding 与 2 分钟签名窗口，但复杂 body canonicalization、精确 comparator/字符编码、AES 输出编码、timestamp 单位/时区和安全 expected-sign vector 仍缺失；PRP 保持 `Blocked — Pending Query-Sign Auth Evidence`，不得实现或真实调用，PR/merge TBD |
 | Not in scope | 真实 Token 获取/验证、业务 API、RAW 写入、Redis/共享存储、多实例协调、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |
