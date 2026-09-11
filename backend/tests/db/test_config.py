@@ -92,6 +92,11 @@ def test_environment_loading_rejects_non_postgresql_url_without_echoing_it(
 def test_lingxing_settings_default_to_dry_run_and_deny_dangerous_actions() -> None:
     settings = _settings("test", test_database_url=SYNTHETIC_DATABASE_URL)
 
+    assert settings.lingxing_enable_token_requests is False
+    assert settings.lingxing_token_refresh_safety_seconds == 600
+    assert settings.lingxing_token_refresh_short_ttl_ratio == 0.2
+    assert settings.lingxing_token_request_timeout_ms == 5_000
+    assert settings.lingxing_token_max_attempts == 2
     assert settings.lingxing_enable_real_calls is False
     assert settings.lingxing_dry_run is True
     assert settings.lingxing_allow_raw_write is False
@@ -100,6 +105,27 @@ def test_lingxing_settings_default_to_dry_run_and_deny_dangerous_actions() -> No
     assert settings.lingxing_sample_page_size == 3
     assert settings.lingxing_max_sample_pages == 1
     assert settings.lingxing_max_response_bytes == 1_048_576
+
+
+def test_lingxing_token_requests_require_complete_credentials() -> None:
+    marker = "credential-fixture"
+    values = {
+        "APP_ENV": "test",
+        "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+        "LINGXING_BASE_URL": "https://provider.invalid",
+        "LINGXING_APP_ID": "app-id-fixture",
+        "LINGXING_ENABLE_TOKEN_REQUESTS": True,
+        "LINGXING_APP_SECRET": marker,
+    }
+
+    settings = Settings.model_validate(values)
+    assert marker not in repr(settings)
+
+    del values["LINGXING_APP_SECRET"]
+    with pytest.raises(ValidationError) as error:
+        Settings.model_validate(values)
+
+    assert marker not in str(error.value)
 
 
 @pytest.mark.parametrize(
