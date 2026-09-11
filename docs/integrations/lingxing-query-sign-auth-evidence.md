@@ -1,12 +1,12 @@
 # Lingxing Query-Sign Authentication Official Evidence
 
-Status: `Blocked — Official Evidence Partially Captured`
+Status: `Official Evidence Partially Captured — Owner-Approved Supplemental Protocol Evidence for Python Mock-Only Implementation`
 
 Evidence capture date: `2026-09-11`
 
 ## 1. 文档定位
 
-本文记录领星官方“API 接入指南”中业务接口 Query Params 鉴权与签名规则的最小实现证据，供 ProductLists 后续 gate 复审使用。本文不是实现批准，不授权 query-sign adapter、真实 Token 请求、真实业务 API 调用、ProductLists sampling 或 RAW/DB/Redis 写入。
+本文记录领星官方“API 接入指南”中业务接口 Query Params 鉴权与签名规则，以及 Owner 提供的已跑通参考协议所补充的最小实现证据。本文本身不授权真实 Token 请求、真实业务 API 调用、ProductLists sampling 或 RAW/DB/Redis 写入；Python mock-only implementation 的批准边界以 `PRPs/lingxing-product-list-controlled-validation.md` 为准。
 
 官方来源：
 
@@ -30,10 +30,10 @@ Evidence capture date: `2026-09-11`
 | 摘要 | 32 位 MD5，结果转大写 | 已确认 |
 | 二次处理 | AES/ECB/PKCS5PADDING，key 为 appId | 已确认算法、mode、padding 与 key 来源 |
 | 传输编码 | `sign` 生成后需要 URL encoding | 已确认边界 |
-| AES 结果输出编码 | 官方页面未说明是 Base64、hex 或其他编码 | 未确认，阻塞实现 |
-| 可复核非密钥向量 | 页面未提供一组可安全入库的确定输入与预期最终签名 | 未确认，阻塞实现 |
+| AES 结果输出编码 | 官方页面未说明是 Base64、hex 或其他编码 | 官方未确认；Owner 补充协议证据确认为 Base64，仅用于 mock-only 实现 |
+| 可复核非密钥向量 | 页面未提供一组可安全入库的确定输入与预期最终签名 | 官方未确认；mock-only PR 必须使用 synthetic tests，真实验证仍需单独批准 |
 
-结论：官方原始规则页面已定位，并补齐多数高层算法步骤；但 contract 仍不足以实现可互操作、可复核的 query-sign adapter，状态保持阻塞。
+结论：官方原始规则页面已定位，并补齐多数高层算法步骤；官方证据自身仍不完整。Owner 于 2026-09-12 接受已跑通参考协议作为补充证据，只批准 Python mock-only query-sign adapter；这不等于官方 contract 已完整，也不批准真实 API validation。
 
 ## 3. Query auth parameters
 
@@ -95,7 +95,7 @@ Evidence capture date: `2026-09-11`
 - 非 ASCII key 的处理。
 - locale 或稳定排序要求。
 
-后续实现不得用语言运行时默认排序规则替代缺失的官方 contract。
+官方证据自身不足以确定语言运行时排序行为。Owner 补充协议证据确认 mock-only 实现采用默认字符串顺序；Python 实现必须集中封装并用 synthetic tests 固定该行为，真实验证前仍保留互操作风险。
 
 ## 6. Serialization rule
 
@@ -109,6 +109,8 @@ Evidence capture date: `2026-09-11`
 
 GET 请求的业务参数与公共参数位于 URL；POST 请求的业务参数位于 JSON body，公共参数位于 Query Params。两类业务参数都进入签名输入。官方页面只说明集合需转为字符串，没有给出足以跨语言复现的 canonical serialization 规范。
 
+Owner 补充协议证据确认 ProductLists mock-only 实现只排除严格空字符串 `""`，保留 `null`、`0`、`false`，并对 array/object 使用 compact JSON serialization。该规则是 Owner 批准的参考协议，不改写为官方文档事实。
+
 ## 7. Encoding and cryptographic rule
 
 - 拼接字符串的字符编码：官方文档未确认。
@@ -116,10 +118,10 @@ GET 请求的业务参数与公共参数位于 URL；POST 请求的业务参数�
 - 摘要：32 位 MD5，uppercase。
 - 二次处理：AES/ECB/PKCS5PADDING。
 - AES key：appId。
-- AES 结果输出编码：官方文档未确认。
+- AES 结果输出编码：官方文档未确认；Owner 补充协议证据确认为 Base64，仅供 Python mock-only 实现。
 - 是否还有 AES 之外的二次编码/包装：官方文档未确认。
 
-缺少 AES 输出编码时，无法仅凭现有文字得到确定的最终 query value。
+仅凭官方文字仍无法得到确定的最终 query value；Owner 补充协议证据为 mock-only 实现补足 Base64 输出选择。Python 实现必须集中封装字符编码和密码学步骤，真实互操作性仍待后续独立 controlled validation。
 
 ## 8. Test vector status
 
@@ -132,7 +134,7 @@ GET 请求的业务参数与公共参数位于 URL；POST 请求的业务参数�
 - 明确给出 AES 后、URL encoding 前的输出。
 - 明确给出最终 expected `sign`。
 
-本任务未向官方签名测试工具提交任何值，也未生成真实或 synthetic sign。后续不得用自行计算结果冒充官方测试向量。
+本任务未向官方签名测试工具提交任何值，也未生成真实或 synthetic sign。后续 mock-only implementation 可以使用不可复用的 synthetic inputs 验证 Owner 批准的确定性行为，但不得把自行计算结果冒充官方测试向量或真实 API validation。
 
 ## 9. Security boundary
 
@@ -146,12 +148,12 @@ GET 请求的业务参数与公共参数位于 URL；POST 请求的业务参数�
 
 ## 10. ProductLists impact
 
-- ProductLists 的 path、JSON body、分页和 response envelope 证据不受本文改变。
-- 本文足以形成 query-sign adapter 的风险清单和后续 evidence request，但不足以批准 mock-only 实现。
-- 阻塞项是：AES 输出编码、复杂值确定性序列化、timestamp 正式单位/时区、精确排序规则和非密钥 expected-sign 向量。
-- `PRPs/lingxing-product-list-controlled-validation.md` 必须保持 `Blocked — Pending Query-Sign Auth Evidence`。
-- 即使证据未来补齐，也必须经过独立 Owner Approval Gate 后才能实现 mock-only adapter。
-- mock-only adapter 合并与复审通过后，真实 ProductLists validation 仍需另一项明确授权。
+- ProductLists 的 path、JSON body、分页和 response envelope 官方证据不受本文改变。
+- Owner 补充协议证据确认 `app_key = appId`、Unix 秒级 timestamp、默认字符串排序、严格空字符串排除、复杂值 compact JSON、MD5 uppercase、AES ECB + PKCS5/PKCS7、Base64 与 query encoder URL encoding。
+- `PRPs/lingxing-product-list-controlled-validation.md` 已更新为 `Approved for Python Mock-Only Implementation`。
+- 本批准只允许 Python backend mock-only contract、signer 与 tests；不得引入 Node/npm/JavaScript runtime，也不得另写 Token Manager。
+- 官方证据的精确 comparator、字符编码、正式 timestamp 语义和 official expected-sign vector 缺口继续记录为真实互操作风险。
+- 真实 ProductLists validation、P0 sampling、Token 请求和 RAW/DB/Redis 写入仍需另一项明确 Owner 授权。
 
 ## 11. 后续证据建议
 
@@ -163,7 +165,7 @@ GET 请求的业务参数与公共参数位于 URL；POST 请求的业务参数�
 4. timestamp 单位、时区与容差。
 5. 一组不可复用 credential 的官方 expected-sign 测试向量。
 
-在这些证据完成并复审前，不得编写 query-sign adapter、扩展 ProductLists endpoint contract 或执行真实 API validation。
+这些官方证据缺口不再阻塞 Owner 已批准的 Python mock-only implementation，但仍阻塞真实 ProductLists validation。后续不得用 mock-only 测试结果宣称真实 API 已验证。
 
 ## 12. 明确未执行
 
@@ -174,3 +176,14 @@ GET 请求的业务参数与公共参数位于 URL；POST 请求的业务参数�
 - 未读取 `.env` 或业务 secret 文件。
 - 未生成、记录或持久化真实 sign。
 - 未写 RAW、DB 或 Redis，未连接数据库或服务器。
+
+## 13. Owner 补充协议与批准记录
+
+Owner approval date: `2026-09-12`
+
+- Owner 提供的已跑通参考项目只作为协议证据，不是本项目的运行依赖或实现模板。
+- 新系统后续必须用 Python 独立实现同等协议规则，并复用现有 `LingxingTokenManager`。
+- 签名输入为 business body params、`access_token`、`app_key`、`timestamp`，不包含 `sign` 自身。
+- key 使用默认字符串顺序；只排除严格空字符串；复杂值使用 compact JSON；MD5 hex uppercase 后，以 appId 为 key 执行 AES ECB + PKCS5/PKCS7 padding，输出 Base64，再由 query encoder URL encode。
+- 允许后续 backend PR 在当前 Python 依赖没有 AES 支持时增加 `cryptography`；本 docs PR 不修改依赖。
+- Python mock-only implementation 已批准；真实 ProductLists 调用、Real Business API Validation 与 P0 Sampling 均未批准。
