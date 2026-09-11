@@ -1,1 +1,1 @@
-"""Lingxing readonly capture boundary."""
+"""Lingxing readonly capture and internal token boundaries."""

@@ -46,6 +46,32 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="LINGXING_ACCESS_TOKEN",
     )
+    lingxing_enable_token_requests: bool = Field(
+        default=False,
+        validation_alias="LINGXING_ENABLE_TOKEN_REQUESTS",
+    )
+    lingxing_token_refresh_safety_seconds: int = Field(
+        default=600,
+        ge=1,
+        validation_alias="LINGXING_TOKEN_REFRESH_SAFETY_SECONDS",
+    )
+    lingxing_token_refresh_short_ttl_ratio: float = Field(
+        default=0.2,
+        gt=0,
+        lt=1,
+        validation_alias="LINGXING_TOKEN_REFRESH_SHORT_TTL_RATIO",
+    )
+    lingxing_token_request_timeout_ms: int = Field(
+        default=5_000,
+        ge=100,
+        validation_alias="LINGXING_TOKEN_REQUEST_TIMEOUT_MS",
+    )
+    lingxing_token_max_attempts: int = Field(
+        default=2,
+        ge=1,
+        le=2,
+        validation_alias="LINGXING_TOKEN_MAX_ATTEMPTS",
+    )
     lingxing_timeout_ms: int = Field(
         default=5_000,
         ge=100,
@@ -130,6 +156,12 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL is required outside APP_ENV=test")
         if self.lingxing_enable_real_calls and self.lingxing_base_url is None:
             raise ValueError("LINGXING_BASE_URL is required when real calls are enabled")
+        if self.lingxing_enable_token_requests and (
+            self.lingxing_base_url is None
+            or not self.lingxing_app_id
+            or self.lingxing_app_secret is None
+        ):
+            raise ValueError("Lingxing token request settings are missing or invalid")
         if self.lingxing_allow_structured_write:
             raise ValueError("Lingxing structured writes are not approved")
         if self.lingxing_allow_full_sync:
