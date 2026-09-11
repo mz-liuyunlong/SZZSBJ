@@ -14,7 +14,7 @@
 | Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
-| Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已在待审分支实现的后端内部 Token client、单进程内存缓存与安全刷新边界；合并前保持 `approved` |
+| Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -106,7 +106,7 @@
 |---|---|
 | Module name | Lingxing Token Manager |
 | Module key | `lingxing-token-manager` |
-| Status | `approved`；实现已在当前分支完成并通过 synthetic/mock 验证，合并前不标记 `implemented` |
+| Status | `implemented` / `merged`；implementation PR #48，merge commit `a78af4d` |
 | Main role | Backend Engineer |
 | Purpose | 在后端内部安全获取、缓存和刷新 Lingxing access_token，并隔离 AppSecret/Token 与日志、RAW、前端和业务响应 |
 | Owned backend files | `backend/app/integrations/lingxing/token_manager.py`、settings placeholders、scoped synthetic/mock tests and metadata registration |
@@ -119,5 +119,6 @@
 | Dependencies | 现有 Lingxing integration boundary；真实凭据只能通过后端 `secret_ref` 注入，不新增明文配置 |
 | Security boundary | Token/AppSecret 使用 `SecretStr` 或等价封装，不得进入 repr、日志、异常、RAW、前端、测试夹具、文档或 Git；默认 `LINGXING_ENABLE_TOKEN_REQUESTS=false` |
 | Tests | 仅使用 `httpx.MockTransport` 与 synthetic values；覆盖精确 multipart 字段、string/number TTL、提前刷新、原子轮换、已消费 refresh token 不重用、`2001003`/`2001008`/`2001009`/`3001008`、默认拒绝和并发刷新 single-flight |
-| Approval | Project Owner 于 2026-09-11 批准 implementation gate 并下发后端 Prompt；implementation PR/merge TBD |
+| Approval | Project Owner 于 2026-09-11 批准 implementation gate 并下发后端 Prompt；implementation PR #48 已合并（merge commit `a78af4d`） |
+| Controlled validation | 当前 docs-only 记录任务的 PR/merge 仍为 TBD；不表示业务 API 已接入或 P0 endpoint sampling 已完成 |
 | Not in scope | 真实 Token 获取/验证、业务 API、RAW 写入、Redis/共享存储、多实例协调、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |
