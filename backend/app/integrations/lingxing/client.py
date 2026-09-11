@@ -8,6 +8,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, field_validator
 
 from app.core.config import Settings
+from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_query_auth_params
 from app.integrations.lingxing.security import redact_json
 
 type LingxingEndpoint = Literal[
@@ -16,9 +17,11 @@ type LingxingEndpoint = Literal[
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo",
     "/pb/mp/shop/v2/getSellerList",
     "/basicOpen/multiplatform/profit/report/order",
+    "/erp/sc/routing/data/local_inventory/productList",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
+type AuthStrategy = Literal["authorization_header", "query_sign"]
 
 MAX_ATTEMPTS = 2
 RETRY_BACKOFF_SECONDS = 0.05
@@ -47,6 +50,7 @@ class LingxingEndpointContract:
     page_field: str | None = None
     offset_field: str | None = None
     rejection_reason: str | None = None
+    auth_strategy: AuthStrategy = "authorization_header"
 
 
 _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
@@ -104,6 +108,18 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         store_field=None,
         page_size_field=None,
         rejection_reason="pending_endpoint_contract: endpoint outbound is disabled",
+    ),
+    "/erp/sc/routing/data/local_inventory/productList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset({"offset", "length"}),
+        required_body_fields=frozenset(),
+        store_field=None,
+        page_size_field="length",
+        offset_field="offset",
+        auth_strategy="query_sign",
     ),
 }
 
@@ -258,26 +274,30 @@ class LingxingReadonlyClient:
         if not contract.require_json_body or not isinstance(body, dict):
             raise LingxingClientError("Lingxing endpoint requires a JSON object body")
         body_fields = frozenset(body)
-        if body_fields != contract.required_body_fields:
+        if not contract.required_body_fields.issubset(body_fields):
             raise LingxingClientError("Lingxing outbound body does not match endpoint contract")
         if not body_fields.issubset(contract.allowed_body_fields):
-            raise LingxingClientError("Lingxing outbound body contains unapproved fields")
+            raise LingxingClientError("Lingxing outbound body does not match endpoint contract")
 
-        if contract.store_field is None or contract.page_size_field is None:
-            raise LingxingClientError("Lingxing endpoint contract is incomplete")
-        stores = _required_store_ids(body[contract.store_field])
-        if not stores.issubset(set(capture.store_ids)):
-            raise LingxingClientError("Lingxing outbound store scope is missing or unauthorized")
-        length = _required_integer(body[contract.page_size_field], minimum=1)
-        if length != page.page_size or length > self._settings.lingxing_sample_page_size:
-            raise LingxingClientError("Lingxing outbound page size is missing or inconsistent")
+        if contract.store_field is not None:
+            stores = _required_store_ids(body[contract.store_field])
+            if not stores.issubset(set(capture.store_ids)):
+                raise LingxingClientError(
+                    "Lingxing outbound store scope is missing or unauthorized"
+                )
+        if contract.page_size_field is not None and contract.page_size_field in body:
+            length = _required_integer(body[contract.page_size_field], minimum=1)
+            if length != page.page_size or length > self._settings.lingxing_sample_page_size:
+                raise LingxingClientError("Lingxing outbound page size is missing or inconsistent")
         if page.page_no != 1:
             raise LingxingClientError("Lingxing outbound page number is inconsistent")
         if contract.page_field is not None:
             if _required_integer(body[contract.page_field], minimum=1) != 1:
                 raise LingxingClientError("Lingxing outbound page number is inconsistent")
-        if contract.offset_field is not None:
+        if contract.offset_field is not None and contract.offset_field in body:
             _required_integer(body[contract.offset_field], minimum=0)
+        if contract.auth_strategy == "query_sign" and not self._settings.lingxing_app_id:
+            raise LingxingClientError("Lingxing query-sign configuration is unavailable")
 
     def _fetch_page(
         self,
@@ -304,10 +324,26 @@ class LingxingReadonlyClient:
                     error_message="Lingxing authorization is unavailable",
                 )
             try:
+                headers: dict[str, str]
+                query_params: dict[str, str] | None = None
+                if contract.auth_strategy == "query_sign":
+                    if not self._settings.lingxing_app_id:
+                        raise LingxingClientError(
+                            "Lingxing query-sign configuration is unavailable"
+                        )
+                    headers = {"Accept": "application/json"}
+                    query_params = build_query_auth_params(
+                        cast(dict[str, JsonValue], page.body),
+                        access_token=access_token,
+                        app_id=self._settings.lingxing_app_id,
+                    )
+                else:
+                    headers = {"Authorization": access_token.get_secret_value()}
                 outbound = self._client.build_request(
                     contract.method,
                     capture.api_path,
-                    headers={"Authorization": access_token.get_secret_value()},
+                    headers=headers,
+                    params=query_params,
                     json=page.body,
                 )
                 response = self._client.send(outbound)
@@ -399,6 +435,16 @@ class LingxingReadonlyClient:
                     attempt=attempt,
                     response_code=last_status,
                     response_json=response_json,
+                )
+            except (LingxingClientError, LingxingQuerySignError):
+                return self._envelope(
+                    capture,
+                    page,
+                    attempt=attempt,
+                    response_code=last_status,
+                    response_json=response_json,
+                    error_code="AUTH_ERROR",
+                    error_message="Lingxing query-sign authentication is unavailable",
                 )
             except httpx.HTTPError:
                 if attempt < MAX_ATTEMPTS:
