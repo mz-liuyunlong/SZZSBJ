@@ -121,6 +121,13 @@ Evidence capture date: `2026-09-11`
 Owner/架构 Review date: `2026-09-11`
 
 - ProductLists 的 path、method、JSON body 字段、分页边界、成功 envelope 与限流证据足以支持未来 mock-only endpoint contract proposal。
-- 本文只记录了公共 Query Params、`sign` 参与要求和 URL encoding，没有记录可直接实现的完整签名算法、复杂 body canonicalization 或 `app_key` 来源映射。
+- PR #54 Review 当时只记录了公共 Query Params、`sign` 参与要求和 URL encoding，尚未取得可直接实现的完整签名算法、复杂 body canonicalization 或 `app_key` 来源映射。
 - 因签名实现仍会依赖猜测，`PRPs/lingxing-product-list-controlled-validation.md` 更新为 `Blocked — Pending Query-Sign Auth Evidence`。
 - 本 Review note 不改变既有官方证据，不批准 backend implementation、真实业务 API validation 或 P0 endpoint sampling。
+
+## 11. Query-sign official evidence reference
+
+- 官方 query-sign 规则的后续取证见 `docs/integrations/lingxing-query-sign-auth-evidence.md`。
+- 官方指南已确认公共 Query Params、签名输入、排序/拼接高层步骤、MD5 uppercase、AES/ECB/PKCS5PADDING、appId key、URL encoding 和 2 分钟签名窗口。
+- 证据仍未定义 AES 输出编码、复杂值确定性序列化、timestamp 正式单位/时区、精确排序 comparator 或非密钥 expected-sign 向量。
+- 因此 ProductLists 继续保持 `Blocked — Pending Query-Sign Auth Evidence`；本引用不批准实现、真实业务 API validation 或 P0 endpoint sampling。

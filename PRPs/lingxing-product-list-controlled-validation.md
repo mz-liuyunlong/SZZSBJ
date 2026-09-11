@@ -29,6 +29,7 @@ Owner Review 结论：ProductLists endpoint contract 本身已有足够证据进
 - PR #52 记录本 endpoint 因缺少官方证据而阻塞。
 - PR #53 已合并 ProductLists 官方 endpoint evidence，状态推进至 Owner Review。
 - Evidence：`docs/integrations/lingxing-product-list-endpoint-evidence.md`。
+- Query-sign evidence：`docs/integrations/lingxing-query-sign-auth-evidence.md`（官方高层算法证据已捕获，但 contract 仍不完整）。
 - 当前 `LingxingReadonlyClient` 仍不包含本 endpoint，并使用 header-only 认证路径；不得绕过 endpoint contract 直接调用。
 
 ## 3. ProductLists contract Review
@@ -51,30 +52,34 @@ Owner Review 结论：ProductLists endpoint contract 本身已有足够证据进
 
 ## 4. Query-sign auth Review
 
-当前仓库证据只确认：
+官方接入指南现已确认：
 
 - 业务 API 的公共参数包括 `access_token`、`app_key`、`timestamp`、`sign`，通过 Query Params 传递。
+- `app_key` 的官方来源为应用 APP ID；Token 表单字段 `appId` 与业务 query 字段 `app_key` 使用不同协议名称。
 - `access_token` 应由已合并的 `LingxingTokenManager` 提供。
-- `timestamp` 必须按请求生成，旧签名不得复用。
-- `sign` 传输时需要 URL encoding。
+- 签名输入包括全部业务请求参数以及 `access_token`、`app_key`、`timestamp`；`sign` 是输出，不参与自身签名。
+- 官方页面要求按其所写的 `ASII` 顺序排序，以 `key=value` 和 `&` 拼接；空值不参与，`null` 参与。
+- body 集合需转为字符串后参与签名，但未定义确定性序列化格式。
+- 拼接结果执行 32 位 MD5 并转大写，再以 appId 为 key 执行 AES/ECB/PKCS5PADDING。
+- `sign` 生成后需要 URL encoding。
+- `timestamp` 必须按请求生成；固定 timestamp 的签名有效期为 2 分钟，不得缓存。
 - ProductLists 页面未见 `nonce`。
 
-当前仓库证据没有完整记录以下实现必需事实：
+官方证据仍没有完整记录以下实现必需事实：
 
-1. `app_key` 的官方来源映射，以及它与现有安全配置字段的精确关系。
-2. 参与签名的全部字段集合与 canonical ordering 规则。
-3. 空字符串、null、布尔、数字、数组和嵌套 JSON 的 canonical serialization 规则。
-4. 拼接格式、字符编码、摘要算法及大小写规则。
-5. 二次加密/编码步骤、算法、模式、padding、密钥来源和最终输出编码。
-6. Query Params 的最终 URL encoding 顺序及签名前后编码边界。
-7. 官方可复核的脱敏签名测试向量或等价示例。
+1. 官方 `ASII` 表述对应的精确 comparator、大小写和非 ASCII key 规则。
+2. 空字符串、空数组、空对象、`null`、布尔、数字、数组和嵌套 JSON 的逐字节 canonical serialization。
+3. 拼接字符串的字符编码。
+4. AES 结果的最终输出编码，以及是否存在额外包装步骤。
+5. timestamp 的正式单位、时区和服务端容差。
+6. 官方可复核且不含可复用 credential 的 expected-sign 测试向量。
 
 缺少这些证据时实现 signing helper 会依赖猜测，因此 query-sign adapter 和 combined implementation gate 必须 fail closed。
 
 ## 5. Owner Review 决定
 
 - ProductLists JSON body endpoint contract：证据足够进入未来 mock-only implementation proposal。
-- Query Params auth/sign adapter：证据不足，不批准实现。
+- Query Params auth/sign adapter：高层算法证据已捕获，但确定性 contract 仍不足，不批准实现。
 - Combined backend implementation gate：`Blocked — Pending Query-Sign Auth Evidence`。
 - Real Business API Validation：不批准，必须保留为后续独立任务。
 - P0 endpoint sampling：不批准。
@@ -86,11 +91,11 @@ Owner Review 结论：ProductLists endpoint contract 本身已有足够证据进
 
 必须先完成新的 docs-only 官方 query-sign 取证，并由 Owner/架构师重新 Review：
 
-- 官方页面与复核日期。
-- `app_key` 的来源和安全配置映射。
-- 完整签名输入、排序、序列化、摘要、加密、padding、encoding 与 URL encoding 规则。
-- 数组/嵌套 body 的签名规则。
-- 不包含真实 credential 的官方或等价 synthetic test vector。
+- 官方 SDK、官方签名实现或官方支持证据的来源与复核日期。
+- 精确排序 comparator、字符编码和 timestamp 单位/时区。
+- 空值、`null`、数组与嵌套 body 的逐字节 canonical serialization。
+- AES 结果的最终输出编码及任何附加编码步骤。
+- 不包含可复用 credential 的官方 expected-sign test vector。
 - 签名材料的 secret boundary、日志/异常/query/RAW 脱敏要求。
 
 证据合并后仍需独立 Owner Approval Gate；即使未来 gate 改为 Approved，也必须等待负责人另行下发 backend implementation Prompt。
@@ -120,7 +125,7 @@ Owner Review 结论：ProductLists endpoint contract 本身已有足够证据进
 
 - [x] PR #53 的官方 ProductLists endpoint evidence 已复审。
 - [x] ProductLists body/envelope contract 与 query-sign auth 证据充分性已分别判断。
-- [x] 缺失的 signing algorithm 与 `app_key` 来源证据已明确列出。
+- [x] 官方高层签名算法和 `app_key` 来源已完成 docs-only 取证，剩余确定性 contract 缺口已明确列出。
 - [x] 状态为 `Blocked — Pending Query-Sign Auth Evidence`。
 - [x] Backend implementation 和 Real Business API Validation 均为 `No`。
 - [x] Registry/catalog 未标记 approved 或 implemented，PR/merge 保持 TBD。
@@ -132,4 +137,4 @@ Owner Review 结论：ProductLists endpoint contract 本身已有足够证据进
 
 ## 10. 下一步
 
-创建独立 docs-only query-sign auth evidence 任务，只补齐签名算法、`app_key` 来源、复杂 body canonicalization 和脱敏 synthetic test vector。证据完成并经 renewed Owner Review 前，不得开始后端实现或真实 ProductLists validation。
+继续以独立 docs-only evidence 任务从官方 SDK、官方签名实现或官方支持回复补齐复杂 body canonicalization、AES 输出编码、timestamp 单位/时区、精确排序 comparator 和非密钥 expected-sign vector。证据完成并经 renewed Owner Review 前，不得开始后端实现或真实 ProductLists validation。
