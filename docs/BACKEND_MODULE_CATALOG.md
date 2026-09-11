@@ -121,5 +121,5 @@
 | Tests | 仅使用 `httpx.MockTransport` 与 synthetic values；覆盖精确 multipart 字段、string/number TTL、提前刷新、原子轮换、已消费 refresh token 不重用、`2001003`/`2001008`/`2001009`/`3001008`、默认拒绝和并发刷新 single-flight |
 | Approval | Project Owner 于 2026-09-11 批准 implementation gate 并下发后端 Prompt；implementation PR #48 已合并（merge commit `a78af4d`） |
 | Controlled validation | 脱敏记录已在 PR #49 合并（merge commit `0032e4e`）；不表示业务 API 已接入或 P0 endpoint sampling 已完成 |
-| Business client integration gate | `PRPs/lingxing-business-client-token-integration.md` 已获批；只允许后续独立实现 readonly client 的 Token Manager 注入与 `2001003` 单次恢复重放；implementation PR/merge TBD，不授权真实业务 API 或 P0 sampling |
+| Business client integration | `PRPs/lingxing-business-client-token-integration.md` 已获批；当前 worktree 已完成 readonly client 的 Token Manager provider 注入、逐请求认证 header 构造与 `2001003` 单次恢复重放，并通过 fake provider/MockTransport 验证；implementation PR/merge TBD，状态为 ready for review，不表示真实业务 API 或 P0 sampling 已验证 |
 | Not in scope | 真实 Token 获取/验证、业务 API、RAW 写入、Redis/共享存储、多实例协调、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment |

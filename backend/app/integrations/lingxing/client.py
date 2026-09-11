@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from time import sleep
-from typing import Literal, cast
+from typing import Literal, Protocol, cast
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, field_validator
@@ -26,6 +26,12 @@ RETRY_BACKOFF_SECONDS = 0.05
 
 class LingxingClientError(RuntimeError):
     """Safe integration error that does not expose request details."""
+
+
+class LingxingAccessTokenProvider(Protocol):
+    def get_access_token(self) -> SecretStr: ...
+
+    def recover_from_access_error(self, provider_code: int | str) -> SecretStr: ...
 
 
 @dataclass(frozen=True)
@@ -122,6 +128,22 @@ def _required_store_ids(value: JsonValue) -> set[str]:
     return stores
 
 
+def _provider_code(value: JsonValue) -> int | None:
+    if not isinstance(value, dict):
+        return None
+    code = value.get("code")
+    if isinstance(code, bool):
+        return None
+    if isinstance(code, int):
+        return code
+    if isinstance(code, str):
+        try:
+            return int(code.strip())
+        except ValueError:
+            return None
+    return None
+
+
 class LingxingPageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
@@ -185,7 +207,7 @@ class LingxingReadonlyClient:
         self,
         settings: Settings,
         *,
-        authorization: SecretStr,
+        token_provider: LingxingAccessTokenProvider,
         success_evaluator: SuccessEvaluator,
         transport: httpx.BaseTransport | None = None,
         sleeper: Callable[[float], None] = sleep,
@@ -193,11 +215,11 @@ class LingxingReadonlyClient:
         if settings.lingxing_base_url is None:
             raise LingxingClientError("Lingxing client configuration is unavailable")
         self._settings = settings
+        self._token_provider = token_provider
         self._success_evaluator = success_evaluator
         self._sleeper = sleeper
         self._client = httpx.Client(
             base_url=settings.lingxing_base_url,
-            headers={"Authorization": authorization.get_secret_value()},
             timeout=settings.lingxing_timeout_ms / 1_000,
             transport=transport,
         )
@@ -265,11 +287,27 @@ class LingxingReadonlyClient:
     ) -> LingxingRawEnvelope:
         last_status: int | None = None
         response_json: JsonValue = None
+        next_access_token: SecretStr | None = None
+        recovery_attempted = False
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                access_token = next_access_token or self._token_provider.get_access_token()
+                next_access_token = None
+            except Exception:
+                return self._envelope(
+                    capture,
+                    page,
+                    attempt=attempt,
+                    response_code=last_status,
+                    response_json=response_json,
+                    error_code="AUTH_ERROR",
+                    error_message="Lingxing authorization is unavailable",
+                )
             try:
                 outbound = self._client.build_request(
                     contract.method,
                     capture.api_path,
+                    headers={"Authorization": access_token.get_secret_value()},
                     json=page.body,
                 )
                 response = self._client.send(outbound)
@@ -309,6 +347,34 @@ class LingxingReadonlyClient:
                         error_code="HTTP_ERROR",
                         error_message="Lingxing HTTP request failed",
                     )
+                provider_code = _provider_code(response_json)
+                if provider_code == 2001003:
+                    if recovery_attempted or attempt >= MAX_ATTEMPTS:
+                        return self._envelope(
+                            capture,
+                            page,
+                            attempt=attempt,
+                            response_code=last_status,
+                            response_json=response_json,
+                            error_code="PROVIDER_ERROR",
+                            error_message="Lingxing provider reported failure",
+                        )
+                    try:
+                        next_access_token = self._token_provider.recover_from_access_error(
+                            provider_code
+                        )
+                    except Exception:
+                        return self._envelope(
+                            capture,
+                            page,
+                            attempt=attempt,
+                            response_code=last_status,
+                            response_json=response_json,
+                            error_code="AUTH_ERROR",
+                            error_message="Lingxing authorization recovery failed",
+                        )
+                    recovery_attempted = True
+                    continue
                 try:
                     provider_succeeded = self._success_evaluator(
                         capture.api_path,

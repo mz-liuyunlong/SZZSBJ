@@ -23,6 +23,31 @@ BATCH_PRODUCT_ENDPOINT: LingxingEndpoint = (
 )
 
 
+class _FakeTokenProvider:
+    def __init__(
+        self,
+        access_token: str = "credential-fixture",
+        recovered_access_token: str = "rotated-credential-fixture",
+        *,
+        recovery_error: Exception | None = None,
+    ) -> None:
+        self._access_token = SecretStr(access_token)
+        self._recovered_access_token = SecretStr(recovered_access_token)
+        self._recovery_error = recovery_error
+        self.get_calls = 0
+        self.recover_calls: list[int | str] = []
+
+    def get_access_token(self) -> SecretStr:
+        self.get_calls += 1
+        return self._access_token
+
+    def recover_from_access_error(self, provider_code: int | str) -> SecretStr:
+        self.recover_calls.append(provider_code)
+        if self._recovery_error is not None:
+            raise self._recovery_error
+        return self._recovered_access_token
+
+
 def _settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "APP_ENV": "test",
@@ -106,14 +131,17 @@ def test_enabled_endpoint_contracts_bind_the_actual_outbound_request(
         assert request.method == "POST"
         assert request.url.path == endpoint
         assert not request.url.query
+        assert request.headers["Authorization"] == marker
         assert json.loads(request.content) == body
+        assert marker.encode() not in request.content
         return httpx.Response(200, json={"code": 0, "access_token": marker})
 
     settings = _settings()
     assert settings.lingxing_dry_run is True
+    token_provider = _FakeTokenProvider(marker)
     client = LingxingReadonlyClient(
         settings,
-        authorization=SecretStr(marker),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
         sleeper=lambda _: None,
@@ -127,7 +155,11 @@ def test_enabled_endpoint_contracts_bind_the_actual_outbound_request(
     assert envelope.page_no == 1
     assert envelope.store_id == "scope-fixture"
     assert marker not in envelope.model_dump_json()
+    assert marker not in repr(envelope)
+    assert marker not in str(envelope)
     assert calls == 1
+    assert token_provider.get_calls == 1
+    assert token_provider.recover_calls == []
 
 
 def test_http_and_provider_failures_are_safe_raw_envelopes() -> None:
@@ -139,9 +171,10 @@ def test_http_and_provider_failures_are_safe_raw_envelopes() -> None:
         calls += 1
         return httpx.Response(503, json={"message": "authorization=credential-fixture"})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
         sleeper=lambda _: None,
@@ -156,10 +189,13 @@ def test_http_and_provider_failures_are_safe_raw_envelopes() -> None:
     assert http_failure.error_code == "HTTP_ERROR"
     assert http_failure.attempt_no == 2
     assert "credential-fixture" not in http_failure.model_dump_json()
+    assert token_provider.get_calls == 2
+    assert token_provider.recover_calls == []
 
+    provider_token_provider = _FakeTokenProvider()
     provider_client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=provider_token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(
             lambda _: httpx.Response(200, json={"code": 1, "message": "rejected"})
@@ -173,6 +209,125 @@ def test_http_and_provider_failures_are_safe_raw_envelopes() -> None:
     assert provider_failure.response_code == 200
     assert provider_failure.is_success is False
     assert provider_failure.error_code == "PROVIDER_ERROR"
+    assert provider_token_provider.get_calls == 1
+    assert provider_token_provider.recover_calls == []
+
+
+@pytest.mark.parametrize("provider_code", [2001003, "2001003"])
+def test_access_error_recovers_and_replays_once(provider_code: int | str) -> None:
+    calls = 0
+    original_body: JsonValue = {
+        "offset": 0,
+        "length": 3,
+        "store_ids": ["scope-fixture"],
+    }
+    token_provider = _FakeTokenProvider()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.method == "POST"
+        assert request.url.path == WALMART_ENDPOINT
+        assert json.loads(request.content) == original_body
+        expected_token = "credential-fixture" if calls == 1 else "rotated-credential-fixture"
+        assert request.headers["Authorization"] == expected_token
+        if calls == 1:
+            return httpx.Response(200, json={"code": provider_code})
+        return httpx.Response(200, json={"code": 0, "data": []})
+
+    client = LingxingReadonlyClient(
+        _settings(),
+        token_provider=token_provider,
+        success_evaluator=_is_success,
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        envelope = client.fetch_pages(_capture(body=original_body))[0]
+    finally:
+        client.close()
+
+    assert envelope.is_success is True
+    assert envelope.attempt_no == 2
+    assert calls == 2
+    assert token_provider.get_calls == 1
+    assert token_provider.recover_calls == [2001003]
+
+
+def test_replayed_access_error_fails_closed_without_another_recovery() -> None:
+    calls = 0
+    token_provider = _FakeTokenProvider()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        expected_token = "credential-fixture" if calls == 1 else "rotated-credential-fixture"
+        assert request.headers["Authorization"] == expected_token
+        return httpx.Response(
+            200,
+            json={
+                "code": 2001003,
+                "access_token": "credential-fixture",
+                "Authorization": "rotated-credential-fixture",
+            },
+        )
+
+    client = LingxingReadonlyClient(
+        _settings(),
+        token_provider=token_provider,
+        success_evaluator=_is_success,
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        envelope = client.fetch_pages(_capture())[0]
+    finally:
+        client.close()
+
+    dumped = envelope.model_dump_json()
+    assert envelope.is_success is False
+    assert envelope.error_code == "PROVIDER_ERROR"
+    assert envelope.attempt_no == 2
+    assert calls == 2
+    assert token_provider.get_calls == 1
+    assert token_provider.recover_calls == [2001003]
+    assert "credential-fixture" not in dumped
+    assert "rotated-credential-fixture" not in dumped
+
+
+def test_access_error_recovery_failure_does_not_replay_or_leak_details() -> None:
+    calls = 0
+    token_provider = _FakeTokenProvider(
+        recovery_error=RuntimeError("synthetic credential-fixture recovery failure")
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.headers["Authorization"] == "credential-fixture"
+        return httpx.Response(
+            200,
+            json={"code": 2001003, "access_token": "credential-fixture"},
+        )
+
+    client = LingxingReadonlyClient(
+        _settings(),
+        token_provider=token_provider,
+        success_evaluator=_is_success,
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        envelope = client.fetch_pages(_capture())[0]
+    finally:
+        client.close()
+
+    assert envelope.is_success is False
+    assert envelope.error_code == "AUTH_ERROR"
+    assert envelope.error_message == "Lingxing authorization recovery failed"
+    assert calls == 1
+    assert token_provider.get_calls == 1
+    assert token_provider.recover_calls == [2001003]
+    assert "credential-fixture" not in envelope.model_dump_json()
+    assert "credential-fixture" not in repr(envelope)
+    assert "credential-fixture" not in str(envelope)
 
 
 def test_transport_failure_is_bounded_and_recordable() -> None:
@@ -183,9 +338,10 @@ def test_transport_failure_is_bounded_and_recordable() -> None:
         calls += 1
         raise httpx.ReadTimeout("synthetic timeout", request=request)
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(timeout),
         sleeper=lambda _: None,
@@ -199,6 +355,8 @@ def test_transport_failure_is_bounded_and_recordable() -> None:
     assert envelope.is_success is False
     assert envelope.error_code == "TRANSPORT_ERROR"
     assert envelope.response_json is None
+    assert token_provider.get_calls == 2
+    assert token_provider.recover_calls == []
 
 
 def test_endpoint_store_and_pagination_boundaries_fail_closed() -> None:
@@ -233,9 +391,10 @@ def test_endpoint_store_and_pagination_boundaries_fail_closed() -> None:
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(LINGXING_SAMPLE_PAGE_SIZE=1),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -243,6 +402,8 @@ def test_endpoint_store_and_pagination_boundaries_fail_closed() -> None:
         client.fetch_pages(_capture(page_size=2))
     client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 @pytest.mark.parametrize(
@@ -313,9 +474,10 @@ def test_endpoint_contracts_reject_unauthorized_store_and_pagination(
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -332,6 +494,8 @@ def test_endpoint_contracts_reject_unauthorized_store_and_pagination(
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 @pytest.mark.parametrize(
@@ -444,9 +608,10 @@ def test_endpoint_contracts_reject_invalid_body_shapes_before_transport(
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -456,6 +621,8 @@ def test_endpoint_contracts_reject_invalid_body_shapes_before_transport(
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 @pytest.mark.parametrize(
@@ -486,9 +653,10 @@ def test_endpoint_contracts_reject_query_body_confusion_before_transport(
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -498,6 +666,8 @@ def test_endpoint_contracts_reject_query_body_confusion_before_transport(
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 def test_store_scope_may_be_a_nonempty_subset_of_the_capture_allowlist() -> None:
@@ -511,7 +681,7 @@ def test_store_scope_may_be_a_nonempty_subset_of_the_capture_allowlist() -> None
 
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=_FakeTokenProvider(),
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -545,9 +715,10 @@ def test_client_rejects_endpoint_path_bypasses_before_transport(bypass_path: str
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -557,6 +728,8 @@ def test_client_rejects_endpoint_path_bypasses_before_transport(bypass_path: str
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 @pytest.mark.parametrize(
@@ -577,9 +750,10 @@ def test_pending_endpoint_contracts_fail_closed_before_transport(
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -589,6 +763,8 @@ def test_pending_endpoint_contracts_fail_closed_before_transport(
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 def test_client_rejects_empty_store_allowlist_before_transport() -> None:
@@ -599,9 +775,10 @@ def test_client_rejects_empty_store_allowlist_before_transport() -> None:
         calls += 1
         return httpx.Response(200, json={"code": 0})
 
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -611,6 +788,8 @@ def test_client_rejects_empty_store_allowlist_before_transport() -> None:
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 def test_client_rejects_multiple_pages_before_transport() -> None:
@@ -622,9 +801,10 @@ def test_client_rejects_multiple_pages_before_transport() -> None:
         return httpx.Response(200, json={"code": 0})
 
     capture = _capture()
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         _settings(),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -634,13 +814,15 @@ def test_client_rejects_multiple_pages_before_transport() -> None:
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
 
 
 def test_response_size_limit_rejects_payload_before_json_or_raw_capture() -> None:
     oversized = b'{"code":0,"data":"' + (b"x" * 64) + b'"}'
     client = LingxingReadonlyClient(
         _settings(LINGXING_MAX_RESPONSE_BYTES=32),
-        authorization=SecretStr("credential-fixture"),
+        token_provider=_FakeTokenProvider(),
         success_evaluator=_is_success,
         transport=httpx.MockTransport(lambda _: httpx.Response(200, content=oversized)),
     )
@@ -664,9 +846,10 @@ def test_real_call_switch_defaults_to_disabled() -> None:
         return httpx.Response(200, json={"code": 0})
 
     settings = _settings(LINGXING_ENABLE_REAL_CALLS=False)
+    token_provider = _FakeTokenProvider()
     client = LingxingReadonlyClient(
         settings,
-        authorization=SecretStr("credential-fixture"),
+        token_provider=token_provider,
         success_evaluator=_is_success,
         transport=httpx.MockTransport(handler),
     )
@@ -676,3 +859,5 @@ def test_real_call_switch_defaults_to_disabled() -> None:
     finally:
         client.close()
     assert calls == 0
+    assert token_provider.get_calls == 0
+    assert token_provider.recover_calls == []
