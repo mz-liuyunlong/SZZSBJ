@@ -115,3 +115,12 @@ Evidence capture date: `2026-09-11`
 - 未执行 P0 endpoint sampling。
 - 未写 RAW、数据库或 Redis。
 - 未读取 `.env` 或任何 secret 文件。
+
+## 10. Owner Review note
+
+Owner/架构 Review date: `2026-09-11`
+
+- ProductLists 的 path、method、JSON body 字段、分页边界、成功 envelope 与限流证据足以支持未来 mock-only endpoint contract proposal。
+- 本文只记录了公共 Query Params、`sign` 参与要求和 URL encoding，没有记录可直接实现的完整签名算法、复杂 body canonicalization 或 `app_key` 来源映射。
+- 因签名实现仍会依赖猜测，`PRPs/lingxing-product-list-controlled-validation.md` 更新为 `Blocked — Pending Query-Sign Auth Evidence`。
+- 本 Review note 不改变既有官方证据，不批准 backend implementation、真实业务 API validation 或 P0 endpoint sampling。
