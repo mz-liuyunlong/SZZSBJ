@@ -1,12 +1,12 @@
 # Lingxing ProductLists 官方 Endpoint Evidence
 
-Status: `Evidence Captured — Pending Owner Review`
+Status: `Evidence Captured — Python Mock-Only Implementation Approved`
 
 Evidence capture date: `2026-09-11`
 
 ## 1. 文档定位
 
-本文记录领星官方文档中“查询本地产品列表（ProductLists）”的 endpoint contract 摘要，作为后续 Owner/架构 Review 的证据输入。本文不是 implementation approval，不授权修改 `LingxingReadonlyClient`、调用真实业务 API、执行 P0 sampling 或写入 RAW/DB/Redis。
+本文记录领星官方文档中“查询本地产品列表（ProductLists）”的 endpoint contract 摘要，以及 Owner 后续基于补充参考协议作出的 mock-only implementation 决定。实际批准边界以 `PRPs/lingxing-product-list-controlled-validation.md` 为准；本文不授权真实业务 API、P0 sampling 或 RAW/DB/Redis 写入。
 
 官方来源：
 
@@ -101,10 +101,10 @@ Evidence capture date: `2026-09-11`
 ## 8. Gate 结论
 
 - 官方 ProductLists 原始页面已找到，endpoint contract 核心证据已捕获。
-- 状态更新为 `Evidence Captured — Pending Owner Review`。
-- 本状态不等于 `Approved`、`implemented` 或真实 API 已验证。
-- 当前仍禁止修改 `_ENDPOINT_CONTRACTS`、调用真实 ProductLists、执行 P0 sampling 或写入 RAW/DB/Redis。
-- 下一步必须由 Owner/架构师审查认证/签名差异、scope 风险和最小验证参数，再决定是否创建独立 mock-only implementation approval gate。
+- Owner 于 2026-09-12 接受已跑通参考协议作为 query-sign 补充证据，并批准独立 Python backend mock-only implementation。
+- 本状态不等于 `implemented` 或真实 API 已验证。
+- 后续只允许在独立 backend worktree、收到 Owner 单独实现 Prompt 后修改精确 endpoint contract 和 Python query-sign adapter。
+- 真实 ProductLists、P0 sampling、真实 Token 请求和 RAW/DB/Redis 写入继续禁止。
 - mock-only contract 合并并复审通过后，真实 controlled validation 仍需另一项明确 Owner 授权。
 
 ## 9. 明确未执行
@@ -122,12 +122,24 @@ Owner/架构 Review date: `2026-09-11`
 
 - ProductLists 的 path、method、JSON body 字段、分页边界、成功 envelope 与限流证据足以支持未来 mock-only endpoint contract proposal。
 - PR #54 Review 当时只记录了公共 Query Params、`sign` 参与要求和 URL encoding，尚未取得可直接实现的完整签名算法、复杂 body canonicalization 或 `app_key` 来源映射。
-- 因签名实现仍会依赖猜测，`PRPs/lingxing-product-list-controlled-validation.md` 更新为 `Blocked — Pending Query-Sign Auth Evidence`。
+- 因签名实现当时仍会依赖猜测，`PRPs/lingxing-product-list-controlled-validation.md` 曾更新为 `Blocked — Pending Query-Sign Auth Evidence`；该历史结论已由 2026-09-12 的 Owner 补充协议决定取代，仅对 mock-only implementation 解除阻塞。
 - 本 Review note 不改变既有官方证据，不批准 backend implementation、真实业务 API validation 或 P0 endpoint sampling。
 
 ## 11. Query-sign official evidence reference
 
 - 官方 query-sign 规则的后续取证见 `docs/integrations/lingxing-query-sign-auth-evidence.md`。
 - 官方指南已确认公共 Query Params、签名输入、排序/拼接高层步骤、MD5 uppercase、AES/ECB/PKCS5PADDING、appId key、URL encoding 和 2 分钟签名窗口。
-- 证据仍未定义 AES 输出编码、复杂值确定性序列化、timestamp 正式单位/时区、精确排序 comparator 或非密钥 expected-sign 向量。
-- 因此 ProductLists 继续保持 `Blocked — Pending Query-Sign Auth Evidence`；本引用不批准实现、真实业务 API validation 或 P0 endpoint sampling。
+- 官方证据仍未定义 AES 输出编码、复杂值确定性序列化、timestamp 正式单位/时区、精确排序 comparator 或非密钥 expected-sign 向量。
+- Owner 提供的已跑通参考协议补充确认了 mock-only 实现所需行为；因此 ProductLists 已解除 Python mock-only implementation 阻塞，但官方证据缺口仍是未来真实 validation 的风险。
+
+## 12. Owner 补充协议决定
+
+Owner approval date: `2026-09-12`
+
+- 参考协议确认 ProductLists 使用 `POST`、JSON body 和 `application/json` / `application/json` 的 Content-Type / Accept。
+- auth query 为 `access_token`、`app_key`、`timestamp`、`sign`；`app_key = appId`，timestamp 为当前 Unix 秒级字符串。
+- access token 必须复用现有 `LingxingTokenManager`；不得另写 Token 获取逻辑。
+- 签名输入为 business body params 加前三项 auth input，不包含 `sign`；默认字符串排序，严格空字符串排除，`null`/`0`/`false` 保留，复杂值 compact JSON，MD5 uppercase 后执行 AES ECB + PKCS5/PKCS7，Base64 输出并由 query encoder URL encode。
+- 已跑通参考中 JSON body 可为 `{}`；`offset`、`length` 如使用，必须位于 body。
+- 参考项目只作为协议证据。新系统必须使用 Python，不得引入 Node、npm、`.mjs`、`.js` runtime 或参考项目结构。
+- `Status: Approved for Python Mock-Only Implementation` 只允许后续独立 backend PR；真实 ProductLists 调用、Real Business API Validation 与 P0 Sampling 均为 `No`。
