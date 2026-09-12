@@ -207,7 +207,7 @@ class LingxingRawEnvelope(BaseModel):
     data_date: date | None = None
     pulled_at: datetime
     page_no: int = Field(ge=1)
-    page_size: int = Field(ge=1, le=3)
+    page_size: int = Field(ge=1, le=1000)
     store_id: str | None = Field(default=None, min_length=1)
     store_name: str | None = Field(default=None, min_length=1, max_length=255)
     object_type: str = Field(min_length=1, max_length=128)
@@ -259,14 +259,67 @@ class LingxingReadonlyClient:
             raise LingxingClientError("Lingxing page size limit exceeded")
         # DRY_RUN controls RAW persistence only; outbound HTTP remains gated here.
         for page in request.pages:
-            self._validate_outbound_contract(request, page, contract)
+            self._validate_outbound_contract(
+                request,
+                page,
+                contract,
+                page_size_limit=self._settings.lingxing_sample_page_size,
+                first_page_only=True,
+            )
         return [self._fetch_page(request, page, contract) for page in request.pages]
+
+    def fetch_product_list_page(
+        self,
+        *,
+        offset: int,
+        length: int,
+        page_no: int,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """Fetch one authorized ProductList page for the governed server sync."""
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing source account scope is invalid")
+        _required_integer(offset, minimum=0)
+        _required_integer(page_no, minimum=1)
+        if _required_integer(length, minimum=1) > 1000:
+            raise LingxingClientError("Lingxing outbound page size is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=length,
+            params=None,
+            body={"offset": offset, "length": length},
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/erp/sc/routing/data/local_inventory/productList",
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type="lingxing_product_list",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=1000,
+            first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract)
 
     def _validate_outbound_contract(
         self,
         capture: LingxingCaptureRequest,
         page: LingxingPageRequest,
         contract: LingxingEndpointContract,
+        *,
+        page_size_limit: int,
+        first_page_only: bool,
     ) -> None:
         if page.params and not contract.allow_query_parameters:
             raise LingxingClientError("Lingxing endpoint does not allow query parameters")
@@ -287,9 +340,9 @@ class LingxingReadonlyClient:
                 )
         if contract.page_size_field is not None and contract.page_size_field in body:
             length = _required_integer(body[contract.page_size_field], minimum=1)
-            if length != page.page_size or length > self._settings.lingxing_sample_page_size:
+            if length != page.page_size or length > page_size_limit:
                 raise LingxingClientError("Lingxing outbound page size is missing or inconsistent")
-        if page.page_no != 1:
+        if first_page_only and page.page_no != 1:
             raise LingxingClientError("Lingxing outbound page number is inconsistent")
         if contract.page_field is not None:
             if _required_integer(body[contract.page_field], minimum=1) != 1:

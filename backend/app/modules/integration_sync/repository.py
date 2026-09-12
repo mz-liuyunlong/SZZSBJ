@@ -310,6 +310,11 @@ class IntegrationSyncRepository:
     def get_raw_request_ref(self, ref_id: UUID) -> ApiRawRequestRef | None:
         return self.session.get(ApiRawRequestRef, ref_id)
 
+    def get_raw_request_ref_for_work_item(self, work_item_id: UUID) -> ApiRawRequestRef | None:
+        return self.session.scalar(
+            select(ApiRawRequestRef).where(ApiRawRequestRef.work_item_id == work_item_id)
+        )
+
     def add_productlist_refs(
         self, refs: Sequence[LingxingProductListSkuRef]
     ) -> list[LingxingProductListSkuRef]:
