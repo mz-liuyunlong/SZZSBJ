@@ -160,6 +160,7 @@ function ListingManagementTable({
       dataIndex: "sku",
       title: title("sku", fieldTitle.sku),
       width: columnWidths.sku,
+      sorter: (a, b) => a.sku.localeCompare(b.sku),
       onHeaderCell: headerCell,
       render: (_, row) => <Typography.Link>{row.sku}</Typography.Link>,
     },

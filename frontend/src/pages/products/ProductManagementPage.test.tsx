@@ -13,8 +13,7 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NavigationPage } from "@/config/navigation";
 
-const SYNC_PENDING = "同步接口待接入";
-const TAG_PENDING = "标签接口待接入";
+const EXPORT_PENDING = "导出接口待接入";
 
 vi.mock("@ant-design/icons", () => {
   const Icon = () => <span aria-hidden="true">icon</span>;
@@ -22,10 +21,15 @@ vi.mock("@ant-design/icons", () => {
     ArrowDownOutlined: Icon,
     ArrowUpOutlined: Icon,
     AppstoreOutlined: Icon,
+    CheckOutlined: Icon,
     CopyOutlined: Icon,
+    CloudDownloadOutlined: Icon,
     DatabaseOutlined: Icon,
     DownOutlined: Icon,
+    GoldenFilled: Icon,
+    PartitionOutlined: Icon,
     PictureOutlined: Icon,
+    PlayCircleFilled: Icon,
     SearchOutlined: Icon,
     SettingOutlined: Icon,
     SyncOutlined: Icon,
@@ -52,14 +56,8 @@ vi.mock("@/components/page/PageShell", () => ({
           <a aria-label={`在新标签页打开${page.help.title}`} href={page.help.helpUrl}>帮助</a>
         )}
       </div>
-      <section className="page-shell" aria-label="当前页面">
-        <header className="page-shell__header">
-          <div className="page-shell__heading">
-            <h1 aria-label="当前页面">{page.title}</h1>
-            <span aria-label={`页面状态：${page.status}`}>规划中</span>
-            {description && <p>{description}</p>}
-          </div>
-        </header>
+      <section className="page-shell" aria-label={page.title}>
+        {description && <p>{description}</p>}
         <div className="page-shell__content">{children}</div>
       </section>
     </>
@@ -333,6 +331,15 @@ vi.mock("antd", async () => {
   );
 
   const Typography = {
+    Link: ({ children, onClick, strong }: {
+      children: ReactNode;
+      onClick?: () => void;
+      strong?: boolean;
+    }) => (
+      <button type="button" onClick={onClick}>
+        {strong ? <strong>{children}</strong> : children}
+      </button>
+    ),
     Paragraph: ({ children }: { children: ReactNode }) => <p>{children}</p>,
     Text: ({ children, strong }: { children: ReactNode; strong?: boolean }) =>
       strong ? <strong>{children}</strong> : <span>{children}</span>,
@@ -352,6 +359,7 @@ vi.mock("antd", async () => {
     Menu,
     Modal,
     Popover,
+    Progress: ({ percent }: { percent: number }) => <div role="progressbar" aria-valuenow={percent} />,
     Select,
     Space: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     Tag: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -657,16 +665,14 @@ describe("ProductManagementPage", () => {
   it("renders the final toolbar, selectable table columns, sorting, and pagination shell", () => {
     const view = renderPage();
 
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(productPage.title);
-    expect(view.container.querySelector(
-      ".page-shell:has(> .page-shell__content .product-management) > .page-shell__header > .page-shell__heading",
-    )).not.toBeNull();
+    expect(screen.getByRole("region", { name: productPage.title })).toBeVisible();
+    expect(screen.queryByLabelText(`页面状态：${productPage.status}`)).not.toBeInTheDocument();
     expect(screen.queryByText(productPage.permissionKey)).not.toBeInTheDocument();
     expect(screen.queryByText(/前端静态验收示例数据/)).not.toBeInTheDocument();
     expect(screen.queryByText(/不来自 API/)).not.toBeInTheDocument();
     expect(screen.queryByText(/当前排序仅作用于前端验收示例数据/)).not.toBeInTheDocument();
 
-    const toolbar = screen.getByRole("search", { name: "产品筛选与页面工具" });
+    const toolbar = screen.getByRole("search", { name: "产品管理筛选" });
     expect(toolbar).toHaveClass("product-management__toolbar");
     expect(within(toolbar).getByRole("combobox", { name: "产品等级" })).toBeVisible();
     expect(within(toolbar).getByRole("combobox", { name: "标签" })).toBeVisible();
@@ -680,15 +686,9 @@ describe("ProductManagementPage", () => {
     expect(within(toolbar).queryByText("预览产品详情结构")).not.toBeInTheDocument();
 
     const pageActions = screen.getByRole("group", { name: "页面级操作" });
-    const syncState = within(pageActions).getByText("最后同步时间：待接入").closest("div");
-    expect(syncState).toHaveClass("product-management__sync-state");
-    expect(within(pageActions).getByRole("button", { name: "同步数据" })).toHaveAttribute(
-      "data-shape",
-      "circle",
-    );
     expect(within(pageActions).getByRole("link", { name: "在新标签页打开产品管理帮助" }))
       .toHaveTextContent("帮助");
-    expect(screen.getAllByText("最后同步时间：待接入")).toHaveLength(1);
+    expect(within(pageActions).queryByText("最后同步时间：待接入")).not.toBeInTheDocument();
     expect(screen.getAllByText("帮助")).toHaveLength(1);
     const productContent = view.container.querySelector(".product-management");
     expect(productContent).not.toBeNull();
@@ -697,25 +697,28 @@ describe("ProductManagementPage", () => {
     expect(within(productContent as HTMLElement).queryByText("最后同步时间：待接入"))
       .not.toBeInTheDocument();
     expect(within(productContent as HTMLElement).queryByText("帮助")).not.toBeInTheDocument();
-    expect(toolbar.querySelector(".product-management__search-box")).toContainElement(
+    expect(toolbar.querySelector(".product-management__search")).toContainElement(
       within(toolbar).getByRole("combobox", { name: "搜索类型" }),
     );
+    expect(within(toolbar).getByRole("button", { name: "列配置" })).toBeVisible();
+    expect(within(toolbar).getByRole("button", { name: "下载" })).toBeVisible();
 
-    const table = screen.getByRole("region", { name: "产品管理主表" });
-    expect(within(table).getAllByText(/验收示例产品/)).toHaveLength(50);
-    expect(within(table).getByText("共 50 条")).toBeVisible();
+    const table = screen.getByRole("region", { name: "产品管理表格" });
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })).toHaveLength(50);
+    expect(within(table).getByText("共 128 条数据")).toBeVisible();
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-row-key", "id");
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-has-request", "false");
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-scroll-x", "max-content");
-    expect(screen.getByTestId("pro-table")).toHaveAttribute(
-      "data-scroll-y",
-      "max(240px, calc(100dvh - 390px))",
-    );
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-source-count", "50");
+    expect(Number(screen.getByTestId("pro-table").getAttribute("data-scroll-x")))
+      .toBeGreaterThan(0);
+    expect(screen.getByTestId("pro-table")).not.toHaveAttribute("data-scroll-y");
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-source-count", "128");
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-table-alert", "false");
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-table-alert-option", "false");
+    expect(screen.getByTestId("pro-table")).toHaveAttribute(
+      "data-table-alert-option",
+      "undefined",
+    );
     const tableBody = view.container.querySelector(".ant-table-body");
-    expect(tableBody).toHaveAttribute("data-scroll-y", "max(240px, calc(100dvh - 390px))");
+    expect(tableBody).not.toHaveAttribute("data-scroll-y");
     expect(tableBody).not.toContainElement(view.container.querySelector(".ant-pagination"));
     expect(within(table).getByRole("checkbox", { name: "选择当前页" })).toBeVisible();
 
@@ -737,10 +740,13 @@ describe("ProductManagementPage", () => {
       .getAllByRole("columnheader")
       .filter((header) => header.dataset.sortable === "true")
       .map((header) => header.textContent?.trim());
-    expect(sortableTitles).toEqual(["SKU", "产品等级", "WFS费用", "建议售价", "最低售价", "清仓售价"]);
+    expect(sortableTitles).toEqual(["SKU", "产品名称", "产品等级"]);
     expect(within(table).queryByRole("columnheader", { name: "详情" })).not.toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "操作" })).toHaveAttribute("data-fixed", "right");
-    expect(within(table).getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(9);
+    expect(within(table).getByRole("columnheader", { name: /^操作/ })).toHaveAttribute(
+      "data-fixed",
+      "right",
+    );
+    expect(within(table).getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(10);
     const pageSizeSelect = within(table).getByRole("combobox", { name: "每页条数" });
     expect(pageSizeSelect).toHaveValue("50");
     expect(Array.from(pageSizeSelect.querySelectorAll("option")).map((option) => option.value))
@@ -748,9 +754,9 @@ describe("ProductManagementPage", () => {
     expect(within(table).getByLabelText("跳至页码")).toBeVisible();
     expect(view.container.querySelector(".ant-pagination")).toBeInTheDocument();
 
-    const productNameCell = within(table).getByText("验收示例产品 001").closest("td");
+    const productNameCell = within(table).getByText("无线蓝牙耳机 Air Pro 001").closest("td");
     expect(productNameCell).not.toHaveTextContent("测品");
-    expect(within(table).getByText("验收示例产品 050")).toBeVisible();
+    expect(within(table).getByText("智能手表 Watch 8 050")).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -759,19 +765,19 @@ describe("ProductManagementPage", () => {
     sessionStorage.setItem("tab_workspace", "keep");
     renderPage();
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "选择 acceptance-product-1" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择 product-001" }));
     expect(screen.getByText("已选择 1 项")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: "ui-sample-025" } });
-    fireEvent.click(screen.getByRole("button", { name: "搜索产品" }));
-    expect(screen.getByText("共 1 条")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("搜索产品"), { target: { value: "ui-sample-025" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    expect(screen.getByText("共 1 条数据")).toBeVisible();
     expect(screen.getByRole("button", { name: "UI-SAMPLE-025" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "UI-SAMPLE-001" })).not.toBeInTheDocument();
     expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "同步数据" }));
-    expect(screen.getByText(SYNC_PENDING)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "下载" }));
+    expect(screen.getByText(EXPORT_PENDING)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "重置" }));
-    expect(screen.getByLabelText("搜索内容")).toHaveValue("");
-    expect(screen.getByText("共 50 条")).toBeVisible();
+    expect(screen.getByLabelText("搜索产品")).toHaveValue("");
+    expect(screen.getByText("共 128 条数据")).toBeVisible();
     expect(screen.getByRole("button", { name: "UI-SAMPLE-001" })).toBeVisible();
 
     expect(localStorage.getItem("existing_local")).toBe("keep");
@@ -783,11 +789,11 @@ describe("ProductManagementPage", () => {
 
   it("filters locally by grade and tag, resets pagination and selection, and sorts filtered rows", () => {
     renderPage();
-    const table = screen.getByRole("region", { name: "产品管理主表" });
-    fireEvent.click(within(table).getByRole("checkbox", { name: "选择 acceptance-product-1" }));
+    const table = screen.getByRole("region", { name: "产品管理表格" });
+    fireEvent.click(within(table).getByRole("checkbox", { name: "选择 product-001" }));
     fireEvent.change(screen.getByRole("combobox", { name: "产品等级" }), { target: { value: "B级" } });
 
-    expect(within(table).getByText("共 17 条")).toBeVisible();
+    expect(within(table).getByText("共 43 条数据")).toBeVisible();
     expect(within(table).getByRole("button", { name: "第 1 页" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
     for (const row of within(table).getAllByRole("row").slice(1)) {
@@ -799,12 +805,12 @@ describe("ProductManagementPage", () => {
     expect(skuHeader).toBeDefined();
     fireEvent.click(skuHeader!);
     fireEvent.click(skuHeader!);
-    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent("UI-SAMPLE-050");
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent("UI-SAMPLE-128");
 
     fireEvent.click(screen.getByRole("button", { name: "重置" }));
-    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent("UI-SAMPLE-001");
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent("UI-SAMPLE-128");
     fireEvent.change(screen.getByRole("combobox", { name: "标签" }), { target: { value: "测品" } });
-    expect(within(table).getByText("共 20 条")).toBeVisible();
+    expect(within(table).getByText("共 51 条数据")).toBeVisible();
     for (const row of within(table).getAllByRole("row").slice(1)) {
       expect(row).toHaveTextContent("测品");
     }
@@ -812,15 +818,15 @@ describe("ProductManagementPage", () => {
 
   it("keeps the table header and pagination fixed when page size changes", () => {
     const view = renderPage();
-    const table = screen.getByRole("region", { name: "产品管理主表" });
-    fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: "UI-SAMPLE-" } });
-    fireEvent.click(screen.getByRole("button", { name: "搜索产品" }));
+    const table = screen.getByRole("region", { name: "产品管理表格" });
+    fireEvent.change(screen.getByLabelText("搜索产品"), { target: { value: "UI-SAMPLE-" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     fireEvent.change(screen.getByRole("combobox", { name: "产品等级" }), { target: { value: "B级" } });
     const skuHeader = within(table).getAllByRole("columnheader")
       .find((header) => header.textContent?.trim() === "SKU");
     fireEvent.click(skuHeader!);
     fireEvent.click(skuHeader!);
-    fireEvent.click(within(table).getAllByRole("checkbox", { name: /选择 acceptance-product-/ })[0]);
+    fireEvent.click(within(table).getAllByRole("checkbox", { name: /选择 product-/ })[0]);
     expect(screen.getByText("已选择 1 项")).toBeVisible();
 
     fireEvent.change(within(table).getByRole("combobox", { name: "每页条数" }), {
@@ -833,10 +839,10 @@ describe("ProductManagementPage", () => {
     );
     expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "产品等级" })).toHaveValue("B级");
-    expect(screen.getByLabelText("搜索内容")).toHaveValue("UI-SAMPLE-");
-    expect(within(table).getAllByText(/验收示例产品/)).toHaveLength(17);
+    expect(screen.getByLabelText("搜索产品")).toHaveValue("UI-SAMPLE-");
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })).toHaveLength(43);
     expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0])
-      .toHaveTextContent("UI-SAMPLE-050");
+      .toHaveTextContent("UI-SAMPLE-128");
 
     const tableHeader = view.container.querySelector<HTMLElement>(".ant-table-header");
     const tableBody = view.container.querySelector<HTMLElement>(".ant-table-body");
@@ -852,42 +858,39 @@ describe("ProductManagementPage", () => {
 
   it("uses the batch-search popover for exact local matches and rejects more than 1000 lines", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("checkbox", { name: "选择 acceptance-product-1" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择 product-001" }));
     expect(screen.getByText("已选择 1 项")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "批量搜索 SKU" }));
 
-    let dialog = screen.getByRole("dialog", { name: "批量搜索 SKU" });
-    expect(dialog.closest('[data-overlay-kind="popover"]')).toBeInTheDocument();
-    expect(within(dialog).getByText("精确搜索，一行一项，最多支持1000行")).toBeVisible();
-    const input = within(dialog).getByLabelText("批量 SKU 输入");
+    let popover = screen.getByText("精确搜索，一行一项，最多支持1000行")
+      .closest<HTMLElement>(".product-management__batch-popover");
+    expect(popover?.closest('[data-overlay-kind="popover"]')).toBeInTheDocument();
+    const input = within(popover!).getByPlaceholderText("请输入 SKU，一行一个");
     fireEvent.change(input, {
       target: { value: " UI-SAMPLE-003\n\nUI-SAMPLE-011\nUI-SAMPLE-004,UI-SAMPLE-005 " },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "搜索" }));
-    expect(input).toHaveValue("UI-SAMPLE-003\nUI-SAMPLE-011\nUI-SAMPLE-004,UI-SAMPLE-005");
-    expect(screen.getByText("共 2 条")).toBeVisible();
+    fireEvent.click(within(popover!).getByRole("button", { name: "搜索" }));
+    expect(screen.getByText("共 2 条数据")).toBeVisible();
     expect(screen.getByRole("button", { name: "UI-SAMPLE-003" })).toBeVisible();
     expect(screen.getByRole("button", { name: "UI-SAMPLE-011" })).toBeVisible();
     expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
-    fireEvent.change(input, {
+    fireEvent.click(screen.getByRole("button", { name: "批量搜索 SKU" }));
+    popover = screen.getByText("精确搜索，一行一项，最多支持1000行")
+      .closest<HTMLElement>(".product-management__batch-popover");
+    const reopenedInput = within(popover!).getByPlaceholderText("请输入 SKU，一行一个");
+    fireEvent.change(reopenedInput, {
       target: { value: Array.from({ length: 1_001 }, (_, index) => `SKU-${index}`).join("\n") },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "搜索" }));
-    expect(screen.getByText("最多支持1000行")).toBeVisible();
-    fireEvent.click(within(dialog).getByRole("button", { name: "清空" }));
-    expect(input).toHaveValue("");
-    expect(screen.getByText("共 50 条")).toBeVisible();
-    fireEvent.change(input, { target: { value: "NOT-SAVED" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "搜索" }));
-    expect(screen.getByText("暂无匹配产品")).toBeVisible();
-    fireEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
-    expect(screen.queryByRole("dialog", { name: "批量搜索 SKU" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "批量搜索 SKU" }));
-    dialog = screen.getByRole("dialog", { name: "批量搜索 SKU" });
-    expect(within(dialog).getByLabelText("批量 SKU 输入")).toHaveValue("");
+    fireEvent.click(within(popover!).getByRole("button", { name: "搜索" }));
+    expect(screen.getByText("最多支持 1000 行")).toBeVisible();
+    fireEvent.click(within(popover!).getByRole("button", { name: "清空" }));
+    expect(reopenedInput).toHaveValue("");
+    fireEvent.click(within(popover!).getByRole("button", { name: "关闭" }));
+    expect(screen.queryByText("精确搜索，一行一项，最多支持1000行"))
+      .not.toBeInTheDocument();
   });
 
-  it("selects only the current page and opens batch marking from the shared upward menu", () => {
+  it("selects only the current page and exposes only the shared export bulk action", () => {
     sessionStorage.setItem("tab_workspace", "keep");
     renderPage();
 
@@ -898,27 +901,14 @@ describe("ProductManagementPage", () => {
     const selectionFooter = screen.getByText("已选择 50 项").closest(".ant-table-footer");
     const pagination = screen.getByRole("navigation", { name: "分页" });
     expect(selectionFooter?.parentElement).toBe(pagination.parentElement);
-    expect(screen.queryByRole("button", { name: "批量标记标签" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "清空选择" })).not.toBeInTheDocument();
     const bulkActionButton = screen.getByRole("button", { name: /批量操作/ });
     expect(bulkActionButton.closest('[data-placement="topLeft"]')).toBeInTheDocument();
     fireEvent.click(bulkActionButton);
-    fireEvent.click(screen.getByRole("menuitem", { name: "批量标记" }));
-    const dialog = screen.getByRole("dialog", { name: "标记标签" });
-    const tagSelect = within(dialog).getByRole("listbox", { name: "标记标签选择" });
-    expect(tagSelect).toBeVisible();
-    expect(tagSelect).toHaveValue([]);
-    const tagDots = dialog.querySelectorAll(".product-management__tag-option-dot");
-    expect(tagDots).toHaveLength(3);
-    expect(Array.from(tagDots).map((dot) => (dot as HTMLElement).style.backgroundColor)).toEqual([
-      "rgb(77, 141, 247)",
-      "rgb(245, 158, 11)",
-      "rgb(239, 83, 80)",
-    ]);
-    expect(dialog).toHaveAttribute("data-width", "560");
-    expect(within(dialog).queryByRole("button", { name: "新建标签" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "添加产品标签" })).not.toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: /标记/ })).not.toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "导出已选" }));
+    expect(screen.getByText(EXPORT_PENDING)).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: /标记标签|标签管理/ })).not.toBeInTheDocument();
     expect(sessionStorage.getItem("tab_workspace")).toBe("keep");
     expect(localStorage).toHaveLength(0);
   });
@@ -977,71 +967,38 @@ describe("ProductManagementPage", () => {
 
   it("resizes business columns with native handles but not system columns", () => {
     renderPage();
-    const table = screen.getByRole("region", { name: "产品管理主表" });
+    const table = screen.getByRole("region", { name: "产品管理表格" });
     const handles = within(table).getAllByRole("separator", { name: /调整列宽/ });
-    expect(handles).toHaveLength(9);
-    expect(within(table).queryByRole("separator", { name: /操作/ })).not.toBeInTheDocument();
+    expect(handles).toHaveLength(10);
+    expect(within(table).getByRole("separator", { name: "调整列宽：操作" })).toBeVisible();
 
     const skuHandle = within(table).getByRole("separator", { name: "调整列宽：SKU" });
     const skuHeader = skuHandle.closest("th");
-    expect(skuHeader).toHaveClass("product-management__resizable-header-cell");
-    expect(skuHeader).toHaveAttribute("data-width", "176");
+    expect(skuHeader).toHaveClass("report-table-resizable-header-cell");
+    expect(skuHeader).toHaveAttribute("data-width", "170");
     fireEvent.pointerDown(skuHandle, { clientX: 100, pointerId: 1 });
     fireEvent.pointerMove(skuHandle, { clientX: 148, pointerId: 1 });
-    expect(skuHeader).toHaveAttribute("data-width", "176");
+    expect(skuHeader).toHaveAttribute("data-width", "170");
     expect(skuHandle.querySelector(".report-table-resize-guide")).toHaveStyle({
       visibility: "visible",
       transform: "translateX(48px)",
     });
     fireEvent.pointerUp(skuHandle, { clientX: 148, pointerId: 1 });
-    expect(skuHeader).toHaveAttribute("data-width", "224");
+    expect(skuHeader).toHaveAttribute("data-width", "218");
     expect(skuHandle.querySelector(".report-table-resize-guide")).toHaveStyle({ visibility: "hidden" });
     fireEvent.click(skuHandle);
     expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0])
       .toHaveTextContent("UI-SAMPLE-001");
   });
 
-  it("renders formal tag management while keeping all actions as no-API placeholders", () => {
+  it("keeps tags as a filter without rendering tag-management UI", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "标签管理" }));
-    const dialog = screen.getByRole("dialog", { name: "标签管理" });
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    const tagNameInput = within(dialog).getByLabelText("新增标签名");
-    expect(tagNameInput).toHaveAttribute("placeholder", "请输入标签名称");
-    expect(within(dialog).getAllByRole("button", { name: /选择标签颜色/ })).toHaveLength(7);
-    expect(tagNameInput.closest(".product-management__new-tag-row")).not.toBeNull();
-    const colorRow = within(dialog).getByText("标签颜色：").closest(
-      ".product-management__tag-color-row",
-    );
-    expect(colorRow).not.toBeNull();
-    expect(colorRow).not.toContainElement(tagNameInput);
-
-    for (const tag of ["测品", "清货", "停售"]) {
-      expect(within(dialog).getByText(tag)).toBeVisible();
-    }
-    for (const heading of ["标签名", "操作"]) {
-      expect(within(dialog).getByRole("columnheader", { name: heading })).toBeVisible();
-    }
-    expect(within(dialog).queryByRole("columnheader", { name: "颜色" })).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("columnheader", { name: "使用数量" })).not.toBeInTheDocument();
-    expect(within(dialog).getAllByLabelText("标签颜色")).toHaveLength(3);
-    fireEvent.click(within(dialog).getByRole("button", { name: "新增标签" }));
-    expect(screen.getByText("请输入标签名称")).toBeVisible();
-    fireEvent.change(tagNameInput, { target: { value: "临时标签" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "新增标签" }));
-    expect(screen.getByText(TAG_PENDING)).toBeVisible();
-    fireEvent.click(within(dialog).getAllByRole("button", { name: "编辑" })[0]);
-    expect(tagNameInput).toHaveValue("测品");
-    expect(within(dialog).getByRole("button", { name: "选择标签颜色：蓝色" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(within(dialog).getByRole("button", { name: "保存修改" })).toBeVisible();
-    fireEvent.click(within(dialog).getByRole("button", { name: "保存修改" }));
-    expect(screen.getByText(TAG_PENDING)).toBeVisible();
-    fireEvent.click(within(dialog).getAllByRole("button", { name: "删除" })[0]);
-    expect(within(dialog).getByText("测品")).toBeVisible();
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    const tagFilter = screen.getByRole("combobox", { name: "标签" });
+    expect(tagFilter).toBeVisible();
+    fireEvent.change(tagFilter, { target: { value: "停售" } });
+    expect(screen.getByText("共 26 条数据")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "标签管理" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "标签管理" })).not.toBeInTheDocument();
   });
 
   it("opens a product card and switches among only the four approved detail sections", () => {
@@ -1049,72 +1006,41 @@ describe("ProductManagementPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "UI-SAMPLE-001" }));
     const dialog = screen.getByRole("dialog", { name: "产品详情" });
 
-    expect(within(dialog).getByText("验收示例产品 001")).toBeVisible();
-    const menu = within(dialog).getByRole("navigation", { name: "详情菜单" });
-    expect(within(menu).getAllByRole("button").map((item) => item.textContent)).toEqual([
-      "基本信息",
-      "物流报关清关",
-      "图片信息",
-      "商品分析资料",
-    ]);
-    expect(within(menu).getByRole("button", { name: "基本信息" })).toHaveAttribute("aria-current", "page");
+    expect(within(dialog).getAllByText("无线蓝牙耳机 Air Pro 001")).not.toHaveLength(0);
+    const menu = dialog.querySelector<HTMLElement>(".product-management__detail-nav-card");
+    expect(menu).not.toBeNull();
+    expect(within(menu!).getAllByRole("button").map((item) => item.textContent?.replace("›", "")))
+      .toEqual(["基本信息", "物流报关清关", "图片信息", "商品分析资料"]);
+    expect(within(menu!).getByRole("button", { name: /^基本信息/ })).toHaveClass("active");
     for (const field of ["SKU", "类目", "产品等级", "WFS配送费"]) {
-      expect(within(dialog).getByText(field)).toBeVisible();
+      expect(within(dialog).getAllByText(field)).not.toHaveLength(0);
     }
-    for (const field of ["包装规格", "单箱重量", "单品净重"]) {
-      expect(within(dialog).queryByText(field)).not.toBeInTheDocument();
-    }
-    expect(within(dialog).queryByText("WFS费用")).not.toBeInTheDocument();
 
-    fireEvent.click(within(menu).getByRole("button", { name: "物流报关清关" }));
-    for (const field of ["中文报关名", "英文用途", "报关单价", "海关编码", "包装规格", "单品净重"]) {
+    fireEvent.click(within(menu!).getByRole("button", { name: /^物流报关清关/ }));
+    for (const field of ["中文报关名", "英文用途", "包装规格", "净重"]) {
       expect(within(dialog).getByText(field)).toBeVisible();
     }
-    fireEvent.click(within(menu).getByRole("button", { name: "商品分析资料" }));
-    for (const field of ["竞品文案信息表", "卖家精灵关键词表", "图片分析表", "沃尔玛竞争ID"]) {
+    fireEvent.click(within(menu!).getByRole("button", { name: /^商品分析资料/ }));
+    for (const field of ["竞品文案信息表", "关键词分析表", "图片分析表", "平台竞争ID"]) {
       expect(within(dialog).getByText(field)).toBeVisible();
-    }
-    for (const excluded of ["采购信息", "供应商报价", "关联资料", "质检信息", "操作日志", "竞品链接"]) {
-      expect(within(dialog).queryByText(excluded)).not.toBeInTheDocument();
     }
   });
 
-  it("copies SKU and product names without opening detail from the copy control", async () => {
+  it("opens details from SKU without rendering legacy copy controls", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "复制SKU：UI-SAMPLE-001" }));
-    expect(await screen.findByText("已复制")).toBeVisible();
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("UI-SAMPLE-001");
+    expect(screen.queryByRole("button", { name: /复制SKU|复制产品名称/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "产品详情" })).not.toBeInTheDocument();
-
-    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("denied"));
-    fireEvent.click(screen.getByRole("button", { name: "复制产品名称：验收示例产品 001" }));
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("验收示例产品 001");
-    expect(await screen.findByText("复制失败，请手动复制")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "UI-SAMPLE-001" }));
     expect(screen.getByRole("dialog", { name: "产品详情" })).toBeVisible();
   });
 
-  it("shows only edit and delete in each row operation menu", () => {
+  it("keeps only the detail action without a legacy operation menu", () => {
     renderPage();
-    fireEvent.click(screen.getAllByRole("button", { name: /操作/ })[0]);
-    const menu = screen.getByRole("menu");
-
-    expect(within(menu).getByRole("menuitem", { name: "删除" })).toHaveAttribute("data-danger", "true");
-    const cases = [
-      ["编辑", "产品编辑接口待接入"],
-      ["删除", "产品删除接口待接入"],
-    ];
-    for (const [action, expected] of cases) {
-      if (!screen.queryByRole("menu")) {
-        fireEvent.click(screen.getAllByRole("button", { name: /操作/ })[0]);
-      }
-      const currentMenu = screen.getByRole("menu");
-      fireEvent.click(within(currentMenu).getByRole("menuitem", { name: action }));
-      expect(screen.getByText(expected)).toBeVisible();
-    }
-    for (const excluded of ["停用", "复制", "打印产品条码"]) {
-      expect(screen.queryByRole("menuitem", { name: excluded })).not.toBeInTheDocument();
-    }
+    expect(screen.getAllByRole("button", { name: "详情" })).toHaveLength(50);
+    expect(screen.queryByRole("button", { name: /更多|操作/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "详情" })[0]);
+    expect(screen.getByRole("dialog", { name: "产品详情" })).toBeVisible();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

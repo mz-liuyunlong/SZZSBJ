@@ -359,14 +359,12 @@ const usdHeaders = dailySalesColumnFields.map((field) => ({
 
 describe("DailySalesPage", () => {
   it("uses PageShell metadata, hides the implementation status, and keeps all 35 columns in order", () => {
-    const view = renderPage();
+    renderPage();
 
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent("每日销售");
-    expect(view.container.querySelector(
-      ".page-shell:has(> .page-shell__content .daily-sales) > .page-shell__header > .page-shell__heading",
-    )).not.toBeNull();
-    expect(screen.getByLabelText("页面状态：planned").closest(".page-shell"))
+    expect(screen.getByRole("region", { name: "每日销售" }))
       .toContainElement(screen.getByLabelText("每日销售筛选"));
+    expect(screen.queryByRole("heading", { name: "当前页面" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("页面状态：planned")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /在新标签页打开/ })).toBeVisible();
     expect(dailySalesMockData).toHaveLength(50);
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
@@ -515,7 +513,7 @@ describe("DailySalesPage", () => {
     for (const metric of ["销量", "销售额", "订单利润", "利润率", "广告费", "广告占比"]) {
       expect(within(summary).getByText(metric)).toBeVisible();
     }
-    expect(within(summary).getAllByText("较上期")).toHaveLength(6);
+    expect(within(summary).queryByText("较上期")).not.toBeInTheDocument();
     for (const trend of ["12.5%", "8.2%", "15.3%", "2.1%", "6.8%", "1.2%"]) {
       expect(within(summary).getByText(trend)).toBeVisible();
     }
