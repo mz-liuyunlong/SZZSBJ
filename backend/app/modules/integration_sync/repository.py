@@ -106,6 +106,23 @@ class IntegrationSyncRepository:
             )
         )
 
+    def get_retention_policy_by_key(self, policy_key: str) -> RawRetentionPolicy | None:
+        return self.session.scalar(
+            select(RawRetentionPolicy).where(RawRetentionPolicy.policy_key == policy_key)
+        )
+
+    def get_config_by_scope(
+        self,
+        interface_id: UUID,
+        source_account_ref: str,
+    ) -> IntegrationSyncConfig | None:
+        return self.session.scalar(
+            select(IntegrationSyncConfig).where(
+                IntegrationSyncConfig.interface_id == interface_id,
+                IntegrationSyncConfig.source_account_ref == source_account_ref,
+            )
+        )
+
     def add_catalog_record[ModelT](self, record: ModelT) -> ModelT:
         self.session.add(record)
         self.session.flush()
