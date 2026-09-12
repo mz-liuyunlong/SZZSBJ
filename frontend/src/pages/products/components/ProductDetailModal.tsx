@@ -1,5 +1,5 @@
 import { Button, Modal, Progress, Tag, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
 
 interface ProductDetailModalProps {
@@ -45,11 +45,18 @@ function DetailFieldGrid({ items }: { items: DetailFieldItem[] }) {
 }
 
 function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
-  const [activeSection, setActiveSection] = useState<ProductDetailSection>("basic");
+  const [sectionOverride, setSectionOverride] = useState<{
+    rowId: string;
+    section: ProductDetailSection;
+  }>();
+  const activeSection = sectionOverride && sectionOverride.rowId === row?.id
+    ? sectionOverride.section
+    : "basic";
 
-  useEffect(() => {
-    if (row) setActiveSection("basic");
-  }, [row?.id]);
+  const closeModal = () => {
+    setSectionOverride(undefined);
+    onClose();
+  };
 
   const renderContent = () => {
     if (!row) return null;
@@ -225,10 +232,10 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
           <Typography.Text type="secondary">
             产品详情为 <Typography.Text strong>SKU基础数据源</Typography.Text>，标签由后端返回，仅展示和筛选。
           </Typography.Text>
-          <Button type="primary" onClick={onClose}>关闭</Button>
+          <Button type="primary" onClick={closeModal}>关闭</Button>
         </div>
       ) : null}
-      onCancel={onClose}
+      onCancel={closeModal}
     >
       {row && (
         <div className="product-management__detail-modern">
@@ -272,7 +279,7 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
                     key={section.key}
                     className={activeSection === section.key ? "active" : undefined}
                     type="button"
-                    onClick={() => setActiveSection(section.key)}
+                    onClick={() => setSectionOverride({ rowId: row.id, section: section.key })}
                   >
                     {section.label}<span>›</span>
                   </button>

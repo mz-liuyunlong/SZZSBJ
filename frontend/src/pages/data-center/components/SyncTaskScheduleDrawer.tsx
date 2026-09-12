@@ -1,5 +1,5 @@
 import { Button, Drawer, Radio, Space, Tag, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { SyncScheduleItem, SyncScheduleTab, SyncTaskStatus } from "@/pages/data-center/syncTaskTypes";
 
 interface SyncTaskScheduleDrawerProps {
@@ -62,11 +62,23 @@ function SyncTaskScheduleDrawer({
   onClose,
   onOpenGlobalLog,
 }: SyncTaskScheduleDrawerProps) {
-  const [activeTab, setActiveTab] = useState<SyncScheduleTab>(initialTab);
+  const [tabOverride, setTabOverride] = useState<{
+    initialTab: SyncScheduleTab;
+    activeTab: SyncScheduleTab;
+  }>();
+  const activeTab = tabOverride?.initialTab === initialTab
+    ? tabOverride.activeTab
+    : initialTab;
 
-  useEffect(() => {
-    if (open) setActiveTab(initialTab);
-  }, [initialTab, open]);
+  const closeDrawer = () => {
+    setTabOverride(undefined);
+    onClose();
+  };
+
+  const openGlobalLog = () => {
+    setTabOverride(undefined);
+    onOpenGlobalLog();
+  };
 
   return (
     <Drawer
@@ -75,11 +87,11 @@ function SyncTaskScheduleDrawer({
       width={560}
       open={open}
       destroyOnClose
-      onClose={onClose}
+      onClose={closeDrawer}
       footer={(
         <Space className="sync-task__drawer-footer">
-          <Button onClick={onOpenGlobalLog}>查看全局日志</Button>
-          <Button onClick={onClose}>关闭</Button>
+          <Button onClick={openGlobalLog}>查看全局日志</Button>
+          <Button onClick={closeDrawer}>关闭</Button>
         </Space>
       )}
     >
@@ -93,7 +105,10 @@ function SyncTaskScheduleDrawer({
             { label: "本周安排", value: "week" },
             { label: "只看周任务", value: "weeklyOnly" },
           ]}
-          onChange={(event) => setActiveTab(event.target.value as SyncScheduleTab)}
+          onChange={(event) => setTabOverride({
+            initialTab,
+            activeTab: event.target.value as SyncScheduleTab,
+          })}
         />
         <Typography.Text type="secondary">展示所有同步任务的计划触发时间</Typography.Text>
       </div>

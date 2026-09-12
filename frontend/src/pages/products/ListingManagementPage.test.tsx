@@ -105,8 +105,8 @@ describe("ListingManagementPage acceptance contract", () => {
         onCurrentPageChange={() => undefined}
         onPageSizeChange={() => undefined}
         onSelectionChange={() => undefined}
-        onBulkMark={() => undefined}
-        onCopy={() => undefined}
+        onOpenDetail={() => undefined}
+        onBulkExport={() => undefined}
       />,
     );
 

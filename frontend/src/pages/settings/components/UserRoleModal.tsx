@@ -1,6 +1,6 @@
 /** Modal for assigning one or more roles to a selected user. */
 import { Checkbox, Modal, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   userRoleOptions,
   type UserManagementRow,
@@ -14,11 +14,18 @@ interface UserRoleModalProps {
 }
 
 function UserRoleModal({ user, onCancel, onSubmit }: UserRoleModalProps) {
-  const [roles, setRoles] = useState<UserRoleName[]>([]);
+  const [roleOverride, setRoleOverride] = useState<{
+    userId: string;
+    roles: UserRoleName[];
+  }>();
+  const roles = roleOverride && roleOverride.userId === user?.id
+    ? roleOverride.roles
+    : user?.roles ?? [];
 
-  useEffect(() => {
-    setRoles(user?.roles ?? []);
-  }, [user]);
+  const cancel = () => {
+    setRoleOverride(undefined);
+    onCancel();
+  };
 
   return (
     <Modal
@@ -28,9 +35,10 @@ function UserRoleModal({ user, onCancel, onSubmit }: UserRoleModalProps) {
       destroyOnHidden
       okText="保存角色"
       cancelText="取消"
-      onCancel={onCancel}
+      onCancel={cancel}
       onOk={() => {
         if (!user || roles.length === 0) return;
+        setRoleOverride(undefined);
         onSubmit(user.id, roles);
       }}
       okButtonProps={{ disabled: roles.length === 0 }}
@@ -43,7 +51,9 @@ function UserRoleModal({ user, onCancel, onSubmit }: UserRoleModalProps) {
         className="user-role-modal__checks"
         value={roles}
         options={userRoleOptions.map((value) => ({ value, label: value }))}
-        onChange={(values) => setRoles(values as UserRoleName[])}
+        onChange={(values) => {
+          if (user) setRoleOverride({ userId: user.id, roles: values as UserRoleName[] });
+        }}
       />
     </Modal>
   );

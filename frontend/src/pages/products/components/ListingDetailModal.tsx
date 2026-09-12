@@ -1,5 +1,5 @@
 import { Button, Modal, Tag, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
 
 interface ListingDetailModalProps {
@@ -46,11 +46,18 @@ function ListingFieldGrid({ items }: { items: ListingFieldItem[] }) {
 }
 
 function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
-  const [activeSection, setActiveSection] = useState<ListingDetailSection>("basic");
+  const [sectionOverride, setSectionOverride] = useState<{
+    rowId: string;
+    section: ListingDetailSection;
+  }>();
+  const activeSection = sectionOverride && sectionOverride.rowId === row?.id
+    ? sectionOverride.section
+    : "basic";
 
-  useEffect(() => {
-    if (row) setActiveSection("basic");
-  }, [row?.id]);
+  const closeModal = () => {
+    setSectionOverride(undefined);
+    onClose();
+  };
 
   const renderContent = () => {
     if (!row) return null;
@@ -152,10 +159,10 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
       destroyOnHidden
       footer={(
         <div className="listing-management__detail-footer">
-          <Button onClick={onClose}>关闭</Button>
+          <Button onClick={closeModal}>关闭</Button>
         </div>
       )}
-      onCancel={onClose}
+      onCancel={closeModal}
     >
       {row && (
         <div className="listing-management__detail-modern">
@@ -183,7 +190,7 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
                   key={section.key}
                   className={activeSection === section.key ? "active" : undefined}
                   type="button"
-                  onClick={() => setActiveSection(section.key)}
+                  onClick={() => setSectionOverride({ rowId: row.id, section: section.key })}
                 >
                   {section.label}
                 </button>
