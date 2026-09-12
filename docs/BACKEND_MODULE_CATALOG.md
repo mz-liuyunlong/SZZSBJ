@@ -15,6 +15,7 @@
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
 | Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
+| Integration Sync Governance + Lingxing SKU Detail Foundation V1 | Proposed `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | 计划中的可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW import、任务骨架与受保护 API contract；尚未批准实现 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -126,3 +127,30 @@
 | productList controlled full local RAW capture | Owner 后续一次性授权的运行 `lingxing_product_list_20260911T195715Z_636b2f7d` 已完成：ProductLists-only 串行分页 2 页，captured/total 均为 `1188`，stop `total_reached`；4 个本地文件位于 `LINGXING_LOCAL_RAW_DIR/<validation_run_id>/` 且不进入 Git；无 DB、`raw_lingxing_api`、业务表或 Redis 写入，无 P0 sampling、完整 response/商品字段/credential 输出 |
 | productList next phase | 独立设计并实现 `local RAW -> server RAW import`；必须另行批准导入目标、完整性、幂等、敏感性、权限、失败恢复与审计边界，本次未实现 |
 | Token Manager module not in scope | 真实 Token 获取/验证、业务 API、RAW 写入、Redis/共享存储、多实例协调、数据库表/migration、DIM/FACT/Core/read model、frontend、sync、deployment；上面的 controlled capture 是独立一次性验证，不扩大 Token Manager 模块范围 |
+
+## Integration Sync Governance + Lingxing SKU Detail Foundation V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Integration Sync Governance + Lingxing SKU Detail Foundation V1 |
+| Module key | `integration-sync-governance-backend-v1` |
+| Status | `planned`；Draft PRP，等待 Owner Review/Source Decision，不表示获批或已实现 |
+| Main role | Architect for this docs task；future implementation role is Backend Engineer after separate authorization |
+| Purpose | 为 Lingxing 及未来 Walmart/Amazon/TEMU source handlers 提供统一 run/config/dependency/event/lock/work-item/retention/parse/lineage 治理，并建设首个 Lingxing SKU identity/detail/DWS 后端链路 |
+| Proposed backend directories | `backend/app/modules/integration_sync/`, `backend/app/modules/sku_detail/`, ordered Alembic revisions, scoped tests and backend API docs |
+| Governance storage | `gov_integration_interfaces`, `gov_integration_interface_dependencies`, `gov_integration_sync_configs`, `gov_integration_sync_runs`, `gov_integration_sync_run_events`, `gov_integration_sync_locks`, `gov_integration_sync_run_work_items`, `gov_raw_retention_policies`, `gov_parse_jobs`, `gov_data_lineage` |
+| RAW / ODS storage | `ods_api_raw_blobs`, `ods_api_raw_request_refs`, `ods_lingxing_productlist_sku_refs`, `ods_lingxing_product_info_batch_items`; response hash dedup and safe request metadata; no payload API |
+| DWD / DWS storage | `dwd_lingxing_sku_identity_index`, detail snapshots/current, images, global tags, and `dws_sku_base_profile_current`; source-derived/rebuildable, not Product Core authority |
+| Identity contract | `productList.data.id -> lingxing_sku_id`; `batchGetProductInfo.data.sku -> lingxing_sku_code`; no SKU/MSKU/ItemID/internal Product inference |
+| Local import | Planned manifest/checksum-verified import from the recorded ProductLists run outside Git; no provider/Token request; live local PostgreSQL execution needs separate authorization and skips safely when `DATABASE_URL` is missing |
+| batchGetProductInfo | Candidate disabled-by-default `LingxingBatchGetProductInfoSyncHandler`; reads active identities, freezes ID membership, splits batches, stores only count/hash safe params, uses synthetic parser tests; no real call in V1 |
+| Tasks | Planned `execute_sync_run(run_id)` and `scheduler_tick()` Celery contracts; manual/schedule/retry/backfill/import share the run model; eager/mock/service tests, no live Redis/worker/beat and no RQ |
+| API scope | Ten planned protected `/api/integrations/**` metadata/trigger routes and seven candidate protected `/api/products/skus/**` read routes; unified envelope/request ID; no RAW payload; no frontend |
+| Permission keys | `integrations:read`, `integrations:update`, `integrations:execute`, `integrations:raw_metadata:read`, `products:read`, `products:sync_history:read`, `products:raw_lineage:read`, `products:cost:read`, `products:operation_logs:read` |
+| Data scope | Trusted opaque `source_account_ref` scope must fail closed; confirmed Product mapping additionally uses existing Product scope; roles are not hard-coded |
+| Source/field status | Governance is proposed `NEW_SYSTEM_OWNED`; ProductLists identity is proposed `REBUILD_SYNC`; batch detail/DWD/DWS and business APIs remain candidate until a dedicated Source Decision and field dictionary are approved |
+| Security | No credential, Token, sign, Authorization, full URL, RAW payload, full ID batch, captured product value, or secret-bearing archive URI in logs/events/API/docs/tasks |
+| Existing-table boundary | Does not drop, rewrite, or dual-write existing `raw_lingxing_api`; does not overwrite `products` or `product_platform_listings` |
+| PRP | `PRPs/integration-sync-governance-backend-v1.md` |
+| PR | TBD |
+| Not in scope | Any implementation in this docs task, frontend/admin-frontend, old-system, real Lingxing/Token calls, production DB/migration, live Redis/Celery, archive transport/deletion, ADS, external provider handlers beyond the reusable contract, deployment, or Git publishing |
