@@ -1,22 +1,23 @@
 # PRP: Integration Sync Governance + Lingxing SKU Detail Foundation V1
 
 ```text
-Status: Draft — Pending Owner Review and Approval
+Status: Approved — Owner Authorized for Backend Implementation
 Owner Approval Required: Yes
-Implementation Authorized: No
+Implementation Authorized: Yes
 Main Implementation Role After Approval: Backend Engineer
 Frontend Implementation: Forbidden in this scope
 Real Lingxing or Token Requests: Forbidden in this scope
-Source Decision Gate: BLOCKED_BY_OWNER_DECISION until the decision described in section 5 is approved
+Source Decision Gate: APPROVED_BY_OWNER_DECISION
+Source Decision: docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md
 ```
 
 ## 1. Goal
 
 Build one backend-only foundation for governed external-interface synchronization and the first Lingxing SKU-detail pipeline. This is not a standalone ProductList feature. It establishes reusable PostgreSQL, Alembic, RAW/ODS, DWD, DWS, run governance, import, task-orchestration, and protected FastAPI contracts that later Lingxing, Walmart, Amazon, and TEMU integrations can reuse.
 
-The later implementation task must remain within this exact PRP. Approval of this PRP does not authorize a production migration, a real Lingxing call, a Token request, deployment, or any frontend work.
+The authorized implementation task must remain within this exact PRP. Approval of this PRP does not authorize a production migration, a real Lingxing call, a Token request, deployment, or any frontend work.
 
-### 1.1 Deliverables after a separately authorized implementation
+### 1.1 Authorized implementation deliverables
 
 1. PostgreSQL/Alembic structures for integration governance.
 2. Ten governance tables.
@@ -71,7 +72,7 @@ The controlled capture proves only that the recorded ProductLists run completed 
 
 ## 4. Scope
 
-### 4.1 In scope after approval
+### 4.1 Approved implementation scope
 
 - The exact twenty tables in sections 8–11 and their Alembic revisions.
 - Synchronous SQLAlchemy 2.x models/repositories using the existing single `Base` and sessionmaker.
@@ -102,29 +103,29 @@ The controlled capture proves only that the recorded ProductLists run completed 
 
 ## 5. Source Decision and approval gate
 
-No dedicated Source Decision for the combined Lingxing SKU detail APIs exists in the allowed files for this docs task. Under `docs/delivery/backend-data-source-decision-gate.md`, this PRP therefore remains non-executable until the Owner approves:
+The Owner decision is recorded in:
 
 ```text
-docs/data-sources/decisions/integration-sync-governance-lingxing-sku-detail-v1-decision.md
+docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md
 ```
 
-The future decision must be `READY_FOR_PRP`, contain no unresolved `NEED_OWNER_DECISION`, and approve the classifications below. Alternatively, an Owner instruction may explicitly designate an equivalent merged decision artifact, but chat context alone is not repository authority.
+That decision authorizes the backend implementation branch `feat/integration-sync-governance-backend-v1` for this PRP only. It approves the classifications and contracts below for implementation while keeping every real Lingxing, Token, ProductList, and batchGetProductInfo request prohibited.
 
 | Dataset/field group | Proposed authority/classification | Rule |
 |---|---|---|
 | Governance configs, runs, locks, events, work items, parse jobs, lineage | `NEW_SYSTEM_OWNED` | Written only by approved backend services; no external system may overwrite governance state. |
 | ProductLists local capture files | L1/L2 evidence; `ARCHIVE_ONLY` as local artifacts | Import source only; never an online API source and never committed. |
 | ProductLists identities | Lingxing external source; `REBUILD_SYNC` | Imported/synchronized into new-system ODS and L6 identity records before API use. |
-| batchGetProductInfo detail fields | Lingxing external source; proposed `REBUILD_SYNC`, currently candidate | No real call until endpoint contract, account scope, field dictionary, and Owner authorization are complete. |
+| batchGetProductInfo detail fields | Lingxing external source; `REBUILD_SYNC` implementation foundation | Only skeleton/mock/fixture parsing and `id_batch_page` work-item infrastructure are approved. Real calls and unverified provider parameters remain blocked pending separate official evidence and Owner authorization. |
 | DWS values | New-system derived projection | Rebuildable from approved DWD snapshots using versioned formulas; never independent authority. |
 | Existing `products` and `product_platform_listings` | Existing `NEW_SYSTEM_OWNED` authority | No overwrite from Lingxing. A link requires explicit identity evidence; SKU string equality is not sufficient. |
 
 Implementation stop conditions:
 
-- The Source Decision remains absent or blocked.
-- The Owner does not approve the proposed `ods_`/`dwd_`/`dws_` physical names as explicit project naming exceptions.
-- `source_account_ref` ownership/scope or the batchGetProductInfo request/response contract remains unresolved.
-- Any cost/currency mapping, identity mapping, migration, or data-scope rule conflicts with an approved decision.
+- The requested implementation differs from this PRP or the linked Source Decision.
+- Any real Lingxing, Token, ProductList, or batchGetProductInfo request is required.
+- Any implementation requires credentials, captured RAW artifacts in Git, production database access, frontend/admin-frontend, or old-system access.
+- A migration, identity, currency, data-scope, or provider contract conflicts with the linked Source Decision.
 
 ## 6. Mandatory business rules
 
@@ -144,7 +145,7 @@ Implementation stop conditions:
 14. V1 must not make any real Lingxing or Token request. A future real call requires a separate Owner authorization.
 15. IDs are opaque strings; SKU, MSKU, ItemID, Lingxing SKU ID, Lingxing SKU code, internal product ID, and listing ID must never be inferred from one another.
 16. All timestamps are timezone-aware UTC. Source timestamps remain separate from ingestion timestamps.
-17. All monetary values use `Numeric(18,4)`/`Decimal` and a currency companion. No conversion or assumed currency is allowed except `purchase_cost_cny`, whose source evidence explicitly identifies CNY and whose persisted companion is `CNY`.
+17. All monetary values use `Numeric(18,4)`/`Decimal` and a currency companion field. No conversion or assumed currency is allowed. `purchase_cost_cny` has companion `CNY`; `customs_declared_currency` remains nullable and is `NULL` when the provider supplies no currency; US first-leg currency comes only from `data.product_logistics_relation.US_currency`.
 
 ## 7. Layering, naming, and transaction architecture
 
@@ -157,7 +158,7 @@ Implementation stop conditions:
 | Other `dwd_*` | L3 standardized source snapshots/current projection | Typed Lingxing source representation; not allowed to overwrite new-system-owned Product Core. |
 | `dws_sku_base_profile_current` | L9 reusable read projection | Versioned, rebuildable calculations for multiple backend modules. |
 
-The repository standard normally uses `raw_`, `stg_`/`std_`, `map_`, and `mart_` prefixes. This PRP deliberately proposes the Owner-required `ods_`, `dwd_`, and `dws_` names. Approval of this PRP must explicitly approve those names and the layer mapping above; otherwise implementation stops for a naming decision.
+The Owner-approved Source Decision establishes `gov_`, `ods_`, `dwd_`, `dws_`, and `ads_` as this project's data-layer prefixes. The names and layer mapping above are approved project design, not ad hoc naming exceptions.
 
 All tables use the existing SQLAlchemy `Base`. UUID primary keys are generated by the application unless a table explicitly uses an ordered bigint event key. All instants use `DateTime(timezone=True)`. JSON uses PostgreSQL JSONB. Enumerations are persisted as bounded strings with check constraints so migrations remain explicit.
 
@@ -312,7 +313,7 @@ The generic background-task vocabulary uses `pending/cancelled/partial_success`.
 
 ### 10.2 Shared snapshot field dictionary
 
-All entries remain `Draft` until the Source Decision and Owner field approval are merged. Null means absent/unparseable under a recorded parser version; raw values remain only in RAW. Text is trimmed only where approved and case is preserved. Numeric parsing rejects invalid/negative physical or monetary values into DQ records rather than coercing them.
+The field entries below are approved for skeleton/mock/fixture parsing and schema implementation. They do not prove the real batchGetProductInfo transport contract or authorize a provider call. Null means absent/unparseable under a recorded parser version; raw values remain only in RAW. Text is trimmed only where approved and case is preserved. Numeric parsing rejects invalid/negative physical or monetary values into DQ records rather than coercing them.
 
 | Source path | Canonical column | PostgreSQL type / rule |
 |---|---|---|
@@ -326,7 +327,7 @@ All entries remain `Draft` until the Source Decision and Owner field approval ar
 | `data.cg_product_material` | `purchase_material` | `text nullable` |
 | `data.bg_customs_export_name` | `customs_export_name_cn` | `varchar(500) nullable` |
 | `data.bg_customs_import_name` | `customs_import_name_en` | `varchar(500) nullable` |
-| `data.bg_customs_import_price` | `customs_declared_unit_price` | `numeric(18,4) nullable`, nonnegative; persist only with approved `customs_declared_currency_code` |
+| `data.bg_customs_import_price` | `customs_declared_unit_price` | `numeric(18,4) nullable`, nonnegative; companion `customs_declared_currency` is nullable and remains `NULL` when provider currency is absent |
 | `data.bg_export_hs_code` | `china_hs_code` | `varchar(64) nullable`; preserve leading zeros |
 | `data.permission_user_info.permission_uid` | `owner_uid` | `varchar(255) nullable`; sensitive staff identifier |
 | `data.permission_user_info.permission_user_name` | `owner_name` | `varchar(255) nullable`; sensitive staff field |
@@ -349,15 +350,15 @@ All entries remain `Draft` until the Source Decision and Owner field approval ar
 | `data.cg_product_gross_weight` | `product_gross_weight_g` | `numeric(18,4) nullable`, nonnegative |
 | `data.cg_box_weight` | `box_weight_kg` | `numeric(18,4) nullable`, nonnegative |
 
-The monetary companion `customs_declared_currency_code` is mandatory if `customs_declared_unit_price` is persisted. Because the listed source field does not itself prove currency, an unresolved currency leaves the standardized amount null and records the missing mapping; the RAW value is not guessed. No FX conversion is in V1.
+`customs_declared_unit_price` is parsed from `data.bg_customs_import_price`. Its companion `customs_declared_currency` is nullable; when the provider does not return a currency, the amount may be stored with currency `NULL` and must not be labeled or converted. No FX conversion is in V1.
 
-The parser must validate the approved batch response cardinality and nesting before mapping. If `permission_user_info` contains multiple owners, or the logistics object/list contains multiple US candidates, V1 must not silently choose one; the parse job fails that record or leaves the affected standardized fields null under the approved field rule. Exact nesting/cardinality is a Source Decision item.
+The fixture parser must validate its declared cardinality and nesting before mapping. If `permission_user_info` contains multiple owners, or the logistics object/list contains multiple US candidates, V1 must not silently choose one; the parse job fails that record or leaves the affected standardized fields null. Real response cardinality and nesting remain subject to future official evidence before any real call.
 
 ### 10.3 `dwd_lingxing_sku_product_info_snapshots`
 
 - Purpose: immutable successful parsed detail snapshot per SKU/run.
-- Core fields: `id UUID PK`, `provider`, `source_account_ref`, `identity_id FK`, `lingxing_sku_id`, `source_run_id FK`, `source_raw_request_ref_id FK`, `parser_version`, all shared snapshot columns above plus `purchase_cost_currency_code`, `customs_declared_currency_code`, `source_observed_at`, `created_at`.
-- Constraints: unique `(source_run_id, source_account_ref, lingxing_sku_id)`; money/currency pairs; nonnegative physical values; all source IDs are strings.
+- Core fields: `id UUID PK`, `provider`, `source_account_ref`, `identity_id FK`, `lingxing_sku_id`, `source_run_id FK`, `source_raw_request_ref_id FK`, `parser_version`, all shared snapshot columns above plus `purchase_cost_currency_code`, nullable `customs_declared_currency`, `source_observed_at`, `created_at`.
+- Constraints: unique `(source_run_id, source_account_ref, lingxing_sku_id)`; monetary fields follow the explicit currency rules above, including nullable `customs_declared_currency`; nonnegative physical values; all source IDs are strings.
 - Relations: identity/run/RAW reference; parent of images/tags; source of current and DWS.
 - Security: costs and staff fields require field permissions; no endpoint returns all columns by default.
 
@@ -406,13 +407,13 @@ The parser must validate the approved batch response cardinality and nesting bef
 | `purchase_cost_cny` | Copy of approved snapshot value, not a new calculation |
 | `us_first_leg_cost` | Copy of approved snapshot value with its currency companion retained |
 | `unit_first_leg_cost` | `us_first_leg_cost / box_pcs` only when `box_pcs > 0`; same currency as `us_first_leg_cost` |
-| `has_customs_info` | True only if at least one customs text/code is present or a valid declared-price/currency pair is present |
+| `has_customs_info` | True when at least one customs text/code or a valid declared price is present; missing nullable customs currency remains a separate completeness flag and is never inferred |
 | `has_package_info` | True only when all three package dimensions are positive |
 | `has_logistics_info` | True only when a valid US first-leg cost/currency pair is present |
 | `missing_fields_json` | Sorted JSON array of missing V1 completeness-check field keys; never contains values |
 | `data_quality_score` | `round(100 * present_checks / 23, 2)` using the fixed V1 checks below; a completeness indicator, not a business-quality guarantee |
 
-The 23 V1 completeness checks are: product name; SKU code; purchase delivery; purchase cost/CNY pair; material; customs CN name; customs EN name; customs price/currency pair; China HS code; product length/width/height; product net/gross weight; package length/width/height; box length/width/height; box pieces; box weight; US first-leg cost/currency pair. `calc_version` is required and any formula/checklist change requires a new version and rebuild plan.
+The 23 V1 completeness checks are: product name; SKU code; purchase delivery; purchase cost/CNY pair; material; customs CN name; customs EN name; customs declared price with nullable currency recorded separately; China HS code; product length/width/height; product net/gross weight; package length/width/height; box length/width/height; box pieces; box weight; US first-leg cost/currency pair. `calc_version` is required and any formula/checklist change requires a new version and rebuild plan.
 
 All arithmetic uses Decimal, rejects negative inputs, uses a documented half-up four-decimal quantization only at persistence, and converts numeric overflow into a failed parse/calculation event. The table also stores `purchase_cost_currency_code`, `us_first_leg_currency`, and `unit_first_leg_currency`; monetary values never appear without currency.
 
@@ -451,7 +452,7 @@ The implementation provides a backend CLI/module entrypoint, not an API upload e
 13. Commit through the service. On failure, do not publish partial DWD current state; retain a sanitized failed run/event when transaction boundaries permit.
 14. Output only run ID, counts, hashes count, status, timings, and safe error code. No RAW, product field, source ID, secret, Token, sign, Authorization, or full path containing credentials.
 
-The importer must not request Lingxing or Token, connect to Redis, call a business endpoint, or write Product Core. If `DATABASE_URL` is missing, the later implementation must still import and test safely as code, skip the live import without failure, and report `LIVE_IMPORT_SKIPPED_DATABASE_URL_MISSING`. It must not construct a fallback database URL.
+The importer must not request Lingxing or Token, connect to Redis, call a business endpoint, or write Product Core. If `DATABASE_URL` is missing, the implementation must still import and test safely as code, skip the live import without failure, and report `LIVE_IMPORT_SKIPPED_DATABASE_URL_MISSING`. It must not construct a fallback database URL.
 
 ## 13. batchGetProductInfo foundation
 
@@ -466,7 +467,7 @@ Rules:
 1. The handler is registered to `provider=lingxing`, `interface_key=batchGetProductInfo`, `request_kind=id_batch_page`.
 2. Real outbound execution remains disabled in interface metadata/config and transport settings.
 3. At run start, query active identity rows for the authorized `source_account_ref`, sort deterministically by `lingxing_sku_id`, and freeze membership in `ods_lingxing_product_info_batch_items`.
-4. Split IDs by positive bounded `batch_size`; repository evidence currently says the endpoint accepts at most 100 product IDs, so V1 maximum is 100 and the Source Decision may lower it.
+4. Split IDs by a positive bounded implementation default. No real request parameter shape or provider batch limit is asserted in V1; those require later official evidence and Owner authorization.
 5. Create one work item per batch. Safe params are exactly `batch_no`, `id_count`, and SHA-256 `id_hash` over the ordered length-delimited ID set.
 6. The full ID list exists only in the protected batch-items table and transient outbound body. It never enters Celery arguments, safe params, logs, events, errors, or API responses.
 7. When a future call is separately authorized, persist the response in RAW, create the request reference, attach it to batch items, then run the versioned parser.
@@ -541,7 +542,7 @@ Error responses use the existing unified error envelope. All query/body schemas 
 
 Every route declares an explicit Pydantic `response_model`, standard 401/403/404/409/422/500/503 OpenAPI error models as applicable, and an operation ID. Read `meta` contains only `source='new_system_postgresql'`, the approved logical source objects, pagination when applicable, and a freshness timestamp derived from persisted run/snapshot/calculation times. It never claims real-time freshness or exposes storage connection details.
 
-The exact routes below intentionally follow the Owner-specified unversioned paths. Approval must explicitly accept this path choice; otherwise implementation stops rather than silently changing to `/api/v1`.
+The exact routes below follow the existing project `/api/...` convention approved by the Owner for this module. V1 does not force a new `/v1` prefix; any future project-wide versioning change requires a separate PRP decision.
 
 ### 16.1 Integration sync center APIs
 
@@ -572,7 +573,7 @@ The exact routes below intentionally follow the Owner-specified unversioned path
 | `GET /api/products/skus/{sku_id}/cost-history` | Query: `page`, `page_size` | Snapshot time, purchase CNY amount/currency, customs amount/currency when approved, US first-leg amount/currency, source run/snapshot IDs | `products:cost:read`; sensitive, audited; no FX calculation |
 | `GET /api/products/skus/{sku_id}/operation-logs` | Query: `event_type?`, `page`, `page_size` | Sanitized run/parse event code, status transition, actor ref, request ID, timestamp | `products:operation_logs:read`; V1 sync operations only |
 
-List/detail field exposure remains blocked until the field dictionary entries and Source Decision are Approved. The API must not expose owner staff fields unless the Source Decision adds a separate field permission; they are excluded from V1 default responses.
+List/detail contracts are approved for implementation against persisted new-system projections and synthetic fixtures. This approval does not authorize real provider calls or treat fixture mappings as verified provider evidence. Owner staff fields remain excluded from V1 default responses.
 
 ### 16.3 Errors and audit
 
@@ -592,7 +593,7 @@ Config updates and trigger actions write audit/run events with actor, reason, re
 
 ## 17. Proposed implementation structure
 
-The future implementation should use the existing module patterns and keep orchestration thin:
+The implementation should use the existing module patterns and keep orchestration thin:
 
 ```text
 backend/app/modules/integration_sync/
@@ -715,7 +716,7 @@ This is intentionally a broad but single backend foundation because governance/r
 
 Do not split out an incomplete API that reads RAW directly. If implementation cannot complete the full accepted contract safely, stop and return to the Owner rather than declaring a partial capability ready.
 
-## 21. Acceptance checklist for the later implementation
+## 21. Acceptance checklist for the authorized implementation
 
 - [ ] No files under `frontend/**` or `admin-frontend/**` are modified.
 - [ ] No files under `old-system/**` are read or modified.
@@ -729,16 +730,16 @@ Do not split out an incomplete API that reads RAW directly. If implementation ca
 - [ ] Targeted secret scan passes.
 - [ ] `git diff --check` passes.
 
-Additional approval gates:
+Approval gates:
 
-- [ ] The dedicated Source Decision is merged as `READY_FOR_PRP` with no unresolved Owner decision.
-- [ ] Owner explicitly approves the physical table naming exceptions and unversioned API paths in this PRP.
-- [ ] A separate Owner implementation prompt identifies the worktree/branch/allowlist.
-- [ ] Any live local import receives separate connection/write authorization; production migration remains separately prohibited.
+- [x] The Owner Source Decision is recorded and the implementation gate is approved.
+- [x] The data-layer prefixes and existing project `/api/...` path convention are approved.
+- [x] The Owner implementation branch and PRP allowlist are identified as `feat/integration-sync-governance-backend-v1` and this PRP.
+- [x] Local RAW import implementation and confirmed-local-PostgreSQL validation are approved; production database access and production migration remain prohibited.
 
 ## 22. Forbidden actions
 
-- Treating this Draft PRP or registry entry as implementation approval.
+- Treating this approval as authorization for anything beyond this PRP or for any real external request.
 - Reading/printing/committing the captured RAW pages or archives during PRP work.
 - Real Lingxing/Token requests in implementation or tests.
 - Enabling real calls, full sync, schedules, Redis workers, or production migrations by default.
@@ -748,14 +749,14 @@ Additional approval gates:
 - Adding ADS/frontend/provider-specific scope beyond this PRP.
 - Git add/commit/push without a later explicit Owner instruction.
 
-## 23. Owner decisions required before implementation
+## 23. Owner decisions resolved for implementation
 
-1. Approve/merge the Source Decision and the proposed `REBUILD_SYNC`/`NEW_SYSTEM_OWNED`/`ARCHIVE_ONLY` classifications.
-2. Approve the `ods_`/`dwd_`/`dws_` names as explicit exceptions to generic layer prefixes.
-3. Approve the exact unversioned `/api/integrations` and `/api/products/skus` paths or require a revised contract.
-4. Approve an opaque non-secret `source_account_ref` and trusted account-scope provider.
-5. Confirm batchGetProductInfo body/response shape, batch limit, rate/retry policy, and detail-field dictionary before any real call.
-6. Resolve `customs_declared_currency_code`; until then the standardized declared price remains null.
-7. Approve local PostgreSQL write validation separately if the implementation is expected to import the 1188-record capture during validation.
+1. The linked Source Decision approves the `REBUILD_SYNC`, `NEW_SYSTEM_OWNED`, and `ARCHIVE_ONLY` classifications for this PRP.
+2. `gov_`, `ods_`, `dwd_`, `dws_`, and `ads_` are approved project data-layer prefixes.
+3. The exact `/api/integrations` and `/api/products/skus` paths are approved under the existing project `/api/...` convention; no `/v1` prefix is forced in this module.
+4. `source_account_ref` is an opaque non-secret logical account identifier. Local import may use `default`; protected APIs still fail closed until their trusted account-scope provider supplies allowed refs.
+5. batchGetProductInfo is approved only as skeleton/mock/fixture parser and `id_batch_page` work-item foundation. Real parameters, limits, retry/rate behavior, Token use, and provider calls require later official evidence and separate Owner authorization.
+6. `data.bg_customs_import_price` maps to `customs_declared_unit_price`; nullable `customs_declared_currency` remains `NULL` when provider currency is absent. `purchase_cost_cny` is CNY and US first-leg currency comes only from `data.product_logistics_relation.US_currency`.
+7. Local RAW importer implementation and validation against a confirmed local PostgreSQL database are approved. Production database access and production migration are not approved.
 
-Until these are resolved and this PRP is approved, registry/catalog entries remain `planned` or `candidate`, and no backend implementation may begin.
+Backend implementation may begin only on `feat/integration-sync-governance-backend-v1` and only within this PRP. It must not make real Lingxing or Token requests, commit RAW artifacts, modify frontend/admin-frontend or old-system, or continue when implementation requirements diverge from this PRP.

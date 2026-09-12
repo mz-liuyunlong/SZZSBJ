@@ -15,7 +15,7 @@
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
 | Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
-| Integration Sync Governance + Lingxing SKU Detail Foundation V1 | Proposed `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | 计划中的可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW import、任务骨架与受保护 API contract；尚未批准实现 |
+| Integration Sync Governance + Lingxing SKU Detail Foundation V1 | Proposed `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | `approved_for_implementation` 的可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW import、任务骨架与受保护 API contract；尚未实现 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -134,23 +134,24 @@
 |---|---|
 | Module name | Integration Sync Governance + Lingxing SKU Detail Foundation V1 |
 | Module key | `integration-sync-governance-backend-v1` |
-| Status | `planned`；Draft PRP，等待 Owner Review/Source Decision，不表示获批或已实现 |
-| Main role | Architect for this docs task；future implementation role is Backend Engineer after separate authorization |
+| Status | `approved_for_implementation`；Owner 已批准后端实现，尚未实现 |
+| Main role | Backend Engineer；implementation branch `feat/integration-sync-governance-backend-v1` |
 | Purpose | 为 Lingxing 及未来 Walmart/Amazon/TEMU source handlers 提供统一 run/config/dependency/event/lock/work-item/retention/parse/lineage 治理，并建设首个 Lingxing SKU identity/detail/DWS 后端链路 |
 | Proposed backend directories | `backend/app/modules/integration_sync/`, `backend/app/modules/sku_detail/`, ordered Alembic revisions, scoped tests and backend API docs |
 | Governance storage | `gov_integration_interfaces`, `gov_integration_interface_dependencies`, `gov_integration_sync_configs`, `gov_integration_sync_runs`, `gov_integration_sync_run_events`, `gov_integration_sync_locks`, `gov_integration_sync_run_work_items`, `gov_raw_retention_policies`, `gov_parse_jobs`, `gov_data_lineage` |
 | RAW / ODS storage | `ods_api_raw_blobs`, `ods_api_raw_request_refs`, `ods_lingxing_productlist_sku_refs`, `ods_lingxing_product_info_batch_items`; response hash dedup and safe request metadata; no payload API |
 | DWD / DWS storage | `dwd_lingxing_sku_identity_index`, detail snapshots/current, images, global tags, and `dws_sku_base_profile_current`; source-derived/rebuildable, not Product Core authority |
 | Identity contract | `productList.data.id -> lingxing_sku_id`; `batchGetProductInfo.data.sku -> lingxing_sku_code`; no SKU/MSKU/ItemID/internal Product inference |
-| Local import | Planned manifest/checksum-verified import from the recorded ProductLists run outside Git; no provider/Token request; live local PostgreSQL execution needs separate authorization and skips safely when `DATABASE_URL` is missing |
-| batchGetProductInfo | Candidate disabled-by-default `LingxingBatchGetProductInfoSyncHandler`; reads active identities, freezes ID membership, splits batches, stores only count/hash safe params, uses synthetic parser tests; no real call in V1 |
-| Tasks | Planned `execute_sync_run(run_id)` and `scheduler_tick()` Celery contracts; manual/schedule/retry/backfill/import share the run model; eager/mock/service tests, no live Redis/worker/beat and no RQ |
-| API scope | Ten planned protected `/api/integrations/**` metadata/trigger routes and seven candidate protected `/api/products/skus/**` read routes; unified envelope/request ID; no RAW payload; no frontend |
+| Local import | Approved manifest/checksum-verified importer from the recorded ProductList run outside Git; no provider/Token request; may validate against confirmed local PostgreSQL and skips safely when `DATABASE_URL` is missing |
+| batchGetProductInfo | Approved only for disabled-by-default skeleton/mock/fixture parser and `id_batch_page` work-item foundation; no real parameters, Token, or provider call are approved |
+| Tasks | Approved `execute_sync_run(run_id)` and `scheduler_tick()` Celery skeleton contracts; manual/schedule/retry/backfill/import share the run model; eager/mock/service tests, no live Redis/worker/beat and no RQ |
+| API scope | Approved protected `/api/integrations/**` metadata/trigger routes and `/api/products/skus/**` read routes under the existing project `/api/...` convention; unified envelope/request ID; no RAW payload; no frontend |
 | Permission keys | `integrations:read`, `integrations:update`, `integrations:execute`, `integrations:raw_metadata:read`, `products:read`, `products:sync_history:read`, `products:raw_lineage:read`, `products:cost:read`, `products:operation_logs:read` |
 | Data scope | Trusted opaque `source_account_ref` scope must fail closed; confirmed Product mapping additionally uses existing Product scope; roles are not hard-coded |
-| Source/field status | Governance is proposed `NEW_SYSTEM_OWNED`; ProductLists identity is proposed `REBUILD_SYNC`; batch detail/DWD/DWS and business APIs remain candidate until a dedicated Source Decision and field dictionary are approved |
+| Source/field status | Governance is `NEW_SYSTEM_OWNED`; ProductList identity and the synthetic/mock SKU-detail foundation are `REBUILD_SYNC`; real batchGetProductInfo interoperability remains blocked pending official evidence and separate Owner authorization |
 | Security | No credential, Token, sign, Authorization, full URL, RAW payload, full ID batch, captured product value, or secret-bearing archive URI in logs/events/API/docs/tasks |
 | Existing-table boundary | Does not drop, rewrite, or dual-write existing `raw_lingxing_api`; does not overwrite `products` or `product_platform_listings` |
 | PRP | `PRPs/integration-sync-governance-backend-v1.md` |
+| Source Decision | `docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md` |
 | PR | TBD |
-| Not in scope | Any implementation in this docs task, frontend/admin-frontend, old-system, real Lingxing/Token calls, production DB/migration, live Redis/Celery, archive transport/deletion, ADS, external provider handlers beyond the reusable contract, deployment, or Git publishing |
+| Not in scope | Frontend/admin-frontend, old-system, real Lingxing/Token/ProductList/batchGetProductInfo calls, production DB/migration, live Redis/Celery, archive transport/deletion, ADS implementation, external provider handlers beyond the reusable contract, deployment, or Git publishing |
