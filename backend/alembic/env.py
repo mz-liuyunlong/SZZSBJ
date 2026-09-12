@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import create_engine, pool
@@ -21,7 +22,8 @@ target_metadata = Base.metadata
 
 def migration_url() -> URL:
     settings = get_settings()
-    if settings.app_env is AppEnvironment.PRODUCTION:
+    production_authorized = os.getenv("PRODUCTION_MIGRATIONS_AUTHORIZED", "").casefold() == "true"
+    if settings.app_env is AppEnvironment.PRODUCTION and not production_authorized:
         raise SettingsError("Production migrations require separate authorization")
     return get_database_url(settings)
 
