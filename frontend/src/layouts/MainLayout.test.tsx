@@ -291,7 +291,7 @@ describe("MainLayout", () => {
     expect(window.location.hash).toBe(`#${keywordLibrary.path}`);
   }, 10_000);
 
-  it("keeps Home fixed and closes active or inactive tabs predictably", () => {
+  it("keeps Home fixed and closes an inactive tab predictably", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -335,6 +335,16 @@ describe("MainLayout", () => {
     expect(window.location.hash).toBe(`#${todaySales.path}`);
     expectSecondaryClosed();
 
+  });
+
+  it("returns to Home after closing the active tab", () => {
+    renderLayout();
+
+    const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
+    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const adsGroup = requiredGroup("ads");
+    const keywordLibrary = requiredPage("ads", "ads_keyword_library");
+
     fireEvent.click(
       within(primaryNavigation).getByRole("menuitem", { name: adsGroup.title }),
     );
@@ -343,8 +353,8 @@ describe("MainLayout", () => {
         name: keywordLibrary.title,
       }),
     );
-    fireEvent.click(getTab(keywordLibrary.title));
     fireEvent.click(getCloseTabButton(keywordLibrary.title));
+
     expect(
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();

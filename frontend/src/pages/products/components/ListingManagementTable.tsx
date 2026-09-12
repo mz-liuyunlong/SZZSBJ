@@ -1,23 +1,63 @@
-/** Dense Listing Management table built on the shared report-table shell. */
+import { Button, Space, Tag, Tooltip, Typography } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Empty, Table, Tag, Tooltip } from "antd";
 import type { Key } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
-import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
+import {
+  REPORT_TABLE_PAGE_SIZE_OPTIONS,
+} from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import {
-  CopyableTextCell,
-  ImageCell,
-  MoneyCell,
-  StatusTagCell,
-} from "@/components/report-table/cells";
-import {
-  fixedListingColumnKeys,
   listingColumnFields,
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
+
+const minColumnWidths: Record<string, number> = {
+  image: 72,
+  msku: 130,
+  productId: 150,
+  store: 120,
+  owner: 110,
+  sku: 130,
+  productName: 190,
+  title: 260,
+  productType: 130,
+  listPrice: 110,
+  salePrice: 110,
+  productStatus: 120,
+  lifecycle: 120,
+  listedAt: 140,
+  category: 120,
+  wfsAvailableInventory: 140,
+  inboundInventory: 130,
+  sales90Days: 130,
+  adSpend30Days: 140,
+  disabledReason: 130,
+  listingStatus: 130,
+  buyBoxStatus: 130,
+  walmartSeller: 140,
+  resold: 120,
+  checkedAt: 160,
+  rating: 100,
+  reviewCount: 110,
+  brand: 130,
+  tags: 130,
+  gtin: 160,
+  productGrade: 120,
+  actions: 110,
+};
+
+const statusColorMap: Record<string, string> = {
+  启用: "green",
+  停用: "red",
+  在线: "green",
+  离线: "red",
+  拥有: "green",
+  未拥有: "orange",
+  是: "orange",
+  否: "default",
+};
 
 interface ListingManagementTableProps {
   rows: ListingManagementRow[];
@@ -30,118 +70,8 @@ interface ListingManagementTableProps {
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
-  onBulkMark: () => void;
-  onCopy: (text: string) => void;
-}
-
-const widths: Record<string, number> = {
-  image: 72,
-  msku: 118,
-  productId: 136,
-  store: 120,
-  owner: 96,
-  sku: 120,
-  productName: 180,
-  title: 240,
-  productType: 112,
-  disabledReason: 140,
-  checkedAt: 152,
-  tags: 132,
-};
-
-const moneyKeys = new Set(["listPrice", "salePrice", "adSpend30Days"]);
-const totalNumberKeys = new Set([
-  "wfsAvailableInventory",
-  "inboundInventory",
-  "sales90Days",
-  "reviewCount",
-]);
-const sortableKeys = new Set<keyof ListingManagementRow>([
-  "msku",
-  "productId",
-  "store",
-  "owner",
-  "sku",
-  "productName",
-  "title",
-  "productType",
-  "listPrice",
-  "salePrice",
-  "productStatus",
-  "lifecycle",
-  "listedAt",
-  "category",
-  "wfsAvailableInventory",
-  "inboundInventory",
-  "sales90Days",
-  "adSpend30Days",
-  "listingStatus",
-  "buyBoxStatus",
-  "walmartSeller",
-  "resold",
-  "checkedAt",
-  "rating",
-  "reviewCount",
-  "brand",
-  "gtin",
-  "productGrade",
-]);
-const dateKeys = new Set<keyof ListingManagementRow>(["listedAt", "checkedAt"]);
-const statusColors: Record<string, string> = {
-  启用: "success",
-  停用: "error",
-  在线: "success",
-  离线: "default",
-  拥有: "processing",
-  未拥有: "warning",
-};
-
-const sum = (rows: ListingManagementRow[], key: keyof ListingManagementRow) => rows
-  .reduce((total, row) => total + Number(row[key]), 0);
-
-const listingSorter = (key: keyof ListingManagementRow) => (
-  left: ListingManagementRow,
-  right: ListingManagementRow,
-) => {
-  const leftValue = left[key];
-  const rightValue = right[key];
-  if (typeof leftValue === "number") return leftValue - Number(rightValue);
-  if (dateKeys.has(key)) {
-    return Date.parse(String(leftValue).replace(" ", "T"))
-      - Date.parse(String(rightValue).replace(" ", "T"));
-  }
-  return String(leftValue).localeCompare(String(rightValue), "zh-CN");
-};
-
-function TotalCell({ columnKey, rows }: { columnKey: string; rows: ListingManagementRow[] }) {
-  if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
-  if (columnKey === "adSpend30Days") {
-    return <MoneyCell value={sum(rows, "adSpend30Days")} />;
-  }
-  if (totalNumberKeys.has(columnKey)) {
-    return <span className="report-table-metric">
-      {sum(rows, columnKey as keyof ListingManagementRow).toLocaleString("zh-CN")}
-    </span>;
-  }
-  return null;
-}
-
-function cell(row: ListingManagementRow, key: keyof ListingManagementRow, onCopy: (text: string) => void) {
-  const value = row[key];
-  if (key === "image") return <ImageCell label="Listing 商品图片占位" />;
-  if (["msku", "productId", "sku", "productName"].includes(key)) {
-    return <CopyableTextCell text={String(value)} label={listingColumnFields.find((field) => field.key === key)?.title ?? key} onCopy={onCopy} />;
-  }
-  if (moneyKeys.has(key)) return <MoneyCell value={Number(value)} />;
-  if (key === "tags") {
-    return value instanceof Array
-      ? <span>{value.map((tag) => <Tag key={tag}>{tag}</Tag>)}</span>
-      : null;
-  }
-  if (key === "productStatus" || key === "listingStatus" || key === "buyBoxStatus") {
-    return <StatusTagCell label={String(value)} color={statusColors[String(value)] ?? "default"} />;
-  }
-  return <Tooltip title={String(value)}><span>{String(value)}</span></Tooltip>;
+  onOpenDetail: (row: ListingManagementRow) => void;
+  onBulkExport: () => void;
 }
 
 function ListingManagementTable({
@@ -155,94 +85,351 @@ function ListingManagementTable({
   onCurrentPageChange,
   onPageSizeChange,
   onSelectionChange,
-  onBulkMark,
-  onCopy,
+  onOpenDetail,
+  onBulkExport,
 }: ListingManagementTableProps) {
-  const fieldMap = new Map(listingColumnFields.map((field) => [field.key, field]));
-  const columns = appliedColumnKeys.flatMap((key): ProColumns<ListingManagementRow>[] => {
-    const field = fieldMap.get(key as typeof listingColumnFields[number]["key"]);
-    if (!field) return [];
-    const width = columnWidths[key] ?? widths[key] ?? 112;
-    const fixed = fixedListingColumnKeys.includes(key) ? "left" as const : undefined;
-    return [{
-      key,
-      dataIndex: key,
-      align: "left",
-      fixed,
-      width,
-      ellipsis: true,
-      sorter: sortableKeys.has(key as keyof ListingManagementRow)
-        ? listingSorter(key as keyof ListingManagementRow)
-        : undefined,
-      onHeaderCell: () => ({ className: "report-table-resizable-header-cell" }),
-      title: (
-        <ResizableColumnTitle
-          label={field.title}
-          minWidth={key === "image" ? 72 : 88}
-          width={width}
-          onWidthChange={(nextWidth) => onColumnWidthChange(key, nextWidth)}
-        />
-      ),
-      render: (_, row) => cell(row, key as keyof ListingManagementRow, onCopy),
-    }];
+  const title = (key: string, label: string) => (
+    <ResizableColumnTitle
+      label={label}
+      minWidth={minColumnWidths[key] ?? 96}
+      width={columnWidths[key] ?? minColumnWidths[key] ?? 112}
+      onWidthChange={(width) => onColumnWidthChange(key, width)}
+    />
+  );
+
+  const headerCell = () => ({
+    className: "report-table-resizable-header-cell",
   });
 
+  const fieldTitle = Object.fromEntries(listingColumnFields.map((field) => [field.key, field.title]));
+
+  const allColumns: Record<string, ProColumns<ListingManagementRow>> = {
+    image: {
+      key: "image",
+      dataIndex: "image",
+      title: title("image", fieldTitle.image),
+      width: columnWidths.image,
+      fixed: "left",
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <div className="listing-management__image-cell" aria-label={`Listing 图片：${row.productName}`}>
+          {row.image}
+        </div>
+      ),
+    },
+    msku: {
+      key: "msku",
+      dataIndex: "msku",
+      title: title("msku", fieldTitle.msku),
+      width: columnWidths.msku,
+      fixed: "left",
+      sorter: (a, b) => a.msku.localeCompare(b.msku),
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Typography.Link strong onClick={() => onOpenDetail(row)}>
+          {row.msku}
+        </Typography.Link>
+      ),
+    },
+    productId: {
+      key: "productId",
+      dataIndex: "productId",
+      title: title("productId", fieldTitle.productId),
+      width: columnWidths.productId,
+      fixed: "left",
+      sorter: (a, b) => a.productId.localeCompare(b.productId),
+      onHeaderCell: headerCell,
+      render: (_, row) => <Typography.Link>{row.productId}</Typography.Link>,
+    },
+    store: {
+      key: "store",
+      dataIndex: "store",
+      title: title("store", fieldTitle.store),
+      width: columnWidths.store,
+      onHeaderCell: headerCell,
+    },
+    owner: {
+      key: "owner",
+      dataIndex: "owner",
+      title: title("owner", fieldTitle.owner),
+      width: columnWidths.owner,
+      onHeaderCell: headerCell,
+    },
+    sku: {
+      key: "sku",
+      dataIndex: "sku",
+      title: title("sku", fieldTitle.sku),
+      width: columnWidths.sku,
+      sorter: (a, b) => a.sku.localeCompare(b.sku),
+      onHeaderCell: headerCell,
+      render: (_, row) => <Typography.Link>{row.sku}</Typography.Link>,
+    },
+    productName: {
+      key: "productName",
+      dataIndex: "productName",
+      title: title("productName", fieldTitle.productName),
+      width: columnWidths.productName,
+      ellipsis: true,
+      sorter: (a, b) => a.productName.localeCompare(b.productName),
+      onHeaderCell: headerCell,
+      render: (_, row) => <Typography.Link strong onClick={() => onOpenDetail(row)}>{row.productName}</Typography.Link>,
+    },
+    title: {
+      key: "title",
+      dataIndex: "title",
+      title: title("title", fieldTitle.title),
+      width: columnWidths.title,
+      ellipsis: true,
+      onHeaderCell: headerCell,
+    },
+    productType: {
+      key: "productType",
+      dataIndex: "productType",
+      title: title("productType", fieldTitle.productType),
+      width: columnWidths.productType,
+      onHeaderCell: headerCell,
+    },
+    listPrice: {
+      key: "listPrice",
+      dataIndex: "listPrice",
+      title: title("listPrice", fieldTitle.listPrice),
+      width: columnWidths.listPrice,
+      sorter: (a, b) => a.listPrice - b.listPrice,
+      onHeaderCell: headerCell,
+      render: (_, row) => `$${row.listPrice.toFixed(2)}`,
+    },
+    salePrice: {
+      key: "salePrice",
+      dataIndex: "salePrice",
+      title: title("salePrice", fieldTitle.salePrice),
+      width: columnWidths.salePrice,
+      sorter: (a, b) => a.salePrice - b.salePrice,
+      onHeaderCell: headerCell,
+      render: (_, row) => `$${row.salePrice.toFixed(2)}`,
+    },
+    productStatus: {
+      key: "productStatus",
+      dataIndex: "productStatus",
+      title: title("productStatus", fieldTitle.productStatus),
+      width: columnWidths.productStatus,
+      onHeaderCell: headerCell,
+      render: (_, row) => <Tag color={statusColorMap[row.productStatus]}>{row.productStatus}</Tag>,
+    },
+    lifecycle: {
+      key: "lifecycle",
+      dataIndex: "lifecycle",
+      title: title("lifecycle", fieldTitle.lifecycle),
+      width: columnWidths.lifecycle,
+      onHeaderCell: headerCell,
+    },
+    listedAt: {
+      key: "listedAt",
+      dataIndex: "listedAt",
+      title: title("listedAt", fieldTitle.listedAt),
+      width: columnWidths.listedAt,
+      sorter: (a, b) => a.listedAt.localeCompare(b.listedAt),
+      onHeaderCell: headerCell,
+    },
+    category: {
+      key: "category",
+      dataIndex: "category",
+      title: title("category", fieldTitle.category),
+      width: columnWidths.category,
+      onHeaderCell: headerCell,
+    },
+    wfsAvailableInventory: {
+      key: "wfsAvailableInventory",
+      dataIndex: "wfsAvailableInventory",
+      title: title("wfsAvailableInventory", fieldTitle.wfsAvailableInventory),
+      width: columnWidths.wfsAvailableInventory,
+      sorter: (a, b) => a.wfsAvailableInventory - b.wfsAvailableInventory,
+      onHeaderCell: headerCell,
+    },
+    inboundInventory: {
+      key: "inboundInventory",
+      dataIndex: "inboundInventory",
+      title: title("inboundInventory", fieldTitle.inboundInventory),
+      width: columnWidths.inboundInventory,
+      sorter: (a, b) => a.inboundInventory - b.inboundInventory,
+      onHeaderCell: headerCell,
+    },
+    sales90Days: {
+      key: "sales90Days",
+      dataIndex: "sales90Days",
+      title: title("sales90Days", fieldTitle.sales90Days),
+      width: columnWidths.sales90Days,
+      sorter: (a, b) => a.sales90Days - b.sales90Days,
+      onHeaderCell: headerCell,
+    },
+    adSpend30Days: {
+      key: "adSpend30Days",
+      dataIndex: "adSpend30Days",
+      title: title("adSpend30Days", fieldTitle.adSpend30Days),
+      width: columnWidths.adSpend30Days,
+      sorter: (a, b) => a.adSpend30Days - b.adSpend30Days,
+      onHeaderCell: headerCell,
+      render: (_, row) => `$${row.adSpend30Days.toFixed(2)}`,
+    },
+    disabledReason: {
+      key: "disabledReason",
+      dataIndex: "disabledReason",
+      title: title("disabledReason", fieldTitle.disabledReason),
+      width: columnWidths.disabledReason,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.disabledReason || "-",
+    },
+    listingStatus: {
+      key: "listingStatus",
+      dataIndex: "listingStatus",
+      title: title("listingStatus", fieldTitle.listingStatus),
+      width: columnWidths.listingStatus,
+      onHeaderCell: headerCell,
+      render: (_, row) => <Tag color={statusColorMap[row.listingStatus]}>{row.listingStatus}</Tag>,
+    },
+    buyBoxStatus: {
+      key: "buyBoxStatus",
+      dataIndex: "buyBoxStatus",
+      title: title("buyBoxStatus", fieldTitle.buyBoxStatus),
+      width: columnWidths.buyBoxStatus,
+      onHeaderCell: headerCell,
+      render: (_, row) => <Tag color={statusColorMap[row.buyBoxStatus]}>{row.buyBoxStatus}</Tag>,
+    },
+    walmartSeller: {
+      key: "walmartSeller",
+      dataIndex: "walmartSeller",
+      title: title("walmartSeller", fieldTitle.walmartSeller),
+      width: columnWidths.walmartSeller,
+      onHeaderCell: headerCell,
+    },
+    resold: {
+      key: "resold",
+      dataIndex: "resold",
+      title: title("resold", fieldTitle.resold),
+      width: columnWidths.resold,
+      onHeaderCell: headerCell,
+      render: (_, row) => <Tag color={statusColorMap[row.resold]}>{row.resold}</Tag>,
+    },
+    checkedAt: {
+      key: "checkedAt",
+      dataIndex: "checkedAt",
+      title: title("checkedAt", fieldTitle.checkedAt),
+      width: columnWidths.checkedAt,
+      sorter: (a, b) => a.checkedAt.localeCompare(b.checkedAt),
+      onHeaderCell: headerCell,
+    },
+    rating: {
+      key: "rating",
+      dataIndex: "rating",
+      title: title("rating", fieldTitle.rating),
+      width: columnWidths.rating,
+      sorter: (a, b) => a.rating - b.rating,
+      onHeaderCell: headerCell,
+    },
+    reviewCount: {
+      key: "reviewCount",
+      dataIndex: "reviewCount",
+      title: title("reviewCount", fieldTitle.reviewCount),
+      width: columnWidths.reviewCount,
+      sorter: (a, b) => a.reviewCount - b.reviewCount,
+      onHeaderCell: headerCell,
+    },
+    brand: {
+      key: "brand",
+      dataIndex: "brand",
+      title: title("brand", fieldTitle.brand),
+      width: columnWidths.brand,
+      onHeaderCell: headerCell,
+    },
+    tags: {
+      key: "tags",
+      dataIndex: "tags",
+      title: title("tags", fieldTitle.tags),
+      width: columnWidths.tags,
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Space size={4} wrap>
+          {row.tags.map((tag) => <Tag key={tag} color="blue">{tag}</Tag>)}
+        </Space>
+      ),
+    },
+    gtin: {
+      key: "gtin",
+      dataIndex: "gtin",
+      title: title("gtin", fieldTitle.gtin),
+      width: columnWidths.gtin,
+      onHeaderCell: headerCell,
+    },
+    productGrade: {
+      key: "productGrade",
+      dataIndex: "productGrade",
+      title: title("productGrade", fieldTitle.productGrade),
+      width: columnWidths.productGrade,
+      onHeaderCell: headerCell,
+    },
+  };
+
+  const columns = appliedColumnKeys
+    .flatMap((key) => (allColumns[key] ? [allColumns[key]] : []))
+    .concat({
+      key: "actions",
+      title: title("actions", "操作"),
+      width: columnWidths.actions,
+      fixed: "right",
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Tooltip title="打开 Listing 详情">
+          <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
+        </Tooltip>
+      ),
+    });
+
+  const scrollX = columns.reduce((sum, column) => sum + Number(column.width ?? 112), 56);
+
   return (
-    <ReportTableShell className="listing-management__table" label="Listing 管理主表">
+    <ReportTableShell label="Listing 管理表格" className="listing-management__table-shell">
       <ProTable<ListingManagementRow>
-        columns={columns}
-        dataSource={rows}
         rowKey="id"
-        rowSelection={{ fixed: true, selectedRowKeys, onChange: onSelectionChange }}
         search={false}
         options={false}
-        toolBarRender={false}
+        dataSource={rows}
+        columns={columns}
         tableAlertRender={false}
-        tableAlertOptionRender={false}
-        showSorterTooltip={{ target: "sorter-icon" }}
-        scroll={{ x: "max-content", y: "100%" }}
-        summary={() => (
-          <Table.Summary fixed="bottom">
-            <Table.Summary.Row className="listing-management__total-row" data-testid="listing-management-total-row">
-              <Table.Summary.Cell index={0} />
-              {columns.map((column, index) => {
-                const key = String(column.key);
-                return (
-                  <Table.Summary.Cell
-                    key={key}
-                    index={index + 1}
-                    align="left"
-                    className={`listing-management__total-cell listing-management__total-cell--${key}`}
-                  >
-                    <TotalCell columnKey={key} rows={rows} />
-                  </Table.Summary.Cell>
-                );
-              })}
-            </Table.Summary.Row>
-          </Table.Summary>
-        )}
-        footer={() => (
-          <ReportTableSelectionBar
-            selectedCount={selectedRowKeys.length}
-            actions={[{ key: "mark", label: "批量标记", onClick: onBulkMark }]}
-          />
-        )}
+        toolBarRender={false}
+        bordered
+        size="small"
+        scroll={{ x: scrollX }}
+        rowSelection={{
+          fixed: true,
+          selectedRowKeys,
+          columnWidth: 48,
+          onChange: onSelectionChange,
+        }}
         pagination={{
           current: currentPage,
           pageSize,
           total: rows.length,
           showSizeChanger: true,
           showQuickJumper: true,
-          pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (nextPage, nextPageSize) => {
+          pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),
+          showTotal: (total) => `共 ${total.toLocaleString()} 条数据`,
+          onChange: (page, nextPageSize) => {
+            onCurrentPageChange(page);
             if (nextPageSize !== pageSize) onPageSizeChange(nextPageSize);
-            else onCurrentPageChange(nextPage);
           },
         }}
-        locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无匹配 Listing 数据" />,
-        }}
+        footer={() => (
+          <ReportTableSelectionBar
+            selectedCount={selectedRowKeys.length}
+            actions={[
+              {
+                key: "export",
+                label: "导出已选",
+                disabled: selectedRowKeys.length === 0,
+                onClick: onBulkExport,
+              },
+            ]}
+          />
+        )}
       />
     </ReportTableShell>
   );

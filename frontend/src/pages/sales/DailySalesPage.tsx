@@ -1,4 +1,4 @@
-/** Daily-sales No-API shell composed from approved navigation metadata and local acceptance data. */
+/** Daily-sales No-API page: keep behavior, refresh layout to match the unified report pages. */
 import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
@@ -147,25 +147,13 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const toolbarActions = (
     <>
       <Button
-        icon={<CloudDownloadOutlined aria-hidden="true" />}
-        onClick={() => void messageApi.info(EXPORT_PENDING)}
-      >
-        下载
-      </Button>
-      <Button
-        icon={<SettingOutlined aria-hidden="true" />}
-        onClick={() => setColumnConfigOpen(true)}
-      >
-        列配置
-      </Button>
-      <Button
-        icon={statisticsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+        icon={statisticsVisible ? <EyeInvisibleOutlined aria-hidden="true" /> : <EyeOutlined aria-hidden="true" />}
         onClick={() => setStatisticsVisible((visible) => !visible)}
       >
         {statisticsVisible ? "隐藏统计" : "显示统计"}
       </Button>
       <Button
-        icon={chartsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+        icon={chartsVisible ? <EyeInvisibleOutlined aria-hidden="true" /> : <EyeOutlined aria-hidden="true" />}
         onClick={() => setChartsVisible((visible) => !visible)}
       >
         {chartsVisible ? "隐藏图表" : "显示图表"}
@@ -173,10 +161,45 @@ function DailySalesPage({ page }: DailySalesPageProps) {
     </>
   );
 
+  const toolbarIconActions = (
+    <>
+      <Tooltip title="列配置">
+        <Button
+          className="daily-sales__toolbar-icon-button"
+          aria-label="列配置"
+          icon={<SettingOutlined aria-hidden="true" />}
+          onClick={() => setColumnConfigOpen(true)}
+        />
+      </Tooltip>
+      <Tooltip title={EXPORT_PENDING}>
+        <Button
+          className="daily-sales__toolbar-icon-button"
+          aria-label="下载"
+          icon={<CloudDownloadOutlined aria-hidden="true" />}
+          onClick={() => void messageApi.info(EXPORT_PENDING)}
+        />
+      </Tooltip>
+    </>
+  );
+
   return (
     <PageShell page={page} headerActions={headerActions}>
       {messageContextHolder}
       <div className="daily-sales">
+        <section className="daily-sales__page-header" aria-label="每日销售页面说明">
+          <div>
+            <Typography.Title level={3}>每日销售</Typography.Title>
+            <Typography.Paragraph type="secondary">
+              按日期查看 SKU / MSKU 销售、成本、利润、广告费、库存与运营日志数据。
+            </Typography.Paragraph>
+          </div>
+          <div className="daily-sales__page-header-meta">
+            <span>当前筛选</span>
+            <strong>{filteredRows.length.toLocaleString("zh-CN")}</strong>
+            <span>条记录</span>
+          </div>
+        </section>
+
         <Card size="small" className="daily-sales__toolbar-card">
           <DailySalesToolbar
             key={toolbarResetKey}
@@ -184,13 +207,16 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             owners={owners}
             stores={stores}
             actions={toolbarActions}
+            trailingActions={toolbarIconActions}
             onChange={updateFilters}
             onReset={resetFilters}
             onMessage={(content) => void messageApi.info(content)}
           />
         </Card>
+
         {statisticsVisible && <DailySalesSummaryCards rows={filteredRows} currency={filters.currency} />}
         {chartsVisible && <DailySalesCharts rows={filteredRows} currency={filters.currency} />}
+
         <DailySalesTable
           rows={filteredRows}
           currency={filters.currency}

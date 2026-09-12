@@ -1,0 +1,131 @@
+.page-shell:has(> .page-shell__content .settings-management) {
+  overflow: hidden;
+}
+
+.page-shell:has(> .page-shell__content .settings-management) > .page-shell__content {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.settings-management {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  color: #1f2a44;
+}
+
+.settings-management__page-card {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 3%);
+}
+
+.settings-management__page-head {
+  display: flex;
+  flex: 0 0 62px;
+  height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-block-end: 1px solid #e5eaf3;
+}
+
+.settings-management__page-head .ant-typography {
+  margin: 0;
+}
+
+.settings-management__page-head h4.ant-typography {
+  color: #101828;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.user-management__toolbar {
+  display: flex;
+  flex: 0 0 52px;
+  height: 52px;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 10px 16px;
+  background: #fbfdff;
+  border-block-end: 1px solid #edf2f7;
+}
+
+.user-management__toolbar > .ant-select {
+  width: 118px;
+  flex: 0 0 118px;
+}
+
+.user-management__search.ant-input-affix-wrapper {
+  width: 300px;
+  flex: 0 0 300px;
+}
+
+.user-management__table {
+  flex: 1 1 0;
+  min-height: 0;
+  border-radius: 0;
+  border-inline: 0;
+  border-block-end: 0;
+}
+
+.user-management__row-actions {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.user-management__row-actions .ant-btn-link {
+  min-height: 28px;
+  padding-inline: 4px;
+}
+
+.user-management-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.user-role-modal__target {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  margin-block-end: 14px;
+  background: #fbfdff;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+}
+
+.user-role-modal__checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .settings-management__page-head {
+    height: auto;
+    flex-basis: auto;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .user-management-modal__grid,
+  .user-role-modal__checks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

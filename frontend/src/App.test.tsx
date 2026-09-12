@@ -76,9 +76,7 @@ describe("App", () => {
 
     await logIn();
 
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      "今日销售",
-    );
+    expect(screen.getByRole("region", { name: "今日销售" })).toBeVisible();
     expect(screen.getByRole("navigation", { name: "面包屑" })).toHaveTextContent(
       "工作台",
     );

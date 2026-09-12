@@ -1,4 +1,4 @@
-/** Static acceptance data for the Listing Management No-API page shell. */
+/** Listing-management No-API acceptance data; replace it when a real API is approved. */
 export interface ListingManagementRow {
   id: string;
   image: string;
@@ -55,7 +55,7 @@ export const listingColumnFields = [
   { key: "sales90Days", title: "近90天销量" },
   { key: "adSpend30Days", title: "近30天广告费" },
   { key: "disabledReason", title: "停用原因" },
-  { key: "listingStatus", title: "listing状态" },
+  { key: "listingStatus", title: "Listing状态" },
   { key: "buyBoxStatus", title: "购物车状态" },
   { key: "walmartSeller", title: "Walmart卖家" },
   { key: "resold", title: "是否被跟卖" },
@@ -70,40 +70,42 @@ export const listingColumnFields = [
 
 export const fixedListingColumnKeys = ["image", "msku", "productId"];
 
-const stores = ["美国一店", "美国二店", "加拿大店", "验收测试"];
-const owners = ["林晓", "陈宁", "周琳", "赵明"];
-const productTypes = ["常规产品", "季节产品", "组合产品"];
+export const listingStores = ["美国一店", "美国二店", "加拿大店", "验收测试"];
+export const listingOwners = ["林晓", "陈宁", "周琳", "赵明"];
+export const listingProductTypes = ["常规产品", "季节产品", "组合产品"];
 const categories = ["家居", "户外", "厨房", "收纳"];
 const brands = ["NorthPeak", "HomeEase", "DailyNest"];
 const tagPatterns = [["主推"], ["新品"], ["清货"], ["主推", "稳定"]];
+const images = ["🎧", "⌚", "🔋", "☕", "🎒", "📱", "💡", "▤", "🧴", "🍳"];
 
 export const listingManagementMockData: ListingManagementRow[] = Array.from(
-  { length: 50 },
+  { length: 128 },
   (_, index) => {
     const number = index + 1;
     const serial = String(number).padStart(3, "0");
+    const productStatus = index % 9 === 0 ? "停用" : "启用";
     return {
       id: `listing-${serial}`,
-      image: "",
+      image: images[index % images.length],
       msku: `LM-${serial}`,
       productId: `WMT-${124000000 + number}`,
-      store: stores[index % stores.length],
-      owner: owners[index % owners.length],
+      store: listingStores[index % listingStores.length],
+      owner: listingOwners[index % listingOwners.length],
       sku: `SKU-${String(9000 + number)}`,
       productName: `Listing 验收产品 ${serial}`,
       title: `No-API Listing acceptance title ${serial}`,
-      productType: productTypes[index % productTypes.length],
-      listPrice: 19.99 + index,
-      salePrice: 16.99 + index,
-      productStatus: index % 9 === 0 ? "停用" : "启用",
+      productType: listingProductTypes[index % listingProductTypes.length],
+      listPrice: Number((19.99 + index * 0.7).toFixed(2)),
+      salePrice: Number((16.99 + index * 0.65).toFixed(2)),
+      productStatus,
       lifecycle: index % 4 === 0 ? "成长期" : "成熟期",
       listedAt: `2026-08-${String(index % 28 + 1).padStart(2, "0")}`,
       category: categories[index % categories.length],
       wfsAvailableInventory: 40 + index * 3,
       inboundInventory: index % 5 * 12,
       sales90Days: 180 + index * 7,
-      adSpend30Days: 25 + index * 2.4,
-      disabledReason: index % 9 === 0 ? "待接入" : "",
+      adSpend30Days: Number((25 + index * 2.4).toFixed(2)),
+      disabledReason: productStatus === "停用" ? "待复核" : "",
       listingStatus: index % 9 === 0 ? "离线" : "在线",
       buyBoxStatus: index % 6 === 0 ? "未拥有" : "拥有",
       walmartSeller: index % 3 === 0 ? "Walmart" : "第三方卖家",
@@ -118,7 +120,3 @@ export const listingManagementMockData: ListingManagementRow[] = Array.from(
     };
   },
 );
-
-export const listingStores = stores;
-export const listingOwners = owners;
-export const listingProductTypes = productTypes;
