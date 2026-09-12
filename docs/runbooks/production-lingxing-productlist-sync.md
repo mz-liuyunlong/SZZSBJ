@@ -35,8 +35,17 @@ Stop unless every item is confirmed without printing a DSN or credential:
 5. The database account has only the minimum required application and migration privileges.
 6. The migration head, expected schema, capacity, and lock impact have been reviewed.
 
-Run `uv run alembic -c alembic.ini upgrade head` from the merged backend deployment only. If it
-fails, stop before any Token or ProductList request.
+Run the migration from the clean, merged `main` backend deployment with authorization scoped to
+that one command only:
+
+```bash
+PRODUCTION_MIGRATIONS_AUTHORIZED=true uv run alembic -c alembic.ini upgrade head
+```
+
+Do not add `PRODUCTION_MIGRATIONS_AUTHORIZED` to `/etc/APPLICATION/app.env` or any other persistent
+environment file. The command and its output must not print `DATABASE_URL`, database credentials,
+Token material, or Lingxing credentials. If the migration fails, stop before any Token or
+ProductList request.
 
 ## Before the manual run
 
