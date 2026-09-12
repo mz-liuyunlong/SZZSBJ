@@ -1,0 +1,1 @@
+"""SKU detail module tests."""

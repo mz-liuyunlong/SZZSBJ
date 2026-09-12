@@ -1,5 +1,6 @@
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import Self
 from urllib.parse import urlsplit
 
@@ -111,6 +112,10 @@ class Settings(BaseSettings):
     lingxing_allow_full_sync: bool = Field(
         default=False,
         validation_alias="LINGXING_ALLOW_FULL_SYNC",
+    )
+    lingxing_productlist_raw_run_dir: Path | None = Field(
+        default=None,
+        validation_alias="LINGXING_PRODUCTLIST_RAW_RUN_DIR",
     )
 
     @field_validator("database_url", "test_database_url")

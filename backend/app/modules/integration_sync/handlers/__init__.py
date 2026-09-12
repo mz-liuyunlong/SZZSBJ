@@ -1,0 +1,1 @@
+"""Registered integration sync handlers."""

@@ -15,7 +15,7 @@
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
 | Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
-| Integration Sync Governance + Lingxing SKU Detail Foundation V1 | Proposed `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | `approved_for_implementation` 的可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW import、任务骨架与受保护 API contract；尚未实现 |
+| Integration Sync Governance + Lingxing SKU Detail Foundation V1 | `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | 当前实现分支已准备可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW importer、任务骨架与受保护 API contract；合并前仍为 `approved_for_implementation` |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |
@@ -134,17 +134,17 @@
 |---|---|
 | Module name | Integration Sync Governance + Lingxing SKU Detail Foundation V1 |
 | Module key | `integration-sync-governance-backend-v1` |
-| Status | `approved_for_implementation`；Owner 已批准后端实现，尚未实现 |
+| Status | `approved_for_implementation`；当前分支实现已准备并待只读复审，合并前不得标记 `implemented` |
 | Main role | Backend Engineer；implementation branch `feat/integration-sync-governance-backend-v1` |
 | Purpose | 为 Lingxing 及未来 Walmart/Amazon/TEMU source handlers 提供统一 run/config/dependency/event/lock/work-item/retention/parse/lineage 治理，并建设首个 Lingxing SKU identity/detail/DWS 后端链路 |
-| Proposed backend directories | `backend/app/modules/integration_sync/`, `backend/app/modules/sku_detail/`, ordered Alembic revisions, scoped tests and backend API docs |
+| Backend directories | `backend/app/modules/integration_sync/`, `backend/app/modules/sku_detail/`, four ordered Alembic revisions, scoped tests and `docs/api/integration-sync-governance-sku-detail-v1.md` |
 | Governance storage | `gov_integration_interfaces`, `gov_integration_interface_dependencies`, `gov_integration_sync_configs`, `gov_integration_sync_runs`, `gov_integration_sync_run_events`, `gov_integration_sync_locks`, `gov_integration_sync_run_work_items`, `gov_raw_retention_policies`, `gov_parse_jobs`, `gov_data_lineage` |
 | RAW / ODS storage | `ods_api_raw_blobs`, `ods_api_raw_request_refs`, `ods_lingxing_productlist_sku_refs`, `ods_lingxing_product_info_batch_items`; response hash dedup and safe request metadata; no payload API |
 | DWD / DWS storage | `dwd_lingxing_sku_identity_index`, detail snapshots/current, images, global tags, and `dws_sku_base_profile_current`; source-derived/rebuildable, not Product Core authority |
 | Identity contract | `productList.data.id -> lingxing_sku_id`; `batchGetProductInfo.data.sku -> lingxing_sku_code`; no SKU/MSKU/ItemID/internal Product inference |
-| Local import | Approved manifest/checksum-verified importer from the recorded ProductList run outside Git; no provider/Token request; may validate against confirmed local PostgreSQL and skips safely when `DATABASE_URL` is missing |
+| Local import | Manifest/checksum/path/pagination-verified importer implemented for an outside-Git ProductList run; no provider/Token request; live import remains skipped when `DATABASE_URL` is missing |
 | batchGetProductInfo | Approved only for disabled-by-default skeleton/mock/fixture parser and `id_batch_page` work-item foundation; no real parameters, Token, or provider call are approved |
-| Tasks | Approved `execute_sync_run(run_id)` and `scheduler_tick()` Celery skeleton contracts; manual/schedule/retry/backfill/import share the run model; eager/mock/service tests, no live Redis/worker/beat and no RQ |
+| Tasks | `execute_sync_run(run_id)` and `scheduler_tick()` Celery skeleton contracts are present; args contain only run ID, real outbound remains disabled, and tests require no live Redis/worker/beat |
 | API scope | Approved protected `/api/integrations/**` metadata/trigger routes and `/api/products/skus/**` read routes under the existing project `/api/...` convention; unified envelope/request ID; no RAW payload; no frontend |
 | Permission keys | `integrations:read`, `integrations:update`, `integrations:execute`, `integrations:raw_metadata:read`, `products:read`, `products:sync_history:read`, `products:raw_lineage:read`, `products:cost:read`, `products:operation_logs:read` |
 | Data scope | Trusted opaque `source_account_ref` scope must fail closed; confirmed Product mapping additionally uses existing Product scope; roles are not hard-coded |
@@ -154,4 +154,5 @@
 | PRP | `PRPs/integration-sync-governance-backend-v1.md` |
 | Source Decision | `docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md` |
 | PR | TBD |
+| Current branch evidence | Four revisions through `20260912_0006`, 20 approved tables in one metadata, 17 protected routes, synthetic parser/calculation/importer/batch tests; final merge status and PR remain TBD |
 | Not in scope | Frontend/admin-frontend, old-system, real Lingxing/Token/ProductList/batchGetProductInfo calls, production DB/migration, live Redis/Celery, archive transport/deletion, ADS implementation, external provider handlers beyond the reusable contract, deployment, or Git publishing |
