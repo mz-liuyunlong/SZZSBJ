@@ -17,7 +17,7 @@ Source Decisions: docs/decisions/2026-09-12-integration-sync-governance-backend-
 
 Build one backend-only foundation for governed external-interface synchronization and the first Lingxing SKU-detail pipeline. This is not a standalone ProductList feature. It establishes reusable PostgreSQL, Alembic, RAW/ODS, DWD, DWS, run governance, import, task-orchestration, and protected FastAPI contracts that later Lingxing, Walmart, Amazon, and TEMU integrations can reuse.
 
-PR #61 implemented the original foundation without production migration or real provider requests. The 2026-09-13 Source Decision now authorizes a separate ProductList-only follow-on implementation and controlled server execution against `szzsbj_app`; it does not authorize `batchGetProductInfo`, other Lingxing interfaces, automatic scheduling, frontend work, or server-side development outside a merged PR.
+PR #61 implemented the original foundation without production migration or real provider requests. The 2026-09-13 Source Decision now authorizes a separate ProductList-only follow-on implementation and controlled server execution against `APPLICATION_DATABASE`; it does not authorize `batchGetProductInfo`, other Lingxing interfaces, automatic scheduling, frontend work, or server-side development outside a merged PR.
 
 ### 1.1 Authorized implementation deliverables
 
@@ -93,7 +93,7 @@ The controlled capture proves only that the recorded ProductLists run completed 
 - Any frontend or `admin-frontend` implementation.
 - Any `old-system/**` read, import, runtime dependency, or modification.
 - Real Lingxing/Token/business API requests other than the ProductList-only follow-on explicitly authorized by the 2026-09-13 Source Decision; `batchGetProductInfo` remains prohibited.
-- Server database connection, migration or deployment outside the exact `szzsbj_app` preconditions and post-merge manual execution authorized by the 2026-09-13 Source Decision.
+- Server database connection, migration or deployment outside the exact `APPLICATION_DATABASE` preconditions and post-merge manual execution authorized by the 2026-09-13 Source Decision.
 - RAW artifacts, real response payloads, or business identifiers in Git/tests/docs/logs.
 - Redis persistence validation or starting a live Celery worker/beat process.
 - RQ or a second job system.
@@ -119,7 +119,7 @@ The first decision authorized the foundation implemented in PR #61 without real 
 | Governance configs, runs, locks, events, work items, parse jobs, lineage | `NEW_SYSTEM_OWNED` | Written only by approved backend services; no external system may overwrite governance state. |
 | ProductLists local capture files | L1/L2 evidence; `ARCHIVE_ONLY` as local artifacts | Import source only; never an online API source and never committed. |
 | ProductLists identities | Lingxing external source; `REBUILD_SYNC` | Imported/synchronized into new-system ODS and L6 identity records before API use. |
-| ProductLists formal server sync | Lingxing external source; `REBUILD_SYNC` | May write credential-redacted RAW/request evidence, governed run/work-item state, ProductList SKU refs and identity upserts only to `szzsbj_app`, with manual trigger and `schedule_enabled=false`. |
+| ProductLists formal server sync | Lingxing external source; `REBUILD_SYNC` | May write credential-redacted RAW/request evidence, governed run/work-item state, ProductList SKU refs and identity upserts only to `APPLICATION_DATABASE`, with manual trigger and `schedule_enabled=false`. |
 | batchGetProductInfo detail fields | Lingxing external source; `REBUILD_SYNC` implementation foundation | Only skeleton/mock/fixture parsing and `id_batch_page` work-item infrastructure are approved. Real calls and unverified provider parameters remain blocked pending separate official evidence and Owner authorization. |
 | DWS values | New-system derived projection | Rebuildable from approved DWD snapshots using versioned formulas; never independent authority. |
 | Existing `products` and `product_platform_listings` | Existing `NEW_SYSTEM_OWNED` authority | No overwrite from Lingxing. A link requires explicit identity evidence; SKU string equality is not sufficient. |
@@ -128,7 +128,7 @@ Implementation stop conditions:
 
 - The requested implementation differs from this PRP or the linked Source Decision.
 - Any real Lingxing or Token request outside the ProductList-only 2026-09-13 authorization is required.
-- Any implementation requires credentials in code/Git/output, captured RAW artifacts in Git, database access outside `szzsbj_app`, frontend/admin-frontend, or old-system access.
+- Any implementation requires credentials in code/Git/output, captured RAW artifacts in Git, database access outside `APPLICATION_DATABASE`, frontend/admin-frontend, or old-system access.
 - A migration, identity, currency, data-scope, or provider contract conflicts with the linked Source Decision.
 
 ## 6. Mandatory business rules
@@ -741,7 +741,7 @@ Approval gates:
 - [x] The Owner Source Decision is recorded and the implementation gate is approved.
 - [x] The data-layer prefixes and existing project `/api/...` path convention are approved.
 - [x] The Owner implementation branch and PRP allowlist are identified as `feat/integration-sync-governance-backend-v1` and this PRP.
-- [x] Original V1 local RAW import implementation and confirmed-local-PostgreSQL validation were approved without server database access; the later ProductList-only `szzsbj_app` authorization is governed separately by the 2026-09-13 Source Decision.
+- [x] Original V1 local RAW import implementation and confirmed-local-PostgreSQL validation were approved without server database access; the later ProductList-only `APPLICATION_DATABASE` authorization is governed separately by the 2026-09-13 Source Decision.
 
 ## 22. Forbidden actions
 
@@ -763,7 +763,7 @@ Approval gates:
 4. `source_account_ref` is an opaque non-secret logical account identifier. Local import may use `default`; protected APIs still fail closed until their trusted account-scope provider supplies allowed refs.
 5. batchGetProductInfo is approved only as skeleton/mock/fixture parser and `id_batch_page` work-item foundation. Real parameters, limits, retry/rate behavior, Token use, and provider calls require later official evidence and separate Owner authorization.
 6. `data.bg_customs_import_price` maps to `customs_declared_unit_price`; nullable `customs_declared_currency` remains `NULL` when provider currency is absent. `purchase_cost_cny` is CNY and US first-leg currency comes only from `data.product_logistics_relation.US_currency`.
-7. The original local RAW importer validation did not authorize server database access. The 2026-09-13 Source Decision separately authorizes `alembic upgrade head` and ProductList-only writes to `szzsbj_app` after the follow-on implementation is merged.
+7. The original local RAW importer validation did not authorize server database access. The 2026-09-13 Source Decision separately authorizes `alembic upgrade head` and ProductList-only writes to `APPLICATION_DATABASE` after the follow-on implementation is merged.
 
 The original backend foundation was implemented in PR #61. The next implementation may begin only on `feat/production-lingxing-productlist-sync`, after a separate Owner prompt, and within section 24 plus the 2026-09-13 Source Decision. It must not commit RAW artifacts, modify frontend/admin-frontend or old-system, enable schedules, call `batchGetProductInfo` or other Lingxing endpoints, or continue when requirements diverge from the approved boundary.
 
@@ -773,7 +773,7 @@ The Project Owner authorizes the next phase to implement and, after its code PR 
 
 Authorized database and write boundary:
 
-- Formal application database name: `szzsbj_app`; it is not named or classified as a `test`, `staging`, `dev`, or `prod` database.
+- Formal application database name: `APPLICATION_DATABASE`; it is not named or classified as a `test`, `staging`, `dev`, or `prod` database.
 - `alembic upgrade head` may run only after target verification, backup/snapshot confirmation and deployment from merged `main`.
 - ProductList response RAW may write only to `ods_api_raw_blobs`.
 - Safe ProductList request metadata may write only to `ods_api_raw_request_refs`.

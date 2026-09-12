@@ -12,14 +12,14 @@ Lingxing Token Request Permission: Yes, only for the authorized ProductList run
 batchGetProductInfo Real Call Permission: No
 Initial Trigger: Manual only
 Initial schedule_enabled: false
-Formal Application Database: szzsbj_app
+Formal Application Database: APPLICATION_DATABASE
 ```
 
 ## 1. 正式决定
 
-项目负责人正式批准下一阶段实现并执行服务器 Lingxing ProductList 同步。该授权只适用于 `/erp/sc/routing/data/local_inventory/productList`，只允许从已合并 `main` 部署的代码执行，并只允许将获批记录写入 PostgreSQL 正式应用数据库 `szzsbj_app`。
+项目负责人正式批准下一阶段实现并执行服务器 Lingxing ProductList 同步。该授权只适用于 `/erp/sc/routing/data/local_inventory/productList`，只允许从已合并 `main` 部署的代码执行，并只允许将获批记录写入 PostgreSQL 正式应用数据库 `APPLICATION_DATABASE`。
 
-`szzsbj_app` 是固定的正式应用数据库名，不以 `test`、`staging`、`dev` 或 `prod` 命名，也不得被描述为这些临时库之一。本决定不授权在当前 docs-only 分支连接服务器、数据库、请求 Token 或调用 Lingxing。
+`APPLICATION_DATABASE` 是固定的正式应用数据库名，不以 `test`、`staging`、`dev` 或 `prod` 命名，也不得被描述为这些临时库之一。本决定不授权在当前 docs-only 分支连接服务器、数据库、请求 Token 或调用 Lingxing。
 
 本决定是对 `docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md` 的限定后续授权：PR #61 的历史实现边界不变；仅下一阶段 ProductList 正式链路解除真实 Token、真实 ProductList 和指定新系统表写入禁令。其他 Lingxing 接口继续 fail closed。
 
@@ -27,12 +27,12 @@ Formal Application Database: szzsbj_app
 
 | 数据对象 | 来源与分层 | 正式决定 |
 |---|---|---|
-| ProductList response | Lingxing L0 来源；L2 RAW evidence | 凭据脱敏后写入 `szzsbj_app` 数据库中的 `ods_api_raw_blobs`，不是业务权威表 |
-| ProductList request metadata | 新系统 L1/L12 请求证据 | 安全元数据写入 `szzsbj_app` 数据库中的 `ods_api_raw_request_refs`；不得包含认证 query、完整 URL 或 payload |
-| Sync run | `NEW_SYSTEM_OWNED` governance | 写入 `szzsbj_app` 数据库中的 `gov_integration_sync_runs` |
-| Sync work item | `NEW_SYSTEM_OWNED` governance | 每个分页工作项写入 `szzsbj_app` 数据库中的 `gov_integration_sync_run_work_items` |
-| ProductList SKU reference | Lingxing-derived L3 evidence | 从 `productList.data.id` 或 response `data.id` 提取 `lingxing_sku_id`，写入 `szzsbj_app` 数据库中的 `ods_lingxing_productlist_sku_refs` |
-| Lingxing SKU identity index | Lingxing-derived L6 identity | 幂等 upsert `szzsbj_app` 数据库中的 `dwd_lingxing_sku_identity_index`；不得用 SKU code、MSKU、ItemID 或名称推导身份 |
+| ProductList response | Lingxing L0 来源；L2 RAW evidence | 凭据脱敏后写入 `APPLICATION_DATABASE` 数据库中的 `ods_api_raw_blobs`，不是业务权威表 |
+| ProductList request metadata | 新系统 L1/L12 请求证据 | 安全元数据写入 `APPLICATION_DATABASE` 数据库中的 `ods_api_raw_request_refs`；不得包含认证 query、完整 URL 或 payload |
+| Sync run | `NEW_SYSTEM_OWNED` governance | 写入 `APPLICATION_DATABASE` 数据库中的 `gov_integration_sync_runs` |
+| Sync work item | `NEW_SYSTEM_OWNED` governance | 每个分页工作项写入 `APPLICATION_DATABASE` 数据库中的 `gov_integration_sync_run_work_items` |
+| ProductList SKU reference | Lingxing-derived L3 evidence | 从 `productList.data.id` 或 response `data.id` 提取 `lingxing_sku_id`，写入 `APPLICATION_DATABASE` 数据库中的 `ods_lingxing_productlist_sku_refs` |
+| Lingxing SKU identity index | Lingxing-derived L6 identity | 幂等 upsert `APPLICATION_DATABASE` 数据库中的 `dwd_lingxing_sku_identity_index`；不得用 SKU code、MSKU、ItemID 或名称推导身份 |
 
 RAW 是可回放证据，不是前端或业务 API 的直接真源。服务器保存 RAW 到数据库不等于允许把 RAW JSON、归档包或商品字段值提交到 Git、日志、错误信息或任务输出。
 
@@ -42,7 +42,7 @@ RAW 是可回放证据，不是前端或业务 API 的直接真源。服务器�
 
 1. 在服务器正式环境请求 Lingxing ProductList。
 2. 为 ProductList 请求受控获取或刷新 Token。
-3. 在执行前对 `szzsbj_app` 执行 `alembic upgrade head`。
+3. 在执行前对 `APPLICATION_DATABASE` 执行 `alembic upgrade head`。
 4. 将凭据脱敏后的 ProductList RAW response 写入 `ods_api_raw_blobs`。
 5. 将 ProductList request metadata 写入 `ods_api_raw_request_refs`。
 6. 写入 `gov_integration_sync_runs`。
@@ -60,11 +60,11 @@ RAW 是可回放证据，不是前端或业务 API 的直接真源。服务器�
 
 执行前必须逐项确认：
 
-1. 服务器已存在 PostgreSQL 数据库 `szzsbj_app`。
-2. `DATABASE_URL` 明确指向 `szzsbj_app`。
+1. 服务器已存在 PostgreSQL 数据库 `APPLICATION_DATABASE`。
+2. `DATABASE_URL` 明确指向 `APPLICATION_DATABASE`。
 3. `DATABASE_URL` 不指向旧系统 MySQL。
 4. `DATABASE_URL` 不指向承载旧 `raw_lingxing_api` 的数据库。
-5. `szzsbj_app` 是新建正式应用数据库，或执行前已具备可验证的备份/snapshot。
+5. `APPLICATION_DATABASE` 是新建正式应用数据库，或执行前已具备可验证的备份/snapshot。
 6. 环境变量只通过受控 env 文件、部署平台或 secret manager 注入，不进入 Git、文档、命令输出或聊天。
 7. 数据库账号遵循最小权限；本授权不包含数据库超级用户或跨库写权限。
 8. ProductList interface、retention policy 与 sync config 等执行前置记录必须已由合并代码和已批准流程建立；如缺失或需要写入本决策未批准的其他表，必须停止并申请单独授权，禁止临时手工补写。
@@ -103,7 +103,7 @@ RAW 是可回放证据，不是前端或业务 API 的直接真源。服务器�
 
 出现以下任一情况必须停止 migration 或同步，且不得通过放宽校验继续：
 
-- 数据库不存在、目标库不是 `szzsbj_app`、数据库归属无法确认或缺少备份/snapshot。
+- 数据库不存在、目标库不是 `APPLICATION_DATABASE`、数据库归属无法确认或缺少备份/snapshot。
 - `DATABASE_URL` 目标不明确、可能指向 MySQL、旧 RAW 库或其他数据库。
 - 部署代码不是已合并 `main`，或服务器工作区存在临时修改。
 - ProductList interface、retention policy 或 sync config 等前置记录缺失，或需要调用 ProductList 之外的接口，或需要写入授权清单之外的表。
@@ -142,4 +142,4 @@ RAW 是可回放证据，不是前端或业务 API 的直接真源。服务器�
 
 ## 10. Owner approval record
 
-Project Owner 于 2026-09-13 批准本文件所列 ProductList-only 实现、`szzsbj_app` migration 和第一次 manual server execution。该批准不包括 `batchGetProductInfo`、其他 Lingxing 接口、自动调度、前端、旧系统、旧 MySQL、旧 `raw_lingxing_api` 或 RAW 文件入 Git。
+Project Owner 于 2026-09-13 批准本文件所列 ProductList-only 实现、`APPLICATION_DATABASE` migration 和第一次 manual server execution。该批准不包括 `batchGetProductInfo`、其他 Lingxing 接口、自动调度、前端、旧系统、旧 MySQL、旧 `raw_lingxing_api` 或 RAW 文件入 Git。
