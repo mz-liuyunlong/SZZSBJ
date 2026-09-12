@@ -42,6 +42,8 @@ from app.modules.integration_sync.schemas import (
 SYNC_INTERFACE_DISABLED = "SYNC_INTERFACE_DISABLED"
 SYNC_RUN_NOT_RETRYABLE = "SYNC_RUN_NOT_RETRYABLE"
 SYNC_RUN_ALREADY_RUNNING = "SYNC_RUN_ALREADY_RUNNING"
+SYNC_PRODUCTLIST_ONLY = "SYNC_PRODUCTLIST_ONLY"
+SYNC_PRODUCTLIST_MANUAL_ONLY = "SYNC_PRODUCTLIST_MANUAL_ONLY"
 
 audit_logger = logging.getLogger("app.audit.integration_sync")
 
@@ -94,6 +96,14 @@ class IntegrationSyncService:
         schedule_cron = values.get("schedule_cron", config.schedule_cron)
         if schedule_enabled and not schedule_cron:
             raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
+        if schedule_enabled:
+            interface = self.repository.get_interface(config.interface_id)
+            if (
+                interface is not None
+                and interface.provider == "lingxing"
+                and interface.interface_key == "productList"
+            ):
+                raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         try:
             self.repository.update_config(config, values)
             self.session.commit()
@@ -128,6 +138,7 @@ class IntegrationSyncService:
             actor_ref=actor_ref,
             request_id=request_id,
             account_refs=account_refs,
+            productlist_only=True,
         )
 
     def create_backfill_run(
@@ -160,6 +171,8 @@ class IntegrationSyncService:
         account_refs: frozenset[str],
     ) -> SyncRunCreated:
         source = self._require_run(source_run_id, account_refs)
+        if source.provider == "lingxing" and source.interface_key == "productList":
+            raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         if source.status not in {RunStatus.FAILED, RunStatus.CANCELED}:
             raise ApiError(code=SYNC_RUN_NOT_RETRYABLE, status_code=409)
         run = self._new_run(
@@ -261,6 +274,7 @@ class IntegrationSyncService:
         account_refs: frozenset[str],
         window_start: datetime | None = None,
         window_end: datetime | None = None,
+        productlist_only: bool = False,
     ) -> SyncRunCreated:
         config = self._require_config(config_id, account_refs)
         interface = self.repository.get_interface(config.interface_id)
@@ -268,6 +282,17 @@ class IntegrationSyncService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         if not config.is_enabled or not interface.outbound_enabled:
             raise ApiError(code=SYNC_INTERFACE_DISABLED, status_code=409)
+        is_productlist = (
+            interface.provider == "lingxing"
+            and interface.interface_key == "productList"
+            and interface.method == "POST"
+            and interface.endpoint_path == "/erp/sc/routing/data/local_inventory/productList"
+            and interface.request_kind == "offset_page"
+        )
+        if productlist_only and not is_productlist:
+            raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
+        if is_productlist and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
+            raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         run = self._new_run(
             config_id=config.id,
             interface_id=interface.id,
@@ -281,7 +306,7 @@ class IntegrationSyncService:
             window_start=window_start,
             window_end=window_end,
         )
-        return self._persist_queued_run(run, actor_ref)
+        return self._persist_queued_run(run, actor_ref, record_event=not is_productlist)
 
     def _new_run(
         self,
@@ -330,7 +355,13 @@ class IntegrationSyncService:
             records_written=0,
         )
 
-    def _persist_queued_run(self, run: IntegrationSyncRun, actor_ref: str) -> SyncRunCreated:
+    def _persist_queued_run(
+        self,
+        run: IntegrationSyncRun,
+        actor_ref: str,
+        *,
+        record_event: bool = True,
+    ) -> SyncRunCreated:
         if (
             run.id is not None
             and self.repository.find_run_by_idempotency(run.idempotency_key) is run
@@ -338,19 +369,20 @@ class IntegrationSyncService:
             return self._created(run)
         try:
             self.repository.add_run(run)
-            self.repository.add_event(
-                IntegrationSyncRunEvent(
-                    run_id=run.id,
-                    sequence_no=1,
-                    event_type="state_transition",
-                    from_status=None,
-                    to_status=RunStatus.QUEUED.value,
-                    message_code="SYNC_RUN_QUEUED",
-                    safe_details=None,
-                    occurred_at=utc_now(),
-                    actor_ref=actor_ref,
+            if record_event:
+                self.repository.add_event(
+                    IntegrationSyncRunEvent(
+                        run_id=run.id,
+                        sequence_no=1,
+                        event_type="state_transition",
+                        from_status=None,
+                        to_status=RunStatus.QUEUED.value,
+                        message_code="SYNC_RUN_QUEUED",
+                        safe_details=None,
+                        occurred_at=utc_now(),
+                        actor_ref=actor_ref,
+                    )
                 )
-            )
             self.session.commit()
         except IntegrityError:
             self.session.rollback()

@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     LingxingBatchGetProductInfoSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_product_list_sync import (
+    LingxingProductListSyncHandler,
+)
 from app.modules.integration_sync.models import (
     IntegrationSyncLock,
     IntegrationSyncRun,
@@ -31,6 +34,9 @@ class SyncRunExecutionService:
         interface = self.repository.get_interface(run.interface_id)
         if interface is None:
             self._fail(run, "SYNC_INTERFACE_NOT_FOUND")
+            return
+        if run.provider == "lingxing" and run.interface_key == "productList":
+            LingxingProductListSyncHandler(self.session).execute(run, interface)
             return
         now = utc_now()
         existing_lock = self.repository.get_lock_for_interface(run.provider, run.interface_key)

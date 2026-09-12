@@ -1,7 +1,8 @@
 # Integration Sync Governance + Lingxing SKU Detail V1 API
 
-Status: implementation prepared on `feat/integration-sync-governance-backend-v1`; remains
-`approved_for_implementation` until review and merge.
+Status: foundation implemented in PR #61; ProductList-only formal server sync implementation is
+prepared on `feat/production-lingxing-productlist-sync` and remains unexecuted until review, merge,
+deployment, and a separate Owner manual trigger.
 
 ## Contract boundary
 
@@ -14,7 +15,9 @@ Status: implementation prepared on `feat/integration-sync-governance-backend-v1`
 - Pagination: `page >= 1`, `1 <= page_size <= 100`, deterministic ID tie-breakers.
 - Freshness: non-empty reads derive `meta.freshness_at` only from persisted run, snapshot,
   RAW-reference, identity, event, or calculation timestamps; it is not a real-time SLA.
-- External effects: routes never request a Token, call Lingxing, read local RAW, or contact Redis.
+- External effects: read routes never call a provider. The protected ProductList manual-run route
+  dispatches work; only the merged server deployment may invoke the approved Token and ProductList
+  transports. Tests use fakes/`MockTransport` only.
 - RAW boundary: only request/blob metadata is serializable; `payload_json`, source values,
   archive URI values, auth material, and full ID batches are excluded.
 
@@ -25,9 +28,9 @@ Status: implementation prepared on `feat/integration-sync-governance-backend-v1`
 | `GET /api/integrations/interfaces` | `integrations:read` | `provider?`, `enabled?`, pagination | Safe interface catalog page | `gov_integration_interfaces` | Read-only; global catalog metadata; no base URL or credentials |
 | `GET /api/integrations/sync-configs` | `integrations:read` | Safe filters and pagination | Account-scoped safe configs | `gov_integration_sync_configs` | Read-only; account-scoped |
 | `PATCH /api/integrations/sync-configs/{config_id}` | `integrations:update` | Allowlisted schedule/page/batch/retention fields | Updated safe config | `gov_integration_sync_configs` | Audit records actor/request ID and changed field names only; cannot change account, interface, credential, or transport |
-| `POST /api/integrations/sync-configs/{config_id}/run` | `integrations:execute` | Required `reason`; optional idempotency key | Queued manual run; HTTP 202 | `gov_integration_sync_runs` | High-risk trigger; disabled config/interface fails closed; no inline work |
-| `POST /api/integrations/sync-runs/{run_id}/retry` | `integrations:execute` | Required `reason`; optional idempotency key | Queued retry run; HTTP 202 | `gov_integration_sync_runs` | Failed/canceled runs only; links retry source |
-| `POST /api/integrations/sync-configs/{config_id}/backfill` | `integrations:execute` | UTC window, required reason, optional idempotency key | Queued backfill run; HTTP 202 | `gov_integration_sync_runs` | Bounded contract only; real provider execution remains disabled |
+| `POST /api/integrations/sync-configs/{config_id}/run` | `integrations:execute` | Required `reason`; optional idempotency key | Queued manual ProductList run; HTTP 202 | `gov_integration_sync_runs` | Exact Lingxing ProductList config only; requires enabled config/interface and `schedule_enabled=false`; no inline provider work |
+| `POST /api/integrations/sync-runs/{run_id}/retry` | `integrations:execute` | Required `reason`; optional idempotency key | Queued retry run; HTTP 202 | `gov_integration_sync_runs` | ProductList retries are refused by the current manual-only authorization |
+| `POST /api/integrations/sync-configs/{config_id}/backfill` | `integrations:execute` | UTC window, required reason, optional idempotency key | Queued backfill run; HTTP 202 | `gov_integration_sync_runs` | ProductList backfills are refused; other real provider execution remains disabled |
 | `GET /api/integrations/sync-runs` | `integrations:read` | Safe status/trigger/time filters and pagination | Sanitized run page | `gov_integration_sync_runs` | Read-only; account-scoped; counters/codes only |
 | `GET /api/integrations/sync-runs/{run_id}` | `integrations:read` | UUID path ID | Sanitized run | `gov_integration_sync_runs` | Read-only; account-scoped |
 | `GET /api/integrations/sync-runs/{run_id}/work-items` | `integrations:read` | Safe filters and pagination | Work-item metadata | `gov_integration_sync_run_work_items` | Read-only; no complete external ID list |
@@ -58,6 +61,8 @@ provider SKU ID or SKU code.
 | 404 | `NOT_FOUND` | Resource absent or outside visible scope |
 | 409 | `SYNC_RUN_ALREADY_RUNNING` | Provider/interface concurrency conflict |
 | 409 | `SYNC_INTERFACE_DISABLED` | Config or outbound interface is disabled |
+| 409 | `SYNC_PRODUCTLIST_ONLY` | Manual execution target is not the approved ProductList interface |
+| 409 | `SYNC_PRODUCTLIST_MANUAL_ONLY` | ProductList schedule, retry, or backfill is not authorized |
 | 409 | `SYNC_RUN_NOT_RETRYABLE` | Source run cannot be retried |
 | 422 | `VALIDATION_ERROR` | Path/query/body/range/config validation failed |
 | 500 | `INTERNAL_ERROR` | Safe generic server failure |
@@ -83,6 +88,8 @@ an upload endpoint.
 
 ## Explicit exclusions
 
-No frontend, real Lingxing/Token/ProductList/batchGetProductInfo request, production migration,
-production database, live Redis/worker/beat, RAW archive/deletion transport, ADS implementation,
-Product Core overwrite, SKU-string identity inference, or captured RAW artifact is included.
+This implementation task performs no real Lingxing/Token/ProductList request, database connection,
+production migration, or server action. After merge, only the Owner-authorized manual ProductList
+path may run. No frontend, real `batchGetProductInfo` or other provider request, automatic schedule,
+RAW archive/deletion transport, ADS implementation, Product Core overwrite, SKU-string identity
+inference, or captured RAW artifact is included.

@@ -25,6 +25,8 @@ class IntegrationSchedulerService:
                 interface = self.repository.get_interface(config.interface_id)
                 if interface is None or not interface.outbound_enabled:
                     continue
+                if interface.provider == "lingxing" and interface.interface_key == "productList":
+                    continue
                 if config.next_run_at is None:
                     continue
                 key = f"schedule:{config.id}:{config.next_run_at.isoformat()}"
