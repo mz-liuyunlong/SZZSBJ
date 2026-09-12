@@ -1,21 +1,23 @@
 # PRP: Integration Sync Governance + Lingxing SKU Detail Foundation V1
 
 ```text
-Status: Approved — Owner Authorized for Backend Implementation
-Owner Approval Required: Yes
-Implementation Authorized: Yes
+Status: Implemented in PR #61 — Production ProductList Follow-on Authorized
+Owner Approval Required: Completed for the 2026-09-13 ProductList-only production sync gate
+Original Foundation Implementation: Implemented in PR #61, merge commit e8bc130
+Production ProductList Follow-on Implementation Authorized: Yes, only on feat/production-lingxing-productlist-sync after a separate implementation prompt
 Main Implementation Role After Approval: Backend Engineer
 Frontend Implementation: Forbidden in this scope
-Real Lingxing or Token Requests: Forbidden in this scope
+ProductList and Required Token Requests: Authorized only by docs/decisions/2026-09-13-production-lingxing-productlist-sync-source-decision.md
+batchGetProductInfo or Other Lingxing Requests: Forbidden
 Source Decision Gate: APPROVED_BY_OWNER_DECISION
-Source Decision: docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md
+Source Decisions: docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md; docs/decisions/2026-09-13-production-lingxing-productlist-sync-source-decision.md
 ```
 
 ## 1. Goal
 
 Build one backend-only foundation for governed external-interface synchronization and the first Lingxing SKU-detail pipeline. This is not a standalone ProductList feature. It establishes reusable PostgreSQL, Alembic, RAW/ODS, DWD, DWS, run governance, import, task-orchestration, and protected FastAPI contracts that later Lingxing, Walmart, Amazon, and TEMU integrations can reuse.
 
-The authorized implementation task must remain within this exact PRP. Approval of this PRP does not authorize a production migration, a real Lingxing call, a Token request, deployment, or any frontend work.
+PR #61 implemented the original foundation without production migration or real provider requests. The 2026-09-13 Source Decision now authorizes a separate ProductList-only follow-on implementation and controlled server execution against `szzsbj_app`; it does not authorize `batchGetProductInfo`, other Lingxing interfaces, automatic scheduling, frontend work, or server-side development outside a merged PR.
 
 ### 1.1 Authorized implementation deliverables
 
@@ -90,8 +92,8 @@ The controlled capture proves only that the recorded ProductLists run completed 
 
 - Any frontend or `admin-frontend` implementation.
 - Any `old-system/**` read, import, runtime dependency, or modification.
-- Real Lingxing/Token/business API requests, including batchGetProductInfo.
-- A production database connection, production SQL, production migration, or deployment.
+- Real Lingxing/Token/business API requests other than the ProductList-only follow-on explicitly authorized by the 2026-09-13 Source Decision; `batchGetProductInfo` remains prohibited.
+- Server database connection, migration or deployment outside the exact `szzsbj_app` preconditions and post-merge manual execution authorized by the 2026-09-13 Source Decision.
 - RAW artifacts, real response payloads, or business identifiers in Git/tests/docs/logs.
 - Redis persistence validation or starting a live Celery worker/beat process.
 - RQ or a second job system.
@@ -103,19 +105,21 @@ The controlled capture proves only that the recorded ProductLists run completed 
 
 ## 5. Source Decision and approval gate
 
-The Owner decision is recorded in:
+The original foundation decision and the ProductList-only follow-on decision are recorded in:
 
 ```text
 docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md
+docs/decisions/2026-09-13-production-lingxing-productlist-sync-source-decision.md
 ```
 
-That decision authorizes the backend implementation branch `feat/integration-sync-governance-backend-v1` for this PRP only. It approves the classifications and contracts below for implementation while keeping every real Lingxing, Token, ProductList, and batchGetProductInfo request prohibited.
+The first decision authorized the foundation implemented in PR #61 without real provider calls. The second decision authorizes `feat/production-lingxing-productlist-sync` to implement and, only after merge to `main`, execute the ProductList-only formal server path. All other real Lingxing interfaces, including `batchGetProductInfo`, remain prohibited.
 
 | Dataset/field group | Proposed authority/classification | Rule |
 |---|---|---|
 | Governance configs, runs, locks, events, work items, parse jobs, lineage | `NEW_SYSTEM_OWNED` | Written only by approved backend services; no external system may overwrite governance state. |
 | ProductLists local capture files | L1/L2 evidence; `ARCHIVE_ONLY` as local artifacts | Import source only; never an online API source and never committed. |
 | ProductLists identities | Lingxing external source; `REBUILD_SYNC` | Imported/synchronized into new-system ODS and L6 identity records before API use. |
+| ProductLists formal server sync | Lingxing external source; `REBUILD_SYNC` | May write credential-redacted RAW/request evidence, governed run/work-item state, ProductList SKU refs and identity upserts only to `szzsbj_app`, with manual trigger and `schedule_enabled=false`. |
 | batchGetProductInfo detail fields | Lingxing external source; `REBUILD_SYNC` implementation foundation | Only skeleton/mock/fixture parsing and `id_batch_page` work-item infrastructure are approved. Real calls and unverified provider parameters remain blocked pending separate official evidence and Owner authorization. |
 | DWS values | New-system derived projection | Rebuildable from approved DWD snapshots using versioned formulas; never independent authority. |
 | Existing `products` and `product_platform_listings` | Existing `NEW_SYSTEM_OWNED` authority | No overwrite from Lingxing. A link requires explicit identity evidence; SKU string equality is not sufficient. |
@@ -123,8 +127,8 @@ That decision authorizes the backend implementation branch `feat/integration-syn
 Implementation stop conditions:
 
 - The requested implementation differs from this PRP or the linked Source Decision.
-- Any real Lingxing, Token, ProductList, or batchGetProductInfo request is required.
-- Any implementation requires credentials, captured RAW artifacts in Git, production database access, frontend/admin-frontend, or old-system access.
+- Any real Lingxing or Token request outside the ProductList-only 2026-09-13 authorization is required.
+- Any implementation requires credentials in code/Git/output, captured RAW artifacts in Git, database access outside `szzsbj_app`, frontend/admin-frontend, or old-system access.
 - A migration, identity, currency, data-scope, or provider contract conflicts with the linked Source Decision.
 
 ## 6. Mandatory business rules
@@ -142,7 +146,7 @@ Implementation stop conditions:
 11. Manual, schedule, retry, backfill, and import triggers use the same `gov_integration_sync_runs` and execution service boundary.
 12. At most one run with `status=running` may exist for one `provider + interface_key`, regardless of source account.
 13. RAW payloads require retention policy, content hashing, archive metadata, and storage-mode state; main-database storage is not indefinite by default.
-14. V1 must not make any real Lingxing or Token request. A future real call requires a separate Owner authorization.
+14. Original V1 implementation made no real Lingxing or Token request. The separate 2026-09-13 authorization permits only ProductList and its required Token flow after the follow-on code is merged; every other endpoint remains fail closed.
 15. IDs are opaque strings; SKU, MSKU, ItemID, Lingxing SKU ID, Lingxing SKU code, internal product ID, and listing ID must never be inferred from one another.
 16. All timestamps are timezone-aware UTC. Source timestamps remain separate from ingestion timestamps.
 17. All monetary values use `Numeric(18,4)`/`Decimal` and a currency companion field. No conversion or assumed currency is allowed. `purchase_cost_cny` has companion `CNY`; `customs_declared_currency` remains nullable and is `NULL` when the provider supplies no currency; US first-leg currency comes only from `data.product_logistics_relation.US_currency`.
@@ -716,7 +720,9 @@ This is intentionally a broad but single backend foundation because governance/r
 
 Do not split out an incomplete API that reads RAW directly. If implementation cannot complete the full accepted contract safely, stop and return to the Owner rather than declaring a partial capability ready.
 
-## 21. Acceptance checklist for the authorized implementation
+## 21. Acceptance checklist for the original PR #61 implementation
+
+The checklist below records the completed foundation implementation boundary. It is not the acceptance checklist for the separately authorized formal server ProductList work in Section 24.
 
 - [ ] No files under `frontend/**` or `admin-frontend/**` are modified.
 - [ ] No files under `old-system/**` are read or modified.
@@ -735,13 +741,13 @@ Approval gates:
 - [x] The Owner Source Decision is recorded and the implementation gate is approved.
 - [x] The data-layer prefixes and existing project `/api/...` path convention are approved.
 - [x] The Owner implementation branch and PRP allowlist are identified as `feat/integration-sync-governance-backend-v1` and this PRP.
-- [x] Local RAW import implementation and confirmed-local-PostgreSQL validation are approved; production database access and production migration remain prohibited.
+- [x] Original V1 local RAW import implementation and confirmed-local-PostgreSQL validation were approved without server database access; the later ProductList-only `szzsbj_app` authorization is governed separately by the 2026-09-13 Source Decision.
 
 ## 22. Forbidden actions
 
-- Treating this approval as authorization for anything beyond this PRP or for any real external request.
+- Treating this approval as authorization for any real external request other than the exact ProductList-only follow-on in the 2026-09-13 Source Decision.
 - Reading/printing/committing the captured RAW pages or archives during PRP work.
-- Real Lingxing/Token requests in implementation or tests.
+- Real Lingxing/Token requests in PR #61, tests, or any endpoint outside the post-merge ProductList-only controlled execution.
 - Enabling real calls, full sync, schedules, Redis workers, or production migrations by default.
 - Putting credentials, auth query/header data, external ID lists, RAW payloads, or product values in logs/events/API/errors/Celery arguments.
 - Querying RAW directly from a business API.
@@ -757,6 +763,22 @@ Approval gates:
 4. `source_account_ref` is an opaque non-secret logical account identifier. Local import may use `default`; protected APIs still fail closed until their trusted account-scope provider supplies allowed refs.
 5. batchGetProductInfo is approved only as skeleton/mock/fixture parser and `id_batch_page` work-item foundation. Real parameters, limits, retry/rate behavior, Token use, and provider calls require later official evidence and separate Owner authorization.
 6. `data.bg_customs_import_price` maps to `customs_declared_unit_price`; nullable `customs_declared_currency` remains `NULL` when provider currency is absent. `purchase_cost_cny` is CNY and US first-leg currency comes only from `data.product_logistics_relation.US_currency`.
-7. Local RAW importer implementation and validation against a confirmed local PostgreSQL database are approved. Production database access and production migration are not approved.
+7. The original local RAW importer validation did not authorize server database access. The 2026-09-13 Source Decision separately authorizes `alembic upgrade head` and ProductList-only writes to `szzsbj_app` after the follow-on implementation is merged.
 
-Backend implementation may begin only on `feat/integration-sync-governance-backend-v1` and only within this PRP. It must not make real Lingxing or Token requests, commit RAW artifacts, modify frontend/admin-frontend or old-system, or continue when implementation requirements diverge from this PRP.
+The original backend foundation was implemented in PR #61. The next implementation may begin only on `feat/production-lingxing-productlist-sync`, after a separate Owner prompt, and within section 24 plus the 2026-09-13 Source Decision. It must not commit RAW artifacts, modify frontend/admin-frontend or old-system, enable schedules, call `batchGetProductInfo` or other Lingxing endpoints, or continue when requirements diverge from the approved boundary.
+
+## 24. Production ProductList follow-on authorization
+
+The Project Owner authorizes the next phase to implement and, after its code PR is merged to `main`, execute the formal server ProductList sync described in `docs/decisions/2026-09-13-production-lingxing-productlist-sync-source-decision.md`.
+
+Authorized database and write boundary:
+
+- Formal application database name: `szzsbj_app`; it is not named or classified as a `test`, `staging`, `dev`, or `prod` database.
+- `alembic upgrade head` may run only after target verification, backup/snapshot confirmation and deployment from merged `main`.
+- ProductList response RAW may write only to `ods_api_raw_blobs`.
+- Safe ProductList request metadata may write only to `ods_api_raw_request_refs`.
+- Run/work-item state may write only to `gov_integration_sync_runs` and `gov_integration_sync_run_work_items`.
+- `productList.data.id` / response `data.id` may write as `lingxing_sku_id` to `ods_lingxing_productlist_sku_refs` and be idempotently upserted to `dwd_lingxing_sku_identity_index`.
+- The first execution is manual only and requires `schedule_enabled=false`.
+
+The follow-on must preserve credential/query redaction, bounded pagination/retry/limiting, run/work-item idempotency and RAW-before-parse ordering. It must not print or commit RAW/product values, write the legacy `raw_lingxing_api`, connect to legacy MySQL, call any non-ProductList endpoint, or activate automatic scheduling. After the first run it must reconcile `total_captured`, `raw_blobs_count`, `request_refs_count` and `sku_identity_active_count`; a ProductList total mismatch blocks all further real-interface expansion.
