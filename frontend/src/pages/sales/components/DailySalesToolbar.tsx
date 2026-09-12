@@ -39,6 +39,7 @@ interface DailySalesToolbarProps {
   owners: string[];
   stores: string[];
   actions: ReactNode;
+  trailingActions?: ReactNode;
   onChange: (filters: DailySalesFilters) => void;
   onReset: () => void;
   onMessage: (content: string) => void;
@@ -94,6 +95,7 @@ function DailySalesToolbar({
   owners,
   stores,
   actions,
+  trailingActions,
   onChange,
   onReset,
   onMessage,
@@ -120,7 +122,7 @@ function DailySalesToolbar({
       <Typography.Text>精确搜索，一行一项，最多支持1000行</Typography.Text>
       <Input.TextArea
         aria-label="批量搜索内容"
-        placeholder="请输入搜索内容，一行一个"
+        placeholder="请输入 MSKU / SKU / 商品ID，一行一个"
         value={batchInput}
         rows={7}
         onChange={(event) => setBatchInput(event.target.value)}
@@ -135,140 +137,143 @@ function DailySalesToolbar({
 
   return (
     <div className="daily-sales__toolbar" role="search" aria-label="每日销售筛选">
-      <Select
-        mode="multiple"
-        showSearch
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
-        aria-label="平台"
-        placeholder="全部平台"
-        value={filters.platforms}
-        maxTagCount={0}
-        maxTagPlaceholder={() => selectedLabel(filters.platforms, "个平台", "全部平台")}
-        options={["Walmart", "TEMU", "Amazon"].map((value) => ({ label: value, value }))}
-        optionRender={checkboxOption(filters.platforms, "平台")}
-        onChange={(value) => update("platforms", value)}
-      />
-      <Select
-        mode="multiple"
-        showSearch
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
-        aria-label="负责人"
-        placeholder="负责人"
-        value={filters.owners}
-        maxTagCount={0}
-        maxTagPlaceholder={() => selectedLabel(filters.owners, "人", "负责人")}
-        options={owners.map((value) => ({ label: value, value }))}
-        optionRender={checkboxOption(filters.owners, "负责人")}
-        onChange={(value) => update("owners", value)}
-      />
-      <Select
-        mode="multiple"
-        showSearch
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
-        aria-label="店铺"
-        placeholder="全部店铺"
-        value={filters.stores}
-        maxTagCount={0}
-        maxTagPlaceholder={() => selectedLabel(filters.stores, "个店铺", "全部店铺")}
-        options={stores.map((value) => ({ label: value, value }))}
-        optionRender={checkboxOption(filters.stores, "店铺")}
-        onChange={(value) => update("stores", value)}
-      />
-      <Radio.Group
-        className="daily-sales__date-presets"
-        aria-label="日期快捷项"
-        optionType="button"
-        buttonStyle="solid"
-        value={filters.datePreset === "custom" ? undefined : filters.datePreset}
-        options={[
-          { label: "今日", value: "today" },
-          { label: "本周", value: "week" },
-          { label: "本月", value: "month" },
-          { label: "今年", value: "year" },
-        ]}
-        onChange={(event) => {
-          const datePreset = event.target.value as Exclude<DatePreset, "custom">;
-          onChange({ ...filters, datePreset, dateRange: dateRangeForPreset(datePreset) });
-        }}
-      />
-      <DatePicker.RangePicker
-        className="daily-sales__date-range"
-        aria-label="日期范围"
-        locale={datePickerLocale}
-        value={filters.dateRange
-          ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
-          : undefined}
-        presets={rangePresets()}
-        format="YYYY-MM-DD"
-        separator="~"
-        onChange={(dates) => onChange({
-          ...filters,
-          datePreset: "custom",
-          dateRange: dates
-            ? [dates[0]?.format("YYYY-MM-DD") ?? "", dates[1]?.format("YYYY-MM-DD") ?? ""]
-            : undefined,
-        })}
-      />
-      <Select
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-        aria-label="币种"
-        value={filters.currency}
-        options={["USD", "CNY"].map((value) => ({ label: value, value }))}
-        onChange={(value) => update("currency", value)}
-      />
-      <ConnectedSearch
-        className="daily-sales__search"
-        typeAriaLabel="搜索类型"
-        typeOptions={[
-          { label: "MSKU", value: "msku" },
-          { label: "SKU", value: "sku" },
-          { label: "商品ID", value: "productId" },
-          { label: "品名", value: "productName" },
-        ]}
-        typeValue={filters.searchField}
-        inputAriaLabel="搜索内容"
-        inputPlaceholder="搜索内容"
-        inputValue={filters.keyword}
-        onTypeChange={(value) => onChange({
-          ...filters,
-          searchField: value as SearchField,
-          batchValues: undefined,
-        })}
-        onInputChange={(value) => onChange({
-          ...filters,
-          keyword: value,
-          batchValues: undefined,
-        })}
-        onSearch={() => onChange({ ...filters, batchValues: undefined })}
-        batchControl={(
-          <Popover
-            trigger="click"
-            placement="bottomRight"
-            open={batchOpen}
-            content={batchContent}
-            onOpenChange={(open) => {
-              if (open && !batchSupported) {
-                onMessage("批量搜索仅支持 MSKU、SKU、商品ID");
-                return;
-              }
-              setBatchOpen(open);
-            }}
-          >
-            <Button
-              className="report-table-connected-search__batch"
-              aria-label="批量搜索"
-              icon={<UnorderedListOutlined aria-hidden="true" />}
-            />
-          </Popover>
-        )}
-      />
-      <ResetButton onClick={onReset} />
-      <span className="daily-sales__toolbar-spacer" aria-hidden="true" />
-      <div className="daily-sales__toolbar-actions">{actions}</div>
+      <div className="daily-sales__toolbar-row daily-sales__toolbar-row--single">
+        <Select
+          mode="multiple"
+          showSearch
+          className="report-filter-select"
+          classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
+          aria-label="平台"
+          placeholder="全部平台"
+          value={filters.platforms}
+          maxTagCount={0}
+          maxTagPlaceholder={() => selectedLabel(filters.platforms, "个平台", "全部平台")}
+          options={["Walmart", "TEMU", "Amazon"].map((value) => ({ label: value, value }))}
+          optionRender={checkboxOption(filters.platforms, "平台")}
+          onChange={(value) => update("platforms", value as DailySalesPlatform[])}
+        />
+        <Select
+          mode="multiple"
+          showSearch
+          className="report-filter-select"
+          classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
+          aria-label="负责人"
+          placeholder="负责人"
+          value={filters.owners}
+          maxTagCount={0}
+          maxTagPlaceholder={() => selectedLabel(filters.owners, "人", "负责人")}
+          options={owners.map((value) => ({ label: value, value }))}
+          optionRender={checkboxOption(filters.owners, "负责人")}
+          onChange={(value) => update("owners", value)}
+        />
+        <Select
+          mode="multiple"
+          showSearch
+          className="report-filter-select"
+          classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
+          aria-label="店铺"
+          placeholder="全部店铺"
+          value={filters.stores}
+          maxTagCount={0}
+          maxTagPlaceholder={() => selectedLabel(filters.stores, "个店铺", "全部店铺")}
+          options={stores.map((value) => ({ label: value, value }))}
+          optionRender={checkboxOption(filters.stores, "店铺")}
+          onChange={(value) => update("stores", value)}
+        />
+        <Radio.Group
+          className="daily-sales__date-presets"
+          aria-label="日期快捷项"
+          optionType="button"
+          buttonStyle="solid"
+          value={filters.datePreset === "custom" ? undefined : filters.datePreset}
+          options={[
+            { label: "今日", value: "today" },
+            { label: "本周", value: "week" },
+            { label: "本月", value: "month" },
+            { label: "今年", value: "year" },
+          ]}
+          onChange={(event) => {
+            const datePreset = event.target.value as Exclude<DatePreset, "custom">;
+            onChange({ ...filters, datePreset, dateRange: dateRangeForPreset(datePreset) });
+          }}
+        />
+        <DatePicker.RangePicker
+          className="daily-sales__date-range"
+          aria-label="日期范围"
+          locale={datePickerLocale}
+          value={filters.dateRange
+            ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
+            : undefined}
+          presets={rangePresets()}
+          format="YYYY-MM-DD"
+          separator="~"
+          onChange={(dates) => onChange({
+            ...filters,
+            datePreset: "custom",
+            dateRange: dates
+              ? [dates[0]?.format("YYYY-MM-DD") ?? "", dates[1]?.format("YYYY-MM-DD") ?? ""]
+              : undefined,
+          })}
+        />
+        <Select
+          className="report-filter-select daily-sales__currency-select"
+          classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+          aria-label="币种"
+          value={filters.currency}
+          options={["USD", "CNY"].map((value) => ({ label: value, value }))}
+          onChange={(value) => update("currency", value as DailySalesCurrency)}
+        />
+        <ConnectedSearch
+          className="daily-sales__search"
+          typeAriaLabel="搜索类型"
+          typeOptions={[
+            { label: "MSKU", value: "msku" },
+            { label: "SKU", value: "sku" },
+            { label: "商品ID", value: "productId" },
+            { label: "品名", value: "productName" },
+          ]}
+          typeValue={filters.searchField}
+          inputAriaLabel="搜索内容"
+          inputPlaceholder="搜索 MSKU / SKU / 商品ID / 品名"
+          inputValue={filters.keyword}
+          onTypeChange={(value) => onChange({
+            ...filters,
+            searchField: value as SearchField,
+            batchValues: undefined,
+          })}
+          onInputChange={(value) => onChange({
+            ...filters,
+            keyword: value,
+            batchValues: undefined,
+          })}
+          onSearch={() => onChange({ ...filters, batchValues: undefined })}
+          batchControl={(
+            <Popover
+              trigger="click"
+              placement="bottomRight"
+              open={batchOpen}
+              content={batchContent}
+              onOpenChange={(open) => {
+                if (open && !batchSupported) {
+                  onMessage("批量搜索仅支持 MSKU、SKU、商品ID");
+                  return;
+                }
+                setBatchOpen(open);
+              }}
+            >
+              <Button
+                className="report-table-connected-search__batch"
+                aria-label="批量搜索"
+                icon={<UnorderedListOutlined aria-hidden="true" />}
+              />
+            </Popover>
+          )}
+        />
+        <ResetButton onClick={onReset} />
+        <div className="daily-sales__toolbar-actions">{actions}</div>
+        <span className="daily-sales__toolbar-spacer" aria-hidden="true" />
+        <div className="daily-sales__toolbar-icon-actions">{trailingActions}</div>
+      </div>
     </div>
   );
 }

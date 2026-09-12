@@ -1,22 +1,21 @@
-/** Listing Management No-API page shell using local acceptance data only. */
-import {
-  CloudDownloadOutlined,
-  SettingOutlined,
-} from "@ant-design/icons";
-import { Button, Card, Checkbox, Select, message } from "antd";
+/** Listing-management No-API page shell rebuilt from the approved HTML prototype. */
+import { Card, message } from "antd";
 import { useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
-import ConnectedSearch from "@/components/report-table/ConnectedSearch";
+import RuntimeColumnConfigDrawer, {
+  type RuntimeColumnGroup,
+} from "@/components/report-table/RuntimeColumnConfigDrawer";
 import {
   REPORT_TABLE_DEFAULT_PAGE_SIZE,
   normalizeReportTablePageSize,
 } from "@/components/report-table/pagination";
-import ResetButton from "@/components/report-table/ResetButton";
-import RuntimeColumnConfigDrawer, {
-  type RuntimeColumnGroup,
-} from "@/components/report-table/RuntimeColumnConfigDrawer";
 import type { NavigationPage } from "@/config/navigation";
+import ListingDetailModal from "@/pages/products/components/ListingDetailModal";
+import ListingManagementSummaryCards from "@/pages/products/components/ListingManagementSummaryCards";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
+import ListingManagementToolbar, {
+  type ListingManagementFilters,
+} from "@/pages/products/components/ListingManagementToolbar";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -24,14 +23,57 @@ import {
   listingOwners,
   listingProductTypes,
   listingStores,
+  type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 import "@/pages/products/ListingManagementPage.css";
 
-const NO_API_PENDING = "Listing 数据接口待接入";
 const TEMPLATE_PENDING = "列模板接口待接入";
+const EXPORT_PENDING = "导出接口待接入";
+
+const createInitialFilters = (): ListingManagementFilters => ({
+  stores: [],
+  searchType: "sku",
+  keyword: "",
+});
+
 const defaultColumnKeys = listingColumnFields.map((field) => field.key);
-const columnGroups: RuntimeColumnGroup[] = [{ title: "Listing 管理字段", fields: [...listingColumnFields] }];
-const defaultWidths = Object.fromEntries(listingColumnFields.map((field) => [field.key, field.key === "image" ? 72 : 112]));
+const defaultColumnWidths: Record<string, number> = {
+  image: 72,
+  msku: 130,
+  productId: 150,
+  store: 120,
+  owner: 110,
+  sku: 130,
+  productName: 190,
+  title: 260,
+  productType: 130,
+  listPrice: 110,
+  salePrice: 110,
+  productStatus: 120,
+  lifecycle: 120,
+  listedAt: 140,
+  category: 120,
+  wfsAvailableInventory: 140,
+  inboundInventory: 130,
+  sales90Days: 130,
+  adSpend30Days: 140,
+  disabledReason: 130,
+  listingStatus: 130,
+  buyBoxStatus: 130,
+  walmartSeller: 140,
+  resold: 120,
+  checkedAt: 160,
+  rating: 100,
+  reviewCount: 110,
+  brand: 130,
+  tags: 130,
+  gtin: 160,
+  productGrade: 120,
+  actions: 112,
+};
+const columnGroups: RuntimeColumnGroup[] = [
+  { title: "Listing 管理字段", fields: [...listingColumnFields] },
+];
 
 interface ListingManagementPageProps {
   page: NavigationPage;
@@ -39,177 +81,120 @@ interface ListingManagementPageProps {
 
 function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const [stores, setStores] = useState<string[]>([]);
-  const [owner, setOwner] = useState<string>();
-  const [productType, setProductType] = useState<string>();
-  const [productStatus, setProductStatus] = useState<string>();
-  const [searchType, setSearchType] = useState("sku");
-  const [keyword, setKeyword] = useState("");
+  const [filters, setFilters] = useState(createInitialFilters);
+  const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(defaultColumnKeys);
-  const [columnWidths, setColumnWidths] = useState(defaultWidths);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [detailRow, setDetailRow] = useState<ListingManagementRow>();
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
   };
-  const updateFilter = (update: () => void) => {
-    update();
+
+  const updateFilters = (nextFilters: ListingManagementFilters) => {
+    setFilters(nextFilters);
     resetPageAndSelection();
   };
-  const rows = useMemo(() => {
-    const query = keyword.trim().toLocaleLowerCase();
-    return listingManagementMockData.filter((row) => (
-      (stores.length === 0 || stores.includes(row.store))
-      && (!owner || row.owner === owner)
-      && (!productType || row.productType === productType)
-      && (!productStatus || row.productStatus === productStatus)
-      && (!query || String(row[searchType as "sku" | "msku" | "productId" | "productName"])
-        .toLocaleLowerCase().includes(query))
-    ));
-  }, [keyword, owner, productStatus, productType, searchType, stores]);
+
+  const filteredRows = useMemo(() => {
+    const keyword = filters.keyword.trim().toLocaleLowerCase();
+    const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
+
+    return listingManagementMockData.filter((row) => {
+      const target = String(row[filters.searchType]).toLocaleLowerCase();
+      const statusMatched = !filters.productStatus
+        || row.productStatus === filters.productStatus
+        || row.listingStatus === filters.productStatus
+        || row.buyBoxStatus === filters.productStatus;
+      return (filters.stores.length === 0 || filters.stores.includes(row.store))
+        && (!filters.owner || row.owner === filters.owner)
+        && (!filters.productType || row.productType === filters.productType)
+        && statusMatched
+        && (!keyword || target.includes(keyword))
+        && (batchValues.length === 0
+          || batchValues.includes(row.sku.toLocaleLowerCase())
+          || batchValues.includes(row.msku.toLocaleLowerCase())
+          || batchValues.includes(row.productId.toLocaleLowerCase()));
+    });
+  }, [filters]);
 
   const resetFilters = () => {
-    setStores([]);
-    setOwner(undefined);
-    setProductType(undefined);
-    setProductStatus(undefined);
-    setSearchType("sku");
-    setKeyword("");
+    setFilters(createInitialFilters());
     resetPageAndSelection();
-  };
-  const copyText = async (text: string) => {
-    try {
-      if (!navigator.clipboard) throw new Error("Clipboard API unavailable");
-      await navigator.clipboard.writeText(text);
-      void messageApi.success("已复制");
-    } catch {
-      void messageApi.error("复制失败，请手动复制");
-    }
   };
 
   return (
     <PageShell page={page}>
       {messageContextHolder}
       <div className="listing-management">
-        <Card size="small" className="listing-management__toolbar-card">
-          <div className="listing-management__toolbar" role="search" aria-label="Listing 管理筛选">
-            <Select
-              className="report-filter-select"
-              classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-              allowClear
-              aria-label="产品类型"
-              placeholder="产品类型"
-              value={productType}
-              options={listingProductTypes.map((value) => ({ value, label: value }))}
-              onChange={(value) => updateFilter(() => setProductType(value))}
+        <Card size="small" className="listing-management__page-card">
+          <div className="listing-management__title-row">
+            <div>
+              <h1>Listing管理</h1>
+              <p>覆盖店铺、负责人、状态、价格、库存、购物车、跟卖与检查信息。</p>
+            </div>
+          </div>
+
+          <Card size="small" className="listing-management__toolbar-card">
+            <ListingManagementToolbar
+              filters={filters}
+              stores={listingStores}
+              owners={listingOwners}
+              productTypes={listingProductTypes}
+              statisticsVisible={statisticsVisible}
+              onChange={updateFilters}
+              onReset={resetFilters}
+              onBatchSearch={(values) => updateFilters({ ...filters, batchValues: values })}
+              onMessage={(content) => void messageApi.info(content)}
+              onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
+              onOpenColumnConfig={() => setColumnConfigOpen(true)}
+              onDownload={() => void messageApi.info(EXPORT_PENDING)}
             />
-            <Select
-              className="report-filter-select"
-              classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-              allowClear
-              aria-label="负责人"
-              placeholder="负责人"
-              value={owner}
-              options={listingOwners.map((value) => ({ value, label: value }))}
-              onChange={(value) => updateFilter(() => setOwner(value))}
-            />
-            <Select
-              className="report-filter-select"
-              classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-              allowClear
-              aria-label="产品状态"
-              placeholder="产品状态"
-              value={productStatus}
-              options={["启用", "停用"].map((value) => ({ value, label: value }))}
-              onChange={(value) => updateFilter(() => setProductStatus(value))}
-            />
-            <Select
-              className="report-filter-select"
-              classNames={{ popup: { root: "report-filter-select-dropdown report-filter-select-dropdown--multiple" } }}
-              mode="multiple"
-              maxTagCount="responsive"
-              allowClear
-              aria-label="店铺"
-              placeholder="全部店铺"
-              value={stores}
-              options={listingStores.map((value) => ({ value, label: value }))}
-              optionRender={(option) => (
-                <Checkbox checked={stores.includes(String(option.value))}>{option.label}</Checkbox>
-              )}
-              onChange={(value) => updateFilter(() => setStores(value))}
-            />
-            <ConnectedSearch
-              className="listing-management__search"
-              typeAriaLabel="搜索类型"
-              typeOptions={[
-                { value: "sku", label: "SKU" },
-                { value: "msku", label: "MSKU" },
-                { value: "productId", label: "商品ID" },
-                { value: "productName", label: "品名" },
-              ]}
-              typeValue={searchType}
-              inputAriaLabel="搜索 Listing"
-              inputPlaceholder="搜索商品"
-              inputValue={keyword}
-              filterAction={{
-                ariaLabel: "批量搜索",
-                tooltip: "批量搜索待接入",
-                onClick: () => void messageApi.info(NO_API_PENDING),
+          </Card>
+
+          {statisticsVisible && <ListingManagementSummaryCards rows={filteredRows} />}
+
+          <div className="listing-management__table-wrap">
+            <ListingManagementTable
+              rows={filteredRows}
+              appliedColumnKeys={appliedColumnKeys}
+              columnWidths={columnWidths}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              selectedRowKeys={selectedRowKeys}
+              onColumnWidthChange={(key, width) => setColumnWidths((current) => ({
+                ...current,
+                [key]: width,
+              }))}
+              onCurrentPageChange={setCurrentPage}
+              onPageSizeChange={(nextPageSize) => {
+                setPageSize(normalizeReportTablePageSize(nextPageSize));
+                resetPageAndSelection();
               }}
-              onTypeChange={(value) => updateFilter(() => setSearchType(value))}
-              onInputChange={(value) => updateFilter(() => setKeyword(value))}
-              onSearch={() => undefined}
+              onSelectionChange={setSelectedRowKeys}
+              onOpenDetail={setDetailRow}
+              onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
             />
-            <ResetButton onClick={resetFilters} />
-            <div className="listing-management__toolbar-spacer" />
-            <Button
-              icon={<CloudDownloadOutlined aria-hidden="true" />}
-              onClick={() => void messageApi.info(NO_API_PENDING)}
-            >
-              下载
-            </Button>
-            <Button
-              icon={<SettingOutlined aria-hidden="true" />}
-              onClick={() => setColumnConfigOpen(true)}
-            >
-              列配置
-            </Button>
           </div>
         </Card>
 
-        <ListingManagementTable
-          rows={rows}
-          appliedColumnKeys={appliedColumnKeys}
-          columnWidths={columnWidths}
-          currentPage={currentPage}
-          pageSize={pageSize}
-          selectedRowKeys={selectedRowKeys}
-          onColumnWidthChange={(key, width) => setColumnWidths((current) => ({ ...current, [key]: width }))}
-          onCurrentPageChange={setCurrentPage}
-          onPageSizeChange={(nextPageSize) => {
-            setPageSize(normalizeReportTablePageSize(nextPageSize));
-            resetPageAndSelection();
-          }}
-          onSelectionChange={setSelectedRowKeys}
-          onBulkMark={() => void messageApi.info(NO_API_PENDING)}
-          onCopy={(text) => void copyText(text)}
+        <RuntimeColumnConfigDrawer
+          open={columnConfigOpen}
+          groups={columnGroups}
+          fixedKeys={fixedListingColumnKeys}
+          defaultKeys={defaultColumnKeys}
+          appliedKeys={appliedColumnKeys}
+          onApply={setAppliedColumnKeys}
+          onClose={() => setColumnConfigOpen(false)}
+          onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
         />
+        <ListingDetailModal row={detailRow} onClose={() => setDetailRow(undefined)} />
       </div>
-
-      <RuntimeColumnConfigDrawer
-        open={columnConfigOpen}
-        groups={columnGroups}
-        fixedKeys={fixedListingColumnKeys}
-        defaultKeys={defaultColumnKeys}
-        appliedKeys={appliedColumnKeys}
-        onApply={setAppliedColumnKeys}
-        onClose={() => setColumnConfigOpen(false)}
-        onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
-      />
     </PageShell>
   );
 }

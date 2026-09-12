@@ -20,8 +20,51 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   overflow: hidden;
+}
+
+.daily-sales__page-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 0;
+}
+
+.daily-sales__page-header h3.ant-typography {
+  margin: 0 0 4px;
+  color: #101828;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.daily-sales__page-header .ant-typography {
+  margin-bottom: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.daily-sales__page-header-meta {
+  display: inline-flex;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  color: #667085;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 9px;
+}
+
+.daily-sales__page-header-meta strong {
+  color: #1677ff;
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .daily-sales__toolbar-card,
@@ -33,29 +76,41 @@
 .daily-sales__toolbar-card {
   min-width: 0;
   overflow-x: auto;
+  border-color: #dce3ed;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
 }
 
 .daily-sales__toolbar-card .ant-card-body {
-  padding: 4px 4px;
+  padding: 10px 12px;
 }
 
 .daily-sales__toolbar {
+  display: block;
+  min-width: 0;
+}
+
+.daily-sales__toolbar-row {
   display: flex;
   width: max-content;
   min-width: 100%;
-  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
-.daily-sales__toolbar > .ant-select {
-  width: 112px;
-  flex: 0 0 112px;
+.daily-sales__toolbar-row--single {
+  overflow: visible;
 }
 
-.daily-sales__toolbar .ant-picker {
-  width: 272px;
-  height: 32px;
+.daily-sales__toolbar-row > .ant-select {
+  width: 128px;
+  flex: 0 0 128px;
+}
+
+.daily-sales__toolbar-row > .daily-sales__currency-select {
+  width: 82px;
+  flex-basis: 82px;
 }
 
 .daily-sales__date-presets {
@@ -67,22 +122,26 @@
 
 .daily-sales__date-presets .ant-radio-button-wrapper {
   min-width: 48px;
-  flex: 0 0 auto;
   height: 32px;
+  flex: 0 0 auto;
   line-height: 30px;
   text-align: center;
   white-space: nowrap;
 }
 
 .daily-sales__date-range.ant-picker {
-  min-width: 272px;
-  flex: 0 0 272px;
+  width: 266px;
+  min-width: 266px;
+  height: 32px;
+  flex: 0 0 266px;
 }
 
 .daily-sales__search {
   display: flex;
-  min-width: 340px;
-  flex: 0 0 380px;
+  width: 400px;
+  min-width: 400px;
+  max-width: 400px;
+  flex: 0 0 400px;
 }
 
 .daily-sales__filter-checkbox {
@@ -90,15 +149,51 @@
   pointer-events: none;
 }
 
-.daily-sales__toolbar-spacer {
-  flex: 1 1 16px;
-}
-
 .daily-sales__toolbar-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  margin-left: 0;
+}
+
+.daily-sales__toolbar-actions .ant-btn {
+  height: 32px;
+  padding-inline: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.daily-sales__toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 12px;
+}
+
+.daily-sales__toolbar-icon-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.daily-sales__toolbar-icon-actions .ant-btn,
+.daily-sales__toolbar-icon-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border-color: #d6dfec;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+}
+
+.daily-sales__toolbar-icon-actions .ant-btn:hover,
+.daily-sales__toolbar-icon-button:hover {
+  border-color: #91caff;
+  color: #1677ff;
+  background: #f8fbff;
 }
 
 .daily-sales__batch-search {
@@ -126,7 +221,7 @@
 .daily-sales__summary {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
 .daily-sales__summary-card {
@@ -134,58 +229,58 @@
   --summary-icon-bg: #e8f2ff;
   --summary-card-bg: #f7faff;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--summary-accent) 16%, white);
-  background: linear-gradient(115deg, var(--summary-card-bg), #fff);
-  border-radius: 9px;
-  box-shadow: 0 3px 10px rgb(15 23 42 / 5%);
+  border-color: color-mix(in srgb, var(--summary-accent) 14%, white);
+  background: linear-gradient(180deg, #fff, var(--summary-card-bg));
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
 }
 
 .daily-sales__summary-card .ant-card-body {
   display: grid;
   min-height: 82px;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  padding: 10px 9px;
+  gap: 10px;
+  padding: 12px 14px;
 }
 
 .daily-sales__summary-card--green {
-  --summary-accent: #21a554;
-  --summary-icon-bg: #e7f8ec;
-  --summary-card-bg: #f3fcf6;
+  --summary-accent: #16a34a;
+  --summary-icon-bg: #ecfdf3;
+  --summary-card-bg: #fbfffd;
 }
 
 .daily-sales__summary-card--orange {
-  --summary-accent: #fa8c16;
-  --summary-icon-bg: #fff2dd;
-  --summary-card-bg: #fff9f0;
+  --summary-accent: #f79009;
+  --summary-icon-bg: #fff7e6;
+  --summary-card-bg: #fffdf8;
 }
 
 .daily-sales__summary-card--purple {
-  --summary-accent: #7259e8;
-  --summary-icon-bg: #eeebff;
-  --summary-card-bg: #f8f6ff;
+  --summary-accent: #7c3aed;
+  --summary-icon-bg: #f4f0ff;
+  --summary-card-bg: #fdfcff;
+}
+
+.daily-sales__summary-card--red {
+  --summary-accent: #f04438;
+  --summary-icon-bg: #fff1f0;
+  --summary-card-bg: #fffafa;
 }
 
 .daily-sales__summary-card--cyan {
-  --summary-accent: #12a8cc;
-  --summary-icon-bg: #e0f8fc;
-  --summary-card-bg: #f2fcfe;
-}
-
-.daily-sales__summary-card--sky {
-  --summary-accent: #1688e8;
-  --summary-icon-bg: #e8f4ff;
-  --summary-card-bg: #f4faff;
+  --summary-accent: #0ea5e9;
+  --summary-icon-bg: #e0f2fe;
+  --summary-card-bg: #f8fdff;
 }
 
 .daily-sales__summary-icon {
   display: inline-flex;
-  width: 38px;
-  height: 38px;
+  width: 42px;
+  height: 42px;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 13px;
   background: var(--summary-icon-bg);
   color: var(--summary-accent);
   font-size: 20px;
@@ -203,16 +298,22 @@
 }
 
 .daily-sales__summary-title,
-.daily-sales__summary-period {
+.daily-sales__summary-subtitle {
+  overflow: hidden;
   color: #667085;
   font-size: 12px;
   white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.daily-sales__summary-title {
+  font-weight: 600;
 }
 
 .daily-sales__summary-card strong {
   overflow: hidden;
   color: #101828;
-  font-size: clamp(14px, 1.15vw, 18px);
+  font-size: clamp(16px, 1.25vw, 22px);
   font-variant-numeric: tabular-nums;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -221,20 +322,24 @@
 
 .daily-sales__summary-comparison {
   align-items: flex-end;
-  gap: 2px;
 }
 
 .daily-sales__summary-trend {
   display: inline-flex;
   align-items: center;
-  color: #219653;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 2px;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .daily-sales__summary-comparison--cost-up .daily-sales__summary-trend {
-  color: #e5484d;
+  color: #f04438;
+}
+
+.daily-sales__summary-comparison--down .daily-sales__summary-trend {
+  color: #16a34a;
 }
 
 .daily-sales__charts {
@@ -243,12 +348,23 @@
 
 .daily-sales__chart-card {
   min-width: 0;
-  height: 230px;
+  height: 220px;
   padding: 12px 16px;
   background: #fff;
-  border: 1px solid #e5eaf3;
-  border-radius: 10px;
-  box-shadow: 0 3px 12px rgb(15 23 42 / 4%);
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.daily-sales__chart-card h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.daily-sales__chart-card .echarts-for-react {
+  height: 172px !important;
 }
 
 .daily-sales__chart-header {
@@ -258,17 +374,6 @@
   justify-content: space-between;
   gap: 12px;
   overflow-x: auto;
-}
-
-.daily-sales__chart-card h3 {
-  margin: 0;
-  color: #1f2937;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.daily-sales__chart-card .echarts-for-react {
-  height: 182px !important;
 }
 
 .daily-sales__chart-header .ant-radio-group {
@@ -292,7 +397,7 @@
 }
 
 .daily-sales__table {
-  flex: 1 1 180px;
+  flex: 1 1 220px;
 }
 
 .daily-sales__identifier-stack {
@@ -309,7 +414,7 @@
 .daily-sales-detail-modal .ant-modal-title {
   color: #1f2937;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .daily-sales-detail-modal__grid {
@@ -379,6 +484,24 @@
 }
 
 @media (max-height: 820px) {
+  .daily-sales {
+    gap: 9px;
+  }
+
+  .daily-sales__page-header h3.ant-typography {
+    font-size: 20px;
+  }
+
+  .daily-sales__summary-card .ant-card-body {
+    min-height: 74px;
+    padding: 10px 12px;
+  }
+
+  .daily-sales__summary-icon {
+    width: 38px;
+    height: 38px;
+  }
+
   .daily-sales__chart-card {
     height: 190px;
   }
@@ -388,21 +511,28 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1280px) {
   .daily-sales__summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .daily-sales-detail-modal__grid {
+  .daily-sales__toolbar-row {
+    min-width: max-content;
+  }
+}
+
+@media (max-width: 900px) {
+  .daily-sales__page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .daily-sales__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .daily-sales__chart-card {
-    height: 210px;
-  }
-
-  .daily-sales__chart-card .echarts-for-react {
-    height: 162px !important;
+  .daily-sales-detail-modal__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -412,37 +542,21 @@
   }
 
   .daily-sales__summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .daily-sales__summary-card .ant-card-body {
     min-height: 70px;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
-    padding: 7px 8px;
+    padding: 8px 10px;
   }
 
   .daily-sales__summary-icon {
     display: none;
   }
 
-  .daily-sales__summary-card strong {
-    font-size: 16px;
-  }
-
-  .daily-sales__summary-trend,
-  .daily-sales__summary-title,
-  .daily-sales__summary-period {
-    font-size: 11px;
-  }
-
   .daily-sales-detail-modal__grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .daily-sales-detail-modal__card .ant-card-body {
-    min-height: 92px;
-    padding: 14px;
   }
 }

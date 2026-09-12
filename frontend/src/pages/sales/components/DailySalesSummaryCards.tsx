@@ -41,6 +41,7 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
     {
       title: "销量",
       value: totals.salesVolume.toLocaleString("zh-CN"),
+      subtitle: "当前筛选销量",
       icon: <ShoppingOutlined />,
       tone: "blue",
       trend: "12.5%",
@@ -49,6 +50,7 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
     {
       title: "销售额",
       value: formatAmount(totals.salesAmount * rate, currency),
+      subtitle: "销售金额合计",
       icon: <DollarCircleOutlined />,
       tone: "green",
       trend: "8.2%",
@@ -57,6 +59,7 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
     {
       title: "订单利润",
       value: formatAmount(totals.orderProfit * rate, currency),
+      subtitle: "SKU 订单利润",
       icon: <LineChartOutlined />,
       tone: "orange",
       trend: "15.3%",
@@ -65,6 +68,7 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
     {
       title: "利润率",
       value: totals.salesAmount ? `${(totals.orderProfit / totals.salesAmount * 100).toFixed(2)}%` : "-",
+      subtitle: "利润 / 销售额",
       icon: <PieChartOutlined />,
       tone: "purple",
       trend: "2.1%",
@@ -73,16 +77,18 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
     {
       title: "广告费",
       value: formatAmount(totals.adSpend * rate, currency),
+      subtitle: "广告花费合计",
       icon: <NotificationOutlined />,
-      tone: "cyan",
+      tone: "red",
       trend: "6.8%",
       trendDirection: "cost-up",
     },
     {
       title: "广告占比",
       value: totals.salesAmount ? `${(totals.adSpend / totals.salesAmount * 100).toFixed(2)}%` : "-",
+      subtitle: "广告费 / 销售额",
       icon: <PercentageOutlined />,
-      tone: "sky",
+      tone: "cyan",
       trend: "1.2%",
       trendDirection: "down",
     },
@@ -100,6 +106,7 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
           <span className="daily-sales__summary-content">
             <span className="daily-sales__summary-title">{metric.title}</span>
             <strong>{metric.value}</strong>
+            <span className="daily-sales__summary-subtitle">{metric.subtitle}</span>
           </span>
           <span
             className={`daily-sales__summary-comparison daily-sales__summary-comparison--${metric.trendDirection}`}
@@ -108,7 +115,6 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
               {metric.trendDirection === "down" ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
               {metric.trend}
             </span>
-            <span className="daily-sales__summary-period">较上期</span>
           </span>
         </Card>
       ))}
