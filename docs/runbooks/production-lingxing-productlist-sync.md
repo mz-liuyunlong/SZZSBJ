@@ -42,7 +42,7 @@ that one command only:
 PRODUCTION_MIGRATIONS_AUTHORIZED=true uv run alembic -c alembic.ini upgrade head
 ```
 
-Do not add `PRODUCTION_MIGRATIONS_AUTHORIZED` to `/etc/APPLICATION/app.env` or any other persistent
+Do not add `PRODUCTION_MIGRATIONS_AUTHORIZED` to `APPLICATION_ENV_FILE` or any other persistent
 environment file. The command and its output must not print `DATABASE_URL`, database credentials,
 Token material, or Lingxing credentials. If the migration fails, stop before any Token or
 ProductList request.
@@ -50,8 +50,21 @@ ProductList request.
 ## Before the manual run
 
 Verify through approved metadata tooling that the ProductList interface, active retention policy,
-and scoped sync config already exist. Do not insert missing prerequisite rows by hand under this
-authorization. Confirm all of the following:
+and scoped sync config already exist. Do not insert missing prerequisite rows by hand. If any of
+these three governance rows is missing, run the reviewed bootstrap from a clean, merged `main`
+backend deployment with authorization scoped to that one command:
+
+```bash
+PRODUCTLIST_SOURCE_ACCOUNT_REF=SOURCE_ACCOUNT_REF_PLACEHOLDER \
+PRODUCTLIST_GOVERNANCE_BOOTSTRAP_AUTHORIZED=true \
+uv run python scripts/bootstrap_productlist_governance.py
+```
+
+`PRODUCTLIST_SOURCE_ACCOUNT_REF` is a non-secret logical account reference. Do not add either
+bootstrap variable to `APPLICATION_ENV_FILE` or another persistent environment file. The bootstrap
+does not request a Token or Lingxing endpoint, create a sync run/work item, or write RAW/ODS/DWD/DWS
+data. After it succeeds, re-check the ProductList interface, active retention policy, and scoped
+sync config before continuing. Confirm all of the following:
 
 - provider is `lingxing`, interface key is `productList`, method is `POST`, and request kind is
   `offset_page`;
