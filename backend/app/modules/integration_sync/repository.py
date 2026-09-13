@@ -174,6 +174,56 @@ class IntegrationSyncRepository:
             select(IntegrationSyncRun).where(IntegrationSyncRun.idempotency_key == idempotency_key)
         )
 
+    def has_running_run(self, provider: str, interface_key: str) -> bool:
+        return (
+            self.session.scalar(
+                select(IntegrationSyncRun.id)
+                .where(
+                    IntegrationSyncRun.provider == provider,
+                    IntegrationSyncRun.interface_key == interface_key,
+                    IntegrationSyncRun.status == "running",
+                )
+                .limit(1)
+            )
+            is not None
+        )
+
+    def productlist_run_aggregate_counts(
+        self,
+        run_id: UUID,
+        source_account_ref: str,
+    ) -> tuple[int, int, int, int]:
+        raw_blobs = self.session.scalar(
+            select(func.count(func.distinct(ApiRawRequestRef.raw_blob_id))).where(
+                ApiRawRequestRef.run_id == run_id
+            )
+        )
+        request_refs = self.session.scalar(
+            select(func.count())
+            .select_from(ApiRawRequestRef)
+            .where(ApiRawRequestRef.run_id == run_id)
+        )
+        productlist_refs = self.session.scalar(
+            select(func.count())
+            .select_from(LingxingProductListSkuRef)
+            .where(LingxingProductListSkuRef.run_id == run_id)
+        )
+        active_identities = self.session.scalar(
+            select(func.count())
+            .select_from(LingxingSkuIdentity)
+            .where(
+                LingxingSkuIdentity.provider == "lingxing",
+                LingxingSkuIdentity.source_account_ref == source_account_ref,
+                LingxingSkuIdentity.is_active.is_(True),
+            )
+        )
+        return (
+            int(raw_blobs or 0),
+            int(request_refs or 0),
+            int(productlist_refs or 0),
+            int(active_identities or 0),
+        )
+
     def add_run(self, run: IntegrationSyncRun) -> IntegrationSyncRun:
         self.session.add(run)
         self.session.flush()
