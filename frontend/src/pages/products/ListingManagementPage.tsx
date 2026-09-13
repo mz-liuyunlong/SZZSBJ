@@ -11,7 +11,9 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import ListingDetailModal from "@/pages/products/components/ListingDetailModal";
-import ListingManagementSummaryCards from "@/pages/products/components/ListingManagementSummaryCards";
+import ListingManagementSummaryCards, {
+  type ListingManagementSummaryCardKey,
+} from "@/pages/products/components/ListingManagementSummaryCards";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingManagementToolbar, {
   type ListingManagementFilters,
@@ -83,6 +85,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState(createInitialFilters);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
+  const [summaryFilterKey, setSummaryFilterKey] = useState<ListingManagementSummaryCardKey>("total");
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
@@ -98,10 +101,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
   const updateFilters = (nextFilters: ListingManagementFilters) => {
     setFilters(nextFilters);
+    setSummaryFilterKey("total");
     resetPageAndSelection();
   };
 
-  const filteredRows = useMemo(() => {
+  const toolbarFilteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
     const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
 
@@ -123,8 +127,23 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     });
   }, [filters]);
 
+  const filteredRows = useMemo(() => {
+    if (summaryFilterKey === "online") return toolbarFilteredRows.filter((row) => row.listingStatus === "在线");
+    if (summaryFilterKey === "offline") return toolbarFilteredRows.filter((row) => row.listingStatus === "离线");
+    if (summaryFilterKey === "buybox") return toolbarFilteredRows.filter((row) => row.buyBoxStatus === "未拥有");
+    if (summaryFilterKey === "resold") return toolbarFilteredRows.filter((row) => row.resold === "是");
+    if (summaryFilterKey === "disabled") return toolbarFilteredRows.filter((row) => row.productStatus === "停用");
+    return toolbarFilteredRows;
+  }, [summaryFilterKey, toolbarFilteredRows]);
+
+  const handleSummaryCardClick = (key: ListingManagementSummaryCardKey) => {
+    setSummaryFilterKey(key);
+    resetPageAndSelection();
+  };
+
   const resetFilters = () => {
     setFilters(createInitialFilters());
+    setSummaryFilterKey("total");
     resetPageAndSelection();
   };
 
@@ -157,7 +176,13 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             />
           </Card>
 
-          {statisticsVisible && <ListingManagementSummaryCards rows={filteredRows} />}
+          {statisticsVisible && (
+            <ListingManagementSummaryCards
+              rows={toolbarFilteredRows}
+              activeKey={summaryFilterKey}
+              onCardClick={handleSummaryCardClick}
+            />
+          )}
 
           <div className="listing-management__table-wrap">
             <ListingManagementTable

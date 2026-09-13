@@ -397,7 +397,9 @@ function ListingManagementTable({
         toolBarRender={false}
         bordered
         size="small"
-        scroll={{ x: scrollX }}
+        scroll={{ x: scrollX, y: 520 }}
+      virtual
+      tableLayout="fixed"
         rowSelection={{
           fixed: true,
           selectedRowKeys,

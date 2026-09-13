@@ -1,6 +1,4 @@
 /** Renders shared page metadata and content without duplicating MainLayout navigation UI. */
-import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Button } from "antd";
 import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { NavigationPage } from "@/config/navigation";
@@ -38,30 +36,17 @@ function PageShell({ page, headerActions, children }: PageShellProps) {
     ? headerOutlet.target
     : null;
 
-  const pageActions = (headerActions || page.help.enabled) && (
+  const pageActions = headerActions ? (
     <div className="page-shell__header-actions">
       {headerActions}
-      {page.help.enabled && (
-        <Button
-          className="page-shell__help"
-          type="link"
-          icon={<QuestionCircleOutlined aria-hidden="true" />}
-          href={page.help.helpUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`在新标签页打开${page.help.title}`}
-        >
-          帮助
-        </Button>
-      )}
     </div>
-  );
+  ) : null;
 
   return (
     <section className="page-shell" aria-label={page.title}>
       {!headerOutlet && pageActions}
       <div className="page-shell__content">{children}</div>
-      {headerOutletTarget && pageActions && createPortal(pageActions, headerOutletTarget)}
+      {headerOutletTarget && createPortal(pageActions, headerOutletTarget)}
     </section>
   );
 }

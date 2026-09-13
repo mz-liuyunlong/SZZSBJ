@@ -20,6 +20,7 @@ import OrderProfitPage from '@/pages/sales/OrderProfitPage'
 import OperationLogPage from '@/pages/operations/OperationLogPage'
 import SyncTaskPage from '@/pages/data-center/SyncTaskPage'
 import ApiDocsPage from '@/pages/data-center/ApiDocsPage'
+import DataImportPage from '@/pages/data-center/DataImportPage'
 import WfsFeeAlertPage from '@/pages/warehouse/WfsFeeAlertPage'
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
@@ -76,6 +77,10 @@ function BusinessRoute({
     return <Navigate replace to="/login" />
   }
 
+  if (location.pathname === '/') {
+    return <Navigate replace to={DEFAULT_BUSINESS_PATH} />
+  }
+
   if (resolution.kind === 'unknown') {
     return <NotFoundPage />
   }
@@ -102,7 +107,9 @@ renderPage={(page) =>
   ) : page.key === 'operations_log' ? (
     <OperationLogPage page={page} />
   ) : page.key === 'warehouse_wfs_fee_alert' ? (
-    <WfsFeeAlertPage page={page} />
+    <WfsFeeAlertPage page={page} />  ) : page.key === 'data_center_data_import' ? (
+    <DataImportPage page={page} />
+
   ) : page.key === 'data_center_api_docs' ? (
     <ApiDocsPage page={page} />
   ) : page.key === 'data_center_task_center' ? (

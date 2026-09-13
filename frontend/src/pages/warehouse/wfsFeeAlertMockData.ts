@@ -1,6 +1,6 @@
 import type { WfsFeeAlertRow } from "@/pages/warehouse/wfsFeeAlertTypes";
 
-export const wfsFeeAlertRows: WfsFeeAlertRow[] = [
+const baseWfsFeeAlertRows: WfsFeeAlertRow[] = [
   {
     id: "w1",
     imageLabel: "厨房烘焙套装图片",
@@ -350,3 +350,43 @@ export const wfsFeeAlertRows: WfsFeeAlertRow[] = [
     latestFollow: "追回金额已结算。",
   },
 ];
+
+const createGeneratedWfsFeeAlertRows = (): WfsFeeAlertRow[] => Array.from({ length: 100 }, (_, index) => {
+  const source = baseWfsFeeAlertRows[index % baseWfsFeeAlertRows.length];
+  const serial = String(index + 1).padStart(3, "0");
+  const batch = Math.floor(index / baseWfsFeeAlertRows.length);
+  const units = source.units + batch * 8 + index % 5;
+  const unitCharged = Number((source.unitCharged + batch * 0.03).toFixed(2));
+  const unitStandard = Number((source.unitStandard + batch * 0.02).toFixed(2));
+  const chargedFee = Number((units * unitCharged).toFixed(2));
+  const standardFee = Number((units * unitStandard).toFixed(2));
+  const overFee = Number((chargedFee - standardFee).toFixed(2));
+
+  return {
+    ...source,
+    id: `wfs-fee-alert-${serial}`,
+    imageLabel: `${source.imageLabel} ${serial}`,
+    sku: `${source.sku}-${serial}`,
+    msku: `${source.msku}-${serial}`,
+    productId: `${source.productId}${String(index % 10)}`,
+    productName: `${source.productName} ${serial}`,
+    orders: source.orders + batch * 6 + index % 7,
+    units,
+    unitCharged,
+    unitStandard,
+    chargedFee,
+    standardFee,
+    overFee,
+    unitOverFee: Number((unitCharged - unitStandard).toFixed(2)),
+    recoveredAmount: source.status === "已追回"
+      ? overFee
+      : Number((source.recoveredAmount + batch * 3).toFixed(2)),
+    caseNo: source.caseNo ? `${source.caseNo}-${serial}` : "",
+    discoveredAt: `2026-09-${String(1 + index % 13).padStart(2, "0")}`,
+    caseOpenedAt: source.caseOpenedAt ? `2026-09-${String(2 + index % 12).padStart(2, "0")}` : "",
+    nextFollowAt: source.nextFollowAt === "-" ? "-" : `2026-09-${String(14 + index % 10).padStart(2, "0")}`,
+    latestFollow: `${source.latestFollow}（验收样例 ${serial}）`,
+  };
+});
+
+export const wfsFeeAlertRows: WfsFeeAlertRow[] = createGeneratedWfsFeeAlertRows();

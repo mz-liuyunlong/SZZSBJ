@@ -359,8 +359,8 @@ describe("OrderProfitPage", () => {
 
     expect(screen.getByRole("region", { name: "订单利润" }))
       .toContainElement(screen.getByLabelText("订单利润筛选"));
-    expect(orderProfitSourceRecords).toHaveLength(384);
-    expect(todayRows).toHaveLength(48);
+    expect(orderProfitSourceRecords).toHaveLength(800);
+    expect(todayRows).toHaveLength(100);
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
     expect(screen.getByText("商品ID/品名")).toBeVisible();
     expect(screen.getByText("SKU/MSKU")).toBeVisible();
@@ -369,14 +369,12 @@ describe("OrderProfitPage", () => {
     expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.length);
   });
 
-  it("keeps sync and refresh in the header, with export and column config inside the toolbar", () => {
+  it("leaves global sync and help to MainLayout while keeping page actions in the toolbar", () => {
     renderPage();
 
-    const actions = screen.getByText("同步时间：待接入")
-      .closest<HTMLElement>(".page-shell__header-actions");
-    expect(actions).not.toBeNull();
-    expect(within(actions!).getByRole("button", { name: "刷新订单利润" })).toBeVisible();
-    expect(within(actions!).queryByRole("button", { name: "下载" })).not.toBeInTheDocument();
+    expect(screen.queryByText("同步时间：待接入")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "刷新订单利润" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
 
     const toolbar = screen.getByRole("search", { name: "订单利润筛选" });
     expect(within(toolbar).getByRole("button", { name: /隐藏统计$/ })).toBeVisible();
@@ -384,8 +382,6 @@ describe("OrderProfitPage", () => {
     expect(within(toolbar).getByRole("button", { name: "列配置" })).toBeVisible();
     expect(within(toolbar).getByRole("button", { name: "下载" })).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新订单利润" }));
-    expect(messageInfo).toHaveBeenCalledWith("同步接口待接入");
   });
 
   it("defaults to today, product ID search, visible statistics and hidden charts", () => {

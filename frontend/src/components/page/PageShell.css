@@ -3,7 +3,7 @@
   min-width: 0;
   height: 100%;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .page-shell__header {
@@ -45,5 +45,40 @@
 }
 
 .page-shell__content {
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
 }
+
+/* Force full-width page shell */
+.page-shell {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+}
+
+.page-shell__content {
+  display: flex !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+.page-shell__content > * {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  align-self: stretch !important;
+  box-sizing: border-box;
+}
+/* End force full-width page shell */

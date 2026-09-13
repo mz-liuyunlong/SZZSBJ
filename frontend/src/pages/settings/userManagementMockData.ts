@@ -92,7 +92,7 @@ const realNames = [
 const namePrefixes = ["OPS", "BUY", "WHS", "FIN", "ADS", "SKU", "LIST", "DATA"];
 const statuses: UserStatus[] = ["启用", "启用", "启用", "启用", "停用"];
 
-const generatedUsers: UserManagementRow[] = Array.from({ length: 54 }, (_, index) => {
+const generatedUsers: UserManagementRow[] = Array.from({ length: 94 }, (_, index) => {
   const serial = String(index + 7).padStart(3, "0");
   const role = userRoleOptions[index % userRoleOptions.length];
   const secondRole = index % 6 === 0 ? userRoleOptions[(index + 2) % userRoleOptions.length] : undefined;

@@ -205,7 +205,7 @@ const primarySyncTaskRows: SyncTaskRow[] = [
   }),
 ];
 
-const generatedSyncTaskRows: SyncTaskRow[] = Array.from({ length: 100 }, (_, index) => {
+const generatedSyncTaskRows: SyncTaskRow[] = Array.from({ length: 92 }, (_, index) => {
   const number = index + 1;
   const serial = String(number).padStart(3, "0");
   const taskName = generatedTaskNames[index % generatedTaskNames.length];

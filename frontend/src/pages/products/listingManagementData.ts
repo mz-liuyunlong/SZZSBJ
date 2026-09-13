@@ -79,7 +79,7 @@ const tagPatterns = [["主推"], ["新品"], ["清货"], ["主推", "稳定"]];
 const images = ["🎧", "⌚", "🔋", "☕", "🎒", "📱", "💡", "▤", "🧴", "🍳"];
 
 export const listingManagementMockData: ListingManagementRow[] = Array.from(
-  { length: 128 },
+  { length: 100 },
   (_, index) => {
     const number = index + 1;
     const serial = String(number).padStart(3, "0");

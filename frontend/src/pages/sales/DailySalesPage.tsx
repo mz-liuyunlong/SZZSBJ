@@ -3,7 +3,6 @@ import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
-  ReloadOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
@@ -31,7 +30,6 @@ import {
 } from "@/pages/sales/dailySalesTypes";
 import "@/pages/sales/DailySalesPage.css";
 
-const SYNC_PENDING = "同步接口待接入";
 const EXPORT_PENDING = "导出接口待接入";
 const TEMPLATE_PENDING = "列模板接口待接入";
 
@@ -128,19 +126,6 @@ function DailySalesPage({ page }: DailySalesPageProps) {
 
   const headerActions = (
     <>
-      <Typography.Text className="daily-sales__sync-time" type="secondary">
-        同步时间：待接入
-      </Typography.Text>
-      <Tooltip title={SYNC_PENDING}>
-        <Button
-          className="daily-sales__header-icon"
-          type="text"
-          shape="circle"
-          aria-label="刷新每日销售"
-          icon={<ReloadOutlined aria-hidden="true" />}
-          onClick={() => void messageApi.info(SYNC_PENDING)}
-        />
-      </Tooltip>
     </>
   );
 
