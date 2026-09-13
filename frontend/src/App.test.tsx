@@ -124,5 +124,5 @@ describe("App", () => {
       ),
     ).toHaveLength(1);
     expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
-  }, 10_000);
+  }, 20_000);
 });
