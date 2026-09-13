@@ -156,3 +156,27 @@
 | PR | TBD |
 | Current branch evidence | Four revisions through `20260912_0006`, 20 approved tables in one metadata, 17 protected routes, synthetic parser/calculation/importer/batch tests; final merge status and PR remain TBD |
 | Not in scope | Frontend/admin-frontend, old-system, real Lingxing/Token/ProductList/batchGetProductInfo calls, production DB/migration, live Redis/Celery, archive transport/deletion, ADS implementation, external provider handlers beyond the reusable contract, deployment, or Git publishing |
+
+## Product Detail Sync + Product Management BFF / Pricing V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Product Detail Sync foundation and Product Management BFF / Pricing V1 |
+| Module key | `product-detail-sync-product-management-api-v1` |
+| Status | `approved_for_implementation`; current worktree implementation is not `implemented` before review and merge |
+| Main role | Backend Engineer; branch `feat/product-detail-sync-product-management-api` |
+| Backend directory | `backend/app/modules/product_management/` plus minimal registration, Product listing primary flag, one Alembic revision, synthetic/mock tests, API doc and runbook |
+| APIs | Ten protected operations under `/api/product-management/**` and `/api/user-table-views/product-management` using the shared envelope/request ID foundation |
+| Storage | Internal tags/assignments, account-scoped immutable pricing rule versions, safe persistent recalculation runs, rebuildable current pricing projection and principal-owned table views; existing Product/listing/DWD/DWS objects are reused |
+| Calculations | Decimal-only WFS override selection, configured WFS/storage state flow, gross-weight first leg, three prices, gross margin, purchase/total-cost ROI and versioned A/B/C/exception grade |
+| WFS evidence | Source URL/confirmation metadata can be versioned, but no concrete fulfillment/storage value is bundled; missing config returns `missing_rate` |
+| Product Info integration | Existing `id_batch_page`, synthetic parser and publisher are reused; dedicated setting defaults false and real outbound fails `outbound_not_authorized` / `provider_contract_missing` |
+| Permissions | `products:read`, `products:cost:read`, `products:export`, `products:pricing_rules:read`, `products:pricing_rules:update`, `products:pricing:recalculate`, `products:table_views:update` |
+| Scope | Confirmed Product mapping plus trusted Product and source-account scopes; no SKU/MSKU/name inference |
+| Review hardening | Exact batch SKU search is bounded to 1,000 values; recalculation defaults to persistent preview and isolates idempotency by principal/account/capability/mode; rule rollover is transactional with a partial unique open-version index; listing-level WFS overrides fail closed until listings gain account scope |
+| Security | BFF never reads/returns RAW, provider payload, auth material or secret values; logs contain only actor/request/internal UUID/count/version/status |
+| PRP | `PRPs/product-detail-sync-product-management-api-v1.md` |
+| Source Decision | `docs/data-sources/decisions/product-management-product-detail-sync-decision.md` |
+| API docs / runbook | `docs/api/product-management-api.md`; `docs/runbooks/production-lingxing-product-info-sync.md` |
+| PR | TBD |
+| Not in scope | Frontend, old-system, real Token/Lingxing/Walmart, production DB/server/migration/sync/deployment, guessed provider contract/rates, automatic schedule, RAW artifact, or Git publishing |

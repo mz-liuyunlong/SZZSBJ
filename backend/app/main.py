@@ -9,6 +9,7 @@ from app.core.api import SuccessEnvelope, install_api_foundation, success_respon
 from app.core.auth import enforce_protected_by_default
 from app.db.session import dispose_engine
 from app.modules.integration_sync.router import router as integration_sync_router
+from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
 from app.modules.sku_detail.router import router as sku_detail_router
 
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     )
     install_api_foundation(application)
     application.include_router(integration_sync_router)
+    application.include_router(product_management_router)
     application.include_router(products_router)
     application.include_router(sku_detail_router)
 

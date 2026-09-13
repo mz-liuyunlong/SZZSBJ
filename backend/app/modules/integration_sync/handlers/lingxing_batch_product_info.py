@@ -12,6 +12,10 @@ class BatchProductInfoOutboundDisabled(RuntimeError):
     """V1 deliberately has no real batchGetProductInfo transport contract."""
 
 
+OUTBOUND_NOT_AUTHORIZED = "outbound_not_authorized"
+PROVIDER_CONTRACT_MISSING = "provider_contract_missing"
+
+
 @dataclass(frozen=True, slots=True)
 class BatchPlan:
     work_items: tuple[IntegrationSyncRunWorkItem, ...]
@@ -72,11 +76,19 @@ class LingxingBatchGetProductInfoSyncHandler:
             )
         return BatchPlan(tuple(work_items), tuple(memberships))
 
-    def execute(self, run_id: UUID) -> None:
+    def execute(
+        self,
+        run_id: UUID,
+        *,
+        outbound_authorized: bool = False,
+        provider_contract_verified: bool = False,
+    ) -> None:
         del run_id
-        raise BatchProductInfoOutboundDisabled(
-            "batchGetProductInfo outbound execution is not authorized"
-        )
+        if not outbound_authorized:
+            raise BatchProductInfoOutboundDisabled(OUTBOUND_NOT_AUTHORIZED)
+        if not provider_contract_verified:
+            raise BatchProductInfoOutboundDisabled(PROVIDER_CONTRACT_MISSING)
+        raise BatchProductInfoOutboundDisabled(OUTBOUND_NOT_AUTHORIZED)
 
 
 def ordered_id_hash(values: list[str]) -> str:

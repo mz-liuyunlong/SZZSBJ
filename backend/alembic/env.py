@@ -6,6 +6,7 @@ from sqlalchemy.engine import URL, Connection
 
 import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metadata.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
+import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.
 import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS projections.
 from alembic import context

@@ -5,13 +5,16 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -87,6 +90,14 @@ class ProductPlatformListing(Base):
             "(wfs_fee IS NULL AND shipping_cost IS NULL) OR currency_code IS NOT NULL",
             name="ck_product_platform_listings_money_currency_required",
         ),
+        Index(
+            "uq_product_platform_listings_primary_walmart",
+            "product_id",
+            unique=True,
+            postgresql_where=text(
+                "is_primary IS TRUE AND platform = 'walmart' AND deleted_at IS NULL"
+            ),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -102,6 +113,9 @@ class ProductPlatformListing(Base):
     listing_url: Mapped[str | None] = mapped_column(String(2048))
     listing_status: Mapped[str | None] = mapped_column(String(64))
     fulfillment_type: Mapped[str | None] = mapped_column(String(64))
+    is_primary: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     wfs_fee: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     shipping_cost: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     currency_code: Mapped[str | None] = mapped_column(String(3))

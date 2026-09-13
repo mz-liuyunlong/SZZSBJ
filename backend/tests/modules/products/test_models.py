@@ -52,7 +52,10 @@ def test_models_match_approved_grains_and_constraints() -> None:
         "ck_product_platform_listings_platform_allowed",
         "ck_product_platform_listings_money_currency_required",
     }
-    assert {index.name for index in listings.indexes} == {"ix_product_platform_listings_product_id"}
+    assert {index.name for index in listings.indexes} == {
+        "ix_product_platform_listings_product_id",
+        "uq_product_platform_listings_primary_walmart",
+    }
 
 
 def test_product_schema_trims_identity_and_serializes_decimal_as_string() -> None:
