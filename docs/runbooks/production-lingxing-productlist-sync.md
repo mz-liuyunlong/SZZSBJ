@@ -3,8 +3,10 @@
 Status: implementation prepared; execution is prohibited until this change is reviewed, merged to
 `main`, deployed, and manually authorized by the Project Owner.
 
-Source Decision:
-`docs/decisions/2026-09-13-production-lingxing-productlist-sync-source-decision.md`
+Source Decisions:
+
+- `docs/decisions/2026-09-13-production-lingxing-productlist-sync-source-decision.md`
+- `docs/decisions/2026-09-13-productlist-one-time-runner-source-decision.md`
 
 ## Fixed boundary
 
@@ -77,6 +79,42 @@ sync config before continuing. Confirm all of the following:
 - ProductList outbound and Token requests are enabled only for this Owner-authorized run.
 
 If any prerequisite is missing or ambiguous, stop and request a separate Owner decision.
+
+## First controlled one-time run
+
+The governance bootstrap must complete and its three rows must pass the checks above before the
+one-time runner is considered. Run only code deployed from a clean, merged `main`; never run the
+script from a feature branch or server-side patch.
+
+The Owner must separately authorize the real request at execution time. Scope the following
+overrides to that single command and use the non-secret logical account placeholder shown here:
+
+```bash
+PRODUCTLIST_SOURCE_ACCOUNT_REF=SOURCE_ACCOUNT_REF_PLACEHOLDER \
+PRODUCTLIST_ONE_TIME_RUN_AUTHORIZED=true \
+LINGXING_ENABLE_TOKEN_REQUESTS=true \
+LINGXING_ENABLE_REAL_CALLS=true \
+LINGXING_DRY_RUN=false \
+LINGXING_ALLOW_RAW_WRITE=true \
+uv run python scripts/run_productlist_once.py
+```
+
+The deployed environment must already identify the production application environment and keep
+structured writes and full sync disabled. The runner validates every gate, the approved ProductList
+interface, active retention policy, scoped config, manual-only schedule state, running-run exclusion,
+and optional non-secret idempotency/reason inputs before creating one run. It never repairs or
+upserts governance rows.
+
+Do not add the authorization or real-request overrides to `APPLICATION_ENV_FILE` or any other
+persistent environment file. The runner directly invokes the reviewed ProductList handler: it does
+not use FastAPI, Celery dispatch, scheduler tasks, `batchGetProductInfo`, or another provider
+endpoint. The authorized execution requests a Token and ProductList pages, so stop unless the Owner
+has approved that exact server command.
+
+Runner output is limited to run IDs, safe status/error codes, paging settings, and aggregate counts.
+It must not print the logical account reference, credentials, authentication parameters, full URLs,
+RAW payloads, archive locations, or product fields. Post-run reconciliation may query only the
+aggregate fields listed below; never select `payload_json`, product values, or authentication fields.
 
 ## Manual trigger
 
