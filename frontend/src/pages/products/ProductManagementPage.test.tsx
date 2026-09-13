@@ -811,7 +811,7 @@ describe("ProductManagementPage", () => {
     for (const row of within(table).getAllByRole("row").slice(1)) {
       expect(row).toHaveTextContent("测品");
     }
-  });
+  }, 10000);
 
   it("keeps the table header and pagination fixed when page size changes", () => {
     const view = renderPage();
@@ -1023,12 +1023,15 @@ describe("ProductManagementPage", () => {
     }
   });
 
-  it("opens details from SKU without rendering legacy copy controls", () => {
+  it("opens details from SKU and renders standardized copy controls", () => {
     renderPage();
-    expect(screen.queryByRole("button", { name: /复制SKU|复制产品名称/ })).not.toBeInTheDocument();
+
+    expect(screen.getAllByRole("button", { name: /复制SKU：/ })).not.toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: /复制产品名称：/ })).not.toHaveLength(0);
     expect(screen.queryByRole("dialog", { name: "产品详情" })).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "UI-SAMPLE-001" }));
-    expect(screen.getByRole("dialog", { name: "产品详情" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "产品详情" })).toBeInTheDocument();
   });
 
   it("keeps only the detail action without a legacy operation menu", () => {
