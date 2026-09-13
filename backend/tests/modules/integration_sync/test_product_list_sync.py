@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from pydantic import JsonValue, SecretStr
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -24,7 +25,11 @@ from app.modules.integration_sync.handlers.lingxing_product_list_sync import (
     product_list_client,
     product_list_response_succeeded,
 )
-from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncRun
+from app.modules.integration_sync.models import (
+    IntegrationInterface,
+    IntegrationSyncRun,
+    IntegrationSyncRunWorkItem,
+)
 from app.modules.integration_sync.parsers.lingxing_product_list import (
     inspect_productlist_sku_ids,
 )
@@ -166,6 +171,26 @@ def _handler(
     repository.get_lingxing_identity.return_value = None
     repository.deactivate_absent_identities.return_value = 1
     return handler, repository, session
+
+
+def _enable_failure_recovery(
+    repository: MagicMock,
+    run: IntegrationSyncRun,
+) -> list[IntegrationSyncRunWorkItem]:
+    work_items: list[IntegrationSyncRunWorkItem] = []
+
+    def capture(
+        items: list[IntegrationSyncRunWorkItem],
+    ) -> list[IntegrationSyncRunWorkItem]:
+        work_items.extend(items)
+        return items
+
+    repository.add_work_items.side_effect = capture
+    repository.get_run_for_update.return_value = run
+    repository.get_work_item_for_update.side_effect = lambda run_id, work_item_id: (
+        work_items[0] if run_id == run.id and work_item_id == work_items[0].id else None
+    )
+    return work_items
 
 
 def test_productlist_transport_uses_mocked_token_and_keeps_auth_out_of_envelope() -> None:
@@ -361,6 +386,111 @@ def test_duplicate_ids_fail_with_count_and_without_identity_publication() -> Non
     repository.add_productlist_refs.assert_not_called()
     repository.add_identity.assert_not_called()
     repository.deactivate_absent_identities.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "publish_error",
+    [
+        IntegrityError("synthetic statement", {}, RuntimeError("synthetic cause")),
+        SQLAlchemyError("synthetic failure"),
+    ],
+)
+def test_reference_publish_failure_recovers_and_finishes_work_item(
+    publish_error: Exception,
+) -> None:
+    client = FakePageClient(
+        [
+            _envelope(
+                page_no=1,
+                page_size=1,
+                payload={"code": 0, "total": 1, "data": [{"id": "synthetic"}]},
+            )
+        ]
+    )
+    handler, repository, session = _handler(client, page_size=1)
+    run = _run()
+    work_items = _enable_failure_recovery(repository, run)
+    repository.add_productlist_refs.side_effect = publish_error
+
+    result = handler.execute(run, _interface())
+
+    work = work_items[0]
+    assert result.status == "failed"
+    assert run.status == "failed"
+    assert run.error_code == "SYNC_PRODUCTLIST_REF_PUBLISH_FAILED"
+    assert run.finished_at is not None
+    assert run.work_items_failed == 1
+    assert work.status == "failed"
+    assert work.error_code == "SYNC_PRODUCTLIST_REF_PUBLISH_FAILED"
+    assert work.finished_at is not None
+    assert repository.add_raw_blob.call_count == 1
+    assert repository.add_raw_request_ref.call_count == 1
+    session.delete.assert_not_called()
+
+
+def test_identity_publish_failure_uses_safe_code_without_identifier_logging(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    private_identifier = "synthetic-private-identifier"
+    client = FakePageClient(
+        [
+            _envelope(
+                page_no=1,
+                page_size=1,
+                payload={"code": 0, "total": 1, "data": [{"id": private_identifier}]},
+            )
+        ]
+    )
+    handler, repository, _ = _handler(client, page_size=1)
+    run = _run()
+    work_items = _enable_failure_recovery(repository, run)
+    repository.add_identity.side_effect = SQLAlchemyError("synthetic failure")
+    caplog.set_level(logging.INFO, logger="app.integration_sync.product_list")
+
+    result = handler.execute(run, _interface())
+
+    work = work_items[0]
+    assert result.status == "failed"
+    assert run.error_code == "SYNC_PRODUCTLIST_IDENTITY_PUBLISH_FAILED"
+    assert work.status == "failed"
+    assert work.error_code == "SYNC_PRODUCTLIST_IDENTITY_PUBLISH_FAILED"
+    assert work.finished_at is not None
+    assert private_identifier not in caplog.text
+    repository.add_productlist_refs.assert_not_called()
+
+
+def test_broad_publish_exception_does_not_leave_running_work_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakePageClient(
+        [_envelope(page_no=1, page_size=1, payload={"code": 0, "total": 0, "data": []})]
+    )
+    handler, repository, _ = _handler(client, page_size=1)
+    run = _run()
+    work_items = _enable_failure_recovery(repository, run)
+    monkeypatch.setattr(handler, "_publish_page", MagicMock(side_effect=RuntimeError("synthetic")))
+
+    result = handler.execute(run, _interface())
+
+    work = work_items[0]
+    assert result.status == "failed"
+    assert run.error_code == "SYNC_PRODUCTLIST_PUBLISH_FAILED"
+    assert work.status == "failed"
+    assert work.error_code == "SYNC_PRODUCTLIST_PUBLISH_FAILED"
+    assert work.finished_at is not None
+
+
+def test_failed_work_item_counter_is_not_incremented_twice() -> None:
+    handler, _, _ = _handler(FakePageClient([]))
+    run = _run()
+    run.status = "failed"
+    run.work_items_failed = 1
+    work = MagicMock(spec=IntegrationSyncRunWorkItem)
+    work.status = "failed"
+
+    handler._fail_run(run, work, "SYNC_PRODUCTLIST_PUBLISH_FAILED")
+
+    assert run.work_items_failed == 1
 
 
 def test_nested_productlist_data_ids_are_supported_without_exposing_values() -> None:
