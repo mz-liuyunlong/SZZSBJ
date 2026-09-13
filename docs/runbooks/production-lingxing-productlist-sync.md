@@ -157,5 +157,22 @@ retry with relaxed validation, call another endpoint, or inspect/print product p
 the failure. Credential exposure requires immediate stop and Owner-managed rotation without
 repeating the exposed value.
 
+If a failed ProductList run has a work item incorrectly left in `running`, use the repair script only
+after this fix is reviewed, merged to `main`, deployed cleanly, and separately authorized by the
+Owner for the exact run ID:
+
+```bash
+PRODUCTLIST_REPAIR_RUN_ID=RUN_ID_PLACEHOLDER \
+PRODUCTLIST_REPAIR_FAILED_WORK_ITEMS_AUTHORIZED=true \
+uv run python scripts/repair_productlist_failed_work_items.py
+```
+
+The authorization value is one-command only and must not be added to `APPLICATION_ENV_FILE`. The
+script accepts only a failed Lingxing ProductList run with a non-empty safe error code. It changes
+only stale running work-item status/error/finish fields and increments the run's failed-work count;
+it does not retry, request a Token, call ProductList or another endpoint, or read/change RAW,
+request references, ProductList references, identities, governance, Product Core, or DWS data.
+Output is limited to PASS/NOOP, run ID, repaired count, and whether the run error code is present.
+
 RAW JSON and archive files must remain outside Git. Never add them to a commit, report, log, or
 task output.

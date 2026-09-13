@@ -286,6 +286,36 @@ class IntegrationSyncRepository:
             page_size,
         )
 
+    def get_work_item_for_update(
+        self,
+        run_id: UUID,
+        work_item_id: UUID,
+    ) -> IntegrationSyncRunWorkItem | None:
+        return self.session.scalar(
+            select(IntegrationSyncRunWorkItem)
+            .where(
+                IntegrationSyncRunWorkItem.id == work_item_id,
+                IntegrationSyncRunWorkItem.run_id == run_id,
+            )
+            .with_for_update()
+        )
+
+    def list_running_work_items_for_update(
+        self,
+        run_id: UUID,
+    ) -> list[IntegrationSyncRunWorkItem]:
+        return list(
+            self.session.scalars(
+                select(IntegrationSyncRunWorkItem)
+                .where(
+                    IntegrationSyncRunWorkItem.run_id == run_id,
+                    IntegrationSyncRunWorkItem.status == "running",
+                )
+                .order_by(IntegrationSyncRunWorkItem.ordinal)
+                .with_for_update()
+            ).all()
+        )
+
     def list_raw_request_refs(
         self, *, run_id: UUID, page: int, page_size: int
     ) -> tuple[list[tuple[ApiRawRequestRef, ApiRawBlob]], int]:

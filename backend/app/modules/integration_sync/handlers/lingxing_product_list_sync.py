@@ -193,10 +193,12 @@ class LingxingProductListSyncHandler:
         observed_ids: set[str] = set()
         expected_total: int | None = None
         offset = 0
-        current_work: IntegrationSyncRunWorkItem | None = None
+        run_id = run.id
+        current_work_id: UUID | None = None
         try:
             for page_no in range(1, max_pages + 1):
-                work = current_work = self._start_work_item(run, page_no, offset, page_size)
+                work = self._start_work_item(run, page_no, offset, page_size)
+                current_work_id = work.id
                 try:
                     envelope = client.fetch_product_list_page(
                         offset=offset,
@@ -240,7 +242,18 @@ class LingxingProductListSyncHandler:
                 projected_count = offset + inspected.response_count
                 if expected_total is not None and projected_count > expected_total:
                     return self._fail_run(run, work, "SYNC_PRODUCTLIST_TOTAL_MISMATCH")
-                self._publish_page(run, work, envelope.pulled_at, inspected.values)
+                try:
+                    self._publish_page(run, work, envelope.pulled_at, inspected.values)
+                except ProductListSyncError as error:
+                    self.session.rollback()
+                    return self._recover_and_fail(run_id, current_work_id, str(error))
+                except Exception:
+                    self.session.rollback()
+                    return self._recover_and_fail(
+                        run_id,
+                        current_work_id,
+                        "SYNC_PRODUCTLIST_PUBLISH_FAILED",
+                    )
                 observed_ids.update(inspected.values)
                 offset = projected_count
                 logger.info(
@@ -263,16 +276,14 @@ class LingxingProductListSyncHandler:
             return self._fail_run(run, None, "SYNC_PRODUCTLIST_MAX_PAGES_REACHED")
         except ProductListSyncError as error:
             self.session.rollback()
-            return self._fail_run(run, current_work, str(error))
+            return self._recover_and_fail(run_id, current_work_id, str(error))
         except Exception:
             self.session.rollback()
-            try:
-                recovered = self.repository.get_run_for_update(run.id)
-                if recovered is not None and recovered.status == "running":
-                    self._fail_run(recovered, None, "SYNC_PRODUCTLIST_EXECUTION_FAILED")
-            except Exception:
-                self.session.rollback()
-            raise ProductListSyncError("SYNC_PRODUCTLIST_EXECUTION_FAILED") from None
+            return self._recover_and_fail(
+                run_id,
+                current_work_id,
+                "SYNC_PRODUCTLIST_EXECUTION_FAILED",
+            )
 
     def _start_work_item(
         self,
@@ -360,40 +371,46 @@ class LingxingProductListSyncHandler:
         if raw_ref is None:
             raise ProductListSyncError("SYNC_PRODUCTLIST_RAW_REF_MISSING")
         refs: list[LingxingProductListSkuRef] = []
-        for ordinal, sku_id in enumerate(sku_ids):
-            refs.append(
-                LingxingProductListSkuRef(
-                    id=uuid4(),
-                    run_id=run.id,
-                    raw_request_ref_id=raw_ref.id,
-                    source_account_ref=run.source_account_ref,
-                    lingxing_sku_id=sku_id,
-                    source_item_ordinal=ordinal,
-                    observed_at=observed_at,
-                )
-            )
-            identity = self.repository.get_lingxing_identity(run.source_account_ref, sku_id)
-            if identity is None:
-                self.repository.add_identity(
-                    LingxingSkuIdentity(
+        try:
+            for ordinal, sku_id in enumerate(sku_ids):
+                refs.append(
+                    LingxingProductListSkuRef(
                         id=uuid4(),
-                        provider="lingxing",
+                        run_id=run.id,
+                        raw_request_ref_id=raw_ref.id,
                         source_account_ref=run.source_account_ref,
                         lingxing_sku_id=sku_id,
-                        mapping_status="unmapped",
-                        is_active=True,
-                        first_seen_run_id=run.id,
-                        last_seen_run_id=run.id,
-                        first_seen_at=observed_at,
-                        last_seen_at=observed_at,
+                        source_item_ordinal=ordinal,
+                        observed_at=observed_at,
                     )
                 )
-            else:
-                identity.is_active = True
-                identity.last_seen_run_id = run.id
-                identity.last_seen_at = observed_at
-                identity.inactive_at = None
-        self.repository.add_productlist_refs(refs)
+                identity = self.repository.get_lingxing_identity(run.source_account_ref, sku_id)
+                if identity is None:
+                    self.repository.add_identity(
+                        LingxingSkuIdentity(
+                            id=uuid4(),
+                            provider="lingxing",
+                            source_account_ref=run.source_account_ref,
+                            lingxing_sku_id=sku_id,
+                            mapping_status="unmapped",
+                            is_active=True,
+                            first_seen_run_id=run.id,
+                            last_seen_run_id=run.id,
+                            first_seen_at=observed_at,
+                            last_seen_at=observed_at,
+                        )
+                    )
+                else:
+                    identity.is_active = True
+                    identity.last_seen_run_id = run.id
+                    identity.last_seen_at = observed_at
+                    identity.inactive_at = None
+        except Exception:
+            raise ProductListSyncError("SYNC_PRODUCTLIST_IDENTITY_PUBLISH_FAILED") from None
+        try:
+            self.repository.add_productlist_refs(refs)
+        except Exception:
+            raise ProductListSyncError("SYNC_PRODUCTLIST_REF_PUBLISH_FAILED") from None
         work.status = "succeeded"
         work.finished_at = utc_now()
         run.work_items_succeeded += 1
@@ -430,6 +447,28 @@ class LingxingProductListSyncHandler:
             inactive_ids_count=inactive_count,
         )
 
+    def _recover_and_fail(
+        self,
+        run_id: UUID,
+        work_item_id: UUID | None,
+        error_code: str,
+    ) -> ProductListSyncResult:
+        try:
+            run = self.repository.get_run_for_update(run_id)
+            if run is None:
+                raise ProductListSyncError("SYNC_PRODUCTLIST_RUN_MISSING")
+            work = (
+                self.repository.get_work_item_for_update(run_id, work_item_id)
+                if work_item_id is not None
+                else None
+            )
+            return self._fail_run(run, work, error_code)
+        except ProductListSyncError:
+            raise
+        except Exception:
+            self.session.rollback()
+            raise ProductListSyncError("SYNC_PRODUCTLIST_FAILURE_STATE_WRITE_FAILED") from None
+
     def _fail_run(
         self,
         run: IntegrationSyncRun,
@@ -439,7 +478,7 @@ class LingxingProductListSyncHandler:
         duplicate_count: int = 0,
     ) -> ProductListSyncResult:
         now = utc_now()
-        if work is not None:
+        if work is not None and work.status == "running":
             work.status = "failed"
             work.error_code = error_code
             work.error_message = (
