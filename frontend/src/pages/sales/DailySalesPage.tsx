@@ -193,11 +193,6 @@ function DailySalesPage({ page }: DailySalesPageProps) {
               按日期查看 SKU / MSKU 销售、成本、利润、广告费、库存与运营日志数据。
             </Typography.Paragraph>
           </div>
-          <div className="daily-sales__page-header-meta">
-            <span>当前筛选</span>
-            <strong>{filteredRows.length.toLocaleString("zh-CN")}</strong>
-            <span>条记录</span>
-          </div>
         </section>
 
         <Card size="small" className="daily-sales__toolbar-card">

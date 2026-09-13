@@ -1,0 +1,340 @@
+.api-docs {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.api-docs__page-head {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid #e5eaf3;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.api-docs__page-head .ant-typography {
+  margin: 0;
+}
+
+.api-docs__page-head .ant-typography + .ant-typography {
+  margin-top: 5px;
+}
+
+.api-docs__search {
+  width: 320px;
+}
+
+.api-docs__layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 228px minmax(620px, 1fr) 380px;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.api-docs__module-nav,
+.api-docs__right-model,
+.api-docs__matrix-card,
+.api-docs__detail-reader,
+.api-docs__level-nav {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.api-docs__module-nav .ant-card-body {
+  height: calc(100% - 38px);
+  overflow: auto;
+  padding: 8px;
+}
+
+.api-docs__module-button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid #edf1f7;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  color: #344054;
+}
+
+.api-docs__module-button:hover,
+.api-docs__module-button--active {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #1677ff;
+}
+
+.api-docs__module-button-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.api-docs__module-button > span:last-child {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.api-docs__main-doc {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 260px minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.api-docs__level-nav .ant-card-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px;
+}
+
+.api-docs__level-chip {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 1px solid #e8edf5;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 12px;
+  color: #344054;
+}
+
+.api-docs__level-chip:hover,
+.api-docs__level-chip--active {
+  background: #e6f4ff;
+  border-color: #91caff;
+  color: #1677ff;
+}
+
+.api-docs__level-chip span:last-child {
+  color: #667085;
+  font-size: 12px;
+}
+
+.api-docs__matrix-card .ant-card-body,
+.api-docs__detail-reader .ant-card-body,
+.api-docs__right-model .ant-card-body {
+  height: calc(100% - 38px);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.api-docs__matrix-scroll {
+  height: 100%;
+  overflow: auto;
+}
+
+.api-docs__matrix-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.api-docs__matrix-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #475467;
+  font-weight: 700;
+  border-bottom: 1px solid #e5eaf3;
+}
+
+.api-docs__matrix-table th,
+.api-docs__matrix-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #edf1f7;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.api-docs__matrix-table td:nth-child(6),
+.api-docs__matrix-table td:nth-child(8) {
+  min-width: 180px;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.api-docs__matrix-table tr {
+  cursor: pointer;
+}
+
+.api-docs__matrix-table tr:hover td,
+.api-docs__matrix-row--active td {
+  background: #f8fbff;
+}
+
+.api-docs__matrix-row--active td:first-child {
+  box-shadow: inset 3px 0 0 #1677ff;
+}
+
+.api-docs__detail-body,
+.api-docs__model-body {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.api-docs__breadcrumb-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.api-docs__detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.api-docs__detail-head .ant-typography {
+  margin: 0;
+}
+
+.api-docs__detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.api-docs__doc-section,
+.api-docs__schema-card {
+  border: 1px solid #edf1f7;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.api-docs__doc-section h3,
+.api-docs__schema-card b {
+  display: block;
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.api-docs__doc-section p {
+  margin: 0;
+  color: #344054;
+  line-height: 1.7;
+}
+
+.api-docs__field-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.api-docs__field-table th,
+.api-docs__field-table td {
+  border-bottom: 1px solid #edf1f7;
+  padding: 7px;
+  text-align: left;
+  font-size: 12px;
+  vertical-align: top;
+}
+
+.api-docs__field-table th {
+  color: #667085;
+  background: #f8fafc;
+}
+
+.api-docs__code {
+  margin: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 12px;
+  overflow: auto;
+  line-height: 1.55;
+  font-size: 12px;
+  font-family: SFMono-Regular, Consolas, Monaco, monospace;
+}
+
+.api-docs__quick-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-bottom: 10px;
+}
+
+.api-docs__export-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 1280px) {
+  .api-docs__layout {
+    grid-template-columns: 210px minmax(520px, 1fr);
+  }
+
+  .api-docs__right-model {
+    display: none;
+  }
+
+  .api-docs__search {
+    width: 220px;
+  }
+}
+/* api-docs page head one-line */
+.api-docs__page-head {
+  align-items: center;
+}
+
+.api-docs__page-head > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.api-docs__page-head > div:first-child h1,
+.api-docs__page-head > div:first-child h2,
+.api-docs__page-head > div:first-child h3.ant-typography,
+.api-docs__page-head > div:first-child h3 {
+  flex: 0 0 auto;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.api-docs__page-head > div:first-child p,
+.api-docs__page-head > div:first-child .ant-typography:not(h1):not(h2):not(h3):not(h4):not(h5) {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #667085;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-docs__page-head > .ant-space {
+  flex: 0 0 auto;
+}

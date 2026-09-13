@@ -256,8 +256,12 @@
 }
 
 .report-table-connected-search {
+  width: 440px;
+  min-width: 360px;
+  max-width: 440px;
+  flex: 0 0 440px;
+
   display: flex;
-  min-width: 280px;
 }
 
 .report-table-connected-search > .ant-select {

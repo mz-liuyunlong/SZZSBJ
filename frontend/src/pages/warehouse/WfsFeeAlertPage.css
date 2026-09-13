@@ -1,0 +1,417 @@
+.page-shell:has(> .page-shell__content .wfs-fee-alert) {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-shell:has(> .page-shell__content .wfs-fee-alert) > .page-shell__content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page-shell:has(> .page-shell__content .wfs-fee-alert) > .page-shell__header > .page-shell__heading {
+  display: none;
+}
+
+.wfs-fee-alert {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.wfs-fee-alert__page-header,
+.wfs-fee-alert__toolbar-card,
+.wfs-fee-alert__summary {
+  flex: 0 0 auto;
+}
+
+.wfs-fee-alert__page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #e5eaf3;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.wfs-fee-alert__page-header .ant-typography {
+  margin: 0;
+}
+
+.wfs-fee-alert__page-header .ant-typography + .ant-typography {
+  margin-top: 6px;
+}
+
+
+
+.wfs-fee-alert__sync-time {
+  font-size: 13px;
+}
+
+.wfs-fee-alert__header-icon,
+.wfs-fee-alert__toolbar-icon-button {
+  color: #475467;
+}
+
+.wfs-fee-alert__toolbar-card .ant-card-body {
+  padding: 10px;
+}
+
+.wfs-fee-alert__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+
+.wfs-fee-alert__currency-select {
+  width: 94px;
+  flex: 0 0 94px;
+}
+
+.wfs-fee-alert__filter-select {
+  width: 126px;
+  flex: 0 0 126px;
+}
+
+.wfs-fee-alert__connected-search {
+  width: 440px;
+  min-width: 360px;
+  max-width: 440px;
+  flex: 0 0 440px;
+
+  display: flex;
+  border: 1px solid #d6dfec;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.wfs-fee-alert__connected-search:focus-within {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.12);
+}
+
+.wfs-fee-alert__connected-search .ant-select-selector,
+.wfs-fee-alert__connected-search .ant-input,
+.wfs-fee-alert__connected-search .ant-btn {
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.wfs-fee-alert__connected-search .ant-select {
+  width: 96px;
+  flex: 0 0 96px;
+  border-right: 1px solid #e5eaf3;
+}
+
+.wfs-fee-alert__connected-search .ant-input {
+  flex: 1;
+}
+
+.wfs-fee-alert__connected-search .ant-btn {
+  width: 38px;
+  flex: 0 0 38px;
+  border-left: 1px solid #e5eaf3 !important;
+}
+
+.wfs-fee-alert__summary {
+  height: 68px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(132px, 1fr));
+  gap: 0;
+  border: 1px solid #e5eaf3;
+  border-radius: 12px;
+  background: #fff;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.wfs-fee-alert__summary-card {
+  border: 0;
+  border-right: 1px solid #eef2f7;
+  border-radius: 0;
+  background: linear-gradient(180deg, #fff, #fbfdff);
+}
+
+.wfs-fee-alert__summary-card .ant-card-body {
+  height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+}
+
+.wfs-fee-alert__summary-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.wfs-fee-alert__summary-card--red .wfs-fee-alert__summary-icon {
+  color: #f04438;
+  background: #fff1f0;
+}
+
+.wfs-fee-alert__summary-card--orange .wfs-fee-alert__summary-icon {
+  color: #d46b08;
+  background: #fff7e6;
+}
+
+.wfs-fee-alert__summary-card--green .wfs-fee-alert__summary-icon {
+  color: #16a34a;
+  background: #ecfdf3;
+}
+
+.wfs-fee-alert__summary-card--purple .wfs-fee-alert__summary-icon {
+  color: #7c3aed;
+  background: #f4f0ff;
+}
+
+.wfs-fee-alert__summary-card--blue .wfs-fee-alert__summary-icon {
+  color: #1677ff;
+  background: #e6f4ff;
+}
+
+.wfs-fee-alert__summary-label {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wfs-fee-alert__summary strong {
+  display: block;
+  color: #1f2a44;
+  font-size: 16px;
+  line-height: 1.2;
+  margin: 1px 0;
+}
+
+.wfs-fee-alert__summary small {
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.wfs-fee-alert__table {
+  flex: 1 1 260px;
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.wfs-fee-alert__product-image {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 1px solid #dce6f5;
+  background: linear-gradient(135deg, #eef5ff, #f8fafc);
+  font-size: 17px;
+}
+
+.wfs-fee-alert__danger-money {
+  color: #ff2d2d;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.wfs-fee-alert__total-row .ant-table-cell,
+.wfs-fee-alert__total-row td {
+  background: #fffbe6 !important;
+  font-weight: 800;
+}
+
+.wfs-fee-alert__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wfs-fee-alert__detail-head {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.wfs-fee-alert__detail-image {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid #dce6f5;
+  background: linear-gradient(135deg, #eef5ff, #f8fafc);
+  font-size: 30px;
+}
+
+.wfs-fee-alert__detail-head .ant-typography {
+  margin: 0;
+}
+
+.wfs-fee-alert__detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.wfs-fee-alert__detail-section {
+  border: 1px solid #e5eaf3;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.wfs-fee-alert__detail-section .ant-typography {
+  margin-top: 0;
+}
+
+@media (max-width: 1360px) {
+  .wfs-fee-alert__toolbar {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
+
+.wfs-fee-alert__table .ant-table-body {
+  min-height: 220px;
+}
+
+/* one-line page header: wfs-fee-alert__page-header */
+.wfs-fee-alert__page-header {
+  align-items: center;
+}
+
+.wfs-fee-alert__page-header > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.wfs-fee-alert__page-header h1,
+.wfs-fee-alert__page-header h2,
+.wfs-fee-alert__page-header h3.ant-typography,
+.wfs-fee-alert__page-header h3,
+.wfs-fee-alert__page-header .ant-typography h3 {
+  flex: 0 0 auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.wfs-fee-alert__page-header p,
+.wfs-fee-alert__page-header .ant-typography:not(h1):not(h2):not(h3):not(h4):not(h5) {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #667085;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+  .wfs-fee-alert__page-header > div:first-child {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .wfs-fee-alert__page-header p,
+  .wfs-fee-alert__page-header .ant-typography:not(h1):not(h2):not(h3):not(h4):not(h5) {
+    white-space: normal;
+  }
+}
+/* WFS toolbar date range and right aligned icon actions */
+.wfs-fee-alert__toolbar-card {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.wfs-fee-alert__toolbar {
+  width: max-content;
+  min-width: 100%;
+}
+
+
+.wfs-fee-alert__date-range.ant-picker {
+  width: 320px;
+  min-width: 320px;
+  height: 32px;
+  flex: 0 0 320px;
+}
+
+.wfs-fee-alert__toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 12px;
+}
+
+.wfs-fee-alert__toolbar-icon-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wfs-fee-alert-follow-modal .ant-modal-title {
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.wfs-fee-alert-follow-modal__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.wfs-fee-alert-follow-modal__summary > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+}
+
+.wfs-fee-alert-follow-modal__summary strong {
+  overflow: hidden;
+  color: #101828;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wfs-fee-alert-follow-modal__danger {
+  color: #f04438 !important;
+}
+
+.wfs-fee-alert-follow-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.wfs-fee-alert-follow-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+}

@@ -17,7 +17,10 @@ import ListingManagementPage from '@/pages/products/ListingManagementPage'
 import ProductManagementPage from '@/pages/products/ProductManagementPage'
 import DailySalesPage from '@/pages/sales/DailySalesPage'
 import OrderProfitPage from '@/pages/sales/OrderProfitPage'
+import OperationLogPage from '@/pages/operations/OperationLogPage'
 import SyncTaskPage from '@/pages/data-center/SyncTaskPage'
+import ApiDocsPage from '@/pages/data-center/ApiDocsPage'
+import WfsFeeAlertPage from '@/pages/warehouse/WfsFeeAlertPage'
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from '@/router/routeResolver'
@@ -96,6 +99,12 @@ renderPage={(page) =>
     <DailySalesPage page={page} />
   ) : page.key === 'sales_order_profit' ? (
     <OrderProfitPage page={page} />
+  ) : page.key === 'operations_log' ? (
+    <OperationLogPage page={page} />
+  ) : page.key === 'warehouse_wfs_fee_alert' ? (
+    <WfsFeeAlertPage page={page} />
+  ) : page.key === 'data_center_api_docs' ? (
+    <ApiDocsPage page={page} />
   ) : page.key === 'data_center_task_center' ? (
     <SyncTaskPage page={page} />
   ) : page.key === 'settings_user_management' ? (
