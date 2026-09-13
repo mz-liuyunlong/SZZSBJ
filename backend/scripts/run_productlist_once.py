@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import AppEnvironment, Settings, get_settings  # noqa: E402
+from app.db.model_registry import register_productlist_sync_models  # noqa: E402
 from app.db.session import get_session_factory  # noqa: E402
 from app.modules.integration_sync.catalog import (  # noqa: E402
     ProductListGovernanceBootstrapError,
@@ -76,6 +77,7 @@ class ProductListOneTimeRunner:
     """ProductList-only CLI orchestration; governance rows remain read-only."""
 
     def __init__(self, session: Session) -> None:
+        register_productlist_sync_models()
         self.session = session
         self.repository = IntegrationSyncRepository(session)
 

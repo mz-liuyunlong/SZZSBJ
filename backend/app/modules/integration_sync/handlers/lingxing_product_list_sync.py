@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import AppEnvironment, get_settings
+from app.db.model_registry import register_productlist_sync_models
 from app.integrations.lingxing.client import (
     LingxingEndpoint,
     LingxingRawEnvelope,
@@ -113,6 +114,7 @@ class LingxingProductListSyncHandler:
     request_kind = "offset_page"
 
     def __init__(self, session: Session, *, client: ProductListPageClient | None = None) -> None:
+        register_productlist_sync_models()
         self.session = session
         self.repository = IntegrationSyncRepository(session)
         self._client = client
