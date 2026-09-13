@@ -199,11 +199,6 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
               按商品ID汇总订单量、销售额、成本费用、广告花费与订单利润，口径与每日销售保持一致。
             </Typography.Paragraph>
           </div>
-          <div className="order-profit__page-header-meta">
-            <span>当前筛选</span>
-            <strong>{filteredRows.length.toLocaleString("zh-CN")}</strong>
-            <span>个商品ID</span>
-          </div>
         </section>
 
         <Card size="small" className="order-profit__toolbar-card">

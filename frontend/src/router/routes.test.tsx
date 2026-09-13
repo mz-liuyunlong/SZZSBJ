@@ -77,6 +77,18 @@ vi.mock("@/pages/sales/OrderProfitPage", () => ({
 }));
 
 
+
+vi.mock("@/pages/operations/OperationLogPage", () => ({
+  default: ({ page }: { page: { key: string; status: string; title: string } }) => (
+    <section aria-label="运营日志页面壳">
+      <h1 aria-label="当前页面">{page.title}</h1>
+      <span>{page.key}</span>
+      <span aria-label={`页面状态：${page.status}`}>{page.status}</span>
+    </section>
+  ),
+}));
+
+
 vi.mock("@/layouts/MainLayout", () => ({
   default: function MockMainLayout({
     onLogout,
@@ -277,6 +289,19 @@ describe("AppRoutes", () => {
     expect(screen.queryByRole("region", { name: "每日销售页面壳" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/sales/order-profit");
   });
+
+
+  it("uses the operations log page shell for its resolved navigation page", () => {
+    renderRoutes("/operations/log", true);
+
+    expect(screen.getByRole("region", { name: "运营日志页面壳" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent("运营日志");
+    expect(screen.getByText("operations_log")).toBeVisible();
+    expect(screen.getByLabelText("页面状态：planned")).toHaveTextContent("planned");
+    expect(screen.queryByRole("region", { name: "统一占位页" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/operations/log");
+  });
+
 
   it("redirects logged-in auth routes to the default business entry", async () => {
     const { unmount } = renderRoutes("/login", true);
