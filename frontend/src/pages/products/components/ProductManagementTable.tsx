@@ -8,6 +8,7 @@ import {
   REPORT_TABLE_PAGE_SIZE_OPTIONS,
 } from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
+import { CopyableTextCell, ImageCell } from "@/components/report-table/cells";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
 import { productColumnFields } from "@/pages/products/productManagementTypes";
 
@@ -94,9 +95,11 @@ function ProductManagementTable({
       fixed: "left",
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <div className="product-management__image-cell" aria-label={`产品图片：${row.productName}`}>
-          {row.image}
-        </div>
+        <ImageCell
+          image={row.image}
+          label={`产品图片：${row.productName}`}
+          placement="right"
+        />
       ),
     },
     sku: {
@@ -108,9 +111,12 @@ function ProductManagementTable({
       sorter: (a, b) => a.sku.localeCompare(b.sku),
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <Typography.Link strong onClick={() => onOpenDetail(row)}>
-          {row.sku}
-        </Typography.Link>
+        <CopyableTextCell
+          text={row.sku}
+          label="SKU"
+          link
+          onOpen={() => onOpenDetail(row)}
+        />
       ),
     },
     productName: {
@@ -121,7 +127,14 @@ function ProductManagementTable({
       sorter: (a, b) => a.productName.localeCompare(b.productName),
       ellipsis: true,
       onHeaderCell: headerCell,
-      render: (_, row) => <Typography.Text strong>{row.productName}</Typography.Text>,
+      render: (_, row) => (
+        <CopyableTextCell
+          text={row.productName}
+          label="产品名称"
+          link
+          onOpen={() => onOpenDetail(row)}
+        />
+      ),
     },
     tags: {
       key: "tags",

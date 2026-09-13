@@ -1,5 +1,5 @@
 /** Provides small report-table cells shared by existing no-API data pages. */
-import { CopyOutlined, PictureOutlined } from "@ant-design/icons";
+import { CheckOutlined, CopyOutlined, PictureOutlined } from "@ant-design/icons";
 import { Button, Popover, Tag, Tooltip } from "antd";
 import ReactECharts from "echarts-for-react";
 import { useState, type MouseEvent, type ReactNode } from "react";
@@ -9,18 +9,51 @@ interface CopyableTextCellProps {
   text: string;
   label: string;
   link?: boolean;
-  onCopy: (text: string) => void;
+  onCopy?: (text: string) => void;
   onOpen?: () => void;
 }
 
+async function copyTextWithFallback(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "-9999px";
+
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 export function CopyableTextCell({ text, label, link, onCopy, onOpen }: CopyableTextCellProps) {
-  const copy = (event: MouseEvent<HTMLButtonElement>) => {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    onCopy(text);
+
+    try {
+      if (onCopy) {
+        onCopy(text);
+      } else {
+        await copyTextWithFallback(text);
+      }
+
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 900);
+    } catch {
+      setCopied(false);
+    }
   };
 
   return (
-    <span className="report-table-copyable">
+    <span className="report-table-copyable" data-copyable-text={text}>
       <Tooltip title={text}>
         {link ? (
           <Button className="report-table-copyable__link" type="link" onClick={onOpen}>
@@ -30,19 +63,23 @@ export function CopyableTextCell({ text, label, link, onCopy, onOpen }: Copyable
           <span className="report-table-copyable__text">{text}</span>
         )}
       </Tooltip>
-      <Button
-        className="report-table-copyable__button"
-        type="text"
-        size="small"
-        aria-label={`复制${label}：${text}`}
-        icon={<CopyOutlined aria-hidden="true" />}
-        onClick={copy}
-      />
+      <Tooltip title={copied ? `已复制${label}` : `复制${label}`}>
+        <Button
+          className={copied ? "report-table-copyable__button report-table-copyable__button--copied" : "report-table-copyable__button"}
+          type="text"
+          size="small"
+          aria-label={`复制${label}：${text}`}
+          icon={copied ? <CheckOutlined aria-hidden="true" /> : <CopyOutlined aria-hidden="true" />}
+          onClick={copy}
+        />
+      </Tooltip>
     </span>
   );
 }
 
+
 interface ImageCellProps {
+  image?: string;
   src?: string;
   alt?: string;
   label?: string;
@@ -65,7 +102,16 @@ function ImageVisual({
   return <span className="report-table-image__fallback">{fallback ?? <PictureOutlined aria-hidden="true" />}</span>;
 }
 
+const imageSourcePattern = /^(https?:\/\/|data:image\/|blob:|\/|\.{1,2}\/)/i;
+
+function resolveImageCellSource(image?: string, explicitSrc?: string) {
+  if (explicitSrc) return explicitSrc;
+  if (!image) return undefined;
+  return imageSourcePattern.test(image) ? image : undefined;
+}
+
 export function ImageCell({
+  image,
   src,
   alt = "商品图片",
   label = "图片占位",
@@ -74,13 +120,16 @@ export function ImageCell({
   fallback,
   placement = "right",
 }: ImageCellProps) {
+  const resolvedSrc = resolveImageCellSource(image, src);
+  const resolvedFallback = fallback ?? (resolvedSrc ? undefined : image);
+
   return (
     <Popover
       trigger={["hover", "focus"]}
       placement={placement}
       content={(
         <span className="report-table-image-preview" style={{ width: previewSize, height: previewSize }}>
-          <ImageVisual src={src} alt={alt} size={previewSize} fallback={fallback} />
+          <ImageVisual src={resolvedSrc} alt={alt} size={previewSize} fallback={resolvedFallback} />
         </span>
       )}
     >
@@ -90,11 +139,12 @@ export function ImageCell({
         tabIndex={0}
         style={{ width: thumbnailSize, height: thumbnailSize }}
       >
-        <ImageVisual src={src} alt={alt} size={thumbnailSize} fallback={fallback} />
+        <ImageVisual src={resolvedSrc} alt={alt} size={thumbnailSize} fallback={resolvedFallback} />
       </span>
     </Popover>
   );
 }
+
 
 interface TrendPreviewCellProps {
   values: number[];
