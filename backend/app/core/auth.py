@@ -1,11 +1,35 @@
+import secrets
 from dataclasses import dataclass
 from typing import Annotated, Final
 
 from fastapi import Depends, Request
+from pydantic import SecretStr
 
 from app.core.api import ApiError, ErrorCode
+from app.core.config import SettingsError, get_settings
 
 PUBLIC_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset({"/health"})
+PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
+PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
+_PREVIEW_PERMISSIONS: Final = frozenset(
+    {
+        "products:read",
+        "products:pricing_rules:read",
+        "products:table_views:update",
+        "products:cost:read",
+    }
+)
+_PREVIEW_PATH_PREFIX: Final = "/api/product-management/"
+_PREVIEW_TABLE_VIEW_PATH: Final = "/api/user-table-views/product-management"
+
+
+def _constant_time_ascii_equals(provided: str, expected: SecretStr) -> bool:
+    try:
+        provided_bytes = provided.encode("ascii")
+        expected_bytes = expected.get_secret_value().encode("ascii")
+        return secrets.compare_digest(provided_bytes, expected_bytes)
+    except (UnicodeEncodeError, TypeError, ValueError):
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,9 +44,28 @@ class Principal:
             raise ValueError("permission keys must be non-empty canonical values")
 
 
-def get_optional_principal() -> Principal | None:
-    """Trusted authentication provider entrypoint; fail closed until integrated."""
-    return None
+def get_optional_principal(request: Request) -> Principal | None:
+    """Return the temporary path-bound preview principal or fail closed."""
+    path = request.scope.get("path")
+    if not isinstance(path, str) or not (
+        path.startswith(_PREVIEW_PATH_PREFIX) or path == _PREVIEW_TABLE_VIEW_PATH
+    ):
+        return None
+    try:
+        settings = get_settings()
+    except SettingsError:
+        return None
+    configured = settings.product_management_preview_auth_token
+    supplied = request.headers.get(PREVIEW_AUTH_HEADER)
+    if (
+        not settings.product_management_preview_auth_configured
+        or configured is None
+        or supplied is None
+    ):
+        return None
+    if not _constant_time_ascii_equals(supplied, configured):
+        return None
+    return Principal(user_id=PREVIEW_PRINCIPAL_ID, permissions=_PREVIEW_PERMISSIONS)
 
 
 def require_principal(
