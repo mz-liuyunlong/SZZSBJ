@@ -65,6 +65,18 @@ vi.mock("@/pages/sales/DailySalesPage", () => ({
   ),
 }));
 
+
+vi.mock("@/pages/sales/OrderProfitPage", () => ({
+  default: ({ page }: { page: { key: string; status: string; title: string } }) => (
+    <section aria-label="订单利润页面壳">
+      <h1 aria-label="当前页面">{page.title}</h1>
+      <span>{page.key}</span>
+      <span aria-label={`页面状态：${page.status}`}>{page.status}</span>
+    </section>
+  ),
+}));
+
+
 vi.mock("@/layouts/MainLayout", () => ({
   default: function MockMainLayout({
     onLogout,
@@ -245,7 +257,7 @@ describe("AppRoutes", () => {
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/products/listing-management");
   });
 
-  it("uses the daily-sales shell only for its resolved navigation page", () => {
+  it("uses the approved sales page shells for their resolved navigation pages", () => {
     const { unmount } = renderRoutes("/sales/daily-sales", true);
 
     expect(screen.getByRole("region", { name: "每日销售页面壳" })).toBeVisible();
@@ -253,11 +265,17 @@ describe("AppRoutes", () => {
     expect(screen.getByText("sales_daily_sales")).toBeVisible();
     expect(screen.getByLabelText("页面状态：planned")).toHaveTextContent("planned");
     expect(screen.queryByRole("region", { name: "统一占位页" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/sales/daily-sales");
 
     unmount();
     renderRoutes("/sales/order-profit", true);
-    expect(screen.getByRole("region", { name: "统一占位页" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "订单利润页面壳" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent("订单利润");
+    expect(screen.getByText("sales_order_profit")).toBeVisible();
+    expect(screen.getByLabelText("页面状态：planned")).toHaveTextContent("planned");
+    expect(screen.queryByRole("region", { name: "统一占位页" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "每日销售页面壳" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/sales/order-profit");
   });
 
   it("redirects logged-in auth routes to the default business entry", async () => {

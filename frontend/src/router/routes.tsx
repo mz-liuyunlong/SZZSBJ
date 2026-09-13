@@ -16,6 +16,7 @@ import NotFoundPage from '@/pages/errors/NotFoundPage'
 import ListingManagementPage from '@/pages/products/ListingManagementPage'
 import ProductManagementPage from '@/pages/products/ProductManagementPage'
 import DailySalesPage from '@/pages/sales/DailySalesPage'
+import OrderProfitPage from '@/pages/sales/OrderProfitPage'
 import SyncTaskPage from '@/pages/data-center/SyncTaskPage'
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
@@ -93,6 +94,8 @@ renderPage={(page) =>
     <ListingManagementPage page={page} />
   ) : page.key === 'sales_daily_sales' ? (
     <DailySalesPage page={page} />
+  ) : page.key === 'sales_order_profit' ? (
+    <OrderProfitPage page={page} />
   ) : page.key === 'data_center_task_center' ? (
     <SyncTaskPage page={page} />
   ) : page.key === 'settings_user_management' ? (
