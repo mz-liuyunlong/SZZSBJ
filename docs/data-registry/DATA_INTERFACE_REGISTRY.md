@@ -8,6 +8,12 @@ Registry Status: `draft; approved only after owner review and merge`
 - 空表不表示能力不存在；条目只有在 PR 合并且验证通过后才可为 `implemented`。
 - 未知值写 `TBD` 并保持 `candidate/blocked`；Secret 只写 `secret_ref`。
 
+## External Contract Evidence Index
+
+| Index ID | Provider Scope | Contract Status Coverage | Source Paths | Priority Coverage | Inventory | Source Map | Notes |
+|---|---|---|---|---|---|---|---|
+| `contract-inventory-lingxing-walmart-v1` | Lingxing / Walmart repository evidence | `READY_FOR_PRP`, `PARTIAL_CONTRACT`, `PROVIDER_CONTRACT_MISSING`, `CONTRACT_SOURCE_CONFLICT`, `DO_NOT_USE`, `DELETED`, `NOT_WALMART`, `NEED_OWNER_DECISION` | `old-system/source/docs/lingxing/**/*.md`; `docs/integrations/lingxing-walmart-openapi/**`; existing governance/data-map registries | `P0`–`P3` as recorded by the normalized index | `docs/integrations/lingxing/API_CONTRACT_INVENTORY.csv` | `docs/integrations/lingxing/API_CONTRACT_SOURCE_MAP.md` | Evidence index only; contract class does not authorize implementation, credentials, provider traffic, or database writes. High-priority redacted snapshots are under `docs/integrations/lingxing/contracts/`. |
+
 ## External Interface Registry
 
 | Interface ID | Provider | Interface Name | Direction | Method | Endpoint / Source Path | Auth Type | Secret Ref | Business Purpose | Platform / Store Scope | Sync Type | Sync Cadence | RAW Required | RAW Storage Location | Standardized Layer | Core Table | Read Model | Backend API | Frontend Page | Permission Key | Owner | Status | PRP | PR | Last Updated | Risk / Notes |
