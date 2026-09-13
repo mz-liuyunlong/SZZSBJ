@@ -4,14 +4,26 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.api import ApiError, ErrorCode
-from app.core.auth import Principal, require_principal
+from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal, require_principal
+from app.core.config import SettingsError, get_settings
 
 type SourceAccountScopeProvider = Callable[[Principal], frozenset[str]]
 
 
 def get_source_account_scope_provider() -> SourceAccountScopeProvider | None:
-    """Trusted opaque account-scope entrypoint; absent providers fail closed."""
-    return None
+    """Return configured preview account scope without exposing its values."""
+    try:
+        settings = get_settings()
+    except SettingsError:
+        return None
+    refs = settings.product_management_preview_source_account_ref_set
+    if not settings.product_management_preview_auth_configured or not refs:
+        return None
+
+    def preview_scope(principal: Principal) -> frozenset[str]:
+        return refs if principal.user_id == PREVIEW_PRINCIPAL_ID else frozenset()
+
+    return preview_scope
 
 
 def require_source_account_scope(

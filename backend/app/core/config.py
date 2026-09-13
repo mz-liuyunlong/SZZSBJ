@@ -1,13 +1,22 @@
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Final, Self
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    SecretStr,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL, make_url
 from sqlalchemy.exc import ArgumentError
+
+PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH: Final = 32
 
 
 class AppEnvironment(StrEnum):
@@ -36,6 +45,19 @@ class Settings(BaseSettings):
     test_database_url: SecretStr | None = Field(
         default=None,
         validation_alias="TEST_DATABASE_URL",
+    )
+    product_management_preview_auth_enabled: bool = Field(
+        default=False,
+        validation_alias="PRODUCT_MANAGEMENT_PREVIEW_AUTH_ENABLED",
+    )
+    product_management_preview_auth_token: SecretStr | None = Field(
+        default=None,
+        validation_alias="PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN",
+    )
+    product_management_preview_source_account_refs: str | None = Field(
+        default=None,
+        repr=False,
+        validation_alias="PRODUCT_MANAGEMENT_PREVIEW_SOURCE_ACCOUNT_REFS",
     )
     lingxing_base_url: str | None = Field(default=None, validation_alias="LINGXING_BASE_URL")
     lingxing_app_id: str | None = Field(default=None, validation_alias="LINGXING_APP_ID")
@@ -135,6 +157,23 @@ class Settings(BaseSettings):
             raise ValueError("database URL must use PostgreSQL with the psycopg driver")
         return value
 
+    @field_validator("product_management_preview_auth_token", mode="before")
+    @classmethod
+    def validate_product_management_preview_auth_token(
+        cls,
+        value: object,
+        info: ValidationInfo,
+    ) -> object:
+        if not info.data.get("product_management_preview_auth_enabled") or value in (None, ""):
+            return value
+        if (
+            not isinstance(value, str)
+            or len(value) < PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH
+            or not value.isascii()
+        ):
+            raise SettingsError("Product Management preview auth settings are invalid")
+        return value
+
     @field_validator("lingxing_base_url")
     @classmethod
     def validate_lingxing_base_url(cls, value: str | None) -> str | None:
@@ -178,6 +217,22 @@ class Settings(BaseSettings):
         if self.lingxing_allow_full_sync:
             raise ValueError("Lingxing full sync is not approved")
         return self
+
+    @property
+    def product_management_preview_auth_configured(self) -> bool:
+        token = self.product_management_preview_auth_token
+        return (
+            self.product_management_preview_auth_enabled
+            and token is not None
+            and len(token) >= PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH
+        )
+
+    @property
+    def product_management_preview_source_account_ref_set(self) -> frozenset[str]:
+        value = self.product_management_preview_source_account_refs
+        if value is None:
+            return frozenset()
+        return frozenset(part.strip() for part in value.split(",") if part.strip())
 
     def sqlalchemy_url(self) -> URL:
         value = self.test_database_url if self.app_env is AppEnvironment.TEST else self.database_url
