@@ -6,12 +6,21 @@ import {
   PlayCircleFilled,
 } from "@ant-design/icons";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
+import type { ReactNode } from "react";
+
+export type ProductManagementSummaryCardKey = "total" | "gradeA" | "gradeB" | "gradeC" | "complete" | "linked";
 
 interface ProductManagementSummaryCardsProps {
   rows: ProductManagementRow[];
+  activeKey?: ProductManagementSummaryCardKey;
+  onCardClick?: (key: ProductManagementSummaryCardKey) => void;
 }
 
-function ProductManagementSummaryCards({ rows }: ProductManagementSummaryCardsProps) {
+function ProductManagementSummaryCards({
+  rows,
+  activeKey = "total",
+  onCardClick,
+}: ProductManagementSummaryCardsProps) {
   const total = rows.length;
   const gradeA = rows.filter((row) => row.productGrade === "A级").length;
   const gradeB = rows.filter((row) => row.productGrade === "B级").length;
@@ -21,7 +30,14 @@ function ProductManagementSummaryCards({ rows }: ProductManagementSummaryCardsPr
     : 0;
   const linkedPlatformSkuCount = rows.reduce((sum, row) => sum + row.linkedPlatformSkuCount, 0);
 
-  const cards = [
+  const cards: Array<{
+    key: ProductManagementSummaryCardKey;
+    label: string;
+    value: string;
+    hint: string;
+    icon: ReactNode;
+    tone: string;
+  }> = [
     {
       key: "total",
       label: "产品总数",
@@ -58,7 +74,7 @@ function ProductManagementSummaryCards({ rows }: ProductManagementSummaryCardsPr
       key: "complete",
       label: "资料完整率",
       value: `${completeness.toFixed(1)}%`,
-      hint: "基础字段完整",
+      hint: "点击查看完整率≥90%",
       icon: <CheckOutlined aria-hidden="true" />,
       tone: "green",
     },
@@ -66,7 +82,7 @@ function ProductManagementSummaryCards({ rows }: ProductManagementSummaryCardsPr
       key: "linked",
       label: "已关联平台SKU",
       value: linkedPlatformSkuCount.toLocaleString(),
-      hint: "多平台映射",
+      hint: "点击查看已映射SKU",
       icon: <PartitionOutlined aria-hidden="true" />,
       tone: "blue",
     },
@@ -75,14 +91,24 @@ function ProductManagementSummaryCards({ rows }: ProductManagementSummaryCardsPr
   return (
     <div className="product-management__summary" aria-label="产品管理统计">
       {cards.map((card) => (
-        <div key={card.key} className={`product-management__summary-card product-management__summary-card--${card.tone}`}>
+        <button
+          key={card.key}
+          type="button"
+          className={[
+            "product-management__summary-card",
+            `product-management__summary-card--${card.tone}`,
+            activeKey === card.key ? "product-management__summary-card--active" : "",
+          ].filter(Boolean).join(" ")}
+          aria-pressed={activeKey === card.key}
+          onClick={() => onCardClick?.(card.key)}
+        >
           <div className="product-management__summary-icon">{card.icon}</div>
           <div>
             <span>{card.label}</span>
             <strong>{card.value}</strong>
             <small>{card.hint}</small>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

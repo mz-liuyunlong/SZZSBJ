@@ -28,8 +28,8 @@ describe("routeResolver", () => {
     });
   });
 
-  it("uses today sales from navigation as the default business route", () => {
-    expect(DEFAULT_BUSINESS_ROUTE.page).toBe(findRouteByKey("dashboard_today_sales")?.page);
+  it("uses daily sales from navigation as the default business route", () => {
+    expect(DEFAULT_BUSINESS_ROUTE.page).toBe(findRouteByKey("sales_daily_sales")?.page);
     expect(DEFAULT_BUSINESS_PATH).toBe(DEFAULT_BUSINESS_ROUTE.page.path);
   });
 
@@ -101,6 +101,10 @@ describe("tab workspace restoration", () => {
   });
 
   it("restores at most twelve tabs without evicting earlier paths", () => {
+    const expectedOpenPaths = [
+      DEFAULT_BUSINESS_PATH,
+      ...allowedPaths.filter((path) => path !== DEFAULT_BUSINESS_PATH),
+    ].slice(0, MAX_OPEN_TABS);
     const restored = restoreTabWorkspace(
       JSON.stringify({
         version: TAB_WORKSPACE_VERSION,
@@ -109,7 +113,7 @@ describe("tab workspace restoration", () => {
       }),
     );
 
-    expect(restored.openPaths).toEqual(allowedPaths.slice(0, MAX_OPEN_TABS));
+    expect(restored.openPaths).toEqual(expectedOpenPaths);
     expect(restored.openPaths).toHaveLength(MAX_OPEN_TABS);
     expect(restored.activePath).toBe(DEFAULT_BUSINESS_PATH);
   });

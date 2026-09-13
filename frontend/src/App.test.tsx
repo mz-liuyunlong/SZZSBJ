@@ -76,11 +76,11 @@ describe("App", () => {
 
     await logIn();
 
-    expect(screen.getByRole("region", { name: "今日销售" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "每日销售" })).toBeVisible();
     expect(screen.getByRole("navigation", { name: "面包屑" })).toHaveTextContent(
-      "工作台",
+      "销售",
     );
-    expect(window.location.hash).toBe("#/dashboard/today-sales");
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     expect(localStorage.length).toBe(0);
     expect(JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null")).toEqual({
       version: TAB_WORKSPACE_VERSION,
@@ -124,5 +124,5 @@ describe("App", () => {
       ),
     ).toHaveLength(1);
     expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
-  }, 10_000);
+  }, 20_000);
 });

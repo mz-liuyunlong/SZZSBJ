@@ -1,0 +1,354 @@
+.data-import {
+  width: 100%;
+  min-width: 0;
+}
+
+.data-import__head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.data-import__head h3 {
+  margin: 0 !important;
+  font-size: 22px !important;
+  line-height: 30px !important;
+}
+
+.data-import__head .ant-typography {
+  margin-bottom: 0 !important;
+}
+
+.data-import__card {
+  margin-bottom: 12px;
+  border-color: #e5eaf3;
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgb(16 24 40 / 5%);
+}
+
+.data-import__card .ant-card-head {
+  min-height: 40px;
+  border-bottom-color: #e5eaf3;
+}
+
+.data-import__card .ant-card-body {
+  padding: 12px;
+}
+
+.data-import__type-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.data-import__type-card {
+  display: flex;
+  height: 56px;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.data-import__type-card:hover {
+  border-color: #b7d8ff;
+  background: #f8fbff;
+}
+
+.data-import__type-card--active {
+  border-color: #8cc8ff;
+  background: #e6f4ff;
+  box-shadow: inset 0 0 0 1px #8cc8ff;
+}
+
+.data-import__type-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 8px;
+  background: #f5f7fb;
+  font-size: 16px;
+}
+
+.data-import__type-card--active .data-import__type-icon {
+  background: #fff;
+}
+
+.data-import__type-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.data-import__type-text strong,
+.data-import__type-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-import__type-text strong {
+  line-height: 18px;
+}
+
+.data-import__type-text small {
+  color: #667085;
+  line-height: 16px;
+}
+
+.data-import__upload-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(420px, 1fr) 310px;
+  gap: 14px;
+}
+
+.data-import__info-panel,
+.data-import__upload-panel,
+.data-import__result-panel {
+  min-height: 152px;
+  border: 1px solid #e5eaf3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.data-import__info-panel,
+.data-import__result-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 13px;
+}
+
+.data-import__info-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.data-import__info-top span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.data-import__info-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: #eef6ff;
+  font-size: 20px;
+}
+
+.data-import__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.data-import__hint {
+  padding: 8px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 9px;
+  background: #eff6ff;
+  color: #37517e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.data-import__hint--error {
+  border-color: #ffa39e;
+  background: #fff1f0;
+  color: #a61d24;
+}
+
+.data-import__upload-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  border-style: dashed;
+  border-color: #b9cde9;
+  background: #fbfdff;
+  text-align: center;
+}
+
+.data-import__upload-icon {
+  color: #667085;
+  font-size: 32px;
+}
+
+.data-import__upload-panel h4 {
+  margin: 8px 0 4px !important;
+}
+
+.data-import__upload-actions {
+  margin: 12px 0 8px;
+}
+
+.data-import__result-empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  border: 1px dashed #e5eaf3;
+  border-radius: 10px;
+  background: #fafcff;
+  color: #667085;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.data-import__result-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.data-import__result-stats > div {
+  padding: 8px;
+  border: 1px solid #eef2f7;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.data-import__result-stats small,
+.data-import__info-top small {
+  color: #667085;
+}
+
+.data-import__result-stats strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 17px;
+}
+
+.data-import__filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5eaf3;
+  flex-wrap: wrap;
+}
+
+.data-import__filter-spacer {
+  flex: 1 1 auto;
+}
+
+.data-import__records-card .ant-table-wrapper {
+  margin-top: 0;
+}
+
+.data-import__records-card .ant-table-thead > tr > th {
+  background: #f8fafc !important;
+  color: #475467;
+  font-weight: 700;
+}
+
+.data-import__card-foot {
+  display: flex;
+  height: 38px;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0 -12px -12px;
+  padding: 0 12px;
+  border-top: 1px solid #e5eaf3;
+  background: #fff;
+}
+
+@media (max-width: 1280px) {
+  .data-import__type-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .data-import__upload-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Data import records footer final fix */
+.data-import {
+  padding-bottom: 20px;
+}
+
+.data-import__records-card {
+  margin-bottom: 16px;
+  overflow: visible;
+}
+
+.data-import__records-card .ant-card-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.data-import__records-card .ant-table-wrapper {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.data-import__records-card .ant-table-body {
+  max-height: 240px !important;
+}
+
+.data-import__card-foot {
+  display: flex;
+  min-height: 46px;
+  height: auto;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 12px -12px -12px;
+  padding: 8px 12px;
+  border-top: 1px solid #e5eaf3;
+  background: #fff;
+}
+
+.page-shell:has(.data-import),
+.main-layout__page-panel:has(.data-import),
+.main-layout__content:has(.data-import) {
+  overflow: auto !important;
+}
+/* End data import records footer final fix */
+
+/* Data import header actions right alignment fix */
+.data-import__head {
+  justify-content: space-between !important;
+}
+
+.data-import__head > div:first-child {
+  min-width: 0;
+}
+
+.data-import__head > .ant-space {
+  margin-left: auto !important;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+/* End data import header actions right alignment fix */
+
+/* Data import footer left alignment */
+.data-import__card-foot {
+  justify-content: flex-start !important;
+}
+/* End data import footer left alignment */

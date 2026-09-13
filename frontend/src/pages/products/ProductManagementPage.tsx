@@ -11,7 +11,9 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import ProductDetailModal from "@/pages/products/components/ProductDetailModal";
-import ProductManagementSummaryCards from "@/pages/products/components/ProductManagementSummaryCards";
+import ProductManagementSummaryCards, {
+  type ProductManagementSummaryCardKey,
+} from "@/pages/products/components/ProductManagementSummaryCards";
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
 import {
@@ -82,6 +84,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState(createInitialFilters);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
+  const [summaryFilterKey, setSummaryFilterKey] = useState<ProductManagementSummaryCardKey>("total");
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
@@ -97,10 +100,11 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
 
   const updateFilters = (nextFilters: ProductManagementFilters) => {
     setFilters(nextFilters);
+    setSummaryFilterKey("total");
     resetPageAndSelection();
   };
 
-  const filteredRows = useMemo(() => {
+  const toolbarFilteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
     const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
     return productManagementMockData.filter((row) => {
@@ -112,8 +116,23 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
     });
   }, [filters]);
 
+  const filteredRows = useMemo(() => {
+    if (summaryFilterKey === "gradeA") return toolbarFilteredRows.filter((row) => row.productGrade === "A级");
+    if (summaryFilterKey === "gradeB") return toolbarFilteredRows.filter((row) => row.productGrade === "B级");
+    if (summaryFilterKey === "gradeC") return toolbarFilteredRows.filter((row) => row.productGrade === "C级");
+    if (summaryFilterKey === "complete") return toolbarFilteredRows.filter((row) => row.dataCompleteness >= 90);
+    if (summaryFilterKey === "linked") return toolbarFilteredRows.filter((row) => row.linkedPlatformSkuCount > 0);
+    return toolbarFilteredRows;
+  }, [summaryFilterKey, toolbarFilteredRows]);
+
+  const handleSummaryCardClick = (key: ProductManagementSummaryCardKey) => {
+    setSummaryFilterKey(key);
+    resetPageAndSelection();
+  };
+
   const resetFilters = () => {
     setFilters(createInitialFilters());
+    setSummaryFilterKey("total");
     resetPageAndSelection();
   };
 
@@ -145,7 +164,13 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
             />
           </Card>
 
-          {statisticsVisible && <ProductManagementSummaryCards rows={filteredRows} />}
+          {statisticsVisible && (
+            <ProductManagementSummaryCards
+              rows={toolbarFilteredRows}
+              activeKey={summaryFilterKey}
+              onCardClick={handleSummaryCardClick}
+            />
+          )}
 
           <div className="product-management__table-wrap">
             <ProductManagementTable

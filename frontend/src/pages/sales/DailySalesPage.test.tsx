@@ -365,8 +365,8 @@ describe("DailySalesPage", () => {
       .toContainElement(screen.getByLabelText("每日销售筛选"));
     expect(screen.queryByRole("heading", { name: "当前页面" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("页面状态：planned")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /在新标签页打开/ })).toBeVisible();
-    expect(dailySalesMockData).toHaveLength(50);
+    expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
+    expect(dailySalesMockData).toHaveLength(100);
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
 
     const headers = within(screen.getByTestId("table-header"))
@@ -379,20 +379,12 @@ describe("DailySalesPage", () => {
     expect(screen.queryByText("父体")).not.toBeInTheDocument();
   });
 
-  it("keeps only sync, refresh, and help in the global header", () => {
+  it("leaves sync and help controls to MainLayout", () => {
     renderPage();
 
-    const actions = screen.getByText("同步时间：待接入")
-      .closest<HTMLElement>(".page-shell__header-actions");
-    expect(actions).not.toBeNull();
-    expect(within(actions!).getByRole("button", { name: "刷新每日销售" })).toBeVisible();
-    expect(within(actions!).getByRole("link", { name: /在新标签页打开/ })).toBeVisible();
-    expect(within(actions!).queryByRole("button", { name: "下载" })).not.toBeInTheDocument();
-    expect(within(actions!).queryByRole("button", { name: "列配置" })).not.toBeInTheDocument();
-    expect(within(actions!).queryByRole("button", { name: /统计|图表/ })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "刷新每日销售" }));
-    expect(messageInfo).toHaveBeenCalledWith("同步接口待接入");
+    expect(screen.queryByText("同步时间：待接入")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "刷新每日销售" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
   });
 
   it("moves page actions into the toolbar and reuses the runtime column drawer", () => {

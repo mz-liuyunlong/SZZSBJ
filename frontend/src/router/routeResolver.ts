@@ -35,9 +35,9 @@ export const resolveRoute = (path: string): RouteResolution => {
 export const getSidebarPages = (group: NavigationGroup) =>
   group.children.filter((page) => page.status !== "hidden");
 
-const defaultRoute = findRouteByKey("dashboard_today_sales");
+const defaultRoute = findRouteByKey("sales_daily_sales");
 if (!defaultRoute || !isRoutableStatus(defaultRoute.page.status)) {
-  throw new Error("Default business route is missing or disabled");
+  throw new Error("Default daily sales route is missing or disabled");
 }
 
 export const DEFAULT_BUSINESS_ROUTE = defaultRoute;

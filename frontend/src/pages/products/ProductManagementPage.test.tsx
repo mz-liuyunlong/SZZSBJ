@@ -40,27 +40,14 @@ vi.mock("@ant-design/icons", () => {
 vi.mock("@/components/page/PageShell", () => ({
   default: ({
     page,
-    description,
-    headerActions,
     children,
   }: {
     page: NavigationPage;
-    description?: string;
-    headerActions?: ReactNode;
     children: ReactNode;
   }) => (
-    <>
-      <div role="group" aria-label="页面级操作">
-        {headerActions}
-        {page.help.enabled && (
-          <a aria-label={`在新标签页打开${page.help.title}`} href={page.help.helpUrl}>帮助</a>
-        )}
-      </div>
-      <section className="page-shell" aria-label={page.title}>
-        {description && <p>{description}</p>}
-        <div className="page-shell__content">{children}</div>
-      </section>
-    </>
+    <section className="page-shell" aria-label={page.title}>
+      <div className="page-shell__content">{children}</div>
+    </section>
   ),
 }));
 
@@ -606,6 +593,7 @@ vi.mock("@ant-design/pro-components", () => ({
 }));
 
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
+import { productManagementMockData } from "@/pages/products/productManagementMockData";
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -643,6 +631,13 @@ const productPage: NavigationPage = {
 };
 
 const renderPage = () => render(<ProductManagementPage page={productPage} />);
+const productCount = productManagementMockData.length;
+const gradeBRows = productManagementMockData.filter((row) => row.productGrade === "B级");
+const gradeACount = productManagementMockData.filter((row) => row.productGrade === "A级").length;
+const testProductCount = productManagementMockData.filter((row) => row.tags.includes("测品")).length;
+const discontinuedProductCount = productManagementMockData.filter((row) => row.tags.includes("停售")).length;
+const highestSku = [...productManagementMockData].sort((a, b) => b.sku.localeCompare(a.sku))[0].sku;
+const highestGradeBSku = [...gradeBRows].sort((a, b) => b.sku.localeCompare(a.sku))[0].sku;
 
 beforeEach(() => {
   localStorage.clear();
@@ -685,11 +680,7 @@ describe("ProductManagementPage", () => {
     expect(within(toolbar).queryByText("更多筛选")).not.toBeInTheDocument();
     expect(within(toolbar).queryByText("预览产品详情结构")).not.toBeInTheDocument();
 
-    const pageActions = screen.getByRole("group", { name: "页面级操作" });
-    expect(within(pageActions).getByRole("link", { name: "在新标签页打开产品管理帮助" }))
-      .toHaveTextContent("帮助");
-    expect(within(pageActions).queryByText("最后同步时间：待接入")).not.toBeInTheDocument();
-    expect(screen.getAllByText("帮助")).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
     const productContent = view.container.querySelector(".product-management");
     expect(productContent).not.toBeNull();
     expect(productContent?.parentElement).toHaveClass("page-shell__content");
@@ -705,20 +696,20 @@ describe("ProductManagementPage", () => {
 
     const table = screen.getByRole("region", { name: "产品管理表格" });
     expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })).toHaveLength(50);
-    expect(within(table).getByText("共 128 条数据")).toBeVisible();
+    expect(within(table).getByText(`共 ${productCount} 条数据`)).toBeVisible();
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-row-key", "id");
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-has-request", "false");
     expect(Number(screen.getByTestId("pro-table").getAttribute("data-scroll-x")))
       .toBeGreaterThan(0);
-    expect(screen.getByTestId("pro-table")).not.toHaveAttribute("data-scroll-y");
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-source-count", "128");
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-scroll-y", "100%");
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-source-count", String(productCount));
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-table-alert", "false");
     expect(screen.getByTestId("pro-table")).toHaveAttribute(
       "data-table-alert-option",
       "undefined",
     );
     const tableBody = view.container.querySelector(".ant-table-body");
-    expect(tableBody).not.toHaveAttribute("data-scroll-y");
+    expect(tableBody).toHaveAttribute("data-scroll-y", "100%");
     expect(tableBody).not.toContainElement(view.container.querySelector(".ant-pagination"));
     expect(within(table).getByRole("checkbox", { name: "选择当前页" })).toBeVisible();
 
@@ -777,7 +768,7 @@ describe("ProductManagementPage", () => {
     expect(screen.getByText(EXPORT_PENDING)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "重置" }));
     expect(screen.getByLabelText("搜索产品")).toHaveValue("");
-    expect(screen.getByText("共 128 条数据")).toBeVisible();
+    expect(screen.getByText(`共 ${productCount} 条数据`)).toBeVisible();
     expect(screen.getByRole("button", { name: "UI-SAMPLE-001" })).toBeVisible();
 
     expect(localStorage.getItem("existing_local")).toBe("keep");
@@ -790,10 +781,16 @@ describe("ProductManagementPage", () => {
   it("filters locally by grade and tag, resets pagination and selection, and sorts filtered rows", () => {
     renderPage();
     const table = screen.getByRole("region", { name: "产品管理表格" });
+    const gradeACard = screen.getByRole("button", { name: /A级产品/ });
+    fireEvent.click(gradeACard);
+    expect(gradeACard).toHaveAttribute("aria-pressed", "true");
+    expect(within(table).getByText(`共 ${gradeACount} 条数据`)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /产品总数/ }));
+
     fireEvent.click(within(table).getByRole("checkbox", { name: "选择 product-001" }));
     fireEvent.change(screen.getByRole("combobox", { name: "产品等级" }), { target: { value: "B级" } });
 
-    expect(within(table).getByText("共 43 条数据")).toBeVisible();
+    expect(within(table).getByText(`共 ${gradeBRows.length} 条数据`)).toBeVisible();
     expect(within(table).getByRole("button", { name: "第 1 页" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
     for (const row of within(table).getAllByRole("row").slice(1)) {
@@ -805,12 +802,12 @@ describe("ProductManagementPage", () => {
     expect(skuHeader).toBeDefined();
     fireEvent.click(skuHeader!);
     fireEvent.click(skuHeader!);
-    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent("UI-SAMPLE-128");
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent(highestGradeBSku);
 
     fireEvent.click(screen.getByRole("button", { name: "重置" }));
-    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent("UI-SAMPLE-128");
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0]).toHaveTextContent(highestSku);
     fireEvent.change(screen.getByRole("combobox", { name: "标签" }), { target: { value: "测品" } });
-    expect(within(table).getByText("共 51 条数据")).toBeVisible();
+    expect(within(table).getByText(`共 ${testProductCount} 条数据`)).toBeVisible();
     for (const row of within(table).getAllByRole("row").slice(1)) {
       expect(row).toHaveTextContent("测品");
     }
@@ -840,9 +837,9 @@ describe("ProductManagementPage", () => {
     expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "产品等级" })).toHaveValue("B级");
     expect(screen.getByLabelText("搜索产品")).toHaveValue("UI-SAMPLE-");
-    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })).toHaveLength(43);
+    expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })).toHaveLength(gradeBRows.length);
     expect(within(table).getAllByRole("button", { name: /^UI-SAMPLE-/ })[0])
-      .toHaveTextContent("UI-SAMPLE-128");
+      .toHaveTextContent(highestGradeBSku);
 
     const tableHeader = view.container.querySelector<HTMLElement>(".ant-table-header");
     const tableBody = view.container.querySelector<HTMLElement>(".ant-table-body");
@@ -996,7 +993,7 @@ describe("ProductManagementPage", () => {
     const tagFilter = screen.getByRole("combobox", { name: "标签" });
     expect(tagFilter).toBeVisible();
     fireEvent.change(tagFilter, { target: { value: "停售" } });
-    expect(screen.getByText("共 26 条数据")).toBeVisible();
+    expect(screen.getByText(`共 ${discontinuedProductCount} 条数据`)).toBeVisible();
     expect(screen.queryByRole("button", { name: "标签管理" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "标签管理" })).not.toBeInTheDocument();
   });

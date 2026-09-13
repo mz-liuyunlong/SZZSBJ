@@ -3,7 +3,6 @@ import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
-  ReloadOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
@@ -36,7 +35,6 @@ interface WfsFeeAlertPageProps {
   page: NavigationPage;
 }
 
-const SYNC_PENDING = "WFS费用接口待接入";
 const EXPORT_PENDING = "WFS费用异常导出接口待接入";
 const TEMPLATE_PENDING = "WFS费用异常列模板接口待接入";
 const CASE_PENDING = "Case写入接口待接入";
@@ -117,17 +115,6 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
 
   const headerActions = (
     <>
-      <Typography.Text className="wfs-fee-alert__sync-time" type="secondary">同步时间：待接入</Typography.Text>
-      <Tooltip title={SYNC_PENDING}>
-        <Button
-          className="wfs-fee-alert__header-icon"
-          type="text"
-          shape="circle"
-          aria-label="刷新WFS费用异常"
-          icon={<ReloadOutlined aria-hidden="true" />}
-          onClick={() => void messageApi.info(SYNC_PENDING)}
-        />
-      </Tooltip>
     </>
   );
 

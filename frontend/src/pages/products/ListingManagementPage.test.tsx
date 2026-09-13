@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
+import ListingManagementSummaryCards from "@/pages/products/components/ListingManagementSummaryCards";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -78,9 +79,9 @@ afterEach(() => {
 });
 
 describe("ListingManagementPage acceptance contract", () => {
-  it("keeps 128 local rows and the owner-approved column order", () => {
-    expect(listingManagementMockData).toHaveLength(128);
-    expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(128);
+  it("keeps 100 local rows and the owner-approved column order", () => {
+    expect(listingManagementMockData).toHaveLength(100);
+    expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(100);
     expect(listingColumnFields.map((field) => field.title)).toEqual([
       "图片", "MSKU", "商品ID", "店铺", "负责人", "SKU", "品名", "标题", "产品类型",
       "划线价", "在售价", "产品状态", "生命周期", "上架时间", "类目", "WFS可售库存",
@@ -89,6 +90,19 @@ describe("ListingManagementPage acceptance contract", () => {
       "产品等级",
     ]);
     expect(fixedListingColumnKeys).toEqual(["image", "msku", "productId"]);
+  });
+
+  it("reports the selected summary filter when a statistics card is clicked", () => {
+    const onCardClick = vi.fn();
+    render(
+      <ListingManagementSummaryCards
+        rows={listingManagementMockData}
+        onCardClick={onCardClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /在线Listing/ }));
+    expect(onCardClick).toHaveBeenCalledWith("online");
   });
 
   it("uses Ant table sorters without changing pagination options", () => {

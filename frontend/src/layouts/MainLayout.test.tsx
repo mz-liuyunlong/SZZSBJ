@@ -124,7 +124,7 @@ function StatefulPageFixture({ page }: { page: NavigationPage }) {
 }
 
 describe("MainLayout", () => {
-  it("starts on today sales with the complete topbar and sidebar structure", () => {
+  it("starts on daily sales with the complete topbar and sidebar structure", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -135,8 +135,8 @@ describe("MainLayout", () => {
     const content = screen.getByRole("main", { name: "内容区" });
     const currentPage = screen.getByRole("heading", { name: "当前页面" });
     const breadcrumb = screen.getByRole("navigation", { name: "面包屑" });
-    const dashboardGroup = requiredGroup("dashboard");
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const salesGroup = requiredGroup("sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const primaryMenuItems = within(primaryNavigation).getAllByRole("menuitem");
     expect(primaryMenuItems).toHaveLength(navigation.length);
     navigation.forEach((group, index) => {
@@ -149,15 +149,15 @@ describe("MainLayout", () => {
     expect(document.querySelector(".main-layout")).toBeInTheDocument();
     expect(
       within(primaryNavigation).getByRole("menuitem", {
-        name: dashboardGroup.title,
+        name: salesGroup.title,
       }),
     ).toHaveClass("ant-menu-item-selected");
-    expect(currentPage).toHaveTextContent(todaySales.title);
-    expect(within(breadcrumb).getByText(dashboardGroup.title)).toBeVisible();
-    expect(within(breadcrumb).getByText(todaySales.title)).toBeVisible();
-    expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
+    expect(currentPage).toHaveTextContent(dailySales.title);
+    expect(within(breadcrumb).getByText(salesGroup.title)).toBeVisible();
+    expect(within(breadcrumb).getByText(dailySales.title)).toBeVisible();
+    expect(getTab(dailySales.title)).toHaveAttribute("aria-selected", "true");
     expect(
-      within(topbar).getByRole("button", { name: "回到工作台今日销售" }),
+      within(topbar).getByRole("button", { name: "回到每日销售首页" }),
     ).toBeInTheDocument();
     expect(
       within(topbar).queryByRole("button", { name: "折叠侧边栏" }),
@@ -169,7 +169,7 @@ describe("MainLayout", () => {
     expect(within(topbar).getByRole("navigation", { name: "面包屑" })).toBeInTheDocument();
     expect(
       within(primarySidebar).queryByRole("button", {
-        name: "回到工作台今日销售",
+        name: "回到每日销售首页",
       }),
     ).not.toBeInTheDocument();
     expect(document.querySelector(".main-layout__body")).toBeInTheDocument();
@@ -184,12 +184,12 @@ describe("MainLayout", () => {
     expect(screen.getByText("掌上便捷")).toBeVisible();
   });
 
-  it("hosts the active page help and actions beside the breadcrumb", async () => {
+  it("hosts global sync, help, and active page actions beside the breadcrumb", async () => {
     const productPage = requiredPage("products", "products_product_management");
     renderLayout(productPage.path, (page) => (
       <PageShell
         page={page}
-        headerActions={<span>最后同步时间：待接入</span>}
+        headerActions={<span>页面操作</span>}
       >
         <div>页面主体</div>
       </PageShell>
@@ -198,15 +198,14 @@ describe("MainLayout", () => {
     const topbar = screen.getByRole("banner", { name: "顶部栏" });
     const pageActions = within(topbar).getByRole("group", { name: "页面级操作" });
     await waitFor(() => {
-      expect(within(pageActions).getByText("最后同步时间：待接入")).toBeVisible();
+      expect(within(pageActions).getByText("页面操作")).toBeVisible();
     });
-    expect(within(pageActions).getByRole("link", {
-      name: `在新标签页打开${productPage.help.title}`,
-    })).toHaveTextContent("帮助");
-    expect(screen.getAllByText("最后同步时间：待接入")).toHaveLength(1);
+    expect(within(topbar).getByText("同步时间：待接入")).toBeVisible();
+    expect(within(topbar).getByRole("button", { name: "帮助" })).toBeVisible();
+    expect(within(topbar).queryByRole("button", { name: /刷新|同步/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("帮助")).toHaveLength(1);
     const content = screen.getByRole("main", { name: "内容区" });
-    expect(within(content).queryByText("最后同步时间：待接入")).not.toBeInTheDocument();
+    expect(within(content).queryByText("页面操作")).not.toBeInTheDocument();
     expect(within(content).queryByText("帮助")).not.toBeInTheDocument();
   });
 
@@ -217,8 +216,8 @@ describe("MainLayout", () => {
     const content = screen.getByRole("main", { name: "内容区" });
     const currentPage = screen.getByRole("heading", { name: "当前页面" });
     const breadcrumb = screen.getByRole("navigation", { name: "面包屑" });
-    const dashboardGroup = requiredGroup("dashboard");
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const salesGroup = requiredGroup("sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
 
@@ -227,7 +226,7 @@ describe("MainLayout", () => {
     });
     fireEvent.click(adsGroupItem);
     expect(adsGroupItem).toHaveClass("ant-menu-item-selected");
-    expect(currentPage).toHaveTextContent(todaySales.title);
+    expect(currentPage).toHaveTextContent(dailySales.title);
     expect(screen.getByLabelText("二级菜单浮层")).toHaveStyle({
       position: "fixed",
     });
@@ -243,7 +242,7 @@ describe("MainLayout", () => {
     expect(currentPage).toHaveTextContent(keywordLibrary.title);
     expect(within(breadcrumb).getByText(adsGroup.title)).toBeVisible();
     expect(within(breadcrumb).getByText(keywordLibrary.title)).toBeVisible();
-    expect(getTab(todaySales.title)).toBeInTheDocument();
+    expect(getTab(dailySales.title)).toBeInTheDocument();
     expect(getTab(keywordLibrary.title)).toHaveAttribute(
       "aria-selected",
       "true",
@@ -264,11 +263,11 @@ describe("MainLayout", () => {
       ),
     ).toHaveLength(1);
 
-    fireEvent.click(getTab(todaySales.title));
-    expect(currentPage).toHaveTextContent(todaySales.title);
-    expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
-    expect(within(breadcrumb).getByText(dashboardGroup.title)).toBeVisible();
-    expect(window.location.hash).toBe(`#${todaySales.path}`);
+    fireEvent.click(getTab(dailySales.title));
+    expect(currentPage).toHaveTextContent(dailySales.title);
+    expect(getTab(dailySales.title)).toHaveAttribute("aria-selected", "true");
+    expect(within(breadcrumb).getByText(salesGroup.title)).toBeVisible();
+    expect(window.location.hash).toBe(`#${dailySales.path}`);
 
     fireEvent.click(getTab(keywordLibrary.title));
     expect(currentPage).toHaveTextContent(keywordLibrary.title);
@@ -280,9 +279,9 @@ describe("MainLayout", () => {
 
     act(() => window.history.back());
     await waitFor(() => {
-      expect(currentPage).toHaveTextContent(todaySales.title);
+      expect(currentPage).toHaveTextContent(dailySales.title);
     });
-    expect(window.location.hash).toBe(`#${todaySales.path}`);
+    expect(window.location.hash).toBe(`#${dailySales.path}`);
 
     act(() => window.history.forward());
     await waitFor(() => {
@@ -295,8 +294,8 @@ describe("MainLayout", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
-    const dashboardGroup = requiredGroup("dashboard");
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const salesGroup = requiredGroup("sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
 
@@ -309,7 +308,7 @@ describe("MainLayout", () => {
       }),
     );
 
-    const homeTabContainer = getTab(todaySales.title).closest(".ant-tabs-tab");
+    const homeTabContainer = getTab(dailySales.title).closest(".ant-tabs-tab");
     if (!homeTabContainer) throw new Error("Missing Home tab container");
     expect(
       within(homeTabContainer as HTMLElement).queryByRole("tab", {
@@ -317,22 +316,22 @@ describe("MainLayout", () => {
       }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(getTab(todaySales.title));
+    fireEvent.click(getTab(dailySales.title));
     fireEvent.click(getCloseTabButton(keywordLibrary.title));
     expect(
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();
 
-    expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
+    expect(getTab(dailySales.title)).toHaveAttribute("aria-selected", "true");
     expect(
       within(primaryNavigation).getByRole("menuitem", {
-        name: dashboardGroup.title,
+        name: salesGroup.title,
       }),
     ).toHaveClass("ant-menu-item-selected");
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      todaySales.title,
+      dailySales.title,
     );
-    expect(window.location.hash).toBe(`#${todaySales.path}`);
+    expect(window.location.hash).toBe(`#${dailySales.path}`);
     expectSecondaryClosed();
 
   });
@@ -341,7 +340,7 @@ describe("MainLayout", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
 
@@ -358,13 +357,13 @@ describe("MainLayout", () => {
     expect(
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();
-    expect(getTab(todaySales.title)).toHaveAttribute("aria-selected", "true");
-    expect(window.location.hash).toBe(`#${todaySales.path}`);
+    expect(getTab(dailySales.title)).toHaveAttribute("aria-selected", "true");
+    expect(window.location.hash).toBe(`#${dailySales.path}`);
   });
 
   it("reopens a closed active tab when browser Back restores its URL", async () => {
     const adsGroup = requiredGroup("ads");
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
     renderLayout(DEFAULT_BUSINESS_PATH, (page) => (
       <StatefulPageFixture page={page} />
@@ -382,7 +381,7 @@ describe("MainLayout", () => {
       }),
     );
     fireEvent.click(getCloseTabButton(keywordLibrary.title));
-    expect(window.location.hash).toBe(`#${todaySales.path}`);
+    expect(window.location.hash).toBe(`#${dailySales.path}`);
     expect(
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();
@@ -410,7 +409,7 @@ describe("MainLayout", () => {
       );
       expect(stored).toEqual({
         version: TAB_WORKSPACE_VERSION,
-        openPaths: [todaySales.path, keywordLibrary.path],
+        openPaths: [dailySales.path, keywordLibrary.path],
         activePath: keywordLibrary.path,
       });
       expect(Object.keys(stored)).toEqual([
@@ -421,9 +420,9 @@ describe("MainLayout", () => {
     });
   });
 
-  it("preserves mounted page state across tab switches and destroys it on close or refresh", async () => {
+  it("renders only the active page and remounts local state on tab switches and refresh", async () => {
     const adsGroup = requiredGroup("ads");
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
     const renderPage = (page: NavigationPage) => (
       <StatefulPageFixture page={page} />
@@ -431,7 +430,7 @@ describe("MainLayout", () => {
     const view = renderLayout(DEFAULT_BUSINESS_PATH, renderPage);
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
 
-    fireEvent.change(screen.getByLabelText(`${todaySales.title}测试状态`), {
+    fireEvent.change(screen.getByLabelText(`${dailySales.title}测试状态`), {
       target: { value: "首页草稿" },
     });
     fireEvent.click(
@@ -445,29 +444,13 @@ describe("MainLayout", () => {
     fireEvent.change(screen.getByLabelText(`${keywordLibrary.title}测试状态`), {
       target: { value: "词库草稿" },
     });
+    expect(screen.queryByLabelText(`${dailySales.title}测试状态`)).not.toBeInTheDocument();
 
-    fireEvent.click(getTab(todaySales.title));
-    expect(screen.getByLabelText(`${todaySales.title}测试状态`)).toHaveValue(
-      "首页草稿",
-    );
+    fireEvent.click(getTab(dailySales.title));
+    expect(screen.getByLabelText(`${dailySales.title}测试状态`)).toHaveValue("");
+    expect(screen.queryByLabelText(`${keywordLibrary.title}测试状态`)).not.toBeInTheDocument();
     fireEvent.click(getTab(keywordLibrary.title));
-    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue(
-      "词库草稿",
-    );
-
-    fireEvent.click(getTab(todaySales.title));
-    fireEvent.click(getCloseTabButton(keywordLibrary.title));
-    fireEvent.click(
-      within(primaryNavigation).getByRole("menuitem", { name: adsGroup.title }),
-    );
-    fireEvent.click(
-      within(screen.getByLabelText("二级菜单浮层")).getByRole("menuitem", {
-        name: keywordLibrary.title,
-      }),
-    );
-    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue(
-      "",
-    );
+    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue("");
 
     fireEvent.change(screen.getByLabelText(`${keywordLibrary.title}测试状态`), {
       target: { value: "刷新前草稿" },
@@ -477,14 +460,14 @@ describe("MainLayout", () => {
         JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null"),
       ).toEqual({
         version: TAB_WORKSPACE_VERSION,
-        openPaths: [todaySales.path, keywordLibrary.path],
+        openPaths: [dailySales.path, keywordLibrary.path],
         activePath: keywordLibrary.path,
       });
     });
 
     view.unmount();
     renderLayout(keywordLibrary.path, renderPage);
-    expect(getTab(todaySales.title)).toBeInTheDocument();
+    expect(getTab(dailySales.title)).toBeInTheDocument();
     expect(getTab(keywordLibrary.title)).toHaveAttribute(
       "aria-selected",
       "true",
@@ -510,6 +493,10 @@ describe("MainLayout", () => {
     const target = allowedSelections[MAX_OPEN_TABS];
     if (!target) throw new Error("Missing thirteenth navigation fixture");
     const initialPaths = initialSelections.map(({ page }) => page.path);
+    const restoredPaths = [
+      DEFAULT_BUSINESS_PATH,
+      ...initialPaths.filter((path) => path !== DEFAULT_BUSINESS_PATH),
+    ].slice(0, MAX_OPEN_TABS);
     sessionStorage.setItem(
       TAB_WORKSPACE_STORAGE_KEY,
       JSON.stringify({
@@ -543,7 +530,7 @@ describe("MainLayout", () => {
     expect(
       JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null")
         .openPaths,
-    ).toEqual(initialPaths);
+    ).toEqual(restoredPaths);
 
     act(() => {
       window.history.pushState(null, "", `#${target.page.path}`);
@@ -552,14 +539,14 @@ describe("MainLayout", () => {
     await waitFor(() => {
       expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     });
-    expect(getTab(requiredPage("dashboard", "dashboard_today_sales").title)).toHaveAttribute(
+    expect(getTab(requiredPage("sales", "sales_daily_sales").title)).toHaveAttribute(
       "aria-selected",
       "true",
     );
     expect(screen.getByRole("main", { name: "内容区" })).not.toBeEmptyDOMElement();
   });
 
-  it("switches an open flyout on hover and closes it from the backdrop", () => {
+  it("switches an open flyout on hover and closes it from the backdrop", async () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -578,7 +565,7 @@ describe("MainLayout", () => {
       }),
     );
     expect(
-      screen.getByRole("menu", { name: `${salesGroup.title}二级导航` }),
+      await screen.findByRole("menu", { name: `${salesGroup.title}二级导航` }),
     ).toBeVisible();
     expect(
       within(screen.getByLabelText("二级菜单浮层")).getByText(
@@ -590,7 +577,7 @@ describe("MainLayout", () => {
 
     expectSecondaryClosed();
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      requiredPage("dashboard", "dashboard_today_sales").title,
+      requiredPage("sales", "sales_daily_sales").title,
     );
   });
 
@@ -598,14 +585,14 @@ describe("MainLayout", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
-    const dashboardGroup = requiredGroup("dashboard");
+    const salesGroup = requiredGroup("sales");
     const productGroup = requiredGroup("products");
-    const todaySales = requiredPage("dashboard", "dashboard_today_sales");
+    const dailySales = requiredPage("sales", "sales_daily_sales");
     const primaryTitle = within(primaryNavigation).getByText(
-      dashboardGroup.title,
+      salesGroup.title,
     );
-    const dashboardGroupItem = within(primaryNavigation).getByRole("menuitem", {
-      name: dashboardGroup.title,
+    const salesGroupItem = within(primaryNavigation).getByRole("menuitem", {
+      name: salesGroup.title,
     });
     fireEvent.click(
       within(primaryNavigation).getByRole("menuitem", {
@@ -632,11 +619,11 @@ describe("MainLayout", () => {
     expectSecondaryOpen();
     expect(screen.getByRole("button", { name: "关闭二级菜单" })).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "回到工作台今日销售" }));
+    fireEvent.click(screen.getByRole("button", { name: "回到每日销售首页" }));
 
-    expect(dashboardGroupItem).toHaveClass("ant-menu-item-selected");
+    expect(salesGroupItem).toHaveClass("ant-menu-item-selected");
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      todaySales.title,
+      dailySales.title,
     );
     expectSecondaryClosed();
     expect(screen.getByRole("img", { name: "掌上便捷标识" })).toBeVisible();

@@ -1,9 +1,9 @@
 /**
  * Provides the shared application frame; routing, permissions, and page state live elsewhere.
  */
-import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
+import { ClockCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, message, Tabs, Typography } from "antd";
-import { Activity, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PageHeaderOutletProvider } from "@/components/page/PageShell";
 import { navigation, type NavigationPage } from "@/config/navigation";
@@ -27,6 +27,7 @@ function requireNavigationItem<T>(value: T | undefined, message: string): T {
 
 const defaultGroup = DEFAULT_BUSINESS_ROUTE.group;
 const defaultPage = DEFAULT_BUSINESS_ROUTE.page;
+const SECONDARY_MENU_HOVER_OPEN_DELAY_MS = 500;
 const aiAssistantPage = requireNavigationItem(
   findRouteByKey("ai_center_assistant"),
   "MainLayout AI assistant navigation page is missing",
@@ -57,6 +58,7 @@ function MainLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [flyoutGroupKey, setFlyoutGroupKey] = useState(defaultGroup.key);
+  const secondaryHoverTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const [pageHeaderOutlet, setPageHeaderOutlet] = useState<HTMLDivElement | null>(null);
   const routeResolution = resolveRoute(location.pathname);
   const requestedActivePath =
@@ -78,6 +80,13 @@ function MainLayout({
       : DEFAULT_BUSINESS_ROUTE;
   const activePageGroup = activePageSelection.group;
   const activePage = activePageSelection.page;
+
+  useEffect(() => () => {
+    if (secondaryHoverTimerRef.current !== null) {
+      window.clearTimeout(secondaryHoverTimerRef.current);
+      secondaryHoverTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!rejectedPath) return;
@@ -106,15 +115,38 @@ function MainLayout({
     closable: path !== defaultPage.path,
   }));
 
+
+
+
+  const clearPendingSecondaryHover = () => {
+    if (secondaryHoverTimerRef.current !== null) {
+      window.clearTimeout(secondaryHoverTimerRef.current);
+      secondaryHoverTimerRef.current = null;
+    }
+  };
+
   const selectGroup = (key: string) => {
     const group = navigation.find((item) => item.key === key);
     if (!group) return;
 
+    clearPendingSecondaryHover();
     setFlyoutGroupKey(key);
     setSecondaryOpen(true);
   };
 
+  const scheduleSecondaryGroupHover = (key: string) => {
+    clearPendingSecondaryHover();
+
+    if (!secondaryOpen || flyoutGroupKey === key) return;
+
+    secondaryHoverTimerRef.current = window.setTimeout(() => {
+      secondaryHoverTimerRef.current = null;
+      selectGroup(key);
+    }, SECONDARY_MENU_HOVER_OPEN_DELAY_MS);
+  };
+
   const closeSecondaryMenu = () => {
+    clearPendingSecondaryHover();
     setSecondaryOpen(false);
   };
 
@@ -181,7 +213,7 @@ function MainLayout({
           type="button"
           className="main-layout__brand"
           style={{ width: collapsed ? 64 : 168 }}
-          aria-label="回到工作台今日销售"
+          aria-label="回到每日销售首页"
           onClick={resetToDefaultPage}
         >
           <img
@@ -214,6 +246,27 @@ function MainLayout({
               { title: activePage.title },
             ]}
           />
+          <div className="main-layout__topbar-fixed-actions" aria-label="固定页面信息">
+            <span className="main-layout__sync-time" aria-label="同步时间">
+              <ClockCircleOutlined aria-hidden="true" />
+              同步时间：待接入
+            </span>
+            <Button
+              className="main-layout__topbar-help"
+              type="link"
+              icon={<QuestionCircleOutlined aria-hidden="true" />}
+              onClick={() => {
+                if (activePage.help.enabled) {
+                  window.open(activePage.help.helpUrl, "_blank", "noopener,noreferrer");
+                  return;
+                }
+
+                openPageByKey(documentationPage.key);
+              }}
+            >
+              帮助
+            </Button>
+          </div>
           <div
             ref={setPageHeaderOutlet}
             className="main-layout__page-actions"
@@ -259,11 +312,8 @@ function MainLayout({
                 <span className="main-layout__primary-label">{group.title}</span>
               ),
               title: group.title,
-              onMouseEnter: () => {
-                if (secondaryOpen && flyoutGroupKey !== group.key) {
-                  selectGroup(group.key);
-                }
-              },
+              onMouseEnter: () => scheduleSecondaryGroupHover(group.key),
+              onMouseLeave: clearPendingSecondaryHover,
             }))}
           />
           <div className="main-layout__sidebar-footer">
@@ -342,14 +392,12 @@ function MainLayout({
           </section>
           <Layout.Content className="main-layout__content" aria-label="内容区">
             {renderPage ? (
-              openRoutes.map(({ path, page }) => (
-                <Activity
-                  key={path}
-                  mode={path === activePage.path ? "visible" : "hidden"}
-                >
-                  <div className="main-layout__page-panel">{renderPage(page)}</div>
-                </Activity>
-              ))
+              <div
+                key={activePage.path}
+                className="main-layout__page-panel main-layout__page-panel--active"
+              >
+                {renderPage(activePage)}
+              </div>
             ) : children ? (
               children
             ) : (

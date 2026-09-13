@@ -12,7 +12,7 @@ const owners = ["林晓", "周宁", "陈岚", "王舟"];
 const stores = ["美国一店", "美国二店", "加拿大店", "验收测试店"];
 const statuses: DailySalesCostStatus[] = ["已完成", "待补齐", "异常", "部分缺失"];
 
-export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 50 }, (_, index) => {
+export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (_, index) => {
   const number = index + 1;
   const serial = String(number).padStart(3, "0");
   const platform = platforms[index % platforms.length];

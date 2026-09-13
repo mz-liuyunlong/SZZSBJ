@@ -7,12 +7,21 @@ import {
   SwapOutlined,
 } from "@ant-design/icons";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
+import type { ReactNode } from "react";
+
+export type ListingManagementSummaryCardKey = "total" | "online" | "offline" | "buybox" | "resold" | "disabled";
 
 interface ListingManagementSummaryCardsProps {
   rows: ListingManagementRow[];
+  activeKey?: ListingManagementSummaryCardKey;
+  onCardClick?: (key: ListingManagementSummaryCardKey) => void;
 }
 
-function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsProps) {
+function ListingManagementSummaryCards({
+  rows,
+  activeKey = "total",
+  onCardClick,
+}: ListingManagementSummaryCardsProps) {
   const total = rows.length;
   const online = rows.filter((row) => row.listingStatus === "在线").length;
   const offline = rows.filter((row) => row.listingStatus === "离线").length;
@@ -20,7 +29,14 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
   const resold = rows.filter((row) => row.resold === "是").length;
   const disabled = rows.filter((row) => row.productStatus === "停用").length;
 
-  const cards = [
+  const cards: Array<{
+    key: ListingManagementSummaryCardKey;
+    label: string;
+    value: string;
+    hint: string;
+    icon: ReactNode;
+    tone: string;
+  }> = [
     {
       key: "total",
       label: "Listing总数",
@@ -33,7 +49,7 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
       key: "online",
       label: "在线Listing",
       value: online.toLocaleString(),
-      hint: "listing状态在线",
+      hint: "点击查看在线",
       icon: <CheckOutlined aria-hidden="true" />,
       tone: "green",
     },
@@ -41,7 +57,7 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
       key: "offline",
       label: "离线Listing",
       value: offline.toLocaleString(),
-      hint: "需要处理",
+      hint: "点击查看离线",
       icon: <CloseOutlined aria-hidden="true" />,
       tone: "red",
     },
@@ -49,7 +65,7 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
       key: "buybox",
       label: "未拥有购物车",
       value: noBuyBox.toLocaleString(),
-      hint: "Buy Box风险",
+      hint: "点击查看Buy Box风险",
       icon: <ShoppingCartOutlined aria-hidden="true" />,
       tone: "orange",
     },
@@ -57,7 +73,7 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
       key: "resold",
       label: "被跟卖",
       value: resold.toLocaleString(),
-      hint: "跟卖监控",
+      hint: "点击查看跟卖",
       icon: <SwapOutlined aria-hidden="true" />,
       tone: "purple",
     },
@@ -65,7 +81,7 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
       key: "disabled",
       label: "停用产品",
       value: disabled.toLocaleString(),
-      hint: "产品状态停用",
+      hint: "点击查看停用",
       icon: <PauseOutlined aria-hidden="true" />,
       tone: "gray",
     },
@@ -74,14 +90,24 @@ function ListingManagementSummaryCards({ rows }: ListingManagementSummaryCardsPr
   return (
     <div className="listing-management__summary" aria-label="Listing 管理统计">
       {cards.map((card) => (
-        <div key={card.key} className={`listing-management__summary-card listing-management__summary-card--${card.tone}`}>
+        <button
+          key={card.key}
+          type="button"
+          className={[
+            "listing-management__summary-card",
+            `listing-management__summary-card--${card.tone}`,
+            activeKey === card.key ? "listing-management__summary-card--active" : "",
+          ].filter(Boolean).join(" ")}
+          aria-pressed={activeKey === card.key}
+          onClick={() => onCardClick?.(card.key)}
+        >
           <div className="listing-management__summary-icon">{card.icon}</div>
           <div>
             <span>{card.label}</span>
             <strong>{card.value}</strong>
             <small>{card.hint}</small>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

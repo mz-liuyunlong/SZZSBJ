@@ -6,7 +6,7 @@ import {
   type RolePermissionState,
 } from "@/pages/settings/roleManagementTypes";
 
-export const roleManagementMockData: RoleManagementRow[] = [
+const baseRoleManagementMockData: RoleManagementRow[] = [
   { id: "role-ai-assistant", name: "AI助手", description: "AI 调整广告、分析数据辅助角色", preset: true, userCount: 1 },
   { id: "role-operator", name: "运营", description: "日常运营角色", preset: false, userCount: 18 },
   { id: "role-buyer", name: "采购", description: "采购计划、采购单与供应商资料维护", preset: false, userCount: 4 },
@@ -15,6 +15,22 @@ export const roleManagementMockData: RoleManagementRow[] = [
   { id: "role-ad-admin", name: "广告负责人", description: "广告活动、关键词、否定词和调价记录管理", preset: false, userCount: 2 },
   { id: "role-boss", name: "老板", description: "查看全局经营数据和关键异常", preset: false, userCount: 1 },
   { id: "role-admin", name: "管理员", description: "系统配置、用户、角色和权限维护", preset: true, userCount: 2 },
+];
+
+const generatedRoleManagementRows: RoleManagementRow[] = Array.from({ length: 92 }, (_, index) => {
+  const serial = String(index + baseRoleManagementMockData.length + 1).padStart(3, "0");
+  return {
+    id: `role-generated-${serial}`,
+    name: `业务角色${serial}`,
+    description: `No-API 验收角色 ${serial}，用于验证角色管理列表 100 条数据。`,
+    preset: false,
+    userCount: 1 + index % 12,
+  };
+});
+
+export const roleManagementMockData: RoleManagementRow[] = [
+  ...baseRoleManagementMockData,
+  ...generatedRoleManagementRows,
 ];
 
 export const pagePermissionGroups: PermissionGroup[] = [

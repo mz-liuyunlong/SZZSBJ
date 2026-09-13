@@ -22,7 +22,7 @@ const productNames = [
   "抽屉分隔盒",
 ];
 
-export const orderProfitSourceRecords: OrderProfitSourceRecord[] = Array.from({ length: 48 }, (_, productIndex) => {
+export const orderProfitSourceRecords: OrderProfitSourceRecord[] = Array.from({ length: 100 }, (_, productIndex) => {
   const productNumber = productIndex + 1;
   const serial = String(productNumber).padStart(3, "0");
   const productId = `PID-${300_000 + productNumber}`;

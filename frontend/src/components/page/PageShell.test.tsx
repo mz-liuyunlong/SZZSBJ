@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe("PageShell", () => {
-  it("labels the page region and keeps help without rendering title or status chrome", () => {
+  it("labels the page region without rendering title, status, or help chrome", () => {
     const page = DEFAULT_BUSINESS_ROUTE.page;
 
     render(
@@ -35,12 +35,7 @@ describe("PageShell", () => {
     expect(screen.queryByText("页面说明")).not.toBeInTheDocument();
     expect(screen.getByText("页面内容")).toBeVisible();
 
-    const help = screen.getByRole("link", {
-      name: `在新标签页打开${page.help.title}`,
-    });
-    expect(help).toHaveAttribute("href", page.help.helpUrl);
-    expect(help).toHaveAttribute("target", "_blank");
-    expect(help).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
     expect(screen.queryByText(page.permissionKey)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("navigation", { name: "面包屑" }),

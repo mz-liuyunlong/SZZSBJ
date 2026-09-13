@@ -2,10 +2,8 @@
 import {
   CloudDownloadOutlined,
   CopyOutlined,
-  ReloadOutlined,
-  SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Drawer, Input, Modal, Space, Tag, Typography, message } from "antd";
+import { Button, Card, Input, Modal, Space, Tag, Typography, message } from "antd";
 import { useMemo, useState } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
@@ -24,7 +22,6 @@ interface ApiDocsPageProps {
   page: NavigationPage;
 }
 
-const CONFIG_PENDING = "API文档配置接口待接入";
 const EXPORT_PENDING = "API文档导出接口待接入";
 const DEBUG_PENDING = "在线调试接口待接入";
 
@@ -62,7 +59,6 @@ function ApiDocsPage({ page }: ApiDocsPageProps) {
   const [activeModuleKey, setActiveModuleKey] = useState(apiDocModules[0].key);
   const [activeLevelName, setActiveLevelName] = useState(apiDocModules[0].levels[0].name);
   const [selectedApiId, setSelectedApiId] = useState(apiDocModules[0].levels[0].apis[0].id);
-  const [configOpen, setConfigOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
 
@@ -99,23 +95,9 @@ function ApiDocsPage({ page }: ApiDocsPageProps) {
     setSelectedApiId(module.levels[0].apis[0].id);
   };
 
-  const headerActions = (
-    <>
-      <Button icon={<SettingOutlined aria-hidden="true" />} onClick={() => setConfigOpen(true)}>显示配置</Button>
-      <Button icon={<CloudDownloadOutlined aria-hidden="true" />} onClick={() => setExportOpen(true)}>导出</Button>
-      <Button type="primary" onClick={() => setDebugOpen(true)}>在线调试</Button>
-      <Button
-        type="text"
-        shape="circle"
-        aria-label="刷新API文档"
-        icon={<ReloadOutlined aria-hidden="true" />}
-        onClick={() => void messageApi.info("API文档接口待接入")}
-      />
-    </>
-  );
 
   return (
-    <PageShell page={page} headerActions={headerActions}>
+    <PageShell page={page}>
       {messageContextHolder}
       <div className="api-docs">
         <section className="api-docs__page-head" aria-label="API文档页面说明">
@@ -293,23 +275,6 @@ function ApiDocsPage({ page }: ApiDocsPageProps) {
           </Card>
         </section>
       </div>
-
-      <Drawer
-        open={configOpen}
-        title="接口文档显示配置"
-        width={540}
-        onClose={() => setConfigOpen(false)}
-        footer={(
-          <Space>
-            <Button onClick={() => setConfigOpen(false)}>取消</Button>
-            <Button type="primary" onClick={() => { void messageApi.info(CONFIG_PENDING); setConfigOpen(false); }}>保存</Button>
-          </Space>
-        )}
-      >
-        <Card size="small" title="导航结构">
-          正式页面固定为：左侧一级模块导航，上方二级业务导航，中间接口矩阵，下方接口详情，右侧权限和返回模型。
-        </Card>
-      </Drawer>
 
       <Modal
         open={exportOpen}

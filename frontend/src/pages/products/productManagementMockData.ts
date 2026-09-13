@@ -42,7 +42,7 @@ const tagPatterns: ProductTag[][] = [
 
 const priceText = (value: number) => `$${value.toFixed(2)}`;
 
-export const productManagementMockData: ProductManagementRow[] = Array.from({ length: 128 }, (_, index) => {
+export const productManagementMockData: ProductManagementRow[] = Array.from({ length: 100 }, (_, index) => {
   const number = index + 1;
   const serial = String(number).padStart(3, "0");
   const grade = productGrades[index % productGrades.length];

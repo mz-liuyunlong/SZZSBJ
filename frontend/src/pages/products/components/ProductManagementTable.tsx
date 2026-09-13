@@ -275,7 +275,7 @@ function ProductManagementTable({
         toolBarRender={false}
         bordered
         size="small"
-        scroll={{ x: scrollX }}
+        scroll={{ x: scrollX, y: "100%" }}
         rowSelection={{
           fixed: true,
           selectedRowKeys,
