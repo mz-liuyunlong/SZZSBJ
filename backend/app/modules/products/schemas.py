@@ -145,6 +145,7 @@ class ProductListingMutableFields(ProductSchema):
     listing_url: Annotated[str, StringConstraints(max_length=2048)] | None = None
     listing_status: Annotated[str, StringConstraints(max_length=64)] | None = None
     fulfillment_type: Annotated[str, StringConstraints(max_length=64)] | None = None
+    is_primary: bool = False
     wfs_fee: MoneyAmount | None = None
     shipping_cost: MoneyAmount | None = None
     currency_code: CurrencyCode | None = None
@@ -195,6 +196,7 @@ class ProductListingRead(ProductSchema):
     listing_url: str | None
     listing_status: str | None
     fulfillment_type: str | None
+    is_primary: bool = False
     wfs_fee: MoneyAmount | None
     shipping_cost: MoneyAmount | None
     currency_code: str | None

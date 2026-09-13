@@ -9,6 +9,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
+    OUTBOUND_NOT_AUTHORIZED,
+    PROVIDER_CONTRACT_MISSING,
     BatchProductInfoOutboundDisabled,
     LingxingBatchGetProductInfoSyncHandler,
     ordered_id_hash,
@@ -194,5 +196,7 @@ def test_batch_plan_is_deterministic_and_safe() -> None:
 
 
 def test_batch_handler_transport_is_explicitly_disabled() -> None:
-    with pytest.raises(BatchProductInfoOutboundDisabled):
+    with pytest.raises(BatchProductInfoOutboundDisabled, match=OUTBOUND_NOT_AUTHORIZED):
         LingxingBatchGetProductInfoSyncHandler().execute(RUN_ID)
+    with pytest.raises(BatchProductInfoOutboundDisabled, match=PROVIDER_CONTRACT_MISSING):
+        LingxingBatchGetProductInfoSyncHandler().execute(RUN_ID, outbound_authorized=True)

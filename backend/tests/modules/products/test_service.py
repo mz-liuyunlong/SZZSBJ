@@ -44,6 +44,7 @@ def _listing() -> ProductPlatformListing:
         platform=Platform.WALMART,
         store_name="Synthetic Store",
         msku="MSKU-SYNTHETIC",
+        is_primary=False,
         created_at=NOW,
         updated_at=NOW,
     )

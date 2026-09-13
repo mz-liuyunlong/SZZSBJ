@@ -61,6 +61,7 @@ def test_environment_loading_fails_closed_with_safe_error(
         "DATABASE_URL",
         "TEST_DATABASE_URL",
         "LINGXING_ENABLE_REAL_CALLS",
+        "LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS",
         "LINGXING_ALLOW_STRUCTURED_WRITE",
         "LINGXING_ALLOW_FULL_SYNC",
     ):
@@ -98,6 +99,7 @@ def test_lingxing_settings_default_to_dry_run_and_deny_dangerous_actions() -> No
     assert settings.lingxing_token_request_timeout_ms == 5_000
     assert settings.lingxing_token_max_attempts == 2
     assert settings.lingxing_enable_real_calls is False
+    assert settings.lingxing_enable_batch_product_info_requests is False
     assert settings.lingxing_dry_run is True
     assert settings.lingxing_allow_raw_write is False
     assert settings.lingxing_allow_structured_write is False
@@ -157,3 +159,14 @@ def test_lingxing_base_url_rejects_credentials_and_masks_secret_fields() -> None
         Settings.model_validate(values)
 
     assert marker not in str(error.value)
+
+
+def test_lingxing_batch_product_info_outbound_cannot_be_enabled_without_contract() -> None:
+    with pytest.raises(ValidationError, match="provider contract is not verified"):
+        Settings.model_validate(
+            {
+                "APP_ENV": "test",
+                "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+                "LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS": True,
+            }
+        )

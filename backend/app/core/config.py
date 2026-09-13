@@ -99,6 +99,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="LINGXING_ENABLE_REAL_CALLS",
     )
+    lingxing_enable_batch_product_info_requests: bool = Field(
+        default=False,
+        validation_alias="LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS",
+    )
     lingxing_save_raw: bool = Field(default=True, validation_alias="LINGXING_SAVE_RAW")
     lingxing_dry_run: bool = Field(default=True, validation_alias="LINGXING_DRY_RUN")
     lingxing_allow_raw_write: bool = Field(
@@ -161,6 +165,8 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL is required outside APP_ENV=test")
         if self.lingxing_enable_real_calls and self.lingxing_base_url is None:
             raise ValueError("LINGXING_BASE_URL is required when real calls are enabled")
+        if self.lingxing_enable_batch_product_info_requests:
+            raise ValueError("Lingxing batch product info provider contract is not verified")
         if self.lingxing_enable_token_requests and (
             self.lingxing_base_url is None
             or not self.lingxing_app_id
