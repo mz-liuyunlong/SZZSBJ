@@ -770,3 +770,66 @@
   min-width: 0;
 }
 /* End summary card height normalization */
+
+/* Listing table vertical fill fix */
+.listing-management__table-wrap {
+  display: flex !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+
+.listing-management__table-shell {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+}
+
+.listing-management__table-shell .ant-pro-table,
+.listing-management__table-shell .ant-pro-card,
+.listing-management__table-shell .ant-pro-card-body,
+.listing-management__table-shell .ant-spin-nested-loading,
+.listing-management__table-shell .ant-spin-container,
+.listing-management__table-shell .ant-table-wrapper {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+}
+
+.listing-management__table-shell .ant-table {
+  display: flex !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+}
+
+.listing-management__table-shell .ant-table-container {
+  display: flex !important;
+  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.listing-management__table-shell .ant-table-header {
+  flex: 0 0 auto !important;
+}
+
+.listing-management__table-shell .ant-table-body {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+}
+
+.listing-management__table-shell .ant-table-pagination.ant-pagination {
+  flex: 0 0 42px !important;
+}
+/* End listing table vertical fill fix */

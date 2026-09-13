@@ -1,0 +1,262 @@
+/**
+ * Global motion polish for admin pages.
+ * Scope:
+ * 1. Empty / loading states
+ * 2. Table row hover / selected feedback
+ * 3. Drawer / Modal entrance details
+ */
+
+:root {
+  --zs-motion-fast: 120ms;
+  --zs-motion-base: 180ms;
+  --zs-motion-slow: 260ms;
+  --zs-motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --zs-motion-ease-soft: cubic-bezier(0.2, 0, 0, 1);
+
+  --zs-primary: #1677ff;
+  --zs-primary-soft: rgb(22 119 255 / 8%);
+  --zs-primary-softer: rgb(22 119 255 / 5%);
+  --zs-primary-line: rgb(22 119 255 / 42%);
+  --zs-primary-glow: rgb(22 119 255 / 16%);
+}
+
+/* =========================
+   Empty state
+   ========================= */
+
+.ant-empty {
+  animation: zs-empty-fade-up var(--zs-motion-slow) var(--zs-motion-ease-out) both;
+}
+
+.ant-empty .ant-empty-image {
+  transform-origin: center;
+  animation: zs-empty-soft-float 3.2s ease-in-out infinite;
+}
+
+.ant-empty .ant-empty-description {
+  transition:
+    color var(--zs-motion-base) var(--zs-motion-ease-soft),
+    transform var(--zs-motion-base) var(--zs-motion-ease-soft);
+}
+
+.ant-empty:hover .ant-empty-description {
+  color: var(--zs-primary);
+  transform: translateY(-1px);
+}
+
+.ant-table-wrapper .ant-table-placeholder > .ant-table-cell {
+  animation: zs-empty-fade-up var(--zs-motion-slow) var(--zs-motion-ease-out) both;
+}
+
+@keyframes zs-empty-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zs-empty-soft-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* =========================
+   Loading state
+   ========================= */
+
+.ant-spin-nested-loading > div > .ant-spin {
+  max-height: none;
+}
+
+.ant-spin .ant-spin-dot {
+  filter: drop-shadow(0 0 8px var(--zs-primary-glow));
+  animation: zs-loading-soft-pulse 1.4s ease-in-out infinite;
+}
+
+.ant-spin .ant-spin-text {
+  animation: zs-loading-text-fade 1.4s ease-in-out infinite;
+}
+
+.ant-skeleton.ant-skeleton-active .ant-skeleton-title,
+.ant-skeleton.ant-skeleton-active .ant-skeleton-paragraph > li,
+.ant-skeleton.ant-skeleton-active .ant-skeleton-avatar,
+.ant-skeleton.ant-skeleton-active .ant-skeleton-button,
+.ant-skeleton.ant-skeleton-active .ant-skeleton-input {
+  background-size: 260% 100% !important;
+  animation: zs-skeleton-soft-sweep 1.35s ease-in-out infinite;
+}
+
+.ant-table-wrapper .ant-spin-container {
+  transition:
+    opacity var(--zs-motion-base) var(--zs-motion-ease-soft),
+    filter var(--zs-motion-base) var(--zs-motion-ease-soft);
+}
+
+.ant-table-wrapper .ant-spin-blur {
+  opacity: 0.58;
+  filter: saturate(0.9);
+}
+
+@keyframes zs-loading-soft-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.86;
+  }
+
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes zs-loading-text-fade {
+  0%,
+  100% {
+    opacity: 0.68;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes zs-skeleton-soft-sweep {
+  0% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+/* =========================
+   Drawer detail motion
+   ========================= */
+
+.ant-drawer-content-wrapper {
+  transition-timing-function: var(--zs-motion-ease-out) !important;
+}
+
+.ant-drawer .ant-drawer-content {
+  animation: zs-drawer-content-in 220ms var(--zs-motion-ease-out) both;
+}
+
+.ant-drawer .ant-drawer-header {
+  animation: zs-drawer-section-in 240ms var(--zs-motion-ease-out) both;
+}
+
+.ant-drawer .ant-drawer-body {
+  animation: zs-drawer-section-in 280ms var(--zs-motion-ease-out) both;
+}
+
+.ant-drawer .ant-drawer-footer {
+  animation: zs-drawer-footer-in 300ms var(--zs-motion-ease-out) both;
+}
+
+.ant-drawer .ant-drawer-body > :where(.ant-card, .ant-form, .ant-table-wrapper, .ant-alert, .ant-space, .ant-row, .ant-list, .ant-tabs) {
+  animation: zs-drawer-item-in 280ms var(--zs-motion-ease-out) both;
+}
+
+.ant-drawer .ant-drawer-body > :where(.ant-card, .ant-form, .ant-table-wrapper, .ant-alert, .ant-space, .ant-row, .ant-list, .ant-tabs):nth-child(2) {
+  animation-delay: 35ms;
+}
+
+.ant-drawer .ant-drawer-body > :where(.ant-card, .ant-form, .ant-table-wrapper, .ant-alert, .ant-space, .ant-row, .ant-list, .ant-tabs):nth-child(3) {
+  animation-delay: 70ms;
+}
+
+@keyframes zs-drawer-content-in {
+  from {
+    opacity: 0.86;
+    transform: translateX(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes zs-drawer-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zs-drawer-footer-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zs-drawer-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================
+   Reduced motion
+   ========================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .ant-empty,
+  .ant-empty .ant-empty-image,
+  .ant-table-wrapper .ant-table-placeholder > .ant-table-cell,
+  .ant-spin .ant-spin-dot,
+  .ant-spin .ant-spin-text,
+  .ant-skeleton.ant-skeleton-active .ant-skeleton-title,
+  .ant-skeleton.ant-skeleton-active .ant-skeleton-paragraph > li,
+  .ant-skeleton.ant-skeleton-active .ant-skeleton-avatar,
+  .ant-skeleton.ant-skeleton-active .ant-skeleton-button,
+  .ant-skeleton.ant-skeleton-active .ant-skeleton-input,
+  .ant-drawer .ant-drawer-content,
+  .ant-drawer .ant-drawer-header,
+  .ant-drawer .ant-drawer-body,
+  .ant-drawer .ant-drawer-footer,
+  .ant-drawer .ant-drawer-body > *,
+  .ant-modal-root .ant-modal,
+  .ant-modal-root .ant-modal .ant-modal-content,
+  .ant-modal-root .ant-modal .ant-modal-header,
+  .ant-modal-root .ant-modal .ant-modal-body,
+  .ant-modal-root .ant-modal .ant-modal-footer {
+    animation: none !important;
+  }
+
+  .ant-table-wrapper .ant-table-tbody > tr.ant-table-row > td,
+  .ant-table-wrapper .ant-table-thead > tr > th,
+  .ant-table-wrapper .ant-spin-container {
+    transition: none !important;
+  }
+}

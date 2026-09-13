@@ -1,4 +1,4 @@
-import { Button, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Space, Tag, Tooltip } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import type { Key } from "react";
 import ReportTableShell, {
@@ -8,6 +8,7 @@ import {
   REPORT_TABLE_PAGE_SIZE_OPTIONS,
 } from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
+import { CopyableTextCell, ImageCell } from "@/components/report-table/cells";
 import {
   listingColumnFields,
   type ListingManagementRow,
@@ -112,9 +113,11 @@ function ListingManagementTable({
       fixed: "left",
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <div className="listing-management__image-cell" aria-label={`Listing 图片：${row.productName}`}>
-          {row.image}
-        </div>
+        <ImageCell
+          image={row.image}
+          label={`Listing 图片：${row.productName}`}
+          placement="right"
+        />
       ),
     },
     msku: {
@@ -126,9 +129,12 @@ function ListingManagementTable({
       sorter: (a, b) => a.msku.localeCompare(b.msku),
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <Typography.Link strong onClick={() => onOpenDetail(row)}>
-          {row.msku}
-        </Typography.Link>
+        <CopyableTextCell
+          text={row.msku}
+          label="MSKU"
+          link
+          onOpen={() => onOpenDetail(row)}
+        />
       ),
     },
     productId: {
@@ -139,7 +145,12 @@ function ListingManagementTable({
       fixed: "left",
       sorter: (a, b) => a.productId.localeCompare(b.productId),
       onHeaderCell: headerCell,
-      render: (_, row) => <Typography.Link>{row.productId}</Typography.Link>,
+      render: (_, row) => (
+        <CopyableTextCell
+          text={row.productId}
+          label="商品ID"
+        />
+      ),
     },
     store: {
       key: "store",
@@ -162,7 +173,12 @@ function ListingManagementTable({
       width: columnWidths.sku,
       sorter: (a, b) => a.sku.localeCompare(b.sku),
       onHeaderCell: headerCell,
-      render: (_, row) => <Typography.Link>{row.sku}</Typography.Link>,
+      render: (_, row) => (
+        <CopyableTextCell
+          text={row.sku}
+          label="SKU"
+        />
+      ),
     },
     productName: {
       key: "productName",
@@ -172,7 +188,14 @@ function ListingManagementTable({
       ellipsis: true,
       sorter: (a, b) => a.productName.localeCompare(b.productName),
       onHeaderCell: headerCell,
-      render: (_, row) => <Typography.Link strong onClick={() => onOpenDetail(row)}>{row.productName}</Typography.Link>,
+      render: (_, row) => (
+        <CopyableTextCell
+          text={row.productName}
+          label="商品名称"
+          link
+          onOpen={() => onOpenDetail(row)}
+        />
+      ),
     },
     title: {
       key: "title",
@@ -397,9 +420,8 @@ function ListingManagementTable({
         toolBarRender={false}
         bordered
         size="small"
-        scroll={{ x: scrollX, y: 520 }}
-      virtual
-      tableLayout="fixed"
+        scroll={{ x: scrollX, y: "100%" }}
+        tableLayout="fixed"
         rowSelection={{
           fixed: true,
           selectedRowKeys,

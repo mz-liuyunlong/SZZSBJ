@@ -925,3 +925,145 @@
     box-shadow: 0 6px 18px rgb(240 68 56 / 10%);
   }
 }
+
+/* Ping-pong shine animation only */
+.order-profit__summary-card {
+  --summary-shine-step: 750ms;
+  --summary-shine-active: 1300ms;
+  --summary-shine-cycle: 9550ms;
+}
+
+.order-profit__summary-card .ant-card-body {
+  position: relative;
+}
+
+.order-profit__summary-card::before,
+.order-profit__summary-card .ant-card-body::before {
+  position: absolute;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(115deg, transparent 0%, rgb(255 255 255 / 0%) 34%, rgb(255 255 255 / 48%) 48%, rgb(255 255 255 / 0%) 62%, transparent 100%),
+    radial-gradient(circle at 82% 22%, color-mix(in srgb, var(--summary-accent) 18%, transparent), transparent 34%);
+  opacity: 0;
+  animation-duration: var(--summary-shine-cycle) !important;
+  animation-timing-function: linear !important;
+  animation-iteration-count: infinite !important;
+  animation-fill-mode: both !important;
+}
+
+.order-profit__summary-card::before {
+  inset: 0;
+  transform: translateX(-135%);
+  animation-name: order-profit-summary-shine-forward !important;
+}
+
+.order-profit__summary-card .ant-card-body::before {
+  z-index: 1;
+  inset: -12px -14px;
+  transform: translateX(135%);
+  animation-name: order-profit-summary-shine-backward !important;
+}
+
+.order-profit__summary-card:nth-child(1)::before {
+  animation-delay: 0ms !important;
+}
+.order-profit__summary-card:nth-child(2)::before {
+  animation-delay: 750ms !important;
+}
+.order-profit__summary-card:nth-child(3)::before {
+  animation-delay: 1500ms !important;
+}
+.order-profit__summary-card:nth-child(4)::before {
+  animation-delay: 2250ms !important;
+}
+.order-profit__summary-card:nth-child(5)::before {
+  animation-delay: 3000ms !important;
+}
+.order-profit__summary-card:nth-child(6)::before {
+  animation-delay: 3750ms !important;
+}
+
+.order-profit__summary-card:nth-child(6) .ant-card-body::before {
+  animation-delay: 4500ms !important;
+}
+.order-profit__summary-card:nth-child(5) .ant-card-body::before {
+  animation-delay: 5250ms !important;
+}
+.order-profit__summary-card:nth-child(4) .ant-card-body::before {
+  animation-delay: 6000ms !important;
+}
+.order-profit__summary-card:nth-child(3) .ant-card-body::before {
+  animation-delay: 6750ms !important;
+}
+.order-profit__summary-card:nth-child(2) .ant-card-body::before {
+  animation-delay: 7500ms !important;
+}
+.order-profit__summary-card:nth-child(1) .ant-card-body::before {
+  animation-delay: 8250ms !important;
+}
+
+.order-profit__summary-icon,
+.order-profit__summary-content,
+.order-profit__summary-comparison {
+  position: relative;
+  z-index: 2;
+}
+
+.order-profit__summary-rising {
+  z-index: 1;
+}
+
+@keyframes order-profit-summary-shine-forward {
+  0% {
+    opacity: 0;
+    transform: translateX(-135%);
+  }
+
+  0.20% {
+    opacity: 0.62;
+    transform: translateX(-135%);
+  }
+
+  13.59% {
+    opacity: 0.62;
+    transform: translateX(135%);
+  }
+
+  13.61%,
+  100% {
+    opacity: 0;
+    transform: translateX(135%);
+  }
+}
+
+@keyframes order-profit-summary-shine-backward {
+  0% {
+    opacity: 0;
+    transform: translateX(135%);
+  }
+
+  0.20% {
+    opacity: 0.62;
+    transform: translateX(135%);
+  }
+
+  13.59% {
+    opacity: 0.62;
+    transform: translateX(-135%);
+  }
+
+  13.61%,
+  100% {
+    opacity: 0;
+    transform: translateX(-135%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-profit__summary-card::before,
+  .order-profit__summary-card .ant-card-body::before {
+    animation: none !important;
+  }
+}
+/* End ping-pong shine animation only */
