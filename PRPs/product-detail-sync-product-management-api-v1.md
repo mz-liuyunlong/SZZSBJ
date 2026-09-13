@@ -3,7 +3,8 @@
 ```text
 Status: Approved for implementation — Ready for implementation
 Owner Approval Required: Completed (2026-09-13)
-Implementation Allowed: Yes, but only after the Project Owner issues a separate backend implementation Prompt
+Implementation Allowed: Yes, within this Approved PRP after this docs-only gate update
+Implementation Resume Authorized: Yes (2026-09-13)
 Main Execution Role: Backend Engineer
 Assigned Agent Skill: engineering-backend-architect
 Source Decision: docs/data-sources/decisions/product-management-product-detail-sync-decision.md
@@ -17,18 +18,19 @@ Production Sync Execution Allowed: No
 
 现有 Integration Sync Governance + Lingxing SKU Detail Foundation 已建立 ProductList identity、`batchGetProductInfo` 禁用 handler/parser skeleton、DWD detail/images/tags、DWS base profile 和受保护 SKU 详情读取。现有 Product Management Backend MVP 另行维护 `products` 与 `product_platform_listings`，前端产品管理页面仍使用静态数据。
 
-本 PRP 已由负责人批准，用于把详情同步、内部标签、版本化费用/售价规则、可重建计算结果和产品管理 BFF 组合为一个受治理后端能力。批准仅覆盖代码、migration、文档和 mock/synthetic 测试；工程师仍须等待负责人单独下发实现 Prompt，且不得执行真实外部或生产操作。
+本 PRP 已由负责人批准，用于把详情同步、内部标签、版本化费用/售价规则、可重建计算结果和产品管理 BFF 组合为一个受治理后端能力。负责人已补齐售价公式并解除 Recovery Stop，允许在当前分支恢复实现。批准仅覆盖代码、migration、文档和 mock/synthetic 测试，不得执行真实外部或生产操作；本次门禁更新本身仍为 docs-only。
 
 ## 2. 前置门禁
 
 当前已满足：
 
 1. Source Decision 已为 `READY_FOR_PRP`，批准范围内无未解决的 `NEED_OWNER_DECISION`。
-2. 负责人已于 2026-09-13 批准 OD-01 至 OD-14。
-3. WFS 来源、FX、佣金、毛利率目标、ROI、等级、头程、历史重算、BFF identity 与字段 precedence 已有明确决定。
+2. 负责人已于 2026-09-13 批准 OD-01 至 OD-27。
+3. WFS 来源、FX、佣金、included costs、不含税收入、售价反推、价格下限、毛利率、ROI、等级、头程、历史重算、BFF identity、WFS override 与字段 precedence 已有明确决定。
 4. 本 PRP 已为 `Approved for implementation — Ready for implementation`。
+5. 负责人已明确允许 `engineering-backend-architect` 在当前分支恢复实现。
 
-唯一尚未满足的启动条件是负责人单独下发后端实现 Prompt。`batchGetProductInfo` 官方 contract 仍不完整，因此只允许实现默认关闭、保守配置、fail-closed 的 outbound 路径和 mock/synthetic 测试；任何真实 Token、真实 provider transport、生产数据库/服务器、生产 migration、真实同步或部署仍须代码合并 `main` 后另行批准。
+`batchGetProductInfo` 官方 contract 仍不完整，因此只允许实现默认关闭、保守配置、fail-closed 的 outbound 路径和 mock/synthetic 测试；任何真实 Token、真实 provider transport、生产数据库/服务器、生产 migration、真实同步或部署仍须代码合并 `main` 后另行批准。
 
 ## 3. 已批准的上游边界
 
@@ -43,7 +45,7 @@ Production Sync Execution Allowed: No
 
 ## 4. 明确不允许事项
 
-- 在负责人另行下发实现 Prompt 前编写或修改业务代码、migration、model、service、router 或测试。
+- 在本次 docs-only 门禁更新中编写或修改业务代码、migration、model、service、router 或测试；后续恢复实现须严格遵守本 PRP allowlist。
 - 超出 Source Decision、本 PRP 或后续实现 Prompt 的 allowlist。
 - 修改 `frontend/**`、`admin-frontend/**` 或 `old-system/**`。
 - 读取 `.env`、请求 Token、调用 Lingxing/Walmart 或运行真实同步。
@@ -59,7 +61,7 @@ Production Sync Execution Allowed: No
 
 ## 5. 后端实现范围
 
-负责人另行下发实现 Prompt 后，可包含且仅包含：
+负责人已授权恢复实现，可包含且仅包含：
 
 1. 为 `batchGetProductInfo` 补齐 default-off endpoint contract、请求构造、响应处理、work-item handler、RAW request/blob 引用、parser、DWD publisher、错误处理和测试；实现 PR 不执行真实请求。
 2. 复用既有 DWD detail/images/Lingxing tags 和 DWS base profile；只在确有字段/约束缺口且 Source Decision 已批准时创建 migration。
@@ -149,8 +151,11 @@ identity index
 
 - 第一版费率证据来源为 `https://marketplace.walmart.com/walmart-fulfillment-services-pricing/`，由负责人于 2026-09-13 人工确认；该页面不是 runtime API，本实现不得自动抓取。
 - 配置必须保存 market、fee type、尺寸/重量/类别区间、amount/rate、`currency_code`、unit、effective period、`source_url`、`confirmed_at`、`version`、`is_active`、confirmed actor 和 rounding rule。
-- 计算输入只用有单位的获批尺寸/重量；尺寸、重量或激活费率缺失时返回稳定计算状态，不抛 500、不默认零。
-- `product_platform_listings.wfs_fee` 的人工值与 calculated fulfillment fee 分开；人工 override 优先，breakdown 标记实际来源。
+- Product Management grain 是 SKU identity，不按 Product 聚合后随意选择 listing。WFS fee 依次选择：active identity-level override、primary Walmart listing active override、唯一 active listing override、多个 active listing 的一致 override、系统规则计算值。
+- 多个 active Walmart listings 的 override 值不一致时，返回 `wfs_calc_status=needs_confirm` 与 `wfs_calc_reason=multiple_listing_wfs_overrides`，不得静默选择第一条。
+- breakdown 返回 `wfsFeeSource`：`manual_sku_override`、`manual_primary_listing_override`、`manual_single_listing_override`、`manual_consistent_listing_override`、`calculated_rule` 或 `needs_confirm`。
+- 计算输入只用有单位的获批尺寸/重量；无人工 override 且尺寸、重量或激活费率缺失时返回对应安全状态。无 active rate config 时 `wfs_calc_status=missing_rate`，聚合 pricing 状态为 `missing_wfs_rate`。
+- `product_platform_listings.wfs_fee` 的人工值与 calculated fulfillment fee 分开；同步或计算值不得覆盖人工 override。
 - 不调用 Walmart API，不把 WFS fulfillment fee 与 storage fee 合并。
 
 ## 10. WFS 每日仓储费计算设计
@@ -164,7 +169,7 @@ daily_storage_fee_per_unit_usd = package_volume_cuft * monthly_storage_rate_usd_
 estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_days
 ```
 
-- `storage_month_basis_days` 默认 30，`pricing_storage_days` 默认 30，`include_storage_fee_in_pricing` 默认 `true`；三者进入版本化规则配置。
+- `storage_month_basis_days` 默认 30，`pricing_storage_days` 默认 30，定价包含开关统一为 `include_storage_fee=true`；三者进入版本化规则配置。
 - API 返回 `dailyStorageFeePerUnitUsd`、`dailyStorageFeePerUnitCny`、`estimatedStorageFeeUsd`、`estimatedStorageFeeCny` 和 breakdown。
 - 输出是每件每日费用与按配置天数估算的每件费用；本 PRP 不引入库存数量或账单事实。
 - 缺尺寸或激活费率时返回 `storage_calc_status`，不抛 500、不使用零值或最新规则回算历史。
@@ -181,19 +186,44 @@ estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_day
 
 第一版 `suggested_gross_margin_rate=0.20`、`minimum_gross_margin_rate=0.10`、`clearance_gross_margin_rate=0.00`，由前端通过受保护 API 配置并形成不可变规则版本。
 
-- 后端 calculation service 统一使用获批的采购成本、WFS、仓储、头程、佣金、FX、currency 和 rounding；前端只展示结果与 breakdown。
-- `usd_cny_rate` 只来自价格规则配置，不写固定值；缺失时 `pricing_calc_status=missing_fx_rate`。配置记录 `updated_at`、`actor_ref` 及 canonical FX metadata。
-- `platform_commission_rate` 允许全局默认；缺失按 0 计算，但 breakdown 必须返回 `commission_source=default_zero`，配置存在时为 `configured`。
-- 价格取整默认 `none`，仅预留 `nearest_0_99` / `nearest_0_95` 枚举，不在首版主动套用。
-- 实现金额结果前，公式必须在 API 文档和确定性测试中显式定义含税/不含税、佣金基数、margin denominator、缺失成本行为和价格下限；仓库无已批准公式时返回安全状态并停止该金额计算，不得由工程师猜测。
-- 三种售价分别保存 target、result、currency、rule IDs、input snapshot refs、calc version 和 breakdown。
-- 不允许前端补算、默认汇率、用二进制 float 或把未获准缺省的费用当 0。
+- `price_usd` 表示 Walmart 前台不含销售税、VAT、GST 或其他税费的商品售价。第一版税费、平台代收税和单独运费收入均不进入收入、成本、毛利或 ROI；未来纳税口径需新 Source Decision/PRP。
+- `usd_cny_rate` 只来自 pricing rule config，不写固定值；缺失时 `pricing_calc_status=missing_fx_rate`。配置记录 `updated_at`、`actor_ref` 及 canonical FX metadata。
+- `revenue_cny = price_usd * usd_cny_rate`。平台佣金基数固定为收入：`commission_cny = revenue_cny * platform_commission_rate`。
+- `platform_commission_rate` 允许全局默认；缺失按 0 计算，breakdown 返回 `commission_source=default_zero`，配置存在时为 `configured`。
+- 第一版固定成本不含平台佣金：
+
+```text
+included_costs_cny =
+    purchase_cost_cny
+    + included_first_leg_cost_cny
+    + included_wfs_fulfillment_fee_cny
+    + included_estimated_storage_fee_cny
+    + other_fixed_cost_cny
+```
+
+- `include_first_leg_fee`、`include_wfs_fulfillment_fee`、`include_storage_fee` 默认 `true`，`other_fixed_cost_cny` 默认 `0`。每项在 breakdown 返回 source 和 `included=true/false`。
+- 缺采购价，或相应 include 开关为 true 时缺重量、WFS 费率、仓储费率，分别返回 `missing_purchase_cost`、`missing_weight`、`missing_wfs_rate`、`missing_storage_rate`，不抛 500。
+- 毛利口径固定为：`gross_profit_cny = revenue_cny - commission_cny - included_costs_cny`；`gross_margin_rate = gross_profit_cny / revenue_cny`。`revenue_cny <= 0` 时返回 `invalid_revenue`。
+- 三种售价按目标毛利率反推：
+
+```text
+price_usd = included_costs_cny
+    / (usd_cny_rate * (1 - platform_commission_rate - target_margin_rate))
+```
+
+- 清仓售价同样包含平台佣金。`1 - platform_commission_rate - target_margin_rate <= 0` 时返回 `invalid_pricing_denominator` 和安全 reason，不返回猜测价格、不抛 500。
+- 规则必须满足 suggested target margin >= minimum target margin >= clearance target margin，否则返回 `invalid_pricing_rule_config`。结果必须满足 `suggested_price_usd >= minimum_price_usd >= clearance_price_usd`，其中 clearance 是第一版系统价格下限。
+- `manual_min_price_usd` 可预留但不强制实现完整维护入口；已有 active override 时，最终价格不得低于 `max(clearance_price_usd, manual_min_price_usd)`，breakdown 标记 `source=manual_override`。
+- `raw_price_usd` 使用 Decimal 高精度。`rounding_mode=none` 时先按 `ROUND_HALF_UP` 保留两位；若结果低于 raw price 并破坏目标毛利率，则提升到下一美分。预留 `nearest_0_99` / `nearest_0_95`，后续启用时同样必须向上取整。
+- breakdown 至少返回 `target_margin_rate`、`denominator`、`raw_price_usd`、`final_price_usd`、`rounding_mode`、各成本项和来源。
+- 三种售价分别保存 target、result、`currency_code`、rule IDs、input snapshot refs、calc version 和 breakdown。前端只展示，不补算。
 
 ## 13. 毛利率、ROI 与产品等级设计
 
-- ROI 默认 `roi_base=purchase_cost`，公式为 `ROI=gross_profit/purchase_cost_cny`；配置可在新规则版本中切换为 `purchase_cost` 或 `total_cost`，breakdown 返回 `roiBase`。
-- 建议售价下：毛利率 >= `0.20` 且 ROI >= `1.00` 为 A；毛利率 >= `0.10` 且 ROI >= `0.50` 为 B；其他可计算商品为 C。
-- 缺采购价、重量、WFS 费率、仓储费率、汇率或无法计算价格时为异常；API 返回 `productGrade` 与 `gradeReason`。
+- ROI 默认 `roi_base=purchase_cost`，公式为 `roi=gross_profit_cny/purchase_cost_cny`；`roi_base=total_cost` 时分母为 `included_costs_cny`，breakdown 返回 `roiBase`。
+- ROI 分母缺失或非正时返回 `missing_purchase_cost` 或 `invalid_roi_base`，不抛 500。
+- 产品等级只按建议售价下的 `gross_margin_rate` 和 ROI 计算：毛利率 >= `0.20` 且 ROI >= `1.00` 为 A；毛利率 >= `0.10` 且 ROI >= `0.50` 为 B；其他可计算商品为 C。
+- 缺采购价、重量、WFS 费率、仓储费率、汇率、非法定价分母或无法计算价格时为异常；API 返回 `productGrade` 与 `gradeReason`。
 - `grade_a_min_margin_rate`、`grade_a_min_roi`、`grade_b_min_margin_rate`、`grade_b_min_roi` 由前端通过受保护 API 配置并形成版本。
 - calculated grade 与 manual grade/source status 分开；不得把 Lingxing `status` 或 `products.grade` 静默替换为计算结果。
 - AI 不参与权威等级计算。
@@ -223,7 +253,7 @@ estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_day
 | `product_grade` | 获批 precedence 后的 effective grade | manual/calculated/source 状态分开，缺规则时不猜测 |
 | `wfs_fulfillment_fee` | 版本化规则的每件履约费投影 | 不复用含义不明的裸 `wfs_fee` |
 | `wfs_daily_storage_fee` | 版本化规则的每日单位仓储费投影 | 不乘库存数量，不表示累计账单费用 |
-| `suggested_price`、`minimum_price`、`clearance_price` | 获批成本与目标 margin 的计算结果 | decimal string + `currency_code`；缺输入时为空并返回状态 |
+| `suggested_price_usd`、`minimum_price_usd`、`clearance_price_usd` | 获批成本与目标 margin 的不含税计算结果 | decimal string + `currency_code=USD`；缺输入时为空并返回状态 |
 | `calculation_status`、`calculated_at`、`rule_version` | 投影状态与版本 | `calculated_at` 不是来源新鲜度 |
 
 详情 contract 在列表字段之外按需返回已批准的基础资料、报关/清关、规格、图片和 pricing breakdown。开发人、负责人、成本及来源标签只在字段权限明确时返回；列表不得为详情 convenience 预加载全部图片或 history。
@@ -237,9 +267,9 @@ estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_day
 
 - PUT 不是原地覆盖：创建新版本并保留旧版本。
 - 请求必须包含 change reason、effective period 和完整的 approved rule set；敏感改动需确认/审批/审计。
-- 第一版配置至少覆盖 WFS fulfillment/storage 规则引用、`storage_month_basis_days=30`、`pricing_storage_days=30`、`include_storage_fee_in_pricing=true`、`usd_cny_rate`、`platform_commission_rate`、`first_leg_cost_per_kg_cny=12.00`、三档毛利率、`roi_base`、四个等级阈值和 price rounding rule。
+- 第一版配置至少覆盖 WFS fulfillment/storage 规则引用、`storage_month_basis_days=30`、`pricing_storage_days=30`、`include_first_leg_fee=true`、`include_wfs_fulfillment_fee=true`、`include_storage_fee=true`、`other_fixed_cost_cny=0`、`usd_cny_rate`、`platform_commission_rate`、`first_leg_cost_per_kg_cny=12.00`、三档毛利率、`roi_base`、四个等级阈值和 `rounding_mode=none`。
 - `usd_cny_rate` 不设文档默认数值；更新时记录 `updated_at` 与 `actor_ref`。前端可维护获准配置，但所有权威计算只在后端执行。
-- 后端检查区间冲突、单位、currency、precision、scale 和 rounding；不接受 unknown fields。
+- 后端检查目标 margin 顺序、非法定价分母、区间冲突、单位、`currency_code`、precision、scale 和 rounding；不接受 unknown fields。配置可保存但计算非法的分母必须在重算时产生明确状态。
 - 响应不回传 secret、来源原文或不必要业务样本。
 - WFS 官方费率证据、FX reference 和审批引用只保存安全 reference，不在配置中存网页凭据或 token。
 
@@ -310,6 +340,8 @@ estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_day
 
 `pricing_calc_status`、`storage_calc_status`、`commission_source`、`productGrade` 和 `gradeReason` 是数据状态/breakdown 字段，不应把缺尺寸、重量、费率或 FX 转换为 500。
 
+第一版至少支持以下安全状态：`missing_fx_rate`、`missing_purchase_cost`、`missing_weight`、`missing_wfs_rate`、`missing_storage_rate`、`invalid_revenue`、`invalid_pricing_denominator`、`invalid_pricing_rule_config`、`invalid_roi_base`。WFS 组件另返回 `wfs_calc_status=missing_rate/needs_confirm`；listing override 冲突 reason 为 `multiple_listing_wfs_overrides`。
+
 ## 21. 测试计划
 
 ### 21.1 同步与 parser
@@ -324,7 +356,10 @@ estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_day
 
 - 对每个 approved rule version 使用确定性 Decimal 测试向量，覆盖边界区间、缺失输入、currency/FX、单位换算、舍入和 effective date。
 - 验证 suggested/minimum/clearance、margin、ROI、grade 与 breakdown 同源；前端无计算依赖。
-- 覆盖 WFS/storage 缺尺寸/重量/费率、`missing_fx_rate`、`missing_weight`、commission default-zero、storage 两个 30 天默认值、ROI 分母、A/B/C/异常阈值和 rounding `none`。
+- 覆盖不含税收入、commission revenue base、included-cost 开关、反推售价、毛利/毛利率、非法 revenue/price denominator、目标 margin 顺序与价格下限。
+- 覆盖 WFS/storage 缺尺寸/重量/费率、`missing_fx_rate`、`missing_purchase_cost`、`missing_weight`、commission default-zero、storage 两个 30 天默认值、purchase/total-cost ROI 分母、A/B/C/异常阈值和 `ROUND_HALF_UP` 两位。
+- 覆盖 identity/primary/single/consistent listing WFS override、冲突 `needs_confirm`、无 override 后 calculated rule，以及不得静默选第一条。
+- 覆盖 `manual_min_price_usd` 存在时的 floor；若测试预留 `nearest_0_99/nearest_0_95`，结果必须向上且不破坏目标毛利率。
 - 验证 manual/source/calculated precedence、rule change、current rebuild 和历史不自动重算。
 - 性质测试或参数化测试可覆盖区间边界；不引入额外依赖除非必要且获批。
 
@@ -358,9 +393,9 @@ git status --short --untracked-files=all
 
 ## 22. 验收标准
 
-- [x] Source Decision 为 `READY_FOR_PRP`，OD-01 至 OD-14 全部解决。
+- [x] Source Decision 为 `READY_FOR_PRP`，OD-01 至 OD-27 全部解决。
 - [x] PRP 已由负责人批准为 Ready for implementation。
-- [ ] 负责人另行下发只针对本 PRP 的后端实现 Prompt。
+- [x] 负责人已解除售价公式 Recovery Stop，并授权在当前分支恢复 Approved PRP 实现。
 - [ ] 实现 diff 仅在批准 allowlist，未触及 frontend/old-system/secrets。
 - [ ] 所有目标 API 有 schema、response model、permission、data scope、安全 envelope 和测试。
 - [ ] `batchGetProductInfo` 只通过治理同步写 RAW/DWD，不在业务 route 实时调用。
@@ -377,11 +412,10 @@ git status --short --untracked-files=all
 
 遇到任一情况立即停止并交回负责人/架构师：
 
-- 负责人尚未下发独立实现 Prompt，或 Prompt 的 worktree/branch/allowlist 与本 PRP 不一致。
+- 实际 worktree、branch、allowlist 或任务范围与本 PRP 不一致。
 - 需要真实 Lingxing/Walmart 调用、真实 Token、生产 sync/migration/database/server/deployment。
 - `batchGetProductInfo` 需要使用仓库未证实的请求字段、Content-Type、认证/query-sign、成功/错误码、批量上限、频控或 retry 语义；不得猜测或据此放行真实 transport。
-- WFS 具体 fulfillment/storage 费率、市场/旺季区间或 fulfillment 分段算法尚未被受控录入并激活；只能返回缺失状态，不得抓取网页或猜测金额。
-- 建议/最低/清仓售价的完整代数公式在仓库批准规则中仍不明确；不得由工程师补造含税口径、佣金基数、margin denominator 或价格下限。
+- WFS 具体 fulfillment/storage 费率、市场/旺季区间或 fulfillment 分段算法尚未被受控录入并激活：允许实现配置、calculator、状态、API 字段和 synthetic 测试，但真实费用金额计算必须停止并返回缺失状态，不得抓取网页或猜测金额。
 - 需要引入未获准的实时 FX 来源、类目佣金、箱规/体积重头程、价格取整策略或历史规则回算。
 - 需要使用 SKU/MSKU/名称猜测 identity，或存在未处理的一对多/多对多 mapping。
 - 需要让外部/计算值覆盖 Product Core 人工字段而 precedence/override 未批准。
@@ -400,14 +434,17 @@ Approved implementation scope: Sections 5-21 only
 Approved database objects/migrations: Minimal objects required by Section 6; test validation only
 Approved APIs and permissions: Sections 14-18; protected and fail closed
 Approved batchGetProductInfo evidence/outbound boundary: Default-off code path and mock/synthetic tests only; no real request
-Approved WFS/first-leg/margin/ROI/grade rules: Owner decisions recorded in Sections 9-13 and Source Decision OD-05 to OD-13
+Approved WFS/first-leg/pricing/margin/ROI/grade rules: Owner decisions recorded in Sections 9-13 and Source Decision OD-05 to OD-27
+Approved pricing formula: Tax-exclusive price; revenue, commission, included costs, gross profit/margin and reverse-price equations in Section 12
+Approved WFS override rule: identity > primary listing > single listing > consistent listing > calculated; conflicts fail safe
 Approved identity and field precedence: internal identity_id; manual override > new-system config/internal > Lingxing sync > calculated
 Approved export/recalculation boundary: export <= 5000 or safe placeholder; bounded run-based recalc; no automatic historical full recalculation
 Approved docs: docs/api/product-management-api.md and docs/runbooks/production-lingxing-product-info-sync.md
 Approved Agent Skill: engineering-backend-architect
 Approved by: Project Owner
 Approved date: 2026-09-13
-Separate implementation Prompt issued: No
+Implementation Recovery Stop resolved: Yes
+Implementation resume on current branch authorized: Yes
 ```
 
-当前结论：本 PRP 已 Ready for implementation。负责人下一步应向主执行角色 Backend Engineer 下发独立实现 Prompt，并指定 `engineering-backend-architect` Agent Skill；在该 Prompt 下发前不得开始实现。该批准不包含任何真实 Token、真实 Lingxing/Walmart 调用、生产数据库/服务器、生产 migration、真实同步、生产配置修改或部署。
+当前结论：本 PRP 已 Ready for implementation，售价公式阻塞已解决。主执行角色 Backend Engineer 可使用 `engineering-backend-architect` Agent Skill 在当前分支继续 Approved PRP 实现；本次门禁更新仍只修改文档。该批准不包含任何真实 Token、真实 Lingxing/Walmart 调用、生产数据库/服务器、生产 migration、真实同步、生产配置修改或部署。
