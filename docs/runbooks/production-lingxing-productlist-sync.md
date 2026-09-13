@@ -157,6 +157,11 @@ retry with relaxed validation, call another endpoint, or inspect/print product p
 the failure. Credential exposure requires immediate stop and Owner-managed rotation without
 repeating the exposed value.
 
+`SYNC_PRODUCTLIST_IDENTITY_PUBLISH_FAILED` diagnosed as `NoReferencedTableError` indicates an ORM
+model-registration fault. Deploy the reviewed fix from merged `main` before rerunning the one-time
+runner. Do not repair it with manual updates, delete RAW evidence, or inspect `payload_json` or
+product fields.
+
 If a failed ProductList run has a work item incorrectly left in `running`, use the repair script only
 after this fix is reviewed, merged to `main`, deployed cleanly, and separately authorized by the
 Owner for the exact run ID:
