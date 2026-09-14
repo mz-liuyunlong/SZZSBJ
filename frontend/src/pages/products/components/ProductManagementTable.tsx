@@ -32,6 +32,8 @@ const minColumnWidths: Record<string, number> = {
   actions: 110,
 };
 
+const hiddenProductTableColumnKeys = new Set(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag"]);
+
 const tagColorMap: Record<string, string> = {
   测品: "blue",
   清货: "orange",
@@ -174,7 +176,7 @@ function ProductManagementTable({
       render: (_, row) => (
         <Space size={4} wrap>
           {row.sourceTags.length > 0 ? row.sourceTags.map((tag) => (
-            <Tag key={tag}>{tag}</Tag>
+            <Tag key={tag} color={row.sourceTagColors?.[tag] ?? undefined}>{tag}</Tag>
           )) : <Typography.Text type="secondary">-</Typography.Text>}
         </Space>
       ),
@@ -294,7 +296,11 @@ function ProductManagementTable({
     },
   };
 
-  const columns = appliedColumnKeys
+  const visibleAppliedColumnKeys = appliedColumnKeys.filter(
+    (key) => !hiddenProductTableColumnKeys.has(key),
+  );
+
+  const columns = visibleAppliedColumnKeys
     .flatMap((key) => (allColumns[key] ? [allColumns[key]] : []))
     .concat({
       key: "actions",
@@ -311,6 +317,25 @@ function ProductManagementTable({
 
   const scrollX = columns.reduce((sum, column) => sum + Number(column.width ?? 112), 56);
 
+  const displayColumns = columns.map((column) => {
+    const isProductNameColumn = (
+      column.key === "productName" ||
+      ("dataIndex" in column && String(column.dataIndex) === "productName")
+    );
+
+    if (!isProductNameColumn) {
+      return column;
+    }
+
+    return {
+      ...column,
+      render: (_value: unknown, row: ProductManagementRow) => (
+        <span className="product-management__plain-cell">{row.productName ?? empty}</span>
+      ),
+    };
+  });
+
+
   return (
     <ReportTableShell label="产品管理表格" className="product-management__table-shell">
       <ProTable<ProductManagementRow>
@@ -318,7 +343,7 @@ function ProductManagementTable({
         search={false}
         options={false}
         dataSource={rows}
-        columns={columns}
+        columns={displayColumns}
         tableAlertRender={false}
         toolBarRender={false}
         bordered

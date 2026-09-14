@@ -10,13 +10,13 @@ import ResetButton from "@/components/report-table/ResetButton";
 import type {
   ProductGrade,
   ProductManagementFilters,
-  ProductTag,
+  ProductSourceTagOption,
 } from "@/pages/products/productManagementTypes";
 
 interface ProductManagementToolbarProps {
   filters: ProductManagementFilters;
   grades: ProductGrade[];
-  tags: ProductTag[];
+  tags: ProductSourceTagOption[];
   statisticsVisible: boolean;
   onChange: (filters: ProductManagementFilters) => void;
   onReset: () => void;
@@ -91,6 +91,20 @@ function ProductManagementToolbar({
     </Popover>
   );
 
+  const sourceTagOptions = tags.map((tag) => ({
+    value: tag.label,
+    label: (
+      <span className="product-management__source-tag-option">
+        <span
+          aria-hidden="true"
+          className="product-management__source-tag-dot"
+          style={{ backgroundColor: tag.color ?? "#D0D5DD" }}
+        />
+        <span>{tag.label}</span>
+      </span>
+    ),
+  }));
+
   return (
     <div className="product-management__toolbar" role="search" aria-label="产品管理筛选">
       <Select
@@ -107,10 +121,10 @@ function ProductManagementToolbar({
         className="report-filter-select"
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
-        placeholder="内部标签"
-        aria-label="内部标签"
+        placeholder="标签"
+        aria-label="标签"
         value={filters.tag}
-        options={tags.map((value) => ({ value, label: value }))}
+        options={sourceTagOptions}
         onChange={(value) => onChange({ ...filters, tag: value })}
       />
       <ConnectedSearch
@@ -119,7 +133,6 @@ function ProductManagementToolbar({
         typeOptions={[
           { value: "sku", label: "SKU" },
           { value: "productName", label: "产品名称" },
-          { value: "category", label: "类目" },
         ]}
         typeValue={filters.searchType}
         inputAriaLabel="搜索产品"

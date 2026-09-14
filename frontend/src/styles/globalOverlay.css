@@ -1,0 +1,123 @@
+/* Global overlay standard for AntD Modal and Drawer. */
+
+/* Modal header baseline */
+body .ant-modal .ant-modal-content {
+  overflow: hidden;
+}
+
+body .ant-modal .ant-modal-header {
+  min-height: 56px !important;
+  margin-bottom: 0 !important;
+  padding: 0 56px 0 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  border-bottom: 1px solid #e5eaf3 !important;
+}
+
+body .ant-modal .ant-modal-title {
+  min-width: 0 !important;
+  padding-inline-end: 0 !important;
+  color: #101828 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  line-height: 56px !important;
+}
+
+/* Modal close button */
+body .ant-modal .ant-modal-close,
+body .ant-modal.product-management__detail-modal .ant-modal-close,
+body .ant-modal.listing-management__detail-modal .ant-modal-close {
+  top: 12px !important;
+  inset-inline-end: 16px !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  color: rgba(15, 23, 42, 0.48) !important;
+  background: transparent !important;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    transform 0.16s ease !important;
+}
+
+body .ant-modal .ant-modal-close:hover,
+body .ant-modal .ant-modal-close:focus-visible {
+  color: rgba(15, 23, 42, 0.88) !important;
+  background: rgba(15, 23, 42, 0.06) !important;
+}
+
+body .ant-modal .ant-modal-close:active {
+  transform: scale(0.96) !important;
+}
+
+body .ant-modal .ant-modal-close-x {
+  display: inline-flex !important;
+  width: 32px !important;
+  height: 32px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 17px !important;
+  line-height: 32px !important;
+}
+
+body .ant-modal .ant-modal-close .anticon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+}
+
+/* Drawer header baseline */
+body .ant-drawer .ant-drawer-header {
+  min-height: 56px !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  border-bottom: 1px solid #e5eaf3 !important;
+}
+
+body .ant-drawer .ant-drawer-header-title {
+  min-height: 56px !important;
+  align-items: center !important;
+}
+
+body .ant-drawer .ant-drawer-title {
+  min-width: 0 !important;
+  padding-inline-end: 16px !important;
+  color: #101828 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+}
+
+/* Drawer close button */
+body .ant-drawer .ant-drawer-close {
+  width: 32px !important;
+  height: 32px !important;
+  margin-inline-end: 8px !important;
+  border-radius: 8px !important;
+  color: rgba(15, 23, 42, 0.48) !important;
+  background: transparent !important;
+  transition:
+    color 0.16s ease,
+    background-color 0.16s ease,
+    transform 0.16s ease !important;
+}
+
+body .ant-drawer .ant-drawer-close:hover,
+body .ant-drawer .ant-drawer-close:focus-visible {
+  color: rgba(15, 23, 42, 0.88) !important;
+  background: rgba(15, 23, 42, 0.06) !important;
+}
+
+body .ant-drawer .ant-drawer-close:active {
+  transform: scale(0.96) !important;
+}
+
+body .ant-drawer .ant-drawer-close .anticon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+}

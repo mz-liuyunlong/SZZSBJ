@@ -1,0 +1,127 @@
+/* Global shell polish based on the Order Profit page visual system. */
+
+:root {
+  --admin-bg: #f5f7fb;
+  --admin-surface: #ffffff;
+  --admin-surface-soft: #f8fbff;
+
+  --admin-border: #dce3ed;
+  --admin-border-soft: #e5eaf3;
+  --admin-border-hover: #91caff;
+
+  --admin-primary: #1677ff;
+  --admin-primary-hover: #f8fbff;
+  --admin-primary-soft: #e8f2ff;
+  --admin-primary-selected: #e8f3ff;
+
+  --admin-text: #101828;
+  --admin-text-strong: #1f2937;
+  --admin-text-secondary: #667085;
+  --admin-text-muted: #98a2b3;
+
+  --admin-success: #16a34a;
+  --admin-warning: #f79009;
+  --admin-danger: #f04438;
+  --admin-purple: #7c3aed;
+  --admin-cyan: #0ea5e9;
+
+  --admin-radius: 12px;
+  --admin-radius-sm: 8px;
+  --admin-shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+body,
+#root {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+.main-layout,
+.main-layout__body,
+.main-layout__workspace {
+  background: var(--admin-bg) !important;
+}
+
+.main-layout__content {
+  margin: 0 !important;
+  padding: 12px !important;
+  overflow: hidden;
+  background: var(--admin-bg) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.main-layout__page-panel,
+.main-layout__page-panel--active {
+  background: transparent !important;
+}
+
+.main-layout__primary,
+.main-layout__secondary {
+  border-inline-end-color: var(--admin-border-soft) !important;
+}
+
+.main-layout__header,
+.main-layout__tabbar,
+.main-layout__brand,
+.main-layout__secondary-title {
+  border-block-end-color: var(--admin-border-soft) !important;
+}
+
+.main-layout__sidebar-footer {
+  border-block-start-color: var(--admin-border-soft) !important;
+}
+
+.main-layout__primary-menu .ant-menu-item,
+.main-layout__secondary-menu .ant-menu-item {
+  color: var(--admin-text-strong) !important;
+}
+
+.main-layout__primary-menu .ant-menu-item:hover,
+.main-layout__secondary-menu .ant-menu-item:hover {
+  color: var(--admin-primary) !important;
+  background: var(--admin-primary-hover) !important;
+}
+
+.main-layout__primary-menu .ant-menu-item-selected,
+.main-layout__secondary-menu .ant-menu-item-selected {
+  color: var(--admin-primary) !important;
+  background: var(--admin-primary-selected) !important;
+}
+
+.main-layout__secondary-menu .ant-menu-item-selected::before {
+  background: var(--admin-primary) !important;
+}
+
+.main-layout__tabbar .ant-tabs-tab:hover {
+  background: var(--admin-primary-hover) !important;
+}
+
+.main-layout__tabbar .ant-tabs-tab-active {
+  background: var(--admin-primary-selected) !important;
+}
+
+.main-layout__tabbar .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--admin-primary) !important;
+}
+
+.main-layout__sync-time {
+  border-color: var(--admin-border) !important;
+  background: var(--admin-surface) !important;
+  color: var(--admin-text-secondary) !important;
+}
+
+.main-layout__topbar-help {
+  color: var(--admin-primary) !important;
+}
+
+.main-layout__topbar-help:hover {
+  background: var(--admin-primary-hover) !important;
+}
+
+/*
+ * Component-level AntD overrides were intentionally removed from the global shell layer.
+ * Do not style AntD components globally from the shell layer.
+ * because interface and integration pages must not be affected by page-skin work.
+ * Page-specific styling belongs in opt-in page root classes only.
+ */

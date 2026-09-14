@@ -1,17 +1,25 @@
 import { useState } from 'react'
 import AppErrorBoundary from '@/components/errors/AppErrorBoundary'
+import AppFeedbackProvider from '@/shared/feedback/AppFeedbackProvider'
+import type { MockAuthUser } from '@/mocks/auth'
 import AppRoutes from '@/router/routes'
+import '@/styles/globalOverlay.css'
+import '@/styles/globalShellPolish.css'
+import '@/styles/developedPagesOrderProfitSkin.css'
 
 function App() {
-  const [mockLoggedIn, setMockLoggedIn] = useState(false)
+  const [mockUser, setMockUser] = useState<MockAuthUser>()
 
   return (
     <AppErrorBoundary>
-      <AppRoutes
-        mockLoggedIn={mockLoggedIn}
-        onLogin={() => setMockLoggedIn(true)}
-        onLogout={() => setMockLoggedIn(false)}
-      />
+      <AppFeedbackProvider>
+        <AppRoutes
+          mockLoggedIn={Boolean(mockUser)}
+          currentUser={mockUser}
+          onLogin={setMockUser}
+          onLogout={() => setMockUser(undefined)}
+        />
+      </AppFeedbackProvider>
     </AppErrorBoundary>
   )
 }

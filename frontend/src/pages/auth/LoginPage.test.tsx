@@ -52,25 +52,21 @@ const submitCredentials = (username: string, password: string) => {
 };
 
 describe("LoginPage", () => {
-  it("shows the mock disclaimer without logging in automatically", () => {
+  it("shows the login form without logging in automatically", () => {
     const onLogin = vi.fn();
     renderLogin(onLogin);
-
-    expect(
-      screen.getByText("演示登录，仅用于前端界面验证，不提供真实身份认证。"),
-    ).toBeVisible();
-    expect(screen.getByLabelText("账号")).toHaveValue("admin");
-    expect(screen.getByLabelText("密码")).toHaveValue("admin");
+    expect(screen.getByLabelText("账号")).toHaveValue("user");
+    expect(screen.getByLabelText("密码")).toHaveValue("12345678");
     expect(screen.getByRole("checkbox", { name: "记住账号" })).not.toBeChecked();
     expect(onLogin).not.toHaveBeenCalled();
   });
 
-  it("accepts admin/admin and stores only a remembered username", async () => {
+  it("accepts admin/12345678 and stores only a remembered username", async () => {
     const onLogin = vi.fn();
     renderLogin(onLogin);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "记住账号" }));
-    submitCredentials("admin", "admin");
+    submitCredentials("admin", "12345678");
 
     await waitFor(() => expect(onLogin).toHaveBeenCalledTimes(1));
     expect(localStorage.length).toBe(1);
@@ -96,7 +92,7 @@ describe("LoginPage", () => {
     localStorage.setItem(REMEMBERED_USERNAME_KEY, "admin");
     renderLogin(onLogin);
     expect(screen.getByLabelText("账号")).toHaveValue("admin");
-    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "12345678" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "记住账号" }));
     fireEvent.click(screen.getByRole("button", { name: "登录" }));
 

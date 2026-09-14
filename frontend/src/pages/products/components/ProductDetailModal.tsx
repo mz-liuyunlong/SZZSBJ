@@ -2,6 +2,63 @@ import { Button, Modal, Progress, Tag, Typography } from "antd";
 import { useState } from "react";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
 
+const detailDateOnly = (value: string | null | undefined) => (
+  value ? value.slice(0, 10) : null
+);
+
+const isDisplayableImageUrl = (value: string | null | undefined): value is string => (
+  typeof value === "string" && /^https?:\/\//i.test(value)
+);
+
+const getDetailImageUrl = (row: ProductManagementRow) => {
+  const record = row as ProductManagementRow & {
+    imageUrl?: string | null;
+    mainImageUrl?: string | null;
+    images?: string[] | null;
+  };
+
+  const candidate = (
+    record.imageUrl ??
+    record.image ??
+    record.mainImageUrl ??
+    record.images?.[0] ??
+    null
+  );
+
+  return isDisplayableImageUrl(candidate) ? candidate : null;
+};
+
+const renderDetailProductImage = (row: ProductManagementRow) => {
+  const imageUrl = getDetailImageUrl(row);
+
+  return (
+    <div className="product-detail-modal__cover-media">
+      {imageUrl ? (
+        <img
+          className="product-detail-modal__cover-img"
+          src={imageUrl}
+          alt={row.productName ?? row.sku ?? "产品图片"}
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+            const emptyNode = event.currentTarget.nextElementSibling;
+            if (emptyNode instanceof HTMLElement) {
+              emptyNode.style.display = "flex";
+            }
+          }}
+        />
+      ) : null}
+      <span
+        className="product-detail-modal__image-empty"
+        style={imageUrl ? { display: "none" } : undefined}
+      >
+        暂无图片
+      </span>
+    </div>
+  );
+};
+
 interface ProductDetailModalProps {
   row?: ProductManagementRow;
   onClose: () => void;
@@ -16,11 +73,6 @@ const productSections: { key: ProductDetailSection; label: string }[] = [
   { key: "analysis", label: "商品分析资料" },
 ];
 
-const tagColorMap: Record<string, string> = {
-  测品: "blue",
-  清货: "orange",
-  停售: "red",
-};
 
 interface DetailFieldItem {
   label: string;
@@ -55,6 +107,27 @@ const withUnit = (value: string | null | undefined, unit: string) => (
   value == null ? null : `${value} ${unit}`
 );
 
+
+
+const normalizeDetailPercent = (value: unknown) => {
+  if (typeof value === "number") {
+    return Math.min(100, Math.max(0, value));
+  }
+
+  if (typeof value === "string") {
+    const matched = value.match(/-?\d+(?:\.\d+)?/);
+    if (!matched) return 0;
+
+    const parsed = Number(matched[0]);
+    if (!Number.isFinite(parsed)) return 0;
+
+    return Math.min(100, Math.max(0, parsed));
+  }
+
+  return 0;
+};
+
+
 function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
   const [sectionOverride, setSectionOverride] = useState<{
     rowId: string;
@@ -81,10 +154,6 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
               <Typography.Text type="secondary">
                 集中查看产品主图、白底图、场景图、尺寸图等基础图片资料。
               </Typography.Text>
-            </div>
-            <div className="product-management__detail-section-actions">
-              <Button>复制</Button>
-              <Button>导出</Button>
             </div>
           </div>
           <div className="product-management__image-gallery">
@@ -187,9 +256,8 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
         </div>
         <div className="product-management__detail-dashboard">
           <div><span>产品等级</span><strong>{row.productGrade}</strong></div>
-          <div><span>来源标签</span><strong>{row.sourceTags[0] || "-"}</strong></div>
+          <div><span>标签</span><strong>{row.sourceTags[0] || "-"}</strong></div>
           <div><span>资料完整度</span><strong>{row.dataCompleteness ?? "-"}{row.dataCompleteness === null ? "" : "%"}</strong></div>
-          <div><span>平台映射</span><strong>{row.linkedPlatformSkuCount}</strong></div>
         </div>
         <div className="product-management__detail-card">
           <div className="product-management__detail-card-title">基础档案</div>
@@ -197,14 +265,7 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
             items={[
               { label: "SKU", value: row.sku },
               { label: "产品名称", value: row.productName },
-              { label: "类目", value: row.category },
-              { label: "产品等级", value: row.productGrade },
-              { label: "内部标签", value: row.tags.length > 0 ? row.tags.join(" / ") : "-" },
-              {
-                label: "来源标签",
-                value: row.sourceTags.length > 0 ? row.sourceTags.join(" / ") : "-",
-              },
-              { label: "更新时间", value: row.updatedAt },
+              { label: "更新时间", value: detailDateOnly(row.updatedAt) ?? "-" },
             ]}
           />
         </div>
@@ -216,30 +277,9 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
                 { label: "产品采购价", value: row.purchasePrice },
                 { label: "头程运费", value: row.firstLegFreight ?? calculationFallback(row) },
                 { label: "WFS配送费", value: row.wfsDeliveryFee ?? calculationFallback(row) },
-                { label: "仓储费", value: row.storageFee ?? calculationFallback(row) },
-                {
-                  label: "头程体积重",
-                  value: withUnit(row.pricingBreakdown?.firstLegVolumeWeightKg, "kg"),
-                },
                 {
                   label: "头程计费重",
                   value: withUnit(row.pricingBreakdown?.firstLegChargeableWeightKg, "kg"),
-                },
-                {
-                  label: "WFS实际重",
-                  value: withUnit(row.pricingBreakdown?.wfsActualWeightLb, "lb"),
-                },
-                {
-                  label: "WFS体积重",
-                  value: withUnit(row.pricingBreakdown?.wfsDimensionalWeightLb, "lb"),
-                },
-                {
-                  label: "WFS计费重",
-                  value: withUnit(row.pricingBreakdown?.wfsChargeableWeightLb, "lb"),
-                },
-                {
-                  label: "包裹体积",
-                  value: withUnit(row.pricingBreakdown?.packageVolumeCuft, "cuft"),
                 },
                 {
                   label: "每日仓储费",
@@ -259,14 +299,6 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
                 { label: "建议售价", value: row.suggestedPrice ?? calculationFallback(row) },
                 { label: "最低售价", value: row.minimumPrice ?? calculationFallback(row) },
                 { label: "清仓售价", value: row.clearancePrice ?? calculationFallback(row) },
-                { label: "计算状态", value: row.calculationStatus },
-                {
-                  label: "缺失根因",
-                  value: row.rootMissingCodes.length > 0
-                    ? row.rootMissingCodes.join(" / ")
-                    : "无",
-                },
-                { label: "公式版本", value: row.formulaVersion },
               ]}
             />
           </div>
@@ -286,7 +318,7 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
       footer={row ? (
         <div className="product-management__detail-footer">
           <Typography.Text type="secondary">
-            产品详情为 <Typography.Text strong>SKU基础数据源</Typography.Text>，内部标签与来源标签由后端分别返回。
+            产品详情为 <Typography.Text strong>SKU基础数据源</Typography.Text>，内部标签与标签由后端分别返回。
           </Typography.Text>
           <Button type="primary" onClick={closeModal}>关闭</Button>
         </div>
@@ -309,19 +341,8 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
           <div className="product-management__detail-layout">
             <aside className="product-management__detail-aside">
               <div className="product-management__detail-product-card">
-                <div className="product-management__detail-image-modern"><span>{row.image ?? "-"}</span></div>
+                <div className="product-management__detail-image-modern">{renderDetailProductImage(row)}</div>
                 <div className="product-management__detail-product-name">{row.productName ?? "-"}</div>
-                <div className="product-management__detail-product-sku">{row.sku ?? "-"}</div>
-                <div className="product-management__detail-tags">
-                  {row.productGrade && <Tag color="blue">{row.productGrade}</Tag>}
-                  {row.tags.length > 0 ? row.tags.map((tag) => (
-                    <Tag key={`internal-${tag}`} color={tagColorMap[tag]}>内部 · {tag}</Tag>
-                  )) : null}
-                  {row.sourceTags.map((tag) => (
-                    <Tag key={`source-${tag}`}>来源 · {tag}</Tag>
-                  ))}
-                  {row.tags.length === 0 && row.sourceTags.length === 0 && <Tag>无标签</Tag>}
-                </div>
                 <div className="product-management__detail-quick-list">
                   <div><span>类目</span><b>{row.category ?? "-"}</b></div>
                   <div><span>采购交期</span><b>{row.purchaseLeadTime ?? "-"}</b></div>
@@ -330,7 +351,7 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
                 </div>
                 <div className="product-management__detail-progress-box">
                   <div><span>基础资料完整度</span><b>{row.dataCompleteness ?? "-"}{row.dataCompleteness === null ? "" : "%"}</b></div>
-                  <Progress percent={row.dataCompleteness ?? 0} showInfo={false} size="small" />
+                  <Progress percent={normalizeDetailPercent(row.dataCompleteness)} showInfo={false} size="small" />
                 </div>
               </div>
               <div className="product-management__detail-nav-card">

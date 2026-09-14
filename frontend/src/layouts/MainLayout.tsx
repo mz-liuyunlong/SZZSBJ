@@ -3,18 +3,22 @@
  */
 import { ClockCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, message, Tabs, Typography } from "antd";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PageHeaderOutletProvider } from "@/components/page/PageShell";
 import { navigation, type NavigationPage } from "@/config/navigation";
 import {
   DEFAULT_BUSINESS_ROUTE,
   findRouteByKey,
-  getSidebarPages,
   isRoutableStatus,
   resolveRoute,
 } from "@/router/routeResolver";
 import TopbarActions from "@/layouts/components/TopbarActions";
+import { DEFAULT_MOCK_AUTH_USER, type MockAuthUser } from "@/mocks/auth";
+import {
+  isMockPageAccessibleForRole,
+  isMockPageVisibleForRole,
+} from "@/shared/permissions/mockAccess";
 import useTabWorkspace from "@/layouts/useTabWorkspace";
 import "@/layouts/MainLayout.css";
 
@@ -45,12 +49,14 @@ interface MainLayoutProps {
   children?: ReactNode;
   onLogout?: () => void;
   renderPage?: (page: NavigationPage) => ReactNode;
+  currentUser?: MockAuthUser;
 }
 
 function MainLayout({
   children,
   onLogout = () => undefined,
   renderPage,
+  currentUser = DEFAULT_MOCK_AUTH_USER,
 }: MainLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -80,6 +86,14 @@ function MainLayout({
       : DEFAULT_BUSINESS_ROUTE;
   const activePageGroup = activePageSelection.group;
   const activePage = activePageSelection.page;
+  const visibleNavigation = useMemo(() => (
+    navigation
+      .map((group) => ({
+        ...group,
+        children: group.children.filter((page) => isMockPageVisibleForRole(currentUser.role, page)),
+      }))
+      .filter((group) => group.children.length > 0)
+  ), [currentUser.role]);
 
   useEffect(() => () => {
     if (secondaryHoverTimerRef.current !== null) {
@@ -94,9 +108,9 @@ function MainLayout({
     navigate(activePath, { replace: true });
   }, [activePath, messageApi, navigate, rejectedPath]);
   const activeGroup = secondaryOpen
-    ? navigation.find((group) => group.key === flyoutGroupKey) ?? activePageGroup
+    ? visibleNavigation.find((group) => group.key === flyoutGroupKey) ?? activePageGroup
     : activePageGroup;
-  const secondaryPages = getSidebarPages(activeGroup);
+  const secondaryPages = activeGroup.children.filter((page) => isMockPageVisibleForRole(currentUser.role, page));
   const openRoutes = openPaths.flatMap((path) => {
     const resolution = resolveRoute(path);
     return resolution.kind === "allowed"
@@ -126,7 +140,7 @@ function MainLayout({
   };
 
   const selectGroup = (key: string) => {
-    const group = navigation.find((item) => item.key === key);
+    const group = visibleNavigation.find((item) => item.key === key);
     if (!group) return;
 
     clearPendingSecondaryHover();
@@ -157,6 +171,11 @@ function MainLayout({
   const openPageByKey = (pageKey: string) => {
     const selection = findRouteByKey(pageKey);
     if (!selection) return;
+    if (!isMockPageAccessibleForRole(currentUser.role, selection.page)) {
+      void messageApi.warning("当前账号无权访问该页面。");
+      closeSecondaryMenu();
+      return;
+    }
     const openResult = openPath(selection.page.path);
     if (openResult === "invalid") return;
     if (openResult === "limit") {
@@ -274,6 +293,8 @@ function MainLayout({
             aria-label="页面级操作"
           />
           <TopbarActions
+            currentUser={currentUser}
+            canOpenPage={(page) => isMockPageAccessibleForRole(currentUser.role, page)}
             aiAssistantPage={aiAssistantPage}
             personalCenterPage={personalCenterPage}
             documentationPage={documentationPage}
@@ -305,7 +326,7 @@ function MainLayout({
             inlineCollapsed={collapsed}
             selectedKeys={[activeGroup.key]}
             onClick={({ key }) => selectGroup(key)}
-            items={navigation.map((group) => ({
+            items={visibleNavigation.map((group) => ({
               key: group.key,
               icon: group.icon,
               label: (

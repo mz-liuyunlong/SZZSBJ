@@ -25,10 +25,16 @@ import WfsFeeAlertPage from '@/pages/warehouse/WfsFeeAlertPage'
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from '@/router/routeResolver'
+import {
+  DEFAULT_MOCK_AUTH_USER,
+  type MockAuthUser,
+} from "@/mocks/auth";
+import { isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
 
 interface AppRoutesProps {
   mockLoggedIn: boolean
-  onLogin: () => void
+  currentUser?: MockAuthUser
+  onLogin: (user: MockAuthUser) => void
   onLogout: () => void
 }
 
@@ -55,9 +61,9 @@ function LoginRoute({
   return (
     <AuthRoute mockLoggedIn={mockLoggedIn}>
       <LoginPage
-        onLogin={() => {
+        onLogin={(user) => {
           const { activePath } = readTabWorkspace()
-          onLogin()
+          onLogin(user)
           navigate(activePath, { replace: true })
         }}
       />
@@ -67,8 +73,9 @@ function LoginRoute({
 
 function BusinessRoute({
   mockLoggedIn,
+  currentUser,
   onLogout,
-}: Pick<AppRoutesProps, 'mockLoggedIn' | 'onLogout'>) {
+}: Pick<AppRoutesProps, 'mockLoggedIn' | 'currentUser' | 'onLogout'>) {
   const location = useLocation()
   const navigate = useNavigate()
   const resolution = resolveRoute(location.pathname)
@@ -76,6 +83,8 @@ function BusinessRoute({
   if (!mockLoggedIn) {
     return <Navigate replace to="/login" />
   }
+
+  const activeUser = currentUser ?? DEFAULT_MOCK_AUTH_USER
 
   if (location.pathname === '/') {
     return <Navigate replace to={DEFAULT_BUSINESS_PATH} />
@@ -89,44 +98,49 @@ function BusinessRoute({
     return <Navigate replace to={DEFAULT_BUSINESS_PATH} />
   }
 
+  if (!isMockPageAccessibleForRole(activeUser.role, resolution.route.page)) {
+    return <Navigate replace to={DEFAULT_BUSINESS_PATH} />
+  }
+
   return (
     <MainLayout
+      currentUser={activeUser}
       onLogout={() => {
         onLogout()
         navigate('/login', { replace: true })
       }}
-renderPage={(page) =>
-  page.key === 'products_product_management' ? (
-    <ProductManagementPage page={page} />
-  ) : page.key === 'products_listing_management' ? (
-    <ListingManagementPage page={page} />
-  ) : page.key === 'sales_daily_sales' ? (
-    <DailySalesPage page={page} />
-  ) : page.key === 'sales_order_profit' ? (
-    <OrderProfitPage page={page} />
-  ) : page.key === 'operations_log' ? (
-    <OperationLogPage page={page} />
-  ) : page.key === 'warehouse_wfs_fee_alert' ? (
-    <WfsFeeAlertPage page={page} />  ) : page.key === 'data_center_data_import' ? (
-    <DataImportPage page={page} />
-
-  ) : page.key === 'data_center_api_docs' ? (
-    <ApiDocsPage page={page} />
-  ) : page.key === 'data_center_task_center' ? (
-    <SyncTaskPage page={page} />
-  ) : page.key === 'settings_user_management' ? (
-    <UserManagementPage page={page} />
-  ) : page.key === 'settings_role_management' ? (
-    <RoleManagementPage page={page} />
-  ) : (
-    <ComingSoonPage page={page} />
-  )
-}
+      renderPage={(page) =>
+        page.key === 'products_product_management' ? (
+          <ProductManagementPage page={page} />
+        ) : page.key === 'products_listing_management' ? (
+          <ListingManagementPage page={page} />
+        ) : page.key === 'sales_daily_sales' ? (
+          <DailySalesPage page={page} />
+        ) : page.key === 'sales_order_profit' ? (
+          <OrderProfitPage page={page} />
+        ) : page.key === 'operations_log' ? (
+          <OperationLogPage page={page} />
+        ) : page.key === 'warehouse_wfs_fee_alert' ? (
+          <WfsFeeAlertPage page={page} />
+        ) : page.key === 'data_center_data_import' ? (
+          <DataImportPage page={page} />
+        ) : page.key === 'data_center_api_docs' ? (
+          <ApiDocsPage page={page} />
+        ) : page.key === 'data_center_task_center' ? (
+          <SyncTaskPage page={page} />
+        ) : page.key === 'settings_user_management' ? (
+          <UserManagementPage page={page} />
+        ) : page.key === 'settings_role_management' ? (
+          <RoleManagementPage page={page} />
+        ) : (
+          <ComingSoonPage page={page} />
+        )
+      }
     />
   )
 }
 
-function AppRoutes({ mockLoggedIn, onLogin, onLogout }: AppRoutesProps) {
+function AppRoutes({ mockLoggedIn, currentUser, onLogin, onLogout }: AppRoutesProps) {
   return (
     <Routes>
       <Route
@@ -144,7 +158,11 @@ function AppRoutes({ mockLoggedIn, onLogin, onLogout }: AppRoutesProps) {
       <Route
         path="*"
         element={
-          <BusinessRoute mockLoggedIn={mockLoggedIn} onLogout={onLogout} />
+          <BusinessRoute
+            mockLoggedIn={mockLoggedIn}
+            currentUser={currentUser}
+            onLogout={onLogout}
+          />
         }
       />
     </Routes>

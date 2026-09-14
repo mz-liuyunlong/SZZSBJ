@@ -155,13 +155,53 @@ const gradeValues: Record<ProductGrade | "异常", string> = {
   异常: "exception",
 };
 
-const money = (currency: string | null, value: string | null) => (
-  value === null ? null : `${currency ?? ""} ${value}`.trim()
+
+
+const currencySymbolMap: Record<string, string> = {
+  CNY: "¥",
+  USD: "$",
+};
+
+const money = (currency: string | null, value: string | null | undefined) => {
+  if (value == null) return null;
+
+  const normalizedValue = String(value)
+    .replace(/^CNY\s*/i, "")
+    .replace(/^USD\s*/i, "");
+
+  const symbol = currency ? (currencySymbolMap[currency] ?? currency) : "";
+
+  return `${symbol}${normalizedValue}`.trim();
+};
+
+const dateOnly = (value: string | null) => (
+  value ? value.slice(0, 10) : null
 );
 
 const dimensions = (...values: Array<string | null>) => (
   values.every((value) => value !== null) ? values.join(" × ") : null
 );
+
+
+const getDailyStorageFeePerUnitUsd = (item: BackendListItem) => {
+  const record = item as BackendListItem & {
+    data?: {
+      pricing?: {
+        daily_storage_fee_per_unit_usd?: string | null;
+      };
+    };
+    pricing?: {
+      daily_storage_fee_per_unit_usd?: string | null;
+    };
+  };
+
+  return (
+    record.data?.pricing?.daily_storage_fee_per_unit_usd ??
+    record.pricing?.daily_storage_fee_per_unit_usd ??
+    item.wfs_daily_storage_fee ??
+    null
+  );
+};
 
 export const toProductManagementRow = (item: BackendListItem): ProductManagementRow => ({
   id: item.sku_id,
@@ -172,6 +212,11 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
   productName: item.product_name,
   tags: item.internal_tags.map((tag) => tag.label),
   sourceTags: item.source_tags.flatMap((tag) => tag.label ? [tag.label] : []),
+  sourceTagColors: Object.fromEntries(
+    item.source_tags.flatMap((tag) => (
+      tag.label ? [[tag.label, tag.color]] : []
+    )),
+  ),
   productGrade: item.product_grade ? gradeLabels[item.product_grade] : null,
   category: item.category,
   purchasePrice: money("CNY", item.purchase_cost_cny),
@@ -183,7 +228,7 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
   purchaseLeadTime: item.purchase_delivery_days === null
     ? null
     : `${item.purchase_delivery_days}天`,
-  storageFee: money("USD", item.storage_fee_usd ?? item.wfs_daily_storage_fee),
+  storageFee: money("USD", getDailyStorageFeePerUnitUsd(item)),
   wfsFee: money(item.wfs_fulfillment_fee_currency_code, item.wfs_fulfillment_fee),
   suggestedPrice: money("USD", item.suggested_price_usd),
   minimumPrice: money("USD", item.minimum_price_usd),
@@ -213,7 +258,7 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
     ? null
     : Number(item.data_quality_score),
   linkedPlatformSkuCount: item.linked_platform_sku_count,
-  updatedAt: item.source_observed_at,
+  updatedAt: dateOnly(item.source_observed_at),
 });
 
 function listQuery(
@@ -235,7 +280,6 @@ function listQuery(
   }
   for (const sku of filters.batchValues ?? []) query.append("sku_batch", sku);
   if (filters.productGrade) query.set("product_grade", gradeValues[filters.productGrade]);
-  if (filters.tag) query.set("internal_tag", filters.tag);
   return query;
 }
 

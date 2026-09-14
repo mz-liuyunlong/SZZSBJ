@@ -29,28 +29,41 @@ import {
   type ProductManagementRow,
   type ProductManagementSummary,
   type ProductGrade,
-  type ProductTag,
+  type ProductSourceTagOption,
 } from "@/pages/products/productManagementTypes";
 import "@/pages/products/ProductManagementPage.css";
+import { applyProductBasicCompleteness } from "@/pages/products/productBasicCompleteness";
 
 const createInitialFilters = (): ProductManagementFilters => ({
   searchType: "sku",
   keyword: "",
 });
 
-const defaultColumnKeys = productColumnFields
-  .map((field) => field.key)
-  .filter((key) => [
-    "image",
-    "sku",
-    "productName",
-    "category",
-    "purchasePrice",
-    "firstLegFreight",
-    "purchaseLeadTime",
-    "dataCompleteness",
-    "updatedAt",
-  ].includes(key));
+const hiddenProductColumnKeys = new Set<string>(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag"]);
+const configurableProductColumnFields = productColumnFields.filter(
+  (field) => !hiddenProductColumnKeys.has(field.key),
+);
+
+const defaultColumnKeys = configurableProductColumnFields.map((field) => field.key);
+
+
+const normalizeProductColumnKeys = (keys: string[]) => {
+  const allowedKeys = new Set<string>(configurableProductColumnFields.map((field) => field.key));
+  const normalizedKeys = keys.filter(
+    (key) => allowedKeys.has(key) && !hiddenProductColumnKeys.has(key),
+  );
+
+  const mergedKeys = [...normalizedKeys];
+
+  for (const key of defaultColumnKeys) {
+    if (!mergedKeys.includes(key)) {
+      mergedKeys.push(key);
+    }
+  }
+
+  return mergedKeys;
+};
+
 const defaultColumnWidths: Record<string, number> = {
   image: 72,
   sku: 170,
@@ -74,8 +87,8 @@ const defaultColumnWidths: Record<string, number> = {
   actions: 112,
 };
 const columnGroups: RuntimeColumnGroup[] = [
-  { title: "默认主表字段", fields: [...productColumnFields.slice(0, 9)] },
-  { title: "可选基本信息字段", fields: [...productColumnFields.slice(9)] },
+  { title: "默认主表字段", fields: [...configurableProductColumnFields.slice(0, 8)] },
+  { title: "可选基本信息字段", fields: [...configurableProductColumnFields.slice(8)] },
 ];
 
 interface ProductManagementPageProps {
@@ -96,13 +109,31 @@ const emptySummary: ProductManagementSummary = {
   pricingOkCount: 0,
 };
 
+const sourceTagOptionsFromRows = (
+  nextRows: ProductManagementRow[],
+): ProductSourceTagOption[] => {
+  const options = new Map<string, string | null>();
+
+  for (const row of nextRows) {
+    for (const label of row.sourceTags) {
+      if (!options.has(label)) {
+        options.set(label, row.sourceTagColors?.[label] ?? null);
+      }
+    }
+  }
+
+  return Array.from(options, ([label, color]) => ({ label, color }));
+};
+
+
+
 function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const messageApiRef = useRef(messageApi);
   const [filters, setFilters] = useState(createInitialFilters);
   const [statisticsVisible, setStatisticsVisible] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(defaultColumnKeys);
+  const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(() => normalizeProductColumnKeys(defaultColumnKeys));
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
@@ -110,9 +141,9 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [detailRow, setDetailRow] = useState<ProductManagementRow>();
   const [rows, setRows] = useState<ProductManagementRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [summary, setSummary] = useState<ProductManagementSummary>(emptySummary);
+  const [, setSummary] = useState<ProductManagementSummary>(emptySummary);
   const [grades, setGrades] = useState<ProductGrade[]>([]);
-  const [tags, setTags] = useState<ProductTag[]>([]);
+  const [tags, setTags] = useState<ProductSourceTagOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -130,7 +161,9 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
       })
       .then((result) => {
         if (!active) return;
-        setRows(result.rows);
+        const rowsWithDynamicCompleteness = applyProductBasicCompleteness(result.rows);
+      setRows(rowsWithDynamicCompleteness);
+        setTags(sourceTagOptionsFromRows(rowsWithDynamicCompleteness));
         setTotal(result.total);
       })
       .catch((reason: unknown) => {
@@ -167,12 +200,11 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
     void getProductManagementOptions()
       .then((options) => {
         setGrades(options.grades);
-        setTags(options.tags);
       })
       .catch(() => undefined);
     void getProductManagementTableView()
       .then((view) => {
-        setAppliedColumnKeys(view.applied_column_keys);
+        setAppliedColumnKeys(normalizeProductColumnKeys(view.applied_column_keys));
         setColumnWidths((current) => ({ ...current, ...view.column_widths }));
       })
       .catch(() => undefined);
@@ -227,13 +259,13 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
 
           {statisticsVisible && (
             <ProductManagementSummaryCards
+            rows={rows}
               total={total}
-              summary={summary}
             />
           )}
 
           <div className="product-management__table-wrap">
-            {loading && <Spin tip="正在加载产品数据" />}
+            {loading && <Spin className="product-management__table-loading" tip="正在加载产品数据" />}
             <ProductManagementTable
               rows={rows}
               total={total}
