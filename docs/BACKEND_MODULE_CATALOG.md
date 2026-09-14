@@ -166,7 +166,7 @@
 | Status | `approved_for_implementation`; current worktree implementation is not `implemented` before review and merge |
 | Main role | Backend Engineer; branch `feat/product-detail-sync-product-management-api` |
 | Backend directory | `backend/app/modules/product_management/` plus minimal registration, Product listing primary flag, one Alembic revision, synthetic/mock tests, API doc and runbook |
-| APIs | Ten protected operations under `/api/product-management/**` and `/api/user-table-views/product-management` using the shared envelope/request ID foundation |
+| APIs | Eleven protected operations under `/api/product-management/**` and `/api/user-table-views/product-management`, including the count-only filtered summary, using the shared envelope/request ID foundation |
 | Storage | Internal tags/assignments, account-scoped immutable pricing rule versions, safe persistent recalculation runs, rebuildable current pricing projection and principal-owned table views; existing Product/listing/DWD/DWS objects are reused |
 | Calculations | Decimal-only WFS override selection, configured WFS/storage state flow, gross-weight first leg, three prices, gross margin, purchase/total-cost ROI and versioned A/B/C/exception grade |
 | WFS evidence | Source URL/confirmation metadata can be versioned, but no concrete fulfillment/storage value is bundled; missing config returns `missing_rate` |

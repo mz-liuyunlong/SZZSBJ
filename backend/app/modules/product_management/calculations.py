@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -10,6 +10,316 @@ FOUR_PLACES = Decimal("0.0001")
 SIX_PLACES = Decimal("0.000001")
 CM_PER_INCH = Decimal("2.54")
 CUBIC_INCHES_PER_CUBIC_FOOT = Decimal("1728")
+GRAMS_PER_KILOGRAM = Decimal("1000")
+DEFAULT_USD_CNY_RATE = Decimal("6.7")
+DEFAULT_FIRST_LEG_COST_PER_KG_CNY = Decimal("12")
+DEFAULT_FIRST_LEG_VOLUME_WEIGHT_DIVISOR = Decimal("6000")
+DEFAULT_GRAMS_PER_LB = Decimal("453.6")
+DEFAULT_WFS_DIMENSIONAL_DIVISOR = Decimal("2277.8")
+DEFAULT_WFS_WEIGHT_PADDING_LB = Decimal("0.25")
+DEFAULT_COMMISSION_RATE = Decimal("0.15")
+DEFAULT_AFTER_SALES_RATE = Decimal("0.05")
+DEFAULT_AD_COST_RATE = Decimal("0.15")
+DEFAULT_SUGGESTED_MARGIN_RATE = Decimal("0.20")
+DEFAULT_MINIMUM_MARGIN_RATE = Decimal("0.10")
+SKU_PRICING_FORMULA_VERSION = "sku_pricing_formula_v1"
+WFS_FORMULA_VERSION = "walmart_wfs_formula_v1"
+WFS_THRESHOLDS = (
+    (Decimal("1"), Decimal("3.05")),
+    (Decimal("2"), Decimal("4.15")),
+    (Decimal("3"), Decimal("4.25")),
+    (Decimal("4"), Decimal("4.15")),
+    (Decimal("21"), Decimal("7.15")),
+    (Decimal("31"), Decimal("2.15")),
+    (Decimal("51"), Decimal("-2.85")),
+)
+
+type RootMissingCode = Literal[
+    "missing_purchase_cost",
+    "missing_gross_weight",
+    "missing_package_dimensions",
+    "missing_dimension_image",
+    "invalid_pricing_rule",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class SkuPricingRule:
+    usd_cny_rate: Decimal = DEFAULT_USD_CNY_RATE
+    first_leg_cost_per_kg_cny: Decimal = DEFAULT_FIRST_LEG_COST_PER_KG_CNY
+    first_leg_volume_weight_divisor: Decimal = DEFAULT_FIRST_LEG_VOLUME_WEIGHT_DIVISOR
+    grams_per_lb: Decimal = DEFAULT_GRAMS_PER_LB
+    wfs_dimensional_divisor: Decimal = DEFAULT_WFS_DIMENSIONAL_DIVISOR
+    wfs_weight_padding_lb: Decimal = DEFAULT_WFS_WEIGHT_PADDING_LB
+    commission_rate: Decimal = DEFAULT_COMMISSION_RATE
+    after_sales_rate: Decimal = DEFAULT_AFTER_SALES_RATE
+    ad_cost_rate: Decimal = DEFAULT_AD_COST_RATE
+    suggested_margin_rate: Decimal = DEFAULT_SUGGESTED_MARGIN_RATE
+    minimum_margin_rate: Decimal = DEFAULT_MINIMUM_MARGIN_RATE
+    monthly_storage_rate_usd_per_cuft: Decimal | None = None
+    storage_month_basis_days: int = 30
+    pricing_storage_days: int = 30
+
+
+@dataclass(frozen=True, slots=True)
+class SkuPricingResult:
+    calculation_status: Literal[
+        "ok", "pricing_unavailable", "storage_unavailable", "invalid_denominator"
+    ]
+    root_missing_codes: tuple[RootMissingCode, ...]
+    pricing_available: bool
+    billing_root_complete: bool
+    purchase_cost_cny: Decimal | None
+    product_gross_weight_g: Decimal | None
+    package_length_cm: Decimal | None
+    package_width_cm: Decimal | None
+    package_height_cm: Decimal | None
+    gross_weight_kg: Decimal | None
+    first_leg_volume_weight_kg: Decimal | None
+    first_leg_chargeable_weight_kg: Decimal | None
+    first_leg_fee_cny: Decimal | None
+    first_leg_calc_status: Literal["ok", "unavailable"]
+    wfs_actual_weight_lb: Decimal | None
+    wfs_dimensional_weight_lb: Decimal | None
+    wfs_chargeable_weight_lb: Decimal | None
+    wfs_base_fee_usd: Decimal | None
+    wfs_fulfillment_fee_usd: Decimal | None
+    wfs_calc_status: Literal["ok", "unavailable"]
+    wfs_calc_reason: str | None
+    package_volume_cuft: Decimal | None
+    daily_storage_fee_per_unit_usd: Decimal | None
+    storage_fee_usd: Decimal | None
+    storage_calc_status: Literal["ok", "unavailable"]
+    fixed_cost_usd: Decimal | None
+    suggested_price_usd: Decimal | None
+    minimum_price_usd: Decimal | None
+    clearance_price_usd: Decimal | None
+    detail_messages: tuple[str, ...]
+    formula_version: str = SKU_PRICING_FORMULA_VERSION
+    wfs_formula_version: str = WFS_FORMULA_VERSION
+
+
+def calculate_sku_pricing(
+    *,
+    purchase_cost_cny: Decimal | None,
+    product_gross_weight_g: Decimal | None,
+    dimensions_cm: tuple[Decimal | None, Decimal | None, Decimal | None],
+    image_count: int,
+    rule: SkuPricingRule | None = None,
+    storage_fee_usd: Decimal | None = None,
+) -> SkuPricingResult:
+    """Calculate SKU-level display costs without requiring a Product mapping."""
+    if rule is None:
+        rule = SkuPricingRule()
+    measurement_rule_valid = (
+        rule.first_leg_volume_weight_divisor > 0
+        and rule.grams_per_lb > 0
+        and rule.wfs_dimensional_divisor > 0
+    )
+    missing_purchase = purchase_cost_cny is None or purchase_cost_cny <= 0
+    missing_weight = product_gross_weight_g is None or product_gross_weight_g <= 0
+    missing_dimensions = any(value is None or value <= 0 for value in dimensions_cm)
+    root_missing: list[RootMissingCode] = []
+    if missing_purchase:
+        root_missing.append("missing_purchase_cost")
+    if missing_weight:
+        root_missing.append("missing_gross_weight")
+    if missing_dimensions:
+        root_missing.append("missing_package_dimensions")
+    if image_count < 2:
+        root_missing.append("missing_dimension_image")
+
+    gross_weight_kg: Decimal | None = None
+    first_leg_volume_weight_kg: Decimal | None = None
+    first_leg_chargeable_weight_kg: Decimal | None = None
+    first_leg_fee_cny: Decimal | None = None
+    wfs_actual_weight_lb: Decimal | None = None
+    wfs_dimensional_weight_lb: Decimal | None = None
+    wfs_chargeable_weight_lb: Decimal | None = None
+    wfs_base_fee_usd: Decimal | None = None
+    wfs_fulfillment_fee_usd: Decimal | None = None
+    package_volume_cuft: Decimal | None = None
+    daily_storage_fee_per_unit_usd: Decimal | None = None
+
+    if not missing_weight and not missing_dimensions and measurement_rule_valid:
+        assert product_gross_weight_g is not None
+        length, width, height = (value for value in dimensions_cm if value is not None)
+        gross_weight_kg = (product_gross_weight_g / GRAMS_PER_KILOGRAM).quantize(
+            SIX_PLACES, rounding=ROUND_HALF_UP
+        )
+        first_leg_volume_weight_kg = (
+            length * width * height / rule.first_leg_volume_weight_divisor
+        ).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
+        first_leg_chargeable_weight_kg = max(gross_weight_kg, first_leg_volume_weight_kg).quantize(
+            SIX_PLACES, rounding=ROUND_HALF_UP
+        )
+        first_leg_fee_cny = _money(first_leg_chargeable_weight_kg * rule.first_leg_cost_per_kg_cny)
+
+        wfs_actual_weight_lb = (product_gross_weight_g / rule.grams_per_lb).quantize(
+            SIX_PLACES, rounding=ROUND_HALF_UP
+        )
+        wfs_dimensional_weight_lb = (
+            Decimal(0)
+            if product_gross_weight_g < rule.grams_per_lb
+            else length * width * height / rule.wfs_dimensional_divisor
+        ).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
+        wfs_chargeable_weight_lb = (
+            max(wfs_actual_weight_lb, wfs_dimensional_weight_lb) + rule.wfs_weight_padding_lb
+        ).to_integral_value(rounding=ROUND_CEILING)
+        wfs_base_fee_usd = _wfs_base_fee(wfs_chargeable_weight_lb)
+        wfs_fulfillment_fee_usd = _money(
+            Decimal("0.4") * wfs_chargeable_weight_lb + wfs_base_fee_usd
+        )
+
+    if missing_dimensions:
+        storage_fee_usd = None
+    else:
+        length, width, height = (value for value in dimensions_cm if value is not None)
+        package_volume_cuft = (
+            (length / CM_PER_INCH)
+            * (width / CM_PER_INCH)
+            * (height / CM_PER_INCH)
+            / CUBIC_INCHES_PER_CUBIC_FOOT
+        ).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
+        if storage_fee_usd is not None and storage_fee_usd >= 0:
+            storage_fee_usd = _money(storage_fee_usd)
+            if rule.pricing_storage_days > 0:
+                daily_storage_fee_per_unit_usd = _money(
+                    storage_fee_usd / Decimal(rule.pricing_storage_days)
+                )
+            elif storage_fee_usd == 0:
+                daily_storage_fee_per_unit_usd = Decimal("0.0000")
+        elif (
+            rule.monthly_storage_rate_usd_per_cuft is not None
+            and rule.monthly_storage_rate_usd_per_cuft >= 0
+            and rule.storage_month_basis_days > 0
+            and rule.pricing_storage_days >= 0
+        ):
+            daily_storage_fee_per_unit_usd = _money(
+                package_volume_cuft
+                * rule.monthly_storage_rate_usd_per_cuft
+                / Decimal(rule.storage_month_basis_days)
+            )
+            storage_fee_usd = _money(
+                daily_storage_fee_per_unit_usd * Decimal(rule.pricing_storage_days)
+            )
+
+    denominators = (
+        Decimal(1)
+        - rule.commission_rate
+        - rule.after_sales_rate
+        - rule.ad_cost_rate
+        - rule.suggested_margin_rate,
+        Decimal(1)
+        - rule.commission_rate
+        - rule.after_sales_rate
+        - rule.ad_cost_rate
+        - rule.minimum_margin_rate,
+        Decimal(1) - rule.commission_rate,
+    )
+    invalid_rule = not is_sku_pricing_rule_valid(rule)
+    if invalid_rule:
+        root_missing.append("invalid_pricing_rule")
+
+    billing_root_complete = not any(
+        code
+        in {
+            "missing_purchase_cost",
+            "missing_gross_weight",
+            "missing_package_dimensions",
+            "invalid_pricing_rule",
+        }
+        for code in root_missing
+    )
+    fixed_cost_usd: Decimal | None = None
+    prices: tuple[Decimal | None, Decimal | None, Decimal | None] = (None, None, None)
+    if billing_root_complete and storage_fee_usd is not None:
+        assert purchase_cost_cny is not None
+        assert first_leg_fee_cny is not None
+        assert wfs_fulfillment_fee_usd is not None
+        fixed_cost_usd = _money(
+            (purchase_cost_cny + first_leg_fee_cny) / rule.usd_cny_rate
+            + wfs_fulfillment_fee_usd
+            + storage_fee_usd
+        )
+        prices = (
+            _price(fixed_cost_usd, denominators[0]),
+            _price(fixed_cost_usd, denominators[1]),
+            _price(fixed_cost_usd, denominators[2]),
+        )
+
+    calculation_status: Literal[
+        "ok", "pricing_unavailable", "storage_unavailable", "invalid_denominator"
+    ] = "ok"
+    if invalid_rule:
+        calculation_status = "invalid_denominator"
+    elif not billing_root_complete:
+        calculation_status = "pricing_unavailable"
+    elif storage_fee_usd is None:
+        calculation_status = "storage_unavailable"
+    detail_messages: list[str] = list(root_missing)
+    if storage_fee_usd is None and not missing_dimensions:
+        detail_messages.append("storage_rate_not_available")
+    return SkuPricingResult(
+        calculation_status=calculation_status,
+        root_missing_codes=tuple(root_missing),
+        pricing_available=calculation_status == "ok",
+        billing_root_complete=billing_root_complete,
+        purchase_cost_cny=purchase_cost_cny,
+        product_gross_weight_g=product_gross_weight_g,
+        package_length_cm=dimensions_cm[0],
+        package_width_cm=dimensions_cm[1],
+        package_height_cm=dimensions_cm[2],
+        gross_weight_kg=gross_weight_kg,
+        first_leg_volume_weight_kg=first_leg_volume_weight_kg,
+        first_leg_chargeable_weight_kg=first_leg_chargeable_weight_kg,
+        first_leg_fee_cny=first_leg_fee_cny,
+        first_leg_calc_status=("ok" if first_leg_fee_cny is not None else "unavailable"),
+        wfs_actual_weight_lb=wfs_actual_weight_lb,
+        wfs_dimensional_weight_lb=wfs_dimensional_weight_lb,
+        wfs_chargeable_weight_lb=wfs_chargeable_weight_lb,
+        wfs_base_fee_usd=wfs_base_fee_usd,
+        wfs_fulfillment_fee_usd=wfs_fulfillment_fee_usd,
+        wfs_calc_status=("ok" if wfs_fulfillment_fee_usd is not None else "unavailable"),
+        wfs_calc_reason=(
+            None
+            if wfs_fulfillment_fee_usd is not None
+            else "invalid_pricing_rule"
+            if not measurement_rule_valid
+            else "missing_weight_or_dimensions"
+        ),
+        package_volume_cuft=package_volume_cuft,
+        daily_storage_fee_per_unit_usd=daily_storage_fee_per_unit_usd,
+        storage_fee_usd=storage_fee_usd,
+        storage_calc_status="ok" if storage_fee_usd is not None else "unavailable",
+        fixed_cost_usd=fixed_cost_usd,
+        suggested_price_usd=prices[0],
+        minimum_price_usd=prices[1],
+        clearance_price_usd=prices[2],
+        detail_messages=tuple(detail_messages),
+    )
+
+
+def is_sku_pricing_rule_valid(rule: SkuPricingRule) -> bool:
+    return (
+        rule.usd_cny_rate > 0
+        and rule.first_leg_volume_weight_divisor > 0
+        and rule.grams_per_lb > 0
+        and rule.wfs_dimensional_divisor > 0
+        and Decimal(1)
+        - rule.commission_rate
+        - rule.after_sales_rate
+        - rule.ad_cost_rate
+        - rule.suggested_margin_rate
+        > 0
+        and Decimal(1)
+        - rule.commission_rate
+        - rule.after_sales_rate
+        - rule.ad_cost_rate
+        - rule.minimum_margin_rate
+        > 0
+        and Decimal(1) - rule.commission_rate > 0
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -585,6 +895,17 @@ def _to_cny(amount: Decimal | None, currency_code: str | None, fx: Decimal) -> D
 
 def _money(value: Decimal) -> Decimal:
     return value.quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
+
+
+def _price(fixed_cost_usd: Decimal, denominator: Decimal) -> Decimal:
+    return (fixed_cost_usd / denominator).quantize(CENT, rounding=ROUND_HALF_UP)
+
+
+def _wfs_base_fee(chargeable_weight_lb: Decimal) -> Decimal:
+    for threshold, fee in reversed(WFS_THRESHOLDS):
+        if chargeable_weight_lb >= threshold:
+            return fee
+    return WFS_THRESHOLDS[0][1]
 
 
 def _round_price_up(value: Decimal) -> Decimal:

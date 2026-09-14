@@ -107,8 +107,8 @@ function ProductManagementToolbar({
         className="report-filter-select"
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
-        placeholder="标签"
-        aria-label="标签"
+        placeholder="内部标签"
+        aria-label="内部标签"
         value={filters.tag}
         options={tags.map((value) => ({ value, label: value }))}
         onChange={(value) => onChange({ ...filters, tag: value })}

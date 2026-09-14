@@ -42,6 +42,19 @@ function DetailFieldGrid({ items }: { items: DetailFieldItem[] }) {
   );
 }
 
+function calculationFallback(row: ProductManagementRow) {
+  if (row.rootMissingCodes.some((code) => [
+    "missing_purchase_cost",
+    "missing_gross_weight",
+    "missing_package_dimensions",
+  ].includes(code))) return "缺基础数据";
+  return row.calculationStatus === "invalid_denominator" ? "规则异常" : "无法计算";
+}
+
+const withUnit = (value: string | null | undefined, unit: string) => (
+  value == null ? null : `${value} ${unit}`
+);
+
 function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
   const [sectionOverride, setSectionOverride] = useState<{
     rowId: string;
@@ -174,7 +187,7 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
         </div>
         <div className="product-management__detail-dashboard">
           <div><span>产品等级</span><strong>{row.productGrade}</strong></div>
-          <div><span>标签</span><strong>{row.tags[0] || "-"}</strong></div>
+          <div><span>来源标签</span><strong>{row.sourceTags[0] || "-"}</strong></div>
           <div><span>资料完整度</span><strong>{row.dataCompleteness ?? "-"}{row.dataCompleteness === null ? "" : "%"}</strong></div>
           <div><span>平台映射</span><strong>{row.linkedPlatformSkuCount}</strong></div>
         </div>
@@ -186,7 +199,11 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
               { label: "产品名称", value: row.productName },
               { label: "类目", value: row.category },
               { label: "产品等级", value: row.productGrade },
-              { label: "标签", value: row.tags.length > 0 ? row.tags.join(" / ") : "-" },
+              { label: "内部标签", value: row.tags.length > 0 ? row.tags.join(" / ") : "-" },
+              {
+                label: "来源标签",
+                value: row.sourceTags.length > 0 ? row.sourceTags.join(" / ") : "-",
+              },
               { label: "更新时间", value: row.updatedAt },
             ]}
           />
@@ -197,9 +214,39 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
             <DetailFieldGrid
               items={[
                 { label: "产品采购价", value: row.purchasePrice },
-                { label: "头程运费", value: row.firstLegFreight },
-                { label: "WFS配送费", value: row.wfsDeliveryFee },
-                { label: "仓储费", value: row.storageFee },
+                { label: "头程运费", value: row.firstLegFreight ?? calculationFallback(row) },
+                { label: "WFS配送费", value: row.wfsDeliveryFee ?? calculationFallback(row) },
+                { label: "仓储费", value: row.storageFee ?? calculationFallback(row) },
+                {
+                  label: "头程体积重",
+                  value: withUnit(row.pricingBreakdown?.firstLegVolumeWeightKg, "kg"),
+                },
+                {
+                  label: "头程计费重",
+                  value: withUnit(row.pricingBreakdown?.firstLegChargeableWeightKg, "kg"),
+                },
+                {
+                  label: "WFS实际重",
+                  value: withUnit(row.pricingBreakdown?.wfsActualWeightLb, "lb"),
+                },
+                {
+                  label: "WFS体积重",
+                  value: withUnit(row.pricingBreakdown?.wfsDimensionalWeightLb, "lb"),
+                },
+                {
+                  label: "WFS计费重",
+                  value: withUnit(row.pricingBreakdown?.wfsChargeableWeightLb, "lb"),
+                },
+                {
+                  label: "包裹体积",
+                  value: withUnit(row.pricingBreakdown?.packageVolumeCuft, "cuft"),
+                },
+                {
+                  label: "每日仓储费",
+                  value: row.pricingBreakdown?.dailyStorageFeeUsd
+                    ? `USD ${row.pricingBreakdown.dailyStorageFeeUsd}`
+                    : calculationFallback(row),
+                },
               ]}
             />
           </div>
@@ -207,10 +254,19 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
             <div className="product-management__detail-card-title">价格字段</div>
             <DetailFieldGrid
               items={[
-                { label: "WFS费用", value: row.wfsFee },
-                { label: "建议售价", value: row.suggestedPrice },
-                { label: "最低售价", value: row.minimumPrice },
-                { label: "清仓售价", value: row.clearancePrice },
+                { label: "WFS费用", value: row.wfsFee ?? calculationFallback(row) },
+                { label: "固定成本", value: row.pricingBreakdown?.fixedCostUsd ? `USD ${row.pricingBreakdown.fixedCostUsd}` : calculationFallback(row) },
+                { label: "建议售价", value: row.suggestedPrice ?? calculationFallback(row) },
+                { label: "最低售价", value: row.minimumPrice ?? calculationFallback(row) },
+                { label: "清仓售价", value: row.clearancePrice ?? calculationFallback(row) },
+                { label: "计算状态", value: row.calculationStatus },
+                {
+                  label: "缺失根因",
+                  value: row.rootMissingCodes.length > 0
+                    ? row.rootMissingCodes.join(" / ")
+                    : "无",
+                },
+                { label: "公式版本", value: row.formulaVersion },
               ]}
             />
           </div>
@@ -230,7 +286,7 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
       footer={row ? (
         <div className="product-management__detail-footer">
           <Typography.Text type="secondary">
-            产品详情为 <Typography.Text strong>SKU基础数据源</Typography.Text>，标签由后端返回，仅展示和筛选。
+            产品详情为 <Typography.Text strong>SKU基础数据源</Typography.Text>，内部标签与来源标签由后端分别返回。
           </Typography.Text>
           <Button type="primary" onClick={closeModal}>关闭</Button>
         </div>
@@ -259,8 +315,12 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
                 <div className="product-management__detail-tags">
                   {row.productGrade && <Tag color="blue">{row.productGrade}</Tag>}
                   {row.tags.length > 0 ? row.tags.map((tag) => (
-                    <Tag key={tag} color={tagColorMap[tag]}>{tag}</Tag>
-                  )) : <Tag>无标签</Tag>}
+                    <Tag key={`internal-${tag}`} color={tagColorMap[tag]}>内部 · {tag}</Tag>
+                  )) : null}
+                  {row.sourceTags.map((tag) => (
+                    <Tag key={`source-${tag}`}>来源 · {tag}</Tag>
+                  ))}
+                  {row.tags.length === 0 && row.sourceTags.length === 0 && <Tag>无标签</Tag>}
                 </div>
                 <div className="product-management__detail-quick-list">
                   <div><span>类目</span><b>{row.category ?? "-"}</b></div>

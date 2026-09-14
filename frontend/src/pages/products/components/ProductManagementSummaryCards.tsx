@@ -5,33 +5,20 @@ import {
   PartitionOutlined,
   PlayCircleFilled,
 } from "@ant-design/icons";
-import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
+import type { ProductManagementSummary } from "@/pages/products/productManagementTypes";
 import type { ReactNode } from "react";
 
-export type ProductManagementSummaryCardKey = "total" | "gradeA" | "gradeB" | "gradeC" | "complete" | "linked";
-
 interface ProductManagementSummaryCardsProps {
-  rows: ProductManagementRow[];
-  activeKey?: ProductManagementSummaryCardKey;
-  onCardClick?: (key: ProductManagementSummaryCardKey) => void;
+  total: number;
+  summary: ProductManagementSummary;
 }
 
 function ProductManagementSummaryCards({
-  rows,
-  activeKey = "total",
-  onCardClick,
+  total,
+  summary,
 }: ProductManagementSummaryCardsProps) {
-  const total = rows.length;
-  const gradeA = rows.filter((row) => row.productGrade === "A级").length;
-  const gradeB = rows.filter((row) => row.productGrade === "B级").length;
-  const gradeC = rows.filter((row) => row.productGrade === "C级").length;
-  const completeness = total > 0
-    ? rows.reduce((sum, row) => sum + (row.dataCompleteness ?? 0), 0) / total
-    : 0;
-  const linkedPlatformSkuCount = rows.reduce((sum, row) => sum + row.linkedPlatformSkuCount, 0);
-
   const cards: Array<{
-    key: ProductManagementSummaryCardKey;
+    key: string;
     label: string;
     value: string;
     hint: string;
@@ -42,47 +29,47 @@ function ProductManagementSummaryCards({
       key: "total",
       label: "产品总数",
       value: total.toLocaleString(),
-      hint: "SKU基础数据",
+      hint: "当前筛选范围",
       icon: <AppstoreOutlined aria-hidden="true" />,
       tone: "blue",
     },
     {
-      key: "gradeA",
-      label: "A级产品",
-      value: gradeA.toLocaleString(),
-      hint: "核心基础资料",
+      key: "synced",
+      label: "已同步详情",
+      value: summary.syncedDetailCount.toLocaleString(),
+      hint: "已有 ProductInfo current",
       icon: <PlayCircleFilled aria-hidden="true" />,
       tone: "green",
     },
     {
-      key: "gradeB",
-      label: "B级产品",
-      value: gradeB.toLocaleString(),
-      hint: "常规维护",
+      key: "completeness",
+      label: "资料完整率",
+      value: `${summary.dataCompletenessRate.toFixed(1)}%`,
+      hint: "平均资料完整度",
       icon: <GoldenFilled aria-hidden="true" />,
       tone: "orange",
     },
     {
-      key: "gradeC",
-      label: "C级产品",
-      value: gradeC.toLocaleString(),
-      hint: "待后续治理",
+      key: "images",
+      label: "已有图片",
+      value: summary.withImageCount.toLocaleString(),
+      hint: "至少一张来源图片",
       icon: <PartitionOutlined aria-hidden="true" />,
       tone: "purple",
     },
     {
-      key: "complete",
-      label: "资料完整率",
-      value: `${completeness.toFixed(1)}%`,
-      hint: "点击查看完整率≥90%",
+      key: "tags",
+      label: "已有标签",
+      value: summary.withSourceTagCount.toLocaleString(),
+      hint: "至少一个来源标签",
       icon: <CheckOutlined aria-hidden="true" />,
       tone: "green",
     },
     {
-      key: "linked",
-      label: "已关联平台SKU",
-      value: linkedPlatformSkuCount.toLocaleString(),
-      hint: "点击查看已映射SKU",
+      key: "incomplete",
+      label: "未补全资料",
+      value: summary.incompleteCount.toLocaleString(),
+      hint: "完整度低于 100%",
       icon: <PartitionOutlined aria-hidden="true" />,
       tone: "blue",
     },
@@ -91,16 +78,12 @@ function ProductManagementSummaryCards({
   return (
     <div className="product-management__summary" aria-label="产品管理统计">
       {cards.map((card) => (
-        <button
+        <div
           key={card.key}
-          type="button"
           className={[
             "product-management__summary-card",
             `product-management__summary-card--${card.tone}`,
-            activeKey === card.key ? "product-management__summary-card--active" : "",
           ].filter(Boolean).join(" ")}
-          aria-pressed={activeKey === card.key}
-          onClick={() => onCardClick?.(card.key)}
         >
           <div className="product-management__summary-icon">{card.icon}</div>
           <div>
@@ -108,7 +91,7 @@ function ProductManagementSummaryCards({
             <strong>{card.value}</strong>
             <small>{card.hint}</small>
           </div>
-        </button>
+        </div>
       ))}
     </div>
   );

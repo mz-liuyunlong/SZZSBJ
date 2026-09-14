@@ -3,6 +3,7 @@ import type {
   ProductGrade,
   ProductManagementFilters,
   ProductManagementRow,
+  ProductManagementSummary,
   ProductTag,
 } from "@/pages/products/productManagementTypes";
 
@@ -12,11 +13,16 @@ interface BackendListItem {
   sku: string | null;
   product_name: string | null;
   primary_image: string | null;
+  image_count: number;
   internal_tags: BackendTag[];
+  source_tags: Array<{
+    source_tag_id: string | null;
+    label: string | null;
+    color: string | null;
+  }>;
   category: string | null;
   purchase_cost_cny: string | null;
-  unit_first_leg_cost: string | null;
-  unit_first_leg_currency_code: string | null;
+  first_leg_fee_cny: string | null;
   purchase_delivery_days: number | null;
   data_quality_score: string | null;
   linked_platform_sku_count: number;
@@ -25,9 +31,20 @@ interface BackendListItem {
   wfs_fulfillment_fee: string | null;
   wfs_fulfillment_fee_currency_code: string | null;
   wfs_daily_storage_fee: string | null;
+  storage_fee_usd: string | null;
+  fixed_cost_usd: string | null;
   suggested_price_usd: string | null;
   minimum_price_usd: string | null;
   clearance_price_usd: string | null;
+  calculation_status: "ok" | "pricing_unavailable" | "storage_unavailable" | "invalid_denominator";
+  root_missing_codes: string[];
+  pricing_available: boolean;
+  billing_root_complete: boolean;
+  wfs_calc_status: string | null;
+  wfs_calc_reason: string | null;
+  storage_calc_status: string | null;
+  first_leg_calc_status: string | null;
+  formula_version: string | null;
 }
 
 interface BackendDetail {
@@ -59,9 +76,65 @@ interface BackendDetail {
   images: Array<{ ordinal: number; url: string; is_primary: boolean | null }>;
   internal_tags: BackendTag[];
   source_tags: Array<{ source_tag_id: string | null; label: string | null; color: string | null }>;
+  pricing: {
+    calculation_status: "ok" | "pricing_unavailable" | "storage_unavailable" | "invalid_denominator";
+    root_missing_codes: string[];
+    pricing_available: boolean;
+    billing_root_complete: boolean;
+    purchase_cost_cny: string | null;
+    product_gross_weight_g: string | null;
+    gross_weight_kg: string | null;
+    package_length_cm: string | null;
+    package_width_cm: string | null;
+    package_height_cm: string | null;
+    first_leg_volume_weight_kg: string | null;
+    first_leg_chargeable_weight_kg: string | null;
+    first_leg_cost_per_kg_cny: string | null;
+    first_leg_fee_cny: string | null;
+    wfs_actual_weight_lb: string | null;
+    wfs_dimensional_weight_lb: string | null;
+    wfs_chargeable_weight_lb: string | null;
+    wfs_weight_padding_lb: string | null;
+    wfs_base_fee_usd: string | null;
+    wfs_fulfillment_fee_usd: string | null;
+    package_volume_cuft: string | null;
+    daily_storage_fee_per_unit_usd: string | null;
+    storage_fee_usd: string | null;
+    fixed_cost_usd: string | null;
+    usd_cny_rate: string | null;
+    commission_rate: string | null;
+    after_sales_rate: string | null;
+    ad_cost_rate: string | null;
+    suggested_margin_rate: string | null;
+    minimum_margin_rate: string | null;
+    suggested_price_usd: string | null;
+    minimum_price_usd: string | null;
+    clearance_price_usd: string | null;
+    wfs_calc_status: string;
+    wfs_calc_reason: string | null;
+    storage_calc_status: string;
+    first_leg_calc_status: string;
+    detail_messages: string[];
+    formula_version: string | null;
+    wfs_formula_version: string | null;
+  } | null;
 }
 
 interface ListMeta { total: number | null }
+interface BackendSummary {
+  total: number;
+  synced_detail_count: number;
+  data_completeness_rate: string;
+  with_image_count: number;
+  with_source_tag_count: number;
+  incomplete_count: number;
+  missing_purchase_cost_count: number;
+  missing_gross_weight_count: number;
+  missing_package_dimensions_count: number;
+  missing_dimension_image_count: number;
+  invalid_pricing_rule_count: number;
+  pricing_ok_count: number;
+}
 interface BackendOptions { product_grades: string[]; internal_tags: BackendTag[] }
 interface BackendTableView {
   applied_column_keys: string[];
@@ -94,13 +167,15 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
   id: item.sku_id,
   image: item.primary_image,
   images: item.primary_image ? [item.primary_image] : [],
+  imageCount: item.image_count,
   sku: item.sku,
   productName: item.product_name,
   tags: item.internal_tags.map((tag) => tag.label),
+  sourceTags: item.source_tags.flatMap((tag) => tag.label ? [tag.label] : []),
   productGrade: item.product_grade ? gradeLabels[item.product_grade] : null,
   category: item.category,
   purchasePrice: money("CNY", item.purchase_cost_cny),
-  firstLegFreight: money(item.unit_first_leg_currency_code, item.unit_first_leg_cost),
+  firstLegFreight: money("CNY", item.first_leg_fee_cny),
   wfsDeliveryFee: money(
     item.wfs_fulfillment_fee_currency_code,
     item.wfs_fulfillment_fee,
@@ -108,11 +183,21 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
   purchaseLeadTime: item.purchase_delivery_days === null
     ? null
     : `${item.purchase_delivery_days}天`,
-  storageFee: money("USD", item.wfs_daily_storage_fee),
+  storageFee: money("USD", item.storage_fee_usd ?? item.wfs_daily_storage_fee),
   wfsFee: money(item.wfs_fulfillment_fee_currency_code, item.wfs_fulfillment_fee),
   suggestedPrice: money("USD", item.suggested_price_usd),
   minimumPrice: money("USD", item.minimum_price_usd),
   clearancePrice: money("USD", item.clearance_price_usd),
+  calculationStatus: item.calculation_status,
+  rootMissingCodes: item.root_missing_codes,
+  pricingAvailable: item.pricing_available,
+  billingRootComplete: item.billing_root_complete,
+  wfsCalculationStatus: item.wfs_calc_status,
+  wfsCalculationReason: item.wfs_calc_reason,
+  storageCalculationStatus: item.storage_calc_status,
+  firstLegCalculationStatus: item.first_leg_calc_status,
+  formulaVersion: item.formula_version,
+  pricingBreakdown: null,
   materialCn: null,
   materialEn: null,
   usageCn: null,
@@ -168,6 +253,30 @@ export async function listProductManagementSkus(
   };
 }
 
+export async function getProductManagementSummary(
+  filters: ProductManagementFilters,
+): Promise<ProductManagementSummary> {
+  const query = listQuery(filters, 1, 1);
+  query.delete("page");
+  query.delete("page_size");
+  const response = await backendRequest<BackendSummary>(
+    `/api/product-management/skus/summary?${query}`,
+  );
+  return {
+    syncedDetailCount: response.data.synced_detail_count,
+    dataCompletenessRate: Number(response.data.data_completeness_rate),
+    withImageCount: response.data.with_image_count,
+    withSourceTagCount: response.data.with_source_tag_count,
+    incompleteCount: response.data.incomplete_count,
+    missingPurchaseCostCount: response.data.missing_purchase_cost_count,
+    missingGrossWeightCount: response.data.missing_gross_weight_count,
+    missingPackageDimensionsCount: response.data.missing_package_dimensions_count,
+    missingDimensionImageCount: response.data.missing_dimension_image_count,
+    invalidPricingRuleCount: response.data.invalid_pricing_rule_count,
+    pricingOkCount: response.data.pricing_ok_count,
+  };
+}
+
 export async function getProductManagementSku(
   row: ProductManagementRow,
 ): Promise<ProductManagementRow> {
@@ -175,17 +284,17 @@ export async function getProductManagementSku(
     `/api/product-management/skus/${encodeURIComponent(row.id)}`,
   );
   const detail = response.data.synced_detail;
+  const pricing = response.data.pricing;
   return {
     ...row,
     image: response.data.images.find((image) => image.is_primary)?.url
       ?? response.data.images[0]?.url
       ?? row.image,
     images: response.data.images.map((image) => image.url),
+    imageCount: response.data.images.length,
     category: response.data.core?.category ?? row.category,
-    tags: [
-      ...response.data.internal_tags.map((tag) => tag.label),
-      ...response.data.source_tags.flatMap((tag) => tag.label ? [tag.label] : []),
-    ],
+    tags: response.data.internal_tags.map((tag) => tag.label),
+    sourceTags: response.data.source_tags.flatMap((tag) => tag.label ? [tag.label] : []),
     purchaseLeadTime: detail?.purchase_delivery_days === null || !detail
       ? null
       : `${detail.purchase_delivery_days}天`,
@@ -214,6 +323,50 @@ export async function getProductManagementSku(
       ? `${detail.product_gross_weight_g} g`
       : null,
     netWeightKg: detail?.product_net_weight_g ? `${detail.product_net_weight_g} g` : null,
+    purchasePrice: money("CNY", pricing?.purchase_cost_cny ?? null),
+    firstLegFreight: money("CNY", pricing?.first_leg_fee_cny ?? null),
+    wfsDeliveryFee: money("USD", pricing?.wfs_fulfillment_fee_usd ?? null),
+    wfsFee: money("USD", pricing?.wfs_fulfillment_fee_usd ?? null),
+    storageFee: money("USD", pricing?.storage_fee_usd ?? null),
+    suggestedPrice: money("USD", pricing?.suggested_price_usd ?? null),
+    minimumPrice: money("USD", pricing?.minimum_price_usd ?? null),
+    clearancePrice: money("USD", pricing?.clearance_price_usd ?? null),
+    calculationStatus: pricing?.calculation_status ?? row.calculationStatus,
+    rootMissingCodes: pricing?.root_missing_codes ?? row.rootMissingCodes,
+    pricingAvailable: pricing?.pricing_available ?? row.pricingAvailable,
+    billingRootComplete: pricing?.billing_root_complete ?? row.billingRootComplete,
+    wfsCalculationStatus: pricing?.wfs_calc_status ?? row.wfsCalculationStatus,
+    wfsCalculationReason: pricing?.wfs_calc_reason ?? row.wfsCalculationReason,
+    storageCalculationStatus: pricing?.storage_calc_status ?? row.storageCalculationStatus,
+    firstLegCalculationStatus: pricing?.first_leg_calc_status ?? row.firstLegCalculationStatus,
+    formulaVersion: pricing?.formula_version ?? row.formulaVersion,
+    pricingBreakdown: pricing ? {
+      productGrossWeightG: pricing.product_gross_weight_g,
+      grossWeightKg: pricing.gross_weight_kg,
+      packageLengthCm: pricing.package_length_cm,
+      packageWidthCm: pricing.package_width_cm,
+      packageHeightCm: pricing.package_height_cm,
+      firstLegVolumeWeightKg: pricing.first_leg_volume_weight_kg,
+      firstLegChargeableWeightKg: pricing.first_leg_chargeable_weight_kg,
+      firstLegCostPerKgCny: pricing.first_leg_cost_per_kg_cny,
+      wfsActualWeightLb: pricing.wfs_actual_weight_lb,
+      wfsDimensionalWeightLb: pricing.wfs_dimensional_weight_lb,
+      wfsChargeableWeightLb: pricing.wfs_chargeable_weight_lb,
+      wfsWeightPaddingLb: pricing.wfs_weight_padding_lb,
+      wfsBaseFeeUsd: pricing.wfs_base_fee_usd,
+      packageVolumeCuft: pricing.package_volume_cuft,
+      dailyStorageFeeUsd: pricing.daily_storage_fee_per_unit_usd,
+      fixedCostUsd: pricing.fixed_cost_usd,
+      usdCnyRate: pricing.usd_cny_rate,
+      commissionRate: pricing.commission_rate,
+      afterSalesRate: pricing.after_sales_rate,
+      adCostRate: pricing.ad_cost_rate,
+      suggestedMarginRate: pricing.suggested_margin_rate,
+      minimumMarginRate: pricing.minimum_margin_rate,
+      detailMessages: pricing.detail_messages,
+      formulaVersion: pricing.formula_version,
+      wfsFormulaVersion: pricing.wfs_formula_version,
+    } : null,
     updatedAt: detail?.source_observed_at ?? row.updatedAt,
   } satisfies ProductManagementRow;
 }

@@ -23,6 +23,8 @@ from app.modules.product_management.schemas import (
     ProductManagementListQuery,
     ProductManagementOptionsData,
     ProductManagementReadMeta,
+    ProductManagementSummaryData,
+    ProductManagementSummaryQuery,
     RecalculatePricingRequest,
     RecalculatePricingResult,
     UserTableViewRead,
@@ -99,14 +101,43 @@ def list_product_management_skus(
             "dwd_lingxing_sku_identity_index",
             "dwd_lingxing_sku_product_info_current",
             "dwd_lingxing_sku_product_images",
+            "dws_sku_base_profile_current",
             "dws_product_management_pricing_current",
             list_freshness_at=list_freshness,
             latest_observed_at=latest_observed,
             page=query.page,
             page_size=query.page_size,
             total=total,
-            partial=any(item.calculation_status != "ok" for item in data.items),
-            input_missing=any(item.calculation_status is None for item in data.items),
+            partial=any(not item.pricing_available for item in data.items),
+            input_missing=any(item.root_missing_codes for item in data.items),
+        ),
+    )
+
+
+@router.get(
+    "/api/product-management/skus/summary",
+    response_model=SuccessEnvelope[ProductManagementSummaryData, ProductManagementReadMeta],
+    responses=ERRORS,
+    dependencies=[product_scope_dependency],
+)
+def summarize_product_management_skus(
+    request: Request,
+    query: Annotated[ProductManagementSummaryQuery, Query()],
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ProductManagementSummaryData, ProductManagementReadMeta]:
+    data = ProductManagementService(session).summary(query, account_refs)
+    return success_response(
+        request,
+        data=data,
+        meta=_meta(
+            "dwd_lingxing_sku_identity_index",
+            "dwd_lingxing_sku_product_info_current",
+            "dwd_lingxing_sku_product_images",
+            "dwd_lingxing_sku_global_tags",
+            "dws_sku_base_profile_current",
+            total=data.total,
         ),
     )
 
@@ -223,6 +254,7 @@ def get_product_management_sku(
             "dwd_lingxing_sku_product_info_current",
             "dwd_lingxing_sku_product_images",
             "dwd_lingxing_sku_global_tags",
+            "dws_sku_base_profile_current",
             "dws_product_management_pricing_current",
         ),
     )
@@ -255,7 +287,12 @@ def get_product_management_pricing_breakdown(
     return success_response(
         request,
         data=data,
-        meta=_meta("dws_product_management_pricing_current"),
+        meta=_meta(
+            "dwd_lingxing_sku_product_info_current",
+            "dwd_lingxing_sku_product_images",
+            "dws_sku_base_profile_current",
+            "ref_product_pricing_rule_versions",
+        ),
     )
 
 

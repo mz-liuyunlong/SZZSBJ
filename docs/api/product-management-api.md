@@ -32,7 +32,7 @@ require a non-empty trusted `source_account_ref` scope.
 
 | Route | Permission |
 |---|---|
-| Product list, detail, options, pricing breakdown | `products:read` |
+| Product list, summary, detail, options, pricing breakdown | `products:read` |
 | Cost, price, margin, ROI, and breakdown components | additional `products:cost:read` |
 | Export | `products:export` |
 | Read pricing rules | `products:pricing_rules:read` |
@@ -69,8 +69,10 @@ clients must not download the full list and filter it locally.
 
 The stable secondary order is the internal identity UUID. `sku_id` is always the identity UUID.
 `sku` and `product_name` prefer Product Core when it exists, otherwise they use the persisted
-ProductInfo current projection. Other fields include primary image, internal tags, category,
-effective grade, calculation status, calculation timestamp, and rule version. `grade_reason`
+ProductInfo current projection. Other fields include primary image, image count, separately typed
+ProductInfo source tags and internal tags, category, SKU-level weight/dimensions,
+first-leg/WFS/storage/fixed costs, three price tiers, root missing codes, calculation status,
+formula versions, calculation timestamp, and rule version. `grade_reason`
 distinguishes a Product Core manual grade from a calculated grade. Fee and price values carry
 `USD`/`CNY` currency codes. Sensitive
 monetary results are `null` unless the principal has `products:cost:read`.
@@ -80,11 +82,31 @@ row on the same page. Both are `null` for an empty page.
 `meta.stale` is `null` until an Owner-approved freshness threshold exists; it is never guessed from
 system update time.
 
+The frontend renders the server-provided page directly and uses `meta.total` for pagination and the
+product total. It does not re-filter the current page. Statistics are hidden by default. The default
+columns are image, SKU, product name, category, purchase cost, first-leg freight, purchase lead time,
+data completeness, updated time, and actions. Fee and price fields remain optional columns until
+their controlled sources are available; the column drawer can restore these defaults.
+
+### `GET /api/product-management/skus/summary`
+
+Returns count-only statistics for the same account scope and filters as the SKU list: total active
+identities, identities with ProductInfo current detail, average persisted `data_quality_score`,
+identities with at least one current-snapshot image, identities with at least one current-snapshot
+source tag, and identities whose score is missing or below 100. It also returns
+`missing_purchase_cost_count`, `missing_gross_weight_count`,
+`missing_package_dimensions_count`, `missing_dimension_image_count`,
+`invalid_pricing_rule_count`, and `pricing_ok_count`. These are root-cause counts; there are no
+derived `missing_wfs_fee`, `missing_storage_fee`, or `missing_billing_data` counters. It never
+returns product field values. `meta.total` repeats the filtered total so clients do not derive
+totals from one page.
+
 ### `GET /api/product-management/skus/{sku_id}`
 
 Returns the active identity, optional Product Core, approved persisted ProductInfo detail fields,
-images, ProductInfo source tags, internal tags, and an optional persisted pricing summary. It does
-not return developer/owner fields by default and does not preload history or RAW.
+images, ProductInfo source tags, internal tags, and the SKU-level fee/price breakdown. The
+calculation reads ProductInfo/DWS data and does not require `products.product_id`. It does not
+return developer/owner fields by default and does not preload history or RAW.
 
 ### `GET /api/product-management/options`
 
@@ -144,8 +166,8 @@ amount inputs, RAW content, or payloads. V1 remains bounded and never changes hi
 
 ### `GET /api/product-management/skus/{sku_id}/pricing-breakdown`
 
-Returns persisted statuses, source selection, rule/calc versions, grade and timestamp. Detailed
-cost components are returned only with `products:cost:read`. Authorized responses include typed
+Returns SKU-level statuses, inputs, formula versions, grade and timestamp. Detailed monetary values
+are returned only with `products:cost:read`. Authorized responses include typed
 WFS fulfillment USD/CNY values, package volume, daily and estimated storage USD/CNY values, three
 USD prices, suggested margin/ROI, `price_currency_code=USD`, and the calculation effective time.
 The `components` array contains exactly `purchase_cost`, `first_leg`, `wfs_fulfillment`,
@@ -178,10 +200,12 @@ selection, filter result, permission, business value, or secret.
 | Images | `dwd_lingxing_sku_product_images` |
 | Lingxing source tags | `dwd_lingxing_sku_global_tags` |
 | Internal tags | `manual_product_tags` and effective assignments |
-| Dimensions, weight, purchase/first-leg source profile | `dws_sku_base_profile_current` |
+| Dimensions and gross weight | ProductInfo current |
+| Purchase cost | DWS base profile, with ProductInfo current fallback |
 | Rules | `ref_product_pricing_rule_versions` |
 | Recalculation run/audit | `product_pricing_recalculation_runs` |
-| Current price/fee/ROI/grade result | `dws_product_management_pricing_current` |
+| SKU display price/fee result | read-time Decimal calculation from ProductInfo/DWS plus effective rule/defaults |
+| Persisted recalculation result / grade | `dws_product_management_pricing_current` when present |
 | Column preferences | `user_table_views` |
 
 ### 4.1 Product Management frontend field metadata
@@ -193,7 +217,7 @@ selection, filter result, permission, business value, or secret.
 | `product_name` | string | `products` / ProductInfo current | `product_name` | yes | table and detail | Product preferred; synchronized fallback |
 | `primary_image` | string | `dwd_lingxing_sku_product_images` | `pic_url` | yes | image cell | synchronized |
 | `images` | array | `dwd_lingxing_sku_product_images` | `pic_url`, `ordinal`, `is_primary` | yes | detail gallery | synchronized |
-| `source_tags` | array | `dwd_lingxing_sku_global_tags` | `source_tag_id`, `tag_name`, `tag_color` | yes | detail tags | synchronized |
+| `source_tags` | array | `dwd_lingxing_sku_global_tags` | `source_tag_id`, `tag_name`, `tag_color` | yes | optional table column and detail tags | synchronized |
 | `internal_tags` | array | manual tag tables | active assignment and tag fields | yes | filter/table/detail | Product-linked only |
 | `category` | string | `products` | `category` | yes | filter/table/detail | Product-linked only |
 | `purchase_delivery_days` | integer | ProductInfo current | `purchase_delivery_days` | yes | table/detail | synchronized |
@@ -202,42 +226,36 @@ selection, filter result, permission, business value, or secret.
 | `unit_first_leg_cost` | decimal string | `dws_sku_base_profile_current` | `unit_first_leg_cost` | yes | cost column | synchronized profile; permission gated |
 | `data_quality_score` | decimal string | `dws_sku_base_profile_current` | `data_quality_score` | yes | completeness | synchronized profile |
 | `linked_platform_sku_count` | integer | `product_platform_listings` | count by optional `product_id` | no | table/summary | `0` without Product/listings |
-| fee/price/ROI/grade fields | decimal/status | `dws_product_management_pricing_current` | matching calculated columns | yes | table/detail | `null` until a valid persisted calculation exists |
+| SKU fee/price fields | decimal/status | ProductInfo current + DWS base profile + effective rule/defaults | calculated projection | yes | table/detail | Product mapping not required; prices remain `null` when root inputs or storage rate are unavailable |
 | `source_observed_at` | datetime | ProductInfo current | `source_observed_at` | yes | freshness display | synchronized |
 
 Lingxing global tags remain source tags and are not interchangeable with internal tags.
 Internal tag assignments are read-only in this API. No tag mutation route is present; any future
 writer must separately prevent overlapping effective periods for the same Product/tag pair before
 it can be approved.
-Product Core manual purchase price takes precedence over the synchronized purchase-cost profile;
-USD manual cost is converted only with the selected rule's recorded FX value. Unsupported manual
-cost currency fails safely instead of falling through to synchronized cost.
+The separate persisted Product-linked recalculation path preserves Product Core manual-cost
+precedence. The SKU display calculation introduced here reads the DWS purchase-cost profile with a
+ProductInfo-current fallback, so an unmapped active identity can still be evaluated.
 
-## 5. WFS fulfillment fee states and overrides
+## 5. WFS fulfillment fee
 
-The approved selection order is:
+The SKU display projection reproduces the approved business spreadsheet formula and never calls a
+Walmart API:
 
-1. active identity-level manual override;
-2. active primary Walmart listing override;
-3. the only active Walmart listing override;
-4. an identical amount/currency shared by all active Walmart listing overrides;
-5. conflicting values produce `needs_confirm` / `multiple_listing_wfs_overrides`;
-6. otherwise use a matching active configured rule;
-7. no applicable rule produces `missing_rate`.
+```text
+actual_lb = gross_weight_g / 453.6
+dimensional_lb = 0 when gross_weight_g < 453.6,
+  otherwise length_cm * width_cm * height_cm / 2277.8
+chargeable_lb = ceil(max(actual_lb, dimensional_lb) + 0.25)
+fee_usd = 0.4 * chargeable_lb + lookup_base_fee(chargeable_lb)
+```
 
-V1 cannot safely apply listing-level overrides because the existing listing table has no
-`source_account_ref`. The Product Management service therefore fails closed by ignoring all listing
-overrides and evaluates only an account-scoped identity override or configured system rule. The
-listing steps above remain a deferred contract until listing ownership is explicitly account-scoped;
-no listing from another account can influence the current result.
-
-More than one configured rule matching the same inputs produces `needs_confirm` /
-`multiple_matching_wfs_rates`; order never decides the fee.
-
-Other safe component states include `missing_dimension` and `missing_weight`. The response source is
-one of `manual_sku_override`, `manual_primary_listing_override`,
-`manual_single_listing_override`, `manual_consistent_listing_override`, `calculated_rule`, or
-`needs_confirm`. Calculated values never overwrite `product_platform_listings.wfs_fee`.
+The lookup thresholds are `1, 2, 3, 4, 21, 31, 51` with corresponding base fees
+`3.05, 4.15, 4.25, 4.15, 7.15, 2.15, -2.85`. The response includes actual, dimensional and
+chargeable weight, padding, base fee, final USD fee, status/reason, and
+`wfs_formula_version=walmart_wfs_formula_v1`. Missing/non-positive weight or any package dimension
+returns `wfs_calc_status=unavailable` and `wfs_calc_reason=missing_weight_or_dimensions`; no amount
+is fabricated. This read-time calculation does not overwrite listing or persisted pricing rows.
 
 ## 6. Daily WFS storage fee
 
@@ -259,28 +277,25 @@ settings default to 30 in each new version. Missing controlled rates or dimensio
 All operations use `Decimal`; money is serialized as a decimal string.
 
 ```text
-revenue_cny = price_usd * usd_cny_rate
-commission_cny = revenue_cny * platform_commission_rate
-included_costs_cny = purchase_cost_cny
-  + included_first_leg_cost_cny
-  + included_wfs_fulfillment_fee_cny
-  + included_estimated_storage_fee_cny
-  + other_fixed_cost_cny
-gross_profit_cny = revenue_cny - commission_cny - included_costs_cny
-gross_margin_rate = gross_profit_cny / revenue_cny
-price_usd = included_costs_cny
-  / (usd_cny_rate * (1 - platform_commission_rate - target_margin_rate))
+gross_weight_kg = gross_weight_g / 1000
+first_leg_volume_weight_kg = length_cm * width_cm * height_cm / 6000
+first_leg_chargeable_weight_kg = max(gross_weight_kg, first_leg_volume_weight_kg)
+first_leg_fee_cny = first_leg_chargeable_weight_kg * 12
+fixed_cost_usd = (purchase_cost_cny + first_leg_fee_cny) / 6.7
+  + wfs_fulfillment_fee_usd + storage_fee_usd
+suggested_price_usd = fixed_cost_usd / (1 - 0.15 - 0.05 - 0.15 - 0.20)
+minimum_price_usd = fixed_cost_usd / (1 - 0.15 - 0.05 - 0.15 - 0.10)
+clearance_price_usd = fixed_cost_usd / (1 - 0.15)
 ```
 
-Default target margins are 0.20, 0.10, and 0.00 for suggested, minimum, and clearance price. All
-three include platform commission. A non-positive denominator produces
-`invalid_pricing_denominator`. Target margins and final prices must remain descending. The `none`
-rounding mode uses `ROUND_HALF_UP` to two decimal places, then raises to the next cent if ordinary
-rounding would fall below the raw price.
+Defaults are USD/CNY `6.7`, first leg `12 CNY/kg`, commission `0.15`, after-sales `0.05`, ads
+`0.15`, and suggested/minimum target margins `0.20`/`0.10`. Clearance includes only fixed cost and
+commission. A non-positive denominator produces `invalid_denominator` and no price. All values use
+`Decimal`; money is returned with two-place `ROUND_HALF_UP` rounding.
 
-Missing commission config means zero with `commission_source=default_zero`; missing FX is
-`missing_fx_rate`. First-leg V1 uses configured CNY/kg multiplied by product gross weight kg; missing
-gross weight is `missing_weight`.
+The SKU display calculation uses the effective versioned rule where available and the documented
+defaults otherwise. Storage still requires an effective monthly rate; missing storage configuration
+returns `storage_unavailable` rather than inventing a value.
 
 ROI defaults to `gross_profit_cny / purchase_cost_cny`. A new rule version may choose
 `roi_base=total_cost`, using included costs. Missing/non-positive denominators fail safely.
@@ -298,11 +313,12 @@ Stable API errors include `UNAUTHORIZED`, `FORBIDDEN`, `DATA_SCOPE_DENIED`, `NOT
 `VALIDATION_ERROR`, `CALCULATION_INPUT_INCOMPLETE`, `RULE_NOT_AVAILABLE`, `SOURCE_DATA_STALE`, and
 `INTERNAL_ERROR`.
 
-Calculation states such as `missing_fx_rate`, `missing_purchase_cost`, `missing_weight`,
-`missing_wfs_rate`, `missing_storage_rate`, `invalid_revenue`, `invalid_pricing_denominator`,
-`invalid_pricing_rule_config`, `invalid_roi_base`, and `needs_confirm` are data states, not 500
-errors. Lists return an empty `items` array; missing pricing may be `null` in detail, while the
-dedicated breakdown route returns `RULE_NOT_AVAILABLE`.
+SKU display root causes are limited to `missing_purchase_cost`, `missing_gross_weight`,
+`missing_package_dimensions`, `missing_dimension_image`, and `invalid_pricing_rule`.
+`missing_dimension_image` does not block pricing. Display calculation status is `ok`,
+`pricing_unavailable`, `storage_unavailable`, or `invalid_denominator`; component statuses explain
+first-leg, WFS, and storage availability. These are data states, not 500 errors. Lists return an
+empty `items` array when nothing is in scope, and unavailable monetary values are `null`.
 
 ## 9. Redaction
 

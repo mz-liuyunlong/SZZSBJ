@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import Select, and_, case, func, nulls_last, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.product_management.models import (
     ManualProductTag,
@@ -56,7 +58,21 @@ class ProductManagementRepository:
         calculation_status: str | None,
         sort_by: str,
         sort_order: str,
+        pricing_ready_account_refs: frozenset[str] = frozenset(),
+        invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
     ) -> tuple[list[ProductManagementProjection], int]:
+        statement = self._filtered_projection(
+            account_refs=account_refs,
+            sku=sku,
+            sku_batch=sku_batch,
+            product_name=product_name,
+            category=category,
+            internal_tag=internal_tag,
+            product_grade=product_grade,
+            calculation_status=calculation_status,
+            pricing_ready_account_refs=pricing_ready_account_refs,
+            invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
+        )
         effective_grade = case(
             (Product.grade.in_(("A", "B", "C", "exception")), Product.grade),
             (Product.grade.is_not(None), "exception"),
@@ -67,38 +83,6 @@ class ProductManagementRepository:
             Product.product_name,
             LingxingSkuProductInfoCurrent.product_name,
         )
-        statement = self._projection().where(
-            LingxingSkuIdentity.source_account_ref.in_(account_refs),
-            LingxingSkuIdentity.is_active.is_(True),
-            or_(Product.id.is_(None), Product.deleted_at.is_(None)),
-        )
-        if sku is not None:
-            statement = statement.where(effective_sku.contains(sku, autoescape=True))
-        if sku_batch:
-            statement = statement.where(effective_sku.in_(sku_batch))
-        if product_name is not None:
-            statement = statement.where(effective_name.contains(product_name, autoescape=True))
-        if category is not None:
-            statement = statement.where(Product.category.contains(category, autoescape=True))
-        if internal_tag is not None:
-            tagged_product_ids = (
-                select(ManualProductTagAssignment.product_id)
-                .join(ManualProductTag)
-                .where(
-                    or_(
-                        ManualProductTag.tag_key == internal_tag,
-                        ManualProductTag.label == internal_tag,
-                    ),
-                    ManualProductTag.is_active.is_(True),
-                )
-            )
-            statement = statement.where(Product.id.in_(tagged_product_ids))
-        if product_grade is not None:
-            statement = statement.where(effective_grade == product_grade)
-        if calculation_status is not None:
-            statement = statement.where(
-                ProductManagementPricingCurrent.calculation_status == calculation_status
-            )
         total = self.session.scalar(
             select(func.count()).select_from(statement.order_by(None).subquery())
         )
@@ -117,6 +101,140 @@ class ProductManagementRepository:
             .limit(page_size)
         ).all()
         return [tuple(row) for row in rows], int(total or 0)
+
+    def summarize_projections(
+        self,
+        *,
+        account_refs: frozenset[str],
+        sku: str | None,
+        sku_batch: Sequence[str],
+        product_name: str | None,
+        category: str | None,
+        internal_tag: str | None,
+        product_grade: str | None,
+        calculation_status: str | None,
+        pricing_ready_account_refs: frozenset[str] = frozenset(),
+        invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
+    ) -> tuple[int, int, Decimal, int, int, int, int, int, int, int, int, int]:
+        missing_purchase, missing_weight, missing_dimensions = self._root_missing_conditions()
+        image_count = (
+            select(func.count(LingxingSkuProductImage.id))
+            .where(
+                LingxingSkuProductImage.source_snapshot_id
+                == LingxingSkuProductInfoCurrent.source_snapshot_id
+            )
+            .correlate(LingxingSkuProductInfoCurrent)
+            .scalar_subquery()
+        )
+        has_image = (
+            select(LingxingSkuProductImage.id)
+            .where(
+                LingxingSkuProductImage.source_snapshot_id
+                == LingxingSkuProductInfoCurrent.source_snapshot_id
+            )
+            .correlate(LingxingSkuProductInfoCurrent)
+            .exists()
+        )
+        has_source_tag = (
+            select(LingxingSkuGlobalTag.id)
+            .where(
+                LingxingSkuGlobalTag.source_snapshot_id
+                == LingxingSkuProductInfoCurrent.source_snapshot_id
+            )
+            .correlate(LingxingSkuProductInfoCurrent)
+            .exists()
+        )
+        filtered = self._filtered_projection(
+            account_refs=account_refs,
+            sku=sku,
+            sku_batch=sku_batch,
+            product_name=product_name,
+            category=category,
+            internal_tag=internal_tag,
+            product_grade=product_grade,
+            calculation_status=calculation_status,
+            pricing_ready_account_refs=pricing_ready_account_refs,
+            invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
+        )
+        projections = (
+            filtered.with_only_columns(
+                LingxingSkuIdentity.id.label("identity_id"),
+                LingxingSkuIdentity.source_account_ref.label("source_account_ref"),
+                LingxingSkuProductInfoCurrent.id.label("current_id"),
+                SkuBaseProfileCurrent.data_quality_score.label("data_quality_score"),
+                has_image.label("has_image"),
+                has_source_tag.label("has_source_tag"),
+                missing_purchase.label("missing_purchase"),
+                missing_weight.label("missing_weight"),
+                missing_dimensions.label("missing_dimensions"),
+                image_count.label("image_count"),
+            )
+            .order_by(None)
+            .distinct()
+            .subquery()
+        )
+        row = self.session.execute(
+            select(
+                func.count(),
+                func.sum(case((projections.c.current_id.is_not(None), 1), else_=0)),
+                func.coalesce(func.avg(func.coalesce(projections.c.data_quality_score, 0)), 0),
+                func.sum(case((projections.c.has_image.is_(True), 1), else_=0)),
+                func.sum(case((projections.c.has_source_tag.is_(True), 1), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            or_(
+                                projections.c.data_quality_score.is_(None),
+                                projections.c.data_quality_score < 100,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(case((projections.c.missing_purchase.is_(True), 1), else_=0)),
+                func.sum(case((projections.c.missing_weight.is_(True), 1), else_=0)),
+                func.sum(case((projections.c.missing_dimensions.is_(True), 1), else_=0)),
+                func.sum(case((projections.c.image_count < 2, 1), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            projections.c.source_account_ref.in_(invalid_pricing_rule_account_refs),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                projections.c.missing_purchase.is_(False),
+                                projections.c.missing_weight.is_(False),
+                                projections.c.missing_dimensions.is_(False),
+                                projections.c.source_account_ref.in_(pricing_ready_account_refs),
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+            ).select_from(projections)
+        ).one()
+        return (
+            int(row[0] or 0),
+            int(row[1] or 0),
+            Decimal(str(row[2] or 0)),
+            int(row[3] or 0),
+            int(row[4] or 0),
+            int(row[5] or 0),
+            int(row[6] or 0),
+            int(row[7] or 0),
+            int(row[8] or 0),
+            int(row[9] or 0),
+            int(row[10] or 0),
+            int(row[11] or 0),
+        )
 
     def get_projection(
         self, sku_id: UUID, account_refs: frozenset[str]
@@ -186,6 +304,35 @@ class ProductManagementRepository:
             ).all()
         )
 
+    def list_source_tags_for_snapshots(
+        self, snapshot_ids: Sequence[UUID]
+    ) -> dict[UUID, list[LingxingSkuGlobalTag]]:
+        if not snapshot_ids:
+            return {}
+        rows = self.session.scalars(
+            select(LingxingSkuGlobalTag)
+            .where(LingxingSkuGlobalTag.source_snapshot_id.in_(snapshot_ids))
+            .order_by(
+                LingxingSkuGlobalTag.source_snapshot_id,
+                LingxingSkuGlobalTag.ordinal,
+                LingxingSkuGlobalTag.id,
+            )
+        ).all()
+        result: dict[UUID, list[LingxingSkuGlobalTag]] = {}
+        for tag in rows:
+            result.setdefault(tag.source_snapshot_id, []).append(tag)
+        return result
+
+    def image_counts_for_snapshots(self, snapshot_ids: Sequence[UUID]) -> dict[UUID, int]:
+        if not snapshot_ids:
+            return {}
+        rows = self.session.execute(
+            select(LingxingSkuProductImage.source_snapshot_id, func.count())
+            .where(LingxingSkuProductImage.source_snapshot_id.in_(snapshot_ids))
+            .group_by(LingxingSkuProductImage.source_snapshot_id)
+        ).all()
+        return {snapshot_id: int(count) for snapshot_id, count in rows}
+
     def list_active_tags(self) -> list[ManualProductTag]:
         return list(
             self.session.scalars(
@@ -238,6 +385,31 @@ class ProductManagementRepository:
             .order_by(ProductPricingRuleVersion.effective_from.desc())
             .limit(1)
         )
+
+    def list_effective_rules(
+        self, at: datetime, account_refs: frozenset[str]
+    ) -> dict[str, ProductPricingRuleVersion]:
+        rules = self.session.scalars(
+            select(ProductPricingRuleVersion)
+            .where(
+                ProductPricingRuleVersion.rule_key == "product_management",
+                ProductPricingRuleVersion.source_account_ref.in_(account_refs),
+                ProductPricingRuleVersion.is_active.is_(True),
+                ProductPricingRuleVersion.effective_from <= at,
+                or_(
+                    ProductPricingRuleVersion.effective_to.is_(None),
+                    ProductPricingRuleVersion.effective_to > at,
+                ),
+            )
+            .order_by(
+                ProductPricingRuleVersion.source_account_ref,
+                ProductPricingRuleVersion.effective_from.desc(),
+            )
+        ).all()
+        result: dict[str, ProductPricingRuleVersion] = {}
+        for rule in rules:
+            result.setdefault(rule.source_account_ref, rule)
+        return result
 
     def lock_rule_versions(self, source_account_ref: str) -> list[ProductPricingRuleVersion]:
         return list(
@@ -348,6 +520,134 @@ class ProductManagementRepository:
         self.session.add(view)
         self.session.flush()
         return view
+
+    @staticmethod
+    def _filtered_projection(
+        *,
+        account_refs: frozenset[str],
+        sku: str | None,
+        sku_batch: Sequence[str],
+        product_name: str | None,
+        category: str | None,
+        internal_tag: str | None,
+        product_grade: str | None,
+        calculation_status: str | None,
+        pricing_ready_account_refs: frozenset[str] = frozenset(),
+        invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
+    ) -> Select[
+        tuple[
+            LingxingSkuIdentity,
+            Product,
+            LingxingSkuProductInfoCurrent,
+            SkuBaseProfileCurrent,
+            ProductManagementPricingCurrent,
+            ProductPricingRuleVersion,
+            LingxingSkuProductImage,
+        ]
+    ]:
+        effective_grade = case(
+            (Product.grade.in_(("A", "B", "C", "exception")), Product.grade),
+            (Product.grade.is_not(None), "exception"),
+            else_=ProductManagementPricingCurrent.product_grade,
+        )
+        effective_sku = func.coalesce(Product.sku, LingxingSkuIdentity.lingxing_sku_code)
+        effective_name = func.coalesce(
+            Product.product_name,
+            LingxingSkuProductInfoCurrent.product_name,
+        )
+        statement = ProductManagementRepository._projection().where(
+            LingxingSkuIdentity.source_account_ref.in_(account_refs),
+            LingxingSkuIdentity.is_active.is_(True),
+            or_(Product.id.is_(None), Product.deleted_at.is_(None)),
+        )
+        if sku is not None:
+            statement = statement.where(effective_sku.contains(sku, autoescape=True))
+        if sku_batch:
+            statement = statement.where(effective_sku.in_(sku_batch))
+        if product_name is not None:
+            statement = statement.where(effective_name.contains(product_name, autoescape=True))
+        if category is not None:
+            statement = statement.where(Product.category.contains(category, autoescape=True))
+        if internal_tag is not None:
+            tagged_product_ids = (
+                select(ManualProductTagAssignment.product_id)
+                .join(ManualProductTag)
+                .where(
+                    or_(
+                        ManualProductTag.tag_key == internal_tag,
+                        ManualProductTag.label == internal_tag,
+                    ),
+                    ManualProductTag.is_active.is_(True),
+                )
+            )
+            statement = statement.where(Product.id.in_(tagged_product_ids))
+        if product_grade is not None:
+            statement = statement.where(effective_grade == product_grade)
+        if calculation_status is not None:
+            missing_purchase, missing_weight, missing_dimensions = (
+                ProductManagementRepository._root_missing_conditions()
+            )
+            billing_root_complete = and_(
+                missing_purchase.is_(False),
+                missing_weight.is_(False),
+                missing_dimensions.is_(False),
+            )
+            if calculation_status == "ok":
+                statement = statement.where(
+                    billing_root_complete,
+                    LingxingSkuIdentity.source_account_ref.in_(pricing_ready_account_refs),
+                )
+            elif calculation_status == "invalid_denominator":
+                statement = statement.where(
+                    LingxingSkuIdentity.source_account_ref.in_(invalid_pricing_rule_account_refs)
+                )
+            elif calculation_status == "pricing_unavailable":
+                statement = statement.where(
+                    or_(missing_purchase, missing_weight, missing_dimensions)
+                )
+            elif calculation_status == "storage_unavailable":
+                statement = statement.where(
+                    billing_root_complete,
+                    LingxingSkuIdentity.source_account_ref.not_in(pricing_ready_account_refs),
+                    LingxingSkuIdentity.source_account_ref.not_in(
+                        invalid_pricing_rule_account_refs
+                    ),
+                )
+            else:
+                statement = statement.where(
+                    ProductManagementPricingCurrent.calculation_status == calculation_status
+                )
+        return statement
+
+    @staticmethod
+    def _root_missing_conditions() -> tuple[
+        ColumnElement[bool], ColumnElement[bool], ColumnElement[bool]
+    ]:
+        return (
+            or_(
+                func.coalesce(
+                    SkuBaseProfileCurrent.purchase_cost_cny,
+                    LingxingSkuProductInfoCurrent.purchase_cost_cny,
+                ).is_(None),
+                func.coalesce(
+                    SkuBaseProfileCurrent.purchase_cost_cny,
+                    LingxingSkuProductInfoCurrent.purchase_cost_cny,
+                )
+                <= 0,
+            ),
+            or_(
+                LingxingSkuProductInfoCurrent.product_gross_weight_g.is_(None),
+                LingxingSkuProductInfoCurrent.product_gross_weight_g <= 0,
+            ),
+            or_(
+                LingxingSkuProductInfoCurrent.package_length_cm.is_(None),
+                LingxingSkuProductInfoCurrent.package_length_cm <= 0,
+                LingxingSkuProductInfoCurrent.package_width_cm.is_(None),
+                LingxingSkuProductInfoCurrent.package_width_cm <= 0,
+                LingxingSkuProductInfoCurrent.package_height_cm.is_(None),
+                LingxingSkuProductInfoCurrent.package_height_cm <= 0,
+            ),
+        )
 
     @staticmethod
     def _projection() -> Select[

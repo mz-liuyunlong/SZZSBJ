@@ -45,6 +45,7 @@ from app.modules.products.bootstrap import (
 from app.modules.products.dependencies import get_product_scope_provider
 from app.modules.products.models import Product, ProductPlatformListing
 from app.modules.sku_detail.models import (
+    LingxingSkuGlobalTag,
     LingxingSkuIdentity,
     LingxingSkuProductImage,
     LingxingSkuProductInfoCurrent,
@@ -80,6 +81,7 @@ def _create_product_management_storage(engine: Engine) -> None:
         LingxingSkuProductInfoSnapshot.__table__,
         LingxingSkuProductInfoCurrent.__table__,
         LingxingSkuProductImage.__table__,
+        LingxingSkuGlobalTag.__table__,
         SkuBaseProfileCurrent.__table__,
         ManualProductTag.__table__,
         ManualProductTagAssignment.__table__,
@@ -376,7 +378,8 @@ def test_bootstrap_product_is_visible_through_real_product_management_route(
     )
     application.dependency_overrides[get_db_session] = lambda: product_management_db_session
 
-    response = TestClient(application).get("/api/product-management/skus")
+    client = TestClient(application)
+    response = client.get("/api/product-management/skus")
     body = response.json()
 
     assert response.status_code == 200
@@ -402,14 +405,31 @@ def test_synced_identity_is_visible_without_product_bootstrap(
     )
     application.dependency_overrides[get_db_session] = lambda: product_management_db_session
 
-    response = TestClient(application).get("/api/product-management/skus")
+    client = TestClient(application)
+    response = client.get("/api/product-management/skus")
     body = response.json()
+    summary = client.get("/api/product-management/skus/summary")
 
     assert response.status_code == 200
     assert body["meta"]["total"] == 1
     assert body["data"]["items"][0]["sku_id"] == str(identity.id)
     assert identity.product_id is None
     assert identity.mapping_status == "unmapped"
+    assert summary.status_code == 200
+    assert summary.json()["data"] == {
+        "total": 1,
+        "synced_detail_count": 1,
+        "data_completeness_rate": "0.000000",
+        "with_image_count": 0,
+        "with_source_tag_count": 0,
+        "incomplete_count": 1,
+        "missing_purchase_cost_count": 1,
+        "missing_gross_weight_count": 1,
+        "missing_package_dimensions_count": 1,
+        "missing_dimension_image_count": 1,
+        "invalid_pricing_rule_count": 0,
+        "pricing_ok_count": 0,
+    }
 
 
 def test_one_time_runner_defaults_to_dry_run_and_requires_injected_executor() -> None:

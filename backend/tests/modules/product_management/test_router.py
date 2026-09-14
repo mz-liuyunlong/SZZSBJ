@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -13,6 +14,7 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import get_source_account_scope_provider
 from app.modules.product_management.models import ProductPricingRecalculationRun
+from app.modules.product_management.repository import ProductManagementRepository
 from app.modules.product_management.schemas import (
     CostComponentRead,
     ExportRequest,
@@ -25,6 +27,7 @@ from app.modules.product_management.schemas import (
     ProductManagementListData,
     ProductManagementListItem,
     ProductManagementOptionsData,
+    ProductManagementSummaryData,
     RecalculatePricingResult,
     UserTableViewRead,
 )
@@ -74,6 +77,7 @@ def test_openapi_contains_all_ten_product_management_routes() -> None:
     paths = create_app().openapi()["paths"]
     expected = {
         "/api/product-management/skus",
+        "/api/product-management/skus/summary",
         "/api/product-management/skus/{sku_id}",
         "/api/product-management/options",
         "/api/product-management/skus/export",
@@ -104,6 +108,37 @@ def test_routes_fail_closed_for_auth_permission_and_source_scope() -> None:
     response = TestClient(application).get("/api/product-management/skus")
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "DATA_SCOPE_DENIED"
+
+
+def test_summary_route_accepts_repeating_completeness_rate(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        ProductManagementRepository,
+        "list_effective_rules",
+        lambda self, at, account_refs: {},
+    )
+    monkeypatch.setattr(
+        ProductManagementRepository,
+        "summarize_projections",
+        lambda self, **kwargs: (
+            3,
+            3,
+            Decimal("66.666666666666666667"),
+            2,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            3,
+        ),
+    )
+
+    response = TestClient(_app()).get("/api/product-management/skus/summary")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["data_completeness_rate"] == "66.666667"
 
 
 def test_batch_sku_query_is_cleaned_deduplicated_and_case_preserving(
@@ -218,6 +253,7 @@ def test_read_export_recalculate_and_view_contracts(
                 product_name="Synthetic Product",
                 primary_image=None,
                 internal_tags=[],
+                source_tags=[],
                 category=None,
                 purchase_cost_cny=None,
                 unit_first_leg_cost=None,
@@ -286,6 +322,24 @@ def test_read_export_recalculate_and_view_contracts(
             internal_tags=[],
         ),
     )
+    monkeypatch.setattr(
+        ProductManagementService,
+        "summary",
+        lambda self, query, account_refs: ProductManagementSummaryData(
+            total=1,
+            synced_detail_count=1,
+            data_completeness_rate=Decimal("80.000000"),
+            with_image_count=0,
+            with_source_tag_count=0,
+            incomplete_count=1,
+            missing_purchase_cost_count=1,
+            missing_gross_weight_count=1,
+            missing_package_dimensions_count=1,
+            missing_dimension_image_count=1,
+            invalid_pricing_rule_count=0,
+            pricing_ok_count=0,
+        ),
+    )
 
     def recalculate(
         self: ProductManagementService,
@@ -343,6 +397,7 @@ def test_read_export_recalculate_and_view_contracts(
                 "column_widths": {"sku": 120},
             },
         ),
+        client.get("/api/product-management/skus/summary"),
     ]
     for response in responses:
         body = _assert_envelope(response)
@@ -361,6 +416,20 @@ def test_read_export_recalculate_and_view_contracts(
         "file_created": False,
     }
     assert captured_request_ids == [responses[4].json()["request_id"]]
+    assert set(responses[7].json()["data"]) == {
+        "total",
+        "synced_detail_count",
+        "data_completeness_rate",
+        "with_image_count",
+        "with_source_tag_count",
+        "incomplete_count",
+        "missing_purchase_cost_count",
+        "missing_gross_weight_count",
+        "missing_package_dimensions_count",
+        "missing_dimension_image_count",
+        "invalid_pricing_rule_count",
+        "pricing_ok_count",
+    }
 
 
 def test_pricing_rule_and_table_view_inputs_reject_unknown_or_business_data() -> None:
