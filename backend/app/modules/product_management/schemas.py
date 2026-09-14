@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
@@ -10,6 +10,7 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    SerializationInfo,
     StringConstraints,
     field_validator,
     model_validator,
@@ -19,20 +20,28 @@ Nonblank64 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=
 Nonblank128 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
 Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 SkuSearchValue = Annotated[str, StringConstraints(min_length=1, max_length=128)]
+
+
+def _api_decimal(value: Decimal, info: SerializationInfo) -> str:
+    if info.context and info.context.get("preserve_decimal_places"):
+        return format(value, "f")
+    return format(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "f")
+
+
 Money = Annotated[
     Decimal,
     Field(max_digits=18, decimal_places=4),
-    PlainSerializer(lambda value: format(value, "f"), return_type=str, when_used="json"),
+    PlainSerializer(_api_decimal, return_type=str, when_used="json"),
 ]
 Ratio = Annotated[
     Decimal,
     Field(max_digits=9, decimal_places=6),
-    PlainSerializer(lambda value: format(value, "f"), return_type=str, when_used="json"),
+    PlainSerializer(_api_decimal, return_type=str, when_used="json"),
 ]
 DecimalSix = Annotated[
     Decimal,
     Field(max_digits=18, decimal_places=6),
-    PlainSerializer(lambda value: format(value, "f"), return_type=str, when_used="json"),
+    PlainSerializer(_api_decimal, return_type=str, when_used="json"),
 ]
 RootMissingCode = Literal[
     "missing_purchase_cost",
@@ -324,6 +333,7 @@ class ProductImageRead(StrictSchema):
     ordinal: int
     url: str
     is_primary: bool | None
+    source: Literal["picture_list"] = "picture_list"
 
 
 class CostComponentRead(StrictSchema):

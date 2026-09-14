@@ -132,7 +132,8 @@ def test_sku_detail_publication_commits_multi_source_dws_lineage() -> None:
                 "data": {
                     "sku": "SYNTHETIC-SKU",
                     "picture_list": [
-                        {"pic_url": "https://example.invalid/synthetic.jpg", "is_primary": 1}
+                        {"pic_url": "https://example.invalid/one.jpg", "is_primary": 1},
+                        {"pic_url": "https://example.invalid/two.jpg", "is_primary": 0},
                     ],
                     "global_tags": [
                         {
@@ -148,7 +149,9 @@ def test_sku_detail_publication_commits_multi_source_dws_lineage() -> None:
 
     assert isinstance(snapshot_id, UUID)
     service.repository.add_snapshot.assert_called_once()
-    assert len(service.repository.add_images.call_args.args[0]) == 1
+    images = service.repository.add_images.call_args.args[0]
+    assert [image.ordinal for image in images] == [0, 1]
+    assert len(images) == 2
     assert len(service.repository.add_tags.call_args.args[0]) == 1
     identity_update = service.repository.update_record.call_args_list[0]
     assert set(identity_update.args[1]) == {"lingxing_sku_code", "updated_at"}

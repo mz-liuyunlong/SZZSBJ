@@ -216,7 +216,7 @@ selection, filter result, permission, business value, or secret.
 | `sku` | string | `products` / `dwd_lingxing_sku_product_info_current` / identity index | `sku` / `lingxing_sku_code` | yes | table and detail | Product preferred; synchronized fallback |
 | `product_name` | string | `products` / ProductInfo current | `product_name` | yes | table and detail | Product preferred; synchronized fallback |
 | `primary_image` | string | `dwd_lingxing_sku_product_images` | `pic_url` | yes | image cell | synchronized |
-| `images` | array | `dwd_lingxing_sku_product_images` | `pic_url`, `ordinal`, `is_primary` | yes | detail gallery | synchronized |
+| `images` | array | `dwd_lingxing_sku_product_images` | `pic_url`, `ordinal`, `is_primary` | yes | detail gallery; each item identifies `source=picture_list` | synchronized |
 | `source_tags` | array | `dwd_lingxing_sku_global_tags` | `source_tag_id`, `tag_name`, `tag_color` | yes | optional table column and detail tags | synchronized |
 | `internal_tags` | array | manual tag tables | active assignment and tag fields | yes | filter/table/detail | Product-linked only |
 | `category` | string | `products` | `category` | yes | filter/table/detail | Product-linked only |
@@ -226,13 +226,19 @@ selection, filter result, permission, business value, or secret.
 | `unit_first_leg_cost` | decimal string | `dws_sku_base_profile_current` | `unit_first_leg_cost` | yes | cost column | synchronized profile; permission gated |
 | `data_quality_score` | decimal string | `dws_sku_base_profile_current` | `data_quality_score` | yes | completeness | synchronized profile |
 | `linked_platform_sku_count` | integer | `product_platform_listings` | count by optional `product_id` | no | table/summary | `0` without Product/listings |
-| SKU fee/price fields | decimal/status | ProductInfo current + DWS base profile + effective rule/defaults | calculated projection | yes | table/detail | Product mapping not required; prices remain `null` when root inputs or storage rate are unavailable |
+| SKU fee/price fields | decimal/status | ProductInfo current + DWS base profile + effective rule/defaults | calculated projection | yes | table/detail | Product mapping not required; prices remain `null` when purchase cost, weight, or package dimensions are unavailable |
 | `source_observed_at` | datetime | ProductInfo current | `source_observed_at` | yes | freshness display | synchronized |
 
 Lingxing global tags remain source tags and are not interchangeable with internal tags.
 Internal tag assignments are read-only in this API. No tag mutation route is present; any future
 writer must separately prevent overlapping effective periods for the same Product/tag pair before
 it can be approved.
+ProductInfo `data.picture_list` is parsed into the existing immutable snapshot image table. The
+detail route returns the complete, ordinal-sorted image collection for the current snapshot only;
+an empty or absent source list returns `images=[]`. Duplicate URLs inside one source list are
+collapsed before publication. Historical snapshot images remain lineage records and are not mixed
+into the current detail response. List responses continue to expose only `primary_image` and
+`image_count`.
 The separate persisted Product-linked recalculation path preserves Product Core manual-cost
 precedence. The SKU display calculation introduced here reads the DWS purchase-cost profile with a
 ProductInfo-current fallback, so an unmapped active identity can still be evaluated.
@@ -259,22 +265,25 @@ is fabricated. This read-time calculation does not overwrite listing or persiste
 
 ## 6. Daily WFS storage fee
 
-Persisted output is per unit, not an inventory bill:
+The SKU display estimate is per unit, not an inventory bill. This version intentionally uses the
+single approved 10–12 month, up-to-30-day rule: `0.75 USD/cuft/month`, a 30-day month basis, and 30
+pricing days. It does not use inventory age or implement later-age tiers.
 
 ```text
-package_volume_cuft = package_length_in * package_width_in * package_height_in / 1728
-daily_storage_fee_per_unit_usd =
-  package_volume_cuft * monthly_storage_rate_usd_per_cuft / storage_month_basis_days
-estimated_storage_fee_usd = daily_storage_fee_per_unit_usd * pricing_storage_days
+package_volume_cuft = package_length_cm * package_width_cm * package_height_cm / 28316.846592
+daily_storage_fee_per_unit_usd = package_volume_cuft * 0.75 / 30
+estimated_storage_fee_usd = package_volume_cuft * 0.75
 ```
 
-Canonical package dimensions are converted from centimetres to inches before this formula. Both day
-settings default to 30 in each new version. Missing controlled rates or dimensions produce
-`missing_rate` or `missing_dimension`; zero is not substituted.
+Valid canonical package dimensions are sufficient to calculate this estimate; missing/non-positive
+dimensions return `unavailable`, and zero is not substituted. The response uses the existing
+non-failure `storage_calc_status=ok` for a calculated estimate.
 
 ## 7. Pricing, margin, ROI, and grade
 
-All operations use `Decimal`; money is serialized as a decimal string.
+All operations use `Decimal`. Product Management API decimal amounts, dimensions, weights, volumes,
+rates, and ratios are serialized as two-place decimal strings with `ROUND_HALF_UP`; database and
+internal calculation precision remain unchanged. Count fields remain integers.
 
 ```text
 gross_weight_kg = gross_weight_g / 1000
@@ -293,9 +302,10 @@ Defaults are USD/CNY `6.7`, first leg `12 CNY/kg`, commission `0.15`, after-sale
 commission. A non-positive denominator produces `invalid_denominator` and no price. All values use
 `Decimal`; money is returned with two-place `ROUND_HALF_UP` rounding.
 
-The SKU display calculation uses the effective versioned rule where available and the documented
-defaults otherwise. Storage still requires an effective monthly rate; missing storage configuration
-returns `storage_unavailable` rather than inventing a value.
+The SKU display calculation uses the effective versioned pricing rule where available and the
+documented defaults otherwise. Its storage component uses the fixed `0.75` estimate above for this
+version, so a valid package size does not become unavailable solely because inventory age or a
+month-specific storage configuration is absent.
 
 ROI defaults to `gross_profit_cny / purchase_cost_cny`. A new rule version may choose
 `roi_base=total_cost`, using included costs. Missing/non-positive denominators fail safely.

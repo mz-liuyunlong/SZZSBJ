@@ -494,7 +494,16 @@ def test_pricing_rule_publish_closes_previous_open_version_and_records_audit(
     next_start = datetime(2026, 2, 1, tzinfo=UTC)
 
     published = service.publish_rule(
-        _pricing_rule_payload(version="synthetic-v2", effective_from=next_start),
+        _pricing_rule_payload(
+            version="synthetic-v2",
+            effective_from=next_start,
+            wfs_storage_rates=[
+                {
+                    "rate_key": "synthetic-storage",
+                    "monthly_rate_usd_per_cuft": "0.1234",
+                }
+            ],
+        ),
         frozenset({"synthetic-account"}),
         actor_ref="synthetic-user",
         request_id="synthetic-rule-request",
@@ -505,6 +514,8 @@ def test_pricing_rule_publish_closes_previous_open_version_and_records_audit(
     assert published.request_id == "synthetic-rule-request"
     assert published.action == "publish_pricing_rule"
     assert published.status == "succeeded"
+    stored_rule = service.repository.add_rule.call_args.args[0]
+    assert stored_rule.wfs_storage_rates_json[0]["monthly_rate_usd_per_cuft"] == "0.1234"
     session.commit.assert_called_once_with()
 
 

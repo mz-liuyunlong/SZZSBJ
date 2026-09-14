@@ -102,6 +102,27 @@ def test_sku_pricing_reproduces_wfs_formula_and_three_price_tiers() -> None:
     assert result.pricing_available is True
 
 
+def test_sku_pricing_uses_fixed_thirty_day_wfs_storage_rate() -> None:
+    result = calculate_sku_pricing(
+        purchase_cost_cny=Decimal("20"),
+        product_gross_weight_g=Decimal("800"),
+        dimensions_cm=(Decimal("30.48"), Decimal("30.48"), Decimal("30.48")),
+        image_count=0,
+    )
+
+    assert result.package_volume_cuft == Decimal("1.000000")
+    assert result.daily_storage_fee_per_unit_usd == Decimal("0.0250")
+    assert result.storage_fee_usd == Decimal("0.7500")
+    assert result.fixed_cost_usd == Decimal("21.5379")
+    assert result.suggested_price_usd == Decimal("47.86")
+    assert result.minimum_price_usd == Decimal("39.16")
+    assert result.clearance_price_usd == Decimal("25.34")
+    assert result.storage_calc_status == "ok"
+    assert result.calculation_status == "ok"
+    assert result.pricing_available is True
+    assert result.root_missing_codes == ("missing_dimension_image",)
+
+
 @pytest.mark.parametrize(
     ("changes", "missing_code"),
     [

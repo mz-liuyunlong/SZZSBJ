@@ -104,6 +104,25 @@ def test_product_info_fixture_maps_approved_fields_and_children() -> None:
     assert len(parsed.tags) == 1
 
 
+def test_product_info_picture_list_preserves_order_and_deduplicates_urls() -> None:
+    fixture = _detail_fixture()
+    data = fixture["data"]
+    assert isinstance(data, dict)
+    data["picture_list"] = [
+        {"pic_url": "https://example.invalid/one.jpg", "is_primary": 1},
+        {"pic_url": "https://example.invalid/two.jpg", "is_primary": 0},
+        {"pic_url": "https://example.invalid/one.jpg", "is_primary": 0},
+    ]
+
+    images = parse_product_info_fixture(fixture).images
+
+    assert [image.pic_url for image in images] == [
+        "https://example.invalid/one.jpg",
+        "https://example.invalid/two.jpg",
+    ]
+    assert [image.ordinal for image in images] == [0, 1]
+
+
 def test_batch_product_info_fixture_matches_response_ids_without_order_guessing() -> None:
     first = _detail_fixture()["data"]
     second = _detail_fixture()["data"]
