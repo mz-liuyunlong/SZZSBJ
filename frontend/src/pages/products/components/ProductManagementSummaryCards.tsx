@@ -26,7 +26,7 @@ function ProductManagementSummaryCards({
   const gradeB = rows.filter((row) => row.productGrade === "B级").length;
   const gradeC = rows.filter((row) => row.productGrade === "C级").length;
   const completeness = total > 0
-    ? rows.reduce((sum, row) => sum + row.dataCompleteness, 0) / total
+    ? rows.reduce((sum, row) => sum + (row.dataCompleteness ?? 0), 0) / total
     : 0;
   const linkedPlatformSkuCount = rows.reduce((sum, row) => sum + row.linkedPlatformSkuCount, 0);
 

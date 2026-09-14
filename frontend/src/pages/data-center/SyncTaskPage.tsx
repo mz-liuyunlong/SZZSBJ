@@ -1,7 +1,6 @@
 import { CalendarOutlined } from "@ant-design/icons";
-import { Button, Modal, Typography, message } from "antd";
-import dayjs from "dayjs";
-import { useMemo, useState, type Key } from "react";
+import { Button, Spin, Typography, message } from "antd";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
 import SyncTaskConfigDrawer from "@/pages/data-center/components/SyncTaskConfigDrawer";
@@ -10,14 +9,7 @@ import SyncTaskScheduleDrawer from "@/pages/data-center/components/SyncTaskSched
 import SyncTaskSummaryCards from "@/pages/data-center/components/SyncTaskSummaryCards";
 import SyncTaskTable from "@/pages/data-center/components/SyncTaskTable";
 import SyncTaskToolbar from "@/pages/data-center/components/SyncTaskToolbar";
-import {
-  dayScheduleItems,
-  syncTaskLogs,
-  syncTaskModules,
-  syncTaskRows,
-  syncTaskStatuses,
-  weekScheduleItems,
-} from "@/pages/data-center/syncTaskMockData";
+import { listIntegrationSyncTasks } from "@/pages/data-center/integrationSyncTaskApi";
 import type {
   SyncScheduleTab,
   SyncTaskFilters,
@@ -31,8 +23,6 @@ const anomalyStatuses = new Set<SyncTaskStatus>(["失败", "超时", "部分成�
 const createInitialFilters = (): SyncTaskFilters => ({
   keyword: "",
 });
-
-const formatNow = () => dayjs().format("YYYY-MM-DD HH:mm");
 
 const defaultColumnWidths: Record<string, number> = {
   taskName: 190,
@@ -52,7 +42,12 @@ interface SyncTaskPageProps {
 
 function SyncTaskPage({ page }: SyncTaskPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const [rows, setRows] = useState<SyncTaskRow[]>(syncTaskRows);
+  const messageApiRef = useRef(messageApi);
+  const [rows, setRows] = useState<SyncTaskRow[]>([]);
+  const [logs, setLogs] = useState<import("@/pages/data-center/syncTaskTypes").SyncTaskLog[]>([]);
+  const [scheduleItems, setScheduleItems] = useState<import("@/pages/data-center/syncTaskTypes").SyncScheduleItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [filters, setFilters] = useState(createInitialFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -63,11 +58,43 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   const [logOpen, setLogOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleInitialTab, setScheduleInitialTab] = useState<SyncScheduleTab>("day");
-  const [syncCandidate, setSyncCandidate] = useState<{
-    task: SyncTaskRow;
-    mode: "sync" | "retry";
-  }>();
-  const [disableCandidate, setDisableCandidate] = useState<SyncTaskRow>();
+
+  useEffect(() => {
+    messageApiRef.current = messageApi;
+  }, [messageApi]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve()
+      .then(() => {
+        if (active) {
+          setLoading(true);
+        }
+        return listIntegrationSyncTasks();
+      })
+      .then((result) => {
+        if (!active) return;
+        setRows(result.rows);
+        setLogs(result.logs);
+        setScheduleItems(result.schedules);
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setRows([]);
+        setLogs([]);
+        setScheduleItems([]);
+        void messageApiRef.current.error(
+          reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [refreshKey]);
+
+  const syncTaskModules = useMemo(() => Array.from(new Set(rows.map((row) => row.module))), [rows]);
+  const syncTaskStatuses: SyncTaskStatus[] = ["成功", "失败", "运行中", "部分成功", "超时", "已停用"];
 
   const filteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
@@ -83,10 +110,6 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
       );
     });
   }, [filters, rows]);
-
-  const updateRows = (task: SyncTaskRow) => {
-    setRows((currentRows) => currentRows.map((row) => (row.id === task.id ? task : row)));
-  };
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -114,66 +137,29 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   };
 
   const requestManualSync = (task: SyncTaskRow) => {
-    if (task.lastStatus === "运行中") {
-      void messageApi.warning("任务运行中，不可重复触发");
-      return;
-    }
-    setSyncCandidate({ task, mode: "sync" });
+    void task;
+    void messageApi.warning("真实执行需要 Owner 单独授权，当前未创建同步任务");
   };
 
   const requestRetry = (task: SyncTaskRow) => {
-    if (task.lastStatus === "运行中") {
-      void messageApi.warning("任务运行中，不可重复触发");
-      return;
-    }
-    setSyncCandidate({ task, mode: "retry" });
-  };
-
-  const confirmSync = () => {
-    if (!syncCandidate) return;
-    updateRows({
-      ...syncCandidate.task,
-      lastStatus: "运行中",
-      lastRunAt: formatNow(),
-    });
-    setSyncCandidate(undefined);
-    void messageApi.success(syncCandidate.mode === "retry" ? "已创建失败重试任务" : "已创建手动同步任务");
+    void task;
+    void messageApi.warning("重试需要 Owner 单独授权，当前未创建重试任务");
   };
 
   const toggleAutoSync = (task: SyncTaskRow, checked: boolean) => {
-    if (checked) {
-      updateRows({
-        ...task,
-        autoSync: true,
-        lastStatus: task.lastStatus === "已停用" ? "成功" : task.lastStatus,
-        nextRunAt: task.nextRunAt ?? "2026-09-13 00:00",
-      });
-      void messageApi.success("自动同步已开启");
-      return;
-    }
-    setDisableCandidate(task);
-  };
-
-  const confirmDisable = () => {
-    if (!disableCandidate) return;
-    updateRows({
-      ...disableCandidate,
-      autoSync: false,
-      lastStatus: "已停用",
-      nextRunAt: undefined,
-    });
-    setDisableCandidate(undefined);
-    void messageApi.success("自动同步已关闭");
+    void task;
+    void checked;
+    void messageApi.warning("调度变更需要 Owner 单独授权，当前配置未修改");
   };
 
   const saveConfig = (task: SyncTaskRow) => {
-    updateRows(task);
+    void task;
     setConfigTask(undefined);
-    void messageApi.success("配置已保存");
+    void messageApi.warning("配置写入需要 Owner 单独授权，当前配置未修改");
   };
 
   const refreshTasks = () => {
-    void messageApi.success("任务列表已刷新");
+    setRefreshKey((current) => current + 1);
   };
 
   const bulkAction = () => {
@@ -215,6 +201,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
             onReset={resetFilters}
             onRefresh={refreshTasks}
           />
+          {loading && <Spin tip="正在加载同步任务" />}
           <SyncTaskSummaryCards rows={filteredRows} />
           <SyncTaskTable
             rows={filteredRows}
@@ -252,47 +239,20 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
       <SyncTaskLogDrawer
         open={logOpen}
         task={logTask}
-        logs={syncTaskLogs}
+        logs={logs}
         onClose={() => setLogOpen(false)}
       />
       <SyncTaskScheduleDrawer
         open={scheduleOpen}
         initialTab={scheduleInitialTab}
-        dayItems={dayScheduleItems}
-        weekItems={weekScheduleItems}
+        dayItems={scheduleItems}
+        weekItems={scheduleItems}
         onClose={() => setScheduleOpen(false)}
         onOpenGlobalLog={() => {
           setScheduleOpen(false);
           openLogDrawer(undefined);
         }}
       />
-      <Modal
-        title={syncCandidate?.mode === "retry" ? "重试同步确认" : "立即同步确认"}
-        open={Boolean(syncCandidate)}
-        okText={syncCandidate?.mode === "retry" ? "确认重试" : "确认同步"}
-        cancelText="取消"
-        onOk={confirmSync}
-        onCancel={() => setSyncCandidate(undefined)}
-      >
-        <div className="sync-task__modal-warn">
-          该任务可能正在处理较大数据量。确认后会立即创建一次{syncCandidate?.mode === "retry" ? "失败重试" : "手动同步"}任务。
-        </div>
-        <Typography.Paragraph>
-          是否立即执行：{syncCandidate?.task.taskName}？
-        </Typography.Paragraph>
-      </Modal>
-      <Modal
-        title="关闭自动同步？"
-        open={Boolean(disableCandidate)}
-        okText="确认关闭"
-        cancelText="取消"
-        onOk={confirmDisable}
-        onCancel={() => setDisableCandidate(undefined)}
-      >
-        <Typography.Paragraph>
-          关闭后，系统将不再按照计划自动执行该任务，但仍可手动点击“立即同步”。
-        </Typography.Paragraph>
-      </Modal>
     </PageShell>
   );
 }

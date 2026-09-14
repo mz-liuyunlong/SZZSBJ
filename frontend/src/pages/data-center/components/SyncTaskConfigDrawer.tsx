@@ -40,7 +40,6 @@ function SyncTaskConfigDrawer({
   task,
   modules,
   onClose,
-  onSave,
 }: SyncTaskConfigDrawerProps) {
   const [form] = Form.useForm<SyncTaskConfigFormValues>();
   const cycle = Form.useWatch("cycle", form);
@@ -54,54 +53,20 @@ function SyncTaskConfigDrawer({
       description: task.description,
       cycle: task.cycle,
       autoSync: task.autoSync,
-      dailyRunCount: task.dailyRunCount,
+      dailyRunCount: task.dailyRunCount ?? undefined,
       runTimes: task.runTimes,
       weekDays: task.weekDays,
-      timeoutSeconds: task.timeoutSeconds,
-      maxFailureTimes: task.maxFailureTimes,
-      duplicatePolicy: task.duplicatePolicy,
+      timeoutSeconds: task.timeoutSeconds ?? undefined,
+      maxFailureTimes: task.maxFailureTimes ?? undefined,
+      duplicatePolicy: task.duplicatePolicy ?? undefined,
       retryEnabled: task.retryEnabled,
-      retryTimes: task.retryTimes,
-      retryInterval: task.retryInterval,
+      retryTimes: task.retryTimes ?? undefined,
+      retryInterval: task.retryInterval ?? undefined,
       notificationScenes: task.notificationScenes,
       notificationChannels: task.notificationChannels,
-      notificationTargets: task.notificationTargets,
+      notificationTargets: task.notificationTargets ?? undefined,
     });
   }, [form, open, task]);
-
-  const submit = (values: SyncTaskConfigFormValues) => {
-    if (!task) return;
-    onSave({
-      ...task,
-      taskName: values.taskName,
-      module: values.module,
-      interfaceName: values.interfaceName,
-      description: values.description,
-      cycle: values.cycle,
-      autoSync: values.autoSync,
-      frequency: values.cycle === "周任务"
-        ? `${values.weekDays.join("、") || "每周"} ${values.runTimes[0] ?? "04:00"}`
-        : values.cycle === "手动任务"
-          ? "手动触发"
-          : values.runTimes.length > 0
-            ? `每天 ${values.runTimes.join("、")}`
-            : task.frequency,
-      nextRunAt: values.autoSync ? task.nextRunAt ?? "2026-09-13 00:00" : undefined,
-      lastStatus: values.autoSync && task.lastStatus === "已停用" ? "成功" : task.lastStatus,
-      dailyRunCount: values.dailyRunCount,
-      runTimes: values.runTimes,
-      weekDays: values.weekDays,
-      timeoutSeconds: values.timeoutSeconds,
-      maxFailureTimes: values.maxFailureTimes,
-      duplicatePolicy: values.duplicatePolicy,
-      retryEnabled: values.retryEnabled,
-      retryTimes: values.retryTimes,
-      retryInterval: values.retryInterval,
-      notificationScenes: values.notificationScenes,
-      notificationChannels: values.notificationChannels,
-      notificationTargets: values.notificationTargets,
-    });
-  };
 
   return (
     <Drawer
@@ -121,7 +86,7 @@ function SyncTaskConfigDrawer({
         form={form}
         layout="vertical"
         className="sync-task__config-form"
-        onFinish={submit}
+        disabled
       >
         <section className="sync-task__drawer-section">
           <h3>基础信息</h3>
@@ -231,7 +196,7 @@ function SyncTaskConfigDrawer({
 
         <div className="sync-task__drawer-actions">
           <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={() => form.submit()}>保存配置</Button>
+          <Button type="primary" disabled>保存配置（未授权）</Button>
         </div>
       </Form>
     </Drawer>

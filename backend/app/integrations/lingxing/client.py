@@ -100,14 +100,14 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
     ),
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo": LingxingEndpointContract(
         method="POST",
-        outbound_enabled=False,
+        outbound_enabled=True,
         allow_query_parameters=False,
         require_json_body=True,
-        allowed_body_fields=frozenset(),
-        required_body_fields=frozenset(),
+        allowed_body_fields=frozenset({"productIds"}),
+        required_body_fields=frozenset({"productIds"}),
         store_field=None,
         page_size_field=None,
-        rejection_reason="pending_endpoint_contract: endpoint outbound is disabled",
+        auth_strategy="query_sign",
     ),
     "/erp/sc/routing/data/local_inventory/productList": LingxingEndpointContract(
         method="POST",
@@ -249,6 +249,8 @@ class LingxingReadonlyClient:
         contract = _ENDPOINT_CONTRACTS.get(request.api_path)
         if contract is None:
             raise LingxingClientError("Lingxing endpoint is not approved")
+        if request.api_path == "/erp/sc/routing/data/local_inventory/batchGetProductInfo":
+            raise LingxingClientError("Use the controlled ProductInfo batch method")
         if not contract.outbound_enabled:
             raise LingxingClientError(contract.rejection_reason or "Lingxing endpoint is disabled")
         if not request.store_ids:
@@ -312,6 +314,53 @@ class LingxingReadonlyClient:
         )
         return self._fetch_page(capture, page, contract)
 
+    def fetch_batch_product_info(
+        self,
+        *,
+        product_ids: tuple[str, ...],
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """Fetch one owner-authorized ProductInfo ID batch with one attempt."""
+        if not (
+            self._settings.lingxing_enable_real_calls
+            and self._settings.lingxing_enable_batch_product_info_requests
+        ):
+            raise LingxingClientError("Lingxing ProductInfo calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing source account scope is invalid")
+        if (
+            not 1 <= len(product_ids) <= 20
+            or len(set(product_ids)) != len(product_ids)
+            or any(not value or value != value.strip() for value in product_ids)
+        ):
+            raise LingxingClientError("Lingxing ProductInfo batch scope is invalid")
+        page = LingxingPageRequest.model_construct(
+            page_no=1,
+            page_size=len(product_ids),
+            params=None,
+            body={"productIds": list(product_ids)},
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/erp/sc/routing/data/local_inventory/batchGetProductInfo",
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type="lingxing_batch_product_info",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=20,
+            first_page_only=True,
+        )
+        return self._fetch_page(capture, page, contract, max_attempts=1)
+
     def _validate_outbound_contract(
         self,
         capture: LingxingCaptureRequest,
@@ -357,12 +406,14 @@ class LingxingReadonlyClient:
         capture: LingxingCaptureRequest,
         page: LingxingPageRequest,
         contract: LingxingEndpointContract,
+        *,
+        max_attempts: int = MAX_ATTEMPTS,
     ) -> LingxingRawEnvelope:
         last_status: int | None = None
         response_json: JsonValue = None
         next_access_token: SecretStr | None = None
         recovery_attempted = False
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for attempt in range(1, max_attempts + 1):
             try:
                 access_token = next_access_token or self._token_provider.get_access_token()
                 next_access_token = None
@@ -423,7 +474,7 @@ class LingxingReadonlyClient:
                         error_code="INVALID_JSON",
                         error_message="Lingxing response was not valid JSON",
                     )
-                if response.status_code >= 500 and attempt < MAX_ATTEMPTS:
+                if response.status_code >= 500 and attempt < max_attempts:
                     self._sleeper(RETRY_BACKOFF_SECONDS * attempt)
                     continue
                 if not response.is_success:
@@ -438,7 +489,7 @@ class LingxingReadonlyClient:
                     )
                 provider_code = _provider_code(response_json)
                 if provider_code == 2001003:
-                    if recovery_attempted or attempt >= MAX_ATTEMPTS:
+                    if recovery_attempted or attempt >= max_attempts:
                         return self._envelope(
                             capture,
                             page,
@@ -500,13 +551,13 @@ class LingxingReadonlyClient:
                     error_message="Lingxing query-sign authentication is unavailable",
                 )
             except httpx.HTTPError:
-                if attempt < MAX_ATTEMPTS:
+                if attempt < max_attempts:
                     self._sleeper(RETRY_BACKOFF_SECONDS * attempt)
                     continue
         return self._envelope(
             capture,
             page,
-            attempt=MAX_ATTEMPTS,
+            attempt=max_attempts,
             response_code=last_status,
             response_json=response_json,
             error_code="TRANSPORT_ERROR",

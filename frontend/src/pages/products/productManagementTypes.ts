@@ -1,38 +1,39 @@
 export type ProductGrade = "A级" | "B级" | "C级";
 
-export type ProductTag = "测品" | "清货" | "停售";
+export type ProductTag = string;
 
 export interface ProductManagementRow {
   id: string;
-  image: string;
-  sku: string;
-  productName: string;
+  image: string | null;
+  images: string[];
+  sku: string | null;
+  productName: string | null;
   tags: ProductTag[];
-  productGrade: ProductGrade;
-  category: string;
-  purchasePrice: number;
-  firstLegFreight: number;
-  wfsDeliveryFee: number;
-  purchaseLeadTime: string;
-  storageFee: number;
-  wfsFee: string;
-  suggestedPrice: string;
-  minimumPrice: string;
-  clearancePrice: string;
-  materialCn: string;
-  materialEn: string;
-  usageCn: string;
-  usageEn: string;
-  customsNameCn: string;
-  customsNameEn: string;
-  packageSpec: string;
-  cartonSpec: string;
-  productSpec: string;
-  grossWeightKg: number;
-  netWeightKg: number;
-  dataCompleteness: number;
+  productGrade: ProductGrade | "异常" | null;
+  category: string | null;
+  purchasePrice: string | null;
+  firstLegFreight: string | null;
+  wfsDeliveryFee: string | null;
+  purchaseLeadTime: string | null;
+  storageFee: string | null;
+  wfsFee: string | null;
+  suggestedPrice: string | null;
+  minimumPrice: string | null;
+  clearancePrice: string | null;
+  materialCn: string | null;
+  materialEn: string | null;
+  usageCn: string | null;
+  usageEn: string | null;
+  customsNameCn: string | null;
+  customsNameEn: string | null;
+  packageSpec: string | null;
+  cartonSpec: string | null;
+  productSpec: string | null;
+  grossWeightKg: string | null;
+  netWeightKg: string | null;
+  dataCompleteness: number | null;
   linkedPlatformSkuCount: number;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 
 export interface ProductManagementFilters {

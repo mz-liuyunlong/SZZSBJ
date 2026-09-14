@@ -4,9 +4,6 @@ import type { Key } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
-import {
-  REPORT_TABLE_PAGE_SIZE_OPTIONS,
-} from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import { CopyableTextCell, ImageCell } from "@/components/report-table/cells";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
@@ -40,10 +37,11 @@ const tagColorMap: Record<string, string> = {
   停售: "red",
 };
 
-const formatMoney = (value: number) => `$${value.toFixed(2)}`;
+const empty = <Typography.Text type="secondary">-</Typography.Text>;
 
 interface ProductManagementTableProps {
   rows: ProductManagementRow[];
+  total: number;
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
   currentPage: number;
@@ -59,6 +57,7 @@ interface ProductManagementTableProps {
 
 function ProductManagementTable({
   rows,
+  total,
   appliedColumnKeys,
   columnWidths,
   currentPage,
@@ -96,8 +95,8 @@ function ProductManagementTable({
       onHeaderCell: headerCell,
       render: (_, row) => (
         <ImageCell
-          image={row.image}
-          label={`产品图片：${row.productName}`}
+          image={row.image ?? undefined}
+          label={`产品图片：${row.productName ?? "未命名"}`}
           placement="right"
         />
       ),
@@ -108,11 +107,11 @@ function ProductManagementTable({
       title: title("sku", fieldTitle.sku),
       width: columnWidths.sku,
       fixed: "left",
-      sorter: (a, b) => a.sku.localeCompare(b.sku),
+      sorter: (a, b) => (a.sku ?? "").localeCompare(b.sku ?? ""),
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
-          text={row.sku}
+          text={row.sku ?? "-"}
           label="SKU"
           link
           onOpen={() => onOpenDetail(row)}
@@ -124,12 +123,12 @@ function ProductManagementTable({
       dataIndex: "productName",
       title: title("productName", fieldTitle.productName),
       width: columnWidths.productName,
-      sorter: (a, b) => a.productName.localeCompare(b.productName),
+      sorter: (a, b) => (a.productName ?? "").localeCompare(b.productName ?? ""),
       ellipsis: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
-          text={row.productName}
+          text={row.productName ?? "-"}
           label="产品名称"
           link
           onOpen={() => onOpenDetail(row)}
@@ -155,7 +154,8 @@ function ProductManagementTable({
       dataIndex: "productGrade",
       title: title("productGrade", fieldTitle.productGrade),
       width: columnWidths.productGrade,
-      sorter: (a, b) => a.productGrade.localeCompare(b.productGrade),
+      sorter: (a, b) => (a.productGrade ?? "").localeCompare(b.productGrade ?? ""),
+      render: (_, row) => row.productGrade ?? empty,
       onHeaderCell: headerCell,
     },
     wfsFee: {
@@ -199,7 +199,7 @@ function ProductManagementTable({
       title: title("purchasePrice", fieldTitle.purchasePrice),
       width: columnWidths.purchasePrice,
       onHeaderCell: headerCell,
-      render: (_, row) => formatMoney(row.purchasePrice),
+      render: (_, row) => row.purchasePrice ?? empty,
     },
     firstLegFreight: {
       key: "firstLegFreight",
@@ -207,7 +207,7 @@ function ProductManagementTable({
       title: title("firstLegFreight", fieldTitle.firstLegFreight),
       width: columnWidths.firstLegFreight,
       onHeaderCell: headerCell,
-      render: (_, row) => formatMoney(row.firstLegFreight),
+      render: (_, row) => row.firstLegFreight ?? empty,
     },
     wfsDeliveryFee: {
       key: "wfsDeliveryFee",
@@ -215,7 +215,7 @@ function ProductManagementTable({
       title: title("wfsDeliveryFee", fieldTitle.wfsDeliveryFee),
       width: columnWidths.wfsDeliveryFee,
       onHeaderCell: headerCell,
-      render: (_, row) => formatMoney(row.wfsDeliveryFee),
+      render: (_, row) => row.wfsDeliveryFee ?? empty,
     },
     purchaseLeadTime: {
       key: "purchaseLeadTime",
@@ -230,7 +230,7 @@ function ProductManagementTable({
       title: title("storageFee", fieldTitle.storageFee),
       width: columnWidths.storageFee,
       onHeaderCell: headerCell,
-      render: (_, row) => formatMoney(row.storageFee),
+      render: (_, row) => row.storageFee ?? empty,
     },
     linkedPlatformSkuCount: {
       key: "linkedPlatformSkuCount",
@@ -245,16 +245,17 @@ function ProductManagementTable({
       dataIndex: "dataCompleteness",
       title: title("dataCompleteness", fieldTitle.dataCompleteness),
       width: columnWidths.dataCompleteness,
-      sorter: (a, b) => a.dataCompleteness - b.dataCompleteness,
+      sorter: (a, b) => (a.dataCompleteness ?? -1) - (b.dataCompleteness ?? -1),
       onHeaderCell: headerCell,
-      render: (_, row) => `${row.dataCompleteness}%`,
+      render: (_, row) => row.dataCompleteness === null ? empty : `${row.dataCompleteness}%`,
     },
     updatedAt: {
       key: "updatedAt",
       dataIndex: "updatedAt",
       title: title("updatedAt", fieldTitle.updatedAt),
       width: columnWidths.updatedAt,
-      sorter: (a, b) => a.updatedAt.localeCompare(b.updatedAt),
+      sorter: (a, b) => (a.updatedAt ?? "").localeCompare(b.updatedAt ?? ""),
+      render: (_, row) => row.updatedAt ?? empty,
       onHeaderCell: headerCell,
     },
   };
@@ -298,10 +299,10 @@ function ProductManagementTable({
         pagination={{
           current: currentPage,
           pageSize,
-          total: rows.length,
+          total,
           showSizeChanger: true,
           showQuickJumper: true,
-          pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),
+          pageSizeOptions: ["50", "100"],
           showTotal: (total) => `共 ${total.toLocaleString()} 条数据`,
           onChange: (page, nextPageSize) => {
             onCurrentPageChange(page);

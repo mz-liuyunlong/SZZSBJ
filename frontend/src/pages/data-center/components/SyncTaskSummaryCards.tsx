@@ -43,8 +43,8 @@ function SyncTaskSummaryCards({ rows }: SyncTaskSummaryCardsProps) {
       value: rows.filter((row) => row.autoSync).length.toLocaleString("zh-CN"),
       icon: <PlayCircleOutlined />,
       tone: "green",
-      trend: "+2",
-      trendTone: "up",
+      trend: "当前",
+      trendTone: "flat",
     },
     {
       key: "success",
@@ -52,8 +52,8 @@ function SyncTaskSummaryCards({ rows }: SyncTaskSummaryCardsProps) {
       value: todaySuccess.toLocaleString("zh-CN"),
       icon: <CheckOutlined />,
       tone: "green",
-      trend: "+12.5%",
-      trendTone: "up",
+      trend: "最近运行",
+      trendTone: "flat",
     },
     {
       key: "failed",
@@ -61,8 +61,8 @@ function SyncTaskSummaryCards({ rows }: SyncTaskSummaryCardsProps) {
       value: todayFailed.toLocaleString("zh-CN"),
       icon: <CloseOutlined />,
       tone: "red",
-      trend: "-8.1%",
-      trendTone: "down",
+      trend: "最近运行",
+      trendTone: "flat",
     },
     {
       key: "running",

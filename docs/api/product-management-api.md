@@ -4,9 +4,10 @@
 
 This contract implements the approved Product Management BFF over persisted new-system data.
 Routes never request Lingxing, Walmart, Token endpoints, legacy MySQL, or RAW payloads. The
-`batchGetProductInfo` provider contract is still incomplete, so its outbound path remains disabled
-and fails closed until separate Owner authorization and repository-verifiable official evidence
-exist.
+ProductInfo executor is a separate controlled write path: after every production gate is satisfied,
+it may call only contract `LX-BB8D0DF598AF` with a `productIds` body and publish the successful
+response through the existing ODS/DWD/DWS storage chain. The BFF never invokes that executor.
+No real provider call or production write has been performed by this implementation task.
 
 All responses use:
 
@@ -21,8 +22,8 @@ All responses use:
 ```
 
 `{sku_id}` is the internal UUID from `dwd_lingxing_sku_identity_index.id`. It is not a SKU
-string, MSKU, Lingxing external ID, or an inferred Product ID. Product Core is joined only when the
-identity mapping is `confirmed`.
+string, MSKU, Lingxing external ID, or an inferred Product ID. Active identities remain readable
+before Product bootstrap; Product Core is an optional left join through `identity.product_id`.
 
 ## 2. Authentication, permissions, and scope
 
@@ -39,8 +40,14 @@ require a non-empty trusted `source_account_ref` scope.
 | Recalculate pricing | `products:pricing:recalculate` |
 | Save table view | `products:table_views:update` |
 
-Missing auth, permission, Product scope, account scope, or confirmed mapping fails closed. A
-resource outside scope is not returned.
+Missing auth, permission, Product scope, or account scope fails closed. A resource outside scope is
+not returned. Product bootstrap is not required for list/detail reads.
+
+For local Vite development only, `VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN` may be supplied through the
+developer's untracked local environment. The shared frontend API client sends it as
+`X-Product-Management-Preview-Token` only in Vite DEV mode. Preview authentication permits only GET
+requests under `/api/product-management/` and the exact GET table-view path; all write methods remain
+unauthorized. Never commit a real preview token or a token-bearing `.env.local` file.
 
 ## 3. Endpoints
 
@@ -49,8 +56,8 @@ resource outside scope is not returned.
 Server-side bounded list. Query parameters:
 
 - `page` (default 1) and `page_size` (default 20, maximum 100)
-- optional fuzzy `sku`, exact `sku_batch`, `product_name`, `product_grade`, and
-  `calculation_status`
+- optional fuzzy `sku`, exact `sku_batch`, `product_name`, `category`, exact `internal_tag`,
+  `product_grade`, and `calculation_status`
 - `sort_by`: `sku`, `product_name`, `product_grade`, or `calculated_at`
 - `sort_order`: `asc` or `desc`
 
@@ -60,10 +67,12 @@ accepts at most 1,000 unique values of at most 128 characters each, is mutually 
 `sku`, and is applied as an exact repository/database filter. Empty or oversized input returns 422;
 clients must not download the full list and filter it locally.
 
-The stable secondary order is the internal identity UUID. Core response fields are `sku_id`,
-Product Core `sku`/`product_name`, primary image, internal tags, effective grade, calculation
-status, calculation timestamp, and rule version. `grade_reason` distinguishes a Product Core manual
-grade from a calculated grade. Fee and price values carry `USD`/`CNY` currency codes. Sensitive
+The stable secondary order is the internal identity UUID. `sku_id` is always the identity UUID.
+`sku` and `product_name` prefer Product Core when it exists, otherwise they use the persisted
+ProductInfo current projection. Other fields include primary image, internal tags, category,
+effective grade, calculation status, calculation timestamp, and rule version. `grade_reason`
+distinguishes a Product Core manual grade from a calculated grade. Fee and price values carry
+`USD`/`CNY` currency codes. Sensitive
 monetary results are `null` unless the principal has `products:cost:read`.
 `meta.list_freshness_at` is the oldest source observation among the returned page, while
 `meta.latest_observed_at` is the newest. This prevents a recently observed row from hiding an older
@@ -73,9 +82,9 @@ system update time.
 
 ### `GET /api/product-management/skus/{sku_id}`
 
-Returns confirmed Product Core identity, approved persisted detail fields, images, internal tags,
-and a persisted pricing summary. It does not return developer/owner fields by default and does not
-preload history or RAW.
+Returns the active identity, optional Product Core, approved persisted ProductInfo detail fields,
+images, ProductInfo source tags, internal tags, and an optional persisted pricing summary. It does
+not return developer/owner fields by default and does not preload history or RAW.
 
 ### `GET /api/product-management/options`
 
@@ -163,15 +172,38 @@ selection, filter result, permission, business value, or secret.
 | Field group | Source |
 |---|---|
 | Internal `sku_id` and account scope | `dwd_lingxing_sku_identity_index` |
-| `sku`, product name, manual grade | confirmed mapping to `products` |
+| `sku`, product name | Product Core when present, otherwise ProductInfo current |
+| Product Core category/status/manual grade | optional mapping to `products` |
 | Product detail and source observation time | `dwd_lingxing_sku_product_info_current` |
 | Images | `dwd_lingxing_sku_product_images` |
+| Lingxing source tags | `dwd_lingxing_sku_global_tags` |
 | Internal tags | `manual_product_tags` and effective assignments |
 | Dimensions, weight, purchase/first-leg source profile | `dws_sku_base_profile_current` |
 | Rules | `ref_product_pricing_rule_versions` |
 | Recalculation run/audit | `product_pricing_recalculation_runs` |
 | Current price/fee/ROI/grade result | `dws_product_management_pricing_current` |
 | Column preferences | `user_table_views` |
+
+### 4.1 Product Management frontend field metadata
+
+| field | type | source_table | source_column | nullable | frontend_usage | source_status |
+|---|---|---|---|---|---|---|
+| `sku_id` | UUID | `dwd_lingxing_sku_identity_index` | `id` | no | row key and detail route | persisted |
+| `sku` | string | `products` / `dwd_lingxing_sku_product_info_current` / identity index | `sku` / `lingxing_sku_code` | yes | table and detail | Product preferred; synchronized fallback |
+| `product_name` | string | `products` / ProductInfo current | `product_name` | yes | table and detail | Product preferred; synchronized fallback |
+| `primary_image` | string | `dwd_lingxing_sku_product_images` | `pic_url` | yes | image cell | synchronized |
+| `images` | array | `dwd_lingxing_sku_product_images` | `pic_url`, `ordinal`, `is_primary` | yes | detail gallery | synchronized |
+| `source_tags` | array | `dwd_lingxing_sku_global_tags` | `source_tag_id`, `tag_name`, `tag_color` | yes | detail tags | synchronized |
+| `internal_tags` | array | manual tag tables | active assignment and tag fields | yes | filter/table/detail | Product-linked only |
+| `category` | string | `products` | `category` | yes | filter/table/detail | Product-linked only |
+| `purchase_delivery_days` | integer | ProductInfo current | `purchase_delivery_days` | yes | table/detail | synchronized |
+| material/customs/dimension/weight fields | decimal/string | ProductInfo current | matching standardized columns | yes | detail | synchronized when supplied |
+| `purchase_cost_cny` | decimal string | `dws_sku_base_profile_current` | `purchase_cost_cny` | yes | cost column | synchronized profile; permission gated |
+| `unit_first_leg_cost` | decimal string | `dws_sku_base_profile_current` | `unit_first_leg_cost` | yes | cost column | synchronized profile; permission gated |
+| `data_quality_score` | decimal string | `dws_sku_base_profile_current` | `data_quality_score` | yes | completeness | synchronized profile |
+| `linked_platform_sku_count` | integer | `product_platform_listings` | count by optional `product_id` | no | table/summary | `0` without Product/listings |
+| fee/price/ROI/grade fields | decimal/status | `dws_product_management_pricing_current` | matching calculated columns | yes | table/detail | `null` until a valid persisted calculation exists |
+| `source_observed_at` | datetime | ProductInfo current | `source_observed_at` | yes | freshness display | synchronized |
 
 Lingxing global tags remain source tags and are not interchangeable with internal tags.
 Internal tag assignments are read-only in this API. No tag mutation route is present; any future

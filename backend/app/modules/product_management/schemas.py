@@ -130,6 +130,11 @@ class ProductManagementListQuery(StrictSchema):
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
         | None
     ) = None
+    category: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+        | None
+    ) = None
+    internal_tag: Nonblank128 | None = None
     product_grade: Literal["A", "B", "C", "exception"] | None = None
     calculation_status: Nonblank64 | None = None
     sort_by: Literal["sku", "product_name", "product_grade", "calculated_at"] = "sku"
@@ -178,10 +183,18 @@ class InternalTagRead(StrictSchema):
 
 class ProductManagementListItem(StrictSchema):
     sku_id: UUID
-    sku: str
-    product_name: str
+    sku: str | None
+    product_name: str | None
     primary_image: str | None
     internal_tags: list[InternalTagRead]
+    category: str | None
+    purchase_cost_cny: Money | None
+    unit_first_leg_cost: Money | None
+    unit_first_leg_currency_code: str | None
+    purchase_delivery_days: int | None
+    data_quality_score: DecimalSix | None
+    linked_platform_sku_count: int
+    source_observed_at: datetime | None
     product_grade: Literal["A", "B", "C", "exception"] | None
     grade_reason: str | None
     wfs_fulfillment_fee: Money | None
@@ -213,18 +226,28 @@ class ProductCoreRead(StrictSchema):
 
 
 class SyncedProductDetailRead(StrictSchema):
+    product_name: str | None
     purchase_delivery_days: int | None
     purchase_material: str | None
     customs_export_name_cn: str | None
     customs_import_name_en: str | None
     china_hs_code: str | None
+    clearance_material_cn: str | None
+    clearance_usage_cn: str | None
+    clearance_material_en: str | None
     product_length_cm: Money | None
     product_width_cm: Money | None
     product_height_cm: Money | None
+    product_net_weight_g: Money | None
     product_gross_weight_g: Money | None
     package_length_cm: Money | None
     package_width_cm: Money | None
     package_height_cm: Money | None
+    box_length_cm: Money | None
+    box_width_cm: Money | None
+    box_height_cm: Money | None
+    box_pcs: int | None
+    box_weight_kg: Money | None
     source_observed_at: datetime
 
 
@@ -232,6 +255,12 @@ class ProductImageRead(StrictSchema):
     ordinal: int
     url: str
     is_primary: bool | None
+
+
+class SourceTagRead(StrictSchema):
+    source_tag_id: str | None
+    label: str | None
+    color: str | None
 
 
 class CostComponentRead(StrictSchema):
@@ -293,9 +322,10 @@ class PricingBreakdownRead(StrictSchema):
 
 class ProductManagementDetailData(StrictSchema):
     sku_id: UUID
-    core: ProductCoreRead
+    core: ProductCoreRead | None
     synced_detail: SyncedProductDetailRead | None
     images: list[ProductImageRead]
+    source_tags: list[SourceTagRead]
     internal_tags: list[InternalTagRead]
     pricing: PricingBreakdownRead | None
 

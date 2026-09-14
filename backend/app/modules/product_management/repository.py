@@ -15,8 +15,9 @@ from app.modules.product_management.models import (
     ProductPricingRuleVersion,
     UserTableView,
 )
-from app.modules.products.models import Product
+from app.modules.products.models import Product, ProductPlatformListing
 from app.modules.sku_detail.models import (
+    LingxingSkuGlobalTag,
     LingxingSkuIdentity,
     LingxingSkuProductImage,
     LingxingSkuProductInfoCurrent,
@@ -25,7 +26,7 @@ from app.modules.sku_detail.models import (
 
 type ProductManagementProjection = tuple[
     LingxingSkuIdentity,
-    Product,
+    Product | None,
     LingxingSkuProductInfoCurrent | None,
     SkuBaseProfileCurrent | None,
     ProductManagementPricingCurrent | None,
@@ -49,6 +50,8 @@ class ProductManagementRepository:
         sku: str | None,
         sku_batch: Sequence[str],
         product_name: str | None,
+        category: str | None,
+        internal_tag: str | None,
         product_grade: str | None,
         calculation_status: str | None,
         sort_by: str,
@@ -59,21 +62,37 @@ class ProductManagementRepository:
             (Product.grade.is_not(None), "exception"),
             else_=ProductManagementPricingCurrent.product_grade,
         )
+        effective_sku = func.coalesce(Product.sku, LingxingSkuIdentity.lingxing_sku_code)
+        effective_name = func.coalesce(
+            Product.product_name,
+            LingxingSkuProductInfoCurrent.product_name,
+        )
         statement = self._projection().where(
             LingxingSkuIdentity.source_account_ref.in_(account_refs),
             LingxingSkuIdentity.is_active.is_(True),
-            LingxingSkuIdentity.mapping_status == "confirmed",
-            LingxingSkuIdentity.product_id.is_not(None),
-            Product.deleted_at.is_(None),
+            or_(Product.id.is_(None), Product.deleted_at.is_(None)),
         )
         if sku is not None:
-            statement = statement.where(Product.sku.contains(sku, autoescape=True))
+            statement = statement.where(effective_sku.contains(sku, autoescape=True))
         if sku_batch:
-            statement = statement.where(Product.sku.in_(sku_batch))
+            statement = statement.where(effective_sku.in_(sku_batch))
         if product_name is not None:
-            statement = statement.where(
-                Product.product_name.contains(product_name, autoescape=True)
+            statement = statement.where(effective_name.contains(product_name, autoescape=True))
+        if category is not None:
+            statement = statement.where(Product.category.contains(category, autoescape=True))
+        if internal_tag is not None:
+            tagged_product_ids = (
+                select(ManualProductTagAssignment.product_id)
+                .join(ManualProductTag)
+                .where(
+                    or_(
+                        ManualProductTag.tag_key == internal_tag,
+                        ManualProductTag.label == internal_tag,
+                    ),
+                    ManualProductTag.is_active.is_(True),
+                )
             )
+            statement = statement.where(Product.id.in_(tagged_product_ids))
         if product_grade is not None:
             statement = statement.where(effective_grade == product_grade)
         if calculation_status is not None:
@@ -84,8 +103,8 @@ class ProductManagementRepository:
             select(func.count()).select_from(statement.order_by(None).subquery())
         )
         sort_columns = {
-            "sku": Product.sku,
-            "product_name": Product.product_name,
+            "sku": effective_sku,
+            "product_name": effective_name,
             "product_grade": effective_grade,
             "calculated_at": ProductManagementPricingCurrent.calculated_at,
         }
@@ -107,9 +126,7 @@ class ProductManagementRepository:
                 LingxingSkuIdentity.id == sku_id,
                 LingxingSkuIdentity.source_account_ref.in_(account_refs),
                 LingxingSkuIdentity.is_active.is_(True),
-                LingxingSkuIdentity.mapping_status == "confirmed",
-                LingxingSkuIdentity.product_id.is_not(None),
-                Product.deleted_at.is_(None),
+                or_(Product.id.is_(None), Product.deleted_at.is_(None)),
             )
         ).first()
         return None if row is None else tuple(row)
@@ -138,12 +155,34 @@ class ProductManagementRepository:
             result.setdefault(product_id, []).append(tag)
         return result
 
+    def listing_counts(self, product_ids: Sequence[UUID]) -> dict[UUID, int]:
+        if not product_ids:
+            return {}
+        rows = self.session.execute(
+            select(ProductPlatformListing.product_id, func.count())
+            .where(
+                ProductPlatformListing.product_id.in_(product_ids),
+                ProductPlatformListing.deleted_at.is_(None),
+            )
+            .group_by(ProductPlatformListing.product_id)
+        ).all()
+        return {product_id: int(count) for product_id, count in rows}
+
     def list_images(self, snapshot_id: UUID) -> list[LingxingSkuProductImage]:
         return list(
             self.session.scalars(
                 select(LingxingSkuProductImage)
                 .where(LingxingSkuProductImage.source_snapshot_id == snapshot_id)
                 .order_by(LingxingSkuProductImage.ordinal, LingxingSkuProductImage.id)
+            ).all()
+        )
+
+    def list_source_tags(self, snapshot_id: UUID) -> list[LingxingSkuGlobalTag]:
+        return list(
+            self.session.scalars(
+                select(LingxingSkuGlobalTag)
+                .where(LingxingSkuGlobalTag.source_snapshot_id == snapshot_id)
+                .order_by(LingxingSkuGlobalTag.ordinal, LingxingSkuGlobalTag.id)
             ).all()
         )
 
@@ -332,7 +371,7 @@ class ProductManagementRepository:
                 ProductPricingRuleVersion,
                 LingxingSkuProductImage,
             )
-            .join(Product, Product.id == LingxingSkuIdentity.product_id)
+            .outerjoin(Product, Product.id == LingxingSkuIdentity.product_id)
             .outerjoin(
                 LingxingSkuProductInfoCurrent,
                 LingxingSkuProductInfoCurrent.identity_id == LingxingSkuIdentity.id,

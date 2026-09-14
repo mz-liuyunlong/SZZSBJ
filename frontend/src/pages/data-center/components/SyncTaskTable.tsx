@@ -37,7 +37,7 @@ const statusColors: Record<SyncTaskStatus, string> = {
 const anomalyStatuses = new Set<SyncTaskStatus>(["失败", "超时", "部分成功"]);
 
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
-const compareDate = (left?: string, right?: string) => Date.parse(left ?? "") - Date.parse(right ?? "");
+const compareDate = (left?: string | null, right?: string | null) => Date.parse(left ?? "") - Date.parse(right ?? "");
 
 function SyncTaskTable({
   rows,
@@ -88,6 +88,7 @@ function SyncTaskTable({
         <Switch
           size="small"
           checked={row.autoSync}
+          disabled
           aria-label={`${row.taskName}自动同步开关`}
           onChange={(checked) => onToggleAutoSync(row, checked)}
         />
@@ -120,6 +121,7 @@ function SyncTaskTable({
       key: "lastRunAt",
       width: 158,
       sorter: (left, right) => compareDate(left.lastRunAt, right.lastRunAt),
+      render: (_, row) => row.lastRunAt ?? <Typography.Text type="secondary">-</Typography.Text>,
     },
     {
       title: "今日成功/失败",
@@ -135,13 +137,13 @@ function SyncTaskTable({
       fixed: "right",
       render: (_, row) => {
         const primaryAction = anomalyStatuses.has(row.lastStatus) ? (
-          <Button type="link" danger onClick={() => onRequestRetry(row)}>重试</Button>
+          <Button type="link" danger disabled onClick={() => onRequestRetry(row)}>重试</Button>
         ) : row.lastStatus === "运行中" ? (
           <Tooltip title="任务运行中，不可重复触发">
             <Button type="link" disabled>立即同步</Button>
           </Tooltip>
         ) : (
-          <Button type="link" onClick={() => onRequestSync(row)}>立即同步</Button>
+          <Button type="link" disabled onClick={() => onRequestSync(row)}>立即同步</Button>
         );
 
         return (

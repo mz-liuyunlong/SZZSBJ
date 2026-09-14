@@ -15,12 +15,19 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
     {
         "products:read",
         "products:pricing_rules:read",
-        "products:table_views:update",
         "products:cost:read",
+        "integrations:read",
     }
 )
 _PREVIEW_PATH_PREFIX: Final = "/api/product-management/"
-_PREVIEW_TABLE_VIEW_PATH: Final = "/api/user-table-views/product-management"
+_PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
+    {
+        "/api/user-table-views/product-management",
+        "/api/integrations/interfaces",
+        "/api/integrations/sync-configs",
+        "/api/integrations/sync-runs",
+    }
+)
 
 
 def _constant_time_ascii_equals(provided: str, expected: SecretStr) -> bool:
@@ -45,10 +52,12 @@ class Principal:
 
 
 def get_optional_principal(request: Request) -> Principal | None:
-    """Return the temporary path-bound preview principal or fail closed."""
+    """Return the temporary read-only preview principal or fail closed."""
     path = request.scope.get("path")
-    if not isinstance(path, str) or not (
-        path.startswith(_PREVIEW_PATH_PREFIX) or path == _PREVIEW_TABLE_VIEW_PATH
+    if (
+        request.method != "GET"
+        or not isinstance(path, str)
+        or not (path.startswith(_PREVIEW_PATH_PREFIX) or path in _PREVIEW_READ_PATHS)
     ):
         return None
     try:

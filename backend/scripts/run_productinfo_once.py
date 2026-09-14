@@ -11,6 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import AppEnvironment, get_settings  # noqa: E402
 from app.db.session import get_session_factory  # noqa: E402
+from app.modules.integration_sync.handlers.lingxing_product_info_executor import (  # noqa: E402
+    LingxingProductInfoExecutor,
+    product_info_client,
+)
 from app.modules.integration_sync.product_info_runner import (  # noqa: E402
     ProductInfoOneTimeRunError,
     ProductInfoOneTimeRunner,
@@ -45,12 +49,23 @@ def main() -> int:
         if not settings.lingxing_dry_run and not dwd_write_authorized:
             raise ProductInfoOneTimeRunError("PRODUCT_INFO_EXECUTION_SETTINGS_NOT_AUTHORIZED")
         with get_session_factory()() as session:
-            result = ProductInfoOneTimeRunner(session).run(
-                source_account_ref=source_account_ref,
-                dry_run=settings.lingxing_dry_run,
-                dwd_write_authorized=dwd_write_authorized,
-                product_bootstrap_authorized=product_bootstrap_authorized,
-            )
+            if settings.lingxing_dry_run:
+                result = ProductInfoOneTimeRunner(session).run(
+                    source_account_ref=source_account_ref,
+                    dry_run=True,
+                    product_bootstrap_authorized=product_bootstrap_authorized,
+                )
+            else:
+                with product_info_client() as client:
+                    result = ProductInfoOneTimeRunner(
+                        session,
+                        executor=LingxingProductInfoExecutor(session, client=client),
+                    ).run(
+                        source_account_ref=source_account_ref,
+                        dry_run=False,
+                        dwd_write_authorized=dwd_write_authorized,
+                        product_bootstrap_authorized=product_bootstrap_authorized,
+                    )
     except ProductInfoOneTimeRunError as error:
         print(str(error))
         return 2
