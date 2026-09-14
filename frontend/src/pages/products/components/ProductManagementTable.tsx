@@ -1,6 +1,6 @@
 import { Button, Space, Tag, Tooltip, Typography } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import type { Key } from "react";
+import type { Key, ReactNode } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
@@ -14,6 +14,7 @@ const minColumnWidths: Record<string, number> = {
   sku: 160,
   productName: 220,
   tags: 120,
+  sourceTags: 120,
   productGrade: 110,
   wfsFee: 110,
   suggestedPrice: 120,
@@ -38,6 +39,21 @@ const tagColorMap: Record<string, string> = {
 };
 
 const empty = <Typography.Text type="secondary">-</Typography.Text>;
+const missingRootCodes = new Set([
+  "missing_purchase_cost",
+  "missing_gross_weight",
+  "missing_package_dimensions",
+]);
+
+function calculatedValue(value: ReactNode, row: ProductManagementRow) {
+  if (value) return value;
+  const label = row.rootMissingCodes.some((code) => missingRootCodes.has(code))
+    ? "缺基础数据"
+    : row.calculationStatus === "invalid_denominator"
+      ? "规则异常"
+      : "无法计算";
+  return <Typography.Text type="secondary">{label}</Typography.Text>;
+}
 
 interface ProductManagementTableProps {
   rows: ProductManagementRow[];
@@ -149,6 +165,20 @@ function ProductManagementTable({
         </Space>
       ),
     },
+    sourceTags: {
+      key: "sourceTags",
+      dataIndex: "sourceTags",
+      title: title("sourceTags", fieldTitle.sourceTags),
+      width: columnWidths.sourceTags,
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Space size={4} wrap>
+          {row.sourceTags.length > 0 ? row.sourceTags.map((tag) => (
+            <Tag key={tag}>{tag}</Tag>
+          )) : <Typography.Text type="secondary">-</Typography.Text>}
+        </Space>
+      ),
+    },
     productGrade: {
       key: "productGrade",
       dataIndex: "productGrade",
@@ -164,6 +194,7 @@ function ProductManagementTable({
       title: title("wfsFee", fieldTitle.wfsFee),
       width: columnWidths.wfsFee,
       onHeaderCell: headerCell,
+      render: (_, row) => calculatedValue(row.wfsFee, row),
     },
     suggestedPrice: {
       key: "suggestedPrice",
@@ -171,6 +202,7 @@ function ProductManagementTable({
       title: title("suggestedPrice", fieldTitle.suggestedPrice),
       width: columnWidths.suggestedPrice,
       onHeaderCell: headerCell,
+      render: (_, row) => calculatedValue(row.suggestedPrice, row),
     },
     minimumPrice: {
       key: "minimumPrice",
@@ -178,6 +210,7 @@ function ProductManagementTable({
       title: title("minimumPrice", fieldTitle.minimumPrice),
       width: columnWidths.minimumPrice,
       onHeaderCell: headerCell,
+      render: (_, row) => calculatedValue(row.minimumPrice, row),
     },
     clearancePrice: {
       key: "clearancePrice",
@@ -185,6 +218,7 @@ function ProductManagementTable({
       title: title("clearancePrice", fieldTitle.clearancePrice),
       width: columnWidths.clearancePrice,
       onHeaderCell: headerCell,
+      render: (_, row) => calculatedValue(row.clearancePrice, row),
     },
     category: {
       key: "category",
@@ -207,7 +241,7 @@ function ProductManagementTable({
       title: title("firstLegFreight", fieldTitle.firstLegFreight),
       width: columnWidths.firstLegFreight,
       onHeaderCell: headerCell,
-      render: (_, row) => row.firstLegFreight ?? empty,
+      render: (_, row) => calculatedValue(row.firstLegFreight, row),
     },
     wfsDeliveryFee: {
       key: "wfsDeliveryFee",
@@ -215,7 +249,7 @@ function ProductManagementTable({
       title: title("wfsDeliveryFee", fieldTitle.wfsDeliveryFee),
       width: columnWidths.wfsDeliveryFee,
       onHeaderCell: headerCell,
-      render: (_, row) => row.wfsDeliveryFee ?? empty,
+      render: (_, row) => calculatedValue(row.wfsDeliveryFee, row),
     },
     purchaseLeadTime: {
       key: "purchaseLeadTime",
@@ -230,7 +264,7 @@ function ProductManagementTable({
       title: title("storageFee", fieldTitle.storageFee),
       width: columnWidths.storageFee,
       onHeaderCell: headerCell,
-      render: (_, row) => row.storageFee ?? empty,
+      render: (_, row) => calculatedValue(row.storageFee, row),
     },
     linkedPlatformSkuCount: {
       key: "linkedPlatformSkuCount",

@@ -1,5 +1,5 @@
 import { Card, Spin, message } from "antd";
-import { useEffect, useMemo, useRef, useState, type Key } from "react";
+import { useEffect, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -10,14 +10,13 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import ProductDetailModal from "@/pages/products/components/ProductDetailModal";
-import ProductManagementSummaryCards, {
-  type ProductManagementSummaryCardKey,
-} from "@/pages/products/components/ProductManagementSummaryCards";
+import ProductManagementSummaryCards from "@/pages/products/components/ProductManagementSummaryCards";
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
 import {
   getProductManagementOptions,
   getProductManagementSku,
+  getProductManagementSummary,
   getProductManagementTableView,
   listProductManagementSkus,
   requestProductManagementExport,
@@ -28,6 +27,7 @@ import {
   productColumnFields,
   type ProductManagementFilters,
   type ProductManagementRow,
+  type ProductManagementSummary,
   type ProductGrade,
   type ProductTag,
 } from "@/pages/products/productManagementTypes";
@@ -44,18 +44,19 @@ const defaultColumnKeys = productColumnFields
     "image",
     "sku",
     "productName",
-    "tags",
-    "productGrade",
-    "wfsFee",
-    "suggestedPrice",
-    "minimumPrice",
-    "clearancePrice",
+    "category",
+    "purchasePrice",
+    "firstLegFreight",
+    "purchaseLeadTime",
+    "dataCompleteness",
+    "updatedAt",
   ].includes(key));
 const defaultColumnWidths: Record<string, number> = {
   image: 72,
   sku: 170,
   productName: 240,
   tags: 132,
+  sourceTags: 132,
   productGrade: 116,
   wfsFee: 118,
   suggestedPrice: 128,
@@ -81,12 +82,25 @@ interface ProductManagementPageProps {
   page: NavigationPage;
 }
 
+const emptySummary: ProductManagementSummary = {
+  syncedDetailCount: 0,
+  dataCompletenessRate: 0,
+  withImageCount: 0,
+  withSourceTagCount: 0,
+  incompleteCount: 0,
+  missingPurchaseCostCount: 0,
+  missingGrossWeightCount: 0,
+  missingPackageDimensionsCount: 0,
+  missingDimensionImageCount: 0,
+  invalidPricingRuleCount: 0,
+  pricingOkCount: 0,
+};
+
 function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const messageApiRef = useRef(messageApi);
   const [filters, setFilters] = useState(createInitialFilters);
-  const [statisticsVisible, setStatisticsVisible] = useState(true);
-  const [summaryFilterKey, setSummaryFilterKey] = useState<ProductManagementSummaryCardKey>("total");
+  const [statisticsVisible, setStatisticsVisible] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
@@ -96,6 +110,7 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [detailRow, setDetailRow] = useState<ProductManagementRow>();
   const [rows, setRows] = useState<ProductManagementRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<ProductManagementSummary>(emptySummary);
   const [grades, setGrades] = useState<ProductGrade[]>([]);
   const [tags, setTags] = useState<ProductTag[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +148,22 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   }, [currentPage, filters, pageSize]);
 
   useEffect(() => {
+    if (!statisticsVisible) return;
+    let active = true;
+    void getProductManagementSummary(filters)
+      .then((result) => {
+        if (active) setSummary(result);
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        void messageApiRef.current.error(
+          reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+        );
+      });
+    return () => { active = false; };
+  }, [filters, statisticsVisible]);
+
+  useEffect(() => {
     void getProductManagementOptions()
       .then((options) => {
         setGrades(options.grades);
@@ -154,41 +185,11 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
 
   const updateFilters = (nextFilters: ProductManagementFilters) => {
     setFilters(nextFilters);
-    setSummaryFilterKey("total");
-    resetPageAndSelection();
-  };
-
-  const toolbarFilteredRows = useMemo(() => {
-    const keyword = filters.keyword.trim().toLocaleLowerCase();
-    const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
-    return rows.filter((row) => {
-      const target = String(row[filters.searchType]).toLocaleLowerCase();
-      return (!filters.productGrade || row.productGrade === filters.productGrade)
-        && (!filters.tag || row.tags.includes(filters.tag))
-        && (!keyword || target.includes(keyword))
-        && (batchValues.length === 0 || (
-          row.sku !== null && batchValues.includes(row.sku.toLocaleLowerCase())
-        ));
-    });
-  }, [filters, rows]);
-
-  const filteredRows = useMemo(() => {
-    if (summaryFilterKey === "gradeA") return toolbarFilteredRows.filter((row) => row.productGrade === "A级");
-    if (summaryFilterKey === "gradeB") return toolbarFilteredRows.filter((row) => row.productGrade === "B级");
-    if (summaryFilterKey === "gradeC") return toolbarFilteredRows.filter((row) => row.productGrade === "C级");
-    if (summaryFilterKey === "complete") return toolbarFilteredRows.filter((row) => (row.dataCompleteness ?? 0) >= 90);
-    if (summaryFilterKey === "linked") return toolbarFilteredRows.filter((row) => row.linkedPlatformSkuCount > 0);
-    return toolbarFilteredRows;
-  }, [summaryFilterKey, toolbarFilteredRows]);
-
-  const handleSummaryCardClick = (key: ProductManagementSummaryCardKey) => {
-    setSummaryFilterKey(key);
     resetPageAndSelection();
   };
 
   const resetFilters = () => {
     setFilters(createInitialFilters());
-    setSummaryFilterKey("total");
     resetPageAndSelection();
   };
 
@@ -226,16 +227,15 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
 
           {statisticsVisible && (
             <ProductManagementSummaryCards
-              rows={toolbarFilteredRows}
-              activeKey={summaryFilterKey}
-              onCardClick={handleSummaryCardClick}
+              total={total}
+              summary={summary}
             />
           )}
 
           <div className="product-management__table-wrap">
             {loading && <Spin tip="正在加载产品数据" />}
             <ProductManagementTable
-              rows={filteredRows}
+              rows={rows}
               total={total}
               appliedColumnKeys={appliedColumnKeys}
               columnWidths={columnWidths}

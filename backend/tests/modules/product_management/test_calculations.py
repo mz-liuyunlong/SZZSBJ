@@ -7,10 +7,12 @@ from app.modules.product_management.calculations import (
     IdentityWfsOverride,
     ListingWfsOverride,
     PricingRule,
+    SkuPricingRule,
     StorageResult,
     WfsFeeResult,
     WfsFulfillmentRate,
     calculate_pricing,
+    calculate_sku_pricing,
     calculate_storage,
     select_wfs_fee,
 )
@@ -72,6 +74,98 @@ def _listing(
         is_primary=primary,
         is_active=True,
     )
+
+
+def test_sku_pricing_reproduces_wfs_formula_and_three_price_tiers() -> None:
+    result = calculate_sku_pricing(
+        purchase_cost_cny=Decimal("20"),
+        product_gross_weight_g=Decimal("800"),
+        dimensions_cm=(Decimal("16"), Decimal("13"), Decimal("13")),
+        image_count=2,
+        storage_fee_usd=Decimal("0.3"),
+    )
+
+    assert result.wfs_actual_weight_lb == Decimal("1.763668")
+    assert result.wfs_dimensional_weight_lb == Decimal("1.187110")
+    assert result.wfs_chargeable_weight_lb == Decimal("3")
+    assert result.wfs_base_fee_usd == Decimal("4.25")
+    assert result.wfs_fulfillment_fee_usd == Decimal("5.4500")
+    assert result.gross_weight_kg == Decimal("0.800000")
+    assert result.first_leg_volume_weight_kg == Decimal("0.450667")
+    assert result.first_leg_chargeable_weight_kg == Decimal("0.800000")
+    assert result.first_leg_fee_cny == Decimal("9.6000")
+    assert result.fixed_cost_usd == Decimal("10.1679")
+    assert result.suggested_price_usd == Decimal("22.60")
+    assert result.minimum_price_usd == Decimal("18.49")
+    assert result.clearance_price_usd == Decimal("11.96")
+    assert result.calculation_status == "ok"
+    assert result.pricing_available is True
+
+
+@pytest.mark.parametrize(
+    ("changes", "missing_code"),
+    [
+        ({"purchase_cost_cny": None}, "missing_purchase_cost"),
+        ({"product_gross_weight_g": None}, "missing_gross_weight"),
+        ({"dimensions_cm": (Decimal("16"), None, Decimal("13"))}, "missing_package_dimensions"),
+    ],
+)
+def test_sku_pricing_missing_billing_inputs_fail_closed(
+    changes: dict[str, object], missing_code: str
+) -> None:
+    inputs: dict[str, object] = {
+        "purchase_cost_cny": Decimal("20"),
+        "product_gross_weight_g": Decimal("800"),
+        "dimensions_cm": (Decimal("16"), Decimal("13"), Decimal("13")),
+        "image_count": 2,
+        "storage_fee_usd": Decimal("0.3"),
+    }
+    inputs.update(changes)
+
+    result = calculate_sku_pricing(**inputs)  # type: ignore[arg-type]
+
+    assert missing_code in result.root_missing_codes
+    assert result.calculation_status == "pricing_unavailable"
+    assert result.suggested_price_usd is None
+    assert result.minimum_price_usd is None
+    assert result.clearance_price_usd is None
+    if missing_code == "missing_gross_weight":
+        assert result.gross_weight_kg is None
+        assert result.wfs_fulfillment_fee_usd is None
+    if missing_code == "missing_package_dimensions":
+        assert result.first_leg_volume_weight_kg is None
+        assert result.first_leg_fee_cny is None
+        assert result.storage_fee_usd is None
+
+
+def test_missing_dimension_image_does_not_block_sku_pricing() -> None:
+    result = calculate_sku_pricing(
+        purchase_cost_cny=Decimal("20"),
+        product_gross_weight_g=Decimal("800"),
+        dimensions_cm=(Decimal("16"), Decimal("13"), Decimal("13")),
+        image_count=1,
+        storage_fee_usd=Decimal("0.3"),
+    )
+
+    assert result.root_missing_codes == ("missing_dimension_image",)
+    assert result.billing_root_complete is True
+    assert result.calculation_status == "ok"
+    assert result.suggested_price_usd is not None
+
+
+def test_invalid_sku_pricing_denominator_fails_closed() -> None:
+    result = calculate_sku_pricing(
+        purchase_cost_cny=Decimal("20"),
+        product_gross_weight_g=Decimal("800"),
+        dimensions_cm=(Decimal("16"), Decimal("13"), Decimal("13")),
+        image_count=2,
+        rule=SkuPricingRule(suggested_margin_rate=Decimal("0.70")),
+        storage_fee_usd=Decimal("0.3"),
+    )
+
+    assert "invalid_pricing_rule" in result.root_missing_codes
+    assert result.calculation_status == "invalid_denominator"
+    assert result.suggested_price_usd is None
 
 
 def test_synthetic_storage_formula_and_missing_states() -> None:

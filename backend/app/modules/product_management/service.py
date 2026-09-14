@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, Never, cast
 from uuid import UUID, uuid4
 
@@ -13,11 +13,16 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
 from app.modules.product_management.calculations import (
+    SIX_PLACES,
     IdentityWfsOverride,
     PricingRule,
+    SkuPricingResult,
+    SkuPricingRule,
     WfsFulfillmentRate,
     calculate_pricing,
+    calculate_sku_pricing,
     calculate_storage,
+    is_sku_pricing_rule_valid,
     select_wfs_fee,
 )
 from app.modules.product_management.models import (
@@ -49,6 +54,8 @@ from app.modules.product_management.schemas import (
     ProductManagementListItem,
     ProductManagementListQuery,
     ProductManagementOptionsData,
+    ProductManagementSummaryData,
+    ProductManagementSummaryQuery,
     RecalculatePricingRequest,
     RecalculatePricingResult,
     SourceTagRead,
@@ -60,6 +67,7 @@ from app.modules.product_management.schemas import (
 )
 from app.modules.products.models import Product
 from app.modules.sku_detail.models import (
+    LingxingSkuGlobalTag,
     LingxingSkuProductInfoCurrent,
     SkuBaseProfileCurrent,
 )
@@ -100,6 +108,13 @@ class ProductManagementService:
         *,
         include_costs: bool,
     ) -> tuple[ProductManagementListData, int, datetime | None, datetime | None]:
+        now = datetime.now(UTC)
+        effective_rules = self.repository.list_effective_rules(now, account_refs)
+        sku_rules = {
+            account_ref: self._sku_pricing_rule(rule, now.month)
+            for account_ref, rule in effective_rules.items()
+        }
+        ready_accounts, invalid_accounts = self._sku_rule_account_sets(account_refs, sku_rules)
         rows, total = self.repository.list_projections(
             account_refs=account_refs,
             page=query.page,
@@ -113,9 +128,14 @@ class ProductManagementService:
             calculation_status=query.calculation_status,
             sort_by=query.sort_by,
             sort_order=query.sort_order,
+            pricing_ready_account_refs=ready_accounts,
+            invalid_pricing_rule_account_refs=invalid_accounts,
         )
         product_ids = [row[1].id for row in rows if row[1] is not None]
+        snapshot_ids = [row[2].source_snapshot_id for row in rows if row[2] is not None]
         tags = self.repository.list_internal_tags(product_ids, datetime.now(UTC))
+        source_tags = self.repository.list_source_tags_for_snapshots(snapshot_ids)
+        image_counts = self.repository.image_counts_for_snapshots(snapshot_ids)
         listing_counts = self.repository.listing_counts(product_ids)
         items = [
             self._list_item(
@@ -123,6 +143,23 @@ class ProductManagementService:
                 tags.get(row[1].id, []) if row[1] is not None else [],
                 listing_counts.get(row[1].id, 0) if row[1] is not None else 0,
                 include_costs=include_costs,
+                source_tags=(
+                    source_tags.get(row[2].source_snapshot_id, []) if row[2] is not None else []
+                ),
+                image_count=(
+                    image_counts.get(row[2].source_snapshot_id, 0) if row[2] is not None else 0
+                ),
+                calculation=self._sku_pricing_calculation(
+                    row[2],
+                    row[3],
+                    image_counts.get(row[2].source_snapshot_id, 0) if row[2] is not None else 0,
+                    sku_rules.get(row[0].source_account_ref, SkuPricingRule()),
+                ),
+                calculation_rule_version=(
+                    effective_rules[row[0].source_account_ref].version
+                    if row[0].source_account_ref in effective_rules
+                    else "sku-pricing-defaults-v1"
+                ),
             )
             for row in rows
         ]
@@ -136,6 +173,57 @@ class ProductManagementService:
             max(observed_at, default=None),
         )
 
+    def summary(
+        self,
+        query: ProductManagementSummaryQuery,
+        account_refs: frozenset[str],
+    ) -> ProductManagementSummaryData:
+        now = datetime.now(UTC)
+        sku_rules = {
+            account_ref: self._sku_pricing_rule(rule, now.month)
+            for account_ref, rule in self.repository.list_effective_rules(now, account_refs).items()
+        }
+        ready_accounts, invalid_accounts = self._sku_rule_account_sets(account_refs, sku_rules)
+        (
+            total,
+            synced,
+            completeness,
+            images,
+            tags,
+            incomplete,
+            missing_purchase,
+            missing_weight,
+            missing_dimensions,
+            missing_dimension_image,
+            invalid_pricing_rule,
+            pricing_ok,
+        ) = self.repository.summarize_projections(
+            account_refs=account_refs,
+            sku=query.sku,
+            sku_batch=query.sku_batch,
+            product_name=query.product_name,
+            category=query.category,
+            internal_tag=query.internal_tag,
+            product_grade=query.product_grade,
+            calculation_status=query.calculation_status,
+            pricing_ready_account_refs=ready_accounts,
+            invalid_pricing_rule_account_refs=invalid_accounts,
+        )
+        return ProductManagementSummaryData(
+            total=total,
+            synced_detail_count=synced,
+            data_completeness_rate=completeness.quantize(SIX_PLACES, rounding=ROUND_HALF_UP),
+            with_image_count=images,
+            with_source_tag_count=tags,
+            incomplete_count=incomplete,
+            missing_purchase_cost_count=missing_purchase,
+            missing_gross_weight_count=missing_weight,
+            missing_package_dimensions_count=missing_dimensions,
+            missing_dimension_image_count=missing_dimension_image,
+            invalid_pricing_rule_count=invalid_pricing_rule,
+            pricing_ok_count=pricing_ok,
+        )
+
     def get_sku(
         self,
         sku_id: UUID,
@@ -144,7 +232,7 @@ class ProductManagementService:
         include_costs: bool,
     ) -> ProductManagementDetailData:
         row = self._require_projection(sku_id, account_refs)
-        identity, product, current, _, pricing, rule, _ = row
+        identity, product, current, profile, pricing, _, _ = row
         tags = (
             self.repository.list_internal_tags([product.id], datetime.now(UTC)).get(product.id, [])
             if product is not None
@@ -154,6 +242,11 @@ class ProductManagementService:
         source_tags = (
             [] if current is None else self.repository.list_source_tags(current.source_snapshot_id)
         )
+        effective_rule = self.repository.get_effective_rule(
+            datetime.now(UTC), identity.source_account_ref
+        )
+        sku_rule = self._sku_pricing_rule(effective_rule, datetime.now(UTC).month)
+        calculation = self._sku_pricing_calculation(current, profile, len(images), sku_rule)
         return ProductManagementDetailData(
             sku_id=identity.id,
             core=(
@@ -187,10 +280,20 @@ class ProductManagementService:
                 for tag in source_tags
             ],
             internal_tags=[self._tag(tag) for tag in tags],
-            pricing=(
-                self._pricing_read(identity.id, pricing, rule, include_costs=include_costs)
-                if pricing is not None and rule is not None
-                else None
+            pricing=self._sku_pricing_read(
+                identity.id,
+                calculation,
+                sku_rule,
+                include_costs=include_costs,
+                rule_version=(
+                    effective_rule.version
+                    if effective_rule is not None
+                    else "sku-pricing-defaults-v1"
+                ),
+                product_grade=(pricing.product_grade if pricing is not None else "exception"),
+                grade_reason=(
+                    pricing.grade_reason if pricing is not None else "pricing_only_not_graded"
+                ),
             ),
         )
 
@@ -199,6 +302,9 @@ class ProductManagementService:
             product_grades=["A", "B", "C", "exception"],
             calculation_statuses=[
                 "ok",
+                "pricing_unavailable",
+                "storage_unavailable",
+                "invalid_denominator",
                 "missing_fx_rate",
                 "missing_purchase_cost",
                 "missing_weight",
@@ -465,10 +571,20 @@ class ProductManagementService:
         include_costs: bool,
     ) -> PricingBreakdownRead:
         row = self._require_projection(sku_id, account_refs)
-        pricing, rule = row[4], row[5]
-        if pricing is None or rule is None:
-            self._error(RULE_NOT_AVAILABLE, 424)
-        return self._pricing_read(sku_id, pricing, rule, include_costs=include_costs)
+        identity, _, current, profile, pricing, _, _ = row
+        images = [] if current is None else self.repository.list_images(current.source_snapshot_id)
+        now = datetime.now(UTC)
+        rule = self.repository.get_effective_rule(now, identity.source_account_ref)
+        sku_rule = self._sku_pricing_rule(rule, now.month)
+        return self._sku_pricing_read(
+            sku_id,
+            self._sku_pricing_calculation(current, profile, len(images), sku_rule),
+            sku_rule,
+            include_costs=include_costs,
+            rule_version=rule.version if rule is not None else "sku-pricing-defaults-v1",
+            product_grade=pricing.product_grade if pricing is not None else "exception",
+            grade_reason=pricing.grade_reason if pricing is not None else "pricing_only_not_graded",
+        )
 
     def get_table_view(self, principal_ref: str) -> UserTableViewRead:
         view = self.repository.get_table_view(principal_ref)
@@ -648,23 +764,84 @@ class ProductManagementService:
         return int(result.status != "ok")
 
     @staticmethod
+    def _sku_pricing_rule(rule: ProductPricingRuleVersion | None, month: int) -> SkuPricingRule:
+        defaults = SkuPricingRule()
+        if rule is None:
+            return defaults
+        return SkuPricingRule(
+            usd_cny_rate=(
+                rule.usd_cny_rate if rule.usd_cny_rate is not None else defaults.usd_cny_rate
+            ),
+            first_leg_cost_per_kg_cny=rule.first_leg_cost_per_kg_cny,
+            commission_rate=(
+                rule.platform_commission_rate
+                if rule.platform_commission_rate is not None
+                else defaults.commission_rate
+            ),
+            suggested_margin_rate=rule.suggested_gross_margin_rate,
+            minimum_margin_rate=rule.minimum_gross_margin_rate,
+            monthly_storage_rate_usd_per_cuft=ProductManagementService._storage_rate(rule, month),
+            storage_month_basis_days=rule.storage_month_basis_days,
+            pricing_storage_days=rule.pricing_storage_days,
+        )
+
+    @staticmethod
+    def _sku_rule_account_sets(
+        account_refs: frozenset[str], rules: dict[str, SkuPricingRule]
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        ready: set[str] = set()
+        invalid: set[str] = set()
+        for account_ref in account_refs:
+            rule = rules.get(account_ref, SkuPricingRule())
+            if not is_sku_pricing_rule_valid(rule):
+                invalid.add(account_ref)
+            elif rule.monthly_storage_rate_usd_per_cuft is not None:
+                ready.add(account_ref)
+        return frozenset(ready), frozenset(invalid)
+
+    @staticmethod
+    def _sku_pricing_calculation(
+        current: LingxingSkuProductInfoCurrent | None,
+        profile: SkuBaseProfileCurrent | None,
+        image_count: int,
+        rule: SkuPricingRule,
+    ) -> SkuPricingResult:
+        return calculate_sku_pricing(
+            purchase_cost_cny=(
+                profile.purchase_cost_cny
+                if profile is not None and profile.purchase_cost_cny is not None
+                else current.purchase_cost_cny
+                if current is not None
+                else None
+            ),
+            product_gross_weight_g=(
+                current.product_gross_weight_g if current is not None else None
+            ),
+            dimensions_cm=(
+                current.package_length_cm if current is not None else None,
+                current.package_width_cm if current is not None else None,
+                current.package_height_cm if current is not None else None,
+            ),
+            image_count=image_count,
+            rule=rule,
+        )
+
+    @staticmethod
     def _list_item(
         row: ProductManagementProjection,
         tags: list[ManualProductTag],
         listing_count: int,
         *,
         include_costs: bool,
+        source_tags: list[LingxingSkuGlobalTag] | None = None,
+        image_count: int = 0,
+        calculation: SkuPricingResult | None = None,
+        calculation_rule_version: str = "sku-pricing-defaults-v1",
     ) -> ProductManagementListItem:
-        identity, product, current, profile, pricing, rule, image = row
-        wfs_fee = None
-        wfs_currency = None
-        if pricing is not None and include_costs:
-            if pricing.wfs_fulfillment_fee_usd is not None:
-                wfs_fee = pricing.wfs_fulfillment_fee_usd
-                wfs_currency = "USD"
-            elif pricing.wfs_fulfillment_fee_cny is not None:
-                wfs_fee = pricing.wfs_fulfillment_fee_cny
-                wfs_currency = "CNY"
+        identity, product, current, profile, pricing, _, image = row
+        calculation = calculation or ProductManagementService._sku_pricing_calculation(
+            current, profile, image_count, SkuPricingRule()
+        )
         manual_grade = product.grade if product is not None else None
         effective_manual_grade = (
             manual_grade if manual_grade in {"A", "B", "C", "exception"} else "exception"
@@ -687,15 +864,19 @@ class ProductManagementService:
                 else None
             ),
             internal_tags=[ProductManagementService._tag(tag) for tag in tags],
+            source_tags=[
+                SourceTagRead(
+                    source_tag_id=tag.global_tag_id,
+                    label=tag.tag_name,
+                    color=tag.color,
+                )
+                for tag in source_tags or []
+            ],
             category=product.category if product is not None else None,
-            purchase_cost_cny=(
-                profile.purchase_cost_cny if profile is not None and include_costs else None
-            ),
-            unit_first_leg_cost=(
-                profile.unit_first_leg_cost if profile is not None and include_costs else None
-            ),
+            purchase_cost_cny=(calculation.purchase_cost_cny if include_costs else None),
+            unit_first_leg_cost=(calculation.first_leg_fee_cny if include_costs else None),
             unit_first_leg_currency_code=(
-                profile.unit_first_leg_currency if profile is not None and include_costs else None
+                "CNY" if include_costs and calculation.first_leg_fee_cny is not None else None
             ),
             purchase_delivery_days=(
                 current.purchase_delivery_days if current is not None else None
@@ -724,38 +905,54 @@ class ProductManagementService:
                 if pricing is not None
                 else None
             ),
-            wfs_fulfillment_fee=wfs_fee,
-            wfs_fulfillment_fee_currency_code=cast(Literal["USD", "CNY"] | None, wfs_currency),
+            wfs_fulfillment_fee=(calculation.wfs_fulfillment_fee_usd if include_costs else None),
+            wfs_fulfillment_fee_currency_code=(
+                "USD" if include_costs and calculation.wfs_fulfillment_fee_usd is not None else None
+            ),
             wfs_daily_storage_fee=(
-                pricing.daily_storage_fee_per_unit_usd
-                if pricing is not None and include_costs
-                else None
+                calculation.daily_storage_fee_per_unit_usd if include_costs else None
             ),
             wfs_daily_storage_fee_currency_code=(
                 "USD"
-                if pricing is not None
-                and include_costs
-                and pricing.daily_storage_fee_per_unit_usd is not None
+                if include_costs and calculation.daily_storage_fee_per_unit_usd is not None
                 else None
             ),
-            suggested_price_usd=(
-                pricing.suggested_price_usd if pricing is not None and include_costs else None
-            ),
-            minimum_price_usd=(
-                pricing.minimum_price_usd if pricing is not None and include_costs else None
-            ),
-            clearance_price_usd=(
-                pricing.clearance_price_usd if pricing is not None and include_costs else None
-            ),
+            suggested_price_usd=(calculation.suggested_price_usd if include_costs else None),
+            minimum_price_usd=(calculation.minimum_price_usd if include_costs else None),
+            clearance_price_usd=(calculation.clearance_price_usd if include_costs else None),
             price_currency_code=(
-                cast(Literal["USD"], pricing.price_currency_code)
-                if pricing is not None and include_costs and pricing.suggested_price_usd is not None
-                else None
+                "USD" if include_costs and calculation.suggested_price_usd is not None else None
             ),
-            calculation_status=pricing.calculation_status if pricing is not None else None,
-            calculated_at=pricing.calculated_at if pricing is not None else None,
-            rule_version=rule.version if rule is not None else None,
+            calculation_status=calculation.calculation_status,
+            calculated_at=None,
+            rule_version=calculation_rule_version,
             costs_visible=include_costs,
+            image_count=image_count,
+            product_gross_weight_g=(
+                current.product_gross_weight_g if current is not None else None
+            ),
+            gross_weight_kg=calculation.gross_weight_kg,
+            package_length_cm=current.package_length_cm if current is not None else None,
+            package_width_cm=current.package_width_cm if current is not None else None,
+            package_height_cm=current.package_height_cm if current is not None else None,
+            first_leg_volume_weight_kg=calculation.first_leg_volume_weight_kg,
+            first_leg_chargeable_weight_kg=calculation.first_leg_chargeable_weight_kg,
+            first_leg_fee_cny=calculation.first_leg_fee_cny if include_costs else None,
+            wfs_actual_weight_lb=calculation.wfs_actual_weight_lb,
+            wfs_dimensional_weight_lb=calculation.wfs_dimensional_weight_lb,
+            wfs_chargeable_weight_lb=calculation.wfs_chargeable_weight_lb,
+            wfs_base_fee_usd=calculation.wfs_base_fee_usd if include_costs else None,
+            fixed_cost_usd=calculation.fixed_cost_usd if include_costs else None,
+            storage_fee_usd=calculation.storage_fee_usd if include_costs else None,
+            root_missing_codes=list(calculation.root_missing_codes),
+            pricing_available=calculation.pricing_available,
+            billing_root_complete=calculation.billing_root_complete,
+            wfs_calc_status=calculation.wfs_calc_status,
+            wfs_calc_reason=calculation.wfs_calc_reason,
+            storage_calc_status=calculation.storage_calc_status,
+            first_leg_calc_status=calculation.first_leg_calc_status,
+            formula_version=calculation.formula_version,
+            wfs_formula_version=calculation.wfs_formula_version,
         )
 
     @staticmethod
@@ -821,6 +1018,90 @@ class ProductManagementService:
             ),
             suggested_roi=pricing.suggested_roi if include_costs else None,
             components=components,
+        )
+
+    @staticmethod
+    def _sku_pricing_read(
+        sku_id: UUID,
+        calculation: SkuPricingResult,
+        rule: SkuPricingRule,
+        *,
+        include_costs: bool,
+        rule_version: str,
+        product_grade: str,
+        grade_reason: str,
+    ) -> PricingBreakdownRead:
+        now = datetime.now(UTC)
+        grade = product_grade if product_grade in {"A", "B", "C", "exception"} else "exception"
+        return PricingBreakdownRead(
+            sku_id=sku_id,
+            calculation_status=calculation.calculation_status,
+            wfs_calc_status=calculation.wfs_calc_status,
+            wfs_calc_reason=calculation.wfs_calc_reason,
+            wfs_fee_source="excel_formula",
+            storage_calc_status=calculation.storage_calc_status,
+            first_leg_calc_status=calculation.first_leg_calc_status,
+            product_grade=cast(Literal["A", "B", "C", "exception"], grade),
+            grade_reason=grade_reason,
+            commission_source="default_business_parameter",
+            rule_version=rule_version,
+            calc_version=calculation.formula_version,
+            pricing_effective_at=now,
+            calculated_at=now,
+            wfs_fulfillment_fee_usd=(
+                calculation.wfs_fulfillment_fee_usd if include_costs else None
+            ),
+            wfs_fulfillment_fee_cny=None,
+            package_volume_cuft=calculation.package_volume_cuft,
+            daily_storage_fee_per_unit_usd=(
+                calculation.daily_storage_fee_per_unit_usd if include_costs else None
+            ),
+            daily_storage_fee_per_unit_cny=None,
+            estimated_storage_fee_usd=(calculation.storage_fee_usd if include_costs else None),
+            estimated_storage_fee_cny=None,
+            suggested_price_usd=(calculation.suggested_price_usd if include_costs else None),
+            minimum_price_usd=(calculation.minimum_price_usd if include_costs else None),
+            clearance_price_usd=(calculation.clearance_price_usd if include_costs else None),
+            price_currency_code=(
+                "USD" if include_costs and calculation.suggested_price_usd is not None else None
+            ),
+            suggested_gross_margin_rate=(
+                rule.suggested_margin_rate if calculation.pricing_available else None
+            ),
+            suggested_roi=None,
+            components=None,
+            purchase_cost_cny=(calculation.purchase_cost_cny if include_costs else None),
+            purchase_cost_currency_code=(
+                "CNY" if include_costs and calculation.purchase_cost_cny is not None else None
+            ),
+            product_gross_weight_g=calculation.product_gross_weight_g,
+            gross_weight_kg=calculation.gross_weight_kg,
+            package_length_cm=calculation.package_length_cm,
+            package_width_cm=calculation.package_width_cm,
+            package_height_cm=calculation.package_height_cm,
+            first_leg_volume_weight_kg=calculation.first_leg_volume_weight_kg,
+            first_leg_chargeable_weight_kg=calculation.first_leg_chargeable_weight_kg,
+            first_leg_cost_per_kg_cny=(rule.first_leg_cost_per_kg_cny if include_costs else None),
+            first_leg_fee_cny=calculation.first_leg_fee_cny if include_costs else None,
+            wfs_actual_weight_lb=calculation.wfs_actual_weight_lb,
+            wfs_dimensional_weight_lb=calculation.wfs_dimensional_weight_lb,
+            wfs_chargeable_weight_lb=calculation.wfs_chargeable_weight_lb,
+            wfs_weight_padding_lb=rule.wfs_weight_padding_lb,
+            wfs_base_fee_usd=calculation.wfs_base_fee_usd if include_costs else None,
+            storage_fee_usd=calculation.storage_fee_usd if include_costs else None,
+            fixed_cost_usd=calculation.fixed_cost_usd if include_costs else None,
+            usd_cny_rate=rule.usd_cny_rate if include_costs else None,
+            commission_rate=rule.commission_rate,
+            after_sales_rate=rule.after_sales_rate,
+            ad_cost_rate=rule.ad_cost_rate,
+            suggested_margin_rate=rule.suggested_margin_rate,
+            minimum_margin_rate=rule.minimum_margin_rate,
+            root_missing_codes=list(calculation.root_missing_codes),
+            pricing_available=calculation.pricing_available,
+            billing_root_complete=calculation.billing_root_complete,
+            detail_messages=list(calculation.detail_messages),
+            formula_version=calculation.formula_version,
+            wfs_formula_version=calculation.wfs_formula_version,
         )
 
     @staticmethod

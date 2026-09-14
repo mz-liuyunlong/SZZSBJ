@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 from sqlalchemy.orm import Session
@@ -32,5 +33,45 @@ def test_batch_sku_filter_is_applied_in_bounded_repository_query() -> None:
     assert total == 0
     assert "coalesce(products.sku, dwd_lingxing_sku_identity_index.lingxing_sku_code) IN" in sql
     assert "LIMIT" in sql
+    session.commit.assert_not_called()
+    session.rollback.assert_not_called()
+
+
+def test_summary_uses_filtered_identity_scope_and_persisted_detail_signals() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.one.return_value = (
+        1188,
+        1188,
+        Decimal("80.25"),
+        1000,
+        1188,
+        188,
+        20,
+        30,
+        40,
+        50,
+        0,
+        1048,
+    )
+    repository = ProductManagementRepository(session)
+
+    result = repository.summarize_projections(
+        account_refs=frozenset({"synthetic-account"}),
+        sku="SYNTHETIC",
+        sku_batch=[],
+        product_name=None,
+        category=None,
+        internal_tag=None,
+        product_grade=None,
+        calculation_status=None,
+    )
+
+    statement = session.execute.call_args.args[0]
+    sql = str(statement.compile())
+    assert result == (1188, 1188, Decimal("80.25"), 1000, 1188, 188, 20, 30, 40, 50, 0, 1048)
+    assert "dwd_lingxing_sku_product_info_current" in sql
+    assert "dwd_lingxing_sku_product_images" in sql
+    assert "dwd_lingxing_sku_global_tags" in sql
+    assert "synthetic-account" not in sql
     session.commit.assert_not_called()
     session.rollback.assert_not_called()

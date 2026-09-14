@@ -973,45 +973,10 @@
   white-space: nowrap;
 }
 
-/* product-management summary card interaction */
 .product-management__summary-card {
   width: 100%;
-  appearance: none;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease,
-    background-color 160ms ease;
-}
-
-.product-management__summary-card:hover {
-  border-color: #91caff;
-  background: linear-gradient(180deg, #ffffff, #f4f8ff);
-  box-shadow: 0 8px 20px rgb(15 23 42 / 8%);
-  transform: translateY(-1px);
-}
-
-.product-management__summary-card:active {
-  transform: translateY(0);
-}
-
-.product-management__summary-card:focus-visible {
-  outline: 2px solid #1677ff;
-  outline-offset: 2px;
-}
-
-.product-management__summary-card--active {
-  border-color: #1677ff;
-  background: linear-gradient(180deg, #ffffff, #eef6ff);
-  box-shadow: inset 0 0 0 1px rgb(22 119 255 / 22%);
-}
-
-.product-management__summary-card--active span,
-.product-management__summary-card--active strong {
-  color: #0958d9;
 }
 
 /* Summary card height normalization */

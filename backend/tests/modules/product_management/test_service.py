@@ -17,11 +17,17 @@ from app.modules.product_management.models import (
 from app.modules.product_management.schemas import (
     PricingRuleWrite,
     ProductManagementListQuery,
+    ProductManagementSummaryQuery,
     RecalculatePricingRequest,
 )
 from app.modules.product_management.service import ProductManagementService
 from app.modules.products.models import Product
-from app.modules.sku_detail.models import LingxingSkuIdentity, SkuBaseProfileCurrent
+from app.modules.sku_detail.models import (
+    LingxingSkuGlobalTag,
+    LingxingSkuIdentity,
+    LingxingSkuProductInfoCurrent,
+    SkuBaseProfileCurrent,
+)
 
 RULE_ID = UUID("00000000-0000-0000-0000-000000000010")
 RUN_ID = UUID("00000000-0000-0000-0000-000000000011")
@@ -150,6 +156,9 @@ def test_list_freshness_uses_oldest_returned_observation_and_reports_latest() ->
     ]
     service.repository.list_projections.return_value = (rows, 2)
     service.repository.list_internal_tags.return_value = {}
+    service.repository.list_source_tags_for_snapshots.return_value = {}
+    service.repository.image_counts_for_snapshots.return_value = {}
+    service.repository.list_effective_rules.return_value = {}
     service.repository.listing_counts.return_value = {}
 
     _, _, list_freshness_at, latest_observed_at = service.list_skus(
@@ -160,6 +169,70 @@ def test_list_freshness_uses_oldest_returned_observation_and_reports_latest() ->
 
     assert list_freshness_at == earlier
     assert latest_observed_at == later
+
+
+def test_list_keeps_source_tags_separate_from_internal_tags() -> None:
+    session = MagicMock(spec=Session)
+    service = ProductManagementService(session)
+    service.repository = MagicMock()
+    identity = LingxingSkuIdentity(id=UUID(int=1), last_seen_at=NOW)
+    current = LingxingSkuProductInfoCurrent(
+        id=UUID(int=2),
+        source_snapshot_id=UUID(int=3),
+        source_observed_at=NOW,
+        product_name="Synthetic Product",
+    )
+    source_tag = LingxingSkuGlobalTag(
+        source_snapshot_id=current.source_snapshot_id,
+        global_tag_id="synthetic-source-tag-id",
+        tag_name="Synthetic Source Tag",
+        color=None,
+    )
+    service.repository.list_projections.return_value = (
+        [(identity, None, current, None, None, None, None)],
+        1,
+    )
+    service.repository.list_internal_tags.return_value = {}
+    service.repository.list_source_tags_for_snapshots.return_value = {
+        current.source_snapshot_id: [source_tag]
+    }
+    service.repository.image_counts_for_snapshots.return_value = {}
+    service.repository.list_effective_rules.return_value = {}
+    service.repository.listing_counts.return_value = {}
+
+    data, total, _, _ = service.list_skus(
+        ProductManagementListQuery(),
+        frozenset({"synthetic-account"}),
+        include_costs=False,
+    )
+
+    assert total == 1
+    assert data.items[0].internal_tags == []
+    assert data.items[0].source_tags[0].label == "Synthetic Source Tag"
+
+
+def test_summary_quantizes_repeating_completeness_rate() -> None:
+    service = ProductManagementService(MagicMock(spec=Session))
+    service.repository = MagicMock()
+    service.repository.list_effective_rules.return_value = {}
+    service.repository.summarize_projections.return_value = (
+        3,
+        3,
+        Decimal("66.666666666666666667"),
+        2,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        3,
+    )
+
+    result = service.summary(ProductManagementSummaryQuery(), frozenset({"synthetic-account"}))
+
+    assert result.data_completeness_rate == Decimal("66.666667")
 
 
 def test_recalculation_preview_does_not_write_projection_and_execute_does(

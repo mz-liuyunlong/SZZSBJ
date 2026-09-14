@@ -435,7 +435,9 @@ vi.mock("@ant-design/pro-components", () => ({
       }
     }
     const start = (pagination.current - 1) * pagination.pageSize;
-    const pageData = sortedData.slice(start, start + pagination.pageSize);
+    const pageData = pagination.total > sortedData.length
+      ? sortedData
+      : sortedData.slice(start, start + pagination.pageSize);
     const pageKeys = pageData.map((record) => String(record[rowKey]));
     const selectedPageKeys = rowSelection?.selectedRowKeys.map(String)
       .filter((key) => pageKeys.includes(key)) ?? [];
@@ -597,6 +599,7 @@ vi.mock("@ant-design/pro-components", () => ({
 vi.mock("@/pages/products/productManagementApi", () => ({
   getProductManagementOptions: vi.fn(),
   getProductManagementSku: vi.fn(),
+  getProductManagementSummary: vi.fn(),
   getProductManagementTableView: vi.fn(),
   listProductManagementSkus: vi.fn(),
   requestProductManagementExport: vi.fn(),
@@ -607,6 +610,7 @@ import ProductManagementPage from "@/pages/products/ProductManagementPage";
 import {
   getProductManagementOptions,
   getProductManagementSku,
+  getProductManagementSummary,
   getProductManagementTableView,
   listProductManagementSkus,
 } from "@/pages/products/productManagementApi";
@@ -635,9 +639,11 @@ const row: ProductManagementRow = {
   id: "synthetic-id",
   image: null,
   images: [],
+  imageCount: 0,
   sku: "SYNTHETIC-SKU",
   productName: "Synthetic Product",
   tags: [],
+  sourceTags: ["Synthetic Source Tag"],
   productGrade: null,
   category: null,
   purchasePrice: null,
@@ -649,6 +655,16 @@ const row: ProductManagementRow = {
   suggestedPrice: null,
   minimumPrice: null,
   clearancePrice: null,
+  calculationStatus: "pricing_unavailable",
+  rootMissingCodes: ["missing_purchase_cost"],
+  pricingAvailable: false,
+  billingRootComplete: false,
+  wfsCalculationStatus: "unavailable",
+  wfsCalculationReason: "missing_weight_or_dimensions",
+  storageCalculationStatus: "unavailable",
+  firstLegCalculationStatus: "unavailable",
+  formulaVersion: "sku_pricing_formula_v1",
+  pricingBreakdown: null,
   materialCn: null,
   materialEn: null,
   usageCn: null,
@@ -668,6 +684,19 @@ const row: ProductManagementRow = {
 beforeEach(() => {
   vi.mocked(listProductManagementSkus).mockResolvedValue({ rows: [row], total: 1 });
   vi.mocked(getProductManagementOptions).mockResolvedValue({ grades: [], tags: [] });
+  vi.mocked(getProductManagementSummary).mockResolvedValue({
+    syncedDetailCount: 1,
+    dataCompletenessRate: 80,
+    withImageCount: 1,
+    withSourceTagCount: 1,
+    incompleteCount: 1,
+    missingPurchaseCostCount: 1,
+    missingGrossWeightCount: 1,
+    missingPackageDimensionsCount: 1,
+    missingDimensionImageCount: 1,
+    invalidPricingRuleCount: 0,
+    pricingOkCount: 0,
+  });
   vi.mocked(getProductManagementTableView).mockResolvedValue({
     applied_column_keys: ["sku", "productName"],
     column_widths: {},
@@ -681,6 +710,60 @@ afterEach(() => {
 });
 
 describe("ProductManagementPage", () => {
+  it("hides statistics by default and uses backend totals when shown", async () => {
+    vi.mocked(listProductManagementSkus).mockResolvedValue({
+      rows: Array.from({ length: 50 }, (_, index) => ({
+        ...row,
+        id: `synthetic-id-${index}`,
+        sku: `SYNTHETIC-${index}`,
+      })),
+      total: 1188,
+    });
+
+    render(<ProductManagementPage page={productPage} />);
+
+    expect(await screen.findByText("共 1,188 条数据")).toBeVisible();
+    expect(screen.queryByLabelText("产品管理统计")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "显示统计" }));
+    expect(await screen.findByLabelText("产品管理统计")).toHaveTextContent("1,188");
+    expect(getProductManagementSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ keyword: "" }),
+    );
+  });
+
+  it("uses real-data default columns and keeps fee and price columns optional", async () => {
+    vi.mocked(getProductManagementTableView).mockRejectedValueOnce(new Error("no saved view"));
+
+    render(<ProductManagementPage page={productPage} />);
+    await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
+
+    expect(screen.getByRole("columnheader", { name: /类目/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /产品采购价/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /资料完整度/ })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: /WFS费用/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /建议售价/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /最低售价/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /清仓售价/ })).not.toBeInTheDocument();
+  });
+
+  it("can restore real-data defaults over an older saved column view", async () => {
+    vi.mocked(getProductManagementTableView).mockResolvedValueOnce({
+      applied_column_keys: ["sku", "productName", "wfsFee", "suggestedPrice"],
+      column_widths: {},
+    });
+
+    render(<ProductManagementPage page={productPage} />);
+    expect(await screen.findByRole("columnheader", { name: /WFS费用/ })).toBeVisible();
+    expect(screen.getAllByText("缺基础数据").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "列配置" }));
+    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并应用" }));
+
+    expect(screen.getByRole("columnheader", { name: /类目/ })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: /WFS费用/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /建议售价/ })).not.toBeInTheDocument();
+  });
+
   it("loads rows from the backend and opens backend detail data", async () => {
     render(<ProductManagementPage page={productPage} />);
 
@@ -694,6 +777,7 @@ describe("ProductManagementPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "SYNTHETIC-SKU" }));
     await waitFor(() => expect(getProductManagementSku).toHaveBeenCalledWith(row));
+    expect(await screen.findByText("来源 · Synthetic Source Tag")).toBeVisible();
   });
 
   it("sends changed filters to the backend and renders safe failures", async () => {
@@ -706,10 +790,25 @@ describe("ProductManagementPage", () => {
       1,
       50,
     ));
+    expect(screen.getByRole("button", { name: "SYNTHETIC-SKU" })).toBeVisible();
 
     vi.mocked(listProductManagementSkus).mockRejectedValueOnce(new Error("SAFE_BACKEND_ERROR"));
     fireEvent.change(screen.getByLabelText("搜索产品"), { target: { value: "failed" } });
     fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     expect(await screen.findByText(/SAFE_BACKEND_ERROR/)).toBeVisible();
+  });
+
+  it("renders each server-provided page without applying client-side business filters", async () => {
+    vi.mocked(listProductManagementSkus).mockResolvedValue({ rows: [row], total: 100 });
+    render(<ProductManagementPage page={productPage} />);
+    await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
+
+    fireEvent.click(screen.getByRole("button", { name: "第 2 页" }));
+    await waitFor(() => expect(listProductManagementSkus).toHaveBeenLastCalledWith(
+      expect.objectContaining({ keyword: "" }),
+      2,
+      50,
+    ));
+    expect(screen.getByRole("button", { name: "SYNTHETIC-SKU" })).toBeVisible();
   });
 });

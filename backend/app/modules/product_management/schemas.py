@@ -34,31 +34,47 @@ DecimalSix = Annotated[
     Field(max_digits=18, decimal_places=6),
     PlainSerializer(lambda value: format(value, "f"), return_type=str, when_used="json"),
 ]
+RootMissingCode = Literal[
+    "missing_purchase_cost",
+    "missing_gross_weight",
+    "missing_package_dimensions",
+    "missing_dimension_image",
+    "invalid_pricing_rule",
+]
 
 PRODUCT_MANAGEMENT_COLUMNS = frozenset(
     {
+        "image",
         "sku",
         "productName",
-        "primaryImage",
-        "internalTags",
+        "tags",
+        "sourceTags",
         "productGrade",
-        "wfsFulfillmentFee",
-        "wfsDailyStorageFee",
-        "suggestedPriceUsd",
-        "minimumPriceUsd",
-        "clearancePriceUsd",
-        "calculationStatus",
-        "calculatedAt",
-        "ruleVersion",
+        "wfsFee",
+        "suggestedPrice",
+        "minimumPrice",
+        "clearancePrice",
+        "category",
+        "purchasePrice",
+        "firstLegFreight",
+        "wfsDeliveryFee",
+        "purchaseLeadTime",
+        "storageFee",
+        "linkedPlatformSkuCount",
+        "dataCompleteness",
+        "updatedAt",
     }
 )
 DEFAULT_PRODUCT_MANAGEMENT_COLUMNS = (
+    "image",
     "sku",
     "productName",
-    "primaryImage",
-    "internalTags",
-    "productGrade",
-    "calculationStatus",
+    "category",
+    "purchasePrice",
+    "firstLegFreight",
+    "purchaseLeadTime",
+    "dataCompleteness",
+    "updatedAt",
 )
 
 
@@ -118,9 +134,7 @@ class ProductManagementReadMeta(StrictSchema):
     input_missing: bool = False
 
 
-class ProductManagementListQuery(StrictSchema):
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+class ProductManagementFilterQuery(StrictSchema):
     sku: (
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
         | None
@@ -137,8 +151,6 @@ class ProductManagementListQuery(StrictSchema):
     internal_tag: Nonblank128 | None = None
     product_grade: Literal["A", "B", "C", "exception"] | None = None
     calculation_status: Nonblank64 | None = None
-    sort_by: Literal["sku", "product_name", "product_grade", "calculated_at"] = "sku"
-    sort_order: Literal["asc", "desc"] = "asc"
 
     @field_validator("sku_batch", mode="before")
     @classmethod
@@ -175,9 +187,26 @@ class ProductManagementListQuery(StrictSchema):
         return self
 
 
+class ProductManagementListQuery(ProductManagementFilterQuery):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    sort_by: Literal["sku", "product_name", "product_grade", "calculated_at"] = "sku"
+    sort_order: Literal["asc", "desc"] = "asc"
+
+
+class ProductManagementSummaryQuery(ProductManagementFilterQuery):
+    pass
+
+
 class InternalTagRead(StrictSchema):
     key: str
     label: str
+    color: str | None
+
+
+class SourceTagRead(StrictSchema):
+    source_tag_id: str | None
+    label: str | None
     color: str | None
 
 
@@ -187,6 +216,7 @@ class ProductManagementListItem(StrictSchema):
     product_name: str | None
     primary_image: str | None
     internal_tags: list[InternalTagRead]
+    source_tags: list[SourceTagRead]
     category: str | None
     purchase_cost_cny: Money | None
     unit_first_leg_cost: Money | None
@@ -209,10 +239,49 @@ class ProductManagementListItem(StrictSchema):
     calculated_at: datetime | None
     rule_version: str | None
     costs_visible: bool
+    image_count: int = 0
+    product_gross_weight_g: Money | None = None
+    gross_weight_kg: DecimalSix | None = None
+    package_length_cm: Money | None = None
+    package_width_cm: Money | None = None
+    package_height_cm: Money | None = None
+    first_leg_volume_weight_kg: DecimalSix | None = None
+    first_leg_chargeable_weight_kg: DecimalSix | None = None
+    first_leg_fee_cny: Money | None = None
+    wfs_actual_weight_lb: DecimalSix | None = None
+    wfs_dimensional_weight_lb: DecimalSix | None = None
+    wfs_chargeable_weight_lb: DecimalSix | None = None
+    wfs_base_fee_usd: Money | None = None
+    fixed_cost_usd: Money | None = None
+    storage_fee_usd: Money | None = None
+    root_missing_codes: list[RootMissingCode] = Field(default_factory=list)
+    pricing_available: bool = False
+    billing_root_complete: bool = False
+    wfs_calc_status: str | None = None
+    wfs_calc_reason: str | None = None
+    storage_calc_status: str | None = None
+    first_leg_calc_status: str | None = None
+    formula_version: str | None = None
+    wfs_formula_version: str | None = None
 
 
 class ProductManagementListData(StrictSchema):
     items: list[ProductManagementListItem]
+
+
+class ProductManagementSummaryData(StrictSchema):
+    total: int
+    synced_detail_count: int
+    data_completeness_rate: DecimalSix
+    with_image_count: int
+    with_source_tag_count: int
+    incomplete_count: int
+    missing_purchase_cost_count: int = 0
+    missing_gross_weight_count: int = 0
+    missing_package_dimensions_count: int = 0
+    missing_dimension_image_count: int = 0
+    invalid_pricing_rule_count: int = 0
+    pricing_ok_count: int = 0
 
 
 class ProductCoreRead(StrictSchema):
@@ -255,12 +324,6 @@ class ProductImageRead(StrictSchema):
     ordinal: int
     url: str
     is_primary: bool | None
-
-
-class SourceTagRead(StrictSchema):
-    source_tag_id: str | None
-    label: str | None
-    color: str | None
 
 
 class CostComponentRead(StrictSchema):
@@ -318,6 +381,36 @@ class PricingBreakdownRead(StrictSchema):
     suggested_gross_margin_rate: Ratio | None
     suggested_roi: DecimalSix | None
     components: Annotated[list[CostComponentRead], Field(min_length=6, max_length=6)] | None
+    purchase_cost_cny: Money | None = None
+    purchase_cost_currency_code: Literal["CNY"] | None = None
+    product_gross_weight_g: Money | None = None
+    gross_weight_kg: DecimalSix | None = None
+    package_length_cm: Money | None = None
+    package_width_cm: Money | None = None
+    package_height_cm: Money | None = None
+    first_leg_volume_weight_kg: DecimalSix | None = None
+    first_leg_chargeable_weight_kg: DecimalSix | None = None
+    first_leg_cost_per_kg_cny: Money | None = None
+    first_leg_fee_cny: Money | None = None
+    wfs_actual_weight_lb: DecimalSix | None = None
+    wfs_dimensional_weight_lb: DecimalSix | None = None
+    wfs_chargeable_weight_lb: DecimalSix | None = None
+    wfs_weight_padding_lb: DecimalSix | None = None
+    wfs_base_fee_usd: Money | None = None
+    storage_fee_usd: Money | None = None
+    fixed_cost_usd: Money | None = None
+    usd_cny_rate: DecimalSix | None = None
+    commission_rate: Ratio | None = None
+    after_sales_rate: Ratio | None = None
+    ad_cost_rate: Ratio | None = None
+    suggested_margin_rate: Ratio | None = None
+    minimum_margin_rate: Ratio | None = None
+    root_missing_codes: list[RootMissingCode] = Field(default_factory=list)
+    pricing_available: bool = False
+    billing_root_complete: bool = False
+    detail_messages: list[str] = Field(default_factory=list)
+    formula_version: str | None = None
+    wfs_formula_version: str | None = None
 
 
 class ProductManagementDetailData(StrictSchema):
