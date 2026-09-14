@@ -10,6 +10,7 @@ FOUR_PLACES = Decimal("0.0001")
 SIX_PLACES = Decimal("0.000001")
 CM_PER_INCH = Decimal("2.54")
 CUBIC_INCHES_PER_CUBIC_FOOT = Decimal("1728")
+CUBIC_CENTIMETERS_PER_CUBIC_FOOT = Decimal("28316.846592")
 GRAMS_PER_KILOGRAM = Decimal("1000")
 DEFAULT_USD_CNY_RATE = Decimal("6.7")
 DEFAULT_FIRST_LEG_COST_PER_KG_CNY = Decimal("12")
@@ -22,6 +23,7 @@ DEFAULT_AFTER_SALES_RATE = Decimal("0.05")
 DEFAULT_AD_COST_RATE = Decimal("0.15")
 DEFAULT_SUGGESTED_MARGIN_RATE = Decimal("0.20")
 DEFAULT_MINIMUM_MARGIN_RATE = Decimal("0.10")
+DEFAULT_WFS_STORAGE_RATE_USD_PER_CUFT = Decimal("0.75")
 SKU_PRICING_FORMULA_VERSION = "sku_pricing_formula_v1"
 WFS_FORMULA_VERSION = "walmart_wfs_formula_v1"
 WFS_THRESHOLDS = (
@@ -56,7 +58,7 @@ class SkuPricingRule:
     ad_cost_rate: Decimal = DEFAULT_AD_COST_RATE
     suggested_margin_rate: Decimal = DEFAULT_SUGGESTED_MARGIN_RATE
     minimum_margin_rate: Decimal = DEFAULT_MINIMUM_MARGIN_RATE
-    monthly_storage_rate_usd_per_cuft: Decimal | None = None
+    monthly_storage_rate_usd_per_cuft: Decimal | None = DEFAULT_WFS_STORAGE_RATE_USD_PER_CUFT
     storage_month_basis_days: int = 30
     pricing_storage_days: int = 30
 
@@ -175,12 +177,9 @@ def calculate_sku_pricing(
         storage_fee_usd = None
     else:
         length, width, height = (value for value in dimensions_cm if value is not None)
-        package_volume_cuft = (
-            (length / CM_PER_INCH)
-            * (width / CM_PER_INCH)
-            * (height / CM_PER_INCH)
-            / CUBIC_INCHES_PER_CUBIC_FOOT
-        ).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
+        package_volume_cuft = (length * width * height / CUBIC_CENTIMETERS_PER_CUBIC_FOOT).quantize(
+            SIX_PLACES, rounding=ROUND_HALF_UP
+        )
         if storage_fee_usd is not None and storage_fee_usd >= 0:
             storage_fee_usd = _money(storage_fee_usd)
             if rule.pricing_storage_days > 0:
@@ -195,13 +194,16 @@ def calculate_sku_pricing(
             and rule.storage_month_basis_days > 0
             and rule.pricing_storage_days >= 0
         ):
+            storage_fee_usd = _money(
+                package_volume_cuft
+                * rule.monthly_storage_rate_usd_per_cuft
+                * Decimal(rule.pricing_storage_days)
+                / Decimal(rule.storage_month_basis_days)
+            )
             daily_storage_fee_per_unit_usd = _money(
                 package_volume_cuft
                 * rule.monthly_storage_rate_usd_per_cuft
                 / Decimal(rule.storage_month_basis_days)
-            )
-            storage_fee_usd = _money(
-                daily_storage_fee_per_unit_usd * Decimal(rule.pricing_storage_days)
             )
 
     denominators = (

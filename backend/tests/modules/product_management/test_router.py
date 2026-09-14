@@ -138,7 +138,7 @@ def test_summary_route_accepts_repeating_completeness_rate(monkeypatch: Any) -> 
     response = TestClient(_app()).get("/api/product-management/skus/summary")
 
     assert response.status_code == 200
-    assert response.json()["data"]["data_completeness_rate"] == "66.666667"
+    assert response.json()["data"]["data_completeness_rate"] == "66.67"
 
 
 def test_batch_sku_query_is_cleaned_deduplicated_and_case_preserving(
@@ -255,27 +255,41 @@ def test_read_export_recalculate_and_view_contracts(
                 internal_tags=[],
                 source_tags=[],
                 category=None,
-                purchase_cost_cny=None,
-                unit_first_leg_cost=None,
+                purchase_cost_cny=Decimal("8.5000"),
+                unit_first_leg_cost=Decimal("0.3500"),
                 unit_first_leg_currency_code=None,
                 purchase_delivery_days=None,
-                data_quality_score=None,
+                data_quality_score=Decimal("82.716187"),
                 linked_platform_sku_count=0,
                 source_observed_at=NOW,
                 product_grade="A",
                 grade_reason="calculated_grade_a",
-                wfs_fulfillment_fee=None,
-                wfs_fulfillment_fee_currency_code=None,
-                wfs_daily_storage_fee=None,
-                wfs_daily_storage_fee_currency_code=None,
-                suggested_price_usd=None,
-                minimum_price_usd=None,
-                clearance_price_usd=None,
-                price_currency_code=None,
+                wfs_fulfillment_fee=Decimal("5.4500"),
+                wfs_fulfillment_fee_currency_code="USD",
+                wfs_daily_storage_fee=Decimal("0.0250"),
+                wfs_daily_storage_fee_currency_code="USD",
+                suggested_price_usd=Decimal("54.5300"),
+                minimum_price_usd=Decimal("44.6100"),
+                clearance_price_usd=Decimal("28.8700"),
+                price_currency_code="USD",
                 calculation_status="ok",
                 calculated_at=NOW,
                 rule_version="synthetic-v1",
-                costs_visible=False,
+                costs_visible=True,
+                product_gross_weight_g=Decimal("800.0000"),
+                gross_weight_kg=Decimal("0.800000"),
+                package_length_cm=Decimal("30.4800"),
+                package_width_cm=Decimal("30.4800"),
+                package_height_cm=Decimal("30.4800"),
+                first_leg_volume_weight_kg=Decimal("4.719475"),
+                first_leg_chargeable_weight_kg=Decimal("4.719475"),
+                first_leg_fee_cny=Decimal("56.6337"),
+                wfs_actual_weight_lb=Decimal("1.763668"),
+                wfs_dimensional_weight_lb=Decimal("12.436842"),
+                wfs_chargeable_weight_lb=Decimal("13.000000"),
+                wfs_base_fee_usd=Decimal("7.1500"),
+                fixed_cost_usd=Decimal("24.5373"),
+                storage_fee_usd=Decimal("0.7500"),
             )
         ]
     )
@@ -408,6 +422,34 @@ def test_read_export_recalculate_and_view_contracts(
         assert "authorization" not in lowered
         assert "access_token" not in lowered
         assert "refresh_token" not in lowered
+
+    list_item = responses[0].json()["data"]["items"][0]
+    for field in (
+        "purchase_cost_cny",
+        "unit_first_leg_cost",
+        "data_quality_score",
+        "wfs_fulfillment_fee",
+        "wfs_daily_storage_fee",
+        "suggested_price_usd",
+        "minimum_price_usd",
+        "clearance_price_usd",
+        "product_gross_weight_g",
+        "gross_weight_kg",
+        "package_length_cm",
+        "package_width_cm",
+        "package_height_cm",
+        "first_leg_volume_weight_kg",
+        "first_leg_chargeable_weight_kg",
+        "first_leg_fee_cny",
+        "wfs_actual_weight_lb",
+        "wfs_dimensional_weight_lb",
+        "wfs_chargeable_weight_lb",
+        "wfs_base_fee_usd",
+        "fixed_cost_usd",
+        "storage_fee_usd",
+    ):
+        assert len(list_item[field].rsplit(".", 1)[1]) == 2
+    assert responses[7].json()["data"]["data_completeness_rate"] == "80.00"
 
     export_body = responses[3].json()["data"]
     assert export_body == {

@@ -276,6 +276,7 @@ def _images(value: object) -> tuple[ParsedImage, ...]:
     if not isinstance(value, list):
         raise ProductInfoParseError("PRODUCT_INFO_IMAGES_INVALID")
     result: list[ParsedImage] = []
+    seen_urls: set[str] = set()
     primary_count = 0
     for ordinal, item in enumerate(value):
         if not isinstance(item, dict):
@@ -287,6 +288,9 @@ def _images(value: object) -> tuple[ParsedImage, ...]:
         if isinstance(primary_value, bool) or primary_value not in (None, 0, 1):
             raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
         primary = None if primary_value is None else bool(primary_value)
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
         primary_count += primary is True
         result.append(ParsedImage(ordinal=ordinal, pic_url=url, is_primary=primary))
     if primary_count > 1:

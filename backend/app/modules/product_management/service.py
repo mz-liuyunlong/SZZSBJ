@@ -111,7 +111,7 @@ class ProductManagementService:
         now = datetime.now(UTC)
         effective_rules = self.repository.list_effective_rules(now, account_refs)
         sku_rules = {
-            account_ref: self._sku_pricing_rule(rule, now.month)
+            account_ref: self._sku_pricing_rule(rule)
             for account_ref, rule in effective_rules.items()
         }
         ready_accounts, invalid_accounts = self._sku_rule_account_sets(account_refs, sku_rules)
@@ -180,7 +180,7 @@ class ProductManagementService:
     ) -> ProductManagementSummaryData:
         now = datetime.now(UTC)
         sku_rules = {
-            account_ref: self._sku_pricing_rule(rule, now.month)
+            account_ref: self._sku_pricing_rule(rule)
             for account_ref, rule in self.repository.list_effective_rules(now, account_refs).items()
         }
         ready_accounts, invalid_accounts = self._sku_rule_account_sets(account_refs, sku_rules)
@@ -245,7 +245,7 @@ class ProductManagementService:
         effective_rule = self.repository.get_effective_rule(
             datetime.now(UTC), identity.source_account_ref
         )
-        sku_rule = self._sku_pricing_rule(effective_rule, datetime.now(UTC).month)
+        sku_rule = self._sku_pricing_rule(effective_rule)
         calculation = self._sku_pricing_calculation(current, profile, len(images), sku_rule)
         return ProductManagementDetailData(
             sku_id=identity.id,
@@ -381,13 +381,16 @@ class ProductManagementService:
             rule_key="product_management",
             **values,
             wfs_fulfillment_rates_json=[
-                item.model_dump(mode="json") for item in payload.wfs_fulfillment_rates
+                item.model_dump(mode="json", context={"preserve_decimal_places": True})
+                for item in payload.wfs_fulfillment_rates
             ],
             wfs_storage_rates_json=[
-                item.model_dump(mode="json") for item in payload.wfs_storage_rates
+                item.model_dump(mode="json", context={"preserve_decimal_places": True})
+                for item in payload.wfs_storage_rates
             ],
             identity_wfs_overrides_json=[
-                item.model_dump(mode="json") for item in payload.identity_wfs_overrides
+                item.model_dump(mode="json", context={"preserve_decimal_places": True})
+                for item in payload.identity_wfs_overrides
             ],
             is_active=True,
             approved_by=actor_ref,
@@ -575,7 +578,7 @@ class ProductManagementService:
         images = [] if current is None else self.repository.list_images(current.source_snapshot_id)
         now = datetime.now(UTC)
         rule = self.repository.get_effective_rule(now, identity.source_account_ref)
-        sku_rule = self._sku_pricing_rule(rule, now.month)
+        sku_rule = self._sku_pricing_rule(rule)
         return self._sku_pricing_read(
             sku_id,
             self._sku_pricing_calculation(current, profile, len(images), sku_rule),
@@ -764,7 +767,7 @@ class ProductManagementService:
         return int(result.status != "ok")
 
     @staticmethod
-    def _sku_pricing_rule(rule: ProductPricingRuleVersion | None, month: int) -> SkuPricingRule:
+    def _sku_pricing_rule(rule: ProductPricingRuleVersion | None) -> SkuPricingRule:
         defaults = SkuPricingRule()
         if rule is None:
             return defaults
@@ -780,9 +783,9 @@ class ProductManagementService:
             ),
             suggested_margin_rate=rule.suggested_gross_margin_rate,
             minimum_margin_rate=rule.minimum_gross_margin_rate,
-            monthly_storage_rate_usd_per_cuft=ProductManagementService._storage_rate(rule, month),
-            storage_month_basis_days=rule.storage_month_basis_days,
-            pricing_storage_days=rule.pricing_storage_days,
+            monthly_storage_rate_usd_per_cuft=defaults.monthly_storage_rate_usd_per_cuft,
+            storage_month_basis_days=defaults.storage_month_basis_days,
+            pricing_storage_days=defaults.pricing_storage_days,
         )
 
     @staticmethod

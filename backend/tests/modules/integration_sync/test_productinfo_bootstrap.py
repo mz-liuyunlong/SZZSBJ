@@ -1,6 +1,7 @@
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock
@@ -8,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import JSON, Column, Engine, MetaData, String, Table, create_engine
+from sqlalchemy import JSON, Column, Engine, MetaData, String, Table, create_engine, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -386,6 +387,7 @@ def test_bootstrap_product_is_visible_through_real_product_management_route(
     assert body["success"] is True
     assert body["meta"]["total"] > 0
     assert body["data"]["items"][0]["sku_id"] == str(identity.id)
+    assert "images" not in body["data"]["items"][0]
 
 
 def test_synced_identity_is_visible_without_product_bootstrap(
@@ -419,7 +421,7 @@ def test_synced_identity_is_visible_without_product_bootstrap(
     assert summary.json()["data"] == {
         "total": 1,
         "synced_detail_count": 1,
-        "data_completeness_rate": "0.000000",
+        "data_completeness_rate": "0.00",
         "with_image_count": 0,
         "with_source_tag_count": 0,
         "incomplete_count": 1,
@@ -430,6 +432,103 @@ def test_synced_identity_is_visible_without_product_bootstrap(
         "invalid_pricing_rule_count": 0,
         "pricing_ok_count": 0,
     }
+    detail = client.get(f"/api/product-management/skus/{identity.id}")
+    assert detail.status_code == 200
+    assert detail.json()["data"]["images"] == []
+
+
+def test_product_management_detail_returns_current_picture_list_images_in_order(
+    product_management_db_session: Session,
+) -> None:
+    identity, source_account_ref = _add_unbootstrapped_identity(product_management_db_session)
+    current = product_management_db_session.scalar(select(LingxingSkuProductInfoCurrent))
+    assert current is not None
+    product_management_db_session.add_all(
+        [
+            LingxingSkuProductImage(
+                id=uuid4(),
+                source_snapshot_id=current.source_snapshot_id,
+                identity_id=identity.id,
+                ordinal=1,
+                pic_url="https://example.invalid/two.jpg",
+                is_primary=False,
+            ),
+            LingxingSkuProductImage(
+                id=uuid4(),
+                source_snapshot_id=current.source_snapshot_id,
+                identity_id=identity.id,
+                ordinal=0,
+                pic_url="https://example.invalid/one.jpg",
+                is_primary=True,
+            ),
+        ]
+    )
+    product_management_db_session.commit()
+    application = create_app()
+    application.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id="synthetic-user",
+        permissions=frozenset({"products:read"}),
+    )
+    application.dependency_overrides[get_product_scope_provider] = lambda: (
+        lambda _principal, _resource: True
+    )
+    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
+        lambda _principal: frozenset({source_account_ref})
+    )
+    application.dependency_overrides[get_db_session] = lambda: product_management_db_session
+    client = TestClient(application)
+
+    detail = client.get(f"/api/product-management/skus/{identity.id}")
+    listing = client.get("/api/product-management/skus")
+
+    assert detail.status_code == 200
+    assert detail.json()["data"]["images"] == [
+        {
+            "ordinal": 0,
+            "url": "https://example.invalid/one.jpg",
+            "is_primary": True,
+            "source": "picture_list",
+        },
+        {
+            "ordinal": 1,
+            "url": "https://example.invalid/two.jpg",
+            "is_primary": False,
+            "source": "picture_list",
+        },
+    ]
+    assert "images" not in listing.json()["data"]["items"][0]
+
+
+def test_summary_counts_pricing_with_complete_inputs_even_without_images(
+    product_management_db_session: Session,
+) -> None:
+    _, source_account_ref = _add_unbootstrapped_identity(product_management_db_session)
+    current = product_management_db_session.scalar(select(LingxingSkuProductInfoCurrent))
+    assert current is not None
+    current.purchase_cost_cny = Decimal("20")
+    current.product_gross_weight_g = Decimal("800")
+    current.package_length_cm = Decimal("30.48")
+    current.package_width_cm = Decimal("30.48")
+    current.package_height_cm = Decimal("30.48")
+    product_management_db_session.commit()
+    application = create_app()
+    application.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id="synthetic-user",
+        permissions=frozenset({"products:read"}),
+    )
+    application.dependency_overrides[get_product_scope_provider] = lambda: (
+        lambda _principal, _resource: True
+    )
+    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
+        lambda _principal: frozenset({source_account_ref})
+    )
+    application.dependency_overrides[get_db_session] = lambda: product_management_db_session
+
+    response = TestClient(application).get("/api/product-management/skus/summary")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["pricing_ok_count"] == 1
+    assert response.json()["data"]["missing_dimension_image_count"] == 1
 
 
 def test_one_time_runner_defaults_to_dry_run_and_requires_injected_executor() -> None:
