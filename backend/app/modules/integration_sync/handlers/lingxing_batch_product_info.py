@@ -13,7 +13,6 @@ class BatchProductInfoOutboundDisabled(RuntimeError):
 
 
 OUTBOUND_NOT_AUTHORIZED = "outbound_not_authorized"
-PROVIDER_CONTRACT_MISSING = "provider_contract_missing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,13 +80,9 @@ class LingxingBatchGetProductInfoSyncHandler:
         run_id: UUID,
         *,
         outbound_authorized: bool = False,
-        provider_contract_verified: bool = False,
     ) -> None:
         del run_id
-        if not outbound_authorized:
-            raise BatchProductInfoOutboundDisabled(OUTBOUND_NOT_AUTHORIZED)
-        if not provider_contract_verified:
-            raise BatchProductInfoOutboundDisabled(PROVIDER_CONTRACT_MISSING)
+        del outbound_authorized
         raise BatchProductInfoOutboundDisabled(OUTBOUND_NOT_AUTHORIZED)
 
 

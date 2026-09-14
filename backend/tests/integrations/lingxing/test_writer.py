@@ -74,7 +74,7 @@ def test_write_guard_denies_raw_and_structured_writes() -> None:
     with pytest.raises(LingxingWriteError, match="RAW writes are disabled"):
         service.save([_envelope()])
 
-    with pytest.raises(ValidationError, match="structured writes are not approved"):
+    with pytest.raises(ValidationError, match="execution settings are not authorized"):
         _settings(LINGXING_ALLOW_STRUCTURED_WRITE=True)
     session.commit.assert_not_called()
 

@@ -143,6 +143,13 @@ class SkuDetailPublicationService:
         raw_ref = self.sync_repository.get_raw_request_ref(raw_request_ref_id)
         if identity is None or raw_ref is None or raw_ref.run_id != run_id:
             raise SkuDetailPublicationError("SKU_DETAIL_PUBLICATION_SOURCE_INVALID")
+        current_identity_code = getattr(identity, "lingxing_sku_code", None)
+        if (
+            parsed.lingxing_sku_code is not None
+            and current_identity_code is not None
+            and current_identity_code != parsed.lingxing_sku_code
+        ):
+            raise SkuDetailPublicationError("CONTRACT_FIELD_MISMATCH")
         detail_values = parsed.model_dump(exclude={"images", "tags"})
         snapshot = LingxingSkuProductInfoSnapshot(
             id=uuid4(),
@@ -158,6 +165,14 @@ class SkuDetailPublicationService:
         )
         now = utc_now()
         try:
+            if parsed.lingxing_sku_code is not None and current_identity_code is None:
+                self.repository.update_record(
+                    identity,
+                    {
+                        "lingxing_sku_code": parsed.lingxing_sku_code,
+                        "updated_at": now,
+                    },
+                )
             self.repository.add_snapshot(snapshot)
             images = [
                 LingxingSkuProductImage(
@@ -225,22 +240,37 @@ class SkuDetailPublicationService:
                 else:
                     self.repository.update_record(profile, profile_values)
                 profile_id = profile.id
-            parse_job = self.sync_repository.add_parse_job(
-                ParseJob(
-                    id=uuid4(),
-                    run_id=run_id,
-                    raw_request_ref_id=raw_request_ref_id,
-                    parser_key="lingxing.product_info.v1",
-                    parser_version=parser_version,
-                    target_layer="DWD",
-                    status="succeeded",
-                    records_seen=1,
-                    records_written=1,
-                    records_rejected=0,
-                    started_at=now,
-                    finished_at=now,
-                )
+            parse_job = self.sync_repository.get_parse_job(
+                raw_request_ref_id,
+                "lingxing.product_info.v1",
+                parser_version,
             )
+            if parse_job is None:
+                parse_job = self.sync_repository.add_parse_job(
+                    ParseJob(
+                        id=uuid4(),
+                        run_id=run_id,
+                        raw_request_ref_id=raw_request_ref_id,
+                        parser_key="lingxing.product_info.v1",
+                        parser_version=parser_version,
+                        target_layer="DWD",
+                        status="succeeded",
+                        records_seen=1,
+                        records_written=1,
+                        records_rejected=0,
+                        started_at=now,
+                        finished_at=now,
+                    )
+                )
+            else:
+                self.repository.update_record(
+                    parse_job,
+                    {
+                        "records_seen": parse_job.records_seen + 1,
+                        "records_written": parse_job.records_written + 1,
+                        "finished_at": now,
+                    },
+                )
             self.sync_repository.add_lineage(
                 self._lineage_entries(
                     run_id=run_id,
@@ -249,7 +279,10 @@ class SkuDetailPublicationService:
                     raw_blob_id=raw_ref.raw_blob_id,
                     target_table="dwd_lingxing_sku_product_info_snapshots",
                     target_record_id=snapshot.id,
-                    paths=DETAIL_SOURCE_PATHS,
+                    paths={
+                        field: _batch_source_path(path)
+                        for field, path in DETAIL_SOURCE_PATHS.items()
+                    },
                     transform_key="lingxing.product_info.standardize",
                     transform_version=parser_version,
                 )
@@ -261,7 +294,10 @@ class SkuDetailPublicationService:
                         raw_blob_id=raw_ref.raw_blob_id,
                         target_table="dwd_lingxing_sku_product_info_current",
                         target_record_id=current_id,
-                        paths=DETAIL_SOURCE_PATHS,
+                        paths={
+                            field: _batch_source_path(path)
+                            for field, path in DETAIL_SOURCE_PATHS.items()
+                        },
                         transform_key="lingxing.product_info.current",
                         transform_version=parser_version,
                     )
@@ -275,7 +311,7 @@ class SkuDetailPublicationService:
                         parse_job_id=parse_job.id,
                         raw_request_ref_id=raw_request_ref_id,
                         raw_blob_id=raw_ref.raw_blob_id,
-                        source_path=f"$.data.picture_list[{image.ordinal}].{field}",
+                        source_path=f"$.data[].picture_list[{image.ordinal}].{field}",
                         target_table="dwd_lingxing_sku_product_images",
                         target_record_id=str(image.id),
                         target_field=field,
@@ -292,7 +328,7 @@ class SkuDetailPublicationService:
                         parse_job_id=parse_job.id,
                         raw_request_ref_id=raw_request_ref_id,
                         raw_blob_id=raw_ref.raw_blob_id,
-                        source_path=f"$.data.global_tags[{tag.ordinal}].{source_field}",
+                        source_path=f"$.data[].global_tags[{tag.ordinal}].{source_field}",
                         target_table="dwd_lingxing_sku_global_tags",
                         target_record_id=str(tag.id),
                         target_field=target_field,
@@ -301,8 +337,8 @@ class SkuDetailPublicationService:
                     )
                     for tag in tags
                     for target_field, source_field in (
-                        ("global_tag_id", "id"),
-                        ("tag_name", "name"),
+                        ("global_tag_id", "global_tag_id"),
+                        ("tag_name", "tag_name"),
                         ("color", "color"),
                     )
                 ]
@@ -314,7 +350,7 @@ class SkuDetailPublicationService:
                             parse_job_id=parse_job.id,
                             raw_request_ref_id=raw_request_ref_id,
                             raw_blob_id=raw_ref.raw_blob_id,
-                            source_path=source_path,
+                            source_path=_batch_source_path(source_path),
                             target_table="dws_sku_base_profile_current",
                             target_record_id=str(profile_id),
                             target_field=field,
@@ -376,3 +412,7 @@ class SkuDetailPublicationService:
             )
             for field, source_path in paths.items()
         ]
+
+
+def _batch_source_path(path: str) -> str:
+    return path.replace("$.data.", "$.data[].", 1)

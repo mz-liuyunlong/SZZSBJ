@@ -161,8 +161,8 @@ def test_lingxing_base_url_rejects_credentials_and_masks_secret_fields() -> None
     assert marker not in str(error.value)
 
 
-def test_lingxing_batch_product_info_outbound_cannot_be_enabled_without_contract() -> None:
-    with pytest.raises(ValidationError, match="provider contract is not verified"):
+def test_lingxing_batch_product_info_mode_requires_the_full_production_gate() -> None:
+    with pytest.raises(ValidationError, match="execution settings are not authorized"):
         Settings.model_validate(
             {
                 "APP_ENV": "test",
@@ -170,3 +170,22 @@ def test_lingxing_batch_product_info_outbound_cannot_be_enabled_without_contract
                 "LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS": True,
             }
         )
+
+    settings = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "DATABASE_URL": SYNTHETIC_DATABASE_URL,
+            "LINGXING_BASE_URL": "https://provider.invalid",
+            "LINGXING_APP_ID": "synthetic-app",
+            "LINGXING_APP_SECRET": "synthetic-secret",
+            "LINGXING_ENABLE_TOKEN_REQUESTS": True,
+            "LINGXING_ENABLE_REAL_CALLS": True,
+            "LINGXING_DRY_RUN": False,
+            "LINGXING_ALLOW_RAW_WRITE": True,
+            "LINGXING_ALLOW_STRUCTURED_WRITE": True,
+            "LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS": True,
+        }
+    )
+
+    assert settings.lingxing_enable_batch_product_info_requests is True
+    assert settings.lingxing_allow_structured_write is True

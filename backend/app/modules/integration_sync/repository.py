@@ -424,6 +424,20 @@ class IntegrationSyncRepository:
         self.session.flush()
         return job
 
+    def get_parse_job(
+        self,
+        raw_request_ref_id: UUID,
+        parser_key: str,
+        parser_version: str,
+    ) -> ParseJob | None:
+        return self.session.scalar(
+            select(ParseJob).where(
+                ParseJob.raw_request_ref_id == raw_request_ref_id,
+                ParseJob.parser_key == parser_key,
+                ParseJob.parser_version == parser_version,
+            )
+        )
+
     def add_lineage(self, entries: Sequence[DataLineage]) -> list[DataLineage]:
         self.session.add_all(entries)
         self.session.flush()

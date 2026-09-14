@@ -98,8 +98,8 @@ GET  /api/product-management/skus/{sku_id}/pricing-breakdown
 
 | 接口字段/字段组 | 源系统、表或接口 | 原始字段/输入 | 标准字段或目标 | 转换/公式 | 时区 | 币种/单位 | 更新与新鲜度 | 写入方 | 风险与证据 |
 |---|---|---|---|---|---|---|---|---|---|
-| `sku_id`（BFF resource ID） | L6 identity | `dwd_lingxing_sku_identity_index.id` | `identity_id`（API alias 为 `sku_id`） | 直接使用新系统内部 identity UUID；绝不暴露 Lingxing ID 为主路径 | N/A | N/A | 取 identity persisted freshness | identity publisher | Product Core 字段仅通过 confirmed `product_id` mapping 组合；不得用 SKU 猜测 |
-| Lingxing sync input | `dwd_lingxing_sku_identity_index` | `lingxing_sku_id` | batch work-item ID list | 只取 account-scoped active identity；不以 SKU code 反推 | UTC | N/A | 取已发布 identity 的 persisted freshness | ProductList publisher / sync dispatcher | `product_id` 可空；未映射仍可同步详情但不能自动并入 Product Core |
+| `sku_id`（BFF resource ID） | L6 identity | `dwd_lingxing_sku_identity_index.id` | `identity_id`（API alias 为 `sku_id`） | 直接使用新系统内部 identity UUID；绝不暴露 Lingxing ID 为主路径 | N/A | N/A | 取 identity persisted freshness | identity publisher | Product Core 字段仅通过 confirmed `product_id` mapping 组合；不得用 SKU 猜测。唯一例外是满足 `OD-ProductInfo-Bootstrap-01` 的受控 exact SKU bootstrap |
+| Lingxing sync input | `dwd_lingxing_sku_identity_index` | `lingxing_sku_id` | batch work-item ID list | 只取 account-scoped active identity；不以 SKU code 反推 | UTC | N/A | 取已发布 identity 的 persisted freshness | ProductList publisher / sync dispatcher | `product_id` 可空；未映射详情默认不能自动并入 Product Core，满足 `OD-ProductInfo-Bootstrap-01` 的一次性受控 bootstrap 除外 |
 | 产品详情 | `batchGetProductInfo` -> ODS RAW refs -> DWD snapshot/current | `data[]` 候选字段 | parser 中定义的产品、报关、材质、尺寸、重量字段 | 可逆类型/单位标准化并记录 parser version、raw ref、run ID | 来源时间待证；系统时间 UTC | 金额用 Decimal/Numeric 并带 `currency_code`；尺寸/重量保留单位 | 由 sync run 决定，不能声称实时 | integration handler/parser/publisher | 离线字段表存在，但验证状态为“未验证” |
 | 图片 | `data[].pic_url` / `picture_list[]` | URL、primary 标记 | `dwd_lingxing_sku_product_images` | 受控 URL 校验、ordinal、snapshot lineage | UTC metadata | N/A | 随详情 snapshot | SKU detail publisher | 不返回 RAW 图片对象或非必要源字段 |
 | Lingxing 标签 | `data[].global_tags[]` | tag ID/name/color | `dwd_lingxing_sku_global_tags` | 保留来源语义与 snapshot lineage | UTC metadata | N/A | 随详情 snapshot | SKU detail publisher | 不等于内部运营标签 |
@@ -172,14 +172,20 @@ GET  /api/product-management/skus/{sku_id}/pricing-breakdown
 | OD-25 | 产品等级按建议售价下的 gross margin 与 ROI 计算 | A/B/C/异常阈值按批准值配置、版本化、审计；返回 `productGrade/gradeReason` |
 | OD-26 | WFS override 按 identity、primary listing、single listing、consistent listing、calculated rule 顺序选择 | 多 active listing override 值冲突时为 `needs_confirm/multiple_listing_wfs_overrides`，禁止静默选取 |
 | OD-27 | WFS 具体费率缺失不阻塞 default-off/mock-only 结构实现 | 无 active rule 为 `wfs_calc_status=missing_rate`；阻止真实费用计算，不抓取或猜测费率 |
+| OD-ProductInfo-Bootstrap-01 | Product Core 继续作为人工维护权威；允许一次性、受控地以官方 ProductInfo `data[].sku` 和 `data[].product_name` 创建最小 Product，并以 exact active `products.sku` 链接 | 只写 `sku/product_name`，不创建 listing、不覆盖任何既有 Product 字段；仅限 scoped active、未 confirmed 且 `product_id` 为空的 identity；创建/精确链接成功后才写 confirmed mapping 和不含业务值的 snapshot/run/parser evidence ref；后续同步不得覆盖 Product Core |
 
 ## 10. 官方证据缺口与停止边界
 
-仓库当前只提供 `batchGetProductInfo` 的 normalized 派生索引：
+仓库当前已提供两个脱敏 ProductInfo contract snapshot：
+
+- `docs/integrations/lingxing/contracts/productinfo-lx-bb8d0df598af.md`
+- `docs/integrations/lingxing/contracts/productinfo-lx-dcb0c142100b.md`
+
+它们确认了 batch response 的 `data[]`、`data[].id`、`data[].sku`、`data[].product_name` 以及当前 parser 使用的图片/标签字段形状。以下真实互操作证据仍不完整：
 
 - `normalized/interfaces.csv` 引用了官方文档路径 `/docs/Product/batchGetProductInfo.md`；该原始页面文件未在当前仓库中定位到。
-- `normalized/request_params.csv` 记录 `productIds`、`sku_identifiers`、`skus` 三选一且候选上限 100。
-- `normalized/response_fields.csv` 记录候选 `code=0`、`data[]` 及详情字段。
+- `normalized/request_params.csv` 记录 `productIds`、`sku_identifiers`、`skus` 三个候选请求字段；选择规则和真实批量上限仍未验证。
+- `normalized/response_fields.csv` 与 contract snapshot 记录 `code` 为 int、`data[]` 及详情字段；真实成功码仍未验证。
 - `api-verification-status.csv` 明确标记为“未验证”，账号权限、分页/批量、频控、字段范围和错误码仍未确认。
 
 仍缺：可复核官方原始页面或批准的官方取证文档、认证/query-sign 适用规则、Content-Type、三选一组合的精确定义、请求/响应样例的脱敏契约、成功/错误码全集、批量/频控/重试规则。
@@ -209,7 +215,7 @@ WFS fulfillment 与每日仓储费的来源 URL 和人工确认日期已由负�
 批准的数据集分类：第 5 节 A-L
 批准的短期策略：default-off/mock-only 实现，不执行真实外部或生产操作
 批准的长期策略：RAW-first 同步、版本化配置、可重建投影、受保护 BFF
-OD-01 至 OD-27：已按第 9 节解决
+OD-01 至 OD-27、OD-ProductInfo-Bootstrap-01：已按第 9 节解决
 batchGetProductInfo 官方证据：继续补充；缺失部分不得猜测并阻断真实执行
 WFS 证据来源：https://marketplace.walmart.com/walmart-fulfillment-services-pricing/
 WFS 人工确认日期：2026-09-13
@@ -217,6 +223,7 @@ WFS 人工确认日期：2026-09-13
 字段优先级：manual override > new-system config/internal > Lingxing sync > calculated
 生产真实同步：未授权；代码合并 main 后须单独批准
 实现 Recovery Stop：售价公式阻塞已解决；允许 engineering-backend-architect 在当前分支恢复 Approved PRP 实现
+ProductInfo Product Core bootstrap Recovery Stop：已由 OD-ProductInfo-Bootstrap-01 解决；仅授权最小 create/exact-link，不改变长期人工权威
 批准人：Project Owner
 批准日期：2026-09-13
 批准类型：Source Decision、PRP-entry 与 implementation-resume approval

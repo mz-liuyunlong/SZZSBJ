@@ -204,16 +204,26 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL is required outside APP_ENV=test")
         if self.lingxing_enable_real_calls and self.lingxing_base_url is None:
             raise ValueError("LINGXING_BASE_URL is required when real calls are enabled")
-        if self.lingxing_enable_batch_product_info_requests:
-            raise ValueError("Lingxing batch product info provider contract is not verified")
+        product_info_execute_mode = (
+            self.app_env is AppEnvironment.PRODUCTION
+            and self.lingxing_enable_token_requests
+            and self.lingxing_enable_real_calls
+            and self.lingxing_enable_batch_product_info_requests
+            and not self.lingxing_dry_run
+            and self.lingxing_allow_raw_write
+            and self.lingxing_allow_structured_write
+            and not self.lingxing_allow_full_sync
+        )
+        if (
+            self.lingxing_enable_batch_product_info_requests or self.lingxing_allow_structured_write
+        ) and not product_info_execute_mode:
+            raise ValueError("Lingxing ProductInfo execution settings are not authorized")
         if self.lingxing_enable_token_requests and (
             self.lingxing_base_url is None
             or not self.lingxing_app_id
             or self.lingxing_app_secret is None
         ):
             raise ValueError("Lingxing token request settings are missing or invalid")
-        if self.lingxing_allow_structured_write:
-            raise ValueError("Lingxing structured writes are not approved")
         if self.lingxing_allow_full_sync:
             raise ValueError("Lingxing full sync is not approved")
         return self

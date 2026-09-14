@@ -3,7 +3,9 @@ from decimal import Decimal
 import pytest
 
 from app.modules.integration_sync.parsers.lingxing_product_info import (
+    CONTRACT_FIELD_MISMATCH,
     ProductInfoParseError,
+    parse_batch_product_info_fixture,
     parse_product_info_fixture,
 )
 from app.modules.integration_sync.parsers.lingxing_product_list import (
@@ -15,6 +17,7 @@ from app.modules.sku_detail.calculations import calculate_sku_profile
 
 def _detail_fixture() -> dict[str, object]:
     return {
+        "code": 0,
         "data": {
             "product_name": "Synthetic Product",
             "sku": "SYNTHETIC-SKU",
@@ -28,19 +31,23 @@ def _detail_fixture() -> dict[str, object]:
             "bg_customs_import_name": "Synthetic EN",
             "bg_customs_import_price": "3.2100",
             "bg_export_hs_code": "001234",
-            "permission_user_info": {
-                "permission_uid": "owner-1",
-                "permission_user_name": "Synthetic Owner",
-            },
+            "permission_user_info": [
+                {
+                    "permission_uid": "owner-1",
+                    "permission_user_name": "Synthetic Owner",
+                }
+            ],
             "clearance": {
                 "customs_clearance_material": "Synthetic CN Material",
                 "customs_clearance_usage": "Synthetic Usage",
                 "customs_clearance_en_material": "Synthetic EN Material",
             },
-            "product_logistics_relation": {
-                "US_cg_transport_costs": "8.0000",
-                "US_currency": "usd",
-            },
+            "product_logistics_relation": [
+                {
+                    "US_cg_transport_costs": "8.0000",
+                    "US_currency": "usd",
+                }
+            ],
             "cg_product_length": "10",
             "cg_product_width": "5",
             "cg_product_height": "2",
@@ -57,11 +64,17 @@ def _detail_fixture() -> dict[str, object]:
             "picture_list": [
                 {
                     "pic_url": "https://example.invalid/one.jpg",
-                    "is_primary": True,
+                    "is_primary": 1,
                 }
             ],
-            "global_tags": [{"id": "tag-1", "name": "Synthetic Tag", "color": "blue"}],
-        }
+            "global_tags": [
+                {
+                    "global_tag_id": "tag-1",
+                    "tag_name": "Synthetic Tag",
+                    "color": "blue",
+                }
+            ],
+        },
     }
 
 
@@ -89,6 +102,35 @@ def test_product_info_fixture_maps_approved_fields_and_children() -> None:
     assert parsed.box_pcs == 4
     assert len(parsed.images) == 1
     assert len(parsed.tags) == 1
+
+
+def test_batch_product_info_fixture_matches_response_ids_without_order_guessing() -> None:
+    first = _detail_fixture()["data"]
+    second = _detail_fixture()["data"]
+    assert isinstance(first, dict) and isinstance(second, dict)
+    first = {**first, "id": 2, "sku": "SYNTHETIC-B"}
+    second = {**second, "id": 1, "sku": "SYNTHETIC-A"}
+
+    parsed = parse_batch_product_info_fixture(
+        {"code": 0, "data": [first, second]},
+        expected_lingxing_sku_ids=("1", "2"),
+    )
+
+    assert [item.lingxing_sku_id for item in parsed] == ["1", "2"]
+    assert [item.detail.lingxing_sku_code for item in parsed] == [
+        "SYNTHETIC-A",
+        "SYNTHETIC-B",
+    ]
+
+
+def test_batch_product_info_fixture_fails_closed_on_contract_id_mismatch() -> None:
+    item = _detail_fixture()["data"]
+    assert isinstance(item, dict)
+    with pytest.raises(ProductInfoParseError, match=CONTRACT_FIELD_MISMATCH):
+        parse_batch_product_info_fixture(
+            {"code": 0, "data": [{**item, "id": 2}]},
+            expected_lingxing_sku_ids=("1",),
+        )
 
 
 def test_parser_rejects_ambiguous_owner_and_logistics_cardinality() -> None:
