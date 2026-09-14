@@ -1,6 +1,5 @@
-/** Product-management No-API page shell rebuilt from the approved HTML prototype. */
-import { Card, message } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { Card, Spin, message } from "antd";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -17,20 +16,22 @@ import ProductManagementSummaryCards, {
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
 import {
-  productGrades,
-  productManagementMockData,
-  productTags,
-} from "@/pages/products/productManagementMockData";
+  getProductManagementOptions,
+  getProductManagementSku,
+  getProductManagementTableView,
+  listProductManagementSkus,
+  requestProductManagementExport,
+  saveProductManagementTableView,
+} from "@/pages/products/productManagementApi";
 import {
   fixedProductColumnKeys,
   productColumnFields,
   type ProductManagementFilters,
   type ProductManagementRow,
+  type ProductGrade,
+  type ProductTag,
 } from "@/pages/products/productManagementTypes";
 import "@/pages/products/ProductManagementPage.css";
-
-const TEMPLATE_PENDING = "列模板接口待接入";
-const EXPORT_PENDING = "导出接口待接入";
 
 const createInitialFilters = (): ProductManagementFilters => ({
   searchType: "sku",
@@ -82,6 +83,7 @@ interface ProductManagementPageProps {
 
 function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
+  const messageApiRef = useRef(messageApi);
   const [filters, setFilters] = useState(createInitialFilters);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [summaryFilterKey, setSummaryFilterKey] = useState<ProductManagementSummaryCardKey>("total");
@@ -92,6 +94,58 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<ProductManagementRow>();
+  const [rows, setRows] = useState<ProductManagementRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [grades, setGrades] = useState<ProductGrade[]>([]);
+  const [tags, setTags] = useState<ProductTag[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    messageApiRef.current = messageApi;
+  }, [messageApi]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve()
+      .then(() => {
+        if (active) {
+          setLoading(true);
+        }
+        return listProductManagementSkus(filters, currentPage, pageSize);
+      })
+      .then((result) => {
+        if (!active) return;
+        setRows(result.rows);
+        setTotal(result.total);
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setRows([]);
+        setTotal(0);
+        void messageApiRef.current.error(
+          reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+        );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [currentPage, filters, pageSize]);
+
+  useEffect(() => {
+    void getProductManagementOptions()
+      .then((options) => {
+        setGrades(options.grades);
+        setTags(options.tags);
+      })
+      .catch(() => undefined);
+    void getProductManagementTableView()
+      .then((view) => {
+        setAppliedColumnKeys(view.applied_column_keys);
+        setColumnWidths((current) => ({ ...current, ...view.column_widths }));
+      })
+      .catch(() => undefined);
+  }, []);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -107,20 +161,22 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const toolbarFilteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
     const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
-    return productManagementMockData.filter((row) => {
+    return rows.filter((row) => {
       const target = String(row[filters.searchType]).toLocaleLowerCase();
       return (!filters.productGrade || row.productGrade === filters.productGrade)
         && (!filters.tag || row.tags.includes(filters.tag))
         && (!keyword || target.includes(keyword))
-        && (batchValues.length === 0 || batchValues.includes(row.sku.toLocaleLowerCase()));
+        && (batchValues.length === 0 || (
+          row.sku !== null && batchValues.includes(row.sku.toLocaleLowerCase())
+        ));
     });
-  }, [filters]);
+  }, [filters, rows]);
 
   const filteredRows = useMemo(() => {
     if (summaryFilterKey === "gradeA") return toolbarFilteredRows.filter((row) => row.productGrade === "A级");
     if (summaryFilterKey === "gradeB") return toolbarFilteredRows.filter((row) => row.productGrade === "B级");
     if (summaryFilterKey === "gradeC") return toolbarFilteredRows.filter((row) => row.productGrade === "C级");
-    if (summaryFilterKey === "complete") return toolbarFilteredRows.filter((row) => row.dataCompleteness >= 90);
+    if (summaryFilterKey === "complete") return toolbarFilteredRows.filter((row) => (row.dataCompleteness ?? 0) >= 90);
     if (summaryFilterKey === "linked") return toolbarFilteredRows.filter((row) => row.linkedPlatformSkuCount > 0);
     return toolbarFilteredRows;
   }, [summaryFilterKey, toolbarFilteredRows]);
@@ -151,8 +207,8 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           <Card size="small" className="product-management__toolbar-card">
             <ProductManagementToolbar
               filters={filters}
-              grades={productGrades}
-              tags={productTags}
+              grades={grades}
+              tags={tags}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}
               onReset={resetFilters}
@@ -160,7 +216,11 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
               onMessage={(content) => void messageApi.info(content)}
               onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
               onOpenColumnConfig={() => setColumnConfigOpen(true)}
-              onDownload={() => void messageApi.info(EXPORT_PENDING)}
+              onDownload={() => void requestProductManagementExport(filters)
+                .then(() => messageApi.info("导出任务未启用，未创建文件"))
+                .catch((reason: unknown) => messageApi.error(
+                  reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+                ))}
             />
           </Card>
 
@@ -173,8 +233,10 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           )}
 
           <div className="product-management__table-wrap">
+            {loading && <Spin tip="正在加载产品数据" />}
             <ProductManagementTable
               rows={filteredRows}
+              total={total}
               appliedColumnKeys={appliedColumnKeys}
               columnWidths={columnWidths}
               currentPage={currentPage}
@@ -190,8 +252,19 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
                 resetPageAndSelection();
               }}
               onSelectionChange={setSelectedRowKeys}
-              onOpenDetail={setDetailRow}
-              onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
+              onOpenDetail={(row) => {
+                setDetailRow(row);
+                void getProductManagementSku(row)
+                  .then(setDetailRow)
+                  .catch((reason: unknown) => messageApi.error(
+                    reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+                  ));
+              }}
+              onBulkExport={() => void requestProductManagementExport(filters)
+                .then(() => messageApi.info("导出任务未启用，未创建文件"))
+                .catch((reason: unknown) => messageApi.error(
+                  reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+                ))}
             />
           </div>
         </Card>
@@ -204,7 +277,13 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           appliedKeys={appliedColumnKeys}
           onApply={setAppliedColumnKeys}
           onClose={() => setColumnConfigOpen(false)}
-          onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
+          onSaveTemplate={() => void saveProductManagementTableView(
+            appliedColumnKeys,
+            columnWidths,
+          ).then(() => messageApi.success("列配置已保存"))
+            .catch((reason: unknown) => messageApi.error(
+              reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
+            ))}
         />
         <ProductDetailModal row={detailRow} onClose={() => setDetailRow(undefined)} />
       </div>

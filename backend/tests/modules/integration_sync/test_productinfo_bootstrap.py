@@ -43,7 +43,7 @@ from app.modules.products.bootstrap import (
     ProductInfoProductBootstrapService,
 )
 from app.modules.products.dependencies import get_product_scope_provider
-from app.modules.products.models import Product
+from app.modules.products.models import Product, ProductPlatformListing
 from app.modules.sku_detail.models import (
     LingxingSkuIdentity,
     LingxingSkuProductImage,
@@ -75,6 +75,7 @@ def _create_product_management_storage(engine: Engine) -> None:
     register_productlist_sync_models()
     sources = (
         Product.__table__,
+        ProductPlatformListing.__table__,
         LingxingSkuIdentity.__table__,
         LingxingSkuProductInfoSnapshot.__table__,
         LingxingSkuProductInfoCurrent.__table__,
@@ -108,7 +109,7 @@ def _create_product_management_storage(engine: Engine) -> None:
     storage.create_all(engine)
 
 
-def _bootstrap_product_in_database(session: Session) -> tuple[LingxingSkuIdentity, str]:
+def _add_unbootstrapped_identity(session: Session) -> tuple[LingxingSkuIdentity, str]:
     suffix = uuid4().hex
     source_account_ref = f"synthetic-account-{suffix}"
     run_id = uuid4()
@@ -152,6 +153,11 @@ def _bootstrap_product_in_database(session: Session) -> tuple[LingxingSkuIdentit
     )
     session.add_all((identity, snapshot, current))
     session.flush()
+    return identity, source_account_ref
+
+
+def _bootstrap_product_in_database(session: Session) -> tuple[LingxingSkuIdentity, str]:
+    identity, source_account_ref = _add_unbootstrapped_identity(session)
 
     result = ProductInfoProductBootstrapService(session).execute(
         source_account_ref,
@@ -377,6 +383,33 @@ def test_bootstrap_product_is_visible_through_real_product_management_route(
     assert body["success"] is True
     assert body["meta"]["total"] > 0
     assert body["data"]["items"][0]["sku_id"] == str(identity.id)
+
+
+def test_synced_identity_is_visible_without_product_bootstrap(
+    product_management_db_session: Session,
+) -> None:
+    identity, source_account_ref = _add_unbootstrapped_identity(product_management_db_session)
+    application = create_app()
+    application.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id="synthetic-user",
+        permissions=frozenset({"products:read"}),
+    )
+    application.dependency_overrides[get_product_scope_provider] = lambda: (
+        lambda _principal, _resource: True
+    )
+    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
+        lambda _principal: frozenset({source_account_ref})
+    )
+    application.dependency_overrides[get_db_session] = lambda: product_management_db_session
+
+    response = TestClient(application).get("/api/product-management/skus")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["meta"]["total"] == 1
+    assert body["data"]["items"][0]["sku_id"] == str(identity.id)
+    assert identity.product_id is None
+    assert identity.mapping_status == "unmapped"
 
 
 def test_one_time_runner_defaults_to_dry_run_and_requires_injected_executor() -> None:

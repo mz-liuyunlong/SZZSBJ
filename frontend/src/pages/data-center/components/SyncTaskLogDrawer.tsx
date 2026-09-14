@@ -116,7 +116,7 @@ function SyncTaskLogDrawer({ open, task, logs, onClose }: SyncTaskLogDrawerProps
         <section className="sync-task__notice-section">
           <h3>失败原因摘要</h3>
           <div className="sync-task__notice-box">
-            API 请求超时；部分订单返回字段缺失。敏感参数已脱敏，完整错误请在后端日志中按 request_id 检索。
+            仅展示治理表中的安全状态、计数和错误码，不展示请求或响应内容。
           </div>
         </section>
       </Drawer>

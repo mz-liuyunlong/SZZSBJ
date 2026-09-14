@@ -145,7 +145,7 @@ class ProductInfoOneTimeRunner:
         dry_run: bool = True,
         dwd_write_authorized: bool = False,
         product_bootstrap_authorized: bool = False,
-        batch_size: int = 1,
+        batch_size: int = 20,
     ) -> ProductInfoOneTimeRunResult:
         if not source_account_ref or source_account_ref != source_account_ref.strip():
             raise ProductInfoOneTimeRunError("PRODUCT_INFO_SOURCE_ACCOUNT_REF_INVALID")

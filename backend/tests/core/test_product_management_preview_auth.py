@@ -19,6 +19,12 @@ from app.core.config import Settings, SettingsError, get_settings
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.schemas import (
+    InterfaceListData,
+    SyncConfigListData,
+    SyncRunListData,
+)
+from app.modules.integration_sync.service import IntegrationSyncService
 from app.modules.product_management.schemas import (
     PricingRulesData,
     ProductManagementListData,
@@ -189,6 +195,7 @@ def test_correct_preview_token_creates_only_the_approved_principal(
     token = _enable_preview(monkeypatch)
     scope: dict[str, Any] = {
         "type": "http",
+        "method": "GET",
         "path": "/api/product-management/options",
         "headers": [(PREVIEW_AUTH_HEADER.lower().encode(), token.encode())],
     }
@@ -201,8 +208,8 @@ def test_correct_preview_token_creates_only_the_approved_principal(
             {
                 "products:read",
                 "products:pricing_rules:read",
-                "products:table_views:update",
                 "products:cost:read",
+                "integrations:read",
             }
         ),
     )
@@ -220,12 +227,79 @@ def test_correct_preview_token_is_path_bound_and_export_remains_forbidden(
     options = client.get("/api/product-management/options", headers=headers)
     outside_scope = client.get("/api/v1/products", headers=headers)
     export = client.post("/api/product-management/skus/export", headers=headers, json={})
+    table_view_write = client.put(
+        "/api/user-table-views/product-management",
+        headers=headers,
+        json={},
+    )
 
     assert options.status_code == 200
     assert token not in options.text
     assert outside_scope.status_code == 401
-    assert export.status_code == 403
-    assert export.json()["error"]["code"] == "FORBIDDEN"
+    assert export.status_code == 401
+    assert export.json()["error"]["code"] == "UNAUTHORIZED"
+    assert table_view_write.status_code == 401
+    assert table_view_write.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_preview_token_allows_only_the_three_integration_list_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        IntegrationSyncService,
+        "list_interfaces",
+        MagicMock(return_value=(InterfaceListData(items=[]), 0)),
+    )
+    monkeypatch.setattr(
+        IntegrationSyncService,
+        "list_configs",
+        MagicMock(return_value=(SyncConfigListData(items=[]), 0)),
+    )
+    monkeypatch.setattr(
+        IntegrationSyncService,
+        "list_runs",
+        MagicMock(return_value=(SyncRunListData(items=[]), 0)),
+    )
+    token = _enable_preview(monkeypatch, source_account_refs="acct-a")
+    client = TestClient(_app())
+    headers = {PREVIEW_AUTH_HEADER: token}
+
+    for path in (
+        "/api/integrations/interfaces",
+        "/api/integrations/sync-configs",
+        "/api/integrations/sync-runs",
+    ):
+        response = client.get(path, headers=headers)
+        assert response.status_code == 200
+        assert token not in response.text
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    (
+        ("PATCH", "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001"),
+        ("POST", "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001/run"),
+        ("POST", "/api/integrations/sync-runs/00000000-0000-0000-0000-000000000001/retry"),
+        ("POST", "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001/backfill"),
+    ),
+)
+def test_preview_token_does_not_authorize_integration_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+) -> None:
+    token = _enable_preview(monkeypatch, source_account_refs="acct-a")
+
+    response = TestClient(_app()).request(
+        method,
+        path,
+        headers={PREVIEW_AUTH_HEADER: token},
+        json={},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert token not in response.text
 
 
 def test_preview_product_scope_only_allows_expected_principal_and_resource(

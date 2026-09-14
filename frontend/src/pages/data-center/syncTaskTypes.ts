@@ -24,30 +24,44 @@ export interface SyncTaskFilters {
 
 export interface SyncTaskRow {
   id: string;
+  interfaceId: string;
   taskName: string;
   interfaceName: string;
+  provider: string;
+  source: string | null;
+  taskType: string;
+  status: "enabled" | "disabled";
   module: SyncTaskModule;
   autoSync: boolean;
   frequency: string;
   nextRunAt?: string;
   lastStatus: SyncTaskStatus;
-  lastRunAt: string;
+  lastRunAt: string | null;
+  lastRunFinishedAt: string | null;
   todaySuccess: number;
   todayFailed: number;
   description: string;
   cycle: SyncTaskCycle;
-  dailyRunCount: number;
+  workItemsPlanned: number;
+  workItemsSucceeded: number;
+  workItemsFailed: number;
+  recordsSeen: number;
+  recordsWritten: number;
+  errorCode: string | null;
+  dryRun: boolean | null;
+  updatedAt: string | null;
+  dailyRunCount: number | null;
   runTimes: string[];
   weekDays: string[];
-  timeoutSeconds: number;
-  maxFailureTimes: number;
-  duplicatePolicy: string;
+  timeoutSeconds: number | null;
+  maxFailureTimes: number | null;
+  duplicatePolicy: string | null;
   retryEnabled: boolean;
-  retryTimes: number;
-  retryInterval: string;
+  retryTimes: number | null;
+  retryInterval: string | null;
   notificationScenes: string[];
   notificationChannels: string[];
-  notificationTargets: string;
+  notificationTargets: string | null;
 }
 
 export interface SyncTaskLog {
@@ -56,12 +70,12 @@ export interface SyncTaskLog {
   runAt: string;
   triggerType: SyncTaskTriggerType;
   status: SyncTaskStatus;
-  duration: string;
+  duration: string | null;
   total?: number;
   success?: number;
   failed?: number;
-  requestId: string;
-  errorSummary?: string;
+  requestId: string | null;
+  errorSummary?: string | null;
 }
 
 export interface SyncScheduleItem {

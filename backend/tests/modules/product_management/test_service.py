@@ -122,6 +122,7 @@ def test_product_core_manual_grade_precedes_calculated_grade() -> None:
     item = ProductManagementService._list_item(
         (identity, product, None, None, pricing, rule, None),
         [],
+        0,
         include_costs=False,
     )
 
@@ -149,6 +150,7 @@ def test_list_freshness_uses_oldest_returned_observation_and_reports_latest() ->
     ]
     service.repository.list_projections.return_value = (rows, 2)
     service.repository.list_internal_tags.return_value = {}
+    service.repository.listing_counts.return_value = {}
 
     _, _, list_freshness_at, latest_observed_at = service.list_skus(
         ProductManagementListQuery(),

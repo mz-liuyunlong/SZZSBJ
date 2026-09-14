@@ -18,6 +18,8 @@ def test_batch_sku_filter_is_applied_in_bounded_repository_query() -> None:
         sku=None,
         sku_batch=["Synthetic-A", "Synthetic-b"],
         product_name=None,
+        category=None,
+        internal_tag=None,
         product_grade=None,
         calculation_status=None,
         sort_by="sku",
@@ -28,7 +30,7 @@ def test_batch_sku_filter_is_applied_in_bounded_repository_query() -> None:
     sql = str(statement.compile())
     assert rows == []
     assert total == 0
-    assert "products.sku IN" in sql
+    assert "coalesce(products.sku, dwd_lingxing_sku_identity_index.lingxing_sku_code) IN" in sql
     assert "LIMIT" in sql
     session.commit.assert_not_called()
     session.rollback.assert_not_called()

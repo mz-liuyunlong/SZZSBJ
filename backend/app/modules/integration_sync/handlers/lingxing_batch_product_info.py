@@ -9,7 +9,7 @@ from app.modules.integration_sync.models import (
 
 
 class BatchProductInfoOutboundDisabled(RuntimeError):
-    """V1 deliberately has no real batchGetProductInfo transport contract."""
+    """Direct handler execution is disabled; the controlled one-time executor owns outbound."""
 
 
 OUTBOUND_NOT_AUTHORIZED = "outbound_not_authorized"

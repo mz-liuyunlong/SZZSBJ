@@ -736,7 +736,6 @@ def test_client_rejects_endpoint_path_bypasses_before_transport(bypass_path: str
     ("endpoint", "message"),
     [
         (SELLER_ENDPOINT, "pending_store_scope"),
-        (BATCH_PRODUCT_ENDPOINT, "pending_endpoint_contract"),
     ],
 )
 def test_pending_endpoint_contracts_fail_closed_before_transport(
@@ -765,6 +764,66 @@ def test_pending_endpoint_contracts_fail_closed_before_transport(
     assert calls == 0
     assert token_provider.get_calls == 0
     assert token_provider.recover_calls == []
+
+
+def test_batch_product_info_uses_exact_id_contract_and_one_attempt() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.method == "POST"
+        assert request.url.path == BATCH_PRODUCT_ENDPOINT
+        assert json.loads(request.content) == {"productIds": ["synthetic-id"]}
+        assert "Authorization" not in request.headers
+        assert set(request.url.params) == {"access_token", "app_key", "timestamp", "sign"}
+        return httpx.Response(503, json={"message": "safe provider failure"})
+
+    token_provider = _FakeTokenProvider()
+    client = LingxingReadonlyClient(
+        _settings(
+            APP_ENV="production",
+            DATABASE_URL=SYNTHETIC_DATABASE_URL,
+            LINGXING_APP_ID="synthetic-app-id",
+            LINGXING_APP_SECRET="synthetic-secret",
+            LINGXING_ENABLE_TOKEN_REQUESTS=True,
+            LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS=True,
+            LINGXING_DRY_RUN=False,
+            LINGXING_ALLOW_RAW_WRITE=True,
+            LINGXING_ALLOW_STRUCTURED_WRITE=True,
+        ),
+        token_provider=token_provider,
+        success_evaluator=_is_success,
+        transport=httpx.MockTransport(handler),
+        sleeper=lambda _: None,
+    )
+    try:
+        result = client.fetch_batch_product_info(
+            product_ids=("synthetic-id",),
+            source_account_ref="synthetic-account",
+            run_id="synthetic-run",
+            work_item_id="synthetic-work-item",
+        )
+    finally:
+        client.close()
+
+    assert result.error_code == "HTTP_ERROR"
+    assert result.attempt_no == 1
+    assert calls == 1
+
+
+def test_batch_product_info_generic_capture_path_remains_fail_closed() -> None:
+    client = LingxingReadonlyClient(
+        _settings(),
+        token_provider=_FakeTokenProvider(),
+        success_evaluator=_is_success,
+        transport=httpx.MockTransport(lambda _: pytest.fail("transport must not run")),
+    )
+    try:
+        with pytest.raises(LingxingClientError, match="controlled ProductInfo batch method"):
+            client.fetch_pages(_capture(BATCH_PRODUCT_ENDPOINT, body={"productIds": ["id"]}))
+    finally:
+        client.close()
 
 
 def test_client_rejects_empty_store_allowlist_before_transport() -> None:

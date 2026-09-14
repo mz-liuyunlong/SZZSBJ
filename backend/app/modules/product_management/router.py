@@ -98,6 +98,7 @@ def list_product_management_skus(
             "products",
             "dwd_lingxing_sku_identity_index",
             "dwd_lingxing_sku_product_info_current",
+            "dwd_lingxing_sku_product_images",
             "dws_product_management_pricing_current",
             list_freshness_at=list_freshness,
             latest_observed_at=latest_observed,
@@ -221,6 +222,7 @@ def get_product_management_sku(
             "products",
             "dwd_lingxing_sku_product_info_current",
             "dwd_lingxing_sku_product_images",
+            "dwd_lingxing_sku_global_tags",
             "dws_product_management_pricing_current",
         ),
     )

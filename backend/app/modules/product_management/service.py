@@ -51,6 +51,7 @@ from app.modules.product_management.schemas import (
     ProductManagementOptionsData,
     RecalculatePricingRequest,
     RecalculatePricingResult,
+    SourceTagRead,
     SyncedProductDetailRead,
     UserTableViewRead,
     UserTableViewWrite,
@@ -106,14 +107,23 @@ class ProductManagementService:
             sku=query.sku,
             sku_batch=query.sku_batch,
             product_name=query.product_name,
+            category=query.category,
+            internal_tag=query.internal_tag,
             product_grade=query.product_grade,
             calculation_status=query.calculation_status,
             sort_by=query.sort_by,
             sort_order=query.sort_order,
         )
-        tags = self.repository.list_internal_tags([row[1].id for row in rows], datetime.now(UTC))
+        product_ids = [row[1].id for row in rows if row[1] is not None]
+        tags = self.repository.list_internal_tags(product_ids, datetime.now(UTC))
+        listing_counts = self.repository.listing_counts(product_ids)
         items = [
-            self._list_item(row, tags.get(row[1].id, []), include_costs=include_costs)
+            self._list_item(
+                row,
+                tags.get(row[1].id, []) if row[1] is not None else [],
+                listing_counts.get(row[1].id, 0) if row[1] is not None else 0,
+                include_costs=include_costs,
+            )
             for row in rows
         ]
         observed_at = [
@@ -135,20 +145,29 @@ class ProductManagementService:
     ) -> ProductManagementDetailData:
         row = self._require_projection(sku_id, account_refs)
         identity, product, current, _, pricing, rule, _ = row
-        tags = self.repository.list_internal_tags([product.id], datetime.now(UTC)).get(
-            product.id, []
+        tags = (
+            self.repository.list_internal_tags([product.id], datetime.now(UTC)).get(product.id, [])
+            if product is not None
+            else []
         )
         images = [] if current is None else self.repository.list_images(current.source_snapshot_id)
+        source_tags = (
+            [] if current is None else self.repository.list_source_tags(current.source_snapshot_id)
+        )
         return ProductManagementDetailData(
             sku_id=identity.id,
-            core=ProductCoreRead(
-                product_id=product.id,
-                sku=product.sku,
-                product_name=product.product_name,
-                category=product.category,
-                product_type=product.product_type,
-                status=product.status,
-                manual_grade=product.grade,
+            core=(
+                ProductCoreRead(
+                    product_id=product.id,
+                    sku=product.sku,
+                    product_name=product.product_name,
+                    category=product.category,
+                    product_type=product.product_type,
+                    status=product.status,
+                    manual_grade=product.grade,
+                )
+                if product is not None
+                else None
             ),
             synced_detail=(
                 SyncedProductDetailRead.model_validate(current) if current is not None else None
@@ -158,6 +177,14 @@ class ProductManagementService:
                     ordinal=image.ordinal, url=image.pic_url, is_primary=image.is_primary
                 )
                 for image in images
+            ],
+            source_tags=[
+                SourceTagRead(
+                    source_tag_id=tag.global_tag_id,
+                    label=tag.tag_name,
+                    color=tag.color,
+                )
+                for tag in source_tags
             ],
             internal_tags=[self._tag(tag) for tag in tags],
             pricing=(
@@ -504,6 +531,7 @@ class ProductManagementService:
         actor_ref: str,
     ) -> int:
         identity, product, current, profile, existing, _, _ = row
+        assert product is not None
         fulfillment_rates = tuple(
             self._fulfillment_rate(item) for item in rule.wfs_fulfillment_rates_json
         )
@@ -623,10 +651,11 @@ class ProductManagementService:
     def _list_item(
         row: ProductManagementProjection,
         tags: list[ManualProductTag],
+        listing_count: int,
         *,
         include_costs: bool,
     ) -> ProductManagementListItem:
-        identity, product, _, _, pricing, rule, image = row
+        identity, product, current, profile, pricing, rule, image = row
         wfs_fee = None
         wfs_currency = None
         if pricing is not None and include_costs:
@@ -636,16 +665,46 @@ class ProductManagementService:
             elif pricing.wfs_fulfillment_fee_cny is not None:
                 wfs_fee = pricing.wfs_fulfillment_fee_cny
                 wfs_currency = "CNY"
-        manual_grade = product.grade
+        manual_grade = product.grade if product is not None else None
         effective_manual_grade = (
             manual_grade if manual_grade in {"A", "B", "C", "exception"} else "exception"
         )
         return ProductManagementListItem(
             sku_id=identity.id,
-            sku=product.sku,
-            product_name=product.product_name,
-            primary_image=image.pic_url if image is not None else None,
+            sku=(product.sku if product is not None else identity.lingxing_sku_code),
+            product_name=(
+                product.product_name
+                if product is not None
+                else current.product_name
+                if current is not None
+                else None
+            ),
+            primary_image=(
+                image.pic_url
+                if image is not None
+                else current.main_image_url
+                if current is not None
+                else None
+            ),
             internal_tags=[ProductManagementService._tag(tag) for tag in tags],
+            category=product.category if product is not None else None,
+            purchase_cost_cny=(
+                profile.purchase_cost_cny if profile is not None and include_costs else None
+            ),
+            unit_first_leg_cost=(
+                profile.unit_first_leg_cost if profile is not None and include_costs else None
+            ),
+            unit_first_leg_currency_code=(
+                profile.unit_first_leg_currency if profile is not None and include_costs else None
+            ),
+            purchase_delivery_days=(
+                current.purchase_delivery_days if current is not None else None
+            ),
+            data_quality_score=(profile.data_quality_score if profile is not None else None),
+            linked_platform_sku_count=listing_count,
+            source_observed_at=(
+                current.source_observed_at if current is not None else identity.last_seen_at
+            ),
             product_grade=cast(
                 Literal["A", "B", "C", "exception"] | None,
                 (
