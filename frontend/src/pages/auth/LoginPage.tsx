@@ -14,9 +14,10 @@ import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  isValidMockLogin,
+  authenticateMockLogin,
   MOCK_PASSWORD,
   MOCK_USERNAME,
+  type MockAuthUser,
 } from "@/mocks/auth";
 import "@/pages/auth/LoginPage.css";
 
@@ -29,7 +30,7 @@ interface LoginValues {
 }
 
 interface LoginPageProps {
-  onLogin: () => void;
+  onLogin: (user: MockAuthUser) => void;
 }
 
 function LoginPage({ onLogin }: LoginPageProps) {
@@ -39,7 +40,9 @@ function LoginPage({ onLogin }: LoginPageProps) {
   const [loginError, setLoginError] = useState(false);
 
   const submitLogin: FormProps<LoginValues>["onFinish"] = (values) => {
-    if (!isValidMockLogin(values.username, values.password)) {
+    const user = authenticateMockLogin(values.username, values.password);
+
+    if (!user) {
       setLoginError(true);
       return;
     }
@@ -50,7 +53,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
     } else {
       localStorage.removeItem(REMEMBERED_USERNAME_KEY);
     }
-    onLogin();
+    onLogin(user);
   };
 
   return (
@@ -59,13 +62,6 @@ function LoginPage({ onLogin }: LoginPageProps) {
       <Typography.Paragraph type="secondary">
         请输入您的账户信息以开始管理您的项目
       </Typography.Paragraph>
-
-      <Alert
-        className="login-page__disclaimer"
-        type="info"
-        showIcon
-        message="演示登录，仅用于前端界面验证，不提供真实身份认证。"
-      />
 
       <Form<LoginValues>
         name="mock-login"
@@ -87,7 +83,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
           <Input
             size="large"
             prefix={<UserOutlined aria-hidden="true" />}
-            placeholder="请输入账号"
+            placeholder="请输入账号：admin 或 user"
             autoComplete="username"
           />
         </Form.Item>
@@ -99,7 +95,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
           <Input.Password
             size="large"
             prefix={<LockOutlined aria-hidden="true" />}
-            placeholder="请输入密码"
+            placeholder="请输入密码：12345678"
             autoComplete="current-password"
           />
         </Form.Item>

@@ -25,6 +25,7 @@ import {
 import { useEffect, useRef, useState, type FocusEvent } from "react";
 import type { NavigationPage } from "@/config/navigation";
 import { mockCurrentUser } from "@/mocks/currentUser";
+import type { MockAuthUser } from "@/mocks/auth";
 import {
   mockNotifications,
   type MockNotification,
@@ -35,6 +36,8 @@ interface TopbarActionsProps {
   aiAssistantPage: NavigationPage;
   personalCenterPage: NavigationPage;
   documentationPage: NavigationPage;
+  currentUser?: Pick<MockAuthUser, "displayName" | "account" | "avatarSrc" | "online">;
+  canOpenPage?: (page: NavigationPage) => boolean;
   onOpenPage: (pageKey: string) => void;
   onRequestOverlayClose: () => void;
   onLogout: () => void;
@@ -44,6 +47,8 @@ function TopbarActions({
   aiAssistantPage,
   personalCenterPage,
   documentationPage,
+  currentUser = mockCurrentUser,
+  canOpenPage = () => true,
   onOpenPage,
   onRequestOverlayClose,
   onLogout,
@@ -191,39 +196,43 @@ function TopbarActions({
       <div className="topbar-actions__user-summary">
         <Avatar
           size={48}
-          src={mockCurrentUser.avatarSrc}
+          src={currentUser.avatarSrc}
           alt="演示用户头像"
         >
           掌
         </Avatar>
         <div>
-          <Typography.Text strong>{mockCurrentUser.displayName}</Typography.Text>
-          <Typography.Text type="secondary">{mockCurrentUser.account}</Typography.Text>
+          <Typography.Text strong>{currentUser.displayName}</Typography.Text>
+          <Typography.Text type="secondary">{currentUser.account}</Typography.Text>
           <span className="topbar-actions__online-state">
-            <Badge status={mockCurrentUser.online ? "success" : "default"} />
+            <Badge status={currentUser.online ? "success" : "default"} />
             在线
           </span>
         </div>
       </div>
       <div className="topbar-actions__user-menu" role="menu" aria-label="用户菜单选项">
-        <Button
-          type="text"
-          role="menuitem"
-          icon={<UserOutlined aria-hidden="true" />}
-          onClick={() => openPage(personalCenterPage.key)}
-        >
-          <span className="topbar-actions__user-menu-label">{personalCenterPage.title}</span>
-          <RightOutlined className="topbar-actions__user-menu-arrow" aria-hidden="true" />
-        </Button>
-        <Button
-          type="text"
-          role="menuitem"
-          icon={<FileTextOutlined aria-hidden="true" />}
-          onClick={() => openPage(documentationPage.key)}
-        >
-          <span className="topbar-actions__user-menu-label">{documentationPage.title}</span>
-          <RightOutlined className="topbar-actions__user-menu-arrow" aria-hidden="true" />
-        </Button>
+        {canOpenPage(personalCenterPage) && (
+          <Button
+            type="text"
+            role="menuitem"
+            icon={<UserOutlined aria-hidden="true" />}
+            onClick={() => openPage(personalCenterPage.key)}
+          >
+            <span className="topbar-actions__user-menu-label">{personalCenterPage.title}</span>
+            <RightOutlined className="topbar-actions__user-menu-arrow" aria-hidden="true" />
+          </Button>
+        )}
+        {canOpenPage(documentationPage) && (
+          <Button
+            type="text"
+            role="menuitem"
+            icon={<FileTextOutlined aria-hidden="true" />}
+            onClick={() => openPage(documentationPage.key)}
+          >
+            <span className="topbar-actions__user-menu-label">{documentationPage.title}</span>
+            <RightOutlined className="topbar-actions__user-menu-arrow" aria-hidden="true" />
+          </Button>
+        )}
         <Button
           danger
           type="text"
@@ -265,15 +274,17 @@ function TopbarActions({
           </Button>
         </Popover>
 
-        <Button
-          className="topbar-actions__button topbar-actions__ai-button"
-          type="text"
-          icon={<RobotOutlined aria-hidden="true" />}
-          aria-label={aiAssistantPage.title}
-          onClick={() => openPage(aiAssistantPage.key)}
-        >
-          {aiAssistantPage.title}
-        </Button>
+        {canOpenPage(aiAssistantPage) && (
+          <Button
+            className="topbar-actions__button topbar-actions__ai-button"
+            type="text"
+            icon={<RobotOutlined aria-hidden="true" />}
+            aria-label={aiAssistantPage.title}
+            onClick={() => openPage(aiAssistantPage.key)}
+          >
+            {aiAssistantPage.title}
+          </Button>
+        )}
 
         <Popover
           trigger="hover"
@@ -298,7 +309,7 @@ function TopbarActions({
           >
             <Avatar
               size={28}
-              src={mockCurrentUser.avatarSrc}
+              src={currentUser.avatarSrc}
               alt="演示用户头像"
             >
               掌

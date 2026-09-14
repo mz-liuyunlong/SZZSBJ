@@ -676,7 +676,7 @@ const row: ProductManagementRow = {
   productSpec: null,
   grossWeightKg: null,
   netWeightKg: null,
-  dataCompleteness: null,
+  dataCompleteness: 0,
   linkedPlatformSkuCount: 0,
   updatedAt: null,
 };
@@ -737,13 +737,13 @@ describe("ProductManagementPage", () => {
     render(<ProductManagementPage page={productPage} />);
     await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
 
-    expect(screen.getByRole("columnheader", { name: /类目/ })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: /类目/ })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /产品采购价/ })).toBeVisible();
     expect(screen.getByRole("columnheader", { name: /资料完整度/ })).toBeVisible();
-    expect(screen.queryByRole("columnheader", { name: /WFS费用/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: /建议售价/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: /最低售价/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: /清仓售价/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /每日仓储费/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /建议售价/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /最低售价/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /清仓售价/ })).toBeVisible();
   });
 
   it("can restore real-data defaults over an older saved column view", async () => {
@@ -753,15 +753,15 @@ describe("ProductManagementPage", () => {
     });
 
     render(<ProductManagementPage page={productPage} />);
-    expect(await screen.findByRole("columnheader", { name: /WFS费用/ })).toBeVisible();
+    expect(await screen.findByRole("columnheader", { name: /每日仓储费/ })).toBeVisible();
     expect(screen.getAllByText("缺基础数据").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "列配置" }));
     fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
     fireEvent.click(screen.getByRole("button", { name: "保存并应用" }));
 
-    expect(screen.getByRole("columnheader", { name: /类目/ })).toBeVisible();
-    expect(screen.queryByRole("columnheader", { name: /WFS费用/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: /建议售价/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /类目/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /每日仓储费/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /建议售价/ })).toBeVisible();
   });
 
   it("loads rows from the backend and opens backend detail data", async () => {
@@ -777,7 +777,7 @@ describe("ProductManagementPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "SYNTHETIC-SKU" }));
     await waitFor(() => expect(getProductManagementSku).toHaveBeenCalledWith(row));
-    expect(await screen.findByText("来源 · Synthetic Source Tag")).toBeVisible();
+    expect(await screen.findByText("SKU BASIC DATA")).toBeVisible();
   });
 
   it("sends changed filters to the backend and renders safe failures", async () => {

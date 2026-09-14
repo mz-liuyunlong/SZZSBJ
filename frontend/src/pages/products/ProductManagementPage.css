@@ -706,11 +706,6 @@
   line-height: 48px;
 }
 
-.product-management__detail-modal .ant-modal-close {
-  top: 8px;
-  width: 32px;
-  height: 32px;
-}
 
 .product-management__detail-modal .ant-modal-body {
   flex: 1 1 auto;
@@ -1000,3 +995,364 @@
   min-width: 0;
 }
 /* End summary card height normalization */
+
+
+.product-management__source-tag-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.product-management__source-tag-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgb(16 24 40 / 8%);
+}
+
+.product-management__table-wrap {
+  position: relative;
+}
+
+.product-management__table-loading.ant-spin {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  z-index: 20;
+  padding: 10px 14px;
+  border: 1px solid #e5eaf3;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 8px 24px rgb(16 24 40 / 10%);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* 产品管理表格加载遮罩：覆盖旧的左偏 loading 样式 */
+.product-management__table-wrap {
+  position: relative;
+}
+
+.product-management__table-loading.ant-spin {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 30 !important;
+  display: flex !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: rgb(245 247 251 / 62%) !important;
+  box-shadow: none !important;
+  transform: none !important;
+  pointer-events: none;
+  backdrop-filter: blur(1px);
+}
+
+.product-management__table-loading.ant-spin::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 148px;
+  height: 92px;
+  border: 1px solid #dce3ed;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 10px 30px rgb(16 24 40 / 12%);
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.product-management__table-loading.ant-spin .ant-spin-dot,
+.product-management__table-loading.ant-spin .ant-spin-dot-holder,
+.product-management__table-loading.ant-spin .ant-spin-text {
+  position: relative;
+  z-index: 1;
+}
+
+.product-management__table-loading.ant-spin .ant-spin-text {
+  margin-top: 10px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.product-detail-modal__cover-img {
+  display: block;
+  width: 100%;
+  height: 132px;
+  max-height: 132px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.product-detail-modal__image-empty {
+  display: flex;
+  width: 100%;
+  height: 132px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d7dfeb;
+  border-radius: 12px;
+  color: #98a2b3;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+/* 产品详情图片区域：禁止把图片 URL 当文字撑开 */
+.product-detail-modal__cover-media {
+  display: flex;
+  width: 100%;
+  height: 132px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d7dfeb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.product-detail-modal__cover-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.product-detail-modal__image-empty {
+  display: flex;
+  width: 100%;
+  height: 132px;
+  align-items: center;
+  justify-content: center;
+  color: #98a2b3;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+/* 产品详情弹窗图片兜底限制：防止任何图片撑大弹窗 */
+.product-detail-modal img,
+.product-detail-modal .ant-image,
+.product-detail-modal [class*="image"] img,
+.product-detail-modal [class*="Image"] img {
+  max-width: 100% !important;
+  max-height: 160px !important;
+  object-fit: contain !important;
+}
+
+.product-detail-modal [class*="image"],
+.product-detail-modal [class*="Image"] {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.product-detail-modal [class*="image-card"],
+.product-detail-modal [class*="ImageCard"],
+.product-detail-modal [class*="picture"],
+.product-detail-modal [class*="Picture"] {
+  overflow: hidden !important;
+  border-radius: 12px;
+}
+
+/* 产品详情弹窗：左侧封面图 */
+.product-management__detail-image-modern {
+  display: flex;
+  width: 100%;
+  height: 132px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d7dfeb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.product-management__detail-image-modern .product-detail-modal__cover-media {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 12px;
+}
+
+.product-management__detail-image-modern .product-detail-modal__cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 产品详情弹窗：图片信息页缩略图 */
+.product-management__image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 180px));
+  gap: 12px;
+  align-items: start;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.product-management__image-card {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+}
+
+.product-management__image-thumb {
+  display: flex;
+  width: 100%;
+  height: 132px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #d7dfeb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.product-management__image-thumb img {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}
+
+/* 产品管理统计卡片：产品总数 / 缺采购价 / 缺尺寸 / 缺采购交期 / 缺图片 / 缺重量 */
+.product-management__summary-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.product-management__summary-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #dce5f2;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgb(16 24 40 / 5%);
+}
+
+.product-management__summary-icon {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  color: #1677ff;
+  font-size: 17px;
+  font-weight: 800;
+  background: #eaf3ff;
+}
+
+.product-management__summary-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.product-management__summary-title {
+  color: #344054;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.product-management__summary-value {
+  margin-top: 4px;
+  color: #101828;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.product-management__summary-hint {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1440px) {
+  .product-management__summary-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 产品详情图片：去除图片内层虚线框 */
+.product-management__detail-image-modern .product-detail-modal__cover-media,
+.product-management__detail-image-modern .product-detail-modal__cover-img,
+.product-management__image-thumb,
+.product-management__image-thumb img {
+  border-style: solid !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.product-management__detail-image-modern .product-detail-modal__cover-media {
+  border: 0 !important;
+}
+
+.product-management__detail-image-modern .product-detail-modal__cover-img {
+  border: 0 !important;
+}
+
+/* 主表格：除 SKU 外，产品名称等普通文本不使用链接蓝和加粗 */
+.product-management__plain-cell {
+  color: #101828;
+  font-weight: 400;
+}
+
+.product-management__plain-cell:hover {
+  color: #101828;
+  text-decoration: none;
+}
+
+/* 主表格：产品名称按普通文本展示；只有 SKU 保持蓝色 */
+.product-management__plain-cell,
+.product-management__plain-cell * {
+  color: #101828 !important;
+  font-weight: 400 !important;
+  text-decoration: none !important;
+}
+
+.product-management__plain-cell:hover,
+.product-management__plain-cell:hover * {
+  color: #101828 !important;
+  text-decoration: none !important;
+}
+
+/* 主表格：商品名称普通文本色，只有 SKU 保持蓝色 */
+.product-management__plain-cell,
+.product-management__plain-cell *,
+.product-management__table .product-management__plain-cell,
+.product-management__table .product-management__plain-cell * {
+  color: #262626 !important;
+  font-weight: 400 !important;
+  text-decoration: none !important;
+}
+
+.product-management__plain-cell:hover,
+.product-management__plain-cell:hover * {
+  color: #262626 !important;
+  text-decoration: none !important;
+}

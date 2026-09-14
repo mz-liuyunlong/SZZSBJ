@@ -102,7 +102,7 @@ function ApiDocsPage({ page }: ApiDocsPageProps) {
       <div className="api-docs">
         <section className="api-docs__page-head" aria-label="API文档页面说明">
           <div>
-            <Typography.Title level={3}>接口详情矩阵导航结合版</Typography.Title>
+            <Typography.Title level={3}>接口详情</Typography.Title>
             <Typography.Paragraph type="secondary">
               把接口详情阅读器和权限返回模型矩阵合到一页：先选一级模块，再选二级业务，快速查看接口用途、请求方式和成功返回。
             </Typography.Paragraph>

@@ -19,13 +19,6 @@ function ForgotPasswordPage() {
         请输入真实飞书姓名，系统将向本人飞书发送密码重置卡片，请在卡片中设置新密码。
       </Typography.Paragraph>
 
-      <Alert
-        className="forgot-password-page__disclaimer"
-        type="warning"
-        showIcon
-        message="当前为前端模拟流程，不会实际发送飞书卡片。"
-      />
-
       <Form<ForgotPasswordValues>
         name="mock-forgot-password"
         layout="vertical"

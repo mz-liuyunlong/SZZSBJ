@@ -1,6 +1,11 @@
 export type ProductGrade = "A级" | "B级" | "C级";
 
 export type ProductTag = string;
+
+export interface ProductSourceTagOption {
+  label: string;
+  color: string | null;
+}
 export type ProductCalculationStatus =
   | "ok"
   | "pricing_unavailable"
@@ -44,6 +49,7 @@ export interface ProductManagementRow {
   productName: string | null;
   tags: ProductTag[];
   sourceTags: ProductTag[];
+  sourceTagColors?: Record<string, string | null>;
   productGrade: ProductGrade | "异常" | null;
   category: string | null;
   purchasePrice: string | null;
@@ -113,16 +119,13 @@ export const productColumnFields = [
   { key: "purchaseLeadTime", title: "采购交期" },
   { key: "dataCompleteness", title: "资料完整度" },
   { key: "updatedAt", title: "更新时间" },
-  { key: "tags", title: "内部标签" },
-  { key: "sourceTags", title: "来源标签" },
+  { key: "sourceTags", title: "标签" },
   { key: "productGrade", title: "产品等级" },
   { key: "wfsFee", title: "WFS费用" },
   { key: "suggestedPrice", title: "建议售价" },
   { key: "minimumPrice", title: "最低售价" },
   { key: "clearancePrice", title: "清仓售价" },
-  { key: "wfsDeliveryFee", title: "WFS配送费" },
-  { key: "storageFee", title: "仓储费" },
-  { key: "linkedPlatformSkuCount", title: "平台SKU数" },
+  { key: "storageFee", title: "每日仓储费" },
 ] as const;
 
 export const fixedProductColumnKeys = ["image", "sku"];

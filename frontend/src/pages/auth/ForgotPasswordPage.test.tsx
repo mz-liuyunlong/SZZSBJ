@@ -57,7 +57,7 @@ const renderPage = () =>
   );
 
 describe("ForgotPasswordPage", () => {
-  it("shows the required mock notice and validates an empty name", async () => {
+  it("renders the reset form and validates an empty name", async () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "忘记密码? 🙋🏻‍♂️" })).toBeVisible();
@@ -65,9 +65,6 @@ describe("ForgotPasswordPage", () => {
       screen.getByText(
         "请输入真实飞书姓名，系统将向本人飞书发送密码重置卡片，请在卡片中设置新密码。",
       ),
-    ).toBeVisible();
-    expect(
-      screen.getByText("当前为前端模拟流程，不会实际发送飞书卡片。"),
     ).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "发送重置卡片" }));

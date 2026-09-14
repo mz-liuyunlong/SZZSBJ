@@ -43,7 +43,7 @@ afterEach(() => {
 
 const logIn = async (remember = false) => {
   fireEvent.change(screen.getByLabelText("账号"), { target: { value: "admin" } });
-  fireEvent.change(screen.getByLabelText("密码"), { target: { value: "admin" } });
+  fireEvent.change(screen.getByLabelText("密码"), { target: { value: "12345678" } });
   if (remember) {
     fireEvent.click(screen.getByRole("checkbox", { name: "记住账号" }));
   }
