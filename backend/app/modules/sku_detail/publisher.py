@@ -112,8 +112,8 @@ DWS_SOURCE_PATHS = {
         "$.data.product_logistics_relation.US_cg_transport_costs",
         "$.data.product_logistics_relation.US_currency",
     ),
-    "missing_fields_json": tuple(DETAIL_SOURCE_PATHS.values()),
-    "data_quality_score": tuple(DETAIL_SOURCE_PATHS.values()),
+    "missing_fields_json": tuple(dict.fromkeys(DETAIL_SOURCE_PATHS.values())),
+    "data_quality_score": tuple(dict.fromkeys(DETAIL_SOURCE_PATHS.values())),
 }
 
 

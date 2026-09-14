@@ -1,9 +1,13 @@
 import inspect
+from typing import cast
+
+from sqlalchemy import Table, UniqueConstraint
 
 import app.modules.integration_sync.models  # noqa: F401
 import app.modules.products.models  # noqa: F401
 import app.modules.sku_detail.models  # noqa: F401
 from app.db.base import Base
+from app.modules.integration_sync.models import DataLineage
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 EXPECTED_TABLES = {
@@ -47,3 +51,22 @@ def test_raw_payload_is_not_part_of_api_schema() -> None:
 
     assert "payload_json" not in RawRequestMetadataRead.model_fields
     assert "archive_uri" not in RawRequestMetadataRead.model_fields
+
+
+def test_data_lineage_uniqueness_rejects_only_exact_edges() -> None:
+    table = cast(Table, DataLineage.__table__)
+    constraint = next(
+        item
+        for item in table.constraints
+        if isinstance(item, UniqueConstraint) and item.name == "uq_gov_data_lineage_target"
+    )
+
+    assert tuple(column.name for column in constraint.columns) == (
+        "raw_request_ref_id",
+        "target_table",
+        "target_record_id",
+        "target_field",
+        "source_path",
+        "transform_key",
+        "transform_version",
+    )

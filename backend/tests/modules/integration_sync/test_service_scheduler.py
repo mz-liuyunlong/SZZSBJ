@@ -101,7 +101,7 @@ def test_scheduler_deterministic_idempotency_skips_duplicate_tick() -> None:
     session.commit.assert_called_once_with()
 
 
-def test_sku_detail_publication_commits_snapshot_current_profile_and_lineage() -> None:
+def test_sku_detail_publication_commits_multi_source_dws_lineage() -> None:
     session = MagicMock(spec=Session)
     service = SkuDetailPublicationService(session)
     service.sync_repository = MagicMock()
@@ -156,6 +156,34 @@ def test_sku_detail_publication_commits_snapshot_current_profile_and_lineage() -
     service.repository.add_profile.assert_called_once()
     service.sync_repository.add_parse_job.assert_called_once()
     service.sync_repository.add_lineage.assert_called_once()
+    lineage = service.sync_repository.add_lineage.call_args.args[0]
+    dws_lineage = [item for item in lineage if item.target_table == "dws_sku_base_profile_current"]
+    expected_source_counts = {
+        "product_volume_cm3": 3,
+        "package_volume_cm3": 3,
+    }
+    for target_field, expected_count in expected_source_counts.items():
+        entries = [item for item in dws_lineage if item.target_field == target_field]
+        assert len(entries) == expected_count
+        assert len({item.source_path for item in entries}) == expected_count
+    missing_field_entries = [
+        item for item in dws_lineage if item.target_field == "missing_fields_json"
+    ]
+    assert len(missing_field_entries) > 3
+    assert len({item.source_path for item in missing_field_entries}) == len(missing_field_entries)
+    exact_edges = {
+        (
+            item.raw_request_ref_id,
+            item.target_table,
+            item.target_record_id,
+            item.target_field,
+            item.source_path,
+            item.transform_key,
+            item.transform_version,
+        )
+        for item in lineage
+    }
+    assert len(exact_edges) == len(lineage)
     session.commit.assert_called_once_with()
     session.rollback.assert_not_called()
 

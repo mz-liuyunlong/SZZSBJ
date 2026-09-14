@@ -518,7 +518,9 @@ class DataLineage(Base):
             "target_record_id",
             "target_field",
             "source_path",
+            "transform_key",
             "transform_version",
+            name="uq_gov_data_lineage_target",
         ),
     )
 
