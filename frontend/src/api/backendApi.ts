@@ -10,9 +10,7 @@ export async function backendRequest<T, M = Record<string, unknown>>(
   path: string,
   init?: RequestInit,
 ): Promise<BackendEnvelope<T, M>> {
-  const previewToken = import.meta.env.DEV
-    ? import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN
-    : undefined;
+  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
   const response = await fetch(path, {
     credentials: "same-origin",
     ...init,
