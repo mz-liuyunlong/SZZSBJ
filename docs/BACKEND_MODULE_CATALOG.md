@@ -141,16 +141,16 @@
 | Governance storage | `gov_integration_interfaces`, `gov_integration_interface_dependencies`, `gov_integration_sync_configs`, `gov_integration_sync_runs`, `gov_integration_sync_run_events`, `gov_integration_sync_locks`, `gov_integration_sync_run_work_items`, `gov_raw_retention_policies`, `gov_parse_jobs`, `gov_data_lineage` |
 | RAW / ODS storage | `ods_api_raw_blobs`, `ods_api_raw_request_refs`, `ods_lingxing_productlist_sku_refs`, `ods_lingxing_product_info_batch_items`; response hash dedup and safe request metadata; no payload API |
 | DWD / DWS storage | `dwd_lingxing_sku_identity_index`, detail snapshots/current, images, global tags, and `dws_sku_base_profile_current`; source-derived/rebuildable, not Product Core authority |
-| Identity contract | `productList.data.id -> lingxing_sku_id`; `batchGetProductInfo.data.sku -> lingxing_sku_code`; no SKU/MSKU/ItemID/internal Product inference |
+| Identity contract | `productList.data.id -> lingxing_sku_id`; `batchGetProductInfo.data.sku -> lingxing_sku_code`; no SKU/MSKU/ItemID/internal Product inference except the Owner-approved `OD-ProductInfo-Bootstrap-01` exact SKU create/link path |
 | Local import | Manifest/checksum/path/pagination-verified importer implemented for an outside-Git ProductList run; no provider/Token request; live import remains skipped when `DATABASE_URL` is missing |
-| batchGetProductInfo | Approved only for disabled-by-default skeleton/mock/fixture parser and `id_batch_page` work-item foundation; no real parameters, Token, or provider call are approved |
+| batchGetProductInfo | Redacted contract snapshots support the offline batch response parser, fixture publisher and `id_batch_page` one-time runner foundation; provider transport remains disabled and no real parameter choice, Token, or provider call is approved |
 | Tasks | `execute_sync_run(run_id)` and `scheduler_tick()` Celery skeleton contracts are present; args contain only run ID, real outbound remains disabled, and tests require no live Redis/worker/beat |
 | API scope | Approved protected `/api/integrations/**` metadata/trigger routes and `/api/products/skus/**` read routes under the existing project `/api/...` convention; unified envelope/request ID; no RAW payload; no frontend |
 | Permission keys | `integrations:read`, `integrations:update`, `integrations:execute`, `integrations:raw_metadata:read`, `products:read`, `products:sync_history:read`, `products:raw_lineage:read`, `products:cost:read`, `products:operation_logs:read` |
 | Data scope | Trusted opaque `source_account_ref` scope must fail closed; confirmed Product mapping additionally uses existing Product scope; roles are not hard-coded |
 | Source/field status | Governance is `NEW_SYSTEM_OWNED`; ProductList identity and the synthetic/mock SKU-detail foundation are `REBUILD_SYNC`; real batchGetProductInfo interoperability remains blocked pending official evidence and separate Owner authorization |
 | Security | No credential, Token, sign, Authorization, full URL, RAW payload, full ID batch, captured product value, or secret-bearing archive URI in logs/events/API/docs/tasks |
-| Existing-table boundary | Does not drop, rewrite, or dual-write existing `raw_lingxing_api`; does not overwrite `products` or `product_platform_listings` |
+| Existing-table boundary | Does not drop, rewrite, or dual-write existing `raw_lingxing_api`; `OD-ProductInfo-Bootstrap-01` permits only minimal `products.sku/product_name` creation or exact active-SKU linking and never overwrites Product fields or creates/updates `product_platform_listings` |
 | PRP | `PRPs/integration-sync-governance-backend-v1.md` |
 | Source Decision | `docs/decisions/2026-09-12-integration-sync-governance-backend-v1-source-decision.md` |
 | PR | TBD |
@@ -170,9 +170,10 @@
 | Storage | Internal tags/assignments, account-scoped immutable pricing rule versions, safe persistent recalculation runs, rebuildable current pricing projection and principal-owned table views; existing Product/listing/DWD/DWS objects are reused |
 | Calculations | Decimal-only WFS override selection, configured WFS/storage state flow, gross-weight first leg, three prices, gross margin, purchase/total-cost ROI and versioned A/B/C/exception grade |
 | WFS evidence | Source URL/confirmation metadata can be versioned, but no concrete fulfillment/storage value is bundled; missing config returns `missing_rate` |
-| Product Info integration | Existing `id_batch_page`, synthetic parser and publisher are reused; dedicated setting defaults false and real outbound fails `outbound_not_authorized` / `provider_contract_missing` |
+| Product Info integration | Contract-aligned batch fixture parser/publisher and `id_batch_page` one-time runner are reused; dedicated setting defaults false, field mismatch fails `CONTRACT_FIELD_MISMATCH`, and real outbound remains `outbound_not_authorized` |
 | Permissions | `products:read`, `products:cost:read`, `products:export`, `products:pricing_rules:read`, `products:pricing_rules:update`, `products:pricing:recalculate`, `products:table_views:update` |
-| Scope | Confirmed Product mapping plus trusted Product and source-account scopes; no SKU/MSKU/name inference |
+| Scope | Confirmed Product mapping plus trusted Product and source-account scopes; no SKU/MSKU/name inference except `OD-ProductInfo-Bootstrap-01` exact SKU create/link with traceable evidence |
+| Product Core bootstrap | Recovery extension branch `feat/productinfo-controlled-sync`; default dry-run; minimal Product create/exact-link only; duplicate, missing, deleted or uncertain cases skip/fail closed; implementation pending review and merge |
 | Review hardening | Exact batch SKU search is bounded to 1,000 values; recalculation defaults to persistent preview and isolates idempotency by principal/account/capability/mode; rule rollover is transactional with a partial unique open-version index; listing-level WFS overrides fail closed until listings gain account scope |
 | Security | BFF never reads/returns RAW, provider payload, auth material or secret values; logs contain only actor/request/internal UUID/count/version/status |
 | PRP | `PRPs/product-detail-sync-product-management-api-v1.md` |

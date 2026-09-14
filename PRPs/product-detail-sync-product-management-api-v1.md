@@ -38,7 +38,7 @@ Production Sync Execution Allowed: No
 
 - Product Core `products` / `product_platform_listings` 是新系统人工维护权威，外部同步不得静默覆盖。
 - ProductList 发布的 `dwd_lingxing_sku_identity_index.lingxing_sku_id` 是详情同步候选输入。
-- `product_id` 只能来自有证据的 confirmed mapping，不得用 SKU/MSKU/名称猜测。
+- `product_id` 只能来自有证据的 confirmed mapping，不得用 SKU/MSKU/名称猜测。唯一例外是 `OD-ProductInfo-Bootstrap-01`：官方 ProductInfo `data[].sku` 可用于一次性受控的 exact SKU bootstrap；这不是模糊推断，且必须写可追溯 evidence ref。
 - 外部数据遵循 Source Registry/RAW -> parser -> DWD -> 可选 DWS/read projection；业务 API 不读 RAW。
 - 现有 `batchGetProductInfo` handler 默认拒绝 outbound；实现可补齐受专用安全开关保护的代码路径，但默认仍拒绝真实 transport。
 - 现有 SKU detail route 只读持久化投影，不在 request path 调用外部平台。
@@ -50,7 +50,7 @@ Production Sync Execution Allowed: No
 - 修改 `frontend/**`、`admin-frontend/**` 或 `old-system/**`。
 - 读取 `.env`、请求 Token、调用 Lingxing/Walmart 或运行真实同步。
 - API route 实时调用或批量拉取 `batchGetProductInfo`。
-- 用 SKU、MSKU、名称、图片或顺序推断内部 `product_id`。
+- 用 SKU、MSKU、名称、图片或顺序推断内部 `product_id`；`OD-ProductInfo-Bootstrap-01` 明确批准的 ProductInfo exact SKU bootstrap 除外。
 - 写 DIM/FACT/Core 而没有批准的 writer/precedence；同步覆盖 Product Core 人工值。
 - 把 Lingxing 标签与内部运营标签合并为同一权威数据集。
 - 前端计算 WFS 配送费、每日仓储费、售价、ROI 或产品等级。
@@ -68,6 +68,7 @@ Production Sync Execution Allowed: No
 3. 建立内部运营标签、规则版本、计算投影和用户表格视图的最小持久化模型。
 4. 建立费用/售价 calculation service，输出版本化 breakdown；不在 router/frontend 重复公式。
 5. 建立产品管理 BFF、配置、重算、视图与受限导出 API。
+6. 建立 `OD-ProductInfo-Bootstrap-01` 约束的一次性 Product Core bootstrap：仅从已持久化 ProductInfo current 读取官方 `data[].sku/product_name` 投影，最小创建 Product 或 exact-link active Product；不覆盖 Product、不创建 listing，默认 dry-run，execute 必须显式授权。
 6. 新增 `docs/api/product-management-api.md` 与 `docs/runbooks/production-lingxing-product-info-sync.md`，并同步字段字典、Data Interface Registry、Backend Module Catalog 和 Task Registry；runbook 只描述后续受控执行，不授权本 PR 生产操作。
 
 不得为了“将来可能需要”创建通用规则引擎、第二套任务框架、通用报表平台、缓存、搜索索引或 speculative mart。
@@ -399,7 +400,7 @@ git status --short --untracked-files=all
 - [ ] 实现 diff 仅在批准 allowlist，未触及 frontend/old-system/secrets。
 - [ ] 所有目标 API 有 schema、response model、permission、data scope、安全 envelope 和测试。
 - [ ] `batchGetProductInfo` 只通过治理同步写 RAW/DWD，不在业务 route 实时调用。
-- [ ] Product/Lingxing identity 只通过 confirmed mapping 组合，未使用 SKU 字符串推断。
+- [ ] Product/Lingxing identity 只通过 confirmed mapping 组合；除 `OD-ProductInfo-Bootstrap-01` 的 exact SKU bootstrap 外，未使用 SKU 字符串推断。
 - [ ] Lingxing 标签与内部运营标签、source/manual/calculated grade 分离。
 - [ ] 费用、售价、ROI、grade 只由后端版本化规则计算；breakdown 可追溯，前端不计算。
 - [ ] 金额/比率/单位/时区/舍入符合项目 canonical contract。
@@ -417,7 +418,7 @@ git status --short --untracked-files=all
 - `batchGetProductInfo` 需要使用仓库未证实的请求字段、Content-Type、认证/query-sign、成功/错误码、批量上限、频控或 retry 语义；不得猜测或据此放行真实 transport。
 - WFS 具体 fulfillment/storage 费率、市场/旺季区间或 fulfillment 分段算法尚未被受控录入并激活：允许实现配置、calculator、状态、API 字段和 synthetic 测试，但真实费用金额计算必须停止并返回缺失状态，不得抓取网页或猜测金额。
 - 需要引入未获准的实时 FX 来源、类目佣金、箱规/体积重头程、价格取整策略或历史规则回算。
-- 需要使用 SKU/MSKU/名称猜测 identity，或存在未处理的一对多/多对多 mapping。
+- 需要使用 SKU/MSKU/名称猜测 identity，或存在未处理的一对多/多对多 mapping；`OD-ProductInfo-Bootstrap-01` 仅豁免受控 exact SKU create/link，重复或不确定映射仍必须跳过并 fail closed。
 - 需要让外部/计算值覆盖 Product Core 人工字段而 precedence/override 未批准。
 - 需要新增未批准表、API、permission、依赖、worker、schedule、mart、cache 或第二套框架。
 - 需要在 API route 调外部平台、读 RAW、返回第三方原文或记录敏感值。
@@ -438,6 +439,7 @@ Approved WFS/first-leg/pricing/margin/ROI/grade rules: Owner decisions recorded 
 Approved pricing formula: Tax-exclusive price; revenue, commission, included costs, gross profit/margin and reverse-price equations in Section 12
 Approved WFS override rule: identity > primary listing > single listing > consistent listing > calculated; conflicts fail safe
 Approved identity and field precedence: internal identity_id; manual override > new-system config/internal > Lingxing sync > calculated
+Approved ProductInfo bootstrap exception: OD-ProductInfo-Bootstrap-01; minimal Product sku/product_name create or exact active-SKU link only; no overwrite/listing
 Approved export/recalculation boundary: export <= 5000 or safe placeholder; bounded run-based recalc; no automatic historical full recalculation
 Approved docs: docs/api/product-management-api.md and docs/runbooks/production-lingxing-product-info-sync.md
 Approved Agent Skill: engineering-backend-architect

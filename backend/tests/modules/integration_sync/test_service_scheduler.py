@@ -106,11 +106,15 @@ def test_sku_detail_publication_commits_snapshot_current_profile_and_lineage() -
     service = SkuDetailPublicationService(session)
     service.sync_repository = MagicMock()
     service.repository = MagicMock()
-    service.sync_repository.get_lingxing_identity.return_value = SimpleNamespace(id=ID)
+    service.sync_repository.get_lingxing_identity.return_value = SimpleNamespace(
+        id=ID,
+        lingxing_sku_code=None,
+    )
     service.sync_repository.get_raw_request_ref.return_value = SimpleNamespace(
         run_id=ID,
         raw_blob_id=ID,
     )
+    service.sync_repository.get_parse_job.return_value = None
     service.sync_repository.add_parse_job.return_value = SimpleNamespace(id=ID)
     service.repository.get_current.return_value = None
     service.repository.get_profile.return_value = None
@@ -122,11 +126,32 @@ def test_sku_detail_publication_commits_snapshot_current_profile_and_lineage() -
         lingxing_sku_id="synthetic-id",
         source_observed_at=datetime(2026, 1, 1, tzinfo=UTC),
         parser_version="fixture-v1",
-        parsed=parse_product_info_fixture({"data": {}}),
+        parsed=parse_product_info_fixture(
+            {
+                "code": 0,
+                "data": {
+                    "sku": "SYNTHETIC-SKU",
+                    "picture_list": [
+                        {"pic_url": "https://example.invalid/synthetic.jpg", "is_primary": 1}
+                    ],
+                    "global_tags": [
+                        {
+                            "global_tag_id": "synthetic-tag",
+                            "tag_name": "Synthetic Tag",
+                            "color": "blue",
+                        }
+                    ],
+                },
+            }
+        ),
     )
 
     assert isinstance(snapshot_id, UUID)
     service.repository.add_snapshot.assert_called_once()
+    assert len(service.repository.add_images.call_args.args[0]) == 1
+    assert len(service.repository.add_tags.call_args.args[0]) == 1
+    identity_update = service.repository.update_record.call_args_list[0]
+    assert set(identity_update.args[1]) == {"lingxing_sku_code", "updated_at"}
     service.repository.add_current.assert_called_once()
     service.repository.add_profile.assert_called_once()
     service.sync_repository.add_parse_job.assert_called_once()

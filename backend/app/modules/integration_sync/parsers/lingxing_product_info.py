@@ -1,6 +1,9 @@
 from decimal import Decimal, InvalidOperation
+from typing import cast
 
 from pydantic import BaseModel, ConfigDict
+
+CONTRACT_FIELD_MISMATCH = "CONTRACT_FIELD_MISMATCH"
 
 
 class ProductInfoParseError(ValueError):
@@ -62,10 +65,62 @@ class ParsedSkuDetail(BaseModel):
     tags: tuple[ParsedTag, ...]
 
 
+class ParsedBatchProductInfoItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    lingxing_sku_id: str
+    detail: ParsedSkuDetail
+
+
 def parse_product_info_fixture(payload: object) -> ParsedSkuDetail:
-    if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
-        raise ProductInfoParseError("PRODUCT_INFO_DATA_INVALID")
-    data = payload["data"]
+    data = _contract_data(payload, list_expected=False)
+    assert isinstance(data, dict)
+    return _parse_detail(data)
+
+
+def parse_batch_product_info_fixture(
+    payload: object,
+    *,
+    expected_lingxing_sku_ids: tuple[str, ...],
+) -> tuple[ParsedBatchProductInfoItem, ...]:
+    data = _contract_data(payload, list_expected=True)
+    assert isinstance(data, list)
+    expected = tuple(_required_identifier(value) for value in expected_lingxing_sku_ids)
+    if not expected or len(set(expected)) != len(expected):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+    parsed_by_id: dict[str, ParsedSkuDetail] = {}
+    for item in data:
+        if not isinstance(item, dict):
+            raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+        lingxing_sku_id = _required_identifier(item.get("id"))
+        if lingxing_sku_id in parsed_by_id:
+            raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+        parsed_by_id[lingxing_sku_id] = _parse_detail(item)
+    if set(parsed_by_id) != set(expected):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+    return tuple(
+        ParsedBatchProductInfoItem(
+            lingxing_sku_id=lingxing_sku_id,
+            detail=parsed_by_id[lingxing_sku_id],
+        )
+        for lingxing_sku_id in expected
+    )
+
+
+def _contract_data(payload: object, *, list_expected: bool) -> dict[str, object] | list[object]:
+    if not isinstance(payload, dict):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+    code = payload.get("code")
+    if isinstance(code, bool) or not isinstance(code, int):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+    data = payload.get("data")
+    if (list_expected and not isinstance(data, list)) or (
+        not list_expected and not isinstance(data, dict)
+    ):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+    return cast(dict[str, object] | list[object], data)
+
+
+def _parse_detail(data: dict[str, object]) -> ParsedSkuDetail:
     owner = _one_mapping(data.get("permission_user_info"), "PRODUCT_INFO_OWNER_CARDINALITY")
     logistics = _one_us_logistics(data.get("product_logistics_relation"))
     purchase_cost = _decimal(data.get("cg_price"))
@@ -131,14 +186,17 @@ def _identifier(value: object) -> str | None:
     return normalized or None
 
 
+def _required_identifier(value: object) -> str:
+    result = _identifier(value)
+    if result is None:
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+    return result
+
+
 def _decimal(value: object) -> Decimal | None:
     if value is None or value == "":
         return None
-    if (
-        isinstance(value, bool)
-        or isinstance(value, float)
-        or not isinstance(value, (str, int, Decimal))
-    ):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
         raise ProductInfoParseError("PRODUCT_INFO_DECIMAL_INVALID")
     try:
         result = Decimal(str(value))
@@ -183,23 +241,20 @@ def _https_url(value: object) -> str | None:
 def _one_mapping(value: object, error: str) -> dict[str, object]:
     if value is None:
         return {}
-    if isinstance(value, dict):
-        return value
     if isinstance(value, list):
         if len(value) > 1 or (value and not isinstance(value[0], dict)):
             raise ProductInfoParseError(error)
         return {} if not value else value[0]
-    raise ProductInfoParseError(error)
+    raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
 
 
 def _one_us_logistics(value: object) -> dict[str, object]:
     if value is None:
         return {}
-    candidates = [value] if isinstance(value, dict) else value
-    if not isinstance(candidates, list) or any(not isinstance(item, dict) for item in candidates):
-        raise ProductInfoParseError("PRODUCT_INFO_LOGISTICS_CARDINALITY")
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
     us_candidates = [
-        item for item in candidates if "US_cg_transport_costs" in item or "US_currency" in item
+        item for item in value if "US_cg_transport_costs" in item or "US_currency" in item
     ]
     if len(us_candidates) > 1:
         raise ProductInfoParseError("PRODUCT_INFO_LOGISTICS_CARDINALITY")
@@ -228,9 +283,10 @@ def _images(value: object) -> tuple[ParsedImage, ...]:
         url = _https_url(item.get("pic_url"))
         if url is None:
             raise ProductInfoParseError("PRODUCT_INFO_IMAGES_INVALID")
-        primary = item.get("is_primary")
-        if primary is not None and not isinstance(primary, bool):
-            raise ProductInfoParseError("PRODUCT_INFO_IMAGES_INVALID")
+        primary_value = item.get("is_primary")
+        if isinstance(primary_value, bool) or primary_value not in (None, 0, 1):
+            raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+        primary = None if primary_value is None else bool(primary_value)
         primary_count += primary is True
         result.append(ParsedImage(ordinal=ordinal, pic_url=url, is_primary=primary))
     if primary_count > 1:
@@ -248,7 +304,7 @@ def _tags(value: object) -> tuple[ParsedTag, ...]:
     for ordinal, item in enumerate(value):
         if not isinstance(item, dict):
             raise ProductInfoParseError("PRODUCT_INFO_TAGS_INVALID")
-        tag_id = _identifier(item.get("id"))
+        tag_id = _identifier(item.get("global_tag_id"))
         if tag_id is not None and tag_id in seen_ids:
             raise ProductInfoParseError("PRODUCT_INFO_TAGS_DUPLICATE")
         if tag_id is not None:
@@ -257,7 +313,7 @@ def _tags(value: object) -> tuple[ParsedTag, ...]:
             ParsedTag(
                 ordinal=ordinal,
                 global_tag_id=tag_id,
-                tag_name=_text(item.get("name")),
+                tag_name=_text(item.get("tag_name")),
                 color=_text(item.get("color")),
             )
         )

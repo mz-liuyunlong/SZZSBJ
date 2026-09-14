@@ -27,6 +27,11 @@ type SkuProjection = tuple[
     LingxingSkuProductInfoCurrent | None,
     SkuBaseProfileCurrent | None,
 ]
+type ProductBootstrapRow = tuple[
+    LingxingSkuIdentity,
+    LingxingSkuProductInfoCurrent | None,
+    LingxingSkuProductInfoSnapshot | None,
+]
 
 
 class SkuDetailRepository:
@@ -264,6 +269,31 @@ class SkuDetailRepository:
         return self.session.scalar(
             select(SkuBaseProfileCurrent).where(SkuBaseProfileCurrent.identity_id == identity_id)
         )
+
+    def list_product_bootstrap_rows(self, source_account_ref: str) -> list[ProductBootstrapRow]:
+        rows = self.session.execute(
+            select(
+                LingxingSkuIdentity,
+                LingxingSkuProductInfoCurrent,
+                LingxingSkuProductInfoSnapshot,
+            )
+            .outerjoin(
+                LingxingSkuProductInfoCurrent,
+                LingxingSkuProductInfoCurrent.identity_id == LingxingSkuIdentity.id,
+            )
+            .outerjoin(
+                LingxingSkuProductInfoSnapshot,
+                LingxingSkuProductInfoSnapshot.id
+                == LingxingSkuProductInfoCurrent.source_snapshot_id,
+            )
+            .where(
+                LingxingSkuIdentity.provider == "lingxing",
+                LingxingSkuIdentity.source_account_ref == source_account_ref,
+                LingxingSkuIdentity.is_active.is_(True),
+            )
+            .order_by(LingxingSkuIdentity.id)
+        ).all()
+        return [(row[0], row[1], row[2]) for row in rows]
 
     def add_profile(self, profile: SkuBaseProfileCurrent) -> SkuBaseProfileCurrent:
         self.session.add(profile)
