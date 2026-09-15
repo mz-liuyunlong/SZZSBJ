@@ -541,10 +541,10 @@ def test_execution_routes_productlist_without_lock_or_event_writes(
             SimpleNamespace(
                 id=INTERFACE_ID,
                 provider="lingxing",
-                interface_key="batchGetProductInfo",
+                interface_key="unsupportedRead",
                 method="POST",
-                endpoint_path="/erp/sc/routing/data/local_inventory/batchGetProductInfo",
-                request_kind="id_batch_page",
+                endpoint_path="/synthetic/unsupportedRead",
+                request_kind="offset_page",
                 outbound_enabled=True,
             ),
             False,
