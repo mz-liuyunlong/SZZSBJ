@@ -253,6 +253,13 @@ class SkuDetailRepository:
         self.session.flush()
         return list(tags)
 
+    def get_identity_for_update(self, identity_id: UUID) -> LingxingSkuIdentity | None:
+        return self.session.scalar(
+            select(LingxingSkuIdentity)
+            .where(LingxingSkuIdentity.id == identity_id)
+            .with_for_update()
+        )
+
     def get_current(self, identity_id: UUID) -> LingxingSkuProductInfoCurrent | None:
         return self.session.scalar(
             select(LingxingSkuProductInfoCurrent).where(

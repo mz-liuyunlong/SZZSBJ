@@ -8,13 +8,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.integration_sync.handlers.lingxing_batch_product_info import ordered_id_hash
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
     IntegrationSyncRun,
     IntegrationSyncRunEvent,
+    IntegrationSyncRunWorkItem,
+    LingxingProductInfoBatchItem,
     utc_now,
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.integration_sync.scheduler import (
+    ScheduleExpressionError,
+    next_cron_instant,
+    validate_cron_expression,
+)
 from app.modules.integration_sync.schemas import (
     BackfillRequest,
     IntegrationInterfaceRead,
@@ -44,6 +52,8 @@ SYNC_RUN_NOT_RETRYABLE = "SYNC_RUN_NOT_RETRYABLE"
 SYNC_RUN_ALREADY_RUNNING = "SYNC_RUN_ALREADY_RUNNING"
 SYNC_PRODUCTLIST_ONLY = "SYNC_PRODUCTLIST_ONLY"
 SYNC_PRODUCTLIST_MANUAL_ONLY = "SYNC_PRODUCTLIST_MANUAL_ONLY"
+SYNC_PRODUCTINFO_RETRY_PLAN_INVALID = "SYNC_PRODUCTINFO_RETRY_PLAN_INVALID"
+SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED = "SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED"
 
 audit_logger = logging.getLogger("app.audit.integration_sync")
 
@@ -104,8 +114,36 @@ class IntegrationSyncService:
                 and interface.interface_key == "productList"
             ):
                 raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
+
+        schedule_changed = "schedule_enabled" in values or "schedule_cron" in values
+        schedule_now = utc_now()
+        if "schedule_cron" in values and schedule_cron:
+            try:
+                validate_cron_expression(str(schedule_cron))
+            except ScheduleExpressionError:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    status_code=422,
+                ) from None
+
+        persist_values = dict(values)
+        if schedule_changed:
+            if schedule_enabled:
+                try:
+                    persist_values["next_run_at"] = next_cron_instant(
+                        str(schedule_cron),
+                        schedule_now,
+                    )
+                except ScheduleExpressionError:
+                    raise ApiError(
+                        code=ErrorCode.VALIDATION_ERROR,
+                        status_code=422,
+                    ) from None
+            else:
+                persist_values["next_run_at"] = None
+
         try:
-            self.repository.update_config(config, values)
+            self.repository.update_config(config, persist_values)
             self.session.commit()
         except IntegrityError:
             self.session.rollback()
@@ -175,6 +213,15 @@ class IntegrationSyncService:
             raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         if source.status not in {RunStatus.FAILED, RunStatus.CANCELED}:
             raise ApiError(code=SYNC_RUN_NOT_RETRYABLE, status_code=409)
+        if source.provider == "lingxing" and source.interface_key == "batchGetProductInfo":
+            if getattr(source, "error_code", None) == "PRODUCT_INFO_ANOMALY_BREAKER_TRIPPED":
+                raise ApiError(code=SYNC_RUN_NOT_RETRYABLE, status_code=409)
+            return self._create_productinfo_retry_run(
+                source,
+                payload,
+                actor_ref=actor_ref,
+                request_id=request_id,
+            )
         run = self._new_run(
             config_id=source.config_id,
             interface_id=source.interface_id,
@@ -191,6 +238,126 @@ class IntegrationSyncService:
             window_end=source.window_end,
         )
         return self._persist_queued_run(run, actor_ref)
+
+    def _create_productinfo_retry_run(
+        self,
+        source: IntegrationSyncRun,
+        payload: TriggerRequest,
+        *,
+        actor_ref: str,
+        request_id: str,
+    ) -> SyncRunCreated:
+        source_work_items = self.repository.list_work_items_for_run(source.id)
+        failed_work_items = [item for item in source_work_items if item.status == "failed"]
+        if not failed_work_items:
+            raise ApiError(code=SYNC_RUN_NOT_RETRYABLE, status_code=409)
+
+        source_batch_items = self.repository.list_batch_items_for_run(source.id)
+        batch_items_by_work_id: dict[UUID, list[LingxingProductInfoBatchItem]] = {}
+        for item in source_batch_items:
+            batch_items_by_work_id.setdefault(item.work_item_id, []).append(item)
+
+        run = self._new_run(
+            config_id=source.config_id,
+            interface_id=source.interface_id,
+            provider=source.provider,
+            interface_key=source.interface_key,
+            source_account_ref=source.source_account_ref,
+            trigger=TriggerType.RETRY,
+            payload=payload,
+            actor_ref=actor_ref,
+            request_id=request_id,
+            parent_run_id=source.id,
+            retry_of_run_id=source.id,
+            window_start=source.window_start,
+            window_end=source.window_end,
+        )
+        existing = self.repository.find_run_by_idempotency(run.idempotency_key)
+        if existing is not None:
+            return self._created(existing)
+
+        try:
+            self.repository.add_run(run)
+            copied_work_items: list[IntegrationSyncRunWorkItem] = []
+            copied_batch_items: list[LingxingProductInfoBatchItem] = []
+
+            for source_work in failed_work_items:
+                members = sorted(
+                    batch_items_by_work_id.get(source_work.id, []),
+                    key=lambda item: item.item_ordinal,
+                )
+                product_ids = [item.lingxing_sku_id for item in members]
+                if (
+                    source_work.request_kind != "id_batch_page"
+                    or source_work.batch_no is None
+                    or source_work.id_count is None
+                    or source_work.id_hash is None
+                    or len(members) != source_work.id_count
+                    or [item.item_ordinal for item in members] != list(range(len(members)))
+                    or len(set(product_ids)) != len(product_ids)
+                    or ordered_id_hash(product_ids) != source_work.id_hash
+                ):
+                    raise ApiError(
+                        code=SYNC_PRODUCTINFO_RETRY_PLAN_INVALID,
+                        status_code=409,
+                    )
+
+                copied_work = IntegrationSyncRunWorkItem(
+                    id=uuid4(),
+                    run_id=run.id,
+                    ordinal=source_work.ordinal,
+                    request_kind="id_batch_page",
+                    status="queued",
+                    attempt_count=0,
+                    batch_no=source_work.batch_no,
+                    id_count=source_work.id_count,
+                    id_hash=source_work.id_hash,
+                    request_safe_params=dict(source_work.request_safe_params),
+                )
+                copied_work_items.append(copied_work)
+                for member in members:
+                    copied_batch_items.append(
+                        LingxingProductInfoBatchItem(
+                            id=uuid4(),
+                            run_id=run.id,
+                            work_item_id=copied_work.id,
+                            source_account_ref=member.source_account_ref,
+                            batch_no=member.batch_no,
+                            item_ordinal=member.item_ordinal,
+                            lingxing_sku_id=member.lingxing_sku_id,
+                            raw_request_ref_id=None,
+                            item_status="queued",
+                        )
+                    )
+
+            self.repository.add_work_items(copied_work_items)
+            self.repository.add_batch_items(copied_batch_items)
+            run.work_items_total = len(copied_work_items)
+            self.repository.add_event(
+                IntegrationSyncRunEvent(
+                    run_id=run.id,
+                    sequence_no=1,
+                    event_type="state_transition",
+                    from_status=None,
+                    to_status=RunStatus.QUEUED.value,
+                    message_code="SYNC_RUN_QUEUED",
+                    safe_details={"retry_failed_work_items": len(copied_work_items)},
+                    occurred_at=utc_now(),
+                    actor_ref=actor_ref,
+                )
+            )
+            self.session.commit()
+        except ApiError:
+            self.session.rollback()
+            raise
+        except IntegrityError:
+            self.session.rollback()
+            raise ApiError(code=SYNC_RUN_ALREADY_RUNNING, status_code=409) from None
+        except Exception:
+            self.session.rollback()
+            raise
+
+        return self._created(run)
 
     def list_runs(
         self, query: SyncRunListQuery, account_refs: frozenset[str]
@@ -289,10 +456,23 @@ class IntegrationSyncService:
             and interface.endpoint_path == "/erp/sc/routing/data/local_inventory/productList"
             and interface.request_kind == "offset_page"
         )
-        if productlist_only and not is_productlist:
+        is_productinfo = (
+            interface.provider == "lingxing"
+            and interface.interface_key == "batchGetProductInfo"
+            and interface.method == "POST"
+            and interface.endpoint_path
+            == "/erp/sc/routing/data/local_inventory/batchGetProductInfo"
+            and interface.request_kind == "id_batch_page"
+        )
+        if productlist_only and not (is_productlist or is_productinfo):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_productlist and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
             raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
+        if is_productinfo and trigger is TriggerType.BACKFILL:
+            raise ApiError(
+                code=SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED,
+                status_code=409,
+            )
         run = self._new_run(
             config_id=config.id,
             interface_id=interface.id,

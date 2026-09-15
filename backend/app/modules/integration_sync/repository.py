@@ -169,6 +169,16 @@ class IntegrationSyncRepository:
             )
         )
 
+    def max_attempts_for_run(self, run: IntegrationSyncRun) -> int:
+        if run.config_id is None:
+            return 1
+        value = self.session.scalar(
+            select(IntegrationSyncConfig.max_attempts).where(
+                IntegrationSyncConfig.id == run.config_id
+            )
+        )
+        return int(value or 1)
+
     def find_run_by_idempotency(self, idempotency_key: str) -> IntegrationSyncRun | None:
         return self.session.scalar(
             select(IntegrationSyncRun).where(IntegrationSyncRun.idempotency_key == idempotency_key)
@@ -286,6 +296,64 @@ class IntegrationSyncRepository:
             page_size,
         )
 
+    def list_work_items_for_run(
+        self,
+        run_id: UUID,
+    ) -> list[IntegrationSyncRunWorkItem]:
+        return list(
+            self.session.scalars(
+                select(IntegrationSyncRunWorkItem)
+                .where(IntegrationSyncRunWorkItem.run_id == run_id)
+                .order_by(IntegrationSyncRunWorkItem.ordinal, IntegrationSyncRunWorkItem.id)
+            ).all()
+        )
+
+    def list_batch_items_for_run(
+        self,
+        run_id: UUID,
+    ) -> list[LingxingProductInfoBatchItem]:
+        return list(
+            self.session.scalars(
+                select(LingxingProductInfoBatchItem)
+                .where(LingxingProductInfoBatchItem.run_id == run_id)
+                .order_by(
+                    LingxingProductInfoBatchItem.batch_no,
+                    LingxingProductInfoBatchItem.item_ordinal,
+                    LingxingProductInfoBatchItem.id,
+                )
+            ).all()
+        )
+
+    def list_work_items_for_run_for_update(
+        self,
+        run_id: UUID,
+    ) -> list[IntegrationSyncRunWorkItem]:
+        return list(
+            self.session.scalars(
+                select(IntegrationSyncRunWorkItem)
+                .where(IntegrationSyncRunWorkItem.run_id == run_id)
+                .order_by(IntegrationSyncRunWorkItem.ordinal, IntegrationSyncRunWorkItem.id)
+                .with_for_update()
+            ).all()
+        )
+
+    def list_batch_items_for_run_for_update(
+        self,
+        run_id: UUID,
+    ) -> list[LingxingProductInfoBatchItem]:
+        return list(
+            self.session.scalars(
+                select(LingxingProductInfoBatchItem)
+                .where(LingxingProductInfoBatchItem.run_id == run_id)
+                .order_by(
+                    LingxingProductInfoBatchItem.batch_no,
+                    LingxingProductInfoBatchItem.item_ordinal,
+                    LingxingProductInfoBatchItem.id,
+                )
+                .with_for_update()
+            ).all()
+        )
+
     def get_work_item_for_update(
         self,
         run_id: UUID,
@@ -349,6 +417,13 @@ class IntegrationSyncRepository:
     def get_lock_for_run(self, run_id: UUID) -> IntegrationSyncLock | None:
         return self.session.scalar(
             select(IntegrationSyncLock).where(IntegrationSyncLock.run_id == run_id)
+        )
+
+    def get_lock_for_run_for_update(self, run_id: UUID) -> IntegrationSyncLock | None:
+        return self.session.scalar(
+            select(IntegrationSyncLock)
+            .where(IntegrationSyncLock.run_id == run_id)
+            .with_for_update()
         )
 
     def get_lock_for_interface(
@@ -509,6 +584,27 @@ class IntegrationSyncRepository:
                 )
                 .order_by(IntegrationSyncConfig.next_run_at, IntegrationSyncConfig.id)
                 .with_for_update(skip_locked=True)
+                .limit(limit)
+            ).all()
+        )
+
+    def list_recoverable_queued_run_ids(
+        self,
+        queued_before: datetime,
+        *,
+        limit: int,
+    ) -> list[UUID]:
+        # Only handlers that this worker can actually execute are eligible.
+        return list(
+            self.session.scalars(
+                select(IntegrationSyncRun.id)
+                .where(
+                    IntegrationSyncRun.status == "queued",
+                    IntegrationSyncRun.provider == "lingxing",
+                    IntegrationSyncRun.interface_key.in_(("productList", "batchGetProductInfo")),
+                    IntegrationSyncRun.queued_at <= queued_before,
+                )
+                .order_by(IntegrationSyncRun.queued_at, IntegrationSyncRun.id)
                 .limit(limit)
             ).all()
         )

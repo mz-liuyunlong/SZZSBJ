@@ -152,6 +152,10 @@ class LingxingSkuProductInfoSnapshot(SkuDetailFields, Base):
     __tablename__ = "dwd_lingxing_sku_product_info_snapshots"
     __table_args__ = (
         UniqueConstraint("source_run_id", "source_account_ref", "lingxing_sku_id"),
+        CheckConstraint(
+            "business_hash IS NULL OR char_length(business_hash) = 64",
+            name="business_hash_sha256",
+        ),
         *detail_value_constraints(),
     )
 
@@ -169,6 +173,7 @@ class LingxingSkuProductInfoSnapshot(SkuDetailFields, Base):
         ForeignKey("ods_api_raw_request_refs.id", ondelete="RESTRICT"), nullable=False
     )
     parser_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    business_hash: Mapped[str | None] = mapped_column(String(64))
     source_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
@@ -180,6 +185,10 @@ class LingxingSkuProductInfoCurrent(SkuDetailFields, Base):
     __table_args__ = (
         UniqueConstraint("provider", "source_account_ref", "lingxing_sku_id"),
         UniqueConstraint("source_snapshot_id"),
+        CheckConstraint(
+            "business_hash IS NULL OR char_length(business_hash) = 64",
+            name="business_hash_sha256",
+        ),
         *detail_value_constraints(),
     )
 
@@ -197,6 +206,7 @@ class LingxingSkuProductInfoCurrent(SkuDetailFields, Base):
     source_run_id: Mapped[UUID] = mapped_column(
         ForeignKey("gov_integration_sync_runs.id", ondelete="RESTRICT"), nullable=False
     )
+    business_hash: Mapped[str | None] = mapped_column(String(64))
     source_observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False

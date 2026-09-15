@@ -110,6 +110,9 @@ def test_sku_detail_publication_commits_multi_source_dws_lineage() -> None:
         id=ID,
         lingxing_sku_code=None,
     )
+    service.repository.get_identity_for_update.return_value = (
+        service.sync_repository.get_lingxing_identity.return_value
+    )
     service.sync_repository.get_raw_request_ref.return_value = SimpleNamespace(
         run_id=ID,
         raw_blob_id=ID,

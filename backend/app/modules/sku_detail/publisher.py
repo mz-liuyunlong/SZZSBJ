@@ -1,5 +1,6 @@
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.modules.integration_sync.parsers.lingxing_product_info import ParsedSku
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.media_assets.registration import MediaAssetRegistrationService
 from app.modules.media_assets.tasks import MediaTaskDispatchError, dispatch_media_assets
+from app.modules.sku_detail.business_hash import product_info_business_hash
 from app.modules.sku_detail.calculations import calculate_sku_profile
 from app.modules.sku_detail.models import (
     LingxingSkuGlobalTag,
@@ -123,6 +125,15 @@ class SkuDetailPublicationError(RuntimeError):
     """Safe publication error without raw values."""
 
 
+@dataclass(frozen=True, slots=True)
+class SkuDetailPublicationResult:
+    status: Literal["changed", "unchanged"]
+    snapshot_id: UUID
+    business_hash: str
+    images_written: int
+    tags_written: int
+
+
 class SkuDetailPublicationService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -141,32 +152,52 @@ class SkuDetailPublicationService:
         parsed: ParsedSkuDetail,
         calc_version: str = "v1",
     ) -> UUID:
+        return self.publish_with_result(
+            run_id=run_id,
+            raw_request_ref_id=raw_request_ref_id,
+            source_account_ref=source_account_ref,
+            lingxing_sku_id=lingxing_sku_id,
+            source_observed_at=source_observed_at,
+            parser_version=parser_version,
+            parsed=parsed,
+            calc_version=calc_version,
+        ).snapshot_id
+
+    def publish_with_result(
+        self,
+        *,
+        run_id: UUID,
+        raw_request_ref_id: UUID,
+        source_account_ref: str,
+        lingxing_sku_id: str,
+        source_observed_at: datetime,
+        parser_version: str,
+        parsed: ParsedSkuDetail,
+        calc_version: str = "v1",
+    ) -> SkuDetailPublicationResult:
         identity = self.sync_repository.get_lingxing_identity(source_account_ref, lingxing_sku_id)
         raw_ref = self.sync_repository.get_raw_request_ref(raw_request_ref_id)
         if identity is None or raw_ref is None or raw_ref.run_id != run_id:
             raise SkuDetailPublicationError("SKU_DETAIL_PUBLICATION_SOURCE_INVALID")
-        current_identity_code = getattr(identity, "lingxing_sku_code", None)
-        if (
-            parsed.lingxing_sku_code is not None
-            and current_identity_code is not None
-            and current_identity_code != parsed.lingxing_sku_code
-        ):
-            raise SkuDetailPublicationError("CONTRACT_FIELD_MISMATCH")
+
+        incoming_business_hash = product_info_business_hash(parsed)
         detail_values = parsed.model_dump(exclude={"images", "tags"})
-        snapshot = LingxingSkuProductInfoSnapshot(
-            id=uuid4(),
-            provider="lingxing",
-            source_account_ref=source_account_ref,
-            identity_id=identity.id,
-            lingxing_sku_id=lingxing_sku_id,
-            source_run_id=run_id,
-            source_raw_request_ref_id=raw_request_ref_id,
-            parser_version=parser_version,
-            source_observed_at=source_observed_at,
-            **detail_values,
-        )
         now = utc_now()
+        media_asset_ids: tuple[UUID, ...] = ()
+
         try:
+            locked_identity = self.repository.get_identity_for_update(identity.id)
+            if locked_identity is None:
+                raise SkuDetailPublicationError("SKU_DETAIL_PUBLICATION_SOURCE_INVALID")
+            identity = locked_identity
+            current_identity_code = getattr(identity, "lingxing_sku_code", None)
+            if (
+                parsed.lingxing_sku_code is not None
+                and current_identity_code is not None
+                and current_identity_code != parsed.lingxing_sku_code
+            ):
+                raise SkuDetailPublicationError("CONTRACT_FIELD_MISMATCH")
+
             if parsed.lingxing_sku_code is not None and current_identity_code is None:
                 self.repository.update_record(
                     identity,
@@ -175,7 +206,42 @@ class SkuDetailPublicationService:
                         "updated_at": now,
                     },
                 )
+
+            current = self.repository.get_current(identity.id)
+            if current is not None and current.business_hash == incoming_business_hash:
+                self._record_parse(
+                    run_id=run_id,
+                    raw_request_ref_id=raw_request_ref_id,
+                    raw_blob_id=raw_ref.raw_blob_id,
+                    parser_version=parser_version,
+                    records_written=0,
+                    message_code="PRODUCT_INFO_UNCHANGED",
+                    now=now,
+                )
+                self.session.commit()
+                return SkuDetailPublicationResult(
+                    status="unchanged",
+                    snapshot_id=current.source_snapshot_id,
+                    business_hash=incoming_business_hash,
+                    images_written=0,
+                    tags_written=0,
+                )
+
+            snapshot = LingxingSkuProductInfoSnapshot(
+                id=uuid4(),
+                provider="lingxing",
+                source_account_ref=source_account_ref,
+                identity_id=identity.id,
+                lingxing_sku_id=lingxing_sku_id,
+                source_run_id=run_id,
+                source_raw_request_ref_id=raw_request_ref_id,
+                parser_version=parser_version,
+                business_hash=incoming_business_hash,
+                source_observed_at=source_observed_at,
+                **detail_values,
+            )
             self.repository.add_snapshot(snapshot)
+
             images = [
                 LingxingSkuProductImage(
                     id=uuid4(),
@@ -202,9 +268,9 @@ class SkuDetailPublicationService:
             self.repository.add_images(images)
             media_asset_ids = MediaAssetRegistrationService(self.session).register_images(images)
             self.repository.add_tags(tags)
+
             current_id: UUID | None = None
             profile_id: UUID | None = None
-            current = self.repository.get_current(identity.id)
             if current is None or current.source_observed_at <= source_observed_at:
                 current_values = {
                     **detail_values,
@@ -214,6 +280,7 @@ class SkuDetailPublicationService:
                     "lingxing_sku_id": lingxing_sku_id,
                     "source_snapshot_id": snapshot.id,
                     "source_run_id": run_id,
+                    "business_hash": incoming_business_hash,
                     "source_observed_at": source_observed_at,
                     "updated_at": now,
                 }
@@ -223,6 +290,7 @@ class SkuDetailPublicationService:
                 else:
                     self.repository.update_record(current, current_values)
                 current_id = current.id
+
                 calculated = calculate_sku_profile(parsed)
                 profile_values = {
                     **asdict(calculated),
@@ -243,37 +311,16 @@ class SkuDetailPublicationService:
                 else:
                     self.repository.update_record(profile, profile_values)
                 profile_id = profile.id
-            parse_job = self.sync_repository.get_parse_job(
-                raw_request_ref_id,
-                "lingxing.product_info.v1",
-                parser_version,
+
+            parse_job = self._record_parse(
+                run_id=run_id,
+                raw_request_ref_id=raw_request_ref_id,
+                raw_blob_id=raw_ref.raw_blob_id,
+                parser_version=parser_version,
+                records_written=1,
+                message_code="PARSE_JOB_SUCCEEDED",
+                now=now,
             )
-            if parse_job is None:
-                parse_job = self.sync_repository.add_parse_job(
-                    ParseJob(
-                        id=uuid4(),
-                        run_id=run_id,
-                        raw_request_ref_id=raw_request_ref_id,
-                        parser_key="lingxing.product_info.v1",
-                        parser_version=parser_version,
-                        target_layer="DWD",
-                        status="succeeded",
-                        records_seen=1,
-                        records_written=1,
-                        records_rejected=0,
-                        started_at=now,
-                        finished_at=now,
-                    )
-                )
-            else:
-                self.repository.update_record(
-                    parse_job,
-                    {
-                        "records_seen": parse_job.records_seen + 1,
-                        "records_written": parse_job.records_written + 1,
-                        "finished_at": now,
-                    },
-                )
             self.sync_repository.add_lineage(
                 self._lineage_entries(
                     run_id=run_id,
@@ -367,19 +414,6 @@ class SkuDetailPublicationService:
                     else []
                 )
             )
-            self.sync_repository.add_event(
-                IntegrationSyncRunEvent(
-                    run_id=run_id,
-                    sequence_no=self.sync_repository.next_event_sequence(run_id),
-                    event_type="parse",
-                    from_status=None,
-                    to_status=None,
-                    message_code="PARSE_JOB_SUCCEEDED",
-                    safe_details={"records_written": 1},
-                    occurred_at=now,
-                    actor_ref="parser",
-                )
-            )
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -391,7 +425,72 @@ class SkuDetailPublicationService:
             # ProductInfo publication remains authoritative even when media queueing is unavailable.
             # Pending media assets can be redispatched by the controlled media backfill path.
             pass
-        return snapshot.id
+
+        return SkuDetailPublicationResult(
+            status="changed",
+            snapshot_id=snapshot.id,
+            business_hash=incoming_business_hash,
+            images_written=len(images),
+            tags_written=len(tags),
+        )
+
+    def _record_parse(
+        self,
+        *,
+        run_id: UUID,
+        raw_request_ref_id: UUID,
+        raw_blob_id: UUID,
+        parser_version: str,
+        records_written: int,
+        message_code: str,
+        now: datetime,
+    ) -> ParseJob:
+        parse_job = self.sync_repository.get_parse_job(
+            raw_request_ref_id,
+            "lingxing.product_info.v1",
+            parser_version,
+        )
+        if parse_job is None:
+            parse_job = self.sync_repository.add_parse_job(
+                ParseJob(
+                    id=uuid4(),
+                    run_id=run_id,
+                    raw_request_ref_id=raw_request_ref_id,
+                    parser_key="lingxing.product_info.v1",
+                    parser_version=parser_version,
+                    target_layer="DWD",
+                    status="succeeded",
+                    records_seen=1,
+                    records_written=records_written,
+                    records_rejected=0,
+                    started_at=now,
+                    finished_at=now,
+                )
+            )
+        else:
+            self.repository.update_record(
+                parse_job,
+                {
+                    "records_seen": parse_job.records_seen + 1,
+                    "records_written": parse_job.records_written + records_written,
+                    "finished_at": now,
+                },
+            )
+
+        self.sync_repository.add_event(
+            IntegrationSyncRunEvent(
+                run_id=run_id,
+                sequence_no=self.sync_repository.next_event_sequence(run_id),
+                event_type="parse",
+                from_status=None,
+                to_status=None,
+                message_code=message_code,
+                safe_details={"records_written": records_written},
+                occurred_at=now,
+                actor_ref="parser",
+            )
+        )
+        return parse_job
 
     @staticmethod
     def _lineage_entries(
