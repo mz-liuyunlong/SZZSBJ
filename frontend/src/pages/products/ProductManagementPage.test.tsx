@@ -644,6 +644,8 @@ const row: ProductManagementRow = {
   productName: "Synthetic Product",
   tags: [],
   sourceTags: ["Synthetic Source Tag"],
+  ownerName: null,
+  developerName: null,
   productGrade: null,
   category: null,
   purchasePrice: null,
@@ -739,10 +741,12 @@ describe("ProductManagementPage", () => {
 
     expect(screen.queryByRole("columnheader", { name: /类目/ })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /产品采购价/ })).toBeVisible();
-    expect(screen.getByRole("columnheader", { name: /资料完整度/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /负责人/ })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: /开发人/ })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: /资料完整度/ })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /每日仓储费/ })).toBeVisible();
-    expect(screen.getByRole("columnheader", { name: /建议售价/ })).toBeVisible();
-    expect(screen.getByRole("columnheader", { name: /最低售价/ })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: /建议售价/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /最低售价/ })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /清仓售价/ })).toBeVisible();
   });
 
@@ -761,7 +765,7 @@ describe("ProductManagementPage", () => {
 
     expect(screen.queryByRole("columnheader", { name: /类目/ })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /每日仓储费/ })).toBeVisible();
-    expect(screen.getByRole("columnheader", { name: /建议售价/ })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: /建议售价/ })).not.toBeInTheDocument();
   });
 
   it("loads rows from the backend and opens backend detail data", async () => {
@@ -777,7 +781,7 @@ describe("ProductManagementPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "SYNTHETIC-SKU" }));
     await waitFor(() => expect(getProductManagementSku).toHaveBeenCalledWith(row));
-    expect(await screen.findByText("SKU BASIC DATA")).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "产品详情" })).toBeVisible();
   });
 
   it("sends changed filters to the backend and renders safe failures", async () => {

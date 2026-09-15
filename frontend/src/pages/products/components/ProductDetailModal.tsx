@@ -1,10 +1,6 @@
 import { Button, Modal, Progress, Tag, Typography } from "antd";
-import { useState } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
-
-const detailDateOnly = (value: string | null | undefined) => (
-  value ? value.slice(0, 10) : null
-);
 
 const isDisplayableImageUrl = (value: string | null | undefined): value is string => (
   typeof value === "string" && /^https?:\/\//i.test(value)
@@ -76,9 +72,29 @@ const productSections: { key: ProductDetailSection; label: string }[] = [
 
 interface DetailFieldItem {
   label: string;
-  value: string | number | null;
+  value: ReactNode;
   extra?: string;
 }
+
+const productTagFallbackColor = "#1677ff";
+
+const productTagStyle = (color: string | null | undefined): CSSProperties => ({
+  "--product-tag-color": color || productTagFallbackColor,
+}) as CSSProperties;
+
+const renderProductSourceTag = (
+  label: string | null | undefined,
+  color: string | null | undefined,
+) => (
+  label ? (
+    <span
+      className="product-management__source-tag-pill"
+      style={productTagStyle(color)}
+    >
+      {label}
+    </span>
+  ) : null
+);
 
 function DetailFieldGrid({ items }: { items: DetailFieldItem[] }) {
   return (
@@ -148,14 +164,6 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
     if (activeSection === "images") {
       return (
         <section className="product-management__detail-main">
-          <div className="product-management__detail-section-head">
-            <div>
-              <Typography.Title level={4}>图片信息</Typography.Title>
-              <Typography.Text type="secondary">
-                集中查看产品主图、白底图、场景图、尺寸图等基础图片资料。
-              </Typography.Text>
-            </div>
-          </div>
           <div className="product-management__image-gallery">
             {row.images.map((url, index) => (
               <div key={`${row.id}-${index}`} className="product-management__image-card">
@@ -167,12 +175,6 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
             ))}
             {row.images.length === 0 && <Typography.Text type="secondary">暂无图片</Typography.Text>}
           </div>
-          <div className="product-management__detail-note">
-            <Typography.Text strong>图片资料说明</Typography.Text>
-            <div>
-              当前页面只展示产品基础图片资料入口。图片源、图片审核状态、平台图片映射关系后续由接口返回。
-            </div>
-          </div>
         </section>
       );
     }
@@ -180,12 +182,6 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
     if (activeSection === "logistics") {
       return (
         <section className="product-management__detail-main">
-          <div className="product-management__detail-section-head">
-            <div>
-              <Typography.Title level={4}>物流报关清关</Typography.Title>
-              <Typography.Text type="secondary">维护报关、材质、用途、规格等跨境基础资料。</Typography.Text>
-            </div>
-          </div>
           <div className="product-management__detail-card">
             <div className="product-management__detail-card-title">报关基础信息</div>
             <DetailFieldGrid
@@ -219,12 +215,6 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
     if (activeSection === "analysis") {
       return (
         <section className="product-management__detail-main">
-          <div className="product-management__detail-section-head">
-            <div>
-              <Typography.Title level={4}>商品分析资料</Typography.Title>
-              <Typography.Text type="secondary">关联竞品文案、关键词、图片分析和平台竞争资料。</Typography.Text>
-            </div>
-          </div>
           <div className="product-management__file-grid">
             {[
               ["竞品文案信息表", "记录竞品标题、卖点、描述等文案结构"],
@@ -248,60 +238,44 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
 
     return (
       <section className="product-management__detail-main">
-        <div className="product-management__detail-section-head">
-          <div>
-            <Typography.Title level={4}>基本信息</Typography.Title>
-            <Typography.Text type="secondary">SKU 维度的基础档案、成本费用和平台映射状态。</Typography.Text>
-          </div>
-        </div>
-        <div className="product-management__detail-dashboard">
-          <div><span>产品等级</span><strong>{row.productGrade}</strong></div>
-          <div><span>标签</span><strong>{row.sourceTags[0] || "-"}</strong></div>
-          <div><span>资料完整度</span><strong>{row.dataCompleteness ?? "-"}{row.dataCompleteness === null ? "" : "%"}</strong></div>
-        </div>
         <div className="product-management__detail-card">
           <div className="product-management__detail-card-title">基础档案</div>
           <DetailFieldGrid
             items={[
-              { label: "SKU", value: row.sku },
               { label: "产品名称", value: row.productName },
-              { label: "更新时间", value: detailDateOnly(row.updatedAt) ?? "-" },
+              { label: "SKU", value: row.sku },
+              {
+                label: "标签",
+                value: renderProductSourceTag(
+                  row.sourceTags[0],
+                  row.sourceTags[0] ? row.sourceTagColors?.[row.sourceTags[0]] : null,
+                ),
+              },
+              { label: "负责人", value: "-" },
+              { label: "开发人", value: "-" },
             ]}
           />
         </div>
-        <div className="product-management__detail-split">
-          <div className="product-management__detail-card">
-            <div className="product-management__detail-card-title">成本与费用</div>
-            <DetailFieldGrid
-              items={[
-                { label: "产品采购价", value: row.purchasePrice },
-                { label: "头程运费", value: row.firstLegFreight ?? calculationFallback(row) },
-                { label: "WFS配送费", value: row.wfsDeliveryFee ?? calculationFallback(row) },
-                {
-                  label: "头程计费重",
-                  value: withUnit(row.pricingBreakdown?.firstLegChargeableWeightKg, "kg"),
-                },
-                {
-                  label: "每日仓储费",
-                  value: row.pricingBreakdown?.dailyStorageFeeUsd
-                    ? `USD ${row.pricingBreakdown.dailyStorageFeeUsd}`
-                    : calculationFallback(row),
-                },
-              ]}
-            />
-          </div>
-          <div className="product-management__detail-card">
-            <div className="product-management__detail-card-title">价格字段</div>
-            <DetailFieldGrid
-              items={[
-                { label: "WFS费用", value: row.wfsFee ?? calculationFallback(row) },
-                { label: "固定成本", value: row.pricingBreakdown?.fixedCostUsd ? `USD ${row.pricingBreakdown.fixedCostUsd}` : calculationFallback(row) },
-                { label: "建议售价", value: row.suggestedPrice ?? calculationFallback(row) },
-                { label: "最低售价", value: row.minimumPrice ?? calculationFallback(row) },
-                { label: "清仓售价", value: row.clearancePrice ?? calculationFallback(row) },
-              ]}
-            />
-          </div>
+        <div className="product-management__detail-card">
+          <div className="product-management__detail-card-title">成本与费用</div>
+          <DetailFieldGrid
+            items={[
+              { label: "产品采购价", value: row.purchasePrice },
+              { label: "头程运费", value: row.firstLegFreight ?? calculationFallback(row) },
+              {
+                label: "头程计费重",
+                value: withUnit(row.pricingBreakdown?.firstLegChargeableWeightKg, "kg"),
+              },
+              {
+                label: "每日仓储费",
+                value: row.pricingBreakdown?.dailyStorageFeeUsd
+                  ? `USD ${row.pricingBreakdown.dailyStorageFeeUsd}`
+                  : calculationFallback(row),
+              },
+              { label: "WFS费用", value: row.wfsFee ?? calculationFallback(row) },
+              { label: "清仓售价", value: row.clearancePrice ?? calculationFallback(row) },
+            ]}
+          />
         </div>
       </section>
     );
@@ -312,14 +286,11 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
       className="product-management__detail-modal"
       title="产品详情"
       open={Boolean(row)}
-      width="min(1080px, calc(100vw - 64px))"
+      width={1050}
       centered
       destroyOnHidden
       footer={row ? (
         <div className="product-management__detail-footer">
-          <Typography.Text type="secondary">
-            产品详情为 <Typography.Text strong>SKU基础数据源</Typography.Text>，内部标签与标签由后端分别返回。
-          </Typography.Text>
           <Button type="primary" onClick={closeModal}>关闭</Button>
         </div>
       ) : null}
@@ -327,28 +298,10 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
     >
       {row && (
         <div className="product-management__detail-modern">
-          <section className="product-management__detail-pro-header">
-            <div>
-              <Typography.Text className="product-management__detail-eyebrow">SKU BASIC DATA</Typography.Text>
-              <Typography.Title level={3}>{row.productName ?? "未命名产品"}</Typography.Title>
-              <div className="product-management__detail-meta">
-                <span>SKU：<code>{row.sku ?? "-"}</code></span>
-                <span>类目：{row.category ?? "-"}</span>
-                <span>资料状态：基础字段已载入</span>
-              </div>
-            </div>
-          </section>
           <div className="product-management__detail-layout">
             <aside className="product-management__detail-aside">
               <div className="product-management__detail-product-card">
                 <div className="product-management__detail-image-modern">{renderDetailProductImage(row)}</div>
-                <div className="product-management__detail-product-name">{row.productName ?? "-"}</div>
-                <div className="product-management__detail-quick-list">
-                  <div><span>类目</span><b>{row.category ?? "-"}</b></div>
-                  <div><span>采购交期</span><b>{row.purchaseLeadTime ?? "-"}</b></div>
-                  <div><span>采购价</span><b>{row.purchasePrice ?? "-"}</b></div>
-                  <div><span>头程运费</span><b>{row.firstLegFreight ?? "-"}</b></div>
-                </div>
                 <div className="product-management__detail-progress-box">
                   <div><span>基础资料完整度</span><b>{row.dataCompleteness ?? "-"}{row.dataCompleteness === null ? "" : "%"}</b></div>
                   <Progress percent={normalizeDetailPercent(row.dataCompleteness)} showInfo={false} size="small" />

@@ -50,6 +50,8 @@ export interface ProductManagementRow {
   tags: ProductTag[];
   sourceTags: ProductTag[];
   sourceTagColors?: Record<string, string | null>;
+  ownerName: string | null;
+  developerName: string | null;
   productGrade: ProductGrade | "异常" | null;
   category: string | null;
   purchasePrice: string | null;
@@ -103,6 +105,8 @@ export interface ProductManagementSummary {
 
 export interface ProductManagementFilters {
   productGrade?: ProductGrade;
+  owner?: string;
+  developer?: string;
   tag?: ProductTag;
   searchType: "sku" | "productName" | "category";
   keyword: string;
@@ -113,17 +117,14 @@ export const productColumnFields = [
   { key: "image", title: "图片" },
   { key: "sku", title: "SKU" },
   { key: "productName", title: "产品名称" },
+  { key: "ownerName", title: "负责人" },
+  { key: "developerName", title: "开发人" },
   { key: "category", title: "类目" },
   { key: "purchasePrice", title: "产品采购价" },
   { key: "firstLegFreight", title: "头程运费" },
   { key: "purchaseLeadTime", title: "采购交期" },
-  { key: "dataCompleteness", title: "资料完整度" },
-  { key: "updatedAt", title: "更新时间" },
   { key: "sourceTags", title: "标签" },
-  { key: "productGrade", title: "产品等级" },
   { key: "wfsFee", title: "WFS费用" },
-  { key: "suggestedPrice", title: "建议售价" },
-  { key: "minimumPrice", title: "最低售价" },
   { key: "clearancePrice", title: "清仓售价" },
   { key: "storageFee", title: "每日仓储费" },
 ] as const;
