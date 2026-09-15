@@ -217,6 +217,8 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
       tag.label ? [[tag.label, tag.color]] : []
     )),
   ),
+  ownerName: null,
+  developerName: null,
   productGrade: item.product_grade ? gradeLabels[item.product_grade] : null,
   category: item.category,
   purchasePrice: money("CNY", item.purchase_cost_cny),
@@ -339,6 +341,11 @@ export async function getProductManagementSku(
     category: response.data.core?.category ?? row.category,
     tags: response.data.internal_tags.map((tag) => tag.label),
     sourceTags: response.data.source_tags.flatMap((tag) => tag.label ? [tag.label] : []),
+    sourceTagColors: Object.fromEntries(
+      response.data.source_tags.flatMap((tag) => (
+        tag.label ? [[tag.label, tag.color]] : []
+      )),
+    ),
     purchaseLeadTime: detail?.purchase_delivery_days === null || !detail
       ? null
       : `${detail.purchase_delivery_days}天`,

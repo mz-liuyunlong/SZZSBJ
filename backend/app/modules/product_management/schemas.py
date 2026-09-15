@@ -56,12 +56,11 @@ PRODUCT_MANAGEMENT_COLUMNS = frozenset(
         "image",
         "sku",
         "productName",
+        "ownerName",
+        "developerName",
         "tags",
         "sourceTags",
-        "productGrade",
         "wfsFee",
-        "suggestedPrice",
-        "minimumPrice",
         "clearancePrice",
         "category",
         "purchasePrice",
@@ -70,20 +69,20 @@ PRODUCT_MANAGEMENT_COLUMNS = frozenset(
         "purchaseLeadTime",
         "storageFee",
         "linkedPlatformSkuCount",
-        "dataCompleteness",
-        "updatedAt",
     }
 )
 DEFAULT_PRODUCT_MANAGEMENT_COLUMNS = (
     "image",
     "sku",
     "productName",
-    "category",
+    "ownerName",
+    "developerName",
     "purchasePrice",
     "firstLegFreight",
     "purchaseLeadTime",
-    "dataCompleteness",
-    "updatedAt",
+    "sourceTags",
+    "clearancePrice",
+    "storageFee",
 )
 
 

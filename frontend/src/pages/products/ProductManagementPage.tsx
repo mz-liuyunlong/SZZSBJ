@@ -14,7 +14,6 @@ import ProductManagementSummaryCards from "@/pages/products/components/ProductMa
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
 import {
-  getProductManagementOptions,
   getProductManagementSku,
   getProductManagementSummary,
   getProductManagementTableView,
@@ -28,7 +27,6 @@ import {
   type ProductManagementFilters,
   type ProductManagementRow,
   type ProductManagementSummary,
-  type ProductGrade,
   type ProductSourceTagOption,
 } from "@/pages/products/productManagementTypes";
 import "@/pages/products/ProductManagementPage.css";
@@ -39,7 +37,7 @@ const createInitialFilters = (): ProductManagementFilters => ({
   keyword: "",
 });
 
-const hiddenProductColumnKeys = new Set<string>(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag"]);
+const hiddenProductColumnKeys = new Set<string>(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag", "suggestedPrice", "minimumPrice", "productGrade", "updatedAt", "dataCompleteness"]);
 const configurableProductColumnFields = productColumnFields.filter(
   (field) => !hiddenProductColumnKeys.has(field.key),
 );
@@ -68,6 +66,8 @@ const defaultColumnWidths: Record<string, number> = {
   image: 72,
   sku: 170,
   productName: 240,
+  ownerName: 120,
+  developerName: 120,
   tags: 132,
   sourceTags: 132,
   productGrade: 116,
@@ -142,7 +142,8 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const [rows, setRows] = useState<ProductManagementRow[]>([]);
   const [total, setTotal] = useState(0);
   const [, setSummary] = useState<ProductManagementSummary>(emptySummary);
-  const [grades, setGrades] = useState<ProductGrade[]>([]);
+  const ownerOptions: string[] = [];
+  const developerOptions: string[] = [];
   const [tags, setTags] = useState<ProductSourceTagOption[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -197,11 +198,6 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   }, [filters, statisticsVisible]);
 
   useEffect(() => {
-    void getProductManagementOptions()
-      .then((options) => {
-        setGrades(options.grades);
-      })
-      .catch(() => undefined);
     void getProductManagementTableView()
       .then((view) => {
         setAppliedColumnKeys(normalizeProductColumnKeys(view.applied_column_keys));
@@ -240,7 +236,8 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           <Card size="small" className="product-management__toolbar-card">
             <ProductManagementToolbar
               filters={filters}
-              grades={grades}
+              owners={ownerOptions}
+              developers={developerOptions}
               tags={tags}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}

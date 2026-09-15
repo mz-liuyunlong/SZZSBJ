@@ -8,14 +8,14 @@ import { useState } from "react";
 import ConnectedSearch from "@/components/report-table/ConnectedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
 import type {
-  ProductGrade,
   ProductManagementFilters,
   ProductSourceTagOption,
 } from "@/pages/products/productManagementTypes";
 
 interface ProductManagementToolbarProps {
   filters: ProductManagementFilters;
-  grades: ProductGrade[];
+  owners: string[];
+  developers: string[];
   tags: ProductSourceTagOption[];
   statisticsVisible: boolean;
   onChange: (filters: ProductManagementFilters) => void;
@@ -29,7 +29,8 @@ interface ProductManagementToolbarProps {
 
 function ProductManagementToolbar({
   filters,
-  grades,
+  owners,
+  developers,
   tags,
   statisticsVisible,
   onChange,
@@ -111,11 +112,21 @@ function ProductManagementToolbar({
         className="report-filter-select"
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
-        placeholder="产品等级"
-        aria-label="产品等级"
-        value={filters.productGrade}
-        options={grades.map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, productGrade: value })}
+        placeholder="负责人"
+        aria-label="负责人"
+        value={filters.owner}
+        options={owners.map((value) => ({ value, label: value }))}
+        onChange={(value) => onChange({ ...filters, owner: value })}
+      />
+      <Select
+        className="report-filter-select"
+        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+        allowClear
+        placeholder="开发人"
+        aria-label="开发人"
+        value={filters.developer}
+        options={developers.map((value) => ({ value, label: value }))}
+        onChange={(value) => onChange({ ...filters, developer: value })}
       />
       <Select
         className="report-filter-select"
@@ -132,7 +143,6 @@ function ProductManagementToolbar({
         typeAriaLabel="搜索类型"
         typeOptions={[
           { value: "sku", label: "SKU" },
-          { value: "productName", label: "产品名称" },
         ]}
         typeValue={filters.searchType}
         inputAriaLabel="搜索产品"

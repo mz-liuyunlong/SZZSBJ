@@ -1,6 +1,6 @@
 import { Button, Space, Tag, Tooltip, Typography } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import type { Key, ReactNode } from "react";
+import type { CSSProperties, Key, ReactNode } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
 } from "@/components/report-table/ReportTableShell";
@@ -13,6 +13,8 @@ const minColumnWidths: Record<string, number> = {
   image: 72,
   sku: 160,
   productName: 220,
+  ownerName: 120,
+  developerName: 120,
   tags: 120,
   sourceTags: 120,
   productGrade: 110,
@@ -32,13 +34,32 @@ const minColumnWidths: Record<string, number> = {
   actions: 110,
 };
 
-const hiddenProductTableColumnKeys = new Set(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag"]);
+const hiddenProductTableColumnKeys = new Set(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag", "suggestedPrice", "minimumPrice", "productGrade", "updatedAt", "dataCompleteness"]);
 
 const tagColorMap: Record<string, string> = {
   测品: "blue",
   清货: "orange",
   停售: "red",
 };
+
+const productTagFallbackColor = "#1677ff";
+
+const productTagStyle = (color: string | null | undefined): CSSProperties => ({
+  "--product-tag-color": color || productTagFallbackColor,
+}) as CSSProperties;
+
+const renderProductSourceTag = (
+  label: string,
+  color: string | null | undefined,
+) => (
+  <span
+    key={label}
+    className="product-management__source-tag-pill"
+    style={productTagStyle(color)}
+  >
+    {label}
+  </span>
+);
 
 const empty = <Typography.Text type="secondary">-</Typography.Text>;
 const missingRootCodes = new Set([
@@ -153,6 +174,22 @@ function ProductManagementTable({
         />
       ),
     },
+    ownerName: {
+      key: "ownerName",
+      dataIndex: "ownerName",
+      title: title("ownerName", fieldTitle.ownerName),
+      width: columnWidths.ownerName,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.ownerName ?? empty,
+    },
+    developerName: {
+      key: "developerName",
+      dataIndex: "developerName",
+      title: title("developerName", fieldTitle.developerName),
+      width: columnWidths.developerName,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.developerName ?? empty,
+    },
     tags: {
       key: "tags",
       dataIndex: "tags",
@@ -174,11 +211,13 @@ function ProductManagementTable({
       width: columnWidths.sourceTags,
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <Space size={4} wrap>
-          {row.sourceTags.length > 0 ? row.sourceTags.map((tag) => (
-            <Tag key={tag} color={row.sourceTagColors?.[tag] ?? undefined}>{tag}</Tag>
-          )) : <Typography.Text type="secondary">-</Typography.Text>}
-        </Space>
+        row.sourceTags.length > 0 ? (
+          <span className="product-management__source-tag-list">
+            {row.sourceTags.map((tag) => (
+              renderProductSourceTag(tag, row.sourceTagColors?.[tag])
+            ))}
+          </span>
+        ) : <Typography.Text type="secondary">-</Typography.Text>
       ),
     },
     productGrade: {
