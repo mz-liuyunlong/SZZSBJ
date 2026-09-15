@@ -135,9 +135,7 @@ class MediaAssetDeliveryService:
         if asset is None or asset.status != "ready":
             raise MediaDeliveryError("MEDIA_NOT_AVAILABLE")
 
-        object_key = (
-            asset.thumbnail_128_key if variant == "thumbnail" else asset.preview_512_key
-        )
+        object_key = asset.thumbnail_128_key if variant == "thumbnail" else asset.preview_512_key
         if not object_key:
             raise MediaDeliveryError("MEDIA_NOT_AVAILABLE")
 

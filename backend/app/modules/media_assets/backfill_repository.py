@@ -49,9 +49,7 @@ class MediaImageBackfillRepository:
             statement = statement.where(LingxingSkuProductImage.id > after_id)
 
         return list(
-            self.session.scalars(
-                statement.order_by(LingxingSkuProductImage.id).limit(limit)
-            ).all()
+            self.session.scalars(statement.order_by(LingxingSkuProductImage.id).limit(limit)).all()
         )
 
     def has_unlinked_current_images_after(self, after_id: UUID) -> bool:
@@ -103,34 +101,27 @@ class MediaImageBackfillRepository:
             )
             .distinct()
         )
-        statement = (
-            select(MediaImageAsset)
-            .where(
-                MediaImageAsset.id.in_(current_asset_ids),
-                MediaImageAsset.retry_count < max_attempts,
-                or_(
-                    MediaImageAsset.status == "pending",
-                    and_(
-                        MediaImageAsset.status == "failed",
-                        MediaImageAsset.error_code.in_(RETRYABLE_MEDIA_ERROR_CODES),
-                    ),
-                    and_(
-                        MediaImageAsset.status == "processing",
-                        or_(
-                            MediaImageAsset.last_attempt_at.is_(None),
-                            MediaImageAsset.last_attempt_at <= stale_before,
-                        ),
+        statement = select(MediaImageAsset).where(
+            MediaImageAsset.id.in_(current_asset_ids),
+            MediaImageAsset.retry_count < max_attempts,
+            or_(
+                MediaImageAsset.status == "pending",
+                and_(
+                    MediaImageAsset.status == "failed",
+                    MediaImageAsset.error_code.in_(RETRYABLE_MEDIA_ERROR_CODES),
+                ),
+                and_(
+                    MediaImageAsset.status == "processing",
+                    or_(
+                        MediaImageAsset.last_attempt_at.is_(None),
+                        MediaImageAsset.last_attempt_at <= stale_before,
                     ),
                 ),
-            )
+            ),
         )
         if after_id is not None:
             statement = statement.where(MediaImageAsset.id > after_id)
-        return list(
-            self.session.scalars(
-                statement.order_by(MediaImageAsset.id).limit(limit)
-            ).all()
-        )
+        return list(self.session.scalars(statement.order_by(MediaImageAsset.id).limit(limit)).all())
 
     def has_recoverable_current_assets_after(
         self,

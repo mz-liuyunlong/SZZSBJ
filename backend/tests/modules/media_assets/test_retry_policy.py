@@ -27,13 +27,19 @@ def test_processing_stale_policy_recovers_missing_or_old_attempts() -> None:
     now = datetime.now(UTC)
 
     assert processing_is_stale(None, now=now, stale_seconds=900) is True
-    assert processing_is_stale(
-        now - timedelta(seconds=901),
-        now=now,
-        stale_seconds=900,
-    ) is True
-    assert processing_is_stale(
-        now - timedelta(seconds=899),
-        now=now,
-        stale_seconds=900,
-    ) is False
+    assert (
+        processing_is_stale(
+            now - timedelta(seconds=901),
+            now=now,
+            stale_seconds=900,
+        )
+        is True
+    )
+    assert (
+        processing_is_stale(
+            now - timedelta(seconds=899),
+            now=now,
+            stale_seconds=900,
+        )
+        is False
+    )

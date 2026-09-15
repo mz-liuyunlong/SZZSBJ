@@ -121,10 +121,7 @@ class MediaSourceDownloader:
                 with client.stream("GET", source_url) as response:
                     self._validate_response(response)
                     content_type = (
-                        response.headers.get("content-type", "")
-                        .split(";", 1)[0]
-                        .strip()
-                        .lower()
+                        response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
                     )
                     chunks: list[bytes] = []
                     size = 0
@@ -162,12 +159,7 @@ class MediaSourceDownloader:
         if response.status_code < 200 or response.status_code >= 300:
             raise MediaDownloadError("SOURCE_HTTP_ERROR", retryable=False)
 
-        content_type = (
-            response.headers.get("content-type", "")
-            .split(";", 1)[0]
-            .strip()
-            .lower()
-        )
+        content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
         if content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
             raise MediaDownloadError("SOURCE_CONTENT_TYPE_UNSUPPORTED", retryable=False)
 

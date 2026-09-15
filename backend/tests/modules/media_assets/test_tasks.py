@@ -82,6 +82,7 @@ def test_dispatch_failure_raises_safe_error(monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(MediaTaskDispatchError, match="media task dispatch is unavailable"):
         dispatch_media_assets([UUID(int=1)])
 
+
 def test_retry_scheduler_uses_db_attempt_count_and_hard_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -89,20 +90,26 @@ def test_retry_scheduler_uses_db_attempt_count_and_hard_cap(
     monkeypatch.setattr(process_image_asset, "apply_async", apply_async)
     asset_id = UUID(int=9)
 
-    assert schedule_media_asset_retry(
-        asset_id,
-        retry_count=2,
-        max_attempts=3,
-    ) is True
+    assert (
+        schedule_media_asset_retry(
+            asset_id,
+            retry_count=2,
+            max_attempts=3,
+        )
+        is True
+    )
     apply_async.assert_called_once_with(
         args=(str(asset_id),),
         countdown=60,
     )
 
     apply_async.reset_mock()
-    assert schedule_media_asset_retry(
-        asset_id,
-        retry_count=3,
-        max_attempts=3,
-    ) is False
+    assert (
+        schedule_media_asset_retry(
+            asset_id,
+            retry_count=3,
+            max_attempts=3,
+        )
+        is False
+    )
     apply_async.assert_not_called()

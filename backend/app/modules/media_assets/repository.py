@@ -61,17 +61,13 @@ class MediaAssetRepository:
         if not source_url_hashes:
             return {}
         assets = self.session.scalars(
-            select(MediaImageAsset).where(
-                MediaImageAsset.source_url_hash.in_(source_url_hashes)
-            )
+            select(MediaImageAsset).where(MediaImageAsset.source_url_hash.in_(source_url_hashes))
         ).all()
         return {asset.source_url_hash: asset for asset in assets}
 
     def get_by_source_url_hash(self, source_url_hash: str) -> MediaImageAsset | None:
         return self.session.scalar(
-            select(MediaImageAsset).where(
-                MediaImageAsset.source_url_hash == source_url_hash
-            )
+            select(MediaImageAsset).where(MediaImageAsset.source_url_hash == source_url_hash)
         )
 
     def add_asset(self, asset: MediaImageAsset) -> MediaImageAsset:

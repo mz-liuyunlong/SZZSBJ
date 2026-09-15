@@ -146,9 +146,7 @@ class ProductManagementService:
         listing_counts = self.repository.listing_counts(product_ids)
         primary_media_urls = MediaAssetReadService.from_runtime(
             self.session
-        ).urls_for_source_images(
-            [row[6].id for row in rows if row[6] is not None]
-        )
+        ).urls_for_source_images([row[6].id for row in rows if row[6] is not None])
         items = [
             self._list_item(
                 row,
@@ -172,11 +170,7 @@ class ProductManagementService:
                     if row[0].source_account_ref in effective_rules
                     else "sku-pricing-defaults-v1"
                 ),
-                image_urls=(
-                    primary_media_urls.get(row[6].id)
-                    if row[6] is not None
-                    else None
-                ),
+                image_urls=(primary_media_urls.get(row[6].id) if row[6] is not None else None),
             )
             for row in rows
         ]
@@ -263,9 +257,9 @@ class ProductManagementService:
             else []
         )
         images = [] if current is None else self.repository.list_images(current.source_snapshot_id)
-        image_urls = MediaAssetReadService.from_runtime(
-            self.session
-        ).urls_for_source_images([image.id for image in images])
+        image_urls = MediaAssetReadService.from_runtime(self.session).urls_for_source_images(
+            [image.id for image in images]
+        )
         source_tags = (
             [] if current is None else self.repository.list_source_tags(current.source_snapshot_id)
         )
@@ -297,14 +291,10 @@ class ProductManagementService:
                     ordinal=image.ordinal,
                     url=image.pic_url,
                     thumbnail_url=(
-                        image_urls[image.id].thumbnail_url
-                        if image.id in image_urls
-                        else None
+                        image_urls[image.id].thumbnail_url if image.id in image_urls else None
                     ),
                     preview_url=(
-                        image_urls[image.id].preview_url
-                        if image.id in image_urls
-                        else None
+                        image_urls[image.id].preview_url if image.id in image_urls else None
                     ),
                     is_primary=image.is_primary,
                 )
@@ -913,9 +903,7 @@ class ProductManagementService:
             ),
             owner_uid=current.owner_uid if current is not None else None,
             owner_name=current.owner_name if current is not None else None,
-            product_developer_uid=(
-                current.product_developer_uid if current is not None else None
-            ),
+            product_developer_uid=(current.product_developer_uid if current is not None else None),
             product_developer_name=(
                 current.product_developer_name if current is not None else None
             ),
@@ -929,9 +917,7 @@ class ProductManagementService:
             primary_image_thumbnail_url=(
                 image_urls.thumbnail_url if image_urls is not None else None
             ),
-            primary_image_preview_url=(
-                image_urls.preview_url if image_urls is not None else None
-            ),
+            primary_image_preview_url=(image_urls.preview_url if image_urls is not None else None),
             internal_tags=[ProductManagementService._tag(tag) for tag in tags],
             source_tags=[
                 SourceTagRead(

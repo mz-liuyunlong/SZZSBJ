@@ -210,9 +210,7 @@ class ProductManagementRepository:
                     )
                 ),
                 func.sum(case((projections.c.missing_purchase.is_(True), 1), else_=0)),
-                func.sum(
-                    case((projections.c.missing_purchase_delivery.is_(True), 1), else_=0)
-                ),
+                func.sum(case((projections.c.missing_purchase_delivery.is_(True), 1), else_=0)),
                 func.sum(case((projections.c.missing_weight.is_(True), 1), else_=0)),
                 func.sum(case((projections.c.missing_dimensions.is_(True), 1), else_=0)),
                 func.sum(case((projections.c.image_count == 0, 1), else_=0)),
@@ -445,11 +443,7 @@ class ProductManagementRepository:
             .order_by(LingxingSkuGlobalTag.tag_name, tag_value)
             .limit(1000)
         ).all()
-        return [
-            (str(value), str(label), color)
-            for value, label, color in rows
-            if value and label
-        ]
+        return [(str(value), str(label), color) for value, label, color in rows if value and label]
 
     def list_rule_versions(self, source_account_ref: str) -> list[ProductPricingRuleVersion]:
         return list(

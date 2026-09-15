@@ -99,8 +99,6 @@ def test_signed_media_route_maps_missing_asset_to_404(
 
 
 def test_media_route_post_is_not_exposed() -> None:
-    response = TestClient(create_app()).post(
-        f"/api/media/image-assets/{ASSET_ID}/thumbnail"
-    )
+    response = TestClient(create_app()).post(f"/api/media/image-assets/{ASSET_ID}/thumbnail")
 
     assert response.status_code == 405

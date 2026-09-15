@@ -132,9 +132,7 @@ class MediaImageBackfillService:
         )
 
         recovery_limit = max_dispatch if dispatch else DEFAULT_MAX_DISPATCH
-        stale_before = datetime.now(UTC) - timedelta(
-            seconds=self.processing_stale_seconds
-        )
+        stale_before = datetime.now(UTC) - timedelta(seconds=self.processing_stale_seconds)
         recoverable_assets = self.repository.list_recoverable_current_assets(
             after_id=None,
             limit=max(1, recovery_limit),

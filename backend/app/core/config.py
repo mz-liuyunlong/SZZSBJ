@@ -296,17 +296,9 @@ class Settings(BaseSettings):
         value = self.media_allowed_source_hosts
         if value is None:
             return frozenset()
-        hosts = {
-            part.strip().lower().rstrip(".")
-            for part in value.split(",")
-            if part.strip()
-        }
+        hosts = {part.strip().lower().rstrip(".") for part in value.split(",") if part.strip()}
         if any(
-            "://" in host
-            or "/" in host
-            or ":" in host
-            or host.startswith(".")
-            for host in hosts
+            "://" in host or "/" in host or ":" in host or host.startswith(".") for host in hosts
         ):
             raise ValueError("MEDIA_ALLOWED_SOURCE_HOSTS must contain hostnames only")
         return frozenset(hosts)

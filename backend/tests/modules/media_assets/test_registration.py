@@ -52,13 +52,9 @@ def test_registration_reuses_existing_asset() -> None:
         status="pending",
     )
     repository.source_links_for_images.return_value = {}
-    repository.assets_by_source_url_hashes.return_value = {
-        descriptor.source_url_hash: existing
-    }
+    repository.assets_by_source_url_hashes.return_value = {descriptor.source_url_hash: existing}
 
-    result = service.register_images_with_stats(
-        [_image(1, "https://images.example.com/a.jpg")]
-    )
+    result = service.register_images_with_stats([_image(1, "https://images.example.com/a.jpg")])
 
     assert result.created_asset_count == 0
     assert result.created_link_count == 1
@@ -76,9 +72,7 @@ def test_registration_terminally_links_unsupported_source_without_dispatch() -> 
     repository.assets_by_source_url_hashes.return_value = {}
     repository.add_asset.side_effect = lambda asset: asset
 
-    result = service.register_images_with_stats(
-        [_image(1, "http://images.example.com/a.jpg")]
-    )
+    result = service.register_images_with_stats([_image(1, "http://images.example.com/a.jpg")])
 
     assert result.created_asset_count == 1
     assert result.created_link_count == 1

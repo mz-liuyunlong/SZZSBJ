@@ -9,9 +9,7 @@ from app.core.api import ApiError, ErrorCode
 from app.core.config import SettingsError, get_settings
 
 PUBLIC_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset({"/health"})
-PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset(
-    {"/api/media/image-assets/"}
-)
+PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset({"/api/media/image-assets/"})
 PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
 _PREVIEW_PERMISSIONS: Final = frozenset(

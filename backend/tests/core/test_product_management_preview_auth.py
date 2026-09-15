@@ -72,7 +72,10 @@ def _app() -> FastAPI:
     return application
 
 
-def _empty_options(_: ProductManagementService) -> ProductManagementOptionsData:
+def _empty_options(
+    _: ProductManagementService,
+    __: frozenset[str],
+) -> ProductManagementOptionsData:
     return ProductManagementOptionsData(
         product_grades=[],
         calculation_statuses=[],

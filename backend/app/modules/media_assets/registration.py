@@ -78,9 +78,7 @@ class MediaAssetRegistrationService:
             link_count=link_count,
             new_asset_count=len(missing_hashes),
             reused_asset_link_count=link_count - len(missing_hashes),
-            invalid_source_count=sum(
-                not descriptor.dispatchable for _, descriptor in pending
-            ),
+            invalid_source_count=sum(not descriptor.dispatchable for _, descriptor in pending),
         )
 
     def register_images_with_stats(
@@ -161,9 +159,7 @@ class MediaAssetRegistrationService:
     ) -> list[tuple[LingxingSkuProductImage, MediaSourceDescriptor]]:
         if not images:
             return []
-        links = self.repository.source_links_for_images(
-            tuple(image.id for image in images)
-        )
+        links = self.repository.source_links_for_images(tuple(image.id for image in images))
         return [
             (image, self.describe_source(image.pic_url))
             for image in images
