@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://42.193.254.170/api/:path*"
+      "destination": "http://42.193.254.170/szzsbj-api/:path*"
     },
     {
       "source": "/(.*)",
