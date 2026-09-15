@@ -1773,6 +1773,17 @@
   outline-offset: 2px;
 }
 
+.product-management__summary-card--active {
+  border-color: #1677ff !important;
+  background: linear-gradient(180deg, #ffffff 0%, #eaf3ff 100%) !important;
+  box-shadow: 0 8px 20px rgba(22, 119, 255, 0.16);
+}
+
+.product-management__summary-card--active .product-management__summary-icon {
+  color: #0958d9;
+  background: #d6e8ff;
+}
+
 .product-management__summary-icon {
   transition:
     transform 0.16s ease,

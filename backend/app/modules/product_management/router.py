@@ -152,11 +152,18 @@ def get_product_management_options(
     request: Request,
     session: db_session,
     _: read_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[ProductManagementOptionsData, ProductManagementReadMeta]:
     return success_response(
         request,
-        data=ProductManagementService(session).options(),
-        meta=_meta("manual_product_tags", "dws_product_management_pricing_current"),
+        data=ProductManagementService(session).options(account_refs),
+        meta=_meta(
+            "manual_product_tags",
+            "dwd_lingxing_sku_identity_index",
+            "dwd_lingxing_sku_product_info_current",
+            "dwd_lingxing_sku_global_tags",
+            "dws_product_management_pricing_current",
+        ),
     )
 
 

@@ -2,6 +2,7 @@ from uuid import UUID
 
 from celery import shared_task
 
+import app.modules.media_assets.tasks  # noqa: F401
 from app.db.session import get_session_factory
 from app.modules.integration_sync.execution import SyncRunExecutionService
 from app.modules.integration_sync.scheduler import IntegrationSchedulerService

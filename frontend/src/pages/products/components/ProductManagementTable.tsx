@@ -135,6 +135,7 @@ function ProductManagementTable({
       render: (_, row) => (
         <ImageCell
           image={row.image ?? undefined}
+          previewSrc={row.previewImage ?? undefined}
           label={`产品图片：${row.productName ?? "未命名"}`}
           placement="right"
         />

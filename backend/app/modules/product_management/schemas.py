@@ -18,6 +18,7 @@ from pydantic import (
 
 Nonblank64 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
 Nonblank128 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+Nonblank255 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 SkuSearchValue = Annotated[str, StringConstraints(min_length=1, max_length=128)]
 
@@ -49,6 +50,13 @@ RootMissingCode = Literal[
     "missing_package_dimensions",
     "missing_dimension_image",
     "invalid_pricing_rule",
+]
+ProductManagementIssueCode = Literal[
+    "missing_purchase_cost",
+    "missing_purchase_delivery",
+    "missing_package_dimensions",
+    "missing_image",
+    "missing_gross_weight",
 ]
 
 PRODUCT_MANAGEMENT_COLUMNS = frozenset(
@@ -157,6 +165,9 @@ class ProductManagementFilterQuery(StrictSchema):
         | None
     ) = None
     internal_tag: Nonblank128 | None = None
+    owner_uid: Nonblank255 | None = None
+    developer_uid: Nonblank255 | None = None
+    source_tag: Nonblank255 | None = None
     product_grade: Literal["A", "B", "C", "exception"] | None = None
     calculation_status: Nonblank64 | None = None
 
@@ -200,6 +211,7 @@ class ProductManagementListQuery(ProductManagementFilterQuery):
     page_size: int = Field(default=20, ge=1, le=100)
     sort_by: Literal["sku", "product_name", "product_grade", "calculated_at"] = "sku"
     sort_order: Literal["asc", "desc"] = "asc"
+    issue_code: ProductManagementIssueCode | None = None
 
 
 class ProductManagementSummaryQuery(ProductManagementFilterQuery):
@@ -222,7 +234,13 @@ class ProductManagementListItem(StrictSchema):
     sku_id: UUID
     sku: str | None
     product_name: str | None
+    owner_uid: str | None = None
+    owner_name: str | None = None
+    product_developer_uid: str | None = None
+    product_developer_name: str | None = None
     primary_image: str | None
+    primary_image_thumbnail_url: str | None = None
+    primary_image_preview_url: str | None = None
     internal_tags: list[InternalTagRead]
     source_tags: list[SourceTagRead]
     category: str | None
@@ -285,8 +303,10 @@ class ProductManagementSummaryData(StrictSchema):
     with_source_tag_count: int
     incomplete_count: int
     missing_purchase_cost_count: int = 0
+    missing_purchase_delivery_count: int = 0
     missing_gross_weight_count: int = 0
     missing_package_dimensions_count: int = 0
+    missing_image_count: int = 0
     missing_dimension_image_count: int = 0
     invalid_pricing_rule_count: int = 0
     pricing_ok_count: int = 0
@@ -304,6 +324,10 @@ class ProductCoreRead(StrictSchema):
 
 class SyncedProductDetailRead(StrictSchema):
     product_name: str | None
+    owner_uid: str | None = None
+    owner_name: str | None = None
+    product_developer_uid: str | None = None
+    product_developer_name: str | None = None
     purchase_delivery_days: int | None
     purchase_material: str | None
     customs_export_name_cn: str | None
@@ -331,6 +355,8 @@ class SyncedProductDetailRead(StrictSchema):
 class ProductImageRead(StrictSchema):
     ordinal: int
     url: str
+    thumbnail_url: str | None = None
+    preview_url: str | None = None
     is_primary: bool | None
     source: Literal["picture_list"] = "picture_list"
 
@@ -432,10 +458,24 @@ class ProductManagementDetailData(StrictSchema):
     pricing: PricingBreakdownRead | None
 
 
+class ProductPersonOptionRead(StrictSchema):
+    uid: str
+    name: str
+
+
+class ProductSourceTagOptionRead(StrictSchema):
+    value: str
+    label: str
+    color: str | None
+
+
 class ProductManagementOptionsData(StrictSchema):
     product_grades: list[str]
     calculation_statuses: list[str]
     internal_tags: list[InternalTagRead]
+    owners: list[ProductPersonOptionRead] = Field(default_factory=list)
+    developers: list[ProductPersonOptionRead] = Field(default_factory=list)
+    source_tags: list[ProductSourceTagOptionRead] = Field(default_factory=list)
 
 
 class ExportRequest(StrictSchema):

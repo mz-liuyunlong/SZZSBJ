@@ -58,6 +58,10 @@ class ProductManagementRepository:
         calculation_status: str | None,
         sort_by: str,
         sort_order: str,
+        owner_uid: str | None = None,
+        developer_uid: str | None = None,
+        source_tag: str | None = None,
+        issue_code: str | None = None,
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
     ) -> tuple[list[ProductManagementProjection], int]:
@@ -70,6 +74,10 @@ class ProductManagementRepository:
             internal_tag=internal_tag,
             product_grade=product_grade,
             calculation_status=calculation_status,
+            owner_uid=owner_uid,
+            developer_uid=developer_uid,
+            source_tag=source_tag,
+            issue_code=issue_code,
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
         )
@@ -113,10 +121,14 @@ class ProductManagementRepository:
         internal_tag: str | None,
         product_grade: str | None,
         calculation_status: str | None,
+        owner_uid: str | None = None,
+        developer_uid: str | None = None,
+        source_tag: str | None = None,
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
-    ) -> tuple[int, int, Decimal, int, int, int, int, int, int, int, int, int]:
+    ) -> tuple[int, int, Decimal, int, int, int, int, int, int, int, int, int, int, int]:
         missing_purchase, missing_weight, missing_dimensions = self._root_missing_conditions()
+        missing_purchase_delivery = LingxingSkuProductInfoCurrent.purchase_delivery_days.is_(None)
         image_count = (
             select(func.count(LingxingSkuProductImage.id))
             .where(
@@ -153,6 +165,10 @@ class ProductManagementRepository:
             internal_tag=internal_tag,
             product_grade=product_grade,
             calculation_status=calculation_status,
+            owner_uid=owner_uid,
+            developer_uid=developer_uid,
+            source_tag=source_tag,
+            issue_code=None,
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
         )
@@ -165,6 +181,7 @@ class ProductManagementRepository:
                 has_image.label("has_image"),
                 has_source_tag.label("has_source_tag"),
                 missing_purchase.label("missing_purchase"),
+                missing_purchase_delivery.label("missing_purchase_delivery"),
                 missing_weight.label("missing_weight"),
                 missing_dimensions.label("missing_dimensions"),
                 image_count.label("image_count"),
@@ -193,8 +210,10 @@ class ProductManagementRepository:
                     )
                 ),
                 func.sum(case((projections.c.missing_purchase.is_(True), 1), else_=0)),
+                func.sum(case((projections.c.missing_purchase_delivery.is_(True), 1), else_=0)),
                 func.sum(case((projections.c.missing_weight.is_(True), 1), else_=0)),
                 func.sum(case((projections.c.missing_dimensions.is_(True), 1), else_=0)),
+                func.sum(case((projections.c.image_count == 0, 1), else_=0)),
                 func.sum(case((projections.c.image_count < 2, 1), else_=0)),
                 func.sum(
                     case(
@@ -234,6 +253,8 @@ class ProductManagementRepository:
             int(row[9] or 0),
             int(row[10] or 0),
             int(row[11] or 0),
+            int(row[12] or 0),
+            int(row[13] or 0),
         )
 
     def get_projection(
@@ -342,6 +363,87 @@ class ProductManagementRepository:
                 .limit(500)
             ).all()
         )
+
+    def list_owner_options(self, account_refs: frozenset[str]) -> list[tuple[str, str]]:
+        rows = self.session.execute(
+            select(
+                LingxingSkuProductInfoCurrent.owner_uid,
+                func.max(LingxingSkuProductInfoCurrent.owner_name),
+            )
+            .join(
+                LingxingSkuIdentity,
+                LingxingSkuIdentity.id == LingxingSkuProductInfoCurrent.identity_id,
+            )
+            .where(
+                LingxingSkuIdentity.source_account_ref.in_(account_refs),
+                LingxingSkuIdentity.is_active.is_(True),
+                LingxingSkuProductInfoCurrent.owner_uid.is_not(None),
+                LingxingSkuProductInfoCurrent.owner_name.is_not(None),
+            )
+            .group_by(LingxingSkuProductInfoCurrent.owner_uid)
+            .order_by(
+                func.max(LingxingSkuProductInfoCurrent.owner_name),
+                LingxingSkuProductInfoCurrent.owner_uid,
+            )
+        ).all()
+        return [(str(uid), str(name)) for uid, name in rows if uid and name]
+
+    def list_developer_options(self, account_refs: frozenset[str]) -> list[tuple[str, str]]:
+        rows = self.session.execute(
+            select(
+                LingxingSkuProductInfoCurrent.product_developer_uid,
+                func.max(LingxingSkuProductInfoCurrent.product_developer_name),
+            )
+            .join(
+                LingxingSkuIdentity,
+                LingxingSkuIdentity.id == LingxingSkuProductInfoCurrent.identity_id,
+            )
+            .where(
+                LingxingSkuIdentity.source_account_ref.in_(account_refs),
+                LingxingSkuIdentity.is_active.is_(True),
+                LingxingSkuProductInfoCurrent.product_developer_uid.is_not(None),
+                LingxingSkuProductInfoCurrent.product_developer_name.is_not(None),
+            )
+            .group_by(LingxingSkuProductInfoCurrent.product_developer_uid)
+            .order_by(
+                func.max(LingxingSkuProductInfoCurrent.product_developer_name),
+                LingxingSkuProductInfoCurrent.product_developer_uid,
+            )
+        ).all()
+        return [(str(uid), str(name)) for uid, name in rows if uid and name]
+
+    def list_source_tag_options(
+        self, account_refs: frozenset[str]
+    ) -> list[tuple[str, str, str | None]]:
+        tag_value = func.coalesce(
+            LingxingSkuGlobalTag.global_tag_id,
+            LingxingSkuGlobalTag.tag_name,
+        )
+        rows = self.session.execute(
+            select(
+                tag_value.label("tag_value"),
+                LingxingSkuGlobalTag.tag_name,
+                func.max(LingxingSkuGlobalTag.color),
+            )
+            .join(
+                LingxingSkuProductInfoCurrent,
+                LingxingSkuProductInfoCurrent.source_snapshot_id
+                == LingxingSkuGlobalTag.source_snapshot_id,
+            )
+            .join(
+                LingxingSkuIdentity,
+                LingxingSkuIdentity.id == LingxingSkuProductInfoCurrent.identity_id,
+            )
+            .where(
+                LingxingSkuIdentity.source_account_ref.in_(account_refs),
+                LingxingSkuIdentity.is_active.is_(True),
+                LingxingSkuGlobalTag.tag_name.is_not(None),
+            )
+            .group_by(tag_value, LingxingSkuGlobalTag.tag_name)
+            .order_by(LingxingSkuGlobalTag.tag_name, tag_value)
+            .limit(1000)
+        ).all()
+        return [(str(value), str(label), color) for value, label, color in rows if value and label]
 
     def list_rule_versions(self, source_account_ref: str) -> list[ProductPricingRuleVersion]:
         return list(
@@ -532,6 +634,10 @@ class ProductManagementRepository:
         internal_tag: str | None,
         product_grade: str | None,
         calculation_status: str | None,
+        owner_uid: str | None = None,
+        developer_uid: str | None = None,
+        source_tag: str | None = None,
+        issue_code: str | None = None,
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
     ) -> Select[
@@ -581,8 +687,54 @@ class ProductManagementRepository:
                 )
             )
             statement = statement.where(Product.id.in_(tagged_product_ids))
+        if owner_uid is not None:
+            statement = statement.where(LingxingSkuProductInfoCurrent.owner_uid == owner_uid)
+        if developer_uid is not None:
+            statement = statement.where(
+                LingxingSkuProductInfoCurrent.product_developer_uid == developer_uid
+            )
+        if source_tag is not None:
+            has_source_tag = (
+                select(LingxingSkuGlobalTag.id)
+                .where(
+                    LingxingSkuGlobalTag.source_snapshot_id
+                    == LingxingSkuProductInfoCurrent.source_snapshot_id,
+                    or_(
+                        LingxingSkuGlobalTag.global_tag_id == source_tag,
+                        LingxingSkuGlobalTag.tag_name == source_tag,
+                    ),
+                )
+                .correlate(LingxingSkuProductInfoCurrent)
+                .exists()
+            )
+            statement = statement.where(has_source_tag)
         if product_grade is not None:
             statement = statement.where(effective_grade == product_grade)
+        if issue_code is not None:
+            missing_purchase, missing_weight, missing_dimensions = (
+                ProductManagementRepository._root_missing_conditions()
+            )
+            if issue_code == "missing_purchase_cost":
+                statement = statement.where(missing_purchase)
+            elif issue_code == "missing_purchase_delivery":
+                statement = statement.where(
+                    LingxingSkuProductInfoCurrent.purchase_delivery_days.is_(None)
+                )
+            elif issue_code == "missing_package_dimensions":
+                statement = statement.where(missing_dimensions)
+            elif issue_code == "missing_image":
+                has_current_image = (
+                    select(LingxingSkuProductImage.id)
+                    .where(
+                        LingxingSkuProductImage.source_snapshot_id
+                        == LingxingSkuProductInfoCurrent.source_snapshot_id
+                    )
+                    .correlate(LingxingSkuProductInfoCurrent)
+                    .exists()
+                )
+                statement = statement.where(~has_current_image)
+            elif issue_code == "missing_gross_weight":
+                statement = statement.where(missing_weight)
         if calculation_status is not None:
             missing_purchase, missing_weight, missing_dimensions = (
                 ProductManagementRepository._root_missing_conditions()

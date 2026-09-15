@@ -426,9 +426,11 @@ def test_synced_identity_is_visible_without_product_bootstrap(
         "with_source_tag_count": 0,
         "incomplete_count": 1,
         "missing_purchase_cost_count": 1,
+        "missing_purchase_delivery_count": 1,
         "missing_gross_weight_count": 1,
         "missing_package_dimensions_count": 1,
         "missing_dimension_image_count": 1,
+        "missing_image_count": 1,
         "invalid_pricing_rule_count": 0,
         "pricing_ok_count": 0,
     }
@@ -486,12 +488,16 @@ def test_product_management_detail_returns_current_picture_list_images_in_order(
         {
             "ordinal": 0,
             "url": "https://example.invalid/one.jpg",
+            "thumbnail_url": None,
+            "preview_url": None,
             "is_primary": True,
             "source": "picture_list",
         },
         {
             "ordinal": 1,
             "url": "https://example.invalid/two.jpg",
+            "thumbnail_url": None,
+            "preview_url": None,
             "is_primary": False,
             "source": "picture_list",
         },

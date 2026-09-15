@@ -81,6 +81,7 @@ export function CopyableTextCell({ text, label, link, onCopy, onOpen }: Copyable
 interface ImageCellProps {
   image?: string;
   src?: string;
+  previewSrc?: string;
   alt?: string;
   label?: string;
   thumbnailSize?: number;
@@ -97,7 +98,17 @@ function ImageVisual({
 }: Pick<ImageCellProps, "src" | "alt" | "fallback"> & { size: number }) {
   const [failed, setFailed] = useState(false);
   if (src && !failed) {
-    return <img src={src} alt={alt} width={size} height={size} onError={() => setFailed(true)} />;
+    return (
+      <img
+        src={src}
+        alt={alt}
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    );
   }
   return <span className="report-table-image__fallback">{fallback ?? <PictureOutlined aria-hidden="true" />}</span>;
 }
@@ -113,6 +124,7 @@ function resolveImageCellSource(image?: string, explicitSrc?: string) {
 export function ImageCell({
   image,
   src,
+  previewSrc,
   alt = "商品图片",
   label = "图片占位",
   thumbnailSize = 36,
@@ -121,6 +133,7 @@ export function ImageCell({
   placement = "right",
 }: ImageCellProps) {
   const resolvedSrc = resolveImageCellSource(image, src);
+  const resolvedPreviewSrc = resolveImageCellSource(previewSrc) ?? resolvedSrc;
   const resolvedFallback = fallback ?? (resolvedSrc ? undefined : image);
 
   return (
@@ -129,7 +142,13 @@ export function ImageCell({
       placement={placement}
       content={(
         <span className="report-table-image-preview" style={{ width: previewSize, height: previewSize }}>
-          <ImageVisual src={resolvedSrc} alt={alt} size={previewSize} fallback={resolvedFallback} />
+          <ImageVisual
+            key={`preview:${resolvedPreviewSrc ?? "fallback"}`}
+            src={resolvedPreviewSrc}
+            alt={alt}
+            size={previewSize}
+            fallback={resolvedFallback}
+          />
         </span>
       )}
     >
@@ -139,7 +158,13 @@ export function ImageCell({
         tabIndex={0}
         style={{ width: thumbnailSize, height: thumbnailSize }}
       >
-        <ImageVisual src={resolvedSrc} alt={alt} size={thumbnailSize} fallback={resolvedFallback} />
+        <ImageVisual
+          key={`thumbnail:${resolvedSrc ?? "fallback"}`}
+          src={resolvedSrc}
+          alt={alt}
+          size={thumbnailSize}
+          fallback={resolvedFallback}
+        />
       </span>
     </Popover>
   );

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   useState,
@@ -115,6 +116,7 @@ vi.mock("antd", async () => {
     mode?: "multiple";
     onChange?: (value: string | string[] | undefined) => void;
     options?: { label: ReactNode; value: string }[];
+    optionFilterProp?: string;
     placeholder?: ReactNode;
     showSearch?: boolean;
     value?: string | string[];
@@ -126,12 +128,14 @@ vi.mock("antd", async () => {
     mode,
     onChange,
     options = [],
+    optionFilterProp,
     placeholder,
     showSearch,
     value,
     ...props
   }: SelectProps) => {
     void classNames;
+    void optionFilterProp;
     void showSearch;
     return (
       <>
@@ -613,6 +617,7 @@ import {
   getProductManagementSummary,
   getProductManagementTableView,
   listProductManagementSkus,
+  saveProductManagementTableView,
 } from "@/pages/products/productManagementApi";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
 
@@ -644,7 +649,9 @@ const row: ProductManagementRow = {
   productName: "Synthetic Product",
   tags: [],
   sourceTags: ["Synthetic Source Tag"],
+  ownerUid: null,
   ownerName: null,
+  developerUid: null,
   developerName: null,
   productGrade: null,
   category: null,
@@ -685,16 +692,24 @@ const row: ProductManagementRow = {
 
 beforeEach(() => {
   vi.mocked(listProductManagementSkus).mockResolvedValue({ rows: [row], total: 1 });
-  vi.mocked(getProductManagementOptions).mockResolvedValue({ grades: [], tags: [] });
+  vi.mocked(getProductManagementOptions).mockResolvedValue({
+    grades: [],
+    owners: [],
+    developers: [],
+    tags: [],
+  });
   vi.mocked(getProductManagementSummary).mockResolvedValue({
+    total: 1,
     syncedDetailCount: 1,
     dataCompletenessRate: 80,
     withImageCount: 1,
     withSourceTagCount: 1,
     incompleteCount: 1,
     missingPurchaseCostCount: 1,
+    missingPurchaseDeliveryCount: 1,
     missingGrossWeightCount: 1,
     missingPackageDimensionsCount: 1,
+    missingImageCount: 1,
     missingDimensionImageCount: 1,
     invalidPricingRuleCount: 0,
     pricingOkCount: 0,
@@ -702,6 +717,16 @@ beforeEach(() => {
   vi.mocked(getProductManagementTableView).mockResolvedValue({
     applied_column_keys: ["sku", "productName"],
     column_widths: {},
+    schema_version: 1,
+    view_key: "default",
+    updated_at: null,
+  });
+  vi.mocked(saveProductManagementTableView).mockResolvedValue({
+    applied_column_keys: ["image", "sku", "productName"],
+    column_widths: {},
+    schema_version: 1,
+    view_key: "default",
+    updated_at: null,
   });
   vi.mocked(getProductManagementSku).mockResolvedValue({ ...row, image: "synthetic-image" });
 });
@@ -709,7 +734,22 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.localStorage.clear();
 });
+
+const renderProductPage = () => {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <ProductManagementPage page={productPage} preferenceScope="synthetic-user" />
+    </QueryClientProvider>,
+  );
+};
 
 describe("ProductManagementPage", () => {
   it("hides statistics by default and uses backend totals when shown", async () => {
@@ -721,13 +761,31 @@ describe("ProductManagementPage", () => {
       })),
       total: 1188,
     });
+    vi.mocked(getProductManagementSummary).mockResolvedValueOnce({
+      total: 1188,
+      syncedDetailCount: 1188,
+      dataCompletenessRate: 80,
+      withImageCount: 1000,
+      withSourceTagCount: 1188,
+      incompleteCount: 188,
+      missingPurchaseCostCount: 17,
+      missingPurchaseDeliveryCount: 21,
+      missingGrossWeightCount: 31,
+      missingPackageDimensionsCount: 27,
+      missingImageCount: 11,
+      missingDimensionImageCount: 15,
+      invalidPricingRuleCount: 0,
+      pricingOkCount: 1100,
+    });
 
-    render(<ProductManagementPage page={productPage} />);
+    renderProductPage();
 
     expect(await screen.findByText("共 1,188 条数据")).toBeVisible();
     expect(screen.queryByLabelText("产品管理统计")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "显示统计" }));
     expect(await screen.findByLabelText("产品管理统计")).toHaveTextContent("1,188");
+    expect(await screen.findByRole("button", { name: "缺采购价：17" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "缺图片：11" })).toBeVisible();
     expect(getProductManagementSummary).toHaveBeenCalledWith(
       expect.objectContaining({ keyword: "" }),
     );
@@ -736,7 +794,7 @@ describe("ProductManagementPage", () => {
   it("uses real-data default columns and keeps fee and price columns optional", async () => {
     vi.mocked(getProductManagementTableView).mockRejectedValueOnce(new Error("no saved view"));
 
-    render(<ProductManagementPage page={productPage} />);
+    renderProductPage();
     await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
 
     expect(screen.queryByRole("columnheader", { name: /类目/ })).not.toBeInTheDocument();
@@ -754,11 +812,14 @@ describe("ProductManagementPage", () => {
     vi.mocked(getProductManagementTableView).mockResolvedValueOnce({
       applied_column_keys: ["sku", "productName", "wfsFee", "suggestedPrice"],
       column_widths: {},
+      schema_version: 1,
+      view_key: "default",
+      updated_at: null,
     });
 
-    render(<ProductManagementPage page={productPage} />);
+    renderProductPage();
     expect(await screen.findByRole("columnheader", { name: /每日仓储费/ })).toBeVisible();
-    expect(screen.getAllByText("缺基础数据").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("缺基础数据")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "列配置" }));
     fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
     fireEvent.click(screen.getByRole("button", { name: "保存并应用" }));
@@ -769,7 +830,7 @@ describe("ProductManagementPage", () => {
   });
 
   it("loads rows from the backend and opens backend detail data", async () => {
-    render(<ProductManagementPage page={productPage} />);
+    renderProductPage();
 
     expect(await screen.findByRole("button", { name: "SYNTHETIC-SKU" })).toBeVisible();
     expect(screen.getByText("共 1 条数据")).toBeVisible();
@@ -785,9 +846,11 @@ describe("ProductManagementPage", () => {
   });
 
   it("sends changed filters to the backend and renders safe failures", async () => {
-    render(<ProductManagementPage page={productPage} />);
+    renderProductPage();
     await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
+    const requestsBeforeTyping = vi.mocked(listProductManagementSkus).mock.calls.length;
     fireEvent.change(screen.getByLabelText("搜索产品"), { target: { value: "filtered" } });
+    expect(vi.mocked(listProductManagementSkus).mock.calls.length).toBe(requestsBeforeTyping);
     fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     await waitFor(() => expect(listProductManagementSkus).toHaveBeenLastCalledWith(
       expect.objectContaining({ keyword: "filtered" }),
@@ -804,7 +867,7 @@ describe("ProductManagementPage", () => {
 
   it("renders each server-provided page without applying client-side business filters", async () => {
     vi.mocked(listProductManagementSkus).mockResolvedValue({ rows: [row], total: 100 });
-    render(<ProductManagementPage page={productPage} />);
+    renderProductPage();
     await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
 
     fireEvent.click(screen.getByRole("button", { name: "第 2 页" }));

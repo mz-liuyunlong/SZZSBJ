@@ -3,7 +3,8 @@ import { useState, type CSSProperties, type ReactNode } from "react";
 import type { ProductManagementRow } from "@/pages/products/productManagementTypes";
 
 const isDisplayableImageUrl = (value: string | null | undefined): value is string => (
-  typeof value === "string" && /^https?:\/\//i.test(value)
+  typeof value === "string"
+  && /^(https?:\/\/|data:image\/|blob:|\/)/i.test(value)
 );
 
 const getDetailImageUrl = (row: ProductManagementRow) => {
@@ -14,6 +15,7 @@ const getDetailImageUrl = (row: ProductManagementRow) => {
   };
 
   const candidate = (
+    row.previewImage ??
     record.imageUrl ??
     record.image ??
     record.mainImageUrl ??
@@ -251,8 +253,8 @@ function ProductDetailModal({ row, onClose }: ProductDetailModalProps) {
                   row.sourceTags[0] ? row.sourceTagColors?.[row.sourceTags[0]] : null,
                 ),
               },
-              { label: "负责人", value: "-" },
-              { label: "开发人", value: "-" },
+              { label: "负责人", value: row.ownerName },
+              { label: "开发人", value: row.developerName },
             ]}
           />
         </div>

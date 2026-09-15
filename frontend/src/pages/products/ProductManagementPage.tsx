@@ -1,5 +1,5 @@
 import { Card, Spin, message } from "antd";
-import { useEffect, useRef, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -13,52 +13,73 @@ import ProductDetailModal from "@/pages/products/components/ProductDetailModal";
 import ProductManagementSummaryCards from "@/pages/products/components/ProductManagementSummaryCards";
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
+import { requestProductManagementExport } from "@/pages/products/productManagementApi";
 import {
-  getProductManagementSku,
-  getProductManagementSummary,
-  getProductManagementTableView,
-  listProductManagementSkus,
-  requestProductManagementExport,
-  saveProductManagementTableView,
-} from "@/pages/products/productManagementApi";
+  useProductManagementDetailQuery,
+  useProductManagementListQuery,
+  useProductManagementOptionsQuery,
+  usePrefetchProductManagementList,
+  useProductManagementSummaryQuery,
+  useProductManagementTableViewQuery,
+  useSaveProductManagementTableViewMutation,
+} from "@/pages/products/productManagementQueries";
 import {
   fixedProductColumnKeys,
   productColumnFields,
   type ProductManagementFilters,
-  type ProductManagementRow,
   type ProductManagementSummary,
-  type ProductSourceTagOption,
 } from "@/pages/products/productManagementTypes";
-import "@/pages/products/ProductManagementPage.css";
+import {
+  readUserPreference,
+  removeUserPreference,
+  writeUserPreference,
+} from "@/shared/preferences/userPreferenceCache";
 import { applyProductBasicCompleteness } from "@/pages/products/productBasicCompleteness";
+import "@/pages/products/ProductManagementPage.css";
+
+const TABLE_VIEW_PREFERENCE_KEY = "product-management:table-view";
+const TABLE_VIEW_SCHEMA_VERSION = 1;
+
+interface ProductTablePreference {
+  appliedColumnKeys: string[];
+  columnWidths: Record<string, number>;
+}
 
 const createInitialFilters = (): ProductManagementFilters => ({
   searchType: "sku",
   keyword: "",
 });
 
-const hiddenProductColumnKeys = new Set<string>(["category", "linkedPlatformSkuCount", "wfsDeliveryFee", "wfsFulfillmentFee", "wfsShippingFee", "wfsFee", "tags", "internalTags", "internalTag", "suggestedPrice", "minimumPrice", "productGrade", "updatedAt", "dataCompleteness"]);
+const hiddenProductColumnKeys = new Set<string>([
+  "category",
+  "linkedPlatformSkuCount",
+  "wfsDeliveryFee",
+  "wfsFulfillmentFee",
+  "wfsShippingFee",
+  "wfsFee",
+  "tags",
+  "internalTags",
+  "internalTag",
+  "suggestedPrice",
+  "minimumPrice",
+  "productGrade",
+  "updatedAt",
+  "dataCompleteness",
+]);
 const configurableProductColumnFields = productColumnFields.filter(
   (field) => !hiddenProductColumnKeys.has(field.key),
 );
-
 const defaultColumnKeys = configurableProductColumnFields.map((field) => field.key);
-
 
 const normalizeProductColumnKeys = (keys: string[]) => {
   const allowedKeys = new Set<string>(configurableProductColumnFields.map((field) => field.key));
   const normalizedKeys = keys.filter(
     (key) => allowedKeys.has(key) && !hiddenProductColumnKeys.has(key),
   );
-
   const mergedKeys = [...normalizedKeys];
-
   for (const key of defaultColumnKeys) {
-    if (!mergedKeys.includes(key)) {
-      mergedKeys.push(key);
-    }
+    if (!mergedKeys.includes(key)) mergedKeys.push(key);
   }
-
   return mergedKeys;
 };
 
@@ -91,120 +112,135 @@ const columnGroups: RuntimeColumnGroup[] = [
   { title: "可选基本信息字段", fields: [...configurableProductColumnFields.slice(8)] },
 ];
 
-interface ProductManagementPageProps {
-  page: NavigationPage;
-}
-
 const emptySummary: ProductManagementSummary = {
+  total: 0,
   syncedDetailCount: 0,
   dataCompletenessRate: 0,
   withImageCount: 0,
   withSourceTagCount: 0,
   incompleteCount: 0,
   missingPurchaseCostCount: 0,
+  missingPurchaseDeliveryCount: 0,
   missingGrossWeightCount: 0,
   missingPackageDimensionsCount: 0,
+  missingImageCount: 0,
   missingDimensionImageCount: 0,
   invalidPricingRuleCount: 0,
   pricingOkCount: 0,
 };
 
-const sourceTagOptionsFromRows = (
-  nextRows: ProductManagementRow[],
-): ProductSourceTagOption[] => {
-  const options = new Map<string, string | null>();
+interface ProductManagementPageProps {
+  page: NavigationPage;
+  preferenceScope?: string;
+}
 
-  for (const row of nextRows) {
-    for (const label of row.sourceTags) {
-      if (!options.has(label)) {
-        options.set(label, row.sourceTagColors?.[label] ?? null);
-      }
-    }
-  }
-
-  return Array.from(options, ([label, color]) => ({ label, color }));
-};
-
-
-
-function ProductManagementPage({ page }: ProductManagementPageProps) {
+function ProductManagementPage({
+  page,
+  preferenceScope = "anonymous",
+}: ProductManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const messageApiRef = useRef(messageApi);
+  const initialPreference = useMemo(
+    () => readUserPreference<ProductTablePreference>(
+      preferenceScope,
+      TABLE_VIEW_PREFERENCE_KEY,
+      TABLE_VIEW_SCHEMA_VERSION,
+    ),
+    [preferenceScope],
+  );
   const [filters, setFilters] = useState(createInitialFilters);
   const [statisticsVisible, setStatisticsVisible] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(() => normalizeProductColumnKeys(defaultColumnKeys));
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
+  const [columnPreferenceOverride, setColumnPreferenceOverride] = useState<{
+    scope: string;
+    value: ProductTablePreference;
+  }>();
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const [detailRow, setDetailRow] = useState<ProductManagementRow>();
-  const [rows, setRows] = useState<ProductManagementRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [, setSummary] = useState<ProductManagementSummary>(emptySummary);
-  const ownerOptions: string[] = [];
-  const developerOptions: string[] = [];
-  const [tags, setTags] = useState<ProductSourceTagOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [detailRowId, setDetailRowId] = useState<string>();
 
   useEffect(() => {
     messageApiRef.current = messageApi;
   }, [messageApi]);
 
-  useEffect(() => {
-    let active = true;
-    void Promise.resolve()
-      .then(() => {
-        if (active) {
-          setLoading(true);
-        }
-        return listProductManagementSkus(filters, currentPage, pageSize);
-      })
-      .then((result) => {
-        if (!active) return;
-        const rowsWithDynamicCompleteness = applyProductBasicCompleteness(result.rows);
-      setRows(rowsWithDynamicCompleteness);
-        setTags(sourceTagOptionsFromRows(rowsWithDynamicCompleteness));
-        setTotal(result.total);
-      })
-      .catch((reason: unknown) => {
-        if (!active) return;
-        setRows([]);
-        setTotal(0);
-        void messageApiRef.current.error(
-          reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-        );
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [currentPage, filters, pageSize]);
+  const listQuery = useProductManagementListQuery(filters, currentPage, pageSize);
+  const prefetchProductList = usePrefetchProductManagementList();
+  const summaryQuery = useProductManagementSummaryQuery(filters, statisticsVisible);
+  const optionsQuery = useProductManagementOptionsQuery();
+  const tableViewQuery = useProductManagementTableViewQuery();
+  const saveTableView = useSaveProductManagementTableViewMutation();
+  const serverColumnPreference = useMemo<ProductTablePreference>(() => {
+    if (tableViewQuery.data) {
+      return {
+        appliedColumnKeys: normalizeProductColumnKeys(tableViewQuery.data.applied_column_keys),
+        columnWidths: { ...defaultColumnWidths, ...tableViewQuery.data.column_widths },
+      };
+    }
+    return {
+      appliedColumnKeys: normalizeProductColumnKeys(
+        initialPreference?.appliedColumnKeys ?? defaultColumnKeys,
+      ),
+      columnWidths: { ...defaultColumnWidths, ...initialPreference?.columnWidths },
+    };
+  }, [initialPreference, tableViewQuery.data]);
+  const activeColumnPreference = columnPreferenceOverride?.scope === preferenceScope
+    ? columnPreferenceOverride.value
+    : serverColumnPreference;
+  const appliedColumnKeys = activeColumnPreference.appliedColumnKeys;
+  const columnWidths = activeColumnPreference.columnWidths;
+
+  const rows = useMemo(
+    () => applyProductBasicCompleteness(listQuery.data?.rows ?? []),
+    [listQuery.data?.rows],
+  );
+  const total = listQuery.data?.total ?? 0;
+  const detailBaseRow = rows.find((row) => row.id === detailRowId);
+  const detailQuery = useProductManagementDetailQuery(detailBaseRow);
+  const detailRow = detailQuery.data ?? detailBaseRow;
+  const summary = summaryQuery.data ?? { ...emptySummary, total };
+  const owners = optionsQuery.data?.owners ?? [];
+  const developers = optionsQuery.data?.developers ?? [];
+  const tags = optionsQuery.data?.tags ?? [];
 
   useEffect(() => {
-    if (!statisticsVisible) return;
-    let active = true;
-    void getProductManagementSummary(filters)
-      .then((result) => {
-        if (active) setSummary(result);
-      })
-      .catch((reason: unknown) => {
-        if (!active) return;
-        void messageApiRef.current.error(
-          reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-        );
-      });
-    return () => { active = false; };
-  }, [filters, statisticsVisible]);
+    if (total <= currentPage * pageSize) return;
+    void prefetchProductList(filters, currentPage + 1, pageSize);
+  }, [currentPage, filters, pageSize, prefetchProductList, total]);
 
   useEffect(() => {
-    void getProductManagementTableView()
-      .then((view) => {
-        setAppliedColumnKeys(normalizeProductColumnKeys(view.applied_column_keys));
-        setColumnWidths((current) => ({ ...current, ...view.column_widths }));
-      })
-      .catch(() => undefined);
-  }, []);
+    if (!tableViewQuery.data) return;
+    writeUserPreference<ProductTablePreference>(
+      preferenceScope,
+      TABLE_VIEW_PREFERENCE_KEY,
+      tableViewQuery.data.schema_version,
+      serverColumnPreference,
+    );
+  }, [preferenceScope, serverColumnPreference, tableViewQuery.data]);
+
+  const shownErrorsRef = useRef(new Set<string>());
+  useEffect(() => {
+    const candidates: unknown[] = [
+      listQuery.error,
+      optionsQuery.error,
+      statisticsVisible ? summaryQuery.error : null,
+      detailRowId ? detailQuery.error : null,
+    ];
+    for (const reason of candidates) {
+      if (!reason) continue;
+      const text = reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED";
+      if (shownErrorsRef.current.has(text)) continue;
+      shownErrorsRef.current.add(text);
+      void messageApiRef.current.error(text);
+    }
+  }, [
+    detailQuery.error,
+    detailRowId,
+    listQuery.error,
+    optionsQuery.error,
+    statisticsVisible,
+    summaryQuery.error,
+  ]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -219,6 +255,49 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
   const resetFilters = () => {
     setFilters(createInitialFilters());
     resetPageAndSelection();
+  };
+
+  const persistColumns = (nextKeys: string[]) => {
+    const normalizedKeys = normalizeProductColumnKeys(nextKeys);
+    const previousPreference: ProductTablePreference = {
+      appliedColumnKeys,
+      columnWidths,
+    };
+    const nextPreference: ProductTablePreference = {
+      appliedColumnKeys: normalizedKeys,
+      columnWidths,
+    };
+    setColumnPreferenceOverride({ scope: preferenceScope, value: nextPreference });
+    writeUserPreference<ProductTablePreference>(
+      preferenceScope,
+      TABLE_VIEW_PREFERENCE_KEY,
+      TABLE_VIEW_SCHEMA_VERSION,
+      nextPreference,
+    );
+    saveTableView.mutate(
+      { appliedColumnKeys: normalizedKeys, columnWidths },
+      {
+        onSuccess: (view) => {
+          const savedPreference: ProductTablePreference = {
+            appliedColumnKeys: normalizeProductColumnKeys(view.applied_column_keys),
+            columnWidths: { ...defaultColumnWidths, ...view.column_widths },
+          };
+          setColumnPreferenceOverride({ scope: preferenceScope, value: savedPreference });
+          writeUserPreference<ProductTablePreference>(
+            preferenceScope,
+            TABLE_VIEW_PREFERENCE_KEY,
+            view.schema_version,
+            savedPreference,
+          );
+          void messageApi.success("列配置已保存");
+        },
+        onError: (reason) => {
+          setColumnPreferenceOverride({ scope: preferenceScope, value: previousPreference });
+          removeUserPreference(preferenceScope, TABLE_VIEW_PREFERENCE_KEY);
+          void messageApi.error(reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED");
+        },
+      },
+    );
   };
 
   return (
@@ -236,13 +315,17 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           <Card size="small" className="product-management__toolbar-card">
             <ProductManagementToolbar
               filters={filters}
-              owners={ownerOptions}
-              developers={developerOptions}
+              owners={owners}
+              developers={developers}
               tags={tags}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}
               onReset={resetFilters}
-              onBatchSearch={(values) => updateFilters({ ...filters, batchValues: values })}
+              onBatchSearch={(values) => updateFilters({
+                ...filters,
+                keyword: "",
+                batchValues: values,
+              })}
               onMessage={(content) => void messageApi.info(content)}
               onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
               onOpenColumnConfig={() => setColumnConfigOpen(true)}
@@ -256,13 +339,16 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
 
           {statisticsVisible && (
             <ProductManagementSummaryCards
-            rows={rows}
-              total={total}
+              summary={summary}
+              activeIssue={filters.issueCode}
+              onIssueChange={(issueCode) => updateFilters({ ...filters, issueCode })}
             />
           )}
 
           <div className="product-management__table-wrap">
-            {loading && <Spin className="product-management__table-loading" tip="正在加载产品数据" />}
+            {listQuery.isPending && (
+              <Spin className="product-management__table-loading" tip="正在加载产品数据" />
+            )}
             <ProductManagementTable
               rows={rows}
               total={total}
@@ -271,24 +357,20 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
               currentPage={currentPage}
               pageSize={pageSize}
               selectedRowKeys={selectedRowKeys}
-              onColumnWidthChange={(key, width) => setColumnWidths((current) => ({
-                ...current,
-                [key]: width,
-              }))}
+              onColumnWidthChange={(key, width) => setColumnPreferenceOverride({
+                scope: preferenceScope,
+                value: {
+                  appliedColumnKeys,
+                  columnWidths: { ...columnWidths, [key]: width },
+                },
+              })}
               onCurrentPageChange={setCurrentPage}
               onPageSizeChange={(nextPageSize) => {
                 setPageSize(normalizeReportTablePageSize(nextPageSize));
                 resetPageAndSelection();
               }}
               onSelectionChange={setSelectedRowKeys}
-              onOpenDetail={(row) => {
-                setDetailRow(row);
-                void getProductManagementSku(row)
-                  .then(setDetailRow)
-                  .catch((reason: unknown) => messageApi.error(
-                    reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-                  ));
-              }}
+              onOpenDetail={(row) => setDetailRowId(row.id)}
               onBulkExport={() => void requestProductManagementExport(filters)
                 .then(() => messageApi.info("导出任务未启用，未创建文件"))
                 .catch((reason: unknown) => messageApi.error(
@@ -304,17 +386,11 @@ function ProductManagementPage({ page }: ProductManagementPageProps) {
           fixedKeys={fixedProductColumnKeys}
           defaultKeys={defaultColumnKeys}
           appliedKeys={appliedColumnKeys}
-          onApply={setAppliedColumnKeys}
+          onApply={persistColumns}
           onClose={() => setColumnConfigOpen(false)}
-          onSaveTemplate={() => void saveProductManagementTableView(
-            appliedColumnKeys,
-            columnWidths,
-          ).then(() => messageApi.success("列配置已保存"))
-            .catch((reason: unknown) => messageApi.error(
-              reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-            ))}
+          onSaveTemplate={() => void messageApi.info("模板功能暂未开放；当前列配置请使用“保存并应用”")}
         />
-        <ProductDetailModal row={detailRow} onClose={() => setDetailRow(undefined)} />
+        <ProductDetailModal row={detailRow} onClose={() => setDetailRowId(undefined)} />
       </div>
     </PageShell>
   );

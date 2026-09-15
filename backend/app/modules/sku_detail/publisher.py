@@ -11,6 +11,8 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.integration_sync.parsers.lingxing_product_info import ParsedSkuDetail
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.media_assets.registration import MediaAssetRegistrationService
+from app.modules.media_assets.tasks import MediaTaskDispatchError, dispatch_media_assets
 from app.modules.sku_detail.calculations import calculate_sku_profile
 from app.modules.sku_detail.models import (
     LingxingSkuGlobalTag,
@@ -198,6 +200,7 @@ class SkuDetailPublicationService:
                 for tag in parsed.tags
             ]
             self.repository.add_images(images)
+            media_asset_ids = MediaAssetRegistrationService(self.session).register_images(images)
             self.repository.add_tags(tags)
             current_id: UUID | None = None
             profile_id: UUID | None = None
@@ -381,6 +384,13 @@ class SkuDetailPublicationService:
         except Exception:
             self.session.rollback()
             raise
+
+        try:
+            dispatch_media_assets(media_asset_ids)
+        except MediaTaskDispatchError:
+            # ProductInfo publication remains authoritative even when media queueing is unavailable.
+            # Pending media assets can be redispatched by the controlled media backfill path.
+            pass
         return snapshot.id
 
     @staticmethod
