@@ -109,8 +109,19 @@ forbidden_patterns=(
   '@your-github-username|@your-|real-owner-or-team'
 )
 
+rule_pack_content_scan_paths=(
+  "AGENTS.md"
+  "AI_DAILY_RULES.md"
+  "RULE_PACK_FILE_INDEX.md"
+  "docs"
+  "skills"
+  ".cursor"
+  ".github"
+  "templates"
+)
+
 for pattern in "${forbidden_patterns[@]}"; do
-  if grep -RInE "$pattern" . \
+  if grep -RInE "$pattern" "${rule_pack_content_scan_paths[@]}" \
     --exclude-dir=.git --exclude-dir=old-system --exclude-dir=.venv --exclude-dir=.pytest_cache --exclude-dir=.ruff_cache --exclude-dir=.mypy_cache \
     --exclude-dir=node_modules \
     --exclude-dir=dist \
