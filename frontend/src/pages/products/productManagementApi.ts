@@ -1,10 +1,10 @@
 import { backendRequest } from "@/api/backendApi";
+import { formatDate } from "@/shared/formatters";
 import type {
   ProductGrade,
   ProductManagementFilters,
   ProductManagementRow,
   ProductManagementSummary,
-  ProductTag,
 } from "@/pages/products/productManagementTypes";
 
 interface BackendTag { key: string; label: string; color: string | null }
@@ -12,7 +12,13 @@ interface BackendListItem {
   sku_id: string;
   sku: string | null;
   product_name: string | null;
+  owner_uid: string | null;
+  owner_name: string | null;
+  product_developer_uid: string | null;
+  product_developer_name: string | null;
   primary_image: string | null;
+  primary_image_thumbnail_url: string | null;
+  primary_image_preview_url: string | null;
   image_count: number;
   internal_tags: BackendTag[];
   source_tags: Array<{
@@ -53,6 +59,10 @@ interface BackendDetail {
     category: string | null;
   } | null;
   synced_detail: {
+    owner_uid: string | null;
+    owner_name: string | null;
+    product_developer_uid: string | null;
+    product_developer_name: string | null;
     purchase_delivery_days: number | null;
     purchase_material: string | null;
     customs_export_name_cn: string | null;
@@ -73,7 +83,13 @@ interface BackendDetail {
     box_height_cm: string | null;
     source_observed_at: string;
   } | null;
-  images: Array<{ ordinal: number; url: string; is_primary: boolean | null }>;
+  images: Array<{
+    ordinal: number;
+    url: string;
+    thumbnail_url: string | null;
+    preview_url: string | null;
+    is_primary: boolean | null;
+  }>;
   internal_tags: BackendTag[];
   source_tags: Array<{ source_tag_id: string | null; label: string | null; color: string | null }>;
   pricing: {
@@ -129,16 +145,29 @@ interface BackendSummary {
   with_source_tag_count: number;
   incomplete_count: number;
   missing_purchase_cost_count: number;
+  missing_purchase_delivery_count: number;
   missing_gross_weight_count: number;
   missing_package_dimensions_count: number;
+  missing_image_count: number;
   missing_dimension_image_count: number;
   invalid_pricing_rule_count: number;
   pricing_ok_count: number;
 }
-interface BackendOptions { product_grades: string[]; internal_tags: BackendTag[] }
+interface BackendPersonOption { uid: string; name: string }
+interface BackendSourceTagOption { value: string; label: string; color: string | null }
+interface BackendOptions {
+  product_grades: string[];
+  internal_tags: BackendTag[];
+  owners: BackendPersonOption[];
+  developers: BackendPersonOption[];
+  source_tags: BackendSourceTagOption[];
+}
 interface BackendTableView {
   applied_column_keys: string[];
   column_widths: Record<string, number>;
+  schema_version: number;
+  view_key: string;
+  updated_at: string | null;
 }
 
 const gradeLabels: Record<string, ProductManagementRow["productGrade"]> = {
@@ -175,7 +204,7 @@ const money = (currency: string | null, value: string | null | undefined) => {
 };
 
 const dateOnly = (value: string | null) => (
-  value ? value.slice(0, 10) : null
+  value ? formatDate(value) : null
 );
 
 const dimensions = (...values: Array<string | null>) => (
@@ -205,8 +234,20 @@ const getDailyStorageFeePerUnitUsd = (item: BackendListItem) => {
 
 export const toProductManagementRow = (item: BackendListItem): ProductManagementRow => ({
   id: item.sku_id,
-  image: item.primary_image,
-  images: item.primary_image ? [item.primary_image] : [],
+  image: item.primary_image_thumbnail_url ?? item.primary_image,
+  previewImage: (
+    item.primary_image_preview_url
+    ?? item.primary_image_thumbnail_url
+    ?? item.primary_image
+  ),
+  sourceImage: item.primary_image,
+  images: item.primary_image_preview_url
+    ? [item.primary_image_preview_url]
+    : item.primary_image_thumbnail_url
+      ? [item.primary_image_thumbnail_url]
+      : item.primary_image
+        ? [item.primary_image]
+        : [],
   imageCount: item.image_count,
   sku: item.sku,
   productName: item.product_name,
@@ -217,8 +258,10 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
       tag.label ? [[tag.label, tag.color]] : []
     )),
   ),
-  ownerName: null,
-  developerName: null,
+  ownerUid: item.owner_uid,
+  ownerName: item.owner_name,
+  developerUid: item.product_developer_uid,
+  developerName: item.product_developer_name,
   productGrade: item.product_grade ? gradeLabels[item.product_grade] : null,
   category: item.category,
   purchasePrice: money("CNY", item.purchase_cost_cny),
@@ -267,21 +310,21 @@ function listQuery(
   filters: ProductManagementFilters,
   page: number,
   pageSize: number,
+  includeIssue = true,
 ) {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
-  const keyword = filters.keyword.trim();
-  if (keyword) {
-    query.set(
-      filters.searchType === "productName"
-        ? "product_name"
-        : filters.searchType === "category"
-          ? "category"
-          : "sku",
-      keyword,
-    );
+  const batchValues = filters.batchValues ?? [];
+  if (batchValues.length > 0) {
+    for (const sku of batchValues) query.append("sku_batch", sku);
+  } else {
+    const keyword = filters.keyword.trim();
+    if (keyword) query.set("sku", keyword);
   }
-  for (const sku of filters.batchValues ?? []) query.append("sku_batch", sku);
+  if (filters.ownerUid) query.set("owner_uid", filters.ownerUid);
+  if (filters.developerUid) query.set("developer_uid", filters.developerUid);
+  if (filters.tag) query.set("source_tag", filters.tag);
   if (filters.productGrade) query.set("product_grade", gradeValues[filters.productGrade]);
+  if (includeIssue && filters.issueCode) query.set("issue_code", filters.issueCode);
   return query;
 }
 
@@ -302,21 +345,24 @@ export async function listProductManagementSkus(
 export async function getProductManagementSummary(
   filters: ProductManagementFilters,
 ): Promise<ProductManagementSummary> {
-  const query = listQuery(filters, 1, 1);
+  const query = listQuery(filters, 1, 1, false);
   query.delete("page");
   query.delete("page_size");
   const response = await backendRequest<BackendSummary>(
     `/api/product-management/skus/summary?${query}`,
   );
   return {
+    total: response.data.total,
     syncedDetailCount: response.data.synced_detail_count,
     dataCompletenessRate: Number(response.data.data_completeness_rate),
     withImageCount: response.data.with_image_count,
     withSourceTagCount: response.data.with_source_tag_count,
     incompleteCount: response.data.incomplete_count,
     missingPurchaseCostCount: response.data.missing_purchase_cost_count,
+    missingPurchaseDeliveryCount: response.data.missing_purchase_delivery_count,
     missingGrossWeightCount: response.data.missing_gross_weight_count,
     missingPackageDimensionsCount: response.data.missing_package_dimensions_count,
+    missingImageCount: response.data.missing_image_count,
     missingDimensionImageCount: response.data.missing_dimension_image_count,
     invalidPricingRuleCount: response.data.invalid_pricing_rule_count,
     pricingOkCount: response.data.pricing_ok_count,
@@ -331,12 +377,28 @@ export async function getProductManagementSku(
   );
   const detail = response.data.synced_detail;
   const pricing = response.data.pricing;
+  const primaryImage = (
+    response.data.images.find((image) => image.is_primary)
+    ?? response.data.images[0]
+  );
   return {
     ...row,
-    image: response.data.images.find((image) => image.is_primary)?.url
-      ?? response.data.images[0]?.url
-      ?? row.image,
-    images: response.data.images.map((image) => image.url),
+    image: (
+      primaryImage?.thumbnail_url
+      ?? primaryImage?.url
+      ?? row.image
+    ),
+    previewImage: (
+      primaryImage?.preview_url
+      ?? primaryImage?.thumbnail_url
+      ?? primaryImage?.url
+      ?? row.previewImage
+      ?? row.image
+    ),
+    sourceImage: primaryImage?.url ?? row.sourceImage ?? row.image,
+    images: response.data.images.map((image) => (
+      image.preview_url ?? image.thumbnail_url ?? image.url
+    )),
     imageCount: response.data.images.length,
     category: response.data.core?.category ?? row.category,
     tags: response.data.internal_tags.map((tag) => tag.label),
@@ -346,6 +408,10 @@ export async function getProductManagementSku(
         tag.label ? [[tag.label, tag.color]] : []
       )),
     ),
+    ownerUid: detail?.owner_uid ?? row.ownerUid,
+    ownerName: detail?.owner_name ?? row.ownerName,
+    developerUid: detail?.product_developer_uid ?? row.developerUid,
+    developerName: detail?.product_developer_name ?? row.developerName,
     purchaseLeadTime: detail?.purchase_delivery_days === null || !detail
       ? null
       : `${detail.purchase_delivery_days}天`,
@@ -429,7 +495,9 @@ export async function getProductManagementOptions() {
       const label = gradeLabels[grade];
       return label && label !== "异常" ? [label] : [];
     }) as ProductGrade[],
-    tags: response.data.internal_tags.map((tag) => tag.label) as ProductTag[],
+    owners: response.data.owners,
+    developers: response.data.developers,
+    tags: response.data.source_tags,
   };
 }
 
@@ -448,7 +516,10 @@ export async function requestProductManagementExport(
           category: query.get("category"),
           sku_batch: query.getAll("sku_batch"),
           product_grade: query.get("product_grade"),
-          internal_tag: query.get("internal_tag"),
+          owner_uid: query.get("owner_uid"),
+          developer_uid: query.get("developer_uid"),
+          source_tag: query.get("source_tag"),
+          issue_code: query.get("issue_code"),
         },
         max_rows: 5_000,
       }),

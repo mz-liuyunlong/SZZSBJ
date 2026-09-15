@@ -143,6 +143,58 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="LINGXING_PRODUCTLIST_RAW_RUN_DIR",
     )
+    media_cache_enabled: bool = Field(
+        default=False,
+        validation_alias="MEDIA_CACHE_ENABLED",
+    )
+    media_storage_root: Path | None = Field(
+        default=None,
+        validation_alias="MEDIA_STORAGE_ROOT",
+    )
+    media_signing_secret: SecretStr | None = Field(
+        default=None,
+        validation_alias="MEDIA_SIGNING_SECRET",
+    )
+    media_allowed_source_hosts: str | None = Field(
+        default=None,
+        validation_alias="MEDIA_ALLOWED_SOURCE_HOSTS",
+    )
+    media_download_timeout_ms: int = Field(
+        default=8_000,
+        ge=500,
+        le=30_000,
+        validation_alias="MEDIA_DOWNLOAD_TIMEOUT_MS",
+    )
+    media_max_source_bytes: int = Field(
+        default=10_485_760,
+        ge=65_536,
+        le=52_428_800,
+        validation_alias="MEDIA_MAX_SOURCE_BYTES",
+    )
+    media_max_source_pixels: int = Field(
+        default=40_000_000,
+        ge=1_000_000,
+        le=100_000_000,
+        validation_alias="MEDIA_MAX_SOURCE_PIXELS",
+    )
+    media_signed_url_ttl_seconds: int = Field(
+        default=3_600,
+        ge=60,
+        le=86_400,
+        validation_alias="MEDIA_SIGNED_URL_TTL_SECONDS",
+    )
+    media_processing_stale_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=86_400,
+        validation_alias="MEDIA_PROCESSING_STALE_SECONDS",
+    )
+    media_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        validation_alias="MEDIA_MAX_ATTEMPTS",
+    )
 
     @field_validator("database_url", "test_database_url")
     @classmethod
@@ -226,7 +278,38 @@ class Settings(BaseSettings):
             raise ValueError("Lingxing token request settings are missing or invalid")
         if self.lingxing_allow_full_sync:
             raise ValueError("Lingxing full sync is not approved")
+        if self.media_cache_enabled:
+            secret = self.media_signing_secret
+            hosts = self.media_allowed_source_host_set
+            if (
+                self.media_storage_root is None
+                or not self.media_storage_root.is_absolute()
+                or secret is None
+                or len(secret.get_secret_value()) < 32
+                or not hosts
+            ):
+                raise ValueError("Media cache settings are missing or invalid")
         return self
+
+    @property
+    def media_allowed_source_host_set(self) -> frozenset[str]:
+        value = self.media_allowed_source_hosts
+        if value is None:
+            return frozenset()
+        hosts = {
+            part.strip().lower().rstrip(".")
+            for part in value.split(",")
+            if part.strip()
+        }
+        if any(
+            "://" in host
+            or "/" in host
+            or ":" in host
+            or host.startswith(".")
+            for host in hosts
+        ):
+            raise ValueError("MEDIA_ALLOWED_SOURCE_HOSTS must contain hostnames only")
+        return frozenset(hosts)
 
     @property
     def product_management_preview_auth_configured(self) -> bool:

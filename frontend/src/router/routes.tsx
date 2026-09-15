@@ -111,7 +111,7 @@ function BusinessRoute({
       }}
       renderPage={(page) =>
         page.key === 'products_product_management' ? (
-          <ProductManagementPage page={page} />
+          <ProductManagementPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === 'products_listing_management' ? (
           <ListingManagementPage page={page} />
         ) : page.key === 'sales_daily_sales' ? (

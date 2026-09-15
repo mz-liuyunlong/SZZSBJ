@@ -2,10 +2,24 @@ export type ProductGrade = "A级" | "B级" | "C级";
 
 export type ProductTag = string;
 
+export type ProductManagementIssueCode =
+  | "missing_purchase_cost"
+  | "missing_purchase_delivery"
+  | "missing_package_dimensions"
+  | "missing_image"
+  | "missing_gross_weight";
+
+export interface ProductPersonOption {
+  uid: string;
+  name: string;
+}
+
 export interface ProductSourceTagOption {
+  value: string;
   label: string;
   color: string | null;
 }
+
 export type ProductCalculationStatus =
   | "ok"
   | "pricing_unavailable"
@@ -43,6 +57,8 @@ export interface ProductPricingBreakdown {
 export interface ProductManagementRow {
   id: string;
   image: string | null;
+  previewImage?: string | null;
+  sourceImage?: string | null;
   images: string[];
   imageCount: number;
   sku: string | null;
@@ -50,7 +66,9 @@ export interface ProductManagementRow {
   tags: ProductTag[];
   sourceTags: ProductTag[];
   sourceTagColors?: Record<string, string | null>;
+  ownerUid: string | null;
   ownerName: string | null;
+  developerUid: string | null;
   developerName: string | null;
   productGrade: ProductGrade | "异常" | null;
   category: string | null;
@@ -90,14 +108,17 @@ export interface ProductManagementRow {
 }
 
 export interface ProductManagementSummary {
+  total: number;
   syncedDetailCount: number;
   dataCompletenessRate: number;
   withImageCount: number;
   withSourceTagCount: number;
   incompleteCount: number;
   missingPurchaseCostCount: number;
+  missingPurchaseDeliveryCount: number;
   missingGrossWeightCount: number;
   missingPackageDimensionsCount: number;
+  missingImageCount: number;
   missingDimensionImageCount: number;
   invalidPricingRuleCount: number;
   pricingOkCount: number;
@@ -105,10 +126,11 @@ export interface ProductManagementSummary {
 
 export interface ProductManagementFilters {
   productGrade?: ProductGrade;
-  owner?: string;
-  developer?: string;
-  tag?: ProductTag;
-  searchType: "sku" | "productName" | "category";
+  ownerUid?: string;
+  developerUid?: string;
+  tag?: string;
+  issueCode?: ProductManagementIssueCode;
+  searchType: "sku";
   keyword: string;
   batchValues?: string[];
 }

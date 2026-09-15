@@ -16,6 +16,7 @@
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
 | Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
 | Integration Sync Governance + Lingxing SKU Detail Foundation V1 | `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | 当前实现分支已准备可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW importer、任务骨架与受保护 API contract；合并前仍为 `approved_for_implementation` |
+| Media Image Assets M1 | `backend/app/modules/media_assets/` | 第三方商品图登记、异步安全缓存、128/512 WebP 派生图、签名同源读取和 Product Management 图片加速；受控 backfill 同时承担 pending/retryable-failed/stale-processing reconciliation；生产 migration/backfill 需独立授权 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
 | Task Model | `backend/app/models/task.py` | 统一后台任务表 |

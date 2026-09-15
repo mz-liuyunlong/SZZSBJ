@@ -3,19 +3,20 @@ import {
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
-import { Button, Popover, Select, Space, Typography, Input } from "antd";
+import { Button, Input, Popover, Select, Space, Typography } from "antd";
 import { useState } from "react";
 import ConnectedSearch from "@/components/report-table/ConnectedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
 import type {
   ProductManagementFilters,
+  ProductPersonOption,
   ProductSourceTagOption,
 } from "@/pages/products/productManagementTypes";
 
 interface ProductManagementToolbarProps {
   filters: ProductManagementFilters;
-  owners: string[];
-  developers: string[];
+  owners: ProductPersonOption[];
+  developers: ProductPersonOption[];
   tags: ProductSourceTagOption[];
   statisticsVisible: boolean;
   onChange: (filters: ProductManagementFilters) => void;
@@ -43,6 +44,15 @@ function ProductManagementToolbar({
 }: ProductManagementToolbarProps) {
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchText, setBatchText] = useState("");
+  const [keywordDraft, setKeywordDraft] = useState(filters.keyword);
+
+  const applyKeywordSearch = () => {
+    onChange({
+      ...filters,
+      keyword: keywordDraft.trim(),
+      batchValues: undefined,
+    });
+  };
 
   const applyBatchSearch = () => {
     const values = batchText
@@ -57,6 +67,7 @@ function ProductManagementToolbar({
       onMessage("最多支持 1000 行");
       return;
     }
+    setKeywordDraft("");
     onBatchSearch(values);
     setBatchOpen(false);
   };
@@ -93,7 +104,7 @@ function ProductManagementToolbar({
   );
 
   const sourceTagOptions = tags.map((tag) => ({
-    value: tag.label,
+    value: tag.value,
     label: (
       <span className="product-management__source-tag-option">
         <span
@@ -112,51 +123,58 @@ function ProductManagementToolbar({
         className="report-filter-select"
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
+        showSearch
+        optionFilterProp="label"
         placeholder="负责人"
         aria-label="负责人"
-        value={filters.owner}
-        options={owners.map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, owner: value })}
+        value={filters.ownerUid}
+        options={owners.map((option) => ({ value: option.uid, label: option.name }))}
+        onChange={(ownerUid) => onChange({ ...filters, ownerUid })}
       />
       <Select
         className="report-filter-select"
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
+        showSearch
+        optionFilterProp="label"
         placeholder="开发人"
         aria-label="开发人"
-        value={filters.developer}
-        options={developers.map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, developer: value })}
+        value={filters.developerUid}
+        options={developers.map((option) => ({ value: option.uid, label: option.name }))}
+        onChange={(developerUid) => onChange({ ...filters, developerUid })}
       />
       <Select
         className="report-filter-select"
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
+        showSearch
+        optionFilterProp="label"
         placeholder="标签"
         aria-label="标签"
         value={filters.tag}
         options={sourceTagOptions}
-        onChange={(value) => onChange({ ...filters, tag: value })}
+        onChange={(tag) => onChange({ ...filters, tag })}
       />
       <ConnectedSearch
         className="product-management__search"
         typeAriaLabel="搜索类型"
-        typeOptions={[
-          { value: "sku", label: "SKU" },
-        ]}
-        typeValue={filters.searchType}
+        typeOptions={[{ value: "sku", label: "SKU" }]}
+        typeValue="sku"
         inputAriaLabel="搜索产品"
-        inputPlaceholder="请输入搜索内容"
-        inputValue={filters.keyword}
+        inputPlaceholder="请输入 SKU"
+        inputValue={keywordDraft}
         batchControl={batchControl}
-        onTypeChange={(searchType) => onChange({
-          ...filters,
-          searchType: searchType as ProductManagementFilters["searchType"],
-        })}
-        onInputChange={(keyword) => onChange({ ...filters, keyword })}
-        onSearch={() => onMessage("已应用搜索条件")}
+        onTypeChange={() => undefined}
+        onInputChange={setKeywordDraft}
+        onSearch={applyKeywordSearch}
       />
-      <ResetButton onClick={onReset} />
+      <ResetButton
+        onClick={() => {
+          setKeywordDraft("");
+          setBatchText("");
+          onReset();
+        }}
+      />
       <Button onClick={onToggleStatistics}>
         {statisticsVisible ? "隐藏统计" : "显示统计"}
       </Button>

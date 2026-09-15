@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
+from app.modules.media_assets.read_service import MediaAssetReadService, MediaImageUrls
 from app.modules.product_management.calculations import (
     SIX_PLACES,
     IdentityWfsOverride,
@@ -56,6 +57,8 @@ from app.modules.product_management.schemas import (
     ProductManagementOptionsData,
     ProductManagementSummaryData,
     ProductManagementSummaryQuery,
+    ProductPersonOptionRead,
+    ProductSourceTagOptionRead,
     RecalculatePricingRequest,
     RecalculatePricingResult,
     SourceTagRead,
@@ -128,6 +131,10 @@ class ProductManagementService:
             calculation_status=query.calculation_status,
             sort_by=query.sort_by,
             sort_order=query.sort_order,
+            owner_uid=query.owner_uid,
+            developer_uid=query.developer_uid,
+            source_tag=query.source_tag,
+            issue_code=query.issue_code,
             pricing_ready_account_refs=ready_accounts,
             invalid_pricing_rule_account_refs=invalid_accounts,
         )
@@ -137,6 +144,11 @@ class ProductManagementService:
         source_tags = self.repository.list_source_tags_for_snapshots(snapshot_ids)
         image_counts = self.repository.image_counts_for_snapshots(snapshot_ids)
         listing_counts = self.repository.listing_counts(product_ids)
+        primary_media_urls = MediaAssetReadService.from_runtime(
+            self.session
+        ).urls_for_source_images(
+            [row[6].id for row in rows if row[6] is not None]
+        )
         items = [
             self._list_item(
                 row,
@@ -159,6 +171,11 @@ class ProductManagementService:
                     effective_rules[row[0].source_account_ref].version
                     if row[0].source_account_ref in effective_rules
                     else "sku-pricing-defaults-v1"
+                ),
+                image_urls=(
+                    primary_media_urls.get(row[6].id)
+                    if row[6] is not None
+                    else None
                 ),
             )
             for row in rows
@@ -192,8 +209,10 @@ class ProductManagementService:
             tags,
             incomplete,
             missing_purchase,
+            missing_purchase_delivery,
             missing_weight,
             missing_dimensions,
+            missing_image,
             missing_dimension_image,
             invalid_pricing_rule,
             pricing_ok,
@@ -206,6 +225,9 @@ class ProductManagementService:
             internal_tag=query.internal_tag,
             product_grade=query.product_grade,
             calculation_status=query.calculation_status,
+            owner_uid=query.owner_uid,
+            developer_uid=query.developer_uid,
+            source_tag=query.source_tag,
             pricing_ready_account_refs=ready_accounts,
             invalid_pricing_rule_account_refs=invalid_accounts,
         )
@@ -217,8 +239,10 @@ class ProductManagementService:
             with_source_tag_count=tags,
             incomplete_count=incomplete,
             missing_purchase_cost_count=missing_purchase,
+            missing_purchase_delivery_count=missing_purchase_delivery,
             missing_gross_weight_count=missing_weight,
             missing_package_dimensions_count=missing_dimensions,
+            missing_image_count=missing_image,
             missing_dimension_image_count=missing_dimension_image,
             invalid_pricing_rule_count=invalid_pricing_rule,
             pricing_ok_count=pricing_ok,
@@ -239,6 +263,9 @@ class ProductManagementService:
             else []
         )
         images = [] if current is None else self.repository.list_images(current.source_snapshot_id)
+        image_urls = MediaAssetReadService.from_runtime(
+            self.session
+        ).urls_for_source_images([image.id for image in images])
         source_tags = (
             [] if current is None else self.repository.list_source_tags(current.source_snapshot_id)
         )
@@ -267,7 +294,19 @@ class ProductManagementService:
             ),
             images=[
                 ProductImageRead(
-                    ordinal=image.ordinal, url=image.pic_url, is_primary=image.is_primary
+                    ordinal=image.ordinal,
+                    url=image.pic_url,
+                    thumbnail_url=(
+                        image_urls[image.id].thumbnail_url
+                        if image.id in image_urls
+                        else None
+                    ),
+                    preview_url=(
+                        image_urls[image.id].preview_url
+                        if image.id in image_urls
+                        else None
+                    ),
+                    is_primary=image.is_primary,
                 )
                 for image in images
             ],
@@ -297,7 +336,7 @@ class ProductManagementService:
             ),
         )
 
-    def options(self) -> ProductManagementOptionsData:
+    def options(self, account_refs: frozenset[str]) -> ProductManagementOptionsData:
         return ProductManagementOptionsData(
             product_grades=["A", "B", "C", "exception"],
             calculation_statuses=[
@@ -317,6 +356,18 @@ class ProductManagementService:
                 "needs_confirm",
             ],
             internal_tags=[self._tag(tag) for tag in self.repository.list_active_tags()],
+            owners=[
+                ProductPersonOptionRead(uid=uid, name=name)
+                for uid, name in self.repository.list_owner_options(account_refs)
+            ],
+            developers=[
+                ProductPersonOptionRead(uid=uid, name=name)
+                for uid, name in self.repository.list_developer_options(account_refs)
+            ],
+            source_tags=[
+                ProductSourceTagOptionRead(value=value, label=label, color=color)
+                for value, label, color in self.repository.list_source_tag_options(account_refs)
+            ],
         )
 
     @staticmethod
@@ -840,6 +891,7 @@ class ProductManagementService:
         image_count: int = 0,
         calculation: SkuPricingResult | None = None,
         calculation_rule_version: str = "sku-pricing-defaults-v1",
+        image_urls: MediaImageUrls | None = None,
     ) -> ProductManagementListItem:
         identity, product, current, profile, pricing, _, image = row
         calculation = calculation or ProductManagementService._sku_pricing_calculation(
@@ -859,12 +911,26 @@ class ProductManagementService:
                 if current is not None
                 else None
             ),
+            owner_uid=current.owner_uid if current is not None else None,
+            owner_name=current.owner_name if current is not None else None,
+            product_developer_uid=(
+                current.product_developer_uid if current is not None else None
+            ),
+            product_developer_name=(
+                current.product_developer_name if current is not None else None
+            ),
             primary_image=(
                 image.pic_url
                 if image is not None
                 else current.main_image_url
                 if current is not None
                 else None
+            ),
+            primary_image_thumbnail_url=(
+                image_urls.thumbnail_url if image_urls is not None else None
+            ),
+            primary_image_preview_url=(
+                image_urls.preview_url if image_urls is not None else None
             ),
             internal_tags=[ProductManagementService._tag(tag) for tag in tags],
             source_tags=[

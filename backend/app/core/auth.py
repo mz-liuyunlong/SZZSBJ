@@ -9,6 +9,9 @@ from app.core.api import ApiError, ErrorCode
 from app.core.config import SettingsError, get_settings
 
 PUBLIC_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset({"/health"})
+PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset(
+    {"/api/media/image-assets/"}
+)
 PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
 _PREVIEW_PERMISSIONS: Final = frozenset(
@@ -89,7 +92,14 @@ def enforce_protected_by_default(
     request: Request,
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
 ) -> None:
-    if request.scope.get("path") in PUBLIC_ENDPOINT_PATHS:
+    path = request.scope.get("path")
+    if path in PUBLIC_ENDPOINT_PATHS:
+        return
+    if (
+        request.method == "GET"
+        and isinstance(path, str)
+        and any(path.startswith(prefix) for prefix in PUBLIC_GET_ENDPOINT_PREFIXES)
+    ):
         return
     if principal is None:
         raise ApiError(code=ErrorCode.UNAUTHORIZED, status_code=401)

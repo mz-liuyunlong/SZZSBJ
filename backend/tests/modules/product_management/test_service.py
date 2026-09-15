@@ -223,8 +223,10 @@ def test_summary_quantizes_repeating_completeness_rate() -> None:
         1,
         1,
         0,
+        1,
         0,
         0,
+        1,
         1,
         0,
         3,
@@ -233,6 +235,8 @@ def test_summary_quantizes_repeating_completeness_rate() -> None:
     result = service.summary(ProductManagementSummaryQuery(), frozenset({"synthetic-account"}))
 
     assert result.data_completeness_rate == Decimal("66.666667")
+    assert result.missing_purchase_delivery_count == 1
+    assert result.missing_image_count == 1
 
 
 def test_recalculation_preview_does_not_write_projection_and_execute_does(
