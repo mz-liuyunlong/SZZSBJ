@@ -1,4 +1,4 @@
-/** Daily-sales No-API page: keep behavior, refresh layout to match the unified report pages. */
+/** Daily-sales page backed by DATA-PAGES MART API with temporary local fallback. */
 import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
@@ -6,7 +6,7 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import {
@@ -21,6 +21,7 @@ import DailySalesToolbar, {
   type DailySalesFilters,
 } from "@/pages/sales/components/DailySalesToolbar";
 import SalesDetailModal from "@/pages/sales/components/SalesDetailModal";
+import { fetchDailySalesRows } from "@/pages/sales/dailySalesApi";
 import { dailySalesMockData } from "@/pages/sales/dailySalesMockData";
 import {
   dailySalesColumnFields,
@@ -56,8 +57,6 @@ const defaultColumnWidths = Object.fromEntries(dailySalesColumnFields.map((field
         : 112,
 ]));
 const columnGroups = [{ title: "每日销售字段", fields: dailySalesColumnFields }];
-const owners = [...new Set(dailySalesMockData.map((row) => row.owner))];
-const stores = [...new Set(dailySalesMockData.map((row) => row.store))];
 
 const matchesDate = (row: DailySalesRow, filters: DailySalesFilters) => {
   if (filters.dateRange) {
@@ -73,6 +72,7 @@ interface DailySalesPageProps {
 function DailySalesPage({ page }: DailySalesPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState(createInitialFilters);
+  const [sourceRows, setSourceRows] = useState<DailySalesRow[]>(dailySalesMockData);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -84,6 +84,30 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<DailySalesRow>();
 
+  const dateRangeStart = filters.dateRange?.[0];
+  const dateRangeEnd = filters.dateRange?.[1];
+
+  useEffect(() => {
+    let active = true;
+    void fetchDailySalesRows({
+      startDate: dateRangeStart,
+      endDate: dateRangeEnd,
+      pageSize: 500,
+    })
+      .then(({ rows }) => {
+        if (active) setSourceRows(rows);
+      })
+      .catch(() => {
+        // Keep the local fallback visible until the backend has synced MART data.
+      });
+    return () => {
+      active = false;
+    };
+  }, [dateRangeStart, dateRangeEnd]);
+
+  const owners = useMemo(() => [...new Set(sourceRows.map((row) => row.owner))], [sourceRows]);
+  const stores = useMemo(() => [...new Set(sourceRows.map((row) => row.store))], [sourceRows]);
+
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
@@ -91,7 +115,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
 
   const filteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
-    return dailySalesMockData.filter((row) => {
+    return sourceRows.filter((row) => {
       const target = String(row[filters.searchField]).toLocaleLowerCase();
       const exactTarget = String(row[filters.searchField]);
       return (filters.platforms.length === 0 || filters.platforms.includes(row.platform))
@@ -101,7 +125,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         && (!keyword || target.includes(keyword))
         && (!filters.batchValues?.length || filters.batchValues.includes(exactTarget));
     });
-  }, [filters]);
+  }, [filters, sourceRows]);
 
   const updateFilters = (nextFilters: DailySalesFilters) => {
     setFilters(nextFilters);
