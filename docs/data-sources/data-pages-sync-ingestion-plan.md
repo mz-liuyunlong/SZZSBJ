@@ -3,7 +3,7 @@
 ## Status
 
 - Task: `SYNC-1`
-- Current slice: `SYNC-1B` request planning foundation
+- Current slice: `SYNC-1C` + `SYNC-1D` governance bootstrap and RAW capture foundation
 - Status: implementation foundation only
 - Production calls: not authorized
 - Production database writes: not authorized
@@ -38,18 +38,35 @@ Important planning rules:
 - `walmart_ad_item_sp_list` depends on advertiser IDs collected from `walmart_advertiser_list`.
 - `walmart_listing_list` keeps the initial no-store-filter boundary from the approved field mapping.
 
+## Governance bootstrap foundation
+
+`SYNC-1C` adds idempotent governance bootstrap metadata for the seven DATA-PAGES interfaces.
+The bootstrap creates or updates:
+
+- `gov_integration_interfaces` rows with `outbound_enabled=false`.
+- `gov_raw_retention_policies` rows with active DATA-PAGES retention policies.
+- `gov_integration_sync_configs` rows with `is_enabled=false` and `schedule_enabled=false`.
+
+The bootstrap is safe by default. It does not make the interfaces executable, does not enable schedules, and does not authorize production runs.
+
+## RAW capture foundation
+
+`SYNC-1D` adds controlled RAW capture foundations for already-received DATA-PAGES envelopes.
+The capture contract persists redacted response blobs and request references through the existing governance tables.
+It validates the run/work-item/policy context before persistence and rejects unsafe request parameters that look like credentials, payloads, or RAW data.
+
+This foundation does not call Lingxing APIs. Future execution code must supply an already-received envelope from a separately authorized runner.
+
 ## Boundary
 
-These foundation slices only add stable catalog and request-planning metadata that ties parser specs to integration interface metadata.
-They do not call Lingxing APIs, do not create real sync runs, do not write production data, and do not run migrations.
+These foundation slices only add stable catalog, request-planning, governance, and RAW-capture metadata.
+They do not call Lingxing APIs, do not create real production sync runs, do not write production data, and do not run migrations.
 
 ## Next implementation slices
 
-1. `SYNC-1C`: add governance bootstrap for DATA-PAGES interfaces, retention policies, and disabled sync configs.
-2. `SYNC-1D`: add controlled RAW capture handlers that persist redacted RAW envelopes through existing governance tables.
-3. `SYNC-1E`: add DIM/FACT parser writers for the seven target tables with idempotent upsert behavior.
-4. `SYNC-1F`: add MART refresh service for `mart_daily_sales_item_day`, `mart_order_profit_sku_day`, and `mart_listing_management_current`.
-5. `SYNC-1G`: add non-production fixture validation and production runbook handoff. Production execution remains a separate authorized operation.
+1. `SYNC-1E`: add DIM/FACT parser writers for the seven target tables with idempotent upsert behavior.
+2. `SYNC-1F`: add MART refresh service for `mart_daily_sales_item_day`, `mart_order_profit_sku_day`, and `mart_listing_management_current`.
+3. `SYNC-1G`: add non-production fixture validation and production runbook handoff. Production execution remains a separate authorized operation.
 
 ## Notes
 
