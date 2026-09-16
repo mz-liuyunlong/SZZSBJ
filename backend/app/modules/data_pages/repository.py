@@ -251,7 +251,9 @@ class ListingManagementRepository:
             statement = statement.where(ListingManagementCurrentMart.store_id == store_id)
         normalized_keyword = keyword.strip()
         if normalized_keyword:
-            column = LISTING_SEARCH_COLUMNS.get(search_field, ListingManagementCurrentMart.local_sku)
+            column = LISTING_SEARCH_COLUMNS.get(
+                search_field, ListingManagementCurrentMart.local_sku
+            )
             like_value = f"%{normalized_keyword}%"
             if search_field == "title":
                 statement = statement.where(
