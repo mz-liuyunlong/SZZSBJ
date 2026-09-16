@@ -9,6 +9,7 @@ import httpx
 from pydantic import JsonValue, SecretStr
 
 from app.core.config import Settings
+from app.integrations.lingxing.official_contract_overrides import official_http_method
 from app.integrations.lingxing.openapi import (
     LingxingOpenApiError,
     LingxingOpenApiRequest,
@@ -89,11 +90,6 @@ class LingxingBusinessApiExecutor:
                 "LINGXING_OPENAPI_OUTBOUND_NOT_AUTHORIZED",
                 "Lingxing interface execution is not authorized",
             )
-        if request.method not in {"GET", "POST"}:
-            raise LingxingOpenApiError(
-                "LINGXING_BUSINESS_API_METHOD_UNSUPPORTED",
-                "Lingxing business API method is not supported by the verified transport",
-            )
 
         token = self._safe_token()
         recovered = False
@@ -123,6 +119,13 @@ class LingxingBusinessApiExecutor:
             ) from exc
 
     def _send(self, request: LingxingOpenApiRequest, access_token: SecretStr) -> JsonValue:
+        method = official_http_method(request.interface_id, request.method)
+        if method not in {"GET", "POST"}:
+            raise LingxingOpenApiError(
+                "LINGXING_BUSINESS_API_METHOD_UNSUPPORTED",
+                "Lingxing business API method is not supported by the verified transport",
+            )
+
         business_params = cast(dict[str, JsonValue], dict(request.parameters))
         try:
             auth_params = build_query_auth_params(
@@ -138,18 +141,18 @@ class LingxingBusinessApiExecutor:
 
         query_params: dict[str, str] = dict(auth_params)
         json_body: JsonValue | None = None
-        if request.method == "GET":
+        if method == "GET":
             query_params.update(_query_business_params(business_params))
         else:
             json_body = cast(JsonValue, business_params)
 
         headers = {"Accept": "application/json"}
-        if request.method == "POST":
+        if method == "POST":
             headers["Content-Type"] = "application/json"
 
         try:
             response = self._client.request(
-                request.method,
+                method,
                 request.api_path,
                 headers=headers,
                 params=query_params,
