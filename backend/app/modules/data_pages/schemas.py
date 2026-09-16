@@ -126,3 +126,60 @@ class DailySalesReadMeta(StrictSchema):
     total: int
     partial: bool = False
     input_missing: bool = False
+
+
+class OrderProfitQuery(StrictSchema):
+    start_date: date | None = None
+    end_date: date | None = None
+    platform: Nonblank128 | None = None
+    store_id: Nonblank128 | None = None
+    owner_ref: Nonblank128 | None = None
+    search_field: Literal["sku", "item_id", "product_name"] = "sku"
+    keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=100, ge=1, le=500)
+
+
+class OrderProfitItemRead(StrictSchema):
+    id: str
+    business_date_la: date
+    business_timezone: str
+    local_sku: str
+    item_ids: list[str]
+    store_ids: list[str]
+    store_count: int
+    item_count: int
+    sales_qty: Money
+    order_count: Money
+    sales_amount: Money
+    sales_currency_code: str | None
+    refund_amount: Money | None
+    ad_spend_amount: Money | None
+    commission_fee_amount: Money | None
+    wfs_fee_total_amount: Money | None
+    purchase_cost_total_usd: Money | None
+    first_leg_cost_total_usd: Money | None
+    storage_fee_total_amount: Money | None
+    gross_profit_amount: Money | None
+    gross_profit_currency_code: str | None
+    gross_margin: Ratio | None
+    roi: Ratio | None
+    cost_status: Literal["complete", "partial", "missing"]
+    missing_cost_codes: list[str]
+    calc_version: str
+    calculated_at: datetime
+
+
+class OrderProfitListData(StrictSchema):
+    items: list[OrderProfitItemRead]
+
+
+class OrderProfitReadMeta(StrictSchema):
+    source: Literal["new_system_postgresql"] = "new_system_postgresql"
+    source_objects: list[str]
+    latest_calculated_at: datetime | None = None
+    page: int
+    page_size: int
+    total: int
+    partial: bool = False
+    input_missing: bool = False
