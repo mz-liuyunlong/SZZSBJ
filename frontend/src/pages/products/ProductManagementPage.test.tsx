@@ -611,6 +611,7 @@ vi.mock("@/pages/products/productManagementApi", () => ({
 }));
 
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
+import { clearPageStateCache } from "@/shared/page-state/pageStateCache";
 import {
   getProductManagementOptions,
   getProductManagementSku,
@@ -691,6 +692,7 @@ const row: ProductManagementRow = {
 };
 
 beforeEach(() => {
+  clearPageStateCache();
   vi.mocked(listProductManagementSkus).mockResolvedValue({ rows: [row], total: 1 });
   vi.mocked(getProductManagementOptions).mockResolvedValue({
     grades: [],
@@ -732,6 +734,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearPageStateCache();
   cleanup();
   vi.clearAllMocks();
   window.localStorage.clear();

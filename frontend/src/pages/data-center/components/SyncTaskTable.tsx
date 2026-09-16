@@ -6,6 +6,7 @@ import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagina
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import type { SyncTaskRow, SyncTaskStatus } from "@/pages/data-center/syncTaskTypes";
+import { getAutoSyncGuard, getManualSyncGuard, getRetryGuard } from "@/pages/data-center/syncTaskOperationGuards";
 
 interface SyncTaskTableProps {
   rows: SyncTaskRow[];
@@ -40,20 +41,15 @@ const compareText = (left: string, right: string) => left.localeCompare(right, "
 const compareDate = (left?: string | null, right?: string | null) => Date.parse(left ?? "") - Date.parse(right ?? "");
 
 function manualSyncDisabledReason(row: SyncTaskRow) {
-  if (row.lastStatus === "运行中") return "任务运行中，不可重复触发";
-  if (row.status === "disabled") return "接口或同步配置未启用";
-  return "本阶段只开放只读详情，真实执行将在二次确认能力接入后开放";
+  return getManualSyncGuard(row).reason;
 }
 
 function retryDisabledReason(row: SyncTaskRow) {
-  if (!anomalyStatuses.has(row.lastStatus)) return "只有失败、超时或部分成功任务才允许重试";
-  if (!row.retryEnabled) return "当前配置未开启重试";
-  return "本阶段只开放失败详情，真实重试将在二次确认能力接入后开放";
+  return getRetryGuard(row).reason;
 }
 
 function autoSyncDisabledReason(row: SyncTaskRow) {
-  if (row.status === "disabled") return "接口或同步配置未启用";
-  return "自动同步配置写入尚未开放，避免误触发生产调度";
+  return getAutoSyncGuard(row).reason;
 }
 
 function SyncTaskTable({
@@ -106,7 +102,6 @@ function SyncTaskTable({
           <Switch
             size="small"
             checked={row.autoSync}
-            disabled
             aria-label={`${row.taskName}自动同步开关`}
             onChange={(checked) => onToggleAutoSync(row, checked)}
           />
@@ -157,11 +152,11 @@ function SyncTaskTable({
       render: (_, row) => {
         const primaryAction = anomalyStatuses.has(row.lastStatus) ? (
           <Tooltip title={retryDisabledReason(row)}>
-            <Button type="link" danger disabled onClick={() => onRequestRetry(row)}>重试</Button>
+            <Button type="link" danger onClick={() => onRequestRetry(row)}>重试</Button>
           </Tooltip>
         ) : (
           <Tooltip title={manualSyncDisabledReason(row)}>
-            <Button type="link" disabled onClick={() => onRequestSync(row)}>立即同步</Button>
+            <Button type="link" onClick={() => onRequestSync(row)}>立即同步</Button>
           </Tooltip>
         );
 
