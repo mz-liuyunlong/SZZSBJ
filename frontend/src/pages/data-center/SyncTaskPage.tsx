@@ -1,6 +1,6 @@
 import { CalendarOutlined } from "@ant-design/icons";
 import { Button, Spin, Typography, message } from "antd";
-import { useEffect, useMemo, useRef, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
 import SyncTaskConfigDrawer from "@/pages/data-center/components/SyncTaskConfigDrawer";
@@ -10,6 +10,14 @@ import SyncTaskSummaryCards from "@/pages/data-center/components/SyncTaskSummary
 import SyncTaskTable from "@/pages/data-center/components/SyncTaskTable";
 import SyncTaskToolbar from "@/pages/data-center/components/SyncTaskToolbar";
 import { useIntegrationSyncTasksQuery } from "@/pages/data-center/integrationSyncTaskQueries";
+import {
+  getAutoSyncGuard,
+  getManualSyncGuard,
+  getRetryGuard,
+  getSaveConfigGuard,
+} from "@/pages/data-center/syncTaskOperationGuards";
+import { usePageStateCache } from "@/shared/page-state/pageStateCache";
+import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import type {
   SyncScheduleItem,
   SyncScheduleTab,
@@ -57,18 +65,21 @@ interface SyncTaskPageProps {
 function SyncTaskPage({ page }: SyncTaskPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const messageApiRef = useRef(messageApi);
+  const pageStateKey = `sync-task:${page.key}`;
+  const syncTaskPageRootRef = useRef<HTMLDivElement | null>(null);
   const shownErrorsRef = useRef(new Set<string>());
-  const [filters, setFilters] = useState(createInitialFilters);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
-  const [configTask, setConfigTask] = useState<SyncTaskRow>();
-  const [logTask, setLogTask] = useState<SyncTaskRow>();
-  const [logOpen, setLogOpen] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleInitialTab, setScheduleInitialTab] = useState<SyncScheduleTab>("day");
+  const [filters, setFilters] = usePageStateCache(`${pageStateKey}:filters`, createInitialFilters);
+  const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
+  const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, 50);
+  const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
+  const [columnWidths, setColumnWidths] = usePageStateCache(`${pageStateKey}:columnWidths`, defaultColumnWidths);
+  const [configTask, setConfigTask] = usePageStateCache<SyncTaskRow | undefined>(`${pageStateKey}:configTask`, undefined);
+  const [logTask, setLogTask] = usePageStateCache<SyncTaskRow | undefined>(`${pageStateKey}:logTask`, undefined);
+  const [logOpen, setLogOpen] = usePageStateCache(`${pageStateKey}:logOpen`, false);
+  const [scheduleOpen, setScheduleOpen] = usePageStateCache(`${pageStateKey}:scheduleOpen`, false);
+  const [scheduleInitialTab, setScheduleInitialTab] = usePageStateCache<SyncScheduleTab>(`${pageStateKey}:scheduleInitialTab`, "day");
 
+  useElementScrollRestoration(`${pageStateKey}:tableScroll`, syncTaskPageRootRef, ".ant-table-body");
   const tasksQuery = useIntegrationSyncTasksQuery();
   const syncTaskOverview = tasksQuery.data ?? emptySyncTaskOverview;
   const rows = syncTaskOverview.rows;
@@ -133,25 +144,25 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   };
 
   const requestManualSync = (task: SyncTaskRow) => {
-    void task;
-    void messageApi.warning("真实执行需要 Owner 单独授权，当前未创建同步任务");
+    const operationGuard = getManualSyncGuard(task);
+    void messageApi.warning(operationGuard.reason);
   };
 
   const requestRetry = (task: SyncTaskRow) => {
-    void task;
-    void messageApi.warning("重试需要 Owner 单独授权，当前未创建重试任务");
+    const operationGuard = getRetryGuard(task);
+    void messageApi.warning(operationGuard.reason);
   };
 
   const toggleAutoSync = (task: SyncTaskRow, checked: boolean) => {
-    void task;
     void checked;
-    void messageApi.warning("调度变更需要 Owner 单独授权，当前配置未修改");
+    const operationGuard = getAutoSyncGuard(task);
+    void messageApi.warning(operationGuard.reason);
   };
 
   const saveConfig = (task: SyncTaskRow) => {
-    void task;
+    const operationGuard = getSaveConfigGuard(task);
     setConfigTask(undefined);
-    void messageApi.warning("配置写入需要 Owner 单独授权，当前配置未修改");
+    void messageApi.warning(operationGuard.reason);
   };
 
   const refreshTasks = () => {
@@ -165,7 +176,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   return (
     <PageShell page={page}>
       {messageContextHolder}
-      <div className="sync-task">
+      <div ref={syncTaskPageRootRef} className="sync-task">
         <section className="sync-task__hero">
           <div className="sync-task__hero-main">
             <div className="sync-task__hero-copy">

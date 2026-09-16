@@ -40,6 +40,7 @@ function SyncTaskConfigDrawer({
   task,
   modules,
   onClose,
+  onSave,
 }: SyncTaskConfigDrawerProps) {
   const [form] = Form.useForm<SyncTaskConfigFormValues>();
   const cycle = Form.useWatch("cycle", form);
@@ -85,15 +86,14 @@ function SyncTaskConfigDrawer({
       <Alert
         showIcon
         type="info"
-        message="当前为配置只读预览"
-        description="本阶段只读取同步配置并展示禁用原因，不写入调度配置、不启动 Worker、不触发真实同步。"
+        message="当前为配置操作前置校验"
+        description="本阶段允许查看与试点填写配置，但保存只触发前置校验提示，不写入调度配置、不启动 Worker、不触发真实同步。"
         style={{ marginBottom: 16 }}
       />
       <Form
         form={form}
         layout="vertical"
         className="sync-task__config-form"
-        disabled
       >
         <section className="sync-task__drawer-section">
           <h3>基础信息</h3>
@@ -203,10 +203,10 @@ function SyncTaskConfigDrawer({
 
         <div className="sync-task__drawer-actions">
           <Button onClick={onClose}>取消</Button>
-          <Tooltip title="配置写入尚未开放，避免误触发生产调度">
-            <span>
-              <Button type="primary" disabled>保存配置（只读预览）</Button>
-            </span>
+          <Tooltip title="点击只触发前置校验提示，不写入生产配置">
+            <Button type="primary" onClick={() => task && onSave(task)}>
+              保存配置（前置校验）
+            </Button>
           </Tooltip>
         </div>
       </Form>

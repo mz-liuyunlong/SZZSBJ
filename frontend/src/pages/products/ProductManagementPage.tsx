@@ -1,5 +1,5 @@
 import { Card, Spin, message } from "antd";
-import { useEffect, useMemo, useRef, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -34,6 +34,8 @@ import {
   removeUserPreference,
   writeUserPreference,
 } from "@/shared/preferences/userPreferenceCache";
+import { usePageStateCache } from "@/shared/page-state/pageStateCache";
+import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import { applyProductBasicCompleteness } from "@/pages/products/productBasicCompleteness";
 import "@/pages/products/ProductManagementPage.css";
 
@@ -140,6 +142,8 @@ function ProductManagementPage({
 }: ProductManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const messageApiRef = useRef(messageApi);
+  const pageStateKey = `product-management:${preferenceScope}`;
+  const productPageRootRef = useRef<HTMLDivElement | null>(null);
   const initialPreference = useMemo(
     () => readUserPreference<ProductTablePreference>(
       preferenceScope,
@@ -148,17 +152,17 @@ function ProductManagementPage({
     ),
     [preferenceScope],
   );
-  const [filters, setFilters] = useState(createInitialFilters);
-  const [statisticsVisible, setStatisticsVisible] = useState(false);
-  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [columnPreferenceOverride, setColumnPreferenceOverride] = useState<{
+  const [filters, setFilters] = usePageStateCache(`${pageStateKey}:filters`, createInitialFilters);
+  const [statisticsVisible, setStatisticsVisible] = usePageStateCache(`${pageStateKey}:statisticsVisible`, false);
+  const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
+  const [columnPreferenceOverride, setColumnPreferenceOverride] = usePageStateCache<{
     scope: string;
     value: ProductTablePreference;
-  }>();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const [detailRowId, setDetailRowId] = useState<string>();
+  } | undefined>(`${pageStateKey}:columnPreferenceOverride`, undefined);
+  const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
+  const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
+  const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
+  const [detailRowId, setDetailRowId] = usePageStateCache<string | undefined>(`${pageStateKey}:detailRowId`, undefined);
 
   useEffect(() => {
     messageApiRef.current = messageApi;
@@ -168,6 +172,7 @@ function ProductManagementPage({
   const prefetchProductList = usePrefetchProductManagementList();
   const summaryQuery = useProductManagementSummaryQuery(filters, statisticsVisible);
   const optionsQuery = useProductManagementOptionsQuery();
+  useElementScrollRestoration(`${pageStateKey}:tableScroll`, productPageRootRef, ".ant-table-body");
   const tableViewQuery = useProductManagementTableViewQuery();
   const saveTableView = useSaveProductManagementTableViewMutation();
   const serverColumnPreference = useMemo<ProductTablePreference>(() => {
@@ -303,7 +308,7 @@ function ProductManagementPage({
   return (
     <PageShell page={page}>
       {messageContextHolder}
-      <div className="product-management">
+      <div ref={productPageRootRef} className="product-management">
         <Card size="small" className="product-management__page-card">
           <div className="product-management__title-row">
             <div>
