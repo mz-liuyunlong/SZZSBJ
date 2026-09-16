@@ -12,14 +12,21 @@ from app.modules.data_pages.schemas import (
     DailySalesListData,
     DailySalesQuery,
     DailySalesReadMeta,
+    ListingManagementListData,
+    ListingManagementQuery,
+    ListingManagementReadMeta,
     OrderProfitListData,
     OrderProfitQuery,
     OrderProfitReadMeta,
 )
-from app.modules.data_pages.service import DailySalesService, OrderProfitService
+from app.modules.data_pages.service import (
+    DailySalesService,
+    ListingManagementService,
+    OrderProfitService,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 
-router = APIRouter(tags=["DATA-PAGES Sales"])
+router = APIRouter(tags=["DATA-PAGES"])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 daily_sales_principal = Annotated[
@@ -29,6 +36,10 @@ daily_sales_principal = Annotated[
 order_profit_principal = Annotated[
     Principal,
     Depends(require_permission("sales:daily-sales:read")),
+]
+listing_principal = Annotated[
+    Principal,
+    Depends(require_permission("products:read")),
 ]
 
 ERRORS: dict[int | str, dict[str, Any]] = {
@@ -76,6 +87,22 @@ def _order_profit_meta(
         total=total,
         partial=partial,
         input_missing=input_missing,
+    )
+
+
+def _listing_meta(
+    *,
+    latest_calculated_at: datetime | None,
+    page: int,
+    page_size: int,
+    total: int,
+) -> ListingManagementReadMeta:
+    return ListingManagementReadMeta(
+        source_objects=["mart_listing_management_current"],
+        latest_calculated_at=latest_calculated_at,
+        page=page,
+        page_size=page_size,
+        total=total,
     )
 
 
@@ -143,5 +170,33 @@ def list_order_profit(
             total=total,
             partial=_is_partial(data.items),
             input_missing=_has_missing_costs(data.items),
+        ),
+    )
+
+
+@router.get(
+    "/api/listings/walmart",
+    response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
+    responses=ERRORS,
+)
+def list_walmart_listings(
+    request: Request,
+    query: Annotated[ListingManagementQuery, Query()],
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta]:
+    data, total, latest_calculated_at = ListingManagementService(session).list_listings(
+        query,
+        account_refs,
+    )
+    return success_response(
+        request,
+        data=data,
+        meta=_listing_meta(
+            latest_calculated_at=latest_calculated_at,
+            page=query.page,
+            page_size=query.page_size,
+            total=total,
         ),
     )
