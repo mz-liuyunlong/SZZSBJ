@@ -46,11 +46,7 @@ def _provider_code(payload: JsonValue) -> int | None:
 def _query_business_params(parameters: Mapping[str, JsonValue]) -> dict[str, str]:
     """Encode GET business parameters exactly once so sent values match signing values."""
 
-    return {
-        key: canonical_value(value)
-        for key, value in parameters.items()
-        if value != ""
-    }
+    return {key: canonical_value(value) for key, value in parameters.items() if value != ""}
 
 
 class LingxingBusinessApiExecutor:
