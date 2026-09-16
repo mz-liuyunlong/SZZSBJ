@@ -1,6 +1,6 @@
-/** Listing-management No-API page shell rebuilt from the approved HTML prototype. */
+/** Listing-management page backed by DATA-PAGES MART API with temporary local fallback. */
 import { Card, message } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -18,6 +18,7 @@ import ListingManagementTable from "@/pages/products/components/ListingManagemen
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
+import { fetchListingManagementRows } from "@/pages/products/listingManagementApi";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -37,6 +38,8 @@ const createInitialFilters = (): ListingManagementFilters => ({
   searchType: "sku",
   keyword: "",
 });
+
+const uniqueValues = (values: string[]) => [...new Set(values.filter(Boolean))];
 
 const defaultColumnKeys = listingColumnFields.map((field) => field.key);
 const defaultColumnWidths: Record<string, number> = {
@@ -84,6 +87,7 @@ interface ListingManagementPageProps {
 function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState(createInitialFilters);
+  const [sourceRows, setSourceRows] = useState<ListingManagementRow[]>(listingManagementMockData);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [summaryFilterKey, setSummaryFilterKey] = useState<ListingManagementSummaryCardKey>("total");
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
@@ -93,6 +97,33 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<ListingManagementRow>();
+
+  useEffect(() => {
+    let active = true;
+    void fetchListingManagementRows({ pageSize: 500 })
+      .then(({ rows }) => {
+        if (active) setSourceRows(rows);
+      })
+      .catch(() => {
+        // Keep the local fallback visible until the backend has synced MART data.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const storeOptions = useMemo(() => uniqueValues([
+    ...listingStores,
+    ...sourceRows.map((row) => row.store),
+  ]), [sourceRows]);
+  const ownerOptions = useMemo(() => uniqueValues([
+    ...listingOwners,
+    ...sourceRows.map((row) => row.owner),
+  ]), [sourceRows]);
+  const productTypeOptions = useMemo(() => uniqueValues([
+    ...listingProductTypes,
+    ...sourceRows.map((row) => row.productType),
+  ]), [sourceRows]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -109,7 +140,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
     const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
 
-    return listingManagementMockData.filter((row) => {
+    return sourceRows.filter((row) => {
       const target = String(row[filters.searchType]).toLocaleLowerCase();
       const statusMatched = !filters.productStatus
         || row.productStatus === filters.productStatus
@@ -125,7 +156,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           || batchValues.includes(row.msku.toLocaleLowerCase())
           || batchValues.includes(row.productId.toLocaleLowerCase()));
     });
-  }, [filters]);
+  }, [filters, sourceRows]);
 
   const filteredRows = useMemo(() => {
     if (summaryFilterKey === "online") return toolbarFilteredRows.filter((row) => row.listingStatus === "在线");
@@ -162,9 +193,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           <Card size="small" className="listing-management__toolbar-card">
             <ListingManagementToolbar
               filters={filters}
-              stores={listingStores}
-              owners={listingOwners}
-              productTypes={listingProductTypes}
+              stores={storeOptions}
+              owners={ownerOptions}
+              productTypes={productTypeOptions}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}
               onReset={resetFilters}
