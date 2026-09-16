@@ -8,7 +8,10 @@ from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
-from app.modules.data_pages.registry import DATA_PAGE_API_REGISTRY, registry_source_objects
+from app.modules.data_pages.registry import (
+    DATA_PAGE_API_REGISTRY,
+    registry_source_objects,
+)
 from app.modules.data_pages.schemas import (
     DailySalesListData,
     DailySalesQuery,
