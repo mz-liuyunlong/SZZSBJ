@@ -3,7 +3,7 @@
 ## Status
 
 - Task: `SYNC-1`
-- Current slice: `SYNC-1C` + `SYNC-1D` governance bootstrap and RAW capture foundation
+- Current slice: `SYNC-1E` + `SYNC-1F` writer and MART refresh foundations
 - Status: implementation foundation only
 - Production calls: not authorized
 - Production database writes: not authorized
@@ -57,16 +57,39 @@ It validates the run/work-item/policy context before persistence and rejects uns
 
 This foundation does not call Lingxing APIs. Future execution code must supply an already-received envelope from a separately authorized runner.
 
+## DIM / FACT writer foundation
+
+`SYNC-1E` adds writer contracts for the seven approved DATA-PAGES parser targets.
+The writer contracts record:
+
+- Target DIM / FACT table.
+- Idempotent upsert mode.
+- Approved unique-key identity from the parser spec.
+- Required source fields.
+- Required lineage metadata, including RAW request references and sync timestamps.
+- Downstream MART objects affected by each target table.
+
+This slice still does not execute real writes. It defines the safe writer contract that future parser execution must follow.
+
+## MART refresh foundation
+
+`SYNC-1F` adds refresh contracts for the three DATA-PAGES MART objects:
+
+- `mart_daily_sales_item_day`.
+- `mart_order_profit_sku_day`.
+- `mart_listing_management_current`.
+
+The refresh contracts define delete-insert refresh mode, source table dependencies, grain, and business-date window requirements.
+Business-date MARTs require explicit `business_date_from` and `business_date_to` windows. The current listing MART can be planned as a current snapshot refresh.
+
 ## Boundary
 
-These foundation slices only add stable catalog, request-planning, governance, and RAW-capture metadata.
+These foundation slices add stable catalog, request-planning, governance, RAW-capture, writer, and MART-refresh metadata.
 They do not call Lingxing APIs, do not create real production sync runs, do not write production data, and do not run migrations.
 
 ## Next implementation slices
 
-1. `SYNC-1E`: add DIM/FACT parser writers for the seven target tables with idempotent upsert behavior.
-2. `SYNC-1F`: add MART refresh service for `mart_daily_sales_item_day`, `mart_order_profit_sku_day`, and `mart_listing_management_current`.
-3. `SYNC-1G`: add non-production fixture validation and production runbook handoff. Production execution remains a separate authorized operation.
+1. `SYNC-1G`: add non-production fixture validation and production runbook handoff. Production execution remains a separate authorized operation.
 
 ## Notes
 
