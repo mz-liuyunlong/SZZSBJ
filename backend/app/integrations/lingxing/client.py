@@ -18,6 +18,10 @@ type LingxingEndpoint = Literal[
     "/pb/mp/shop/v2/getSellerList",
     "/basicOpen/multiplatform/profit/report/order",
     "/erp/sc/routing/data/local_inventory/productList",
+    "/pb/mp/order/v2/list",
+    "/basicOpen/openapi/multiplatform/walmart/returnOrder/list",
+    "/basicOpen/adReport/advertiser/list",
+    "/basicOpen/multiplatform/ads/reportAdItemSpList",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
@@ -59,8 +63,22 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         outbound_enabled=True,
         allow_query_parameters=False,
         require_json_body=True,
-        allowed_body_fields=frozenset({"offset", "length", "store_ids"}),
-        required_body_fields=frozenset({"offset", "length", "store_ids"}),
+        allowed_body_fields=frozenset(
+            {
+                "offset",
+                "length",
+                "store_ids",
+                "listing_time_field",
+                "listing_start_time",
+                "listing_end_time",
+                "status",
+                "fulfillment_types",
+                "search_field",
+                "search_single_value",
+                "principalUids",
+            }
+        ),
+        required_body_fields=frozenset({"offset", "length"}),
         store_field="store_ids",
         page_size_field="length",
         offset_field="offset",
@@ -70,8 +88,19 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         outbound_enabled=True,
         allow_query_parameters=False,
         require_json_body=True,
-        allowed_body_fields=frozenset({"page", "length", "sids"}),
-        required_body_fields=frozenset({"page", "length", "sids"}),
+        allowed_body_fields=frozenset(
+            {
+                "data_type",
+                "date_unit",
+                "start_date",
+                "end_date",
+                "page",
+                "length",
+                "result_type",
+                "sids",
+            }
+        ),
+        required_body_fields=frozenset({"page", "length"}),
         store_field="sids",
         page_size_field="length",
         page_field="page",
@@ -89,14 +118,110 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
     ),
     "/pb/mp/shop/v2/getSellerList": LingxingEndpointContract(
         method="POST",
-        outbound_enabled=False,
+        outbound_enabled=True,
         allow_query_parameters=False,
         require_json_body=True,
-        allowed_body_fields=frozenset(),
-        required_body_fields=frozenset(),
+        allowed_body_fields=frozenset({"offset", "length", "platform_code", "status", "is_sync"}),
+        required_body_fields=frozenset({"offset", "length"}),
         store_field=None,
-        page_size_field=None,
-        rejection_reason="pending_store_scope: endpoint outbound is disabled",
+        page_size_field="length",
+        offset_field="offset",
+        rejection_reason="pending_store_scope: explicit seller pagination scope is required",
+    ),
+    "/pb/mp/order/v2/list": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {
+                "date_type",
+                "start_time",
+                "end_time",
+                "offset",
+                "length",
+                "platform_code",
+                "store_id",
+                "order_status",
+                "include_delete",
+                "global_order_nos",
+                "platform_order_nos",
+                "platform_order_names",
+            }
+        ),
+        required_body_fields=frozenset({"date_type", "offset", "length"}),
+        store_field="store_id",
+        page_size_field="length",
+        offset_field="offset",
+    ),
+    "/basicOpen/openapi/multiplatform/walmart/returnOrder/list": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {
+                "dateType",
+                "startDate",
+                "endDate",
+                "pageNum",
+                "pageSize",
+                "returnTypeList",
+                "returnStatusList",
+                "storeIdList",
+                "searchType",
+                "searchSingleValue",
+                "searchMultiValue",
+                "sortField",
+                "sortType",
+            }
+        ),
+        required_body_fields=frozenset({"dateType", "pageNum", "pageSize"}),
+        store_field="storeIdList",
+        page_size_field="pageSize",
+        page_field="pageNum",
+    ),
+    "/basicOpen/adReport/advertiser/list": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset({"paging", "page", "limit", "searchText"}),
+        required_body_fields=frozenset({"paging", "page", "limit"}),
+        store_field=None,
+        page_size_field="limit",
+        page_field="page",
+    ),
+    "/basicOpen/multiplatform/ads/reportAdItemSpList": LingxingEndpointContract(
+        method="POST",
+        outbound_enabled=True,
+        allow_query_parameters=False,
+        require_json_body=True,
+        allowed_body_fields=frozenset(
+            {
+                "advertiserIds",
+                "campaignType",
+                "startDate",
+                "endDate",
+                "pageNum",
+                "pageSize",
+                "paging",
+                "day",
+                "orderField",
+                "orderType",
+                "adGroupIds",
+                "campaignIds",
+                "status",
+                "searchText",
+                "searchType",
+            }
+        ),
+        required_body_fields=frozenset(
+            {"advertiserIds", "campaignType", "startDate", "endDate", "pageNum", "pageSize"}
+        ),
+        store_field=None,
+        page_size_field="pageSize",
+        page_field="pageNum",
     ),
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo": LingxingEndpointContract(
         method="POST",
@@ -131,6 +256,11 @@ def _required_integer(value: JsonValue, *, minimum: int) -> int:
 
 
 def _required_store_ids(value: JsonValue) -> set[str]:
+    if isinstance(value, (str, int)) and not isinstance(value, bool):
+        normalized_single = str(value).strip()
+        if not normalized_single:
+            raise LingxingClientError("Lingxing outbound store scope is invalid")
+        return {normalized_single}
     if not isinstance(value, list) or not value:
         raise LingxingClientError("Lingxing outbound store scope is invalid")
     stores: set[str] = set()
@@ -376,12 +506,14 @@ class LingxingReadonlyClient:
         if not contract.require_json_body or not isinstance(body, dict):
             raise LingxingClientError("Lingxing endpoint requires a JSON object body")
         body_fields = frozenset(body)
+        if not body_fields and contract.rejection_reason is not None:
+            raise LingxingClientError(contract.rejection_reason)
         if not contract.required_body_fields.issubset(body_fields):
             raise LingxingClientError("Lingxing outbound body does not match endpoint contract")
         if not body_fields.issubset(contract.allowed_body_fields):
             raise LingxingClientError("Lingxing outbound body does not match endpoint contract")
 
-        if contract.store_field is not None:
+        if contract.store_field is not None and contract.store_field in body:
             stores = _required_store_ids(body[contract.store_field])
             if not stores.issubset(set(capture.store_ids)):
                 raise LingxingClientError(
@@ -393,7 +525,7 @@ class LingxingReadonlyClient:
                 raise LingxingClientError("Lingxing outbound page size is missing or inconsistent")
         if first_page_only and page.page_no != 1:
             raise LingxingClientError("Lingxing outbound page number is inconsistent")
-        if contract.page_field is not None:
+        if contract.page_field is not None and contract.page_field in body:
             if _required_integer(body[contract.page_field], minimum=1) != 1:
                 raise LingxingClientError("Lingxing outbound page number is inconsistent")
         if contract.offset_field is not None and contract.offset_field in body:
