@@ -81,7 +81,6 @@ class DataPagesFixtureValidationReport:
         return not self.issues and not self.production_calls and not self.production_writes
 
 
-
 def _request_metadata_for(parser_key: DataPagesParserKey) -> dict[str, object]:
     plan = DATA_PAGES_REQUEST_PLAN_SPECS_BY_KEY[parser_key]
     metadata: dict[str, object] = dict(plan.static_body_fields)
@@ -94,7 +93,6 @@ def _request_metadata_for(parser_key: DataPagesParserKey) -> dict[str, object]:
     if plan.store_scope_field is not None:
         metadata["store_scope_field"] = plan.store_scope_field
     return metadata
-
 
 
 def _available_target_fields_for(parser_key: DataPagesParserKey) -> tuple[str, ...]:
@@ -115,7 +113,9 @@ DATA_PAGES_FIXTURE_CASES: Final[tuple[DataPagesFixtureCase, ...]] = tuple(
         available_target_fields=_available_target_fields_for(parser_key),
         request_metadata=_request_metadata_for(parser_key),
         observed_record_count=1,
-        observed_return_types=("REFUND",) if parser_key == "walmart_return_order_list" else (),
+        observed_return_types=(
+            ("REFUND",) if parser_key == "walmart_return_order_list" else ()
+        ),
         boundary_notes=(
             "Synthetic fixture only; no real Lingxing payload or production data.",
         ),
@@ -128,10 +128,8 @@ DATA_PAGES_FIXTURE_CASES_BY_KEY: Final = {
 }
 
 
-
 def data_pages_fixture_parser_keys() -> frozenset[DataPagesParserKey]:
     return frozenset(DATA_PAGES_FIXTURE_CASES_BY_KEY)
-
 
 
 def validate_data_pages_fixture_contracts(
@@ -195,14 +193,17 @@ def validate_data_pages_fixture_contracts(
     )
 
 
-
 def _validate_required_fields(
     fixture: DataPagesFixtureCase,
     issues: list[DataPagesFixtureValidationIssue],
 ) -> int:
     parser_spec = DATA_PAGES_PARSER_SPECS[fixture.parser_key]
-    required_fields = tuple(field.target_name for field in parser_spec.fields if field.required)
-    missing = tuple(field for field in required_fields if field not in fixture.available_target_fields)
+    required_fields = tuple(
+        field.target_name for field in parser_spec.fields if field.required
+    )
+    missing = tuple(
+        field for field in required_fields if field not in fixture.available_target_fields
+    )
     if missing:
         issues.append(
             _issue(
@@ -214,14 +215,15 @@ def _validate_required_fields(
     return len(required_fields)
 
 
-
 def _validate_unique_key_fields(
     fixture: DataPagesFixtureCase,
     issues: list[DataPagesFixtureValidationIssue],
 ) -> int:
     writer_spec = DATA_PAGES_WRITER_SPECS_BY_KEY[fixture.parser_key]
     missing = tuple(
-        field for field in writer_spec.unique_key if field not in fixture.available_target_fields
+        field
+        for field in writer_spec.unique_key
+        if field not in fixture.available_target_fields
     )
     if missing:
         issues.append(
@@ -232,7 +234,6 @@ def _validate_unique_key_fields(
             )
         )
     return len(writer_spec.unique_key)
-
 
 
 def _validate_request_rules(
@@ -283,7 +284,6 @@ def _validate_request_rules(
     return check_count
 
 
-
 def _validate_mart_plans(issues: list[DataPagesFixtureValidationIssue]) -> int:
     check_count = 0
     for key in sorted(mart_refresh_keys()):
@@ -309,7 +309,6 @@ def _validate_mart_plans(issues: list[DataPagesFixtureValidationIssue]) -> int:
     return check_count
 
 
-
 def _contains_sensitive_key(value: object) -> bool:
     if isinstance(value, Mapping):
         for key, nested_value in value.items():
@@ -321,7 +320,6 @@ def _contains_sensitive_key(value: object) -> bool:
     elif isinstance(value, tuple | list):
         return any(_contains_sensitive_key(item) for item in value)
     return False
-
 
 
 def _issue(
