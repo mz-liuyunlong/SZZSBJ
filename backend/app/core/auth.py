@@ -61,11 +61,11 @@ class Principal:
 def get_optional_principal(request: Request) -> Principal | None:
     """Return the temporary read-only preview principal or fail closed."""
     path = request.scope.get("path")
-    if (
-        request.method != "GET"
-        or not isinstance(path, str)
-        or not (any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES) or path in _PREVIEW_READ_PATHS)
-    ):
+    path_allowed = isinstance(path, str) and (
+        any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
+        or path in _PREVIEW_READ_PATHS
+    )
+    if request.method != "GET" or not path_allowed:
         return None
     try:
         settings = get_settings()
