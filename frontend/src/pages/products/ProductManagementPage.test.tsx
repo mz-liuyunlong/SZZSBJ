@@ -696,6 +696,7 @@ beforeEach(() => {
   vi.mocked(listProductManagementSkus).mockResolvedValue({ rows: [row], total: 1 });
   vi.mocked(getProductManagementOptions).mockResolvedValue({
     grades: [],
+    gradeOptions: [],
     owners: [],
     developers: [],
     tags: [],

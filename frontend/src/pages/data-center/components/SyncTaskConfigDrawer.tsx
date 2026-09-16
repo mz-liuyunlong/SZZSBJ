@@ -7,10 +7,10 @@ interface SyncTaskConfigDrawerProps {
   task?: SyncTaskRow;
   modules: SyncTaskModule[];
   onClose: () => void;
-  onSave: (task: SyncTaskRow) => void;
+  onSave: (task: SyncTaskRow, values: SyncTaskConfigFormValues) => void;
 }
 
-interface SyncTaskConfigFormValues {
+export interface SyncTaskConfigFormValues {
   taskName: string;
   module: SyncTaskModule;
   interfaceName: string;
@@ -75,7 +75,7 @@ function SyncTaskConfigDrawer({
       title="配置同步任务"
       width={680}
       open={open}
-      destroyOnClose
+      destroyOnHidden
       onClose={onClose}
       extra={(
         <Typography.Text type="secondary">
@@ -86,8 +86,8 @@ function SyncTaskConfigDrawer({
       <Alert
         showIcon
         type="info"
-        message="当前为配置操作前置校验"
-        description="本阶段允许查看与试点填写配置，但保存只触发前置校验提示，不写入调度配置、不启动 Worker、不触发真实同步。"
+        message="配置保存将进入二次确认"
+        description="保存前会展示确认弹窗。确认后会调用配置写入接口，建议先在测试环境验证。"
         style={{ marginBottom: 16 }}
       />
       <Form
@@ -203,9 +203,9 @@ function SyncTaskConfigDrawer({
 
         <div className="sync-task__drawer-actions">
           <Button onClick={onClose}>取消</Button>
-          <Tooltip title="点击只触发前置校验提示，不写入生产配置">
-            <Button type="primary" onClick={() => task && onSave(task)}>
-              保存配置（前置校验）
+          <Tooltip title="保存前会进行二次确认">
+            <Button type="primary" onClick={() => task && onSave(task, form.getFieldsValue())}>
+              保存配置
             </Button>
           </Tooltip>
         </div>

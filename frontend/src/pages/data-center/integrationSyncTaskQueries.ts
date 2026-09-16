@@ -1,9 +1,13 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SERVER_STATE_STALE_TIME } from "@/api/queryClient";
 import {
+  createIntegrationSyncManualRun,
   listIntegrationSyncRunRawRequestRefs,
   listIntegrationSyncRunWorkItems,
   listIntegrationSyncTasks,
+  retryIntegrationSyncRun,
+  updateIntegrationSyncConfig,
+  type SyncConfigUpdatePayload,
 } from "@/pages/data-center/integrationSyncTaskApi";
 
 const emptyRunId = "__none__";
@@ -62,5 +66,45 @@ export function useIntegrationSyncRunRawRequestRefsQuery(
     },
     enabled: Boolean(runId) && enabled,
     staleTime: SERVER_STATE_STALE_TIME.detail,
+  });
+}
+
+export function useCreateIntegrationSyncManualRunMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ configId, reason }: { configId: string; reason: string }) => (
+      createIntegrationSyncManualRun(configId, reason)
+    ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: integrationSyncTaskKeys.overview });
+    },
+  });
+}
+
+export function useRetryIntegrationSyncRunMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, reason }: { runId: string; reason: string }) => (
+      retryIntegrationSyncRun(runId, reason)
+    ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: integrationSyncTaskKeys.overview });
+    },
+  });
+}
+
+export function useUpdateIntegrationSyncConfigMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      configId,
+      payload,
+    }: {
+      configId: string;
+      payload: SyncConfigUpdatePayload;
+    }) => updateIntegrationSyncConfig(configId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: integrationSyncTaskKeys.overview });
+    },
   });
 }

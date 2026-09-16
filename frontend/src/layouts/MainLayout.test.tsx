@@ -420,7 +420,7 @@ describe("MainLayout", () => {
     });
   });
 
-  it("renders only the active page and remounts local state on tab switches and refresh", async () => {
+  it("keeps open tab pages mounted on tab switches and remounts them on refresh", async () => {
     const adsGroup = requiredGroup("ads");
     const dailySales = requiredPage("sales", "sales_daily_sales");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
@@ -444,13 +444,12 @@ describe("MainLayout", () => {
     fireEvent.change(screen.getByLabelText(`${keywordLibrary.title}测试状态`), {
       target: { value: "词库草稿" },
     });
-    expect(screen.queryByLabelText(`${dailySales.title}测试状态`)).not.toBeInTheDocument();
 
     fireEvent.click(getTab(dailySales.title));
-    expect(screen.getByLabelText(`${dailySales.title}测试状态`)).toHaveValue("");
-    expect(screen.queryByLabelText(`${keywordLibrary.title}测试状态`)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(`${dailySales.title}测试状态`)).toHaveValue("首页草稿");
+
     fireEvent.click(getTab(keywordLibrary.title));
-    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue("");
+    expect(screen.getByLabelText(`${keywordLibrary.title}测试状态`)).toHaveValue("词库草稿");
 
     fireEvent.change(screen.getByLabelText(`${keywordLibrary.title}测试状态`), {
       target: { value: "刷新前草稿" },

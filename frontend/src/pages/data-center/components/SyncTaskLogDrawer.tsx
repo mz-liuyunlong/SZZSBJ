@@ -2,7 +2,6 @@ import {
   Alert,
   Button,
   DatePicker,
-  Drawer,
   Modal,
   Select,
   Space,
@@ -197,13 +196,15 @@ function SyncTaskLogDrawer({ open, task, logs, onClose }: SyncTaskLogDrawerProps
 
   return (
     <>
-      <Drawer
-        className="sync-task__log-drawer"
+      <Modal
+        centered
+        className="sync-task__log-modal"
         title={task ? `任务执行日志：${task.taskName}` : "任务执行日志"}
-        width={760}
+        width={1080}
         open={open}
-        destroyOnClose
-        onClose={onClose}
+        destroyOnHidden
+        onCancel={onClose}
+        footer={<Button type="primary" onClick={onClose}>关闭</Button>}
       >
         <Space className="sync-task__log-toolbar" wrap>
           <Select
@@ -239,7 +240,7 @@ function SyncTaskLogDrawer({ open, task, logs, onClose }: SyncTaskLogDrawerProps
             仅展示治理表中的安全状态、计数和错误码，不展示请求或响应原文。
           </div>
         </section>
-      </Drawer>
+      </Modal>
       <Modal
         title="执行明细"
         open={Boolean(detailLog)}

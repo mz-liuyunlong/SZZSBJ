@@ -86,7 +86,7 @@ function SyncTaskScheduleDrawer({
       title="同步日程"
       width={560}
       open={open}
-      destroyOnClose
+      destroyOnHidden
       onClose={closeDrawer}
       footer={(
         <Space className="sync-task__drawer-footer">

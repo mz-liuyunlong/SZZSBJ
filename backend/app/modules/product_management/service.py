@@ -49,6 +49,7 @@ from app.modules.product_management.schemas import (
     PricingRulesData,
     PricingRuleWrite,
     ProductCoreRead,
+    ProductGradeOptionRead,
     ProductImageRead,
     ProductManagementDetailData,
     ProductManagementListData,
@@ -326,9 +327,47 @@ class ProductManagementService:
             ),
         )
 
-    def options(self, account_refs: frozenset[str]) -> ProductManagementOptionsData:
+    def options(
+        self,
+        account_refs: frozenset[str],
+        query: ProductManagementSummaryQuery | None = None,
+    ) -> ProductManagementOptionsData:
+        active_query = query or ProductManagementSummaryQuery()
+        now = datetime.now(UTC)
+        sku_rules = {
+            account_ref: self._sku_pricing_rule(rule)
+            for account_ref, rule in self.repository.list_effective_rules(now, account_refs).items()
+        }
+        ready_accounts, invalid_accounts = self._sku_rule_account_sets(account_refs, sku_rules)
+        counts = self.repository.option_counts(
+            account_refs=account_refs,
+            sku=active_query.sku,
+            sku_batch=active_query.sku_batch,
+            product_name=active_query.product_name,
+            category=active_query.category,
+            internal_tag=active_query.internal_tag,
+            product_grade=active_query.product_grade,
+            calculation_status=active_query.calculation_status,
+            owner_uid=active_query.owner_uid,
+            developer_uid=active_query.developer_uid,
+            source_tag=active_query.source_tag,
+            pricing_ready_account_refs=ready_accounts,
+            invalid_pricing_rule_account_refs=invalid_accounts,
+        )
+        grade_labels = {"A": "A级", "B": "B级", "C": "C级", "exception": "异常"}
+        grade_counts = {value: count for value, count in counts["product_grades"]}
+
         return ProductManagementOptionsData(
             product_grades=["A", "B", "C", "exception"],
+            product_grade_options=[
+                ProductGradeOptionRead(
+                    value=value,
+                    label=label,
+                    count=grade_counts.get(value, 0),
+                )
+                for value, label in grade_labels.items()
+                if value != "exception"
+            ],
             calculation_statuses=[
                 "ok",
                 "pricing_unavailable",
@@ -347,16 +386,16 @@ class ProductManagementService:
             ],
             internal_tags=[self._tag(tag) for tag in self.repository.list_active_tags()],
             owners=[
-                ProductPersonOptionRead(uid=uid, name=name)
-                for uid, name in self.repository.list_owner_options(account_refs)
+                ProductPersonOptionRead(uid=uid, name=name, count=count)
+                for uid, name, count in counts["owners"]
             ],
             developers=[
-                ProductPersonOptionRead(uid=uid, name=name)
-                for uid, name in self.repository.list_developer_options(account_refs)
+                ProductPersonOptionRead(uid=uid, name=name, count=count)
+                for uid, name, count in counts["developers"]
             ],
             source_tags=[
-                ProductSourceTagOptionRead(value=value, label=label, color=color)
-                for value, label, color in self.repository.list_source_tag_options(account_refs)
+                ProductSourceTagOptionRead(value=value, label=label, color=color, count=count)
+                for value, label, color, count in counts["source_tags"]
             ],
         )
 

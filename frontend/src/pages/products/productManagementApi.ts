@@ -153,10 +153,12 @@ interface BackendSummary {
   invalid_pricing_rule_count: number;
   pricing_ok_count: number;
 }
-interface BackendPersonOption { uid: string; name: string }
-interface BackendSourceTagOption { value: string; label: string; color: string | null }
+interface BackendPersonOption { uid: string; name: string; count?: number }
+interface BackendSourceTagOption { value: string; label: string; color: string | null; count?: number }
+interface BackendGradeOption { value: string; label: string; count?: number }
 interface BackendOptions {
   product_grades: string[];
+  product_grade_options?: BackendGradeOption[];
   internal_tags: BackendTag[];
   owners: BackendPersonOption[];
   developers: BackendPersonOption[];
@@ -488,13 +490,29 @@ export async function getProductManagementSku(
   } satisfies ProductManagementRow;
 }
 
-export async function getProductManagementOptions() {
-  const response = await backendRequest<BackendOptions>("/api/product-management/options");
+export async function getProductManagementOptions(filters?: ProductManagementFilters) {
+  const query = filters ? listQuery(filters, 1, 1, false) : new URLSearchParams();
+  query.delete("page");
+  query.delete("page_size");
+  const suffix = query.toString();
+  const response = await backendRequest<BackendOptions>(
+    `/api/product-management/options${suffix ? `?${suffix}` : ""}`,
+  );
+  const gradeOptions = response.data.product_grade_options?.flatMap((option) => {
+    const label = gradeLabels[option.value];
+    return label && label !== "异常"
+      ? [{ value: label as ProductGrade, label: label as ProductGrade, count: option.count ?? 0 }]
+      : [];
+  }) ?? response.data.product_grades.flatMap((grade) => {
+    const label = gradeLabels[grade];
+    return label && label !== "异常"
+      ? [{ value: label as ProductGrade, label: label as ProductGrade, count: undefined }]
+      : [];
+  });
+
   return {
-    grades: response.data.product_grades.flatMap((grade) => {
-      const label = gradeLabels[grade];
-      return label && label !== "异常" ? [label] : [];
-    }) as ProductGrade[],
+    grades: gradeOptions.map((option) => option.value),
+    gradeOptions,
     owners: response.data.owners,
     developers: response.data.developers,
     tags: response.data.source_tags,

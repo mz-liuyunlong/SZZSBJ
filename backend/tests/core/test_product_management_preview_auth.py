@@ -75,6 +75,7 @@ def _app() -> FastAPI:
 def _empty_options(
     _: ProductManagementService,
     __: frozenset[str],
+    _query: object | None = None,
 ) -> ProductManagementOptionsData:
     return ProductManagementOptionsData(
         product_grades=[],

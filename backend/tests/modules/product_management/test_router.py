@@ -332,7 +332,7 @@ def test_read_export_recalculate_and_view_contracts(
     monkeypatch.setattr(
         ProductManagementService,
         "options",
-        lambda self, account_refs: ProductManagementOptionsData(
+        lambda self, account_refs, query=None: ProductManagementOptionsData(
             product_grades=["A", "B", "C", "exception"],
             calculation_statuses=["ok"],
             internal_tags=[],

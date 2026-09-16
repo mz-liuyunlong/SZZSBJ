@@ -6,6 +6,20 @@ export interface BackendEnvelope<T, M = Record<string, unknown>> {
   request_id: string;
 }
 
+export class BackendRequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly requestId?: string;
+
+  constructor(status: number, code: string, requestId?: string) {
+    super(code);
+    this.name = "BackendRequestError";
+    this.status = status;
+    this.code = code;
+    this.requestId = requestId;
+  }
+}
+
 export async function backendRequest<T, M = Record<string, unknown>>(
   path: string,
   init?: RequestInit,
@@ -29,7 +43,8 @@ export async function backendRequest<T, M = Record<string, unknown>>(
   }
   const body = await response.json() as BackendEnvelope<T, M>;
   if (!response.ok || !body.success) {
-    throw new Error(body.error?.code ?? "BACKEND_REQUEST_FAILED");
+    const errorCode = body.error?.code ?? "BACKEND_REQUEST_FAILED";
+    throw new BackendRequestError(response.status, errorCode, body.request_id);
   }
   return body;
 }
