@@ -90,7 +90,10 @@ describe("App", () => {
     expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).not.toMatch(
       /title|permission|role|user|token|auth|state/i,
     );
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/sales/daily-sales?"),
+      expect.objectContaining({ credentials: "same-origin" }),
+    );
   });
 
   it("keeps login when logout is dismissed and routes confirmed logout to login", async () => {
@@ -98,6 +101,7 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
     await logIn(true);
+    fetchMock.mockClear();
 
     await openLogoutDialog();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
