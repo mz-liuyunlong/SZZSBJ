@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -34,13 +35,75 @@ DATA_PAGES_ENDPOINTS = frozenset(
 )
 
 
-def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
-    """Normalize DATA-PAGES bodies against the owner's complete Lingxing docs snapshot.
+@dataclass(frozen=True, slots=True)
+class DataPagesProviderPageContract:
+    """Observed/verified provider page-size constraints for bounded DATA-PAGES calls."""
 
-    REAL-DATA-1 was initially generated from a derived interface index. The complete
-    documentation confirms several enum/value types that differ from that index. This
-    integration-boundary normalization keeps the signed values and the transmitted JSON
-    body consistent without leaking authentication material into business payloads.
+    minimum_page_size: int = 1
+    maximum_probe_page_size: int = 3
+    observed_response_floor: int | None = None
+
+
+# Seller and Order V2 were provider-verified on 2026-09-17 to reject length < 20.
+# The other endpoints were successfully probed with a requested size of 3. Advertiser
+# returned 10 rows despite limit=3, so its response floor is recorded as an observation
+# rather than guessed into request semantics.
+DATA_PAGES_PROVIDER_PAGE_CONTRACTS: dict[str, DataPagesProviderPageContract] = {
+    SELLER_ENDPOINT: DataPagesProviderPageContract(20, 20),
+    WALMART_LISTING_ENDPOINT: DataPagesProviderPageContract(1, 3),
+    SALE_STAT_ENDPOINT: DataPagesProviderPageContract(1, 3),
+    ORDER_ENDPOINT: DataPagesProviderPageContract(20, 20),
+    RETURN_ENDPOINT: DataPagesProviderPageContract(1, 3),
+    ADVERTISER_ENDPOINT: DataPagesProviderPageContract(1, 3, observed_response_floor=10),
+    AD_ITEM_SP_ENDPOINT: DataPagesProviderPageContract(1, 3),
+}
+
+DATA_PAGES_PAGE_SIZE_FIELDS: dict[str, str] = {
+    SELLER_ENDPOINT: "length",
+    WALMART_LISTING_ENDPOINT: "length",
+    SALE_STAT_ENDPOINT: "length",
+    ORDER_ENDPOINT: "length",
+    RETURN_ENDPOINT: "pageSize",
+    ADVERTISER_ENDPOINT: "limit",
+    AD_ITEM_SP_ENDPOINT: "pageSize",
+}
+
+
+def data_pages_probe_page_size(api_path: str, requested_page_size: int) -> int:
+    """Resolve a bounded request size while honoring provider minimums.
+
+    Callers may continue to request the global safe sample size (normally <=3). For
+    endpoints whose provider rejects that size, this raises only to the smallest
+    provider-verified value. It never expands beyond the endpoint-specific probe cap.
+    """
+
+    contract = DATA_PAGES_PROVIDER_PAGE_CONTRACTS.get(api_path)
+    if contract is None:
+        return requested_page_size
+    resolved = max(requested_page_size, contract.minimum_page_size)
+    return min(resolved, contract.maximum_probe_page_size)
+
+
+def data_pages_probe_page_size_limit(api_path: str, configured_limit: int) -> int:
+    """Return the largest page size this bounded DATA-PAGES path may emit."""
+
+    contract = DATA_PAGES_PROVIDER_PAGE_CONTRACTS.get(api_path)
+    if contract is None:
+        return configured_limit
+    return max(configured_limit, contract.maximum_probe_page_size)
+
+
+def normalize_data_pages_body(
+    api_path: str,
+    body: JsonValue,
+    *,
+    page_size: int | None = None,
+) -> JsonValue:
+    """Normalize DATA-PAGES bodies against owner docs and provider validation.
+
+    Authentication remains outside the business body. When ``page_size`` is supplied,
+    the endpoint's documented pagination field is normalized to the bounded provider-
+    compatible request size so signing values and transmitted JSON stay identical.
     """
 
     if api_path not in DATA_PAGES_ENDPOINTS or not isinstance(body, dict):
@@ -48,8 +111,17 @@ def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
 
     normalized: dict[str, Any] = dict(body)
 
+    if page_size is not None:
+        page_size_field = DATA_PAGES_PAGE_SIZE_FIELDS.get(api_path)
+        if page_size_field is not None:
+            normalized[page_size_field] = data_pages_probe_page_size(api_path, page_size)
+
     if api_path == SELLER_ENDPOINT:
         normalized["platform_code"] = _platform_codes(normalized.get("platform_code"))
+        # The owner-provided endpoint example and the successful parameter-validation
+        # probe both use active + synchronized stores. Keep these explicit for REAL-DATA.
+        normalized.setdefault("is_sync", 1)
+        normalized.setdefault("status", 1)
 
     elif api_path == SALE_STAT_ENDPOINT:
         # Official enums: data_type=4 -> SKU, date_unit=4 -> day.
