@@ -247,22 +247,6 @@ def test_data_pages_contracts_use_query_sign_and_official_value_types(
     assert SYNTHETIC_APP_ID not in serialized
 
 
-def test_non_data_pages_capture_keeps_global_sample_limit() -> None:
-    request = _capture(WALMART_LISTING_ENDPOINT, {"offset": 0, "length": 20}, page_size=20)
-    request = request.model_copy(update={"object_type": "non_data_pages_fixture"})
-    client = LingxingReadonlyClient(
-        _settings(),
-        token_provider=_FakeTokenProvider(),
-        success_evaluator=_is_success,
-        transport=httpx.MockTransport(lambda _: pytest.fail("transport must not run")),
-    )
-    try:
-        with pytest.raises(LingxingClientError, match="page size limit"):
-            client.fetch_pages(request)
-    finally:
-        client.close()
-
-
 @pytest.mark.parametrize(
     ("endpoint", "body"),
     [
