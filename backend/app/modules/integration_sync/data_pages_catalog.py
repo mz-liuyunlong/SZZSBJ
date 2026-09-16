@@ -43,9 +43,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-get-seller-list-v1",
         default_page_size=100,
         default_max_pages=1000,
-        notes=(
-            "Store metadata is a prerequisite for store-scoped DATA-PAGES joins.",
-        ),
+        notes=("Store metadata is a prerequisite for store-scoped DATA-PAGES joins.",),
     ),
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_listing_list",
@@ -85,9 +83,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-order-v2-list-v1",
         default_page_size=100,
         default_max_pages=10000,
-        notes=(
-            "date_type is fixed to global_purchase_time for DATA-PAGES profit lineage.",
-        ),
+        notes=("date_type is fixed to global_purchase_time for DATA-PAGES profit lineage.",),
     ),
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_return_order_list",
@@ -113,9 +109,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-walmart-advertiser-list-v1",
         default_page_size=100,
         default_max_pages=1000,
-        notes=(
-            "Advertiser IDs are prerequisites for Walmart SP ad item report requests.",
-        ),
+        notes=("Advertiser IDs are prerequisites for Walmart SP ad item report requests.",),
     ),
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_ad_item_sp_list",
@@ -128,9 +122,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
         retention_policy_key="lingxing-data-pages-walmart-ad-item-sp-list-v1",
         default_page_size=100,
         default_max_pages=10000,
-        notes=(
-            "Request planning must use advertiser IDs captured from advertiser/list.",
-        ),
+        notes=("Request planning must use advertiser IDs captured from advertiser/list.",),
     ),
 )
 
