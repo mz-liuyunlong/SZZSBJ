@@ -3,7 +3,6 @@ from sqlalchemy import CheckConstraint, UniqueConstraint
 import app.modules.data_pages.models  # noqa: F401
 from app.db.base import Base
 
-
 EXPECTED_TABLES = {
     "dim_lingxing_stores",
     "dim_walmart_listings",
@@ -52,9 +51,7 @@ def test_data_pages_dimensions_have_stable_external_keys() -> None:
         "store_id",
         "item_id",
     ) in _unique_column_sets("dim_walmart_listings")
-    assert ("source_account_ref", "advertiser_id") in _unique_column_sets(
-        "dim_walmart_advertisers"
-    )
+    assert ("source_account_ref", "advertiser_id") in _unique_column_sets("dim_walmart_advertisers")
 
 
 def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:

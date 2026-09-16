@@ -85,7 +85,9 @@ def upgrade() -> None:
     op.create_table(
         "dim_lingxing_stores",
         _uuid("id"),
-        sa.Column("source_system", sa.String(32), server_default=sa.text("'lingxing'"), nullable=False),
+        sa.Column(
+            "source_system", sa.String(32), server_default=sa.text("'lingxing'"), nullable=False
+        ),
         sa.Column("source_account_ref", sa.String(128), nullable=False),
         sa.Column("platform_name_raw", sa.Text(), nullable=True),
         sa.Column("platform_code_raw", sa.String(64), nullable=False),
@@ -100,7 +102,9 @@ def upgrade() -> None:
         _ts("source_observed_at"),
         _ts("synced_at", nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("store_id <> ''", name=op.f("ck_dim_lingxing_stores_store_id_not_blank")),
+        sa.CheckConstraint(
+            "store_id <> ''", name=op.f("ck_dim_lingxing_stores_store_id_not_blank")
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_dim_lingxing_stores")),
         sa.UniqueConstraint(
             "source_account_ref",
@@ -118,7 +122,9 @@ def upgrade() -> None:
     op.create_table(
         "dim_walmart_listings",
         _uuid("id"),
-        sa.Column("source_system", sa.String(32), server_default=sa.text("'lingxing'"), nullable=False),
+        sa.Column(
+            "source_system", sa.String(32), server_default=sa.text("'lingxing'"), nullable=False
+        ),
         sa.Column("source_account_ref", sa.String(128), nullable=False),
         sa.Column("platform_code", sa.String(64), nullable=True),
         sa.Column("platform_code_raw", sa.String(64), nullable=True),
@@ -157,9 +163,17 @@ def upgrade() -> None:
         _ts("synced_at", nullable=False),
         *_timestamps(),
         sa.CheckConstraint("item_id <> ''", name=op.f("ck_dim_walmart_listings_item_id_not_blank")),
-        sa.CheckConstraint("store_id <> ''", name=op.f("ck_dim_walmart_listings_store_id_not_blank")),
-        sa.CheckConstraint("price_amount IS NULL OR price_amount >= 0", name=op.f("ck_dim_walmart_listings_price_nonnegative")),
-        sa.CheckConstraint("business_hash IS NULL OR char_length(business_hash) = 64", name=op.f("ck_dim_walmart_listings_business_hash_sha256")),
+        sa.CheckConstraint(
+            "store_id <> ''", name=op.f("ck_dim_walmart_listings_store_id_not_blank")
+        ),
+        sa.CheckConstraint(
+            "price_amount IS NULL OR price_amount >= 0",
+            name=op.f("ck_dim_walmart_listings_price_nonnegative"),
+        ),
+        sa.CheckConstraint(
+            "business_hash IS NULL OR char_length(business_hash) = 64",
+            name=op.f("ck_dim_walmart_listings_business_hash_sha256"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_dim_walmart_listings")),
         sa.UniqueConstraint(
             "source_account_ref",
@@ -209,7 +223,9 @@ def upgrade() -> None:
         sa.Column("source_account_ref", sa.String(128), nullable=False),
         sa.Column("platform_code", sa.String(64), nullable=False),
         sa.Column("store_id", sa.String(128), nullable=False),
-        sa.Column("commission_rate", sa.Numeric(9, 6), server_default=sa.text("0.15"), nullable=False),
+        sa.Column(
+            "commission_rate", sa.Numeric(9, 6), server_default=sa.text("0.15"), nullable=False
+        ),
         sa.Column("effective_from", sa.Date(), nullable=False),
         sa.Column("effective_to", sa.Date(), nullable=True),
         sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
@@ -219,7 +235,10 @@ def upgrade() -> None:
         sa.Column("approved_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("request_id", sa.String(128), nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("commission_rate >= 0 AND commission_rate < 1", name=op.f("ck_ref_store_commission_rule_versions_rate_range")),
+        sa.CheckConstraint(
+            "commission_rate >= 0 AND commission_rate < 1",
+            name=op.f("ck_ref_store_commission_rule_versions_rate_range"),
+        ),
         sa.CheckConstraint(
             "effective_to IS NULL OR effective_to > effective_from",
             name=op.f("ck_ref_store_commission_rule_versions_effective_period"),
@@ -260,7 +279,9 @@ def upgrade() -> None:
         sa.Column("sales_currency_code", sa.String(3), nullable=True),
         sa.Column("source_date_raw", sa.Text(), nullable=True),
         sa.Column("source_group_key", sa.String(128), nullable=True),
-        sa.Column("allocation_status", sa.String(32), server_default=sa.text("'direct'"), nullable=False),
+        sa.Column(
+            "allocation_status", sa.String(32), server_default=sa.text("'direct'"), nullable=False
+        ),
         _jsonb("date_collect_json"),
         _raw_ref(),
         _ts("source_observed_at"),
@@ -279,8 +300,16 @@ def upgrade() -> None:
             name=op.f("uq_fact_walmart_sales_item_daily_business_date_la"),
         ),
     )
-    op.create_index("ix_fact_walmart_sales_item_date", "fact_walmart_sales_item_daily", ["item_id", "business_date_la"])
-    op.create_index("ix_fact_walmart_sales_store_date", "fact_walmart_sales_item_daily", ["store_id", "business_date_la"])
+    op.create_index(
+        "ix_fact_walmart_sales_item_date",
+        "fact_walmart_sales_item_daily",
+        ["item_id", "business_date_la"],
+    )
+    op.create_index(
+        "ix_fact_walmart_sales_store_date",
+        "fact_walmart_sales_item_daily",
+        ["store_id", "business_date_la"],
+    )
 
     _create_order_fact()
     _create_refund_fact()
@@ -305,7 +334,12 @@ def _create_order_fact() -> None:
         sa.Column("local_sku", sa.Text(), nullable=True),
         _amount("quantity"),
         sa.Column("source_purchase_at_raw", sa.Text(), nullable=True),
-        sa.Column("source_purchase_timezone", sa.String(64), server_default=sa.text(f"'{CHINA_TZ}'"), nullable=False),
+        sa.Column(
+            "source_purchase_timezone",
+            sa.String(64),
+            server_default=sa.text(f"'{CHINA_TZ}'"),
+            nullable=False,
+        ),
         _ts("purchase_at_utc"),
         sa.Column("business_date_la", sa.Date(), nullable=True),
         _business_timezone(),
@@ -323,7 +357,10 @@ def _create_order_fact() -> None:
         _raw_ref(),
         _ts("synced_at", nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("char_length(source_line_hash) = 64", name=op.f("ck_fact_walmart_order_items_source_line_hash_sha256")),
+        sa.CheckConstraint(
+            "char_length(source_line_hash) = 64",
+            name=op.f("ck_fact_walmart_order_items_source_line_hash_sha256"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_fact_walmart_order_items")),
         sa.UniqueConstraint(
             "source_account_ref",
@@ -332,8 +369,16 @@ def _create_order_fact() -> None:
             name=op.f("uq_fact_walmart_order_items_source_account_ref"),
         ),
     )
-    op.create_index("ix_fact_walmart_order_items_business_date", "fact_walmart_order_items", ["business_date_la"])
-    op.create_index("ix_fact_walmart_order_items_store_item", "fact_walmart_order_items", ["store_id", "item_id"])
+    op.create_index(
+        "ix_fact_walmart_order_items_business_date",
+        "fact_walmart_order_items",
+        ["business_date_la"],
+    )
+    op.create_index(
+        "ix_fact_walmart_order_items_store_item",
+        "fact_walmart_order_items",
+        ["store_id", "item_id"],
+    )
 
 
 def _create_refund_fact() -> None:
@@ -368,8 +413,14 @@ def _create_refund_fact() -> None:
         _raw_ref(),
         _ts("synced_at", nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("char_length(source_line_hash) = 64", name=op.f("ck_fact_walmart_refund_items_source_line_hash_sha256")),
-        sa.CheckConstraint("return_type_raw = 'REFUND'", name=op.f("ck_fact_walmart_refund_items_return_type_refund")),
+        sa.CheckConstraint(
+            "char_length(source_line_hash) = 64",
+            name=op.f("ck_fact_walmart_refund_items_source_line_hash_sha256"),
+        ),
+        sa.CheckConstraint(
+            "return_type_raw = 'REFUND'",
+            name=op.f("ck_fact_walmart_refund_items_return_type_refund"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_fact_walmart_refund_items")),
         sa.UniqueConstraint(
             "source_account_ref",
@@ -378,8 +429,16 @@ def _create_refund_fact() -> None:
             name=op.f("uq_fact_walmart_refund_items_source_account_ref"),
         ),
     )
-    op.create_index("ix_fact_walmart_refund_items_business_date", "fact_walmart_refund_items", ["business_date_la"])
-    op.create_index("ix_fact_walmart_refund_items_store_item", "fact_walmart_refund_items", ["store_id", "item_id"])
+    op.create_index(
+        "ix_fact_walmart_refund_items_business_date",
+        "fact_walmart_refund_items",
+        ["business_date_la"],
+    )
+    op.create_index(
+        "ix_fact_walmart_refund_items_store_item",
+        "fact_walmart_refund_items",
+        ["store_id", "item_id"],
+    )
 
 
 def _create_ad_fact() -> None:
@@ -417,7 +476,10 @@ def _create_ad_fact() -> None:
         _raw_ref(),
         _ts("synced_at", nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("char_length(source_line_hash) = 64", name=op.f("ck_fact_walmart_ad_item_sp_daily_source_line_hash_sha256")),
+        sa.CheckConstraint(
+            "char_length(source_line_hash) = 64",
+            name=op.f("ck_fact_walmart_ad_item_sp_daily_source_line_hash_sha256"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_fact_walmart_ad_item_sp_daily")),
         sa.UniqueConstraint(
             "business_date_la",
@@ -427,8 +489,16 @@ def _create_ad_fact() -> None:
             name=op.f("uq_fact_walmart_ad_item_sp_daily_business_date_la"),
         ),
     )
-    op.create_index("ix_fact_walmart_ads_advertiser_date", "fact_walmart_ad_item_sp_daily", ["advertiser_id", "business_date_la"])
-    op.create_index("ix_fact_walmart_ads_item_date", "fact_walmart_ad_item_sp_daily", ["item_id", "business_date_la"])
+    op.create_index(
+        "ix_fact_walmart_ads_advertiser_date",
+        "fact_walmart_ad_item_sp_daily",
+        ["advertiser_id", "business_date_la"],
+    )
+    op.create_index(
+        "ix_fact_walmart_ads_item_date",
+        "fact_walmart_ad_item_sp_daily",
+        ["item_id", "business_date_la"],
+    )
 
 
 def _create_daily_sales_mart() -> None:
@@ -488,14 +558,19 @@ def _create_daily_sales_mart() -> None:
         sa.Column("gross_profit_currency_code", sa.String(3), nullable=True),
         _ratio("gross_margin"),
         _ratio("roi"),
-        sa.Column("cost_status", sa.String(32), server_default=sa.text("'missing'"), nullable=False),
+        sa.Column(
+            "cost_status", sa.String(32), server_default=sa.text("'missing'"), nullable=False
+        ),
         _jsonb("missing_cost_codes_json", nullable=False),
         _jsonb("sales_7d_trend_json", nullable=False),
         _jsonb("source_lineage_json", nullable=False),
         sa.Column("calc_version", sa.String(64), nullable=False),
         _ts("calculated_at", nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("cost_status IN ('complete', 'partial', 'missing')", name=op.f("ck_mart_daily_sales_item_day_cost_status")),
+        sa.CheckConstraint(
+            "cost_status IN ('complete', 'partial', 'missing')",
+            name=op.f("ck_mart_daily_sales_item_day_cost_status"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_mart_daily_sales_item_day")),
         sa.UniqueConstraint(
             "business_date_la",
@@ -505,8 +580,16 @@ def _create_daily_sales_mart() -> None:
             name=op.f("uq_mart_daily_sales_item_day_business_date_la"),
         ),
     )
-    op.create_index("ix_mart_daily_sales_item_date", "mart_daily_sales_item_day", ["item_id", "business_date_la"])
-    op.create_index("ix_mart_daily_sales_store_date", "mart_daily_sales_item_day", ["store_id", "business_date_la"])
+    op.create_index(
+        "ix_mart_daily_sales_item_date",
+        "mart_daily_sales_item_day",
+        ["item_id", "business_date_la"],
+    )
+    op.create_index(
+        "ix_mart_daily_sales_store_date",
+        "mart_daily_sales_item_day",
+        ["store_id", "business_date_la"],
+    )
 
 
 def _create_order_profit_mart() -> None:
@@ -536,13 +619,18 @@ def _create_order_profit_mart() -> None:
         sa.Column("gross_profit_currency_code", sa.String(3), nullable=True),
         _ratio("gross_margin"),
         _ratio("roi"),
-        sa.Column("cost_status", sa.String(32), server_default=sa.text("'missing'"), nullable=False),
+        sa.Column(
+            "cost_status", sa.String(32), server_default=sa.text("'missing'"), nullable=False
+        ),
         _jsonb("missing_cost_codes_json", nullable=False),
         _jsonb("source_lineage_json", nullable=False),
         sa.Column("calc_version", sa.String(64), nullable=False),
         _ts("calculated_at", nullable=False),
         *_timestamps(),
-        sa.CheckConstraint("cost_status IN ('complete', 'partial', 'missing')", name=op.f("ck_mart_order_profit_sku_day_cost_status")),
+        sa.CheckConstraint(
+            "cost_status IN ('complete', 'partial', 'missing')",
+            name=op.f("ck_mart_order_profit_sku_day_cost_status"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_mart_order_profit_sku_day")),
         sa.UniqueConstraint(
             "business_date_la",
@@ -551,7 +639,11 @@ def _create_order_profit_mart() -> None:
             name=op.f("uq_mart_order_profit_sku_day_business_date_la"),
         ),
     )
-    op.create_index("ix_mart_order_profit_sku_date", "mart_order_profit_sku_day", ["local_sku", "business_date_la"])
+    op.create_index(
+        "ix_mart_order_profit_sku_date",
+        "mart_order_profit_sku_day",
+        ["local_sku", "business_date_la"],
+    )
 
 
 def _create_listing_current_mart() -> None:
@@ -611,12 +703,20 @@ def _create_listing_current_mart() -> None:
             name=op.f("uq_mart_listing_management_current_source_account_ref"),
         ),
     )
-    op.create_index("ix_mart_listing_current_local_sku", "mart_listing_management_current", ["local_sku"])
-    op.create_index("ix_mart_listing_current_store_item", "mart_listing_management_current", ["store_id", "item_id"])
+    op.create_index(
+        "ix_mart_listing_current_local_sku", "mart_listing_management_current", ["local_sku"]
+    )
+    op.create_index(
+        "ix_mart_listing_current_store_item",
+        "mart_listing_management_current",
+        ["store_id", "item_id"],
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_mart_listing_current_store_item", table_name="mart_listing_management_current")
+    op.drop_index(
+        "ix_mart_listing_current_store_item", table_name="mart_listing_management_current"
+    )
     op.drop_index("ix_mart_listing_current_local_sku", table_name="mart_listing_management_current")
     op.drop_table("mart_listing_management_current")
 

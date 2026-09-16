@@ -275,7 +275,9 @@ class WalmartOrderItemFact(Base):
         CheckConstraint("char_length(source_line_hash) = 64", name="source_line_hash_sha256"),
         CheckConstraint("quantity IS NULL OR quantity >= 0", name="quantity_nonnegative"),
         CheckConstraint("sales_revenue_amount IS NULL OR sales_revenue_amount >= 0", name="sales"),
-        CheckConstraint("order_total_amount IS NULL OR order_total_amount >= 0", name="order_total"),
+        CheckConstraint(
+            "order_total_amount IS NULL OR order_total_amount >= 0", name="order_total"
+        ),
         Index("ix_fact_walmart_order_items_business_date", "business_date_la"),
         Index("ix_fact_walmart_order_items_store_item", "store_id", "item_id"),
     )
@@ -386,7 +388,9 @@ class WalmartRefundItemFact(Base):
 class WalmartAdItemSpDailyFact(Base):
     __tablename__ = "fact_walmart_ad_item_sp_daily"
     __table_args__ = (
-        UniqueConstraint("business_date_la", "source_account_ref", "advertiser_id", "source_line_hash"),
+        UniqueConstraint(
+            "business_date_la", "source_account_ref", "advertiser_id", "source_line_hash"
+        ),
         CheckConstraint("char_length(source_line_hash) = 64", name="source_line_hash_sha256"),
         CheckConstraint("ad_spend_amount IS NULL OR ad_spend_amount >= 0", name="ad_spend"),
         CheckConstraint("num_ads_clicks IS NULL OR num_ads_clicks >= 0", name="clicks"),
@@ -584,9 +588,7 @@ class ListingManagementCurrentMart(Base):
     __table_args__ = (
         UniqueConstraint("source_account_ref", "store_id", "item_id"),
         CheckConstraint("sales_7d >= 0 AND sales_14d >= 0 AND sales_30d >= 0", name="sales"),
-        CheckConstraint(
-            "ad_spend_30d_amount IS NULL OR ad_spend_30d_amount >= 0", name="ad_spend"
-        ),
+        CheckConstraint("ad_spend_30d_amount IS NULL OR ad_spend_30d_amount >= 0", name="ad_spend"),
         Index("ix_mart_listing_current_store_item", "store_id", "item_id"),
         Index("ix_mart_listing_current_local_sku", "local_sku"),
     )
