@@ -397,9 +397,7 @@ class LingxingReadonlyClient:
 
         is_data_pages = request.object_type.startswith(DATA_PAGES_OBJECT_PREFIX)
         pages = tuple(
-            page.model_copy(
-                update={"body": normalize_data_pages_body(request.api_path, page.body)}
-            )
+            page.model_copy(update={"body": normalize_data_pages_body(request.api_path, page.body)})
             if is_data_pages
             else page
             for page in request.pages
