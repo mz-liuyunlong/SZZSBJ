@@ -303,7 +303,7 @@ class LingxingPageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
 
     page_no: int = Field(ge=1)
-    page_size: int = Field(ge=1, le=20)
+    page_size: int = Field(ge=1, le=3)
     params: dict[str, QueryValue] | None = None
     body: JsonValue = None
 
