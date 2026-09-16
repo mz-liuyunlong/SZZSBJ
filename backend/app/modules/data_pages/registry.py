@@ -5,9 +5,7 @@ from typing import Final, Literal
 
 DataPageKey = Literal["daily_sales", "order_profit", "listing_management"]
 
-EMPTY_DATA_BEHAVIOR: Final = (
-    "Return a successful envelope with data.items=[] and meta.total=0."
-)
+EMPTY_DATA_BEHAVIOR: Final = "Return a successful envelope with data.items=[] and meta.total=0."
 FALLBACK_BEHAVIOR: Final = (
     "Frontend keeps local acceptance rows when the backend request fails "
     "while MART sync is not implemented."
