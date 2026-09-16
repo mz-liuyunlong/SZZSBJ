@@ -113,12 +113,8 @@ DATA_PAGES_FIXTURE_CASES: Final[tuple[DataPagesFixtureCase, ...]] = tuple(
         available_target_fields=_available_target_fields_for(parser_key),
         request_metadata=_request_metadata_for(parser_key),
         observed_record_count=1,
-        observed_return_types=(
-            ("REFUND",) if parser_key == "walmart_return_order_list" else ()
-        ),
-        boundary_notes=(
-            "Synthetic fixture only; no real Lingxing payload or production data.",
-        ),
+        observed_return_types=(("REFUND",) if parser_key == "walmart_return_order_list" else ()),
+        boundary_notes=("Synthetic fixture only; no real Lingxing payload or production data.",),
     )
     for parser_key in DATA_PAGES_PARSER_SPECS
 )
@@ -198,9 +194,7 @@ def _validate_required_fields(
     issues: list[DataPagesFixtureValidationIssue],
 ) -> int:
     parser_spec = DATA_PAGES_PARSER_SPECS[fixture.parser_key]
-    required_fields = tuple(
-        field.target_name for field in parser_spec.fields if field.required
-    )
+    required_fields = tuple(field.target_name for field in parser_spec.fields if field.required)
     missing = tuple(
         field for field in required_fields if field not in fixture.available_target_fields
     )
@@ -221,9 +215,7 @@ def _validate_unique_key_fields(
 ) -> int:
     writer_spec = DATA_PAGES_WRITER_SPECS_BY_KEY[fixture.parser_key]
     missing = tuple(
-        field
-        for field in writer_spec.unique_key
-        if field not in fixture.available_target_fields
+        field for field in writer_spec.unique_key if field not in fixture.available_target_fields
     )
     if missing:
         issues.append(
