@@ -25,6 +25,7 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
     {
         "/api/product-management/",
         "/api/sales/",
+        "/api/listings/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(

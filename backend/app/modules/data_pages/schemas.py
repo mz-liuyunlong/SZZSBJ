@@ -183,3 +183,72 @@ class OrderProfitReadMeta(StrictSchema):
     total: int
     partial: bool = False
     input_missing: bool = False
+
+
+class ListingManagementQuery(StrictSchema):
+    store_id: Nonblank128 | None = None
+    search_field: Literal["sku", "msku", "item_id", "title"] = "sku"
+    keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=100, ge=1, le=500)
+
+
+class ListingManagementItemRead(StrictSchema):
+    id: str
+    source_account_ref: str
+    platform_code: str | None
+    store_id: str
+    store_name: str | None
+    item_id: str
+    msku: str | None
+    local_sku: str | None
+    local_name: str | None
+    title: str | None
+    picture_url: str | None
+    item_url: str | None
+    owner_ref: str | None
+    product_grade: str | None
+    tags: list[str]
+    strike_price_amount: Money | None
+    strike_price_currency_code: str | None
+    sale_price_amount: Money | None
+    sale_price_currency_code: str | None
+    listing_status: str | None
+    lifecycle_status: str | None
+    listing_start_at_utc: datetime | None
+    category: str | None
+    wfs_available_quantity: Money | None
+    available_quantity: Money | None
+    inbound_quantity: Money | None
+    sales_7d: Money
+    sales_14d: Money
+    sales_30d: Money
+    ad_spend_30d_amount: Money | None
+    ad_spend_currency_code: str | None
+    buybox_status: str | None
+    walmart_seller: str | None
+    is_hijacked: bool | None
+    average_rating: Ratio | None
+    review_count: int | None
+    brand: str | None
+    disabled_reason: str | None
+    wfs_fee_amount: Money | None
+    wfs_fee_currency_code: str | None
+    gtin: str | None
+    upc: str | None
+    calculated_at: datetime
+
+
+class ListingManagementListData(StrictSchema):
+    items: list[ListingManagementItemRead]
+
+
+class ListingManagementReadMeta(StrictSchema):
+    source: Literal["new_system_postgresql"] = "new_system_postgresql"
+    source_objects: list[str]
+    latest_calculated_at: datetime | None = None
+    page: int
+    page_size: int
+    total: int
+    partial: bool = False
+    input_missing: bool = False
