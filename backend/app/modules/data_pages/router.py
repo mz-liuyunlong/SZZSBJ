@@ -8,6 +8,10 @@ from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.modules.data_pages.registry import (
+    DATA_PAGE_API_REGISTRY,
+    registry_source_objects,
+)
 from app.modules.data_pages.schemas import (
     DailySalesListData,
     DailySalesQuery,
@@ -29,17 +33,20 @@ from app.modules.integration_sync.dependencies import require_source_account_sco
 router = APIRouter(tags=["DATA-PAGES"])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
+_DAILY_SALES_REGISTRY = DATA_PAGE_API_REGISTRY["daily_sales"]
+_ORDER_PROFIT_REGISTRY = DATA_PAGE_API_REGISTRY["order_profit"]
+_LISTING_REGISTRY = DATA_PAGE_API_REGISTRY["listing_management"]
 daily_sales_principal = Annotated[
     Principal,
-    Depends(require_permission("sales:daily-sales:read")),
+    Depends(require_permission(_DAILY_SALES_REGISTRY.permission)),
 ]
 order_profit_principal = Annotated[
     Principal,
-    Depends(require_permission("sales:daily-sales:read")),
+    Depends(require_permission(_ORDER_PROFIT_REGISTRY.permission)),
 ]
 listing_principal = Annotated[
     Principal,
-    Depends(require_permission("products:read")),
+    Depends(require_permission(_LISTING_REGISTRY.permission)),
 ]
 
 ERRORS: dict[int | str, dict[str, Any]] = {
@@ -60,7 +67,7 @@ def _daily_sales_meta(
     input_missing: bool,
 ) -> DailySalesReadMeta:
     return DailySalesReadMeta(
-        source_objects=["mart_daily_sales_item_day"],
+        source_objects=registry_source_objects("daily_sales"),
         latest_calculated_at=latest_calculated_at,
         page=page,
         page_size=page_size,
@@ -80,7 +87,7 @@ def _order_profit_meta(
     input_missing: bool,
 ) -> OrderProfitReadMeta:
     return OrderProfitReadMeta(
-        source_objects=["mart_order_profit_sku_day"],
+        source_objects=registry_source_objects("order_profit"),
         latest_calculated_at=latest_calculated_at,
         page=page,
         page_size=page_size,
@@ -98,7 +105,7 @@ def _listing_meta(
     total: int,
 ) -> ListingManagementReadMeta:
     return ListingManagementReadMeta(
-        source_objects=["mart_listing_management_current"],
+        source_objects=registry_source_objects("listing_management"),
         latest_calculated_at=latest_calculated_at,
         page=page,
         page_size=page_size,
@@ -115,7 +122,7 @@ def _is_partial(items: Any) -> bool:
 
 
 @router.get(
-    "/api/sales/daily-sales",
+    _DAILY_SALES_REGISTRY.route_path,
     response_model=SuccessEnvelope[DailySalesListData, DailySalesReadMeta],
     responses=ERRORS,
 )
@@ -145,7 +152,7 @@ def list_daily_sales(
 
 
 @router.get(
-    "/api/sales/order-profit",
+    _ORDER_PROFIT_REGISTRY.route_path,
     response_model=SuccessEnvelope[OrderProfitListData, OrderProfitReadMeta],
     responses=ERRORS,
 )
@@ -175,7 +182,7 @@ def list_order_profit(
 
 
 @router.get(
-    "/api/listings/walmart",
+    _LISTING_REGISTRY.route_path,
     response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
     responses=ERRORS,
 )
