@@ -1,4 +1,4 @@
-/** Order-profit No-API page: daily-sales layout, product-ID aggregation dimension. */
+/** Order-profit page backed by DATA-PAGES MART API with temporary local fallback. */
 import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
@@ -6,7 +6,7 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import {
@@ -21,6 +21,7 @@ import OrderProfitTable from "@/pages/sales/components/OrderProfitTable";
 import OrderProfitToolbar, {
   type OrderProfitFilters,
 } from "@/pages/sales/components/OrderProfitToolbar";
+import { fetchOrderProfitSourceRecords } from "@/pages/sales/orderProfitApi";
 import { orderProfitSourceRecords } from "@/pages/sales/orderProfitMockData";
 import {
   aggregateOrderProfitRows,
@@ -60,8 +61,6 @@ const defaultColumnWidths: Record<string, number> = Object.fromEntries(orderProf
           : 112,
 ]));
 const columnGroups = [{ title: "订单利润字段", fields: orderProfitColumnFields }];
-const owners = [...new Set(orderProfitSourceRecords.map((row) => row.owner))];
-const stores = [...new Set(orderProfitSourceRecords.map((row) => row.store))];
 
 const matchesDate = (row: OrderProfitSourceRecord, filters: OrderProfitFilters) => {
   if (filters.dateRange) {
@@ -77,6 +76,7 @@ interface OrderProfitPageProps {
 function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState(createInitialFilters);
+  const [sourceRecords, setSourceRecords] = useState<OrderProfitSourceRecord[]>(orderProfitSourceRecords);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -88,6 +88,30 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<OrderProfitRow>();
 
+  const dateRangeStart = filters.dateRange?.[0];
+  const dateRangeEnd = filters.dateRange?.[1];
+
+  useEffect(() => {
+    let active = true;
+    void fetchOrderProfitSourceRecords({
+      startDate: dateRangeStart,
+      endDate: dateRangeEnd,
+      pageSize: 500,
+    })
+      .then(({ records }) => {
+        if (active) setSourceRecords(records);
+      })
+      .catch(() => {
+        // Keep the local fallback visible until the backend has synced MART data.
+      });
+    return () => {
+      active = false;
+    };
+  }, [dateRangeStart, dateRangeEnd]);
+
+  const owners = useMemo(() => [...new Set(sourceRecords.map((row) => row.owner))], [sourceRecords]);
+  const stores = useMemo(() => [...new Set(sourceRecords.map((row) => row.store))], [sourceRecords]);
+
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
@@ -95,7 +119,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
   const filteredSourceRecords = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
-    return orderProfitSourceRecords.filter((row) => {
+    return sourceRecords.filter((row) => {
       const target = String(row[filters.searchField]).toLocaleLowerCase();
       const exactTarget = String(row[filters.searchField]);
       return (filters.platforms.length === 0 || filters.platforms.includes(row.platform))
@@ -105,7 +129,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         && (!keyword || target.includes(keyword))
         && (!filters.batchValues?.length || filters.batchValues.includes(exactTarget));
     });
-  }, [filters]);
+  }, [filters, sourceRecords]);
 
   const filteredRows = useMemo(() => aggregateOrderProfitRows(filteredSourceRecords), [filteredSourceRecords]);
 

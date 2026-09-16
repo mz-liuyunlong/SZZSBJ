@@ -5,13 +5,16 @@ from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.orm import Session
 
-from app.modules.data_pages.models import DailySalesItemDayMart
-from app.modules.data_pages.repository import DailySalesRepository
+from app.modules.data_pages.models import DailySalesItemDayMart, OrderProfitSkuDayMart
+from app.modules.data_pages.repository import DailySalesRepository, OrderProfitRepository
 from app.modules.data_pages.schemas import (
     DailySalesItemRead,
     DailySalesListData,
     DailySalesQuery,
     DailySalesTrendPointRead,
+    OrderProfitItemRead,
+    OrderProfitListData,
+    OrderProfitQuery,
 )
 
 
@@ -47,6 +50,12 @@ def _trend_points(value: object) -> list[DailySalesTrendPointRead]:
             )
         )
     return result
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item is not None and str(item).strip()]
 
 
 class DailySalesService:
@@ -127,6 +136,65 @@ class DailySalesService:
             cost_status=row.cost_status,
             missing_cost_codes=list(row.missing_cost_codes_json or []),
             sales_7d_trend=_trend_points(row.sales_7d_trend_json),
+            calc_version=row.calc_version,
+            calculated_at=row.calculated_at,
+        )
+
+
+class OrderProfitService:
+    """Read and shape the order-profit MART without touching RAW or external APIs."""
+
+    def __init__(self, session: Session) -> None:
+        self.repository = OrderProfitRepository(session)
+
+    def list_order_profit(
+        self,
+        query: OrderProfitQuery,
+        account_refs: frozenset[str],
+    ) -> tuple[OrderProfitListData, int, object | None]:
+        rows, total, latest_calculated_at = self.repository.list_order_profit(
+            account_refs=account_refs,
+            start_date=query.start_date,
+            end_date=query.end_date,
+            store_id=query.store_id,
+            search_field=query.search_field,
+            keyword=query.keyword,
+            page=query.page,
+            page_size=query.page_size,
+        )
+        return (
+            OrderProfitListData(items=[self._to_read(row) for row in rows]),
+            total,
+            latest_calculated_at,
+        )
+
+    def _to_read(self, row: OrderProfitSkuDayMart) -> OrderProfitItemRead:
+        return OrderProfitItemRead(
+            id=str(row.id),
+            business_date_la=row.business_date_la,
+            business_timezone=row.business_timezone,
+            local_sku=row.local_sku,
+            item_ids=_string_list(row.item_ids_json),
+            store_ids=_string_list(row.store_ids_json),
+            store_count=row.store_count,
+            item_count=row.item_count,
+            sales_qty=_decimal(row.sales_qty),
+            order_count=_decimal(row.order_count),
+            sales_amount=_decimal(row.sales_amount),
+            sales_currency_code=row.sales_currency_code,
+            refund_amount=row.refund_amount,
+            ad_spend_amount=row.ad_spend_amount,
+            commission_fee_amount=row.commission_fee_amount,
+            wfs_fee_total_amount=row.wfs_fee_total_amount,
+            purchase_cost_total_usd=row.purchase_cost_total_usd,
+            first_leg_cost_total_usd=row.first_leg_cost_total_usd,
+            storage_fee_total_amount=row.storage_fee_total_amount,
+            gross_profit_amount=row.gross_profit_amount,
+            gross_profit_currency_code=row.gross_profit_currency_code,
+            gross_margin=row.gross_margin,
+            roi=row.roi,
+            cost_status=row.cost_status,
+            missing_cost_codes=list(row.missing_cost_codes_json or []),
             calc_version=row.calc_version,
             calculated_at=row.calculated_at,
         )
