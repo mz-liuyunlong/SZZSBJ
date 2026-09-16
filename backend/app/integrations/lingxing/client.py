@@ -121,9 +121,7 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         outbound_enabled=True,
         allow_query_parameters=False,
         require_json_body=True,
-        allowed_body_fields=frozenset(
-            {"offset", "length", "platform_code", "status", "is_sync"}
-        ),
+        allowed_body_fields=frozenset({"offset", "length", "platform_code", "status", "is_sync"}),
         required_body_fields=frozenset({"offset", "length"}),
         store_field=None,
         page_size_field="length",

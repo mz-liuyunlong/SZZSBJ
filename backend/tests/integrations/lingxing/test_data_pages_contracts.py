@@ -22,9 +22,7 @@ SELLER_ENDPOINT: LingxingEndpoint = "/pb/mp/shop/v2/getSellerList"
 WALMART_LISTING_ENDPOINT: LingxingEndpoint = "/basicOpen/multiplatform/walmart/list"
 SALE_STAT_ENDPOINT: LingxingEndpoint = "/basicOpen/platformStatisticsV2/saleStat/pageList"
 ORDER_ENDPOINT: LingxingEndpoint = "/pb/mp/order/v2/list"
-RETURN_ENDPOINT: LingxingEndpoint = (
-    "/basicOpen/openapi/multiplatform/walmart/returnOrder/list"
-)
+RETURN_ENDPOINT: LingxingEndpoint = "/basicOpen/openapi/multiplatform/walmart/returnOrder/list"
 ADVERTISER_ENDPOINT: LingxingEndpoint = "/basicOpen/adReport/advertiser/list"
 AD_ITEM_SP_ENDPOINT: LingxingEndpoint = "/basicOpen/multiplatform/ads/reportAdItemSpList"
 

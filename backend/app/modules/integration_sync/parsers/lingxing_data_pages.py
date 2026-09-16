@@ -53,7 +53,8 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         ),
         skip_rules=(
             "store_id is required for DATA-PAGES joins",
-            "platform_code values outside Walmart may be stored but are not used by DATA-PAGES-1 MARTs",
+            "platform_code values outside Walmart may be stored but are not used by "
+            "DATA-PAGES-1 MARTs",
         ),
     ),
     "walmart_listing_list": DataPagesParserSpec(
@@ -119,7 +120,8 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         skip_rules=(
             "result_type must come from request metadata, not from response inference",
             "date_collect must be expanded by date and volumeTotal must not be double counted",
-            "platform_product_id arrays with more than one value require source_group_key and allocation_status=needs_owner_decision",
+            "platform_product_id arrays with more than one value require source_group_key and "
+            "allocation_status=needs_owner_decision",
         ),
     ),
     "order_v2_list": DataPagesParserSpec(
@@ -141,7 +143,9 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             ParserFieldSpec("flow_node", "data.list[].flow_node"),
             ParserFieldSpec("store_id", "data.list[].store_id"),
             ParserFieldSpec("amount_currency_code", "data.list[].amount_currency"),
-            ParserFieldSpec("order_total_amount", "data.list[].transaction_info[].order_total_amount"),
+            ParserFieldSpec(
+                "order_total_amount", "data.list[].transaction_info[].order_total_amount"
+            ),
             ParserFieldSpec("global_item_no", "data.list[].item_info[].global_item_no"),
             ParserFieldSpec("order_item_no", "data.list[].item_info[].order_item_no"),
             ParserFieldSpec("item_info_id", "data.list[].item_info[].id"),
@@ -156,10 +160,12 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         skip_rules=(
             "global_order_no is required",
             "line identity must use the first stable candidate present in the response",
-            "global_purchase_time is interpreted as China time before converting to UTC and America/Los_Angeles business date",
+            "global_purchase_time is interpreted as China time before converting to UTC and "
+            "America/Los_Angeles business date",
         ),
         warnings=(
-            "sample order detection uses zero sales revenue, zero order total, or discount offset rules",
+            "sample order detection uses zero sales revenue, zero order total, or "
+            "discount offset rules",
         ),
     ),
     "walmart_return_order_list": DataPagesParserSpec(
@@ -205,7 +211,8 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             "return_line_id is not documented and must not be invented",
         ),
         warnings=(
-            "store returnOrderDate as refund business time and retain item statusTime for state lineage",
+            "store returnOrderDate as refund business time and retain item statusTime for "
+            "state lineage",
         ),
     ),
     "walmart_advertiser_list": DataPagesParserSpec(
