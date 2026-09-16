@@ -12,6 +12,8 @@ from typing import Literal, cast
 
 from pydantic import JsonValue
 
+from app.integrations.lingxing.official_contract_overrides import official_http_method
+
 type HttpMethod = Literal["GET", "POST", "DELETE"]
 type LingxingOpenApiExecutor = Callable[["LingxingOpenApiRequest"], JsonValue]
 
@@ -164,6 +166,7 @@ def _contract(row: Mapping[str, str]) -> LingxingOpenApiContract:
             "LINGXING_OPENAPI_REGISTRY_INVALID",
             "Lingxing registry is missing token_bucket_capacity",
         )
+    verified_method = official_http_method(row["interface_id"], cast(HttpMethod, method))
     return LingxingOpenApiContract(
         interface_id=row["interface_id"],
         verification_status="OFFICIAL_VERIFIED",
@@ -171,7 +174,7 @@ def _contract(row: Mapping[str, str]) -> LingxingOpenApiContract:
         level_2_module=row["level_2_module"],
         level_3_module=row["level_3_module"],
         interface_name=row["interface_name"],
-        method=cast(HttpMethod, method),
+        method=verified_method,
         api_path=api_path,
         purpose=row["purpose"],
         token_bucket_capacity=token_bucket_capacity,
