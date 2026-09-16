@@ -103,7 +103,7 @@ def test_get_business_request_sends_business_and_auth_params_in_query() -> None:
         }
         assert request.url.params["start_date"] == "2026-09-01"
         assert request.url.params["end_date"] == "2026-09-02"
-        assert request.url.params["sid"] == '[1,2]'
+        assert request.url.params["sid"] == "[1,2]"
         assert "Authorization" not in request.headers
         return httpx.Response(200, json={"code": 0, "data": []})
 
