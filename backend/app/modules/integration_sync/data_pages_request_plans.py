@@ -94,9 +94,7 @@ DATA_PAGES_REQUEST_PLAN_SPECS: Final[tuple[DataPagesRequestPlanSpec, ...]] = (
         end_field="end_time",
         store_scope_field="store_id",
         static_body_fields=(("date_type", "global_purchase_time"),),
-        boundary_notes=(
-            "The order window is based on global_purchase_time for profit lineage.",
-        ),
+        boundary_notes=("The order window is based on global_purchase_time for profit lineage.",),
     ),
     DataPagesRequestPlanSpec(
         parser_key="walmart_return_order_list",
