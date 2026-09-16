@@ -18,9 +18,15 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "products:pricing_rules:read",
         "products:cost:read",
         "integrations:read",
+        "sales:daily-sales:read",
     }
 )
-_PREVIEW_PATH_PREFIX: Final = "/api/product-management/"
+_PREVIEW_PATH_PREFIXES: Final = frozenset(
+    {
+        "/api/product-management/",
+        "/api/sales/",
+    }
+)
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
     {
         "/api/user-table-views/product-management",
@@ -58,7 +64,7 @@ def get_optional_principal(request: Request) -> Principal | None:
     if (
         request.method != "GET"
         or not isinstance(path, str)
-        or not (path.startswith(_PREVIEW_PATH_PREFIX) or path in _PREVIEW_READ_PATHS)
+        or not (any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES) or path in _PREVIEW_READ_PATHS)
     ):
         return None
     try:
