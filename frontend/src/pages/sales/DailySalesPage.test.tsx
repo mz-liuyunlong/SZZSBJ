@@ -448,7 +448,10 @@ describe("DailySalesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /重.*置/ }));
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
     expect(screen.getByLabelText("币种")).toHaveValue("USD");
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining("/api/sales/daily-sales?"),
+      expect.objectContaining({ credentials: "same-origin" }),
+    );
     expect(localStorageSpy).not.toHaveBeenCalled();
     expect(sessionStorageSpy).not.toHaveBeenCalled();
   });

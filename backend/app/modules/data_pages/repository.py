@@ -51,7 +51,9 @@ class DailySalesRepository:
             select(func.count()).select_from(statement.order_by(None).subquery())
         )
         latest_calculated_at = self.session.scalar(
-            statement.with_only_columns(func.max(DailySalesItemDayMart.calculated_at)).order_by(None)
+            statement.with_only_columns(func.max(DailySalesItemDayMart.calculated_at)).order_by(
+                None
+            )
         )
         rows = self.session.scalars(
             statement.order_by(

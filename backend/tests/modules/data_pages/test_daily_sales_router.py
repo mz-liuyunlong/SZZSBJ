@@ -91,9 +91,7 @@ def _daily_sales_item() -> DailySalesItemRead:
         roi=Decimal("2.590000"),
         cost_status="complete",
         missing_cost_codes=[],
-        sales_7d_trend=[
-            DailySalesTrendPointRead(date=date(2026, 9, 16), sales_qty=Decimal("3"))
-        ],
+        sales_7d_trend=[DailySalesTrendPointRead(date=date(2026, 9, 16), sales_qty=Decimal("3"))],
         calc_version="synthetic-v1",
         calculated_at=NOW,
     )
