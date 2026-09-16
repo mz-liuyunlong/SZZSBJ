@@ -12,12 +12,20 @@ export type ProductManagementIssueCode =
 export interface ProductPersonOption {
   uid: string;
   name: string;
+  count?: number;
 }
 
 export interface ProductSourceTagOption {
   value: string;
   label: string;
   color: string | null;
+  count?: number;
+}
+
+export interface ProductGradeOption {
+  value: ProductGrade;
+  label: ProductGrade;
+  count?: number;
 }
 
 export type ProductCalculationStatus =

@@ -69,6 +69,24 @@ interface WorkItemDto {
   created_at: string;
 }
 
+interface SyncRunCreatedDto {
+  run_id: string;
+  trigger_type: string;
+  status: string;
+  retry_of_run_id: string | null;
+}
+
+export interface SyncConfigUpdatePayload {
+  is_enabled?: boolean;
+  schedule_enabled?: boolean;
+  schedule_cron?: string | null;
+  page_size?: number | null;
+  batch_size?: number | null;
+  max_pages?: number | null;
+  max_attempts?: number | null;
+  retention_policy_id?: string | null;
+}
+
 interface RawRequestMetadataDto {
   id: string;
   run_id: string;
@@ -105,6 +123,97 @@ const newestRun = (runs: RunDto[], interfaceId: string, accountRef?: string | nu
     && (accountRef === undefined || accountRef === null || run.source_account_ref === accountRef))
 );
 
+
+const productListInterfaceKeys = new Set([
+  "productList",
+  "listProduct",
+  "product_list",
+]);
+
+const productDetailDependencyKeys = new Set([
+  "batchGetProductInfo",
+  "batchProductInfo",
+  "getProductInfo",
+  "productInfo",
+]);
+
+const isProductListTask = (task: SyncTaskRow) => {
+  const key = task.interfaceKey.toLowerCase();
+  const name = task.interfaceName.toLowerCase();
+  return productListInterfaceKeys.has(task.interfaceKey)
+    || key.includes("productlist")
+    || name.includes("productlist");
+};
+
+const isProductDetailDependencyTask = (task: SyncTaskRow) => {
+  const key = task.interfaceKey.toLowerCase();
+  const name = task.interfaceName.toLowerCase();
+  return productDetailDependencyKeys.has(task.interfaceKey)
+    || key.includes("batchgetproductinfo")
+    || (name.includes("batch") && name.includes("product info"));
+};
+
+const latestDate = (...values: Array<string | null | undefined>) => (
+  values
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? null
+);
+
+const statusPriority: Record<SyncTaskStatus, number> = {
+  已停用: 0,
+  成功: 1,
+  运行中: 2,
+  部分成功: 3,
+  超时: 4,
+  失败: 5,
+};
+
+const worseStatus = (left: SyncTaskStatus, right: SyncTaskStatus) => (
+  statusPriority[right] > statusPriority[left] ? right : left
+);
+
+const mergeProductDetailDependency = (
+  parent: SyncTaskRow,
+  dependency: SyncTaskRow,
+): SyncTaskRow => ({
+  ...parent,
+  todaySuccess: parent.todaySuccess + dependency.todaySuccess,
+  todayFailed: parent.todayFailed + dependency.todayFailed,
+  workItemsPlanned: parent.workItemsPlanned + dependency.workItemsPlanned,
+  workItemsSucceeded: parent.workItemsSucceeded + dependency.workItemsSucceeded,
+  workItemsFailed: parent.workItemsFailed + dependency.workItemsFailed,
+  recordsSeen: parent.recordsSeen + dependency.recordsSeen,
+  recordsWritten: parent.recordsWritten + dependency.recordsWritten,
+  lastStatus: worseStatus(parent.lastStatus, dependency.lastStatus),
+  lastRunAt: latestDate(parent.lastRunAt, dependency.lastRunAt),
+  lastRunFinishedAt: latestDate(parent.lastRunFinishedAt, dependency.lastRunFinishedAt),
+  updatedAt: latestDate(parent.updatedAt, dependency.updatedAt),
+  errorCode: parent.errorCode ?? dependency.errorCode,
+  description: "ProductList 与产品详情依赖同步合并展示；详情步骤依赖 Product ID，不单独展示为前端任务。",
+});
+
+const foldProductDetailDependencyRows = (rows: SyncTaskRow[]) => {
+  const dependencies = rows.filter(isProductDetailDependencyTask);
+  if (dependencies.length === 0) return rows;
+
+  const productList = rows.find(isProductListTask);
+  if (!productList) {
+    return rows.filter((task) => !isProductDetailDependencyTask(task));
+  }
+
+  const mergedProductList = dependencies.reduce(
+    mergeProductDetailDependency,
+    productList,
+  );
+
+  return rows.flatMap((task) => {
+    if (isProductDetailDependencyTask(task)) return [];
+    if (task === productList) return [mergedProductList];
+    return [task];
+  });
+};
+
+
 function row(
   item: InterfaceDto,
   config: ConfigDto | undefined,
@@ -115,7 +224,11 @@ function row(
     : "已停用";
   return {
     id: config?.id ?? run?.id ?? item.id,
+    configId: config?.id ?? run?.config_id ?? null,
+    latestRunId: run?.id ?? null,
+    scheduleCron: config?.schedule_cron ?? null,
     interfaceId: item.id,
+    interfaceKey: item.interface_key,
     interfaceName: item.display_name,
     provider: item.provider,
     source: config?.source_account_ref ?? run?.source_account_ref ?? null,
@@ -171,6 +284,7 @@ export async function listIntegrationSyncTasks() {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
     rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
   }
+  const visibleRows = foldProductDetailDependencyRows(rows);
   const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
     id: run.id,
     taskId: run.config_id ?? run.id,
@@ -186,7 +300,7 @@ export async function listIntegrationSyncTasks() {
     requestId: run.request_id,
     errorSummary: run.error_code,
   }));
-  const schedules: SyncScheduleItem[] = rows.flatMap((task) => task.nextRunAt ? [{
+  const schedules: SyncScheduleItem[] = visibleRows.flatMap((task) => task.nextRunAt ? [{
     id: task.id,
     time: task.nextRunAt,
     taskName: task.taskName,
@@ -194,7 +308,7 @@ export async function listIntegrationSyncTasks() {
     frequency: task.frequency,
     status: task.lastStatus,
   }] : []);
-  return { rows, logs, schedules };
+  return { rows: visibleRows, logs, schedules };
 }
 
 
@@ -250,4 +364,50 @@ export async function listIntegrationSyncRunRawRequestRefs(runId: string) {
     `/api/integrations/sync-runs/${runId}/raw-request-refs?page_size=100`,
   );
   return response.data.items.map(rawRequestRef);
+}
+
+const idempotencyKey = (operation: string, id: string) => (
+  `frontend:${operation}:${id}:${Date.now()}`
+);
+
+export async function createIntegrationSyncManualRun(configId: string, reason: string) {
+  const response = await backendRequest<SyncRunCreatedDto>(
+    `/api/integrations/sync-configs/${configId}/run`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        reason,
+        idempotency_key: idempotencyKey("manual-run", configId),
+      }),
+    },
+  );
+  return response.data;
+}
+
+export async function retryIntegrationSyncRun(runId: string, reason: string) {
+  const response = await backendRequest<SyncRunCreatedDto>(
+    `/api/integrations/sync-runs/${runId}/retry`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        reason,
+        idempotency_key: idempotencyKey("retry-run", runId),
+      }),
+    },
+  );
+  return response.data;
+}
+
+export async function updateIntegrationSyncConfig(
+  configId: string,
+  payload: SyncConfigUpdatePayload,
+) {
+  const response = await backendRequest<ConfigDto>(
+    `/api/integrations/sync-configs/${configId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+  return response.data;
 }

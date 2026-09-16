@@ -49,7 +49,7 @@ function retryDisabledReason(row: SyncTaskRow) {
 }
 
 function autoSyncDisabledReason(row: SyncTaskRow) {
-  return getAutoSyncGuard(row).reason;
+  return getAutoSyncGuard(row, !row.autoSync).reason;
 }
 
 function SyncTaskTable({

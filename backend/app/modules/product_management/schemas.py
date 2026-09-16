@@ -461,16 +461,25 @@ class ProductManagementDetailData(StrictSchema):
 class ProductPersonOptionRead(StrictSchema):
     uid: str
     name: str
+    count: int = 0
 
 
 class ProductSourceTagOptionRead(StrictSchema):
     value: str
     label: str
     color: str | None
+    count: int = 0
+
+
+class ProductGradeOptionRead(StrictSchema):
+    value: str
+    label: str
+    count: int = 0
 
 
 class ProductManagementOptionsData(StrictSchema):
     product_grades: list[str]
+    product_grade_options: list[ProductGradeOptionRead] = Field(default_factory=list)
     calculation_statuses: list[str]
     internal_tags: list[InternalTagRead]
     owners: list[ProductPersonOptionRead] = Field(default_factory=list)

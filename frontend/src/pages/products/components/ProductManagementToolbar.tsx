@@ -72,6 +72,33 @@ function ProductManagementToolbar({
     setBatchOpen(false);
   };
 
+
+  const optionLabel = (label: string, count?: number) => (
+    <span className="product-management__facet-option">
+      <span>{label}</span>
+      {count !== undefined && <Typography.Text type="secondary">（{count}）</Typography.Text>}
+    </span>
+  );
+
+  const personOptions = (
+    options: ProductPersonOption[],
+    selectedValue?: string,
+  ) => {
+    const mapped = options.map((option) => ({
+      value: option.uid,
+      label: optionLabel(option.name, option.count),
+      searchLabel: option.name,
+    }));
+    if (selectedValue && !mapped.some((option) => option.value === selectedValue)) {
+      mapped.push({
+        value: selectedValue,
+        label: optionLabel(`${selectedValue}（已选）`, 0),
+        searchLabel: selectedValue,
+      });
+    }
+    return mapped;
+  };
+
   const batchControl = (
     <Popover
       trigger="click"
@@ -103,8 +130,10 @@ function ProductManagementToolbar({
     </Popover>
   );
 
+
   const sourceTagOptions = tags.map((tag) => ({
     value: tag.value,
+    searchLabel: tag.label,
     label: (
       <span className="product-management__source-tag-option">
         <span
@@ -113,9 +142,18 @@ function ProductManagementToolbar({
           style={{ backgroundColor: tag.color ?? "#D0D5DD" }}
         />
         <span>{tag.label}</span>
+        {tag.count !== undefined && <Typography.Text type="secondary">（{tag.count}）</Typography.Text>}
       </span>
     ),
   }));
+
+  if (filters.tag && !sourceTagOptions.some((option) => option.value === filters.tag)) {
+    sourceTagOptions.push({
+      value: filters.tag,
+      searchLabel: filters.tag,
+      label: optionLabel(`${filters.tag}（已选）`, 0),
+    });
+  }
 
   return (
     <div className="product-management__toolbar" role="search" aria-label="产品管理筛选">
@@ -124,11 +162,11 @@ function ProductManagementToolbar({
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
         showSearch
-        optionFilterProp="label"
+        optionFilterProp="searchLabel"
         placeholder="负责人"
         aria-label="负责人"
         value={filters.ownerUid}
-        options={owners.map((option) => ({ value: option.uid, label: option.name }))}
+        options={personOptions(owners, filters.ownerUid)}
         onChange={(ownerUid) => onChange({ ...filters, ownerUid })}
       />
       <Select
@@ -136,11 +174,11 @@ function ProductManagementToolbar({
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
         showSearch
-        optionFilterProp="label"
+        optionFilterProp="searchLabel"
         placeholder="开发人"
         aria-label="开发人"
         value={filters.developerUid}
-        options={developers.map((option) => ({ value: option.uid, label: option.name }))}
+        options={personOptions(developers, filters.developerUid)}
         onChange={(developerUid) => onChange({ ...filters, developerUid })}
       />
       <Select
@@ -148,7 +186,7 @@ function ProductManagementToolbar({
         classNames={{ popup: { root: "report-filter-select-dropdown" } }}
         allowClear
         showSearch
-        optionFilterProp="label"
+        optionFilterProp="searchLabel"
         placeholder="标签"
         aria-label="标签"
         value={filters.tag}

@@ -171,7 +171,7 @@ function ProductManagementPage({
   const listQuery = useProductManagementListQuery(filters, currentPage, pageSize);
   const prefetchProductList = usePrefetchProductManagementList();
   const summaryQuery = useProductManagementSummaryQuery(filters, statisticsVisible);
-  const optionsQuery = useProductManagementOptionsQuery();
+  const optionsQuery = useProductManagementOptionsQuery(filters);
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, productPageRootRef, ".ant-table-body");
   const tableViewQuery = useProductManagementTableViewQuery();
   const saveTableView = useSaveProductManagementTableViewMutation();
@@ -352,7 +352,10 @@ function ProductManagementPage({
 
           <div className="product-management__table-wrap">
             {listQuery.isPending && (
-              <Spin className="product-management__table-loading" tip="正在加载产品数据" />
+              <span className="product-management__table-loading" role="status">
+                <Spin size="small" />
+                <span>正在加载产品数据</span>
+              </span>
             )}
             <ProductManagementTable
               rows={rows}

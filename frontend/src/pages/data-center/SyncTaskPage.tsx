@@ -1,21 +1,27 @@
 import { CalendarOutlined } from "@ant-design/icons";
-import { Button, Spin, Typography, message } from "antd";
+import { Button, Input, Modal, Spin, Typography, message } from "antd";
 import { useEffect, useMemo, useRef, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
-import SyncTaskConfigDrawer from "@/pages/data-center/components/SyncTaskConfigDrawer";
+import SyncTaskConfigDrawer, { type SyncTaskConfigFormValues } from "@/pages/data-center/components/SyncTaskConfigDrawer";
 import SyncTaskLogDrawer from "@/pages/data-center/components/SyncTaskLogDrawer";
 import SyncTaskScheduleDrawer from "@/pages/data-center/components/SyncTaskScheduleDrawer";
 import SyncTaskSummaryCards from "@/pages/data-center/components/SyncTaskSummaryCards";
 import SyncTaskTable from "@/pages/data-center/components/SyncTaskTable";
 import SyncTaskToolbar from "@/pages/data-center/components/SyncTaskToolbar";
-import { useIntegrationSyncTasksQuery } from "@/pages/data-center/integrationSyncTaskQueries";
+import {
+  useCreateIntegrationSyncManualRunMutation,
+  useIntegrationSyncTasksQuery,
+  useRetryIntegrationSyncRunMutation,
+  useUpdateIntegrationSyncConfigMutation,
+} from "@/pages/data-center/integrationSyncTaskQueries";
 import {
   getAutoSyncGuard,
   getManualSyncGuard,
   getRetryGuard,
   getSaveConfigGuard,
 } from "@/pages/data-center/syncTaskOperationGuards";
+import { formatSyncTaskOperationError } from "@/pages/data-center/syncTaskOperationMessages";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import type {
@@ -58,12 +64,54 @@ const emptySyncTaskOverview: SyncTaskOverview = {
   schedules: [],
 };
 
+
+const weekDayMap: Record<string, number> = {
+  周一: 1,
+  周二: 2,
+  周三: 3,
+  周四: 4,
+  周五: 5,
+  周六: 6,
+  周日: 0,
+};
+
+const parseTime = (value?: string) => {
+  const match = value?.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+};
+
+const buildScheduleCron = (values: SyncTaskConfigFormValues) => {
+  if (!values.autoSync || values.cycle === "手动任务") return null;
+  const firstTime = parseTime(values.runTimes?.[0]);
+  if (!firstTime) return null;
+  if (values.cycle === "周任务") {
+    const days = values.weekDays?.map((day) => weekDayMap[day]).filter((day) => day !== undefined);
+    if (!days || days.length === 0) return null;
+    return `${firstTime.minute} ${firstTime.hour} * * ${days.join(",")}`;
+  }
+  return `${firstTime.minute} ${firstTime.hour} * * *`;
+};
+
+const buildConfigPayload = (values: SyncTaskConfigFormValues) => {
+  const scheduleCron = buildScheduleCron(values);
+  return {
+    schedule_enabled: Boolean(values.autoSync && scheduleCron),
+    schedule_cron: scheduleCron,
+    max_attempts: values.retryEnabled ? Math.max((values.retryTimes ?? 0) + 1, 1) : 1,
+  };
+};
+
 interface SyncTaskPageProps {
   page: NavigationPage;
 }
 
 function SyncTaskPage({ page }: SyncTaskPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
+  const [modalApi, modalContextHolder] = Modal.useModal();
   const messageApiRef = useRef(messageApi);
   const pageStateKey = `sync-task:${page.key}`;
   const syncTaskPageRootRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +129,9 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
 
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, syncTaskPageRootRef, ".ant-table-body");
   const tasksQuery = useIntegrationSyncTasksQuery();
+  const manualRunMutation = useCreateIntegrationSyncManualRunMutation();
+  const retryRunMutation = useRetryIntegrationSyncRunMutation();
+  const updateConfigMutation = useUpdateIntegrationSyncConfigMutation();
   const syncTaskOverview = tasksQuery.data ?? emptySyncTaskOverview;
   const rows = syncTaskOverview.rows;
   const logs = syncTaskOverview.logs;
@@ -145,24 +196,158 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
 
   const requestManualSync = (task: SyncTaskRow) => {
     const operationGuard = getManualSyncGuard(task);
-    void messageApi.warning(operationGuard.reason);
+    if (!operationGuard.allowed || !task.configId) {
+      void messageApi.warning(operationGuard.reason);
+      return;
+    }
+
+    let reason = `手动触发同步：${task.taskName}`;
+    modalApi.confirm({
+      title: operationGuard.confirmTitle,
+      content: (
+        <div>
+          <Typography.Paragraph>{operationGuard.confirmDescription}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            任务：{task.taskName}；接口：{task.interfaceName}
+          </Typography.Paragraph>
+          <Input.TextArea
+            defaultValue={reason}
+            rows={3}
+            maxLength={1000}
+            showCount
+            onChange={(event) => { reason = event.target.value; }}
+          />
+        </div>
+      ),
+      okText: "确认执行",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await manualRunMutation.mutateAsync({ configId: task.configId!, reason });
+          void messageApi.success("已创建同步任务");
+        } catch (reason_) {
+          void messageApi.error(formatSyncTaskOperationError(reason_));
+        }
+      },
+    });
   };
 
   const requestRetry = (task: SyncTaskRow) => {
     const operationGuard = getRetryGuard(task);
-    void messageApi.warning(operationGuard.reason);
+    if (!operationGuard.allowed || !task.latestRunId) {
+      void messageApi.warning(operationGuard.reason);
+      return;
+    }
+
+    let reason = `重试同步任务：${task.taskName}`;
+    modalApi.confirm({
+      title: operationGuard.confirmTitle,
+      content: (
+        <div>
+          <Typography.Paragraph>{operationGuard.confirmDescription}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            最近状态：{task.lastStatus}；最近错误：{task.errorCode ?? "-"}
+          </Typography.Paragraph>
+          <Input.TextArea
+            defaultValue={reason}
+            rows={3}
+            maxLength={1000}
+            showCount
+            onChange={(event) => { reason = event.target.value; }}
+          />
+        </div>
+      ),
+      okText: "确认重试",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await retryRunMutation.mutateAsync({ runId: task.latestRunId!, reason });
+          void messageApi.success("已创建重试任务");
+        } catch (reason_) {
+          void messageApi.error(formatSyncTaskOperationError(reason_));
+        }
+      },
+    });
   };
 
   const toggleAutoSync = (task: SyncTaskRow, checked: boolean) => {
-    void checked;
-    const operationGuard = getAutoSyncGuard(task);
-    void messageApi.warning(operationGuard.reason);
+    const operationGuard = getAutoSyncGuard(task, checked);
+    if (!operationGuard.allowed || !task.configId) {
+      if (checked && task.configId && !task.scheduleCron) {
+        setConfigTask(task);
+      }
+      void messageApi.warning(operationGuard.reason);
+      return;
+    }
+
+    modalApi.confirm({
+      title: operationGuard.confirmTitle,
+      content: (
+        <div>
+          <Typography.Paragraph>{operationGuard.confirmDescription}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            任务：{task.taskName}；当前计划：{task.frequency}
+          </Typography.Paragraph>
+        </div>
+      ),
+      okText: "确认修改",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await updateConfigMutation.mutateAsync({
+            configId: task.configId!,
+            payload: checked
+              ? {
+                  schedule_enabled: true,
+                  schedule_cron: task.scheduleCron,
+                }
+              : {
+                  schedule_enabled: false,
+                },
+          });
+          void messageApi.success(checked ? "已开启自动同步" : "已关闭自动同步");
+        } catch (reason_) {
+          void messageApi.error(formatSyncTaskOperationError(reason_));
+        }
+      },
+    });
   };
 
-  const saveConfig = (task: SyncTaskRow) => {
+  const saveConfig = (task: SyncTaskRow, values: SyncTaskConfigFormValues) => {
     const operationGuard = getSaveConfigGuard(task);
-    setConfigTask(undefined);
-    void messageApi.warning(operationGuard.reason);
+    if (!operationGuard.allowed || !task.configId) {
+      void messageApi.warning(operationGuard.reason);
+      return;
+    }
+
+    const payload = buildConfigPayload(values);
+    if (values.autoSync && !payload.schedule_cron) {
+      void messageApi.warning("开启自动同步需要至少一个有效执行时间，例如 08:00");
+      return;
+    }
+
+    modalApi.confirm({
+      title: operationGuard.confirmTitle,
+      content: (
+        <div>
+          <Typography.Paragraph>{operationGuard.confirmDescription}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            任务：{task.taskName}；自动同步：{payload.schedule_enabled ? "开启" : "关闭"}；cron：{payload.schedule_cron ?? "-"}
+          </Typography.Paragraph>
+        </div>
+      ),
+      okText: "确认保存",
+      cancelText: "取消",
+      onOk: async () => {
+        try {
+          await updateConfigMutation.mutateAsync({ configId: task.configId!, payload });
+          setConfigTask(undefined);
+          void messageApi.success("同步配置已保存");
+        } catch (reason_) {
+          void messageApi.error(formatSyncTaskOperationError(reason_));
+        }
+      },
+    });
   };
 
   const refreshTasks = () => {
@@ -176,6 +361,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   return (
     <PageShell page={page}>
       {messageContextHolder}
+      {modalContextHolder}
       <div ref={syncTaskPageRootRef} className="sync-task">
         <section className="sync-task__hero">
           <div className="sync-task__hero-main">
@@ -208,7 +394,12 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
             onReset={resetFilters}
             onRefresh={refreshTasks}
           />
-          {tasksQuery.isPending && <Spin tip="正在加载同步任务" />}
+          {tasksQuery.isPending && (
+        <span className="sync-task__loading" role="status">
+          <Spin size="small" />
+          <span>正在加载同步任务</span>
+        </span>
+      )}
           <SyncTaskSummaryCards rows={filteredRows} />
           <SyncTaskTable
             rows={filteredRows}

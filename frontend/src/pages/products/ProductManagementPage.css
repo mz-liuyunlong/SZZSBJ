@@ -997,12 +997,6 @@
 /* End summary card height normalization */
 
 
-.product-management__source-tag-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
 
 .product-management__source-tag-dot {
   width: 8px;
@@ -1790,3 +1784,16 @@
     box-shadow 0.16s ease;
 }
 /* Product summary interactive state:end */
+
+
+
+.product-management__facet-dropdown .ant-select-item-option-content {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.product-management__table-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

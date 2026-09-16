@@ -91,3 +91,98 @@ select {
 .ant-popover .ant-popover-inner {
   padding: 12px;
 }
+
+/* Global report filter dropdown sizing: start */
+.report-filter-select-dropdown.ant-select-dropdown,
+.report-filter-select-dropdown {
+  width: max-content !important;
+  min-width: 120px !important;
+  max-width: min(340px, calc(100vw - 32px)) !important;
+}
+
+.report-filter-select-dropdown .ant-select-item {
+  width: max-content;
+  min-width: 100%;
+  max-width: min(340px, calc(100vw - 32px));
+}
+
+.report-filter-select-dropdown .ant-select-item-option-content {
+  display: inline-flex;
+  width: auto;
+  max-width: min(320px, calc(100vw - 56px));
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.report-filter-select-dropdown .product-management__facet-option,
+.report-filter-select-dropdown .product-management__source-tag-option {
+  display: inline-flex;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 56px));
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.report-filter-select-dropdown .product-management__facet-option .ant-typography,
+.report-filter-select-dropdown .product-management__source-tag-option .ant-typography {
+  flex: 0 0 auto;
+  margin-inline-start: 2px;
+}
+/* Global report filter dropdown sizing: end */
+
+/* Global compact report filter dropdown: start */
+.report-filter-select-dropdown.ant-select-dropdown,
+.report-filter-select-dropdown {
+  width: fit-content !important;
+  min-width: 128px !important;
+  max-width: min(300px, calc(100vw - 32px)) !important;
+}
+
+.report-filter-select-dropdown .rc-virtual-list,
+.report-filter-select-dropdown .rc-virtual-list-holder,
+.report-filter-select-dropdown .rc-virtual-list-holder-inner {
+  width: fit-content !important;
+  min-width: 100% !important;
+  max-width: min(300px, calc(100vw - 32px)) !important;
+}
+
+.report-filter-select-dropdown .ant-select-item {
+  width: fit-content !important;
+  min-width: 100% !important;
+  max-width: min(300px, calc(100vw - 32px)) !important;
+  padding-inline: 12px !important;
+}
+
+.report-filter-select-dropdown .ant-select-item-option-content {
+  display: inline-flex !important;
+  width: fit-content !important;
+  max-width: min(280px, calc(100vw - 56px)) !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.report-filter-select-dropdown .product-management__facet-option,
+.report-filter-select-dropdown .product-management__source-tag-option {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: min(280px, calc(100vw - 56px)) !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 4px !important;
+  white-space: nowrap !important;
+}
+
+.report-filter-select-dropdown .product-management__source-tag-option > span,
+.report-filter-select-dropdown .product-management__facet-option > span {
+  flex: 0 0 auto !important;
+}
+
+.report-filter-select-dropdown .product-management__source-tag-option .ant-typography,
+.report-filter-select-dropdown .product-management__facet-option .ant-typography {
+  flex: 0 0 auto !important;
+  margin-inline-start: 2px !important;
+}
+/* Global compact report filter dropdown: end */

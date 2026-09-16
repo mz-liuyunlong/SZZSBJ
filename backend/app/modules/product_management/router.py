@@ -150,13 +150,14 @@ def summarize_product_management_skus(
 )
 def get_product_management_options(
     request: Request,
+    query: Annotated[ProductManagementSummaryQuery, Query()],
     session: db_session,
     _: read_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[ProductManagementOptionsData, ProductManagementReadMeta]:
     return success_response(
         request,
-        data=ProductManagementService(session).options(account_refs),
+        data=ProductManagementService(session).options(account_refs, query),
         meta=_meta(
             "manual_product_tags",
             "dwd_lingxing_sku_identity_index",

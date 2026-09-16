@@ -33,7 +33,7 @@ export const productManagementKeys = {
   summary: (filters: ProductManagementFilters) => (
     ["product-management", "summary", baseFilterKey(filters)] as const
   ),
-  options: ["product-management", "options"] as const,
+  options: (filters: ProductManagementFilters) => (["product-management", "options", baseFilterKey(filters)] as const),
   detail: (skuId: string) => ["product-management", "detail", skuId] as const,
   tableView: ["product-management", "table-view", "default"] as const,
 };
@@ -76,11 +76,12 @@ export function useProductManagementSummaryQuery(
   });
 }
 
-export function useProductManagementOptionsQuery() {
+export function useProductManagementOptionsQuery(filters: ProductManagementFilters) {
   return useQuery({
-    queryKey: productManagementKeys.options,
-    queryFn: getProductManagementOptions,
+    queryKey: productManagementKeys.options(filters),
+    queryFn: () => getProductManagementOptions(filters),
     staleTime: SERVER_STATE_STALE_TIME.options,
+    placeholderData: keepPreviousData,
   });
 }
 

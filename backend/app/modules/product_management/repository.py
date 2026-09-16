@@ -445,6 +445,130 @@ class ProductManagementRepository:
         ).all()
         return [(str(value), str(label), color) for value, label, color in rows if value and label]
 
+    def option_counts(
+        self,
+        *,
+        account_refs: frozenset[str],
+        sku: str | None,
+        sku_batch: Sequence[str],
+        product_name: str | None,
+        category: str | None,
+        internal_tag: str | None,
+        product_grade: str | None,
+        calculation_status: str | None,
+        owner_uid: str | None = None,
+        developer_uid: str | None = None,
+        source_tag: str | None = None,
+        pricing_ready_account_refs: frozenset[str] = frozenset(),
+        invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
+    ) -> dict[str, list[tuple]]:
+        effective_grade = case(
+            (Product.grade.in_(("A", "B", "C", "exception")), Product.grade),
+            (Product.grade.is_not(None), "exception"),
+            else_=ProductManagementPricingCurrent.product_grade,
+        )
+        filtered = self._filtered_projection(
+            account_refs=account_refs,
+            sku=sku,
+            sku_batch=sku_batch,
+            product_name=product_name,
+            category=category,
+            internal_tag=internal_tag,
+            product_grade=product_grade,
+            calculation_status=calculation_status,
+            owner_uid=owner_uid,
+            developer_uid=developer_uid,
+            source_tag=source_tag,
+            issue_code=None,
+            pricing_ready_account_refs=pricing_ready_account_refs,
+            invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
+        )
+        base = (
+            filtered.with_only_columns(
+                LingxingSkuIdentity.id.label("identity_id"),
+                LingxingSkuProductInfoCurrent.owner_uid.label("owner_uid"),
+                LingxingSkuProductInfoCurrent.owner_name.label("owner_name"),
+                LingxingSkuProductInfoCurrent.product_developer_uid.label("developer_uid"),
+                LingxingSkuProductInfoCurrent.product_developer_name.label("developer_name"),
+                LingxingSkuProductInfoCurrent.source_snapshot_id.label("source_snapshot_id"),
+                effective_grade.label("product_grade"),
+            )
+            .order_by(None)
+            .distinct()
+            .subquery()
+        )
+
+        owner_rows = self.session.execute(
+            select(
+                base.c.owner_uid,
+                func.max(base.c.owner_name),
+                func.count(func.distinct(base.c.identity_id)),
+            )
+            .where(base.c.owner_uid.is_not(None), base.c.owner_name.is_not(None))
+            .group_by(base.c.owner_uid)
+            .order_by(func.max(base.c.owner_name), base.c.owner_uid)
+        ).all()
+
+        developer_rows = self.session.execute(
+            select(
+                base.c.developer_uid,
+                func.max(base.c.developer_name),
+                func.count(func.distinct(base.c.identity_id)),
+            )
+            .where(base.c.developer_uid.is_not(None), base.c.developer_name.is_not(None))
+            .group_by(base.c.developer_uid)
+            .order_by(func.max(base.c.developer_name), base.c.developer_uid)
+        ).all()
+
+        tag_value = func.coalesce(
+            LingxingSkuGlobalTag.global_tag_id,
+            LingxingSkuGlobalTag.tag_name,
+        )
+        source_tag_rows = self.session.execute(
+            select(
+                tag_value.label("tag_value"),
+                LingxingSkuGlobalTag.tag_name,
+                func.max(LingxingSkuGlobalTag.color),
+                func.count(func.distinct(base.c.identity_id)),
+            )
+            .join(
+                LingxingSkuGlobalTag,
+                LingxingSkuGlobalTag.source_snapshot_id == base.c.source_snapshot_id,
+            )
+            .where(LingxingSkuGlobalTag.tag_name.is_not(None))
+            .group_by(tag_value, LingxingSkuGlobalTag.tag_name)
+            .order_by(LingxingSkuGlobalTag.tag_name, tag_value)
+            .limit(1000)
+        ).all()
+
+        grade_rows = self.session.execute(
+            select(base.c.product_grade, func.count(func.distinct(base.c.identity_id)))
+            .where(base.c.product_grade.in_(("A", "B", "C", "exception")))
+            .group_by(base.c.product_grade)
+            .order_by(base.c.product_grade)
+        ).all()
+
+        return {
+            "owners": [
+                (str(uid), str(name), int(count or 0))
+                for uid, name, count in owner_rows
+                if uid and name
+            ],
+            "developers": [
+                (str(uid), str(name), int(count or 0))
+                for uid, name, count in developer_rows
+                if uid and name
+            ],
+            "source_tags": [
+                (str(value), str(label), color, int(count or 0))
+                for value, label, color, count in source_tag_rows
+                if value and label
+            ],
+            "product_grades": [
+                (str(value), int(count or 0)) for value, count in grade_rows if value
+            ],
+        }
+
     def list_rule_versions(self, source_account_ref: str) -> list[ProductPricingRuleVersion]:
         return list(
             self.session.scalars(

@@ -24,7 +24,11 @@ export interface SyncTaskFilters {
 
 export interface SyncTaskRow {
   id: string;
+  configId: string | null;
+  latestRunId: string | null;
+  scheduleCron: string | null;
   interfaceId: string;
+  interfaceKey: string;
   taskName: string;
   interfaceName: string;
   provider: string;

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const modalApi = vi.hoisted(() => ({ confirm: vi.fn() }));
 import type { NavigationPage } from "@/config/navigation";
 import type { SyncTaskRow } from "@/pages/data-center/syncTaskTypes";
 
@@ -11,6 +12,9 @@ const messageError = vi.hoisted(() => vi.fn());
 
 vi.mock("@ant-design/icons", () => ({ CalendarOutlined: () => null }));
 vi.mock("antd", () => ({
+  Modal: {
+    useModal: () => [modalApi, null],
+  },
   Button: ({ children, onClick }: { children?: ReactNode; onClick?: () => void }) => (
     <button type="button" onClick={onClick}>{children}</button>
   ),
@@ -83,7 +87,11 @@ function renderSyncTaskPage() {
 
 const task = {
   id: "synthetic-task",
+  configId: "config-1",
+  latestRunId: "run-1",
+  scheduleCron: "0 8 * * *",
   interfaceId: "synthetic-interface",
+  interfaceKey: "productList",
   taskName: "ProductInfo controlled sync",
   interfaceName: "batchGetProductInfo",
   provider: "synthetic-provider",
@@ -123,6 +131,7 @@ const task = {
 } satisfies SyncTaskRow;
 
 beforeEach(() => {
+  modalApi.confirm.mockReset();
   vi.mocked(listIntegrationSyncTasks).mockResolvedValue({ rows: [task], logs: [], schedules: [] });
 });
 

@@ -413,11 +413,23 @@ function MainLayout({
           </section>
           <Layout.Content className="main-layout__content" aria-label="内容区">
             {renderPage ? (
-              <div
-                key={activePage.path}
-                className="main-layout__page-panel main-layout__page-panel--active"
-              >
-                {renderPage(activePage)}
+              <div className="main-layout__page-panels">
+                {openRoutes.map(({ path, page }) => {
+                  const isActive = path === activePage.path;
+
+                  return (
+                    <div
+                      key={path}
+                      className={`main-layout__page-panel${
+                        isActive ? " main-layout__page-panel--active" : ""
+                      }`}
+                      hidden={!isActive}
+                      aria-hidden={!isActive}
+                    >
+                      {renderPage(page)}
+                    </div>
+                  );
+                })}
               </div>
             ) : children ? (
               children
