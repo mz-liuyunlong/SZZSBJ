@@ -35,13 +35,12 @@ DATA_PAGES_ENDPOINTS = frozenset(
 
 
 def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
-    """Normalize the approved DATA-PAGES request body to the official Lingxing contract.
+    """Normalize DATA-PAGES bodies against the owner's complete Lingxing docs snapshot.
 
-    The REAL-DATA-1 runner was originally built from the derived repository index. The
-    owner's complete Lingxing documentation snapshot confirms several value types and
-    enum values that differ from that derived index. Keep the compatibility correction
-    at the integration boundary so the actual signed body is also the body preserved in
-    the safe request envelope.
+    REAL-DATA-1 was initially generated from a derived interface index. The complete
+    documentation confirms several enum/value types that differ from that index. This
+    integration-boundary normalization keeps the signed values and the transmitted JSON
+    body consistent without leaking authentication material into business payloads.
     """
 
     if api_path not in DATA_PAGES_ENDPOINTS or not isinstance(body, dict):
@@ -53,10 +52,12 @@ def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
         normalized["platform_code"] = _platform_codes(normalized.get("platform_code"))
 
     elif api_path == SALE_STAT_ENDPOINT:
-        # DATA-PAGES is SKU/item-grained. Official values are string enums:
-        # data_type=4 (SKU) and date_unit=4 (day).
+        # Official enums: data_type=4 -> SKU, date_unit=4 -> day.
         normalized["data_type"] = "4"
         normalized["date_unit"] = "4"
+        result_type = normalized.get("result_type")
+        if isinstance(result_type, int) and not isinstance(result_type, bool):
+            normalized["result_type"] = str(result_type)
 
     elif api_path == ORDER_ENDPOINT:
         normalized["platform_code"] = _platform_codes(normalized.get("platform_code"))
@@ -73,24 +74,28 @@ def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
         if isinstance(date_type, str) and date_type.isdecimal():
             normalized["dateType"] = int(date_type)
 
-    elif api_path == ADVERTISER_ENDPOINT:
-        paging = normalized.get("paging")
-        if isinstance(paging, bool):
-            normalized["paging"] = "true" if paging else "false"
-
     elif api_path == AD_ITEM_SP_ENDPOINT:
         campaign_type = normalized.get("campaignType")
         if campaign_type == "SP":
             normalized["campaignType"] = list(SP_CAMPAIGN_TYPES)
         elif isinstance(campaign_type, str):
             normalized["campaignType"] = [campaign_type]
+        advertiser_ids = normalized.get("advertiserIds")
+        if isinstance(advertiser_ids, list):
+            normalized["advertiserIds"] = [
+                _decimal_id(value) for value in advertiser_ids
+            ]
 
     return cast(JsonValue, normalized)
 
 
 def _platform_codes(value: object) -> list[int | str]:
     if isinstance(value, list):
-        return [item for item in value if isinstance(item, (int, str)) and not isinstance(item, bool)]
+        return [
+            item
+            for item in value
+            if isinstance(item, (int, str)) and not isinstance(item, bool)
+        ]
     if isinstance(value, bool) or value is None:
         return [WALMART_PLATFORM_CODE]
     if isinstance(value, int):
@@ -104,9 +109,17 @@ def _platform_codes(value: object) -> list[int | str]:
     return [WALMART_PLATFORM_CODE]
 
 
+def _decimal_id(value: object) -> object:
+    if isinstance(value, str) and value.strip().isdecimal():
+        return int(value.strip())
+    return value
+
+
 def _china_datetime_to_epoch_seconds(value: str) -> int | str:
     try:
-        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CHINA_TIMEZONE)
+        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(
+            tzinfo=CHINA_TIMEZONE
+        )
     except ValueError:
         return value
     return int(parsed.timestamp())
