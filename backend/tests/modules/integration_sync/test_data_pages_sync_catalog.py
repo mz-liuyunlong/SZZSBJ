@@ -5,7 +5,6 @@ from app.modules.integration_sync.data_pages_catalog import (
 )
 from app.modules.integration_sync.parsers.lingxing_data_pages import DATA_PAGES_PARSER_SPECS
 
-
 EXPECTED_PARSER_KEYS = {
     "seller_list_multi_platform",
     "walmart_listing_list",
