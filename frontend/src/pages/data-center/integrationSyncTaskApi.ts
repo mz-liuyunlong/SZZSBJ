@@ -2,6 +2,8 @@ import { backendRequest } from "@/api/backendApi";
 import type {
   SyncScheduleItem,
   SyncTaskLog,
+  SyncTaskRawRequestRef,
+  SyncTaskWorkItem,
   SyncTaskRow,
   SyncTaskStatus,
 } from "@/pages/data-center/syncTaskTypes";
@@ -48,6 +50,43 @@ interface RunDto {
   records_written: number;
   error_code: string | null;
   created_at: string;
+}
+
+
+interface WorkItemDto {
+  id: string;
+  run_id: string;
+  ordinal: number;
+  request_kind: string;
+  status: string;
+  attempt_count: number;
+  request_safe_params: Record<string, unknown>;
+  response_count: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+interface RawRequestMetadataDto {
+  id: string;
+  run_id: string;
+  work_item_id: string;
+  raw_blob_id: string;
+  request_kind: string;
+  attempt_no: number;
+  request_safe_params: Record<string, unknown>;
+  http_status: number | null;
+  provider_code: string | null;
+  is_success: boolean;
+  response_count: number | null;
+  response_hash: string;
+  payload_bytes: number;
+  storage_mode: "database" | "archive";
+  archive_present: boolean;
+  requested_at: string;
+  received_at: string;
 }
 
 const status: Record<string, SyncTaskStatus> = {
@@ -156,4 +195,59 @@ export async function listIntegrationSyncTasks() {
     status: task.lastStatus,
   }] : []);
   return { rows, logs, schedules };
+}
+
+
+function workItem(item: WorkItemDto): SyncTaskWorkItem {
+  return {
+    id: item.id,
+    runId: item.run_id,
+    ordinal: item.ordinal,
+    requestKind: item.request_kind,
+    status: item.status,
+    attemptCount: item.attempt_count,
+    requestSafeParams: item.request_safe_params,
+    responseCount: item.response_count,
+    errorCode: item.error_code,
+    errorMessage: item.error_message,
+    startedAt: item.started_at,
+    finishedAt: item.finished_at,
+    createdAt: item.created_at,
+  };
+}
+
+function rawRequestRef(item: RawRequestMetadataDto): SyncTaskRawRequestRef {
+  return {
+    id: item.id,
+    runId: item.run_id,
+    workItemId: item.work_item_id,
+    rawBlobId: item.raw_blob_id,
+    requestKind: item.request_kind,
+    attemptNo: item.attempt_no,
+    requestSafeParams: item.request_safe_params,
+    httpStatus: item.http_status,
+    providerCode: item.provider_code,
+    isSuccess: item.is_success,
+    responseCount: item.response_count,
+    responseHash: item.response_hash,
+    payloadBytes: item.payload_bytes,
+    storageMode: item.storage_mode,
+    archivePresent: item.archive_present,
+    requestedAt: item.requested_at,
+    receivedAt: item.received_at,
+  };
+}
+
+export async function listIntegrationSyncRunWorkItems(runId: string) {
+  const response = await backendRequest<{ items: WorkItemDto[] }>(
+    `/api/integrations/sync-runs/${runId}/work-items?page_size=100`,
+  );
+  return response.data.items.map(workItem);
+}
+
+export async function listIntegrationSyncRunRawRequestRefs(runId: string) {
+  const response = await backendRequest<{ items: RawRequestMetadataDto[] }>(
+    `/api/integrations/sync-runs/${runId}/raw-request-refs?page_size=100`,
+  );
+  return response.data.items.map(rawRequestRef);
 }

@@ -39,6 +39,23 @@ const anomalyStatuses = new Set<SyncTaskStatus>(["失败", "超时", "部分成�
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 const compareDate = (left?: string | null, right?: string | null) => Date.parse(left ?? "") - Date.parse(right ?? "");
 
+function manualSyncDisabledReason(row: SyncTaskRow) {
+  if (row.lastStatus === "运行中") return "任务运行中，不可重复触发";
+  if (row.status === "disabled") return "接口或同步配置未启用";
+  return "本阶段只开放只读详情，真实执行将在二次确认能力接入后开放";
+}
+
+function retryDisabledReason(row: SyncTaskRow) {
+  if (!anomalyStatuses.has(row.lastStatus)) return "只有失败、超时或部分成功任务才允许重试";
+  if (!row.retryEnabled) return "当前配置未开启重试";
+  return "本阶段只开放失败详情，真实重试将在二次确认能力接入后开放";
+}
+
+function autoSyncDisabledReason(row: SyncTaskRow) {
+  if (row.status === "disabled") return "接口或同步配置未启用";
+  return "自动同步配置写入尚未开放，避免误触发生产调度";
+}
+
 function SyncTaskTable({
   rows,
   columnWidths,
@@ -85,13 +102,15 @@ function SyncTaskTable({
       key: "autoSync",
       width: 94,
       render: (_, row) => (
-        <Switch
-          size="small"
-          checked={row.autoSync}
-          disabled
-          aria-label={`${row.taskName}自动同步开关`}
-          onChange={(checked) => onToggleAutoSync(row, checked)}
-        />
+        <Tooltip title={autoSyncDisabledReason(row)}>
+          <Switch
+            size="small"
+            checked={row.autoSync}
+            disabled
+            aria-label={`${row.taskName}自动同步开关`}
+            onChange={(checked) => onToggleAutoSync(row, checked)}
+          />
+        </Tooltip>
       ),
     },
     {
@@ -137,13 +156,13 @@ function SyncTaskTable({
       fixed: "right",
       render: (_, row) => {
         const primaryAction = anomalyStatuses.has(row.lastStatus) ? (
-          <Button type="link" danger disabled onClick={() => onRequestRetry(row)}>重试</Button>
-        ) : row.lastStatus === "运行中" ? (
-          <Tooltip title="任务运行中，不可重复触发">
-            <Button type="link" disabled>立即同步</Button>
+          <Tooltip title={retryDisabledReason(row)}>
+            <Button type="link" danger disabled onClick={() => onRequestRetry(row)}>重试</Button>
           </Tooltip>
         ) : (
-          <Button type="link" disabled onClick={() => onRequestSync(row)}>立即同步</Button>
+          <Tooltip title={manualSyncDisabledReason(row)}>
+            <Button type="link" disabled onClick={() => onRequestSync(row)}>立即同步</Button>
+          </Tooltip>
         );
 
         return (
