@@ -9,10 +9,12 @@ import SyncTaskScheduleDrawer from "@/pages/data-center/components/SyncTaskSched
 import SyncTaskSummaryCards from "@/pages/data-center/components/SyncTaskSummaryCards";
 import SyncTaskTable from "@/pages/data-center/components/SyncTaskTable";
 import SyncTaskToolbar from "@/pages/data-center/components/SyncTaskToolbar";
-import { listIntegrationSyncTasks } from "@/pages/data-center/integrationSyncTaskApi";
+import { useIntegrationSyncTasksQuery } from "@/pages/data-center/integrationSyncTaskQueries";
 import type {
+  SyncScheduleItem,
   SyncScheduleTab,
   SyncTaskFilters,
+  SyncTaskLog,
   SyncTaskRow,
   SyncTaskStatus,
 } from "@/pages/data-center/syncTaskTypes";
@@ -36,6 +38,18 @@ const defaultColumnWidths: Record<string, number> = {
   actions: 178,
 };
 
+interface SyncTaskOverview {
+  rows: SyncTaskRow[];
+  logs: SyncTaskLog[];
+  schedules: SyncScheduleItem[];
+}
+
+const emptySyncTaskOverview: SyncTaskOverview = {
+  rows: [],
+  logs: [],
+  schedules: [],
+};
+
 interface SyncTaskPageProps {
   page: NavigationPage;
 }
@@ -43,11 +57,7 @@ interface SyncTaskPageProps {
 function SyncTaskPage({ page }: SyncTaskPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const messageApiRef = useRef(messageApi);
-  const [rows, setRows] = useState<SyncTaskRow[]>([]);
-  const [logs, setLogs] = useState<import("@/pages/data-center/syncTaskTypes").SyncTaskLog[]>([]);
-  const [scheduleItems, setScheduleItems] = useState<import("@/pages/data-center/syncTaskTypes").SyncScheduleItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const shownErrorsRef = useRef(new Set<string>());
   const [filters, setFilters] = useState(createInitialFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -59,39 +69,25 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleInitialTab, setScheduleInitialTab] = useState<SyncScheduleTab>("day");
 
+  const tasksQuery = useIntegrationSyncTasksQuery();
+  const syncTaskOverview = tasksQuery.data ?? emptySyncTaskOverview;
+  const rows = syncTaskOverview.rows;
+  const logs = syncTaskOverview.logs;
+  const scheduleItems = syncTaskOverview.schedules;
+
   useEffect(() => {
     messageApiRef.current = messageApi;
   }, [messageApi]);
 
   useEffect(() => {
-    let active = true;
-    void Promise.resolve()
-      .then(() => {
-        if (active) {
-          setLoading(true);
-        }
-        return listIntegrationSyncTasks();
-      })
-      .then((result) => {
-        if (!active) return;
-        setRows(result.rows);
-        setLogs(result.logs);
-        setScheduleItems(result.schedules);
-      })
-      .catch((reason: unknown) => {
-        if (!active) return;
-        setRows([]);
-        setLogs([]);
-        setScheduleItems([]);
-        void messageApiRef.current.error(
-          reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-        );
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
-  }, [refreshKey]);
+    if (!tasksQuery.error) return;
+    const text = tasksQuery.error instanceof Error
+      ? tasksQuery.error.message
+      : "BACKEND_REQUEST_FAILED";
+    if (shownErrorsRef.current.has(text)) return;
+    shownErrorsRef.current.add(text);
+    void messageApiRef.current.error(text);
+  }, [tasksQuery.error]);
 
   const syncTaskModules = useMemo(() => Array.from(new Set(rows.map((row) => row.module))), [rows]);
   const syncTaskStatuses: SyncTaskStatus[] = ["成功", "失败", "运行中", "部分成功", "超时", "已停用"];
@@ -159,7 +155,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   };
 
   const refreshTasks = () => {
-    setRefreshKey((current) => current + 1);
+    void tasksQuery.refetch();
   };
 
   const bulkAction = () => {
@@ -201,7 +197,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
             onReset={resetFilters}
             onRefresh={refreshTasks}
           />
-          {loading && <Spin tip="正在加载同步任务" />}
+          {tasksQuery.isPending && <Spin tip="正在加载同步任务" />}
           <SyncTaskSummaryCards rows={filteredRows} />
           <SyncTaskTable
             rows={filteredRows}

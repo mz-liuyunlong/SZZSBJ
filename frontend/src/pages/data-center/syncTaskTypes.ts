@@ -78,6 +78,42 @@ export interface SyncTaskLog {
   errorSummary?: string | null;
 }
 
+export interface SyncTaskWorkItem {
+  id: string;
+  runId: string;
+  ordinal: number;
+  requestKind: string;
+  status: string;
+  attemptCount: number;
+  requestSafeParams: Record<string, unknown>;
+  responseCount: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface SyncTaskRawRequestRef {
+  id: string;
+  runId: string;
+  workItemId: string;
+  rawBlobId: string;
+  requestKind: string;
+  attemptNo: number;
+  requestSafeParams: Record<string, unknown>;
+  httpStatus: number | null;
+  providerCode: string | null;
+  isSuccess: boolean;
+  responseCount: number | null;
+  responseHash: string;
+  payloadBytes: number;
+  storageMode: "database" | "archive";
+  archivePresent: boolean;
+  requestedAt: string;
+  receivedAt: string;
+}
+
 export interface SyncScheduleItem {
   id: string;
   time: string;

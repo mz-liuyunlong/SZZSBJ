@@ -1,4 +1,4 @@
-import { Button, Drawer, Form, Input, InputNumber, Radio, Select, Switch, Typography } from "antd";
+import { Alert, Button, Drawer, Form, Input, InputNumber, Radio, Select, Switch, Tooltip, Typography } from "antd";
 import { useEffect } from "react";
 import type { SyncTaskCycle, SyncTaskModule, SyncTaskRow } from "@/pages/data-center/syncTaskTypes";
 
@@ -82,6 +82,13 @@ function SyncTaskConfigDrawer({
         </Typography.Text>
       )}
     >
+      <Alert
+        showIcon
+        type="info"
+        message="当前为配置只读预览"
+        description="本阶段只读取同步配置并展示禁用原因，不写入调度配置、不启动 Worker、不触发真实同步。"
+        style={{ marginBottom: 16 }}
+      />
       <Form
         form={form}
         layout="vertical"
@@ -196,7 +203,11 @@ function SyncTaskConfigDrawer({
 
         <div className="sync-task__drawer-actions">
           <Button onClick={onClose}>取消</Button>
-          <Button type="primary" disabled>保存配置（未授权）</Button>
+          <Tooltip title="配置写入尚未开放，避免误触发生产调度">
+            <span>
+              <Button type="primary" disabled>保存配置（只读预览）</Button>
+            </span>
+          </Tooltip>
         </div>
       </Form>
     </Drawer>

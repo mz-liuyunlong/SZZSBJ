@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NavigationPage } from "@/config/navigation";
@@ -60,6 +61,26 @@ const page = {
   help: { enabled: true, title: "help", helpUrl: "/help", openInNewTab: true },
 } as NavigationPage;
 
+function renderSyncTaskPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: 0,
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SyncTaskPage page={page} />
+    </QueryClientProvider>,
+  );
+}
+
 const task = {
   id: "synthetic-task",
   interfaceId: "synthetic-interface",
@@ -112,7 +133,7 @@ afterEach(() => {
 
 describe("SyncTaskPage", () => {
   it("loads governance state from the backend and refreshes it", async () => {
-    render(<SyncTaskPage page={page} />);
+    renderSyncTaskPage();
 
     expect(await screen.findByText(task.taskName)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "刷新任务" }));
@@ -121,7 +142,7 @@ describe("SyncTaskPage", () => {
 
   it("renders a safe backend failure without fallback rows", async () => {
     vi.mocked(listIntegrationSyncTasks).mockRejectedValueOnce(new Error("SAFE_BACKEND_ERROR"));
-    render(<SyncTaskPage page={page} />);
+    renderSyncTaskPage();
 
     await waitFor(() => expect(messageError).toHaveBeenCalledWith("SAFE_BACKEND_ERROR"));
     expect(screen.queryByText(task.taskName)).not.toBeInTheDocument();
