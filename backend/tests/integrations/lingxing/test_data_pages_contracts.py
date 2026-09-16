@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -12,12 +14,13 @@ from app.integrations.lingxing.client import (
     LingxingPageRequest,
     LingxingReadonlyClient,
 )
+from app.integrations.lingxing.data_pages_contracts import SP_CAMPAIGN_TYPES
 from app.modules.integration_sync.parsers.lingxing_data_pages import (
     DATA_PAGES_PARSER_SPECS,
 )
 
 SYNTHETIC_DATABASE_URL = "postgresql+psycopg://synthetic@db.invalid/synthetic"
-
+SYNTHETIC_APP_ID = "0123456789ABCDEF"
 SELLER_ENDPOINT: LingxingEndpoint = "/pb/mp/shop/v2/getSellerList"
 WALMART_LISTING_ENDPOINT: LingxingEndpoint = "/basicOpen/multiplatform/walmart/list"
 SALE_STAT_ENDPOINT: LingxingEndpoint = "/basicOpen/platformStatisticsV2/saleStat/pageList"
@@ -42,6 +45,7 @@ def _settings() -> Settings:
             "APP_ENV": "test",
             "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
             "LINGXING_BASE_URL": "https://provider.invalid",
+            "LINGXING_APP_ID": SYNTHETIC_APP_ID,
             "LINGXING_ENABLE_REAL_CALLS": True,
         }
     )
@@ -79,35 +83,79 @@ def _is_success(
     return isinstance(payload, dict) and payload.get("code") == 0
 
 
+def _china_epoch(value: str) -> int:
+    return int(
+        datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        .replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        .timestamp()
+    )
+
+
 @pytest.mark.parametrize(
-    ("endpoint", "body"),
+    ("endpoint", "body", "expected_body"),
     [
         (
             SELLER_ENDPOINT,
+            {"offset": 0, "length": 3, "platform_code": "10008"},
             {"offset": 0, "length": 3, "platform_code": [10008]},
         ),
         (
             WALMART_LISTING_ENDPOINT,
             {"offset": 0, "length": 3},
+            {"offset": 0, "length": 3},
         ),
         (
             SALE_STAT_ENDPOINT,
-            {"page": 1, "length": 3, "data_type": 1, "result_type": 1},
+            {
+                "page": 1,
+                "length": 3,
+                "data_type": 1,
+                "date_unit": "day",
+                "result_type": 1,
+            },
+            {
+                "page": 1,
+                "length": 3,
+                "data_type": "4",
+                "date_unit": "4",
+                "result_type": "1",
+            },
         ),
         (
             ORDER_ENDPOINT,
             {
                 "date_type": "global_purchase_time",
+                "start_time": "2026-09-01 00:00:00",
+                "end_time": "2026-09-01 23:59:59",
+                "offset": 0,
+                "length": 3,
+                "platform_code": "10008",
+                "store_id": "scope-fixture",
+            },
+            {
+                "date_type": "global_purchase_time",
+                "start_time": _china_epoch("2026-09-01 00:00:00"),
+                "end_time": _china_epoch("2026-09-01 23:59:59"),
                 "offset": 0,
                 "length": 3,
                 "platform_code": [10008],
-                "store_id": "scope-fixture",
+                "store_id": ["scope-fixture"],
             },
         ),
         (
             RETURN_ENDPOINT,
             {
                 "dateType": "1",
+                "startDate": "2026-09-01",
+                "endDate": "2026-09-01",
+                "pageNum": 1,
+                "pageSize": 3,
+                "returnTypeList": ["REFUND"],
+            },
+            {
+                "dateType": 1,
+                "startDate": "2026-09-01",
+                "endDate": "2026-09-01",
                 "pageNum": 1,
                 "pageSize": 3,
                 "returnTypeList": ["REFUND"],
@@ -116,23 +164,35 @@ def _is_success(
         (
             ADVERTISER_ENDPOINT,
             {"paging": True, "page": 1, "limit": 3},
+            {"paging": True, "page": 1, "limit": 3},
         ),
         (
             AD_ITEM_SP_ENDPOINT,
             {
-                "advertiserIds": ["advertiser-fixture"],
-                "campaignType": ["sponsoredProducts-manual", "sponsoredProducts-auto"],
+                "advertiserIds": ["123456789012345"],
+                "campaignType": "SP",
                 "startDate": "2026-09-01",
-                "endDate": "2026-09-02",
+                "endDate": "2026-09-01",
                 "pageNum": 1,
                 "pageSize": 3,
+                "paging": True,
+            },
+            {
+                "advertiserIds": [123456789012345],
+                "campaignType": list(SP_CAMPAIGN_TYPES),
+                "startDate": "2026-09-01",
+                "endDate": "2026-09-01",
+                "pageNum": 1,
+                "pageSize": 3,
+                "paging": True,
             },
         ),
     ],
 )
-def test_data_pages_contracts_bind_safe_outbound_requests(
+def test_data_pages_contracts_use_query_sign_and_official_value_types(
     endpoint: LingxingEndpoint,
     body: JsonValue,
+    expected_body: JsonValue,
 ) -> None:
     calls = 0
 
@@ -141,9 +201,14 @@ def test_data_pages_contracts_bind_safe_outbound_requests(
         calls += 1
         assert request.method == "POST"
         assert request.url.path == endpoint
-        assert not request.url.query
-        assert request.headers["Authorization"] == "credential-fixture"
-        assert json.loads(request.content) == body
+        assert set(request.url.params) == {
+            "access_token",
+            "app_key",
+            "timestamp",
+            "sign",
+        }
+        assert "Authorization" not in request.headers
+        assert json.loads(request.content) == expected_body
         assert b"credential-fixture" not in request.content
         return httpx.Response(200, json={"code": 0, "data": []})
 
@@ -159,8 +224,12 @@ def test_data_pages_contracts_bind_safe_outbound_requests(
         client.close()
 
     assert envelope.is_success is True
+    assert envelope.request_params_json is None
+    assert envelope.request_body_json == expected_body
     assert calls == 1
-    assert "credential-fixture" not in envelope.model_dump_json()
+    serialized = envelope.model_dump_json()
+    assert "credential-fixture" not in serialized
+    assert SYNTHETIC_APP_ID not in serialized
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,13 @@ from app.integrations.lingxing.openapi import (
 
 BATCH_PRODUCT_INFO_ID = "LX-BB8D0DF598AF"
 SIDE_EFFECT_INTERFACE_ID = "LX-633648A48963"
+METHOD_CORRECTION_IDS = {
+    "LX-ECC5B6E072BC",
+    "LX-50E3A9271BE9",
+    "LX-9AE1466FB085",
+    "LX-1E89A7A2DA3C",
+    "LX-2AD144D844C7",
+}
 
 
 def test_registry_contains_all_official_non_page_interfaces() -> None:
@@ -21,6 +28,12 @@ def test_registry_contains_all_official_non_page_interfaces() -> None:
     assert len({(item.method, item.api_path) for item in registry.values()}) == 329
     assert {item.verification_status for item in registry.values()} == {"OFFICIAL_VERIFIED"}
     assert sum(item.requires_owner_authorization for item in registry.values()) == 133
+
+
+def test_registry_applies_owner_verified_http_method_corrections() -> None:
+    registry = lingxing_openapi_registry()
+
+    assert {registry[interface_id].method for interface_id in METHOD_CORRECTION_IDS} == {"POST"}
 
 
 def test_product_info_contract_builds_only_verified_request_fields() -> None:

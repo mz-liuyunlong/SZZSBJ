@@ -8,6 +8,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, field_validator
 
 from app.core.config import Settings
+from app.integrations.lingxing.data_pages_contracts import normalize_data_pages_body
 from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_query_auth_params
 from app.integrations.lingxing.security import redact_json
 
@@ -29,6 +30,7 @@ type AuthStrategy = Literal["authorization_header", "query_sign"]
 
 MAX_ATTEMPTS = 2
 RETRY_BACKOFF_SECONDS = 0.05
+DATA_PAGES_OBJECT_PREFIX = "data_pages_"
 
 
 class LingxingClientError(RuntimeError):
@@ -174,6 +176,9 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
                 "searchMultiValue",
                 "sortField",
                 "sortType",
+                "fulfilmentTypeList",
+                "returnReasonList",
+                "siteCodeList",
             }
         ),
         required_body_fields=frozenset({"dateType", "pageNum", "pageSize"}),
@@ -389,8 +394,15 @@ class LingxingReadonlyClient:
             raise LingxingClientError("Lingxing page limit exceeded")
         if any(page.page_size > self._settings.lingxing_sample_page_size for page in request.pages):
             raise LingxingClientError("Lingxing page size limit exceeded")
-        # DRY_RUN controls RAW persistence only; outbound HTTP remains gated here.
-        for page in request.pages:
+
+        is_data_pages = request.object_type.startswith(DATA_PAGES_OBJECT_PREFIX)
+        pages = tuple(
+            page.model_copy(update={"body": normalize_data_pages_body(request.api_path, page.body)})
+            if is_data_pages
+            else page
+            for page in request.pages
+        )
+        for page in pages:
             self._validate_outbound_contract(
                 request,
                 page,
@@ -398,7 +410,15 @@ class LingxingReadonlyClient:
                 page_size_limit=self._settings.lingxing_sample_page_size,
                 first_page_only=True,
             )
-        return [self._fetch_page(request, page, contract) for page in request.pages]
+        return [
+            self._fetch_page(
+                request,
+                page,
+                contract,
+                force_query_sign=is_data_pages,
+            )
+            for page in pages
+        ]
 
     def fetch_product_list_page(
         self,
@@ -540,6 +560,7 @@ class LingxingReadonlyClient:
         contract: LingxingEndpointContract,
         *,
         max_attempts: int = MAX_ATTEMPTS,
+        force_query_sign: bool = False,
     ) -> LingxingRawEnvelope:
         last_status: int | None = None
         response_json: JsonValue = None
@@ -562,7 +583,7 @@ class LingxingReadonlyClient:
             try:
                 headers: dict[str, str]
                 query_params: dict[str, str] | None = None
-                if contract.auth_strategy == "query_sign":
+                if force_query_sign or contract.auth_strategy == "query_sign":
                     if not self._settings.lingxing_app_id:
                         raise LingxingClientError(
                             "Lingxing query-sign configuration is unavailable"
