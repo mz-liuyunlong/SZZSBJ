@@ -3,8 +3,8 @@
 ## Status
 
 - Task: `SYNC-1`
-- Current slice: `SYNC-1E` + `SYNC-1F` writer and MART refresh foundations
-- Status: implementation foundation only
+- Current slice: `SYNC-1G` non-production fixture validation and production runbook handoff
+- Status: foundation complete after fixture validation and runbook handoff
 - Production calls: not authorized
 - Production database writes: not authorized
 
@@ -82,14 +82,30 @@ This slice still does not execute real writes. It defines the safe writer contra
 The refresh contracts define delete-insert refresh mode, source table dependencies, grain, and business-date window requirements.
 Business-date MARTs require explicit `business_date_from` and `business_date_to` windows. The current listing MART can be planned as a current snapshot refresh.
 
+## Fixture validation and runbook handoff
+
+`SYNC-1G` adds non-production fixture validation and production runbook handoff.
+The fixture validation contract verifies:
+
+- All seven approved source interfaces have synthetic fixture coverage.
+- Required parser fields and writer unique-key fields are represented.
+- Request metadata rejects token, secret, authorization, sign, payload, and raw-looking keys.
+- `sale_stat_page_list` keeps explicit `result_type` fan-out.
+- `walmart_return_order_list` remains refund-only.
+- `walmart_ad_item_sp_list` keeps the advertiser-list dependency.
+- MART refresh plans can be built safely without executing SQL.
+- The validation report keeps `production_calls=false` and `production_writes=false`.
+
+The production handoff runbook is recorded in `docs/data-sources/data-pages-production-runbook.md`.
+
 ## Boundary
 
-These foundation slices add stable catalog, request-planning, governance, RAW-capture, writer, and MART-refresh metadata.
+These foundation slices add stable catalog, request-planning, governance, RAW-capture, writer, MART-refresh, fixture-validation, and runbook metadata.
 They do not call Lingxing APIs, do not create real production sync runs, do not write production data, and do not run migrations.
 
 ## Next implementation slices
 
-1. `SYNC-1G`: add non-production fixture validation and production runbook handoff. Production execution remains a separate authorized operation.
+`SYNC-1` foundation is complete after `SYNC-1G`. Production execution remains a separate authorized operation and should be handled by a future production-enablement task.
 
 ## Notes
 
