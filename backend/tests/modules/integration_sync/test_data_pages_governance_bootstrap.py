@@ -86,8 +86,6 @@ def test_data_pages_governance_bootstrap_rejects_unsafe_account_ref(
     governance_session: Session,
 ) -> None:
     with pytest.raises(DataPagesGovernanceBootstrapError) as exc_info:
-        IntegrationCatalogService(governance_session).bootstrap_data_pages_governance(
-            " default"
-        )
+        IntegrationCatalogService(governance_session).bootstrap_data_pages_governance(" default")
 
     assert str(exc_info.value) == "DATA_PAGES_GOVERNANCE_BOOTSTRAP_SOURCE_ACCOUNT_REF_INVALID"
