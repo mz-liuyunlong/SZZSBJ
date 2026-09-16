@@ -22,6 +22,7 @@
 - `legacy-lingxing-lineage-review.md`：旧系统领星 lineage matrix 的仓库静态证据复核。
 - `legacy-lingxing-migration-priority.md`：P0/P1/P2/P3 调查与迁移候选顺序；不授权实现。
 - `data-pages-validation-registry.md`：DATA-PAGES 三个只读页面的 API / MART / source_objects / 验收检查点注册；不授权真实同步、生产迁移或回填。
+- `data-pages-sync-ingestion-plan.md`：SYNC-1 DATA-PAGES 真实同步接入的接口目录、阶段边界和后续实施顺序；当前不授权生产调用。
 
 ## 数据架构标准
 
