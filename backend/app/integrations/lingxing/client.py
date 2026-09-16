@@ -8,7 +8,11 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, field_validator
 
 from app.core.config import Settings
-from app.integrations.lingxing.data_pages_contracts import normalize_data_pages_body
+from app.integrations.lingxing.data_pages_contracts import (
+    data_pages_probe_page_size,
+    data_pages_probe_page_size_limit,
+    normalize_data_pages_body,
+)
 from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_query_auth_params
 from app.integrations.lingxing.security import redact_json
 
@@ -392,12 +396,32 @@ class LingxingReadonlyClient:
             raise LingxingClientError("Lingxing store allowlist is required")
         if len(request.pages) != 1 or len(request.pages) > self._settings.lingxing_max_sample_pages:
             raise LingxingClientError("Lingxing page limit exceeded")
-        if any(page.page_size > self._settings.lingxing_sample_page_size for page in request.pages):
-            raise LingxingClientError("Lingxing page size limit exceeded")
 
         is_data_pages = request.object_type.startswith(DATA_PAGES_OBJECT_PREFIX)
+        if not is_data_pages and any(
+            page.page_size > self._settings.lingxing_sample_page_size for page in request.pages
+        ):
+            raise LingxingClientError("Lingxing page size limit exceeded")
+
+        page_size_limit = (
+            data_pages_probe_page_size_limit(
+                request.api_path,
+                self._settings.lingxing_sample_page_size,
+            )
+            if is_data_pages
+            else self._settings.lingxing_sample_page_size
+        )
         pages = tuple(
-            page.model_copy(update={"body": normalize_data_pages_body(request.api_path, page.body)})
+            page.model_copy(
+                update={
+                    "page_size": data_pages_probe_page_size(request.api_path, page.page_size),
+                    "body": normalize_data_pages_body(
+                        request.api_path,
+                        page.body,
+                        page_size=page.page_size,
+                    ),
+                }
+            )
             if is_data_pages
             else page
             for page in request.pages
@@ -407,7 +431,7 @@ class LingxingReadonlyClient:
                 request,
                 page,
                 contract,
-                page_size_limit=self._settings.lingxing_sample_page_size,
+                page_size_limit=page_size_limit,
                 first_page_only=True,
             )
         return [
