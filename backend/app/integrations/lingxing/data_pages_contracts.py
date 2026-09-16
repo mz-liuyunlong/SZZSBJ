@@ -82,9 +82,7 @@ def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
             normalized["campaignType"] = [campaign_type]
         advertiser_ids = normalized.get("advertiserIds")
         if isinstance(advertiser_ids, list):
-            normalized["advertiserIds"] = [
-                _decimal_id(value) for value in advertiser_ids
-            ]
+            normalized["advertiserIds"] = [_decimal_id(value) for value in advertiser_ids]
 
     return cast(JsonValue, normalized)
 
@@ -92,9 +90,7 @@ def normalize_data_pages_body(api_path: str, body: JsonValue) -> JsonValue:
 def _platform_codes(value: object) -> list[int | str]:
     if isinstance(value, list):
         return [
-            item
-            for item in value
-            if isinstance(item, (int, str)) and not isinstance(item, bool)
+            item for item in value if isinstance(item, (int, str)) and not isinstance(item, bool)
         ]
     if isinstance(value, bool) or value is None:
         return [WALMART_PLATFORM_CODE]
@@ -117,9 +113,7 @@ def _decimal_id(value: object) -> object:
 
 def _china_datetime_to_epoch_seconds(value: str) -> int | str:
     try:
-        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=CHINA_TIMEZONE
-        )
+        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=CHINA_TIMEZONE)
     except ValueError:
         return value
     return int(parsed.timestamp())
