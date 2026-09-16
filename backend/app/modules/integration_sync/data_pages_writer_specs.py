@@ -109,7 +109,8 @@ def _writer_spec(parser_key: DataPagesParserKey) -> DataPagesWriterSpec:
         boundary_notes=(
             "Use the first approved unique-key candidate for idempotent upsert identity.",
             f"Source interface remains disabled by default: {sync_spec.interface_key}.",
-            "Writers must attach RAW request lineage and never persist credentials or payload dumps.",
+            "Writers must attach RAW request lineage and never persist credentials or "
+            "payload dumps.",
         ),
     )
 
