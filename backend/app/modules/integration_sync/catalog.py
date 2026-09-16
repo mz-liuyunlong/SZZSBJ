@@ -229,9 +229,7 @@ class IntegrationCatalogService:
         try:
             for spec in DATA_PAGES_SYNC_INTERFACE_SPECS:
                 interface, interface_status = self._bootstrap_data_pages_interface(spec)
-                policy, retention_policy_status = self._bootstrap_data_pages_retention_policy(
-                    spec
-                )
+                policy, retention_policy_status = self._bootstrap_data_pages_retention_policy(spec)
                 sync_config_status = self._bootstrap_data_pages_sync_config(
                     interface,
                     policy,
