@@ -7,7 +7,11 @@ from sqlalchemy import Select, String, cast, func, or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.modules.data_pages.models import DailySalesItemDayMart, OrderProfitSkuDayMart
+from app.modules.data_pages.models import (
+    DailySalesItemDayMart,
+    ListingManagementCurrentMart,
+    OrderProfitSkuDayMart,
+)
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
     "sku": DailySalesItemDayMart.local_sku,
@@ -20,6 +24,13 @@ ORDER_PROFIT_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
     "sku": OrderProfitSkuDayMart.local_sku,
     "item_id": cast(OrderProfitSkuDayMart.item_ids_json, String),
     "product_name": OrderProfitSkuDayMart.local_sku,
+}
+
+LISTING_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
+    "sku": ListingManagementCurrentMart.local_sku,
+    "msku": ListingManagementCurrentMart.msku,
+    "item_id": ListingManagementCurrentMart.item_id,
+    "title": ListingManagementCurrentMart.title,
 }
 
 
@@ -181,4 +192,74 @@ class OrderProfitRepository:
         if normalized_keyword:
             column = ORDER_PROFIT_SEARCH_COLUMNS.get(search_field, OrderProfitSkuDayMart.local_sku)
             statement = statement.where(column.ilike(f"%{normalized_keyword}%"))
+        return statement
+
+
+class ListingManagementRepository:
+    """Read-only persistence boundary for DATA-PAGES listing-management MART queries."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_listings(
+        self,
+        *,
+        account_refs: frozenset[str],
+        store_id: str | None,
+        search_field: str,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> tuple[Sequence[ListingManagementCurrentMart], int, datetime | None]:
+        statement = self._filtered_statement(
+            account_refs=account_refs,
+            store_id=store_id,
+            search_field=search_field,
+            keyword=keyword,
+        )
+        total = self.session.scalar(
+            select(func.count()).select_from(statement.order_by(None).subquery())
+        )
+        latest_calculated_at = self.session.scalar(
+            statement.with_only_columns(
+                func.max(ListingManagementCurrentMart.calculated_at)
+            ).order_by(None)
+        )
+        rows = self.session.scalars(
+            statement.order_by(
+                ListingManagementCurrentMart.store_name.asc(),
+                ListingManagementCurrentMart.local_sku.asc(),
+                ListingManagementCurrentMart.item_id.asc(),
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+        return rows, int(total or 0), latest_calculated_at
+
+    def _filtered_statement(
+        self,
+        *,
+        account_refs: frozenset[str],
+        store_id: str | None,
+        search_field: str,
+        keyword: str,
+    ) -> Select[tuple[ListingManagementCurrentMart]]:
+        statement = select(ListingManagementCurrentMart).where(
+            ListingManagementCurrentMart.source_account_ref.in_(account_refs)
+        )
+        if store_id is not None:
+            statement = statement.where(ListingManagementCurrentMart.store_id == store_id)
+        normalized_keyword = keyword.strip()
+        if normalized_keyword:
+            column = LISTING_SEARCH_COLUMNS.get(search_field, ListingManagementCurrentMart.local_sku)
+            like_value = f"%{normalized_keyword}%"
+            if search_field == "title":
+                statement = statement.where(
+                    or_(
+                        ListingManagementCurrentMart.local_name.ilike(like_value),
+                        ListingManagementCurrentMart.title.ilike(like_value),
+                    )
+                )
+            else:
+                statement = statement.where(column.ilike(like_value))
         return statement
