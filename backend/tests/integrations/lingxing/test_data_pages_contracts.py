@@ -92,17 +92,25 @@ def _china_epoch(value: str) -> int:
 
 
 @pytest.mark.parametrize(
-    ("endpoint", "body", "expected_body"),
+    ("endpoint", "body", "expected_body", "expected_page_size"),
     [
         (
             SELLER_ENDPOINT,
             {"offset": 0, "length": 3, "platform_code": "10008"},
-            {"offset": 0, "length": 3, "platform_code": [10008]},
+            {
+                "offset": 0,
+                "length": 20,
+                "platform_code": [10008],
+                "is_sync": 1,
+                "status": 1,
+            },
+            20,
         ),
         (
             WALMART_LISTING_ENDPOINT,
             {"offset": 0, "length": 3},
             {"offset": 0, "length": 3},
+            3,
         ),
         (
             SALE_STAT_ENDPOINT,
@@ -120,6 +128,7 @@ def _china_epoch(value: str) -> int:
                 "date_unit": "4",
                 "result_type": "1",
             },
+            3,
         ),
         (
             ORDER_ENDPOINT,
@@ -137,10 +146,11 @@ def _china_epoch(value: str) -> int:
                 "start_time": _china_epoch("2026-09-01 00:00:00"),
                 "end_time": _china_epoch("2026-09-01 23:59:59"),
                 "offset": 0,
-                "length": 3,
+                "length": 20,
                 "platform_code": [10008],
                 "store_id": ["scope-fixture"],
             },
+            20,
         ),
         (
             RETURN_ENDPOINT,
@@ -160,11 +170,13 @@ def _china_epoch(value: str) -> int:
                 "pageSize": 3,
                 "returnTypeList": ["REFUND"],
             },
+            3,
         ),
         (
             ADVERTISER_ENDPOINT,
             {"paging": True, "page": 1, "limit": 3},
             {"paging": True, "page": 1, "limit": 3},
+            3,
         ),
         (
             AD_ITEM_SP_ENDPOINT,
@@ -186,6 +198,7 @@ def _china_epoch(value: str) -> int:
                 "pageSize": 3,
                 "paging": True,
             },
+            3,
         ),
     ],
 )
@@ -193,6 +206,7 @@ def test_data_pages_contracts_use_query_sign_and_official_value_types(
     endpoint: LingxingEndpoint,
     body: JsonValue,
     expected_body: JsonValue,
+    expected_page_size: int,
 ) -> None:
     calls = 0
 
@@ -226,10 +240,27 @@ def test_data_pages_contracts_use_query_sign_and_official_value_types(
     assert envelope.is_success is True
     assert envelope.request_params_json is None
     assert envelope.request_body_json == expected_body
+    assert envelope.page_size == expected_page_size
     assert calls == 1
     serialized = envelope.model_dump_json()
     assert "credential-fixture" not in serialized
     assert SYNTHETIC_APP_ID not in serialized
+
+
+def test_non_data_pages_capture_keeps_global_sample_limit() -> None:
+    request = _capture(WALMART_LISTING_ENDPOINT, {"offset": 0, "length": 20}, page_size=20)
+    request = request.model_copy(update={"object_type": "non_data_pages_fixture"})
+    client = LingxingReadonlyClient(
+        _settings(),
+        token_provider=_FakeTokenProvider(),
+        success_evaluator=_is_success,
+        transport=httpx.MockTransport(lambda _: pytest.fail("transport must not run")),
+    )
+    try:
+        with pytest.raises(LingxingClientError, match="page size limit"):
+            client.fetch_pages(request)
+    finally:
+        client.close()
 
 
 @pytest.mark.parametrize(
