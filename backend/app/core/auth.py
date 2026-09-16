@@ -18,9 +18,15 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "products:pricing_rules:read",
         "products:cost:read",
         "integrations:read",
+        "sales:daily-sales:read",
     }
 )
-_PREVIEW_PATH_PREFIX: Final = "/api/product-management/"
+_PREVIEW_PATH_PREFIXES: Final = frozenset(
+    {
+        "/api/product-management/",
+        "/api/sales/",
+    }
+)
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
     {
         "/api/user-table-views/product-management",
@@ -55,11 +61,11 @@ class Principal:
 def get_optional_principal(request: Request) -> Principal | None:
     """Return the temporary read-only preview principal or fail closed."""
     path = request.scope.get("path")
-    if (
-        request.method != "GET"
-        or not isinstance(path, str)
-        or not (path.startswith(_PREVIEW_PATH_PREFIX) or path in _PREVIEW_READ_PATHS)
-    ):
+    path_allowed = isinstance(path, str) and (
+        any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
+        or path in _PREVIEW_READ_PATHS
+    )
+    if request.method != "GET" or not path_allowed:
         return None
     try:
         settings = get_settings()
