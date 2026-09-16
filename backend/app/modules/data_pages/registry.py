@@ -5,6 +5,18 @@ from typing import Final, Literal
 
 DataPageKey = Literal["daily_sales", "order_profit", "listing_management"]
 
+EMPTY_DATA_BEHAVIOR: Final = (
+    "Return a successful envelope with data.items=[] and meta.total=0."
+)
+FALLBACK_BEHAVIOR: Final = (
+    "Frontend keeps local acceptance rows when the backend request fails "
+    "while MART sync is not implemented."
+)
+READ_ONLY_BOUNDARY: Final = (
+    "Read-only MART API; no Lingxing call, parser writer, backfill, "
+    "Celery task, production migration, or production database operation."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class DataPageRegistryEntry:
@@ -32,9 +44,9 @@ DATA_PAGE_API_REGISTRY: Final[dict[DataPageKey, DataPageRegistryEntry]] = {
         mart_object="mart_daily_sales_item_day",
         frontend_page="frontend/src/pages/sales/DailySalesPage.tsx",
         frontend_api_adapter="frontend/src/pages/sales/dailySalesApi.ts",
-        empty_data_behavior="Return a successful envelope with data.items=[] and meta.total=0.",
-        fallback_behavior="Frontend keeps local acceptance rows when the backend request fails while MART sync is not implemented.",
-        current_boundary="Read-only MART API; no Lingxing call, parser writer, backfill, Celery task, production migration, or production database operation.",
+        empty_data_behavior=EMPTY_DATA_BEHAVIOR,
+        fallback_behavior=FALLBACK_BEHAVIOR,
+        current_boundary=READ_ONLY_BOUNDARY,
         quality_checks=(
             "business_date_la is a Walmart business date in America/Los_Angeles.",
             "source_account_ref is constrained by the caller's integration source-account scope.",
@@ -51,9 +63,9 @@ DATA_PAGE_API_REGISTRY: Final[dict[DataPageKey, DataPageRegistryEntry]] = {
         mart_object="mart_order_profit_sku_day",
         frontend_page="frontend/src/pages/sales/OrderProfitPage.tsx",
         frontend_api_adapter="frontend/src/pages/sales/orderProfitApi.ts",
-        empty_data_behavior="Return a successful envelope with data.items=[] and meta.total=0.",
-        fallback_behavior="Frontend keeps local acceptance rows when the backend request fails while MART sync is not implemented.",
-        current_boundary="Read-only MART API; no Lingxing call, parser writer, backfill, Celery task, production migration, or production database operation.",
+        empty_data_behavior=EMPTY_DATA_BEHAVIOR,
+        fallback_behavior=FALLBACK_BEHAVIOR,
+        current_boundary=READ_ONLY_BOUNDARY,
         quality_checks=(
             "business_date_la is a Walmart business date in America/Los_Angeles.",
             "source_account_ref is constrained by the caller's integration source-account scope.",
@@ -70,9 +82,9 @@ DATA_PAGE_API_REGISTRY: Final[dict[DataPageKey, DataPageRegistryEntry]] = {
         mart_object="mart_listing_management_current",
         frontend_page="frontend/src/pages/products/ListingManagementPage.tsx",
         frontend_api_adapter="frontend/src/pages/products/listingManagementApi.ts",
-        empty_data_behavior="Return a successful envelope with data.items=[] and meta.total=0.",
-        fallback_behavior="Frontend keeps local acceptance rows when the backend request fails while MART sync is not implemented.",
-        current_boundary="Read-only MART API; no Lingxing call, parser writer, backfill, Celery task, production migration, or production database operation.",
+        empty_data_behavior=EMPTY_DATA_BEHAVIOR,
+        fallback_behavior=FALLBACK_BEHAVIOR,
+        current_boundary=READ_ONLY_BOUNDARY,
         quality_checks=(
             "source_account_ref is constrained by the caller's integration source-account scope.",
             "meta.source_objects contains only mart_listing_management_current.",
