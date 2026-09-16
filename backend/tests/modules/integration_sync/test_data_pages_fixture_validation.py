@@ -30,10 +30,7 @@ def test_fixture_validation_report_passes_without_production_effects() -> None:
     report = validate_data_pages_fixture_contracts()
 
     expected_required_checks = sum(
-        1
-        for spec in DATA_PAGES_PARSER_SPECS.values()
-        for field in spec.fields
-        if field.required
+        1 for spec in DATA_PAGES_PARSER_SPECS.values() for field in spec.fields if field.required
     )
     expected_unique_key_checks = sum(
         len(spec.unique_key) for spec in DATA_PAGES_WRITER_SPECS_BY_KEY.values()
@@ -63,8 +60,7 @@ def test_fixture_validation_rejects_sensitive_request_metadata() -> None:
 
     assert report.passed is False
     assert any(
-        issue.code == "DATA_PAGES_FIXTURE_UNSAFE_REQUEST_METADATA"
-        for issue in report.issues
+        issue.code == "DATA_PAGES_FIXTURE_UNSAFE_REQUEST_METADATA" for issue in report.issues
     )
 
 
@@ -81,12 +77,10 @@ def test_fixture_validation_rejects_missing_required_fields() -> None:
 
     assert report.passed is False
     assert any(
-        issue.code == "DATA_PAGES_FIXTURE_REQUIRED_FIELDS_MISSING"
-        for issue in report.issues
+        issue.code == "DATA_PAGES_FIXTURE_REQUIRED_FIELDS_MISSING" for issue in report.issues
     )
     assert any(
-        issue.code == "DATA_PAGES_FIXTURE_UNIQUE_KEY_FIELDS_MISSING"
-        for issue in report.issues
+        issue.code == "DATA_PAGES_FIXTURE_UNIQUE_KEY_FIELDS_MISSING" for issue in report.issues
     )
 
 
@@ -111,8 +105,7 @@ def test_fixture_validation_keeps_return_fixtures_refund_only() -> None:
 
     assert report.passed is False
     assert any(
-        issue.code == "DATA_PAGES_FIXTURE_RETURN_TYPE_NOT_REFUND_ONLY"
-        for issue in report.issues
+        issue.code == "DATA_PAGES_FIXTURE_RETURN_TYPE_NOT_REFUND_ONLY" for issue in report.issues
     )
 
 
