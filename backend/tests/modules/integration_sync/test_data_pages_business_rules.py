@@ -56,18 +56,22 @@ def test_sample_order_request_uses_special_window_without_changing_generic_order
     sample_body = runner._sample_order_body(offset=0, size=100)
     generic_body = runner._order_body(offset=0, size=100)
 
-    assert datetime.fromtimestamp(sample_body["start_time"], CHINA_TZ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    ) == "2026-09-01 15:00:00"
-    assert datetime.fromtimestamp(sample_body["end_time"], CHINA_TZ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    ) == "2026-09-02 14:59:59"
-    assert datetime.fromtimestamp(generic_body["start_time"], CHINA_TZ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    ) == "2026-09-01 00:00:00"
-    assert datetime.fromtimestamp(generic_body["end_time"], CHINA_TZ).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    ) == "2026-09-01 23:59:59"
+    assert (
+        datetime.fromtimestamp(sample_body["start_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        == "2026-09-01 15:00:00"
+    )
+    assert (
+        datetime.fromtimestamp(sample_body["end_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        == "2026-09-02 14:59:59"
+    )
+    assert (
+        datetime.fromtimestamp(generic_body["start_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        == "2026-09-01 00:00:00"
+    )
+    assert (
+        datetime.fromtimestamp(generic_body["end_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        == "2026-09-01 23:59:59"
+    )
 
 
 def test_sample_rule_requires_zero_total_and_no_cancel_time() -> None:
