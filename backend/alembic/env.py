@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import URL, Connection
 
 import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metadata.
+import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
