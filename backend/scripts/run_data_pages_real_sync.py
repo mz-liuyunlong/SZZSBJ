@@ -1,5 +1,5 @@
 import app.modules.integration_sync.data_pages_business_rules as business_rules
-from app.modules.integration_sync.data_pages_business_rules_v2 import DataPagesRealSyncRunner
+from app.modules.integration_sync.data_pages_business_rules_v3 import DataPagesRealSyncRunner
 from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncError,
     DataPagesRealSyncSummary,
@@ -10,7 +10,7 @@ from app.modules.integration_sync.data_pages_real_sync import (
 
 
 def main() -> None:
-    """Run the governed CLI with the #113 business-rule runner."""
+    """Run the governed CLI with the page-completeness business-rule runner."""
     business_rules.DataPagesRealSyncRunner = DataPagesRealSyncRunner
     business_rules.main()
 
