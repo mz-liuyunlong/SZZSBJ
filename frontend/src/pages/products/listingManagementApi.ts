@@ -56,6 +56,7 @@ interface ListingManagementParams {
   pageSize?: number;
 }
 
+const MAX_API_PAGES = 10_000;
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 
 const toDateText = (value: string | null): string => {
@@ -103,17 +104,40 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
 export async function fetchListingManagementRows(
   params: ListingManagementParams = {},
 ): Promise<ListingManagementApiResult> {
-  const search = new URLSearchParams();
-  if (params.storeId) search.set("store_id", params.storeId);
-  search.set("page", "1");
-  search.set("page_size", String(params.pageSize ?? 500));
+  const pageSize = params.pageSize ?? 500;
+  const items: BackendListingItem[] = [];
+  let firstMeta: ListingManagementApiMeta | null = null;
 
-  const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
-    `/api/listings/walmart?${search.toString()}`,
-  );
+  for (let page = 1; page <= MAX_API_PAGES; page += 1) {
+    const search = new URLSearchParams();
+    if (params.storeId) search.set("store_id", params.storeId);
+    search.set("page", String(page));
+    search.set("page_size", String(pageSize));
 
-  return {
-    rows: envelope.data.items.map(toListingRow),
-    meta: envelope.meta,
-  };
+    const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
+      `/api/listings/walmart?${search.toString()}`,
+    );
+
+    firstMeta ??= envelope.meta;
+    items.push(...envelope.data.items);
+
+    if (
+      envelope.data.items.length === 0 ||
+      items.length >= envelope.meta.total ||
+      envelope.data.items.length < envelope.meta.page_size
+    ) {
+      const meta = firstMeta ?? envelope.meta;
+      return {
+        rows: items.map(toListingRow),
+        meta: {
+          ...meta,
+          page: 1,
+          page_size: items.length,
+          total: envelope.meta.total,
+        },
+      };
+    }
+  }
+
+  throw new Error("Listing API pagination exceeded the safety limit");
 }
