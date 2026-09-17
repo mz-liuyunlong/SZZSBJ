@@ -124,8 +124,9 @@ def normalize_data_pages_body(
         normalized.setdefault("status", 1)
 
     elif api_path == SALE_STAT_ENDPOINT:
-        # Official enums: data_type=4 -> SKU, date_unit=4 -> day.
-        normalized["data_type"] = "4"
+        # Owner validation on 2026-09-17 confirmed data_type defaults to 1.
+        # Preserve an explicitly supplied value instead of silently forcing a different enum.
+        normalized.setdefault("data_type", 1)
         normalized["date_unit"] = "4"
         result_type = normalized.get("result_type")
         if isinstance(result_type, int) and not isinstance(result_type, bool):
