@@ -290,14 +290,18 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         )
 
     def _reprice_refunds(self) -> int:
-        refunds = self.session.execute(
-            text(
-                "select id,store_id,item_id,msku,local_sku,customer_order_id,purchase_order_id,"
-                "quantity,refund_amount,refund_currency_code from fact_walmart_refund_items "
-                "where source_account_ref=:account and business_date_la=:day"
-            ),
-            {"account": self.source_account_ref, "day": self.business_date},
-        ).mappings().all()
+        refunds = (
+            self.session.execute(
+                text(
+                    "select id,store_id,item_id,msku,local_sku,customer_order_id,purchase_order_id,"
+                    "quantity,refund_amount,refund_currency_code from fact_walmart_refund_items "
+                    "where source_account_ref=:account and business_date_la=:day"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            )
+            .mappings()
+            .all()
+        )
         unresolved = 0
         now = _now()
         for refund in refunds:
@@ -384,31 +388,35 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         purchase_order_id = _text_or_none(refund.get("purchase_order_id"))
         if not customer_order_id and not purchase_order_id:
             return None
-        return self.session.execute(
-            text(
-                "select id,source_order_id,store_id,item_id,msku,local_sku,quantity,"
-                "sales_revenue_amount,sales_revenue_currency_code,business_date_la "
-                "from fact_walmart_order_items where source_account_ref=:account "
-                "and ((:customer_order_id is not null and source_order_id=:customer_order_id) "
-                "or (:purchase_order_id is not null and source_order_id=:purchase_order_id)) "
-                "and (:store_id is null or store_id=:store_id) and ("
-                "(:item_id is not null and item_id=:item_id) or "
-                "(:local_sku is not null and trim(local_sku)=trim(:local_sku)) or "
-                "(:msku is not null and trim(msku)=trim(:msku))) "
-                "order by case when :item_id is not null and item_id=:item_id then 0 "
-                "when :local_sku is not null and trim(local_sku)=trim(:local_sku) then 1 else 2 end,"
-                "business_date_la desc nulls last,updated_at desc limit 1"
-            ),
-            {
-                "account": self.source_account_ref,
-                "customer_order_id": customer_order_id,
-                "purchase_order_id": purchase_order_id,
-                "store_id": refund.get("store_id"),
-                "item_id": refund.get("item_id"),
-                "local_sku": refund.get("local_sku"),
-                "msku": refund.get("msku"),
-            },
-        ).mappings().first()
+        return (
+            self.session.execute(
+                text(
+                    "select id,source_order_id,store_id,item_id,msku,local_sku,quantity,"
+                    "sales_revenue_amount,sales_revenue_currency_code,business_date_la "
+                    "from fact_walmart_order_items where source_account_ref=:account "
+                    "and ((:customer_order_id is not null and source_order_id=:customer_order_id) "
+                    "or (:purchase_order_id is not null and source_order_id=:purchase_order_id)) "
+                    "and (:store_id is null or store_id=:store_id) and ("
+                    "(:item_id is not null and item_id=:item_id) or "
+                    "(:local_sku is not null and trim(local_sku)=trim(:local_sku)) or "
+                    "(:msku is not null and trim(msku)=trim(:msku))) "
+                    "order by case when :item_id is not null and item_id=:item_id then 0 "
+                    "when :local_sku is not null and trim(local_sku)=trim(:local_sku) then 1 else 2 end,"
+                    "business_date_la desc nulls last,updated_at desc limit 1"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "customer_order_id": customer_order_id,
+                    "purchase_order_id": purchase_order_id,
+                    "store_id": refund.get("store_id"),
+                    "item_id": refund.get("item_id"),
+                    "local_sku": refund.get("local_sku"),
+                    "msku": refund.get("msku"),
+                },
+            )
+            .mappings()
+            .first()
+        )
 
     def _store_commission_rate(self, store_id: object) -> Decimal:
         if store_id is None:
@@ -431,7 +439,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
 
     def _refresh_daily_sales_mart(self) -> int:
         now = _now()
-        return_status = "provider_permission_403" if self.summary.return_permission_403 else "loaded"
+        return_status = (
+            "provider_permission_403" if self.summary.return_permission_403 else "loaded"
+        )
         self.session.execute(
             text(
                 "delete from mart_daily_sales_item_day where source_account_ref=:account "
