@@ -53,7 +53,9 @@ def upgrade() -> None:
         sa.Column("synced_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.CheckConstraint("quantity IS NULL OR quantity >= 0", name="ck_sample_quantity_nonnegative"),
+        sa.CheckConstraint(
+            "quantity IS NULL OR quantity >= 0", name="ck_sample_quantity_nonnegative"
+        ),
         sa.CheckConstraint(
             "unit_price_amount IS NULL OR unit_price_amount >= 0",
             name="ck_sample_unit_price_nonnegative",
