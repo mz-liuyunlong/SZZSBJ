@@ -9,7 +9,7 @@ from sqlalchemy import text
 from app.core.config import AppEnvironment, get_settings
 from app.db.session import get_session_factory
 from app.modules.integration_sync.catalog import IntegrationCatalogService
-from app.modules.integration_sync.data_pages_business_rules_v2 import DataPagesRealSyncRunner
+from app.modules.integration_sync.data_pages_business_rules_v3 import DataPagesRealSyncRunner
 from app.modules.integration_sync.data_pages_real_sync import (
     AUTHORIZED_ENV,
     DataPagesRealSyncError,
