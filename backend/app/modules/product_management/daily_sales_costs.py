@@ -63,26 +63,30 @@ def load_daily_sales_costs(
         else "sku-pricing-defaults-v1"
     )
 
-    rows = session.execute(
-        text(
-            "select i.id identity_id,i.mapping_status,i.updated_at identity_updated_at,"
-            "p.sku product_sku,i.lingxing_sku_code identity_sku,c.lingxing_sku_code current_sku,"
-            "coalesce(nullif(trim(c.owner_name),''),nullif(trim(c.owner_uid),'')) owner_ref,"
-            "coalesce(b.purchase_cost_cny,c.purchase_cost_cny) purchase_cost_cny,"
-            "c.product_gross_weight_g,c.package_length_cm,c.package_width_cm,c.package_height_cm,"
-            "c.source_observed_at,coalesce(img.image_count,0) image_count "
-            "from dwd_lingxing_sku_identity_index i "
-            "left join products p on p.id=i.product_id and p.deleted_at is null "
-            "left join dwd_lingxing_sku_product_info_current c on c.identity_id=i.id "
-            "left join dws_sku_base_profile_current b on b.identity_id=i.id "
-            "left join lateral (select count(*) image_count from dwd_lingxing_sku_product_images x "
-            "where c.source_snapshot_id is not null and x.source_snapshot_id=c.source_snapshot_id) img on true "
-            "where i.source_account_ref=:account and i.is_active=true "
-            "order by case when i.mapping_status='confirmed' then 0 else 1 end,"
-            "c.source_observed_at desc nulls last,i.updated_at desc"
-        ),
-        {"account": source_account_ref},
-    ).mappings().all()
+    rows = (
+        session.execute(
+            text(
+                "select i.id identity_id,i.mapping_status,i.updated_at identity_updated_at,"
+                "p.sku product_sku,i.lingxing_sku_code identity_sku,c.lingxing_sku_code current_sku,"
+                "coalesce(nullif(trim(c.owner_name),''),nullif(trim(c.owner_uid),'')) owner_ref,"
+                "coalesce(b.purchase_cost_cny,c.purchase_cost_cny) purchase_cost_cny,"
+                "c.product_gross_weight_g,c.package_length_cm,c.package_width_cm,c.package_height_cm,"
+                "c.source_observed_at,coalesce(img.image_count,0) image_count "
+                "from dwd_lingxing_sku_identity_index i "
+                "left join products p on p.id=i.product_id and p.deleted_at is null "
+                "left join dwd_lingxing_sku_product_info_current c on c.identity_id=i.id "
+                "left join dws_sku_base_profile_current b on b.identity_id=i.id "
+                "left join lateral (select count(*) image_count from dwd_lingxing_sku_product_images x "
+                "where c.source_snapshot_id is not null and x.source_snapshot_id=c.source_snapshot_id) img on true "
+                "where i.source_account_ref=:account and i.is_active=true "
+                "order by case when i.mapping_status='confirmed' then 0 else 1 end,"
+                "c.source_observed_at desc nulls last,i.updated_at desc"
+            ),
+            {"account": source_account_ref},
+        )
+        .mappings()
+        .all()
+    )
 
     resolved: dict[str, DailySalesCostResolution] = {}
     for row in rows:
