@@ -22,7 +22,7 @@ def test_mart_refresh_specs_match_data_page_registry() -> None:
         assert spec.source_tables
 
 
-def test_daily_sales_refresh_depends_on_all_dim_and_fact_sources() -> None:
+def test_daily_sales_refresh_depends_on_authoritative_sales_and_business_sources() -> None:
     spec = mart_refresh_spec_for("daily_sales")
 
     assert spec.requires_business_date_window is True
@@ -30,22 +30,29 @@ def test_daily_sales_refresh_depends_on_all_dim_and_fact_sources() -> None:
     assert set(spec.source_tables) == {
         "dim_lingxing_stores",
         "dim_walmart_listings",
-        "dim_walmart_advertisers",
         "fact_walmart_sales_item_daily",
-        "fact_walmart_order_items",
+        "fact_walmart_sample_order_items",
         "fact_walmart_refund_items",
+        "dws_walmart_refund_business_amounts",
         "fact_walmart_ad_item_sp_daily",
+        "dwd_lingxing_sku_identity_index",
+        "dwd_lingxing_sku_product_info_current",
+        "dws_sku_base_profile_current",
+        "dws_product_management_pricing_current",
+        "ref_product_pricing_rule_versions",
+        "ref_store_commission_rule_versions",
     }
 
 
-def test_order_profit_refresh_depends_on_daily_sales_mart_and_profit_facts() -> None:
+def test_order_profit_refresh_inherits_daily_sales_business_rules() -> None:
     spec = mart_refresh_spec_for("order_profit")
 
     assert spec.requires_business_date_window is True
     assert spec.granularity == "business_date_sku"
-    assert "mart_daily_sales_item_day" in spec.source_tables
-    assert "fact_walmart_order_items" in spec.source_tables
-    assert "fact_walmart_refund_items" in spec.source_tables
+    assert set(spec.source_tables) == {
+        "mart_daily_sales_item_day",
+        "dws_walmart_refund_business_amounts",
+    }
 
 
 def test_listing_management_refresh_can_build_current_snapshot_plan() -> None:
