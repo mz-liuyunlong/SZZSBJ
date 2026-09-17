@@ -114,9 +114,7 @@ def test_ad_identity_only_uses_global_item_fallback_when_unique() -> None:
 
 
 def test_return_provider_403_is_recorded_and_does_not_block_other_syncs() -> None:
-    client = _SequenceClient(
-        [_response(parser_key="walmart_return_order_list", code=403)]
-    )
+    client = _SequenceClient([_response(parser_key="walmart_return_order_list", code=403)])
     runner = _runner(client)
 
     rows = runner._fetch_return_all()
