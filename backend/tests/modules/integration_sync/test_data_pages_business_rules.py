@@ -123,16 +123,46 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["is_valid_sample"] is True
 
 
-def test_refund_business_amount_subtracts_store_commission() -> None:
-    gross, commission, net = _refund_amounts(
-        Decimal("20"),
-        Decimal("2"),
-        Decimal("0.15"),
+def test_refund_quantity_comes_from_return_api_quantity_display() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+
+    written = runner._write_refunds(
+        [
+            {
+                "returnType": "REFUND",
+                "returnOrderId": "return-1",
+                "storeId": "store-a",
+                "customerOrderId": "order-1",
+                "items": [
+                    {
+                        "returnLineId": "return-line-1",
+                        "purchaseOrderId": "purchase-1",
+                        "itemId": "item-1",
+                        "msku": "MSKU-1",
+                        "localSku": "SKU-1",
+                        "quantityDisplay": "3.5",
+                        "lineTotalAmount": "59.50",
+                        "lineTotalCurrency": "USD",
+                    }
+                ],
+            }
+        ]
     )
 
-    assert gross == Decimal("40")
-    assert commission == Decimal("6.00")
-    assert net == Decimal("34.00")
+    assert written == 1
+    params = session.calls[0][1]
+    assert params is not None
+    assert params["quantity"] == Decimal("3.5")
+
+    gross, commission, net = _refund_amounts(
+        Decimal("20"),
+        params["quantity"],
+        Decimal("0.15"),
+    )
+    assert gross == Decimal("70.0")
+    assert commission == Decimal("10.500")
+    assert net == Decimal("59.500")
 
 
 def test_daily_sales_mart_is_based_on_salestat_and_joins_sku_cost_sources() -> None:
