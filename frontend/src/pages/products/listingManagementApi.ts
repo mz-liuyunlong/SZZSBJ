@@ -107,7 +107,6 @@ export async function fetchListingManagementRows(
   const pageSize = params.pageSize ?? 500;
   const items: BackendListingItem[] = [];
   let firstMeta: ListingManagementApiMeta | null = null;
-  let latestMeta: ListingManagementApiMeta | null = null;
 
   for (let page = 1; page <= MAX_API_PAGES; page += 1) {
     const search = new URLSearchParams();
@@ -120,7 +119,6 @@ export async function fetchListingManagementRows(
     );
 
     firstMeta ??= envelope.meta;
-    latestMeta = envelope.meta;
     items.push(...envelope.data.items);
 
     // Do not trust a possibly stale/capped `total` to stop after the first 500 rows.
@@ -137,7 +135,7 @@ export async function fetchListingManagementRows(
           ...meta,
           page: 1,
           page_size: items.length,
-          total: Math.max(items.length, latestMeta?.total ?? 0),
+          total: Math.max(items.length, envelope.meta.total),
         },
       };
     }
