@@ -1,12 +1,18 @@
 import { backendRequest } from "@/api/backendApi";
 import type { OrderProfitSourceRecord } from "@/pages/sales/orderProfitTypes";
 
-interface BackendOrderProfitItem {
+interface BackendDailySalesItem {
   id: string;
   business_date_la: string;
-  local_sku: string;
-  item_ids: string[];
-  store_ids: string[];
+  store_id: string;
+  store_name: string | null;
+  owner_ref: string | null;
+  item_id: string;
+  msku: string | null;
+  local_sku: string | null;
+  local_name: string | null;
+  title: string | null;
+  platform_code: string | null;
   sales_qty: string;
   order_count: string;
   sales_amount: string;
@@ -22,8 +28,8 @@ interface BackendOrderProfitItem {
   missing_cost_codes: string[];
 }
 
-interface BackendOrderProfitData {
-  items: BackendOrderProfitItem[];
+interface BackendDailySalesData {
+  items: BackendDailySalesItem[];
 }
 
 export interface OrderProfitApiMeta {
@@ -53,8 +59,14 @@ const currencyLabel = (currencyCode: string | null): OrderProfitSourceRecord["cu
   currencyCode === "CNY" ? "CNY" : "USD"
 );
 
+const platformLabel = (platformCode: string | null): OrderProfitSourceRecord["platform"] => {
+  if (platformCode === "amazon") return "Amazon";
+  if (platformCode === "temu") return "TEMU";
+  return "Walmart";
+};
+
 const costStatusLabel = (
-  status: BackendOrderProfitItem["cost_status"],
+  status: BackendDailySalesItem["cost_status"],
   missingCodes: string[],
 ): OrderProfitSourceRecord["costStatus"] => {
   if (missingCodes.length > 0) return "部分缺失";
@@ -63,18 +75,16 @@ const costStatusLabel = (
   return "待补齐";
 };
 
-const firstOrFallback = (values: string[], fallback: string) => values[0] ?? fallback;
-
-const toOrderProfitSourceRecord = (item: BackendOrderProfitItem): OrderProfitSourceRecord => ({
+const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSourceRecord => ({
   id: item.id,
   date: item.business_date_la,
-  store: firstOrFallback(item.store_ids, "全部店铺"),
-  owner: "未分配",
-  msku: "-",
-  productId: firstOrFallback(item.item_ids, item.local_sku),
-  sku: item.local_sku,
-  productName: item.local_sku,
-  platform: "Walmart",
+  store: item.store_name ?? item.store_id,
+  owner: item.owner_ref ?? "未分配",
+  msku: item.msku ?? "-",
+  productId: item.item_id,
+  sku: item.local_sku ?? "-",
+  productName: item.local_name ?? item.title ?? item.local_sku ?? item.item_id,
+  platform: platformLabel(item.platform_code),
   currency: currencyLabel(item.sales_currency_code),
   salesVolume: numberValue(item.sales_qty),
   orderCount: numberValue(item.order_count),
@@ -93,7 +103,7 @@ export async function fetchOrderProfitSourceRecords(
   params: OrderProfitParams,
 ): Promise<OrderProfitApiResult> {
   const pageSize = params.pageSize ?? 500;
-  const items: BackendOrderProfitItem[] = [];
+  const items: BackendDailySalesItem[] = [];
   let firstMeta: OrderProfitApiMeta | null = null;
 
   for (let page = 1; page <= MAX_API_PAGES; page += 1) {
@@ -103,8 +113,8 @@ export async function fetchOrderProfitSourceRecords(
     search.set("page", String(page));
     search.set("page_size", String(pageSize));
 
-    const envelope = await backendRequest<BackendOrderProfitData, OrderProfitApiMeta>(
-      `/api/sales/order-profit?${search.toString()}`,
+    const envelope = await backendRequest<BackendDailySalesData, OrderProfitApiMeta>(
+      `/api/sales/daily-sales?${search.toString()}`,
     );
 
     firstMeta ??= envelope.meta;
@@ -130,5 +140,5 @@ export async function fetchOrderProfitSourceRecords(
     }
   }
 
-  throw new Error("Order Profit API pagination exceeded the safety limit");
+  throw new Error("Order Profit source pagination exceeded the safety limit");
 }

@@ -105,13 +105,13 @@ export const MOCK_USD_TO_CNY_RATE = 7.2;
 export const dateRangeForPreset = (
   preset: Exclude<DailySalesDatePreset, "custom">,
 ): [string, string] => {
-  const today = dayjs();
+  const referenceDay = dayjs().subtract(1, "day");
   const start = preset === "today"
-    ? today
+    ? referenceDay
     : preset === "week"
-      ? today.startOf("week")
+      ? referenceDay.startOf("week")
       : preset === "month"
-        ? today.startOf("month")
-        : today.startOf("year");
-  return [start.format("YYYY-MM-DD"), today.format("YYYY-MM-DD")];
+        ? referenceDay.startOf("month")
+        : referenceDay.startOf("year");
+  return [start.format("YYYY-MM-DD"), referenceDay.format("YYYY-MM-DD")];
 };

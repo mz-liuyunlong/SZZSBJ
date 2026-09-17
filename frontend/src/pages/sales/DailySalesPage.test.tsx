@@ -348,8 +348,8 @@ afterEach(() => {
 });
 
 const renderPage = () => render(<DailySalesPage page={dailySalesPage!} />);
-const today = dayjs().format("YYYY-MM-DD");
-const todayRows = dailySalesMockData.filter((row) => row.date === today);
+const referenceDay = dayjs().subtract(1, "day").format("YYYY-MM-DD");
+const referenceRows = dailySalesMockData.filter((row) => row.date === referenceDay);
 const usdHeaders = dailySalesColumnFields.map((field) => ({
   wfsDeliveryUnitPrice: "WFS配送单价($)",
   purchaseUnitPriceCny: "采购单价($)",
@@ -367,7 +367,7 @@ describe("DailySalesPage", () => {
     expect(screen.queryByLabelText("页面状态：planned")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
     expect(dailySalesMockData).toHaveLength(100);
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
 
     const headers = within(screen.getByTestId("table-header"))
       .getAllByRole("columnheader")
@@ -409,11 +409,11 @@ describe("DailySalesPage", () => {
     }
   });
 
-  it("defaults dates to today, links shortcuts, and exposes the three multi-select filters", () => {
+  it("defaults dates to the previous completed day, links shortcuts, and exposes the three multi-select filters", () => {
     renderPage();
 
     expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${today}~${today}`);
+    expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${referenceDay}~${referenceDay}`);
     for (const label of ["平台", "负责人", "店铺"]) {
       expect(screen.getByLabelText(label)).toHaveAttribute("multiple");
       expect(screen.getByTestId(`${label}-checkbox-options`).querySelectorAll('input[type="checkbox"]'))
@@ -421,8 +421,9 @@ describe("DailySalesPage", () => {
     }
 
     fireEvent.click(screen.getByRole("button", { name: "本周" }));
+    const completedDay = dayjs().subtract(1, "day");
     expect(screen.getByLabelText("日期范围值")).toHaveTextContent(
-      `${dayjs().startOf("week").format("YYYY-MM-DD")}~${today}`,
+      `${completedDay.startOf("week").format("YYYY-MM-DD")}~${referenceDay}`,
     );
     fireEvent.click(screen.getByRole("button", { name: "设置自定义日期范围" }));
     expect(screen.getByRole("button", { name: "本周" })).toHaveAttribute("aria-pressed", "false");
@@ -435,7 +436,7 @@ describe("DailySalesPage", () => {
     renderPage();
 
     fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
-    expect(Number(screen.getByTestId("pro-table").getAttribute("data-total"))).toBeLessThan(todayRows.length);
+    expect(Number(screen.getByTestId("pro-table").getAttribute("data-total"))).toBeLessThan(referenceRows.length);
 
     fireEvent.change(screen.getByLabelText("币种"), { target: { value: "CNY" } });
     const filteredTotal = screen.getByTestId("pro-table").getAttribute("data-total");
@@ -446,7 +447,7 @@ describe("DailySalesPage", () => {
     expect(screen.getByText("暂无匹配销售数据")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: /重.*置/ }));
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
     expect(screen.getByLabelText("币种")).toHaveValue("USD");
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining("/api/sales/daily-sales?"),
@@ -463,14 +464,14 @@ describe("DailySalesPage", () => {
     const popover = screen.getByRole("dialog");
     expect(within(popover).getByText("精确搜索，一行一项，最多支持1000行")).toBeVisible();
     fireEvent.change(within(popover).getByLabelText("批量搜索内容"), {
-      target: { value: `${todayRows[0].sku}\n\n${todayRows[0].sku}` },
+      target: { value: `${referenceRows[0].sku}\n\n${referenceRows[0].sku}` },
     });
     fireEvent.click(within(popover).getByRole("button", { name: /搜.*索/ }));
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
 
     fireEvent.click(screen.getByRole("button", { name: "批量搜索" }));
     fireEvent.change(screen.getByLabelText("批量搜索内容"), {
-      target: { value: todayRows[0].sku.toLocaleLowerCase() },
+      target: { value: referenceRows[0].sku.toLocaleLowerCase() },
     });
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /搜.*索/ }));
     expect(screen.getByText("暂无匹配销售数据")).toBeVisible();
@@ -493,7 +494,7 @@ describe("DailySalesPage", () => {
       fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: String(size) } });
       expect(screen.getByLabelText("当前页")).toHaveTextContent("1");
       expect(screen.queryByText("已选择 1 项")).not.toBeInTheDocument();
-      expect(screen.getByLabelText("当前显示条数")).toHaveTextContent(String(Math.min(size, todayRows.length)));
+      expect(screen.getByLabelText("当前显示条数")).toHaveTextContent(String(Math.min(size, referenceRows.length)));
     }
     expect(screen.getByTestId("table-header")).toBeInTheDocument();
     expect(screen.getByTestId("table-body")).toBeInTheDocument();
@@ -534,7 +535,7 @@ describe("DailySalesPage", () => {
     const totalRow = screen.getByTestId("daily-sales-total-row");
     expect(totalRow).toHaveTextContent("总计");
     expect(totalRow).toHaveTextContent(
-      todayRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
+      referenceRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
     );
     expect(totalRow.querySelector(".daily-sales__total-cell--analysis")).toBeEmptyDOMElement();
     expect(totalRow.querySelector(".daily-sales__total-cell--date")).toBeEmptyDOMElement();
@@ -546,7 +547,7 @@ describe("DailySalesPage", () => {
     expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent("总计");
     fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
     expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent(
-      todayRows
+      referenceRows
         .filter((row) => row.platform === "Walmart")
         .reduce((total, row) => total + row.salesVolume, 0)
         .toLocaleString("zh-CN"),

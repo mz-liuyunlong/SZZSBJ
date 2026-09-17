@@ -109,15 +109,15 @@ export const MOCK_USD_TO_CNY_RATE = 7.2;
 export const dateRangeForPreset = (
   preset: Exclude<OrderProfitDatePreset, "custom">,
 ): [string, string] => {
-  const today = dayjs();
+  const referenceDay = dayjs().subtract(1, "day");
   const start = preset === "today"
-    ? today
+    ? referenceDay
     : preset === "week"
-      ? today.startOf("week")
+      ? referenceDay.startOf("week")
       : preset === "month"
-        ? today.startOf("month")
-        : today.startOf("year");
-  return [start.format("YYYY-MM-DD"), today.format("YYYY-MM-DD")];
+        ? referenceDay.startOf("month")
+        : referenceDay.startOf("year");
+  return [start.format("YYYY-MM-DD"), referenceDay.format("YYYY-MM-DD")];
 };
 
 const priority: Record<OrderProfitCostStatus, number> = {
@@ -127,13 +127,21 @@ const priority: Record<OrderProfitCostStatus, number> = {
   已完成: 1,
 };
 
+const aggregateKey = (record: OrderProfitSourceRecord) => [
+  record.productId,
+  record.msku,
+  record.store,
+  record.owner,
+].join("\u001f");
+
 export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): OrderProfitRow[] => {
   const buckets = new Map<string, OrderProfitSourceRecord[]>();
 
   for (const record of records) {
-    const bucket = buckets.get(record.productId) ?? [];
+    const key = aggregateKey(record);
+    const bucket = buckets.get(key) ?? [];
     bucket.push(record);
-    buckets.set(record.productId, bucket);
+    buckets.set(key, bucket);
   }
 
   return Array.from(buckets.values()).map((bucket) => {
@@ -153,7 +161,8 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
     const status = bucket.reduce((current, row) => (
       priority[row.costStatus] > priority[current] ? row.costStatus : current
     ), base.costStatus);
-    const trendDates = Array.from({ length: 7 }, (_, index) => dayjs()
+    const latestDate = bucket.reduce((latest, row) => row.date > latest ? row.date : latest, base.date);
+    const trendDates = Array.from({ length: 7 }, (_, index) => dayjs(latestDate)
       .subtract(6 - index, "day")
       .format("YYYY-MM-DD"));
     const sevenDaySales = trendDates.map((date) => bucket
@@ -161,7 +170,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       .reduce((total, row) => total + row.salesVolume, 0));
 
     return {
-      id: `order-profit-${base.productId}`,
+      id: `order-profit-${aggregateKey(base)}`,
       productId: base.productId,
       productName: base.productName,
       sku: base.sku,

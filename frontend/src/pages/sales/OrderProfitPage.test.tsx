@@ -350,8 +350,10 @@ afterEach(() => {
 });
 
 const renderPage = () => render(<OrderProfitPage page={orderProfitPage!} />);
-const today = dayjs().format("YYYY-MM-DD");
-const todayRows = aggregateOrderProfitRows(orderProfitSourceRecords.filter((row) => row.date === today));
+const referenceDay = dayjs().subtract(1, "day").format("YYYY-MM-DD");
+const referenceRows = aggregateOrderProfitRows(
+  orderProfitSourceRecords.filter((row) => row.date === referenceDay),
+);
 
 describe("OrderProfitPage", () => {
   it("renders the order-profit shell with product-ID aggregation and no log columns", () => {
@@ -360,8 +362,8 @@ describe("OrderProfitPage", () => {
     expect(screen.getByRole("region", { name: "订单利润" }))
       .toContainElement(screen.getByLabelText("订单利润筛选"));
     expect(orderProfitSourceRecords).toHaveLength(800);
-    expect(todayRows).toHaveLength(100);
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(todayRows.length));
+    expect(referenceRows).toHaveLength(100);
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
     expect(screen.getByText("商品ID/品名")).toBeVisible();
     expect(screen.getByText("SKU/MSKU")).toBeVisible();
     expect(screen.queryByText("系统运营日志")).not.toBeInTheDocument();
@@ -381,14 +383,13 @@ describe("OrderProfitPage", () => {
     expect(within(toolbar).getByRole("button", { name: /显示图表$/ })).toBeVisible();
     expect(within(toolbar).getByRole("button", { name: "列配置" })).toBeVisible();
     expect(within(toolbar).getByRole("button", { name: "下载" })).toBeVisible();
-
   });
 
-  it("defaults to today, product ID search, visible statistics and hidden charts", () => {
+  it("defaults to the previous completed day, product ID search, visible statistics and hidden charts", () => {
     renderPage();
 
     expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${today}~${today}`);
+    expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${referenceDay}~${referenceDay}`);
     expect(screen.getByLabelText("搜索类型")).toHaveValue("productId");
     expect(screen.queryByLabelText("订单利润趋势图")).not.toBeInTheDocument();
 
@@ -405,7 +406,7 @@ describe("OrderProfitPage", () => {
     const sessionStorageSpy = vi.spyOn(window.sessionStorage, "setItem");
     renderPage();
 
-    fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: todayRows[0].productId } });
+    fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: referenceRows[0].productId } });
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
     fireEvent.click(screen.getByRole("button", { name: /查看订单利润详情/ }));
     expect(screen.getByRole("dialog", { name: "订单利润详情" })).toBeInTheDocument();
@@ -420,7 +421,7 @@ describe("OrderProfitPage", () => {
     const totalRow = screen.getByTestId("order-profit-total-row");
     expect(totalRow).toHaveTextContent("总计");
     expect(totalRow).toHaveTextContent(
-      todayRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
+      referenceRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
     );
     expect(totalRow.querySelector(".order-profit__total-cell--salesAmount")).toHaveTextContent("$");
 
