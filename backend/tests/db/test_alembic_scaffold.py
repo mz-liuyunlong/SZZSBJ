@@ -44,7 +44,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == ["20260917_0011"]
+    assert script.get_heads() == ["20260917_0012"]
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -55,6 +55,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20260914_0008_fix_data_lineage_uniqueness.py",
         "20260915_0009_add_media_image_assets.py",
         "20260916_0010_add_productinfo_business_hash.py",
+        "20260917_0012_add_sample_and_refund_business_amounts.py",
     } <= revisions
 
     revision = (
