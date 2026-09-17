@@ -1,11 +1,13 @@
+from app.modules.integration_sync.data_pages_business_rules import (
+    DataPagesRealSyncRunner,
+    main,
+)
 from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncError,
-    DataPagesRealSyncRunner,
     DataPagesRealSyncSummary,
     _rows_for,
     _stable_hash,
     data_pages_response_succeeded,
-    main,
 )
 
 __all__ = [
