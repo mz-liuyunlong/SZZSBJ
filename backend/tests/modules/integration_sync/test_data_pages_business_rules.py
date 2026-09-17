@@ -18,6 +18,17 @@ class _ScalarResult:
         return 0
 
 
+class _MappingResult:
+    def __init__(self) -> None:
+        self._row = None
+
+    def mappings(self) -> "_MappingResult":
+        return self
+
+    def first(self) -> None:
+        return self._row
+
+
 class _CaptureSession:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any] | None]] = []
@@ -25,6 +36,12 @@ class _CaptureSession:
     def execute(self, statement: object, params: dict[str, Any] | None = None) -> _ScalarResult:
         self.calls.append((str(statement), params))
         return _ScalarResult()
+
+
+class _MatchCaptureSession(_CaptureSession):
+    def execute(self, statement: object, params: dict[str, Any] | None = None) -> _MappingResult:
+        self.calls.append((str(statement), params))
+        return _MappingResult()
 
 
 def _runner(session: object | None = None) -> DataPagesRealSyncRunner:
@@ -163,6 +180,31 @@ def test_refund_quantity_comes_from_return_api_quantity_display() -> None:
     assert gross == Decimal("70.0")
     assert commission == Decimal("10.500")
     assert net == Decimal("59.500")
+
+
+def test_refund_order_match_types_nullable_text_parameters() -> None:
+    session = _MatchCaptureSession()
+    runner = _runner(session)
+
+    matched = runner._match_refund_order_line(
+        {
+            "customer_order_id": "order-1",
+            "purchase_order_id": None,
+            "store_id": None,
+            "item_id": None,
+            "local_sku": "SKU-1",
+            "msku": None,
+        }
+    )
+
+    assert matched is None
+    sql = session.calls[0][0]
+    assert "cast(:customer_order_id as text) is not null" in sql
+    assert "cast(:purchase_order_id as text) is not null" in sql
+    assert "cast(:store_id as text) is null" in sql
+    assert "cast(:item_id as text) is not null" in sql
+    assert "trim(cast(:local_sku as text))" in sql
+    assert "cast(:msku as text) is not null" in sql
 
 
 def test_daily_sales_mart_is_based_on_salestat_and_joins_sku_cost_sources() -> None:
