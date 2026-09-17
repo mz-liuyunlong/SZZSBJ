@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Mapping
@@ -13,7 +12,6 @@ from app.modules.integration_sync.data_pages_business_rules import (
     DataPagesRealSyncRunner as BusinessRulesRunner,
 )
 from app.modules.integration_sync.data_pages_real_sync import (
-    WALMART_PLATFORM_CODE,
     _decimal,
     _field,
     _nested_first,
@@ -64,15 +62,9 @@ def _cost_totals(
         if cost.first_leg_cost_unit_cny is not None and fx is not None and fx > 0
         else None
     )
-    wfs = (
-        cost.wfs_fee_unit_usd * quantity
-        if cost.wfs_fee_unit_usd is not None
-        else None
-    )
+    wfs = cost.wfs_fee_unit_usd * quantity if cost.wfs_fee_unit_usd is not None else None
     storage = (
-        cost.storage_fee_unit_usd * quantity
-        if cost.storage_fee_unit_usd is not None
-        else None
+        cost.storage_fee_unit_usd * quantity if cost.storage_fee_unit_usd is not None else None
     )
     return purchase, first_leg, wfs, storage
 
@@ -140,8 +132,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "source_account_ref": self.source_account_ref,
                         "store_id": _field(row, "store_id"),
                         "source_order_id": order_id,
-                        "source_order_line_id": _field(item, "global_item_no", "order_item_no", "id"),
-                        "platform_order_no": _field(item, "platform_order_no") or _field(row, "platform_order_no"),
+                        "source_order_line_id": _field(
+                            item, "global_item_no", "order_item_no", "id"
+                        ),
+                        "platform_order_no": _field(item, "platform_order_no")
+                        or _field(row, "platform_order_no"),
                         "reference_no": _field(row, "reference_no", "referenceNo"),
                         "source_line_hash": line_hash,
                         "source_line_ordinal": ordinal,
@@ -293,32 +288,40 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             source_account_ref=self.source_account_ref,
             at=now,
         )
-        trend_rows = self.session.execute(
-            text(
-                "select business_date_la,store_id,item_id,coalesce(sales_qty,0) sales_qty "
-                "from fact_walmart_sales_item_daily where source_account_ref=:account "
-                "and business_date_la between :start_day and :end_day and allocation_status='direct'"
-            ),
-            {
-                "account": self.source_account_ref,
-                "start_day": self.business_date - timedelta(days=7),
-                "end_day": self.business_date - timedelta(days=1),
-            },
-        ).mappings().all()
+        trend_rows = (
+            self.session.execute(
+                text(
+                    "select business_date_la,store_id,item_id,coalesce(sales_qty,0) sales_qty "
+                    "from fact_walmart_sales_item_daily where source_account_ref=:account "
+                    "and business_date_la between :start_day and :end_day and allocation_status='direct'"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "start_day": self.business_date - timedelta(days=7),
+                    "end_day": self.business_date - timedelta(days=1),
+                },
+            )
+            .mappings()
+            .all()
+        )
         trend_map: dict[tuple[str, str, object], Decimal] = {}
         for trend in trend_rows:
-            trend_map[(str(trend["store_id"]), str(trend["item_id"]), trend["business_date_la"])] = (
-                _decimal(trend["sales_qty"]) or Decimal("0")
-            )
+            trend_map[
+                (str(trend["store_id"]), str(trend["item_id"]), trend["business_date_la"])
+            ] = _decimal(trend["sales_qty"]) or Decimal("0")
 
-        mart_rows = self.session.execute(
-            text(
-                "select m.id,m.store_id,m.item_id,m.local_sku,m.sales_qty,m.sales_amount,m.refund_amount,"
-                "m.ad_spend_amount,m.commission_fee_amount,coalesce((m.source_lineage_json->>'refund_unpriced_count')::int,0) refund_unpriced_count "
-                "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
-            ),
-            {"account": self.source_account_ref, "day": self.business_date},
-        ).mappings().all()
+        mart_rows = (
+            self.session.execute(
+                text(
+                    "select m.id,m.store_id,m.item_id,m.local_sku,m.sales_qty,m.sales_amount,m.refund_amount,"
+                    "m.ad_spend_amount,m.commission_fee_amount,coalesce((m.source_lineage_json->>'refund_unpriced_count')::int,0) refund_unpriced_count "
+                    "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            )
+            .mappings()
+            .all()
+        )
 
         for row in mart_rows:
             quantity = _decimal(row["sales_qty"]) or Decimal("0")
@@ -333,7 +336,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             if cost is None:
                 missing.append("product_management_sku_unmatched")
             else:
-                purchase_total, first_leg_total, wfs_total, storage_total = _cost_totals(cost, quantity)
+                purchase_total, first_leg_total, wfs_total, storage_total = _cost_totals(
+                    cost, quantity
+                )
                 if cost.purchase_cost_unit_cny is None:
                     missing.append("purchase_cost_missing")
                 if cost.wfs_fee_unit_usd is None:
@@ -343,9 +348,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 if cost.storage_fee_unit_usd is None:
                     missing.append("storage_fee_missing")
                 if (
-                    (cost.purchase_cost_unit_cny is not None or cost.first_leg_cost_unit_cny is not None)
-                    and (cost.exchange_rate is None or cost.exchange_rate <= 0)
-                ):
+                    cost.purchase_cost_unit_cny is not None
+                    or cost.first_leg_cost_unit_cny is not None
+                ) and (cost.exchange_rate is None or cost.exchange_rate <= 0):
                     missing.append("fx_rate_missing")
             if int(row["refund_unpriced_count"] or 0) > 0:
                 missing.append("refund_business_amount_missing")
@@ -364,7 +369,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             known_costs = [refund, ad_spend, commission]
             optional_costs = (purchase_total, first_leg_total, wfs_total, storage_total)
             gross_profit = (
-                sales - sum(known_costs, Decimal("0")) - sum(
+                sales
+                - sum(known_costs, Decimal("0"))
+                - sum(
                     (value for value in optional_costs if value is not None),
                     Decimal("0"),
                 )
