@@ -46,6 +46,7 @@ interface OrderProfitParams {
   pageSize?: number;
 }
 
+const MAX_API_PAGES = 10_000;
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 
 const currencyLabel = (currencyCode: string | null): OrderProfitSourceRecord["currency"] => (
@@ -91,18 +92,43 @@ const toOrderProfitSourceRecord = (item: BackendOrderProfitItem): OrderProfitSou
 export async function fetchOrderProfitSourceRecords(
   params: OrderProfitParams,
 ): Promise<OrderProfitApiResult> {
-  const search = new URLSearchParams();
-  if (params.startDate) search.set("start_date", params.startDate);
-  if (params.endDate) search.set("end_date", params.endDate);
-  search.set("page", "1");
-  search.set("page_size", String(params.pageSize ?? 500));
+  const pageSize = params.pageSize ?? 500;
+  const items: BackendOrderProfitItem[] = [];
+  let firstMeta: OrderProfitApiMeta | null = null;
 
-  const envelope = await backendRequest<BackendOrderProfitData, OrderProfitApiMeta>(
-    `/api/sales/order-profit?${search.toString()}`,
-  );
+  for (let page = 1; page <= MAX_API_PAGES; page += 1) {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set("start_date", params.startDate);
+    if (params.endDate) search.set("end_date", params.endDate);
+    search.set("page", String(page));
+    search.set("page_size", String(pageSize));
 
-  return {
-    records: envelope.data.items.map(toOrderProfitSourceRecord),
-    meta: envelope.meta,
-  };
+    const envelope = await backendRequest<BackendOrderProfitData, OrderProfitApiMeta>(
+      `/api/sales/order-profit?${search.toString()}`,
+    );
+
+    firstMeta ??= envelope.meta;
+    items.push(...envelope.data.items);
+
+    if (
+      envelope.data.items.length === 0 ||
+      items.length >= envelope.meta.total ||
+      envelope.data.items.length < envelope.meta.page_size
+    ) {
+      const meta = firstMeta ?? envelope.meta;
+      return {
+        records: items.map(toOrderProfitSourceRecord),
+        meta: {
+          ...meta,
+          page: 1,
+          page_size: items.length,
+          total: envelope.meta.total,
+          partial: meta.partial || envelope.meta.partial,
+          input_missing: meta.input_missing || envelope.meta.input_missing,
+        },
+      };
+    }
+  }
+
+  throw new Error("Order Profit API pagination exceeded the safety limit");
 }

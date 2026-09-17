@@ -31,7 +31,10 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["scripts/run_data_pages_real_sync.py"]
+extend-exclude = [
+    "scripts/run_data_pages_real_sync.py",
+    "app/modules/integration_sync/data_pages_real_sync.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

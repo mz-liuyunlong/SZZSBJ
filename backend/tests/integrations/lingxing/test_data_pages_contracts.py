@@ -124,7 +124,7 @@ def _china_epoch(value: str) -> int:
             {
                 "page": 1,
                 "length": 3,
-                "data_type": "4",
+                "data_type": 1,
                 "date_unit": "4",
                 "result_type": "1",
             },
@@ -245,6 +245,22 @@ def test_data_pages_contracts_use_query_sign_and_official_value_types(
     serialized = envelope.model_dump_json()
     assert "credential-fixture" not in serialized
     assert SYNTHETIC_APP_ID not in serialized
+
+
+def test_sale_stat_defaults_data_type_without_overriding_explicit_value() -> None:
+    from app.integrations.lingxing.data_pages_contracts import normalize_data_pages_body
+
+    defaulted = normalize_data_pages_body(
+        SALE_STAT_ENDPOINT,
+        {"page": 1, "length": 3, "date_unit": "day", "result_type": 1},
+    )
+    explicit = normalize_data_pages_body(
+        SALE_STAT_ENDPOINT,
+        {"page": 1, "length": 3, "data_type": 2, "date_unit": "day", "result_type": 1},
+    )
+
+    assert isinstance(defaulted, dict) and defaulted["data_type"] == 1
+    assert isinstance(explicit, dict) and explicit["data_type"] == 2
 
 
 @pytest.mark.parametrize(
