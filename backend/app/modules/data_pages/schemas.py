@@ -75,12 +75,12 @@ class DailySalesItemRead(StrictSchema):
     title: str | None
     picture_url: str | None
     platform_code: str | None
-    gross_sales_qty: Money
-    gross_order_count: Money
-    gross_sales_amount: Money
-    sample_order_count: Money
-    sample_qty: Money
-    cost_quantity: Money
+    gross_sales_qty: Money = Decimal("0")
+    gross_order_count: Money = Decimal("0")
+    gross_sales_amount: Money = Decimal("0")
+    sample_order_count: Money = Decimal("0")
+    sample_qty: Money = Decimal("0")
+    cost_quantity: Money = Decimal("0")
     sales_qty: Money
     order_count: Money
     sales_amount: Money
@@ -98,42 +98,42 @@ class DailySalesItemRead(StrictSchema):
     wfs_fee_unit_amount: Money | None
     wfs_fee_total_amount: Money | None
     wfs_fee_currency_code: str | None
-    wfs_fee_expected_unit_amount: Money | None
-    wfs_fee_expected_total_amount: Money | None
-    wfs_fee_actual_total_amount: Money | None
-    wfs_fee_variance_amount: Money | None
-    wfs_fee_variance_rate: Ratio | None
-    wfs_fee_source: str | None
+    wfs_fee_expected_unit_amount: Money | None = None
+    wfs_fee_expected_total_amount: Money | None = None
+    wfs_fee_actual_total_amount: Money | None = None
+    wfs_fee_variance_amount: Money | None = None
+    wfs_fee_variance_rate: Ratio | None = None
+    wfs_fee_source: str | None = None
     purchase_cost_unit_cny: Money | None
     purchase_cost_total_usd: Money | None
-    purchase_cost_estimated_total_usd: Money | None
-    purchase_cost_actual_total_usd: Money | None
-    purchase_cost_source: str | None
+    purchase_cost_estimated_total_usd: Money | None = None
+    purchase_cost_actual_total_usd: Money | None = None
+    purchase_cost_source: str | None = None
     first_leg_cost_unit_cny: Money | None
     first_leg_cost_total_usd: Money | None
-    first_leg_cost_estimated_total_usd: Money | None
-    first_leg_cost_actual_total_usd: Money | None
-    first_leg_cost_source: str | None
+    first_leg_cost_estimated_total_usd: Money | None = None
+    first_leg_cost_actual_total_usd: Money | None = None
+    first_leg_cost_source: str | None = None
     storage_fee_unit_amount: Money | None
     storage_fee_total_amount: Money | None
     storage_fee_currency_code: str | None
-    storage_fee_estimated_total_amount: Money | None
-    storage_fee_actual_total_amount: Money | None
-    storage_fee_source: str | None
-    exchange_rate: Ratio | None
-    fx_date: date | None
-    fx_source: str | None
+    storage_fee_estimated_total_amount: Money | None = None
+    storage_fee_actual_total_amount: Money | None = None
+    storage_fee_source: str | None = None
+    exchange_rate: Ratio | None = None
+    fx_date: date | None = None
+    fx_source: str | None = None
     commission_rate: Ratio | None
     commission_fee_amount: Money | None
     commission_fee_currency_code: str | None
-    commission_source: str | None
+    commission_source: str | None = None
     gross_profit_amount: Money | None
     gross_profit_currency_code: str | None
     gross_margin: Ratio | None
     roi: Ratio | None
     cost_status: Literal["complete", "partial", "missing"]
     missing_cost_codes: list[str]
-    calculation_warnings: list[str]
+    calculation_warnings: list[str] = Field(default_factory=list)
     sales_7d_trend: list[DailySalesTrendPointRead]
     calc_version: str
     calculated_at: datetime
