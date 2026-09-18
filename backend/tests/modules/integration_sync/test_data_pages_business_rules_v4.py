@@ -70,10 +70,7 @@ def test_daily_sales_scope_includes_positive_ads_and_refund_only_keys() -> None:
     source = inspect.getsource(PageCompletenessRunner._refresh_daily_sales_mart)
 
     assert "having sum(coalesce(ad_spend_amount,0))>0" in source
-    assert (
-        '"select business_date_la,source_account_ref,store_id,item_id from r),"'
-        in source
-    )
+    assert '"select business_date_la,source_account_ref,store_id,item_id from r),"' in source
     assert "sale_stat_union_positive_ad_spend_union_refund" in source
 
 
