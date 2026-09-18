@@ -97,6 +97,7 @@ export async function fetchWfsFeeAlerts(
 export async function updateWfsFeeAlertCase(
   id: string,
   values: WfsFeeAlertFollowFormValues,
+  claimAmount: number,
 ): Promise<void> {
   await backendRequest<{ updated: boolean }, null>(
     `/api/warehouse/wfs-fee-alerts/${encodeURIComponent(id)}/case`,
@@ -107,6 +108,7 @@ export async function updateWfsFeeAlertCase(
         case_no: values.caseNo,
         reason: "",
         priority: "中",
+        claim_amount: claimAmount,
         recovered_amount: values.recoveredAmount,
         next_follow_at: values.nextFollowAt === "-" ? null : values.nextFollowAt,
         latest_follow: values.latestFollow,
