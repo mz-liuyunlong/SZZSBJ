@@ -23,6 +23,7 @@ export interface OrderProfitSourceRecord {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+  refundQuantity: number;
   refundAmount: number;
   adSpend: number;
   wfsDeliveryFee: number | null;
@@ -46,6 +47,7 @@ export interface OrderProfitRow {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+  refundQuantity: number;
   refundAmount: number;
   adSpend: number;
   adRatio: number | null;
@@ -80,7 +82,8 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "salesVolume", title: "销量" },
   { key: "orderCount", title: "订单量" },
   { key: "salesAmount", title: "销售额" },
-  { key: "refundAmount", title: "退款额" },
+  { key: "refundQuantity", title: "退款数量" },
+  { key: "refundAmount", title: "退款金额" },
   { key: "adSpend", title: "广告费" },
   { key: "adRatio", title: "广告占比" },
   { key: "wfsDeliveryFee", title: "WFS总配送费" },
@@ -149,6 +152,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
     const salesVolume = bucket.reduce((total, row) => total + row.salesVolume, 0);
     const orderCount = bucket.reduce((total, row) => total + row.orderCount, 0);
     const salesAmount = bucket.reduce((total, row) => total + row.salesAmount, 0);
+    const refundQuantity = bucket.reduce((total, row) => total + row.refundQuantity, 0);
     const refundAmount = bucket.reduce((total, row) => total + row.refundAmount, 0);
     const adSpend = bucket.reduce((total, row) => total + row.adSpend, 0);
     const sumOptional = (key: "wfsDeliveryFee" | "purchaseCost" | "firstLegCost" | "storageFee") => (
@@ -192,6 +196,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       salesVolume,
       orderCount,
       salesAmount,
+      refundQuantity,
       refundAmount,
       adSpend,
       adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
