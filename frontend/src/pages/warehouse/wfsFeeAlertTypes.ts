@@ -59,8 +59,8 @@ export interface WfsFeeAlertColumnField {
   title: string;
 }
 
-export const WFS_FEE_ALERT_USD_TO_CNY_RATE = 7.2;
-export const WFS_FEE_ALERT_REFERENCE_DATE = "2026-09-13";
+export const WFS_FEE_ALERT_USD_TO_CNY_RATE = 6.6;
+export const WFS_FEE_ALERT_REFERENCE_DATE = new Date().toISOString().slice(0, 10);
 
 const formatIsoDate = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -87,7 +87,7 @@ export const wfsFeeAlertColumnFields: WfsFeeAlertColumnField[] = [
   { key: "productId", title: "商品ID" },
   { key: "category", title: "类目" },
   { key: "orders", title: "订单量" },
-  { key: "units", title: "销量" },
+  { key: "units", title: "计费量（销量+送样）" },
   { key: "chargedFee", title: "已收WFS费用" },
   { key: "standardFee", title: "应收WFS费用" },
   { key: "overFee", title: "多收金额" },

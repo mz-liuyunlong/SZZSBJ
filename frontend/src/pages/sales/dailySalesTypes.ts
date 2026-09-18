@@ -22,6 +22,13 @@ export interface DailySalesRow {
   productName: string;
   platform: DailySalesPlatform;
   currency: DailySalesCurrency;
+  grossSalesVolume?: number;
+  grossOrderCount?: number;
+  grossSalesAmount?: number;
+  sampleOrderCount?: number;
+  sampleQuantity?: number;
+  sampleAmount?: number;
+  costQuantity?: number;
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
@@ -31,20 +38,32 @@ export interface DailySalesRow {
   returnRate30Days: number;
   adSpend: number;
   adRatio: number;
-  wfsDeliveryFee: number;
-  wfsDeliveryUnitPrice: number;
-  commission: number;
-  purchaseCost: number;
-  purchaseUnitPriceCny: number;
-  firstLegCost: number;
-  firstLegUnitPriceCny: number;
-  storageFee: number;
-  storageUnitPrice: number;
+  wfsDeliveryFee: number | null;
+  wfsDeliveryUnitPrice: number | null;
+  wfsExpectedFee?: number;
+  wfsActualFee?: number | null;
+  wfsVarianceAmount?: number | null;
+  wfsVarianceRate?: number | null;
+  wfsFeeSource?: string;
+  commission: number | null;
+  purchaseCost: number | null;
+  purchaseUnitPriceCny: number | null;
+  firstLegCost: number | null;
+  firstLegUnitPriceCny: number | null;
+  storageFee: number | null;
+  storageUnitPrice: number | null;
   wfsAvailableInventory: number;
-  legacyGrossProfit: number;
-  orderProfit: number;
-  profitMargin: number;
-  roi: number;
+  legacyGrossProfit: number | null;
+  orderProfit: number | null;
+  profitMargin: number | null;
+  roi: number | null;
+  exchangeRate?: number;
+  fxSource?: string;
+  commissionSource?: string;
+  purchaseCostSource?: string;
+  firstLegCostSource?: string;
+  storageFeeSource?: string;
+  calculationWarnings?: string[];
   costStatus: DailySalesCostStatus;
   systemOperationLog: string;
   operationLog: string;
@@ -100,7 +119,7 @@ export const fixedDailySalesColumnKeys = [
 ];
 
 /** Acceptance-only display rate; replace with approved daily FX data when the API is implemented. */
-export const MOCK_USD_TO_CNY_RATE = 7.2;
+export const MOCK_USD_TO_CNY_RATE = 6.6;
 
 export const dateRangeForPreset = (
   preset: Exclude<DailySalesDatePreset, "custom">,

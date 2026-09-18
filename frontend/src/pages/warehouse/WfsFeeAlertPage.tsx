@@ -6,7 +6,7 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import {
@@ -19,7 +19,10 @@ import WfsFeeAlertFollowModal from "@/pages/warehouse/components/WfsFeeAlertFoll
 import WfsFeeAlertSummaryCards from "@/pages/warehouse/components/WfsFeeAlertSummaryCards";
 import WfsFeeAlertTable from "@/pages/warehouse/components/WfsFeeAlertTable";
 import WfsFeeAlertToolbar from "@/pages/warehouse/components/WfsFeeAlertToolbar";
-import { wfsFeeAlertRows } from "@/pages/warehouse/wfsFeeAlertMockData";
+import {
+  fetchWfsFeeAlerts,
+  updateWfsFeeAlertCase,
+} from "@/pages/warehouse/wfsFeeAlertApi";
 import {
   createWfsFeeAlertInitialFilters,
   filterWfsFeeAlertRows,
@@ -37,8 +40,6 @@ interface WfsFeeAlertPageProps {
 
 const EXPORT_PENDING = "WFS费用异常导出接口待接入";
 const TEMPLATE_PENDING = "WFS费用异常列模板接口待接入";
-const CASE_PENDING = "Case写入接口待接入";
-const FOLLOW_PENDING = "跟进记录接口待接入";
 
 const defaultColumnKeys = wfsFeeAlertColumnFields.map((field) => field.key);
 const defaultColumnWidths: Record<string, number> = Object.fromEntries(wfsFeeAlertColumnFields.map((field) => [
@@ -54,10 +55,6 @@ const defaultColumnWidths: Record<string, number> = Object.fromEntries(wfsFeeAle
           : 112,
 ]));
 const columnGroups = [{ title: "WFS费用异常字段", fields: wfsFeeAlertColumnFields }];
-const stores = [...new Set(wfsFeeAlertRows.map((row) => row.store))];
-const owners = [...new Set(wfsFeeAlertRows.map((row) => row.owner))];
-const reasons = [...new Set(wfsFeeAlertRows.map((row) => row.reason))];
-
 function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState<WfsFeeAlertFilters>(createWfsFeeAlertInitialFilters);
@@ -71,8 +68,39 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<WfsFeeAlertRow>();
   const [followRow, setFollowRow] = useState<WfsFeeAlertRow>();
+  const [rows, setRows] = useState<WfsFeeAlertRow[]>([]);
 
-  const filteredRows = useMemo(() => filterWfsFeeAlertRows(wfsFeeAlertRows, filters), [filters]);
+  const reloadRows = async () => {
+    try {
+      const nextRows = await fetchWfsFeeAlerts(filters.dateRange[0], filters.dateRange[1]);
+      setRows(nextRows);
+    } catch {
+      setRows([]);
+      void messageApi.error("WFS费用异常数据加载失败");
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchWfsFeeAlerts(filters.dateRange[0], filters.dateRange[1])
+      .then((nextRows) => {
+        if (!cancelled) setRows(nextRows);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRows([]);
+          void messageApi.error("WFS费用异常数据加载失败");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.dateRange, messageApi]);
+
+  const stores = useMemo(() => [...new Set(rows.map((row) => row.store))], [rows]);
+  const owners = useMemo(() => [...new Set(rows.map((row) => row.owner))], [rows]);
+  const reasons = useMemo(() => [...new Set(rows.map((row) => row.reason))], [rows]);
+  const filteredRows = useMemo(() => filterWfsFeeAlertRows(rows, filters), [rows, filters]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -100,12 +128,26 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
     }
   };
 
-  const handleBatchOpenCase = () => void messageApi.info(selectedRowKeys.length ? CASE_PENDING : "请先选择需要开Case的异常SKU");
-  const handleBatchFollow = () => void messageApi.info(selectedRowKeys.length ? FOLLOW_PENDING : "请先选择需要跟进的异常SKU");
+  const handleBatchOpenCase = () => {
+    if (!selectedRowKeys.length) {
+      void messageApi.info("请先选择需要开Case的异常SKU");
+      return;
+    }
+    const first = rows.find((row) => selectedRowKeys.includes(row.id));
+    if (first) setFollowRow(first);
+  };
+  const handleBatchFollow = handleBatchOpenCase;
 
-  const handleSaveFollow = (values: WfsFeeAlertFollowFormValues) => {
-    void messageApi.info(`${FOLLOW_PENDING}：${values.status}`);
-    setFollowRow(undefined);
+  const handleSaveFollow = async (values: WfsFeeAlertFollowFormValues) => {
+    if (!followRow) return;
+    try {
+      await updateWfsFeeAlertCase(followRow.id, values, followRow.overFee);
+      setFollowRow(undefined);
+      await reloadRows();
+      void messageApi.success("WFS异常跟进已保存");
+    } catch {
+      void messageApi.error("WFS异常跟进保存失败");
+    }
   };
 
   const openFollowModal = (row: WfsFeeAlertRow) => {

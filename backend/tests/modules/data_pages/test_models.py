@@ -1,6 +1,7 @@
 from sqlalchemy import CheckConstraint, UniqueConstraint
 
 import app.modules.data_pages.models  # noqa: F401
+import app.modules.warehouse_wfs.models  # noqa: F401
 from app.db.base import Base
 
 EXPECTED_TABLES = {
@@ -15,6 +16,8 @@ EXPECTED_TABLES = {
     "mart_daily_sales_item_day",
     "mart_order_profit_sku_day",
     "mart_listing_management_current",
+    "fact_walmart_wfs_fee_actual",
+    "ops_wfs_fee_anomaly_cases",
 }
 
 
@@ -85,15 +88,37 @@ def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:
 def test_data_pages_marts_snapshot_financial_rules() -> None:
     daily = Base.metadata.tables["mart_daily_sales_item_day"].c
     assert {
+        "gross_sales_qty",
+        "gross_order_count",
+        "gross_sales_amount",
+        "sample_order_count",
+        "sample_qty",
+        "cost_quantity",
         "exchange_rate",
         "fx_date",
         "fx_source",
         "commission_rate",
         "commission_rule_version_id",
+        "commission_source",
+        "wfs_fee_expected_total_amount",
+        "wfs_fee_actual_total_amount",
+        "wfs_fee_variance_amount",
+        "wfs_fee_variance_rate",
+        "purchase_cost_source",
+        "first_leg_cost_source",
+        "storage_fee_source",
+        "calculation_warnings_json",
         "cost_status",
         "calc_version",
         "calculated_at",
     } <= set(daily.keys())
+    assert (
+        "business_date_la",
+        "source_account_ref",
+        "store_id",
+        "item_id",
+        "msku",
+    ) in _unique_column_sets("mart_daily_sales_item_day")
 
     order_profit = Base.metadata.tables["mart_order_profit_sku_day"].c
     assert {

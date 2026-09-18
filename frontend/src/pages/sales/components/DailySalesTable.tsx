@@ -63,15 +63,22 @@ function LogCell({ text }: { text: string }) {
 const money = (key: keyof DailySalesRow, currency: DailySalesCurrency) => {
   const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
   const symbol = currency === "CNY" ? "¥" : "$";
-  return (_: unknown, row: DailySalesRow) => (
-    <MoneyCell value={Number(row[key]) * rate} currency={symbol} />
-  );
+  return (_: unknown, row: DailySalesRow) => {
+    const value = row[key];
+    return <MoneyCell value={typeof value === "number" ? value * rate : null} currency={symbol} />;
+  };
 };
 const percent = (key: keyof DailySalesRow) =>
-  (_: unknown, row: DailySalesRow) => <PercentCell value={Number(row[key])} />;
+  (_: unknown, row: DailySalesRow) => {
+    const value = row[key];
+    return <PercentCell value={typeof value === "number" ? value : null} />;
+  };
 
 const sum = (rows: DailySalesRow[], key: keyof DailySalesRow) => rows
-  .reduce((total, row) => total + Number(row[key]), 0);
+  .reduce((total, row) => total + Number(row[key] ?? 0), 0);
+const sumNullable = (rows: DailySalesRow[], key: keyof DailySalesRow) => (
+  rows.some((row) => row[key] == null) ? null : sum(rows, key)
+);
 
 const totalMoneyKeys = new Set([
   "salesAmount",
@@ -104,7 +111,8 @@ function TotalCell({
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
   if (totalMoneyKeys.has(columnKey)) {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    return <MoneyCell value={sum(rows, columnKey as keyof DailySalesRow) * rate} currency={currency === "CNY" ? "¥" : "$"} />;
+    const total = sumNullable(rows, columnKey as keyof DailySalesRow);
+    return <MoneyCell value={total == null ? null : total * rate} currency={currency === "CNY" ? "¥" : "$"} />;
   }
   if (totalIntegerKeys.has(columnKey)) {
     return <span className="report-table-metric">{sum(rows, columnKey as keyof DailySalesRow).toLocaleString("zh-CN")}</span>;
@@ -119,10 +127,21 @@ function TotalCell({
     return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : null;
   }
   if (columnKey === "profitMargin") {
-    return salesAmount ? <PercentCell value={sum(rows, "orderProfit") / salesAmount * 100} /> : null;
+    const orderProfit = sumNullable(rows, "orderProfit");
+    return salesAmount && orderProfit != null
+      ? <PercentCell value={orderProfit / salesAmount * 100} />
+      : <PercentCell value={null} />;
   }
   if (columnKey === "roi") {
-    return adSpend ? <span className="report-table-metric">{(salesAmount / adSpend).toFixed(2)}</span> : null;
+    const orderProfit = sumNullable(rows, "orderProfit");
+    const purchaseCost = sumNullable(rows, "purchaseCost");
+    const firstLegCost = sumNullable(rows, "firstLegCost");
+    const denominator = purchaseCost != null && firstLegCost != null
+      ? purchaseCost + firstLegCost
+      : null;
+    return orderProfit != null && denominator != null && denominator > 0
+      ? <PercentCell value={orderProfit / denominator * 100} />
+      : <PercentCell value={null} />;
   }
   return null;
 }

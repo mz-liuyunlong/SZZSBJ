@@ -21,15 +21,18 @@ interface OrderProfitDetailModalProps {
 function OrderProfitDetailModal({ row, onClose }: OrderProfitDetailModalProps) {
   if (!row) return null;
 
+  const money = (value: number | null) => value == null ? "—" : `${value.toFixed(2)}`;
+  const percent = (value: number | null) => value == null ? "—" : `${value.toFixed(2)}%`;
+
   const items = [
     { label: "商品ID / 品名", value: `${row.productId} / ${row.productName}`, icon: <TagsOutlined />, tone: "green" },
     { label: "SKU / MSKU", value: `${row.sku} / ${row.msku}`, icon: <AppstoreOutlined />, tone: "purple" },
     { label: "平台 / 店铺 / 负责人", value: `${row.platform} · ${row.store} · ${row.owner}`, icon: <ShopOutlined /> },
     { label: "销量 / 订单量 / 销售额", value: `${row.salesVolume} / ${row.orderCount} / $${row.salesAmount.toFixed(2)}`, icon: <BarChartOutlined /> },
     { label: "退款 / 广告", value: `$${row.refundAmount.toFixed(2)} / $${row.adSpend.toFixed(2)}`, icon: <RollbackOutlined />, tone: "orange" },
-    { label: "配送 / 佣金", value: `$${row.wfsDeliveryFee.toFixed(2)} / $${row.commission.toFixed(2)}`, icon: <NotificationOutlined />, tone: "red" },
-    { label: "总成本", value: `$${row.totalCost.toFixed(2)} / ${row.costStatus}`, icon: <DollarCircleOutlined />, tone: "gray" },
-    { label: "订单利润", value: `$${row.orderProfit.toFixed(2)} / ${row.profitMargin.toFixed(2)}%`, icon: <RiseOutlined />, tone: "purple" },
+    { label: "配送 / 佣金", value: `${money(row.wfsDeliveryFee)} / ${row.commission.toFixed(2)}`, icon: <NotificationOutlined />, tone: "red" },
+    { label: "总成本", value: `${money(row.totalCost)} / ${row.costStatus}`, icon: <DollarCircleOutlined />, tone: "gray" },
+    { label: "订单利润", value: `${money(row.orderProfit)} / ${percent(row.profitMargin)}`, icon: <RiseOutlined />, tone: "purple" },
     { label: "近 7 天趋势", value: row.sevenDaySales.join(" / "), icon: <LineChartOutlined />, tone: "green" },
   ];
 

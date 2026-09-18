@@ -226,7 +226,16 @@ export function TrendPreviewCell({ values, dates, label = "销量" }: TrendPrevi
   );
 }
 
-export function MoneyCell({ value, currency = "$" }: { value: number; currency?: "$" | "¥" }) {
+export function MoneyCell({
+  value,
+  currency = "$",
+}: {
+  value: number | null | undefined;
+  currency?: "$" | "¥";
+}) {
+  if (value == null || !Number.isFinite(value)) {
+    return <span className="report-table-metric">—</span>;
+  }
   return (
     <span className="report-table-metric">
       {currency}{value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -234,7 +243,10 @@ export function MoneyCell({ value, currency = "$" }: { value: number; currency?:
   );
 }
 
-export function PercentCell({ value }: { value: number }) {
+export function PercentCell({ value }: { value: number | null | undefined }) {
+  if (value == null || !Number.isFinite(value)) {
+    return <span className="report-table-metric">—</span>;
+  }
   return <span className="report-table-metric">{value.toFixed(2)}%</span>;
 }
 

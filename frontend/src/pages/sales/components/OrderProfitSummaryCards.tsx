@@ -31,8 +31,8 @@ const formatAmount = (value: number, currency: OrderProfitCurrency) => {
 };
 
 interface AnimatedMetricValueProps {
-  value: number;
-  formatter: (value: number) => string;
+  value: number | null;
+  formatter: (value: number | null) => string;
 }
 
 function AnimatedMetricValue({ value, formatter }: AnimatedMetricValueProps) {
@@ -41,18 +41,23 @@ function AnimatedMetricValue({ value, formatter }: AnimatedMetricValueProps) {
 
 function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProps) {
   const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-  const totals = useMemo(() => rows.reduce((result, row) => ({
-    salesVolume: result.salesVolume + row.salesVolume,
-    salesAmount: result.salesAmount + row.salesAmount,
-    orderProfit: result.orderProfit + row.orderProfit,
-    adSpend: result.adSpend + row.adSpend,
-  }), { salesVolume: 0, salesAmount: 0, orderProfit: 0, adSpend: 0 }), [rows]);
+  const totals = useMemo(() => {
+    const incompleteProfit = rows.some((row) => row.orderProfit == null);
+    return {
+      salesVolume: rows.reduce((total, row) => total + row.salesVolume, 0),
+      salesAmount: rows.reduce((total, row) => total + row.salesAmount, 0),
+      orderProfit: incompleteProfit
+        ? null
+        : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0),
+      adSpend: rows.reduce((total, row) => total + row.adSpend, 0),
+    };
+  }, [rows]);
 
   const metrics = [
     {
       title: "销量",
       value: totals.salesVolume,
-      formatter: (value: number) => Math.round(value).toLocaleString("zh-CN"),
+      formatter: (value: number | null) => Math.round(value ?? 0).toLocaleString("zh-CN"),
       subtitle: "当前筛选销量",
       icon: <ShoppingOutlined />,
       tone: "blue",
@@ -62,7 +67,7 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
     {
       title: "销售额",
       value: totals.salesAmount * rate,
-      formatter: (value: number) => formatAmount(value, currency),
+      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "销售金额合计",
       icon: <DollarCircleOutlined />,
       tone: "green",
@@ -71,8 +76,8 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
     },
     {
       title: "订单利润",
-      value: totals.orderProfit * rate,
-      formatter: (value: number) => formatAmount(value, currency),
+      value: totals.orderProfit == null ? null : totals.orderProfit * rate,
+      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "商品ID利润合计",
       icon: <LineChartOutlined />,
       tone: "orange",
@@ -81,8 +86,10 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
     },
     {
       title: "利润率",
-      value: totals.salesAmount ? totals.orderProfit / totals.salesAmount * 100 : 0,
-      formatter: (value: number) => (totals.salesAmount ? `${value.toFixed(2)}%` : "-"),
+      value: totals.salesAmount && totals.orderProfit != null
+        ? totals.orderProfit / totals.salesAmount * 100
+        : null,
+      formatter: (value: number | null) => value == null ? "—" : `${value.toFixed(2)}%`,
       subtitle: "利润 / 销售额",
       icon: <PieChartOutlined />,
       tone: "purple",
@@ -92,7 +99,7 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
     {
       title: "广告费",
       value: totals.adSpend * rate,
-      formatter: (value: number) => formatAmount(value, currency),
+      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "广告花费合计",
       icon: <NotificationOutlined />,
       tone: "red",
@@ -101,8 +108,8 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
     },
     {
       title: "广告占比",
-      value: totals.salesAmount ? totals.adSpend / totals.salesAmount * 100 : 0,
-      formatter: (value: number) => (totals.salesAmount ? `${value.toFixed(2)}%` : "-"),
+      value: totals.salesAmount ? totals.adSpend / totals.salesAmount * 100 : null,
+      formatter: (value: number | null) => value == null ? "—" : `${value.toFixed(2)}%`,
       subtitle: "广告费 / 销售额",
       icon: <PercentageOutlined />,
       tone: "cyan",

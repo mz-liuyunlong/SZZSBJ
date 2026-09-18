@@ -19,6 +19,7 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "products:cost:read",
         "integrations:read",
         "sales:daily-sales:read",
+        "warehouse:wfs-fee-alert:read",
     }
 )
 _PREVIEW_PATH_PREFIXES: Final = frozenset(
@@ -26,6 +27,7 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
         "/api/product-management/",
         "/api/sales/",
         "/api/listings/",
+        "/api/warehouse/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(

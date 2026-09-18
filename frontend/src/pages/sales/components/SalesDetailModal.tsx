@@ -21,6 +21,9 @@ interface SalesDetailModalProps {
 function SalesDetailModal({ row, onClose }: SalesDetailModalProps) {
   if (!row) return null;
 
+  const money = (value: number | null) => value == null ? "—" : `${value.toFixed(2)}`;
+  const percent = (value: number | null) => value == null ? "—" : `${value.toFixed(2)}%`;
+
   const items = [
     { label: "基础信息", value: `${row.date} · ${row.store} · ${row.owner}`, icon: <ShopOutlined /> },
     { label: "MSKU / 商品ID", value: `${row.msku} / ${row.productId}`, icon: <TagsOutlined />, tone: "green" },
@@ -28,7 +31,7 @@ function SalesDetailModal({ row, onClose }: SalesDetailModalProps) {
     { label: "销量 / 订单量 / 销售额", value: `${row.salesVolume} / ${row.orderCount} / $${row.salesAmount.toFixed(2)}`, icon: <BarChartOutlined /> },
     { label: "退货 / 退款", value: `${row.returnCount} / $${row.refundAmount.toFixed(2)}`, icon: <RollbackOutlined />, tone: "orange" },
     { label: "广告 / 成本", value: `$${row.adSpend.toFixed(2)} / ${row.costStatus}`, icon: <NotificationOutlined />, tone: "red" },
-    { label: "利润", value: `$${row.orderProfit.toFixed(2)} / ${row.profitMargin.toFixed(2)}%`, icon: <RiseOutlined />, tone: "purple" },
+    { label: "利润", value: `${money(row.orderProfit)} / ${percent(row.profitMargin)}`, icon: <RiseOutlined />, tone: "purple" },
     { label: "近 7 天趋势", value: row.sevenDaySales.join(" / "), icon: <LineChartOutlined />, tone: "green" },
     { label: "运营日志摘要", value: row.operationLog, icon: <FileTextOutlined />, tone: "gray" },
   ];

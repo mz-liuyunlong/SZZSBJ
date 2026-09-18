@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -210,6 +210,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         return rows[0] if len(rows) == 1 else None
 
     def _refresh_daily_sales_mart(self) -> int:
+        """Build the auditable paid-sales truth and snapshot all effective cost inputs."""
         now = _now()
         self.session.execute(
             text(
@@ -263,16 +264,20 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "order by store_id,effective_from desc,created_at desc) "
                 "insert into mart_daily_sales_item_day "
                 "(id,business_date_la,source_account_ref,platform_code,store_id,store_name,item_id,msku,local_sku,"
-                "local_name,title,picture_url,owner_ref,sales_qty,order_count,sales_amount,sales_currency_code,"
+                "local_name,title,picture_url,owner_ref,gross_sales_qty,gross_order_count,gross_sales_amount,"
+                "sample_order_count,sample_qty,cost_quantity,sales_qty,order_count,sales_amount,sales_currency_code,"
                 "sample_amount,sales_amount_excluding_sample,return_qty,refund_amount,refund_currency_code,"
                 "ad_spend_amount,ad_spend_currency_code,ad_ratio,wfs_available_quantity,commission_rate,"
-                "commission_rule_version_id,commission_fee_amount,commission_fee_currency_code,cost_status,"
-                "missing_cost_codes_json,sales_7d_trend_json,source_lineage_json,calc_version,calculated_at,created_at,updated_at) "
+                "commission_rule_version_id,commission_fee_amount,commission_fee_currency_code,commission_source,"
+                "cost_status,missing_cost_codes_json,calculation_warnings_json,sales_7d_trend_json,"
+                "source_lineage_json,calc_version,calculated_at,created_at,updated_at) "
                 "select gen_random_uuid(),k.business_date_la,k.source_account_ref,coalesce(l.platform_code,'walmart'),"
                 "k.store_id,l.store_name,k.item_id,k.msku,"
                 "coalesce(nullif(trim(l.local_sku),''),nullif(trim(s.local_sku),''),nullif(trim(r.local_sku),''),"
                 "nullif(trim(sample.local_sku),''),k.item_id),coalesce(l.local_name,s.product_name),"
-                "l.title,l.picture_url,null,"
+                "l.title,l.picture_url,null,coalesce(s.sales_qty,0),coalesce(s.order_count,0),coalesce(s.sales_amount,0),"
+                "coalesce(sample.sample_order_count,0),coalesce(sample.sample_qty,0),"
+                "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)+coalesce(sample.sample_qty,0),"
                 "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0),"
                 "greatest(coalesce(s.order_count,0)-coalesce(sample.sample_order_count,0),0),"
                 "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0),"
@@ -285,11 +290,14 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "else null end,l.wfs_available_quantity,coalesce(commission.commission_rate,0.15),commission.rule_id,"
                 "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)"
                 "*coalesce(commission.commission_rate,0.15),coalesce(s.currency_code,'USD'),"
-                "'missing','[\"product_management_cost_pending\"]'::jsonb,'[]'::jsonb,"
+                "case when commission.rule_id is null then 'default_15_percent' "
+                "else 'store_commission_rule' end,"
+                "'missing','[\"product_management_cost_pending\"]'::jsonb,'[]'::jsonb,'[]'::jsonb,"
                 "jsonb_build_object('runner',cast(:runner as text),"
                 "'basis','sale_stat_union_positive_ad_spend_union_refund_union_sample',"
                 "'match_key','store_id+item_id+msku','refund_unpriced_count',coalesce(r.refund_unpriced_count,0),"
-                "'sample_order_count',coalesce(sample.sample_order_count,0),'sample_qty',coalesce(sample.sample_qty,0)),"
+                "'sample_order_count',coalesce(sample.sample_order_count,0),'sample_qty',coalesce(sample.sample_qty,0),"
+                "'commission_rule_version',commission.rule_version),"
                 "cast(:runner as text),:now,:now,:now from k "
                 "left join s on s.source_account_ref=k.source_account_ref and s.business_date_la=k.business_date_la "
                 "and s.store_id=k.store_id and s.item_id=k.item_id and s.msku=k.msku "
@@ -312,17 +320,19 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             },
         )
 
+        effective_at = datetime.combine(self.business_date, datetime.min.time(), tzinfo=UTC)
         costs = load_daily_sales_costs(
             self.session,
             source_account_ref=self.source_account_ref,
-            at=now,
+            at=effective_at,
         )
+
         trend_rows = (
             self.session.execute(
                 text(
-                    "select business_date_la,store_id,item_id,coalesce(sales_qty,0) sales_qty "
-                    "from fact_walmart_sales_item_daily where source_account_ref=:account "
-                    "and business_date_la between :start_day and :end_day and allocation_status='direct'"
+                    "select business_date_la,store_id,item_id,trim(msku) msku,coalesce(sales_qty,0) sales_qty "
+                    "from mart_daily_sales_item_day where source_account_ref=:account "
+                    "and business_date_la between :start_day and :end_day"
                 ),
                 {
                     "account": self.source_account_ref,
@@ -333,17 +343,69 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             .mappings()
             .all()
         )
-        trend_map: dict[tuple[str, str, object], Decimal] = {}
+        trend_map: dict[tuple[str, str, str, object], Decimal] = {}
         for trend in trend_rows:
             trend_map[
-                (str(trend["store_id"]), str(trend["item_id"]), trend["business_date_la"])
+                (
+                    str(trend["store_id"]),
+                    str(trend["item_id"]),
+                    str(trend["msku"]),
+                    trend["business_date_la"],
+                )
             ] = _decimal(trend["sales_qty"]) or Decimal("0")
+
+        rolling_rows = (
+            self.session.execute(
+                text(
+                    "select store_id,item_id,trim(msku) msku,sum(coalesce(return_qty,0)) return_qty,"
+                    "sum(coalesce(sales_qty,0)) sales_qty from mart_daily_sales_item_day "
+                    "where source_account_ref=:account and business_date_la between :start_day and :end_day "
+                    "group by store_id,item_id,trim(msku)"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "start_day": self.business_date - timedelta(days=29),
+                    "end_day": self.business_date,
+                },
+            )
+            .mappings()
+            .all()
+        )
+        rolling_map = {
+            (str(row["store_id"]), str(row["item_id"]), str(row["msku"])): (
+                _decimal(row["return_qty"]) or Decimal("0"),
+                _decimal(row["sales_qty"]) or Decimal("0"),
+            )
+            for row in rolling_rows
+        }
+
+        actual_wfs_rows = (
+            self.session.execute(
+                text(
+                    "select store_id,item_id,trim(msku) msku,sum(actual_fee_amount) actual_fee "
+                    "from fact_walmart_wfs_fee_actual where source_account_ref=:account "
+                    "and business_date_la=:day group by store_id,item_id,trim(msku)"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            )
+            .mappings()
+            .all()
+        )
+        actual_wfs_map = {
+            (str(row["store_id"]), str(row["item_id"]), str(row["msku"])): _decimal(
+                row["actual_fee"]
+            )
+            for row in actual_wfs_rows
+        }
 
         mart_rows = (
             self.session.execute(
                 text(
-                    "select m.id,m.store_id,m.item_id,m.local_sku,m.sales_qty,m.sales_amount,m.refund_amount,"
-                    "m.ad_spend_amount,m.commission_fee_amount,coalesce((m.source_lineage_json->>'refund_unpriced_count')::int,0) refund_unpriced_count "
+                    "select m.id,m.store_id,m.item_id,m.msku,m.local_sku,m.gross_sales_qty,"
+                    "m.gross_order_count,m.gross_sales_amount,m.sample_order_count,m.sample_qty,m.sample_amount,"
+                    "m.cost_quantity,m.sales_qty,m.sales_amount,m.refund_amount,m.ad_spend_amount,"
+                    "m.commission_fee_amount,"
+                    "coalesce((m.source_lineage_json->>'refund_unpriced_count')::int,0) refund_unpriced_count "
                     "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
@@ -353,19 +415,39 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         )
 
         for row in mart_rows:
-            quantity = _decimal(row["sales_qty"]) or Decimal("0")
+            cost_quantity = _decimal(row["cost_quantity"]) or Decimal("0")
             sales = _decimal(row["sales_amount"]) or Decimal("0")
             ad_spend = _decimal(row["ad_spend_amount"]) or Decimal("0")
             commission = _decimal(row["commission_fee_amount"]) or Decimal("0")
+            gross_qty = _decimal(row["gross_sales_qty"]) or Decimal("0")
+            gross_orders = _decimal(row["gross_order_count"]) or Decimal("0")
+            gross_sales = _decimal(row["gross_sales_amount"]) or Decimal("0")
+            sample_orders = _decimal(row["sample_order_count"]) or Decimal("0")
+            sample_qty = _decimal(row["sample_qty"]) or Decimal("0")
+            sample_amount = _decimal(row["sample_amount"]) or Decimal("0")
+            refund_amount = _decimal(row["refund_amount"]) or Decimal("0")
+
             sku_key = normalize_sku_key(row["local_sku"])
             cost = costs.get(sku_key) if sku_key is not None else None
             missing: list[str] = []
-            purchase_total = first_leg_total = wfs_total = storage_total = None
+            warnings: list[str] = []
+            if sample_orders > gross_orders:
+                warnings.append("sample_order_count_exceeds_gross_order_count")
+            if sample_qty > gross_qty:
+                warnings.append("sample_qty_exceeds_gross_sales_qty")
+            if sample_amount > gross_sales:
+                warnings.append("sample_amount_exceeds_gross_sales_amount")
+            paid_sales = max(gross_sales - sample_amount, Decimal("0"))
+            if refund_amount > paid_sales:
+                warnings.append("refund_amount_exceeds_paid_sales_amount")
+
+            purchase_total = first_leg_total = wfs_expected_total = storage_total = None
             if cost is None:
                 missing.append("product_management_sku_unmatched")
+                warnings.append("product_management_sku_unmatched")
             else:
-                purchase_total, first_leg_total, wfs_total, storage_total = _cost_totals(
-                    cost, quantity
+                purchase_total, first_leg_total, wfs_expected_total, storage_total = _cost_totals(
+                    cost, cost_quantity
                 )
                 if cost.purchase_cost_unit_cny is None:
                     missing.append("purchase_cost_missing")
@@ -382,10 +464,37 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     missing.append("fx_rate_missing")
             if int(row["refund_unpriced_count"] or 0) > 0:
                 missing.append("refund_business_amount_missing")
+                warnings.append("refund_identity_or_business_amount_unresolved")
+            warnings.extend(code for code in missing if code not in warnings)
+
+            identity = (str(row["store_id"]), str(row["item_id"]), str(row["msku"]))
+            wfs_actual_total = actual_wfs_map.get(identity)
+            wfs_effective_total = (
+                wfs_actual_total if wfs_actual_total is not None else wfs_expected_total
+            )
+            wfs_variance = (
+                wfs_actual_total - wfs_expected_total
+                if wfs_actual_total is not None and wfs_expected_total is not None
+                else None
+            )
+            wfs_variance_rate = (
+                wfs_variance / wfs_expected_total
+                if wfs_variance is not None
+                and wfs_expected_total is not None
+                and wfs_expected_total > 0
+                else None
+            )
+            wfs_source = (
+                "walmart_statement" if wfs_actual_total is not None else "product_management"
+            )
+            if wfs_actual_total is not None and wfs_expected_total is None:
+                warnings.append("wfs_actual_without_expected_fee")
+            elif wfs_variance is not None and wfs_variance > 0:
+                warnings.append("wfs_overcharge_detected")
 
             complete_costs = all(
                 value is not None
-                for value in (purchase_total, first_leg_total, wfs_total, storage_total)
+                for value in (purchase_total, first_leg_total, wfs_effective_total, storage_total)
             )
             if not missing and complete_costs:
                 cost_status = "complete"
@@ -394,19 +503,35 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             else:
                 cost_status = "missing"
 
-            known_costs = [ad_spend, commission]
-            optional_costs = (purchase_total, first_leg_total, wfs_total, storage_total)
             gross_profit = (
                 sales
-                - sum(known_costs, Decimal("0"))
-                - sum(
-                    (value for value in optional_costs if value is not None),
-                    Decimal("0"),
-                )
-                if complete_costs and int(row["refund_unpriced_count"] or 0) == 0
+                - ad_spend
+                - commission
+                - purchase_total
+                - first_leg_total
+                - wfs_effective_total
+                - storage_total
+                if complete_costs
+                and int(row["refund_unpriced_count"] or 0) == 0
+                and purchase_total is not None
+                and first_leg_total is not None
+                and wfs_effective_total is not None
+                and storage_total is not None
                 else None
             )
             gross_margin = gross_profit / sales if gross_profit is not None and sales > 0 else None
+            roi_denominator = (
+                purchase_total + first_leg_total
+                if purchase_total is not None and first_leg_total is not None
+                else None
+            )
+            roi = (
+                gross_profit / roi_denominator
+                if gross_profit is not None and roi_denominator is not None and roi_denominator > 0
+                else None
+            )
+            rolling_return, rolling_sales = rolling_map.get(identity, (Decimal("0"), Decimal("0")))
+            return_rate_30d = rolling_return / rolling_sales if rolling_sales > 0 else None
             trend = [
                 {
                     "date": (self.business_date - timedelta(days=offset)).isoformat(),
@@ -415,6 +540,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                             (
                                 str(row["store_id"]),
                                 str(row["item_id"]),
+                                str(row["msku"]),
                                 self.business_date - timedelta(days=offset),
                             ),
                             Decimal("0"),
@@ -425,34 +551,57 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             ]
             self.session.execute(
                 text(
-                    "update mart_daily_sales_item_day set owner_ref=:owner_ref,"
+                    "update mart_daily_sales_item_day set owner_ref=:owner_ref,return_rate_30d=:return_rate_30d,"
                     "wfs_fee_unit_amount=:wfs_unit,wfs_fee_total_amount=:wfs_total,wfs_fee_currency_code='USD',"
+                    "wfs_fee_expected_unit_amount=:wfs_unit,wfs_fee_expected_total_amount=:wfs_expected_total,"
+                    "wfs_fee_actual_total_amount=:wfs_actual_total,wfs_fee_variance_amount=:wfs_variance,"
+                    "wfs_fee_variance_rate=:wfs_variance_rate,wfs_fee_source=:wfs_source,"
                     "purchase_cost_unit_cny=:purchase_unit,purchase_cost_total_usd=:purchase_total,"
+                    "purchase_cost_estimated_total_usd=:purchase_total,purchase_cost_actual_total_usd=null,"
+                    "purchase_cost_source=:purchase_source,"
                     "first_leg_cost_unit_cny=:first_leg_unit,first_leg_cost_total_usd=:first_leg_total,"
+                    "first_leg_cost_estimated_total_usd=:first_leg_total,first_leg_cost_actual_total_usd=null,"
+                    "first_leg_cost_source=:first_leg_source,"
                     "storage_fee_unit_amount=:storage_unit,storage_fee_total_amount=:storage_total,"
-                    "storage_fee_currency_code='USD',exchange_rate=:exchange_rate,fx_date=:fx_date,fx_source=:fx_source,"
+                    "storage_fee_expected_total_amount=:storage_total,storage_fee_actual_total_amount=null,"
+                    "storage_fee_source=:storage_source,storage_fee_currency_code='USD',"
+                    "exchange_rate=:exchange_rate,fx_date=:fx_date,fx_source=:fx_source,"
                     "gross_profit_amount=:gross_profit,gross_profit_currency_code='USD',gross_margin=:gross_margin,"
-                    "cost_status=:cost_status,missing_cost_codes_json=cast(:missing_codes as jsonb),"
+                    "roi=:roi,cost_status=:cost_status,missing_cost_codes_json=cast(:missing_codes as jsonb),"
+                    "calculation_warnings_json=cast(:warnings as jsonb),"
                     "sales_7d_trend_json=cast(:trend as jsonb),calc_version=:runner,updated_at=:now where id=:id"
                 ),
                 {
                     "id": str(row["id"]),
                     "owner_ref": cost.owner_ref if cost is not None else None,
+                    "return_rate_30d": return_rate_30d,
                     "wfs_unit": cost.wfs_fee_unit_usd if cost is not None else None,
-                    "wfs_total": wfs_total,
+                    "wfs_total": wfs_effective_total,
+                    "wfs_expected_total": wfs_expected_total,
+                    "wfs_actual_total": wfs_actual_total,
+                    "wfs_variance": wfs_variance,
+                    "wfs_variance_rate": wfs_variance_rate,
+                    "wfs_source": wfs_source,
                     "purchase_unit": cost.purchase_cost_unit_cny if cost is not None else None,
                     "purchase_total": purchase_total,
+                    "purchase_source": "product_management" if cost is not None else None,
                     "first_leg_unit": cost.first_leg_cost_unit_cny if cost is not None else None,
                     "first_leg_total": first_leg_total,
+                    "first_leg_source": "product_management" if cost is not None else None,
                     "storage_unit": cost.storage_fee_unit_usd if cost is not None else None,
                     "storage_total": storage_total,
+                    "storage_source": "product_management" if cost is not None else None,
                     "exchange_rate": cost.exchange_rate if cost is not None else None,
-                    "fx_date": cost.fx_date if cost is not None else None,
-                    "fx_source": cost.fx_source if cost is not None else None,
+                    "fx_date": cost.fx_date if cost is not None else self.business_date,
+                    "fx_source": cost.fx_source
+                    if cost is not None
+                    else "daily-sales-default-fx-6.6",
                     "gross_profit": gross_profit,
                     "gross_margin": gross_margin,
+                    "roi": roi,
                     "cost_status": cost_status,
                     "missing_codes": _json(missing),
+                    "warnings": _json(warnings),
                     "trend": _json(trend),
                     "runner": DAILY_SALES_V2_VERSION,
                     "now": now,
@@ -501,7 +650,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "(id,business_date_la,source_account_ref,local_sku,item_ids_json,store_ids_json,store_count,item_count,"
                 "sales_qty,order_count,sales_amount,sales_currency_code,refund_amount,ad_spend_amount,"
                 "commission_fee_amount,wfs_fee_total_amount,purchase_cost_total_usd,first_leg_cost_total_usd,"
-                "storage_fee_total_amount,gross_profit_amount,gross_profit_currency_code,cost_status,"
+                "storage_fee_total_amount,gross_profit_amount,gross_profit_currency_code,gross_margin,roi,cost_status,"
                 "missing_cost_codes_json,source_lineage_json,calc_version,calculated_at,created_at,updated_at) "
                 "select gen_random_uuid(),business_date_la,source_account_ref,coalesce(nullif(local_sku,''),item_id),"
                 "jsonb_agg(distinct item_id),jsonb_agg(distinct store_id),count(distinct store_id),count(distinct item_id),"
@@ -511,6 +660,12 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "sum(coalesce(purchase_cost_total_usd,0)),sum(coalesce(first_leg_cost_total_usd,0)),"
                 "sum(coalesce(storage_fee_total_amount,0)),"
                 "case when bool_and(gross_profit_amount is not null) then sum(gross_profit_amount) end,'USD',"
+                "case when bool_and(gross_profit_amount is not null) and sum(sales_amount)>0 "
+                "then sum(gross_profit_amount)/sum(sales_amount) end,"
+                "case when bool_and(gross_profit_amount is not null) "
+                "and sum(coalesce(purchase_cost_total_usd,0)+coalesce(first_leg_cost_total_usd,0))>0 "
+                "then sum(gross_profit_amount)/"
+                "sum(coalesce(purchase_cost_total_usd,0)+coalesce(first_leg_cost_total_usd,0)) end,"
                 "case when bool_and(cost_status='complete') then 'complete' "
                 "when bool_or(cost_status<>'missing') then 'partial' else 'missing' end,"
                 "case when bool_and(cost_status='complete') then '[]'::jsonb "

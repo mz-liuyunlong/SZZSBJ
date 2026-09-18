@@ -57,11 +57,15 @@ def load_daily_sales_costs(
     rule_version = (
         effective_rule.version if effective_rule is not None else "sku-pricing-defaults-v1"
     )
-    fx_date = effective_rule.fx_date if effective_rule is not None else None
+    fx_date = (
+        effective_rule.fx_date
+        if effective_rule is not None and effective_rule.fx_date is not None
+        else effective_at.date()
+    )
     fx_source = (
         effective_rule.fx_source
         if effective_rule is not None and effective_rule.fx_source
-        else "sku-pricing-defaults-v1"
+        else "daily-sales-default-fx-6.6"
     )
 
     rows = (
