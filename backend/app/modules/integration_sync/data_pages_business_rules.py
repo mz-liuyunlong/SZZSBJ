@@ -161,6 +161,15 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         }
 
     def _write_sample_orders(self, rows: Iterable[dict[str, Any]]) -> int:
+        """Replace one UTC-7 sample-day snapshot before strict triple validation."""
+
+        self.session.execute(
+            text(
+                "delete from fact_walmart_sample_order_items "
+                "where source_account_ref=:account and business_date_utc_minus_7=:day"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
         count = 0
         for row in rows:
             order_total = _decimal(_nested_first(row, "transaction_info", "order_total_amount"))
@@ -210,8 +219,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "on conflict (source_account_ref,platform_order_no,source_order_line_id) "
                         "do update set business_date_utc_minus_7=excluded.business_date_utc_minus_7,"
                         "store_id=excluded.store_id,store_name=excluded.store_name,"
-                        "platform_code=excluded.platform_code,item_id=coalesce(excluded.item_id,"
-                        "fact_walmart_sample_order_items.item_id),msku=excluded.msku,"
+                        "platform_code=excluded.platform_code,item_id=excluded.item_id,msku=excluded.msku,"
                         "local_sku=excluded.local_sku,quantity=excluded.quantity,"
                         "unit_price_amount=excluded.unit_price_amount,"
                         "unit_price_currency_code=excluded.unit_price_currency_code,"
