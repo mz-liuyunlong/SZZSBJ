@@ -104,7 +104,7 @@ export const fixedOrderProfitColumnKeys = [
 ];
 
 /** Acceptance-only display rate; replace with approved daily FX data when the API is implemented. */
-export const MOCK_USD_TO_CNY_RATE = 7.2;
+export const MOCK_USD_TO_CNY_RATE = 6.6;
 
 export const dateRangeForPreset = (
   preset: Exclude<OrderProfitDatePreset, "custom">,
@@ -156,7 +156,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
     const purchaseCost = bucket.reduce((total, row) => total + row.purchaseCost, 0);
     const firstLegCost = bucket.reduce((total, row) => total + row.firstLegCost, 0);
     const storageFee = bucket.reduce((total, row) => total + row.storageFee, 0);
-    const totalCost = refundAmount + adSpend + wfsDeliveryFee + commission + purchaseCost + firstLegCost + storageFee;
+    const totalCost = adSpend + wfsDeliveryFee + commission + purchaseCost + firstLegCost + storageFee;
     const orderProfit = salesAmount - totalCost;
     const status = bucket.reduce((current, row) => (
       priority[row.costStatus] > priority[current] ? row.costStatus : current
@@ -194,7 +194,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       orderProfit,
       averageProfitPerOrder: orderCount ? orderProfit / orderCount : 0,
       profitMargin: salesAmount ? orderProfit / salesAmount * 100 : 0,
-      roi: adSpend ? orderProfit / adSpend * 100 : 0,
+      roi: purchaseCost + firstLegCost ? orderProfit / (purchaseCost + firstLegCost) * 100 : 0,
       costStatus: status,
       sevenDayDates: trendDates,
       sevenDaySales,
