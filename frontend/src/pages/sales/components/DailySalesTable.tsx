@@ -17,6 +17,12 @@ import {
   TrendPreviewCell,
 } from "@/components/report-table/cells";
 import {
+  convertUsdSourceValue,
+  dynamicCurrencyTitle,
+  renderCnySourceMoney,
+  renderUsdSourceMoney,
+} from "@/components/report-table/moneyRenderers";
+import {
   MOCK_USD_TO_CNY_RATE,
   dailySalesColumnFields,
   type DailySalesCostStatus,
@@ -51,6 +57,7 @@ const statusColors: Record<DailySalesCostStatus, string> = {
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 const numberSorter = (key: keyof DailySalesRow) => (left: DailySalesRow, right: DailySalesRow) =>
   Number(left[key]) - Number(right[key]);
+const dailySalesFxRate = (row: DailySalesRow) => row.exchangeRate ?? MOCK_USD_TO_CNY_RATE;
 
 function LogCell({ text }: { text: string }) {
   return (
@@ -60,14 +67,6 @@ function LogCell({ text }: { text: string }) {
   );
 }
 
-const money = (key: keyof DailySalesRow, currency: DailySalesCurrency) => {
-  const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-  const symbol = currency === "CNY" ? "¥" : "$";
-  return (_: unknown, row: DailySalesRow) => {
-    const value = row[key];
-    return <MoneyCell value={typeof value === "number" ? value * rate : null} currency={symbol} />;
-  };
-};
 const percent = (key: keyof DailySalesRow) =>
   (_: unknown, row: DailySalesRow) => {
     const value = row[key];
@@ -79,6 +78,14 @@ const sum = (rows: DailySalesRow[], key: keyof DailySalesRow) => rows
 const sumNullable = (rows: DailySalesRow[], key: keyof DailySalesRow) => (
   rows.some((row) => row[key] == null) ? null : sum(rows, key)
 );
+const sumUsdSourceMoney = (rows: DailySalesRow[], key: keyof DailySalesRow, currency: DailySalesCurrency) => {
+  if (rows.some((row) => row[key] == null)) return null;
+  return rows.reduce((total, row) => {
+    const value = row[key];
+    const numeric = typeof value === "number" ? value : 0;
+    return total + (convertUsdSourceValue(numeric, currency, dailySalesFxRate(row)) ?? 0);
+  }, 0);
+};
 
 const totalMoneyKeys = new Set([
   "salesAmount",
@@ -110,9 +117,8 @@ function TotalCell({
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
   if (totalMoneyKeys.has(columnKey)) {
-    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    const total = sumNullable(rows, columnKey as keyof DailySalesRow);
-    return <MoneyCell value={total == null ? null : total * rate} currency={currency === "CNY" ? "¥" : "$"} />;
+    const total = sumUsdSourceMoney(rows, columnKey as keyof DailySalesRow, currency);
+    return <MoneyCell value={total} currency={currency === "CNY" ? "¥" : "$"} />;
   }
   if (totalIntegerKeys.has(columnKey)) {
     return <span className="report-table-metric">{sum(rows, columnKey as keyof DailySalesRow).toLocaleString("zh-CN")}</span>;
@@ -146,7 +152,7 @@ function TotalCell({
   return null;
 }
 
-const currencyColumnTitles: Partial<Record<string, string>> = {
+const dynamicCurrencyColumnTitles: Partial<Record<string, string>> = {
   wfsDeliveryUnitPrice: "WFS配送单价",
   purchaseUnitPriceCny: "采购单价",
   firstLegUnitPriceCny: "头程单价",
@@ -154,8 +160,8 @@ const currencyColumnTitles: Partial<Record<string, string>> = {
 };
 
 const columnTitle = (key: string, fallback: string, currency: DailySalesCurrency) => {
-  const base = currencyColumnTitles[key];
-  return base ? `${base}(${currency === "CNY" ? "¥" : "$"})` : fallback;
+  const dynamic = dynamicCurrencyColumnTitles[key];
+  return dynamic ? dynamicCurrencyTitle(dynamic, currency) : fallback;
 };
 
 function createColumns(
@@ -213,25 +219,25 @@ function createColumns(
     { title: "平台", dataIndex: "platform", key: "platform", width: 96, sorter: (a, b) => compareText(a.platform, b.platform) },
     { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88, sorter: numberSorter("salesVolume") },
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88, sorter: numberSorter("orderCount") },
-    { title: "销售额", key: "salesAmount", width: 112, sorter: numberSorter("salesAmount"), render: money("salesAmount", currency) },
+    { title: "销售额", key: "salesAmount", width: 112, sorter: numberSorter("salesAmount"), render: renderUsdSourceMoney<DailySalesRow>("salesAmount", currency, dailySalesFxRate) },
     { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88, sorter: numberSorter("sampleQuantity") },
-    { title: "送样金额", key: "sampleExcludedAmount", width: 112, sorter: numberSorter("sampleExcludedAmount"), render: money("sampleExcludedAmount", currency) },
+    { title: "送样金额", key: "sampleExcludedAmount", width: 112, sorter: numberSorter("sampleExcludedAmount"), render: renderUsdSourceMoney<DailySalesRow>("sampleExcludedAmount", currency, dailySalesFxRate) },
     { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88, sorter: numberSorter("returnCount") },
-    { title: "退款额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: money("refundAmount", currency) },
+    { title: "退款额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: renderUsdSourceMoney<DailySalesRow>("refundAmount", currency, dailySalesFxRate) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, sorter: numberSorter("returnRate30Days"), render: percent("returnRate30Days") },
-    { title: "广告费", key: "adSpend", width: 104, sorter: numberSorter("adSpend"), render: money("adSpend", currency) },
+    { title: "广告费", key: "adSpend", width: 104, sorter: numberSorter("adSpend"), render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
     { title: "广告占比", key: "adRatio", width: 104, sorter: numberSorter("adRatio"), render: percent("adRatio") },
-    { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, sorter: numberSorter("wfsDeliveryFee"), render: money("wfsDeliveryFee", currency) },
-    { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, sorter: numberSorter("wfsDeliveryUnitPrice"), render: money("wfsDeliveryUnitPrice", currency) },
-    { title: "佣金", key: "commission", width: 104, sorter: numberSorter("commission"), render: money("commission", currency) },
-    { title: "采购总成本", key: "purchaseCost", width: 128, sorter: numberSorter("purchaseCost"), render: money("purchaseCost", currency) },
-    { title: "采购单价", key: "purchaseUnitPriceCny", width: 128, sorter: numberSorter("purchaseUnitPriceCny"), render: money("purchaseUnitPriceCny", currency) },
-    { title: "头程总成本", key: "firstLegCost", width: 128, sorter: numberSorter("firstLegCost"), render: money("firstLegCost", currency) },
-    { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, sorter: numberSorter("firstLegUnitPriceCny"), render: money("firstLegUnitPriceCny", currency) },
-    { title: "总仓储费", key: "storageFee", width: 112, sorter: numberSorter("storageFee"), render: money("storageFee", currency) },
-    { title: "仓储单价", key: "storageUnitPrice", width: 128, sorter: numberSorter("storageUnitPrice"), render: money("storageUnitPrice", currency) },
+    { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, sorter: numberSorter("wfsDeliveryFee"), render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryFee", currency, dailySalesFxRate) },
+    { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, sorter: numberSorter("wfsDeliveryUnitPrice"), render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryUnitPrice", currency, dailySalesFxRate) },
+    { title: "佣金", key: "commission", width: 104, sorter: numberSorter("commission"), render: renderUsdSourceMoney<DailySalesRow>("commission", currency, dailySalesFxRate) },
+    { title: "采购总成本", key: "purchaseCost", width: 128, sorter: numberSorter("purchaseCost"), render: renderUsdSourceMoney<DailySalesRow>("purchaseCost", currency, dailySalesFxRate) },
+    { title: "采购单价", key: "purchaseUnitPriceCny", width: 128, sorter: numberSorter("purchaseUnitPriceCny"), render: renderCnySourceMoney<DailySalesRow>("purchaseUnitPriceCny", currency, dailySalesFxRate) },
+    { title: "头程总成本", key: "firstLegCost", width: 128, sorter: numberSorter("firstLegCost"), render: renderUsdSourceMoney<DailySalesRow>("firstLegCost", currency, dailySalesFxRate) },
+    { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, sorter: numberSorter("firstLegUnitPriceCny"), render: renderCnySourceMoney<DailySalesRow>("firstLegUnitPriceCny", currency, dailySalesFxRate) },
+    { title: "总仓储费", key: "storageFee", width: 112, sorter: numberSorter("storageFee"), render: renderUsdSourceMoney<DailySalesRow>("storageFee", currency, dailySalesFxRate) },
+    { title: "仓储单价", key: "storageUnitPrice", width: 128, sorter: numberSorter("storageUnitPrice"), render: renderUsdSourceMoney<DailySalesRow>("storageUnitPrice", currency, dailySalesFxRate) },
     { title: "WFS可售库存", dataIndex: "wfsAvailableInventory", key: "wfsAvailableInventory", width: 128, sorter: numberSorter("wfsAvailableInventory") },
-    { title: "订单利润", key: "orderProfit", width: 112, sorter: numberSorter("orderProfit"), render: money("orderProfit", currency) },
+    { title: "订单利润", key: "orderProfit", width: 112, sorter: numberSorter("orderProfit"), render: renderUsdSourceMoney<DailySalesRow>("orderProfit", currency, dailySalesFxRate) },
     { title: "利润率", key: "profitMargin", width: 96, sorter: numberSorter("profitMargin"), render: percent("profitMargin") },
     { title: "ROI", key: "roi", width: 88, sorter: numberSorter("roi"), render: percent("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
