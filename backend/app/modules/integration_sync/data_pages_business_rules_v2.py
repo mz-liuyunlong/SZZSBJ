@@ -292,7 +292,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "*coalesce(commission.commission_rate,0.15),coalesce(s.currency_code,'USD'),"
                 "case when commission.rule_id is null then 'default_15_percent' "
                 "else 'store_commission_rule' end,"
-                "'missing','["product_management_cost_pending"]'::jsonb,'[]'::jsonb,'[]'::jsonb,"
+                "'missing','[\\\"product_management_cost_pending\\\"]'::jsonb,'[]'::jsonb,'[]'::jsonb,"
                 "jsonb_build_object('runner',cast(:runner as text),"
                 "'basis','sale_stat_union_positive_ad_spend_union_refund_union_sample',"
                 "'match_key','store_id+item_id+msku','refund_unpriced_count',coalesce(r.refund_unpriced_count,0),"
