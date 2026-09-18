@@ -19,6 +19,7 @@ from app.modules.data_pages.schemas import (
     DailySalesItemRead,
     DailySalesListData,
     DailySalesQuery,
+    DailySalesSummaryRead,
     DailySalesTrendPointRead,
     ListingManagementItemRead,
     ListingManagementListData,
@@ -106,8 +107,21 @@ class DailySalesService:
             page=query.page,
             page_size=query.page_size,
         )
+        refund_qty, refund_amount, refund_currency = self.repository.refund_event_summary(
+            account_refs=account_refs,
+            start_date=query.start_date,
+            end_date=query.end_date,
+            store_id=query.store_id,
+        )
         return (
-            DailySalesListData(items=[self._to_read(row) for row in rows]),
+            DailySalesListData(
+                items=[self._to_read(row) for row in rows],
+                summary=DailySalesSummaryRead(
+                    refund_event_qty=_decimal(refund_qty),
+                    refund_event_amount=_decimal(refund_amount),
+                    refund_event_currency_code=refund_currency or "USD",
+                ),
+            ),
             total,
             latest_calculated_at,
         )
