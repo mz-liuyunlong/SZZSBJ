@@ -102,6 +102,9 @@ const currencyLabel = (currencyCode: string | null): DailySalesRow["currency"] =
 );
 
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
+const nullableNumberValue = (value: string | null | undefined) => (
+  value == null ? null : Number(value)
+);
 
 const costStatusLabel = (
   status: BackendDailySalesItem["cost_status"],
@@ -142,25 +145,25 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => ({
   returnRate30Days: numberValue(item.return_rate_30d) * 100,
   adSpend: numberValue(item.ad_spend_amount),
   adRatio: numberValue(item.ad_ratio) * 100,
-  wfsDeliveryFee: numberValue(item.wfs_fee_total_amount),
-  wfsDeliveryUnitPrice: numberValue(item.wfs_fee_unit_amount),
+  wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
+  wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
   wfsExpectedFee: numberValue(item.wfs_fee_expected_total_amount),
   wfsActualFee: item.wfs_fee_actual_total_amount == null ? null : numberValue(item.wfs_fee_actual_total_amount),
   wfsVarianceAmount: item.wfs_fee_variance_amount == null ? null : numberValue(item.wfs_fee_variance_amount),
   wfsVarianceRate: item.wfs_fee_variance_rate == null ? null : numberValue(item.wfs_fee_variance_rate) * 100,
   wfsFeeSource: item.wfs_fee_source ?? "product_management",
-  commission: numberValue(item.commission_fee_amount),
-  purchaseCost: numberValue(item.purchase_cost_total_usd),
-  purchaseUnitPriceCny: numberValue(item.purchase_cost_unit_cny),
-  firstLegCost: numberValue(item.first_leg_cost_total_usd),
-  firstLegUnitPriceCny: numberValue(item.first_leg_cost_unit_cny),
-  storageFee: numberValue(item.storage_fee_total_amount),
-  storageUnitPrice: numberValue(item.storage_fee_unit_amount),
+  commission: nullableNumberValue(item.commission_fee_amount),
+  purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
+  purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
+  firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
+  firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
+  storageFee: nullableNumberValue(item.storage_fee_total_amount),
+  storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
-  legacyGrossProfit: numberValue(item.gross_profit_amount),
-  orderProfit: numberValue(item.gross_profit_amount),
-  profitMargin: numberValue(item.gross_margin) * 100,
-  roi: numberValue(item.roi) * 100,
+  legacyGrossProfit: nullableNumberValue(item.gross_profit_amount),
+  orderProfit: nullableNumberValue(item.gross_profit_amount),
+  profitMargin: item.gross_margin == null ? null : numberValue(item.gross_margin) * 100,
+  roi: item.roi == null ? null : numberValue(item.roi) * 100,
   exchangeRate: numberValue(item.exchange_rate),
   fxSource: item.fx_source ?? "daily-sales-default-fx-6.6",
   commissionSource: item.commission_source ?? "default_15_percent",
