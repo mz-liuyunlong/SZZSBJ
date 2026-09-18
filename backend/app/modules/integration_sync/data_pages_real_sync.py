@@ -913,7 +913,7 @@ class DataPagesRealSyncRunner:
                         "store_id = excluded.store_id, customer_order_id=excluded.customer_order_id, "
                         "purchase_order_id=excluded.purchase_order_id, item_id=excluded.item_id, "
                         "msku = excluded.msku, local_sku = excluded.local_sku, "
-                        "refund_status_raw=excluded.refund_status_raw, "
+                        "refund_status_raw=excluded.refund_status_raw, business_date_la=excluded.business_date_la, "
                         "return_order_date_raw=excluded.return_order_date_raw, status_time_raw=excluded.status_time_raw, "
                         "quantity = excluded.quantity, refund_amount = excluded.refund_amount, "
                         "refund_currency_code=excluded.refund_currency_code, tracking_no=excluded.tracking_no, "
