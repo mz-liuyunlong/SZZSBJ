@@ -1,4 +1,4 @@
-/** Dense no-API report table with the approved 35-column order. */
+/** Dense daily-sales report table. */
 import { BarChartOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Space, Table, Tooltip } from "antd";
@@ -96,6 +96,7 @@ const totalMoneyKeys = new Set([
 const totalIntegerKeys = new Set([
   "salesVolume",
   "orderCount",
+  "sampleQuantity",
   "returnCount",
   "wfsAvailableInventory",
 ]);
@@ -214,7 +215,8 @@ function createColumns(
     { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88, sorter: numberSorter("salesVolume") },
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88, sorter: numberSorter("orderCount") },
     { title: "销售额", key: "salesAmount", width: 112, sorter: numberSorter("salesAmount"), render: money("salesAmount", currency) },
-    { title: "剔除送样额", key: "sampleExcludedAmount", width: 128, sorter: numberSorter("sampleExcludedAmount"), render: money("sampleExcludedAmount", currency) },
+    { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88, sorter: numberSorter("sampleQuantity") },
+    { title: "送样金额", key: "sampleExcludedAmount", width: 112, sorter: numberSorter("sampleExcludedAmount"), render: money("sampleExcludedAmount", currency) },
     { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88, sorter: numberSorter("returnCount") },
     { title: "退款额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: money("refundAmount", currency) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, sorter: numberSorter("returnRate30Days"), render: percent("returnRate30Days") },
