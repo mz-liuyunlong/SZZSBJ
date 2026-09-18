@@ -358,7 +358,7 @@ const usdHeaders = dailySalesColumnFields.map((field) => ({
 }[field.key] ?? field.title));
 
 describe("DailySalesPage", () => {
-  it("uses PageShell metadata, hides the implementation status, and keeps all 35 columns in order", () => {
+  it("uses PageShell metadata, hides the implementation status, and keeps all 36 columns in order", () => {
     renderPage();
 
     expect(screen.getByRole("region", { name: "每日销售" }))
@@ -374,9 +374,20 @@ describe("DailySalesPage", () => {
       .slice(1)
       .map((header) => header.textContent);
     expect(headers).toEqual(usdHeaders);
-    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(35);
+    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(36);
     expect(screen.queryByText("商品 ID")).not.toBeInTheDocument();
     expect(screen.queryByText("父体")).not.toBeInTheDocument();
+    expect(headers).toContain("送样量");
+    expect(headers).toContain("送样金额");
+  });
+
+  it("shows refund event cards separately from row-level refund attribution", () => {
+    renderPage();
+
+    const summary = screen.getByRole("region", { name: "销售统计" });
+    expect(within(summary).getByText("退款数量")).toBeVisible();
+    expect(within(summary).getByText("退款金额")).toBeVisible();
+    expect(within(summary).getAllByText("按退款发生日统计")).toHaveLength(2);
   });
 
   it("leaves sync and help controls to MainLayout", () => {
@@ -402,7 +413,7 @@ describe("DailySalesPage", () => {
     fireEvent.click(columnButton);
     const drawer = screen.getByRole("dialog", { name: "列配置" });
     expect(drawer).toBeVisible();
-    expect(within(drawer).getAllByRole("checkbox")).toHaveLength(35);
+    expect(within(drawer).getAllByRole("checkbox")).toHaveLength(36);
     for (const title of ["图片", "分析", "日期"]) {
       expect(within(drawer).getByRole("checkbox", { name: `显示列：${title}` })).toBeChecked();
       expect(within(drawer).getByRole("checkbox", { name: `显示列：${title}` })).toBeDisabled();
