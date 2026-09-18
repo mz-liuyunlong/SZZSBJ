@@ -54,6 +54,9 @@ interface OrderProfitParams {
 
 const MAX_API_PAGES = 10_000;
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
+const nullableNumberValue = (value: string | null | undefined) => (
+  value == null ? null : Number(value)
+);
 
 const currencyLabel = (currencyCode: string | null): OrderProfitSourceRecord["currency"] => (
   currencyCode === "CNY" ? "CNY" : "USD"
@@ -91,11 +94,11 @@ const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSour
   salesAmount: numberValue(item.sales_amount),
   refundAmount: numberValue(item.refund_amount),
   adSpend: numberValue(item.ad_spend_amount),
-  wfsDeliveryFee: numberValue(item.wfs_fee_total_amount),
+  wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
   commission: numberValue(item.commission_fee_amount),
-  purchaseCost: numberValue(item.purchase_cost_total_usd),
-  firstLegCost: numberValue(item.first_leg_cost_total_usd),
-  storageFee: numberValue(item.storage_fee_total_amount),
+  purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
+  firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
+  storageFee: nullableNumberValue(item.storage_fee_total_amount),
   costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
 });
 
