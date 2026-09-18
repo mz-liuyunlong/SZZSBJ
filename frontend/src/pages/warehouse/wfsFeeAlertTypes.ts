@@ -60,7 +60,7 @@ export interface WfsFeeAlertColumnField {
 }
 
 export const WFS_FEE_ALERT_USD_TO_CNY_RATE = 6.6;
-export const WFS_FEE_ALERT_REFERENCE_DATE = "2026-09-13";
+export const WFS_FEE_ALERT_REFERENCE_DATE = new Date().toISOString().slice(0, 10);
 
 const formatIsoDate = (date: Date) => date.toISOString().slice(0, 10);
 
