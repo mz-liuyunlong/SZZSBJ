@@ -55,15 +55,22 @@ const numberSorter = (key: keyof OrderProfitRow) => (left: OrderProfitRow, right
 const money = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => {
   const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
   const symbol = currency === "CNY" ? "¥" : "$";
-  return (_: unknown, row: OrderProfitRow) => (
-    <MoneyCell value={Number(row[key]) * rate} currency={symbol} />
-  );
+  return (_: unknown, row: OrderProfitRow) => {
+    const value = row[key];
+    return <MoneyCell value={typeof value === "number" ? value * rate : null} currency={symbol} />;
+  };
 };
 const percent = (key: keyof OrderProfitRow) =>
-  (_: unknown, row: OrderProfitRow) => <PercentCell value={Number(row[key])} />;
+  (_: unknown, row: OrderProfitRow) => {
+    const value = row[key];
+    return <PercentCell value={typeof value === "number" ? value : null} />;
+  };
 
 const sum = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => rows
-  .reduce((total, row) => total + Number(row[key]), 0);
+  .reduce((total, row) => total + Number(row[key] ?? 0), 0);
+const sumNullable = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => (
+  rows.some((row) => row[key] == null) ? null : sum(rows, key)
+);
 
 const totalMoneyKeys = new Set([
   "salesAmount",
@@ -94,7 +101,8 @@ function TotalCell({
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
   if (totalMoneyKeys.has(columnKey)) {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    return <MoneyCell value={sum(rows, columnKey as keyof OrderProfitRow) * rate} currency={currency === "CNY" ? "¥" : "$"} />;
+    const total = sumNullable(rows, columnKey as keyof OrderProfitRow);
+    return <MoneyCell value={total == null ? null : total * rate} currency={currency === "CNY" ? "¥" : "$"} />;
   }
   if (totalIntegerKeys.has(columnKey)) {
     return <span className="report-table-metric">{sum(rows, columnKey as keyof OrderProfitRow).toLocaleString("zh-CN")}</span>;
@@ -102,19 +110,30 @@ function TotalCell({
   const salesAmount = sum(rows, "salesAmount");
   const orderCount = sum(rows, "orderCount");
   const adSpend = sum(rows, "adSpend");
-  const orderProfit = sum(rows, "orderProfit");
+  const orderProfit = sumNullable(rows, "orderProfit");
   if (columnKey === "averageProfitPerOrder") {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    return orderCount ? <MoneyCell value={orderProfit / orderCount * rate} currency={currency === "CNY" ? "¥" : "$"} /> : null;
+    return orderCount && orderProfit != null
+      ? <MoneyCell value={orderProfit / orderCount * rate} currency={currency === "CNY" ? "¥" : "$"} />
+      : <MoneyCell value={null} currency={currency === "CNY" ? "¥" : "$"} />;
   }
   if (columnKey === "adRatio") {
     return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : null;
   }
   if (columnKey === "profitMargin") {
-    return salesAmount ? <PercentCell value={orderProfit / salesAmount * 100} /> : null;
+    return salesAmount && orderProfit != null
+      ? <PercentCell value={orderProfit / salesAmount * 100} />
+      : <PercentCell value={null} />;
   }
   if (columnKey === "roi") {
-    return adSpend ? <PercentCell value={orderProfit / adSpend * 100} /> : null;
+    const purchaseCost = sumNullable(rows, "purchaseCost");
+    const firstLegCost = sumNullable(rows, "firstLegCost");
+    const denominator = purchaseCost != null && firstLegCost != null
+      ? purchaseCost + firstLegCost
+      : null;
+    return orderProfit != null && denominator != null && denominator > 0
+      ? <PercentCell value={orderProfit / denominator * 100} />
+      : <PercentCell value={null} />;
   }
   return null;
 }
