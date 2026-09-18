@@ -226,4 +226,41 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
             # Item IDs for Return rows are intentionally resolved only from the
             # hydrated original order using store_id + MSKU + provider order IDs.
             self._resolve_refund_items()
-        return super()._reprice_refunds()
+        unresolved = super()._reprice_refunds()
+        affected = (
+            self.session.execute(
+                text(
+                    "select distinct b.business_date_la "
+                    "from dws_walmart_refund_business_amounts b "
+                    "join fact_walmart_refund_items f on f.id=b.refund_fact_id "
+                    "where f.source_account_ref=:account and f.business_date_la=:refund_day "
+                    "and b.calculation_status='calculated'"
+                ),
+                {"account": self.source_account_ref, "refund_day": self.business_date},
+            )
+            .scalars()
+            .all()
+        )
+        self._refund_affected_business_dates = tuple(
+            sorted(day for day in affected if day is not None)
+        )
+        return unresolved
+
+    def _refresh_daily_sales_mart(self) -> int:
+        """Refresh the refund event day plus every original sales day it changes."""
+
+        current_day = self.business_date
+        affected_days = tuple(
+            day
+            for day in getattr(self, "_refund_affected_business_dates", ())
+            if day != current_day
+        )
+        try:
+            for day in affected_days:
+                self.business_date = day
+                super()._refresh_daily_sales_mart()
+                self._refresh_order_profit_mart()
+            self.business_date = current_day
+            return super()._refresh_daily_sales_mart()
+        finally:
+            self.business_date = current_day
