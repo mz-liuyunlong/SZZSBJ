@@ -218,7 +218,7 @@ class StoreCommissionRuleVersion(Base):
 class WalmartSalesItemDailyFact(Base):
     __tablename__ = "fact_walmart_sales_item_daily"
     __table_args__ = (
-        UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id", "msku"),
+        UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id"),
         CheckConstraint(f"allocation_status IN ({ALLOCATION_STATUSES})", name="allocation_status"),
         CheckConstraint("sales_qty IS NULL OR sales_qty >= 0", name="sales_qty_nonnegative"),
         CheckConstraint("order_count IS NULL OR order_count >= 0", name="order_count_nonnegative"),
@@ -448,7 +448,7 @@ class WalmartAdItemSpDailyFact(Base):
 class DailySalesItemDayMart(Base):
     __tablename__ = "mart_daily_sales_item_day"
     __table_args__ = (
-        UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id"),
+        UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id", "msku"),
         CheckConstraint(f"cost_status IN ({COST_STATUSES})", name="cost_status"),
         CheckConstraint("sales_qty >= 0 AND order_count >= 0", name="nonnegative_counts"),
         CheckConstraint("gross_margin IS NULL OR gross_margin > -10", name="gross_margin_floor"),
