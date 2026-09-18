@@ -26,7 +26,7 @@ from app.modules.product_management.daily_sales_costs import (
     normalize_sku_key,
 )
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-sample-ads-118"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-cost-integrity-v1"
 
 
 def _money_decimal(value: object) -> Decimal | None:
