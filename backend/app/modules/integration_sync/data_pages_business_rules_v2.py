@@ -671,7 +671,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "case when bool_and(cost_status='complete') then 'complete' "
                 "when bool_or(cost_status<>'missing') then 'partial' else 'missing' end,"
                 "case when bool_and(cost_status='complete') then '[]'::jsonb "
-                "else '["daily_sales_cost_incomplete"]'::jsonb end,"
+                "else '[\"daily_sales_cost_incomplete\"]'::jsonb end,"
                 "jsonb_build_object('runner',cast(:runner as text),'basis','mart_daily_sales_item_day'),"
                 "cast(:runner as text),:now,:now,:now from mart_daily_sales_item_day "
                 "where source_account_ref=:account and business_date_la=:day "
