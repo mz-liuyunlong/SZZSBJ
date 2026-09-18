@@ -35,7 +35,7 @@ DEFAULT_PAGE_SIZE = 100
 WALMART_PLATFORM_CODE = "10008"
 WALMART_PLATFORM_CODE_INT = 10008
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
-SP_CAMPAIGN_TYPES = ("sponsoredProducts-manual", "sponsoredProducts-auto")
+SP_CAMPAIGN_TYPES = ("sponsoredProducts-manual", "sponsoredProducts-auto", "sba", "video")
 
 
 class DataPagesRealSyncError(RuntimeError):
@@ -924,12 +924,44 @@ class DataPagesRealSyncRunner:
         return count
 
     def _write_ads(self, rows: Iterable[dict[str, Any]]) -> int:
-        count = 0
+        """Replace one business-day ad snapshot using a stable provider identity.
+
+        The provider updates spend/click/order metrics after the first pull. Hashing the
+        entire mutable row creates stale duplicates, so the persisted identity is based
+        on the provider key (or a stable structural fallback). The current day is
+        replaced only after all advertiser pages were fetched successfully.
+        """
+
+        self.session.execute(
+            text(
+                "delete from fact_walmart_ad_item_sp_daily "
+                "where source_account_ref=:account and business_date_la=:day"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
+
+        deduped: dict[tuple[str, str], dict[str, Any]] = {}
         for row in rows:
             advertiser_id = _field(row, "advertiserId", "advertiser_id")
             if not advertiser_id:
                 continue
-            line_hash = _stable_hash(row)
+            source_key = _field(row, "key")
+            identity: dict[str, Any]
+            if source_key:
+                identity = {"source_key": source_key}
+            else:
+                identity = {
+                    "campaign_id": _field(row, "campaignId"),
+                    "ad_group_id": _field(row, "adGroupId"),
+                    "ad_item_id": _field(row, "adItemId"),
+                    "item_id": _field(row, "itemId", "item_id"),
+                    "msku": _field(row, "msku"),
+                }
+            line_hash = _stable_hash(identity)
+            deduped[(advertiser_id, line_hash)] = row
+
+        count = 0
+        for (advertiser_id, line_hash), row in deduped.items():
             self.session.execute(
                 text(
                     "insert into fact_walmart_ad_item_sp_daily "
@@ -944,14 +976,17 @@ class DataPagesRealSyncRunner:
                     ":advertised_sku_sales_amount, :advertised_sku_units, :num_ads_clicks, :num_ads_shown, "
                     ":acos, :roas, :cpc, :ctr, :cvr, :synced_at, :created_at, :updated_at) on conflict "
                     "(business_date_la, source_account_ref, advertiser_id, source_line_hash) do update set "
-                    "item_id = coalesce(excluded.item_id, fact_walmart_ad_item_sp_daily.item_id), "
+                    "store_id = excluded.store_id, item_id = excluded.item_id, msku = excluded.msku, "
+                    "campaign_id = excluded.campaign_id, ad_group_id = excluded.ad_group_id, "
+                    "ad_item_id = excluded.ad_item_id, source_key = excluded.source_key, "
                     "ad_spend_amount = excluded.ad_spend_amount, "
                     "attributed_sales_amount = excluded.attributed_sales_amount, "
                     "attributed_orders = excluded.attributed_orders, attributed_units = excluded.attributed_units, "
                     "advertised_sku_sales_amount = excluded.advertised_sku_sales_amount, "
                     "advertised_sku_units = excluded.advertised_sku_units, num_ads_clicks = excluded.num_ads_clicks, "
                     "num_ads_shown = excluded.num_ads_shown, acos = excluded.acos, roas = excluded.roas, "
-                    "cpc = excluded.cpc, ctr = excluded.ctr, cvr = excluded.cvr, updated_at = excluded.updated_at"
+                    "cpc = excluded.cpc, ctr = excluded.ctr, cvr = excluded.cvr, "
+                    "synced_at = excluded.synced_at, updated_at = excluded.updated_at"
                 ),
                 {
                     "id": str(uuid4()),
