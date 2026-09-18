@@ -10,8 +10,8 @@ from app.modules.integration_sync.data_pages_business_rules_v3 import (
     DataPagesRealSyncRunner as HistoricalAdRunner,
 )
 from app.modules.integration_sync.data_pages_real_sync import (
-    DataPagesRealSyncError,
     WALMART_PLATFORM_CODE_INT,
+    DataPagesRealSyncError,
     _china_epoch,
     _field,
     _row_count,
