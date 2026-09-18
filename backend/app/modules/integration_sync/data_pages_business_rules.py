@@ -276,12 +276,12 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         self,
         refund: Mapping[str, Any],
         order: Mapping[str, Any] | None,
-    ) -> date:
+    ) -> date | None:
         """Return the original sales day used for refund attribution."""
 
         if order is not None and order.get("business_date_la") is not None:
             return order["business_date_la"]
-        return self.business_date
+        return None
 
     def _reprice_refunds(self) -> int:
         """Persist completed provider refund amount against the original sales day."""
@@ -306,18 +306,19 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             quantity = _decimal(refund["quantity"])
             provider_refund = _decimal(refund["refund_amount"])
             order = self._match_refund_order_line(refund)
+            business_date = self._refund_business_date(refund, order)
             status = "calculated"
             if quantity is None or quantity <= 0:
                 status = "quantity_missing"
             elif provider_refund is None or provider_refund < 0:
                 status = "unit_price_missing"
-            elif order is None:
+            elif order is None or business_date is None:
                 status = "order_not_matched"
 
             if status != "calculated":
                 unresolved += 1
 
-            business_date = self._refund_business_date(refund, order)
+            persisted_business_date = business_date or self.business_date
             self.session.execute(
                 text(
                     "insert into dws_walmart_refund_business_amounts "
@@ -348,7 +349,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "id": str(uuid4()),
                     "refund_fact_id": str(refund["id"]),
                     "source_account_ref": self.source_account_ref,
-                    "business_date_la": business_date,
+                    "business_date_la": persisted_business_date,
                     "store_id": refund.get("store_id"),
                     "item_id": refund.get("item_id"),
                     "local_sku": refund.get("local_sku"),
