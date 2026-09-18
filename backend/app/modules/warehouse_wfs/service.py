@@ -73,8 +73,9 @@ class WfsFeeAlertService:
         rows = (
             self.session.execute(
                 text(
-                    "select m.id,m.business_date_la,m.store_id,m.store_name,m.owner_ref,m.item_id,m.msku,"
-                    "m.local_sku,coalesce(m.local_name,m.title) product_name,m.order_count,m.sales_qty,"
+                    "select m.id,m.business_date_la,m.store_id,m.store_name,m.owner_ref,"
+                    "m.item_id,m.msku,m.local_sku,coalesce(m.local_name,m.title) product_name,"
+                    "m.order_count,m.sales_qty,"
                     "m.cost_quantity,m.wfs_fee_expected_total_amount expected_fee_amount,"
                     "m.wfs_fee_actual_total_amount actual_fee_amount,"
                     "m.wfs_fee_variance_amount variance_amount,"
