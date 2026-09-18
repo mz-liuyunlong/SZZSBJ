@@ -25,11 +25,11 @@ export interface OrderProfitSourceRecord {
   salesAmount: number;
   refundAmount: number;
   adSpend: number;
-  wfsDeliveryFee: number;
+  wfsDeliveryFee: number | null;
   commission: number;
-  purchaseCost: number;
-  firstLegCost: number;
-  storageFee: number;
+  purchaseCost: number | null;
+  firstLegCost: number | null;
+  storageFee: number | null;
   costStatus: OrderProfitCostStatus;
 }
 
@@ -48,17 +48,17 @@ export interface OrderProfitRow {
   salesAmount: number;
   refundAmount: number;
   adSpend: number;
-  adRatio: number;
-  wfsDeliveryFee: number;
+  adRatio: number | null;
+  wfsDeliveryFee: number | null;
   commission: number;
-  purchaseCost: number;
-  firstLegCost: number;
-  storageFee: number;
-  totalCost: number;
-  orderProfit: number;
-  averageProfitPerOrder: number;
-  profitMargin: number;
-  roi: number;
+  purchaseCost: number | null;
+  firstLegCost: number | null;
+  storageFee: number | null;
+  totalCost: number | null;
+  orderProfit: number | null;
+  averageProfitPerOrder: number | null;
+  profitMargin: number | null;
+  roi: number | null;
   costStatus: OrderProfitCostStatus;
   sevenDayDates: string[];
   sevenDaySales: number[];
@@ -151,13 +151,23 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
     const salesAmount = bucket.reduce((total, row) => total + row.salesAmount, 0);
     const refundAmount = bucket.reduce((total, row) => total + row.refundAmount, 0);
     const adSpend = bucket.reduce((total, row) => total + row.adSpend, 0);
-    const wfsDeliveryFee = bucket.reduce((total, row) => total + row.wfsDeliveryFee, 0);
+    const sumOptional = (key: "wfsDeliveryFee" | "purchaseCost" | "firstLegCost" | "storageFee") => (
+      bucket.some((row) => row[key] == null)
+        ? null
+        : bucket.reduce((total, row) => total + (row[key] ?? 0), 0)
+    );
+    const wfsDeliveryFee = sumOptional("wfsDeliveryFee");
     const commission = bucket.reduce((total, row) => total + row.commission, 0);
-    const purchaseCost = bucket.reduce((total, row) => total + row.purchaseCost, 0);
-    const firstLegCost = bucket.reduce((total, row) => total + row.firstLegCost, 0);
-    const storageFee = bucket.reduce((total, row) => total + row.storageFee, 0);
-    const totalCost = adSpend + wfsDeliveryFee + commission + purchaseCost + firstLegCost + storageFee;
-    const orderProfit = salesAmount - totalCost;
+    const purchaseCost = sumOptional("purchaseCost");
+    const firstLegCost = sumOptional("firstLegCost");
+    const storageFee = sumOptional("storageFee");
+    const totalCost = wfsDeliveryFee != null
+      && purchaseCost != null
+      && firstLegCost != null
+      && storageFee != null
+      ? adSpend + wfsDeliveryFee + commission + purchaseCost + firstLegCost + storageFee
+      : null;
+    const orderProfit = totalCost == null ? null : salesAmount - totalCost;
     const status = bucket.reduce((current, row) => (
       priority[row.costStatus] > priority[current] ? row.costStatus : current
     ), base.costStatus);
@@ -184,7 +194,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       salesAmount,
       refundAmount,
       adSpend,
-      adRatio: salesAmount ? adSpend / salesAmount * 100 : 0,
+      adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
       wfsDeliveryFee,
       commission,
       purchaseCost,
@@ -192,12 +202,18 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       storageFee,
       totalCost,
       orderProfit,
-      averageProfitPerOrder: orderCount ? orderProfit / orderCount : 0,
-      profitMargin: salesAmount ? orderProfit / salesAmount * 100 : 0,
-      roi: purchaseCost + firstLegCost ? orderProfit / (purchaseCost + firstLegCost) * 100 : 0,
+      averageProfitPerOrder: orderProfit != null && orderCount ? orderProfit / orderCount : null,
+      profitMargin: orderProfit != null && salesAmount ? orderProfit / salesAmount * 100 : null,
+      roi: orderProfit != null
+        && purchaseCost != null
+        && firstLegCost != null
+        && purchaseCost + firstLegCost > 0
+        ? orderProfit / (purchaseCost + firstLegCost) * 100
+        : null,
       costStatus: status,
       sevenDayDates: trendDates,
       sevenDaySales,
     };
-  }).sort((left, right) => right.orderProfit - left.orderProfit);
+  }).sort((left, right) => (right.orderProfit ?? Number.NEGATIVE_INFINITY)
+    - (left.orderProfit ?? Number.NEGATIVE_INFINITY));
 };
