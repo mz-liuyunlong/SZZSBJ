@@ -971,7 +971,10 @@ class DataPagesRealSyncRunner:
             if not advertiser_id:
                 continue
             line_hash = _ad_identity_hash(row)
-            deduped[(advertiser_id, line_hash)] = row
+            identity_key = (advertiser_id, line_hash)
+            if identity_key in deduped:
+                raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
+            deduped[identity_key] = row
 
         count = 0
         for (advertiser_id, line_hash), row in deduped.items():
