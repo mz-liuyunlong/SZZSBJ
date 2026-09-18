@@ -84,7 +84,9 @@ class WfsFeeAlertService:
                     "from mart_daily_sales_item_day m left join ops_wfs_fee_anomaly_cases c "
                     "on c.source_account_ref=m.source_account_ref and c.business_date_la=m.business_date_la "
                     "and c.store_id=m.store_id and c.item_id=m.item_id and trim(c.msku)=trim(m.msku) "
-                    "where " + where_sql + " order by m.wfs_fee_variance_amount desc,m.business_date_la desc "
+                    "where "
+                    + where_sql
+                    + " order by m.wfs_fee_variance_amount desc,m.business_date_la desc "
                     "limit :limit offset :offset"
                 ),
                 params,
