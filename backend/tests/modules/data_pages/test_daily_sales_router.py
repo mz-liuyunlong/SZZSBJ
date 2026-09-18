@@ -131,14 +131,18 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
     ) -> tuple[DailySalesListData, int, datetime]:
         captured["query"] = query
         captured["account_refs"] = account_refs
-        return DailySalesListData(
-            items=[_daily_sales_item()],
-            summary=DailySalesSummaryRead(
-                refund_event_qty=Decimal("36"),
-                refund_event_amount=Decimal("674.80"),
-                refund_event_currency_code="USD",
+        return (
+            DailySalesListData(
+                items=[_daily_sales_item()],
+                summary=DailySalesSummaryRead(
+                    refund_event_qty=Decimal("36"),
+                    refund_event_amount=Decimal("674.80"),
+                    refund_event_currency_code="USD",
+                ),
             ),
-        ), 1, NOW
+            1,
+            NOW,
+        )
 
     monkeypatch.setattr(DailySalesService, "list_daily_sales", list_daily_sales)
 
