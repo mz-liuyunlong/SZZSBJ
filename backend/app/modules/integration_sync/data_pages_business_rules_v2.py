@@ -485,6 +485,10 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             wfs_source = (
                 "walmart_statement" if wfs_actual_total is not None else "product_management"
             )
+            if wfs_actual_total is not None and wfs_expected_total is None:
+                warnings.append("wfs_actual_without_expected_fee")
+            elif wfs_variance is not None and wfs_variance > 0:
+                warnings.append("wfs_overcharge_detected")
 
             complete_costs = all(
                 value is not None
