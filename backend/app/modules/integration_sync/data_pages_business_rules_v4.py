@@ -52,6 +52,7 @@ def _refund_purchase_business_date(value: object) -> date | None:
         return None
     return purchase_at_china.astimezone(FIXED_UTC_MINUS_7).date()
 
+
 def _refund_identifiers(rows: Iterable[Mapping[str, Any]]) -> tuple[set[str], set[str]]:
     purchase_ids: set[str] = set()
     customer_ids: set[str] = set()
