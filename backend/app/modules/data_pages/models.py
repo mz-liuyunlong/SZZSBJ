@@ -538,7 +538,9 @@ class DailySalesItemDayMart(Base):
         String(32), default="missing", server_default=text("'missing'"), nullable=False
     )
     missing_cost_codes_json: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
-    calculation_warnings_json: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    calculation_warnings_json: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, nullable=False
+    )
     sales_7d_trend_json: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB, default=list, nullable=False
     )
