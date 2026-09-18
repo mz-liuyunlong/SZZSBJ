@@ -85,9 +85,7 @@ def test_wfs_fee_alert_read_requires_permission(monkeypatch: Any) -> None:
         return WfsFeeAlertListData(items=[_item()]), 1
 
     monkeypatch.setattr(WfsFeeAlertService, "list_alerts", list_alerts)
-    response = TestClient(_app("warehouse:wfs-fee-alert:read")).get(
-        "/api/warehouse/wfs-fee-alerts"
-    )
+    response = TestClient(_app("warehouse:wfs-fee-alert:read")).get("/api/warehouse/wfs-fee-alerts")
     assert response.status_code == 200
     assert response.json()["data"]["items"][0]["variance_amount"] == "3"
 
