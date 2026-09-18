@@ -364,7 +364,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "source_order_item_id": str(order["id"]) if order is not None else None,
                     "quantity": quantity,
                     "unit_sales_amount": None,
-                    "gross_refund_sales_amount": provider_refund if status == "calculated" else None,
+                    "gross_refund_sales_amount": provider_refund
+                    if status == "calculated"
+                    else None,
                     "commission_rate": Decimal("0"),
                     "commission_amount": Decimal("0") if status == "calculated" else None,
                     "net_refund_amount": provider_refund if status == "calculated" else None,
