@@ -27,6 +27,7 @@ import {
   dailySalesColumnFields,
   dateRangeForPreset,
   fixedDailySalesColumnKeys,
+  type DailySalesRefundSummary,
   type DailySalesRow,
 } from "@/pages/sales/dailySalesTypes";
 import "@/pages/sales/DailySalesPage.css";
@@ -73,6 +74,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState(createInitialFilters);
   const [sourceRows, setSourceRows] = useState<DailySalesRow[]>(dailySalesMockData);
+  const [refundSummary, setRefundSummary] = useState<DailySalesRefundSummary | null>(null);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -94,8 +96,11 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       endDate: dateRangeEnd,
       pageSize: 500,
     })
-      .then(({ rows }) => {
-        if (active) setSourceRows(rows);
+      .then(({ rows, refundSummary: nextRefundSummary }) => {
+        if (active) {
+          setSourceRows(rows);
+          setRefundSummary(nextRefundSummary);
+        }
       })
       .catch(() => {
         // Keep the local fallback visible until the backend has synced MART data.
@@ -218,7 +223,13 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           />
         </Card>
 
-        {statisticsVisible && <DailySalesSummaryCards rows={filteredRows} currency={filters.currency} />}
+        {statisticsVisible && (
+          <DailySalesSummaryCards
+            rows={filteredRows}
+            currency={filters.currency}
+            refundSummary={refundSummary}
+          />
+        )}
         {chartsVisible && <DailySalesCharts rows={filteredRows} currency={filters.currency} />}
 
         <DailySalesTable

@@ -48,7 +48,7 @@ DATA_PAGE_API_REGISTRY: Final[dict[DataPageKey, DataPageRegistryEntry]] = {
         quality_checks=(
             "business_date_la is a Walmart business date in America/Los_Angeles.",
             "source_account_ref is constrained by the caller's integration source-account scope.",
-            "meta.source_objects contains only mart_daily_sales_item_day.",
+            "meta.source_objects includes mart_daily_sales_item_day and refund event facts.",
             "cost_status and missing_cost_codes are surfaced for incomplete cost inputs.",
             "money fields are serialized as strings from Decimal-compatible values.",
         ),
@@ -95,4 +95,7 @@ DATA_PAGE_API_REGISTRY: Final[dict[DataPageKey, DataPageRegistryEntry]] = {
 
 
 def registry_source_objects(key: DataPageKey) -> list[str]:
-    return [DATA_PAGE_API_REGISTRY[key].mart_object]
+    objects = [DATA_PAGE_API_REGISTRY[key].mart_object]
+    if key == "daily_sales":
+        objects.append("fact_walmart_refund_items")
+    return objects

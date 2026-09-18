@@ -79,8 +79,11 @@ def test_refund_purchase_time_converts_china_to_fixed_utc_minus_7() -> None:
     assert _refund_purchase_business_date("2026-08-30 08:06:23") == date(2026, 8, 29)
 
 
-def test_v4_refreshes_original_refund_sales_days() -> None:
+def test_v4_refreshes_original_refund_sales_days_only_when_salestat_exists() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
 
     assert "_refund_affected_business_dates" in source
+    assert "fact_walmart_sales_item_daily" in source
+    assert "sales_fact_exists" in source
+    assert "if not sales_fact_exists" in source
     assert "self._refresh_order_profit_mart()" in source

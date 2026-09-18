@@ -224,6 +224,33 @@ def test_daily_sales_mart_is_based_on_salestat_and_joins_sku_cost_sources() -> N
     assert "'basis','fact_walmart_sales_item_daily'" in insert_sql
 
 
+def test_refund_writer_keeps_event_day_current_on_conflict() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+
+    runner._write_refunds(
+        [
+            {
+                "returnType": "REFUND",
+                "returnOrderId": "return-1",
+                "storeId": "store-a",
+                "items": [
+                    {
+                        "purchaseOrderId": "purchase-1",
+                        "msku": "MSKU-1",
+                        "currentRefundStatus": "REFUND_COMPLETED",
+                        "quantityDisplay": "1",
+                        "lineTotalAmount": "20.00",
+                    }
+                ],
+            }
+        ]
+    )
+
+    insert_sql = session.calls[1][0]
+    assert "business_date_la=excluded.business_date_la" in insert_sql
+
+
 def test_refund_writer_ignores_non_completed_refunds() -> None:
     session = _CaptureSession()
     runner = _runner(session)

@@ -1,5 +1,8 @@
 import { backendRequest } from "@/api/backendApi";
-import type { DailySalesRow } from "@/pages/sales/dailySalesTypes";
+import type {
+  DailySalesRefundSummary,
+  DailySalesRow,
+} from "@/pages/sales/dailySalesTypes";
 
 interface BackendTrendPoint {
   date: string;
@@ -66,8 +69,15 @@ interface BackendDailySalesItem {
   sales_7d_trend: BackendTrendPoint[];
 }
 
+interface BackendDailySalesSummary {
+  refund_event_qty: string;
+  refund_event_amount: string;
+  refund_event_currency_code: string | null;
+}
+
 interface BackendDailySalesData {
   items: BackendDailySalesItem[];
+  summary?: BackendDailySalesSummary;
 }
 
 export interface DailySalesApiMeta {
@@ -81,6 +91,7 @@ export interface DailySalesApiMeta {
 
 export interface DailySalesApiResult {
   rows: DailySalesRow[];
+  refundSummary: DailySalesRefundSummary | null;
   meta: DailySalesApiMeta;
 }
 
@@ -180,6 +191,7 @@ export async function fetchDailySalesRows(params: DailySalesParams): Promise<Dai
   const pageSize = params.pageSize ?? 500;
   const items: BackendDailySalesItem[] = [];
   let firstMeta: DailySalesApiMeta | null = null;
+  let refundSummary: DailySalesRefundSummary | null = null;
 
   for (let page = 1; page <= MAX_API_PAGES; page += 1) {
     const search = new URLSearchParams();
@@ -193,6 +205,13 @@ export async function fetchDailySalesRows(params: DailySalesParams): Promise<Dai
     );
 
     firstMeta ??= envelope.meta;
+    if (refundSummary == null && envelope.data.summary) {
+      refundSummary = {
+        quantity: numberValue(envelope.data.summary.refund_event_qty),
+        amount: numberValue(envelope.data.summary.refund_event_amount),
+        currency: currencyLabel(envelope.data.summary.refund_event_currency_code),
+      };
+    }
     items.push(...envelope.data.items);
 
     if (
@@ -203,6 +222,7 @@ export async function fetchDailySalesRows(params: DailySalesParams): Promise<Dai
       const meta = firstMeta ?? envelope.meta;
       return {
         rows: items.map(toDailySalesRow),
+        refundSummary,
         meta: {
           ...meta,
           page: 1,

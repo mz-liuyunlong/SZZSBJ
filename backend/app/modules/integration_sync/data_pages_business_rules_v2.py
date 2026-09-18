@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -26,7 +26,7 @@ from app.modules.product_management.daily_sales_costs import (
     normalize_sku_key,
 )
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-sample-ads-118"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-cost-integrity-v1"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -241,7 +241,10 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "from fact_walmart_refund_items f join dws_walmart_refund_business_amounts b on b.refund_fact_id=f.id "
                 "where f.source_account_ref=:account and b.business_date_la=:day "
                 "and f.refund_status_raw='REFUND_COMPLETED' and f.store_id is not null and f.item_id is not null "
-                "and f.msku is not null and trim(f.msku)<>'' group by 1,2,3,4,5),"
+                "and f.msku is not null and trim(f.msku)<>'' and exists ("
+                "select 1 from s where s.source_account_ref=f.source_account_ref "
+                "and s.business_date_la=b.business_date_la and s.store_id=f.store_id "
+                "and s.item_id=f.item_id and s.msku=trim(f.msku)) group by 1,2,3,4,5),"
                 "sample as (select s.source_account_ref,s.business_date_utc_minus_7 business_date_la,"
                 "s.store_id,s.item_id,trim(s.msku) msku,max(s.local_sku) local_sku,"
                 "count(distinct s.platform_order_no) sample_order_count,"
@@ -320,64 +323,171 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             },
         )
 
-        effective_at = datetime.combine(self.business_date, datetime.min.time(), tzinfo=UTC)
+        # Product Management current data is the single source of truth for base/estimated costs.
+        # Historical sales dates are intentionally re-evaluated with the current PM inputs/rules.
         costs = load_daily_sales_costs(
             self.session,
             source_account_ref=self.source_account_ref,
-            at=effective_at,
         )
 
-        trend_rows = (
+        history_7d_start = self.business_date - timedelta(days=7)
+        history_7d_end = self.business_date - timedelta(days=1)
+        history_30d_start = self.business_date - timedelta(days=29)
+
+        history_7d_days = int(
             self.session.execute(
                 text(
-                    "select business_date_la,store_id,item_id,trim(msku) msku,coalesce(sales_qty,0) sales_qty "
-                    "from mart_daily_sales_item_day where source_account_ref=:account "
+                    "select count(distinct business_date_la) from fact_walmart_sales_item_daily "
+                    "where source_account_ref=:account and allocation_status='direct' "
                     "and business_date_la between :start_day and :end_day"
                 ),
                 {
                     "account": self.source_account_ref,
-                    "start_day": self.business_date - timedelta(days=7),
-                    "end_day": self.business_date - timedelta(days=1),
+                    "start_day": history_7d_start,
+                    "end_day": history_7d_end,
                 },
-            )
-            .mappings()
-            .all()
+            ).scalar_one()
+            or 0
         )
-        trend_map: dict[tuple[str, str, str, object], Decimal] = {}
-        for trend in trend_rows:
-            trend_map[
-                (
-                    str(trend["store_id"]),
-                    str(trend["item_id"]),
-                    str(trend["msku"]),
-                    trend["business_date_la"],
-                )
-            ] = _decimal(trend["sales_qty"]) or Decimal("0")
-
-        rolling_rows = (
+        history_30d_days = int(
             self.session.execute(
                 text(
-                    "select store_id,item_id,trim(msku) msku,sum(coalesce(return_qty,0)) return_qty,"
-                    "sum(coalesce(sales_qty,0)) sales_qty from mart_daily_sales_item_day "
-                    "where source_account_ref=:account and business_date_la between :start_day and :end_day "
-                    "group by store_id,item_id,trim(msku)"
+                    "select count(distinct business_date_la) from fact_walmart_sales_item_daily "
+                    "where source_account_ref=:account and allocation_status='direct' "
+                    "and business_date_la between :start_day and :end_day"
                 ),
                 {
                     "account": self.source_account_ref,
-                    "start_day": self.business_date - timedelta(days=29),
+                    "start_day": history_30d_start,
                     "end_day": self.business_date,
                 },
-            )
-            .mappings()
-            .all()
+            ).scalar_one()
+            or 0
         )
-        rolling_map = {
-            (str(row["store_id"]), str(row["item_id"]), str(row["msku"])): (
-                _decimal(row["return_qty"]) or Decimal("0"),
-                _decimal(row["sales_qty"]) or Decimal("0"),
+        history_7d_complete = history_7d_days == 7
+        history_30d_complete = history_30d_days == 30
+
+        trend_map: dict[tuple[str, str, str, object], Decimal] = {}
+        if history_7d_complete:
+            trend_rows = (
+                self.session.execute(
+                    text(
+                        "with sales as ("
+                        "select business_date_la,store_id,item_id,trim(msku) msku,"
+                        "sum(coalesce(sales_qty,0)) sales_qty "
+                        "from fact_walmart_sales_item_daily "
+                        "where source_account_ref=:account and allocation_status='direct' "
+                        "and business_date_la between :start_day and :end_day "
+                        "and store_id is not null and item_id is not null "
+                        "and msku is not null and trim(msku)<>'' group by 1,2,3,4),"
+                        "sample as ("
+                        "select business_date_utc_minus_7 business_date_la,store_id,item_id,trim(msku) msku,"
+                        "sum(coalesce(quantity,0)) sample_qty "
+                        "from fact_walmart_sample_order_items "
+                        "where source_account_ref=:account and is_valid_sample=true "
+                        "and business_date_utc_minus_7 between :start_day and :end_day "
+                        "and store_id is not null and item_id is not null "
+                        "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
+                        "select sales.business_date_la,sales.store_id,sales.item_id,sales.msku,"
+                        "greatest(sales.sales_qty-coalesce(sample.sample_qty,0),0) sales_qty "
+                        "from sales left join sample on sample.business_date_la=sales.business_date_la "
+                        "and sample.store_id=sales.store_id and sample.item_id=sales.item_id "
+                        "and sample.msku=sales.msku"
+                    ),
+                    {
+                        "account": self.source_account_ref,
+                        "start_day": history_7d_start,
+                        "end_day": history_7d_end,
+                    },
+                )
+                .mappings()
+                .all()
             )
-            for row in rolling_rows
-        }
+            for trend in trend_rows:
+                trend_map[
+                    (
+                        str(trend["store_id"]),
+                        str(trend["item_id"]),
+                        str(trend["msku"]),
+                        trend["business_date_la"],
+                    )
+                ] = _decimal(trend["sales_qty"]) or Decimal("0")
+
+        rolling_map: dict[tuple[str, str, str], tuple[Decimal, Decimal]] = {}
+        if history_30d_complete:
+            rolling_sales_rows = (
+                self.session.execute(
+                    text(
+                        "with sales as ("
+                        "select business_date_la,store_id,item_id,trim(msku) msku,"
+                        "sum(coalesce(sales_qty,0)) sales_qty "
+                        "from fact_walmart_sales_item_daily "
+                        "where source_account_ref=:account and allocation_status='direct' "
+                        "and business_date_la between :start_day and :end_day "
+                        "and store_id is not null and item_id is not null "
+                        "and msku is not null and trim(msku)<>'' group by 1,2,3,4),"
+                        "sample as ("
+                        "select business_date_utc_minus_7 business_date_la,store_id,item_id,trim(msku) msku,"
+                        "sum(coalesce(quantity,0)) sample_qty "
+                        "from fact_walmart_sample_order_items "
+                        "where source_account_ref=:account and is_valid_sample=true "
+                        "and business_date_utc_minus_7 between :start_day and :end_day "
+                        "and store_id is not null and item_id is not null "
+                        "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
+                        "select sales.store_id,sales.item_id,sales.msku,"
+                        "sum(greatest(sales.sales_qty-coalesce(sample.sample_qty,0),0)) sales_qty "
+                        "from sales left join sample on sample.business_date_la=sales.business_date_la "
+                        "and sample.store_id=sales.store_id and sample.item_id=sales.item_id "
+                        "and sample.msku=sales.msku group by 1,2,3"
+                    ),
+                    {
+                        "account": self.source_account_ref,
+                        "start_day": history_30d_start,
+                        "end_day": self.business_date,
+                    },
+                )
+                .mappings()
+                .all()
+            )
+            rolling_return_rows = (
+                self.session.execute(
+                    text(
+                        "select f.store_id,f.item_id,trim(f.msku) msku,"
+                        "sum(coalesce(f.quantity,0)) return_qty "
+                        "from fact_walmart_refund_items f "
+                        "join dws_walmart_refund_business_amounts b on b.refund_fact_id=f.id "
+                        "where f.source_account_ref=:account "
+                        "and b.business_date_la between :start_day and :end_day "
+                        "and f.refund_status_raw='REFUND_COMPLETED' "
+                        "and b.calculation_status='calculated' "
+                        "and f.store_id is not null and f.item_id is not null "
+                        "and f.msku is not null and trim(f.msku)<>'' group by 1,2,3"
+                    ),
+                    {
+                        "account": self.source_account_ref,
+                        "start_day": history_30d_start,
+                        "end_day": self.business_date,
+                    },
+                )
+                .mappings()
+                .all()
+            )
+            rolling_sales_map = {
+                (str(row["store_id"]), str(row["item_id"]), str(row["msku"])): (
+                    _decimal(row["sales_qty"]) or Decimal("0")
+                )
+                for row in rolling_sales_rows
+            }
+            rolling_return_map = {
+                (str(row["store_id"]), str(row["item_id"]), str(row["msku"])): (
+                    _decimal(row["return_qty"]) or Decimal("0")
+                )
+                for row in rolling_return_rows
+            }
+            rolling_map = {
+                key: (rolling_return_map.get(key, Decimal("0")), sales_qty)
+                for key, sales_qty in rolling_sales_map.items()
+            }
 
         actual_wfs_rows = (
             self.session.execute(
@@ -466,6 +576,10 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 missing.append("refund_business_amount_missing")
                 warnings.append("refund_identity_or_business_amount_unresolved")
             warnings.extend(code for code in missing if code not in warnings)
+            if not history_7d_complete:
+                warnings.append("sales_history_7d_incomplete")
+            if not history_30d_complete:
+                warnings.append("sales_history_30d_incomplete")
 
             identity = (str(row["store_id"]), str(row["item_id"]), str(row["msku"]))
             wfs_actual_total = actual_wfs_map.get(identity)
@@ -531,24 +645,32 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 else None
             )
             rolling_return, rolling_sales = rolling_map.get(identity, (Decimal("0"), Decimal("0")))
-            return_rate_30d = rolling_return / rolling_sales if rolling_sales > 0 else None
-            trend = [
-                {
-                    "date": (self.business_date - timedelta(days=offset)).isoformat(),
-                    "sales_qty": str(
-                        trend_map.get(
-                            (
-                                str(row["store_id"]),
-                                str(row["item_id"]),
-                                str(row["msku"]),
-                                self.business_date - timedelta(days=offset),
-                            ),
-                            Decimal("0"),
-                        )
-                    ),
-                }
-                for offset in range(7, 0, -1)
-            ]
+            return_rate_30d = (
+                rolling_return / rolling_sales
+                if history_30d_complete and rolling_sales > 0
+                else None
+            )
+            trend = (
+                [
+                    {
+                        "date": (self.business_date - timedelta(days=offset)).isoformat(),
+                        "sales_qty": str(
+                            trend_map.get(
+                                (
+                                    str(row["store_id"]),
+                                    str(row["item_id"]),
+                                    str(row["msku"]),
+                                    self.business_date - timedelta(days=offset),
+                                ),
+                                Decimal("0"),
+                            )
+                        ),
+                    }
+                    for offset in range(7, 0, -1)
+                ]
+                if history_7d_complete
+                else []
+            )
             self.session.execute(
                 text(
                     "update mart_daily_sales_item_day set owner_ref=:owner_ref,return_rate_30d=:return_rate_30d,"

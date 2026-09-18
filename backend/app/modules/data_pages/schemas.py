@@ -139,8 +139,15 @@ class DailySalesItemRead(StrictSchema):
     calculated_at: datetime
 
 
+class DailySalesSummaryRead(StrictSchema):
+    refund_event_qty: Money = Decimal("0")
+    refund_event_amount: Money = Decimal("0")
+    refund_event_currency_code: str | None = "USD"
+
+
 class DailySalesListData(StrictSchema):
     items: list[DailySalesItemRead]
+    summary: DailySalesSummaryRead = Field(default_factory=DailySalesSummaryRead)
 
 
 class DailySalesReadMeta(StrictSchema):
