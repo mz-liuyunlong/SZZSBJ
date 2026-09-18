@@ -13,6 +13,7 @@ from app.main import create_app
 from app.modules.data_pages.schemas import (
     DailySalesItemRead,
     DailySalesListData,
+    DailySalesSummaryRead,
     DailySalesTrendPointRead,
 )
 from app.modules.data_pages.service import DailySalesService
@@ -130,7 +131,14 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
     ) -> tuple[DailySalesListData, int, datetime]:
         captured["query"] = query
         captured["account_refs"] = account_refs
-        return DailySalesListData(items=[_daily_sales_item()]), 1, NOW
+        return DailySalesListData(
+            items=[_daily_sales_item()],
+            summary=DailySalesSummaryRead(
+                refund_event_qty=Decimal("36"),
+                refund_event_amount=Decimal("674.80"),
+                refund_event_currency_code="USD",
+            ),
+        ), 1, NOW
 
     monkeypatch.setattr(DailySalesService, "list_daily_sales", list_daily_sales)
 
@@ -152,5 +160,7 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
     assert captured["query"].page_size == 50
     assert body["data"]["items"][0]["local_sku"] == "sku-1"
     assert body["data"]["items"][0]["sales_amount"] == "39.99"
+    assert body["data"]["summary"]["refund_event_qty"] == "36.00"
+    assert body["data"]["summary"]["refund_event_amount"] == "674.80"
     assert body["meta"]["source_objects"] == ["mart_daily_sales_item_day"]
     assert body["meta"]["total"] == 1
