@@ -563,7 +563,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "first_leg_cost_estimated_total_usd=:first_leg_total,first_leg_cost_actual_total_usd=null,"
                     "first_leg_cost_source=:first_leg_source,"
                     "storage_fee_unit_amount=:storage_unit,storage_fee_total_amount=:storage_total,"
-                    "storage_fee_expected_total_amount=:storage_total,storage_fee_actual_total_amount=null,"
+                    "storage_fee_estimated_total_amount=:storage_total,storage_fee_actual_total_amount=null,"
                     "storage_fee_source=:storage_source,storage_fee_currency_code='USD',"
                     "exchange_rate=:exchange_rate,fx_date=:fx_date,fx_source=:fx_source,"
                     "gross_profit_amount=:gross_profit,gross_profit_currency_code='USD',gross_margin=:gross_margin,"
