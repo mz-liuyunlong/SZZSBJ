@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable, cast
+from typing import Any, Iterable, Mapping, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -863,6 +863,16 @@ class DataPagesRealSyncRunner:
         return count
 
     def _write_refunds(self, rows: Iterable[dict[str, Any]]) -> int:
+        """Replace one refund-event-day snapshot with completed refunds only."""
+
+        self.session.execute(
+            text(
+                "delete from fact_walmart_refund_items "
+                "where source_account_ref=:account and business_date_la=:day"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
+
         count = 0
         for row in rows:
             return_type = _field(row, "returnType", "return_type")
@@ -875,7 +885,17 @@ class DataPagesRealSyncRunner:
             for ordinal, item in enumerate(items):
                 if not isinstance(item, dict):
                     continue
-                line_hash = _stable_hash({"return": return_id, "line": item, "ordinal": ordinal})
+                refund_status = _field(item, "currentRefundStatus", "refund_status")
+                if refund_status != "REFUND_COMPLETED":
+                    continue
+                line_hash = _stable_hash(
+                    {
+                        "return_order_id": return_id,
+                        "purchase_order_id": _field(item, "purchaseOrderId"),
+                        "msku": _field(item, "msku"),
+                        "ordinal": ordinal,
+                    }
+                )
                 self.session.execute(
                     text(
                         "insert into fact_walmart_refund_items "
@@ -890,9 +910,14 @@ class DataPagesRealSyncRunner:
                         ":return_order_date_raw, :business_date_la, :status_time_raw, :quantity, :refund_amount, "
                         ":refund_currency_code, :tracking_no, :synced_at, :created_at, :updated_at) on conflict "
                         "(source_account_ref, source_return_order_id, source_line_hash) do update set "
-                        "store_id = excluded.store_id, msku = excluded.msku, local_sku = excluded.local_sku, "
+                        "store_id = excluded.store_id, customer_order_id=excluded.customer_order_id, "
+                        "purchase_order_id=excluded.purchase_order_id, item_id=excluded.item_id, "
+                        "msku = excluded.msku, local_sku = excluded.local_sku, "
+                        "refund_status_raw=excluded.refund_status_raw, "
+                        "return_order_date_raw=excluded.return_order_date_raw, status_time_raw=excluded.status_time_raw, "
                         "quantity = excluded.quantity, refund_amount = excluded.refund_amount, "
-                        "updated_at = excluded.updated_at"
+                        "refund_currency_code=excluded.refund_currency_code, tracking_no=excluded.tracking_no, "
+                        "synced_at=excluded.synced_at, updated_at = excluded.updated_at"
                     ),
                     {
                         "id": str(uuid4()),
@@ -909,7 +934,7 @@ class DataPagesRealSyncRunner:
                         "local_sku": _field(item, "localSku", "local_sku"),
                         "return_type_raw": "REFUND",
                         "return_type_name": _field(row, "returnTypeName"),
-                        "refund_status_raw": _field(item, "currentRefundStatus", "status"),
+                        "refund_status_raw": refund_status,
                         "return_order_date_raw": _field(row, "returnOrderDate"),
                         "business_date_la": self.business_date,
                         "status_time_raw": _field(item, "statusTime"),
@@ -945,19 +970,7 @@ class DataPagesRealSyncRunner:
             advertiser_id = _field(row, "advertiserId", "advertiser_id")
             if not advertiser_id:
                 continue
-            source_key = _field(row, "key")
-            identity: dict[str, Any]
-            if source_key:
-                identity = {"source_key": source_key}
-            else:
-                identity = {
-                    "campaign_id": _field(row, "campaignId"),
-                    "ad_group_id": _field(row, "adGroupId"),
-                    "ad_item_id": _field(row, "adItemId"),
-                    "item_id": _field(row, "itemId", "item_id"),
-                    "msku": _field(row, "msku"),
-                }
-            line_hash = _stable_hash(identity)
+            line_hash = _ad_identity_hash(row)
             deduped[(advertiser_id, line_hash)] = row
 
         count = 0
@@ -1055,35 +1068,40 @@ class DataPagesRealSyncRunner:
         )
 
     def _resolve_refund_items(self) -> int:
+        """Resolve refund item_id only from an exact original-order store+MSKU match."""
+
         if self.summary.return_permission_403:
             return 0
         now = _now()
         self.session.execute(
             text(
-                "with candidates as (select r.id, "
-                "(select count(*) from dim_walmart_listings l where l.source_account_ref = :account "
-                "and l.store_id = r.store_id and trim(l.local_sku) = trim(r.local_sku)) sku_count, "
-                "(select min(l.item_id) from dim_walmart_listings l where l.source_account_ref = :account "
-                "and l.store_id = r.store_id and trim(l.local_sku) = trim(r.local_sku)) sku_item, "
-                "(select count(*) from dim_walmart_listings l where l.source_account_ref = :account "
-                "and l.store_id = r.store_id and trim(l.local_sku) = trim(r.local_sku) "
-                "and trim(l.msku) = trim(r.msku)) exact_count, "
-                "(select min(l.item_id) from dim_walmart_listings l where l.source_account_ref = :account "
-                "and l.store_id = r.store_id and trim(l.local_sku) = trim(r.local_sku) "
-                "and trim(l.msku) = trim(r.msku)) exact_item from fact_walmart_refund_items r "
-                "where r.source_account_ref = :account and r.business_date_la = :day and r.item_id is null), "
-                "resolved as (select id, case when sku_count = 1 then sku_item "
-                "when sku_count > 1 and exact_count = 1 then exact_item else null end item_id from candidates) "
-                "update fact_walmart_refund_items r set item_id = x.item_id, updated_at = :now "
-                "from resolved x where r.id = x.id and x.item_id is not null"
+                "with candidates as ("
+                "select r.id, count(distinct o.item_id) item_count, min(o.item_id) item_id "
+                "from fact_walmart_refund_items r "
+                "join fact_walmart_order_items o on o.source_account_ref=r.source_account_ref "
+                "and o.store_id=r.store_id "
+                "and trim(o.msku)=trim(r.msku) "
+                "and o.item_id is not null "
+                "and ("
+                "(r.purchase_order_id is not null and o.platform_order_no=r.purchase_order_id) or "
+                "(r.customer_order_id is not null and o.reference_no=r.customer_order_id)"
+                ") "
+                "where r.source_account_ref=:account and r.business_date_la=:day "
+                "and r.item_id is null and r.store_id is not null and r.msku is not null "
+                "and trim(r.msku)<>'' group by r.id"
+                "), resolved as ("
+                "select id,item_id from candidates where item_count=1"
+                ") update fact_walmart_refund_items r set item_id=x.item_id,updated_at=:now "
+                "from resolved x where r.id=x.id"
             ),
             {"account": self.source_account_ref, "day": self.business_date, "now": now},
         )
         return int(
             self.session.execute(
                 text(
-                    "select count(*) from fact_walmart_refund_items where source_account_ref = :account "
-                    "and business_date_la = :day and item_id is null"
+                    "select count(*) from fact_walmart_refund_items "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and (store_id is null or item_id is null or msku is null or trim(msku)='')"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
             ).scalar_one()
@@ -1154,7 +1172,7 @@ class DataPagesRealSyncRunner:
                         "account": self.source_account_ref,
                         "day": self.business_date,
                         "advertiser_id": advertiser_id,
-                        "source_line_hash": _stable_hash(row),
+                        "source_line_hash": _ad_identity_hash(row),
                     },
                 )
                 mapped += 1
@@ -1522,6 +1540,23 @@ def _sales_amount_fields(result_type: int, volume_total: object) -> dict[str, De
 
 def _stable_hash(value: object) -> str:
     return hashlib.sha256(canonical_json(cast(JsonValue, redact_json(value))).encode()).hexdigest()
+
+
+def _ad_identity_hash(row: Mapping[str, Any]) -> str:
+    """Hash only stable ad identity fields so metric refreshes replace, not duplicate, rows."""
+    row_dict = dict(row)
+    source_key = _field(row_dict, "key")
+    if source_key:
+        return _stable_hash({"source_key": source_key})
+    return _stable_hash(
+        {
+            "campaign_id": _field(row_dict, "campaignId"),
+            "ad_group_id": _field(row_dict, "adGroupId"),
+            "ad_item_id": _field(row_dict, "adItemId"),
+            "item_id": _field(row_dict, "itemId", "item_id"),
+            "msku": _field(row_dict, "msku"),
+        }
+    )
 
 
 def _page_signature(rows: list[dict[str, Any]]) -> str:
