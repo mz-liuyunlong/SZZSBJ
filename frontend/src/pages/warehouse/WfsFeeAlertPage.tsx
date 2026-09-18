@@ -141,7 +141,7 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   const handleSaveFollow = async (values: WfsFeeAlertFollowFormValues) => {
     if (!followRow) return;
     try {
-      await updateWfsFeeAlertCase(followRow.id, values);
+      await updateWfsFeeAlertCase(followRow.id, values, followRow.overFee);
       setFollowRow(undefined);
       await reloadRows();
       void messageApi.success("WFS异常跟进已保存");
