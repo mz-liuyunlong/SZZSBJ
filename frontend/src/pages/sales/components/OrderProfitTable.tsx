@@ -16,6 +16,7 @@ import {
   StatusTagCell,
   TrendPreviewCell,
 } from "@/components/report-table/cells";
+import { renderUsdSourceMoney } from "@/components/report-table/moneyRenderers";
 import {
   MOCK_USD_TO_CNY_RATE,
   orderProfitColumnFields,
@@ -52,14 +53,9 @@ const compareText = (left: string, right: string) => left.localeCompare(right, "
 const numberSorter = (key: keyof OrderProfitRow) => (left: OrderProfitRow, right: OrderProfitRow) =>
   Number(left[key]) - Number(right[key]);
 
-const money = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => {
-  const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-  const symbol = currency === "CNY" ? "¥" : "$";
-  return (_: unknown, row: OrderProfitRow) => {
-    const value = row[key];
-    return <MoneyCell value={typeof value === "number" ? value * rate : null} currency={symbol} />;
-  };
-};
+const money = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => (
+  renderUsdSourceMoney<OrderProfitRow>(key, currency, MOCK_USD_TO_CNY_RATE)
+);
 const percent = (key: keyof OrderProfitRow) =>
   (_: unknown, row: OrderProfitRow) => {
     const value = row[key];
@@ -87,6 +83,7 @@ const totalMoneyKeys = new Set([
 const totalIntegerKeys = new Set([
   "salesVolume",
   "orderCount",
+  "refundQuantity",
 ]);
 
 function TotalCell({
@@ -194,7 +191,8 @@ function createColumns(
     { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88, sorter: numberSorter("salesVolume") },
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88, sorter: numberSorter("orderCount") },
     { title: "销售额", key: "salesAmount", width: 112, sorter: numberSorter("salesAmount"), render: money("salesAmount", currency) },
-    { title: "退款额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: money("refundAmount", currency) },
+    { title: "退款数量", dataIndex: "refundQuantity", key: "refundQuantity", width: 104, sorter: numberSorter("refundQuantity") },
+    { title: "退款金额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: money("refundAmount", currency) },
     { title: "广告费", key: "adSpend", width: 104, sorter: numberSorter("adSpend"), render: money("adSpend", currency) },
     { title: "广告占比", key: "adRatio", width: 104, sorter: numberSorter("adRatio"), render: percent("adRatio") },
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, sorter: numberSorter("wfsDeliveryFee"), render: money("wfsDeliveryFee", currency) },
