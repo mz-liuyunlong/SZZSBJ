@@ -9,13 +9,22 @@ def test_data_pages_registry_covers_expected_pages() -> None:
         "listing_management",
     }
 
+    expected_source_objects = {
+        "daily_sales": [
+            "mart_daily_sales_item_day",
+            "fact_walmart_refund_items",
+        ],
+        "order_profit": ["mart_order_profit_sku_day"],
+        "listing_management": ["mart_listing_management_current"],
+    }
+
     for key, entry in DATA_PAGE_API_REGISTRY.items():
         assert entry.key == key
         assert entry.task_ref.startswith("DATA-PAGES-1")
         assert entry.route_path.startswith("/api/")
         assert entry.permission
         assert entry.mart_object.startswith("mart_")
-        assert registry_source_objects(key) == [entry.mart_object]
+        assert registry_source_objects(key) == expected_source_objects[key]
         assert entry.frontend_page.endswith(".tsx")
         assert entry.frontend_api_adapter.endswith("Api.ts")
         assert entry.empty_data_behavior
