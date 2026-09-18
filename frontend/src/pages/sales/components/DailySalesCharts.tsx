@@ -38,14 +38,21 @@ function DailySalesCharts({ rows, currency }: DailySalesChartsProps) {
   const values = labels.map((label) => {
     const dateRows = rows.filter((row) => row.date.endsWith(label));
     const salesAmount = dateRows.reduce((sum, row) => sum + row.salesAmount, 0);
-    const orderProfit = dateRows.reduce((sum, row) => sum + row.orderProfit, 0);
+    const profitIncomplete = dateRows.some((row) => row.orderProfit == null);
+    const orderProfit = profitIncomplete
+      ? null
+      : dateRows.reduce((sum, row) => sum + (row.orderProfit ?? 0), 0);
     const adSpend = dateRows.reduce((sum, row) => sum + row.adSpend, 0);
-    if (metric === "profitMargin") return salesAmount ? orderProfit / salesAmount * 100 : 0;
-    if (metric === "adRatio") return salesAmount ? adSpend / salesAmount * 100 : 0;
-    const value = dateRows.reduce((sum, row) => sum + Number(row[metric]), 0);
+    if (metric === "orderProfit") return orderProfit == null ? null : orderProfit * rate;
+    if (metric === "profitMargin") {
+      return salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null;
+    }
+    if (metric === "adRatio") return salesAmount ? adSpend / salesAmount * 100 : null;
+    const value = dateRows.reduce((sum, row) => sum + Number(row[metric] ?? 0), 0);
     return amountMetrics.includes(metric) ? value * rate : value;
   });
-  const formatValue = (value: number) => {
+  const formatValue = (value: number | null | undefined) => {
+    if (value == null || !Number.isFinite(value)) return "—";
     if (amountMetrics.includes(metric)) return `${symbol}${value.toFixed(2)}`;
     if (percentMetrics.includes(metric)) return `${value.toFixed(2)}%`;
     return Math.round(value).toLocaleString("zh-CN");
@@ -60,7 +67,7 @@ function DailySalesCharts({ rows, currency }: DailySalesChartsProps) {
       borderWidth: 1,
       padding: [8, 10],
       textStyle: { color: "#1f2937", fontSize: 12 },
-      valueFormatter: (value: number) => formatValue(Number(value)),
+      valueFormatter: (value: number | null | undefined) => formatValue(value),
     },
     grid: { top: 28, right: 20, bottom: 28, left: 60 },
     xAxis: {
@@ -82,7 +89,7 @@ function DailySalesCharts({ rows, currency }: DailySalesChartsProps) {
       axisLabel: {
         color: "#667085",
         fontSize: 12,
-        formatter: (value: number) => formatValue(Number(value)),
+        formatter: (value: number) => formatValue(value),
       },
       splitLine: { lineStyle: { color: "#e5eaf3", type: "dashed" } },
     },
