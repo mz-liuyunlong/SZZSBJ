@@ -69,6 +69,12 @@ export interface DailySalesRow {
   operationLog: string;
 }
 
+export interface DailySalesRefundSummary {
+  quantity: number;
+  amount: number;
+  currency: DailySalesCurrency;
+}
+
 export interface DailySalesColumnField {
   key: string;
   title: string;
@@ -87,7 +93,8 @@ export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "salesVolume", title: "销量" },
   { key: "orderCount", title: "订单量" },
   { key: "salesAmount", title: "销售额" },
-  { key: "sampleExcludedAmount", title: "剔除送样额" },
+  { key: "sampleQuantity", title: "送样量" },
+  { key: "sampleExcludedAmount", title: "送样金额" },
   { key: "returnCount", title: "退货量" },
   { key: "refundAmount", title: "退款额" },
   { key: "returnRate30Days", title: "退货率30天" },
