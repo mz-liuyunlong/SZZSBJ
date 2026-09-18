@@ -20,7 +20,6 @@ FIXED_UTC_MINUS_7 = timezone(timedelta(hours=-7), name="UTC-07:00")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 
-
 def _refund_purchase_query_dates(rows: Iterable[Mapping[str, Any]]) -> tuple[date, ...]:
     """Return China calendar dates from provider purchaseTimeLocale values."""
 
@@ -211,7 +210,10 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                if purchase_id and _field(item, "purchaseOrderId", "purchase_order_id") != purchase_id:
+                if (
+                    purchase_id
+                    and _field(item, "purchaseOrderId", "purchase_order_id") != purchase_id
+                ):
                     continue
                 if msku and _field(item, "msku") != msku:
                     continue
