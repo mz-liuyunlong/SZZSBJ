@@ -69,6 +69,7 @@ def test_refund_match_requires_store_item_and_msku() -> None:
     assert "and trim(msku)=trim(cast(:msku as text))" in source
     assert "local_sku" not in source.split("where source_account_ref", 1)[1]
 
+
 def test_daily_sales_uses_current_product_management_and_fact_backed_history() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
 
@@ -77,7 +78,10 @@ def test_daily_sales_uses_current_product_management_and_fact_backed_history() -
     assert "fact_walmart_sales_item_daily" in source
     assert "sales_history_7d_incomplete" in source
     assert "sales_history_30d_incomplete" in source
-    assert "from mart_daily_sales_item_day where source_account_ref=:account and business_date_la between" not in source
+    assert (
+        "from mart_daily_sales_item_day where source_account_ref=:account and business_date_la between"
+        not in source
+    )
 
 
 def test_refund_attribution_requires_matching_salestat_key() -> None:
@@ -86,4 +90,3 @@ def test_refund_attribution_requires_matching_salestat_key() -> None:
     assert "and exists (" in source
     assert "select 1 from s where s.source_account_ref=f.source_account_ref" in source
     assert "and s.business_date_la=b.business_date_la" in source
-
