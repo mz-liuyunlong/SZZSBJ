@@ -106,22 +106,30 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         missing_purchase = set(purchase_ids)
         missing_customer = set(customer_ids)
         if purchase_ids:
-            present = self.session.execute(
-                text(
-                    "select distinct platform_order_no from fact_walmart_order_items "
-                    "where source_account_ref=:account and platform_order_no = any(:values)"
-                ),
-                {"account": self.source_account_ref, "values": list(purchase_ids)},
-            ).scalars().all()
+            present = (
+                self.session.execute(
+                    text(
+                        "select distinct platform_order_no from fact_walmart_order_items "
+                        "where source_account_ref=:account and platform_order_no = any(:values)"
+                    ),
+                    {"account": self.source_account_ref, "values": list(purchase_ids)},
+                )
+                .scalars()
+                .all()
+            )
             missing_purchase.difference_update(str(value) for value in present if value)
         if customer_ids:
-            present = self.session.execute(
-                text(
-                    "select distinct reference_no from fact_walmart_order_items "
-                    "where source_account_ref=:account and reference_no = any(:values)"
-                ),
-                {"account": self.source_account_ref, "values": list(customer_ids)},
-            ).scalars().all()
+            present = (
+                self.session.execute(
+                    text(
+                        "select distinct reference_no from fact_walmart_order_items "
+                        "where source_account_ref=:account and reference_no = any(:values)"
+                    ),
+                    {"account": self.source_account_ref, "values": list(customer_ids)},
+                )
+                .scalars()
+                .all()
+            )
             missing_customer.difference_update(str(value) for value in present if value)
         return missing_purchase, missing_customer
 
