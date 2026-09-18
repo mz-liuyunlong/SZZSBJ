@@ -42,11 +42,16 @@ def test_daily_sales_uses_strict_triple_and_includes_sample_only_rows() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
 
     assert "store_id+item_id+msku" in source
-    assert "union_sample" in source
+    assert "select business_date_la,source_account_ref,store_id,item_id,msku from sample" in source
+    assert "gross_sales_qty" in source
     assert "sample_order_count" in source
     assert "sample_qty" in source
+    assert "cost_quantity" in source
     assert "coalesce(sample.sample_qty,0)" in source
     assert "coalesce(r.refund_amount,0)" in source
+    assert "calculation_warnings_json" in source
+    assert "return_rate_30d" in source
+    assert "fact_walmart_wfs_fee_actual" in source
 
 
 def test_refund_match_requires_store_item_and_msku() -> None:
