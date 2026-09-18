@@ -188,4 +188,3 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         if refunds:
             self.hydrate_refund_source_orders(refunds)
         return super()._reprice_refunds()
-
