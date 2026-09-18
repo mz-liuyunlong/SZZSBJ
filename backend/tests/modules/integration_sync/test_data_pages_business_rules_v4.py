@@ -1,5 +1,4 @@
 import inspect
-
 from datetime import date
 
 from app.modules.integration_sync.data_pages_business_rules_v2 import (
