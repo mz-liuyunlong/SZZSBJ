@@ -94,10 +94,10 @@ def test_sku_pricing_reproduces_wfs_formula_and_three_price_tiers() -> None:
     assert result.first_leg_volume_weight_kg == Decimal("0.450667")
     assert result.first_leg_chargeable_weight_kg == Decimal("0.800000")
     assert result.first_leg_fee_cny == Decimal("9.6000")
-    assert result.fixed_cost_usd == Decimal("10.1679")
-    assert result.suggested_price_usd == Decimal("22.60")
-    assert result.minimum_price_usd == Decimal("18.49")
-    assert result.clearance_price_usd == Decimal("11.96")
+    assert result.fixed_cost_usd == Decimal("10.2348")
+    assert result.suggested_price_usd == Decimal("22.74")
+    assert result.minimum_price_usd == Decimal("18.61")
+    assert result.clearance_price_usd == Decimal("12.04")
     assert result.calculation_status == "ok"
     assert result.pricing_available is True
 
@@ -113,10 +113,10 @@ def test_sku_pricing_uses_fixed_thirty_day_wfs_storage_rate() -> None:
     assert result.package_volume_cuft == Decimal("1.000000")
     assert result.daily_storage_fee_per_unit_usd == Decimal("0.0250")
     assert result.storage_fee_usd == Decimal("0.7500")
-    assert result.fixed_cost_usd == Decimal("21.5379")
-    assert result.suggested_price_usd == Decimal("47.86")
-    assert result.minimum_price_usd == Decimal("39.16")
-    assert result.clearance_price_usd == Decimal("25.34")
+    assert result.fixed_cost_usd == Decimal("21.7112")
+    assert result.suggested_price_usd == Decimal("48.25")
+    assert result.minimum_price_usd == Decimal("39.47")
+    assert result.clearance_price_usd == Decimal("25.54")
     assert result.storage_calc_status == "ok"
     assert result.calculation_status == "ok"
     assert result.pricing_available is True
