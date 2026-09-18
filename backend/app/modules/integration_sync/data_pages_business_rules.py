@@ -296,7 +296,55 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         return count
 
     def _resolve_sample_items(self) -> int:
-        """Require exact store_id + item_id + MSKU before a sample can affect sales."""
+        """Resolve a missing item_id only when Listing and SaleStat agree uniquely.
+
+        Samples affect sales only after the strict store_id + item_id + MSKU
+        identity is established. If the provider omits item_id, enrich it only
+        when the current Walmart listing and same-day direct SaleStat each yield
+        exactly one item_id for the same store + MSKU and those item_ids agree.
+        Ambiguous or disagreeing candidates remain unresolved.
+        """
+
+        self.session.execute(
+            text(
+                "with listing_candidates as ("
+                "select s.id, min(l.item_id) as item_id, count(distinct l.item_id) as item_count "
+                "from fact_walmart_sample_order_items s "
+                "join dim_walmart_listings l "
+                "on l.source_account_ref=s.source_account_ref "
+                "and l.store_id=s.store_id and trim(l.msku)=trim(s.msku) "
+                "where s.source_account_ref=:account "
+                "and s.business_date_utc_minus_7=:day "
+                "and s.is_valid_sample=true and s.item_id is null "
+                "and s.store_id is not null and s.msku is not null and trim(s.msku)<>'' "
+                "and l.item_id is not null "
+                "group by s.id"
+                "), sales_candidates as ("
+                "select s.id, min(f.item_id) as item_id, count(distinct f.item_id) as item_count "
+                "from fact_walmart_sample_order_items s "
+                "join fact_walmart_sales_item_daily f "
+                "on f.source_account_ref=s.source_account_ref "
+                "and f.business_date_la=s.business_date_utc_minus_7 "
+                "and f.store_id=s.store_id and trim(f.msku)=trim(s.msku) "
+                "and f.allocation_status='direct' "
+                "where s.source_account_ref=:account "
+                "and s.business_date_utc_minus_7=:day "
+                "and s.is_valid_sample=true and s.item_id is null "
+                "and s.store_id is not null and s.msku is not null and trim(s.msku)<>'' "
+                "and f.item_id is not null "
+                "group by s.id"
+                "), resolved as ("
+                "select l.id, l.item_id "
+                "from listing_candidates l "
+                "join sales_candidates f on f.id=l.id "
+                "where l.item_count=1 and f.item_count=1 and l.item_id=f.item_id"
+                ") "
+                "update fact_walmart_sample_order_items s "
+                "set item_id=r.item_id, updated_at=now() "
+                "from resolved r where s.id=r.id and s.item_id is null"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
 
         return int(
             self.session.execute(
@@ -308,7 +356,12 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "not exists (select 1 from dim_walmart_listings l "
                     "where l.source_account_ref=s.source_account_ref "
                     "and l.store_id=s.store_id and l.item_id=s.item_id "
-                    "and trim(l.msku)=trim(s.msku))"
+                    "and trim(l.msku)=trim(s.msku)) or "
+                    "not exists (select 1 from fact_walmart_sales_item_daily f "
+                    "where f.source_account_ref=s.source_account_ref "
+                    "and f.business_date_la=s.business_date_utc_minus_7 "
+                    "and f.store_id=s.store_id and f.item_id=s.item_id "
+                    "and trim(f.msku)=trim(s.msku) and f.allocation_status='direct')"
                     ")"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},

@@ -149,6 +149,31 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["sample_rule_version"] == "zero-total-provider-status-strict-triple-v3"
 
 
+def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+
+    unresolved = runner._resolve_sample_items()
+
+    assert unresolved == 0
+    assert len(session.calls) == 2
+
+    enrich_sql = session.calls[0][0]
+    assert "with listing_candidates as" in enrich_sql
+    assert "join dim_walmart_listings l" in enrich_sql
+    assert "count(distinct l.item_id) as item_count" in enrich_sql
+    assert "join fact_walmart_sales_item_daily f" in enrich_sql
+    assert "count(distinct f.item_id) as item_count" in enrich_sql
+    assert "l.item_count=1 and f.item_count=1 and l.item_id=f.item_id" in enrich_sql
+    assert "set item_id=r.item_id" in enrich_sql
+
+    validate_sql = session.calls[1][0]
+    assert "l.store_id=s.store_id and l.item_id=s.item_id" in validate_sql
+    assert "f.store_id=s.store_id and f.item_id=s.item_id" in validate_sql
+    assert "trim(f.msku)=trim(s.msku)" in validate_sql
+    assert "f.allocation_status='direct'" in validate_sql
+
+
 def test_refund_quantity_comes_from_return_api_quantity_display() -> None:
     session = _CaptureSession()
     runner = _runner(session)
