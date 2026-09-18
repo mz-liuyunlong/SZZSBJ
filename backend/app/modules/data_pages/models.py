@@ -218,7 +218,7 @@ class StoreCommissionRuleVersion(Base):
 class WalmartSalesItemDailyFact(Base):
     __tablename__ = "fact_walmart_sales_item_daily"
     __table_args__ = (
-        UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id"),
+        UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id", "msku"),
         CheckConstraint(f"allocation_status IN ({ALLOCATION_STATUSES})", name="allocation_status"),
         CheckConstraint("sales_qty IS NULL OR sales_qty >= 0", name="sales_qty_nonnegative"),
         CheckConstraint("order_count IS NULL OR order_count >= 0", name="order_count_nonnegative"),
@@ -479,6 +479,12 @@ class DailySalesItemDayMart(Base):
     order_count: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
     sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
     sales_currency_code: Mapped[str | None] = mapped_column(String(3))
+    gross_sales_qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
+    gross_order_count: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
+    gross_sales_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
+    sample_order_count: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
+    sample_qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
+    cost_quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=Decimal("0"))
     sample_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     sales_amount_excluding_sample: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     return_qty: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
@@ -492,13 +498,28 @@ class DailySalesItemDayMart(Base):
     wfs_fee_unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_currency_code: Mapped[str | None] = mapped_column(String(3))
+    wfs_fee_expected_unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    wfs_fee_expected_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    wfs_fee_actual_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    wfs_fee_variance_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    wfs_fee_variance_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    wfs_fee_source: Mapped[str | None] = mapped_column(String(64))
     purchase_cost_unit_cny: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     purchase_cost_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    purchase_cost_estimated_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    purchase_cost_actual_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    purchase_cost_source: Mapped[str | None] = mapped_column(String(64))
     first_leg_cost_unit_cny: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     first_leg_cost_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    first_leg_cost_estimated_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    first_leg_cost_actual_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    first_leg_cost_source: Mapped[str | None] = mapped_column(String(64))
     storage_fee_unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     storage_fee_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     storage_fee_currency_code: Mapped[str | None] = mapped_column(String(3))
+    storage_fee_estimated_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    storage_fee_actual_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    storage_fee_source: Mapped[str | None] = mapped_column(String(64))
     exchange_rate: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     fx_date: Mapped[date | None] = mapped_column(Date)
     fx_source: Mapped[str | None] = mapped_column(String(255))
@@ -508,6 +529,7 @@ class DailySalesItemDayMart(Base):
     )
     commission_fee_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     commission_fee_currency_code: Mapped[str | None] = mapped_column(String(3))
+    commission_source: Mapped[str | None] = mapped_column(String(64))
     gross_profit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     gross_profit_currency_code: Mapped[str | None] = mapped_column(String(3))
     gross_margin: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
@@ -516,6 +538,7 @@ class DailySalesItemDayMart(Base):
         String(32), default="missing", server_default=text("'missing'"), nullable=False
     )
     missing_cost_codes_json: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    calculation_warnings_json: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
     sales_7d_trend_json: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB, default=list, nullable=False
     )
