@@ -479,7 +479,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             )
             wfs_variance_rate = (
                 wfs_variance / wfs_expected_total
-                if wfs_variance is not None and wfs_expected_total is not None and wfs_expected_total > 0
+                if wfs_variance is not None
+                and wfs_expected_total is not None
+                and wfs_expected_total > 0
                 else None
             )
             wfs_source = (
@@ -525,17 +527,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             )
             roi = (
                 gross_profit / roi_denominator
-                if gross_profit is not None
-                and roi_denominator is not None
-                and roi_denominator > 0
+                if gross_profit is not None and roi_denominator is not None and roi_denominator > 0
                 else None
             )
-            rolling_return, rolling_sales = rolling_map.get(
-                identity, (Decimal("0"), Decimal("0"))
-            )
-            return_rate_30d = (
-                rolling_return / rolling_sales if rolling_sales > 0 else None
-            )
+            rolling_return, rolling_sales = rolling_map.get(identity, (Decimal("0"), Decimal("0")))
+            return_rate_30d = rolling_return / rolling_sales if rolling_sales > 0 else None
             trend = [
                 {
                     "date": (self.business_date - timedelta(days=offset)).isoformat(),
@@ -597,7 +593,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "storage_source": "product_management" if cost is not None else None,
                     "exchange_rate": cost.exchange_rate if cost is not None else None,
                     "fx_date": cost.fx_date if cost is not None else self.business_date,
-                    "fx_source": cost.fx_source if cost is not None else "daily-sales-default-fx-6.6",
+                    "fx_source": cost.fx_source
+                    if cost is not None
+                    else "daily-sales-default-fx-6.6",
                     "gross_profit": gross_profit,
                     "gross_margin": gross_margin,
                     "roi": roi,
