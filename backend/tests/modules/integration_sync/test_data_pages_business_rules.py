@@ -91,11 +91,16 @@ def test_sample_order_request_uses_special_window_without_changing_generic_order
     )
 
 
-def test_sample_rule_requires_zero_total_and_no_cancel_time() -> None:
-    assert _is_valid_sample(Decimal("0"), None) is True
-    assert _is_valid_sample(Decimal("0.0000"), "") is True
-    assert _is_valid_sample(Decimal("0"), "2026-09-01 10:00:00") is False
-    assert _is_valid_sample(Decimal("1"), None) is False
+def test_sample_rule_uses_provider_status_and_normalized_cancel_time() -> None:
+    assert _is_valid_sample(Decimal("0"), 0, 9) is True
+    assert _is_valid_sample(Decimal("0"), "0", "9") is True
+    assert _is_valid_sample(Decimal("0"), None, 9) is True
+    assert _is_valid_sample(Decimal("0"), 0.0, "9") is True
+    assert _is_valid_sample(Decimal("0"), "0.0", "9") is True
+    assert _is_valid_sample(Decimal("0"), 0, 7) is False
+    assert _is_valid_sample(Decimal("0"), "2026-09-01 10:00:00", None) is False
+    assert _is_valid_sample(Decimal("0"), "2026-09-01 10:00:00", 9) is True
+    assert _is_valid_sample(Decimal("1"), None, 9) is False
 
 
 def test_sample_writer_keeps_required_business_fields() -> None:
@@ -109,8 +114,9 @@ def test_sample_writer_keeps_required_business_fields() -> None:
                 "store_id": "store-a",
                 "store_name": "Store A",
                 "amount_currency": "USD",
+                "status": 9,
                 "transaction_info": [{"order_total_amount": "0"}],
-                "platform_info": [{"platform_code": "10008", "cancel_time": ""}],
+                "platform_info": [{"platform_code": "10008", "cancel_time": 0}],
                 "item_info": [
                     {
                         "id": "line-1",
@@ -137,7 +143,10 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["unit_price_amount"] == Decimal("9.99")
     assert params["order_total_amount"] == Decimal("0")
     assert params["platform_code"] == "10008"
+    assert params["cancel_time_raw"] == "0"
+    assert params["is_cancelled"] is False
     assert params["is_valid_sample"] is True
+    assert params["sample_rule_version"] == "zero-total-provider-status-strict-triple-v3"
 
 
 def test_refund_quantity_comes_from_return_api_quantity_display() -> None:
