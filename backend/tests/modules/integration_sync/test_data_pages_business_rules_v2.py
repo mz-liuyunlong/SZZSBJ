@@ -1,6 +1,8 @@
+import inspect
 from decimal import Decimal
 
 from app.modules.integration_sync.data_pages_business_rules_v2 import (
+    DataPagesRealSyncRunner,
     _cost_totals,
     _money_decimal,
 )
@@ -34,3 +36,23 @@ def test_daily_sales_cost_totals_use_product_management_units_and_sales_qty() ->
     assert first_leg == Decimal("3")
     assert wfs == Decimal("12.75")
     assert storage == Decimal("0.24")
+
+
+def test_daily_sales_uses_strict_triple_and_includes_sample_only_rows() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+
+    assert "store_id+item_id+msku" in source
+    assert "union_sample" in source
+    assert "sample_order_count" in source
+    assert "sample_qty" in source
+    assert "coalesce(sample.sample_qty,0)" in source
+    assert "coalesce(r.refund_amount,0)" in source
+
+
+def test_refund_match_requires_store_item_and_msku() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._match_refund_order_line)
+
+    assert "and store_id=cast(:store_id as text)" in source
+    assert "and item_id=cast(:item_id as text)" in source
+    assert "and trim(msku)=trim(cast(:msku as text))" in source
+    assert "local_sku" not in source.split("where source_account_ref", 1)[1]

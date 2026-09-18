@@ -1,6 +1,6 @@
 # DATA-PAGES-1 数据源决策：每日销售 / 订单利润 / Listing 管理
 
-状态：`READY_FOR_PRP`
+状态：`READY_FOR_PRP`（2026-09-18 业务口径已由负责人再次确认）
 
 日期：2026-09-16
 
@@ -10,6 +10,129 @@
 - 订单利润页面
 - Listing 管理页面
 - 领星 Walmart 相关接口同步、清洗、聚合、查询 API 与前端真实渲染
+
+## 0. 2026-09-18 负责人最终业务口径（覆盖本文冲突旧口径）
+
+本节由项目负责人于 2026-09-18 明确确认，优先级高于本文后续任何与之冲突的历史描述。实现不得回退到旧公式。
+
+### 0.1 商品业务身份
+
+Walmart 销售、广告、退款、送样进入 Daily Sales 时，商品归属必须使用严格业务键：
+
+```text
+business_date + store_id + item_id + msku
+```
+
+其中 `store_id + item_id + msku` 必须同时精确匹配；MSKU 仅允许 trim 首尾空格，不允许 local_sku、模糊匹配或缺字段兜底。无法严格匹配的记录进入 unresolved / DQ warning，不得影响正式金额。
+
+### 0.2 SaleStat、送样与净销售
+
+SaleStat `data_type=1` 保留为原始销售事实，不直接覆盖。Daily Sales 保存原始值与业务值：
+
+```text
+gross_order_count  = SaleStat 原始订单量
+gross_sales_qty    = SaleStat 原始销量
+gross_sales_amount = SaleStat 原始销售额
+
+order_count = max(gross_order_count - sample_order_count, 0)
+sales_qty   = max(gross_sales_qty - sample_qty, 0)
+
+paid_sales_amount = max(gross_sales_amount - sample_amount, 0)
+net_sales_amount  = max(paid_sales_amount - refund_amount, 0)
+```
+
+页面 `订单量 / 销量 / 销售额` 分别读取 `order_count / sales_qty / net_sales_amount`。退款数量独立展示，不再次扣减销量。
+
+有效送样：`order_total_amount = 0` 且未取消。送样订单数按 `platform_order_no` 去重，送样金额为 `unit_price_amount * quantity`。只有送样、没有付费销售的严格商品键也必须保留 Daily Sales 行，业务订单量/销量/销售额均为 0。
+
+### 0.3 退款
+
+只允许 `currentRefundStatus = REFUND_COMPLETED` 进入正式退款金额和退款数量。退款金额直接使用 Return API 的 `lineTotalAmount`，不得乘 `quantityDisplay`、不得按订单售价重算、不得再次扣佣金。
+
+`purchaseTimeLocale` 按已验证的中国时间 UTC+8 解释，再转换为固定 UTC-7，得到退款归属的原销售日。退款用 provider order identifiers 辅助确认，并最终严格匹配 `store_id + item_id + msku`。退款回冲原销售日的 `refund_amount` 与净销售额。
+
+### 0.4 广告
+
+Walmart 广告商品报表必须一次查询完整 campaignType：
+
+```text
+sponsoredProducts-manual
+sponsoredProducts-auto
+sba
+video
+```
+
+广告日事实必须是可替换快照，禁止以包含可变 metrics 的整行 hash 造成历史版本重复。2026-09-01 已验证验收基线：`5152` 行、广告花费 `1677.41 USD`。
+
+### 0.5 当前成本、佣金、汇率与利润
+
+当前成本权威来源先使用新系统 Product Management 按 SKU 解析；未来采购单、发货单、WFS/仓储实际账单可按已记录来源优先级替换“有效成本”，但不得覆盖预计值或历史计算依据。
+
+```text
+cost_qty = sales_qty + sample_qty
+
+WFS预计配送费 = Product Management WFS配送单价 * cost_qty
+预计采购成本  = Product Management 采购单价 * cost_qty
+预计头程成本  = Product Management 头程单价 * cost_qty
+预计仓储费    = Product Management 仓储单价 * cost_qty
+```
+
+CNY 成本按业务日期有效汇率转换为 USD。当前无正式汇率规则时 fallback 为 `USD/CNY = 6.6`；必须快照 `exchange_rate / fx_date / fx_source`。不得用“今天汇率”静默重算历史。
+
+店铺佣金使用 `ref_store_commission_rule_versions` 的业务日期有效规则；没有店铺规则时 fallback 为 `15%`：
+
+```text
+commission = net_sales_amount * effective_store_commission_rate
+```
+
+订单利润不再单独扣退款，因为退款已经进入净销售额：
+
+```text
+order_profit =
+  net_sales_amount
+  - ad_spend
+  - wfs_fee
+  - commission
+  - purchase_cost
+  - first_leg_cost
+  - storage_fee
+
+profit_margin = order_profit / net_sales_amount
+roi = order_profit / (purchase_cost + first_leg_cost)
+ad_ratio = ad_spend / net_sales_amount
+```
+
+分母为 0 时 ratio 为 NULL，不伪装成 0%。
+
+30 天退货率使用归属到原销售日后的口径：
+
+```text
+return_rate_30d = rolling_30d_refund_qty / rolling_30d_actual_sales_qty
+```
+
+其中 actual sales qty 已剔除送样；分母为 0 时为 NULL。
+
+### 0.6 WFS 实际账单与异常追偿
+
+预计 WFS 费用与后续 Walmart 实际账单必须同时保留，不得互相覆盖：
+
+```text
+wfs_variance = actual_wfs_fee - expected_wfs_fee
+```
+
+WFS异常模块用于识别多收、建立 Case、记录跟进、追回金额与关闭状态。实际账单的数据源/合同在获批前不得伪造；当前实现必须保留 future-ready actual/source 字段和可审计边界。
+
+### 0.7 数据质量
+
+以下情况不得静默吞掉，必须进入 `calculation_warnings` / unresolved：
+
+- sample_order_count > gross_order_count
+- sample_qty > gross_sales_qty
+- sample_amount > gross_sales_amount
+- refund_amount > paid_sales_amount
+- store_id + item_id + msku 任一缺失或不匹配
+- Product Management SKU 成本无法匹配
+- 必需成本、汇率缺失
 
 ## 1. 决策摘要
 

@@ -32,8 +32,8 @@ from app.modules.integration_sync.data_pages_real_sync import (
 
 FIXED_UTC_MINUS_7 = timezone(timedelta(hours=-7), name="UTC-07:00")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
-SAMPLE_RULE_VERSION = "zero-total-uncancelled-v1"
-REFUND_RULE_VERSION = "sales-x-qty-less-store-commission-v1"
+SAMPLE_RULE_VERSION = "zero-total-uncancelled-strict-triple-v2"
+REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 DEFAULT_STORE_COMMISSION_RATE = Decimal("0.15")
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
 
@@ -161,6 +161,15 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         }
 
     def _write_sample_orders(self, rows: Iterable[dict[str, Any]]) -> int:
+        """Replace one UTC-7 sample-day snapshot before strict triple validation."""
+
+        self.session.execute(
+            text(
+                "delete from fact_walmart_sample_order_items "
+                "where source_account_ref=:account and business_date_utc_minus_7=:day"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date},
+        )
         count = 0
         for row in rows:
             order_total = _decimal(_nested_first(row, "transaction_info", "order_total_amount"))
@@ -210,8 +219,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "on conflict (source_account_ref,platform_order_no,source_order_line_id) "
                         "do update set business_date_utc_minus_7=excluded.business_date_utc_minus_7,"
                         "store_id=excluded.store_id,store_name=excluded.store_name,"
-                        "platform_code=excluded.platform_code,item_id=coalesce(excluded.item_id,"
-                        "fact_walmart_sample_order_items.item_id),msku=excluded.msku,"
+                        "platform_code=excluded.platform_code,item_id=excluded.item_id,msku=excluded.msku,"
                         "local_sku=excluded.local_sku,quantity=excluded.quantity,"
                         "unit_price_amount=excluded.unit_price_amount,"
                         "unit_price_currency_code=excluded.unit_price_currency_code,"
@@ -253,49 +261,47 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         return count
 
     def _resolve_sample_items(self) -> int:
-        now = _now()
-        self.session.execute(
-            text(
-                "with candidates as (select s.id,"
-                "(select count(*) from dim_walmart_listings l "
-                "where l.source_account_ref=:account and l.store_id=s.store_id "
-                "and trim(l.local_sku)=trim(s.local_sku)) sku_count,"
-                "(select min(l.item_id) from dim_walmart_listings l "
-                "where l.source_account_ref=:account and l.store_id=s.store_id "
-                "and trim(l.local_sku)=trim(s.local_sku)) sku_item,"
-                "(select count(*) from dim_walmart_listings l "
-                "where l.source_account_ref=:account and l.store_id=s.store_id "
-                "and trim(l.local_sku)=trim(s.local_sku) and trim(l.msku)=trim(s.msku)) exact_count,"
-                "(select min(l.item_id) from dim_walmart_listings l "
-                "where l.source_account_ref=:account and l.store_id=s.store_id "
-                "and trim(l.local_sku)=trim(s.local_sku) and trim(l.msku)=trim(s.msku)) exact_item "
-                "from fact_walmart_sample_order_items s where s.source_account_ref=:account "
-                "and s.business_date_utc_minus_7=:day and s.item_id is null),"
-                "resolved as (select id,case when sku_count=1 then sku_item "
-                "when sku_count>1 and exact_count=1 then exact_item else null end item_id "
-                "from candidates) update fact_walmart_sample_order_items s set item_id=r.item_id,"
-                "updated_at=:now from resolved r where s.id=r.id and r.item_id is not null"
-            ),
-            {"account": self.source_account_ref, "day": self.business_date, "now": now},
-        )
+        """Require exact store_id + item_id + MSKU before a sample can affect sales."""
+
         return int(
             self.session.execute(
                 text(
-                    "select count(*) from fact_walmart_sample_order_items "
-                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
-                    "and is_valid_sample=true and item_id is null"
+                    "select count(*) from fact_walmart_sample_order_items s "
+                    "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
+                    "and s.is_valid_sample=true and ("
+                    "s.store_id is null or s.item_id is null or s.msku is null or trim(s.msku)='' or "
+                    "not exists (select 1 from dim_walmart_listings l "
+                    "where l.source_account_ref=s.source_account_ref "
+                    "and l.store_id=s.store_id and l.item_id=s.item_id "
+                    "and trim(l.msku)=trim(s.msku))"
+                    ")"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
             ).scalar_one()
         )
 
+    def _refund_business_date(
+        self,
+        refund: Mapping[str, Any],
+        order: Mapping[str, Any] | None,
+    ) -> date | None:
+        """Return the original sales day used for refund attribution."""
+
+        if order is not None and order.get("business_date_la") is not None:
+            return order["business_date_la"]
+        return None
+
     def _reprice_refunds(self) -> int:
+        """Persist completed provider refund amount against the original sales day."""
+
         refunds = (
             self.session.execute(
                 text(
-                    "select id,store_id,item_id,msku,local_sku,customer_order_id,purchase_order_id,"
-                    "quantity,refund_amount,refund_currency_code from fact_walmart_refund_items "
-                    "where source_account_ref=:account and business_date_la=:day"
+                    "select id,source_return_order_id,store_id,item_id,msku,local_sku,"
+                    "customer_order_id,purchase_order_id,refund_status_raw,quantity,"
+                    "refund_amount,refund_currency_code from fact_walmart_refund_items "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and refund_status_raw='REFUND_COMPLETED'"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
             )
@@ -308,26 +314,19 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             quantity = _decimal(refund["quantity"])
             provider_refund = _decimal(refund["refund_amount"])
             order = self._match_refund_order_line(refund)
-            unit_sales_amount = _order_unit_sales_amount(order)
-            commission_rate = self._store_commission_rate(refund.get("store_id"))
+            business_date = self._refund_business_date(refund, order)
             status = "calculated"
-            gross: Decimal | None = None
-            commission: Decimal | None = None
-            net: Decimal | None = None
             if quantity is None or quantity <= 0:
                 status = "quantity_missing"
-            elif order is None:
-                status = "order_not_matched"
-            elif unit_sales_amount is None:
+            elif provider_refund is None or provider_refund < 0:
                 status = "unit_price_missing"
-            else:
-                gross, commission, net = _refund_amounts(
-                    unit_sales_amount,
-                    quantity,
-                    commission_rate,
-                )
+            elif order is None or business_date is None:
+                status = "order_not_matched"
+
             if status != "calculated":
                 unresolved += 1
+
+            persisted_business_date = business_date or self.business_date
             self.session.execute(
                 text(
                     "insert into dws_walmart_refund_business_amounts "
@@ -342,6 +341,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     ":net_refund_amount,:currency_code,:provider_refund_amount,"
                     ":provider_refund_currency_code,:calculation_status,:rule_version,"
                     ":calculated_at,:created_at,:updated_at) on conflict (refund_fact_id) do update set "
+                    "business_date_la=excluded.business_date_la,store_id=excluded.store_id,"
+                    "item_id=excluded.item_id,local_sku=excluded.local_sku,"
                     "source_order_item_id=excluded.source_order_item_id,quantity=excluded.quantity,"
                     "unit_sales_amount=excluded.unit_sales_amount,"
                     "gross_refund_sales_amount=excluded.gross_refund_sales_amount,"
@@ -356,22 +357,20 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "id": str(uuid4()),
                     "refund_fact_id": str(refund["id"]),
                     "source_account_ref": self.source_account_ref,
-                    "business_date_la": self.business_date,
+                    "business_date_la": persisted_business_date,
                     "store_id": refund.get("store_id"),
                     "item_id": refund.get("item_id"),
                     "local_sku": refund.get("local_sku"),
                     "source_order_item_id": str(order["id"]) if order is not None else None,
                     "quantity": quantity,
-                    "unit_sales_amount": unit_sales_amount,
-                    "gross_refund_sales_amount": gross,
-                    "commission_rate": commission_rate,
-                    "commission_amount": commission,
-                    "net_refund_amount": net,
-                    "currency_code": (
-                        order.get("sales_revenue_currency_code")
-                        if order is not None
-                        else refund.get("refund_currency_code")
-                    ),
+                    "unit_sales_amount": None,
+                    "gross_refund_sales_amount": provider_refund
+                    if status == "calculated"
+                    else None,
+                    "commission_rate": Decimal("0"),
+                    "commission_amount": Decimal("0") if status == "calculated" else None,
+                    "net_refund_amount": provider_refund if status == "calculated" else None,
+                    "currency_code": refund.get("refund_currency_code") or "USD",
                     "provider_refund_amount": provider_refund,
                     "provider_refund_currency_code": refund.get("refund_currency_code"),
                     "calculation_status": status,

@@ -126,7 +126,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     )
 
     assert written == 1
-    params = session.calls[0][1]
+    params = session.calls[1][1]
     assert params is not None
     assert params["platform_order_no"] == "platform-1"
     assert params["source_order_line_id"] == "line-1"
@@ -161,6 +161,7 @@ def test_refund_quantity_comes_from_return_api_quantity_display() -> None:
                         "quantityDisplay": "3.5",
                         "lineTotalAmount": "59.50",
                         "lineTotalCurrency": "USD",
+                        "currentRefundStatus": "REFUND_COMPLETED",
                     }
                 ],
             }
@@ -168,7 +169,7 @@ def test_refund_quantity_comes_from_return_api_quantity_display() -> None:
     )
 
     assert written == 1
-    params = session.calls[0][1]
+    params = session.calls[1][1]
     assert params is not None
     assert params["quantity"] == Decimal("3.5")
 
@@ -221,3 +222,30 @@ def test_daily_sales_mart_is_based_on_salestat_and_joins_sku_cost_sources() -> N
     assert "dws_product_management_pricing_current" in insert_sql
     assert "ref_store_commission_rule_versions" in insert_sql
     assert "'basis','fact_walmart_sales_item_daily'" in insert_sql
+
+
+def test_refund_writer_ignores_non_completed_refunds() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+
+    written = runner._write_refunds(
+        [
+            {
+                "returnType": "REFUND",
+                "returnOrderId": "return-1",
+                "storeId": "store-a",
+                "items": [
+                    {
+                        "purchaseOrderId": "purchase-1",
+                        "msku": "MSKU-1",
+                        "currentRefundStatus": "NOT_REFUNDED",
+                        "quantityDisplay": "1",
+                        "lineTotalAmount": "20.00",
+                    }
+                ],
+            }
+        ]
+    )
+
+    assert written == 0
+    assert len(session.calls) == 1
