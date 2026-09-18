@@ -64,12 +64,14 @@ def test_order_matches_refund_identifiers_rejects_unrelated_order() -> None:
     )
 
 
-def test_daily_sales_scope_includes_positive_ads_and_refund_only_keys() -> None:
+def test_daily_sales_scope_includes_ads_refunds_and_samples_by_strict_triple() -> None:
     source = inspect.getsource(PageCompletenessRunner._refresh_daily_sales_mart)
 
     assert "having sum(coalesce(ad_spend_amount,0))>0" in source
-    assert '"select business_date_la,source_account_ref,store_id,item_id from r),"' in source
-    assert "sale_stat_union_positive_ad_spend_union_refund" in source
+    assert "select business_date_la,source_account_ref,store_id,item_id,msku from r union" in source
+    assert "select business_date_la,source_account_ref,store_id,item_id,msku from sample" in source
+    assert "sale_stat_union_positive_ad_spend_union_refund_union_sample" in source
+    assert "store_id+item_id+msku" in source
 
 
 def test_refund_purchase_time_converts_china_to_fixed_utc_minus_7() -> None:
