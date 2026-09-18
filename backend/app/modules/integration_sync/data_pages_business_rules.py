@@ -32,7 +32,7 @@ from app.modules.integration_sync.data_pages_real_sync import (
 
 FIXED_UTC_MINUS_7 = timezone(timedelta(hours=-7), name="UTC-07:00")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
-SAMPLE_RULE_VERSION = "zero-total-uncancelled-strict-triple-v2"
+SAMPLE_RULE_VERSION = "zero-total-provider-status-strict-triple-v3"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 DEFAULT_STORE_COMMISSION_RATE = Decimal("0.15")
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
@@ -49,8 +49,37 @@ def _sample_window_epoch(day: date, *, end: bool) -> int:
     return int((end_at if end else start_at).timestamp())
 
 
-def _is_valid_sample(order_total: Decimal | None, cancel_time_raw: str | None) -> bool:
-    return order_total == Decimal("0") and not (cancel_time_raw or "").strip()
+def _has_cancel_time(cancel_time_raw: object | None) -> bool:
+    if cancel_time_raw is None:
+        return False
+    text_value = str(cancel_time_raw).strip()
+    if not text_value:
+        return False
+    numeric_value = _decimal(text_value)
+    if numeric_value is not None:
+        return numeric_value != Decimal("0")
+    return True
+
+
+def _is_sample_cancelled(
+    order_status_raw: object | None,
+    cancel_time_raw: object | None,
+) -> bool:
+    status = str(order_status_raw).strip() if order_status_raw is not None else ""
+    if status:
+        return status == "7"
+    return _has_cancel_time(cancel_time_raw)
+
+
+def _is_valid_sample(
+    order_total: Decimal | None,
+    cancel_time_raw: object | None,
+    order_status_raw: object | None = None,
+) -> bool:
+    return order_total == Decimal("0") and not _is_sample_cancelled(
+        order_status_raw,
+        cancel_time_raw,
+    )
 
 
 def _refund_amounts(
@@ -180,6 +209,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "platform_info",
                 "cancel_time",
             )
+            order_status_raw = _field(row, "status")
+            is_cancelled = _is_sample_cancelled(order_status_raw, cancel_time_raw)
             platform_code = (
                 _field(row, "platform_code")
                 or _nested_text(row, "platform_info", "platform_code")
@@ -251,8 +282,12 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "order_total_amount": order_total,
                         "order_total_currency_code": currency_code,
                         "cancel_time_raw": cancel_time_raw,
-                        "is_cancelled": bool((cancel_time_raw or "").strip()),
-                        "is_valid_sample": _is_valid_sample(order_total, cancel_time_raw),
+                        "is_cancelled": is_cancelled,
+                        "is_valid_sample": _is_valid_sample(
+                            order_total,
+                            cancel_time_raw,
+                            order_status_raw,
+                        ),
                         "sample_rule_version": SAMPLE_RULE_VERSION,
                         **_timestamps(),
                     },
