@@ -81,10 +81,21 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   };
 
   useEffect(() => {
-    void reloadRows();
-    // Date range is the only server-side filter here; remaining filters stay instant/local.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.dateRange[0], filters.dateRange[1]]);
+    let cancelled = false;
+    void fetchWfsFeeAlerts(filters.dateRange[0], filters.dateRange[1])
+      .then((nextRows) => {
+        if (!cancelled) setRows(nextRows);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRows([]);
+          void messageApi.error("WFS费用异常数据加载失败");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.dateRange, messageApi]);
 
   const stores = useMemo(() => [...new Set(rows.map((row) => row.store))], [rows]);
   const owners = useMemo(() => [...new Set(rows.map((row) => row.owner))], [rows]);
