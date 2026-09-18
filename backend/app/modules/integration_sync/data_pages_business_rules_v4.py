@@ -14,7 +14,6 @@ from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncError,
     _china_epoch,
     _field,
-    _row_count,
 )
 
 
@@ -189,25 +188,3 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         if refunds:
             self.hydrate_refund_source_orders(refunds)
         return super()._reprice_refunds()
-
-    def _refresh_daily_sales_mart(self) -> int:
-        super()._refresh_daily_sales_mart()
-        self.session.execute(
-            text(
-                "delete from mart_daily_sales_item_day m "
-                "where m.source_account_ref=:account and m.business_date_la=:day "
-                "and coalesce(m.ad_spend_amount,0)=0 and not exists ("
-                "select 1 from fact_walmart_sales_item_daily s "
-                "where s.source_account_ref=m.source_account_ref "
-                "and s.business_date_la=m.business_date_la "
-                "and s.store_id=m.store_id and s.item_id=m.item_id "
-                "and s.allocation_status='direct')"
-            ),
-            {"account": self.source_account_ref, "day": self.business_date},
-        )
-        return _row_count(
-            self.session,
-            "mart_daily_sales_item_day",
-            self.source_account_ref,
-            self.business_date,
-        )
