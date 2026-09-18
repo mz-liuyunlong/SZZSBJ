@@ -4,7 +4,17 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Date, DateTime, Index, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -50,7 +60,9 @@ class WalmartWfsFeeActualFact(Base):
         nullable=False,
     )
     source_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
@@ -66,7 +78,9 @@ class WfsFeeAnomalyCase(Base):
         ),
         CheckConstraint("priority in ('高','中','低')", name="priority_allowed"),
         CheckConstraint("recovered_amount >= 0", name="recovered_nonnegative"),
-        Index("ix_ops_wfs_fee_anomaly_cases_status", "source_account_ref", "status", "next_follow_at"),
+        Index(
+            "ix_ops_wfs_fee_anomaly_cases_status", "source_account_ref", "status", "next_follow_at"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
