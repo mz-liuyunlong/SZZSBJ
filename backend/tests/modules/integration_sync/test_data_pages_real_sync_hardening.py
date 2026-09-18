@@ -4,8 +4,10 @@ from typing import Any, cast
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_real_sync import (
+    SP_CAMPAIGN_TYPES,
     DataPagesRealSyncRunner,
     ProviderResponse,
+    _ad_identity_hash,
     _resolve_ad_identity,
     _scalar_candidates,
 )
@@ -154,3 +156,27 @@ def test_ads_ignore_unreliable_total_and_stop_on_short_page() -> None:
     assert len(client.calls) == 2
     assert client.calls[0]["body"]["pageNum"] == 1
     assert client.calls[1]["body"]["pageNum"] == 2
+
+
+def test_sp_campaign_types_include_manual_auto_sba_and_video() -> None:
+    assert SP_CAMPAIGN_TYPES == (
+        "sponsoredProducts-manual",
+        "sponsoredProducts-auto",
+        "sba",
+        "video",
+    )
+
+
+def test_ad_identity_hash_ignores_mutable_metrics() -> None:
+    original = {
+        "key": "stable-provider-key",
+        "adSpend": "10.00",
+        "numAdsClicks": 3,
+    }
+    refreshed = {
+        "key": "stable-provider-key",
+        "adSpend": "8.50",
+        "numAdsClicks": 9,
+    }
+
+    assert _ad_identity_hash(original) == _ad_identity_hash(refreshed)
