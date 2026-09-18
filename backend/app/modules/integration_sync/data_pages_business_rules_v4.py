@@ -260,6 +260,18 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         )
         try:
             for day in affected_days:
+                sales_fact_exists = self.session.execute(
+                    text(
+                        "select exists(select 1 from fact_walmart_sales_item_daily "
+                        "where source_account_ref=:account and business_date_la=:day "
+                        "and allocation_status='direct')"
+                    ),
+                    {"account": self.source_account_ref, "day": day},
+                ).scalar_one()
+                if not sales_fact_exists:
+                    # A refund may point to an older sales day whose SaleStat facts have
+                    # not been backfilled yet. Never materialize a refund-only MART day.
+                    continue
                 self.business_date = day
                 super()._refresh_daily_sales_mart()
                 self._refresh_order_profit_mart()
