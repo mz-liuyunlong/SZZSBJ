@@ -17,6 +17,7 @@ interface BackendDailySalesItem {
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
+  return_qty: string | null;
   refund_amount: string | null;
   ad_spend_amount: string | null;
   commission_fee_amount: string | null;
@@ -92,6 +93,7 @@ const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSour
   salesVolume: numberValue(item.sales_qty),
   orderCount: numberValue(item.order_count),
   salesAmount: numberValue(item.sales_amount),
+  refundQuantity: numberValue(item.return_qty),
   refundAmount: numberValue(item.refund_amount),
   adSpend: numberValue(item.ad_spend_amount),
   wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
