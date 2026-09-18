@@ -160,11 +160,251 @@ features/pmc-purchase/data/probe_20260915/  probe_20260917/                真�
 
 ## 负责人决定
 
-- 决定：批准进入 PRP / 要求补充证据 / 选择方案 [A/B]
+- 决定：批准进入 PRP，选择方案 A。
+
+- 批准人：mz-liuyunlong
+
+- 批准日期：2026-09-18
+
 - 批准的数据集分类：
-- 批准的短期策略：
-- 批准的长期策略：
-- 约束与退出条件：
-- 批准人：
-- 批准日期：
-- 备注：
+
+  - 采购计划：REBUILD_SYNC
+  - 采购单 + 明细：REBUILD_SYNC
+  - 收货单 + 明细：REBUILD_SYNC
+  - 店铺 / Walmart 在线商品 / 产品负责人、标签、分类：EXISTING_NEW_SYSTEM_DATA
+  - 阈值与算法参数：NEW_SYSTEM_OWNED_VERSIONED_RULE
+  - ItemID 指定 / 交期修正：NEW_SYSTEM_OWNED
+
+- 批准的短期策略：三接口只读同步，90 天增量 + 12 个月一次性回填；复用 DATA-PAGES-1 DIM；前端只读 DWS。
+
+- 批准的长期策略：PMC 后续板块补齐发货追溯与写接口；写接口另立 PRP。
+
+- 边界：本批准仅允许进入 PRP / Gate 2 开发，不授权生产真实调用、生产回填、生产调度、生产迁移或任何领星写接口。
+
+  同时同步文件顶部状态，不能继续写 BLOCKED_BY_OWNER_DECISION / 待确认。
+  需要表达为：负责人已批准进入 PRP，但不授权生产执行。
+
+2. 修改 docs/integrations/lingxing/API_CONTRACT_INVENTORY.csv
+
+   把接口 LX-4B9473A2D2E1 从 DO_NOT_USE 改为 READY_FOR_PRP。
+
+   注意：
+
+- is_read 依据 official_verified_interfaces.csv 为 是。
+- is_write 为 否。
+- has_side_effect 为 否。
+- 风险不要改成 NONE，建议保留 AUTH_UNKNOWN 或类似“未授权真实调用”的风险说明。
+- notes 要说明：Owner approved方案A for PRP planning only；not real-call authorization。
+
+3. 同步 docs/integrations/lingxing/API_CONTRACT_INVENTORY.md
+
+   需要同步状态统计、说明和例外说明。
+   注意保持边界：
+   READY_FOR_PRP = 允许 PRP planning，不是 provider verification，不是 call authorization。
+
+4. 同步 docs/integrations/lingxing/API_CONTRACT_SOURCE_MAP.md
+
+   把 LX-4B9473A2D2E1 改为：
+
+- Status: READY_FOR_PRP
+
+- Can enter PRP: Yes
+
+- Missing / risk: AUTH_UNKNOWN 或 Owner-approved PRP only
+
+  不要把真实调用状态写成已授权。
+
+5. 同步 docs/integrations/lingxing-walmart-openapi/api-verification-status.csv
+
+   不要改成“已验证”。
+   可以把 usable_for_phase_1 / notes 改为：
+   Owner approved for PRP planning / 方案 A / still requires real-call authorization before production use。
+
+6. 修改 PRPs/pmc-purchase-board.md
+
+   把状态：
+
+   Draft
+
+   改为：
+
+   Approved
+
+   并同步内部：
+
+- decision status
+
+- owner approval status
+
+- contains NEED_OWNER_DECISION
+
+  不要让文件里继续保留 blocked / 待确认 / PRP 不批准等矛盾状态。
+
+  任务四：回复四项决定
+
+  请在 PR 描述或最终回复里明确写：
+
+1. LX-4B9473A2D2E1 方案 A：同意。
+
+   - 理由：official_verified_interfaces.csv 显示只读、无写入、无副作用。
+   - 边界：只批准 READY_FOR_PRP，不批准真实生产调用。
+
+2. dim_walmart_listings.fulfillment_type：同意，但必须单独最小 PR。
+
+   - 必须走 Alembic + PR。
+   - 不允许手动改生产库。
+   - 不能影响现有 Listing 数据链路。
+
+3. WalmartItemLink 共享组件：同意。
+
+   - 但必须做成唯一共享组件。
+   - 采购看板、Listing、产品详情直接调用。
+   - 不允许每个页面各写各的 Walmart URL 拼接和样式。
+   - 先检查 main 或当前分支是否已有组件；如果已有直接复用；如果没有，只能新增一个共享组件。
+
+4. 产品详情“采购交期”改读 dws_purchase_sku_cycle：同意，但放 Gate 4 或 DWS 完成后。
+
+   - 前端不能自己从 ODS / RAW 算。
+
+   - 必须通过后端 BFF / DWS 读取。
+
+   - DWS 未完成前不要接页面。
+
+     任务五：前端组件边界
+
+     已有组件必须复用，不允许乱造：
+
+- frontend/src/components/page/PageShell.tsx
+
+- frontend/src/components/report-table/ReportTableShell.tsx
+
+- frontend/src/components/report-table/ConnectedSearch.tsx
+
+- frontend/src/components/report-table/ResetButton.tsx
+
+- frontend/src/components/report-table/ResizableColumnTitle.tsx
+
+- frontend/src/components/report-table/RuntimeColumnConfigDrawer.tsx
+
+- frontend/src/components/report-table/cells.tsx
+
+- frontend/src/components/report-table/pagination.ts
+
+- frontend/src/components/report-table/reportTable.css
+
+- frontend/src/shared/feedback/*
+
+- frontend/src/shared/status/*
+
+- frontend/src/shared/states/*
+
+- frontend/src/shared/permissions/*
+
+- frontend/src/shared/formatters/*
+
+  采购看板 Gate 4 以后做页面时：
+
+- 页面外壳用 PageShell。
+
+- 表格框架用 ReportTableShell。
+
+- 搜索用 ConnectedSearch。
+
+- 重置按钮用 ResetButton。
+
+- 列配置用 RuntimeColumnConfigDrawer。
+
+- 金额、百分比、状态、复制、图片等单元格优先用 cells.tsx 既有组件。
+
+- 不允许新造一套表格布局、筛选样式、状态样式。
+
+  任务六：后端组件边界
+
+  Gate 2 以后后端必须复用：
+
+- backend/app/modules/integration_sync/catalog.py
+
+- backend/app/modules/integration_sync/execution.py
+
+- backend/app/modules/integration_sync/importer.py
+
+- backend/app/modules/integration_sync/repository.py
+
+- backend/app/modules/integration_sync/router.py
+
+- backend/app/modules/integration_sync/scheduler.py
+
+- backend/app/modules/integration_sync/service.py
+
+- backend/app/modules/integration_sync/tasks.py
+
+- backend/app/modules/integration_sync/handlers/
+
+- backend/app/modules/integration_sync/parsers/
+
+  不允许：
+
+- 新造同步框架。
+
+- 绕过 gov_integration_*。
+
+- 绕过 ods_api_raw_blobs / ods_api_raw_request_refs。
+
+- 不记录 gov_data_lineage。
+
+- 直接从前端访问数据库。
+
+- 业务 API 运行时读取旧库。
+
+- 手工改 ODS / DWD 原始值。
+
+  任务七：验收命令
+
+  完成后运行：
+
+- git diff --name-only origin/main
+
+- git diff --check
+
+  必须确认只出现允许的 6 个文档文件。
+
+  可运行文档相关检查，例如 markdownlint / CSV 读取检查。
+  不要运行生产相关命令。
+
+  PR 标题建议：
+
+  docs(pmc-purchase): approve PRP and reclassify receipt list for planning
+
+  PR 描述必须包含：
+
+- Summary
+
+- Files changed
+
+- Owner decision
+
+- Four cross-module decisions
+
+- Validation
+
+- Safety boundary
+
+  Safety boundary 必须写：
+
+- docs-only
+
+- no backend/frontend/old-system changes
+
+- no production DB access
+
+- no migrations
+
+- no real Lingxing calls
+
+- no backfill
+
+- no scheduler
+
+- no deployment
+
+- READY_FOR_PRP is PRP planning only, not production authorization
