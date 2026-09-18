@@ -26,7 +26,7 @@ from app.modules.product_management.daily_sales_costs import (
     normalize_sku_key,
 )
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+page-completeness-117"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-sample-ads-118"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -165,11 +165,22 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         return count
 
     def _match_refund_order_line(self, refund: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        """Match one refund only when order identity and store+item+MSKU are exact."""
+
         customer_order_id = _text_or_none(refund.get("customer_order_id"))
         purchase_order_id = _text_or_none(refund.get("purchase_order_id"))
-        if not customer_order_id and not purchase_order_id:
+        store_id = _text_or_none(refund.get("store_id"))
+        item_id = _text_or_none(refund.get("item_id"))
+        msku = _text_or_none(refund.get("msku"))
+        if (
+            (not customer_order_id and not purchase_order_id)
+            or not store_id
+            or not item_id
+            or not msku
+        ):
             return None
-        return (
+
+        rows = (
             self.session.execute(
                 text(
                     "select id,source_order_id,platform_order_no,reference_no,store_id,item_id,msku,local_sku,"
@@ -179,30 +190,24 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "source_order_id=cast(:customer_order_id as text) or reference_no=cast(:customer_order_id as text))) or "
                     "(cast(:purchase_order_id as text) is not null and ("
                     "source_order_id=cast(:purchase_order_id as text) or platform_order_no=cast(:purchase_order_id as text)))) "
-                    "and (cast(:store_id as text) is null or store_id=cast(:store_id as text)) and ("
-                    "(cast(:item_id as text) is not null and item_id=cast(:item_id as text)) or "
-                    "(cast(:local_sku as text) is not null and lower(trim(local_sku))=lower(trim(cast(:local_sku as text)))) or "
-                    "(cast(:msku as text) is not null and lower(trim(msku))=lower(trim(cast(:msku as text))))) "
-                    "order by case "
-                    "when cast(:purchase_order_id as text) is not null and platform_order_no=cast(:purchase_order_id as text) then 0 "
-                    "when cast(:customer_order_id as text) is not null and reference_no=cast(:customer_order_id as text) then 1 "
-                    "when cast(:item_id as text) is not null and item_id=cast(:item_id as text) then 2 "
-                    "when cast(:local_sku as text) is not null and lower(trim(local_sku))=lower(trim(cast(:local_sku as text))) then 3 "
-                    "else 4 end,business_date_la desc nulls last,updated_at desc limit 1"
+                    "and store_id=cast(:store_id as text) "
+                    "and item_id=cast(:item_id as text) "
+                    "and trim(msku)=trim(cast(:msku as text)) "
+                    "order by business_date_la desc nulls last,updated_at desc limit 2"
                 ),
                 {
                     "account": self.source_account_ref,
                     "customer_order_id": customer_order_id,
                     "purchase_order_id": purchase_order_id,
-                    "store_id": refund.get("store_id"),
-                    "item_id": refund.get("item_id"),
-                    "local_sku": refund.get("local_sku"),
-                    "msku": refund.get("msku"),
+                    "store_id": store_id,
+                    "item_id": item_id,
+                    "msku": msku,
                 },
             )
             .mappings()
-            .first()
+            .all()
         )
+        return rows[0] if len(rows) == 1 else None
 
     def _refresh_daily_sales_mart(self) -> int:
         now = _now()
@@ -215,32 +220,43 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         )
         self.session.execute(
             text(
-                "with s as (select business_date_la,source_account_ref,store_id,item_id,"
-                "max(msku) msku,max(local_sku) local_sku,max(product_name) product_name,"
+                "with s as (select business_date_la,source_account_ref,store_id,item_id,trim(msku) msku,"
+                "max(local_sku) local_sku,max(product_name) product_name,"
                 "sum(coalesce(sales_qty,0)) sales_qty,sum(coalesce(order_count,0)) order_count,"
                 "sum(coalesce(sales_amount,0)) sales_amount,coalesce(max(sales_currency_code),'USD') currency_code "
                 "from fact_walmart_sales_item_daily where source_account_ref=:account and business_date_la=:day "
-                "and allocation_status='direct' group by 1,2,3,4),"
-                "a as (select business_date_la,source_account_ref,store_id,item_id,max(msku) msku,"
+                "and allocation_status='direct' and store_id is not null and item_id is not null "
+                "and msku is not null and trim(msku)<>'' group by 1,2,3,4,5),"
+                "a as (select business_date_la,source_account_ref,store_id,item_id,trim(msku) msku,"
                 "sum(coalesce(ad_spend_amount,0)) ad_spend from fact_walmart_ad_item_sp_daily "
                 "where source_account_ref=:account and business_date_la=:day and store_id is not null "
-                "and item_id is not null group by 1,2,3,4 "
+                "and item_id is not null and msku is not null and trim(msku)<>'' group by 1,2,3,4,5 "
                 "having sum(coalesce(ad_spend_amount,0))>0),"
-                "r as (select f.source_account_ref,f.business_date_la,f.store_id,f.item_id,"
-                "max(f.msku) msku,max(f.local_sku) local_sku,sum(coalesce(f.quantity,0)) return_qty,"
+                "r as (select f.source_account_ref,b.business_date_la,f.store_id,f.item_id,trim(f.msku) msku,"
+                "max(f.local_sku) local_sku,sum(coalesce(f.quantity,0)) return_qty,"
                 "sum(coalesce(b.net_refund_amount,0)) filter (where b.calculation_status='calculated') refund_amount,"
                 "coalesce(max(b.currency_code) filter (where b.calculation_status='calculated'),max(f.refund_currency_code),'USD') refund_currency_code,"
                 "count(*) filter (where b.calculation_status is distinct from 'calculated') refund_unpriced_count "
-                "from fact_walmart_refund_items f left join dws_walmart_refund_business_amounts b on b.refund_fact_id=f.id "
-                "where f.source_account_ref=:account and f.business_date_la=:day and f.store_id is not null "
-                "and f.item_id is not null group by 1,2,3,4),"
-                "k as (select business_date_la,source_account_ref,store_id,item_id from s union "
-                "select business_date_la,source_account_ref,store_id,item_id from a union "
-                "select business_date_la,source_account_ref,store_id,item_id from r),"
-                "sample as (select source_account_ref,business_date_utc_minus_7 business_date_la,store_id,item_id,"
-                "sum(coalesce(unit_price_amount,0)*coalesce(quantity,0)) sample_amount "
-                "from fact_walmart_sample_order_items where source_account_ref=:account "
-                "and business_date_utc_minus_7=:day and is_valid_sample=true and item_id is not null group by 1,2,3,4),"
+                "from fact_walmart_refund_items f join dws_walmart_refund_business_amounts b on b.refund_fact_id=f.id "
+                "where f.source_account_ref=:account and b.business_date_la=:day "
+                "and f.refund_status_raw='REFUND_COMPLETED' and f.store_id is not null and f.item_id is not null "
+                "and f.msku is not null and trim(f.msku)<>'' group by 1,2,3,4,5),"
+                "sample as (select s.source_account_ref,s.business_date_utc_minus_7 business_date_la,"
+                "s.store_id,s.item_id,trim(s.msku) msku,max(s.local_sku) local_sku,"
+                "count(distinct s.platform_order_no) sample_order_count,"
+                "sum(coalesce(s.quantity,0)) sample_qty,"
+                "sum(coalesce(s.unit_price_amount,0)*coalesce(s.quantity,0)) sample_amount "
+                "from fact_walmart_sample_order_items s "
+                "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
+                "and s.is_valid_sample=true and s.store_id is not null and s.item_id is not null "
+                "and s.msku is not null and trim(s.msku)<>'' and exists ("
+                "select 1 from dim_walmart_listings l where l.source_account_ref=s.source_account_ref "
+                "and l.store_id=s.store_id and l.item_id=s.item_id and trim(l.msku)=trim(s.msku)) "
+                "group by 1,2,3,4,5),"
+                "k as (select business_date_la,source_account_ref,store_id,item_id,msku from s union "
+                "select business_date_la,source_account_ref,store_id,item_id,msku from a union "
+                "select business_date_la,source_account_ref,store_id,item_id,msku from r union "
+                "select business_date_la,source_account_ref,store_id,item_id,msku from sample),"
                 "commission as (select distinct on (store_id) store_id,id rule_id,commission_rate,rule_version "
                 "from ref_store_commission_rule_versions where source_account_ref=:account and platform_code='walmart' "
                 "and is_active=true and effective_from<=:day and (effective_to is null or effective_to>:day) "
@@ -253,28 +269,39 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "commission_rule_version_id,commission_fee_amount,commission_fee_currency_code,cost_status,"
                 "missing_cost_codes_json,sales_7d_trend_json,source_lineage_json,calc_version,calculated_at,created_at,updated_at) "
                 "select gen_random_uuid(),k.business_date_la,k.source_account_ref,coalesce(l.platform_code,'walmart'),"
-                "k.store_id,l.store_name,k.item_id,coalesce(nullif(trim(l.msku),''),nullif(trim(s.msku),''),nullif(trim(a.msku),''),nullif(trim(r.msku),'')),"
-                "coalesce(nullif(trim(l.local_sku),''),nullif(trim(s.local_sku),''),nullif(trim(r.local_sku),''),k.item_id),"
-                "coalesce(l.local_name,s.product_name),l.title,l.picture_url,null,coalesce(s.sales_qty,0),"
-                "coalesce(s.order_count,0),coalesce(s.sales_amount,0),coalesce(s.currency_code,'USD'),"
-                "coalesce(sample.sample_amount,0),greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
-                "r.return_qty,r.refund_amount,r.refund_currency_code,coalesce(a.ad_spend,0),'USD',"
-                "case when coalesce(s.sales_amount,0)>0 then coalesce(a.ad_spend,0)/s.sales_amount else null end,"
-                "l.wfs_available_quantity,coalesce(commission.commission_rate,0.15),commission.rule_id,"
-                "coalesce(s.sales_amount,0)*coalesce(commission.commission_rate,0.15),coalesce(s.currency_code,'USD'),"
+                "k.store_id,l.store_name,k.item_id,k.msku,"
+                "coalesce(nullif(trim(l.local_sku),''),nullif(trim(s.local_sku),''),nullif(trim(r.local_sku),''),"
+                "nullif(trim(sample.local_sku),''),k.item_id),coalesce(l.local_name,s.product_name),"
+                "l.title,l.picture_url,null,"
+                "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0),"
+                "greatest(coalesce(s.order_count,0)-coalesce(sample.sample_order_count,0),0),"
+                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0),"
+                "coalesce(s.currency_code,'USD'),coalesce(sample.sample_amount,0),"
+                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
+                "coalesce(r.return_qty,0),coalesce(r.refund_amount,0),coalesce(r.refund_currency_code,'USD'),"
+                "coalesce(a.ad_spend,0),'USD',"
+                "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)>0 "
+                "then coalesce(a.ad_spend,0)/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0) "
+                "else null end,l.wfs_available_quantity,coalesce(commission.commission_rate,0.15),commission.rule_id,"
+                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)"
+                "*coalesce(commission.commission_rate,0.15),coalesce(s.currency_code,'USD'),"
                 "'missing','[\"product_management_cost_pending\"]'::jsonb,'[]'::jsonb,"
-                "jsonb_build_object('runner',cast(:runner as text),'basis','sale_stat_union_positive_ad_spend_union_refund',"
-                "'ads_match_key','store_id+item_id','refund_unpriced_count',coalesce(r.refund_unpriced_count,0)),"
+                "jsonb_build_object('runner',cast(:runner as text),"
+                "'basis','sale_stat_union_positive_ad_spend_union_refund_union_sample',"
+                "'match_key','store_id+item_id+msku','refund_unpriced_count',coalesce(r.refund_unpriced_count,0),"
+                "'sample_order_count',coalesce(sample.sample_order_count,0),'sample_qty',coalesce(sample.sample_qty,0)),"
                 "cast(:runner as text),:now,:now,:now from k "
                 "left join s on s.source_account_ref=k.source_account_ref and s.business_date_la=k.business_date_la "
-                "and s.store_id=k.store_id and s.item_id=k.item_id "
+                "and s.store_id=k.store_id and s.item_id=k.item_id and s.msku=k.msku "
                 "left join a on a.source_account_ref=k.source_account_ref and a.business_date_la=k.business_date_la "
-                "and a.store_id=k.store_id and a.item_id=k.item_id "
-                "left join dim_walmart_listings l on l.source_account_ref=k.source_account_ref and l.store_id=k.store_id and l.item_id=k.item_id "
-                "left join sample on sample.source_account_ref=k.source_account_ref and sample.business_date_la=k.business_date_la "
-                "and sample.store_id=k.store_id and sample.item_id=k.item_id "
+                "and a.store_id=k.store_id and a.item_id=k.item_id and a.msku=k.msku "
                 "left join r on r.source_account_ref=k.source_account_ref and r.business_date_la=k.business_date_la "
-                "and r.store_id=k.store_id and r.item_id=k.item_id "
+                "and r.store_id=k.store_id and r.item_id=k.item_id and r.msku=k.msku "
+                "left join sample on sample.source_account_ref=k.source_account_ref "
+                "and sample.business_date_la=k.business_date_la and sample.store_id=k.store_id "
+                "and sample.item_id=k.item_id and sample.msku=k.msku "
+                "left join dim_walmart_listings l on l.source_account_ref=k.source_account_ref "
+                "and l.store_id=k.store_id and l.item_id=k.item_id and trim(l.msku)=k.msku "
                 "left join commission on commission.store_id=k.store_id"
             ),
             {
@@ -368,7 +395,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             else:
                 cost_status = "missing"
 
-            known_costs = [refund, ad_spend, commission]
+            known_costs = [ad_spend, commission]
             optional_costs = (purchase_total, first_leg_total, wfs_total, storage_total)
             gross_profit = (
                 sales
