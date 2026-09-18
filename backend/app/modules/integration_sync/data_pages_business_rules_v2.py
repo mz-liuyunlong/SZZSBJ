@@ -355,7 +355,6 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         for row in mart_rows:
             quantity = _decimal(row["sales_qty"]) or Decimal("0")
             sales = _decimal(row["sales_amount"]) or Decimal("0")
-            refund = _decimal(row["refund_amount"]) or Decimal("0")
             ad_spend = _decimal(row["ad_spend_amount"]) or Decimal("0")
             commission = _decimal(row["commission_fee_amount"]) or Decimal("0")
             sku_key = normalize_sku_key(row["local_sku"])
