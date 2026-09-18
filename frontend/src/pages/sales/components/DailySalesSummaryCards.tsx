@@ -1,4 +1,4 @@
-/** Six no-API operating metrics derived from the currently filtered acceptance rows. */
+/** Daily-sales operating metrics plus refund-event totals from the selected date range. */
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -7,6 +7,7 @@ import {
   NotificationOutlined,
   PercentageOutlined,
   PieChartOutlined,
+  RollbackOutlined,
   ShoppingOutlined,
 } from "@ant-design/icons";
 import { Card } from "antd";
@@ -14,12 +15,14 @@ import { useMemo } from "react";
 import {
   MOCK_USD_TO_CNY_RATE,
   type DailySalesCurrency,
+  type DailySalesRefundSummary,
   type DailySalesRow,
 } from "@/pages/sales/dailySalesTypes";
 
 interface DailySalesSummaryCardsProps {
   rows: DailySalesRow[];
   currency: DailySalesCurrency;
+  refundSummary: DailySalesRefundSummary | null;
 }
 
 const formatAmount = (value: number, currency: DailySalesCurrency) => {
@@ -39,8 +42,13 @@ function AnimatedMetricValue({ value, formatter }: AnimatedMetricValueProps) {
   return <strong className="daily-sales__summary-value">{formatter(value)}</strong>;
 }
 
-function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps) {
+function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSummaryCardsProps) {
   const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
+  const refundRate = refundSummary == null || refundSummary.currency === currency
+    ? 1
+    : refundSummary.currency === "USD"
+      ? MOCK_USD_TO_CNY_RATE
+      : 1 / MOCK_USD_TO_CNY_RATE;
   const totals = useMemo(() => {
     const incompleteProfit = rows.some((row) => row.orderProfit == null);
     return {
@@ -116,6 +124,26 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
       trend: "1.2%",
       trendDirection: "down",
     },
+    {
+      title: "退款数量",
+      value: refundSummary?.quantity ?? null,
+      formatter: (value: number | null) => value == null ? "—" : Math.round(value).toLocaleString("zh-CN"),
+      subtitle: "按退款发生日统计",
+      icon: <RollbackOutlined />,
+      tone: "red",
+      trend: null,
+      trendDirection: null,
+    },
+    {
+      title: "退款金额",
+      value: refundSummary == null ? null : refundSummary.amount * refundRate,
+      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
+      subtitle: "按退款发生日统计",
+      icon: <DollarCircleOutlined />,
+      tone: "orange",
+      trend: null,
+      trendDirection: null,
+    },
   ] as const;
 
   return (
@@ -124,10 +152,10 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
         <Card
           key={metric.title}
           size="small"
-          className={`daily-sales__summary-card daily-sales__summary-card--${metric.tone} daily-sales__summary-card--trend-${metric.trendDirection}`}
+          className={`daily-sales__summary-card daily-sales__summary-card--${metric.tone}${metric.trendDirection ? ` daily-sales__summary-card--trend-${metric.trendDirection}` : ""}`}
           style={{ "--summary-card-index": index } as React.CSSProperties}
         >
-          <span className={`daily-sales__summary-rising daily-sales__summary-rising--${metric.trendDirection}`} aria-hidden="true">
+          <span className={`daily-sales__summary-rising${metric.trendDirection ? ` daily-sales__summary-rising--${metric.trendDirection}` : ""}`} aria-hidden="true">
             <span />
             <span />
             <span />
@@ -138,14 +166,16 @@ function DailySalesSummaryCards({ rows, currency }: DailySalesSummaryCardsProps)
             <AnimatedMetricValue value={metric.value} formatter={metric.formatter} />
             <span className="daily-sales__summary-subtitle">{metric.subtitle}</span>
           </span>
-          <span
-            className={`daily-sales__summary-comparison daily-sales__summary-comparison--${metric.trendDirection}`}
-          >
-            <span className="daily-sales__summary-trend">
-              {metric.trendDirection === "down" ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
-              {metric.trend}
+          {metric.trend && metric.trendDirection && (
+            <span
+              className={`daily-sales__summary-comparison daily-sales__summary-comparison--${metric.trendDirection}`}
+            >
+              <span className="daily-sales__summary-trend">
+                {metric.trendDirection === "down" ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
+                {metric.trend}
+              </span>
             </span>
-          </span>
+          )}
         </Card>
       ))}
     </section>
