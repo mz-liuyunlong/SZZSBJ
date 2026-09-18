@@ -5,3 +5,4 @@ def register_productlist_sync_models() -> None:
     import app.modules.product_management.models  # noqa: F401
     import app.modules.products.models  # noqa: F401
     import app.modules.sku_detail.models  # noqa: F401
+    import app.modules.warehouse_wfs.models  # noqa: F401
