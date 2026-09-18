@@ -54,6 +54,13 @@ def test_daily_sales_uses_strict_triple_and_includes_sample_only_rows() -> None:
     assert "fact_walmart_wfs_fee_actual" in source
 
 
+def test_daily_sales_storage_fee_sql_matches_persisted_model_column() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+
+    assert "storage_fee_estimated_total_amount=:storage_total" in source
+    assert "storage_fee_expected_total_amount" not in source
+
+
 def test_refund_match_requires_store_item_and_msku() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._match_refund_order_line)
 
