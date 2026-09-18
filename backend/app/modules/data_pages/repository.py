@@ -11,6 +11,7 @@ from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingManagementCurrentMart,
     OrderProfitSkuDayMart,
+    WalmartRefundItemFact,
 )
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
@@ -83,6 +84,34 @@ class DailySalesRepository:
             .limit(page_size)
         ).all()
         return rows, int(total or 0), latest_calculated_at
+
+    def refund_event_summary(
+        self,
+        *,
+        account_refs: frozenset[str],
+        start_date: date | None,
+        end_date: date | None,
+        store_id: str | None,
+    ) -> tuple[object, object, str | None]:
+        """Aggregate completed refunds by refund event day, not original sales day."""
+
+        statement = select(
+            func.coalesce(func.sum(WalmartRefundItemFact.quantity), 0),
+            func.coalesce(func.sum(WalmartRefundItemFact.refund_amount), 0),
+            func.max(WalmartRefundItemFact.refund_currency_code),
+        ).where(
+            WalmartRefundItemFact.source_account_ref.in_(account_refs),
+            WalmartRefundItemFact.refund_status_raw == "REFUND_COMPLETED",
+        )
+        if start_date is not None:
+            statement = statement.where(WalmartRefundItemFact.business_date_la >= start_date)
+        if end_date is not None:
+            statement = statement.where(WalmartRefundItemFact.business_date_la <= end_date)
+        if store_id is not None:
+            statement = statement.where(WalmartRefundItemFact.store_id == store_id)
+
+        row = self.session.execute(statement).one()
+        return row[0], row[1], row[2]
 
     def _filtered_statement(
         self,
