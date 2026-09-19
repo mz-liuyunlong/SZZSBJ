@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import dayjs from "dayjs";
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,81 @@ import { orderProfitColumnFields } from "@/pages/sales/orderProfitTypes";
 const messageInfo = vi.fn();
 const messageSuccess = vi.fn();
 const messageError = vi.fn();
+
+
+vi.mock("@/pages/sales/orderProfitApi", async () => {
+  const { orderProfitSourceRecords } = await import("@/pages/sales/orderProfitMockData");
+
+  type OrderProfitMockRecord = (typeof orderProfitSourceRecords)[number];
+
+  const inDateRange = (
+    row: OrderProfitMockRecord,
+    params: { startDate?: string; endDate?: string },
+  ) => (!params.startDate || row.date >= params.startDate)
+    && (!params.endDate || row.date <= params.endDate);
+
+  const sum = (rows: OrderProfitMockRecord[], key: keyof OrderProfitMockRecord) => (
+    rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
+  );
+
+  const sumOrderProfit = (rows: OrderProfitMockRecord[]) => rows.reduce((total, row) => (
+    total
+    + Number(row.salesAmount ?? 0)
+    - Number(row.refundAmount ?? 0)
+    - Number(row.adSpend ?? 0)
+    - Number(row.wfsDeliveryFee ?? 0)
+    - Number(row.commission ?? 0)
+    - Number(row.purchaseCost ?? 0)
+    - Number(row.firstLegCost ?? 0)
+    - Number(row.storageFee ?? 0)
+  ), 0);
+
+  const fetchOrderProfitSourceRecords = vi.fn(async (
+    params: { startDate?: string; endDate?: string; page?: number; pageSize?: number; signal?: AbortSignal } = {},
+  ) => {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set("start_date", params.startDate);
+    if (params.endDate) search.set("end_date", params.endDate);
+    search.set("page", String(params.page ?? 1));
+    search.set("page_size", String(params.pageSize ?? 50));
+
+    await fetch(`/api/sales/order-profit?${search.toString()}`, {
+      credentials: "same-origin",
+      ...(params.signal ? { signal: params.signal } : {}),
+    });
+
+    const records = orderProfitSourceRecords.filter((row) => inDateRange(row, params));
+
+    return {
+      records,
+      summary: {
+        salesQuantity: sum(records, "salesVolume"),
+        orderCount: sum(records, "orderCount"),
+        salesAmount: sum(records, "salesAmount"),
+        salesCurrency: "USD",
+        refundAmount: sum(records, "refundAmount"),
+        refundCurrency: "USD",
+        orderProfitAmount: sumOrderProfit(records),
+        orderProfitCurrency: "USD",
+        adSpendAmount: sum(records, "adSpend"),
+        adSpendCurrency: "USD",
+      },
+      meta: {
+        latest_calculated_at: null,
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? 50,
+        total: records.length,
+        partial: false,
+        input_missing: false,
+      },
+    };
+  });
+
+  return {
+    fetchOrderProfitSourceRecords,
+    preloadOrderProfitSourceRecords: vi.fn(),
+  };
+});
 
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: { yAxis: { name: string } } }) => (
@@ -323,6 +398,7 @@ beforeEach(() => {
   messageInfo.mockReset();
   messageSuccess.mockReset();
   messageError.mockReset();
+  vi.stubGlobal("fetch", vi.fn(async () => ({})));
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -344,20 +420,25 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
   sessionStorage.clear();
 });
 
-const renderPage = () => render(<OrderProfitPage page={orderProfitPage!} />);
+const renderPage = async () => {
+  const view = render(<OrderProfitPage page={orderProfitPage!} />);
+  await waitFor(() => expect(screen.getByTestId("pro-table")).not.toHaveAttribute("data-total", "0"));
+  return view;
+};
 const referenceDay = dayjs().subtract(1, "day").format("YYYY-MM-DD");
 const referenceRows = aggregateOrderProfitRows(
   orderProfitSourceRecords.filter((row) => row.date === referenceDay),
 );
 
 describe("OrderProfitPage", () => {
-  it("renders the order-profit shell with product-ID aggregation and no log columns", () => {
-    renderPage();
+  it("renders the order-profit shell with product-ID aggregation and no log columns", async () => {
+    await renderPage();
 
     expect(screen.getByRole("region", { name: "订单利润" }))
       .toContainElement(screen.getByLabelText("订单利润筛选"));
@@ -371,8 +452,8 @@ describe("OrderProfitPage", () => {
     expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.length);
   });
 
-  it("leaves global sync and help to MainLayout while keeping page actions in the toolbar", () => {
-    renderPage();
+  it("leaves global sync and help to MainLayout while keeping page actions in the toolbar", async () => {
+    await renderPage();
 
     expect(screen.queryByText("同步时间：待接入")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "刷新订单利润" })).not.toBeInTheDocument();
@@ -385,8 +466,8 @@ describe("OrderProfitPage", () => {
     expect(within(toolbar).getByRole("button", { name: "下载" })).toBeVisible();
   });
 
-  it("defaults to the previous completed day, product ID search, visible statistics and hidden charts", () => {
-    renderPage();
+  it("defaults to the previous completed day, product ID search, visible statistics and hidden charts", async () => {
+    await renderPage();
 
     expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${referenceDay}~${referenceDay}`);
@@ -401,10 +482,10 @@ describe("OrderProfitPage", () => {
     }
   });
 
-  it("filters locally by product ID and opens the product-ID detail modal", () => {
+  it("filters locally by product ID and opens the product-ID detail modal", async () => {
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
     const sessionStorageSpy = vi.spyOn(window.sessionStorage, "setItem");
-    renderPage();
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: referenceRows[0].productId } });
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
@@ -415,8 +496,8 @@ describe("OrderProfitPage", () => {
     expect(sessionStorageSpy).not.toHaveBeenCalled();
   });
 
-  it("keeps a fixed total row and uses the selected display currency", () => {
-    renderPage();
+  it("keeps a fixed total row and uses the selected display currency", async () => {
+    await renderPage();
 
     const totalRow = screen.getByTestId("order-profit-total-row");
     expect(totalRow).toHaveTextContent("总计");

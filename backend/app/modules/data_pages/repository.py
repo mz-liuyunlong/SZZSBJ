@@ -61,7 +61,6 @@ class ListingManagementRowProjection:
         return getattr(self.listing, name)
 
 
-
 class DailySalesRepository:
     """Read-only persistence boundary for DATA-PAGES daily sales MART queries."""
 
@@ -273,7 +272,18 @@ class OrderProfitRepository:
         store_id: str | None,
         search_field: str,
         keyword: str,
-    ) -> tuple[object, object, object, str | None, object, str | None, object, str | None, object, str | None]:
+    ) -> tuple[
+        object,
+        object,
+        object,
+        str | None,
+        object,
+        str | None,
+        object,
+        str | None,
+        object,
+        str | None,
+    ]:
         """Aggregate order-profit metrics for the full filtered range, independent of pagination."""
         statement = self._filtered_statement(
             account_refs=account_refs,
@@ -389,8 +399,7 @@ class ListingManagementRepository:
                 and_(
                     owner_lookup.c.source_account_ref
                     == ListingManagementCurrentMart.source_account_ref,
-                    owner_lookup.c.lingxing_sku_code
-                    == ListingManagementCurrentMart.local_sku,
+                    owner_lookup.c.lingxing_sku_code == ListingManagementCurrentMart.local_sku,
                 ),
             )
             .add_columns(
@@ -408,22 +417,26 @@ class ListingManagementRepository:
             .limit(page_size)
         ).all()
 
-        return [
-            ListingManagementRowProjection(
-                listing=listing,
-                owner_uid=owner_uid,
-                owner_name=owner_name,
-                product_developer_uid=product_developer_uid,
-                product_developer_name=product_developer_name,
-            )
-            for (
-                listing,
-                owner_uid,
-                owner_name,
-                product_developer_uid,
-                product_developer_name,
-            ) in rows
-        ], int(total or 0), latest_calculated_at
+        return (
+            [
+                ListingManagementRowProjection(
+                    listing=listing,
+                    owner_uid=owner_uid,
+                    owner_name=owner_name,
+                    product_developer_uid=product_developer_uid,
+                    product_developer_name=product_developer_name,
+                )
+                for (
+                    listing,
+                    owner_uid,
+                    owner_name,
+                    product_developer_uid,
+                    product_developer_name,
+                ) in rows
+            ],
+            int(total or 0),
+            latest_calculated_at,
+        )
 
     def _filtered_statement(
         self,

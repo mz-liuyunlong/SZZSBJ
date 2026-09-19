@@ -1,8 +1,7 @@
 from datetime import UTC, date, datetime
-
-import pytest
 from typing import Any, cast
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_real_sync import (

@@ -110,7 +110,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     if (sourceRowsLoaded) return;
 
     let active = true;
-    setIsTableRequesting(true);
+    queueMicrotask(() => {
+      if (active) setIsTableRequesting(true);
+    });
     void fetchListingManagementRows({ pageSize: 500 })
       .then(({ rows }) => {
         if (active) {

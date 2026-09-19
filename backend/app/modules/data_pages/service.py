@@ -26,8 +26,8 @@ from app.modules.data_pages.schemas import (
     ListingManagementQuery,
     OrderProfitItemRead,
     OrderProfitListData,
-    OrderProfitSummaryRead,
     OrderProfitQuery,
+    OrderProfitSummaryRead,
 )
 
 

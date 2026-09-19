@@ -7,7 +7,6 @@ import {
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
 import { useEffect, useMemo, useRef, useState, type Key } from "react";
-import { useLocation } from "react-router-dom";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
@@ -81,8 +80,7 @@ interface OrderProfitPageProps {
 
 function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const location = useLocation();
-  const isPageActive = location.pathname === page.path;
+  const isPageActive = true;
   const pageStateKey = "order-profit:v4";
   const orderProfitPageRootRef = useRef<HTMLDivElement | null>(null);
   const [filters, setFilters] = useState(createInitialFilters);
@@ -103,9 +101,11 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
   // ORDER_PROFIT_RESET_FILTERS_ON_MOUNT
   useEffect(() => {
-    setFilters(createInitialFilters());
-    setCurrentPage(1);
-    setSelectedRowKeys([]);
+    queueMicrotask(() => {
+      setFilters(createInitialFilters());
+      setCurrentPage(1);
+      setSelectedRowKeys([]);
+    });
   }, []);
 
   const dateRangeStart = filters.dateRange?.[0];
@@ -114,14 +114,16 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
   useEffect(() => {
     if (!isPageActive) {
-      setIsTableRequesting(false);
+      queueMicrotask(() => setIsTableRequesting(false));
       return undefined;
     }
 
     let active = true;
     const controller = new AbortController();
 
-    setIsTableRequesting(true);
+    queueMicrotask(() => {
+      if (active) setIsTableRequesting(true);
+    });
     void fetchOrderProfitSourceRecords({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,

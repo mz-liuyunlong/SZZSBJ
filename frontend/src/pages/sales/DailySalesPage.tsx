@@ -92,7 +92,9 @@ function DailySalesPage({ page }: DailySalesPageProps) {
     let active = true;
     const controller = new AbortController();
 
-    setIsTableRequesting(true);
+    queueMicrotask(() => {
+      if (active) setIsTableRequesting(true);
+    });
     void fetchDailySalesRows({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
