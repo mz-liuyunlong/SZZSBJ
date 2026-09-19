@@ -50,9 +50,6 @@ const statusColors: Record<OrderProfitCostStatus, string> = {
   部分缺失: "processing",
 };
 
-const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
-const numberSorter = (key: keyof OrderProfitRow) => (left: OrderProfitRow, right: OrderProfitRow) =>
-  Number(left[key]) - Number(right[key]);
 
 const money = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => (
   renderUsdSourceMoney<OrderProfitRow>(key, currency, MOCK_USD_TO_CNY_RATE)
@@ -180,32 +177,32 @@ function createColumns(
         </Space>
       ),
     },
-    { title: "平台", dataIndex: "platform", key: "platform", width: 96, sorter: (a, b) => compareText(a.platform, b.platform) },
-    { title: "店铺", dataIndex: "store", key: "store", width: 120, sorter: (a, b) => compareText(a.store, b.store) },
-    { title: "负责人", dataIndex: "owner", key: "owner", width: 96, sorter: (a, b) => compareText(a.owner, b.owner) },
+    { title: "平台", dataIndex: "platform", key: "platform", width: 96 },
+    { title: "店铺", dataIndex: "store", key: "store", width: 120 },
+    { title: "负责人", dataIndex: "owner", key: "owner", width: 96 },
     {
       title: "前7天销量趋势",
       key: "sevenDaySales",
       width: 140,
       render: (_, row) => <TrendPreviewCell values={row.sevenDaySales} dates={row.sevenDayDates} />,
     },
-    { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88, sorter: numberSorter("salesVolume") },
-    { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88, sorter: numberSorter("orderCount") },
-    { title: "销售额", key: "salesAmount", width: 112, sorter: numberSorter("salesAmount"), render: money("salesAmount", currency) },
-    { title: "退款数量", dataIndex: "refundQuantity", key: "refundQuantity", width: 104, sorter: numberSorter("refundQuantity") },
-    { title: "退款金额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: money("refundAmount", currency) },
-    { title: "广告费", key: "adSpend", width: 104, sorter: numberSorter("adSpend"), render: money("adSpend", currency) },
-    { title: "广告占比", key: "adRatio", width: 104, sorter: numberSorter("adRatio"), render: percent("adRatio") },
-    { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, sorter: numberSorter("wfsDeliveryFee"), render: money("wfsDeliveryFee", currency) },
-    { title: "佣金", key: "commission", width: 104, sorter: numberSorter("commission"), render: money("commission", currency) },
-    { title: "采购总成本", key: "purchaseCost", width: 128, sorter: numberSorter("purchaseCost"), render: money("purchaseCost", currency) },
-    { title: "头程总成本", key: "firstLegCost", width: 128, sorter: numberSorter("firstLegCost"), render: money("firstLegCost", currency) },
-    { title: "总仓储费", key: "storageFee", width: 112, sorter: numberSorter("storageFee"), render: money("storageFee", currency) },
-    { title: "总成本", key: "totalCost", width: 112, sorter: numberSorter("totalCost"), render: money("totalCost", currency) },
-    { title: "订单利润", key: "orderProfit", width: 112, sorter: numberSorter("orderProfit"), render: money("orderProfit", currency) },
-    { title: "平均利润/单", key: "averageProfitPerOrder", width: 128, sorter: numberSorter("averageProfitPerOrder"), render: money("averageProfitPerOrder", currency) },
-    { title: "利润率", key: "profitMargin", width: 96, sorter: numberSorter("profitMargin"), render: percent("profitMargin") },
-    { title: "ROI", key: "roi", width: 88, sorter: numberSorter("roi"), render: percent("roi") },
+    { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88 },
+    { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88 },
+    { title: "销售额", key: "salesAmount", width: 112, render: money("salesAmount", currency) },
+    { title: "退款数量", dataIndex: "refundQuantity", key: "refundQuantity", width: 104 },
+    { title: "退款金额", key: "refundAmount", width: 104, render: money("refundAmount", currency) },
+    { title: "广告费", key: "adSpend", width: 104, render: money("adSpend", currency) },
+    { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
+    { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: money("wfsDeliveryFee", currency) },
+    { title: "佣金", key: "commission", width: 104, render: money("commission", currency) },
+    { title: "采购总成本", key: "purchaseCost", width: 128, render: money("purchaseCost", currency) },
+    { title: "头程总成本", key: "firstLegCost", width: 128, render: money("firstLegCost", currency) },
+    { title: "总仓储费", key: "storageFee", width: 112, render: money("storageFee", currency) },
+    { title: "总成本", key: "totalCost", width: 112, render: money("totalCost", currency) },
+    { title: "订单利润", key: "orderProfit", width: 112, render: money("orderProfit", currency) },
+    { title: "平均利润/单", key: "averageProfitPerOrder", width: 128, render: money("averageProfitPerOrder", currency) },
+    { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
+    { title: "ROI", key: "roi", width: 88, render: percent("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
     {
       title: "操作",
@@ -269,7 +266,6 @@ function OrderProfitTable({
         toolBarRender={false}
         tableAlertRender={false}
         tableAlertOptionRender={false}
-        showSorterTooltip={{ target: "sorter-icon" }}
         scroll={{ x: "max-content" }}
         summary={() => (
           <Table.Summary fixed="bottom">

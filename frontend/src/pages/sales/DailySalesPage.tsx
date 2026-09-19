@@ -29,7 +29,8 @@ import {
   type DailySalesRefundSummary,
   type DailySalesRow,
 } from "@/pages/sales/dailySalesTypes";
-import { fetchSalesFilterOptions, emptySalesFilterOptions, mergeSelectedFilterValues, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
+import { fetchSalesFilterOptions, emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
+import { mergeSelectedFilterOptions } from "@/shared/report-filters";
 import "@/pages/sales/DailySalesPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
@@ -92,8 +93,6 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   // DAILY_SALES_RESET_FILTERS_ON_MOUNT
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
-
     queueMicrotask(() => {
       if (active) setIsTableRequesting(true);
     });
@@ -108,7 +107,6 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       searchField: filters.searchField,
       keyword: filters.keyword,
       batchValues: filters.batchValues,
-      signal: controller.signal,
     })
       .then(({ rows, summary: nextSalesSummary, refundSummary: nextRefundSummary, meta }) => {
         if (!active) return;
@@ -117,8 +115,8 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         setSalesSummary(nextSalesSummary);
         setRefundSummary(nextRefundSummary);
       })
-      .catch((reason: unknown) => {
-        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+      .catch(() => {
+        if (!active) return;
         setSourceRows([]);
         setServerTotal(0);
         setSalesSummary(null);
@@ -130,7 +128,6 @@ function DailySalesPage({ page }: DailySalesPageProps) {
 
     return () => {
       active = false;
-      controller.abort();
       setIsTableRequesting(false);
     };
   }, [
@@ -148,8 +145,6 @@ function DailySalesPage({ page }: DailySalesPageProps) {
 
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
-
     void fetchSalesFilterOptions({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
@@ -158,20 +153,18 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       stores: filters.stores,
       searchField: filters.searchField,
       keyword: filters.keyword,
-      signal: controller.signal,
     })
       .then((nextOptions) => {
         if (!active) return;
         setFilterOptions(nextOptions);
       })
-      .catch((reason: unknown) => {
-        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+      .catch(() => {
+        if (!active) return;
         setFilterOptions(emptySalesFilterOptions);
       });
 
     return () => {
       active = false;
-      controller.abort();
     };
   }, [
     dateRangeStart,
@@ -189,12 +182,16 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   );
 
 
-  const owners = useMemo(
-    () => mergeSelectedFilterValues(filters.owners, filterOptions.owners),
+  const platformOptions = useMemo(
+    () => mergeSelectedFilterOptions(filters.platforms, filterOptions.platforms),
+    [filterOptions.platforms, filters.platforms],
+  );
+  const ownerOptions = useMemo(
+    () => mergeSelectedFilterOptions(filters.owners, filterOptions.owners),
     [filterOptions.owners, filters.owners],
   );
-  const stores = useMemo(
-    () => mergeSelectedFilterValues(filters.stores, filterOptions.stores),
+  const storeOptions = useMemo(
+    () => mergeSelectedFilterOptions(filters.stores, filterOptions.stores),
     [filterOptions.stores, filters.stores],
   );
 
@@ -288,8 +285,9 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           <DailySalesToolbar
             key={toolbarResetKey}
             filters={filters}
-            owners={owners}
-            stores={stores}
+            platformOptions={platformOptions}
+            owners={ownerOptions}
+            stores={storeOptions}
             actions={toolbarActions}
             trailingActions={toolbarIconActions}
             onChange={updateFilters}

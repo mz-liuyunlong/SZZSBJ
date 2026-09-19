@@ -814,3 +814,237 @@
   font-size: 13px;
   line-height: 1;
 }
+
+/* shared report table layout hardening: keep body scrollable and pagination visible */
+.report-table-shell .ant-table-wrapper {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.report-table-shell .ant-spin-nested-loading,
+.report-table-shell .ant-spin-container {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.report-table-shell .ant-table {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.report-table-shell .ant-table-container {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.report-table-shell .ant-table-body,
+.report-table-shell .ant-table-content {
+  min-height: 0;
+  overflow: auto !important;
+}
+
+.report-table-shell .ant-table-body {
+  height: auto !important;
+}
+
+.report-table-shell .ant-table-pagination.ant-pagination,
+.report-table-shell .ant-pagination {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.report-committed-search__batch-popover {
+  display: flex;
+  width: 320px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.report-committed-search__batch-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.report-summary-cards,
+.report-summary-cards.daily-sales__summary,
+.report-summary-cards.order-profit__summary {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-summary-card {
+  --summary-accent: #1677ff;
+  --summary-icon-bg: #e8f2ff;
+  --summary-card-bg: #f7faff;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--summary-accent) 14%, white);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff, var(--summary-card-bg));
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.report-summary-card .ant-card-body {
+  position: relative;
+  display: grid;
+  min-height: 82px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.report-summary-card--green {
+  --summary-accent: #16a34a;
+  --summary-icon-bg: #ecfdf3;
+  --summary-card-bg: #fbfffd;
+}
+
+.report-summary-card--orange {
+  --summary-accent: #f79009;
+  --summary-icon-bg: #fff7e6;
+  --summary-card-bg: #fffdf8;
+}
+
+.report-summary-card--purple {
+  --summary-accent: #7c3aed;
+  --summary-icon-bg: #f4f0ff;
+  --summary-card-bg: #fdfcff;
+}
+
+.report-summary-card--red {
+  --summary-accent: #f04438;
+  --summary-icon-bg: #fff1f0;
+  --summary-card-bg: #fffafa;
+}
+
+.report-summary-card--cyan {
+  --summary-accent: #0ea5e9;
+  --summary-icon-bg: #e0f2fe;
+  --summary-card-bg: #f8fdff;
+}
+
+.report-summary-card__icon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: var(--summary-icon-bg);
+  color: var(--summary-accent);
+  font-size: 20px;
+}
+
+.report-summary-card__content {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-summary-card__title {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.report-summary-card__value {
+  min-width: 0;
+  overflow: hidden;
+  color: #101828;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 28px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-card__subtitle {
+  min-width: 0;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-card__comparison {
+  display: inline-flex;
+  min-width: 52px;
+  justify-content: flex-end;
+  color: #16a34a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-summary-card__comparison--down {
+  color: #16a34a;
+}
+
+.report-summary-card__comparison--cost-up {
+  color: #f04438;
+}
+
+.report-summary-card__trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.report-summary-card__rising {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  display: inline-flex;
+  gap: 6px;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.report-summary-card__rising span {
+  display: block;
+  width: 4px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--summary-accent);
+  transform: rotate(38deg);
+}
+
+.report-summary-card__rising span:nth-child(2) {
+  height: 30px;
+}
+
+.report-summary-card__rising span:nth-child(3) {
+  height: 38px;
+}
+
+@media (max-width: 1440px) {
+  .report-summary-cards,
+  .report-summary-cards.daily-sales__summary,
+  .report-summary-cards.order-profit__summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1180px) {
+  .report-summary-cards,
+  .report-summary-cards.daily-sales__summary,
+  .report-summary-cards.order-profit__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

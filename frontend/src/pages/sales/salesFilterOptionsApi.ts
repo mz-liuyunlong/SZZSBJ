@@ -1,10 +1,11 @@
 import { backendRequest } from "@/api/backendApi";
+import {
+  EMPTY_REPORT_FILTER_OPTIONS,
+  normalizeReportFilterOptions,
+  type ReportFilterOption,
+} from "@/shared/report-filters";
 
-export interface SalesFilterOption {
-  value: string;
-  label: string;
-  count: number;
-}
+export type SalesFilterOption = ReportFilterOption;
 
 export interface SalesFilterOptions {
   platforms: SalesFilterOption[];
@@ -24,9 +25,9 @@ export interface SalesFilterOptionsParams {
 }
 
 export const emptySalesFilterOptions: SalesFilterOptions = {
-  platforms: [],
-  owners: [],
-  stores: [],
+  platforms: EMPTY_REPORT_FILTER_OPTIONS,
+  owners: EMPTY_REPORT_FILTER_OPTIONS,
+  stores: EMPTY_REPORT_FILTER_OPTIONS,
 };
 
 const backendSearchField = (field: string | undefined) => {
@@ -44,13 +45,7 @@ const appendMultiParam = (
   if (normalized.length > 0) search.set(key, normalized.join(","));
 };
 
-export const mergeSelectedFilterValues = (
-  selected: string[],
-  options: SalesFilterOption[],
-) => Array.from(new Set([
-  ...selected,
-  ...options.map((option) => option.value),
-])).filter(Boolean);
+export { mergeSelectedFilterOptions, mergeSelectedFilterValues } from "@/shared/report-filters";
 
 export async function fetchSalesFilterOptions(
   params: SalesFilterOptionsParams,
@@ -77,8 +72,8 @@ export async function fetchSalesFilterOptions(
   );
 
   return {
-    platforms: Array.isArray(envelope.data.platforms) ? envelope.data.platforms : [],
-    owners: Array.isArray(envelope.data.owners) ? envelope.data.owners : [],
-    stores: Array.isArray(envelope.data.stores) ? envelope.data.stores : [],
+    platforms: normalizeReportFilterOptions(envelope.data.platforms),
+    owners: normalizeReportFilterOptions(envelope.data.owners),
+    stores: normalizeReportFilterOptions(envelope.data.stores),
   };
 }

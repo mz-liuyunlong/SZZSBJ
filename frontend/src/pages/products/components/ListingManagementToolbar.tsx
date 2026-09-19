@@ -3,16 +3,24 @@ import {
   SettingOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
-import { Button, Popover, Select, Space, Typography, Input } from "antd";
+import { Button, Popover, Space, Typography, Input } from "antd";
 import { useState } from "react";
 import ConnectedSearch from "@/components/report-table/ConnectedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
+import ReportFacetSelect from "@/shared/report-filters";
+import type { ReportFilterOption } from "@/shared/report-filters";
 
 export interface ListingManagementFilters {
   stores: string[];
+  owners?: string[];
+  productTypes?: string[];
+  productStatuses?: string[];
+
+  /** Legacy cached single-value filters. Kept only to migrate older page-state cache safely. */
   owner?: string;
   productType?: string;
   productStatus?: string;
+
   searchType: "sku" | "msku" | "productId" | "productName";
   keyword: string;
   batchValues?: string[];
@@ -20,9 +28,9 @@ export interface ListingManagementFilters {
 
 interface ListingManagementToolbarProps {
   filters: ListingManagementFilters;
-  stores: string[];
-  owners: string[];
-  productTypes: string[];
+  stores: ReportFilterOption[];
+  owners: ReportFilterOption[];
+  productTypes: ReportFilterOption[];
   statisticsVisible: boolean;
   onChange: (filters: ListingManagementFilters) => void;
   onReset: () => void;
@@ -33,6 +41,19 @@ interface ListingManagementToolbarProps {
   onDownload: () => void;
 }
 
+const normalizeSelected = (values?: string[], legacyValue?: string) => (
+  values && values.length > 0 ? values : legacyValue ? [legacyValue] : []
+);
+
+const listingStatusOptions: ReportFilterOption[] = [
+  "启用",
+  "停用",
+  "在线",
+  "离线",
+  "拥有",
+  "未拥有",
+].map((value) => ({ value, label: value }));
+
 function ListingManagementToolbar({
   filters,
   stores,
@@ -41,7 +62,6 @@ function ListingManagementToolbar({
   statisticsVisible,
   onChange,
   onReset,
-  onBatchSearch,
   onMessage,
   onToggleStatistics,
   onOpenColumnConfig,
@@ -49,12 +69,15 @@ function ListingManagementToolbar({
 }: ListingManagementToolbarProps) {
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchText, setBatchText] = useState("");
+  const [searchTypeDraft, setSearchTypeDraft] = useState<ListingManagementFilters["searchType"]>(filters.searchType);
+  const [keywordDraft, setKeywordDraft] = useState(filters.keyword);
 
   const applyBatchSearch = () => {
     const values = batchText
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
+
     if (values.length === 0) {
       onMessage("请输入 SKU / MSKU / 商品ID");
       return;
@@ -63,7 +86,13 @@ function ListingManagementToolbar({
       onMessage("最多支持 1000 行");
       return;
     }
-    onBatchSearch(values);
+
+    onChange({
+      ...filters,
+      searchType: searchTypeDraft,
+      keyword: "",
+      batchValues: values,
+    });
     setBatchOpen(false);
   };
 
@@ -100,47 +129,54 @@ function ListingManagementToolbar({
 
   return (
     <div className="listing-management__toolbar" role="search" aria-label="Listing 管理筛选">
-      <Select
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-        allowClear
-        placeholder="产品类型"
-        aria-label="产品类型"
-        value={filters.productType}
-        options={productTypes.map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, productType: value })}
-      />
-      <Select
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-        allowClear
-        placeholder="负责人"
-        aria-label="负责人"
-        value={filters.owner}
-        options={owners.map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, owner: value })}
-      />
-      <Select
-        className="report-filter-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-        allowClear
-        placeholder="产品状态"
-        aria-label="产品状态"
-        value={filters.productStatus}
-        options={["启用", "停用", "在线", "离线", "拥有", "未拥有"].map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, productStatus: value })}
-      />
-      <Select
-        className="listing-management__store-select"
-        classNames={{ popup: { root: "report-filter-select-dropdown" } }}
+      <ReportFacetSelect
         mode="multiple"
-        allowClear
-        maxTagCount="responsive"
+        ariaLabel="产品类型"
+        placeholder="产品类型"
+        unit="个类型"
+        value={normalizeSelected(filters.productTypes, filters.productType)}
+        options={productTypes}
+        onChange={(value) => onChange({
+          ...filters,
+          productTypes: value as string[],
+          productType: undefined,
+        })}
+      />
+      <ReportFacetSelect
+        mode="multiple"
+        ariaLabel="负责人"
+        placeholder="负责人"
+        unit="人"
+        value={normalizeSelected(filters.owners, filters.owner)}
+        options={owners}
+        onChange={(value) => onChange({
+          ...filters,
+          owners: value as string[],
+          owner: undefined,
+        })}
+      />
+      <ReportFacetSelect
+        mode="multiple"
+        ariaLabel="产品状态"
+        placeholder="产品状态"
+        unit="个状态"
+        value={normalizeSelected(filters.productStatuses, filters.productStatus)}
+        options={listingStatusOptions}
+        onChange={(value) => onChange({
+          ...filters,
+          productStatuses: value as string[],
+          productStatus: undefined,
+        })}
+      />
+      <ReportFacetSelect
+        mode="multiple"
+        ariaLabel="店铺"
         placeholder="全部店铺"
-        aria-label="店铺"
+        unit="个店铺"
         value={filters.stores}
-        options={stores.map((value) => ({ value, label: value }))}
-        onChange={(value) => onChange({ ...filters, stores: value })}
+        options={stores}
+        popupWidth={360}
+        onChange={(value) => onChange({ ...filters, stores: value as string[] })}
       />
       <ConnectedSearch
         className="listing-management__search"
@@ -151,19 +187,31 @@ function ListingManagementToolbar({
           { value: "productId", label: "商品ID" },
           { value: "productName", label: "品名" },
         ]}
-        typeValue={filters.searchType}
+        typeValue={searchTypeDraft}
         inputAriaLabel="搜索商品"
         inputPlaceholder="搜索商品"
-        inputValue={filters.keyword}
+        inputValue={keywordDraft}
         batchControl={batchControl}
-        onTypeChange={(searchType) => onChange({
-          ...filters,
-          searchType: searchType as ListingManagementFilters["searchType"],
-        })}
-        onInputChange={(keyword) => onChange({ ...filters, keyword })}
-        onSearch={() => onMessage("已应用搜索条件")}
+        onTypeChange={(searchType) => setSearchTypeDraft(searchType as ListingManagementFilters["searchType"])}
+        onInputChange={setKeywordDraft}
+        onSearch={() => {
+          onChange({
+            ...filters,
+            searchType: searchTypeDraft,
+            keyword: keywordDraft.trim(),
+            batchValues: undefined,
+          });
+          onMessage("已应用搜索条件");
+        }}
       />
-      <ResetButton onClick={onReset} />
+      <ResetButton
+        onClick={() => {
+          setSearchTypeDraft("sku");
+          setKeywordDraft("");
+          setBatchText("");
+          onReset();
+        }}
+      />
       <Button onClick={onToggleStatistics}>
         {statisticsVisible ? "隐藏统计" : "显示统计"}
       </Button>

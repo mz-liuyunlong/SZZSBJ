@@ -251,11 +251,21 @@ def test_write_ads_rejects_duplicate_identity_with_conflicting_metrics() -> None
         "advertiserId": "advertiser-1",
         "key": "duplicate-conflict-key",
         "adSpend": "0",
+        "attributedSales": "10",
+        "attributedOrders": "1",
+        "attributedUnits": "1",
+        "advertisedSkuSales": "10",
+        "advertisedSkuUnits": "1",
     }
     second = {
         "advertiserId": "advertiser-1",
         "key": "duplicate-conflict-key",
         "adSpend": "1.25",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
     }
 
     with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE"):
@@ -297,3 +307,137 @@ def test_write_ads_collapses_duplicate_identity_when_activity_counters_differ() 
     inserted_params = session.calls[-1][1]
     assert inserted_params["num_ads_clicks"] == 7
     assert inserted_params["num_ads_shown"] == 30
+
+
+def test_zero_attribution_ad_duplicate_conflict_is_allowed() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import (
+        _is_zero_attribution_ad_duplicate_conflict,
+    )
+
+    existing = {
+        "advertiserId": "adv-1",
+        "key": "same-source-key",
+        "adSpend": "6.42",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
+    }
+    candidate = {
+        "advertiserId": "adv-1",
+        "key": "same-source-key",
+        "adSpend": "3.23",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
+    }
+
+    assert _is_zero_attribution_ad_duplicate_conflict(existing, candidate)
+
+
+def test_non_zero_attribution_ad_duplicate_conflict_is_not_allowed() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import (
+        _is_zero_attribution_ad_duplicate_conflict,
+    )
+
+    existing = {
+        "advertiserId": "adv-1",
+        "key": "same-source-key",
+        "adSpend": "6.42",
+        "attributedSales": "10",
+        "attributedOrders": "1",
+        "attributedUnits": "1",
+        "advertisedSkuSales": "10",
+        "advertisedSkuUnits": "1",
+    }
+    candidate = {
+        "advertiserId": "adv-1",
+        "key": "same-source-key",
+        "adSpend": "3.23",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
+    }
+
+    assert not _is_zero_attribution_ad_duplicate_conflict(existing, candidate)
+
+
+def test_preferred_ad_duplicate_row_uses_higher_spend_then_activity() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import _preferred_ad_duplicate_row
+
+    existing = {
+        "adSpend": "3.23",
+        "numAdsShown": "1223",
+        "numAdsClicks": "4",
+        "acos": "0",
+        "roas": "0",
+        "cpc": "0.81",
+        "ctr": "0.33",
+        "cvr": "0",
+    }
+    candidate = {
+        "adSpend": "6.42",
+        "numAdsShown": "2775",
+        "numAdsClicks": "8",
+        "acos": "0",
+        "roas": "0",
+        "cpc": "0.80",
+        "ctr": "0.29",
+        "cvr": "0",
+    }
+
+    assert _preferred_ad_duplicate_row(existing, candidate) is candidate
+
+
+def test_dedupe_ad_rows_for_resolution_matches_write_ads_identity_collapse() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import _dedupe_ad_rows_for_resolution
+
+    rows = [
+        {
+            "advertiserId": "adv-1",
+            "key": "same-source-key",
+            "adSpend": "6.42",
+            "attributedSales": "0",
+            "attributedOrders": "0",
+            "attributedUnits": "0",
+            "advertisedSkuSales": "0",
+            "advertisedSkuUnits": "0",
+            "numAdsShown": "2775",
+            "numAdsClicks": "8",
+        },
+        {
+            "advertiserId": "adv-1",
+            "key": "same-source-key",
+            "adSpend": "3.23",
+            "attributedSales": "0",
+            "attributedOrders": "0",
+            "attributedUnits": "0",
+            "advertisedSkuSales": "0",
+            "advertisedSkuUnits": "0",
+            "numAdsShown": "1223",
+            "numAdsClicks": "4",
+        },
+        {
+            "advertiserId": "adv-1",
+            "key": "same-source-key",
+            "adSpend": "0",
+            "attributedSales": "0",
+            "attributedOrders": "0",
+            "attributedUnits": "0",
+            "advertisedSkuSales": "0",
+            "advertisedSkuUnits": "0",
+            "numAdsShown": "8",
+            "numAdsClicks": "0",
+        },
+    ]
+
+    deduped = _dedupe_ad_rows_for_resolution(rows)
+
+    assert len(deduped) == 1
+    assert deduped[0]["adSpend"] == "6.42"
+    assert deduped[0]["numAdsShown"] == "2775"

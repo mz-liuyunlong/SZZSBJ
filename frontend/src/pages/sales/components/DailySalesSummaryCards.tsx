@@ -1,7 +1,5 @@
 /** Daily-sales operating metrics from server summary plus refund-event totals. */
 import {
-  ArrowDownOutlined,
-  ArrowUpOutlined,
   DollarCircleOutlined,
   LineChartOutlined,
   NotificationOutlined,
@@ -10,8 +8,10 @@ import {
   RollbackOutlined,
   ShoppingOutlined,
 } from "@ant-design/icons";
-import { Card } from "antd";
-import { useMemo, type CSSProperties } from "react";
+import { useMemo } from "react";
+import ReportSummaryCards, {
+  type ReportSummaryMetric,
+} from "@/components/report-table/ReportSummaryCards";
 import type { DailySalesServerSummary } from "@/pages/sales/dailySalesApi";
 import {
   MOCK_USD_TO_CNY_RATE,
@@ -42,15 +42,6 @@ const currencyRate = (
   if (sourceCurrency === targetCurrency) return 1;
   return sourceCurrency === "USD" ? MOCK_USD_TO_CNY_RATE : 1 / MOCK_USD_TO_CNY_RATE;
 };
-
-interface AnimatedMetricValueProps {
-  value: number | null;
-  formatter: (value: number | null) => string;
-}
-
-function AnimatedMetricValue({ value, formatter }: AnimatedMetricValueProps) {
-  return <strong className="daily-sales__summary-value">{formatter(value)}</strong>;
-}
 
 function DailySalesSummaryCards({
   rows,
@@ -94,11 +85,11 @@ function DailySalesSummaryCards({
     };
   }, [currency, refundSummary, rows, serverSummary]);
 
-  const metrics = [
+  const metrics: ReportSummaryMetric[] = [
     {
       title: "销量",
       value: totals.salesVolume,
-      formatter: (value: number | null) => Math.round(value ?? 0).toLocaleString("zh-CN"),
+      formatter: (value) => Math.round(value ?? 0).toLocaleString("zh-CN"),
       subtitle: "当前筛选销量",
       icon: <ShoppingOutlined />,
       tone: "blue",
@@ -108,7 +99,7 @@ function DailySalesSummaryCards({
     {
       title: "销售额",
       value: totals.salesAmount,
-      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
+      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "销售金额合计",
       icon: <DollarCircleOutlined />,
       tone: "green",
@@ -118,7 +109,7 @@ function DailySalesSummaryCards({
     {
       title: "订单利润",
       value: totals.orderProfit,
-      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
+      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "SKU 订单利润",
       icon: <LineChartOutlined />,
       tone: "orange",
@@ -130,7 +121,7 @@ function DailySalesSummaryCards({
       value: totals.salesAmount && totals.orderProfit != null
         ? totals.orderProfit / totals.salesAmount * 100
         : null,
-      formatter: (value: number | null) => value == null ? "—" : `${value.toFixed(2)}%`,
+      formatter: (value) => value == null ? "—" : `${value.toFixed(2)}%`,
       subtitle: "利润 / 销售额",
       icon: <PieChartOutlined />,
       tone: "purple",
@@ -140,7 +131,7 @@ function DailySalesSummaryCards({
     {
       title: "广告费",
       value: totals.adSpend,
-      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
+      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "广告花费合计",
       icon: <NotificationOutlined />,
       tone: "red",
@@ -150,7 +141,7 @@ function DailySalesSummaryCards({
     {
       title: "广告占比",
       value: totals.salesAmount ? totals.adSpend / totals.salesAmount * 100 : null,
-      formatter: (value: number | null) => value == null ? "—" : `${value.toFixed(2)}%`,
+      formatter: (value) => value == null ? "—" : `${value.toFixed(2)}%`,
       subtitle: "广告费 / 销售额",
       icon: <PercentageOutlined />,
       tone: "cyan",
@@ -160,7 +151,7 @@ function DailySalesSummaryCards({
     {
       title: "退款数量",
       value: totals.refundQuantity,
-      formatter: (value: number | null) => value == null ? "—" : Math.round(value).toLocaleString("zh-CN"),
+      formatter: (value) => value == null ? "—" : Math.round(value).toLocaleString("zh-CN"),
       subtitle: "按退款发生日统计",
       icon: <RollbackOutlined />,
       tone: "red",
@@ -170,48 +161,21 @@ function DailySalesSummaryCards({
     {
       title: "退款金额",
       value: totals.refundAmount,
-      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
+      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "按退款发生日统计",
       icon: <DollarCircleOutlined />,
       tone: "orange",
       trend: null,
       trendDirection: null,
     },
-  ] as const;
+  ];
 
   return (
-    <section className="daily-sales__summary" aria-label="销售统计">
-      {metrics.map((metric, index) => (
-        <Card
-          key={metric.title}
-          size="small"
-          className={`daily-sales__summary-card daily-sales__summary-card--${metric.tone}${metric.trendDirection ? ` daily-sales__summary-card--trend-${metric.trendDirection}` : ""}`}
-          style={{ "--summary-card-index": index } as CSSProperties}
-        >
-          <span className={`daily-sales__summary-rising${metric.trendDirection ? ` daily-sales__summary-rising--${metric.trendDirection}` : ""}`} aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className="daily-sales__summary-icon" aria-hidden="true">{metric.icon}</span>
-          <span className="daily-sales__summary-content">
-            <span className="daily-sales__summary-title">{metric.title}</span>
-            <AnimatedMetricValue value={metric.value} formatter={metric.formatter} />
-            <span className="daily-sales__summary-subtitle">{metric.subtitle}</span>
-          </span>
-          {metric.trend && metric.trendDirection && (
-            <span
-              className={`daily-sales__summary-comparison daily-sales__summary-comparison--${metric.trendDirection}`}
-            >
-              <span className="daily-sales__summary-trend">
-                {metric.trendDirection === "down" ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
-                {metric.trend}
-              </span>
-            </span>
-          )}
-        </Card>
-      ))}
-    </section>
+    <ReportSummaryCards
+      className="daily-sales__summary"
+      ariaLabel="销售统计"
+      metrics={metrics}
+    />
   );
 }
 

@@ -58,9 +58,6 @@ const statusColors: Record<DailySalesCostStatus, string> = {
   部分缺失: "processing",
 };
 
-const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
-const numberSorter = (key: keyof DailySalesRow) => (left: DailySalesRow, right: DailySalesRow) =>
-  Number(left[key]) - Number(right[key]);
 const dailySalesFxRate = (row: DailySalesRow) => row.exchangeRate ?? MOCK_USD_TO_CNY_RATE;
 
 function LogCell({ text }: { text: string }) {
@@ -251,9 +248,9 @@ function createColumns(
         />
       ),
     },
-    { title: "日期", dataIndex: "date", key: "date", width: 112, fixed: "left", sorter: (a, b) => compareText(a.date, b.date) },
-    { title: "店铺", dataIndex: "store", key: "store", width: 120, sorter: (a, b) => compareText(a.store, b.store) },
-    { title: "负责人", dataIndex: "owner", key: "owner", width: 96, sorter: (a, b) => compareText(a.owner, b.owner) },
+    { title: "日期", dataIndex: "date", key: "date", width: 112, fixed: "left" },
+    { title: "店铺", dataIndex: "store", key: "store", width: 120 },
+    { title: "负责人", dataIndex: "owner", key: "owner", width: 96 },
     {
       title: "前7天销量趋势",
       key: "sevenDaySales",
@@ -282,30 +279,30 @@ function createColumns(
         </Space>
       ),
     },
-    { title: "平台", dataIndex: "platform", key: "platform", width: 96, sorter: (a, b) => compareText(a.platform, b.platform) },
-    { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88, sorter: numberSorter("salesVolume") },
-    { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88, sorter: numberSorter("orderCount") },
-    { title: "销售额", key: "salesAmount", width: 112, sorter: numberSorter("salesAmount"), render: renderUsdSourceMoney<DailySalesRow>("salesAmount", currency, dailySalesFxRate) },
-    { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88, sorter: numberSorter("sampleQuantity") },
-    { title: "送样金额", key: "sampleExcludedAmount", width: 112, sorter: numberSorter("sampleExcludedAmount"), render: renderUsdSourceMoney<DailySalesRow>("sampleExcludedAmount", currency, dailySalesFxRate) },
-    { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88, sorter: numberSorter("returnCount") },
-    { title: "退款额", key: "refundAmount", width: 104, sorter: numberSorter("refundAmount"), render: renderUsdSourceMoney<DailySalesRow>("refundAmount", currency, dailySalesFxRate) },
-    { title: "退货率30天", key: "returnRate30Days", width: 120, sorter: numberSorter("returnRate30Days"), render: percent("returnRate30Days") },
-    { title: "广告费", key: "adSpend", width: 104, sorter: numberSorter("adSpend"), render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
-    { title: "广告占比", key: "adRatio", width: 104, sorter: numberSorter("adRatio"), render: percent("adRatio") },
-    { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, sorter: numberSorter("wfsDeliveryFee"), render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryFee", currency, dailySalesFxRate) },
-    { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, sorter: numberSorter("wfsDeliveryUnitPrice"), render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryUnitPrice", currency, dailySalesFxRate) },
-    { title: "佣金", key: "commission", width: 104, sorter: numberSorter("commission"), render: renderUsdSourceMoney<DailySalesRow>("commission", currency, dailySalesFxRate) },
-    { title: "采购总成本", key: "purchaseCost", width: 128, sorter: numberSorter("purchaseCost"), render: renderCnyUnitTotalOrUsdSourceMoney<DailySalesRow>("purchaseCost", "purchaseUnitPriceCny", "costQuantity", currency, dailySalesFxRate) },
-    { title: "采购单价", key: "purchaseUnitPriceCny", width: 128, sorter: numberSorter("purchaseUnitPriceCny"), render: renderCnySourceMoney<DailySalesRow>("purchaseUnitPriceCny", currency, dailySalesFxRate) },
-    { title: "头程总成本", key: "firstLegCost", width: 128, sorter: numberSorter("firstLegCost"), render: renderCnyUnitTotalOrUsdSourceMoney<DailySalesRow>("firstLegCost", "firstLegUnitPriceCny", "costQuantity", currency, dailySalesFxRate) },
-    { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, sorter: numberSorter("firstLegUnitPriceCny"), render: renderCnySourceMoney<DailySalesRow>("firstLegUnitPriceCny", currency, dailySalesFxRate) },
-    { title: "总仓储费", key: "storageFee", width: 112, sorter: numberSorter("storageFee"), render: renderUsdSourceMoney<DailySalesRow>("storageFee", currency, dailySalesFxRate) },
-    { title: "仓储单价", key: "storageUnitPrice", width: 128, sorter: numberSorter("storageUnitPrice"), render: renderUsdSourceMoney<DailySalesRow>("storageUnitPrice", currency, dailySalesFxRate) },
-    { title: "WFS可售库存", dataIndex: "wfsAvailableInventory", key: "wfsAvailableInventory", width: 128, sorter: numberSorter("wfsAvailableInventory") },
-    { title: "订单利润", key: "orderProfit", width: 112, sorter: numberSorter("orderProfit"), render: renderUsdSourceMoney<DailySalesRow>("orderProfit", currency, dailySalesFxRate) },
-    { title: "利润率", key: "profitMargin", width: 96, sorter: numberSorter("profitMargin"), render: percent("profitMargin") },
-    { title: "ROI", key: "roi", width: 88, sorter: numberSorter("roi"), render: percent("roi") },
+    { title: "平台", dataIndex: "platform", key: "platform", width: 96 },
+    { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88 },
+    { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88 },
+    { title: "销售额", key: "salesAmount", width: 112, render: renderUsdSourceMoney<DailySalesRow>("salesAmount", currency, dailySalesFxRate) },
+    { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88 },
+    { title: "送样金额", key: "sampleExcludedAmount", width: 112, render: renderUsdSourceMoney<DailySalesRow>("sampleExcludedAmount", currency, dailySalesFxRate) },
+    { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88 },
+    { title: "退款额", key: "refundAmount", width: 104, render: renderUsdSourceMoney<DailySalesRow>("refundAmount", currency, dailySalesFxRate) },
+    { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
+    { title: "广告费", key: "adSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
+    { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
+    { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryFee", currency, dailySalesFxRate) },
+    { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryUnitPrice", currency, dailySalesFxRate) },
+    { title: "佣金", key: "commission", width: 104, render: renderUsdSourceMoney<DailySalesRow>("commission", currency, dailySalesFxRate) },
+    { title: "采购总成本", key: "purchaseCost", width: 128, render: renderCnyUnitTotalOrUsdSourceMoney<DailySalesRow>("purchaseCost", "purchaseUnitPriceCny", "costQuantity", currency, dailySalesFxRate) },
+    { title: "采购单价", key: "purchaseUnitPriceCny", width: 128, render: renderCnySourceMoney<DailySalesRow>("purchaseUnitPriceCny", currency, dailySalesFxRate) },
+    { title: "头程总成本", key: "firstLegCost", width: 128, render: renderCnyUnitTotalOrUsdSourceMoney<DailySalesRow>("firstLegCost", "firstLegUnitPriceCny", "costQuantity", currency, dailySalesFxRate) },
+    { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, render: renderCnySourceMoney<DailySalesRow>("firstLegUnitPriceCny", currency, dailySalesFxRate) },
+    { title: "总仓储费", key: "storageFee", width: 112, render: renderUsdSourceMoney<DailySalesRow>("storageFee", currency, dailySalesFxRate) },
+    { title: "仓储单价", key: "storageUnitPrice", width: 128, render: renderUsdSourceMoney<DailySalesRow>("storageUnitPrice", currency, dailySalesFxRate) },
+    { title: "WFS可售库存", dataIndex: "wfsAvailableInventory", key: "wfsAvailableInventory", width: 128 },
+    { title: "订单利润", key: "orderProfit", width: 112, render: renderUsdSourceMoney<DailySalesRow>("orderProfit", currency, dailySalesFxRate) },
+    { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
+    { title: "ROI", key: "roi", width: 88, render: percent("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
     { title: "系统运营日志", key: "systemOperationLog", width: 180, render: (_, row) => <LogCell text={row.systemOperationLog} /> },
     { title: "运营日志", key: "operationLog", width: 180, render: (_, row) => <LogCell text={row.operationLog} /> },
@@ -367,7 +364,6 @@ function DailySalesTable({
         toolBarRender={false}
         tableAlertRender={false}
         tableAlertOptionRender={false}
-        showSorterTooltip={{ target: "sorter-icon" }}
         scroll={{ x: "max-content", y: "100%" }}
         summary={() => (
           <Table.Summary fixed="bottom">

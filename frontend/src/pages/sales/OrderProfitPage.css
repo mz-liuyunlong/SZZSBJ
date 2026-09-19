@@ -1149,3 +1149,20 @@
   padding-inline-start: 10px;
   white-space: nowrap !important;
 }
+
+/* keep order-profit table scroll and pagination inside the visible page area */
+.order-profit__table-request-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.order-profit__table-request-wrap > .report-table-shell,
+.order-profit__table-request-wrap > .order-profit__table {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+}

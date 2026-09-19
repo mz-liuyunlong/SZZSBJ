@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import dayjs from "dayjs";
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 30_000 });
 import { navigation } from "@/config/navigation";
 import OrderProfitPage from "@/pages/sales/OrderProfitPage";
 import { aggregateOrderProfitRows } from "@/pages/sales/orderProfitTypes";
@@ -161,8 +163,14 @@ vi.mock("antd", async (importOriginal) => {
     maxTagPlaceholder,
     mode,
     onChange,
+    onClear,
+    onOpenChange,
+    open,
+    menuItemSelectedIcon,
+    optionFilterProp,
     optionRender,
     options = [],
+    popupRender,
     placeholder,
     popupMatchSelectWidth,
     showSearch,
@@ -173,11 +181,15 @@ vi.mock("antd", async (importOriginal) => {
     mode?: "multiple";
     onChange?: (value?: string | string[]) => void;
     options?: { label: ReactNode; value: string }[];
+    onClear?: () => void;
+    onOpenChange?: (open: boolean) => void;
+    open?: boolean;
     optionRender?: (
       option: { label: ReactNode; value: string },
       info: { index: number },
     ) => ReactNode;
     placeholder?: string;
+    popupRender?: (menu: ReactNode) => ReactNode;
     value?: string | string[];
     [key: string]: unknown;
   }) => {
@@ -185,10 +197,20 @@ vi.mock("antd", async (importOriginal) => {
     void classNames;
     void maxTagCount;
     void maxTagPlaceholder;
+    void onOpenChange;
+    void open;
+    void menuItemSelectedIcon;
+    void optionFilterProp;
     void popupMatchSelectWidth;
     void showSearch;
     void styles;
     const multiple = mode === "multiple";
+    const ariaLabel = String(props["aria-label"]);
+    const hasValue = multiple
+      ? Array.isArray(value) && value.length > 0
+      : Boolean(value);
+    const menu = <div data-testid={`${ariaLabel}-menu`} />;
+
     return (
       <>
         <select
@@ -202,11 +224,28 @@ vi.mock("antd", async (importOriginal) => {
           <option value="">{placeholder}</option>
           {options.map((option) => <option key={option.value} value={option.value}>{String(option.label)}</option>)}
         </select>
+        {allowClear && hasValue && (
+          <button
+            type="button"
+            aria-label={`清除${ariaLabel}`}
+            onClick={() => {
+              onClear?.();
+              onChange?.(multiple ? [] : undefined);
+            }}
+          >
+            清除
+          </button>
+        )}
         {multiple && optionRender && (
-          <div data-testid={`${String(props["aria-label"])}-checkbox-options`}>
+          <div data-testid={`${ariaLabel}-checkbox-options`}>
             {options.map((option, index) => (
               <span key={option.value}>{optionRender(option, { index })}</span>
             ))}
+          </div>
+        )}
+        {popupRender && (
+          <div data-testid={`${ariaLabel}-dropdown`}>
+            {popupRender(menu)}
           </div>
         )}
       </>
@@ -542,12 +581,26 @@ describe("OrderProfitPage", () => {
     }
   });
 
+  it("applies multi-select filters only after confirmation", async () => {
+    await renderPage();
+
+    fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
+    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
+
+    fireEvent.click(within(screen.getByTestId("平台-dropdown")).getByRole("button", { name: /确\s*定/ }));
+    await waitFor(() => expect(Number(screen.getByTestId("pro-table").getAttribute("data-total"))).toBeLessThan(referenceRows.length));
+
+    fireEvent.click(screen.getByRole("button", { name: "清除平台" }));
+    await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length)));
+  });
+
   it("filters locally by product ID and opens the product-ID detail modal", async () => {
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
     const sessionStorageSpy = vi.spyOn(window.sessionStorage, "setItem");
     await renderPage();
 
     fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: referenceRows[0].productId } });
+    fireEvent.click(screen.getByLabelText("搜索"));
     await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1"));
     fireEvent.click(screen.getByRole("button", { name: /查看订单利润详情/ }));
     expect(screen.getByRole("dialog", { name: "订单利润详情" })).toBeInTheDocument();

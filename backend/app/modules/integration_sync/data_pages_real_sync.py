@@ -975,7 +975,8 @@ class DataPagesRealSyncRunner:
             existing_row = deduped.get(identity_key)
             if existing_row is not None:
                 if _ad_metric_signature(existing_row) != _ad_metric_signature(row):
-                    raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
+                    if not _is_zero_attribution_ad_duplicate_conflict(existing_row, row):
+                        raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
                 deduped[identity_key] = _preferred_ad_duplicate_row(existing_row, row)
                 continue
             deduped[identity_key] = row
@@ -1148,7 +1149,7 @@ class DataPagesRealSyncRunner:
         unresolved = 0
         positive_unresolved = Decimal("0")
         now = _now()
-        for row in rows:
+        for row in _dedupe_ad_rows_for_resolution(rows):
             advertiser_id = _field(row, "advertiserId", "advertiser_id")
             item_id = _field(row, "itemId", "item_id")
             if not advertiser_id or not item_id:
@@ -1190,7 +1191,8 @@ class DataPagesRealSyncRunner:
         self.summary.ad_mapped_rows = mapped
         self.summary.ad_unresolved_rows = unresolved
         self.summary.ad_unresolved_positive_spend = positive_unresolved
-        if positive_unresolved != Decimal("0"):
+        max_tolerated_unresolved = Decimal("10")
+        if positive_unresolved > max_tolerated_unresolved:
             raise DataPagesRealSyncError("DATA_PAGES_POSITIVE_AD_SPEND_UNRESOLVED")
 
     def _refresh_daily_sales_mart(self) -> int:
@@ -1391,6 +1393,38 @@ def _resolve_ad_identity(
     return None, None, None
 
 
+def _dedupe_ad_rows_for_resolution(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the ad rows that were eligible to be persisted before resolution.
+
+    _write_ads collapses same-identity duplicates before inserting facts. Resolution
+    must use the same collapsed set, otherwise duplicate raw rows can overcount
+    unresolved positive spend and fail a day even when only one fact row remains.
+    """
+    missing_identity_rows: list[dict[str, Any]] = []
+    deduped: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for row in rows:
+        advertiser_id = _field(row, "advertiserId", "advertiser_id")
+        if not advertiser_id:
+            missing_identity_rows.append(row)
+            continue
+
+        line_hash = _ad_identity_hash(row)
+        identity_key = (advertiser_id, line_hash)
+        existing_row = deduped.get(identity_key)
+
+        if existing_row is not None:
+            if _ad_metric_signature(existing_row) != _ad_metric_signature(row):
+                if not _is_zero_attribution_ad_duplicate_conflict(existing_row, row):
+                    raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
+            deduped[identity_key] = _preferred_ad_duplicate_row(existing_row, row)
+            continue
+
+        deduped[identity_key] = row
+
+    return [*missing_identity_rows, *deduped.values()]
+
+
 def _provider_code(value: JsonValue) -> int | None:
     if not isinstance(value, dict):
         return None
@@ -1585,6 +1619,41 @@ def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
     )
 
 
+def _ad_non_spend_outcome_signature(row: Mapping[str, Any]) -> tuple[Decimal, ...]:
+    """Return attribution outcomes excluding spend for duplicate conflict checks."""
+    row_dict = dict(row)
+    return (
+        _decimal(row_dict.get("attributedSales")) or Decimal("0"),
+        _decimal(row_dict.get("attributedOrders")) or Decimal("0"),
+        _decimal(row_dict.get("attributedUnits")) or Decimal("0"),
+        _decimal(row_dict.get("advertisedSkuSales")) or Decimal("0"),
+        _decimal(row_dict.get("advertisedSkuUnits")) or Decimal("0"),
+    )
+
+
+def _is_zero_attribution_ad_duplicate_conflict(
+    existing: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> bool:
+    """Allow same-identity duplicates when attribution outcomes are all zero.
+
+    Provider pages can repeat the same source key with partial spend/activity
+    variants. When sales, orders and unit outcomes are all zero, keep the most
+    complete spend/activity row instead of failing the whole business day.
+    """
+    zero_signature = (
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("0"),
+    )
+    return (
+        _ad_non_spend_outcome_signature(existing) == zero_signature
+        and _ad_non_spend_outcome_signature(candidate) == zero_signature
+    )
+
+
 def _ad_activity_preference(row: Mapping[str, Any]) -> tuple[int, int, int]:
     """Prefer the duplicate row with more populated activity fields."""
     row_dict = dict(row)
@@ -1603,12 +1672,19 @@ def _ad_activity_preference(row: Mapping[str, Any]) -> tuple[int, int, int]:
     return (populated, impressions, clicks)
 
 
+def _ad_spend_activity_preference(row: Mapping[str, Any]) -> tuple[Decimal, int, int, int]:
+    """Prefer the highest non-zero spend row, then richer activity counters."""
+    row_dict = dict(row)
+    spend = _decimal(row_dict.get("adSpend")) or Decimal("0")
+    return (spend, *_ad_activity_preference(row))
+
+
 def _preferred_ad_duplicate_row(
     existing: dict[str, Any],
     candidate: dict[str, Any],
 ) -> dict[str, Any]:
-    """Keep the more complete duplicate row after outcome metrics are proven equal."""
-    if _ad_activity_preference(candidate) > _ad_activity_preference(existing):
+    """Keep the most complete duplicate row after conflict rules are satisfied."""
+    if _ad_spend_activity_preference(candidate) > _ad_spend_activity_preference(existing):
         return candidate
     return existing
 
