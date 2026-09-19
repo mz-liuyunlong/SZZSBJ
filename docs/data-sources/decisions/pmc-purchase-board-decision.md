@@ -2,17 +2,17 @@
 
 > 依据 `docs/delivery/backend-data-source-decision-gate.md`，参照 `docs/data-sources/decisions/data-pages-daily-sales-listing-order-profit-decision.md` 的形态。
 
-状态：`BLOCKED_BY_OWNER_DECISION`（仅 1 项：收货单接口 `LX-4B9473A2D2E1` 在契约清单中为 `DO_NOT_USE`，需负责人按例外流程重评；其余数据集均可 `READY_FOR_PRP`）
+状态：`READY_FOR_PRP`（负责人 mz-liuyunlong 于 2026-09-18 批准进入 PRP / Gate 2 开发，选择方案 A；收货单接口 `LX-4B9473A2D2E1` 已按例外流程重评为 `READY_FOR_PRP`。**本批准不授权生产真实调用、生产回填、生产调度、生产迁移或任何领星写接口**）
 
-日期：2026-09-17
+日期：2026-09-17（调查）/ 2026-09-18（负责人批准）
 
 - 调查日期：2026-09-15 ~ 2026-09-17
 - 调查人：Rocky（业务）+ 代码 AI；真实数据探测由部署 AI 在旧系统只读执行
 - 目标 method/path：`GET /api/v1/pmc/purchase/board`（列表）、`GET /api/v1/pmc/purchase/board/summary`（卡片）、`GET /api/v1/pmc/purchase/orders/{order_sn}`（详情）、`GET /api/v1/pmc/purchase/sku-cycles`（SKU 实际交期）
 - 业务用途：每张采购单的阶段/状态、进度率、采购交期、审批周期、金额，按店铺 + ItemID 可追溯；产出"待下单逾期""下单未到货逾期""ItemID 待处理""WFS 待转换""交期不稳定 SKU"清单（本期只做状态，不推送）
-- 接口总体状态：`BLOCKED_BY_OWNER_DECISION`（见 §12 唯一阻塞项）
-- 是否包含 NEED_OWNER_DECISION：是（1 项）
-- 负责人批准状态：待确认
+- 接口总体状态：`READY_FOR_PRP`（PRP planning only，非生产授权）
+- 是否包含 NEED_OWNER_DECISION：否（原唯一阻塞项已由负责人于 2026-09-18 决定；ItemID 发货追溯本期明确不接入，不构成阻塞）
+- 负责人批准状态：已批准进入 PRP（方案 A，mz-liuyunlong，2026-09-18）；生产执行未授权
 - 关联证据：`docs/integrations/lingxing-pmc-purchase-endpoint-evidence.md`；契约快照 ×3（`docs/integrations/lingxing/contracts/purchase-lx-*.md`、`warehouse-receipt-lx-4b9473a2d2e1.md`）；业务规则 `docs/business-rules/pmc-purchase-rules.md` v3
 - 决策文件路径：`docs/data-sources/decisions/pmc-purchase-board-decision.md`
 - 后续接口 PRP：`PRPs/pmc-purchase-board.md`
@@ -91,7 +91,7 @@ features/pmc-purchase/data/probe_20260915/  probe_20260917/                真�
 |---|---|---|---|---|---|---|---|
 | 采购计划 | S1/S2 起点、审批周期、ItemID 备注来源、合并单拆分比例 | 领星 getPurchasePlans | REBUILD_SYNC | 90 天增量 + 12 月回填 | 系统自动建计划后仍以领星为权威 | 不适用 | 是（真实外部 API） |
 | 采购单 + 明细 | 看板主单：状态、金额、数量、order_time、计划关联 | 领星 purchaseOrderList | REBUILD_SYNC | 同上 | 同上 | 不适用 | 是 |
-| 收货单 + 明细 | 到仓日期（50% 累计规则）、进度率 | 领星 PurchaseReceiptOrder/getOrderList | REBUILD_SYNC | 同上 | 同上 | 不适用 | **是（清单 DO_NOT_USE 重评）** |
+| 收货单 + 明细 | 到仓日期（50% 累计规则）、进度率 | 领星 PurchaseReceiptOrder/getOrderList | REBUILD_SYNC | 同上 | 同上 | 不适用 | 否（负责人 2026-09-18 已重评为 READY_FOR_PRP） |
 | 店铺 | 店铺名/ID 权威 | dim_lingxing_stores（DATA-PAGES-1） | EXISTING_NEW_SYSTEM_DATA | 引用 | 引用 | 不适用 | 否 |
 | Walmart 在线商品（ItemID/MSKU/GTIN/发货方式） | ItemID 归属、GTIN 列、WFS 校验 | dim_walmart_listings（DATA-PAGES-1） | EXISTING_NEW_SYSTEM_DATA（申请新增 `fulfillment_type` 列） | 引用 + 新增一列 | 引用 | 不适用 | 是（跨模块加列） |
 | 产品负责人 / 标签 / 分类 | 筛选、负责人列（唯一来源） | product_management | EXISTING_NEW_SYSTEM_DATA | 引用 | 引用 | 不适用 | 否 |
@@ -141,17 +141,17 @@ features/pmc-purchase/data/probe_20260915/  probe_20260917/                真�
 
 ## 11. PRP 进入条件
 
-除 §12 阻塞项外，本决策已满足 `READY_FOR_PRP` 条件。实现时仍需：Alembic migration；Route→Schema→Service→Repository→Model；前端不查 RAW；不连生产库；不调真实外部 API（含探测）；不改 `old-system/**`；不输出密钥或真实明细。
+本决策已满足 `READY_FOR_PRP` 条件（原 §12 阻塞项已由负责人决定）。实现时仍需：Alembic migration；Route→Schema→Service→Repository→Model；前端不查 RAW；不连生产库；不调真实外部 API（含探测）；不改 `old-system/**`；不输出密钥或真实明细。
 
 ## 12. 最终建议
 
-- 接口总体状态：`BLOCKED_BY_OWNER_DECISION`（单项）
+- 接口总体状态：`READY_FOR_PRP`（负责人已批准进入 PRP；生产执行未授权）
 - 推荐短期策略：REBUILD_SYNC 三接口 + 复用 DATA-PAGES-1 DIM + 两张 manual 覆盖表
 - 推荐长期策略：PMC 后续板块补齐发货追溯与写接口
 - 旧库退出条件：不适用（不读旧库）
 - 迁移或同步边界：只读；12 个月回填 + 90 天增量
 - 主要风险：(1) 56% 明细无 `sid`，店铺维度依赖 ItemID 归属；(2) 存量计划无 ITEMID 备注，上线初期 `unresolved` 高；(3) 审批周期无官方时间戳；(4) `purchaseOrderList` 无 total
-- 待负责人决定：
+- 负责人已决定（2026-09-18，详见下方"负责人决定"块）；原提请事项如下：
   1. **收货单接口 `LX-4B9473A2D2E1` 由 `DO_NOT_USE` 重评为 `READY_FOR_PRP`**（只读、无副作用，登记表 `is_read=是`；`DO_NOT_USE` 疑为"收货质检"模块规则初筛误伤）。方案 A：按 do-not-use.md 例外流程在本 docs PR 内更新 `API_CONTRACT_INVENTORY.csv/.md`、`API_CONTRACT_SOURCE_MAP.md`、`api-verification-status.csv`；方案 B：先只批采购计划 + 采购单两接口，到仓时间暂缺（看板不可用，不建议）。
   2. `dim_walmart_listings` 新增 `fulfillment_type`（0/1/2）列并在 Listing 管理展示（跨模块最小改动）。
   3. 系统级 UI 规则：ItemID 统一渲染为 `https://www.walmart.com/ip/<ItemID>` 链接（`WalmartItemLink` 组件）。
