@@ -31,6 +31,7 @@ import {
 } from "@/pages/sales/dailySalesTypes";
 import { fetchSalesFilterOptions, emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import { mergeSelectedFilterOptions } from "@/shared/report-filters";
+import { previousComparableDateRange } from "@/pages/sales/summaryComparison";
 import "@/pages/sales/DailySalesPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
@@ -74,6 +75,8 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [sourceRows, setSourceRows] = useState<DailySalesRow[]>([]);
   const [refundSummary, setRefundSummary] = useState<DailySalesRefundSummary | null>(null);
   const [salesSummary, setSalesSummary] = useState<DailySalesServerSummary | null>(null);
+  const [previousSalesSummary, setPreviousSalesSummary] = useState<DailySalesServerSummary | null>(null);
+  const [previousSalesSummaryRange, setPreviousSalesSummaryRange] = useState<string | null>(null);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -88,6 +91,10 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
+  const previousDateRange = useMemo(
+    () => previousComparableDateRange(dateRangeStart, dateRangeEnd),
+    [dateRangeStart, dateRangeEnd],
+  );
 
 
   // DAILY_SALES_RESET_FILTERS_ON_MOUNT
@@ -141,6 +148,60 @@ function DailySalesPage({ page }: DailySalesPageProps) {
     filters.searchField,
     filters.stores,
     pageSize,
+  ]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!previousDateRange) {
+      queueMicrotask(() => {
+        if (!active) return;
+        setPreviousSalesSummary(null);
+        setPreviousSalesSummaryRange(null);
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    const previousSalesSummaryRangeLabel = `${previousDateRange.startDate}~${previousDateRange.endDate}`;
+    queueMicrotask(() => {
+      if (!active) return;
+      setPreviousSalesSummaryRange(previousSalesSummaryRangeLabel);
+    });
+
+    void fetchDailySalesRows({
+      startDate: previousDateRange.startDate,
+      endDate: previousDateRange.endDate,
+      page: 1,
+      pageSize: 1,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
+      batchValues: filters.batchValues,
+    })
+      .then(({ summary }) => {
+        if (!active) return;
+        setPreviousSalesSummary(summary);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPreviousSalesSummary(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    filters.batchValues,
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+    previousDateRange,
   ]);
 
   useEffect(() => {
@@ -301,7 +362,9 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             rows={filteredRows}
             currency={filters.currency}
             refundSummary={refundSummary}
-          serverSummary={salesSummary}
+            serverSummary={salesSummary}
+            previousServerSummary={previousSalesSummary}
+            previousSummaryRange={previousSalesSummaryRange}
           />
         )}
         {chartsVisible && <DailySalesCharts rows={filteredRows} currency={filters.currency} />}

@@ -6,6 +6,7 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
+import dayjs from "dayjs";
 import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
@@ -23,7 +24,7 @@ import OrderProfitTable from "@/pages/sales/components/OrderProfitTable";
 import OrderProfitToolbar, {
   type OrderProfitFilters,
 } from "@/pages/sales/components/OrderProfitToolbar";
-import { fetchOrderProfitSourceRecords, type OrderProfitServerSummary } from "@/pages/sales/orderProfitApi";
+import { fetchOrderProfitSourceRecords, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
 import {
   aggregateOrderProfitRows,
   dateRangeForPreset,
@@ -34,6 +35,7 @@ import {
 } from "@/pages/sales/orderProfitTypes";
 import { fetchSalesFilterOptions, emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import { mergeSelectedFilterOptions } from "@/shared/report-filters";
+import { previousComparableDateRange } from "@/pages/sales/summaryComparison";
 import "@/pages/sales/OrderProfitPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
@@ -78,7 +80,10 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [filters, setFilters] = useState(createInitialFilters);
   const [serverTotal, setServerTotal] = useState(0);
   const [sourceRecords, setSourceRecords] = useState<OrderProfitSourceRecord[]>([]);
+  const [orderProfitTrendPoints, setOrderProfitTrendPoints] = useState<OrderProfitTrendPoint[]>([]);
   const [orderProfitSummary, setOrderProfitSummary] = useState<OrderProfitServerSummary | null>(null);
+  const [previousOrderProfitSummary, setPreviousOrderProfitSummary] = useState<OrderProfitServerSummary | null>(null);
+  const [previousOrderProfitSummaryRange, setPreviousOrderProfitSummaryRange] = useState<string | null>(null);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -103,6 +108,14 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
+  const trendDateRangeEnd = dateRangeEnd ?? dateRangeStart;
+  const trendDateRangeStart = trendDateRangeEnd
+    ? dayjs(trendDateRangeEnd).subtract(6, "day").format("YYYY-MM-DD")
+    : undefined;
+  const previousDateRange = useMemo(
+    () => previousComparableDateRange(dateRangeStart, dateRangeEnd),
+    [dateRangeStart, dateRangeEnd],
+  );
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, orderProfitPageRootRef, ".ant-table-body");
 
   useEffect(() => {
@@ -147,6 +160,99 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       setIsTableRequesting(false);
     };
   }, [currentPage, dateRangeStart, dateRangeEnd, filters.keyword, filters.owners, filters.platforms, filters.searchField, filters.stores, isPageActive, pageSize]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!previousDateRange) {
+      queueMicrotask(() => {
+        if (!active) return;
+        setPreviousOrderProfitSummary(null);
+        setPreviousOrderProfitSummaryRange(null);
+      });
+      return () => {
+        active = false;
+      };
+    }
+
+    const previousOrderProfitSummaryRangeLabel = `${previousDateRange.startDate}~${previousDateRange.endDate}`;
+    queueMicrotask(() => {
+      if (!active) return;
+      setPreviousOrderProfitSummaryRange(previousOrderProfitSummaryRangeLabel);
+    });
+
+    void fetchOrderProfitSourceRecords({
+      startDate: previousDateRange.startDate,
+      endDate: previousDateRange.endDate,
+      page: 1,
+      pageSize: 1,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
+    })
+      .then(({ summary }) => {
+        if (!active) return;
+        setPreviousOrderProfitSummary(summary);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPreviousOrderProfitSummary(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+    previousDateRange,
+  ]);
+
+  useEffect(() => {
+    if (!chartsVisible || !isPageActive || !trendDateRangeStart || !trendDateRangeEnd) {
+      queueMicrotask(() => setOrderProfitTrendPoints([]));
+      return undefined;
+    }
+
+    let active = true;
+
+    void fetchOrderProfitTrendPoints({
+      startDate: trendDateRangeStart,
+      endDate: trendDateRangeEnd,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
+    })
+      .then((points) => {
+        if (!active) return;
+        setOrderProfitTrendPoints(points);
+      })
+      .catch(() => {
+        if (!active) return;
+        setOrderProfitTrendPoints([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    chartsVisible,
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+    isPageActive,
+    trendDateRangeEnd,
+    trendDateRangeStart,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -308,9 +414,11 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
             rows={filteredRows}
             currency={filters.currency}
             serverSummary={orderProfitSummary}
+            previousServerSummary={previousOrderProfitSummary}
+            previousSummaryRange={previousOrderProfitSummaryRange}
           />
         )}
-        {chartsVisible && <OrderProfitCharts records={filteredSourceRecords} currency={filters.currency} />}
+        {chartsVisible && <OrderProfitCharts points={orderProfitTrendPoints} currency={filters.currency} endDate={trendDateRangeEnd} />}
 
           <div className="order-profit__table-request-wrap">
 

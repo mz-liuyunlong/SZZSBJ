@@ -1,16 +1,10 @@
 /** Daily-sales operating metrics from server summary plus refund-event totals. */
-import {
-  DollarCircleOutlined,
-  LineChartOutlined,
-  NotificationOutlined,
-  PercentageOutlined,
-  PieChartOutlined,
-  RollbackOutlined,
-  ShoppingOutlined,
-} from "@ant-design/icons";
 import { useMemo } from "react";
 import ReportSummaryCards, {
-  type ReportSummaryMetric,
+  type ReportSummaryCard,
+  type ReportSummaryMetricComparison,
+  type ReportSummaryTrendDirection,
+  type ReportSummaryTrendTone,
 } from "@/components/report-table/ReportSummaryCards";
 import type { DailySalesServerSummary } from "@/pages/sales/dailySalesApi";
 import {
@@ -25,6 +19,19 @@ interface DailySalesSummaryCardsProps {
   currency: DailySalesCurrency;
   refundSummary: DailySalesRefundSummary | null;
   serverSummary?: DailySalesServerSummary | null;
+  previousServerSummary?: DailySalesServerSummary | null;
+  previousSummaryRange?: string | null;
+}
+
+interface SummaryTotals {
+  salesVolume: number | null;
+  salesAmount: number | null;
+  orderProfit: number | null;
+  profitRate: number | null;
+  adSpend: number | null;
+  adRatio: number | null;
+  refundQuantity: number | null;
+  refundAmount: number | null;
 }
 
 const formatAmount = (value: number, currency: DailySalesCurrency) => {
@@ -35,6 +42,18 @@ const formatAmount = (value: number, currency: DailySalesCurrency) => {
   })}`;
 };
 
+const formatAmountOrDash = (value: number | null, currency: DailySalesCurrency) => (
+  value == null ? "—" : formatAmount(value, currency)
+);
+
+const formatInteger = (value: number | null) => (
+  value == null ? "—" : Math.round(value).toLocaleString("zh-CN")
+);
+
+const formatPercent = (value: number | null) => (
+  value == null ? "—" : `${value.toFixed(2)}%`
+);
+
 const currencyRate = (
   sourceCurrency: DailySalesCurrency,
   targetCurrency: DailySalesCurrency,
@@ -43,130 +62,239 @@ const currencyRate = (
   return sourceCurrency === "USD" ? MOCK_USD_TO_CNY_RATE : 1 / MOCK_USD_TO_CNY_RATE;
 };
 
+const toServerTotals = (
+  summary: DailySalesServerSummary,
+  currency: DailySalesCurrency,
+): SummaryTotals => {
+  const salesAmount = summary.salesAmount * currencyRate(summary.salesCurrency, currency);
+  const orderProfit = summary.orderProfitAmount
+    * currencyRate(summary.orderProfitCurrency, currency);
+  const adSpend = summary.adSpendAmount * currencyRate(summary.adSpendCurrency, currency);
+  const refundAmount = summary.refundEventAmount
+    * currencyRate(summary.refundEventCurrency, currency);
+
+  return {
+    salesVolume: summary.salesQuantity,
+    salesAmount,
+    orderProfit,
+    profitRate: salesAmount ? orderProfit / salesAmount * 100 : null,
+    adSpend,
+    adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+    refundQuantity: summary.refundEventQuantity,
+    refundAmount,
+  };
+};
+
+const toFallbackTotals = (
+  rows: DailySalesRow[],
+  currency: DailySalesCurrency,
+  refundSummary: DailySalesRefundSummary | null,
+): SummaryTotals => {
+  const incompleteProfit = rows.some((row) => row.orderProfit == null);
+  const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
+  const refundRate = refundSummary == null || refundSummary.currency === currency
+    ? 1
+    : refundSummary.currency === "USD"
+      ? MOCK_USD_TO_CNY_RATE
+      : 1 / MOCK_USD_TO_CNY_RATE;
+
+  const salesVolume = rows.reduce((total, row) => total + row.salesVolume, 0);
+  const salesAmount = rows.reduce((total, row) => total + row.salesAmount, 0) * rate;
+  const orderProfit = incompleteProfit
+    ? null
+    : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate;
+  const adSpend = rows.reduce((total, row) => total + row.adSpend, 0) * rate;
+  const refundAmount = refundSummary == null ? null : refundSummary.amount * refundRate;
+
+  return {
+    salesVolume,
+    salesAmount,
+    orderProfit,
+    profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
+    adSpend,
+    adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+    refundQuantity: refundSummary?.quantity ?? null,
+    refundAmount,
+  };
+};
+
+const trendTone = (
+  direction: ReportSummaryTrendDirection,
+  change: number | null,
+): ReportSummaryTrendTone => {
+  if (change == null || direction === "flat") return "neutral";
+  return direction === "up" ? "good" : "bad";
+};
+
+const buildComparison = (
+  current: number | null,
+  previous: number | null,
+  formatter: (value: number | null) => string,
+): ReportSummaryMetricComparison => {
+  const currentText = formatter(current);
+  const previousText = formatter(previous);
+
+  if (current == null || previous == null) {
+    return {
+      current: currentText,
+      previous: previous == null ? "暂无数据" : previousText,
+      change: null,
+      direction: "flat",
+      tone: "neutral",
+      status: "暂无对比",
+    };
+  }
+
+  const direction: ReportSummaryTrendDirection = current === previous
+    ? "flat"
+    : current > previous
+      ? "up"
+      : "down";
+
+  const change = previous === 0
+    ? current === 0 ? 0 : null
+    : (current - previous) / Math.abs(previous) * 100;
+
+  const tone = trendTone(direction, change);
+
+  return {
+    current: currentText,
+    previous: previousText,
+    change: change == null ? null : `${Math.abs(change).toFixed(1)}%`,
+    direction,
+    tone,
+    status: direction === "up" ? "上涨" : direction === "down" ? "下降" : "持平",
+  };
+};
+
 function DailySalesSummaryCards({
   rows,
   currency,
   refundSummary,
   serverSummary,
+  previousServerSummary,
+  previousSummaryRange,
 }: DailySalesSummaryCardsProps) {
-  const totals = useMemo(() => {
-    if (serverSummary) {
-      return {
-        salesVolume: serverSummary.salesQuantity,
-        salesAmount: serverSummary.salesAmount
-          * currencyRate(serverSummary.salesCurrency, currency),
-        orderProfit: serverSummary.orderProfitAmount
-          * currencyRate(serverSummary.orderProfitCurrency, currency),
-        adSpend: serverSummary.adSpendAmount
-          * currencyRate(serverSummary.adSpendCurrency, currency),
-        refundQuantity: serverSummary.refundEventQuantity,
-        refundAmount: serverSummary.refundEventAmount
-          * currencyRate(serverSummary.refundEventCurrency, currency),
-      };
-    }
-
-    const incompleteProfit = rows.some((row) => row.orderProfit == null);
-    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-    const refundRate = refundSummary == null || refundSummary.currency === currency
-      ? 1
-      : refundSummary.currency === "USD"
-        ? MOCK_USD_TO_CNY_RATE
-        : 1 / MOCK_USD_TO_CNY_RATE;
+  const { totals, previousTotals } = useMemo(() => {
+    const currentTotals = serverSummary
+      ? toServerTotals(serverSummary, currency)
+      : toFallbackTotals(rows, currency, refundSummary);
 
     return {
-      salesVolume: rows.reduce((total, row) => total + row.salesVolume, 0),
-      salesAmount: rows.reduce((total, row) => total + row.salesAmount, 0) * rate,
-      orderProfit: incompleteProfit
-        ? null
-        : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate,
-      adSpend: rows.reduce((total, row) => total + row.adSpend, 0) * rate,
-      refundQuantity: refundSummary?.quantity ?? null,
-      refundAmount: refundSummary == null ? null : refundSummary.amount * refundRate,
-    };
-  }, [currency, refundSummary, rows, serverSummary]);
-
-  const metrics: ReportSummaryMetric[] = [
-    {
-      title: "销量",
-      value: totals.salesVolume,
-      formatter: (value) => Math.round(value ?? 0).toLocaleString("zh-CN"),
-      subtitle: "当前筛选销量",
-      icon: <ShoppingOutlined />,
-      tone: "blue",
-      trend: "12.5%",
-      trendDirection: "up",
-    },
-    {
-      title: "销售额",
-      value: totals.salesAmount,
-      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
-      subtitle: "销售金额合计",
-      icon: <DollarCircleOutlined />,
-      tone: "green",
-      trend: "8.2%",
-      trendDirection: "up",
-    },
-    {
-      title: "订单利润",
-      value: totals.orderProfit,
-      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
-      subtitle: "SKU 订单利润",
-      icon: <LineChartOutlined />,
-      tone: "orange",
-      trend: "15.3%",
-      trendDirection: "up",
-    },
-    {
-      title: "利润率",
-      value: totals.salesAmount && totals.orderProfit != null
-        ? totals.orderProfit / totals.salesAmount * 100
+      totals: currentTotals,
+      previousTotals: previousServerSummary
+        ? toServerTotals(previousServerSummary, currency)
         : null,
-      formatter: (value) => value == null ? "—" : `${value.toFixed(2)}%`,
-      subtitle: "利润 / 销售额",
-      icon: <PieChartOutlined />,
-      tone: "purple",
-      trend: "2.1%",
-      trendDirection: "up",
+    };
+  }, [currency, refundSummary, rows, serverSummary, previousServerSummary]);
+
+  const previous = previousTotals;
+  const comparisonBadge = previousSummaryRange ? `较 ${previousSummaryRange}` : "较昨日";
+
+  const cards: ReportSummaryCard[] = [
+    {
+      id: "sales",
+      title: "销售表现",
+      badge: comparisonBadge,
+      accent: "#1677FF",
+      metrics: [
+        {
+          label: "销售额",
+          value: formatAmountOrDash(totals.salesAmount, currency),
+          comparison: buildComparison(
+            totals.salesAmount,
+            previous?.salesAmount ?? null,
+            (value) => formatAmountOrDash(value, currency)
+          ),
+        },
+        {
+          label: "销量",
+          value: formatInteger(totals.salesVolume),
+          comparison: buildComparison(
+            totals.salesVolume,
+            previous?.salesVolume ?? null,
+            formatInteger
+          ),
+        },
+      ],
     },
     {
-      title: "广告费",
-      value: totals.adSpend,
-      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
-      subtitle: "广告花费合计",
-      icon: <NotificationOutlined />,
-      tone: "red",
-      trend: "6.8%",
-      trendDirection: "cost-up",
+      id: "ads",
+      title: "广告投入",
+      badge: comparisonBadge,
+      accent: "#7C3AED",
+      metrics: [
+        {
+          label: "广告费",
+          value: formatAmountOrDash(totals.adSpend, currency),
+          comparison: buildComparison(
+            totals.adSpend,
+            previous?.adSpend ?? null,
+            (value) => formatAmountOrDash(value, currency)
+          ),
+        },
+        {
+          label: "广告占比",
+          value: formatPercent(totals.adRatio),
+          comparison: buildComparison(
+            totals.adRatio,
+            previous?.adRatio ?? null,
+            formatPercent
+          ),
+        },
+      ],
     },
     {
-      title: "广告占比",
-      value: totals.salesAmount ? totals.adSpend / totals.salesAmount * 100 : null,
-      formatter: (value) => value == null ? "—" : `${value.toFixed(2)}%`,
-      subtitle: "广告费 / 销售额",
-      icon: <PercentageOutlined />,
-      tone: "cyan",
-      trend: "1.2%",
-      trendDirection: "down",
+      id: "profit",
+      title: "利润表现",
+      badge: comparisonBadge,
+      accent: "#10B981",
+      metrics: [
+        {
+          label: "利润",
+          value: formatAmountOrDash(totals.orderProfit, currency),
+          comparison: buildComparison(
+            totals.orderProfit,
+            previous?.orderProfit ?? null,
+            (value) => formatAmountOrDash(value, currency)
+          ),
+        },
+        {
+          label: "利润率",
+          value: formatPercent(totals.profitRate),
+          comparison: buildComparison(
+            totals.profitRate,
+            previous?.profitRate ?? null,
+            formatPercent
+          ),
+        },
+      ],
     },
     {
-      title: "退款数量",
-      value: totals.refundQuantity,
-      formatter: (value) => value == null ? "—" : Math.round(value).toLocaleString("zh-CN"),
-      subtitle: "按退款发生日统计",
-      icon: <RollbackOutlined />,
-      tone: "red",
-      trend: null,
-      trendDirection: null,
-    },
-    {
-      title: "退款金额",
-      value: totals.refundAmount,
-      formatter: (value) => value == null ? "—" : formatAmount(value, currency),
-      subtitle: "按退款发生日统计",
-      icon: <DollarCircleOutlined />,
-      tone: "orange",
-      trend: null,
-      trendDirection: null,
+      id: "refund",
+      title: "退款风险",
+      badge: comparisonBadge,
+      accent: "#F97316",
+      metrics: [
+        {
+          label: "退款金额",
+          value: formatAmountOrDash(totals.refundAmount, currency),
+          comparison: buildComparison(
+            totals.refundAmount,
+            previous?.refundAmount ?? null,
+            (value) => formatAmountOrDash(value, currency)
+          ),
+        },
+        {
+          label: "退款量",
+          value: formatInteger(totals.refundQuantity),
+          comparison: buildComparison(
+            totals.refundQuantity,
+            previous?.refundQuantity ?? null,
+            formatInteger
+          ),
+        },
+      ],
     },
   ];
 
@@ -174,7 +302,7 @@ function DailySalesSummaryCards({
     <ReportSummaryCards
       className="daily-sales__summary"
       ariaLabel="销售统计"
-      metrics={metrics}
+      cards={cards}
     />
   );
 }

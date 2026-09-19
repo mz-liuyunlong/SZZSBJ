@@ -233,3 +233,185 @@
     transition: none;
   }
 }
+
+/* 2026-09-20 logout dialog: restored from supplied HTML. */
+.topbar-actions__logout-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  pointer-events: none;
+}
+
+.topbar-actions__logout-layer--show {
+  display: block;
+  pointer-events: auto;
+}
+
+.topbar-actions__logout-mask {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(20, 31, 48, 0.40);
+  border: 0;
+  backdrop-filter: blur(4px);
+}
+
+.topbar-actions__logout-dialog {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 560px;
+  overflow: hidden;
+  grid-template-columns: 126px 1fr;
+  background: #fff;
+  border-radius: 22px;
+  box-shadow: 0 34px 100px rgba(24, 39, 75, 0.22);
+  opacity: 0;
+  transform: translate(-50%, -46%) scale(0.985);
+  transition: 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.topbar-actions__logout-layer--entered .topbar-actions__logout-dialog {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.topbar-actions__logout-visual {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #f2f8ff, #eaf4ff);
+}
+
+.topbar-actions__logout-visual::after {
+  position: absolute;
+  width: 70px;
+  height: 70px;
+  background: rgba(22, 119, 255, 0.07);
+  border-radius: 24px;
+  content: "";
+  transform: rotate(18deg);
+}
+
+.topbar-actions__logout-visual-box {
+  z-index: 1;
+  display: grid;
+  width: 66px;
+  height: 66px;
+  place-items: center;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 12px 28px rgba(22, 119, 255, 0.12);
+}
+
+.topbar-actions__logout-visual-box svg {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: #1677ff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.topbar-actions__logout-mainbox {
+  position: relative;
+  padding: 28px 28px 24px;
+}
+
+.topbar-actions__logout-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: #93a0b2;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  transition: 0.18s;
+}
+
+.topbar-actions__logout-close:hover {
+  color: #475467;
+  background: #f3f7fb;
+}
+
+.topbar-actions__logout-close svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+}
+
+.topbar-actions__logout-kicker {
+  margin-bottom: 8px;
+  color: #7e8a9b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.topbar-actions__logout-title {
+  margin-bottom: 9px;
+  color: #172033;
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 30px;
+}
+
+.topbar-actions__logout-desc {
+  margin-bottom: 24px;
+  color: #7b8798;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.topbar-actions__logout-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.topbar-actions__logout-btn {
+  height: 42px;
+  padding: 0 18px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: 0.18s;
+}
+
+.topbar-actions__logout-btn--cancel {
+  color: #344054;
+  background: #fff;
+  border: 1px solid #d8e1ec;
+}
+
+.topbar-actions__logout-btn--cancel:hover {
+  background: #f9fbfd;
+  border-color: #c3cfdd;
+}
+
+.topbar-actions__logout-btn--confirm {
+  color: #fff;
+  background: #1677ff;
+  border: 1px solid #1677ff;
+  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.22);
+}
+
+.topbar-actions__logout-btn--confirm:hover {
+  background: #0958d9;
+  border-color: #0958d9;
+  transform: translateY(-1px);
+}

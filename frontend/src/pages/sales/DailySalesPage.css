@@ -1160,3 +1160,22 @@
   padding-inline-start: 10px;
   white-space: nowrap !important;
 }
+
+/* 2026-09-20 daily sales toolbar temporary polish:
+   hide platform filter for now; currency select only needs 80px. */
+.daily-sales__toolbar [aria-label="平台"].report-facet-select,
+.daily-sales__toolbar .report-facet-select[aria-label="平台"] {
+  display: none !important;
+}
+
+.daily-sales__currency-select,
+.report-filter-select.daily-sales__currency-select {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+  flex: 0 0 80px !important;
+}
+
+.daily-sales__currency-select .ant-select-selector {
+  padding-inline: 10px !important;
+}

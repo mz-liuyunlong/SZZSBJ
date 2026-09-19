@@ -51,6 +51,26 @@ interface BackendDailySalesData {
   summary?: BackendDailySalesSummary;
 }
 
+interface BackendOrderProfitTrendPoint {
+  date: string;
+  sales_qty: string;
+  order_count: string;
+  sales_amount: string;
+  sales_currency_code: string | null;
+  refund_amount: string;
+  refund_currency_code: string | null;
+  order_profit_amount: string;
+  order_profit_currency_code: string | null;
+  profit_margin: string | null;
+  ad_spend_amount: string;
+  ad_spend_currency_code: string | null;
+  ad_ratio: string | null;
+}
+
+interface BackendOrderProfitTrendData {
+  items: BackendOrderProfitTrendPoint[];
+}
+
 export interface OrderProfitApiMeta {
   latest_calculated_at: string | null;
   page: number;
@@ -78,6 +98,22 @@ export interface OrderProfitApiResult {
   records: OrderProfitSourceRecord[];
   summary: OrderProfitServerSummary | null;
   meta: OrderProfitApiMeta;
+}
+
+export interface OrderProfitTrendPoint {
+  date: string;
+  salesVolume: number;
+  orderCount: number;
+  salesAmount: number;
+  salesCurrency: OrderProfitCurrency;
+  refundAmount: number;
+  refundCurrency: OrderProfitCurrency;
+  orderProfit: number;
+  orderProfitCurrency: OrderProfitCurrency;
+  profitMargin: number | null;
+  adSpend: number;
+  adSpendCurrency: OrderProfitCurrency;
+  adRatio: number | null;
 }
 
 interface OrderProfitParams {
@@ -117,6 +153,24 @@ const costStatusLabel = (
   if (status === "partial") return "部分缺失";
   return "待补齐";
 };
+
+const toOrderProfitTrendPoint = (
+  item: BackendOrderProfitTrendPoint,
+): OrderProfitTrendPoint => ({
+  date: item.date,
+  salesVolume: numberValue(item.sales_qty),
+  orderCount: numberValue(item.order_count),
+  salesAmount: numberValue(item.sales_amount),
+  salesCurrency: currencyLabel(item.sales_currency_code),
+  refundAmount: numberValue(item.refund_amount),
+  refundCurrency: currencyLabel(item.refund_currency_code),
+  orderProfit: numberValue(item.order_profit_amount),
+  orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
+  profitMargin: nullableNumberValue(item.profit_margin),
+  adSpend: numberValue(item.ad_spend_amount),
+  adSpendCurrency: currencyLabel(item.ad_spend_currency_code),
+  adRatio: nullableNumberValue(item.ad_ratio),
+});
 
 const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSourceRecord => ({
   id: item.id,
@@ -217,6 +271,25 @@ export async function fetchOrderProfitSourceRecords(
     summary: toOrderProfitServerSummary(envelope.data.summary),
     meta: envelope.meta,
   };
+}
+
+export async function fetchOrderProfitTrendPoints(
+  params: OrderProfitParams,
+): Promise<OrderProfitTrendPoint[]> {
+  const search = new URLSearchParams();
+  if (params.startDate) search.set("start_date", params.startDate);
+  if (params.endDate) search.set("end_date", params.endDate);
+  appendOrderProfitFilters(search, params);
+
+  const requestOptions = params.signal ? { signal: params.signal } : undefined;
+
+  const envelope = await backendRequest<BackendOrderProfitTrendData>(
+    `/api/sales/order-profit/trend?${search.toString()}`,
+    requestOptions,
+  );
+
+  const items = Array.isArray(envelope.data.items) ? envelope.data.items : [];
+  return items.map(toOrderProfitTrendPoint);
 }
 
 export function preloadOrderProfitSourceRecords(params: OrderProfitParams): void {

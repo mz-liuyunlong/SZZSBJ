@@ -17,7 +17,6 @@ import {
   Button,
   Empty,
   List,
-  Modal,
   Popover,
   Space,
   Typography,
@@ -58,6 +57,7 @@ function TopbarActions({
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutEntered, setLogoutEntered] = useState(false);
   const [showAllMessage, setShowAllMessage] = useState(false);
   const logoutConfirmed = useRef(false);
   const userButtonRef = useRef<HTMLButtonElement>(null);
@@ -129,11 +129,18 @@ function TopbarActions({
     setUserMenuOpen(false);
     logoutConfirmed.current = false;
     setLogoutOpen(true);
+    window.requestAnimationFrame(() => setLogoutEntered(true));
+  };
+
+  const closeLogout = () => {
+    setLogoutEntered(false);
+    window.setTimeout(() => setLogoutOpen(false), 180);
   };
 
   const confirmLogout = () => {
     if (logoutConfirmed.current) return;
     logoutConfirmed.current = true;
+    setLogoutEntered(false);
     setLogoutOpen(false);
     onLogout();
   };
@@ -318,19 +325,77 @@ function TopbarActions({
         </Popover>
       </Space>
 
-      <Modal
-        title="提示"
-        open={logoutOpen}
-        onCancel={() => setLogoutOpen(false)}
-        onOk={confirmLogout}
-        cancelText="取消"
-        okText="确认"
-        cancelButtonProps={{ "aria-label": "取消" }}
-        okButtonProps={{ "aria-label": "确认" }}
-        width={400}
+      <div
+        className={[
+          "topbar-actions__logout-layer",
+          logoutOpen ? "topbar-actions__logout-layer--show" : "",
+          logoutEntered ? "topbar-actions__logout-layer--entered" : "",
+        ].filter(Boolean).join(" ")}
+        aria-hidden={!logoutOpen}
       >
-        <Typography.Text>是否退出登录？</Typography.Text>
-      </Modal>
+        <button
+          type="button"
+          className="topbar-actions__logout-mask"
+          aria-label="关闭退出登录弹窗"
+          tabIndex={logoutOpen ? 0 : -1}
+          onClick={closeLogout}
+        />
+
+        <section
+          className="topbar-actions__logout-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="topbar-actions-logout-title"
+          aria-describedby="topbar-actions-logout-desc"
+        >
+          <div className="topbar-actions__logout-visual" aria-hidden="true">
+            <div className="topbar-actions__logout-visual-box">
+              <svg viewBox="0 0 24 24">
+                <path d="M10 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19H10" />
+                <path d="M14 8l4 4-4 4M18 12H9" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="topbar-actions__logout-mainbox">
+            <button
+              type="button"
+              className="topbar-actions__logout-close"
+              aria-label="关闭"
+              onClick={closeLogout}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+
+            <div className="topbar-actions__logout-kicker">ACCOUNT SESSION</div>
+            <div id="topbar-actions-logout-title" className="topbar-actions__logout-title">
+              结束当前登录会话？
+            </div>
+            <div id="topbar-actions-logout-desc" className="topbar-actions__logout-desc">
+              退出后，本设备将不再保持当前账号的登录状态。
+            </div>
+
+            <div className="topbar-actions__logout-footer">
+              <button
+                type="button"
+                className="topbar-actions__logout-btn topbar-actions__logout-btn--cancel"
+                onClick={closeLogout}
+              >
+                暂不退出
+              </button>
+              <button
+                type="button"
+                className="topbar-actions__logout-btn topbar-actions__logout-btn--confirm"
+                onClick={confirmLogout}
+              >
+                退出登录
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
     </>
   );
 }

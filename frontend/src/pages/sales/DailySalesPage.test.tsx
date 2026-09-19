@@ -561,9 +561,10 @@ describe("DailySalesPage", () => {
     await renderPage();
 
     const summary = screen.getByRole("region", { name: "销售统计" });
-    expect(within(summary).getByText("退款数量")).toBeVisible();
+    expect(within(summary).getByText("退款风险")).toBeVisible();
+    expect(within(summary).getByText("退款量")).toBeVisible();
     expect(within(summary).getByText("退款金额")).toBeVisible();
-    expect(within(summary).getAllByText("按退款发生日统计")).toHaveLength(2);
+    expect(summary.querySelectorAll(".report-summary-pair-card__badge")).toHaveLength(4);
   });
 
   it("leaves sync and help controls to MainLayout", async () => {
@@ -696,13 +697,14 @@ describe("DailySalesPage", () => {
 
     const summary = screen.getByLabelText("销售统计");
     expect(summary).toBeVisible();
-    for (const metric of ["销量", "销售额", "订单利润", "利润率", "广告费", "广告占比"]) {
+    for (const metric of ["销售额", "销量", "广告费", "广告占比", "利润", "利润率", "退款金额", "退款量"]) {
       expect(within(summary).getByText(metric)).toBeVisible();
     }
-    expect(within(summary).queryByText("较上期")).not.toBeInTheDocument();
-    for (const trend of ["12.5%", "8.2%", "15.3%", "2.1%", "6.8%", "1.2%"]) {
-      expect(within(summary).getByText(trend)).toBeVisible();
+    for (const cardTitle of ["销售表现", "广告投入", "利润表现", "退款风险"]) {
+      expect(within(summary).getByText(cardTitle)).toBeVisible();
     }
+    expect(summary.querySelectorAll(".report-summary-pair-card__badge")).toHaveLength(4);
+    expect(summary.querySelectorAll("[data-tooltip*='今日：']")).toHaveLength(8);
     expect(within(summary).queryByText("所选日期范围")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("销售趋势图")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /隐藏统计$/ }));

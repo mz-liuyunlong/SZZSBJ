@@ -104,17 +104,16 @@ describe("App", () => {
     fetchMock.mockClear();
 
     await openLogoutDialog();
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "暂不退出" }));
     expect(screen.getByRole("main", { name: "内容区" })).toBeInTheDocument();
 
     await openLogoutDialog();
-    const closeButton = document.querySelector<HTMLButtonElement>(".ant-modal-close");
-    if (!closeButton) throw new Error("Missing modal close button");
+    const closeButton = screen.getByRole("button", { name: "关闭" });
     fireEvent.click(closeButton);
     expect(screen.getByRole("main", { name: "内容区" })).toBeInTheDocument();
 
     await openLogoutDialog();
-    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
     expect(await screen.findByRole("heading", { name: "欢迎回来 👋" })).toBeVisible();
     expect(window.location.hash).toBe("#/login");
     expect(localStorage.getItem(REMEMBERED_USERNAME_KEY)).toBe("admin");
