@@ -17,6 +17,9 @@ from app.modules.integration_sync.models import (
     LingxingProductInfoBatchItem,
     utc_now,
 )
+from app.modules.integration_sync.pmc_purchase_catalog import (
+    PMC_PURCHASE_SPECS_BY_INTERFACE_KEY,
+)
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.scheduler import (
     ScheduleExpressionError,
@@ -464,8 +467,19 @@ class IntegrationSyncService:
             == "/erp/sc/routing/data/local_inventory/batchGetProductInfo"
             and interface.request_kind == "id_batch_page"
         )
-        if productlist_only and not (is_productlist or is_productinfo):
+        purchase_spec = PMC_PURCHASE_SPECS_BY_INTERFACE_KEY.get(interface.interface_key)
+        is_pmc_purchase = (
+            purchase_spec is not None
+            and interface.provider == "lingxing"
+            and interface.method == "POST"
+            and interface.endpoint_path == purchase_spec.endpoint_path
+            and interface.request_kind == "offset_page"
+            and interface.handler_key == purchase_spec.handler_key
+        )
+        if productlist_only and not (is_productlist or is_productinfo or is_pmc_purchase):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
+        if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
+            raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         if is_productlist and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
             raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         if is_productinfo and trigger is TriggerType.BACKFILL:
