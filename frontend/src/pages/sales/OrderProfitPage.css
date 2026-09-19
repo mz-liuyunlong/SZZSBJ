@@ -1166,3 +1166,10 @@
   min-height: 0;
   flex: 1 1 0;
 }
+
+/* 2026-09-20 order profit toolbar temporary polish:
+   hide platform filter for now. */
+.order-profit__toolbar [aria-label="平台"].report-facet-select,
+.order-profit__toolbar .report-facet-select[aria-label="平台"] {
+  display: none !important;
+}

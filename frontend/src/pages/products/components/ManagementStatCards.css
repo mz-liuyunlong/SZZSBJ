@@ -1,0 +1,185 @@
+.management-stat-cards {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.management-stat-card {
+  --management-stat-accent: #2563eb;
+  --management-stat-glow: rgba(37, 99, 235, 0.07);
+  position: relative;
+  height: 110px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 15px;
+  color: #101828;
+  text-align: left;
+  cursor: pointer;
+  background: linear-gradient(145deg, #ffffff 0%, #f5f8ff 100%);
+  border: 0;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px #e6ebf2,
+    0 5px 18px rgba(27, 30, 35, 0.05);
+  transition: 0.2s ease;
+}
+
+.management-stat-card::after {
+  position: absolute;
+  top: -28px;
+  right: -24px;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--management-stat-glow);
+  content: "";
+  transition: 0.25s ease;
+}
+
+.management-stat-card:hover::after,
+.management-stat-card.is-active::after {
+  background: color-mix(in srgb, var(--management-stat-accent) 11%, transparent);
+  transform: scale(1.2);
+}
+
+.management-stat-card:hover {
+  box-shadow:
+    inset 0 0 0 1px #d9e2f2,
+    0 12px 30px rgba(31, 41, 55, 0.09);
+  transform: translateY(-2px);
+}
+
+.management-stat-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--management-stat-accent) 18%, transparent);
+  outline-offset: 2px;
+}
+
+.management-stat-card.is-active {
+  background:
+    radial-gradient(
+      circle at calc(100% - 16px) 6px,
+      color-mix(in srgb, var(--management-stat-accent) 10%, transparent) 0,
+      color-mix(in srgb, var(--management-stat-accent) 10%, transparent) 38px,
+      transparent 39px
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--management-stat-accent) 3.5%, #fff) 0%,
+      #fff 52%,
+      color-mix(in srgb, var(--management-stat-accent) 3%, #fff) 100%
+    );
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--management-stat-accent) 46%, #d9e2f2),
+    0 8px 22px rgba(31, 41, 55, 0.075);
+}
+
+.management-stat-card.is-active::before {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  z-index: 2;
+  width: 3px;
+  height: 58px;
+  background: var(--management-stat-accent);
+  border-radius: 0 999px 999px 0;
+  content: "";
+  opacity: 0.9;
+}
+
+.management-stat-card.is-active:hover {
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--management-stat-accent) 52%, #d9e2f2),
+    0 12px 28px rgba(31, 41, 55, 0.085);
+  transform: translateY(-1px);
+}
+
+.management-stat-card--warning {
+  background: linear-gradient(145deg, #fff 0%, #fffaf0 100%);
+}
+
+.management-stat-card--danger {
+  background: linear-gradient(145deg, #fff 0%, #fff5f5 100%);
+}
+
+.management-stat-card__visual {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  color: var(--management-stat-accent);
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--management-stat-accent) 16%, transparent);
+}
+
+.management-stat-card__visual svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.management-stat-card__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  max-width: calc(100% - 36px);
+  flex-direction: column;
+  gap: 4px;
+}
+
+.management-stat-card__title {
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.management-stat-card__subtitle {
+  overflow: hidden;
+  color: #758196;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.management-stat-card__value {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  color: #101828;
+  font-size: 29px;
+  font-weight: 850;
+  letter-spacing: -1px;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1500px) {
+  .management-stat-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .management-stat-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

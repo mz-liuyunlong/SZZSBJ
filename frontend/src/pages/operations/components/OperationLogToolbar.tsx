@@ -7,6 +7,7 @@ import { Button, Checkbox, DatePicker, Select, Space, Tooltip } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import type { ReactNode } from "react";
 import ConnectedSearch from "@/components/report-table/ConnectedSearch";
+import { disableFutureDate } from "@/shared/date/disableFutureDate";
 import {
   type OperationLogDatePreset,
   type OperationLogFilters,
@@ -96,6 +97,7 @@ function OperationLogToolbar({
         className="operation-log__date-range"
         allowClear={false}
         format="YYYY-MM-DD"
+          disabledDate={disableFutureDate}
         presets={rangePickerPresets}
         value={[dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]}
         onChange={(dates) => {

@@ -107,6 +107,7 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
 
   return {
     fetchOrderProfitSourceRecords,
+    fetchOrderProfitTrendPoints: vi.fn(async () => []),
     preloadOrderProfitSourceRecords: vi.fn(),
   };
 });

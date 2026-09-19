@@ -23,13 +23,17 @@ from app.modules.data_pages.schemas import (
     DailySalesTrendPointRead,
     DataPageFilterOptionRead,
     DataPageFilterOptionsData,
+    ListingManagementFilterOptionsData,
     ListingManagementItemRead,
     ListingManagementListData,
     ListingManagementQuery,
+    ListingManagementSummaryData,
     OrderProfitItemRead,
     OrderProfitListData,
     OrderProfitQuery,
     OrderProfitSummaryRead,
+    OrderProfitTrendData,
+    OrderProfitTrendPointRead,
 )
 
 
@@ -295,6 +299,7 @@ class OrderProfitService:
 
     def __init__(self, session: Session) -> None:
         self.repository = OrderProfitRepository(session)
+        self.daily_sales_repository = DailySalesRepository(session)
 
     def list_order_profit(
         self,
@@ -353,6 +358,55 @@ class OrderProfitService:
             latest_calculated_at,
         )
 
+    def order_profit_trend(
+        self,
+        *,
+        query: OrderProfitQuery,
+        account_refs: frozenset[str],
+    ) -> OrderProfitTrendData:
+        rows = self.daily_sales_repository.order_profit_trend(
+            account_refs=account_refs,
+            start_date=query.start_date,
+            end_date=query.end_date,
+            platform=query.platform,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            search_field=query.search_field,
+            keyword=query.keyword,
+        )
+
+        def percent_ratio(numerator: Decimal, denominator: Decimal) -> Decimal | None:
+            if not denominator:
+                return None
+            return (numerator / denominator * Decimal("100")).quantize(Decimal("0.000001"))
+
+        items: list[OrderProfitTrendPointRead] = []
+        for row in rows:
+            value = row._mapping
+            sales_amount = _decimal(value["sales_amount"])
+            order_profit_amount = _decimal(value["order_profit_amount"])
+            ad_spend_amount = _decimal(value["ad_spend_amount"])
+
+            items.append(
+                OrderProfitTrendPointRead(
+                    date=value["date"],
+                    sales_qty=_decimal(value["sales_qty"]),
+                    order_count=_decimal(value["order_count"]),
+                    sales_amount=sales_amount,
+                    sales_currency_code=value["sales_currency_code"] or "USD",
+                    refund_amount=_decimal(value["refund_amount"]),
+                    refund_currency_code=value["refund_currency_code"] or "USD",
+                    order_profit_amount=order_profit_amount,
+                    order_profit_currency_code=value["order_profit_currency_code"] or "USD",
+                    profit_margin=percent_ratio(order_profit_amount, sales_amount),
+                    ad_spend_amount=ad_spend_amount,
+                    ad_spend_currency_code=value["ad_spend_currency_code"] or "USD",
+                    ad_ratio=percent_ratio(ad_spend_amount, sales_amount),
+                )
+            )
+
+        return OrderProfitTrendData(items=items)
+
     def _to_read(self, row: OrderProfitSkuDayMart) -> OrderProfitItemRead:
         return OrderProfitItemRead(
             id=str(row.id),
@@ -399,8 +453,13 @@ class ListingManagementService:
         rows, total, latest_calculated_at = self.repository.list_listings(
             account_refs=account_refs,
             store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            product_type=query.product_type,
+            status=query.status,
+            summary_filter=query.summary_filter,
             search_field=query.search_field,
             keyword=query.keyword,
+            batch_values=query.batch_values,
             page=query.page,
             page_size=query.page_size,
         )
@@ -408,6 +467,58 @@ class ListingManagementService:
             ListingManagementListData(items=[self._to_read(row) for row in rows]),
             total,
             latest_calculated_at,
+        )
+
+    def listing_summary(
+        self,
+        query: ListingManagementQuery,
+        account_refs: frozenset[str],
+    ) -> ListingManagementSummaryData:
+        (
+            total,
+            online,
+            buybox_exception,
+            rating_warning,
+            resold_warning,
+            strike_price_exception,
+        ) = self.repository.listing_summary(
+            account_refs=account_refs,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            product_type=query.product_type,
+            status=query.status,
+            search_field=query.search_field,
+            keyword=query.keyword,
+            batch_values=query.batch_values,
+        )
+
+        return ListingManagementSummaryData(
+            total=total,
+            online=online,
+            buybox_exception=buybox_exception,
+            rating_warning=rating_warning,
+            resold_warning=resold_warning,
+            strike_price_exception=strike_price_exception,
+        )
+
+    def listing_filter_options(
+        self,
+        account_refs: frozenset[str],
+    ) -> ListingManagementFilterOptionsData:
+        rows = self.repository.listing_filter_options(account_refs=account_refs)
+        return ListingManagementFilterOptionsData(
+            stores=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["stores"]
+            ],
+            owners=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["owners"]
+            ],
+            product_types=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["product_types"]
+            ],
         )
 
     def _to_read(self, row: ListingManagementCurrentMart) -> ListingManagementItemRead:

@@ -9,6 +9,7 @@ import CommittedSearch from "@/components/report-table/CommittedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
 import ReportFacetSelect from "@/shared/report-filters";
 import type { ReportFilterOption } from "@/shared/report-filters";
+import { disableFutureDate } from "@/shared/date/disableFutureDate";
 import {
   dateRangeForPreset,
   type DailySalesCurrency,
@@ -165,6 +166,7 @@ function DailySalesToolbar({
             : undefined}
           presets={rangePresets()}
           format="YYYY-MM-DD"
+          disabledDate={disableFutureDate}
           separator="~"
           onChange={(dates) => onChange({
             ...filters,

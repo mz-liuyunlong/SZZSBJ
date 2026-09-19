@@ -2,6 +2,7 @@ import { SearchOutlined } from "@ant-design/icons";
 import { Button, Checkbox, DatePicker, Input, Select, Space } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import type { ReactNode } from "react";
+import { disableFutureDate } from "@/shared/date/disableFutureDate";
 import {
   type WfsFeeAlertCaseStatus,
   type WfsFeeAlertFilters,
@@ -87,6 +88,7 @@ function WfsFeeAlertToolbar({
         className="wfs-fee-alert__date-range"
         allowClear={false}
         format="YYYY-MM-DD"
+          disabledDate={disableFutureDate}
         presets={rangePickerPresets}
         value={[dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]}
         onChange={(dates) => {

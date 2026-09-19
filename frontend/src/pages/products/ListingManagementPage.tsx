@@ -21,14 +21,16 @@ import ListingManagementTable from "@/pages/products/components/ListingManagemen
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
-import { fetchListingManagementRows } from "@/pages/products/listingManagementApi";
-import type { ReportFilterOption } from "@/shared/report-filters";
+import {
+  fetchListingManagementFilterOptions,
+  fetchListingManagementRows,
+  fetchListingManagementSummary,
+  type ListingManagementFilterOptions,
+  type ListingManagementSummary,
+} from "@/pages/products/listingManagementApi";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
-  listingOwners,
-  listingProductTypes,
-  listingStores,
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 import "@/pages/products/ListingManagementPage.css";
@@ -45,18 +47,19 @@ const createInitialFilters = (): ListingManagementFilters => ({
   keyword: "",
 });
 
-const optionCounts = (baseValues: string[], values: string[]): ReportFilterOption[] => {
-  const counts = new Map<string, number>();
-  for (const value of values) {
-    if (!value) continue;
-    counts.set(value, (counts.get(value) ?? 0) + 1);
-  }
+const emptySummary: ListingManagementSummary = {
+  total: 0,
+  online: 0,
+  buyboxException: 0,
+  ratingWarning: 0,
+  resoldWarning: 0,
+  strikePriceException: 0,
+};
 
-  return Array.from(new Set([...baseValues, ...values].filter(Boolean))).map((value) => ({
-    value,
-    label: value,
-    count: counts.get(value) ?? 0,
-  }));
+const emptyFilterOptions: ListingManagementFilterOptions = {
+  stores: [],
+  owners: [],
+  productTypes: [],
 };
 
 const defaultColumnKeys = listingColumnFields.map((field) => field.key);
@@ -94,6 +97,7 @@ const defaultColumnWidths: Record<string, number> = {
   productGrade: 120,
   actions: 112,
 };
+
 const columnGroups: RuntimeColumnGroup[] = [
   { title: "Listing 管理字段", fields: [...listingColumnFields] },
 ];
@@ -106,9 +110,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const pageStateKey = "listing-management";
   const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
+
   const [filters, setFilters] = usePageStateCache<ListingManagementFilters>(`${pageStateKey}:filters`, createInitialFilters);
-  const [sourceRows, setSourceRows] = usePageStateCache<ListingManagementRow[]>(`${pageStateKey}:sourceRows`, []);
-  const [sourceRowsLoaded, setSourceRowsLoaded] = usePageStateCache(`${pageStateKey}:sourceRowsLoaded`, false);
   const [statisticsVisible, setStatisticsVisible] = usePageStateCache(`${pageStateKey}:statisticsVisible`, true);
   const [summaryFilterKey, setSummaryFilterKey] = usePageStateCache<ListingManagementSummaryCardKey>(`${pageStateKey}:summaryFilterKey`, "total");
   const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
@@ -117,48 +120,105 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
+
+  const [rows, setRows] = useState<ListingManagementRow[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
+  const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
+  const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
   const [detailRow, setDetailRow] = useState<ListingManagementRow>();
   const [isTableRequesting, setIsTableRequesting] = useState(false);
 
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, listingManagementPageRootRef, ".ant-table-body");
 
-  useEffect(() => {
-    if (sourceRowsLoaded) return;
+  const normalizedFilters = useMemo(() => {
+    const owners = filters.owners && filters.owners.length > 0
+      ? filters.owners
+      : filters.owner ? [filters.owner] : [];
+    const productTypes = filters.productTypes && filters.productTypes.length > 0
+      ? filters.productTypes
+      : filters.productType ? [filters.productType] : [];
+    const productStatuses = filters.productStatuses && filters.productStatuses.length > 0
+      ? filters.productStatuses
+      : filters.productStatus ? [filters.productStatus] : [];
 
+    return {
+      stores: filters.stores ?? [],
+      owners,
+      productTypes,
+      productStatuses,
+      searchType: filters.searchType,
+      keyword: filters.keyword,
+      batchValues: filters.batchValues,
+    };
+  }, [filters]);
+
+  useEffect(() => {
     let active = true;
-    queueMicrotask(() => {
-      if (active) setIsTableRequesting(true);
-    });
-    void fetchListingManagementRows({ pageSize: 500 })
-      .then(({ rows }) => {
-        if (active) {
-          setSourceRows(rows);
-          setSourceRowsLoaded(true);
-        }
+
+    void fetchListingManagementFilterOptions()
+      .then((options) => {
+        if (!active) return;
+        setFilterOptions(options);
       })
       .catch(() => {
-        if (active) {
-          setSourceRows([]);
-          setSourceRowsLoaded(true);
-        }
+        if (!active) return;
+        setFilterOptions(emptyFilterOptions);
       });
+
     return () => {
       active = false;
     };
-  }, [sourceRowsLoaded, setSourceRows, setSourceRowsLoaded]);
+  }, []);
 
-  const storeOptions = useMemo(
-    () => optionCounts(listingStores, sourceRows.map((row) => row.store)),
-    [sourceRows],
-  );
-  const ownerOptions = useMemo(
-    () => optionCounts(listingOwners, sourceRows.map((row) => row.owner)),
-    [sourceRows],
-  );
-  const productTypeOptions = useMemo(
-    () => optionCounts(listingProductTypes, sourceRows.map((row) => row.productType)),
-    [sourceRows],
-  );
+  useEffect(() => {
+    let active = true;
+
+    void fetchListingManagementSummary(normalizedFilters)
+      .then((nextSummary) => {
+        if (!active) return;
+        setSummary(nextSummary);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSummary(emptySummary);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [normalizedFilters]);
+
+  useEffect(() => {
+    let active = true;
+
+    queueMicrotask(() => {
+      if (active) setIsTableRequesting(true);
+    });
+
+    void fetchListingManagementRows({
+      ...normalizedFilters,
+      summaryFilter: summaryFilterKey,
+      page: currentPage,
+      pageSize,
+    })
+      .then(({ rows: nextRows, meta }) => {
+        if (!active) return;
+        setRows(nextRows);
+        setTotalRows(meta.total);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRows([]);
+        setTotalRows(0);
+      })
+      .finally(() => {
+        if (active) setIsTableRequesting(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentPage, normalizedFilters, pageSize, summaryFilterKey]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -170,51 +230,6 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     setSummaryFilterKey("total");
     resetPageAndSelection();
   };
-
-  const toolbarFilteredRows = useMemo(() => {
-    const keyword = filters.keyword.trim().toLocaleLowerCase();
-    const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
-
-    const selectedStores = filters.stores ?? [];
-    const selectedOwners = filters.owners && filters.owners.length > 0
-      ? filters.owners
-      : filters.owner ? [filters.owner] : [];
-    const selectedProductTypes = filters.productTypes && filters.productTypes.length > 0
-      ? filters.productTypes
-      : filters.productType ? [filters.productType] : [];
-    const selectedProductStatuses = filters.productStatuses && filters.productStatuses.length > 0
-      ? filters.productStatuses
-      : filters.productStatus ? [filters.productStatus] : [];
-
-    return sourceRows.filter((row) => {
-      const target = String(row[filters.searchType]).toLocaleLowerCase();
-      const statusMatched = selectedProductStatuses.length === 0
-        || selectedProductStatuses.some((status) => (
-          row.productStatus === status
-          || row.listingStatus === status
-          || row.buyBoxStatus === status
-        ));
-
-      return (selectedStores.length === 0 || selectedStores.includes(row.store))
-        && (selectedOwners.length === 0 || selectedOwners.includes(row.owner))
-        && (selectedProductTypes.length === 0 || selectedProductTypes.includes(row.productType))
-        && statusMatched
-        && (!keyword || target.includes(keyword))
-        && (batchValues.length === 0
-          || batchValues.includes(row.sku.toLocaleLowerCase())
-          || batchValues.includes(row.msku.toLocaleLowerCase())
-          || batchValues.includes(row.productId.toLocaleLowerCase()));
-    });
-  }, [filters, sourceRows]);
-
-  const filteredRows = useMemo(() => {
-    if (summaryFilterKey === "online") return toolbarFilteredRows.filter((row) => row.listingStatus === "在线");
-    if (summaryFilterKey === "offline") return toolbarFilteredRows.filter((row) => row.listingStatus === "离线");
-    if (summaryFilterKey === "buybox") return toolbarFilteredRows.filter((row) => row.buyBoxStatus === "未拥有");
-    if (summaryFilterKey === "resold") return toolbarFilteredRows.filter((row) => row.resold === "是");
-    if (summaryFilterKey === "disabled") return toolbarFilteredRows.filter((row) => row.productStatus === "停用");
-    return toolbarFilteredRows;
-  }, [summaryFilterKey, toolbarFilteredRows]);
 
   const handleSummaryCardClick = (key: ListingManagementSummaryCardKey) => {
     setSummaryFilterKey(key);
@@ -231,7 +246,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     <PageShell page={page}>
       {messageContextHolder}
       <div ref={listingManagementPageRootRef} className="listing-management">
-          <Card size="small" className="listing-management__page-card">
+        <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
           <div className="listing-management__title-row">
             <div>
@@ -243,9 +258,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           <Card size="small" className="listing-management__toolbar-card">
             <ListingManagementToolbar
               filters={filters}
-              stores={storeOptions}
-              owners={ownerOptions}
-              productTypes={productTypeOptions}
+              stores={filterOptions.stores}
+              owners={filterOptions.owners}
+              productTypes={filterOptions.productTypes}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}
               onReset={resetFilters}
@@ -259,7 +274,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
           {statisticsVisible && (
             <ListingManagementSummaryCards
-              rows={toolbarFilteredRows}
+              summary={summary}
               activeKey={summaryFilterKey}
               onCardClick={handleSummaryCardClick}
             />
@@ -267,7 +282,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
           <div className="listing-management__table-wrap">
             <ListingManagementTable
-              rows={filteredRows}
+              rows={rows}
+              total={totalRows}
               appliedColumnKeys={appliedColumnKeys}
               columnWidths={columnWidths}
               currentPage={currentPage}
@@ -287,7 +303,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
             />
           </div>
-          </Card>
+        </Card>
 
         <RuntimeColumnConfigDrawer
           open={columnConfigOpen}

@@ -17,12 +17,15 @@ from app.modules.data_pages.schemas import (
     DailySalesQuery,
     DailySalesReadMeta,
     DataPageFilterOptionsData,
+    ListingManagementFilterOptionsData,
     ListingManagementListData,
     ListingManagementQuery,
     ListingManagementReadMeta,
+    ListingManagementSummaryData,
     OrderProfitListData,
     OrderProfitQuery,
     OrderProfitReadMeta,
+    OrderProfitTrendData,
 )
 from app.modules.data_pages.service import (
     DailySalesService,
@@ -198,6 +201,65 @@ def list_order_profit(
             partial=_is_partial(data.items),
             input_missing=_has_missing_costs(data.items),
         ),
+    )
+
+
+@router.get(
+    f"{_ORDER_PROFIT_REGISTRY.route_path}/trend",
+    response_model=SuccessEnvelope[OrderProfitTrendData, Any],
+    responses=ERRORS,
+)
+def order_profit_trend(
+    request: Request,
+    query: Annotated[OrderProfitQuery, Query()],
+    session: db_session,
+    _: order_profit_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[OrderProfitTrendData, Any]:
+    return success_response(
+        request,
+        data=OrderProfitService(session).order_profit_trend(
+            query=query,
+            account_refs=account_refs,
+        ),
+        meta=None,
+    )
+
+
+@router.get(
+    f"{_LISTING_REGISTRY.route_path}/summary",
+    response_model=SuccessEnvelope[ListingManagementSummaryData, Any],
+    responses=ERRORS,
+)
+def listing_summary(
+    request: Request,
+    query: Annotated[ListingManagementQuery, Query()],
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementSummaryData, Any]:
+    return success_response(
+        request,
+        data=ListingManagementService(session).listing_summary(query, account_refs),
+        meta=None,
+    )
+
+
+@router.get(
+    f"{_LISTING_REGISTRY.route_path}/filter-options",
+    response_model=SuccessEnvelope[ListingManagementFilterOptionsData, Any],
+    responses=ERRORS,
+)
+def listing_filter_options(
+    request: Request,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementFilterOptionsData, Any]:
+    return success_response(
+        request,
+        data=ListingManagementService(session).listing_filter_options(account_refs),
+        meta=None,
     )
 
 

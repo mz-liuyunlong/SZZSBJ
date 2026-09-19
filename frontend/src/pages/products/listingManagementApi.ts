@@ -1,5 +1,6 @@
 import { backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
+import type { ReportFilterOption } from "@/shared/report-filters";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
 
 interface BackendListingItem {
@@ -44,6 +45,21 @@ interface BackendListingData {
   items: BackendListingItem[];
 }
 
+interface BackendListingSummaryData {
+  total: number;
+  online: number;
+  buybox_exception: number;
+  rating_warning: number;
+  resold_warning: number;
+  strike_price_exception: number;
+}
+
+interface BackendListingFilterOptionsData {
+  stores: ReportFilterOption[];
+  owners: ReportFilterOption[];
+  product_types: ReportFilterOption[];
+}
+
 export interface ListingManagementApiMeta {
   latest_calculated_at: string | null;
   page: number;
@@ -56,12 +72,34 @@ export interface ListingManagementApiResult {
   meta: ListingManagementApiMeta;
 }
 
-interface ListingManagementParams {
-  storeId?: string;
+export interface ListingManagementSummary {
+  total: number;
+  online: number;
+  buyboxException: number;
+  ratingWarning: number;
+  resoldWarning: number;
+  strikePriceException: number;
+}
+
+export interface ListingManagementFilterOptions {
+  stores: ReportFilterOption[];
+  owners: ReportFilterOption[];
+  productTypes: ReportFilterOption[];
+}
+
+export interface ListingManagementParams {
+  stores?: string[];
+  owners?: string[];
+  productTypes?: string[];
+  productStatuses?: string[];
+  searchType?: "sku" | "msku" | "productId" | "productName";
+  keyword?: string;
+  batchValues?: string[];
+  summaryFilter?: string;
+  page?: number;
   pageSize?: number;
 }
 
-const MAX_API_PAGES = 10_000;
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 
 const toDateText = (value: string | null): string => {
@@ -70,6 +108,24 @@ const toDateText = (value: string | null): string => {
 };
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
+
+const normalizeListingStatus = (value: string | null) => {
+  const raw = value?.trim();
+  if (!raw) return "待确认";
+  const normalized = raw.toLocaleLowerCase();
+  if (["online", "published", "publish", "在售", "在线"].includes(normalized)) return "在线";
+  if (["offline", "unpublished", "离线"].includes(normalized)) return "离线";
+  return raw;
+};
+
+const normalizeBuyBoxStatus = (value: string | null) => {
+  const raw = value?.trim();
+  if (!raw) return "待确认";
+  const normalized = raw.toLocaleLowerCase();
+  if (["primary", "won", "winning", "owned", "拥有"].includes(normalized)) return "拥有";
+  if (["lost", "not_owned", "secondary", "other", "未拥有"].includes(normalized)) return "未拥有";
+  return raw;
+};
 
 const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
@@ -93,8 +149,8 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   sales90Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
   disabledReason: item.disabled_reason ?? "",
-  listingStatus: item.listing_status ?? "待确认",
-  buyBoxStatus: item.buybox_status ?? "待确认",
+  listingStatus: normalizeListingStatus(item.listing_status),
+  buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
   walmartSeller: item.walmart_seller ?? "待确认",
   resold: item.is_hijacked ? "是" : "否",
   checkedAt: toCheckedText(item.calculated_at),
@@ -106,64 +162,127 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productGrade: item.product_grade ?? "未分级",
 });
 
+const backendSearchField = (field: ListingManagementParams["searchType"] | undefined) => {
+  if (field === "productId") return "item_id";
+  if (field === "productName") return "title";
+  return field ?? "sku";
+};
+
+const appendMultiParam = (
+  search: URLSearchParams,
+  key: string,
+  values: string[] | undefined,
+) => {
+  const normalized = (values ?? []).map((value) => value.trim()).filter(Boolean);
+  if (normalized.length > 0) search.set(key, normalized.join(","));
+};
+
+const appendListingFilters = (search: URLSearchParams, params: ListingManagementParams) => {
+  appendMultiParam(search, "store_id", params.stores);
+  appendMultiParam(search, "owner_ref", params.owners);
+  appendMultiParam(search, "product_type", params.productTypes);
+  appendMultiParam(search, "status", params.productStatuses);
+
+  if (params.summaryFilter && params.summaryFilter !== "total") {
+    search.set("summary_filter", params.summaryFilter);
+  }
+
+  const keyword = params.keyword?.trim();
+  if (keyword) {
+    search.set("search_field", backendSearchField(params.searchType));
+    search.set("keyword", keyword);
+  }
+
+  const batchValues = (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean);
+  if (batchValues.length > 0) {
+    search.set("search_field", backendSearchField(params.searchType));
+    search.set("batch_values", batchValues.join(","));
+  }
+};
+
 async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
 ): Promise<ListingManagementApiResult> {
-  const pageSize = params.pageSize ?? 500;
-  const items: BackendListingItem[] = [];
-  let firstMeta: ListingManagementApiMeta | null = null;
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 50;
 
-  for (let page = 1; page <= MAX_API_PAGES; page += 1) {
-    const search = new URLSearchParams();
-    if (params.storeId) search.set("store_id", params.storeId);
-    search.set("page", String(page));
-    search.set("page_size", String(pageSize));
+  const search = new URLSearchParams();
+  search.set("page", String(page));
+  search.set("page_size", String(pageSize));
+  appendListingFilters(search, params);
 
-    const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
-      `/api/listings/walmart?${search.toString()}`,
-    );
+  const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
+    `/api/listings/walmart?${search.toString()}`,
+  );
 
-    firstMeta ??= envelope.meta;
-    items.push(...envelope.data.items);
-
-    // Do not trust a possibly stale/capped `total` to stop after the first 500 rows.
-    // A short page (or an empty page when the total is an exact multiple) is the
-    // authoritative end-of-pagination signal.
-    if (
-      envelope.data.items.length === 0 ||
-      envelope.data.items.length < envelope.meta.page_size
-    ) {
-      const meta = firstMeta ?? envelope.meta;
-      return {
-        rows: items.map(toListingRow),
-        meta: {
-          ...meta,
-          page: 1,
-          page_size: items.length,
-          total: Math.max(items.length, envelope.meta.total),
-        },
-      };
-    }
-  }
-
-  throw new Error("Listing API pagination exceeded the safety limit");
+  return {
+    rows: envelope.data.items.map(toListingRow),
+    meta: envelope.meta,
+  };
 }
 
+async function fetchListingManagementSummaryFromApi(
+  params: ListingManagementParams = {},
+): Promise<ListingManagementSummary> {
+  const search = new URLSearchParams();
+  appendListingFilters(search, { ...params, summaryFilter: "total" });
 
-const fetchListingManagementRowsCacheKey = (...parts: unknown[]) => (
-  "listing-management:" + stableCacheKey(parts)
-);
+  const envelope = await backendRequest<BackendListingSummaryData>(
+    `/api/listings/walmart/summary?${search.toString()}`,
+  );
 
-export function fetchListingManagementRows(...args: Parameters<typeof fetchListingManagementRowsFromApi>): ReturnType<typeof fetchListingManagementRowsFromApi> {
+  return {
+    total: envelope.data.total,
+    online: envelope.data.online,
+    buyboxException: envelope.data.buybox_exception,
+    ratingWarning: envelope.data.rating_warning,
+    resoldWarning: envelope.data.resold_warning,
+    strikePriceException: envelope.data.strike_price_exception,
+  };
+}
+
+async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingManagementFilterOptions> {
+  const envelope = await backendRequest<BackendListingFilterOptionsData>(
+    "/api/listings/walmart/filter-options",
+  );
+
+  return {
+    stores: envelope.data.stores,
+    owners: envelope.data.owners,
+    productTypes: envelope.data.product_types,
+  };
+}
+
+const cacheKey = (...parts: unknown[]) => "listing-management:" + stableCacheKey(parts);
+
+export function fetchListingManagementRows(
+  ...args: Parameters<typeof fetchListingManagementRowsFromApi>
+): ReturnType<typeof fetchListingManagementRowsFromApi> {
   return getCachedResource(
-    fetchListingManagementRowsCacheKey(...args),
+    cacheKey("rows", ...args),
     () => fetchListingManagementRowsFromApi(...args),
   ) as ReturnType<typeof fetchListingManagementRowsFromApi>;
 }
 
+export function fetchListingManagementSummary(
+  ...args: Parameters<typeof fetchListingManagementSummaryFromApi>
+): ReturnType<typeof fetchListingManagementSummaryFromApi> {
+  return getCachedResource(
+    cacheKey("summary", ...args),
+    () => fetchListingManagementSummaryFromApi(...args),
+  ) as ReturnType<typeof fetchListingManagementSummaryFromApi>;
+}
+
+export function fetchListingManagementFilterOptions(): ReturnType<typeof fetchListingManagementFilterOptionsFromApi> {
+  return getCachedResource(
+    cacheKey("filter-options"),
+    () => fetchListingManagementFilterOptionsFromApi(),
+  ) as ReturnType<typeof fetchListingManagementFilterOptionsFromApi>;
+}
+
 export function preloadListingManagementRows(...args: Parameters<typeof fetchListingManagementRowsFromApi>) {
   preloadCachedResource(
-    fetchListingManagementRowsCacheKey(...args),
+    cacheKey("rows", ...args),
     () => fetchListingManagementRowsFromApi(...args),
   );
 }

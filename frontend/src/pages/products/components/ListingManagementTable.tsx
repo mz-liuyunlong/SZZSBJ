@@ -62,6 +62,7 @@ const statusColorMap: Record<string, string> = {
 
 interface ListingManagementTableProps {
   rows: ListingManagementRow[];
+  total: number;
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
   currentPage: number;
@@ -77,6 +78,7 @@ interface ListingManagementTableProps {
 
 function ListingManagementTable({
   rows,
+  total,
   appliedColumnKeys,
   columnWidths,
   currentPage,
@@ -431,7 +433,7 @@ function ListingManagementTable({
         pagination={{
           current: currentPage,
           pageSize,
-          total: rows.length,
+          total,
           showSizeChanger: true,
           showQuickJumper: true,
           pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),

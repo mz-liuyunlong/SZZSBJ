@@ -240,6 +240,26 @@ class OrderProfitSummaryRead(StrictSchema):
     ad_spend_currency_code: str | None = "USD"
 
 
+class OrderProfitTrendPointRead(StrictSchema):
+    date: date
+    sales_qty: Money = Decimal("0")
+    order_count: Money = Decimal("0")
+    sales_amount: Money = Decimal("0")
+    sales_currency_code: str | None = "USD"
+    refund_amount: Money = Decimal("0")
+    refund_currency_code: str | None = "USD"
+    order_profit_amount: Money = Decimal("0")
+    order_profit_currency_code: str | None = "USD"
+    profit_margin: Ratio | None = None
+    ad_spend_amount: Money = Decimal("0")
+    ad_spend_currency_code: str | None = "USD"
+    ad_ratio: Ratio | None = None
+
+
+class OrderProfitTrendData(StrictSchema):
+    items: list[OrderProfitTrendPointRead]
+
+
 class OrderProfitListData(StrictSchema):
     items: list[OrderProfitItemRead]
     summary: OrderProfitSummaryRead = Field(default_factory=OrderProfitSummaryRead)
@@ -257,11 +277,28 @@ class OrderProfitReadMeta(StrictSchema):
 
 
 class ListingManagementQuery(StrictSchema):
-    store_id: Nonblank128 | None = None
+    store_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    owner_ref: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    product_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    status: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    summary_filter: Literal[
+        "total",
+        "online",
+        "offline",
+        "buybox",
+        "rating",
+        "resold",
+        "strike",
+        "disabled",
+    ] = "total"
     search_field: Literal["sku", "msku", "item_id", "title"] = "sku"
     keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
+    batch_values: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=32768),
+    ] = ""
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=100, ge=1, le=1000)
+    page_size: int = Field(default=50, ge=1, le=1000)
 
 
 class ListingManagementItemRead(StrictSchema):
@@ -312,6 +349,21 @@ class ListingManagementItemRead(StrictSchema):
     gtin: str | None
     upc: str | None
     calculated_at: datetime
+
+
+class ListingManagementSummaryData(StrictSchema):
+    total: int = 0
+    online: int = 0
+    buybox_exception: int = 0
+    rating_warning: int = 0
+    resold_warning: int = 0
+    strike_price_exception: int = 0
+
+
+class ListingManagementFilterOptionsData(StrictSchema):
+    stores: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    owners: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    product_types: list[DataPageFilterOptionRead] = Field(default_factory=list)
 
 
 class ListingManagementListData(StrictSchema):

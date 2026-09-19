@@ -1797,3 +1797,419 @@
   align-items: center;
   gap: 8px;
 }
+
+/* 2026-09-20 product management summary cards: 110px design polish. */
+.product-management__summary-cards {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.product-management__summary-card {
+  --product-summary-accent: #2563eb;
+  --product-summary-glow: rgba(37, 99, 235, 0.11);
+  --product-summary-surface: #f5f8ff;
+  position: relative;
+  display: block;
+  height: 110px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 14px 15px 12px;
+  color: #101828;
+  cursor: pointer;
+  background:
+    radial-gradient(
+      circle at calc(100% - 16px) 6px,
+      var(--product-summary-glow) 0,
+      var(--product-summary-glow) 38px,
+      transparent 39px
+    ),
+    linear-gradient(145deg, #fff 0%, var(--product-summary-surface) 100%);
+  border: 1px solid color-mix(in srgb, var(--product-summary-accent) 20%, #e6ebf2);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+    0 6px 18px rgba(27, 30, 35, 0.055);
+  outline: none;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.product-management__summary-card:hover {
+  border-color: color-mix(in srgb, var(--product-summary-accent) 34%, #d9e2f2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.56),
+    0 14px 30px rgba(31, 41, 55, 0.09);
+  transform: translateY(-2px);
+}
+
+.product-management__summary-card:focus-visible {
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--product-summary-accent) 22%, transparent),
+    0 14px 30px rgba(31, 41, 55, 0.09);
+}
+
+.product-management__summary-card--active {
+  border-color: color-mix(in srgb, var(--product-summary-accent) 48%, #d9e2f2);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--product-summary-accent) 16%, transparent),
+    0 12px 30px rgba(31, 41, 55, 0.1);
+}
+
+.product-management__summary-card--active::before {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  width: 4px;
+  height: 62px;
+  background: var(--product-summary-accent);
+  border-radius: 0 999px 999px 0;
+  content: "";
+}
+
+.product-management__summary-visual {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--product-summary-accent);
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid color-mix(in srgb, var(--product-summary-accent) 12%, #fff);
+  border-radius: 50%;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--product-summary-accent) 16%, transparent);
+}
+
+.product-management__summary-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  max-width: calc(100% - 42px);
+  min-width: 0;
+  flex-direction: column;
+}
+
+.product-management__summary-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-management__summary-hint {
+  min-width: 0;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #758196;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-management__summary-value {
+  display: block;
+  min-width: 0;
+  margin-top: 8px;
+  overflow: hidden;
+  color: #101828;
+  font-size: 29px;
+  font-weight: 850;
+  letter-spacing: -1px;
+  line-height: 34px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1500px) {
+  .product-management__summary-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .product-management__summary-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 2026-09-20 product summary cards final restore from supplied HTML. */
+.product-management__summary-cards {
+  display: grid !important;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  margin-bottom: 12px !important;
+}
+
+.product-management-stat-card {
+  --pm-stat-accent: #2563eb;
+  --pm-stat-glow: rgba(37, 99, 235, 0.07);
+  position: relative;
+  height: 110px !important;
+  min-width: 0;
+  overflow: hidden;
+  padding: 10px 15px !important;
+  color: #101828;
+  text-align: left;
+  cursor: pointer;
+  background: linear-gradient(145deg, #ffffff 0%, #f5f8ff 100%);
+  border: 0;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 1px #e6ebf2,
+    0 5px 18px rgba(27, 30, 35, 0.05);
+  transition: 0.2s ease;
+}
+
+.product-management-stat-card::after {
+  position: absolute;
+  top: -28px;
+  right: -24px;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: var(--pm-stat-glow);
+  content: "";
+  transition: 0.25s ease;
+}
+
+.product-management-stat-card:hover::after,
+.product-management-stat-card.is-active::after {
+  background: color-mix(in srgb, var(--pm-stat-accent) 11%, transparent);
+  transform: scale(1.2);
+}
+
+.product-management-stat-card:hover {
+  box-shadow:
+    inset 0 0 0 1px #d9e2f2,
+    0 12px 30px rgba(31, 41, 55, 0.09);
+  transform: translateY(-2px);
+}
+
+.product-management-stat-card.is-active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--pm-stat-accent) 32%, #d9e2f2),
+    0 12px 30px rgba(31, 41, 55, 0.09);
+}
+
+.product-management-stat-card:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--pm-stat-accent) 22%, transparent);
+  outline-offset: 2px;
+}
+
+.product-management-stat-card--warning {
+  background: linear-gradient(145deg, #fff 0%, #fffaf0 100%);
+}
+
+.product-management-stat-card--danger {
+  background: linear-gradient(145deg, #fff 0%, #fff5f5 100%);
+}
+
+.product-management-stat-card__visual {
+  position: absolute;
+  z-index: 1;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  color: var(--pm-stat-accent);
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--pm-stat-accent) 16%, transparent);
+}
+
+.product-management-stat-card__visual svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.product-management-stat-card__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  max-width: calc(100% - 36px);
+  flex-direction: column;
+  gap: 4px;
+}
+
+.product-management-stat-card__title {
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-management-stat-card__subtitle {
+  overflow: hidden;
+  color: #758196;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-management-stat-card__value {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  color: #101828;
+  font-size: 29px;
+  font-weight: 850;
+  letter-spacing: -1px;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1500px) {
+  .product-management__summary-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .product-management__summary-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* 2026-09-20 product summary selected state: stronger active highlight. */
+.product-management-stat-card.is-active {
+  background:
+    radial-gradient(
+      circle at calc(100% - 16px) 6px,
+      color-mix(in srgb, var(--pm-stat-accent) 18%, transparent) 0,
+      color-mix(in srgb, var(--pm-stat-accent) 18%, transparent) 40px,
+      transparent 41px
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--pm-stat-accent) 8%, #fff) 0%,
+      #fff 48%,
+      color-mix(in srgb, var(--pm-stat-accent) 6%, #fff) 100%
+    ) !important;
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--pm-stat-accent) 72%, #d9e2f2),
+    0 0 0 3px color-mix(in srgb, var(--pm-stat-accent) 14%, transparent),
+    0 14px 32px color-mix(in srgb, var(--pm-stat-accent) 16%, rgba(31, 41, 55, 0.08)) !important;
+  transform: translateY(-1px);
+}
+
+.product-management-stat-card.is-active::before {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  z-index: 2;
+  width: 4px;
+  height: 70px;
+  background: var(--pm-stat-accent);
+  border-radius: 0 999px 999px 0;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--pm-stat-accent) 38%, transparent);
+  content: "";
+}
+
+.product-management-stat-card.is-active::after {
+  background: color-mix(in srgb, var(--pm-stat-accent) 18%, transparent) !important;
+  transform: scale(1.22);
+}
+
+.product-management-stat-card.is-active .product-management-stat-card__visual {
+  color: #fff;
+  background: var(--pm-stat-accent);
+  box-shadow:
+    0 6px 16px color-mix(in srgb, var(--pm-stat-accent) 28%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.product-management-stat-card.is-active .product-management-stat-card__title {
+  color: color-mix(in srgb, var(--pm-stat-accent) 58%, #101828);
+}
+
+.product-management-stat-card.is-active .product-management-stat-card__value {
+  color: #0f172a;
+}
+
+/* 2026-09-20 product summary selected state v2: softer active highlight. */
+.product-management-stat-card.is-active {
+  background:
+    radial-gradient(
+      circle at calc(100% - 16px) 6px,
+      color-mix(in srgb, var(--pm-stat-accent) 10%, transparent) 0,
+      color-mix(in srgb, var(--pm-stat-accent) 10%, transparent) 38px,
+      transparent 39px
+    ),
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--pm-stat-accent) 3.5%, #fff) 0%,
+      #fff 52%,
+      color-mix(in srgb, var(--pm-stat-accent) 3%, #fff) 100%
+    ) !important;
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--pm-stat-accent) 46%, #d9e2f2),
+    0 8px 22px rgba(31, 41, 55, 0.075) !important;
+  transform: none !important;
+}
+
+.product-management-stat-card.is-active:hover {
+  transform: translateY(-1px) !important;
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--pm-stat-accent) 52%, #d9e2f2),
+    0 12px 28px rgba(31, 41, 55, 0.085) !important;
+}
+
+.product-management-stat-card.is-active::before {
+  top: 24px !important;
+  width: 3px !important;
+  height: 58px !important;
+  background: var(--pm-stat-accent) !important;
+  box-shadow: none !important;
+  opacity: 0.9;
+}
+
+.product-management-stat-card.is-active::after {
+  background: color-mix(in srgb, var(--pm-stat-accent) 10%, transparent) !important;
+  transform: scale(1.08) !important;
+}
+
+.product-management-stat-card.is-active .product-management-stat-card__visual {
+  color: var(--pm-stat-accent) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid color-mix(in srgb, var(--pm-stat-accent) 18%, #fff) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--pm-stat-accent) 16%, transparent) !important;
+}
+
+.product-management-stat-card.is-active .product-management-stat-card__title {
+  color: #101828 !important;
+}
+
+.product-management-stat-card.is-active .product-management-stat-card__value {
+  color: #101828 !important;
+}

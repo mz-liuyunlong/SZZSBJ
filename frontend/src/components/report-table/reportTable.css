@@ -1048,3 +1048,1552 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Summary pair cards: 2026-09 design from static HTML. */
+.report-summary-cards,
+.report-summary-cards.daily-sales__summary,
+.report-summary-cards.order-profit__summary {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  overflow: visible;
+}
+
+.report-summary-pair-card {
+  --summary-accent: #1677ff;
+  position: relative;
+  height: 100px;
+  overflow: visible;
+  border-color: color-mix(in srgb, var(--summary-accent) 22%, #e5eaf3);
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--summary-accent) 5%, #fff) 0%,
+      #fff 42%,
+      #fff 100%
+    );
+  box-shadow: 0 10px 28px rgba(31, 35, 41, 0.055);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.report-summary-pair-card:hover {
+  z-index: 80;
+  border-color: color-mix(in srgb, var(--summary-accent) 28%, #e5eaf3);
+  box-shadow: 0 18px 34px rgba(31, 35, 41, 0.1);
+  transform: translateY(-2px);
+}
+
+.report-summary-pair-card::after {
+  position: absolute;
+  z-index: 0;
+  top: -58px;
+  right: -46px;
+  width: 138px;
+  height: 138px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--summary-accent) 8%, transparent);
+  content: "";
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.report-summary-pair-card .ant-card-body {
+  position: relative;
+  z-index: 1;
+  display: block;
+  height: 100px;
+  min-height: 100px;
+  padding: 10px 20px;
+  overflow: visible;
+}
+
+.report-summary-pair-card__accent {
+  position: absolute;
+  z-index: 2;
+  top: 22px;
+  left: 0;
+  width: 4px;
+  height: 58px;
+  border-radius: 0 999px 999px 0;
+  background: var(--summary-accent);
+}
+
+.report-summary-pair-card__head {
+  display: flex;
+  height: 18px;
+  min-height: 18px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.report-summary-pair-card__title {
+  min-width: 0;
+  overflow: hidden;
+  color: #1f2329;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-pair-card__badge {
+  flex: 0 0 auto;
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.report-summary-pair-card__dash {
+  margin: 4px 0 8px;
+  border-top: 1px dashed #d7dfec;
+}
+
+.report-summary-pair-card__metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow: visible;
+}
+
+.report-summary-pair-card__metric {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  outline: none;
+  overflow: visible;
+}
+
+.report-summary-pair-card__metric:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid color-mix(in srgb, var(--summary-accent) 38%, #fff);
+  outline-offset: 5px;
+}
+
+.report-summary-pair-card__value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #1f2329;
+  font-size: 22px;
+  font-weight: 780;
+  letter-spacing: -0.5px;
+  line-height: 25px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-pair-card__meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 16px;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.report-summary-pair-card__trend {
+  position: relative;
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.report-summary-pair-card__trend--good {
+  color: #16a34a;
+}
+
+.report-summary-pair-card__trend--bad {
+  color: #ef4444;
+}
+
+.report-summary-pair-card__trend--neutral {
+  color: #98a2b3;
+}
+
+.report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card__trend:focus-visible::after {
+  position: absolute;
+  z-index: 9999;
+  bottom: 31px;
+  left: 50%;
+  min-width: 278px;
+  max-width: 380px;
+  padding: 9px 10px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+  background: #1f2329;
+  border-radius: 8px;
+  box-shadow: 0 12px 24px rgba(31, 35, 41, 0.18);
+  content: attr(data-tooltip);
+  transform: translateX(-50%);
+}
+
+.report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card__trend:focus-visible::before {
+  position: absolute;
+  z-index: 9999;
+  bottom: 23px;
+  left: 50%;
+  border: 6px solid transparent;
+  border-top-color: #1f2329;
+  content: "";
+  transform: translateX(-50%);
+}
+
+@media (max-width: 1180px) {
+  .report-summary-cards,
+  .report-summary-cards.daily-sales__summary,
+  .report-summary-cards.order-profit__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .report-summary-cards,
+  .report-summary-cards.daily-sales__summary,
+  .report-summary-cards.order-profit__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .report-summary-pair-card,
+  .report-summary-pair-card .ant-card-body {
+    height: auto;
+    min-height: 100px;
+  }
+}
+
+/* 2026-09-20 summary card polish: 110px height + safe edge tooltip. */
+.report-summary-cards,
+.report-summary-cards.daily-sales__summary,
+.report-summary-cards.order-profit__summary {
+  overflow: visible !important;
+}
+
+.daily-sales,
+.order-profit,
+.daily-sales__summary,
+.order-profit__summary {
+  overflow: visible !important;
+}
+
+.report-summary-pair-card {
+  height: 110px !important;
+  overflow: visible !important;
+}
+
+.report-summary-pair-card .ant-card-body {
+  height: 110px !important;
+  min-height: 110px !important;
+  padding: 12px 20px 12px !important;
+  overflow: visible !important;
+}
+
+.report-summary-pair-card__head {
+  height: 20px !important;
+  min-height: 20px !important;
+  margin-bottom: 7px !important;
+}
+
+.report-summary-pair-card__dash {
+  margin: 5px 0 9px !important;
+}
+
+.report-summary-pair-card__metrics {
+  gap: 14px !important;
+  overflow: visible !important;
+}
+
+.report-summary-pair-card__value {
+  font-size: 22px !important;
+  line-height: 27px !important;
+}
+
+.report-summary-pair-card__meta {
+  margin-top: 3px !important;
+  line-height: 17px !important;
+}
+
+.report-summary-pair-card__accent {
+  top: 24px !important;
+  height: 62px !important;
+}
+
+/* Tooltip 默认更宽，但不要超过屏幕。 */
+.report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card__trend:focus-visible::after {
+  bottom: 32px !important;
+  min-width: 300px !important;
+  max-width: min(420px, calc(100vw - 32px)) !important;
+  white-space: normal !important;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card__trend:focus-visible::before {
+  bottom: 24px !important;
+}
+
+/* 第一张卡 tooltip 靠左展开，避免被页面左侧裁掉。 */
+.report-summary-pair-card--edge-left .report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card--edge-left .report-summary-pair-card__trend:focus-visible::after {
+  left: 0 !important;
+  transform: translateX(0) !important;
+}
+
+.report-summary-pair-card--edge-left .report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card--edge-left .report-summary-pair-card__trend:focus-visible::before {
+  left: 16px !important;
+  transform: translateX(0) !important;
+}
+
+/* 最后一张卡 tooltip 靠右展开，避免右侧裁掉。 */
+.report-summary-pair-card--edge-right .report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card--edge-right .report-summary-pair-card__trend:focus-visible::after {
+  right: 0 !important;
+  left: auto !important;
+  transform: translateX(0) !important;
+}
+
+.report-summary-pair-card--edge-right .report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card--edge-right .report-summary-pair-card__trend:focus-visible::before {
+  right: 16px !important;
+  left: auto !important;
+  transform: translateX(0) !important;
+}
+
+@media (max-width: 760px) {
+  .report-summary-pair-card,
+  .report-summary-pair-card .ant-card-body {
+    height: auto !important;
+    min-height: 110px !important;
+  }
+}
+
+/* 2026-09-20 summary card clipping fix:
+   Card content must be clipped inside the 110px card.
+   Tooltip is rendered by AntD outside the card, so card overflow can stay hidden. */
+.report-summary-pair-card {
+  height: 110px !important;
+  overflow: hidden !important;
+}
+
+.report-summary-pair-card .ant-card-body {
+  height: 110px !important;
+  min-height: 110px !important;
+  overflow: hidden !important;
+  padding: 12px 20px 12px !important;
+}
+
+.report-summary-pair-card::after {
+  overflow: hidden !important;
+}
+
+.report-summary-pair-card__head,
+.report-summary-pair-card__dash,
+.report-summary-pair-card__metrics,
+.report-summary-pair-card__metric,
+.report-summary-pair-card__value,
+.report-summary-pair-card__meta {
+  max-width: 100%;
+}
+
+.report-summary-pair-card__value {
+  overflow: hidden !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-pair-card__meta {
+  overflow: hidden !important;
+}
+
+.report-summary-pair-card__metric {
+  overflow: hidden !important;
+}
+
+/* Disable old CSS pseudo tooltip. Tooltip is now handled by AntD. */
+.report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card__trend:focus-visible::after,
+.report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card__trend:focus-visible::before {
+  display: none !important;
+  content: none !important;
+}
+
+.report-summary-pair-card__trend {
+  cursor: help;
+}
+
+/* 2026-09-20 summary card metric spacing: right metric offset. */
+.report-summary-pair-card__metrics > .report-summary-pair-card__metric:nth-child(2) {
+  margin-left: 15px;
+}
+
+/* 2026-09-20 rich summary tooltip: premium dark popover. */
+.report-summary-rich-tooltip {
+  max-width: none;
+}
+
+.report-summary-rich-tooltip .ant-tooltip-inner {
+  min-width: 520px;
+  padding: 0;
+  color: #fff;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(96, 165, 250, 0.18), transparent 32%),
+    linear-gradient(180deg, #202936 0%, #111827 100%);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  box-shadow:
+    0 22px 54px rgba(15, 23, 42, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.report-summary-rich-tooltip .ant-tooltip-arrow::before {
+  background: #111827;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.report-summary-tooltip {
+  width: 520px;
+  padding: 18px 20px 16px;
+  font-family: "PingFang SC", "Microsoft YaHei", Inter, Arial, sans-serif;
+}
+
+.report-summary-tooltip__top,
+.report-summary-tooltip__bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.report-summary-tooltip__top {
+  gap: 22px;
+}
+
+.report-summary-tooltip__bottom {
+  gap: 22px;
+}
+
+.report-summary-tooltip__block {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-areas:
+    "icon label"
+    "icon value";
+  column-gap: 12px;
+  align-items: center;
+}
+
+.report-summary-tooltip__block + .report-summary-tooltip__block {
+  padding-left: 22px;
+  border-left: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+.report-summary-tooltip__divider {
+  height: 1px;
+  margin: 16px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(148, 163, 184, 0.34),
+    transparent
+  );
+}
+
+.report-summary-tooltip__label {
+  grid-area: label;
+  min-width: 0;
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-tooltip__value {
+  grid-area: value;
+  min-width: 0;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.35px;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-tooltip__metric-icon {
+  grid-area: icon;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 6px;
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.13);
+  border: 1px solid rgba(147, 197, 253, 0.16);
+  border-radius: 10px;
+}
+
+.report-summary-tooltip__metric-icon i {
+  display: block;
+  width: 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #dbeafe, #60a5fa);
+}
+
+.report-summary-tooltip__metric-icon i:nth-child(1) {
+  height: 10px;
+}
+
+.report-summary-tooltip__metric-icon i:nth-child(2) {
+  height: 16px;
+}
+
+.report-summary-tooltip__metric-icon i:nth-child(3) {
+  height: 22px;
+}
+
+.report-summary-tooltip__metric-icon--muted {
+  opacity: 0.7;
+  filter: grayscale(0.35);
+}
+
+.report-summary-tooltip__trend-icon,
+.report-summary-tooltip__status-icon {
+  grid-area: icon;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  border-radius: 10px;
+}
+
+.report-summary-tooltip__trend-icon--up {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.report-summary-tooltip__trend-icon--down {
+  color: #fb7185;
+  background: rgba(244, 63, 94, 0.13);
+}
+
+.report-summary-tooltip__trend-icon--flat {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.report-summary-tooltip__status-icon {
+  color: #fbbf24;
+  font-size: 18px;
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.report-summary-tooltip__status-icon--good {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.report-summary-tooltip__status-icon--bad {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.report-summary-tooltip__status-icon--neutral {
+  color: #cbd5e1;
+  border-color: rgba(203, 213, 225, 0.18);
+  background: rgba(203, 213, 225, 0.08);
+}
+
+.report-summary-tooltip__change {
+  grid-area: value;
+  font-size: 24px;
+  font-weight: 850;
+  letter-spacing: -0.2px;
+  line-height: 32px;
+}
+
+.report-summary-tooltip__change--good {
+  color: #34d399;
+}
+
+.report-summary-tooltip__change--bad {
+  color: #fb7185;
+}
+
+.report-summary-tooltip__change--neutral {
+  color: #cbd5e1;
+}
+
+.report-summary-tooltip__status {
+  grid-area: value;
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px;
+  overflow: hidden;
+  color: #fbbf24;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  border-radius: 10px;
+}
+
+.report-summary-tooltip__status--good {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.32);
+}
+
+.report-summary-tooltip__status--bad {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.34);
+}
+
+.report-summary-tooltip__status--neutral {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+/* Keep card content clipped; tooltip itself is rendered outside card by AntD. */
+.report-summary-pair-card {
+  height: 110px !important;
+  overflow: hidden !important;
+}
+
+.report-summary-pair-card .ant-card-body {
+  height: 110px !important;
+  min-height: 110px !important;
+  overflow: hidden !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.report-summary-pair-card__trend {
+  cursor: help;
+}
+
+.report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card__trend:focus-visible::after,
+.report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card__trend:focus-visible::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* 2026-09-20 rich summary tooltip: premium dark popover. */
+.report-summary-rich-tooltip {
+  max-width: none;
+}
+
+.report-summary-rich-tooltip .ant-tooltip-inner {
+  min-width: 520px;
+  padding: 0;
+  color: #fff;
+  background:
+    radial-gradient(circle at 20% 8%, rgba(96, 165, 250, 0.18), transparent 32%),
+    linear-gradient(180deg, #202936 0%, #111827 100%);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  box-shadow:
+    0 22px 54px rgba(15, 23, 42, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.report-summary-rich-tooltip .ant-tooltip-arrow::before {
+  background: #111827;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.report-summary-tooltip {
+  width: 520px;
+  padding: 18px 20px 16px;
+  font-family: "PingFang SC", "Microsoft YaHei", Inter, Arial, sans-serif;
+}
+
+.report-summary-tooltip__top,
+.report-summary-tooltip__bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.report-summary-tooltip__top {
+  gap: 22px;
+}
+
+.report-summary-tooltip__bottom {
+  gap: 22px;
+}
+
+.report-summary-tooltip__block {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-areas:
+    "icon label"
+    "icon value";
+  column-gap: 12px;
+  align-items: center;
+}
+
+.report-summary-tooltip__block + .report-summary-tooltip__block {
+  padding-left: 22px;
+  border-left: 1px solid rgba(148, 163, 184, 0.26);
+}
+
+.report-summary-tooltip__divider {
+  height: 1px;
+  margin: 16px 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(148, 163, 184, 0.34),
+    transparent
+  );
+}
+
+.report-summary-tooltip__label {
+  grid-area: label;
+  min-width: 0;
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-tooltip__value {
+  grid-area: value;
+  min-width: 0;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.35px;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-tooltip__metric-icon {
+  grid-area: icon;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 6px;
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.13);
+  border: 1px solid rgba(147, 197, 253, 0.16);
+  border-radius: 10px;
+}
+
+.report-summary-tooltip__metric-icon i {
+  display: block;
+  width: 5px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #dbeafe, #60a5fa);
+}
+
+.report-summary-tooltip__metric-icon i:nth-child(1) {
+  height: 10px;
+}
+
+.report-summary-tooltip__metric-icon i:nth-child(2) {
+  height: 16px;
+}
+
+.report-summary-tooltip__metric-icon i:nth-child(3) {
+  height: 22px;
+}
+
+.report-summary-tooltip__metric-icon--muted {
+  opacity: 0.7;
+  filter: grayscale(0.35);
+}
+
+.report-summary-tooltip__trend-icon,
+.report-summary-tooltip__status-icon {
+  grid-area: icon;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  border-radius: 10px;
+}
+
+.report-summary-tooltip__trend-icon--up {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.report-summary-tooltip__trend-icon--down {
+  color: #fb7185;
+  background: rgba(244, 63, 94, 0.13);
+}
+
+.report-summary-tooltip__trend-icon--flat {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.report-summary-tooltip__status-icon {
+  color: #fbbf24;
+  font-size: 18px;
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.report-summary-tooltip__status-icon--good {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.24);
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.report-summary-tooltip__status-icon--bad {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.report-summary-tooltip__status-icon--neutral {
+  color: #cbd5e1;
+  border-color: rgba(203, 213, 225, 0.18);
+  background: rgba(203, 213, 225, 0.08);
+}
+
+.report-summary-tooltip__change {
+  grid-area: value;
+  font-size: 24px;
+  font-weight: 850;
+  letter-spacing: -0.2px;
+  line-height: 32px;
+}
+
+.report-summary-tooltip__change--good {
+  color: #34d399;
+}
+
+.report-summary-tooltip__change--bad {
+  color: #fb7185;
+}
+
+.report-summary-tooltip__change--neutral {
+  color: #cbd5e1;
+}
+
+.report-summary-tooltip__status {
+  grid-area: value;
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px;
+  overflow: hidden;
+  color: #fbbf24;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  border-radius: 10px;
+}
+
+.report-summary-tooltip__status--good {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.32);
+}
+
+.report-summary-tooltip__status--bad {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.34);
+}
+
+.report-summary-tooltip__status--neutral {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+/* Keep card content clipped; tooltip itself is rendered outside card by AntD. */
+.report-summary-pair-card {
+  height: 110px !important;
+  overflow: hidden !important;
+}
+
+.report-summary-pair-card .ant-card-body {
+  height: 110px !important;
+  min-height: 110px !important;
+  overflow: hidden !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.report-summary-pair-card__trend {
+  cursor: help;
+}
+
+.report-summary-pair-card__trend:hover::after,
+.report-summary-pair-card__trend:focus-visible::after,
+.report-summary-pair-card__trend:hover::before,
+.report-summary-pair-card__trend:focus-visible::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* 2026-09-20 compact summary tooltip: no icons, smaller, easier to scan. */
+.report-summary-rich-tooltip--compact {
+  max-width: none;
+}
+
+.report-summary-rich-tooltip--compact .ant-tooltip-inner {
+  min-width: 360px !important;
+  max-width: 380px !important;
+  padding: 0 !important;
+  color: #fff;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(96, 165, 250, 0.16), transparent 34%),
+    linear-gradient(180deg, #1f2937 0%, #111827 100%) !important;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px !important;
+  box-shadow:
+    0 16px 36px rgba(15, 23, 42, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.report-summary-rich-tooltip--compact .ant-tooltip-arrow::before {
+  background: #111827 !important;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.report-summary-tooltip--compact {
+  width: 360px !important;
+  padding: 12px 14px !important;
+  font-family: "PingFang SC", "Microsoft YaHei", Inter, Arial, sans-serif;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__item {
+  min-width: 0;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__label {
+  display: block;
+  margin-bottom: 3px;
+  overflow: hidden;
+  color: #aebccc;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__change {
+  display: block;
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 24px;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__change--good {
+  color: #34d399;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__change--bad {
+  color: #fb7185;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__change--neutral {
+  color: #cbd5e1;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 10px;
+  overflow: hidden;
+  color: #fbbf24;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.32);
+  border-radius: 999px;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status--good {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status--bad {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status--neutral {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+/* 2026-09-20 compact summary tooltip v2: smaller and centered text. */
+.report-summary-rich-tooltip--compact .ant-tooltip-inner {
+  min-width: 280px !important;
+  max-width: 300px !important;
+  border-radius: 10px !important;
+  background:
+    linear-gradient(180deg, #1f2937 0%, #111827 100%) !important;
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.report-summary-tooltip--compact {
+  width: 280px !important;
+  padding: 9px 10px !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__item {
+  min-height: 58px !important;
+  padding: 7px 6px !important;
+  text-align: center !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  border-radius: 8px !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__label {
+  display: block;
+  margin-bottom: 2px !important;
+  color: #aebccc;
+  font-size: 11px !important;
+  font-weight: 650;
+  line-height: 14px !important;
+  text-align: center !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__value {
+  display: block;
+  color: #f8fafc;
+  font-size: 16px !important;
+  font-weight: 800;
+  line-height: 22px !important;
+  text-align: center !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__change {
+  display: block;
+  font-size: 16px !important;
+  font-weight: 850;
+  line-height: 22px !important;
+  text-align: center !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status {
+  display: inline-flex;
+  min-height: 22px !important;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  padding: 1px 9px !important;
+  font-size: 13px !important;
+  font-weight: 800;
+  line-height: 18px !important;
+  border-radius: 999px !important;
+}
+
+/* Final global rule: up is green, down is red, neutral is gray. */
+.report-summary-pair-card__trend--good,
+.report-summary-pair-card__trend--good i,
+.report-summary-tooltip--compact .report-summary-tooltip__change--good {
+  color: #16a34a !important;
+}
+
+.report-summary-pair-card__trend--bad,
+.report-summary-pair-card__trend--bad i,
+.report-summary-tooltip--compact .report-summary-tooltip__change--bad {
+  color: #ef4444 !important;
+}
+
+.report-summary-pair-card__trend--neutral,
+.report-summary-pair-card__trend--neutral i,
+.report-summary-tooltip--compact .report-summary-tooltip__change--neutral {
+  color: #98a2b3 !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status--good {
+  color: #16a34a !important;
+  background: rgba(22, 163, 74, 0.12) !important;
+  border-color: rgba(22, 163, 74, 0.28) !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status--bad {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.12) !important;
+  border-color: rgba(239, 68, 68, 0.28) !important;
+}
+
+.report-summary-tooltip--compact .report-summary-tooltip__status--neutral {
+  color: #98a2b3 !important;
+  background: rgba(152, 162, 179, 0.12) !important;
+  border-color: rgba(152, 162, 179, 0.22) !important;
+}
+
+/* 2026-09-20 summary card: short divider between two metrics. */
+.report-summary-pair-card__metrics {
+  position: relative;
+}
+
+.report-summary-pair-card__metrics::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(148, 163, 184, 0.55),
+    transparent
+  );
+  border-radius: 999px;
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.report-summary-pair-card__metric {
+  position: relative;
+  z-index: 1;
+}
+
+/* 2026-09-20 summary card color polish: stronger borders and clearer refund card. */
+.report-summary-pair-card {
+  border-width: 1.5px !important;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--summary-accent) 7%, #fff) 0%,
+      #fff 45%,
+      color-mix(in srgb, var(--summary-accent) 3%, #fff) 100%
+    ) !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055) !important;
+}
+
+.report-summary-pair-card--sales {
+  border-color: rgba(22, 119, 255, 0.42) !important;
+}
+
+.report-summary-pair-card--ads {
+  border-color: rgba(124, 58, 237, 0.42) !important;
+}
+
+.report-summary-pair-card--profit {
+  border-color: rgba(16, 185, 129, 0.42) !important;
+}
+
+.report-summary-pair-card--refund {
+  border-color: rgba(249, 115, 22, 0.5) !important;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(249, 115, 22, 0.075) 0%,
+      #fff 45%,
+      rgba(249, 115, 22, 0.05) 100%
+    ) !important;
+}
+
+.report-summary-pair-card--refund::after {
+  background: rgba(249, 115, 22, 0.1) !important;
+  opacity: 0.95 !important;
+}
+
+.report-summary-pair-card--refund .report-summary-pair-card__accent {
+  background: #ea580c !important;
+  box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.12);
+}
+
+/* Make the short middle divider visible on all cards, including the orange card. */
+.report-summary-pair-card__metrics::before {
+  width: 1px !important;
+  height: 32px !important;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(100, 116, 139, 0.38),
+    transparent
+  ) !important;
+}
+
+/* Keep title/date readable on pale colored cards. */
+.report-summary-pair-card__title {
+  color: #111827 !important;
+}
+
+.report-summary-pair-card__badge {
+  color: #64748b !important;
+  font-weight: 700 !important;
+}
+
+/* 2026-09-20 summary card divider polish: make middle divider clearer. */
+.report-summary-pair-card__metrics::before {
+  width: 2px !important;
+  height: 34px !important;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(71, 85, 105, 0.18) 12%,
+    rgba(71, 85, 105, 0.62) 50%,
+    rgba(71, 85, 105, 0.18) 88%,
+    transparent 100%
+  ) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+/* 2026-09-20 global currency select width: sales pages only need 80px. */
+.report-filter-select.daily-sales__currency-select,
+.report-filter-select.order-profit__currency-select,
+.daily-sales__currency-select,
+.order-profit__currency-select,
+[class*="__currency-select"].report-filter-select {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+  flex: 0 0 80px !important;
+}
+
+.daily-sales__currency-select .ant-select-selector,
+.order-profit__currency-select .ant-select-selector,
+[class*="__currency-select"].report-filter-select .ant-select-selector {
+  padding-inline: 10px !important;
+}
+
+/* 2026-09-20 hide platform filter on sales report pages for now. */
+.daily-sales__toolbar [aria-label="平台"].report-facet-select,
+.daily-sales__toolbar .report-facet-select[aria-label="平台"],
+.order-profit__toolbar [aria-label="平台"].report-facet-select,
+.order-profit__toolbar .report-facet-select[aria-label="平台"] {
+  display: none !important;
+}
+
+/* 2026-09-20 daily sales seven-day trend hover popover: restored from supplied HTML. */
+.report-table-trend-popover {
+  max-width: none;
+}
+
+.report-table-trend-popover .ant-popover-inner {
+  padding: 0 !important;
+  overflow: hidden;
+  background: transparent !important;
+  border-radius: 18px !important;
+  box-shadow: none !important;
+}
+
+.report-table-trend-popover .ant-popover-inner-content {
+  padding: 0 !important;
+}
+
+.report-table-trend-popover .ant-popover-arrow::before {
+  background: #fff !important;
+}
+
+.report-table-trend-popover__card {
+  width: 980px;
+  max-width: calc(100vw - 56px);
+  overflow: hidden;
+  color: #172033;
+  background: #fff;
+  border: 1px solid #e6edf5;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(24, 39, 75, 0.06);
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.report-table-trend-popover__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 15px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.report-table-trend-popover__titlebox {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.report-table-trend-popover__bar {
+  width: 7px;
+  height: 32px;
+  flex: 0 0 7px;
+  background: #1677ff;
+  border-radius: 6px;
+}
+
+.report-table-trend-popover__title {
+  overflow: hidden;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -0.2px;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-table-trend-popover__sub {
+  margin-top: 5px;
+  color: #8a95a6;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.report-table-trend-popover__summary {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.report-table-trend-popover__pill {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 16px;
+  background: #f8fbff;
+  border: 1px solid #e6edf6;
+  border-radius: 9px;
+}
+
+.report-table-trend-popover__pill b {
+  margin-left: 4px;
+  color: #1677ff;
+  font-weight: 850;
+}
+
+.report-table-trend-popover__wrap {
+  padding: 8px 14px 4px;
+}
+
+.report-table-trend-popover__chart,
+.report-table-trend-popover__chart.echarts-for-react {
+  width: 100% !important;
+  height: 390px !important;
+}
+
+.report-table-trend-tooltip {
+  min-width: 116px;
+  color: #fff;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.report-table-trend-tooltip__date {
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 14px;
+}
+
+.report-table-trend-tooltip__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.report-table-trend-tooltip__row span {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.report-table-trend-tooltip__row strong {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+/* 2026-09-20 seven-day trend popover compact size:
+   keep restored style, but container returns to table-cell hover preview size. */
+.report-table-trend-popover__card {
+  width: 420px !important;
+  max-width: calc(100vw - 48px) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 24px rgba(24, 39, 75, 0.10) !important;
+}
+
+.report-table-trend-popover__head {
+  gap: 10px !important;
+  padding: 10px 12px 9px !important;
+}
+
+.report-table-trend-popover__bar {
+  width: 4px !important;
+  height: 24px !important;
+  flex-basis: 4px !important;
+}
+
+.report-table-trend-popover__title {
+  font-size: 14px !important;
+  line-height: 19px !important;
+}
+
+.report-table-trend-popover__sub {
+  margin-top: 2px !important;
+  font-size: 10px !important;
+  line-height: 14px !important;
+}
+
+.report-table-trend-popover__summary {
+  gap: 5px !important;
+}
+
+.report-table-trend-popover__pill {
+  min-height: 24px !important;
+  padding: 4px 7px !important;
+  font-size: 10px !important;
+  line-height: 14px !important;
+  border-radius: 7px !important;
+}
+
+.report-table-trend-popover__wrap {
+  padding: 4px 8px 2px !important;
+}
+
+.report-table-trend-popover__chart,
+.report-table-trend-popover__chart.echarts-for-react {
+  height: 210px !important;
+}
+
+/* 2026-09-20 seven-day trend summary pills: improve readability. */
+.report-table-trend-popover__pill {
+  min-height: 28px !important;
+  padding: 5px 9px !important;
+  color: #475467 !important;
+  font-size: 12px !important;
+  font-weight: 750 !important;
+  line-height: 17px !important;
+  border-radius: 8px !important;
+}
+
+.report-table-trend-popover__pill b {
+  margin-left: 5px !important;
+  color: #1677ff !important;
+  font-size: 12.5px !important;
+  font-weight: 900 !important;
+}
+
+/* 2026-09-20 seven-day trend popover width only:
+   keep previous chart logic, just give the right label more room. */
+.report-table-trend-popover__card {
+  width: 460px !important;
+  max-width: calc(100vw - 48px) !important;
+}

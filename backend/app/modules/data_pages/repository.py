@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from sqlalchemy import Select, String, and_, cast, column, func, or_, select, table
+from sqlalchemy import Select, String, and_, case, cast, column, func, or_, select, table
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -205,6 +205,52 @@ class DailySalesRepository:
 
         row = self.session.execute(statement).one()
         return row[0], row[1], row[2]
+
+    def order_profit_trend(
+        self,
+        *,
+        account_refs: frozenset[str],
+        start_date: date | None,
+        end_date: date | None,
+        platform: str | None,
+        store_id: str | None,
+        owner_ref: str | None,
+        search_field: str,
+        keyword: str,
+    ) -> Sequence[object]:
+        """Aggregate lightweight order-profit chart points by date.
+
+        Chart rendering only needs one row per day, not product/SKU detail rows.
+        """
+        base = self._filtered_statement(
+            account_refs=account_refs,
+            start_date=start_date,
+            end_date=end_date,
+            platform=platform,
+            store_id=store_id,
+            owner_ref=owner_ref,
+            search_field=search_field,
+            keyword=keyword,
+            batch_values="",
+        ).subquery()
+
+        return self.session.execute(
+            select(
+                base.c.business_date_la.label("date"),
+                func.coalesce(func.sum(base.c.sales_qty), 0).label("sales_qty"),
+                func.coalesce(func.sum(base.c.order_count), 0).label("order_count"),
+                func.coalesce(func.sum(base.c.sales_amount), 0).label("sales_amount"),
+                func.max(base.c.sales_currency_code).label("sales_currency_code"),
+                func.coalesce(func.sum(base.c.refund_amount), 0).label("refund_amount"),
+                func.max(base.c.refund_currency_code).label("refund_currency_code"),
+                func.coalesce(func.sum(base.c.gross_profit_amount), 0).label("order_profit_amount"),
+                func.max(base.c.gross_profit_currency_code).label("order_profit_currency_code"),
+                func.coalesce(func.sum(base.c.ad_spend_amount), 0).label("ad_spend_amount"),
+                func.max(base.c.ad_spend_currency_code).label("ad_spend_currency_code"),
+            )
+            .group_by(base.c.business_date_la)
+            .order_by(base.c.business_date_la.asc())
+        ).all()
 
     def filter_options(
         self,
@@ -511,67 +557,34 @@ class ListingManagementRepository:
         *,
         account_refs: frozenset[str],
         store_id: str | None,
+        owner_ref: str | None = "",
+        product_type: str | None = "",
+        status: str | None = "",
+        summary_filter: str = "total",
         search_field: str,
         keyword: str,
+        batch_values: str = "",
         page: int,
         page_size: int,
     ) -> tuple[Sequence[ListingManagementRowProjection], int, datetime | None]:
-        statement = self._filtered_statement(
+        statement = self._filtered_listing_statement(
             account_refs=account_refs,
             store_id=store_id,
+            owner_ref=owner_ref,
+            product_type=product_type,
+            status=status,
+            summary_filter=summary_filter,
             search_field=search_field,
             keyword=keyword,
+            batch_values=batch_values,
         )
 
-        total = self.session.scalar(
-            select(func.count()).select_from(statement.order_by(None).subquery())
-        )
-        latest_calculated_at = self.session.scalar(
-            statement.with_only_columns(
-                func.max(ListingManagementCurrentMart.calculated_at)
-            ).order_by(None)
-        )
-
-        # ProductInfo current has SKU-level owner/developer fields. Listing MART
-        # itself may not persist owner_ref yet, so resolve owner at query time
-        # without updating production data.
-        owner_lookup = (
-            select(
-                PRODUCT_INFO_CURRENT.c.source_account_ref.label("source_account_ref"),
-                PRODUCT_INFO_CURRENT.c.lingxing_sku_code.label("lingxing_sku_code"),
-                func.max(PRODUCT_INFO_CURRENT.c.owner_uid).label("owner_uid"),
-                func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
-                func.max(PRODUCT_INFO_CURRENT.c.product_developer_uid).label(
-                    "product_developer_uid"
-                ),
-                func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label(
-                    "product_developer_name"
-                ),
-            )
-            .where(PRODUCT_INFO_CURRENT.c.lingxing_sku_code.is_not(None))
-            .group_by(
-                PRODUCT_INFO_CURRENT.c.source_account_ref,
-                PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
-            )
-            .subquery()
-        )
+        base = statement.order_by(None).subquery()
+        total = self.session.scalar(select(func.count()).select_from(base))
+        latest_calculated_at = self.session.scalar(select(func.max(base.c.calculated_at)))
 
         rows = self.session.execute(
-            statement.outerjoin(
-                owner_lookup,
-                and_(
-                    owner_lookup.c.source_account_ref
-                    == ListingManagementCurrentMart.source_account_ref,
-                    owner_lookup.c.lingxing_sku_code == ListingManagementCurrentMart.local_sku,
-                ),
-            )
-            .add_columns(
-                owner_lookup.c.owner_uid,
-                owner_lookup.c.owner_name,
-                owner_lookup.c.product_developer_uid,
-                owner_lookup.c.product_developer_name,
-            )
-            .order_by(
+            statement.order_by(
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
@@ -601,19 +614,286 @@ class ListingManagementRepository:
             latest_calculated_at,
         )
 
-    def _filtered_statement(
+    def listing_summary(
         self,
         *,
         account_refs: frozenset[str],
         store_id: str | None,
+        owner_ref: str | None,
+        product_type: str | None,
+        status: str | None,
         search_field: str,
         keyword: str,
-    ) -> Select[tuple[ListingManagementCurrentMart]]:
-        statement = select(ListingManagementCurrentMart).where(
-            ListingManagementCurrentMart.source_account_ref.in_(account_refs)
+        batch_values: str,
+    ) -> tuple[int, int, int, int, int, int]:
+        statement = self._filtered_listing_statement(
+            account_refs=account_refs,
+            store_id=store_id,
+            owner_ref=owner_ref,
+            product_type=product_type,
+            status=status,
+            summary_filter="total",
+            search_field=search_field,
+            keyword=keyword,
+            batch_values=batch_values,
         )
-        if store_id is not None:
-            statement = statement.where(ListingManagementCurrentMart.store_id == store_id)
+        base = statement.order_by(None).subquery()
+
+        online_condition = base.c.listing_status.in_(
+            ["在线", "在售", "ONLINE", "PUBLISHED", "PUBLISH", "published"]
+        )
+        buybox_exception_condition = base.c.buybox_status.in_(
+            ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
+        )
+        rating_warning_condition = base.c.average_rating < 4
+        resold_warning_condition = base.c.is_hijacked.is_(True)
+        strike_price_exception_condition = and_(
+            base.c.sale_price_amount.is_not(None),
+            base.c.sale_price_amount > 0,
+            base.c.strike_price_amount.is_not(None),
+            base.c.strike_price_amount <= base.c.sale_price_amount,
+        )
+
+        row = self.session.execute(
+            select(
+                func.count(),
+                func.coalesce(func.sum(case((online_condition, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((buybox_exception_condition, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((rating_warning_condition, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((resold_warning_condition, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((strike_price_exception_condition, 1), else_=0)), 0),
+            ).select_from(base)
+        ).one()
+
+        return (
+            int(row[0] or 0),
+            int(row[1] or 0),
+            int(row[2] or 0),
+            int(row[3] or 0),
+            int(row[4] or 0),
+            int(row[5] or 0),
+        )
+
+    def listing_filter_options(
+        self,
+        *,
+        account_refs: frozenset[str],
+    ) -> dict[str, list[tuple[str, str, int]]]:
+        statement = self._filtered_listing_statement(
+            account_refs=account_refs,
+            store_id="",
+            owner_ref="",
+            product_type="",
+            status="",
+            summary_filter="total",
+            search_field="sku",
+            keyword="",
+            batch_values="",
+        )
+        base = statement.order_by(None).subquery()
+
+        store_value = func.coalesce(base.c.store_name, base.c.store_id)
+        owner_value = func.coalesce(base.c.owner_name, base.c.owner_ref, base.c.owner_uid)
+        product_type_value = base.c.category
+
+        store_rows = self.session.execute(
+            select(store_value.label("value"), func.count().label("count"))
+            .where(store_value.is_not(None), func.trim(cast(store_value, String)) != "")
+            .group_by(store_value)
+            .order_by(store_value)
+        ).all()
+
+        owner_rows = self.session.execute(
+            select(owner_value.label("value"), func.count().label("count"))
+            .where(owner_value.is_not(None), func.trim(cast(owner_value, String)) != "")
+            .group_by(owner_value)
+            .order_by(owner_value)
+        ).all()
+
+        product_type_rows = self.session.execute(
+            select(product_type_value.label("value"), func.count().label("count"))
+            .where(
+                product_type_value.is_not(None),
+                func.trim(cast(product_type_value, String)) != "",
+            )
+            .group_by(product_type_value)
+            .order_by(product_type_value)
+        ).all()
+
+        return {
+            "stores": [
+                (str(value), str(value), int(count or 0))
+                for value, count in store_rows
+                if value is not None and str(value).strip()
+            ],
+            "owners": [
+                (str(value), str(value), int(count or 0))
+                for value, count in owner_rows
+                if value is not None and str(value).strip()
+            ],
+            "product_types": [
+                (str(value), str(value), int(count or 0))
+                for value, count in product_type_rows
+                if value is not None and str(value).strip()
+            ],
+        }
+
+    def _owner_lookup(self):
+        return (
+            select(
+                PRODUCT_INFO_CURRENT.c.source_account_ref.label("source_account_ref"),
+                PRODUCT_INFO_CURRENT.c.lingxing_sku_code.label("lingxing_sku_code"),
+                func.max(PRODUCT_INFO_CURRENT.c.owner_uid).label("owner_uid"),
+                func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
+                func.max(PRODUCT_INFO_CURRENT.c.product_developer_uid).label(
+                    "product_developer_uid"
+                ),
+                func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label(
+                    "product_developer_name"
+                ),
+            )
+            .where(PRODUCT_INFO_CURRENT.c.lingxing_sku_code.is_not(None))
+            .group_by(
+                PRODUCT_INFO_CURRENT.c.source_account_ref,
+                PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+            )
+            .subquery()
+        )
+
+    def _filtered_listing_statement(
+        self,
+        *,
+        account_refs: frozenset[str],
+        store_id: str | None,
+        owner_ref: str | None,
+        product_type: str | None,
+        status: str | None,
+        summary_filter: str,
+        search_field: str,
+        keyword: str,
+        batch_values: str,
+    ):
+        owner_lookup = self._owner_lookup()
+        statement = (
+            select(
+                ListingManagementCurrentMart,
+                owner_lookup.c.owner_uid,
+                owner_lookup.c.owner_name,
+                owner_lookup.c.product_developer_uid,
+                owner_lookup.c.product_developer_name,
+            )
+            .outerjoin(
+                owner_lookup,
+                and_(
+                    owner_lookup.c.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    owner_lookup.c.lingxing_sku_code == ListingManagementCurrentMart.local_sku,
+                ),
+            )
+            .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
+        )
+
+        store_values = _csv_values(store_id)
+        if store_values:
+            statement = statement.where(
+                or_(
+                    ListingManagementCurrentMart.store_id.in_(store_values),
+                    ListingManagementCurrentMart.store_name.in_(store_values),
+                )
+            )
+
+        owner_values = _csv_values(owner_ref)
+        if owner_values:
+            owner_display_value = func.coalesce(
+                owner_lookup.c.owner_name,
+                ListingManagementCurrentMart.owner_ref,
+                owner_lookup.c.owner_uid,
+            )
+            statement = statement.where(
+                or_(
+                    owner_lookup.c.owner_uid.in_(owner_values),
+                    owner_lookup.c.owner_name.in_(owner_values),
+                    ListingManagementCurrentMart.owner_ref.in_(owner_values),
+                    owner_display_value.in_(owner_values),
+                )
+            )
+
+        product_type_values = _csv_values(product_type)
+        if product_type_values:
+            statement = statement.where(
+                ListingManagementCurrentMart.category.in_(product_type_values)
+            )
+
+        status_values = _csv_values(status)
+        if status_values:
+            status_conditions = []
+            for item in status_values:
+                if item == "启用":
+                    status_conditions.append(ListingManagementCurrentMart.disabled_reason.is_(None))
+                elif item == "停用":
+                    status_conditions.append(
+                        ListingManagementCurrentMart.disabled_reason.is_not(None)
+                    )
+                elif item == "在线":
+                    status_conditions.append(
+                        ListingManagementCurrentMart.listing_status.in_(
+                            ["在线", "在售", "ONLINE", "PUBLISHED", "PUBLISH", "published"]
+                        )
+                    )
+                elif item == "离线":
+                    status_conditions.append(
+                        ListingManagementCurrentMart.listing_status.in_(
+                            ["离线", "UNPUBLISHED", "OFFLINE", "unpublished", "offline"]
+                        )
+                    )
+                elif item == "拥有":
+                    status_conditions.append(
+                        ListingManagementCurrentMart.buybox_status.in_(
+                            ["拥有", "PRIMARY", "primary", "WON", "WINNING"]
+                        )
+                    )
+                elif item == "未拥有":
+                    status_conditions.append(
+                        ListingManagementCurrentMart.buybox_status.in_(
+                            ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
+                        )
+                    )
+            if status_conditions:
+                statement = statement.where(or_(*status_conditions))
+
+        if summary_filter == "online":
+            statement = statement.where(
+                ListingManagementCurrentMart.listing_status.in_(
+                    ["在线", "在售", "ONLINE", "PUBLISHED", "PUBLISH", "published"]
+                )
+            )
+        elif summary_filter == "offline":
+            statement = statement.where(
+                ListingManagementCurrentMart.listing_status.in_(
+                    ["离线", "UNPUBLISHED", "OFFLINE", "unpublished", "offline"]
+                )
+            )
+        elif summary_filter == "buybox":
+            statement = statement.where(
+                ListingManagementCurrentMart.buybox_status.in_(
+                    ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
+                )
+            )
+        elif summary_filter == "rating":
+            statement = statement.where(ListingManagementCurrentMart.average_rating < 4)
+        elif summary_filter == "resold":
+            statement = statement.where(ListingManagementCurrentMart.is_hijacked.is_(True))
+        elif summary_filter == "strike":
+            statement = statement.where(
+                ListingManagementCurrentMart.sale_price_amount.is_not(None),
+                ListingManagementCurrentMart.sale_price_amount > 0,
+                ListingManagementCurrentMart.strike_price_amount.is_not(None),
+                ListingManagementCurrentMart.strike_price_amount
+                <= ListingManagementCurrentMart.sale_price_amount,
+            )
+        elif summary_filter == "disabled":
+            statement = statement.where(ListingManagementCurrentMart.disabled_reason.is_not(None))
+
         normalized_keyword = keyword.strip()
         if normalized_keyword:
             column = LISTING_SEARCH_COLUMNS.get(
@@ -629,4 +909,15 @@ class ListingManagementRepository:
                 )
             else:
                 statement = statement.where(column.ilike(like_value))
+
+        batch_filter_values = _csv_values(batch_values)
+        if batch_filter_values:
+            statement = statement.where(
+                or_(
+                    ListingManagementCurrentMart.local_sku.in_(batch_filter_values),
+                    ListingManagementCurrentMart.msku.in_(batch_filter_values),
+                    ListingManagementCurrentMart.item_id.in_(batch_filter_values),
+                )
+            )
+
         return statement
