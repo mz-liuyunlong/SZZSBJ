@@ -734,7 +734,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             self.session.execute(
                 text(
                     "select coalesce(sum(ad_spend_amount),0) from fact_walmart_ad_item_sp_daily "
-                    "where source_account_ref=:account and business_date_la=:day"
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and store_id is not null and item_id is not null "
+                    "and msku is not null and trim(msku)<>''"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
             ).scalar_one()
