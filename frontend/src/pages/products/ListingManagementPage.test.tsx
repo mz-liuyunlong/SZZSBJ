@@ -96,12 +96,21 @@ describe("ListingManagementPage acceptance contract", () => {
     const onCardClick = vi.fn();
     render(
       <ListingManagementSummaryCards
-        rows={listingManagementMockData}
+        summary={{
+          total: listingManagementMockData.length,
+          online: listingManagementMockData.filter((row) => row.listingStatus === "在线").length,
+          buyboxException: listingManagementMockData.filter((row) => row.buyBoxStatus === "未拥有").length,
+          ratingWarning: listingManagementMockData.filter((row) => row.rating < 4).length,
+          resoldWarning: listingManagementMockData.filter((row) => row.resold === "是").length,
+          strikePriceException: listingManagementMockData.filter((row) => (
+            row.listPrice > 0 && row.listPrice <= row.salePrice
+          )).length,
+        }}
         onCardClick={onCardClick}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /在线Listing/ }));
+    fireEvent.click(screen.getByRole("button", { name: /在售商品/ }));
     expect(onCardClick).toHaveBeenCalledWith("online");
   });
 
@@ -110,6 +119,7 @@ describe("ListingManagementPage acceptance contract", () => {
     render(
       <ListingManagementTable
         rows={rows}
+        total={listingManagementMockData.length}
         appliedColumnKeys={listingColumnFields.map((field) => field.key)}
         columnWidths={{}}
         currentPage={1}

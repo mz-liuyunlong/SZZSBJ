@@ -1,34 +1,33 @@
 import {
   AppstoreOutlined,
   CheckOutlined,
-  CloseOutlined,
-  PauseOutlined,
   ShoppingCartOutlined,
+  StarOutlined,
   SwapOutlined,
+  TagOutlined,
 } from "@ant-design/icons";
-import type { ListingManagementRow } from "@/pages/products/listingManagementData";
+import type { ListingManagementSummary } from "@/pages/products/listingManagementApi";
 import type { ReactNode } from "react";
 
-export type ListingManagementSummaryCardKey = "total" | "online" | "offline" | "buybox" | "resold" | "disabled";
+export type ListingManagementSummaryCardKey =
+  | "total"
+  | "online"
+  | "buybox"
+  | "rating"
+  | "resold"
+  | "strike";
 
 interface ListingManagementSummaryCardsProps {
-  rows: ListingManagementRow[];
+  summary: ListingManagementSummary;
   activeKey?: ListingManagementSummaryCardKey;
   onCardClick?: (key: ListingManagementSummaryCardKey) => void;
 }
 
 function ListingManagementSummaryCards({
-  rows,
+  summary,
   activeKey = "total",
   onCardClick,
 }: ListingManagementSummaryCardsProps) {
-  const total = rows.length;
-  const online = rows.filter((row) => row.listingStatus === "在线").length;
-  const offline = rows.filter((row) => row.listingStatus === "离线").length;
-  const noBuyBox = rows.filter((row) => row.buyBoxStatus === "未拥有").length;
-  const resold = rows.filter((row) => row.resold === "是").length;
-  const disabled = rows.filter((row) => row.productStatus === "停用").length;
-
   const cards: Array<{
     key: ListingManagementSummaryCardKey;
     label: string;
@@ -39,50 +38,50 @@ function ListingManagementSummaryCards({
   }> = [
     {
       key: "total",
-      label: "Listing总数",
-      value: total.toLocaleString(),
-      hint: "当前筛选结果",
+      label: "Listing概览",
+      value: summary.total.toLocaleString(),
+      hint: "当前Listing整体状态",
       icon: <AppstoreOutlined aria-hidden="true" />,
       tone: "blue",
     },
     {
       key: "online",
-      label: "在线Listing",
-      value: online.toLocaleString(),
-      hint: "点击查看在线",
+      label: "在售商品",
+      value: summary.online.toLocaleString(),
+      hint: "当前正常在售数量",
       icon: <CheckOutlined aria-hidden="true" />,
       tone: "green",
     },
     {
-      key: "offline",
-      label: "离线Listing",
-      value: offline.toLocaleString(),
-      hint: "点击查看离线",
-      icon: <CloseOutlined aria-hidden="true" />,
+      key: "buybox",
+      label: "购物车异常",
+      value: summary.buyboxException.toLocaleString(),
+      hint: "购物车丢失或异常",
+      icon: <ShoppingCartOutlined aria-hidden="true" />,
       tone: "red",
     },
     {
-      key: "buybox",
-      label: "未拥有购物车",
-      value: noBuyBox.toLocaleString(),
-      hint: "点击查看Buy Box风险",
-      icon: <ShoppingCartOutlined aria-hidden="true" />,
+      key: "rating",
+      label: "评分预警",
+      value: summary.ratingWarning.toLocaleString(),
+      hint: "评分低于预警值",
+      icon: <StarOutlined aria-hidden="true" />,
       tone: "orange",
     },
     {
       key: "resold",
-      label: "被跟卖",
-      value: resold.toLocaleString(),
-      hint: "点击查看跟卖",
+      label: "跟卖预警",
+      value: summary.resoldWarning.toLocaleString(),
+      hint: "发现疑似跟卖商品",
       icon: <SwapOutlined aria-hidden="true" />,
       tone: "purple",
     },
     {
-      key: "disabled",
-      label: "停用产品",
-      value: disabled.toLocaleString(),
-      hint: "点击查看停用",
-      icon: <PauseOutlined aria-hidden="true" />,
+      key: "strike",
+      label: "划线价异常",
+      value: summary.strikePriceException.toLocaleString(),
+      hint: "划线价失效或异常",
+      icon: <TagOutlined aria-hidden="true" />,
       tone: "gray",
     },
   ];
