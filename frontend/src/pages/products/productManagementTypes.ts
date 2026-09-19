@@ -134,6 +134,11 @@ export interface ProductManagementSummary {
 
 export interface ProductManagementFilters {
   productGrade?: ProductGrade;
+  ownerUids?: string[];
+  developerUids?: string[];
+  tags?: string[];
+
+  /** Legacy cached single-value filters. Kept only to migrate older page-state cache safely. */
   ownerUid?: string;
   developerUid?: string;
   tag?: string;

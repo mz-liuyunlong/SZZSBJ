@@ -124,6 +124,8 @@ class DailySalesRepository:
         )
         rows = self.session.scalars(
             statement.order_by(
+                func.coalesce(DailySalesItemDayMart.sales_qty, 0).desc(),
+                func.coalesce(DailySalesItemDayMart.sales_amount, 0).desc(),
                 DailySalesItemDayMart.business_date_la.desc(),
                 DailySalesItemDayMart.store_name.asc(),
                 DailySalesItemDayMart.local_sku.asc(),
@@ -414,6 +416,8 @@ class OrderProfitRepository:
         )
         rows = self.session.scalars(
             statement.order_by(
+                func.coalesce(OrderProfitSkuDayMart.sales_qty, 0).desc(),
+                func.coalesce(OrderProfitSkuDayMart.sales_amount, 0).desc(),
                 OrderProfitSkuDayMart.business_date_la.desc(),
                 OrderProfitSkuDayMart.local_sku.asc(),
             )

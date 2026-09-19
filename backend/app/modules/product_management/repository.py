@@ -37,6 +37,36 @@ type ProductManagementProjection = tuple[
 ]
 
 
+def _normalize_multi_filter_values(value: object) -> tuple[str, ...]:
+    """Normalize legacy single-value filters and new multi-select filters."""
+
+    if value is None or value == "":
+        return ()
+
+    raw_values: object
+    if isinstance(value, str):
+        raw_values = [value]
+    else:
+        raw_values = value
+
+    if not isinstance(raw_values, (list, tuple, set, frozenset)):
+        return ()
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        if raw is None:
+            continue
+        for part in str(raw).replace("\n", ",").split(","):
+            item = part.strip()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+
+    return tuple(normalized)
+
+
 class ProductManagementRepository:
     """Scoped persistence boundary; services own permissions and transactions."""
 
@@ -58,9 +88,9 @@ class ProductManagementRepository:
         calculation_status: str | None,
         sort_by: str,
         sort_order: str,
-        owner_uid: str | None = None,
-        developer_uid: str | None = None,
-        source_tag: str | None = None,
+        owner_uid: Sequence[str] | str = (),
+        developer_uid: Sequence[str] | str = (),
+        source_tag: Sequence[str] | str = (),
         issue_code: str | None = None,
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
@@ -81,15 +111,15 @@ class ProductManagementRepository:
             pricing_ready_account_refs=pricing_ready_account_refs,
             invalid_pricing_rule_account_refs=invalid_pricing_rule_account_refs,
         )
-        effective_grade = case(
-            (Product.grade.in_(("A", "B", "C", "exception")), Product.grade),
-            (Product.grade.is_not(None), "exception"),
-            else_=ProductManagementPricingCurrent.product_grade,
-        )
         effective_sku = func.coalesce(Product.sku, LingxingSkuIdentity.lingxing_sku_code)
         effective_name = func.coalesce(
             Product.product_name,
             LingxingSkuProductInfoCurrent.product_name,
+        )
+        effective_grade = case(
+            (Product.grade.in_(("A", "B", "C", "exception")), Product.grade),
+            (Product.grade.is_not(None), "exception"),
+            else_=ProductManagementPricingCurrent.product_grade,
         )
         total = self.session.scalar(
             select(func.count()).select_from(statement.order_by(None).subquery())
@@ -121,9 +151,9 @@ class ProductManagementRepository:
         internal_tag: str | None,
         product_grade: str | None,
         calculation_status: str | None,
-        owner_uid: str | None = None,
-        developer_uid: str | None = None,
-        source_tag: str | None = None,
+        owner_uid: Sequence[str] | str = (),
+        developer_uid: Sequence[str] | str = (),
+        source_tag: Sequence[str] | str = (),
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
     ) -> tuple[int, int, Decimal, int, int, int, int, int, int, int, int, int, int, int]:
@@ -456,9 +486,9 @@ class ProductManagementRepository:
         internal_tag: str | None,
         product_grade: str | None,
         calculation_status: str | None,
-        owner_uid: str | None = None,
-        developer_uid: str | None = None,
-        source_tag: str | None = None,
+        owner_uid: Sequence[str] | str = (),
+        developer_uid: Sequence[str] | str = (),
+        source_tag: Sequence[str] | str = (),
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
     ) -> dict[str, list[tuple]]:
@@ -758,9 +788,9 @@ class ProductManagementRepository:
         internal_tag: str | None,
         product_grade: str | None,
         calculation_status: str | None,
-        owner_uid: str | None = None,
-        developer_uid: str | None = None,
-        source_tag: str | None = None,
+        owner_uid: Sequence[str] | str = (),
+        developer_uid: Sequence[str] | str = (),
+        source_tag: Sequence[str] | str = (),
         issue_code: str | None = None,
         pricing_ready_account_refs: frozenset[str] = frozenset(),
         invalid_pricing_rule_account_refs: frozenset[str] = frozenset(),
@@ -775,11 +805,6 @@ class ProductManagementRepository:
             LingxingSkuProductImage,
         ]
     ]:
-        effective_grade = case(
-            (Product.grade.in_(("A", "B", "C", "exception")), Product.grade),
-            (Product.grade.is_not(None), "exception"),
-            else_=ProductManagementPricingCurrent.product_grade,
-        )
         effective_sku = func.coalesce(Product.sku, LingxingSkuIdentity.lingxing_sku_code)
         effective_name = func.coalesce(
             Product.product_name,
@@ -811,29 +836,32 @@ class ProductManagementRepository:
                 )
             )
             statement = statement.where(Product.id.in_(tagged_product_ids))
-        if owner_uid is not None:
-            statement = statement.where(LingxingSkuProductInfoCurrent.owner_uid == owner_uid)
-        if developer_uid is not None:
+        owner_uid_values = _normalize_multi_filter_values(owner_uid)
+        if owner_uid_values:
             statement = statement.where(
-                LingxingSkuProductInfoCurrent.product_developer_uid == developer_uid
+                LingxingSkuProductInfoCurrent.owner_uid.in_(owner_uid_values)
             )
-        if source_tag is not None:
-            has_source_tag = (
-                select(LingxingSkuGlobalTag.id)
-                .where(
+
+        developer_uid_values = _normalize_multi_filter_values(developer_uid)
+        if developer_uid_values:
+            statement = statement.where(
+                LingxingSkuProductInfoCurrent.product_developer_uid.in_(developer_uid_values)
+            )
+
+        source_tag_values = _normalize_multi_filter_values(source_tag)
+        if source_tag_values:
+            statement = statement.join(
+                LingxingSkuGlobalTag,
+                and_(
                     LingxingSkuGlobalTag.source_snapshot_id
                     == LingxingSkuProductInfoCurrent.source_snapshot_id,
                     or_(
-                        LingxingSkuGlobalTag.global_tag_id == source_tag,
-                        LingxingSkuGlobalTag.tag_name == source_tag,
+                        LingxingSkuGlobalTag.global_tag_id.in_(source_tag_values),
+                        LingxingSkuGlobalTag.tag_name.in_(source_tag_values),
                     ),
-                )
-                .correlate(LingxingSkuProductInfoCurrent)
-                .exists()
+                ),
             )
-            statement = statement.where(has_source_tag)
-        if product_grade is not None:
-            statement = statement.where(effective_grade == product_grade)
+
         if issue_code is not None:
             missing_purchase, missing_weight, missing_dimensions = (
                 ProductManagementRepository._root_missing_conditions()

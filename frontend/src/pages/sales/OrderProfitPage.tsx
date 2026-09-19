@@ -32,13 +32,11 @@ import {
   type OrderProfitRow,
   type OrderProfitSourceRecord,
 } from "@/pages/sales/orderProfitTypes";
-import { fetchSalesFilterOptions, emptySalesFilterOptions, mergeSelectedFilterValues, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
+import { fetchSalesFilterOptions, emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
+import { mergeSelectedFilterOptions } from "@/shared/report-filters";
 import "@/pages/sales/OrderProfitPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
-const isAbortError = (reason: unknown) => (
-  reason instanceof Error && reason.name === "AbortError"
-);
 
 const TEMPLATE_PENDING = "列模板接口待接入";
 
@@ -114,8 +112,6 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     }
 
     let active = true;
-    const controller = new AbortController();
-
     queueMicrotask(() => {
       if (active) setIsTableRequesting(true);
     });
@@ -129,7 +125,6 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       stores: filters.stores,
       searchField: filters.searchField,
       keyword: filters.keyword,
-      signal: controller.signal,
     })
       .then(({ records, summary, meta }) => {
         if (!active) return;
@@ -137,8 +132,8 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         setOrderProfitSummary(summary);
         setServerTotal(meta.total);
       })
-      .catch((reason: unknown) => {
-        if (!active || isAbortError(reason)) return;
+      .catch(() => {
+        if (!active) return;
         setSourceRecords([]);
         setOrderProfitSummary(null);
         setServerTotal(0);
@@ -149,15 +144,12 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
     return () => {
       active = false;
-      controller.abort();
       setIsTableRequesting(false);
     };
   }, [currentPage, dateRangeStart, dateRangeEnd, filters.keyword, filters.owners, filters.platforms, filters.searchField, filters.stores, isPageActive, pageSize]);
 
   useEffect(() => {
     let active = true;
-    const controller = new AbortController();
-
     void fetchSalesFilterOptions({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
@@ -166,20 +158,18 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       stores: filters.stores,
       searchField: filters.searchField,
       keyword: filters.keyword,
-      signal: controller.signal,
     })
       .then((nextOptions) => {
         if (!active) return;
         setFilterOptions(nextOptions);
       })
-      .catch((reason: unknown) => {
-        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+      .catch(() => {
+        if (!active) return;
         setFilterOptions(emptySalesFilterOptions);
       });
 
     return () => {
       active = false;
-      controller.abort();
     };
   }, [
     dateRangeStart,
@@ -197,12 +187,16 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   );
 
 
-  const owners = useMemo(
-    () => mergeSelectedFilterValues(filters.owners, filterOptions.owners),
+  const platformOptions = useMemo(
+    () => mergeSelectedFilterOptions(filters.platforms, filterOptions.platforms),
+    [filterOptions.platforms, filters.platforms],
+  );
+  const ownerOptions = useMemo(
+    () => mergeSelectedFilterOptions(filters.owners, filterOptions.owners),
     [filterOptions.owners, filters.owners],
   );
-  const stores = useMemo(
-    () => mergeSelectedFilterValues(filters.stores, filterOptions.stores),
+  const storeOptions = useMemo(
+    () => mergeSelectedFilterOptions(filters.stores, filterOptions.stores),
     [filterOptions.stores, filters.stores],
   );
 
@@ -298,8 +292,9 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
           <OrderProfitToolbar
             key={toolbarResetKey}
             filters={filters}
-            owners={owners}
-            stores={stores}
+            platformOptions={platformOptions}
+            owners={ownerOptions}
+            stores={storeOptions}
             actions={toolbarActions}
             trailingActions={toolbarIconActions}
             onChange={updateFilters}

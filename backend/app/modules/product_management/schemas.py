@@ -165,9 +165,9 @@ class ProductManagementFilterQuery(StrictSchema):
         | None
     ) = None
     internal_tag: Nonblank128 | None = None
-    owner_uid: Nonblank255 | None = None
-    developer_uid: Nonblank255 | None = None
-    source_tag: Nonblank255 | None = None
+    owner_uid: list[Nonblank255] = Field(default_factory=list, max_length=50)
+    developer_uid: list[Nonblank255] = Field(default_factory=list, max_length=50)
+    source_tag: list[Nonblank255] = Field(default_factory=list, max_length=50)
     product_grade: Literal["A", "B", "C", "exception"] | None = None
     calculation_status: Nonblank64 | None = None
 
@@ -197,6 +197,28 @@ class ProductManagementFilterQuery(StrictSchema):
                     raise ValueError("batch SKU search accepts at most 1000 values")
         if raw_values and not normalized:
             raise ValueError("batch SKU search must contain a nonblank value")
+        return normalized
+
+    @field_validator("owner_uid", "developer_uid", "source_tag", mode="before")
+    @classmethod
+    def normalize_multi_select_filters(cls, value: object) -> object:
+        if value is None or value == "":
+            return []
+        raw_values = [value] if isinstance(value, str) else value
+        if not isinstance(raw_values, (list, tuple)):
+            return value
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in raw_values:
+            if not isinstance(raw, str):
+                return value
+            for part in raw.replace("\n", ",").split(","):
+                item = part.strip()
+                if not item or item in seen:
+                    continue
+                seen.add(item)
+                normalized.append(item)
         return normalized
 
     @model_validator(mode="after")

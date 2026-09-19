@@ -1,13 +1,14 @@
-/** Local no-API filters for the product-ID order-profit acceptance shell. */
-import { UnorderedListOutlined } from "@ant-design/icons";
-import { Button, Checkbox, DatePicker, Input, Popover, Radio, Select, Space, Typography } from "antd";
+/** Server-backed facet filters for the product-ID order-profit acceptance shell. */
+import { DatePicker, Radio, Select } from "antd";
 import datePickerZhCN from "antd/es/date-picker/locale/zh_CN";
 import dayjs, { type Dayjs } from "dayjs";
 import "dayjs/locale/zh-cn";
 import updateLocale from "dayjs/plugin/updateLocale";
-import { useState, type ReactNode } from "react";
-import ConnectedSearch from "@/components/report-table/ConnectedSearch";
+import type { ReactNode } from "react";
+import CommittedSearch from "@/components/report-table/CommittedSearch";
 import ResetButton from "@/components/report-table/ResetButton";
+import ReportFacetSelect from "@/shared/report-filters";
+import type { ReportFilterOption } from "@/shared/report-filters";
 import {
   dateRangeForPreset,
   type OrderProfitCurrency,
@@ -36,14 +37,21 @@ export interface OrderProfitFilters {
 
 interface OrderProfitToolbarProps {
   filters: OrderProfitFilters;
-  owners: string[];
-  stores: string[];
+  platformOptions?: ReportFilterOption[];
+  owners: ReportFilterOption[];
+  stores: ReportFilterOption[];
   actions: ReactNode;
   trailingActions?: ReactNode;
   onChange: (filters: OrderProfitFilters) => void;
   onReset: () => void;
   onMessage: (content: string) => void;
 }
+
+const defaultPlatformOptions: ReportFilterOption[] = [
+  { value: "Walmart", label: "Walmart" },
+  { value: "Amazon", label: "Amazon" },
+  { value: "TEMU", label: "TEMU" },
+];
 
 const rangePresets = (): { label: string; value: [Dayjs, Dayjs] }[] => {
   const today = dayjs();
@@ -68,28 +76,6 @@ const datePickerLocale = {
   },
 };
 
-const selectedLabel = (values: string[], unit: string, fallback: string) => {
-  if (values.length === 0) return fallback;
-  if (values.length === 1) return values[0];
-  return `已选 ${values.length} ${unit}`;
-};
-
-const checkboxOption = (selectedValues: string[], ariaLabel: string) => (
-  option: { label?: ReactNode; value?: string | number },
-) => {
-  const value = String(option.value);
-  return (
-    <Checkbox
-      className="order-profit__filter-checkbox"
-      checked={selectedValues.includes(value)}
-      aria-label={`${ariaLabel}选项：${String(option.label)}`}
-      tabIndex={-1}
-    >
-      {option.label}
-    </Checkbox>
-  );
-};
-
 const actualTodayRange = (): [string, string] => {
   const today = dayjs().format("YYYY-MM-DD");
   return [today, today];
@@ -105,6 +91,7 @@ const shortcutDatePresetValue = (datePreset: DatePreset) => (
 
 function OrderProfitToolbar({
   filters,
+  platformOptions = defaultPlatformOptions,
   owners,
   stores,
   actions,
@@ -113,93 +100,43 @@ function OrderProfitToolbar({
   onReset,
   onMessage,
 }: OrderProfitToolbarProps) {
-  const [batchOpen, setBatchOpen] = useState(false);
-  const [batchInput, setBatchInput] = useState("");
-
   const update = <Key extends keyof OrderProfitFilters>(key: Key, value: OrderProfitFilters[Key]) => {
     onChange({ ...filters, [key]: value });
   };
-  const batchSupported = filters.searchField !== "productName";
-  const submitBatchSearch = () => {
-    const values = batchInput.split("\n").map((value) => value.trim()).filter(Boolean);
-    if (values.length > 1000) {
-      onMessage("最多支持1000行");
-      return;
-    }
-    if (values.length === 0) {
-      onMessage("请输入商品ID / SKU / MSKU");
-      return;
-    }
-    onChange({ ...filters, keyword: "", batchValues: values });
-    setBatchOpen(false);
-  };
-
-  const batchContent = (
-    <div className="order-profit__batch-search" aria-label="批量搜索">
-      <Typography.Text>精确搜索，一行一项，最多支持1000行</Typography.Text>
-      <Input.TextArea
-        aria-label="批量搜索内容"
-        placeholder="请输入商品ID / SKU / MSKU，一行一个"
-        value={batchInput}
-        rows={7}
-        onChange={(event) => setBatchInput(event.target.value)}
-      />
-      <Space className="order-profit__batch-actions">
-        <Button onClick={() => setBatchInput("")}>清空</Button>
-        <Button onClick={() => setBatchOpen(false)}>关闭</Button>
-        <Button type="primary" onClick={submitBatchSearch}>搜索</Button>
-      </Space>
-    </div>
-  );
 
   return (
     <div className="order-profit__toolbar" role="search" aria-label="订单利润筛选">
       <div className="order-profit__toolbar-row order-profit__toolbar-row--single">
-        <Select
+        <ReportFacetSelect
           mode="multiple"
-          showSearch
-          className="report-filter-select"
-          classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-          aria-label="平台"
+          ariaLabel="平台"
           placeholder="全部平台"
+          unit="个平台"
           value={filters.platforms}
-          maxTagCount={0}
-          maxTagPlaceholder={() => selectedLabel(filters.platforms, "个平台", "全部平台")}
-          options={["Walmart", "TEMU", "Amazon"].map((value) => ({ label: value, value }))}
-          optionRender={checkboxOption(filters.platforms, "平台")}
+          options={platformOptions}
+          optionCheckboxClassName="order-profit__filter-checkbox"
           onChange={(value) => update("platforms", value as OrderProfitPlatform[])}
         />
-        <Select
-          popupMatchSelectWidth={false}
-          styles={{ popup: { root: { width: 360, minWidth: 360, maxWidth: 460 } } }}
+        <ReportFacetSelect
           mode="multiple"
-          showSearch
-          className="report-filter-select"
-          classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-          aria-label="负责人"
+          ariaLabel="负责人"
           placeholder="负责人"
+          unit="人"
           value={filters.owners}
-          maxTagCount={0}
-          maxTagPlaceholder={() => selectedLabel(filters.owners, "人", "负责人")}
-          options={owners.map((value) => ({ label: value, value }))}
-          optionRender={checkboxOption(filters.owners, "负责人")}
-          onChange={(value) => update("owners", value)}
+          options={owners}
+          optionCheckboxClassName="order-profit__filter-checkbox"
+          onChange={(value) => update("owners", value as string[])}
         />
-        <Select
-          popupMatchSelectWidth={false}
-          styles={{ popup: { root: { width: 360, minWidth: 360, maxWidth: 460 } } }}
+        <ReportFacetSelect
           mode="multiple"
-          showSearch
-          className="report-filter-select"
-          classNames={{ popup: { root: "report-filter-select-dropdown" } }}
-          aria-label="店铺"
+          ariaLabel="店铺"
           placeholder="全部店铺"
+          unit="个店铺"
           value={filters.stores}
-          maxTagCount={0}
-          maxTagPlaceholder={() => selectedLabel(filters.stores, "个店铺", "全部店铺")}
-          options={stores.map((value) => ({ label: value, value }))}
-          optionRender={checkboxOption(filters.stores, "店铺")}
-          onChange={(value) => update("stores", value)}
+          options={stores}
+          popupWidth={360}
+          optionCheckboxClassName="order-profit__filter-checkbox"
+          onChange={(value) => update("stores", value as string[])}
         />
         <Radio.Group
           key={`date-preset-${filters.datePreset}`}
@@ -245,7 +182,7 @@ function OrderProfitToolbar({
           options={["USD", "CNY"].map((value) => ({ label: value, value }))}
           onChange={(value) => update("currency", value as OrderProfitCurrency)}
         />
-        <ConnectedSearch
+        <CommittedSearch
           className="order-profit__search"
           typeAriaLabel="搜索类型"
           typeOptions={[
@@ -258,38 +195,25 @@ function OrderProfitToolbar({
           inputAriaLabel="搜索内容"
           inputPlaceholder="搜索商品ID / 品名 / SKU / MSKU"
           inputValue={filters.keyword}
-          onTypeChange={(value) => onChange({
+          batch={{
+            ariaLabel: "批量搜索",
+            placeholder: "请输入商品ID / SKU / MSKU，一行一个",
+            unsupportedMessage: "批量搜索仅支持商品ID、SKU、MSKU",
+            isSupported: (searchField) => searchField !== "productName",
+            onMessage,
+            onCommit: (values, searchField) => onChange({
+              ...filters,
+              searchField: searchField as SearchField,
+              keyword: "",
+              batchValues: values,
+            }),
+          }}
+          onCommit={({ searchField, keyword }) => onChange({
             ...filters,
-            searchField: value as SearchField,
+            searchField: searchField as SearchField,
+            keyword,
             batchValues: undefined,
           })}
-          onInputChange={(value) => onChange({
-            ...filters,
-            keyword: value,
-            batchValues: undefined,
-          })}
-          onSearch={() => onChange({ ...filters, batchValues: undefined })}
-          batchControl={(
-            <Popover
-              trigger="click"
-              placement="bottomRight"
-              open={batchOpen}
-              content={batchContent}
-              onOpenChange={(open) => {
-                if (open && !batchSupported) {
-                  onMessage("批量搜索仅支持商品ID、SKU、MSKU");
-                  return;
-                }
-                setBatchOpen(open);
-              }}
-            >
-              <Button
-                className="report-table-connected-search__batch"
-                aria-label="批量搜索"
-                icon={<UnorderedListOutlined aria-hidden="true" />}
-              />
-            </Popover>
-          )}
         />
         <ResetButton onClick={onReset} />
         <div className="order-profit__toolbar-actions">{actions}</div>

@@ -22,6 +22,7 @@ import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
 import { fetchListingManagementRows } from "@/pages/products/listingManagementApi";
+import type { ReportFilterOption } from "@/shared/report-filters";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -37,11 +38,26 @@ const EXPORT_PENDING = "导出接口待接入";
 
 const createInitialFilters = (): ListingManagementFilters => ({
   stores: [],
+  owners: [],
+  productTypes: [],
+  productStatuses: [],
   searchType: "sku",
   keyword: "",
 });
 
-const uniqueValues = (values: string[]) => [...new Set(values.filter(Boolean))];
+const optionCounts = (baseValues: string[], values: string[]): ReportFilterOption[] => {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    if (!value) continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return Array.from(new Set([...baseValues, ...values].filter(Boolean))).map((value) => ({
+    value,
+    label: value,
+    count: counts.get(value) ?? 0,
+  }));
+};
 
 const defaultColumnKeys = listingColumnFields.map((field) => field.key);
 const defaultColumnWidths: Record<string, number> = {
@@ -131,18 +147,18 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     };
   }, [sourceRowsLoaded, setSourceRows, setSourceRowsLoaded]);
 
-  const storeOptions = useMemo(() => uniqueValues([
-    ...listingStores,
-    ...sourceRows.map((row) => row.store),
-  ]), [sourceRows]);
-  const ownerOptions = useMemo(() => uniqueValues([
-    ...listingOwners,
-    ...sourceRows.map((row) => row.owner),
-  ]), [sourceRows]);
-  const productTypeOptions = useMemo(() => uniqueValues([
-    ...listingProductTypes,
-    ...sourceRows.map((row) => row.productType),
-  ]), [sourceRows]);
+  const storeOptions = useMemo(
+    () => optionCounts(listingStores, sourceRows.map((row) => row.store)),
+    [sourceRows],
+  );
+  const ownerOptions = useMemo(
+    () => optionCounts(listingOwners, sourceRows.map((row) => row.owner)),
+    [sourceRows],
+  );
+  const productTypeOptions = useMemo(
+    () => optionCounts(listingProductTypes, sourceRows.map((row) => row.productType)),
+    [sourceRows],
+  );
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -159,15 +175,29 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
     const batchValues = filters.batchValues?.map((item) => item.toLocaleLowerCase()) ?? [];
 
+    const selectedStores = filters.stores ?? [];
+    const selectedOwners = filters.owners && filters.owners.length > 0
+      ? filters.owners
+      : filters.owner ? [filters.owner] : [];
+    const selectedProductTypes = filters.productTypes && filters.productTypes.length > 0
+      ? filters.productTypes
+      : filters.productType ? [filters.productType] : [];
+    const selectedProductStatuses = filters.productStatuses && filters.productStatuses.length > 0
+      ? filters.productStatuses
+      : filters.productStatus ? [filters.productStatus] : [];
+
     return sourceRows.filter((row) => {
       const target = String(row[filters.searchType]).toLocaleLowerCase();
-      const statusMatched = !filters.productStatus
-        || row.productStatus === filters.productStatus
-        || row.listingStatus === filters.productStatus
-        || row.buyBoxStatus === filters.productStatus;
-      return (filters.stores.length === 0 || filters.stores.includes(row.store))
-        && (!filters.owner || row.owner === filters.owner)
-        && (!filters.productType || row.productType === filters.productType)
+      const statusMatched = selectedProductStatuses.length === 0
+        || selectedProductStatuses.some((status) => (
+          row.productStatus === status
+          || row.listingStatus === status
+          || row.buyBoxStatus === status
+        ));
+
+      return (selectedStores.length === 0 || selectedStores.includes(row.store))
+        && (selectedOwners.length === 0 || selectedOwners.includes(row.owner))
+        && (selectedProductTypes.length === 0 || selectedProductTypes.includes(row.productType))
         && statusMatched
         && (!keyword || target.includes(keyword))
         && (batchValues.length === 0

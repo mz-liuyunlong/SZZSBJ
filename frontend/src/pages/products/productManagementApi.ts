@@ -309,6 +309,23 @@ export const toProductManagementRow = (item: BackendListItem): ProductManagement
   updatedAt: dateOnly(item.source_observed_at),
 });
 
+
+const normalizeMultiFilterValues = (
+  values: string[] | undefined,
+  legacyValue?: string,
+): string[] => {
+  const source = values && values.length > 0 ? values : legacyValue ? [legacyValue] : [];
+  return Array.from(new Set(source.map((value) => value.trim()).filter(Boolean)));
+};
+
+const appendMultiFilterValues = (
+  query: URLSearchParams,
+  key: string,
+  values: string[],
+) => {
+  for (const value of values) query.append(key, value);
+};
+
 function listQuery(
   filters: ProductManagementFilters,
   page: number,
@@ -323,9 +340,9 @@ function listQuery(
     const keyword = filters.keyword.trim();
     if (keyword) query.set("sku", keyword);
   }
-  if (filters.ownerUid) query.set("owner_uid", filters.ownerUid);
-  if (filters.developerUid) query.set("developer_uid", filters.developerUid);
-  if (filters.tag) query.set("source_tag", filters.tag);
+  appendMultiFilterValues(query, "owner_uid", normalizeMultiFilterValues(filters.ownerUids, filters.ownerUid));
+  appendMultiFilterValues(query, "developer_uid", normalizeMultiFilterValues(filters.developerUids, filters.developerUid));
+  appendMultiFilterValues(query, "source_tag", normalizeMultiFilterValues(filters.tags, filters.tag));
   if (filters.productGrade) query.set("product_grade", gradeValues[filters.productGrade]);
   if (includeIssue && filters.issueCode) query.set("issue_code", filters.issueCode);
   return query;
@@ -535,9 +552,9 @@ export async function requestProductManagementExport(
           category: query.get("category"),
           sku_batch: query.getAll("sku_batch"),
           product_grade: query.get("product_grade"),
-          owner_uid: query.get("owner_uid"),
-          developer_uid: query.get("developer_uid"),
-          source_tag: query.get("source_tag"),
+          owner_uid: query.getAll("owner_uid"),
+          developer_uid: query.getAll("developer_uid"),
+          source_tag: query.getAll("source_tag"),
           issue_code: query.get("issue_code"),
         },
         max_rows: 5_000,

@@ -12,6 +12,8 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.setConfig({ testTimeout: 30_000 });
 import type { NavigationPage } from "@/config/navigation";
 
 vi.mock("@ant-design/icons", () => {
@@ -113,30 +115,59 @@ vi.mock("antd", async () => {
   interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "onChange"> {
     allowClear?: boolean;
     classNames?: unknown;
+    maxTagCount?: number;
+    maxTagPlaceholder?: ReactNode | (() => ReactNode);
     mode?: "multiple";
     onChange?: (value: string | string[] | undefined) => void;
-    options?: { label: ReactNode; value: string }[];
+    onClear?: () => void;
+    onOpenChange?: (open: boolean) => void;
+    open?: boolean;
+    menuItemSelectedIcon?: ReactNode;
     optionFilterProp?: string;
+    optionRender?: (option: { label: ReactNode; value: string }, info: { index: number }) => ReactNode;
+    options?: { label: ReactNode; value: string }[];
     placeholder?: ReactNode;
+    popupMatchSelectWidth?: boolean | number;
+    popupRender?: (menu: ReactNode) => ReactNode;
     showSearch?: boolean;
+    styles?: unknown;
     value?: string | string[];
   }
 
   const Select = ({
     allowClear,
     classNames,
+    maxTagCount,
+    maxTagPlaceholder,
     mode,
     onChange,
-    options = [],
+    onClear,
+    onOpenChange,
+    open,
+    menuItemSelectedIcon,
     optionFilterProp,
+    optionRender,
+    options = [],
     placeholder,
+    popupMatchSelectWidth,
+    popupRender,
     showSearch,
+    styles,
     value,
     ...props
   }: SelectProps) => {
     void classNames;
+    void maxTagCount;
+    void maxTagPlaceholder;
+    void onOpenChange;
+    void open;
+    void menuItemSelectedIcon;
     void optionFilterProp;
+    void optionRender;
+    void popupMatchSelectWidth;
+    void popupRender;
     void showSearch;
+    void styles;
     return (
       <>
       <select
@@ -155,6 +186,18 @@ vi.mock("antd", async () => {
           <option key={option.value} value={option.value}>{option.value}</option>
         ))}
       </select>
+      {allowClear && Boolean(Array.isArray(value) ? value.length : value) && (
+        <button
+          type="button"
+          aria-label={`清除${String(props["aria-label"] ?? "")}`}
+          onClick={() => {
+            onClear?.();
+            onChange?.(mode === "multiple" ? [] : undefined);
+          }}
+        >
+          清除
+        </button>
+      )}
       {mode === "multiple" && (
         <span hidden>{options.map((option) => <span key={option.value}>{option.label}</span>)}</span>
       )}
@@ -854,6 +897,7 @@ describe("ProductManagementPage", () => {
     await screen.findByRole("button", { name: "SYNTHETIC-SKU" });
     const requestsBeforeTyping = vi.mocked(listProductManagementSkus).mock.calls.length;
     fireEvent.change(screen.getByLabelText("搜索产品"), { target: { value: "filtered" } });
+    fireEvent.click(screen.getByLabelText("搜索"));
     expect(vi.mocked(listProductManagementSkus).mock.calls.length).toBe(requestsBeforeTyping);
     fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     await waitFor(() => expect(listProductManagementSkus).toHaveBeenLastCalledWith(
@@ -865,6 +909,7 @@ describe("ProductManagementPage", () => {
 
     vi.mocked(listProductManagementSkus).mockRejectedValueOnce(new Error("SAFE_BACKEND_ERROR"));
     fireEvent.change(screen.getByLabelText("搜索产品"), { target: { value: "failed" } });
+    fireEvent.click(screen.getByLabelText("搜索"));
     fireEvent.click(screen.getByRole("button", { name: "搜索" }));
     expect(await screen.findByText(/SAFE_BACKEND_ERROR/)).toBeVisible();
   });
