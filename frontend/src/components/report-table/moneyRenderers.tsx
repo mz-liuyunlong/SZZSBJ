@@ -60,6 +60,45 @@ export const renderCnySourceMoney = <Row extends object>(
   return <MoneyCell value={convertCnySourceValue(value, currency, rate)} currency={displaySymbol(currency)} />;
 };
 
+
+export const convertCnyUnitTotalOrUsdSourceValue = (
+  usdTotal: number | null,
+  cnyUnit: number | null,
+  quantity: number | null,
+  currency: ReportDisplayCurrency,
+  usdToCnyRate: number,
+) => {
+  if (currency === "CNY") {
+    if (cnyUnit != null && quantity != null) {
+      return cnyUnit * quantity;
+    }
+
+    return convertUsdSourceValue(usdTotal, currency, usdToCnyRate);
+  }
+
+  return convertUsdSourceValue(usdTotal, currency, usdToCnyRate);
+};
+
+export const renderCnyUnitTotalOrUsdSourceMoney = <Row extends object>(
+  usdTotalKey: keyof Row,
+  cnyUnitKey: keyof Row,
+  quantityKey: keyof Row,
+  currency: ReportDisplayCurrency,
+  usdToCnyRate: number | ((row: Row) => number),
+) => (_: unknown, row: Row) => {
+  const usdTotal = numericValue(row, usdTotalKey);
+  const cnyUnit = numericValue(row, cnyUnitKey);
+  const quantity = numericValue(row, quantityKey);
+  const rate = resolveRate(row, usdToCnyRate);
+
+  return (
+    <MoneyCell
+      value={convertCnyUnitTotalOrUsdSourceValue(usdTotal, cnyUnit, quantity, currency, rate)}
+      currency={displaySymbol(currency)}
+    />
+  );
+};
+
 export const dynamicCurrencyTitle = (
   base: string,
   currency: ReportDisplayCurrency,

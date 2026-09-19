@@ -17,9 +17,11 @@ import {
   TrendPreviewCell,
 } from "@/components/report-table/cells";
 import {
+  convertCnyUnitTotalOrUsdSourceValue,
   convertUsdSourceValue,
   dynamicCurrencyTitle,
   renderCnySourceMoney,
+  renderCnyUnitTotalOrUsdSourceMoney,
   renderUsdSourceMoney,
 } from "@/components/report-table/moneyRenderers";
 import {
@@ -32,6 +34,8 @@ import {
 
 interface DailySalesTableProps {
   rows: DailySalesRow[];
+  total?: number;
+  loading?: boolean;
   currency: DailySalesCurrency;
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
@@ -87,6 +91,40 @@ const sumUsdSourceMoney = (rows: DailySalesRow[], key: keyof DailySalesRow, curr
   }, 0);
 };
 
+const numericRowValue = (row: DailySalesRow, key: keyof DailySalesRow) => {
+  const value = row[key];
+  return typeof value === "number" ? value : null;
+};
+
+const sumCnyUnitTotalOrUsdSourceMoney = (
+  rows: DailySalesRow[],
+  usdTotalKey: keyof DailySalesRow,
+  cnyUnitKey: keyof DailySalesRow,
+  quantityKey: keyof DailySalesRow,
+  currency: DailySalesCurrency,
+) => {
+  let hasMissingValue = false;
+  const total = rows.reduce((currentTotal, row) => {
+    const value = convertCnyUnitTotalOrUsdSourceValue(
+      numericRowValue(row, usdTotalKey),
+      numericRowValue(row, cnyUnitKey),
+      numericRowValue(row, quantityKey),
+      currency,
+      dailySalesFxRate(row),
+    );
+
+    if (value == null) {
+      hasMissingValue = true;
+      return currentTotal;
+    }
+
+    return currentTotal + value;
+  }, 0);
+
+  return hasMissingValue ? null : total;
+};
+
+
 const totalMoneyKeys = new Set([
   "salesAmount",
   "sampleExcludedAmount",
@@ -116,6 +154,34 @@ function TotalCell({
   rows: DailySalesRow[];
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
+  if (columnKey === "purchaseCost") {
+    return (
+      <MoneyCell
+        value={sumCnyUnitTotalOrUsdSourceMoney(
+          rows,
+          "purchaseCost",
+          "purchaseUnitPriceCny",
+          "costQuantity",
+          currency,
+        )}
+        currency={currency === "CNY" ? "¥" : "$"}
+      />
+    );
+  }
+  if (columnKey === "firstLegCost") {
+    return (
+      <MoneyCell
+        value={sumCnyUnitTotalOrUsdSourceMoney(
+          rows,
+          "firstLegCost",
+          "firstLegUnitPriceCny",
+          "costQuantity",
+          currency,
+        )}
+        currency={currency === "CNY" ? "¥" : "$"}
+      />
+    );
+  }
   if (totalMoneyKeys.has(columnKey)) {
     const total = sumUsdSourceMoney(rows, columnKey as keyof DailySalesRow, currency);
     return <MoneyCell value={total} currency={currency === "CNY" ? "¥" : "$"} />;
@@ -230,9 +296,9 @@ function createColumns(
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, sorter: numberSorter("wfsDeliveryFee"), render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryFee", currency, dailySalesFxRate) },
     { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, sorter: numberSorter("wfsDeliveryUnitPrice"), render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryUnitPrice", currency, dailySalesFxRate) },
     { title: "佣金", key: "commission", width: 104, sorter: numberSorter("commission"), render: renderUsdSourceMoney<DailySalesRow>("commission", currency, dailySalesFxRate) },
-    { title: "采购总成本", key: "purchaseCost", width: 128, sorter: numberSorter("purchaseCost"), render: renderUsdSourceMoney<DailySalesRow>("purchaseCost", currency, dailySalesFxRate) },
+    { title: "采购总成本", key: "purchaseCost", width: 128, sorter: numberSorter("purchaseCost"), render: renderCnyUnitTotalOrUsdSourceMoney<DailySalesRow>("purchaseCost", "purchaseUnitPriceCny", "costQuantity", currency, dailySalesFxRate) },
     { title: "采购单价", key: "purchaseUnitPriceCny", width: 128, sorter: numberSorter("purchaseUnitPriceCny"), render: renderCnySourceMoney<DailySalesRow>("purchaseUnitPriceCny", currency, dailySalesFxRate) },
-    { title: "头程总成本", key: "firstLegCost", width: 128, sorter: numberSorter("firstLegCost"), render: renderUsdSourceMoney<DailySalesRow>("firstLegCost", currency, dailySalesFxRate) },
+    { title: "头程总成本", key: "firstLegCost", width: 128, sorter: numberSorter("firstLegCost"), render: renderCnyUnitTotalOrUsdSourceMoney<DailySalesRow>("firstLegCost", "firstLegUnitPriceCny", "costQuantity", currency, dailySalesFxRate) },
     { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, sorter: numberSorter("firstLegUnitPriceCny"), render: renderCnySourceMoney<DailySalesRow>("firstLegUnitPriceCny", currency, dailySalesFxRate) },
     { title: "总仓储费", key: "storageFee", width: 112, sorter: numberSorter("storageFee"), render: renderUsdSourceMoney<DailySalesRow>("storageFee", currency, dailySalesFxRate) },
     { title: "仓储单价", key: "storageUnitPrice", width: 128, sorter: numberSorter("storageUnitPrice"), render: renderUsdSourceMoney<DailySalesRow>("storageUnitPrice", currency, dailySalesFxRate) },
@@ -248,6 +314,8 @@ function createColumns(
 
 function DailySalesTable({
   rows,
+  total = rows.length,
+  loading = false,
   currency,
   appliedColumnKeys,
   columnWidths,
@@ -291,6 +359,7 @@ function DailySalesTable({
       <ProTable<DailySalesRow>
         columns={columns}
         dataSource={rows}
+        loading={loading}
         rowKey="id"
         rowSelection={{ fixed: true, selectedRowKeys, onChange: onSelectionChange }}
         search={false}
@@ -329,7 +398,7 @@ function DailySalesTable({
         pagination={{
           current: currentPage,
           pageSize,
-          total: rows.length,
+          total,
           showSizeChanger: true,
           showQuickJumper: true,
           pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS,

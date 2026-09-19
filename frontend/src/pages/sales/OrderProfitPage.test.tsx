@@ -388,7 +388,7 @@ describe("OrderProfitPage", () => {
   it("defaults to the previous completed day, product ID search, visible statistics and hidden charts", () => {
     renderPage();
 
-    expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${referenceDay}~${referenceDay}`);
     expect(screen.getByLabelText("搜索类型")).toHaveValue("productId");
     expect(screen.queryByLabelText("订单利润趋势图")).not.toBeInTheDocument();

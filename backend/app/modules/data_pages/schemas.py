@@ -140,6 +140,14 @@ class DailySalesItemRead(StrictSchema):
 
 
 class DailySalesSummaryRead(StrictSchema):
+    sales_qty: Money = Decimal("0")
+    order_count: Money = Decimal("0")
+    sales_amount: Money = Decimal("0")
+    sales_currency_code: str | None = "USD"
+    order_profit_amount: Money = Decimal("0")
+    order_profit_currency_code: str | None = "USD"
+    ad_spend_amount: Money = Decimal("0")
+    ad_spend_currency_code: str | None = "USD"
     refund_event_qty: Money = Decimal("0")
     refund_event_amount: Money = Decimal("0")
     refund_event_currency_code: str | None = "USD"
@@ -203,8 +211,22 @@ class OrderProfitItemRead(StrictSchema):
     calculated_at: datetime
 
 
+class OrderProfitSummaryRead(StrictSchema):
+    sales_qty: Money = Decimal("0")
+    order_count: Money = Decimal("0")
+    sales_amount: Money = Decimal("0")
+    sales_currency_code: str | None = "USD"
+    refund_amount: Money = Decimal("0")
+    refund_currency_code: str | None = "USD"
+    order_profit_amount: Money = Decimal("0")
+    order_profit_currency_code: str | None = "USD"
+    ad_spend_amount: Money = Decimal("0")
+    ad_spend_currency_code: str | None = "USD"
+
+
 class OrderProfitListData(StrictSchema):
     items: list[OrderProfitItemRead]
+    summary: OrderProfitSummaryRead = Field(default_factory=OrderProfitSummaryRead)
 
 
 class OrderProfitReadMeta(StrictSchema):
@@ -240,6 +262,10 @@ class ListingManagementItemRead(StrictSchema):
     picture_url: str | None
     item_url: str | None
     owner_ref: str | None
+    owner_uid: str | None = None
+    owner_name: str | None = None
+    product_developer_uid: str | None = None
+    product_developer_name: str | None = None
     product_grade: str | None
     tags: list[str]
     strike_price_amount: Money | None

@@ -1,4 +1,4 @@
-/** Daily-sales page backed by DATA-PAGES MART API with temporary local fallback. */
+/** Daily-sales page backed by DATA-PAGES MART API. */
 import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
@@ -6,7 +6,7 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
-import { useEffect, useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import {
@@ -21,8 +21,7 @@ import DailySalesToolbar, {
   type DailySalesFilters,
 } from "@/pages/sales/components/DailySalesToolbar";
 import SalesDetailModal from "@/pages/sales/components/SalesDetailModal";
-import { fetchDailySalesRows } from "@/pages/sales/dailySalesApi";
-import { dailySalesMockData } from "@/pages/sales/dailySalesMockData";
+import { fetchDailySalesRows, type DailySalesServerSummary } from "@/pages/sales/dailySalesApi";
 import {
   dailySalesColumnFields,
   dateRangeForPreset,
@@ -33,6 +32,7 @@ import {
 import "@/pages/sales/DailySalesPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
+
 const TEMPLATE_PENDING = "列模板接口待接入";
 
 const createInitialFilters = (): DailySalesFilters => ({
@@ -40,7 +40,7 @@ const createInitialFilters = (): DailySalesFilters => ({
   owners: [],
   stores: [],
   currency: "USD",
-  datePreset: "today",
+  datePreset: "custom",
   dateRange: dateRangeForPreset("today"),
   searchField: "sku",
   keyword: "",
@@ -59,12 +59,6 @@ const defaultColumnWidths = Object.fromEntries(dailySalesColumnFields.map((field
 ]));
 const columnGroups = [{ title: "每日销售字段", fields: dailySalesColumnFields }];
 
-const matchesDate = (row: DailySalesRow, filters: DailySalesFilters) => {
-  if (filters.dateRange) {
-    return row.date >= filters.dateRange[0] && row.date <= filters.dateRange[1];
-  }
-  return true;
-};
 
 interface DailySalesPageProps {
   page: NavigationPage;
@@ -72,9 +66,12 @@ interface DailySalesPageProps {
 
 function DailySalesPage({ page }: DailySalesPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
+  const dailySalesPageRootRef = useRef<HTMLDivElement | null>(null);
   const [filters, setFilters] = useState(createInitialFilters);
-  const [sourceRows, setSourceRows] = useState<DailySalesRow[]>(dailySalesMockData);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [sourceRows, setSourceRows] = useState<DailySalesRow[]>([]);
   const [refundSummary, setRefundSummary] = useState<DailySalesRefundSummary | null>(null);
+  const [salesSummary, setSalesSummary] = useState<DailySalesServerSummary | null>(null);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -85,33 +82,53 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<DailySalesRow>();
-
+  const [isTableRequesting, setIsTableRequesting] = useState(false);
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
 
+
+  // DAILY_SALES_RESET_FILTERS_ON_MOUNT
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+
+    setIsTableRequesting(true);
     void fetchDailySalesRows({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
-      pageSize: 500,
+      page: currentPage,
+      pageSize,
+      signal: controller.signal,
     })
-      .then(({ rows, refundSummary: nextRefundSummary }) => {
-        if (active) {
-          setSourceRows(rows);
-          setRefundSummary(nextRefundSummary);
-        }
+      .then(({ rows, summary: nextSalesSummary, refundSummary: nextRefundSummary, meta }) => {
+        if (!active) return;
+        setSourceRows(Array.isArray(rows) ? rows : []);
+        setServerTotal(meta.total);
+        setSalesSummary(nextSalesSummary);
+        setRefundSummary(nextRefundSummary);
       })
-      .catch(() => {
-        // Keep the local fallback visible until the backend has synced MART data.
+      .catch((reason: unknown) => {
+        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+        setSourceRows([]);
+        setServerTotal(0);
+        setSalesSummary(null);
+        setRefundSummary(null);
+      })
+      .finally(() => {
+        if (active) setIsTableRequesting(false);
       });
+
     return () => {
       active = false;
+      controller.abort();
+      setIsTableRequesting(false);
     };
-  }, [dateRangeStart, dateRangeEnd]);
+  }, [currentPage, dateRangeStart, dateRangeEnd, pageSize]);
 
-  const owners = useMemo(() => [...new Set(sourceRows.map((row) => row.owner))], [sourceRows]);
-  const stores = useMemo(() => [...new Set(sourceRows.map((row) => row.store))], [sourceRows]);
+  const safeSourceRows = Array.isArray(sourceRows) ? sourceRows : [];
+
+  const owners = useMemo(() => [...new Set(safeSourceRows.map((row) => row.owner))], [safeSourceRows]);
+  const stores = useMemo(() => [...new Set(safeSourceRows.map((row) => row.store))], [safeSourceRows]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -120,17 +137,16 @@ function DailySalesPage({ page }: DailySalesPageProps) {
 
   const filteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
-    return sourceRows.filter((row) => {
+    return safeSourceRows.filter((row) => {
       const target = String(row[filters.searchField]).toLocaleLowerCase();
       const exactTarget = String(row[filters.searchField]);
       return (filters.platforms.length === 0 || filters.platforms.includes(row.platform))
         && (filters.owners.length === 0 || filters.owners.includes(row.owner))
         && (filters.stores.length === 0 || filters.stores.includes(row.store))
-        && matchesDate(row, filters)
         && (!keyword || target.includes(keyword))
         && (!filters.batchValues?.length || filters.batchValues.includes(exactTarget));
     });
-  }, [filters, sourceRows]);
+  }, [filters, safeSourceRows]);
 
   const updateFilters = (nextFilters: DailySalesFilters) => {
     setFilters(nextFilters);
@@ -199,7 +215,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   return (
     <PageShell page={page} headerActions={headerActions}>
       {messageContextHolder}
-      <div className="daily-sales">
+      <div ref={dailySalesPageRootRef} className="daily-sales">
         <section className="daily-sales__page-header" aria-label="每日销售页面说明">
           <div>
             <Typography.Title level={3}>每日销售</Typography.Title>
@@ -208,8 +224,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             </Typography.Paragraph>
           </div>
         </section>
-
-        <Card size="small" className="daily-sales__toolbar-card">
+          <Card size="small" className="daily-sales__toolbar-card">
           <DailySalesToolbar
             key={toolbarResetKey}
             filters={filters}
@@ -228,12 +243,16 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             rows={filteredRows}
             currency={filters.currency}
             refundSummary={refundSummary}
+          serverSummary={salesSummary}
           />
         )}
         {chartsVisible && <DailySalesCharts rows={filteredRows} currency={filters.currency} />}
 
-        <DailySalesTable
+
+            <DailySalesTable
           rows={filteredRows}
+          total={serverTotal || filteredRows.length}
+          loading={isTableRequesting}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}
@@ -253,7 +272,8 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={setDetailRow}
-        />
+          />
+
       </div>
 
       <RuntimeColumnConfigDrawer

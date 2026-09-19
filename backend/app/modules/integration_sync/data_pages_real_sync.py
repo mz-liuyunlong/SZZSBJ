@@ -972,8 +972,11 @@ class DataPagesRealSyncRunner:
                 continue
             line_hash = _ad_identity_hash(row)
             identity_key = (advertiser_id, line_hash)
-            if identity_key in deduped:
-                raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
+            existing_row = deduped.get(identity_key)
+            if existing_row is not None:
+                if _ad_metric_signature(existing_row) != _ad_metric_signature(row):
+                    raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
+                continue
             deduped[identity_key] = row
 
         count = 0
@@ -1559,6 +1562,31 @@ def _ad_identity_hash(row: Mapping[str, Any]) -> str:
             "item_id": _field(row_dict, "itemId", "item_id"),
             "msku": _field(row_dict, "msku"),
         }
+    )
+
+
+def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
+    """Return mutable ad metrics used to decide whether duplicate ad identities are safe.
+
+    Provider pages can occasionally repeat the same source key. Repeating a row with
+    identical zero or identical refreshed metrics is safe to collapse. Conflicting
+    metrics still fail fast to avoid hiding real ad spend differences.
+    """
+    row_dict = dict(row)
+    return (
+        _decimal(row_dict.get("adSpend")) or Decimal("0"),
+        _decimal(row_dict.get("attributedSales")) or Decimal("0"),
+        _decimal(row_dict.get("attributedOrders")) or Decimal("0"),
+        _decimal(row_dict.get("attributedUnits")) or Decimal("0"),
+        _decimal(row_dict.get("advertisedSkuSales")) or Decimal("0"),
+        _decimal(row_dict.get("advertisedSkuUnits")) or Decimal("0"),
+        _int(row_dict.get("numAdsClicks")) or 0,
+        _int(row_dict.get("numAdsShown")) or 0,
+        _decimal(row_dict.get("acos")) or Decimal("0"),
+        _decimal(row_dict.get("roas")) or Decimal("0"),
+        _decimal(row_dict.get("cpc")) or Decimal("0"),
+        _decimal(row_dict.get("ctr")) or Decimal("0"),
+        _decimal(row_dict.get("cvr")) or Decimal("0"),
     )
 
 

@@ -27,6 +27,7 @@ import {
 
 interface OrderProfitTableProps {
   rows: OrderProfitRow[];
+  total?: number;
   currency: OrderProfitCurrency;
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
@@ -218,6 +219,7 @@ function createColumns(
 
 function OrderProfitTable({
   rows,
+  total = rows.length,
   currency,
   appliedColumnKeys,
   columnWidths,
@@ -268,7 +270,7 @@ function OrderProfitTable({
         tableAlertRender={false}
         tableAlertOptionRender={false}
         showSorterTooltip={{ target: "sorter-icon" }}
-        scroll={{ x: "max-content", y: "100%" }}
+        scroll={{ x: "max-content" }}
         summary={() => (
           <Table.Summary fixed="bottom">
             <Table.Summary.Row className="order-profit__total-row" data-testid="order-profit-total-row">
@@ -298,7 +300,7 @@ function OrderProfitTable({
         pagination={{
           current: currentPage,
           pageSize,
-          total: rows.length,
+          total,
           showSizeChanger: true,
           showQuickJumper: true,
           pageSizeOptions: REPORT_TABLE_PAGE_SIZE_OPTIONS,

@@ -1,0 +1,26 @@
+.request-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  background: rgb(255 255 255 / 68%);
+  border-radius: inherit;
+  cursor: wait;
+  pointer-events: auto;
+  backdrop-filter: blur(1px);
+}
+
+.request-loading-overlay__placeholder {
+  width: 180px;
+  height: 64px;
+}
+
+.daily-sales__table-request-wrap,
+.order-profit__table-request-wrap,
+.product-management__table-wrap,
+.listing-management__table-wrap {
+  position: relative;
+}

@@ -1,7 +1,10 @@
-/** Listing-management page backed by DATA-PAGES MART API with temporary local fallback. */
+/** Listing-management page backed by DATA-PAGES MART API. */
 import { Card, message } from "antd";
-import { useEffect, useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
+import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
+import { usePageStateCache } from "@/shared/page-state/pageStateCache";
+import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
 } from "@/components/report-table/RuntimeColumnConfigDrawer";
@@ -22,7 +25,6 @@ import { fetchListingManagementRows } from "@/pages/products/listingManagementAp
 import {
   fixedListingColumnKeys,
   listingColumnFields,
-  listingManagementMockData,
   listingOwners,
   listingProductTypes,
   listingStores,
@@ -86,31 +88,46 @@ interface ListingManagementPageProps {
 
 function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const [filters, setFilters] = useState(createInitialFilters);
-  const [sourceRows, setSourceRows] = useState<ListingManagementRow[]>(listingManagementMockData);
-  const [statisticsVisible, setStatisticsVisible] = useState(true);
-  const [summaryFilterKey, setSummaryFilterKey] = useState<ListingManagementSummaryCardKey>("total");
-  const [columnConfigOpen, setColumnConfigOpen] = useState(false);
-  const [appliedColumnKeys, setAppliedColumnKeys] = useState<string[]>(defaultColumnKeys);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(defaultColumnWidths);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const pageStateKey = "listing-management";
+  const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
+  const [filters, setFilters] = usePageStateCache<ListingManagementFilters>(`${pageStateKey}:filters`, createInitialFilters);
+  const [sourceRows, setSourceRows] = usePageStateCache<ListingManagementRow[]>(`${pageStateKey}:sourceRows`, []);
+  const [sourceRowsLoaded, setSourceRowsLoaded] = usePageStateCache(`${pageStateKey}:sourceRowsLoaded`, false);
+  const [statisticsVisible, setStatisticsVisible] = usePageStateCache(`${pageStateKey}:statisticsVisible`, true);
+  const [summaryFilterKey, setSummaryFilterKey] = usePageStateCache<ListingManagementSummaryCardKey>(`${pageStateKey}:summaryFilterKey`, "total");
+  const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
+  const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys`, defaultColumnKeys);
+  const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths`, defaultColumnWidths);
+  const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
+  const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
+  const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
   const [detailRow, setDetailRow] = useState<ListingManagementRow>();
+  const [isTableRequesting, setIsTableRequesting] = useState(false);
+
+  useElementScrollRestoration(`${pageStateKey}:tableScroll`, listingManagementPageRootRef, ".ant-table-body");
 
   useEffect(() => {
+    if (sourceRowsLoaded) return;
+
     let active = true;
+    setIsTableRequesting(true);
     void fetchListingManagementRows({ pageSize: 500 })
       .then(({ rows }) => {
-        if (active) setSourceRows(rows);
+        if (active) {
+          setSourceRows(rows);
+          setSourceRowsLoaded(true);
+        }
       })
       .catch(() => {
-        // Keep the local fallback visible until the backend has synced MART data.
+        if (active) {
+          setSourceRows([]);
+          setSourceRowsLoaded(true);
+        }
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [sourceRowsLoaded, setSourceRows, setSourceRowsLoaded]);
 
   const storeOptions = useMemo(() => uniqueValues([
     ...listingStores,
@@ -181,8 +198,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   return (
     <PageShell page={page}>
       {messageContextHolder}
-      <div className="listing-management">
-        <Card size="small" className="listing-management__page-card">
+      <div ref={listingManagementPageRootRef} className="listing-management">
+          <Card size="small" className="listing-management__page-card">
+          <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
           <div className="listing-management__title-row">
             <div>
               <h1>Listing管理</h1>
@@ -237,7 +255,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
             />
           </div>
-        </Card>
+          </Card>
 
         <RuntimeColumnConfigDrawer
           open={columnConfigOpen}

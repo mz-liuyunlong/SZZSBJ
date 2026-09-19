@@ -1,4 +1,4 @@
-/** Daily-sales operating metrics plus refund-event totals from the selected date range. */
+/** Daily-sales operating metrics from server summary plus refund-event totals. */
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -11,7 +11,8 @@ import {
   ShoppingOutlined,
 } from "@ant-design/icons";
 import { Card } from "antd";
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
+import type { DailySalesServerSummary } from "@/pages/sales/dailySalesApi";
 import {
   MOCK_USD_TO_CNY_RATE,
   type DailySalesCurrency,
@@ -23,6 +24,7 @@ interface DailySalesSummaryCardsProps {
   rows: DailySalesRow[];
   currency: DailySalesCurrency;
   refundSummary: DailySalesRefundSummary | null;
+  serverSummary?: DailySalesServerSummary | null;
 }
 
 const formatAmount = (value: number, currency: DailySalesCurrency) => {
@@ -31,6 +33,14 @@ const formatAmount = (value: number, currency: DailySalesCurrency) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+};
+
+const currencyRate = (
+  sourceCurrency: DailySalesCurrency,
+  targetCurrency: DailySalesCurrency,
+) => {
+  if (sourceCurrency === targetCurrency) return 1;
+  return sourceCurrency === "USD" ? MOCK_USD_TO_CNY_RATE : 1 / MOCK_USD_TO_CNY_RATE;
 };
 
 interface AnimatedMetricValueProps {
@@ -42,24 +52,47 @@ function AnimatedMetricValue({ value, formatter }: AnimatedMetricValueProps) {
   return <strong className="daily-sales__summary-value">{formatter(value)}</strong>;
 }
 
-function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSummaryCardsProps) {
-  const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
-  const refundRate = refundSummary == null || refundSummary.currency === currency
-    ? 1
-    : refundSummary.currency === "USD"
-      ? MOCK_USD_TO_CNY_RATE
-      : 1 / MOCK_USD_TO_CNY_RATE;
+function DailySalesSummaryCards({
+  rows,
+  currency,
+  refundSummary,
+  serverSummary,
+}: DailySalesSummaryCardsProps) {
   const totals = useMemo(() => {
+    if (serverSummary) {
+      return {
+        salesVolume: serverSummary.salesQuantity,
+        salesAmount: serverSummary.salesAmount
+          * currencyRate(serverSummary.salesCurrency, currency),
+        orderProfit: serverSummary.orderProfitAmount
+          * currencyRate(serverSummary.orderProfitCurrency, currency),
+        adSpend: serverSummary.adSpendAmount
+          * currencyRate(serverSummary.adSpendCurrency, currency),
+        refundQuantity: serverSummary.refundEventQuantity,
+        refundAmount: serverSummary.refundEventAmount
+          * currencyRate(serverSummary.refundEventCurrency, currency),
+      };
+    }
+
     const incompleteProfit = rows.some((row) => row.orderProfit == null);
+    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
+    const refundRate = refundSummary == null || refundSummary.currency === currency
+      ? 1
+      : refundSummary.currency === "USD"
+        ? MOCK_USD_TO_CNY_RATE
+        : 1 / MOCK_USD_TO_CNY_RATE;
+
     return {
       salesVolume: rows.reduce((total, row) => total + row.salesVolume, 0),
-      salesAmount: rows.reduce((total, row) => total + row.salesAmount, 0),
+      salesAmount: rows.reduce((total, row) => total + row.salesAmount, 0) * rate,
       orderProfit: incompleteProfit
         ? null
-        : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0),
-      adSpend: rows.reduce((total, row) => total + row.adSpend, 0),
+        : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate,
+      adSpend: rows.reduce((total, row) => total + row.adSpend, 0) * rate,
+      refundQuantity: refundSummary?.quantity ?? null,
+      refundAmount: refundSummary == null ? null : refundSummary.amount * refundRate,
     };
-  }, [rows]);
+  }, [currency, refundSummary, rows, serverSummary]);
 
   const metrics = [
     {
@@ -74,7 +107,7 @@ function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSum
     },
     {
       title: "销售额",
-      value: totals.salesAmount * rate,
+      value: totals.salesAmount,
       formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "销售金额合计",
       icon: <DollarCircleOutlined />,
@@ -84,7 +117,7 @@ function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSum
     },
     {
       title: "订单利润",
-      value: totals.orderProfit == null ? null : totals.orderProfit * rate,
+      value: totals.orderProfit,
       formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "SKU 订单利润",
       icon: <LineChartOutlined />,
@@ -106,7 +139,7 @@ function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSum
     },
     {
       title: "广告费",
-      value: totals.adSpend * rate,
+      value: totals.adSpend,
       formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "广告花费合计",
       icon: <NotificationOutlined />,
@@ -126,7 +159,7 @@ function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSum
     },
     {
       title: "退款数量",
-      value: refundSummary?.quantity ?? null,
+      value: totals.refundQuantity,
       formatter: (value: number | null) => value == null ? "—" : Math.round(value).toLocaleString("zh-CN"),
       subtitle: "按退款发生日统计",
       icon: <RollbackOutlined />,
@@ -136,7 +169,7 @@ function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSum
     },
     {
       title: "退款金额",
-      value: refundSummary == null ? null : refundSummary.amount * refundRate,
+      value: totals.refundAmount,
       formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
       subtitle: "按退款发生日统计",
       icon: <DollarCircleOutlined />,
@@ -153,7 +186,7 @@ function DailySalesSummaryCards({ rows, currency, refundSummary }: DailySalesSum
           key={metric.title}
           size="small"
           className={`daily-sales__summary-card daily-sales__summary-card--${metric.tone}${metric.trendDirection ? ` daily-sales__summary-card--trend-${metric.trendDirection}` : ""}`}
-          style={{ "--summary-card-index": index } as React.CSSProperties}
+          style={{ "--summary-card-index": index } as CSSProperties}
         >
           <span className={`daily-sales__summary-rising${metric.trendDirection ? ` daily-sales__summary-rising--${metric.trendDirection}` : ""}`} aria-hidden="true">
             <span />

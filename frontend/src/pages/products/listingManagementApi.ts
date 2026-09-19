@@ -1,4 +1,5 @@
 import { backendRequest } from "@/api/backendApi";
+import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
 
 interface BackendListingItem {
@@ -12,6 +13,10 @@ interface BackendListingItem {
   title: string | null;
   picture_url: string | null;
   owner_ref: string | null;
+  owner_uid: string | null;
+  owner_name: string | null;
+  product_developer_uid: string | null;
+  product_developer_name: string | null;
   product_grade: string | null;
   tags: string[];
   strike_price_amount: string | null;
@@ -72,7 +77,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   msku: item.msku ?? "-",
   productId: item.item_id,
   store: item.store_name ?? item.store_id,
-  owner: item.owner_ref ?? "未分配",
+  owner: item.owner_name ?? item.owner_ref ?? "未分配",
   sku: item.local_sku ?? "-",
   productName: item.local_name ?? item.title ?? "-",
   title: item.title ?? item.local_name ?? "-",
@@ -101,7 +106,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productGrade: item.product_grade ?? "未分级",
 });
 
-export async function fetchListingManagementRows(
+async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
 ): Promise<ListingManagementApiResult> {
   const pageSize = params.pageSize ?? 500;
@@ -142,4 +147,23 @@ export async function fetchListingManagementRows(
   }
 
   throw new Error("Listing API pagination exceeded the safety limit");
+}
+
+
+const fetchListingManagementRowsCacheKey = (...parts: unknown[]) => (
+  "listing-management:" + stableCacheKey(parts)
+);
+
+export function fetchListingManagementRows(...args: Parameters<typeof fetchListingManagementRowsFromApi>): ReturnType<typeof fetchListingManagementRowsFromApi> {
+  return getCachedResource(
+    fetchListingManagementRowsCacheKey(...args),
+    () => fetchListingManagementRowsFromApi(...args),
+  ) as ReturnType<typeof fetchListingManagementRowsFromApi>;
+}
+
+export function preloadListingManagementRows(...args: Parameters<typeof fetchListingManagementRowsFromApi>) {
+  preloadCachedResource(
+    fetchListingManagementRowsCacheKey(...args),
+    () => fetchListingManagementRowsFromApi(...args),
+  );
 }

@@ -164,8 +164,8 @@ def list_order_profit(
     account_refs: source_scope,
 ) -> SuccessEnvelope[OrderProfitListData, OrderProfitReadMeta]:
     data, total, latest_calculated_at = OrderProfitService(session).list_order_profit(
-        query,
-        account_refs,
+        query=query,
+        account_refs=account_refs,
     )
     return success_response(
         request,

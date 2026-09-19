@@ -423,7 +423,7 @@ describe("DailySalesPage", () => {
   it("defaults dates to the previous completed day, links shortcuts, and exposes the three multi-select filters", () => {
     renderPage();
 
-    expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${referenceDay}~${referenceDay}`);
     for (const label of ["平台", "负责人", "店铺"]) {
       expect(screen.getByLabelText(label)).toHaveAttribute("multiple");

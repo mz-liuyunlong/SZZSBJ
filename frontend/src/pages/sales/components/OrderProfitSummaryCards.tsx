@@ -1,4 +1,4 @@
-/** Six no-API product-ID profit metrics derived from the currently filtered rows. */
+/** Product-ID profit metrics derived from the currently filtered rows. */
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
@@ -7,10 +7,13 @@ import {
   NotificationOutlined,
   PercentageOutlined,
   PieChartOutlined,
+  RollbackOutlined,
   ShoppingOutlined,
+  WalletOutlined,
 } from "@ant-design/icons";
 import { Card } from "antd";
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
+import type { OrderProfitServerSummary } from "@/pages/sales/orderProfitApi";
 import {
   MOCK_USD_TO_CNY_RATE,
   type OrderProfitCurrency,
@@ -20,6 +23,7 @@ import {
 interface OrderProfitSummaryCardsProps {
   rows: OrderProfitRow[];
   currency: OrderProfitCurrency;
+  serverSummary?: OrderProfitServerSummary | null;
 }
 
 const formatAmount = (value: number, currency: OrderProfitCurrency) => {
@@ -39,19 +43,33 @@ function AnimatedMetricValue({ value, formatter }: AnimatedMetricValueProps) {
   return <strong className="order-profit__summary-value">{formatter(value)}</strong>;
 }
 
-function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProps) {
+function OrderProfitSummaryCards({ rows, currency, serverSummary }: OrderProfitSummaryCardsProps) {
   const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
   const totals = useMemo(() => {
+    if (serverSummary) {
+      const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
+      return {
+        salesVolume: serverSummary.salesQuantity,
+        salesAmount: serverSummary.salesAmount * rate,
+        refundQuantity: 0,
+        refundAmount: serverSummary.refundAmount * rate,
+        orderProfit: serverSummary.orderProfitAmount * rate,
+        adSpend: serverSummary.adSpendAmount * rate,
+      };
+    }
+
     const incompleteProfit = rows.some((row) => row.orderProfit == null);
     return {
       salesVolume: rows.reduce((total, row) => total + row.salesVolume, 0),
       salesAmount: rows.reduce((total, row) => total + row.salesAmount, 0),
+      refundQuantity: rows.reduce((total, row) => total + row.refundQuantity, 0),
+      refundAmount: rows.reduce((total, row) => total + row.refundAmount, 0),
       orderProfit: incompleteProfit
         ? null
         : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0),
       adSpend: rows.reduce((total, row) => total + row.adSpend, 0),
     };
-  }, [rows]);
+  }, [currency, rows, serverSummary]);
 
   const metrics = [
     {
@@ -97,6 +115,26 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
       trendDirection: "up",
     },
     {
+      title: "退款数量",
+      value: totals.refundQuantity,
+      formatter: (value: number | null) => Math.round(value ?? 0).toLocaleString("zh-CN"),
+      subtitle: "退款数量合计",
+      icon: <RollbackOutlined />,
+      tone: "red",
+      trend: "—",
+      trendDirection: "cost-up",
+    },
+    {
+      title: "退款金额",
+      value: totals.refundAmount * rate,
+      formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
+      subtitle: "退款金额合计",
+      icon: <WalletOutlined />,
+      tone: "orange",
+      trend: "—",
+      trendDirection: "cost-up",
+    },
+    {
       title: "广告费",
       value: totals.adSpend * rate,
       formatter: (value: number | null) => value == null ? "—" : formatAmount(value, currency),
@@ -125,7 +163,7 @@ function OrderProfitSummaryCards({ rows, currency }: OrderProfitSummaryCardsProp
           key={metric.title}
           size="small"
           className={`order-profit__summary-card order-profit__summary-card--${metric.tone} order-profit__summary-card--trend-${metric.trendDirection}`}
-          style={{ "--summary-card-index": index } as React.CSSProperties}
+          style={{ "--summary-card-index": index } as CSSProperties}
         >
           <span className={`order-profit__summary-rising order-profit__summary-rising--${metric.trendDirection}`} aria-hidden="true">
             <span />

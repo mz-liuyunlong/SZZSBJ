@@ -1,4 +1,5 @@
 import { backendRequest } from "@/api/backendApi";
+import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import { formatDate } from "@/shared/formatters";
 import type {
   ProductGrade,
@@ -330,7 +331,7 @@ function listQuery(
   return query;
 }
 
-export async function listProductManagementSkus(
+async function listProductManagementSkusFromApi(
   filters: ProductManagementFilters,
   page: number,
   pageSize: number,
@@ -344,7 +345,7 @@ export async function listProductManagementSkus(
   };
 }
 
-export async function getProductManagementSummary(
+async function getProductManagementSummaryFromApi(
   filters: ProductManagementFilters,
 ): Promise<ProductManagementSummary> {
   const query = listQuery(filters, 1, 1, false);
@@ -490,7 +491,7 @@ export async function getProductManagementSku(
   } satisfies ProductManagementRow;
 }
 
-export async function getProductManagementOptions(filters?: ProductManagementFilters) {
+async function getProductManagementOptionsFromApi(filters?: ProductManagementFilters) {
   const query = filters ? listQuery(filters, 1, 1, false) : new URLSearchParams();
   query.delete("page");
   query.delete("page_size");
@@ -565,4 +566,63 @@ export async function saveProductManagementTableView(
       }),
     },
   )).data;
+}
+
+
+const productManagementCacheKey = (...parts: unknown[]) => (
+  "product-management:" + stableCacheKey(parts)
+);
+
+export function listProductManagementSkus(
+  ...args: Parameters<typeof listProductManagementSkusFromApi>
+): ReturnType<typeof listProductManagementSkusFromApi> {
+  return getCachedResource(
+    productManagementCacheKey("list", ...args),
+    () => listProductManagementSkusFromApi(...args),
+  ) as ReturnType<typeof listProductManagementSkusFromApi>;
+}
+
+export function preloadProductManagementSkus(
+  ...args: Parameters<typeof listProductManagementSkusFromApi>
+) {
+  preloadCachedResource(
+    productManagementCacheKey("list", ...args),
+    () => listProductManagementSkusFromApi(...args),
+  );
+}
+
+export function getProductManagementSummary(
+  ...args: Parameters<typeof getProductManagementSummaryFromApi>
+): ReturnType<typeof getProductManagementSummaryFromApi> {
+  return getCachedResource(
+    productManagementCacheKey("summary", ...args),
+    () => getProductManagementSummaryFromApi(...args),
+  ) as ReturnType<typeof getProductManagementSummaryFromApi>;
+}
+
+export function preloadProductManagementSummary(
+  ...args: Parameters<typeof getProductManagementSummaryFromApi>
+) {
+  preloadCachedResource(
+    productManagementCacheKey("summary", ...args),
+    () => getProductManagementSummaryFromApi(...args),
+  );
+}
+
+export function getProductManagementOptions(
+  ...args: Parameters<typeof getProductManagementOptionsFromApi>
+): ReturnType<typeof getProductManagementOptionsFromApi> {
+  return getCachedResource(
+    productManagementCacheKey("options", ...args),
+    () => getProductManagementOptionsFromApi(...args),
+  ) as ReturnType<typeof getProductManagementOptionsFromApi>;
+}
+
+export function preloadProductManagementOptions(
+  ...args: Parameters<typeof getProductManagementOptionsFromApi>
+) {
+  preloadCachedResource(
+    productManagementCacheKey("options", ...args),
+    () => getProductManagementOptionsFromApi(...args),
+  );
 }
