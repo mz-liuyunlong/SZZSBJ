@@ -16,6 +16,7 @@ from app.modules.data_pages.schemas import (
     DailySalesListData,
     DailySalesQuery,
     DailySalesReadMeta,
+    DataPageFilterOptionsData,
     ListingManagementListData,
     ListingManagementQuery,
     ListingManagementReadMeta,
@@ -119,6 +120,25 @@ def _has_missing_costs(items: Any) -> bool:
 
 def _is_partial(items: Any) -> bool:
     return any(item.cost_status != "complete" for item in items)
+
+
+@router.get(
+    "/api/data-pages/filter-options",
+    response_model=SuccessEnvelope[DataPageFilterOptionsData, Any],
+    responses=ERRORS,
+)
+def get_data_page_filter_options(
+    request: Request,
+    query: Annotated[DailySalesQuery, Query()],
+    session: db_session,
+    _: daily_sales_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[DataPageFilterOptionsData, Any]:
+    return success_response(
+        request,
+        data=DailySalesService(session).filter_options(query, account_refs),
+        meta=None,
+    )
 
 
 @router.get(

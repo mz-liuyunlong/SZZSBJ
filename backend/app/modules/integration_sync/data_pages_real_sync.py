@@ -976,6 +976,7 @@ class DataPagesRealSyncRunner:
             if existing_row is not None:
                 if _ad_metric_signature(existing_row) != _ad_metric_signature(row):
                     raise DataPagesRealSyncError("DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE")
+                deduped[identity_key] = _preferred_ad_duplicate_row(existing_row, row)
                 continue
             deduped[identity_key] = row
 
@@ -1565,12 +1566,13 @@ def _ad_identity_hash(row: Mapping[str, Any]) -> str:
     )
 
 
-def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
-    """Return mutable ad metrics used to decide whether duplicate ad identities are safe.
 
-    Provider pages can occasionally repeat the same source key. Repeating a row with
-    identical zero or identical refreshed metrics is safe to collapse. Conflicting
-    metrics still fail fast to avoid hiding real ad spend differences.
+def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
+    """Return ad outcome metrics that must match before duplicate identities collapse.
+
+    Provider pages can occasionally repeat the same source key with different
+    activity counters or derived rates. Spend, sales, order and unit outcomes must
+    still match; otherwise the duplicate is treated as a real conflict.
     """
     row_dict = dict(row)
     return (
@@ -1580,14 +1582,35 @@ def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
         _decimal(row_dict.get("attributedUnits")) or Decimal("0"),
         _decimal(row_dict.get("advertisedSkuSales")) or Decimal("0"),
         _decimal(row_dict.get("advertisedSkuUnits")) or Decimal("0"),
-        _int(row_dict.get("numAdsClicks")) or 0,
-        _int(row_dict.get("numAdsShown")) or 0,
-        _decimal(row_dict.get("acos")) or Decimal("0"),
-        _decimal(row_dict.get("roas")) or Decimal("0"),
-        _decimal(row_dict.get("cpc")) or Decimal("0"),
-        _decimal(row_dict.get("ctr")) or Decimal("0"),
-        _decimal(row_dict.get("cvr")) or Decimal("0"),
     )
+
+
+def _ad_activity_preference(row: Mapping[str, Any]) -> tuple[int, int, int]:
+    """Prefer the duplicate row with more populated activity fields."""
+    row_dict = dict(row)
+    activity_fields = (
+        "numAdsShown",
+        "numAdsClicks",
+        "acos",
+        "roas",
+        "cpc",
+        "ctr",
+        "cvr",
+    )
+    populated = sum(1 for field in activity_fields if row_dict.get(field) not in (None, ""))
+    impressions = _int(row_dict.get("numAdsShown")) or 0
+    clicks = _int(row_dict.get("numAdsClicks")) or 0
+    return (populated, impressions, clicks)
+
+
+def _preferred_ad_duplicate_row(
+    existing: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep the more complete duplicate row after outcome metrics are proven equal."""
+    if _ad_activity_preference(candidate) > _ad_activity_preference(existing):
+        return candidate
+    return existing
 
 
 def _page_signature(rows: list[dict[str, Any]]) -> str:

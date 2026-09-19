@@ -51,7 +51,7 @@ function OrderProfitSummaryCards({ rows, currency, serverSummary }: OrderProfitS
       return {
         salesVolume: serverSummary.salesQuantity,
         salesAmount: serverSummary.salesAmount * rate,
-        refundQuantity: 0,
+        refundQuantity: serverSummary.refundQuantity,
         refundAmount: serverSummary.refundAmount * rate,
         orderProfit: serverSummary.orderProfitAmount * rate,
         adSpend: serverSummary.adSpendAmount * rate,

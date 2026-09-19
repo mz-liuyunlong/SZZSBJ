@@ -30,7 +30,19 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
   );
 
   const fetchDailySalesRows = vi.fn(async (
-    params: { startDate?: string; endDate?: string; page?: number; pageSize?: number; signal?: AbortSignal } = {},
+    params: {
+      startDate?: string;
+      endDate?: string;
+      page?: number;
+      pageSize?: number;
+      platforms?: string[];
+      owners?: string[];
+      stores?: string[];
+      searchField?: keyof DailySalesMockRow;
+      keyword?: string;
+      batchValues?: string[];
+      signal?: AbortSignal;
+    } = {},
   ) => {
     const search = new URLSearchParams();
     if (params.startDate) search.set("start_date", params.startDate);
@@ -43,7 +55,17 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
       ...(params.signal ? { signal: params.signal } : {}),
     });
 
-    const rows = dailySalesMockData.filter((row) => inDateRange(row, params));
+    const keyword = params.keyword?.trim().toLocaleLowerCase() ?? "";
+    const searchField = params.searchField ?? "sku";
+    const rows = dailySalesMockData.filter((row) => {
+      const target = String(row[searchField] ?? "");
+      return inDateRange(row, params)
+        && (!params.platforms?.length || params.platforms.includes(row.platform))
+        && (!params.owners?.length || params.owners.includes(row.owner))
+        && (!params.stores?.length || params.stores.includes(row.store))
+        && (!keyword || target.toLocaleLowerCase().includes(keyword))
+        && (!params.batchValues?.length || params.batchValues.includes(target));
+    });
 
     return {
       rows,
@@ -82,6 +104,42 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
   };
 });
 
+vi.mock("@/pages/sales/salesFilterOptionsApi", async () => {
+  const { dailySalesMockData } = await import("@/pages/sales/dailySalesMockData");
+
+  type DailySalesMockRow = (typeof dailySalesMockData)[number];
+
+  const inDateRange = (
+    row: DailySalesMockRow,
+    params: { startDate?: string; endDate?: string },
+  ) => (!params.startDate || row.date >= params.startDate)
+    && (!params.endDate || row.date <= params.endDate);
+
+  const toOptions = (values: string[]) => Array.from(new Set(values.filter(Boolean)))
+    .map((value) => ({ value, label: value, count: values.filter((item) => item === value).length }));
+
+  return {
+    emptySalesFilterOptions: { platforms: [], owners: [], stores: [] },
+    mergeSelectedFilterValues: (
+      selected: string[],
+      options: { value: string }[],
+    ) => Array.from(new Set([
+      ...selected,
+      ...options.map((option) => option.value),
+    ])).filter(Boolean),
+    fetchSalesFilterOptions: vi.fn(async (
+      params: { startDate?: string; endDate?: string } = {},
+    ) => {
+      const rows = dailySalesMockData.filter((row) => inDateRange(row, params));
+      return {
+        platforms: toOptions(rows.map((row) => row.platform)),
+        owners: toOptions(rows.map((row) => row.owner)),
+        stores: toOptions(rows.map((row) => row.store)),
+      };
+    }),
+  };
+});
+
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: { yAxis: { name: string } } }) => (
     <div role="img" aria-label={`${option.yAxis.name}图表`} />
@@ -101,7 +159,9 @@ vi.mock("antd", async (importOriginal) => {
     optionRender,
     options = [],
     placeholder,
+    popupMatchSelectWidth,
     showSearch,
+    styles,
     value,
     ...props
   }: {
@@ -120,7 +180,9 @@ vi.mock("antd", async (importOriginal) => {
     void classNames;
     void maxTagCount;
     void maxTagPlaceholder;
+    void popupMatchSelectWidth;
     void showSearch;
+    void styles;
     const multiple = mode === "multiple";
     return (
       <>
@@ -442,7 +504,7 @@ describe("DailySalesPage", () => {
     expect(screen.queryByLabelText("页面状态：planned")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
     expect(dailySalesMockData).toHaveLength(100);
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
+    await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length)));
 
     const headers = within(screen.getByTestId("table-header"))
       .getAllByRole("columnheader")
@@ -522,7 +584,7 @@ describe("DailySalesPage", () => {
     await renderPage();
 
     fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
-    expect(Number(screen.getByTestId("pro-table").getAttribute("data-total"))).toBeLessThan(referenceRows.length);
+    await waitFor(() => expect(Number(screen.getByTestId("pro-table").getAttribute("data-total"))).toBeLessThan(referenceRows.length));
 
     fireEvent.change(screen.getByLabelText("币种"), { target: { value: "CNY" } });
     const filteredTotal = screen.getByTestId("pro-table").getAttribute("data-total");
@@ -530,10 +592,10 @@ describe("DailySalesPage", () => {
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", filteredTotal);
 
     fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: "does-not-exist" } });
-    expect(screen.getByText("暂无匹配销售数据")).toBeVisible();
+    await waitFor(() => expect(screen.getByText("暂无匹配销售数据")).toBeVisible());
 
     fireEvent.click(screen.getByRole("button", { name: /重.*置/ }));
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
+    await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length)));
     expect(screen.getByLabelText("币种")).toHaveValue("USD");
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining("/api/sales/daily-sales?"),
@@ -553,14 +615,14 @@ describe("DailySalesPage", () => {
       target: { value: `${referenceRows[0].sku}\n\n${referenceRows[0].sku}` },
     });
     fireEvent.click(within(popover).getByRole("button", { name: /搜.*索/ }));
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
+    await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1"));
 
     fireEvent.click(screen.getByRole("button", { name: "批量搜索" }));
     fireEvent.change(screen.getByLabelText("批量搜索内容"), {
       target: { value: referenceRows[0].sku.toLocaleLowerCase() },
     });
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /搜.*索/ }));
-    expect(screen.getByText("暂无匹配销售数据")).toBeVisible();
+    await waitFor(() => expect(screen.getByText("暂无匹配销售数据")).toBeVisible());
   });
 
   it("resets to page one and clears selection for every supported page size", async () => {
@@ -632,12 +694,12 @@ describe("DailySalesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
     expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent("总计");
     fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
-    expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent(
+    await waitFor(() => expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent(
       referenceRows
         .filter((row) => row.platform === "Walmart")
         .reduce((total, row) => total + row.salesVolume, 0)
         .toLocaleString("zh-CN"),
-    );
+    ));
     fireEvent.change(screen.getByLabelText("币种"), { target: { value: "CNY" } });
     expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent("¥");
   });

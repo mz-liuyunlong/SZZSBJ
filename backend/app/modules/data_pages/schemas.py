@@ -44,6 +44,18 @@ class StrictSchema(BaseModel):
         return value
 
 
+class DataPageFilterOptionRead(StrictSchema):
+    value: str
+    label: str
+    count: int = 0
+
+
+class DataPageFilterOptionsData(StrictSchema):
+    platforms: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    owners: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    stores: list[DataPageFilterOptionRead] = Field(default_factory=list)
+
+
 class DailySalesQuery(StrictSchema):
     start_date: date | None = None
     end_date: date | None = None
@@ -52,8 +64,12 @@ class DailySalesQuery(StrictSchema):
     owner_ref: Nonblank128 | None = None
     search_field: Literal["sku", "msku", "item_id", "product_name"] = "sku"
     keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
+    batch_values: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=32768),
+    ] = ""
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=100, ge=1, le=500)
+    page_size: int = Field(default=100, ge=1, le=1000)
 
 
 class DailySalesTrendPointRead(StrictSchema):
@@ -178,7 +194,7 @@ class OrderProfitQuery(StrictSchema):
     search_field: Literal["sku", "item_id", "product_name"] = "sku"
     keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=100, ge=1, le=500)
+    page_size: int = Field(default=100, ge=1, le=1000)
 
 
 class OrderProfitItemRead(StrictSchema):
@@ -245,7 +261,7 @@ class ListingManagementQuery(StrictSchema):
     search_field: Literal["sku", "msku", "item_id", "title"] = "sku"
     keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=100, ge=1, le=500)
+    page_size: int = Field(default=100, ge=1, le=1000)
 
 
 class ListingManagementItemRead(StrictSchema):

@@ -260,3 +260,40 @@ def test_write_ads_rejects_duplicate_identity_with_conflicting_metrics() -> None
 
     with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE"):
         runner._write_ads([first, second])
+
+
+def test_write_ads_collapses_duplicate_identity_when_activity_counters_differ() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+    first = {
+        "advertiserId": "advertiser-1",
+        "key": "duplicate-zero-spend-key-with-activity-diff",
+        "adSpend": "0",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
+        "numAdsClicks": 0,
+        "numAdsShown": 0,
+    }
+    second = {
+        "advertiserId": "advertiser-1",
+        "key": "duplicate-zero-spend-key-with-activity-diff",
+        "adSpend": "0",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
+        "numAdsClicks": 7,
+        "numAdsShown": 30,
+    }
+
+    count = runner._write_ads([first, second])
+
+    assert count == 1
+    assert len(session.calls) == 2
+    inserted_params = session.calls[-1][1]
+    assert inserted_params["num_ads_clicks"] == 7
+    assert inserted_params["num_ads_shown"] == 30

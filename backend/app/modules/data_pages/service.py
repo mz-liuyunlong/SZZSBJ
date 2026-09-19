@@ -21,6 +21,8 @@ from app.modules.data_pages.schemas import (
     DailySalesQuery,
     DailySalesSummaryRead,
     DailySalesTrendPointRead,
+    DataPageFilterOptionRead,
+    DataPageFilterOptionsData,
     ListingManagementItemRead,
     ListingManagementListData,
     ListingManagementQuery,
@@ -85,6 +87,17 @@ def _tag_list(value: object) -> list[str]:
     return tags
 
 
+def _platform_filter_option_label(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized in {"10008", "walmart"}:
+        return "Walmart"
+    if normalized == "amazon":
+        return "Amazon"
+    if normalized == "temu":
+        return "TEMU"
+    return value
+
+
 class DailySalesService:
     """Read and shape the daily-sales MART without touching RAW or external APIs."""
 
@@ -105,6 +118,7 @@ class DailySalesService:
             owner_ref=query.owner_ref,
             search_field=query.search_field,
             keyword=query.keyword,
+            batch_values=query.batch_values,
             page=query.page,
             page_size=query.page_size,
         )
@@ -126,6 +140,7 @@ class DailySalesService:
             owner_ref=query.owner_ref,
             search_field=query.search_field,
             keyword=query.keyword,
+            batch_values=query.batch_values,
         )
 
         refund_qty, refund_amount, refund_currency = self.repository.refund_event_summary(
@@ -153,6 +168,46 @@ class DailySalesService:
             ),
             total,
             latest_calculated_at,
+        )
+
+    def filter_options(
+        self,
+        query: DailySalesQuery,
+        account_refs: frozenset[str],
+    ) -> DataPageFilterOptionsData:
+        rows = self.repository.filter_options(
+            account_refs=account_refs,
+            start_date=query.start_date,
+            end_date=query.end_date,
+            platform=query.platform,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            search_field=query.search_field,
+            keyword=query.keyword,
+        )
+
+        platform_options: list[DataPageFilterOptionRead] = []
+        seen_platforms: set[str] = set()
+        for value, _label, count in rows["platforms"]:
+            label = _platform_filter_option_label(value)
+            option_value = label
+            if option_value in seen_platforms:
+                continue
+            seen_platforms.add(option_value)
+            platform_options.append(
+                DataPageFilterOptionRead(value=option_value, label=label, count=count)
+            )
+
+        return DataPageFilterOptionsData(
+            platforms=platform_options,
+            owners=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["owners"]
+            ],
+            stores=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in rows["stores"]
+            ],
         )
 
     def _to_read(self, row: DailySalesItemDayMart) -> DailySalesItemRead:

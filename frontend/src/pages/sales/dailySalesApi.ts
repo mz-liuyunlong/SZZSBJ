@@ -124,6 +124,12 @@ interface DailySalesParams {
   endDate?: string;
   page?: number;
   pageSize?: number;
+  platforms?: string[];
+  owners?: string[];
+  stores?: string[];
+  searchField?: string;
+  keyword?: string;
+  batchValues?: string[];
   signal?: AbortSignal;
 }
 
@@ -232,6 +238,40 @@ const toDailySalesServerSummary = (
   };
 };
 
+const backendSearchField = (field: string | undefined) => {
+  if (field === "productId") return "item_id";
+  if (field === "productName") return "product_name";
+  return field ?? "sku";
+};
+
+const appendMultiParam = (
+  search: URLSearchParams,
+  key: string,
+  values: string[] | undefined,
+) => {
+  const normalized = (values ?? []).map((value) => value.trim()).filter(Boolean);
+  if (normalized.length > 0) search.set(key, normalized.join(","));
+};
+
+const appendDailySalesFilters = (search: URLSearchParams, params: DailySalesParams) => {
+  appendMultiParam(search, "platform", params.platforms);
+  appendMultiParam(search, "owner_ref", params.owners);
+  appendMultiParam(search, "store_id", params.stores);
+  appendMultiParam(search, "batch_values", params.batchValues);
+
+  const keyword = params.keyword?.trim();
+  const hasBatchValues = (params.batchValues ?? [])
+    .map((value) => value.trim())
+    .some(Boolean);
+
+  if (keyword || hasBatchValues) {
+    search.set("search_field", backendSearchField(params.searchField));
+  }
+  if (keyword) {
+    search.set("keyword", keyword);
+  }
+};
+
 async function fetchDailySalesRowsFromApi(
   params: DailySalesParams,
 ): Promise<DailySalesApiResult> {
@@ -241,6 +281,7 @@ async function fetchDailySalesRowsFromApi(
 
   if (params.startDate) search.set("start_date", params.startDate);
   if (params.endDate) search.set("end_date", params.endDate);
+  appendDailySalesFilters(search, params);
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
 

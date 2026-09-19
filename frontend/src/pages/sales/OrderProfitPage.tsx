@@ -32,6 +32,7 @@ import {
   type OrderProfitRow,
   type OrderProfitSourceRecord,
 } from "@/pages/sales/orderProfitTypes";
+import { fetchSalesFilterOptions, emptySalesFilterOptions, mergeSelectedFilterValues, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import "@/pages/sales/OrderProfitPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
@@ -67,13 +68,6 @@ const defaultColumnWidths: Record<string, number> = Object.fromEntries(orderProf
 ]));
 const columnGroups = [{ title: "订单利润字段", fields: orderProfitColumnFields }];
 
-const matchesDate = (row: OrderProfitSourceRecord, filters: OrderProfitFilters) => {
-  if (filters.dateRange) {
-    return row.date >= filters.dateRange[0] && row.date <= filters.dateRange[1];
-  }
-  return true;
-};
-
 interface OrderProfitPageProps {
   page: NavigationPage;
 }
@@ -98,6 +92,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<OrderProfitRow>();
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
 
   // ORDER_PROFIT_RESET_FILTERS_ON_MOUNT
   useEffect(() => {
@@ -129,6 +124,11 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       endDate: dateRangeEnd,
       page: currentPage,
       pageSize,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
       signal: controller.signal,
     })
       .then(({ records, summary, meta }) => {
@@ -152,31 +152,69 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       controller.abort();
       setIsTableRequesting(false);
     };
-  }, [currentPage, dateRangeStart, dateRangeEnd, isPageActive, pageSize]);
+  }, [currentPage, dateRangeStart, dateRangeEnd, filters.keyword, filters.owners, filters.platforms, filters.searchField, filters.stores, isPageActive, pageSize]);
 
-  const safeSourceRecords = Array.isArray(sourceRecords) ? sourceRecords : [];
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
 
-  const owners = useMemo(() => [...new Set(safeSourceRecords.map((row) => row.owner))], [sourceRecords]);
-  const stores = useMemo(() => [...new Set(safeSourceRecords.map((row) => row.store))], [sourceRecords]);
+    void fetchSalesFilterOptions({
+      startDate: dateRangeStart,
+      endDate: dateRangeEnd,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
+      signal: controller.signal,
+    })
+      .then((nextOptions) => {
+        if (!active) return;
+        setFilterOptions(nextOptions);
+      })
+      .catch((reason: unknown) => {
+        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+        setFilterOptions(emptySalesFilterOptions);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    dateRangeStart,
+    dateRangeEnd,
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+  ]);
+
+  const safeSourceRecords = useMemo(
+    () => (Array.isArray(sourceRecords) ? sourceRecords : []),
+    [sourceRecords],
+  );
+
+
+  const owners = useMemo(
+    () => mergeSelectedFilterValues(filters.owners, filterOptions.owners),
+    [filterOptions.owners, filters.owners],
+  );
+  const stores = useMemo(
+    () => mergeSelectedFilterValues(filters.stores, filterOptions.stores),
+    [filterOptions.stores, filters.stores],
+  );
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
   };
 
-  const filteredSourceRecords = useMemo(() => {
-    const keyword = filters.keyword.trim().toLocaleLowerCase();
-    return safeSourceRecords.filter((row) => {
-      const target = String(row[filters.searchField]).toLocaleLowerCase();
-      const exactTarget = String(row[filters.searchField]);
-      return (filters.platforms.length === 0 || filters.platforms.includes(row.platform))
-        && (filters.owners.length === 0 || filters.owners.includes(row.owner))
-        && (filters.stores.length === 0 || filters.stores.includes(row.store))
-        && matchesDate(row, filters)
-        && (!keyword || target.includes(keyword))
-        && (!filters.batchValues?.length || filters.batchValues.includes(exactTarget));
-    });
-  }, [filters, safeSourceRecords]);
+  const filteredSourceRecords = useMemo(
+    () => safeSourceRecords,
+    [safeSourceRecords],
+  );
 
   const filteredRows = useMemo(() => aggregateOrderProfitRows(filteredSourceRecords), [filteredSourceRecords]);
 
