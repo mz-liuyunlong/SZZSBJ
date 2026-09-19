@@ -1078,3 +1078,85 @@
   }
 }
 /* End ping-pong shine animation only */
+
+
+/* Sales filter dropdown readability */
+.report-filter-select-dropdown {
+  min-width: 220px !important;
+}
+
+.report-filter-select-dropdown .ant-select-item-option-content {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.daily-sales__toolbar .report-filter-select,
+.order-profit__toolbar .report-filter-select {
+  min-width: 132px;
+}
+
+
+/* Sales filter dropdown readability v2 */
+.report-filter-select-dropdown {
+  width: 320px !important;
+  min-width: 320px !important;
+  max-width: 420px !important;
+}
+
+.report-filter-select-dropdown .ant-select-item {
+  padding-inline-end: 32px !important;
+}
+
+.report-filter-select-dropdown .ant-select-item-option-content {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.report-filter-select-dropdown .ant-checkbox-wrapper {
+  display: inline-flex !important;
+  align-items: center;
+  max-width: none !important;
+  white-space: nowrap !important;
+}
+
+.report-filter-select-dropdown .ant-checkbox + span {
+  padding-inline-start: 10px;
+  white-space: nowrap !important;
+}
+
+
+/* Sales filter dropdown readability v3 - override AntD popup width */
+.report-filter-select-dropdown,
+.sales-filter-wide-dropdown {
+  width: 360px !important;
+  min-width: 360px !important;
+  max-width: 460px !important;
+}
+
+.report-filter-select-dropdown .ant-select-item,
+.sales-filter-wide-dropdown .ant-select-item {
+  padding-inline-end: 32px !important;
+}
+
+.report-filter-select-dropdown .ant-select-item-option-content,
+.sales-filter-wide-dropdown .ant-select-item-option-content {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.report-filter-select-dropdown .ant-checkbox-wrapper,
+.sales-filter-wide-dropdown .ant-checkbox-wrapper {
+  display: inline-flex !important;
+  align-items: center;
+  max-width: none !important;
+  white-space: nowrap !important;
+}
+
+.report-filter-select-dropdown .ant-checkbox + span,
+.sales-filter-wide-dropdown .ant-checkbox + span {
+  padding-inline-start: 10px;
+  white-space: nowrap !important;
+}

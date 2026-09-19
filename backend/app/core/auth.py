@@ -25,6 +25,7 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
 _PREVIEW_PATH_PREFIXES: Final = frozenset(
     {
         "/api/product-management/",
+        "/api/data-pages/",
         "/api/sales/",
         "/api/listings/",
         "/api/warehouse/",

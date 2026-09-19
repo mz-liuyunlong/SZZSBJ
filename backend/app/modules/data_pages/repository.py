@@ -61,6 +61,27 @@ class ListingManagementRowProjection:
         return getattr(self.listing, name)
 
 
+def _csv_values(value: str | None) -> list[str]:
+    if value is None:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _platform_filter_values(value: str | None) -> list[str]:
+    values: list[str] = []
+    for item in _csv_values(value):
+        normalized = item.strip().lower()
+        if normalized == "walmart":
+            values.extend(["10008", "Walmart", "walmart"])
+        elif normalized == "amazon":
+            values.extend(["amazon", "Amazon"])
+        elif normalized == "temu":
+            values.extend(["temu", "TEMU"])
+        else:
+            values.append(item)
+    return list(dict.fromkeys(values))
+
+
 class DailySalesRepository:
     """Read-only persistence boundary for DATA-PAGES daily sales MART queries."""
 
@@ -78,6 +99,7 @@ class DailySalesRepository:
         owner_ref: str | None,
         search_field: str,
         keyword: str,
+        batch_values: str,
         page: int,
         page_size: int,
     ) -> tuple[Sequence[DailySalesItemDayMart], int, datetime | None]:
@@ -90,6 +112,7 @@ class DailySalesRepository:
             owner_ref=owner_ref,
             search_field=search_field,
             keyword=keyword,
+            batch_values=batch_values,
         )
         total = self.session.scalar(
             select(func.count()).select_from(statement.order_by(None).subquery())
@@ -122,6 +145,7 @@ class DailySalesRepository:
         owner_ref: str | None,
         search_field: str,
         keyword: str,
+        batch_values: str,
     ) -> tuple[object, object, object, str | None, object, str | None, object, str | None]:
         """Aggregate daily-sales metrics for the full filtered range, independent of pagination."""
         statement = self._filtered_statement(
@@ -133,6 +157,7 @@ class DailySalesRepository:
             owner_ref=owner_ref,
             search_field=search_field,
             keyword=keyword,
+            batch_values=batch_values,
         )
 
         row = self.session.execute(
@@ -172,11 +197,121 @@ class DailySalesRepository:
             statement = statement.where(WalmartRefundItemFact.business_date_la >= start_date)
         if end_date is not None:
             statement = statement.where(WalmartRefundItemFact.business_date_la <= end_date)
-        if store_id is not None:
-            statement = statement.where(WalmartRefundItemFact.store_id == store_id)
+        store_values = _csv_values(store_id)
+        if store_values:
+            statement = statement.where(WalmartRefundItemFact.store_id.in_(store_values))
 
         row = self.session.execute(statement).one()
         return row[0], row[1], row[2]
+
+    def filter_options(
+        self,
+        *,
+        account_refs: frozenset[str],
+        start_date: date | None,
+        end_date: date | None,
+        platform: str | None,
+        store_id: str | None,
+        owner_ref: str | None,
+        search_field: str,
+        keyword: str,
+    ) -> dict[str, list[tuple[str, str, int]]]:
+        """Return filter options from the full filtered daily-sales range, not the current page."""
+
+        # Faceted filter logic:
+        # - platform options are filtered by selected owner/store,
+        #   but not by selected platform itself.
+        # - owner options are filtered by selected platform/store,
+        #   but not by selected owner itself.
+        # - store options are filtered by selected platform/owner,
+        #   but not by selected store itself.
+        platform_base = self._filtered_statement(
+            account_refs=account_refs,
+            start_date=start_date,
+            end_date=end_date,
+            platform=None,
+            store_id=store_id,
+            owner_ref=owner_ref,
+            search_field=search_field,
+            keyword=keyword,
+        ).subquery()
+
+        owner_base = self._filtered_statement(
+            account_refs=account_refs,
+            start_date=start_date,
+            end_date=end_date,
+            platform=platform,
+            store_id=store_id,
+            owner_ref=None,
+            search_field=search_field,
+            keyword=keyword,
+        ).subquery()
+
+        store_base = self._filtered_statement(
+            account_refs=account_refs,
+            start_date=start_date,
+            end_date=end_date,
+            platform=platform,
+            store_id=None,
+            owner_ref=owner_ref,
+            search_field=search_field,
+            keyword=keyword,
+        ).subquery()
+
+        platform_rows = self.session.execute(
+            select(
+                platform_base.c.platform_code,
+                func.count().label("count"),
+            )
+            .where(platform_base.c.platform_code.is_not(None))
+            .group_by(platform_base.c.platform_code)
+            .order_by(platform_base.c.platform_code)
+        ).all()
+
+        owner_rows = self.session.execute(
+            select(
+                owner_base.c.owner_ref,
+                func.count().label("count"),
+            )
+            .where(
+                owner_base.c.owner_ref.is_not(None),
+                func.trim(cast(owner_base.c.owner_ref, String)) != "",
+            )
+            .group_by(owner_base.c.owner_ref)
+            .order_by(owner_base.c.owner_ref)
+        ).all()
+
+        store_value = func.coalesce(store_base.c.store_name, store_base.c.store_id)
+        store_rows = self.session.execute(
+            select(
+                store_value.label("store_value"),
+                func.count().label("count"),
+            )
+            .where(
+                store_value.is_not(None),
+                func.trim(cast(store_value, String)) != "",
+            )
+            .group_by(store_value)
+            .order_by(store_value)
+        ).all()
+
+        return {
+            "platforms": [
+                (str(value), str(value), int(count or 0))
+                for value, count in platform_rows
+                if value is not None and str(value).strip()
+            ],
+            "owners": [
+                (str(value), str(value), int(count or 0))
+                for value, count in owner_rows
+                if value is not None and str(value).strip()
+            ],
+            "stores": [
+                (str(value), str(value), int(count or 0))
+                for value, count in store_rows
+                if value is not None and str(value).strip()
+            ],
+        }
 
     def _filtered_statement(
         self,
@@ -189,6 +324,7 @@ class DailySalesRepository:
         owner_ref: str | None,
         search_field: str,
         keyword: str,
+        batch_values: str = "",
     ) -> Select[tuple[DailySalesItemDayMart]]:
         statement = select(DailySalesItemDayMart).where(
             DailySalesItemDayMart.source_account_ref.in_(account_refs)
@@ -197,15 +333,26 @@ class DailySalesRepository:
             statement = statement.where(DailySalesItemDayMart.business_date_la >= start_date)
         if end_date is not None:
             statement = statement.where(DailySalesItemDayMart.business_date_la <= end_date)
-        if platform is not None:
-            statement = statement.where(DailySalesItemDayMart.platform_code == platform)
-        if store_id is not None:
-            statement = statement.where(DailySalesItemDayMart.store_id == store_id)
-        if owner_ref is not None:
-            statement = statement.where(DailySalesItemDayMart.owner_ref == owner_ref)
+        platform_values = _platform_filter_values(platform)
+        if platform_values:
+            statement = statement.where(DailySalesItemDayMart.platform_code.in_(platform_values))
+        store_values = _csv_values(store_id)
+        if store_values:
+            statement = statement.where(
+                or_(
+                    DailySalesItemDayMart.store_id.in_(store_values),
+                    DailySalesItemDayMart.store_name.in_(store_values),
+                )
+            )
+        owner_values = _csv_values(owner_ref)
+        if owner_values:
+            statement = statement.where(DailySalesItemDayMart.owner_ref.in_(owner_values))
+        search_column = DAILY_SALES_SEARCH_COLUMNS.get(
+            search_field,
+            DailySalesItemDayMart.local_sku,
+        )
         normalized_keyword = keyword.strip()
         if normalized_keyword:
-            column = DAILY_SALES_SEARCH_COLUMNS.get(search_field, DailySalesItemDayMart.local_sku)
             like_value = f"%{normalized_keyword}%"
             if search_field == "product_name":
                 statement = statement.where(
@@ -215,7 +362,19 @@ class DailySalesRepository:
                     )
                 )
             else:
-                statement = statement.where(column.ilike(like_value))
+                statement = statement.where(search_column.ilike(like_value))
+
+        batch_filter_values = _csv_values(batch_values)
+        if batch_filter_values:
+            if search_field == "product_name":
+                statement = statement.where(
+                    or_(
+                        DailySalesItemDayMart.local_name.in_(batch_filter_values),
+                        DailySalesItemDayMart.title.in_(batch_filter_values),
+                    )
+                )
+            else:
+                statement = statement.where(search_column.in_(batch_filter_values))
         return statement
 
 

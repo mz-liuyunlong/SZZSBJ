@@ -29,6 +29,7 @@ import {
   type DailySalesRefundSummary,
   type DailySalesRow,
 } from "@/pages/sales/dailySalesTypes";
+import { fetchSalesFilterOptions, emptySalesFilterOptions, mergeSelectedFilterValues, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import "@/pages/sales/DailySalesPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
@@ -83,6 +84,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<DailySalesRow>();
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+  const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
 
@@ -100,6 +102,12 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       endDate: dateRangeEnd,
       page: currentPage,
       pageSize,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
+      batchValues: filters.batchValues,
       signal: controller.signal,
     })
       .then(({ rows, summary: nextSalesSummary, refundSummary: nextRefundSummary, meta }) => {
@@ -125,30 +133,80 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       controller.abort();
       setIsTableRequesting(false);
     };
-  }, [currentPage, dateRangeStart, dateRangeEnd, pageSize]);
+  }, [
+    currentPage,
+    dateRangeStart,
+    dateRangeEnd,
+    filters.batchValues,
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+    pageSize,
+  ]);
 
-  const safeSourceRows = Array.isArray(sourceRows) ? sourceRows : [];
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
 
-  const owners = useMemo(() => [...new Set(safeSourceRows.map((row) => row.owner))], [safeSourceRows]);
-  const stores = useMemo(() => [...new Set(safeSourceRows.map((row) => row.store))], [safeSourceRows]);
+    void fetchSalesFilterOptions({
+      startDate: dateRangeStart,
+      endDate: dateRangeEnd,
+      platforms: filters.platforms,
+      owners: filters.owners,
+      stores: filters.stores,
+      searchField: filters.searchField,
+      keyword: filters.keyword,
+      signal: controller.signal,
+    })
+      .then((nextOptions) => {
+        if (!active) return;
+        setFilterOptions(nextOptions);
+      })
+      .catch((reason: unknown) => {
+        if (!active || (reason instanceof Error && reason.name === "AbortError")) return;
+        setFilterOptions(emptySalesFilterOptions);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    dateRangeStart,
+    dateRangeEnd,
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+  ]);
+
+  const safeSourceRows = useMemo(
+    () => (Array.isArray(sourceRows) ? sourceRows : []),
+    [sourceRows],
+  );
+
+
+  const owners = useMemo(
+    () => mergeSelectedFilterValues(filters.owners, filterOptions.owners),
+    [filterOptions.owners, filters.owners],
+  );
+  const stores = useMemo(
+    () => mergeSelectedFilterValues(filters.stores, filterOptions.stores),
+    [filterOptions.stores, filters.stores],
+  );
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
   };
 
-  const filteredRows = useMemo(() => {
-    const keyword = filters.keyword.trim().toLocaleLowerCase();
-    return safeSourceRows.filter((row) => {
-      const target = String(row[filters.searchField]).toLocaleLowerCase();
-      const exactTarget = String(row[filters.searchField]);
-      return (filters.platforms.length === 0 || filters.platforms.includes(row.platform))
-        && (filters.owners.length === 0 || filters.owners.includes(row.owner))
-        && (filters.stores.length === 0 || filters.stores.includes(row.store))
-        && (!keyword || target.includes(keyword))
-        && (!filters.batchValues?.length || filters.batchValues.includes(exactTarget));
-    });
-  }, [filters, safeSourceRows]);
+  const filteredRows = useMemo(
+    () => safeSourceRows,
+    [safeSourceRows],
+  );
 
   const updateFilters = (nextFilters: DailySalesFilters) => {
     setFilters(nextFilters);

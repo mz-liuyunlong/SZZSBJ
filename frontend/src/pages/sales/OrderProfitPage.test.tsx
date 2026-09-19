@@ -43,7 +43,18 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
   ), 0);
 
   const fetchOrderProfitSourceRecords = vi.fn(async (
-    params: { startDate?: string; endDate?: string; page?: number; pageSize?: number; signal?: AbortSignal } = {},
+    params: {
+      startDate?: string;
+      endDate?: string;
+      page?: number;
+      pageSize?: number;
+      platforms?: string[];
+      owners?: string[];
+      stores?: string[];
+      searchField?: keyof OrderProfitMockRecord;
+      keyword?: string;
+      signal?: AbortSignal;
+    } = {},
   ) => {
     const search = new URLSearchParams();
     if (params.startDate) search.set("start_date", params.startDate);
@@ -56,7 +67,16 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
       ...(params.signal ? { signal: params.signal } : {}),
     });
 
-    const records = orderProfitSourceRecords.filter((row) => inDateRange(row, params));
+    const keyword = params.keyword?.trim().toLocaleLowerCase() ?? "";
+    const searchField = params.searchField ?? "productId";
+    const records = orderProfitSourceRecords.filter((row) => {
+      const target = String(row[searchField] ?? "");
+      return inDateRange(row, params)
+        && (!params.platforms?.length || params.platforms.includes(row.platform))
+        && (!params.owners?.length || params.owners.includes(row.owner))
+        && (!params.stores?.length || params.stores.includes(row.store))
+        && (!keyword || target.toLocaleLowerCase().includes(keyword));
+    });
 
     return {
       records,
@@ -89,6 +109,42 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
   };
 });
 
+vi.mock("@/pages/sales/salesFilterOptionsApi", async () => {
+  const { orderProfitSourceRecords } = await import("@/pages/sales/orderProfitMockData");
+
+  type OrderProfitMockRecord = (typeof orderProfitSourceRecords)[number];
+
+  const inDateRange = (
+    row: OrderProfitMockRecord,
+    params: { startDate?: string; endDate?: string },
+  ) => (!params.startDate || row.date >= params.startDate)
+    && (!params.endDate || row.date <= params.endDate);
+
+  const toOptions = (values: string[]) => Array.from(new Set(values.filter(Boolean)))
+    .map((value) => ({ value, label: value, count: values.filter((item) => item === value).length }));
+
+  return {
+    emptySalesFilterOptions: { platforms: [], owners: [], stores: [] },
+    mergeSelectedFilterValues: (
+      selected: string[],
+      options: { value: string }[],
+    ) => Array.from(new Set([
+      ...selected,
+      ...options.map((option) => option.value),
+    ])).filter(Boolean),
+    fetchSalesFilterOptions: vi.fn(async (
+      params: { startDate?: string; endDate?: string } = {},
+    ) => {
+      const rows = orderProfitSourceRecords.filter((row) => inDateRange(row, params));
+      return {
+        platforms: toOptions(rows.map((row) => row.platform)),
+        owners: toOptions(rows.map((row) => row.owner)),
+        stores: toOptions(rows.map((row) => row.store)),
+      };
+    }),
+  };
+});
+
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: { yAxis: { name: string } } }) => (
     <div role="img" aria-label={`${option.yAxis.name}图表`} />
@@ -108,7 +164,9 @@ vi.mock("antd", async (importOriginal) => {
     optionRender,
     options = [],
     placeholder,
+    popupMatchSelectWidth,
     showSearch,
+    styles,
     value,
     ...props
   }: {
@@ -127,7 +185,9 @@ vi.mock("antd", async (importOriginal) => {
     void classNames;
     void maxTagCount;
     void maxTagPlaceholder;
+    void popupMatchSelectWidth;
     void showSearch;
+    void styles;
     const multiple = mode === "multiple";
     return (
       <>
@@ -488,7 +548,7 @@ describe("OrderProfitPage", () => {
     await renderPage();
 
     fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: referenceRows[0].productId } });
-    expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1");
+    await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1"));
     fireEvent.click(screen.getByRole("button", { name: /查看订单利润详情/ }));
     expect(screen.getByRole("dialog", { name: "订单利润详情" })).toBeInTheDocument();
     expect(screen.getByText(/商品ID \/ 品名/)).toBeInTheDocument();

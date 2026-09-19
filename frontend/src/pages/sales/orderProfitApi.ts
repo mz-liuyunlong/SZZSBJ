@@ -32,26 +32,23 @@ interface BackendDailySalesItem {
   missing_cost_codes: string[];
 }
 
-interface BackendDailySalesData {
-  items: BackendDailySalesItem[];
-}
-
-interface BackendOrderProfitSummary {
+interface BackendDailySalesSummary {
   sales_qty: string;
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
-  refund_amount: string;
-  refund_currency_code: string | null;
+  refund_event_qty: string;
+  refund_event_amount: string;
+  refund_event_currency_code: string | null;
   order_profit_amount: string;
   order_profit_currency_code: string | null;
   ad_spend_amount: string;
   ad_spend_currency_code: string | null;
 }
 
-interface BackendOrderProfitData {
-  items: unknown[];
-  summary?: BackendOrderProfitSummary;
+interface BackendDailySalesData {
+  items: BackendDailySalesItem[];
+  summary?: BackendDailySalesSummary;
 }
 
 export interface OrderProfitApiMeta {
@@ -68,6 +65,7 @@ export interface OrderProfitServerSummary {
   orderCount: number;
   salesAmount: number;
   salesCurrency: OrderProfitCurrency;
+  refundQuantity: number;
   refundAmount: number;
   refundCurrency: OrderProfitCurrency;
   orderProfitAmount: number;
@@ -87,6 +85,11 @@ interface OrderProfitParams {
   endDate?: string;
   page?: number;
   pageSize?: number;
+  platforms?: string[];
+  owners?: string[];
+  stores?: string[];
+  searchField?: string;
+  keyword?: string;
   signal?: AbortSignal;
 }
 
@@ -141,7 +144,7 @@ const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSour
 });
 
 const toOrderProfitServerSummary = (
-  summary: BackendOrderProfitSummary | undefined,
+  summary: BackendDailySalesSummary | undefined,
 ): OrderProfitServerSummary | null => {
   if (!summary) return null;
 
@@ -150,13 +153,41 @@ const toOrderProfitServerSummary = (
     orderCount: numberValue(summary.order_count),
     salesAmount: numberValue(summary.sales_amount),
     salesCurrency: currencyLabel(summary.sales_currency_code),
-    refundAmount: numberValue(summary.refund_amount),
-    refundCurrency: currencyLabel(summary.refund_currency_code),
+    refundQuantity: numberValue(summary.refund_event_qty),
+    refundAmount: numberValue(summary.refund_event_amount),
+    refundCurrency: currencyLabel(summary.refund_event_currency_code),
     orderProfitAmount: numberValue(summary.order_profit_amount),
     orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
     adSpendAmount: numberValue(summary.ad_spend_amount),
     adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
   };
+};
+
+const backendSearchField = (field: string | undefined) => {
+  if (field === "productId") return "item_id";
+  if (field === "productName") return "product_name";
+  return field ?? "sku";
+};
+
+const appendMultiParam = (
+  search: URLSearchParams,
+  key: string,
+  values: string[] | undefined,
+) => {
+  const normalized = (values ?? []).map((value) => value.trim()).filter(Boolean);
+  if (normalized.length > 0) search.set(key, normalized.join(","));
+};
+
+const appendOrderProfitFilters = (search: URLSearchParams, params: OrderProfitParams) => {
+  appendMultiParam(search, "platform", params.platforms);
+  appendMultiParam(search, "owner_ref", params.owners);
+  appendMultiParam(search, "store_id", params.stores);
+
+  const keyword = params.keyword?.trim();
+  if (keyword) {
+    search.set("search_field", backendSearchField(params.searchField));
+    search.set("keyword", keyword);
+  }
 };
 
 export async function fetchOrderProfitSourceRecords(
@@ -165,37 +196,26 @@ export async function fetchOrderProfitSourceRecords(
   const page = params.page ?? 1;
   const pageSize = params.pageSize ?? 50;
 
-  const rowSearch = new URLSearchParams();
-  if (params.startDate) rowSearch.set("start_date", params.startDate);
-  if (params.endDate) rowSearch.set("end_date", params.endDate);
-  rowSearch.set("page", String(page));
-  rowSearch.set("page_size", String(pageSize));
-
-  const summarySearch = new URLSearchParams();
-  if (params.startDate) summarySearch.set("start_date", params.startDate);
-  if (params.endDate) summarySearch.set("end_date", params.endDate);
-  summarySearch.set("page", "1");
-  summarySearch.set("page_size", "1");
+  const search = new URLSearchParams();
+  if (params.startDate) search.set("start_date", params.startDate);
+  if (params.endDate) search.set("end_date", params.endDate);
+  appendOrderProfitFilters(search, params);
+  search.set("page", String(page));
+  search.set("page_size", String(pageSize));
 
   const requestOptions = params.signal ? { signal: params.signal } : undefined;
 
-  const [rowsEnvelope, summaryEnvelope] = await Promise.all([
-    backendRequest<BackendDailySalesData, OrderProfitApiMeta>(
-      `/api/sales/daily-sales?${rowSearch.toString()}`,
-      requestOptions,
-    ),
-    backendRequest<BackendOrderProfitData, OrderProfitApiMeta>(
-      `/api/sales/order-profit?${summarySearch.toString()}`,
-      requestOptions,
-    ),
-  ]);
+  const envelope = await backendRequest<BackendDailySalesData, OrderProfitApiMeta>(
+    `/api/sales/daily-sales?${search.toString()}`,
+    requestOptions,
+  );
 
-  const items = Array.isArray(rowsEnvelope.data.items) ? rowsEnvelope.data.items : [];
+  const items = Array.isArray(envelope.data.items) ? envelope.data.items : [];
 
   return {
     records: items.map(toOrderProfitSourceRecord),
-    summary: toOrderProfitServerSummary(summaryEnvelope.data.summary),
-    meta: rowsEnvelope.meta,
+    summary: toOrderProfitServerSummary(envelope.data.summary),
+    meta: envelope.meta,
   };
 }
 

@@ -166,6 +166,8 @@ function DailySalesToolbar({
           onChange={(value) => update("platforms", value as DailySalesPlatform[])}
         />
         <Select
+          popupMatchSelectWidth={false}
+          styles={{ popup: { root: { width: 360, minWidth: 360, maxWidth: 460 } } }}
           mode="multiple"
           showSearch
           className="report-filter-select"
@@ -180,6 +182,8 @@ function DailySalesToolbar({
           onChange={(value) => update("owners", value)}
         />
         <Select
+          popupMatchSelectWidth={false}
+          styles={{ popup: { root: { width: 360, minWidth: 360, maxWidth: 460 } } }}
           mode="multiple"
           showSearch
           className="report-filter-select"
