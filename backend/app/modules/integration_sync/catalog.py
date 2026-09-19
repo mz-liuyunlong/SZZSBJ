@@ -1,18 +1,20 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Protocol
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_catalog import (
     DATA_PAGES_SYNC_INTERFACE_SPECS,
-    DataPagesSyncInterfaceSpec,
 )
 from app.modules.integration_sync.models import (
     IntegrationInterface,
     IntegrationInterfaceDependency,
     IntegrationSyncConfig,
     RawRetentionPolicy,
+)
+from app.modules.integration_sync.pmc_purchase_catalog import (
+    PMC_PURCHASE_SYNC_INTERFACE_SPECS,
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 
@@ -25,6 +27,35 @@ class ProductListGovernanceBootstrapError(RuntimeError):
 
 class DataPagesGovernanceBootstrapError(RuntimeError):
     """Safe DATA-PAGES bootstrap validation error without account values."""
+
+
+class PmcPurchaseGovernanceBootstrapError(RuntimeError):
+    """Safe PMC purchase bootstrap validation error without account values."""
+
+
+class SyncInterfaceSpecLike(Protocol):
+    """Fields the disabled-catalog bootstrap needs from any static interface spec."""
+
+    @property
+    def interface_key(self) -> str: ...
+    @property
+    def display_name(self) -> str: ...
+    @property
+    def endpoint_path(self) -> str: ...
+    @property
+    def request_kind(self) -> str: ...
+    @property
+    def handler_key(self) -> str: ...
+    @property
+    def retention_policy_key(self) -> str: ...
+    @property
+    def default_page_size(self) -> int: ...
+    @property
+    def default_max_pages(self) -> int: ...
+    @property
+    def initial_outbound_enabled(self) -> bool: ...
+    @property
+    def schedule_enabled(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +82,9 @@ class DataPagesGovernanceBootstrapResult:
     @property
     def sync_configs_created(self) -> int:
         return self.sync_config_statuses.count("created")
+
+
+PmcPurchaseGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
 
 
 class IntegrationCatalogService:
@@ -249,9 +283,47 @@ class IntegrationCatalogService:
             self.session.rollback()
             raise
 
+    def bootstrap_pmc_purchase_governance(
+        self,
+        source_account_ref: str,
+    ) -> PmcPurchaseGovernanceBootstrapResult:
+        """Create disabled governance metadata for the PMC purchase-board interfaces.
+
+        Reuses the DATA-PAGES bootstrap helpers; the three rows per interface are created
+        with ``outbound_enabled=False``, ``is_enabled=False`` and ``schedule_enabled=False``.
+        This never authorizes calls, schedules, migrations or production execution.
+        """
+
+        source_account_ref = validate_pmc_purchase_source_account_ref(source_account_ref)
+        interface_statuses: list[BootstrapStatus] = []
+        retention_policy_statuses: list[BootstrapStatus] = []
+        sync_config_statuses: list[BootstrapStatus] = []
+        try:
+            for spec in PMC_PURCHASE_SYNC_INTERFACE_SPECS:
+                interface, interface_status = self._bootstrap_data_pages_interface(spec)
+                policy, retention_policy_status = self._bootstrap_data_pages_retention_policy(spec)
+                sync_config_status = self._bootstrap_data_pages_sync_config(
+                    interface,
+                    policy,
+                    spec,
+                    source_account_ref,
+                )
+                interface_statuses.append(interface_status)
+                retention_policy_statuses.append(retention_policy_status)
+                sync_config_statuses.append(sync_config_status)
+            self.session.commit()
+            return PmcPurchaseGovernanceBootstrapResult(
+                interface_statuses=tuple(interface_statuses),
+                retention_policy_statuses=tuple(retention_policy_statuses),
+                sync_config_statuses=tuple(sync_config_statuses),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
     def _bootstrap_data_pages_interface(
         self,
-        spec: DataPagesSyncInterfaceSpec,
+        spec: SyncInterfaceSpecLike,
     ) -> tuple[IntegrationInterface, BootstrapStatus]:
         interface = self.repository.get_interface_by_key("lingxing", spec.interface_key)
         if interface is None:
@@ -284,7 +356,7 @@ class IntegrationCatalogService:
 
     def _bootstrap_data_pages_retention_policy(
         self,
-        spec: DataPagesSyncInterfaceSpec,
+        spec: SyncInterfaceSpecLike,
     ) -> tuple[RawRetentionPolicy, BootstrapStatus]:
         policy = self.repository.get_retention_policy_by_key(spec.retention_policy_key)
         if policy is None:
@@ -320,7 +392,7 @@ class IntegrationCatalogService:
         self,
         interface: IntegrationInterface,
         policy: RawRetentionPolicy,
-        spec: DataPagesSyncInterfaceSpec,
+        spec: SyncInterfaceSpecLike,
         source_account_ref: str,
     ) -> BootstrapStatus:
         config = self.repository.get_config_by_scope(interface.id, source_account_ref)
@@ -381,6 +453,14 @@ def validate_productlist_source_account_ref(value: str) -> str:
     if not value or value != value.strip() or len(value) > 128:
         raise ProductListGovernanceBootstrapError(
             "PRODUCTLIST_GOVERNANCE_BOOTSTRAP_SOURCE_ACCOUNT_REF_INVALID"
+        )
+    return value
+
+
+def validate_pmc_purchase_source_account_ref(value: str) -> str:
+    if not value or value != value.strip() or len(value) > 128:
+        raise PmcPurchaseGovernanceBootstrapError(
+            "PMC_PURCHASE_GOVERNANCE_BOOTSTRAP_SOURCE_ACCOUNT_REF_INVALID"
         )
     return value
 
