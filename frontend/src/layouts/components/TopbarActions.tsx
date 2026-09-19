@@ -62,7 +62,20 @@ function TopbarActions({
   const logoutConfirmed = useRef(false);
   const userButtonRef = useRef<HTMLButtonElement>(null);
   const userPanelRef = useRef<HTMLElement>(null);
+  const logoutFrameRef = useRef<number | null>(null);
+  const logoutCloseTimerRef = useRef<number | null>(null);
   const hasUnread = notifications.some((item) => item.unread);
+
+  useEffect(() => () => {
+    if (logoutFrameRef.current !== null) {
+      window.cancelAnimationFrame(logoutFrameRef.current);
+      logoutFrameRef.current = null;
+    }
+    if (logoutCloseTimerRef.current !== null) {
+      window.clearTimeout(logoutCloseTimerRef.current);
+      logoutCloseTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!userMenuOpen) return;
@@ -125,20 +138,41 @@ function TopbarActions({
     onOpenPage(pageKey);
   };
 
+  const clearLogoutAnimationHandles = () => {
+    if (logoutFrameRef.current !== null) {
+      window.cancelAnimationFrame(logoutFrameRef.current);
+      logoutFrameRef.current = null;
+    }
+    if (logoutCloseTimerRef.current !== null) {
+      window.clearTimeout(logoutCloseTimerRef.current);
+      logoutCloseTimerRef.current = null;
+    }
+  };
+
   const showLogout = () => {
+    clearLogoutAnimationHandles();
     setUserMenuOpen(false);
     logoutConfirmed.current = false;
     setLogoutOpen(true);
-    window.requestAnimationFrame(() => setLogoutEntered(true));
+    setLogoutEntered(false);
+    logoutFrameRef.current = window.requestAnimationFrame(() => {
+      logoutFrameRef.current = null;
+      setLogoutEntered(true);
+    });
   };
 
   const closeLogout = () => {
+    clearLogoutAnimationHandles();
     setLogoutEntered(false);
-    window.setTimeout(() => setLogoutOpen(false), 180);
+    logoutCloseTimerRef.current = window.setTimeout(() => {
+      logoutCloseTimerRef.current = null;
+      setLogoutOpen(false);
+    }, 180);
   };
 
   const confirmLogout = () => {
     if (logoutConfirmed.current) return;
+    clearLogoutAnimationHandles();
     logoutConfirmed.current = true;
     setLogoutEntered(false);
     setLogoutOpen(false);

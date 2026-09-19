@@ -182,13 +182,19 @@ describe("TopbarActions", () => {
       return screen.findByRole("dialog");
     };
 
+    const waitForLogoutClosed = async () => {
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    };
+
     await openLogout();
     fireEvent.click(screen.getByRole("button", { name: "暂不退出" }));
     expect(onLogout).not.toHaveBeenCalled();
+    await waitForLogoutClosed();
 
     await openLogout();
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(onLogout).not.toHaveBeenCalled();
+    await waitForLogoutClosed();
 
     await openLogout();
     fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
