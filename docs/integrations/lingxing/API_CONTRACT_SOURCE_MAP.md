@@ -599,7 +599,7 @@ Each row reports whether normalized request/response evidence exists and whether
 | `LX-8A3BEF320B33` | 查询FBA商品信息列表 | `/erp/sc/routing/fba/shipment/getFbaProductList` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-CEDC59ED8563` | 查询FBA货件商品FNSKU标签 | `/erp/sc/storage/shipment/printFnskuLabels` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-676C983961A2` | 查询亚马逊源报表-FBA订单 | `/erp/sc/data/mws_report/fbaOrders` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
-| `LX-4B9473A2D2E1` | 查询收货单列表 | `/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList` | `normalized CSV only` | Yes | Yes | `DO_NOT_USE` | No | `DO_NOT_USE` |
+| `LX-4B9473A2D2E1` | 查询收货单列表 | `/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList` | `normalized CSV only` | Yes | Yes | `READY_FOR_PRP` | Yes | `AUTH_UNKNOWN` (Owner-approved PRP only, 2026-09-18; no real-call authorization) |
 | `LX-ECAEE8038F87` | 查询质检单列表 | `/erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList` | `normalized CSV only` | Yes | Yes | `DO_NOT_USE` | No | `DO_NOT_USE` |
 | `LX-A49B65E222D2` | 获取商品预处理信息 | `/amzStaServer/openapi/inbound-packing/getPrepDetails` | `normalized CSV only` | No | No | `DELETED` | No | `DELETED` |
 | `LX-EE7D15BC8C4F` | 装箱任务-单据列表 | `/basicOpen/packingTask/getRelateSnList` | `normalized CSV only` | Yes | Yes | `DO_NOT_USE` | No | `DO_NOT_USE` |

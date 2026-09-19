@@ -85,7 +85,7 @@ LX-BE1057CB168C,P1,仓库,收货质检,,待收货退货单快捷入库,POST,/bas
 LX-186837F0F7C4,P2,仓库,收货质检,,收货单-编辑备注,POST,/basicOpen/inboundOrder/receiptOrder/updateOrderInfo,/docs/Warehouse/receiptOrderUpdateOrderInfo.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
 LX-E8B767C41774,P3,仓库,收货质检,,收货单到货,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/receive,/docs/Warehouse/Receive.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
 LX-FE893F657641,P3,仓库,收货质检,,收货单快捷入库,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/fastReceive,/docs/Warehouse/FastReceive.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
-LX-4B9473A2D2E1,P0,仓库,收货质检,,查询收货单列表,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList,/docs/Warehouse/PurchaseReceiptOrderList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
+LX-4B9473A2D2E1,P0,仓库,收货质检,,查询收货单列表,POST,/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList,/docs/Warehouse/PurchaseReceiptOrderList.md,文档已收录,未验证,,,是,未确认,未确认,Owner approved for PRP planning（方案 A，2026-09-18）,默认未实测；Owner approved for PRP planning / 方案 A / still requires real-call authorization before production use；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
 LX-ECAEE8038F87,P0,仓库,收货质检,,查询质检单列表,POST,/erp/sc/routing/deliveryReceipt/ReceiptOrderQc/getOrderList,/docs/Warehouse/ReceiptOrderQcList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
 LX-5D311ED3B89E,P0,仓库,收货质检,,查询质检单详情,POST,/basicOpen/qualityInspectionOrder/detail,/docs/Warehouse/qualityInspectionOrderDetail.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
 LX-1C62776E886A,P0,仓库,收货质检,,查询销售退货单列表,POST,/pb/mp/returns/v2/list,/docs/Warehouse/ReturnList.md,文档已收录,未验证,,,是,未确认,未确认,待评估,默认未实测；接入前需确认账号权限、分页、频控、字段、数据范围与错误码。
