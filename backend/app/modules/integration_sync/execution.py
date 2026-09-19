@@ -9,6 +9,9 @@ from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     LingxingBatchGetProductInfoSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_pmc_purchase_sync import (
+    PMC_PURCHASE_HANDLERS,
+)
 from app.modules.integration_sync.handlers.lingxing_product_info_executor import (
     PRODUCT_INFO_BATCH_SIZE,
     LingxingProductInfoExecutor,
@@ -46,6 +49,15 @@ class SyncRunExecutionService:
             return
         if run.provider == "lingxing" and run.interface_key == "productList":
             LingxingProductListSyncHandler(self.session).execute(run, interface)
+            return
+
+        purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
+        if (
+            run.provider == "lingxing"
+            and purchase_handler is not None
+            and interface.handler_key == purchase_handler.handler_key
+        ):
+            purchase_handler(self.session).execute(run, interface)
             return
 
         is_productinfo = (

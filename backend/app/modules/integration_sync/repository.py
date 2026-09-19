@@ -23,6 +23,15 @@ from app.modules.integration_sync.models import (
 )
 from app.modules.sku_detail.models import LingxingSkuIdentity
 
+# Only handlers this worker can dispatch (execution.py) may be recovered from "queued".
+RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
+    "productList",
+    "batchGetProductInfo",
+    "purchasePlanList",
+    "purchaseOrderList",
+    "purchaseReceiptOrderList",
+)
+
 
 class IntegrationSyncRepository:
     """Persistence only: callers own commit/rollback and task dispatch."""
@@ -494,6 +503,12 @@ class IntegrationSyncRepository:
         self.session.flush()
         return list(refs)
 
+    def add_ods_records(self, records: Sequence[object]) -> None:
+        """Append ODS rows (PMC purchase) in one flush; callers own the transaction."""
+        if records:
+            self.session.add_all(records)
+            self.session.flush()
+
     def add_parse_job(self, job: ParseJob) -> ParseJob:
         self.session.add(job)
         self.session.flush()
@@ -601,7 +616,7 @@ class IntegrationSyncRepository:
                 .where(
                     IntegrationSyncRun.status == "queued",
                     IntegrationSyncRun.provider == "lingxing",
-                    IntegrationSyncRun.interface_key.in_(("productList", "batchGetProductInfo")),
+                    IntegrationSyncRun.interface_key.in_(RECOVERABLE_INTERFACE_KEYS),
                     IntegrationSyncRun.queued_at <= queued_before,
                 )
                 .order_by(IntegrationSyncRun.queued_at, IntegrationSyncRun.id)
