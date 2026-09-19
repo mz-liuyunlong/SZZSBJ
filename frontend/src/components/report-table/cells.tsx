@@ -238,6 +238,7 @@ export function TrendPreviewCell({ values, dates, label = "销量" }: TrendPrevi
 
   const option = {
     animationDuration: 180,
+    title: { text: label, show: false },
     grid: { left: 38, right: 18, top: 38, bottom: 56 },
     tooltip: {
       trigger: "axis",

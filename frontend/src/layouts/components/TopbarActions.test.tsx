@@ -183,17 +183,15 @@ describe("TopbarActions", () => {
     };
 
     await openLogout();
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "暂不退出" }));
     expect(onLogout).not.toHaveBeenCalled();
 
     await openLogout();
-    const closeButton = document.querySelector<HTMLButtonElement>(".ant-modal-close");
-    if (!closeButton) throw new Error("Missing modal close button");
-    fireEvent.click(closeButton);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(onLogout).not.toHaveBeenCalled();
 
     await openLogout();
-    fireEvent.click(screen.getByRole("button", { name: "确认" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });

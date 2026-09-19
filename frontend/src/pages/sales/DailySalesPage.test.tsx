@@ -143,9 +143,22 @@ vi.mock("@/pages/sales/salesFilterOptionsApi", async () => {
 });
 
 vi.mock("echarts-for-react", () => ({
-  default: ({ option }: { option: { yAxis: { name: string } } }) => (
-    <div role="img" aria-label={`${option.yAxis.name}图表`} />
-  ),
+  default: ({
+    option,
+  }: {
+    option: {
+      title?: { text?: string };
+      yAxis?: { name?: string };
+      series?: Array<{ name?: string }>;
+    };
+  }) => {
+    const chartName = option.title?.text
+      ?? option.yAxis?.name
+      ?? option.series?.[0]?.name
+      ?? "趋势";
+
+    return <div role="img" aria-label={`${chartName}图表`} />;
+  },
 }));
 
 vi.mock("antd", async (importOriginal) => {
@@ -704,7 +717,7 @@ describe("DailySalesPage", () => {
       expect(within(summary).getByText(cardTitle)).toBeVisible();
     }
     expect(summary.querySelectorAll(".report-summary-pair-card__badge")).toHaveLength(4);
-    expect(summary.querySelectorAll("[data-tooltip*='今日：']")).toHaveLength(8);
+    expect(summary.querySelectorAll(".report-summary-pair-card__trend")).toHaveLength(8);
     expect(within(summary).queryByText("所选日期范围")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("销售趋势图")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /隐藏统计$/ }));
