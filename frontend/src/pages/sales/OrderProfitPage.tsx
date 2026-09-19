@@ -1,4 +1,4 @@
-/** Order-profit page backed by DATA-PAGES MART API with temporary local fallback. */
+/** Order-profit page backed by DATA-PAGES MART API. */
 import {
   CloudDownloadOutlined,
   EyeInvisibleOutlined,
@@ -6,8 +6,10 @@ import {
   SettingOutlined,
 } from "@ant-design/icons";
 import { Button, Card, Tooltip, Typography, message } from "antd";
-import { useEffect, useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
+import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
+import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import {
   REPORT_TABLE_DEFAULT_PAGE_SIZE,
@@ -21,8 +23,7 @@ import OrderProfitTable from "@/pages/sales/components/OrderProfitTable";
 import OrderProfitToolbar, {
   type OrderProfitFilters,
 } from "@/pages/sales/components/OrderProfitToolbar";
-import { fetchOrderProfitSourceRecords } from "@/pages/sales/orderProfitApi";
-import { orderProfitSourceRecords } from "@/pages/sales/orderProfitMockData";
+import { fetchOrderProfitSourceRecords, type OrderProfitServerSummary } from "@/pages/sales/orderProfitApi";
 import {
   aggregateOrderProfitRows,
   dateRangeForPreset,
@@ -34,6 +35,10 @@ import {
 import "@/pages/sales/OrderProfitPage.css";
 
 const EXPORT_PENDING = "导出接口待接入";
+const isAbortError = (reason: unknown) => (
+  reason instanceof Error && reason.name === "AbortError"
+);
+
 const TEMPLATE_PENDING = "列模板接口待接入";
 
 const createInitialFilters = (): OrderProfitFilters => ({
@@ -41,7 +46,7 @@ const createInitialFilters = (): OrderProfitFilters => ({
   owners: [],
   stores: [],
   currency: "USD",
-  datePreset: "today",
+  datePreset: "custom",
   dateRange: dateRangeForPreset("today"),
   searchField: "productId",
   keyword: "",
@@ -75,8 +80,13 @@ interface OrderProfitPageProps {
 
 function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
+  const isPageActive = true;
+  const pageStateKey = "order-profit:v4";
+  const orderProfitPageRootRef = useRef<HTMLDivElement | null>(null);
   const [filters, setFilters] = useState(createInitialFilters);
-  const [sourceRecords, setSourceRecords] = useState<OrderProfitSourceRecord[]>(orderProfitSourceRecords);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [sourceRecords, setSourceRecords] = useState<OrderProfitSourceRecord[]>([]);
+  const [orderProfitSummary, setOrderProfitSummary] = useState<OrderProfitServerSummary | null>(null);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
@@ -87,30 +97,67 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<OrderProfitRow>();
+  const [isTableRequesting, setIsTableRequesting] = useState(false);
+
+  // ORDER_PROFIT_RESET_FILTERS_ON_MOUNT
+  useEffect(() => {
+    queueMicrotask(() => {
+      setFilters(createInitialFilters());
+      setCurrentPage(1);
+      setSelectedRowKeys([]);
+    });
+  }, []);
 
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
+  useElementScrollRestoration(`${pageStateKey}:tableScroll`, orderProfitPageRootRef, ".ant-table-body");
 
   useEffect(() => {
+    if (!isPageActive) {
+      queueMicrotask(() => setIsTableRequesting(false));
+      return undefined;
+    }
+
     let active = true;
+    const controller = new AbortController();
+
+    queueMicrotask(() => {
+      if (active) setIsTableRequesting(true);
+    });
     void fetchOrderProfitSourceRecords({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
-      pageSize: 500,
+      page: currentPage,
+      pageSize,
+      signal: controller.signal,
     })
-      .then(({ records }) => {
-        if (active) setSourceRecords(records);
+      .then(({ records, summary, meta }) => {
+        if (!active) return;
+        setSourceRecords(Array.isArray(records) ? records : []);
+        setOrderProfitSummary(summary);
+        setServerTotal(meta.total);
       })
-      .catch(() => {
-        // Keep the local fallback visible until the backend has synced MART data.
+      .catch((reason: unknown) => {
+        if (!active || isAbortError(reason)) return;
+        setSourceRecords([]);
+        setOrderProfitSummary(null);
+        setServerTotal(0);
+      })
+      .finally(() => {
+        if (active) setIsTableRequesting(false);
       });
+
     return () => {
       active = false;
+      controller.abort();
+      setIsTableRequesting(false);
     };
-  }, [dateRangeStart, dateRangeEnd]);
+  }, [currentPage, dateRangeStart, dateRangeEnd, isPageActive, pageSize]);
 
-  const owners = useMemo(() => [...new Set(sourceRecords.map((row) => row.owner))], [sourceRecords]);
-  const stores = useMemo(() => [...new Set(sourceRecords.map((row) => row.store))], [sourceRecords]);
+  const safeSourceRecords = Array.isArray(sourceRecords) ? sourceRecords : [];
+
+  const owners = useMemo(() => [...new Set(safeSourceRecords.map((row) => row.owner))], [sourceRecords]);
+  const stores = useMemo(() => [...new Set(safeSourceRecords.map((row) => row.store))], [sourceRecords]);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -119,7 +166,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
   const filteredSourceRecords = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
-    return sourceRecords.filter((row) => {
+    return safeSourceRecords.filter((row) => {
       const target = String(row[filters.searchField]).toLocaleLowerCase();
       const exactTarget = String(row[filters.searchField]);
       return (filters.platforms.length === 0 || filters.platforms.includes(row.platform))
@@ -129,7 +176,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         && (!keyword || target.includes(keyword))
         && (!filters.batchValues?.length || filters.batchValues.includes(exactTarget));
     });
-  }, [filters, sourceRecords]);
+  }, [filters, safeSourceRecords]);
 
   const filteredRows = useMemo(() => aggregateOrderProfitRows(filteredSourceRecords), [filteredSourceRecords]);
 
@@ -200,7 +247,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   return (
     <PageShell page={page} headerActions={headerActions}>
       {messageContextHolder}
-      <div className="order-profit">
+      <div ref={orderProfitPageRootRef} className="order-profit">
         <section className="order-profit__page-header" aria-label="订单利润页面说明">
           <div>
             <Typography.Title level={3}>订单利润</Typography.Title>
@@ -209,8 +256,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
             </Typography.Paragraph>
           </div>
         </section>
-
-        <Card size="small" className="order-profit__toolbar-card">
+          <Card size="small" className="order-profit__toolbar-card">
           <OrderProfitToolbar
             key={toolbarResetKey}
             filters={filters}
@@ -224,11 +270,24 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
           />
         </Card>
 
-        {statisticsVisible && <OrderProfitSummaryCards rows={filteredRows} currency={filters.currency} />}
+        {statisticsVisible && (
+          <OrderProfitSummaryCards
+            rows={filteredRows}
+            currency={filters.currency}
+            serverSummary={orderProfitSummary}
+          />
+        )}
         {chartsVisible && <OrderProfitCharts records={filteredSourceRecords} currency={filters.currency} />}
 
-        <OrderProfitTable
+          <div className="order-profit__table-request-wrap">
+
+
+            <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载订单利润数据，请稍候" />
+
+
+            <OrderProfitTable
           rows={filteredRows}
+          total={serverTotal || filteredRows.length}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}
@@ -248,7 +307,8 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
           onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={setDetailRow}
-        />
+          />
+      </div>
       </div>
 
       <RuntimeColumnConfigDrawer

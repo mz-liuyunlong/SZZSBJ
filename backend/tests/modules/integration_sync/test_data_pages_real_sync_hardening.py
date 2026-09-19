@@ -1,13 +1,16 @@
 from datetime import UTC, date, datetime
 from typing import Any, cast
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_real_sync import (
     SP_CAMPAIGN_TYPES,
+    DataPagesRealSyncError,
     DataPagesRealSyncRunner,
     ProviderResponse,
     _ad_identity_hash,
+    _ad_metric_signature,
     _resolve_ad_identity,
     _scalar_candidates,
 )
@@ -180,3 +183,80 @@ def test_ad_identity_hash_ignores_mutable_metrics() -> None:
     }
 
     assert _ad_identity_hash(original) == _ad_identity_hash(refreshed)
+
+
+class _CaptureSession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, Any]] = []
+
+    def execute(self, statement: Any, params: Any = None) -> None:
+        self.calls.append((statement, params))
+
+
+def _ad_writer_runner(session: _CaptureSession) -> DataPagesRealSyncRunner:
+    return DataPagesRealSyncRunner(
+        session=cast(Session, session),
+        client=cast(Any, object()),
+        source_account_ref="primary",
+        business_date=date(2026, 9, 11),
+        page_size=100,
+        campaign_type="SP",
+        max_advertisers=20,
+    )
+
+
+def test_ad_metric_signature_treats_missing_and_zero_metrics_as_same() -> None:
+    missing_metrics = {"key": "provider-key"}
+    zero_metrics = {
+        "key": "provider-key",
+        "adSpend": "0",
+        "attributedSales": "0",
+        "attributedOrders": "0",
+        "attributedUnits": "0",
+        "advertisedSkuSales": "0",
+        "advertisedSkuUnits": "0",
+        "numAdsClicks": 0,
+        "numAdsShown": 0,
+        "acos": "0",
+        "roas": "0",
+        "cpc": "0",
+        "ctr": "0",
+        "cvr": "0",
+    }
+
+    assert _ad_metric_signature(missing_metrics) == _ad_metric_signature(zero_metrics)
+
+
+def test_write_ads_collapses_duplicate_identity_with_same_metrics() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+    row = {
+        "advertiserId": "advertiser-1",
+        "key": "duplicate-zero-spend-key",
+        "adSpend": "0",
+        "numAdsClicks": 0,
+        "numAdsShown": 0,
+    }
+
+    count = runner._write_ads([row, dict(row)])
+
+    assert count == 1
+    assert len(session.calls) == 2
+
+
+def test_write_ads_rejects_duplicate_identity_with_conflicting_metrics() -> None:
+    session = _CaptureSession()
+    runner = _ad_writer_runner(session)
+    first = {
+        "advertiserId": "advertiser-1",
+        "key": "duplicate-conflict-key",
+        "adSpend": "0",
+    }
+    second = {
+        "advertiserId": "advertiser-1",
+        "key": "duplicate-conflict-key",
+        "adSpend": "1.25",
+    }
+
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_AD_SOURCE_IDENTITY_DUPLICATE"):
+        runner._write_ads([first, second])

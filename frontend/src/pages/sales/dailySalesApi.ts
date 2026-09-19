@@ -1,5 +1,6 @@
 import { backendRequest } from "@/api/backendApi";
 import type {
+  DailySalesCurrency,
   DailySalesRefundSummary,
   DailySalesRow,
 } from "@/pages/sales/dailySalesTypes";
@@ -70,6 +71,14 @@ interface BackendDailySalesItem {
 }
 
 interface BackendDailySalesSummary {
+  sales_qty: string;
+  order_count: string;
+  sales_amount: string;
+  sales_currency_code: string | null;
+  order_profit_amount: string;
+  order_profit_currency_code: string | null;
+  ad_spend_amount: string;
+  ad_spend_currency_code: string | null;
   refund_event_qty: string;
   refund_event_amount: string;
   refund_event_currency_code: string | null;
@@ -89,8 +98,23 @@ export interface DailySalesApiMeta {
   input_missing: boolean;
 }
 
+export interface DailySalesServerSummary {
+  salesQuantity: number;
+  orderCount: number;
+  salesAmount: number;
+  salesCurrency: DailySalesCurrency;
+  orderProfitAmount: number;
+  orderProfitCurrency: DailySalesCurrency;
+  adSpendAmount: number;
+  adSpendCurrency: DailySalesCurrency;
+  refundEventQuantity: number;
+  refundEventAmount: number;
+  refundEventCurrency: DailySalesCurrency;
+}
+
 export interface DailySalesApiResult {
   rows: DailySalesRow[];
+  summary: DailySalesServerSummary | null;
   refundSummary: DailySalesRefundSummary | null;
   meta: DailySalesApiMeta;
 }
@@ -98,10 +122,11 @@ export interface DailySalesApiResult {
 interface DailySalesParams {
   startDate?: string;
   endDate?: string;
+  page?: number;
   pageSize?: number;
+  signal?: AbortSignal;
 }
 
-const MAX_API_PAGES = 10_000;
 
 const platformLabel = (platformCode: string | null): DailySalesRow["platform"] => {
   if (platformCode === "10008") return "Walmart";
@@ -187,53 +212,71 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => ({
   operationLog: "运营日志待接入",
 });
 
-export async function fetchDailySalesRows(params: DailySalesParams): Promise<DailySalesApiResult> {
-  const pageSize = params.pageSize ?? 500;
-  const items: BackendDailySalesItem[] = [];
-  let firstMeta: DailySalesApiMeta | null = null;
-  let refundSummary: DailySalesRefundSummary | null = null;
+const toDailySalesServerSummary = (
+  summary: BackendDailySalesSummary | undefined,
+): DailySalesServerSummary | null => {
+  if (!summary) return null;
 
-  for (let page = 1; page <= MAX_API_PAGES; page += 1) {
-    const search = new URLSearchParams();
-    if (params.startDate) search.set("start_date", params.startDate);
-    if (params.endDate) search.set("end_date", params.endDate);
-    search.set("page", String(page));
-    search.set("page_size", String(pageSize));
+  return {
+    salesQuantity: numberValue(summary.sales_qty),
+    orderCount: numberValue(summary.order_count),
+    salesAmount: numberValue(summary.sales_amount),
+    salesCurrency: currencyLabel(summary.sales_currency_code),
+    orderProfitAmount: numberValue(summary.order_profit_amount),
+    orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
+    adSpendAmount: numberValue(summary.ad_spend_amount),
+    adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
+    refundEventQuantity: numberValue(summary.refund_event_qty),
+    refundEventAmount: numberValue(summary.refund_event_amount),
+    refundEventCurrency: currencyLabel(summary.refund_event_currency_code),
+  };
+};
 
-    const envelope = await backendRequest<BackendDailySalesData, DailySalesApiMeta>(
-      `/api/sales/daily-sales?${search.toString()}`,
-    );
+async function fetchDailySalesRowsFromApi(
+  params: DailySalesParams,
+): Promise<DailySalesApiResult> {
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 50;
+  const search = new URLSearchParams();
 
-    firstMeta ??= envelope.meta;
-    if (refundSummary == null && envelope.data.summary) {
-      refundSummary = {
-        quantity: numberValue(envelope.data.summary.refund_event_qty),
-        amount: numberValue(envelope.data.summary.refund_event_amount),
-        currency: currencyLabel(envelope.data.summary.refund_event_currency_code),
-      };
-    }
-    items.push(...envelope.data.items);
+  if (params.startDate) search.set("start_date", params.startDate);
+  if (params.endDate) search.set("end_date", params.endDate);
+  search.set("page", String(page));
+  search.set("page_size", String(pageSize));
 
-    if (
-      envelope.data.items.length === 0 ||
-      items.length >= envelope.meta.total ||
-      envelope.data.items.length < envelope.meta.page_size
-    ) {
-      const meta = firstMeta ?? envelope.meta;
-      return {
-        rows: items.map(toDailySalesRow),
-        refundSummary,
-        meta: {
-          ...meta,
-          page: 1,
-          page_size: items.length,
-          total: envelope.meta.total,
-          partial: meta.partial || envelope.meta.partial,
-          input_missing: meta.input_missing || envelope.meta.input_missing,
-        },
-      };
-    }
-  }
+  const envelope = await backendRequest<BackendDailySalesData, DailySalesApiMeta>(
+    `/api/sales/daily-sales?${search.toString()}`,
+    params.signal ? { signal: params.signal } : undefined,
+  );
 
-  throw new Error("Daily Sales API pagination exceeded the safety limit");
+  const items = Array.isArray(envelope.data.items) ? envelope.data.items : [];
+  const summary = toDailySalesServerSummary(envelope.data.summary);
+  const refundSummary = summary
+    ? {
+        quantity: summary.refundEventQuantity,
+        amount: summary.refundEventAmount,
+        currency: summary.refundEventCurrency,
+      }
+    : null;
+
+  return {
+    rows: items.map(toDailySalesRow),
+    summary,
+    refundSummary,
+    meta: envelope.meta,
+  };
+}
+
+
+
+
+export function fetchDailySalesRows(
+  params: DailySalesParams,
+): Promise<DailySalesApiResult> {
+  return fetchDailySalesRowsFromApi(params);
+}
+
+
+export function preloadDailySalesRows(params: DailySalesParams): void {
+  void fetchDailySalesRows(params).catch(() => undefined);
 }

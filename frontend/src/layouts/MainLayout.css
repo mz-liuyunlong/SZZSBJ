@@ -399,6 +399,7 @@
   display: none !important;
 }
 
+
 .main-layout__page-panel--active {
   display: block;
 }
@@ -637,3 +638,5 @@
   align-self: stretch !important;
 }
 /* End force full-width business workspace */
+
+

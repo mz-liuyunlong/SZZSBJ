@@ -27,6 +27,7 @@ from app.modules.data_pages.schemas import (
     OrderProfitItemRead,
     OrderProfitListData,
     OrderProfitQuery,
+    OrderProfitSummaryRead,
 )
 
 
@@ -107,6 +108,26 @@ class DailySalesService:
             page=query.page,
             page_size=query.page_size,
         )
+        (
+            sales_qty,
+            order_count,
+            sales_amount,
+            sales_currency,
+            order_profit_amount,
+            order_profit_currency,
+            ad_spend_amount,
+            ad_spend_currency,
+        ) = self.repository.daily_sales_summary(
+            account_refs=account_refs,
+            start_date=query.start_date,
+            end_date=query.end_date,
+            platform=query.platform,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            search_field=query.search_field,
+            keyword=query.keyword,
+        )
+
         refund_qty, refund_amount, refund_currency = self.repository.refund_event_summary(
             account_refs=account_refs,
             start_date=query.start_date,
@@ -117,6 +138,14 @@ class DailySalesService:
             DailySalesListData(
                 items=[self._to_read(row) for row in rows],
                 summary=DailySalesSummaryRead(
+                    sales_qty=_decimal(sales_qty),
+                    order_count=_decimal(order_count),
+                    sales_amount=_decimal(sales_amount),
+                    sales_currency_code=sales_currency or "USD",
+                    order_profit_amount=_decimal(order_profit_amount),
+                    order_profit_currency_code=order_profit_currency or "USD",
+                    ad_spend_amount=_decimal(ad_spend_amount),
+                    ad_spend_currency_code=ad_spend_currency or "USD",
                     refund_event_qty=_decimal(refund_qty),
                     refund_event_amount=_decimal(refund_amount),
                     refund_event_currency_code=refund_currency or "USD",
@@ -214,6 +243,7 @@ class OrderProfitService:
 
     def list_order_profit(
         self,
+        *,
         query: OrderProfitQuery,
         account_refs: frozenset[str],
     ) -> tuple[OrderProfitListData, int, object | None]:
@@ -227,8 +257,43 @@ class OrderProfitService:
             page=query.page,
             page_size=query.page_size,
         )
+
+        (
+            sales_qty,
+            order_count,
+            sales_amount,
+            sales_currency,
+            refund_amount,
+            refund_currency,
+            order_profit_amount,
+            order_profit_currency,
+            ad_spend_amount,
+            ad_spend_currency,
+        ) = self.repository.order_profit_summary(
+            account_refs=account_refs,
+            start_date=query.start_date,
+            end_date=query.end_date,
+            store_id=query.store_id,
+            search_field=query.search_field,
+            keyword=query.keyword,
+        )
+
         return (
-            OrderProfitListData(items=[self._to_read(row) for row in rows]),
+            OrderProfitListData(
+                items=[self._to_read(row) for row in rows],
+                summary=OrderProfitSummaryRead(
+                    sales_qty=_decimal(sales_qty),
+                    order_count=_decimal(order_count),
+                    sales_amount=_decimal(sales_amount),
+                    sales_currency_code=sales_currency or "USD",
+                    refund_amount=_decimal(refund_amount),
+                    refund_currency_code=refund_currency or "USD",
+                    order_profit_amount=_decimal(order_profit_amount),
+                    order_profit_currency_code=order_profit_currency or "USD",
+                    ad_spend_amount=_decimal(ad_spend_amount),
+                    ad_spend_currency_code=ad_spend_currency or "USD",
+                ),
+            ),
             total,
             latest_calculated_at,
         )
@@ -305,6 +370,10 @@ class ListingManagementService:
             picture_url=row.picture_url,
             item_url=row.item_url,
             owner_ref=row.owner_ref,
+            owner_uid=getattr(row, "owner_uid", None),
+            owner_name=getattr(row, "owner_name", None),
+            product_developer_uid=getattr(row, "product_developer_uid", None),
+            product_developer_name=getattr(row, "product_developer_name", None),
             product_grade=row.product_grade,
             tags=_tag_list(row.tags_json),
             strike_price_amount=row.strike_price_amount,

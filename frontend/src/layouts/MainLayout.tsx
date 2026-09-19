@@ -3,7 +3,7 @@
  */
 import { ClockCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Layout, Menu, message, Tabs, Typography } from "antd";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PageHeaderOutletProvider } from "@/components/page/PageShell";
 import { navigation, type NavigationPage } from "@/config/navigation";
@@ -20,6 +20,7 @@ import {
   isMockPageVisibleForRole,
 } from "@/shared/permissions/mockAccess";
 import useTabWorkspace from "@/layouts/useTabWorkspace";
+import { preloadNavigationGroupData, preloadPageData, preloadPrimaryPageData } from "@/shared/preload/pagePreload";
 import "@/layouts/MainLayout.css";
 
 function requireNavigationItem<T>(value: T | undefined, message: string): T {
@@ -51,6 +52,57 @@ interface MainLayoutProps {
   renderPage?: (page: NavigationPage) => ReactNode;
   currentUser?: MockAuthUser;
 }
+
+
+interface CachedPagePanelProps {
+  path: string;
+  page: NavigationPage;
+  isActive: boolean;
+  renderPage: (page: NavigationPage) => ReactNode;
+}
+
+interface CachedPageContentProps {
+  path: string;
+  page: NavigationPage;
+  renderPage: (page: NavigationPage) => ReactNode;
+}
+
+const CachedPageContent = memo(function CachedPageContent({
+  page,
+  renderPage,
+}: CachedPageContentProps) {
+  return <>{renderPage(page)}</>;
+}, (previous, next) => (
+  previous.path === next.path
+  && previous.page.key === next.page.key
+));
+
+CachedPageContent.displayName = "CachedPageContent";
+
+const CachedPagePanel = memo(function CachedPagePanel({
+  path,
+  page,
+  isActive,
+  renderPage,
+}: CachedPagePanelProps) {
+  return (
+    <div
+      className={`main-layout__page-panel${
+        isActive ? " main-layout__page-panel--active" : ""
+      }`}
+      hidden={!isActive}
+      aria-hidden={!isActive}
+    >
+      <CachedPageContent path={path} page={page} renderPage={renderPage} />
+    </div>
+  );
+}, (previous, next) => (
+  previous.path === next.path
+  && previous.page.key === next.page.key
+  && previous.isActive === next.isActive
+));
+
+CachedPagePanel.displayName = "CachedPagePanel";
 
 function MainLayout({
   children,
@@ -95,6 +147,10 @@ function MainLayout({
       .filter((group) => group.children.length > 0)
   ), [currentUser.role]);
 
+  useEffect(() => {
+    preloadPrimaryPageData();
+  }, []);
+
   useEffect(() => () => {
     if (secondaryHoverTimerRef.current !== null) {
       window.clearTimeout(secondaryHoverTimerRef.current);
@@ -132,6 +188,7 @@ function MainLayout({
 
 
 
+
   const clearPendingSecondaryHover = () => {
     if (secondaryHoverTimerRef.current !== null) {
       window.clearTimeout(secondaryHoverTimerRef.current);
@@ -146,10 +203,12 @@ function MainLayout({
     clearPendingSecondaryHover();
     setFlyoutGroupKey(key);
     setSecondaryOpen(true);
+    preloadNavigationGroupData(key);
   };
 
   const scheduleSecondaryGroupHover = (key: string) => {
     clearPendingSecondaryHover();
+    preloadNavigationGroupData(key);
 
     if (!secondaryOpen || flyoutGroupKey === key) return;
 
@@ -176,6 +235,7 @@ function MainLayout({
       closeSecondaryMenu();
       return;
     }
+    preloadPageData(selection.page.path);
     const openResult = openPath(selection.page.path);
     if (openResult === "invalid") return;
     if (openResult === "limit") {
@@ -191,6 +251,7 @@ function MainLayout({
   const activateTab = (path: string) => {
     const resolution = resolveRoute(path);
     if (resolution.kind !== "allowed") return;
+    preloadPageData(path);
     navigate(path);
     closeSecondaryMenu();
   };
@@ -414,22 +475,15 @@ function MainLayout({
           <Layout.Content className="main-layout__content" aria-label="内容区">
             {renderPage ? (
               <div className="main-layout__page-panels">
-                {openRoutes.map(({ path, page }) => {
-                  const isActive = path === activePage.path;
-
-                  return (
-                    <div
-                      key={path}
-                      className={`main-layout__page-panel${
-                        isActive ? " main-layout__page-panel--active" : ""
-                      }`}
-                      hidden={!isActive}
-                      aria-hidden={!isActive}
-                    >
-                      {renderPage(page)}
-                    </div>
-                  );
-                })}
+                {openRoutes.map(({ path, page }) => (
+                  <CachedPagePanel
+                    key={path}
+                    path={path}
+                    page={page}
+                    isActive={path === activePage.path}
+                    renderPage={renderPage}
+                  />
+                ))}
               </div>
             ) : children ? (
               children

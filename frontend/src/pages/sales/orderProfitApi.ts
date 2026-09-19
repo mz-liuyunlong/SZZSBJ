@@ -1,5 +1,8 @@
 import { backendRequest } from "@/api/backendApi";
-import type { OrderProfitSourceRecord } from "@/pages/sales/orderProfitTypes";
+import type {
+  OrderProfitCurrency,
+  OrderProfitSourceRecord,
+} from "@/pages/sales/orderProfitTypes";
 
 interface BackendDailySalesItem {
   id: string;
@@ -33,6 +36,24 @@ interface BackendDailySalesData {
   items: BackendDailySalesItem[];
 }
 
+interface BackendOrderProfitSummary {
+  sales_qty: string;
+  order_count: string;
+  sales_amount: string;
+  sales_currency_code: string | null;
+  refund_amount: string;
+  refund_currency_code: string | null;
+  order_profit_amount: string;
+  order_profit_currency_code: string | null;
+  ad_spend_amount: string;
+  ad_spend_currency_code: string | null;
+}
+
+interface BackendOrderProfitData {
+  items: unknown[];
+  summary?: BackendOrderProfitSummary;
+}
+
 export interface OrderProfitApiMeta {
   latest_calculated_at: string | null;
   page: number;
@@ -42,24 +63,39 @@ export interface OrderProfitApiMeta {
   input_missing: boolean;
 }
 
+export interface OrderProfitServerSummary {
+  salesQuantity: number;
+  orderCount: number;
+  salesAmount: number;
+  salesCurrency: OrderProfitCurrency;
+  refundAmount: number;
+  refundCurrency: OrderProfitCurrency;
+  orderProfitAmount: number;
+  orderProfitCurrency: OrderProfitCurrency;
+  adSpendAmount: number;
+  adSpendCurrency: OrderProfitCurrency;
+}
+
 export interface OrderProfitApiResult {
   records: OrderProfitSourceRecord[];
+  summary: OrderProfitServerSummary | null;
   meta: OrderProfitApiMeta;
 }
 
 interface OrderProfitParams {
   startDate?: string;
   endDate?: string;
+  page?: number;
   pageSize?: number;
+  signal?: AbortSignal;
 }
 
-const MAX_API_PAGES = 10_000;
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 const nullableNumberValue = (value: string | null | undefined) => (
   value == null ? null : Number(value)
 );
 
-const currencyLabel = (currencyCode: string | null): OrderProfitSourceRecord["currency"] => (
+const currencyLabel = (currencyCode: string | null): OrderProfitCurrency => (
   currencyCode === "CNY" ? "CNY" : "USD"
 );
 
@@ -104,46 +140,65 @@ const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSour
   costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
 });
 
+const toOrderProfitServerSummary = (
+  summary: BackendOrderProfitSummary | undefined,
+): OrderProfitServerSummary | null => {
+  if (!summary) return null;
+
+  return {
+    salesQuantity: numberValue(summary.sales_qty),
+    orderCount: numberValue(summary.order_count),
+    salesAmount: numberValue(summary.sales_amount),
+    salesCurrency: currencyLabel(summary.sales_currency_code),
+    refundAmount: numberValue(summary.refund_amount),
+    refundCurrency: currencyLabel(summary.refund_currency_code),
+    orderProfitAmount: numberValue(summary.order_profit_amount),
+    orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
+    adSpendAmount: numberValue(summary.ad_spend_amount),
+    adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
+  };
+};
+
 export async function fetchOrderProfitSourceRecords(
   params: OrderProfitParams,
 ): Promise<OrderProfitApiResult> {
-  const pageSize = params.pageSize ?? 500;
-  const items: BackendDailySalesItem[] = [];
-  let firstMeta: OrderProfitApiMeta | null = null;
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 50;
 
-  for (let page = 1; page <= MAX_API_PAGES; page += 1) {
-    const search = new URLSearchParams();
-    if (params.startDate) search.set("start_date", params.startDate);
-    if (params.endDate) search.set("end_date", params.endDate);
-    search.set("page", String(page));
-    search.set("page_size", String(pageSize));
+  const rowSearch = new URLSearchParams();
+  if (params.startDate) rowSearch.set("start_date", params.startDate);
+  if (params.endDate) rowSearch.set("end_date", params.endDate);
+  rowSearch.set("page", String(page));
+  rowSearch.set("page_size", String(pageSize));
 
-    const envelope = await backendRequest<BackendDailySalesData, OrderProfitApiMeta>(
-      `/api/sales/daily-sales?${search.toString()}`,
-    );
+  const summarySearch = new URLSearchParams();
+  if (params.startDate) summarySearch.set("start_date", params.startDate);
+  if (params.endDate) summarySearch.set("end_date", params.endDate);
+  summarySearch.set("page", "1");
+  summarySearch.set("page_size", "1");
 
-    firstMeta ??= envelope.meta;
-    items.push(...envelope.data.items);
+  const requestOptions = params.signal ? { signal: params.signal } : undefined;
 
-    if (
-      envelope.data.items.length === 0 ||
-      items.length >= envelope.meta.total ||
-      envelope.data.items.length < envelope.meta.page_size
-    ) {
-      const meta = firstMeta ?? envelope.meta;
-      return {
-        records: items.map(toOrderProfitSourceRecord),
-        meta: {
-          ...meta,
-          page: 1,
-          page_size: items.length,
-          total: envelope.meta.total,
-          partial: meta.partial || envelope.meta.partial,
-          input_missing: meta.input_missing || envelope.meta.input_missing,
-        },
-      };
-    }
-  }
+  const [rowsEnvelope, summaryEnvelope] = await Promise.all([
+    backendRequest<BackendDailySalesData, OrderProfitApiMeta>(
+      `/api/sales/daily-sales?${rowSearch.toString()}`,
+      requestOptions,
+    ),
+    backendRequest<BackendOrderProfitData, OrderProfitApiMeta>(
+      `/api/sales/order-profit?${summarySearch.toString()}`,
+      requestOptions,
+    ),
+  ]);
 
-  throw new Error("Order Profit source pagination exceeded the safety limit");
+  const items = Array.isArray(rowsEnvelope.data.items) ? rowsEnvelope.data.items : [];
+
+  return {
+    records: items.map(toOrderProfitSourceRecord),
+    summary: toOrderProfitServerSummary(summaryEnvelope.data.summary),
+    meta: rowsEnvelope.meta,
+  };
+}
+
+export function preloadOrderProfitSourceRecords(params: OrderProfitParams): void {
+  void fetchOrderProfitSourceRecords(params).catch(() => undefined);
 }

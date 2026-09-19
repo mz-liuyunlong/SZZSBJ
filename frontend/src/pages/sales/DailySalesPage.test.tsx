@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import dayjs from "dayjs";
 import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,75 @@ import { dailySalesColumnFields } from "@/pages/sales/dailySalesTypes";
 const messageInfo = vi.fn();
 const messageSuccess = vi.fn();
 const messageError = vi.fn();
+
+
+vi.mock("@/pages/sales/dailySalesApi", async () => {
+  const { dailySalesMockData } = await import("@/pages/sales/dailySalesMockData");
+
+  type DailySalesMockRow = (typeof dailySalesMockData)[number];
+
+  const inDateRange = (
+    row: DailySalesMockRow,
+    params: { startDate?: string; endDate?: string },
+  ) => (!params.startDate || row.date >= params.startDate)
+    && (!params.endDate || row.date <= params.endDate);
+
+  const sum = (rows: DailySalesMockRow[], key: keyof DailySalesMockRow) => (
+    rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
+  );
+
+  const fetchDailySalesRows = vi.fn(async (
+    params: { startDate?: string; endDate?: string; page?: number; pageSize?: number; signal?: AbortSignal } = {},
+  ) => {
+    const search = new URLSearchParams();
+    if (params.startDate) search.set("start_date", params.startDate);
+    if (params.endDate) search.set("end_date", params.endDate);
+    search.set("page", String(params.page ?? 1));
+    search.set("page_size", String(params.pageSize ?? 50));
+
+    await fetch(`/api/sales/daily-sales?${search.toString()}`, {
+      credentials: "same-origin",
+      ...(params.signal ? { signal: params.signal } : {}),
+    });
+
+    const rows = dailySalesMockData.filter((row) => inDateRange(row, params));
+
+    return {
+      rows,
+      summary: {
+        salesQuantity: sum(rows, "salesVolume"),
+        orderCount: sum(rows, "orderCount"),
+        salesAmount: sum(rows, "salesAmount"),
+        salesCurrency: "USD",
+        orderProfitAmount: sum(rows, "orderProfit"),
+        orderProfitCurrency: "USD",
+        adSpendAmount: sum(rows, "adSpend"),
+        adSpendCurrency: "USD",
+        refundEventQuantity: sum(rows, "returnCount"),
+        refundEventAmount: sum(rows, "refundAmount"),
+        refundEventCurrency: "USD",
+      },
+      refundSummary: {
+        quantity: sum(rows, "returnCount"),
+        amount: sum(rows, "refundAmount"),
+        currency: "USD",
+      },
+      meta: {
+        latest_calculated_at: null,
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? 50,
+        total: rows.length,
+        partial: false,
+        input_missing: false,
+      },
+    };
+  });
+
+  return {
+    fetchDailySalesRows,
+    preloadDailySalesRows: vi.fn(),
+  };
+});
 
 vi.mock("echarts-for-react", () => ({
   default: ({ option }: { option: { yAxis: { name: string } } }) => (
@@ -321,6 +390,7 @@ beforeEach(() => {
   messageInfo.mockReset();
   messageSuccess.mockReset();
   messageError.mockReset();
+  vi.stubGlobal("fetch", vi.fn(async () => ({})));
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -342,12 +412,17 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
   sessionStorage.clear();
 });
 
-const renderPage = () => render(<DailySalesPage page={dailySalesPage!} />);
+const renderPage = async () => {
+  const view = render(<DailySalesPage page={dailySalesPage!} />);
+  await waitFor(() => expect(screen.getByTestId("pro-table")).not.toHaveAttribute("data-total", "0"));
+  return view;
+};
 const referenceDay = dayjs().subtract(1, "day").format("YYYY-MM-DD");
 const referenceRows = dailySalesMockData.filter((row) => row.date === referenceDay);
 const usdHeaders = dailySalesColumnFields.map((field) => ({
@@ -358,8 +433,8 @@ const usdHeaders = dailySalesColumnFields.map((field) => ({
 }[field.key] ?? field.title));
 
 describe("DailySalesPage", () => {
-  it("uses PageShell metadata, hides the implementation status, and keeps all visible columns in order", () => {
-    renderPage();
+  it("uses PageShell metadata, hides the implementation status, and keeps all visible columns in order", async () => {
+    await renderPage();
 
     expect(screen.getByRole("region", { name: "每日销售" }))
       .toContainElement(screen.getByLabelText("每日销售筛选"));
@@ -381,8 +456,8 @@ describe("DailySalesPage", () => {
     expect(headers).toContain("送样金额");
   });
 
-  it("shows refund event cards separately from row-level refund attribution", () => {
-    renderPage();
+  it("shows refund event cards separately from row-level refund attribution", async () => {
+    await renderPage();
 
     const summary = screen.getByRole("region", { name: "销售统计" });
     expect(within(summary).getByText("退款数量")).toBeVisible();
@@ -390,16 +465,16 @@ describe("DailySalesPage", () => {
     expect(within(summary).getAllByText("按退款发生日统计")).toHaveLength(2);
   });
 
-  it("leaves sync and help controls to MainLayout", () => {
-    renderPage();
+  it("leaves sync and help controls to MainLayout", async () => {
+    await renderPage();
 
     expect(screen.queryByText("同步时间：待接入")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "刷新每日销售" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /帮助/ })).not.toBeInTheDocument();
   });
 
-  it("moves page actions into the toolbar and reuses the runtime column drawer", () => {
-    renderPage();
+  it("moves page actions into the toolbar and reuses the runtime column drawer", async () => {
+    await renderPage();
 
     const toolbar = screen.getByRole("search", { name: "每日销售筛选" });
     const downloadButton = within(toolbar).getByRole("button", { name: "下载" });
@@ -420,10 +495,10 @@ describe("DailySalesPage", () => {
     }
   });
 
-  it("defaults dates to the previous completed day, links shortcuts, and exposes the three multi-select filters", () => {
-    renderPage();
+  it("defaults dates to the previous completed day, links shortcuts, and exposes the three multi-select filters", async () => {
+    await renderPage();
 
-    expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "今日" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByLabelText("日期范围值")).toHaveTextContent(`${referenceDay}~${referenceDay}`);
     for (const label of ["平台", "负责人", "店铺"]) {
       expect(screen.getByLabelText(label)).toHaveAttribute("multiple");
@@ -440,11 +515,11 @@ describe("DailySalesPage", () => {
     expect(screen.getByRole("button", { name: "本周" })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("filters locally, switches display currency without clearing rows, and resets cleanly", () => {
+  it("filters locally, switches display currency without clearing rows, and resets cleanly", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const localStorageSpy = vi.spyOn(Storage.prototype, "setItem");
     const sessionStorageSpy = vi.spyOn(window.sessionStorage, "setItem");
-    renderPage();
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("平台"), { target: { value: "Walmart" } });
     expect(Number(screen.getByTestId("pro-table").getAttribute("data-total"))).toBeLessThan(referenceRows.length);
@@ -468,8 +543,8 @@ describe("DailySalesPage", () => {
     expect(sessionStorageSpy).not.toHaveBeenCalled();
   });
 
-  it("opens batch search as a popover and performs case-sensitive exact matching", () => {
-    renderPage();
+  it("opens batch search as a popover and performs case-sensitive exact matching", async () => {
+    await renderPage();
 
     fireEvent.click(screen.getByRole("button", { name: "批量搜索" }));
     const popover = screen.getByRole("dialog");
@@ -488,8 +563,8 @@ describe("DailySalesPage", () => {
     expect(screen.getByText("暂无匹配销售数据")).toBeVisible();
   });
 
-  it("resets to page one and clears selection for every supported page size", () => {
-    renderPage();
+  it("resets to page one and clears selection for every supported page size", async () => {
+    await renderPage();
 
     fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("button", { name: "下一页" }));
@@ -512,8 +587,8 @@ describe("DailySalesPage", () => {
     expect(screen.getByTestId("pagination-footer")).toBeInTheDocument();
   });
 
-  it("defaults to visible statistics and hidden charts, then toggles both", () => {
-    renderPage();
+  it("defaults to visible statistics and hidden charts, then toggles both", async () => {
+    await renderPage();
 
     const summary = screen.getByLabelText("销售统计");
     expect(summary).toBeVisible();
@@ -540,8 +615,8 @@ describe("DailySalesPage", () => {
     expect(screen.getByRole("button", { name: /隐藏图表$/ })).toBeVisible();
   });
 
-  it("keeps a fixed total row for all filtered rows and converts it with the display currency", () => {
-    renderPage();
+  it("keeps a fixed total row for all filtered rows and converts it with the display currency", async () => {
+    await renderPage();
 
     const totalRow = screen.getByTestId("daily-sales-total-row");
     expect(totalRow).toHaveTextContent("总计");
@@ -567,8 +642,8 @@ describe("DailySalesPage", () => {
     expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent("¥");
   });
 
-  it("renders shared hover previews and opens the static sales detail", () => {
-    renderPage();
+  it("renders shared hover previews and opens the static sales detail", async () => {
+    await renderPage();
 
     fireEvent.mouseEnter(screen.getByLabelText("每日销售商品图片占位"));
     expect(document.querySelector(".report-table-image-preview")).toBeInTheDocument();

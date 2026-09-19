@@ -90,6 +90,19 @@ const checkboxOption = (selectedValues: string[], ariaLabel: string) => (
   );
 };
 
+const actualTodayRange = (): [string, string] => {
+  const today = dayjs().format("YYYY-MM-DD");
+  return [today, today];
+};
+
+const shortcutDateRange = (datePreset: Exclude<DatePreset, "custom">): [string, string] => (
+  datePreset === "today" ? actualTodayRange() : dateRangeForPreset(datePreset)
+);
+
+const shortcutDatePresetValue = (datePreset: DatePreset) => (
+  datePreset === "custom" ? undefined : datePreset
+);
+
 function OrderProfitToolbar({
   filters,
   owners,
@@ -185,11 +198,12 @@ function OrderProfitToolbar({
           onChange={(value) => update("stores", value)}
         />
         <Radio.Group
+          key={`date-preset-${filters.datePreset}`}
           className="order-profit__date-presets"
           aria-label="日期快捷项"
           optionType="button"
           buttonStyle="solid"
-          value={filters.datePreset === "custom" ? undefined : filters.datePreset}
+          value={shortcutDatePresetValue(filters.datePreset)}
           options={[
             { label: "今日", value: "today" },
             { label: "本周", value: "week" },
@@ -198,7 +212,7 @@ function OrderProfitToolbar({
           ]}
           onChange={(event) => {
             const datePreset = event.target.value as Exclude<DatePreset, "custom">;
-            onChange({ ...filters, datePreset, dateRange: dateRangeForPreset(datePreset) });
+            onChange({ ...filters, datePreset, dateRange: shortcutDateRange(datePreset) });
           }}
         />
         <DatePicker.RangePicker

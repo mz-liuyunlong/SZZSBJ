@@ -184,13 +184,22 @@ function useTabWorkspace(activePath: string) {
     [activePath, openPaths],
   );
 
+  const clearWorkspace = () => {
+    clearTabWorkspaceStorage();
+
+    const nextWorkspace = defaultWorkspace();
+    setWorkspace(syncActivePath(nextWorkspace, DEFAULT_BUSINESS_PATH));
+
+    return DEFAULT_BUSINESS_PATH;
+  };
+
   return {
     openPaths,
     activePath: workspace.activePath,
     rejectedPath: workspace.rejectedPath,
     openPath,
     closePath,
-    clearWorkspace: clearTabWorkspaceStorage,
+    clearWorkspace,
   };
 }
 

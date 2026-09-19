@@ -1,6 +1,7 @@
-import { Card, Spin, message } from "antd";
+import { Card, message } from "antd";
 import { useEffect, useMemo, useRef, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
+import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
 } from "@/components/report-table/RuntimeColumnConfigDrawer";
@@ -35,6 +36,7 @@ import {
   writeUserPreference,
 } from "@/shared/preferences/userPreferenceCache";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
+import { useDebouncedValue } from "@/shared/hooks/useDebouncedValue";
 import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import { applyProductBasicCompleteness } from "@/pages/products/productBasicCompleteness";
 import "@/pages/products/ProductManagementPage.css";
@@ -168,10 +170,12 @@ function ProductManagementPage({
     messageApiRef.current = messageApi;
   }, [messageApi]);
 
-  const listQuery = useProductManagementListQuery(filters, currentPage, pageSize);
+  const debouncedFilters = useDebouncedValue(filters, 350);
+  const isFilterDebouncing = debouncedFilters !== filters;
+  const listQuery = useProductManagementListQuery(debouncedFilters, currentPage, pageSize);
   const prefetchProductList = usePrefetchProductManagementList();
-  const summaryQuery = useProductManagementSummaryQuery(filters, statisticsVisible);
-  const optionsQuery = useProductManagementOptionsQuery(filters);
+  const summaryQuery = useProductManagementSummaryQuery(debouncedFilters, statisticsVisible);
+  const optionsQuery = useProductManagementOptionsQuery(debouncedFilters);
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, productPageRootRef, ".ant-table-body");
   const tableViewQuery = useProductManagementTableViewQuery();
   const saveTableView = useSaveProductManagementTableViewMutation();
@@ -204,14 +208,19 @@ function ProductManagementPage({
   const detailQuery = useProductManagementDetailQuery(detailBaseRow);
   const detailRow = detailQuery.data ?? detailBaseRow;
   const summary = summaryQuery.data ?? { ...emptySummary, total };
+  const isTableRequesting = isFilterDebouncing
+    || listQuery.isFetching
+    || optionsQuery.isFetching
+    || (statisticsVisible && summaryQuery.isFetching)
+    || saveTableView.isPending;
   const owners = optionsQuery.data?.owners ?? [];
   const developers = optionsQuery.data?.developers ?? [];
   const tags = optionsQuery.data?.tags ?? [];
 
   useEffect(() => {
     if (total <= currentPage * pageSize) return;
-    void prefetchProductList(filters, currentPage + 1, pageSize);
-  }, [currentPage, filters, pageSize, prefetchProductList, total]);
+    void prefetchProductList(debouncedFilters, currentPage + 1, pageSize);
+  }, [currentPage, debouncedFilters, pageSize, prefetchProductList, total]);
 
   useEffect(() => {
     if (!tableViewQuery.data) return;
@@ -309,7 +318,8 @@ function ProductManagementPage({
     <PageShell page={page}>
       {messageContextHolder}
       <div ref={productPageRootRef} className="product-management">
-        <Card size="small" className="product-management__page-card">
+          <Card size="small" className="product-management__page-card">
+          <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载产品数据，请稍候" />
           <div className="product-management__title-row">
             <div>
               <h1>产品管理</h1>
@@ -351,12 +361,6 @@ function ProductManagementPage({
           )}
 
           <div className="product-management__table-wrap">
-            {listQuery.isPending && (
-              <span className="product-management__table-loading" role="status">
-                <Spin size="small" />
-                <span>正在加载产品数据</span>
-              </span>
-            )}
             <ProductManagementTable
               rows={rows}
               total={total}
@@ -386,7 +390,7 @@ function ProductManagementPage({
                 ))}
             />
           </div>
-        </Card>
+          </Card>
 
         <RuntimeColumnConfigDrawer
           open={columnConfigOpen}
