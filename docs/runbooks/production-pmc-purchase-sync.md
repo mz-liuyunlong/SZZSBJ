@@ -60,17 +60,73 @@ enabling. Record in the log.
 
 ## Step 3 — Enable exactly one interface for exactly one run
 
-The runner refuses unless, for the chosen interface: `gov_integration_interfaces.outbound_enabled = true`
-and `gov_integration_sync_configs.is_enabled = true` (with `schedule_enabled = false`,
-`schedule_cron IS NULL`, `page_size <= 500`, `max_attempts = 1`). Flip these two flags through
-the approved metadata tooling, for one interface, immediately before Step 4, and record which
-interface and when. Do not enable all three at once.
+The runner refuses unless, for the chosen interface, **both** flags are true:
+`gov_integration_interfaces.outbound_enabled` and `gov_integration_sync_configs.is_enabled`
+(and `schedule_enabled = false`, `schedule_cron IS NULL`, `page_size <= 500`,
+`max_attempts = 1`, `retention_policy_id` = the interface's policy). Enable one interface,
+run Step 4 for it, disable it (Step 5), then move to the next. Never enable two at once.
+
+Two flags, two mechanisms, because only one of them has an API:
+
+**3a. `is_enabled` — via the governed API.** `PATCH /api/integrations/sync-configs/{config_id}`
+with body `{"is_enabled": true}` using a principal that holds `integrations:update`
+(the request is attributed to that principal and request id in the API log; the service
+itself writes no sync-run event for a config update, so the execution-log entry below is the
+audit record). `schedule_enabled` is left untouched — the service rejects enabling a schedule
+without cron and the manual-only rule still applies. Find the `config_id` first:
+
+```sql
+-- read-only lookup (psql, as the application role; run inside BEGIN READ ONLY)
+SELECT c.id AS config_id, i.interface_key, i.outbound_enabled, c.is_enabled,
+       c.schedule_enabled, c.schedule_cron, c.page_size, c.max_attempts, c.source_account_ref
+FROM gov_integration_sync_configs c
+JOIN gov_integration_interfaces i ON i.id = c.interface_id
+WHERE i.provider = 'lingxing'
+  AND i.interface_key IN ('purchasePlanList','purchaseOrderList','purchaseReceiptOrderList')
+ORDER BY i.interface_key;
+```
+
+**3b. `outbound_enabled` — direct SQL (no API exposes this column by design).** One row,
+one transaction, row count checked before commit:
+
+```sql
+BEGIN;
+UPDATE gov_integration_interfaces
+   SET outbound_enabled = true, updated_at = now()
+ WHERE provider = 'lingxing'
+   AND interface_key = '<ONE of purchasePlanList | purchaseOrderList | purchaseReceiptOrderList>'
+   AND outbound_enabled = false;
+-- expect: UPDATE 1. Anything else → ROLLBACK and stop.
+COMMIT;
+```
+
+**3c. Verify only one interface is enabled** (must return exactly one row, the one you chose):
+
+```sql
+SELECT i.interface_key, i.outbound_enabled, c.is_enabled, c.schedule_enabled
+FROM gov_integration_interfaces i
+JOIN gov_integration_sync_configs c ON c.interface_id = i.id
+WHERE i.provider = 'lingxing'
+  AND i.interface_key IN ('purchasePlanList','purchaseOrderList','purchaseReceiptOrderList')
+  AND (i.outbound_enabled OR c.is_enabled);
+```
+
+Also confirm the productList / DATA-PAGES rows were not touched: the same query without the
+`interface_key IN (...)` filter must show no change versus Step 0 for other interfaces.
+Record in the log: interface, config_id, both statements' row counts, timestamp.
+
+**Rollback of Step 3** (no run started yet): Step 5 for that interface, or re-run the
+Step 2 bootstrap script, which restores `outbound_enabled=false` / `is_enabled=false` on all
+three rows and reports `updated`.
 
 ## Step 4 — First window run (go-live window)
 
 Run the three interfaces **sequentially**, receipt orders last (they reference purchase
 order lines). Window = `2026-08-01` → go-live date (≤ 90 days; split into two windows if
-longer). Authorization is one command, one interface, one window.
+longer). Authorization is one command, one interface, one window. **Always set the
+idempotency key** as `<interface>:<start>:<end>`: the runner refuses a second run with the
+same key, so an accidental re-execution of the go-live window is rejected instead of
+duplicating raw pages and ODS rows.
 
 ```bash
 PMC_PURCHASE_ONE_TIME_RUN_AUTHORIZED=true \
@@ -78,12 +134,17 @@ PMC_PURCHASE_INTERFACE_KEY=purchasePlanList \
 PMC_PURCHASE_SOURCE_ACCOUNT_REF=<approved account ref> \
 PMC_PURCHASE_WINDOW_START=2026-08-01 \
 PMC_PURCHASE_WINDOW_END=<go-live date> \
+PMC_PURCHASE_ONE_TIME_RUN_IDEMPOTENCY_KEY=purchasePlanList:2026-08-01:<go-live date> \
 PMC_PURCHASE_ONE_TIME_RUN_REASON="go-live window purchasePlanList" \
 uv run python scripts/run_pmc_purchase_once.py
 ```
 
-Repeat with `PMC_PURCHASE_INTERFACE_KEY=purchaseOrderList`, then
-`purchaseReceiptOrderList`. Exit codes: `0` succeeded, `1` run failed (inspect
+Repeat with `PMC_PURCHASE_INTERFACE_KEY=purchaseOrderList` /
+`…IDEMPOTENCY_KEY=purchaseOrderList:2026-08-01:<go-live date>`, then
+`purchaseReceiptOrderList` / `…IDEMPOTENCY_KEY=purchaseReceiptOrderList:2026-08-01:<go-live date>`,
+each after its own Step 3 → Step 5 cycle. If the window is split, each half gets its own key.
+
+Exit codes: `0` succeeded, `1` run failed (inspect
 `error_code` in the output and in `gov_integration_sync_runs`), `2` refused before any
 request. The runner prints counts only (`headers_written`, `lines_written`,
 `duplicates_skipped`, `quality=…`).
@@ -93,17 +154,35 @@ records header/line quantity mismatches, lines without id, integer store ids and
 without a purchase order as counts instead of failing the run. The first real run decides
 whether any of these becomes a hard gate (follow-up PR), so keep the numbers.
 
-## Step 5 — Disable again
+## Step 5 — Disable again (after each run, before enabling the next interface)
 
-After the three runs, set `is_enabled = false` on the three configs (leave
-`outbound_enabled` as the Owner prefers; the runner needs both true to start). Record.
+**5a.** `PATCH /api/integrations/sync-configs/{config_id}` with `{"is_enabled": false}` for
+the interface just run.
+
+**5b.** Direct SQL, same shape as 3b, reversed:
+
+```sql
+BEGIN;
+UPDATE gov_integration_interfaces
+   SET outbound_enabled = false, updated_at = now()
+ WHERE provider = 'lingxing'
+   AND interface_key = '<the interface just run>'
+   AND outbound_enabled = true;
+-- expect: UPDATE 1, otherwise ROLLBACK and investigate.
+COMMIT;
+```
+
+**5c.** Verify: the Step 3c query must return **zero rows**. Record in the log.
+
+**Fallback / full reset:** re-run the Step 2 bootstrap script. It is idempotent and writes
+the approved disabled defaults to all three interfaces, policies and configs (`updated` for
+any row that drifted). Use this if 5a/5b left anything inconsistent.
 
 ## Step 6 — Incremental windows (manual, no schedule)
 
 Until a schedule is separately approved, each incremental pull is Step 3 → Step 4 → Step 5
-with a window `[last window_end, today]` (≤ 90 days). Idempotency: use
-`PMC_PURCHASE_ONE_TIME_RUN_IDEMPOTENCY_KEY=<interface>:<start>:<end>` so an accidental repeat
-is refused. Overlapping windows are safe for the ODS layer (rows are per-run; DWD dedupes),
+with a window `[last window_end, today]` (≤ 90 days) and the same idempotency key
+convention `<interface>:<start>:<end>`. Overlapping windows are safe for the ODS layer (rows are per-run; DWD dedupes),
 but wasteful — avoid them.
 
 ## Rollback
