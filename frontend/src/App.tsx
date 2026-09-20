@@ -11,9 +11,19 @@ import "@/styles/developedPagesOrderProfitSkin.css";
 function App() {
   const [mockUser, setMockUser] = useState<MockAuthUser>();
 
+  const clearLogoutSessionStorage = () => {
+    try {
+      sessionStorage.clear();
+    } catch {
+      // Ignore storage failures during logout cleanup.
+    }
+  };
+
   const logout = () => {
     clearServerState();
     setMockUser(undefined);
+    clearLogoutSessionStorage();
+    queueMicrotask(clearLogoutSessionStorage);
   };
 
   return (

@@ -129,7 +129,6 @@ function MainLayout({
     rejectedPath,
     openPath,
     closePath,
-    clearWorkspace,
   } = useTabWorkspace(requestedActivePath);
   const activeRouteResolution = resolveRoute(activePath);
   const activePageSelection =
@@ -293,7 +292,7 @@ function MainLayout({
           type="button"
           className="main-layout__brand"
           style={{ width: collapsed ? 64 : 168 }}
-          aria-label="回到每日销售首页"
+          aria-label={`回到${defaultPage.title}首页`}
           onClick={resetToDefaultPage}
         >
           <img
@@ -362,7 +361,6 @@ function MainLayout({
             onOpenPage={openPageByKey}
             onRequestOverlayClose={dismissSecondaryMenu}
             onLogout={() => {
-              clearWorkspace();
               onLogout();
             }}
           />

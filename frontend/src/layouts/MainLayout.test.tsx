@@ -84,10 +84,6 @@ const requiredPage = (groupKey: string, pageKey: string) => {
   return page;
 };
 
-const salesGroup = requiredGroup("sales");
-const dailySales = requiredPage("sales", "sales_daily_sales");
-
-
 const getTab = (title: string) =>
   within(screen.getByRole("region", { name: "页面标签栏" })).getByRole("tab", {
     name: new RegExp(title),
@@ -273,7 +269,7 @@ describe("MainLayout", () => {
     expect(currentPage).toHaveTextContent(listingManagement.title);
     expect(getTab(listingManagement.title)).toHaveAttribute("aria-selected", "true");
     expect(within(breadcrumb).getByText(productsGroup.title)).toBeVisible();
-    expect(window.location.hash).toBe(`#${dailySales.path}`);
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
 
     fireEvent.click(getTab(keywordLibrary.title));
     expect(currentPage).toHaveTextContent(keywordLibrary.title);
@@ -287,7 +283,7 @@ describe("MainLayout", () => {
     await waitFor(() => {
       expect(currentPage).toHaveTextContent(listingManagement.title);
     });
-    expect(window.location.hash).toBe(`#${dailySales.path}`);
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
 
     act(() => window.history.forward());
     await waitFor(() => {
@@ -338,7 +334,7 @@ describe("MainLayout", () => {
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
       listingManagement.title,
     );
-    expect(window.location.hash).toBe(`#${dailySales.path}`);
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     expectSecondaryClosed();
 
   });
@@ -366,7 +362,7 @@ describe("MainLayout", () => {
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();
     expect(getTab(listingManagement.title)).toHaveAttribute("aria-selected", "true");
-    expect(window.location.hash).toBe(`#${dailySales.path}`);
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
   });
 
   it("reopens a closed active tab when browser Back restores its URL", async () => {
@@ -390,7 +386,7 @@ describe("MainLayout", () => {
       }),
     );
     fireEvent.click(getCloseTabButton(keywordLibrary.title));
-    expect(window.location.hash).toBe(`#${dailySales.path}`);
+    expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     expect(
       screen.queryByRole("tab", { name: new RegExp(keywordLibrary.title) }),
     ).not.toBeInTheDocument();
@@ -418,7 +414,7 @@ describe("MainLayout", () => {
       );
       expect(stored).toEqual({
         version: TAB_WORKSPACE_VERSION,
-        openPaths: [dailySales.path, keywordLibrary.path],
+        openPaths: [DEFAULT_BUSINESS_PATH, keywordLibrary.path],
         activePath: keywordLibrary.path,
       });
       expect(Object.keys(stored)).toEqual([
@@ -469,7 +465,7 @@ describe("MainLayout", () => {
         JSON.parse(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY) ?? "null"),
       ).toEqual({
         version: TAB_WORKSPACE_VERSION,
-        openPaths: [dailySales.path, keywordLibrary.path],
+        openPaths: [DEFAULT_BUSINESS_PATH, keywordLibrary.path],
         activePath: keywordLibrary.path,
       });
     });
@@ -548,7 +544,7 @@ describe("MainLayout", () => {
     await waitFor(() => {
       expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     });
-    expect(getTab(requiredPage("sales", "sales_daily_sales").title)).toHaveAttribute(
+    expect(getTab(requiredPage("products", "products_listing_management").title)).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -560,7 +556,7 @@ describe("MainLayout", () => {
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
     const productGroup = requiredGroup("products");
-    const productsGroup = requiredGroup("products");
+    const salesGroup = requiredGroup("sales");
     fireEvent.click(
       within(primaryNavigation).getByRole("menuitem", {
         name: productGroup.title,
@@ -570,11 +566,11 @@ describe("MainLayout", () => {
 
     fireEvent.mouseEnter(
       within(primaryNavigation).getByRole("menuitem", {
-        name: productsGroup.title,
+        name: salesGroup.title,
       }),
     );
     expect(
-      await screen.findByRole("menu", { name: `${productsGroup.title}二级导航` }),
+      await screen.findByRole("menu", { name: `${salesGroup.title}二级导航` }),
     ).toBeVisible();
     expect(
       within(screen.getByLabelText("二级菜单浮层")).getByText(
@@ -586,7 +582,7 @@ describe("MainLayout", () => {
 
     expectSecondaryClosed();
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      requiredPage("sales", "sales_daily_sales").title,
+      requiredPage("products", "products_listing_management").title,
     );
   });
 

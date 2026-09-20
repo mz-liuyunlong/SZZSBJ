@@ -231,9 +231,9 @@ describe("AppRoutes", () => {
     const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      "每日销售",
+      "Listing管理",
     );
-    expect(screen.getByText("sales_daily_sales")).toBeVisible();
+    expect(screen.getByText("products_listing_management")).toBeVisible();
 
     unmount();
     renderRoutes("/data-center/documentation", true);
