@@ -58,7 +58,40 @@ interface BackendListingFilterOptionsData {
   stores: ReportFilterOption[];
   owners: ReportFilterOption[];
   product_types: ReportFilterOption[];
+  tags?: ReportFilterOption[];
 }
+
+interface BackendListingTag {
+  id: string;
+  name: string;
+  color: string;
+  usage: number;
+  sort_order: number;
+  is_active: boolean;
+}
+
+interface BackendListingTagListData {
+  items: BackendListingTag[];
+}
+
+export interface ListingCustomTag {
+  id: string;
+  name: string;
+  color: string;
+  usage: number;
+}
+
+export interface ListingTagMutationPayload {
+  name: string;
+  color: string;
+}
+
+const toListingCustomTag = (tag: BackendListingTag): ListingCustomTag => ({
+  id: tag.id,
+  name: tag.name,
+  color: tag.color,
+  usage: tag.usage,
+});
 
 export interface ListingManagementApiMeta {
   latest_calculated_at: string | null;
@@ -85,6 +118,7 @@ export interface ListingManagementFilterOptions {
   stores: ReportFilterOption[];
   owners: ReportFilterOption[];
   productTypes: ReportFilterOption[];
+  tags: ReportFilterOption[];
 }
 
 export interface ListingManagementParams {
@@ -92,6 +126,7 @@ export interface ListingManagementParams {
   owners?: string[];
   productTypes?: string[];
   productStatuses?: string[];
+  tagValues?: string[];
   searchType?: "sku" | "msku" | "productId" | "productName";
   keyword?: string;
   batchValues?: string[];
@@ -182,6 +217,7 @@ const appendListingFilters = (search: URLSearchParams, params: ListingManagement
   appendMultiParam(search, "owner_ref", params.owners);
   appendMultiParam(search, "product_type", params.productTypes);
   appendMultiParam(search, "status", params.productStatuses);
+  appendMultiParam(search, "tag", params.tagValues);
 
   if (params.summaryFilter && params.summaryFilter !== "total") {
     search.set("summary_filter", params.summaryFilter);
@@ -250,7 +286,68 @@ async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingMana
     stores: envelope.data.stores,
     owners: envelope.data.owners,
     productTypes: envelope.data.product_types,
+    tags: envelope.data.tags ?? [],
   };
+}
+
+
+export async function fetchListingTags(): Promise<ListingCustomTag[]> {
+  const envelope = await backendRequest<BackendListingTagListData>("/api/listings/tags");
+  return envelope.data.items.map(toListingCustomTag);
+}
+
+export async function createListingTag(payload: ListingTagMutationPayload): Promise<ListingCustomTag> {
+  const envelope = await backendRequest<BackendListingTag>("/api/listings/tags", {
+    method: "POST",
+    body: JSON.stringify({
+      name: payload.name,
+      color: payload.color,
+    }),
+  });
+
+  return toListingCustomTag(envelope.data);
+}
+
+export async function updateListingTag(
+  tagId: string,
+  payload: ListingTagMutationPayload,
+): Promise<ListingCustomTag> {
+  const envelope = await backendRequest<BackendListingTag>(`/api/listings/tags/${tagId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      name: payload.name,
+      color: payload.color,
+    }),
+  });
+
+  return toListingCustomTag(envelope.data);
+}
+
+export async function deleteListingTag(tagId: string): Promise<void> {
+  await backendRequest<{ deleted: boolean }>(`/api/listings/tags/${tagId}`, {
+    method: "DELETE",
+  });
+}
+
+export interface BatchSetListingTagsPayload {
+  listingIds: string[];
+  tagValues: string[];
+  mode?: "replace" | "append" | "remove";
+}
+
+export async function batchSetListingTags({
+  listingIds,
+  tagValues,
+  mode = "append",
+}: BatchSetListingTagsPayload): Promise<void> {
+  await backendRequest<unknown>("/api/listings/tags/batch-set", {
+    method: "POST",
+    body: JSON.stringify({
+      listing_ids: listingIds,
+      tag_values: tagValues,
+      mode,
+    }),
+  });
 }
 
 const cacheKey = (...parts: unknown[]) => "listing-management:" + stableCacheKey(parts);

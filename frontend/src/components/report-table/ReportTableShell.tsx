@@ -53,7 +53,10 @@ export function ReportTableSelectionBar({
         placement="topLeft"
         menu={{
           items,
-          onClick: ({ key }) => actions.find((action) => action.key === key)?.onClick(),
+          onClick: ({ key }) => {
+            const action = actions.find((item) => item.key === key);
+            if (typeof action?.onClick === "function") action.onClick();
+          },
         }}
       >
         <Button size="small" disabled={actions.length === 0}>

@@ -83,13 +83,13 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(listingManagementMockData).toHaveLength(100);
     expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(100);
     expect(listingColumnFields.map((field) => field.title)).toEqual([
-      "图片", "MSKU", "商品ID", "店铺", "负责人", "SKU", "品名", "标题", "产品类型",
+      "图片", "商品ID/品名", "SKU/MSKU", "店铺", "负责人", "标题", "产品类型",
       "划线价", "在售价", "产品状态", "生命周期", "上架时间", "类目", "WFS可售库存",
       "在途库存", "近90天销量", "近30天广告费", "停用原因", "Listing状态", "购物车状态",
       "Walmart卖家", "是否被跟卖", "检查时间", "评分", "评论数", "品牌", "标签", "GTIN",
       "产品等级",
     ]);
-    expect(fixedListingColumnKeys).toEqual(["image", "msku", "productId"]);
+    expect(fixedListingColumnKeys).toEqual(["image", "productIdName", "skuMsku"]);
   });
 
   it("reports the selected summary filter when a statistics card is clicked", () => {
@@ -130,12 +130,13 @@ describe("ListingManagementPage acceptance contract", () => {
         onPageSizeChange={() => undefined}
         onSelectionChange={() => undefined}
         onOpenDetail={() => undefined}
+        onBatchSetTags={() => undefined}
         onBulkExport={() => undefined}
       />,
     );
 
     const sorterFor = (key: string) => capturedTableProps?.columns.find((column) => column.key === key)?.sorter;
-    const skuSorter = sorterFor("sku");
+    const skuSorter = sorterFor("skuMsku");
     const priceSorter = sorterFor("salePrice");
     const dateSorter = sorterFor("checkedAt");
     expect(skuSorter).toBeTypeOf("function");

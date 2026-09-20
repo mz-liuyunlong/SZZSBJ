@@ -827,4 +827,24 @@
 .listing-management__table-shell .ant-table-pagination.ant-pagination {
   flex: 0 0 42px !important;
 }
-/* End listing table vertical fill fix */
+/* End listing table vertical fill fix */\n\n.listing-management__tag-manager-button {
+  height: 32px;
+  padding: 0 12px;
+  color: #344054;
+  font-weight: 500;
+  border-color: #dce5ef;
+  border-radius: 8px;
+}
+
+.listing-management__tag-manager-button:hover {
+  color: #1677ff;
+  border-color: #b9d5fb;
+  background: #fbfdff;
+}
+
+.listing-management__batch-tag-tip {
+  margin: 0 0 12px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}

@@ -3,8 +3,23 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from uuid import UUID
 
-from sqlalchemy import Select, String, and_, case, cast, column, func, or_, select, table
+from sqlalchemy import (
+    Select,
+    String,
+    and_,
+    case,
+    cast,
+    column,
+    delete,
+    exists,
+    func,
+    or_,
+    select,
+    table,
+)
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -12,6 +27,8 @@ from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingManagementCurrentMart,
     OrderProfitSkuDayMart,
+    ProductCustomTag,
+    ProductCustomTagAssignment,
     WalmartRefundItemFact,
 )
 
@@ -560,6 +577,7 @@ class ListingManagementRepository:
         owner_ref: str | None = "",
         product_type: str | None = "",
         status: str | None = "",
+        tag: str | None = "",
         summary_filter: str = "total",
         search_field: str,
         keyword: str,
@@ -573,6 +591,7 @@ class ListingManagementRepository:
             owner_ref=owner_ref,
             product_type=product_type,
             status=status,
+            tag=tag,
             summary_filter=summary_filter,
             search_field=search_field,
             keyword=keyword,
@@ -585,6 +604,7 @@ class ListingManagementRepository:
 
         rows = self.session.execute(
             statement.order_by(
+                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
@@ -622,6 +642,7 @@ class ListingManagementRepository:
         owner_ref: str | None,
         product_type: str | None,
         status: str | None,
+        tag: str | None,
         search_field: str,
         keyword: str,
         batch_values: str,
@@ -632,6 +653,7 @@ class ListingManagementRepository:
             owner_ref=owner_ref,
             product_type=product_type,
             status=status,
+            tag=tag,
             summary_filter="total",
             search_field=search_field,
             keyword=keyword,
@@ -639,13 +661,15 @@ class ListingManagementRepository:
         )
         base = statement.order_by(None).subquery()
 
-        online_condition = base.c.listing_status.in_(
-            ["在线", "在售", "ONLINE", "PUBLISHED", "PUBLISH", "published"]
-        )
+        online_condition = func.coalesce(base.c.wfs_available_quantity, 0) > 0
         buybox_exception_condition = base.c.buybox_status.in_(
             ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
         )
-        rating_warning_condition = base.c.average_rating < 4
+        rating_warning_condition = and_(
+            base.c.average_rating.is_not(None),
+            base.c.average_rating > 0,
+            base.c.average_rating < 4,
+        )
         resold_warning_condition = base.c.is_hijacked.is_(True)
         strike_price_exception_condition = and_(
             base.c.sale_price_amount.is_not(None),
@@ -685,6 +709,7 @@ class ListingManagementRepository:
             owner_ref="",
             product_type="",
             status="",
+            tag="",
             summary_filter="total",
             search_field="sku",
             keyword="",
@@ -720,6 +745,24 @@ class ListingManagementRepository:
             .order_by(product_type_value)
         ).all()
 
+        tag_counter: dict[str, int] = {}
+        tag_source_rows = self.session.scalars(
+            select(base.c.tags_json).where(base.c.tags_json.is_not(None))
+        ).all()
+        for tags in tag_source_rows:
+            if not isinstance(tags, list):
+                continue
+            for item in tags:
+                if isinstance(item, str):
+                    name = item.strip()
+                elif isinstance(item, dict):
+                    raw = item.get("name") or item.get("label") or item.get("title")
+                    name = str(raw).strip() if raw is not None else ""
+                else:
+                    name = ""
+                if name:
+                    tag_counter[name] = tag_counter.get(name, 0) + 1
+
         return {
             "stores": [
                 (str(value), str(value), int(count or 0))
@@ -735,6 +778,10 @@ class ListingManagementRepository:
                 (str(value), str(value), int(count or 0))
                 for value, count in product_type_rows
                 if value is not None and str(value).strip()
+            ],
+            "tags": [
+                (name, name, count)
+                for name, count in sorted(tag_counter.items(), key=lambda item: item[0])
             ],
         }
 
@@ -768,6 +815,7 @@ class ListingManagementRepository:
         owner_ref: str | None,
         product_type: str | None,
         status: str | None,
+        tag: str | None,
         summary_filter: str,
         search_field: str,
         keyword: str,
@@ -861,11 +909,30 @@ class ListingManagementRepository:
             if status_conditions:
                 statement = statement.where(or_(*status_conditions))
 
+        tag_values = _csv_values(tag)
+        if tag_values:
+            tag_text = cast(ListingManagementCurrentMart.tags_json, String)
+            legacy_tag_conditions = [tag_text.ilike(f'%"{value}"%') for value in tag_values]
+
+            db_tag_exists = exists(
+                select(1)
+                .select_from(ProductCustomTagAssignment)
+                .join(ProductCustomTag, ProductCustomTag.id == ProductCustomTagAssignment.tag_id)
+                .where(
+                    ProductCustomTagAssignment.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    ProductCustomTagAssignment.item_id == ListingManagementCurrentMart.item_id,
+                    ProductCustomTag.deleted_at.is_(None),
+                    ProductCustomTag.is_active.is_(True),
+                    ProductCustomTag.name.in_(tag_values),
+                )
+            )
+
+            statement = statement.where(or_(*legacy_tag_conditions, db_tag_exists))
+
         if summary_filter == "online":
             statement = statement.where(
-                ListingManagementCurrentMart.listing_status.in_(
-                    ["在线", "在售", "ONLINE", "PUBLISHED", "PUBLISH", "published"]
-                )
+                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0) > 0
             )
         elif summary_filter == "offline":
             statement = statement.where(
@@ -880,7 +947,11 @@ class ListingManagementRepository:
                 )
             )
         elif summary_filter == "rating":
-            statement = statement.where(ListingManagementCurrentMart.average_rating < 4)
+            statement = statement.where(
+                ListingManagementCurrentMart.average_rating.is_not(None),
+                ListingManagementCurrentMart.average_rating > 0,
+                ListingManagementCurrentMart.average_rating < 4,
+            )
         elif summary_filter == "resold":
             statement = statement.where(ListingManagementCurrentMart.is_hijacked.is_(True))
         elif summary_filter == "strike":
@@ -921,3 +992,299 @@ class ListingManagementRepository:
             )
 
         return statement
+
+
+class ListingTagRepository:
+    """Write boundary for Listing custom tags and item assignments."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    @staticmethod
+    def _is_tag_table_missing(exc: ProgrammingError) -> bool:
+        message = str(exc).lower()
+        mentions_tag_table = (
+            "product_custom_tags" in message or "product_custom_tag_assignments" in message
+        )
+        return mentions_tag_table and (
+            "undefinedtable" in message or "does not exist" in message or "no such table" in message
+        )
+
+    def _rollback_if_tag_table_missing(self, exc: ProgrammingError) -> bool:
+        if self._is_tag_table_missing(exc):
+            self.session.rollback()
+            return True
+        return False
+
+    def list_tags(self, *, account_refs: frozenset[str]) -> list[tuple[ProductCustomTag, int]]:
+        if not account_refs:
+            return []
+
+        usage = (
+            select(
+                ProductCustomTagAssignment.tag_id.label("tag_id"),
+                func.count().label("usage"),
+            )
+            .where(ProductCustomTagAssignment.source_account_ref.in_(account_refs))
+            .group_by(ProductCustomTagAssignment.tag_id)
+            .subquery()
+        )
+
+        try:
+            rows = self.session.execute(
+                select(ProductCustomTag, func.coalesce(usage.c.usage, 0))
+                .outerjoin(usage, usage.c.tag_id == ProductCustomTag.id)
+                .where(
+                    ProductCustomTag.deleted_at.is_(None),
+                    ProductCustomTag.is_active.is_(True),
+                )
+                .order_by(ProductCustomTag.sort_order.asc(), ProductCustomTag.created_at.asc())
+            ).all()
+        except ProgrammingError as exc:
+            if self._rollback_if_tag_table_missing(exc):
+                return []
+            raise
+
+        return [(tag, int(count or 0)) for tag, count in rows]
+
+    def create_tag(self, *, name: str, color: str, sort_order: int = 0) -> ProductCustomTag:
+        normalized_name = name.strip()
+        self._raise_if_duplicate_name(normalized_name)
+
+        tag = ProductCustomTag(
+            name=normalized_name,
+            color=color.strip(),
+            sort_order=sort_order,
+            is_active=True,
+        )
+        self.session.add(tag)
+        self.session.commit()
+        self.session.refresh(tag)
+        return tag
+
+    def update_tag(
+        self,
+        *,
+        tag_id: str,
+        name: str | None,
+        color: str | None,
+        sort_order: int | None,
+        is_active: bool | None,
+    ) -> ProductCustomTag:
+        tag = self._get_tag_or_raise(tag_id)
+
+        if name is not None:
+            normalized_name = name.strip()
+            self._raise_if_duplicate_name(normalized_name, except_id=tag.id)
+            tag.name = normalized_name
+        if color is not None:
+            tag.color = color.strip()
+        if sort_order is not None:
+            tag.sort_order = sort_order
+        if is_active is not None:
+            tag.is_active = is_active
+
+        tag.updated_at = datetime.now()
+        self.session.commit()
+        self.session.refresh(tag)
+        return tag
+
+    def delete_tag(self, *, tag_id: str) -> None:
+        tag = self._get_tag_or_raise(tag_id)
+        self.session.execute(
+            delete(ProductCustomTagAssignment).where(ProductCustomTagAssignment.tag_id == tag.id)
+        )
+        self.session.delete(tag)
+        self.session.commit()
+
+    def batch_set_tags(
+        self,
+        *,
+        account_refs: frozenset[str],
+        listing_ids: list[str],
+        tag_ids: list[str],
+        tag_values: list[str],
+        mode: str,
+    ) -> tuple[int, int]:
+        listings = self.session.execute(
+            select(
+                ListingManagementCurrentMart.id,
+                ListingManagementCurrentMart.source_account_ref,
+                ListingManagementCurrentMart.item_id,
+            ).where(
+                ListingManagementCurrentMart.id.in_([self._uuid(value) for value in listing_ids]),
+                ListingManagementCurrentMart.source_account_ref.in_(account_refs),
+            )
+        ).all()
+
+        if not listings:
+            return 0, 0
+
+        tags = self._resolve_tags(tag_ids=tag_ids, tag_values=tag_values)
+        if not tags:
+            return len(listings), 0
+
+        resolved_tag_ids = [tag.id for tag in tags]
+
+        if mode == "replace":
+            for _, source_account_ref, item_id in listings:
+                self.session.execute(
+                    delete(ProductCustomTagAssignment).where(
+                        ProductCustomTagAssignment.source_account_ref == source_account_ref,
+                        ProductCustomTagAssignment.item_id == item_id,
+                    )
+                )
+                for tag_id in resolved_tag_ids:
+                    self.session.add(
+                        ProductCustomTagAssignment(
+                            tag_id=tag_id,
+                            source_account_ref=source_account_ref,
+                            item_id=item_id,
+                        )
+                    )
+
+        elif mode == "remove":
+            for _, source_account_ref, item_id in listings:
+                self.session.execute(
+                    delete(ProductCustomTagAssignment).where(
+                        ProductCustomTagAssignment.source_account_ref == source_account_ref,
+                        ProductCustomTagAssignment.item_id == item_id,
+                        ProductCustomTagAssignment.tag_id.in_(resolved_tag_ids),
+                    )
+                )
+
+        else:
+            for _, source_account_ref, item_id in listings:
+                existing_tag_ids = set(
+                    self.session.scalars(
+                        select(ProductCustomTagAssignment.tag_id).where(
+                            ProductCustomTagAssignment.source_account_ref == source_account_ref,
+                            ProductCustomTagAssignment.item_id == item_id,
+                            ProductCustomTagAssignment.tag_id.in_(resolved_tag_ids),
+                        )
+                    ).all()
+                )
+                for tag_id in resolved_tag_ids:
+                    if tag_id in existing_tag_ids:
+                        continue
+                    self.session.add(
+                        ProductCustomTagAssignment(
+                            tag_id=tag_id,
+                            source_account_ref=source_account_ref,
+                            item_id=item_id,
+                        )
+                    )
+
+        self.session.commit()
+        return len(listings), len(tags)
+
+    def tags_for_listing_rows(self, rows: Sequence[object]) -> dict[tuple[str, str], list[str]]:
+        identities = {
+            (str(row.source_account_ref), str(row.item_id))
+            for row in rows
+            if getattr(row, "source_account_ref", None) and getattr(row, "item_id", None)
+        }
+        if not identities:
+            return {}
+
+        account_refs = sorted({account_ref for account_ref, _ in identities})
+        item_ids = sorted({item_id for _, item_id in identities})
+
+        result: dict[tuple[str, str], list[str]] = {identity: [] for identity in identities}
+
+        try:
+            tag_rows = self.session.execute(
+                select(
+                    ProductCustomTagAssignment.source_account_ref,
+                    ProductCustomTagAssignment.item_id,
+                    ProductCustomTag.name,
+                )
+                .join(ProductCustomTag, ProductCustomTag.id == ProductCustomTagAssignment.tag_id)
+                .where(
+                    ProductCustomTagAssignment.source_account_ref.in_(account_refs),
+                    ProductCustomTagAssignment.item_id.in_(item_ids),
+                    ProductCustomTag.deleted_at.is_(None),
+                    ProductCustomTag.is_active.is_(True),
+                )
+                .order_by(ProductCustomTag.sort_order.asc(), ProductCustomTag.created_at.asc())
+            ).all()
+        except ProgrammingError as exc:
+            if self._rollback_if_tag_table_missing(exc):
+                return result
+            raise
+
+        for source_account_ref, item_id, name in tag_rows:
+            key = (str(source_account_ref), str(item_id))
+            if key in result:
+                result[key].append(str(name))
+
+        return result
+
+    def _resolve_tags(self, *, tag_ids: list[str], tag_values: list[str]) -> list[ProductCustomTag]:
+        tags: list[ProductCustomTag] = []
+        seen: set[UUID] = set()
+
+        uuid_values = [self._uuid(value) for value in tag_ids if value.strip()]
+        if uuid_values:
+            for tag in self.session.scalars(
+                select(ProductCustomTag).where(
+                    ProductCustomTag.id.in_(uuid_values),
+                    ProductCustomTag.deleted_at.is_(None),
+                    ProductCustomTag.is_active.is_(True),
+                )
+            ):
+                if tag.id not in seen:
+                    seen.add(tag.id)
+                    tags.append(tag)
+
+        for value in tag_values:
+            name = value.strip()
+            if not name:
+                continue
+            tag = self._find_tag_by_name(name)
+            if tag is None:
+                tag = ProductCustomTag(
+                    name=name[:16],
+                    color="#1677FF",
+                    sort_order=0,
+                    is_active=True,
+                )
+                self.session.add(tag)
+                self.session.flush()
+            if tag.id not in seen:
+                seen.add(tag.id)
+                tags.append(tag)
+
+        return tags
+
+    def _find_tag_by_name(self, name: str) -> ProductCustomTag | None:
+        return self.session.scalar(
+            select(ProductCustomTag).where(
+                func.lower(ProductCustomTag.name) == name.strip().lower(),
+                ProductCustomTag.deleted_at.is_(None),
+            )
+        )
+
+    def _raise_if_duplicate_name(self, name: str, except_id: UUID | None = None) -> None:
+        statement = select(ProductCustomTag).where(
+            func.lower(ProductCustomTag.name) == name.strip().lower(),
+            ProductCustomTag.deleted_at.is_(None),
+        )
+        if except_id is not None:
+            statement = statement.where(ProductCustomTag.id != except_id)
+
+        if self.session.scalar(statement) is not None:
+            raise ValueError("LISTING_TAG_NAME_DUPLICATED")
+
+    def _get_tag_or_raise(self, tag_id: str) -> ProductCustomTag:
+        tag = self.session.get(ProductCustomTag, self._uuid(tag_id))
+        if tag is None or tag.deleted_at is not None:
+            raise ValueError("LISTING_TAG_NOT_FOUND")
+        return tag
+
+    @staticmethod
+    def _uuid(value: str) -> UUID:
+        try:
+            return UUID(str(value))
+        except ValueError as exc:
+            raise ValueError("INVALID_UUID") from exc

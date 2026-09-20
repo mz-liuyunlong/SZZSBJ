@@ -15,6 +15,7 @@ export interface ListingManagementFilters {
   owners?: string[];
   productTypes?: string[];
   productStatuses?: string[];
+  tagValues?: string[];
 
   /** Legacy cached single-value filters. Kept only to migrate older page-state cache safely. */
   owner?: string;
@@ -31,12 +32,14 @@ interface ListingManagementToolbarProps {
   stores: ReportFilterOption[];
   owners: ReportFilterOption[];
   productTypes: ReportFilterOption[];
+  tags: ReportFilterOption[];
   statisticsVisible: boolean;
   onChange: (filters: ListingManagementFilters) => void;
   onReset: () => void;
   onBatchSearch: (values: string[]) => void;
   onMessage: (content: string) => void;
   onToggleStatistics: () => void;
+  onOpenTagManager?: () => void;
   onOpenColumnConfig: () => void;
   onDownload: () => void;
 }
@@ -59,11 +62,13 @@ function ListingManagementToolbar({
   stores,
   owners,
   productTypes,
+  tags,
   statisticsVisible,
   onChange,
   onReset,
   onMessage,
   onToggleStatistics,
+  onOpenTagManager,
   onOpenColumnConfig,
   onDownload,
 }: ListingManagementToolbarProps) {
@@ -170,6 +175,19 @@ function ListingManagementToolbar({
       />
       <ReportFacetSelect
         mode="multiple"
+        ariaLabel="标签"
+        placeholder="标签"
+        unit="个标签"
+        value={filters.tagValues ?? []}
+        options={tags}
+        popupWidth={320}
+        onChange={(value) => onChange({
+          ...filters,
+          tagValues: value as string[],
+        })}
+      />
+      <ReportFacetSelect
+        mode="multiple"
         ariaLabel="店铺"
         placeholder="全部店铺"
         unit="个店铺"
@@ -212,6 +230,14 @@ function ListingManagementToolbar({
           onReset();
         }}
       />
+      {onOpenTagManager ? (
+        <Button
+          className="listing-management__tag-manager-button"
+          onClick={onOpenTagManager}
+        >
+          标签管理
+        </Button>
+      ) : null}
       <Button onClick={onToggleStatistics}>
         {statisticsVisible ? "隐藏统计" : "显示统计"}
       </Button>

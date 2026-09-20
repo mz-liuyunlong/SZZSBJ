@@ -76,9 +76,9 @@ describe("App", () => {
 
     await logIn();
 
-    expect(screen.getByRole("region", { name: "每日销售" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Listing管理" })).toBeVisible();
     expect(screen.getByRole("navigation", { name: "面包屑" })).toHaveTextContent(
-      "销售",
+      "产品",
     );
     expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     expect(localStorage.length).toBe(0);
@@ -91,7 +91,7 @@ describe("App", () => {
       /title|permission|role|user|token|auth|state/i,
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/api/sales/daily-sales?"),
+      expect.stringContaining("/api/listings/walmart"),
       expect.objectContaining({ credentials: "same-origin" }),
     );
   });

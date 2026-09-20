@@ -273,6 +273,42 @@ export async function fetchOrderProfitSourceRecords(
   };
 }
 
+const ORDER_PROFIT_SOURCE_PAGE_SIZE = 1000;
+
+export async function fetchAllOrderProfitSourceRecords(
+  params: OrderProfitParams,
+): Promise<OrderProfitApiResult> {
+  const firstPage = await fetchOrderProfitSourceRecords({
+    ...params,
+    page: 1,
+    pageSize: ORDER_PROFIT_SOURCE_PAGE_SIZE,
+  });
+  const totalPages = Math.ceil(firstPage.meta.total / ORDER_PROFIT_SOURCE_PAGE_SIZE);
+
+  if (totalPages <= 1) return firstPage;
+
+  const restPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => fetchOrderProfitSourceRecords({
+      ...params,
+      page: index + 2,
+      pageSize: ORDER_PROFIT_SOURCE_PAGE_SIZE,
+    })),
+  );
+
+  return {
+    records: [
+      ...firstPage.records,
+      ...restPages.flatMap((pageResult) => pageResult.records),
+    ],
+    summary: firstPage.summary,
+    meta: {
+      ...firstPage.meta,
+      page: 1,
+      page_size: ORDER_PROFIT_SOURCE_PAGE_SIZE,
+    },
+  };
+}
+
 export async function fetchOrderProfitTrendPoints(
   params: OrderProfitParams,
 ): Promise<OrderProfitTrendPoint[]> {

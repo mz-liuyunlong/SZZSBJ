@@ -762,7 +762,7 @@ describe("DailySalesPage", () => {
     expect(screen.getByTestId("daily-sales-total-row")).toHaveTextContent("¥");
   });
 
-  it("renders shared hover previews and opens the static sales detail", async () => {
+  it("renders shared hover previews and opens the shared listing analysis modal", async () => {
     await renderPage();
 
     fireEvent.mouseEnter(screen.getByLabelText("每日销售商品图片占位"));
@@ -771,6 +771,6 @@ describe("DailySalesPage", () => {
     expect(screen.getByRole("img", { name: "销量图表" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: /查看销售详情/ }));
-    expect(screen.getByRole("dialog", { name: "销售详情" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Listing经营分析中心" })).toBeInTheDocument();
   });
 });

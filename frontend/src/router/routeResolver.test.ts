@@ -28,8 +28,8 @@ describe("routeResolver", () => {
     });
   });
 
-  it("uses daily sales from navigation as the default business route", () => {
-    expect(DEFAULT_BUSINESS_ROUTE.page).toBe(findRouteByKey("sales_daily_sales")?.page);
+  it("uses listing management from navigation as the default business route", () => {
+    expect(DEFAULT_BUSINESS_ROUTE.page).toBe(findRouteByKey("products_listing_management")?.page);
     expect(DEFAULT_BUSINESS_PATH).toBe(DEFAULT_BUSINESS_ROUTE.page.path);
   });
 

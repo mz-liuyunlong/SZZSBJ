@@ -36,12 +36,10 @@ export interface ListingManagementRow {
 
 export const listingColumnFields = [
   { key: "image", title: "图片" },
-  { key: "msku", title: "MSKU" },
-  { key: "productId", title: "商品ID" },
+  { key: "productIdName", title: "商品ID/品名" },
+  { key: "skuMsku", title: "SKU/MSKU" },
   { key: "store", title: "店铺" },
   { key: "owner", title: "负责人" },
-  { key: "sku", title: "SKU" },
-  { key: "productName", title: "品名" },
   { key: "title", title: "标题" },
   { key: "productType", title: "产品类型" },
   { key: "listPrice", title: "划线价" },
@@ -68,7 +66,7 @@ export const listingColumnFields = [
   { key: "productGrade", title: "产品等级" },
 ] as const;
 
-export const fixedListingColumnKeys = ["image", "msku", "productId"];
+export const fixedListingColumnKeys = ["image", "productIdName", "skuMsku"];
 
 export const listingStores = ["美国一店", "美国二店", "加拿大店", "验收测试"];
 export const listingOwners = ["林晓", "陈宁", "周琳", "赵明"];

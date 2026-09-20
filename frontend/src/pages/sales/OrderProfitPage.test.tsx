@@ -107,6 +107,7 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
 
   return {
     fetchOrderProfitSourceRecords,
+    fetchAllOrderProfitSourceRecords: fetchOrderProfitSourceRecords,
     fetchOrderProfitTrendPoints: vi.fn(async () => []),
     preloadOrderProfitSourceRecords: vi.fn(),
   };
@@ -149,9 +150,22 @@ vi.mock("@/pages/sales/salesFilterOptionsApi", async () => {
 });
 
 vi.mock("echarts-for-react", () => ({
-  default: ({ option }: { option: { yAxis: { name: string } } }) => (
-    <div role="img" aria-label={`${option.yAxis.name}图表`} />
-  ),
+  default: ({
+    option,
+  }: {
+    option: {
+      title?: { text?: string };
+      yAxis?: { name?: string };
+      series?: Array<{ name?: string }>;
+    };
+  }) => {
+    const chartName = option.title?.text
+      ?? option.yAxis?.name
+      ?? option.series?.[0]?.name
+      ?? "趋势";
+
+    return <div role="img" aria-label={`${chartName}图表`} />;
+  },
 }));
 
 vi.mock("antd", async (importOriginal) => {
@@ -604,8 +618,10 @@ describe("OrderProfitPage", () => {
     fireEvent.click(screen.getByLabelText("搜索"));
     await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1"));
     fireEvent.click(screen.getByRole("button", { name: /查看订单利润详情/ }));
-    expect(screen.getByRole("dialog", { name: "订单利润详情" })).toBeInTheDocument();
-    expect(screen.getByText(/商品ID \/ 品名/)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Listing经营分析中心" })).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes(`Listing #${referenceRows[0].productId}`)),
+    ).toBeInTheDocument();
     expect(localStorageSpy).not.toHaveBeenCalled();
     expect(sessionStorageSpy).not.toHaveBeenCalled();
   });

@@ -669,3 +669,58 @@ class ListingManagementCurrentMart(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
+
+
+class ProductCustomTag(Base):
+    __tablename__ = "product_custom_tags"
+    __table_args__ = (
+        CheckConstraint("name <> ''", name="product_custom_tag_name_not_blank"),
+        CheckConstraint("color <> ''", name="product_custom_tag_color_not_blank"),
+        Index("ix_product_custom_tags_active_sort", "is_active", "sort_order", "name"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(16), nullable=False)
+    color: Mapped[str] = mapped_column(String(32), nullable=False)
+    sort_order: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0"), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProductCustomTagAssignment(Base):
+    __tablename__ = "product_custom_tag_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_account_ref",
+            "item_id",
+            "tag_id",
+            name="uq_product_custom_tag_assignment_item_tag",
+        ),
+        CheckConstraint("source_account_ref <> ''", name="tag_assignment_account_not_blank"),
+        CheckConstraint("item_id <> ''", name="tag_assignment_item_not_blank"),
+        Index("ix_product_custom_tag_assignments_item", "source_account_ref", "item_id"),
+        Index("ix_product_custom_tag_assignments_tag", "tag_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tag_id: Mapped[UUID] = mapped_column(
+        ForeignKey("product_custom_tags.id", ondelete="CASCADE"), nullable=False
+    )
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )

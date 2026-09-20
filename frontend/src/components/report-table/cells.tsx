@@ -1,6 +1,6 @@
 /** Provides small report-table cells shared by existing no-API data pages. */
 import { CheckOutlined, CopyOutlined, PictureOutlined } from "@ant-design/icons";
-import { Button, Popover, Tag, Tooltip } from "antd";
+import { Button, Popover, Space, Tag, Tooltip } from "antd";
 import ReactECharts from "echarts-for-react";
 import { useState, type MouseEvent, type ReactNode } from "react";
 import "@/components/report-table/reportTable.css";
@@ -76,6 +76,77 @@ export function CopyableTextCell({ text, label, link, onCopy, onOpen }: Copyable
     </span>
   );
 }
+
+
+
+const WALMART_ITEM_URL_PREFIX = "https://www.walmart.com/ip/";
+
+const walmartItemUrl = (productId: string) => {
+  const normalized = productId.trim();
+  return `${WALMART_ITEM_URL_PREFIX}${encodeURIComponent(normalized)}`;
+};
+
+const openWalmartItem = (productId: string) => {
+  const normalized = productId.trim();
+  if (!normalized || normalized === "-") return;
+
+  const opened = window.open(walmartItemUrl(normalized), "_blank", "noopener,noreferrer");
+  if (opened) opened.opener = null;
+};
+
+interface WalmartProductIdCellProps {
+  productId: string;
+  onCopy?: (text: string) => void;
+}
+
+export function WalmartProductIdCell({ productId, onCopy }: WalmartProductIdCellProps) {
+  return (
+    <span className="report-table-product-id-cell">
+      <CopyableTextCell
+        text={productId}
+        label="商品ID"
+        link
+        onCopy={onCopy}
+        onOpen={() => openWalmartItem(productId)}
+      />
+    </span>
+  );
+}
+
+interface ProductIdentityCellProps {
+  productId: string;
+  productName: string;
+  onCopy?: (text: string) => void;
+}
+
+export function ProductIdentityCell({
+  productId,
+  productName,
+  onCopy,
+}: ProductIdentityCellProps) {
+  return (
+    <Space direction="vertical" size={0} className="report-table-identity-stack">
+      <WalmartProductIdCell productId={productId} onCopy={onCopy} />
+      <CopyableTextCell text={productName} label="品名" onCopy={onCopy} />
+    </Space>
+  );
+}
+
+interface SkuMskuIdentityCellProps {
+  sku: string;
+  msku: string;
+  onCopy?: (text: string) => void;
+}
+
+export function SkuMskuIdentityCell({ sku, msku, onCopy }: SkuMskuIdentityCellProps) {
+  return (
+    <Space direction="vertical" size={0} className="report-table-identity-stack">
+      <CopyableTextCell text={sku} label="SKU" onCopy={onCopy} />
+      <CopyableTextCell text={msku} label="MSKU" onCopy={onCopy} />
+    </Space>
+  );
+}
+
 
 
 interface ImageCellProps {

@@ -1,7 +1,7 @@
 /** Product-ID order-profit report table with the daily-sales interaction model. */
 import { BarChartOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Empty, Space, Table } from "antd";
+import { Button, Empty, Table } from "antd";
 import type { Key } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
@@ -9,8 +9,9 @@ import ReportTableShell, {
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import {
-  CopyableTextCell,
   ImageCell,
+  ProductIdentityCell,
+  SkuMskuIdentityCell,
   MoneyCell,
   PercentCell,
   StatusTagCell,
@@ -160,10 +161,11 @@ function createColumns(
       width: 240,
       fixed: "left",
       render: (_, row) => (
-        <Space direction="vertical" size={0} className="order-profit__identifier-stack">
-          <CopyableTextCell text={row.productId} label="商品ID" link onCopy={onCopy} onOpen={() => onOpenDetail(row)} />
-          <CopyableTextCell text={row.productName} label="品名" onCopy={onCopy} />
-        </Space>
+        <ProductIdentityCell
+          productId={row.productId}
+          productName={row.productName}
+          onCopy={onCopy}
+        />
       ),
     },
     {
@@ -171,10 +173,11 @@ function createColumns(
       key: "skuMsku",
       width: 190,
       render: (_, row) => (
-        <Space direction="vertical" size={0} className="order-profit__identifier-stack">
-          <CopyableTextCell text={row.sku} label="SKU" onCopy={onCopy} />
-          <CopyableTextCell text={row.msku} label="MSKU" onCopy={onCopy} />
-        </Space>
+        <SkuMskuIdentityCell
+          sku={row.sku}
+          msku={row.msku}
+          onCopy={onCopy}
+        />
       ),
     },
     { title: "平台", dataIndex: "platform", key: "platform", width: 96 },
