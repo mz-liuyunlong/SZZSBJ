@@ -13,6 +13,7 @@ from app.modules.data_pages.models import (
 from app.modules.data_pages.repository import (
     DailySalesRepository,
     ListingManagementRepository,
+    ListingTagRepository,
     OrderProfitRepository,
 )
 from app.modules.data_pages.schemas import (
@@ -28,6 +29,12 @@ from app.modules.data_pages.schemas import (
     ListingManagementListData,
     ListingManagementQuery,
     ListingManagementSummaryData,
+    ListingTagBatchSetData,
+    ListingTagBatchSetRequest,
+    ListingTagCreateRequest,
+    ListingTagListData,
+    ListingTagRead,
+    ListingTagUpdateRequest,
     OrderProfitItemRead,
     OrderProfitListData,
     OrderProfitQuery,
@@ -444,6 +451,7 @@ class ListingManagementService:
 
     def __init__(self, session: Session) -> None:
         self.repository = ListingManagementRepository(session)
+        self.tag_repository = ListingTagRepository(session)
 
     def list_listings(
         self,
@@ -456,6 +464,7 @@ class ListingManagementService:
             owner_ref=query.owner_ref,
             product_type=query.product_type,
             status=query.status,
+            tag=query.tag,
             summary_filter=query.summary_filter,
             search_field=query.search_field,
             keyword=query.keyword,
@@ -463,8 +472,17 @@ class ListingManagementService:
             page=query.page,
             page_size=query.page_size,
         )
+        custom_tags = self.tag_repository.tags_for_listing_rows(rows)
         return (
-            ListingManagementListData(items=[self._to_read(row) for row in rows]),
+            ListingManagementListData(
+                items=[
+                    self._to_read(
+                        row,
+                        custom_tags.get((str(row.source_account_ref), str(row.item_id))),
+                    )
+                    for row in rows
+                ],
+            ),
             total,
             latest_calculated_at,
         )
@@ -487,6 +505,7 @@ class ListingManagementService:
             owner_ref=query.owner_ref,
             product_type=query.product_type,
             status=query.status,
+            tag=query.tag,
             search_field=query.search_field,
             keyword=query.keyword,
             batch_values=query.batch_values,
@@ -506,6 +525,14 @@ class ListingManagementService:
         account_refs: frozenset[str],
     ) -> ListingManagementFilterOptionsData:
         rows = self.repository.listing_filter_options(account_refs=account_refs)
+
+        tag_rows = {value: (value, label, count) for value, label, count in rows["tags"]}
+        db_tag_rows = {
+            tag.name: (tag.name, tag.name, usage)
+            for tag, usage in self.tag_repository.list_tags(account_refs=account_refs)
+        }
+        tag_rows.update(db_tag_rows)
+
         return ListingManagementFilterOptionsData(
             stores=[
                 DataPageFilterOptionRead(value=value, label=label, count=count)
@@ -519,9 +546,78 @@ class ListingManagementService:
                 DataPageFilterOptionRead(value=value, label=label, count=count)
                 for value, label, count in rows["product_types"]
             ],
+            tags=[
+                DataPageFilterOptionRead(value=value, label=label, count=count)
+                for value, label, count in sorted(
+                    tag_rows.values(),
+                    key=lambda item: item[1],
+                )
+            ],
         )
 
-    def _to_read(self, row: ListingManagementCurrentMart) -> ListingManagementItemRead:
+    def list_tags(self, account_refs: frozenset[str]) -> ListingTagListData:
+        return ListingTagListData(
+            items=[
+                self._to_tag_read(tag, usage)
+                for tag, usage in self.tag_repository.list_tags(account_refs=account_refs)
+            ],
+        )
+
+    def create_tag(self, payload: ListingTagCreateRequest) -> ListingTagRead:
+        tag = self.tag_repository.create_tag(
+            name=payload.name,
+            color=payload.color,
+            sort_order=payload.sort_order,
+        )
+        return self._to_tag_read(tag, 0)
+
+    def update_tag(self, tag_id: str, payload: ListingTagUpdateRequest) -> ListingTagRead:
+        tag = self.tag_repository.update_tag(
+            tag_id=tag_id,
+            name=payload.name,
+            color=payload.color,
+            sort_order=payload.sort_order,
+            is_active=payload.is_active,
+        )
+        return self._to_tag_read(tag, 0)
+
+    def delete_tag(self, tag_id: str) -> None:
+        self.tag_repository.delete_tag(tag_id=tag_id)
+
+    def batch_set_tags(
+        self,
+        *,
+        payload: ListingTagBatchSetRequest,
+        account_refs: frozenset[str],
+    ) -> ListingTagBatchSetData:
+        updated, tag_count = self.tag_repository.batch_set_tags(
+            account_refs=account_refs,
+            listing_ids=list(payload.listing_ids),
+            tag_ids=list(payload.tag_ids),
+            tag_values=list(payload.tag_values),
+            mode=payload.mode,
+        )
+        return ListingTagBatchSetData(
+            updated_listings=updated,
+            tag_count=tag_count,
+            mode=payload.mode,
+        )
+
+    def _to_tag_read(self, tag: object, usage: int) -> ListingTagRead:
+        return ListingTagRead(
+            id=str(tag.id),
+            name=str(tag.name),
+            color=str(tag.color),
+            usage=usage,
+            sort_order=int(tag.sort_order or 0),
+            is_active=bool(tag.is_active),
+        )
+
+    def _to_read(
+        self,
+        row: ListingManagementCurrentMart,
+        custom_tags: list[str] | None = None,
+    ) -> ListingManagementItemRead:
         return ListingManagementItemRead(
             id=str(row.id),
             source_account_ref=row.source_account_ref,
@@ -541,7 +637,7 @@ class ListingManagementService:
             product_developer_uid=getattr(row, "product_developer_uid", None),
             product_developer_name=getattr(row, "product_developer_name", None),
             product_grade=row.product_grade,
-            tags=_tag_list(row.tags_json),
+            tags=custom_tags if custom_tags is not None else _tag_list(row.tags_json),
             strike_price_amount=row.strike_price_amount,
             strike_price_currency_code=row.strike_price_currency_code,
             sale_price_amount=row.sale_price_amount,

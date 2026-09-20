@@ -20,7 +20,7 @@ import DailySalesTable from "@/pages/sales/components/DailySalesTable";
 import DailySalesToolbar, {
   type DailySalesFilters,
 } from "@/pages/sales/components/DailySalesToolbar";
-import SalesDetailModal from "@/pages/sales/components/SalesDetailModal";
+import ListingAnalysisModal, { type ListingAnalysisSource } from "@/shared/listing-analysis";
 import { fetchDailySalesRows, type DailySalesServerSummary } from "@/pages/sales/dailySalesApi";
 import {
   dailySalesColumnFields,
@@ -86,7 +86,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const [detailRow, setDetailRow] = useState<DailySalesRow>();
+  const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
   const dateRangeStart = filters.dateRange?.[0];
@@ -287,6 +287,20 @@ function DailySalesPage({ page }: DailySalesPageProps) {
     }
   };
 
+  const openDailySalesAnalysis = (row: DailySalesRow) => {
+    setAnalysisSource({
+      title: row.productName,
+      sku: row.sku,
+      msku: row.msku,
+      productId: row.productId,
+      date: row.date,
+      platform: row.platform,
+      status: row.costStatus,
+      store: row.store,
+      wfsAvailableInventory: row.wfsAvailableInventory,
+    });
+  };
+
   const headerActions = (
     <>
     </>
@@ -392,7 +406,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           onSelectionChange={setSelectedRowKeys}
           onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
           onCopy={(text) => void copyText(text)}
-          onOpenDetail={setDetailRow}
+          onOpenDetail={openDailySalesAnalysis}
           />
 
       </div>
@@ -407,7 +421,11 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         onClose={() => setColumnConfigOpen(false)}
         onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
       />
-      <SalesDetailModal row={detailRow} onClose={() => setDetailRow(undefined)} />
+      <ListingAnalysisModal
+        open={analysisSource !== null}
+        source={analysisSource ?? undefined}
+        onClose={() => setAnalysisSource(null)}
+      />
     </PageShell>
   );
 }

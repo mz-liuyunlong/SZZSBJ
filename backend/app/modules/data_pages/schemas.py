@@ -281,6 +281,7 @@ class ListingManagementQuery(StrictSchema):
     owner_ref: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     product_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     status: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    tag: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     summary_filter: Literal[
         "total",
         "online",
@@ -364,6 +365,7 @@ class ListingManagementFilterOptionsData(StrictSchema):
     stores: list[DataPageFilterOptionRead] = Field(default_factory=list)
     owners: list[DataPageFilterOptionRead] = Field(default_factory=list)
     product_types: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    tags: list[DataPageFilterOptionRead] = Field(default_factory=list)
 
 
 class ListingManagementListData(StrictSchema):
@@ -379,3 +381,48 @@ class ListingManagementReadMeta(StrictSchema):
     total: int
     partial: bool = False
     input_missing: bool = False
+
+
+class ListingTagRead(StrictSchema):
+    id: str
+    name: str
+    color: str
+    usage: int = 0
+    sort_order: int = 0
+    is_active: bool = True
+
+
+class ListingTagListData(StrictSchema):
+    items: list[ListingTagRead] = Field(default_factory=list)
+
+
+class ListingTagCreateRequest(StrictSchema):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)]
+    color: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
+    sort_order: int = 0
+
+
+class ListingTagUpdateRequest(StrictSchema):
+    name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)] | None
+    ) = None
+    color: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)] | None
+    ) = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class ListingTagBatchSetRequest(StrictSchema):
+    listing_ids: list[Nonblank128] = Field(min_length=1, max_length=1000)
+    tag_ids: list[Nonblank128] = Field(default_factory=list, max_length=1000)
+    tag_values: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)]
+    ] = Field(default_factory=list, max_length=1000)
+    mode: Literal["replace", "append", "remove"] = "append"
+
+
+class ListingTagBatchSetData(StrictSchema):
+    updated_listings: int = 0
+    tag_count: int = 0
+    mode: Literal["replace", "append", "remove"]

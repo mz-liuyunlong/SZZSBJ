@@ -1,0 +1,810 @@
+.custom-tag-manager {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  color: #172033;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.custom-tag-manager *,
+.custom-tag-manager *::before,
+.custom-tag-manager *::after {
+  box-sizing: border-box;
+}
+
+.custom-tag-manager button,
+.custom-tag-manager input {
+  font: inherit;
+}
+
+.custom-tag-manager__mask {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(18, 29, 45, .36);
+  backdrop-filter: blur(2px);
+  cursor: default;
+}
+
+.custom-tag-manager__modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  width: min(480px, calc(100vw - 24px));
+  max-height: calc(100vh - 28px);
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 26px 80px rgba(15, 23, 42, .18);
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.custom-tag-manager__head {
+  display: flex;
+  height: 58px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid #e6edf5;
+}
+
+.custom-tag-manager__title {
+  color: #172033;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 20px;
+}
+
+.custom-tag-manager__sub {
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.custom-tag-manager__close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #8a95a6;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.custom-tag-manager__close:hover {
+  color: #344054;
+  background: #f3f6fa;
+}
+
+.custom-tag-manager__body {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 14px 14px;
+}
+
+.custom-tag-manager__create-box {
+  flex: none;
+  padding: 8px 10px;
+  background: #fbfcfe;
+  border: 1px solid #e4ebf3;
+  border-radius: 12px;
+}
+
+.custom-tag-manager__create-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.custom-tag-manager__create-title {
+  color: #344054;
+  font-size: 10px;
+  font-weight: 830;
+}
+
+.custom-tag-manager__preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #98a2b3;
+  font-size: 8px;
+}
+
+.custom-tag-manager__tag-preview {
+  display: inline-flex;
+  max-width: 160px;
+  height: 22px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  overflow: hidden;
+  color: #35669d;
+  font-size: 10px;
+  font-weight: 750;
+  background: #eef5ff;
+  border-radius: 6px;
+}
+
+.custom-tag-manager__preview-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.custom-tag-manager__form-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px;
+  align-items: start;
+  margin-top: 7px;
+}
+
+.custom-tag-manager__input-wrap {
+  min-width: 0;
+}
+
+.custom-tag-manager__label {
+  display: block;
+  margin-bottom: 4px;
+  color: #667085;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.custom-tag-manager__name-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  color: #344054;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  outline: none;
+}
+
+.custom-tag-manager__name-input:focus {
+  border-color: #98c1f8;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, .07);
+}
+
+.custom-tag-manager__name-input--error {
+  border-color: #e99ca0;
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, .06);
+}
+
+.custom-tag-manager__primary {
+  height: 34px;
+  padding: 0 13px;
+  color: #fff;
+  font-weight: 750;
+  cursor: pointer;
+  background: #1677ff;
+  border: 1px solid #1677ff;
+  border-radius: 8px;
+  transition: .15s;
+}
+
+.custom-tag-manager__primary:hover {
+  background: #0f6be5;
+}
+
+.custom-tag-manager__primary:disabled {
+  cursor: not-allowed;
+  background: #cddff7;
+  border-color: #cddff7;
+}
+
+.custom-tag-manager__add-btn {
+  min-width: 64px;
+  height: 30px;
+  margin-top: 16px;
+  padding: 0 11px;
+  font-size: 9px;
+}
+
+.custom-tag-manager__helper {
+  min-height: 12px;
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 8px;
+  line-height: 12px;
+  visibility: hidden;
+}
+
+.custom-tag-manager__helper--error {
+  color: #d14349;
+  visibility: visible;
+}
+
+.custom-tag-manager__color-area {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 5px;
+}
+
+.custom-tag-manager__color-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.custom-tag-manager__color-row--compact {
+  gap: 8px;
+}
+
+.custom-tag-manager__color-option {
+  position: relative;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+}
+
+.custom-tag-manager__color-option::after {
+  width: 14px;
+  height: 14px;
+  content: "";
+  background: var(--tag-color);
+  border-radius: 50%;
+}
+
+.custom-tag-manager__color-option:hover::before {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  content: "";
+  border: 1px solid var(--tag-color);
+  border-radius: 50%;
+}
+
+.custom-tag-manager__color-option--selected::before {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  content: "";
+  border: 2px solid var(--tag-color);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option {
+  width: 20px;
+  height: 20px;
+}
+
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option::after {
+  width: 13px;
+  height: 13px;
+}
+
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option:hover::before,
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option--selected::before {
+  width: 18px;
+  height: 18px;
+}
+
+.custom-tag-manager__color-option:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 3px;
+}
+
+.custom-tag-manager__list-head {
+  display: flex;
+  height: 38px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+  margin-top: 10px;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.custom-tag-manager__list-title {
+  color: #344054;
+  font-size: 11px;
+  font-weight: 830;
+}
+
+.custom-tag-manager__list-count {
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.custom-tag-manager__tag-list {
+  height: 190px;
+  min-height: 190px;
+  max-height: 190px;
+  flex: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.custom-tag-manager__tag-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-tag-manager__tag-list::-webkit-scrollbar-thumb {
+  background: #dbe4ee;
+  border-radius: 999px;
+}
+
+.custom-tag-manager__tag-row {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid #f1f4f7;
+}
+
+.custom-tag-manager__tag-row:last-child {
+  border-bottom: 0;
+}
+
+.custom-tag-manager__tag-main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.custom-tag-manager__tag-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+}
+
+.custom-tag-manager__tag-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-tag-manager__usage {
+  min-width: 68px;
+  color: #98a2b3;
+  font-size: 8.5px;
+  text-align: right;
+}
+
+.custom-tag-manager__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.custom-tag-manager__text-btn {
+  height: 24px;
+  padding: 0 5px;
+  color: #7d8898;
+  font-size: 9px;
+  line-height: 24px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.custom-tag-manager__text-btn:hover {
+  color: #1677ff;
+  background: #f3f7fc;
+}
+
+.custom-tag-manager__text-btn--danger:hover {
+  color: #d14349;
+  background: #fff4f4;
+}
+
+.custom-tag-manager__tag-row--editing {
+  display: block;
+  min-height: 66px;
+  padding: 6px 4px;
+}
+
+.custom-tag-manager__inline-edit {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.custom-tag-manager__inline-edit-top {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 7px;
+  align-items: center;
+}
+
+.custom-tag-manager__inline-edit-top .custom-tag-manager__name-input {
+  height: 29px;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.custom-tag-manager__inline-usage {
+  color: #98a2b3;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.custom-tag-manager__inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.custom-tag-manager__mini {
+  height: 24px;
+  padding: 0 7px;
+  font-size: 8px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.custom-tag-manager__mini--cancel {
+  color: #667085;
+  background: #fff;
+  border: 1px solid #dfe7f1;
+}
+
+.custom-tag-manager__mini--save {
+  color: #fff;
+  font-weight: 750;
+  background: #1677ff;
+  border: 1px solid #1677ff;
+}
+
+.custom-tag-manager__mini--save:disabled {
+  cursor: not-allowed;
+  background: #cddff7;
+  border-color: #cddff7;
+}
+
+.custom-tag-manager__inline-edit-bottom {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-tag-manager__inline-helper {
+  min-height: 11px;
+  color: #d14349;
+  font-size: 7.5px;
+  line-height: 11px;
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.custom-tag-manager__inline-helper--error {
+  visibility: visible;
+}
+
+.custom-tag-manager__empty {
+  display: grid;
+  height: 120px;
+  place-items: center;
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.custom-tag-manager__confirm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 32, 51, .13);
+}
+
+.custom-tag-manager__confirm {
+  width: min(330px, calc(100% - 28px));
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e5eaf1;
+  border-radius: 13px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, .16);
+}
+
+.custom-tag-manager__confirm-title {
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 16px;
+}
+
+.custom-tag-manager__confirm-text {
+  margin-top: 6px;
+  color: #667085;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.custom-tag-manager__confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.custom-tag-manager__ghost,
+.custom-tag-manager__danger {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 9px;
+  cursor: pointer;
+  border-radius: 7px;
+}
+
+.custom-tag-manager__ghost {
+  color: #475467;
+  background: #fff;
+  border: 1px solid #dce5ef;
+}
+
+.custom-tag-manager__danger {
+  color: #d14349;
+  background: #fff;
+  border: 1px solid #f1c5c7;
+}
+
+.custom-tag-manager__toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  z-index: 1600;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 10px;
+  pointer-events: none;
+  background: #172033;
+  border-radius: 8px;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 720px) {
+  .custom-tag-manager__modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .custom-tag-manager__form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-tag-manager__add-btn {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .custom-tag-manager__tag-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .custom-tag-manager__usage {
+    grid-column: 1;
+  }
+
+  .custom-tag-manager__actions {
+    grid-row: 1 / 3;
+    grid-column: 2;
+  }
+}
+
+/* ===== CustomTagManager font-size lock: mirror 自定义标签.html ===== */
+.custom-tag-manager__title {
+  font-size: 15px !important;
+  font-weight: 850 !important;
+  line-height: 20px !important;
+}
+
+.custom-tag-manager__sub {
+  font-size: 10px !important;
+  line-height: 14px !important;
+}
+
+.custom-tag-manager__close {
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+.custom-tag-manager__create-title {
+  font-size: 10px !important;
+  font-weight: 830 !important;
+}
+
+.custom-tag-manager__preview-wrap {
+  font-size: 8px !important;
+}
+
+.custom-tag-manager__tag-preview {
+  font-size: 10px !important;
+  font-weight: 750 !important;
+}
+
+.custom-tag-manager__label {
+  font-size: 8px !important;
+  font-weight: 700 !important;
+}
+
+.custom-tag-manager__name-input {
+  font-size: 12px !important;
+}
+
+.custom-tag-manager__add-btn {
+  font-size: 9px !important;
+}
+
+.custom-tag-manager__helper {
+  font-size: 8px !important;
+  line-height: 12px !important;
+}
+
+.custom-tag-manager__list-title {
+  font-size: 11px !important;
+  font-weight: 830 !important;
+}
+
+.custom-tag-manager__list-count {
+  font-size: 9px !important;
+}
+
+.custom-tag-manager__tag-name {
+  font-size: 11px !important;
+  font-weight: 760 !important;
+}
+
+.custom-tag-manager__usage {
+  font-size: 8.5px !important;
+}
+
+.custom-tag-manager__text-btn {
+  font-size: 9px !important;
+  line-height: 24px !important;
+}
+
+.custom-tag-manager__inline-edit-top .custom-tag-manager__name-input {
+  font-size: 10px !important;
+}
+
+.custom-tag-manager__inline-usage {
+  font-size: 8px !important;
+}
+
+.custom-tag-manager__mini {
+  font-size: 8px !important;
+}
+
+.custom-tag-manager__inline-helper {
+  font-size: 7.5px !important;
+  line-height: 11px !important;
+}
+
+.custom-tag-manager__confirm-title {
+  font-size: 11px !important;
+  line-height: 16px !important;
+  font-weight: 850 !important;
+}
+
+.custom-tag-manager__confirm-text {
+  font-size: 9px !important;
+  line-height: 1.6 !important;
+}
+
+.custom-tag-manager__ghost,
+.custom-tag-manager__danger {
+  font-size: 9px !important;
+}
+
+.custom-tag-manager__toast {
+  font-size: 10px !important;
+}
+
+/* ===== CustomTagManager color picker shape lock ===== */
+.custom-tag-manager__color-option {
+  position: relative !important;
+  display: inline-grid !important;
+  width: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  flex: 0 0 22px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  line-height: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  appearance: none !important;
+}
+
+.custom-tag-manager__color-option::after {
+  display: block !important;
+  width: 14px !important;
+  min-width: 14px !important;
+  height: 14px !important;
+  min-height: 14px !important;
+  content: "" !important;
+  background: var(--tag-color) !important;
+  border-radius: 50% !important;
+}
+
+.custom-tag-manager__color-option:hover::before,
+.custom-tag-manager__color-option--selected::before {
+  position: absolute !important;
+  inset: auto !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  content: "" !important;
+  border-radius: 50% !important;
+  box-sizing: border-box !important;
+}
+
+.custom-tag-manager__color-option:hover::before {
+  border: 1px solid var(--tag-color) !important;
+}
+
+.custom-tag-manager__color-option--selected::before {
+  border: 2px solid var(--tag-color) !important;
+  box-shadow: 0 0 0 2px #fff !important;
+}
+
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option {
+  width: 20px !important;
+  min-width: 20px !important;
+  max-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  flex-basis: 20px !important;
+}
+
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option::after {
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px !important;
+  min-height: 13px !important;
+}
+
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option:hover::before,
+.custom-tag-manager__color-row--compact .custom-tag-manager__color-option--selected::before {
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+}

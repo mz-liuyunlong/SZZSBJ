@@ -1,14 +1,16 @@
-import { Button, Space, Tag, Tooltip } from "antd";
-import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import type { Key } from "react";
-import ReportTableShell, {
-  ReportTableSelectionBar,
-} from "@/components/report-table/ReportTableShell";
 import {
-  REPORT_TABLE_PAGE_SIZE_OPTIONS,
-} from "@/components/report-table/pagination";
-import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
-import { CopyableTextCell, ImageCell } from "@/components/report-table/cells";
+  Button,
+  Space,
+  Tag,
+  Tooltip } from "antd"; import { ProTable,
+  type ProColumns } from "@ant-design/pro-components"; import type { Key } from "react"; import ReportTableShell,
+  {   ReportTableSelectionBar,
+  } from "@/components/report-table/ReportTableShell"; import {   REPORT_TABLE_PAGE_SIZE_OPTIONS,
+  } from "@/components/report-table/pagination"; import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle"; import { ImageCell,
+  ProductIdentityCell,
+  SkuMskuIdentityCell,
+  CopyableTextCell,
+} from "@/components/report-table/cells";
 import {
   listingColumnFields,
   type ListingManagementRow,
@@ -16,6 +18,8 @@ import {
 
 const minColumnWidths: Record<string, number> = {
   image: 72,
+  productIdName: 240,
+  skuMsku: 190,
   msku: 130,
   productId: 150,
   store: 120,
@@ -73,6 +77,7 @@ interface ListingManagementTableProps {
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
   onOpenDetail: (row: ListingManagementRow) => void;
+  onBatchSetTags: () => void;
   onBulkExport: () => void;
 }
 
@@ -89,6 +94,7 @@ function ListingManagementTable({
   onPageSizeChange,
   onSelectionChange,
   onOpenDetail,
+  onBatchSetTags,
   onBulkExport,
 }: ListingManagementTableProps) {
   const title = (key: string, label: string) => (
@@ -119,6 +125,37 @@ function ListingManagementTable({
           image={row.image}
           label={`Listing 图片：${row.productName}`}
           placement="right"
+        />
+      ),
+    },
+    productIdName: {
+      key: "productIdName",
+      title: title("productIdName", fieldTitle.productIdName ?? "商品ID/品名"),
+      width: columnWidths.productIdName,
+      fixed: "left",
+      sorter: (a, b) => a.productId.localeCompare(b.productId),
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <ProductIdentityCell
+          productId={row.productId}
+          productName={row.productName}
+        />
+      ),
+    },
+    skuMsku: {
+      key: "skuMsku",
+      title: title("skuMsku", fieldTitle.skuMsku ?? "SKU/MSKU"),
+      width: columnWidths.skuMsku,
+      fixed: "left",
+      sorter: (a, b) => (
+        a.sku.localeCompare(b.sku)
+        || a.msku.localeCompare(b.msku)
+      ),
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <SkuMskuIdentityCell
+          sku={row.sku}
+          msku={row.msku}
         />
       ),
     },
@@ -393,7 +430,18 @@ function ListingManagementTable({
     },
   };
 
-  const columns = appliedColumnKeys
+  const normalizedAppliedColumnKeys = appliedColumnKeys.reduce<string[]>((keys, key) => {
+    const normalizedKey = key === "msku" || key === "productId"
+      ? "productIdName"
+      : key === "sku" || key === "productName"
+        ? "skuMsku"
+        : key;
+
+    if (!keys.includes(normalizedKey)) keys.push(normalizedKey);
+    return keys;
+  }, []);
+
+  const columns = normalizedAppliedColumnKeys
     .flatMap((key) => (allColumns[key] ? [allColumns[key]] : []))
     .concat({
       key: "actions",
@@ -447,6 +495,11 @@ function ListingManagementTable({
           <ReportTableSelectionBar
             selectedCount={selectedRowKeys.length}
             actions={[
+              {
+                key: "set-tags",
+                label: "批量设置标签",
+                onClick: onBatchSetTags,
+              },
               {
                 key: "export",
                 label: "导出已选",

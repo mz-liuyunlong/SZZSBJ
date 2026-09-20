@@ -107,6 +107,7 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
 
   return {
     fetchOrderProfitSourceRecords,
+    fetchAllOrderProfitSourceRecords: fetchOrderProfitSourceRecords,
     fetchOrderProfitTrendPoints: vi.fn(async () => []),
     preloadOrderProfitSourceRecords: vi.fn(),
   };
@@ -149,9 +150,22 @@ vi.mock("@/pages/sales/salesFilterOptionsApi", async () => {
 });
 
 vi.mock("echarts-for-react", () => ({
-  default: ({ option }: { option: { yAxis: { name: string } } }) => (
-    <div role="img" aria-label={`${option.yAxis.name}图表`} />
-  ),
+  default: ({
+    option,
+  }: {
+    option: {
+      title?: { text?: string };
+      yAxis?: { name?: string };
+      series?: Array<{ name?: string }>;
+    };
+  }) => {
+    const chartName = option.title?.text
+      ?? option.yAxis?.name
+      ?? option.series?.[0]?.name
+      ?? "趋势";
+
+    return <div role="img" aria-label={`${chartName}图表`} />;
+  },
 }));
 
 vi.mock("antd", async (importOriginal) => {

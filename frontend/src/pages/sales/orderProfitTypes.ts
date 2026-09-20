@@ -130,12 +130,22 @@ const priority: Record<OrderProfitCostStatus, number> = {
   已完成: 1,
 };
 
-const aggregateKey = (record: OrderProfitSourceRecord) => [
-  record.productId,
-  record.msku,
-  record.store,
-  record.owner,
-].join("\u001f");
+const uniqueTextValues = (
+  records: OrderProfitSourceRecord[],
+  key: "sku" | "msku" | "store" | "owner",
+) => Array.from(new Set(
+  records
+    .map((record) => String(record[key] ?? "").trim())
+    .filter(Boolean),
+));
+
+const compactJoinedText = (values: string[], fallback = "-") => {
+  if (values.length === 0) return fallback;
+  if (values.length <= 2) return values.join(" / ");
+  return `${values[0]} / ${values[1]} 等${values.length}个`;
+};
+
+const aggregateKey = (record: OrderProfitSourceRecord) => record.productId;
 
 export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): OrderProfitRow[] => {
   const buckets = new Map<string, OrderProfitSourceRecord[]>();
@@ -149,6 +159,10 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
 
   return Array.from(buckets.values()).map((bucket) => {
     const base = bucket[0];
+    const skuValues = uniqueTextValues(bucket, "sku");
+    const mskuValues = uniqueTextValues(bucket, "msku");
+    const storeValues = uniqueTextValues(bucket, "store");
+    const ownerValues = uniqueTextValues(bucket, "owner");
     const salesVolume = bucket.reduce((total, row) => total + row.salesVolume, 0);
     const orderCount = bucket.reduce((total, row) => total + row.orderCount, 0);
     const salesAmount = bucket.reduce((total, row) => total + row.salesAmount, 0);
@@ -187,11 +201,11 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       id: `order-profit-${aggregateKey(base)}`,
       productId: base.productId,
       productName: base.productName,
-      sku: base.sku,
-      msku: base.msku,
+      sku: compactJoinedText(skuValues),
+      msku: compactJoinedText(mskuValues),
       platform: base.platform,
-      store: base.store,
-      owner: base.owner,
+      store: compactJoinedText(storeValues),
+      owner: compactJoinedText(ownerValues),
       currency: base.currency,
       salesVolume,
       orderCount,
@@ -219,6 +233,10 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       sevenDayDates: trendDates,
       sevenDaySales,
     };
-  }).sort((left, right) => (right.orderProfit ?? Number.NEGATIVE_INFINITY)
-    - (left.orderProfit ?? Number.NEGATIVE_INFINITY));
+  }).sort((left, right) => (
+    right.salesVolume - left.salesVolume
+    || right.salesAmount - left.salesAmount
+    || right.orderCount - left.orderCount
+    || left.productId.localeCompare(right.productId)
+  ));
 };

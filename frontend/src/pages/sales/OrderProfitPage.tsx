@@ -18,13 +18,13 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import OrderProfitCharts from "@/pages/sales/components/OrderProfitCharts";
-import OrderProfitDetailModal from "@/pages/sales/components/OrderProfitDetailModal";
 import OrderProfitSummaryCards from "@/pages/sales/components/OrderProfitSummaryCards";
 import OrderProfitTable from "@/pages/sales/components/OrderProfitTable";
+import ListingAnalysisModal from "@/shared/listing-analysis";
 import OrderProfitToolbar, {
   type OrderProfitFilters,
 } from "@/pages/sales/components/OrderProfitToolbar";
-import { fetchOrderProfitSourceRecords, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
+import { fetchAllOrderProfitSourceRecords, fetchOrderProfitSourceRecords, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
 import {
   aggregateOrderProfitRows,
   dateRangeForPreset,
@@ -72,13 +72,25 @@ interface OrderProfitPageProps {
   page: NavigationPage;
 }
 
+interface OrderProfitAnalysisSource {
+  title?: string;
+  productName?: string;
+  itemName?: string;
+  productId?: string | number;
+  sku?: string;
+  msku?: string;
+  date?: string;
+  platform?: string;
+  store?: string;
+  status?: string;
+}
+
 function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const isPageActive = true;
   const pageStateKey = "order-profit:v4";
   const orderProfitPageRootRef = useRef<HTMLDivElement | null>(null);
   const [filters, setFilters] = useState(createInitialFilters);
-  const [serverTotal, setServerTotal] = useState(0);
   const [sourceRecords, setSourceRecords] = useState<OrderProfitSourceRecord[]>([]);
   const [orderProfitTrendPoints, setOrderProfitTrendPoints] = useState<OrderProfitTrendPoint[]>([]);
   const [orderProfitSummary, setOrderProfitSummary] = useState<OrderProfitServerSummary | null>(null);
@@ -93,7 +105,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
-  const [detailRow, setDetailRow] = useState<OrderProfitRow>();
+  const [analysisSource, setAnalysisSource] = useState<OrderProfitAnalysisSource | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
 
@@ -128,28 +140,24 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     queueMicrotask(() => {
       if (active) setIsTableRequesting(true);
     });
-    void fetchOrderProfitSourceRecords({
+    void fetchAllOrderProfitSourceRecords({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
-      page: currentPage,
-      pageSize,
       platforms: filters.platforms,
       owners: filters.owners,
       stores: filters.stores,
       searchField: filters.searchField,
       keyword: filters.keyword,
     })
-      .then(({ records, summary, meta }) => {
+      .then(({ records, summary }) => {
         if (!active) return;
         setSourceRecords(Array.isArray(records) ? records : []);
         setOrderProfitSummary(summary);
-        setServerTotal(meta.total);
       })
       .catch(() => {
         if (!active) return;
         setSourceRecords([]);
         setOrderProfitSummary(null);
-        setServerTotal(0);
       })
       .finally(() => {
         if (active) setIsTableRequesting(false);
@@ -159,7 +167,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       active = false;
       setIsTableRequesting(false);
     };
-  }, [currentPage, dateRangeStart, dateRangeEnd, filters.keyword, filters.owners, filters.platforms, filters.searchField, filters.stores, isPageActive, pageSize]);
+  }, [dateRangeStart, dateRangeEnd, filters.keyword, filters.owners, filters.platforms, filters.searchField, filters.stores, isPageActive]);
 
   useEffect(() => {
     let active = true;
@@ -339,6 +347,22 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     }
   };
 
+
+  const openOrderProfitAnalysis = (row: OrderProfitRow) => {
+    setAnalysisSource({
+      productId: row.productId,
+      title: row.productName,
+      productName: row.productName,
+      itemName: row.productName,
+      sku: row.sku,
+      msku: row.msku,
+      date: dateRangeEnd ?? dateRangeStart ?? dayjs().format("YYYY-MM-DD"),
+      platform: row.platform,
+      store: row.store || "全部店铺",
+      status: row.costStatus ? `成本${row.costStatus}` : "正常在售",
+    });
+  };
+
   const headerActions = (
     <>
     </>
@@ -428,7 +452,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
             <OrderProfitTable
           rows={filteredRows}
-          total={serverTotal || filteredRows.length}
+          total={filteredRows.length}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}
@@ -447,7 +471,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
           onSelectionChange={setSelectedRowKeys}
           onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
           onCopy={(text) => void copyText(text)}
-          onOpenDetail={setDetailRow}
+          onOpenDetail={openOrderProfitAnalysis}
           />
       </div>
       </div>
@@ -462,7 +486,11 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         onClose={() => setColumnConfigOpen(false)}
         onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
       />
-      <OrderProfitDetailModal row={detailRow} onClose={() => setDetailRow(undefined)} />
+      <ListingAnalysisModal
+        open={analysisSource !== null}
+        source={analysisSource ?? undefined}
+        onClose={() => setAnalysisSource(null)}
+      />
     </PageShell>
   );
 }

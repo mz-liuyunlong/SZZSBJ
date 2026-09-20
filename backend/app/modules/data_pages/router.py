@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
@@ -22,6 +22,12 @@ from app.modules.data_pages.schemas import (
     ListingManagementQuery,
     ListingManagementReadMeta,
     ListingManagementSummaryData,
+    ListingTagBatchSetData,
+    ListingTagBatchSetRequest,
+    ListingTagCreateRequest,
+    ListingTagListData,
+    ListingTagRead,
+    ListingTagUpdateRequest,
     OrderProfitListData,
     OrderProfitQuery,
     OrderProfitReadMeta,
@@ -224,6 +230,101 @@ def order_profit_trend(
         ),
         meta=None,
     )
+
+
+@router.get(
+    "/api/listings/tags",
+    response_model=SuccessEnvelope[ListingTagListData, Any],
+    responses=ERRORS,
+)
+def list_listing_tags(
+    request: Request,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingTagListData, Any]:
+    return success_response(
+        request,
+        data=ListingManagementService(session).list_tags(account_refs),
+        meta=None,
+    )
+
+
+@router.post(
+    "/api/listings/tags",
+    response_model=SuccessEnvelope[ListingTagRead, Any],
+    responses=ERRORS,
+)
+def create_listing_tag(
+    request: Request,
+    payload: ListingTagCreateRequest,
+    session: db_session,
+    _: listing_principal,
+) -> SuccessEnvelope[ListingTagRead, Any]:
+    try:
+        data = ListingManagementService(session).create_tag(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
+
+
+@router.patch(
+    "/api/listings/tags/{tag_id}",
+    response_model=SuccessEnvelope[ListingTagRead, Any],
+    responses=ERRORS,
+)
+def update_listing_tag(
+    request: Request,
+    tag_id: str,
+    payload: ListingTagUpdateRequest,
+    session: db_session,
+    _: listing_principal,
+) -> SuccessEnvelope[ListingTagRead, Any]:
+    try:
+        data = ListingManagementService(session).update_tag(tag_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
+
+
+@router.delete(
+    "/api/listings/tags/{tag_id}",
+    response_model=SuccessEnvelope[dict[str, bool], Any],
+    responses=ERRORS,
+)
+def delete_listing_tag(
+    request: Request,
+    tag_id: str,
+    session: db_session,
+    _: listing_principal,
+) -> SuccessEnvelope[dict[str, bool], Any]:
+    try:
+        ListingManagementService(session).delete_tag(tag_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(request, data={"deleted": True}, meta=None)
+
+
+@router.post(
+    "/api/listings/tags/batch-set",
+    response_model=SuccessEnvelope[ListingTagBatchSetData, Any],
+    responses=ERRORS,
+)
+def batch_set_listing_tags(
+    request: Request,
+    payload: ListingTagBatchSetRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingTagBatchSetData, Any]:
+    try:
+        data = ListingManagementService(session).batch_set_tags(
+            payload=payload,
+            account_refs=account_refs,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
 
 
 @router.get(
