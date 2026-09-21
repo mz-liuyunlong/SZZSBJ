@@ -500,16 +500,24 @@ def test_manual_baseline_alone_is_used_immediately() -> None:
     assert r.source == "baseline_mix" and r.value_days == Decimal("9.0000")
 
 
-def test_manual_baseline_is_evicted_once_enough_new_samples_exist() -> None:
+def test_manual_baseline_holds_with_four_new_samples_and_is_evicted_by_the_fifth() -> None:
+    # Rocky 2026-09-21: baseline + 4 new samples fill the window of 5; the 5th evicts it.
     baseline = ManualBaseline(value_days=7, set_on=_d("2026-08-01"))
-    samples = [
+    four = [
         _sample(f"N{i}", f"2026-08-{10 + i:02d}", f"2026-08-{18 + i:02d}") for i in range(4)
     ]  # four new valid samples, 8 days each
-    r = compute_sku_cycle(
-        samples=samples, baseline=baseline, lingxing_default_days=None, thresholds=T
+    held = compute_sku_cycle(
+        samples=four, baseline=baseline, lingxing_default_days=None, thresholds=T
     )
-    assert r.source == "samples" and r.baseline_days is None
-    assert r.value_days == Decimal("8.0000") and r.sample_count == 4
+    assert held.source == "baseline_mix" and held.baseline_days == 7
+    assert held.sample_count == 4 and held.value_days == Decimal("7.8000")  # (7+8*4)/5
+
+    five = [*four, _sample("N5", "2026-08-20", "2026-08-28")]
+    evicted = compute_sku_cycle(
+        samples=five, baseline=baseline, lingxing_default_days=None, thresholds=T
+    )
+    assert evicted.source == "samples" and evicted.baseline_days is None
+    assert evicted.value_days == Decimal("8.0000") and evicted.sample_count == 5
 
 
 def test_unstable_requires_five_samples_and_range_of_three_days() -> None:

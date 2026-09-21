@@ -64,9 +64,9 @@ class PurchaseThresholds:
     min_samples_for_average: int = 2
     unstable_min_samples: int = 5
     unstable_range_days: int = 3
-    # §4.2 人工基准: "新有效样本满 4 张时基准被挤出". Kept as a parameter because the
-    # sentence admits two readings (4 vs. window-1); see .planning findings.
-    baseline_evict_at_samples: int = 4
+    # §4.2 人工基准 (Rocky 2026-09-21): the baseline occupies one of the five slots;
+    # it stays while at most 4 newer valid orders exist and is evicted by the 5th.
+    baseline_evict_at_samples: int = 5
 
     def __post_init__(self) -> None:
         if not 0 < self.arrival_ratio <= ONE:
