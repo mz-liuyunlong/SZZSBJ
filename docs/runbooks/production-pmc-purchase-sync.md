@@ -32,7 +32,9 @@ Source decision: `docs/data-sources/decisions/pmc-purchase-board-decision.md`
 1. Deployed revision is a clean merged `main` build containing #131. No server-side patch.
 2. `APP_ENV=production`; `DATABASE_URL` resolves to the owned PostgreSQL `APPLICATION_DATABASE`.
 3. A verified backup/snapshot of `APPLICATION_DATABASE` exists and the restore path is known.
-4. Current `alembic_version` is `20260918_0015` (or already `20260919_0016` if Step 1 ran).
+4. `alembic_version` is `20260918_0015`, `20260919_0016`, or a later revision whose chain includes
+   `20260919_0016` (e.g. `20260921_0010_add_listing_custom_tags`, which was applied together with
+   #136 and already contains this migration — Step 1 then becomes a read-only check).
 5. Nobody else is running a governed sync (`gov_integration_sync_runs` has no `running` row).
 
 ## Step 1 — Migration (`20260919_0016`, create-only)
@@ -43,7 +45,8 @@ Authorization scoped to this single command; do not persist the variable.
 PRODUCTION_MIGRATIONS_AUTHORIZED=true uv run alembic -c alembic.ini upgrade head
 ```
 
-Verify: `alembic_version = 20260919_0016`; the five `ods_lingxing_purchase_*` /
+If `alembic_version` already includes `20260919_0016` (see Step 0.4), skip the command and only
+verify. Verify: `alembic_version` is `20260919_0016` or later; the five `ods_lingxing_purchase_*` /
 `ods_lingxing_receipt_*` tables exist and are empty. Record in the log. If this fails, stop.
 
 ## Step 2 — Governance bootstrap (creates disabled rows)
@@ -66,7 +69,7 @@ The runner refuses unless, for the chosen interface, **both** flags are true:
 `max_attempts = 1`, `retention_policy_id` = the interface's policy). Enable one interface,
 run Step 4 for it, disable it (Step 5), then move to the next. Never enable two at once.
 
-Both flags are changed by direct SQL. (`PATCH /api/integrations/sync-configs/{id}` exists,
+Run `psql` without `-q`/`-t` so each statement's `UPDATE n` tag is captured for the log. Both flags are changed by direct SQL. (`PATCH /api/integrations/sync-configs/{id}` exists,
 but `app/core/auth.py` currently issues only a GET-scoped read preview principal — no
 principal carries `integrations:update` — so the endpoint fails closed with 401 in
 production. Until a write principal exists, SQL is the only executable path; the
@@ -134,7 +137,19 @@ idempotency key** as `<interface>:<start>:<end>`: the runner refuses a second ru
 same key, so an accidental re-execution of the go-live window is rejected instead of
 duplicating raw pages and ODS rows.
 
+The runner's `_validate_runtime_settings` requires, in addition to `APP_ENV=production`,
+`LINGXING_ENABLE_TOKEN_REQUESTS=true`, `LINGXING_ENABLE_REAL_CALLS=true`, `LINGXING_DRY_RUN=false`
+and `LINGXING_ALLOW_RAW_WRITE=true`, with structured write and full sync still `false`. The
+production env file deliberately keeps real calls disabled, so — exactly as the ProductList runbook
+does — these four overrides are scoped to the single command and never persisted. Without them the
+runner exits `2` with `PMC_PURCHASE_ONE_TIME_RUN_ENV_NOT_AUTHORIZED` before any request (observed
+on the first go-live attempt, 2026-09-21).
+
 ```bash
+LINGXING_ENABLE_TOKEN_REQUESTS=true \
+LINGXING_ENABLE_REAL_CALLS=true \
+LINGXING_DRY_RUN=false \
+LINGXING_ALLOW_RAW_WRITE=true \
 PMC_PURCHASE_ONE_TIME_RUN_AUTHORIZED=true \
 PMC_PURCHASE_INTERFACE_KEY=purchasePlanList \
 PMC_PURCHASE_SOURCE_ACCOUNT_REF=<approved account ref> \
@@ -145,7 +160,7 @@ PMC_PURCHASE_ONE_TIME_RUN_REASON="go-live window purchasePlanList" \
 uv run python scripts/run_pmc_purchase_once.py
 ```
 
-Repeat with `PMC_PURCHASE_INTERFACE_KEY=purchaseOrderList` /
+Repeat (with the same four `LINGXING_*` overrides) with `PMC_PURCHASE_INTERFACE_KEY=purchaseOrderList` /
 `…IDEMPOTENCY_KEY=purchaseOrderList:2026-08-01:<go-live date>`, then
 `purchaseReceiptOrderList` / `…IDEMPOTENCY_KEY=purchaseReceiptOrderList:2026-08-01:<go-live date>`,
 each after its own Step 3 → Step 5 cycle. If the window is split, each half gets its own key.
