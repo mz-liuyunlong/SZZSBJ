@@ -158,7 +158,12 @@ class DailySalesService:
             account_refs=account_refs,
             start_date=query.start_date,
             end_date=query.end_date,
+            platform=query.platform,
             store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            search_field=query.search_field,
+            keyword=query.keyword,
+            batch_values=query.batch_values,
         )
         return (
             DailySalesListData(
