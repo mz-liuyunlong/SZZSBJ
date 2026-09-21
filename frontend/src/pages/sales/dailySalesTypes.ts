@@ -27,14 +27,14 @@ export interface DailySalesRow {
   grossSalesAmount?: number;
   sampleOrderCount?: number;
   sampleQuantity?: number;
-  sampleAmount?: number;
+  sampleAmount?: number | null;
   costQuantity?: number;
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
-  sampleExcludedAmount: number;
+  sampleExcludedAmount: number | null;
   returnCount: number;
-  refundAmount: number;
+  refundAmount: number | null;
   returnRate30Days: number;
   adSpend: number;
   adRatio: number;
@@ -96,7 +96,7 @@ export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "sampleQuantity", title: "送样量" },
   { key: "sampleExcludedAmount", title: "送样金额" },
   { key: "returnCount", title: "退货量" },
-  { key: "refundAmount", title: "退款额" },
+  { key: "refundAmount", title: "退款损失" },
   { key: "returnRate30Days", title: "退货率30天" },
   { key: "adSpend", title: "广告费" },
   { key: "adRatio", title: "广告占比" },

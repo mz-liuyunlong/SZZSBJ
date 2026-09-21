@@ -41,6 +41,7 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 | RuntimeColumnConfigDrawer | Shared | `frontend/src/components/report-table/RuntimeColumnConfigDrawer.tsx` | 仅运行时生效的列显示与顺序配置 | 可配置列的报表表格 |
 | ResizableColumnTitle | Shared | `frontend/src/components/report-table/ResizableColumnTitle.tsx` | 拖拽参考线预览、松开后应用且无持久化的可访问列宽调整 | 支持列宽调整的报表表格 |
 | ReportTableCells | Shared | `frontend/src/components/report-table/cells.tsx` | 图片、复制文本、金额、百分比和状态展示 | 产品与销售报表单元格；ImageCell 支持独立 thumbnail/preview URL、lazy load 与 async decode |
+| ProductTagAssignmentModal | Shared | `frontend/src/components/product-tags/ProductTagAssignmentModal.tsx` | 为已选择商品多选并追加标签 | Listing 等支持批量标签操作的产品表格 |
 
 ## 组件登记规则
 

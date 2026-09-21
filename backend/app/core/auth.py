@@ -20,6 +20,9 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "integrations:read",
         "sales:daily-sales:read",
         "warehouse:wfs-fee-alert:read",
+        "business-rules:read",
+        "business-rules:write",
+        "business-rules:execute",
     }
 )
 _PREVIEW_PATH_PREFIXES: Final = frozenset(
@@ -29,6 +32,7 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
         "/api/sales/",
         "/api/listings/",
         "/api/warehouse/",
+        "/api/business-rules/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
@@ -37,6 +41,13 @@ _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
         "/api/integrations/interfaces",
         "/api/integrations/sync-configs",
         "/api/integrations/sync-runs",
+    }
+)
+_PREVIEW_WRITE_PATHS: Final[frozenset[str]] = frozenset(
+    {
+        "/api/business-rules/store-commissions",
+        "/api/business-rules/store-commissions/deactivate",
+        "/api/business-rules/store-commissions/recalculate",
     }
 )
 
@@ -69,7 +80,10 @@ def get_optional_principal(request: Request) -> Principal | None:
         any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
         or path in _PREVIEW_READ_PATHS
     )
-    if request.method != "GET" or not path_allowed:
+    write_allowed = (
+        request.method == "POST" and isinstance(path, str) and path in _PREVIEW_WRITE_PATHS
+    )
+    if not ((request.method == "GET" and path_allowed) or write_allowed):
         return None
     try:
         settings = get_settings()

@@ -30,11 +30,12 @@ from app.modules.integration_sync.data_pages_real_sync import (
     parse_args,
 )
 
+from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
+
 FIXED_UTC_MINUS_7 = timezone(timedelta(hours=-7), name="UTC-07:00")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 SAMPLE_RULE_VERSION = "zero-total-provider-status-strict-triple-v3"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
-DEFAULT_STORE_COMMISSION_RATE = Decimal("0.15")
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
 
 
@@ -600,7 +601,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "coalesce(sample.sample_amount,0) sample_amount,r.return_qty,r.refund_amount,r.refund_currency_code,"
                 "coalesce(r.refund_unpriced_count,0) refund_unpriced_count,coalesce(a.ad_spend,0) ad_spend,"
                 "sku.owner_ref,sku.purchase_cost_cny,sku.wfs_fee_usd,sku.first_leg_cny,sku.usd_cny_rate,"
-                "sku.fx_date,sku.fx_source,coalesce(commission.commission_rate,0.15) commission_rate,"
+                "sku.fx_date,sku.fx_source,coalesce(commission.commission_rate,:default_commission_rate) commission_rate,"
                 "commission.rule_id commission_rule_id from s left join dim_walmart_listings l "
                 "on l.source_account_ref=s.source_account_ref and l.store_id=s.store_id and l.item_id=s.item_id "
                 "left join sample on sample.source_account_ref=s.source_account_ref "
@@ -654,6 +655,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "day": self.business_date,
                 "runner": BUSINESS_RULE_RUNNER_VERSION,
                 "return_status": return_status,
+                "default_commission_rate": DEFAULT_STORE_COMMISSION_RATE,
                 "now": now,
             },
         )

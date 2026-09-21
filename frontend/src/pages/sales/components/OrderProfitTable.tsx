@@ -17,7 +17,10 @@ import {
   StatusTagCell,
   TrendPreviewCell,
 } from "@/components/report-table/cells";
-import { renderUsdSourceMoney } from "@/components/report-table/moneyRenderers";
+import {
+  renderUsdSourceMoney,
+  renderUsdSourceProfitMoney,
+} from "@/components/report-table/moneyRenderers";
 import {
   MOCK_USD_TO_CNY_RATE,
   orderProfitColumnFields,
@@ -54,6 +57,9 @@ const statusColors: Record<OrderProfitCostStatus, string> = {
 
 const money = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => (
   renderUsdSourceMoney<OrderProfitRow>(key, currency, MOCK_USD_TO_CNY_RATE)
+);
+const profitMoney = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => (
+  renderUsdSourceProfitMoney<OrderProfitRow>(key, currency, MOCK_USD_TO_CNY_RATE)
 );
 const percent = (key: keyof OrderProfitRow) =>
   (_: unknown, row: OrderProfitRow) => {
@@ -95,6 +101,17 @@ function TotalCell({
   rows: OrderProfitRow[];
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
+  if (columnKey === "orderProfit") {
+    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
+    const total = sumNullable(rows, "orderProfit");
+    return (
+      <MoneyCell
+        value={total == null ? null : total * rate}
+        currency={currency === "CNY" ? "¥" : "$"}
+        tone="profit"
+      />
+    );
+  }
   if (totalMoneyKeys.has(columnKey)) {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
     const total = sumNullable(rows, columnKey as keyof OrderProfitRow);
@@ -110,8 +127,8 @@ function TotalCell({
   if (columnKey === "averageProfitPerOrder") {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
     return orderCount && orderProfit != null
-      ? <MoneyCell value={orderProfit / orderCount * rate} currency={currency === "CNY" ? "¥" : "$"} />
-      : <MoneyCell value={null} currency={currency === "CNY" ? "¥" : "$"} />;
+      ? <MoneyCell value={orderProfit / orderCount * rate} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />
+      : <MoneyCell value={null} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />;
   }
   if (columnKey === "adRatio") {
     return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : null;
@@ -202,8 +219,8 @@ function createColumns(
     { title: "头程总成本", key: "firstLegCost", width: 128, render: money("firstLegCost", currency) },
     { title: "总仓储费", key: "storageFee", width: 112, render: money("storageFee", currency) },
     { title: "总成本", key: "totalCost", width: 112, render: money("totalCost", currency) },
-    { title: "订单利润", key: "orderProfit", width: 112, render: money("orderProfit", currency) },
-    { title: "平均利润/单", key: "averageProfitPerOrder", width: 128, render: money("averageProfitPerOrder", currency) },
+    { title: "订单利润", key: "orderProfit", width: 112, render: profitMoney("orderProfit", currency) },
+    { title: "平均利润/单", key: "averageProfitPerOrder", width: 128, render: profitMoney("averageProfitPerOrder", currency) },
     { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
     { title: "ROI", key: "roi", width: 88, render: percent("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },

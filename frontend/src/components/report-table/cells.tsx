@@ -454,18 +454,33 @@ export function TrendPreviewCell({ values, dates, label = "销量" }: TrendPrevi
   );
 }
 
+export type MoneyCellTone = "default" | "profit";
+
+const moneyToneClass = (
+  value: number,
+  tone: MoneyCellTone,
+) => {
+  if (tone !== "profit") return "";
+  if (value > 0) return " report-table-metric--profit-positive";
+  if (value < 0) return " report-table-metric--profit-negative";
+  return " report-table-metric--profit-neutral";
+};
+
 export function MoneyCell({
   value,
   currency = "$",
+  tone = "default",
 }: {
   value: number | null | undefined;
   currency?: "$" | "¥";
+  tone?: MoneyCellTone;
 }) {
   if (value == null || !Number.isFinite(value)) {
     return <span className="report-table-metric">—</span>;
   }
+
   return (
-    <span className="report-table-metric">
+    <span className={`report-table-metric${moneyToneClass(value, tone)}`}>
       {currency}{value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </span>
   );

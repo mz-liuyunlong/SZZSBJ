@@ -13,6 +13,7 @@ export const USER_VISIBLE_PAGE_KEYS = new Set([
   "data_center_task_center",
   "settings_user_management",
   "settings_role_management",
+  "settings_fee_rules",
 ]);
 
 export function isMockImplementedPage(page: NavigationPage) {

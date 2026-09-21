@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
 
 def utc_now() -> datetime:
@@ -195,7 +196,10 @@ class StoreCommissionRuleVersion(Base):
     platform_code: Mapped[str] = mapped_column(String(64), nullable=False)
     store_id: Mapped[str] = mapped_column(String(128), nullable=False)
     commission_rate: Mapped[Decimal] = mapped_column(
-        Numeric(9, 6), default=Decimal("0.15"), server_default=text("0.15"), nullable=False
+        Numeric(9, 6),
+        default=DEFAULT_STORE_COMMISSION_RATE,
+        server_default=text(str(DEFAULT_STORE_COMMISSION_RATE)),
+        nullable=False,
     )
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
     effective_to: Mapped[date | None] = mapped_column(Date)

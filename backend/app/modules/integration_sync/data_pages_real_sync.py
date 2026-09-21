@@ -1,3 +1,4 @@
+# ruff: noqa: E501,UP035
 from __future__ import annotations
 
 import argparse
@@ -24,6 +25,7 @@ from app.db.session import get_session_factory
 from app.integrations.lingxing.query_sign import build_query_auth_params
 from app.integrations.lingxing.security import canonical_json, redact_json
 from app.integrations.lingxing.token_manager import LingxingTokenClient, LingxingTokenManager
+from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
 from app.modules.integration_sync.parsers.lingxing_data_pages import DataPagesParserKey
@@ -168,7 +170,9 @@ class DataPagesRealHttpClient:
                 )
                 last_status = response.status_code
                 if len(response.content) > self._settings.lingxing_max_response_bytes:
-                    raise DataPagesRealSyncError(f"DATA_PAGES_RESPONSE_TOO_LARGE:{spec.interface_key}")
+                    raise DataPagesRealSyncError(
+                        f"DATA_PAGES_RESPONSE_TOO_LARGE:{spec.interface_key}"
+                    )
                 payload = cast(JsonValue, response.json())
             except (httpx.TimeoutException, httpx.TransportError, ValueError) as exc:
                 if attempt >= 6:
@@ -788,10 +792,13 @@ class DataPagesRealSyncRunner:
                     "store_name": _single_scalar(row.get("store_name")),
                     "item_id": item_id,
                     "msku": _single_scalar(row.get("msku")),
-                    "local_sku": _single_scalar(row.get("sku")) or _single_scalar(row.get("local_sku")),
-                    "product_name": _single_scalar(row.get("product_name")) or _single_scalar(row.get("platform_product_title")),
+                    "local_sku": _single_scalar(row.get("sku"))
+                    or _single_scalar(row.get("local_sku")),
+                    "product_name": _single_scalar(row.get("product_name"))
+                    or _single_scalar(row.get("platform_product_title")),
                     "sales_currency_code": _field(row, "currency_code") or "USD",
-                    "source_date_raw": _single_scalar(row.get("date_collect")) or self.business_date.isoformat(),
+                    "source_date_raw": _single_scalar(row.get("date_collect"))
+                    or self.business_date.isoformat(),
                     "source_group_key": _stable_hash(row),
                     "allocation_status": "direct",
                     "date_collect_json": canonical_json(cast(JsonValue, row.get("date_collect"))),
@@ -837,7 +844,9 @@ class DataPagesRealSyncRunner:
                         "source_account_ref": self.source_account_ref,
                         "store_id": _field(row, "store_id"),
                         "source_order_id": order_id,
-                        "source_order_line_id": _field(item, "global_item_no", "order_item_no", "id"),
+                        "source_order_line_id": _field(
+                            item, "global_item_no", "order_item_no", "id"
+                        ),
                         "source_line_hash": line_hash,
                         "source_line_ordinal": ordinal,
                         "item_id": _field(item, "item_id", "platform_product_id"),
@@ -851,7 +860,9 @@ class DataPagesRealSyncRunner:
                         "flow_node_raw": _field(row, "flow_node"),
                         "sales_revenue_amount": _decimal(item.get("sales_revenue_amount")),
                         "sales_revenue_currency_code": _field(row, "amount_currency") or "USD",
-                        "order_total_amount": _decimal(_nested_first(row, "transaction_info", "order_total_amount")),
+                        "order_total_amount": _decimal(
+                            _nested_first(row, "transaction_info", "order_total_amount")
+                        ),
                         "order_total_currency_code": _field(row, "amount_currency") or "USD",
                         "discount_amount": _decimal(item.get("discount_amount")),
                         "discount_currency_code": _field(row, "amount_currency") or "USD",
@@ -1197,7 +1208,9 @@ class DataPagesRealSyncRunner:
 
     def _refresh_daily_sales_mart(self) -> int:
         now = _now()
-        return_status = "provider_permission_403" if self.summary.return_permission_403 else "loaded"
+        return_status = (
+            "provider_permission_403" if self.summary.return_permission_403 else "loaded"
+        )
         missing_codes = ["cost_source_missing"]
         if self.summary.return_permission_403:
             missing_codes.append("return_provider_403")
@@ -1226,7 +1239,13 @@ class DataPagesRealSyncRunner:
                 "a as (select source_account_ref, business_date_la, store_id, item_id, msku, "
                 "sum(coalesce(ad_spend_amount,0)) ad_spend from fact_walmart_ad_item_sp_daily "
                 "where source_account_ref = :account and business_date_la = :day and store_id is not null "
-                "and item_id is not null and msku is not null and trim(msku) <> '' group by 1,2,3,4,5) "
+                "and item_id is not null and msku is not null and trim(msku) <> '' group by 1,2,3,4,5), "
+                "commission as (select distinct on (store_id) "
+                "store_id,id rule_id,commission_rate,rule_version "
+                "from ref_store_commission_rule_versions where source_account_ref=:account "
+                "and platform_code='walmart' and is_active=true and effective_from<=:day "
+                "and (effective_to is null or effective_to>:day) "
+                "order by store_id,effective_from desc,created_at desc) "
                 "insert into mart_daily_sales_item_day "
                 "(id,business_date_la,source_account_ref,platform_code,store_id,store_name,item_id,msku,local_sku,"
                 "local_name,title,picture_url,sales_qty,order_count,sales_amount,sales_currency_code,sample_amount,"
@@ -1239,7 +1258,10 @@ class DataPagesRealSyncRunner:
                 "l.local_name,l.title,l.picture_url,o.sales_qty,o.order_count,o.sales_amount,o.currency_code,"
                 "o.sample_amount,o.sales_excluding_sample,r.return_qty,r.refund_amount,r.refund_currency_code,"
                 "coalesce(a.ad_spend,0),'USD',case when o.sales_amount > 0 then coalesce(a.ad_spend,0)/o.sales_amount "
-                "else null end,l.wfs_available_quantity,0.15,o.sales_amount*0.15,o.currency_code,'missing',"
+                "else null end,l.wfs_available_quantity,"
+                "coalesce(commission.commission_rate,:default_commission_rate),"
+                "o.sales_amount*coalesce(commission.commission_rate,:default_commission_rate),"
+                "o.currency_code,'missing',"
                 "cast(:missing_codes as jsonb),'[]'::jsonb,jsonb_build_object('runner',cast(:runner as text),"
                 "'basis','fact_walmart_order_items','ads_match_key','store_id+item_id+msku','return_status',"
                 "cast(:return_status as text),'unresolved_order_lines',cast(:unresolved as integer)),"
@@ -1248,7 +1270,8 @@ class DataPagesRealSyncRunner:
                 "left join r on r.source_account_ref=o.source_account_ref and r.business_date_la=o.business_date_la "
                 "and r.store_id=o.store_id and r.item_id=o.item_id left join a on "
                 "a.source_account_ref=o.source_account_ref and a.business_date_la=o.business_date_la "
-                "and a.store_id=o.store_id and a.item_id=o.item_id and a.msku=l.msku"
+                "and a.store_id=o.store_id and a.item_id=o.item_id and a.msku=l.msku "
+                "left join commission on commission.store_id=o.store_id"
             ),
             {
                 "account": self.source_account_ref,
@@ -1257,10 +1280,13 @@ class DataPagesRealSyncRunner:
                 "runner": RUNNER_VERSION,
                 "return_status": return_status,
                 "unresolved": self.summary.order_unresolved_rows,
+                "default_commission_rate": DEFAULT_STORE_COMMISSION_RATE,
                 "now": now,
             },
         )
-        return _row_count(self.session, "mart_daily_sales_item_day", self.source_account_ref, self.business_date)
+        return _row_count(
+            self.session, "mart_daily_sales_item_day", self.source_account_ref, self.business_date
+        )
 
     def _refresh_order_profit_mart(self) -> int:
         now = _now()
@@ -1319,7 +1345,9 @@ class DataPagesRealSyncRunner:
         ) or Decimal("0")
         if daily_spend != profit_spend:
             raise DataPagesRealSyncError("DATA_PAGES_MART_AD_SPEND_MISMATCH")
-        return _row_count(self.session, "mart_order_profit_sku_day", self.source_account_ref, self.business_date)
+        return _row_count(
+            self.session, "mart_order_profit_sku_day", self.source_account_ref, self.business_date
+        )
 
     def _refresh_listing_mart(self) -> int:
         now = _now()
@@ -1359,7 +1387,9 @@ class DataPagesRealSyncRunner:
                 "now": now,
             },
         )
-        return _row_count(self.session, "mart_listing_management_current", self.source_account_ref, None)
+        return _row_count(
+            self.session, "mart_listing_management_current", self.source_account_ref, None
+        )
 
 
 def _resolve_ad_identity(
@@ -1372,18 +1402,26 @@ def _resolve_ad_identity(
 ) -> tuple[str | None, str | None, str | None]:
     direct_store = _field(row, "storeId", "store_id")
     direct_msku = _field(row, "msku")
-    if direct_store and direct_msku and direct_msku in store_item_map.get((direct_store, item_id), set()):
+    if (
+        direct_store
+        and direct_msku
+        and direct_msku in store_item_map.get((direct_store, item_id), set())
+    ):
         return direct_store, direct_msku, "provider_triple"
 
     seller_name = _normalize_name(row.get("mpSellerName"))
     seller_stores = store_name_map.get(seller_name, set()) if seller_name else set()
     if len(seller_stores) == 1:
         store_id = next(iter(seller_stores))
-        msku_candidates = {value for value in store_item_map.get((store_id, item_id), set()) if value}
+        msku_candidates = {
+            value for value in store_item_map.get((store_id, item_id), set()) if value
+        }
         if len(msku_candidates) == 1:
             return store_id, next(iter(msku_candidates)), "seller_store_item"
 
-    candidates = {(store_id, msku) for store_id, msku in item_map.get(item_id, set()) if store_id and msku}
+    candidates = {
+        (store_id, msku) for store_id, msku in item_map.get(item_id, set()) if store_id and msku
+    }
     stores = {store_id for store_id, _ in candidates}
     if len(stores) == 1:
         store_id = next(iter(stores))
@@ -1602,6 +1640,7 @@ def _ad_identity_hash(row: Mapping[str, Any]) -> str:
         }
     )
 
+
 def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
     """Return ad outcome metrics that must match before duplicate identities collapse.
 
@@ -1691,7 +1730,9 @@ def _preferred_ad_duplicate_row(
 
 
 def _page_signature(rows: list[dict[str, Any]]) -> str:
-    encoded = json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":")).encode()
+    encoded = json.dumps(
+        rows, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":")
+    ).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 

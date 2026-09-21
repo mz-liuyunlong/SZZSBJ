@@ -50,6 +50,22 @@ export const renderUsdSourceMoney = <Row extends object>(
   return <MoneyCell value={convertUsdSourceValue(value, currency, rate)} currency={displaySymbol(currency)} />;
 };
 
+export const renderUsdSourceProfitMoney = <Row extends object>(
+  key: keyof Row,
+  currency: ReportDisplayCurrency,
+  usdToCnyRate: ReportFxRate<Row>,
+) => (_: unknown, row: Row) => {
+  const value = numericValue(row, key);
+  const rate = resolveRate(row, usdToCnyRate);
+  return (
+    <MoneyCell
+      value={convertUsdSourceValue(value, currency, rate)}
+      currency={displaySymbol(currency)}
+      tone="profit"
+    />
+  );
+};
+
 export const renderCnySourceMoney = <Row extends object>(
   key: keyof Row,
   currency: ReportDisplayCurrency,

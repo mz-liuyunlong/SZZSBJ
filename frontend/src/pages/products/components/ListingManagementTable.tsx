@@ -497,7 +497,7 @@ function ListingManagementTable({
             actions={[
               {
                 key: "set-tags",
-                label: "批量设置标签",
+                label: "设置标签",
                 onClick: onBatchSetTags,
               },
               {

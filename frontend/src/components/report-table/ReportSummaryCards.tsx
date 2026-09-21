@@ -14,10 +14,16 @@ export interface ReportSummaryMetricComparison {
   status: string;
 }
 
+export type ReportSummaryMetricValueTone =
+  | "profit-positive"
+  | "profit-negative"
+  | "profit-neutral";
+
 export interface ReportSummaryMetric {
   label: string;
   value: string;
   comparison?: ReportSummaryMetricComparison | null;
+  valueTone?: ReportSummaryMetricValueTone;
 }
 
 export interface ReportSummaryCard {
@@ -174,7 +180,14 @@ function ReportSummaryCards({
                 tabIndex={0}
                 aria-label={`${metric.label}：${metric.value}`}
               >
-                <span className="report-summary-pair-card__value">{metric.value}</span>
+                <span
+                  className={[
+                    "report-summary-pair-card__value",
+                    metric.valueTone ? `report-summary-pair-card__value--${metric.valueTone}` : "",
+                  ].filter(Boolean).join(" ")}
+                >
+                  {metric.value}
+                </span>
                 <span className="report-summary-pair-card__meta">
                   <span>{metric.label}</span>
                   {metric.comparison ? renderTrendNode(metric, metric.comparison) : null}
