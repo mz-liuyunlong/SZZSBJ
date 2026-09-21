@@ -66,14 +66,11 @@ The runner refuses unless, for the chosen interface, **both** flags are true:
 `max_attempts = 1`, `retention_policy_id` = the interface's policy). Enable one interface,
 run Step 4 for it, disable it (Step 5), then move to the next. Never enable two at once.
 
-Two flags, two mechanisms, because only one of them has an API:
-
-**3a. `is_enabled` — via the governed API.** `PATCH /api/integrations/sync-configs/{config_id}`
-with body `{"is_enabled": true}` using a principal that holds `integrations:update`
-(the request is attributed to that principal and request id in the API log; the service
-itself writes no sync-run event for a config update, so the execution-log entry below is the
-audit record). `schedule_enabled` is left untouched — the service rejects enabling a schedule
-without cron and the manual-only rule still applies. Find the `config_id` first:
+Both flags are changed by direct SQL. (`PATCH /api/integrations/sync-configs/{id}` exists,
+but `app/core/auth.py` currently issues only a GET-scoped read preview principal — no
+principal carries `integrations:update` — so the endpoint fails closed with 401 in
+production. Until a write principal exists, SQL is the only executable path; the
+execution-log entry is the audit record.) First, the read-only lookup:
 
 ```sql
 -- read-only lookup (psql, as the application role; run inside BEGIN READ ONLY)
@@ -86,8 +83,7 @@ WHERE i.provider = 'lingxing'
 ORDER BY i.interface_key;
 ```
 
-**3b. `outbound_enabled` — direct SQL (no API exposes this column by design).** One row,
-one transaction, row count checked before commit:
+**3a/3b. Enable — one interface, one transaction, each statement must report `UPDATE 1`:**
 
 ```sql
 BEGIN;
@@ -96,7 +92,17 @@ UPDATE gov_integration_interfaces
  WHERE provider = 'lingxing'
    AND interface_key = '<ONE of purchasePlanList | purchaseOrderList | purchaseReceiptOrderList>'
    AND outbound_enabled = false;
--- expect: UPDATE 1. Anything else → ROLLBACK and stop.
+-- expect: UPDATE 1
+UPDATE gov_integration_sync_configs c
+   SET is_enabled = true, updated_at = now()
+  FROM gov_integration_interfaces i
+ WHERE c.interface_id = i.id
+   AND i.provider = 'lingxing'
+   AND i.interface_key = '<the same interface>'
+   AND c.source_account_ref = '<approved account ref>'
+   AND c.is_enabled = false
+   AND c.schedule_enabled = false;
+-- expect: UPDATE 1. Any other count on either statement → ROLLBACK and stop.
 COMMIT;
 ```
 
@@ -156,13 +162,19 @@ whether any of these becomes a hard gate (follow-up PR), so keep the numbers.
 
 ## Step 5 — Disable again (after each run, before enabling the next interface)
 
-**5a.** `PATCH /api/integrations/sync-configs/{config_id}` with `{"is_enabled": false}` for
-the interface just run.
-
-**5b.** Direct SQL, same shape as 3b, reversed:
+**5a/5b. Disable — same shape as Step 3, reversed, each statement `UPDATE 1`:**
 
 ```sql
 BEGIN;
+UPDATE gov_integration_sync_configs c
+   SET is_enabled = false, updated_at = now()
+  FROM gov_integration_interfaces i
+ WHERE c.interface_id = i.id
+   AND i.provider = 'lingxing'
+   AND i.interface_key = '<the interface just run>'
+   AND c.source_account_ref = '<approved account ref>'
+   AND c.is_enabled = true;
+-- expect: UPDATE 1
 UPDATE gov_integration_interfaces
    SET outbound_enabled = false, updated_at = now()
  WHERE provider = 'lingxing'
