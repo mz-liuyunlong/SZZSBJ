@@ -139,8 +139,9 @@ class DailySalesRepository:
                 None
             )
         )
-        rows = self.session.scalars(
-            statement.order_by(
+        is_single_day = start_date is not None and end_date is not None and start_date == end_date
+        order_columns = (
+            (
                 func.coalesce(DailySalesItemDayMart.sales_qty, 0).desc(),
                 func.coalesce(DailySalesItemDayMart.sales_amount, 0).desc(),
                 DailySalesItemDayMart.business_date_la.desc(),
@@ -148,8 +149,19 @@ class DailySalesRepository:
                 DailySalesItemDayMart.local_sku.asc(),
                 DailySalesItemDayMart.item_id.asc(),
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            if is_single_day
+            else (
+                DailySalesItemDayMart.business_date_la.desc(),
+                func.coalesce(DailySalesItemDayMart.sales_qty, 0).desc(),
+                func.coalesce(DailySalesItemDayMart.sales_amount, 0).desc(),
+                DailySalesItemDayMart.store_name.asc(),
+                DailySalesItemDayMart.local_sku.asc(),
+                DailySalesItemDayMart.item_id.asc(),
+            )
+        )
+
+        rows = self.session.scalars(
+            statement.order_by(*order_columns).offset((page - 1) * page_size).limit(page_size)
         ).all()
         return rows, int(total or 0), latest_calculated_at
 
@@ -200,9 +212,14 @@ class DailySalesRepository:
         account_refs: frozenset[str],
         start_date: date | None,
         end_date: date | None,
+        platform: str | None,
         store_id: str | None,
+        owner_ref: str | None,
+        search_field: str,
+        keyword: str,
+        batch_values: str,
     ) -> tuple[object, object, str | None]:
-        """Aggregate completed refunds by refund event day, not original sales day."""
+        """Aggregate completed refunds by refund event day with the active page filters."""
 
         statement = select(
             func.coalesce(func.sum(WalmartRefundItemFact.quantity), 0),
@@ -216,9 +233,88 @@ class DailySalesRepository:
             statement = statement.where(WalmartRefundItemFact.business_date_la >= start_date)
         if end_date is not None:
             statement = statement.where(WalmartRefundItemFact.business_date_la <= end_date)
+
         store_values = _csv_values(store_id)
         if store_values:
             statement = statement.where(WalmartRefundItemFact.store_id.in_(store_values))
+
+        platform_values = _platform_filter_values(platform)
+        owner_values = _csv_values(owner_ref)
+        normalized_keyword = keyword.strip()
+        batch_filter_values = _csv_values(batch_values)
+
+        needs_daily_sales_scope = bool(
+            platform_values or owner_values or normalized_keyword or batch_filter_values
+        )
+
+        if needs_daily_sales_scope:
+            scope = (
+                select(1)
+                .select_from(DailySalesItemDayMart)
+                .where(
+                    DailySalesItemDayMart.source_account_ref
+                    == WalmartRefundItemFact.source_account_ref,
+                    or_(
+                        and_(
+                            WalmartRefundItemFact.item_id.is_not(None),
+                            DailySalesItemDayMart.item_id == WalmartRefundItemFact.item_id,
+                        ),
+                        and_(
+                            WalmartRefundItemFact.local_sku.is_not(None),
+                            DailySalesItemDayMart.local_sku == WalmartRefundItemFact.local_sku,
+                        ),
+                        and_(
+                            WalmartRefundItemFact.msku.is_not(None),
+                            DailySalesItemDayMart.msku == WalmartRefundItemFact.msku,
+                        ),
+                    ),
+                )
+            )
+
+            if start_date is not None:
+                scope = scope.where(DailySalesItemDayMart.business_date_la >= start_date)
+            if end_date is not None:
+                scope = scope.where(DailySalesItemDayMart.business_date_la <= end_date)
+            if store_values:
+                scope = scope.where(
+                    or_(
+                        DailySalesItemDayMart.store_id.in_(store_values),
+                        DailySalesItemDayMart.store_name.in_(store_values),
+                    )
+                )
+            if platform_values:
+                scope = scope.where(DailySalesItemDayMart.platform_code.in_(platform_values))
+            if owner_values:
+                scope = scope.where(DailySalesItemDayMart.owner_ref.in_(owner_values))
+
+            search_column = DAILY_SALES_SEARCH_COLUMNS.get(
+                search_field,
+                DailySalesItemDayMart.local_sku,
+            )
+            if normalized_keyword:
+                like_value = f"%{normalized_keyword}%"
+                if search_field == "product_name":
+                    scope = scope.where(
+                        or_(
+                            DailySalesItemDayMart.local_name.ilike(like_value),
+                            DailySalesItemDayMart.title.ilike(like_value),
+                        )
+                    )
+                else:
+                    scope = scope.where(search_column.ilike(like_value))
+
+            if batch_filter_values:
+                if search_field == "product_name":
+                    scope = scope.where(
+                        or_(
+                            DailySalesItemDayMart.local_name.in_(batch_filter_values),
+                            DailySalesItemDayMart.title.in_(batch_filter_values),
+                        )
+                    )
+                else:
+                    scope = scope.where(search_column.in_(batch_filter_values))
+
+            statement = statement.where(exists(scope))
 
         row = self.session.execute(statement).one()
         return row[0], row[1], row[2]

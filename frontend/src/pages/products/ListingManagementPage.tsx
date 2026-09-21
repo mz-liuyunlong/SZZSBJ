@@ -1,11 +1,12 @@
 /** Listing-management page backed by DATA-PAGES MART API. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Key } from "react";
-import { Card, Modal, Select, message } from "antd";
+import { Card, message } from "antd";
 
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import CustomTagManagerModal, { type CustomProductTag } from "@/components/product-tags/CustomTagManagerModal";
+import ProductTagAssignmentModal from "@/components/product-tags/ProductTagAssignmentModal";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
 } from "@/components/report-table/RuntimeColumnConfigDrawer";
@@ -49,13 +50,17 @@ const TEMPLATE_PENDING = "列模板接口待接入";
 const EXPORT_PENDING = "导出接口待接入";
 
 
-const DEFAULT_LISTING_CUSTOM_TAGS: CustomProductTag[] = [
-  { id: 1, name: "重点产品", color: "#E5484D", usage: 128 },
-  { id: 2, name: "主推", color: "#1677FF", usage: 86 },
-  { id: 3, name: "新品", color: "#7C5CFF", usage: 46 },
-  { id: 4, name: "高利润", color: "#16A36A", usage: 31 },
-  { id: 5, name: "清库存", color: "#D99000", usage: 12 },
-  { id: 6, name: "待优化", color: "#667085", usage: 8 },
+const DEFAULT_LISTING_ASSIGNMENT_TAGS: CustomProductTag[] = [
+  { id: "default-featured", name: "主推产品", color: "#1677FF", usage: 0 },
+  { id: "default-new", name: "新品", color: "#7C5CFF", usage: 0 },
+  { id: "default-high-profit", name: "高利润", color: "#16A36A", usage: 0 },
+  { id: "default-clearance", name: "清库存", color: "#D99000", usage: 0 },
+  { id: "default-needs-work", name: "待优化", color: "#667085", usage: 0 },
+  { id: "default-priority", name: "重点产品", color: "#E5484D", usage: 0 },
+  { id: "default-potential", name: "潜力款", color: "#13A8A8", usage: 0 },
+  { id: "default-campaign", name: "活动款", color: "#EB5B9A", usage: 0 },
+  { id: "default-stable", name: "稳定款", color: "#16A36A", usage: 0 },
+  { id: "default-observing", name: "观察中", color: "#D99000", usage: 0 },
 ];
 
 
@@ -137,9 +142,8 @@ interface ListingManagementPageProps {
 
 function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const [managedTags, setManagedTags] = useState<CustomProductTag[]>(DEFAULT_LISTING_CUSTOM_TAGS);
+  const [managedTags, setManagedTags] = useState<CustomProductTag[]>([]);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
-  const [batchTagValues, setBatchTagValues] = useState<string[]>([]);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
@@ -238,6 +242,14 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
     return Array.from(optionMap.values());
   }, [filterOptions.tags, managedTags]);
+
+  const assignmentTags = useMemo(() => {
+    const tagsByName = new Map(
+      DEFAULT_LISTING_ASSIGNMENT_TAGS.map((tag) => [tag.name, tag]),
+    );
+    for (const tag of managedTags) tagsByName.set(tag.name, tag);
+    return Array.from(tagsByName.values());
+  }, [managedTags]);
 
   const normalizedFilters = useMemo(() => {
     const owners = filters.owners && filters.owners.length > 0
@@ -435,7 +447,6 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                   void messageApi.warning("请先选择商品");
                   return;
                 }
-                setBatchTagValues([]);
                 setBatchTagOpen(true);
               }}
               onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
@@ -459,62 +470,39 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           onClose={() => setAnalysisSource(null)}
         />
       </div>
-        <Modal
-          title="批量设置标签"
+        <ProductTagAssignmentModal
           open={batchTagOpen}
-          okText="保存"
-          cancelText="取消"
-          destroyOnHidden
-          okButtonProps={{
-            disabled: selectedRowKeys.length === 0 || batchTagValues.length === 0,
-          }}
-          onCancel={() => {
-            setBatchTagOpen(false);
-            setBatchTagValues([]);
-          }}
-          onOk={() => {
+          selectedProductCount={selectedRowKeys.length}
+          tags={assignmentTags}
+          loading={isTagManagerLoading}
+          onCancel={() => setBatchTagOpen(false)}
+          onConfirm={(selectedTags) => {
             if (selectedRowKeys.length === 0) {
               void messageApi.warning("请先选择商品");
               return;
             }
-            if (batchTagValues.length === 0) {
+            if (selectedTags.length === 0) {
               void messageApi.warning("请选择标签");
               return;
             }
 
             void batchSetListingTags({
               listingIds: selectedRowKeys.map(String),
-              tagValues: batchTagValues,
+              tagValues: selectedTags,
               mode: "append",
             })
               .then(() => {
                 void messageApi.success(`已给 ${selectedRowKeys.length} 个商品添加标签`);
                 setBatchTagOpen(false);
-                setBatchTagValues([]);
                 setSelectedRowKeys([]);
                 setListingRefreshToken((current) => current + 1);
                 void reloadListingTags({ showError: false });
               })
               .catch(() => {
-                void messageApi.error("批量设置标签失败，请确认后端接口已接入");
+                void messageApi.error("设置标签失败，请确认后端接口已接入");
               });
           }}
-        >
-          <p className="listing-management__batch-tag-tip">
-            已选择 <strong>{selectedRowKeys.length}</strong> 个商品，保存后会追加标签，不会清除原有标签。
-          </p>
-          <Select
-            mode="multiple"
-            allowClear
-            showSearch
-            optionFilterProp="label"
-            placeholder="选择要添加的标签"
-            value={batchTagValues}
-            options={tagOptions}
-            style={{ width: "100%" }}
-            onChange={setBatchTagValues}
-          />
-        </Modal>
+        />
         <CustomTagManagerModal
           open={tagManagerOpen}
           initialTags={managedTags}

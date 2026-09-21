@@ -2627,3 +2627,65 @@
   border: 0;
   box-shadow: none;
 }
+
+
+/* Profit amount emphasis: positive = green, negative = red. */
+.report-table-metric--profit-positive,
+.report-table-metric--profit-negative,
+.report-table-metric--profit-neutral {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 1px 6px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+
+.report-table-metric--profit-positive {
+  color: #039855;
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+
+.report-table-metric--profit-negative {
+  color: #d92d20;
+  background: #fef3f2;
+  border-color: #fecdca;
+}
+
+.report-table-metric--profit-neutral {
+  color: #475467;
+  background: #f8fafc;
+  border-color: #e4e7ec;
+}
+
+.report-summary-pair-card__value--profit-positive,
+.report-summary-pair-card__value--profit-negative,
+.report-summary-pair-card__value--profit-neutral {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.report-summary-pair-card__value--profit-positive {
+  color: #039855;
+  background: #ecfdf3;
+  border-color: #abefc6;
+}
+
+.report-summary-pair-card__value--profit-negative {
+  color: #d92d20;
+  background: #fef3f2;
+  border-color: #fecdca;
+}
+
+.report-summary-pair-card__value--profit-neutral {
+  color: #475467;
+  background: #f8fafc;
+  border-color: #e4e7ec;
+}

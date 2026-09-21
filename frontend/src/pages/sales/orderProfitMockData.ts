@@ -1,3 +1,4 @@
+import { MOCK_DEFAULT_STORE_COMMISSION_RATE } from "@/pages/sales/mockBusinessRules";
 /** Fixed, clearly labelled acceptance data aggregated by product ID for the no-API order-profit page. */
 import dayjs from "dayjs";
 import type {
@@ -44,7 +45,7 @@ export const orderProfitSourceRecords: OrderProfitSourceRecord[] = Array.from({ 
     const refundAmount = refundQuantity * (4.35 + (productIndex % 3) * 0.8);
     const adSpend = salesAmount * (0.07 + (productIndex % 4) * 0.008);
     const wfsDeliveryFee = orderCount * (2.9 + (productIndex % 3) * 0.35);
-    const commission = salesAmount * 0.15;
+    const commission = salesAmount * MOCK_DEFAULT_STORE_COMMISSION_RATE;
     const purchaseCost = salesAmount * (0.29 + (productIndex % 5) * 0.015);
     const firstLegCost = orderCount * (1.4 + (productIndex % 4) * 0.18);
     const storageFee = 2.8 + ((productIndex + dayOffset) % 9) * 0.42;

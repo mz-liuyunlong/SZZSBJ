@@ -24,6 +24,7 @@ import DataImportPage from '@/pages/data-center/DataImportPage'
 import WfsFeeAlertPage from '@/pages/warehouse/WfsFeeAlertPage'
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
+import FeeRulesPage from "@/pages/settings/FeeRulesPage";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from '@/router/routeResolver'
 import {
   DEFAULT_MOCK_AUTH_USER,
@@ -132,6 +133,8 @@ function BusinessRoute({
           <UserManagementPage page={page} />
         ) : page.key === 'settings_role_management' ? (
           <RoleManagementPage page={page} />
+        ) : page.key === 'settings_fee_rules' ? (
+          <FeeRulesPage page={page} />
         ) : (
           <ComingSoonPage page={page} />
         )

@@ -1,3 +1,4 @@
+import { MOCK_DEFAULT_STORE_COMMISSION_RATE } from "@/pages/sales/mockBusinessRules";
 /** Fixed, clearly labelled acceptance data; replace it when a real API is approved. */
 import dayjs from "dayjs";
 import type {
@@ -50,7 +51,7 @@ export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (
     adRatio: (adSpend / salesAmount) * 100,
     wfsDeliveryFee: orderCount * 3.25,
     wfsDeliveryUnitPrice: 3.25,
-    commission: salesAmount * 0.15,
+    commission: salesAmount * MOCK_DEFAULT_STORE_COMMISSION_RATE,
     purchaseCost,
     purchaseUnitPriceCny: 28 + (index % 12) * 1.5,
     firstLegCost: orderCount * 1.8,

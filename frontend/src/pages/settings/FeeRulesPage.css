@@ -1,0 +1,89 @@
+.fee-rules-page {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: #f5f7fb;
+}
+
+.fee-rules-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+}
+
+.fee-rules-page__title {
+  margin: 0;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.fee-rules-page__desc {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.fee-rules-page__toolbar,
+.fee-rules-page__tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fee-rules-page__tab-actions {
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.fee-rules-page__content {
+  min-height: 0;
+  flex: 1 1 auto;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+}
+
+.fee-rules-page__content .ant-card-body {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.fee-rules-page__content .ant-table-thead > tr > th {
+  color: #344054;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+.fee-rules-page__rate {
+  color: #101828;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.fee-rules-page__rate--custom {
+  color: #039855;
+}
+
+.fee-rules-page__drawer-note {
+  margin-bottom: 16px;
+}
+
+.fee-rules-page__range-inputs {
+  display: flex;
+  gap: 10px;
+}
+
+.fee-rules-page__range-item {
+  flex: 1 1 0;
+}

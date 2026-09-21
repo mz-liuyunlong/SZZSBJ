@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import ReportSummaryCards, {
   type ReportSummaryCard,
   type ReportSummaryMetricComparison,
+  type ReportSummaryMetricValueTone,
   type ReportSummaryTrendDirection,
   type ReportSummaryTrendTone,
 } from "@/components/report-table/ReportSummaryCards";
@@ -108,6 +109,15 @@ const toFallbackTotals = (
     refundQuantity,
     refundAmount,
   };
+};
+
+const profitValueTone = (
+  value: number | null,
+): ReportSummaryMetricValueTone | undefined => {
+  if (value == null) return undefined;
+  if (value > 0) return "profit-positive";
+  if (value < 0) return "profit-negative";
+  return "profit-neutral";
 };
 
 const trendTone = (
@@ -240,6 +250,7 @@ function OrderProfitSummaryCards({
         {
           label: "利润",
           value: formatAmountOrDash(totals.orderProfit, currency),
+          valueTone: profitValueTone(totals.orderProfit),
           comparison: buildComparison(
             totals.orderProfit,
             previous?.orderProfit ?? null,

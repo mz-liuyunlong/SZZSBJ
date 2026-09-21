@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+
 from app.modules.integration_sync.data_pages_business_rules import (
     BUSINESS_RULE_RUNNER_VERSION,
     DataPagesRealSyncRunner as BusinessRulesRunner,
@@ -25,6 +26,8 @@ from app.modules.product_management.daily_sales_costs import (
     load_daily_sales_costs,
     normalize_sku_key,
 )
+
+from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
 DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-cost-integrity-v1"
 
@@ -67,6 +70,31 @@ def _cost_totals(
         cost.storage_fee_unit_usd * quantity if cost.storage_fee_unit_usd is not None else None
     )
     return purchase, first_leg, wfs, storage
+
+
+def _cost_loss_total(
+    cost: DailySalesCostResolution | None,
+    quantity: Decimal,
+) -> Decimal | None:
+    """Display amount for sample/refund rows using local_sku matched total cost.
+
+    Business rule:
+    amount = quantity * (purchase + first-leg + WFS + storage).
+    Matching is intentionally only by the row local_sku through load_daily_sales_costs().
+    If local_sku has no complete cost, keep NULL so the frontend shows unmatched.
+    """
+
+    if quantity <= 0:
+        return Decimal("0")
+    if cost is None:
+        return None
+
+    purchase, first_leg, wfs, storage = _cost_totals(cost, quantity)
+    components = (purchase, first_leg, wfs, storage)
+    if any(value is None for value in components):
+        return None
+
+    return sum(components, Decimal("0"))
 
 
 class DataPagesRealSyncRunner(BusinessRulesRunner):
@@ -261,10 +289,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "select business_date_la,source_account_ref,store_id,item_id,msku from a union "
                 "select business_date_la,source_account_ref,store_id,item_id,msku from r union "
                 "select business_date_la,source_account_ref,store_id,item_id,msku from sample),"
-                "commission as (select distinct on (store_id) store_id,id rule_id,commission_rate,rule_version "
-                "from ref_store_commission_rule_versions where source_account_ref=:account and platform_code='walmart' "
-                "and is_active=true and effective_from<=:day and (effective_to is null or effective_to>:day) "
-                "order by store_id,effective_from desc,created_at desc) "
+                "commission_seed as (select 1 as unused) "
                 "insert into mart_daily_sales_item_day "
                 "(id,business_date_la,source_account_ref,platform_code,store_id,store_name,item_id,msku,local_sku,"
                 "local_name,title,picture_url,owner_ref,gross_sales_qty,gross_order_count,gross_sales_amount,"
@@ -290,17 +315,23 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "coalesce(a.ad_spend,0),'USD',"
                 "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)>0 "
                 "then coalesce(a.ad_spend,0)/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0) "
-                "else null end,l.wfs_available_quantity,coalesce(commission.commission_rate,0.15),commission.rule_id,"
+                "else null end,l.wfs_available_quantity,coalesce(commission.commission_rate,:default_commission_rate),commission.rule_id,"
                 "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)"
-                "*coalesce(commission.commission_rate,0.15),coalesce(s.currency_code,'USD'),"
+                "*coalesce(commission.commission_rate,:default_commission_rate),coalesce(s.currency_code,'USD'),"
                 "case when commission.rule_id is null then 'default_15_percent' "
+                "when commission.rule_scope='item' then 'item_commission_rule' "
+                "when commission.rule_scope='price_range' then 'price_range_commission_rule' "
                 "else 'store_commission_rule' end,"
                 "'missing','[\"product_management_cost_pending\"]'::jsonb,'[]'::jsonb,'[]'::jsonb,"
                 "jsonb_build_object('runner',cast(:runner as text),"
                 "'basis','sale_stat_union_positive_ad_spend_union_refund_union_sample',"
                 "'match_key','store_id+item_id+msku','refund_unpriced_count',coalesce(r.refund_unpriced_count,0),"
                 "'sample_order_count',coalesce(sample.sample_order_count,0),'sample_qty',coalesce(sample.sample_qty,0),"
-                "'commission_rule_version',commission.rule_version),"
+                "'commission_rule_version',commission.rule_version,"
+                "'commission_rule_scope',commission.rule_scope,"
+                "'commission_rule_item_id',commission.item_id,"
+                "'commission_rule_price_min',commission.price_min_amount,"
+                "'commission_rule_price_max',commission.price_max_amount),"
                 "cast(:runner as text),:now,:now,:now from k "
                 "left join s on s.source_account_ref=k.source_account_ref and s.business_date_la=k.business_date_la "
                 "and s.store_id=k.store_id and s.item_id=k.item_id and s.msku=k.msku "
@@ -313,12 +344,33 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "and sample.item_id=k.item_id and sample.msku=k.msku "
                 "left join dim_walmart_listings l on l.source_account_ref=k.source_account_ref "
                 "and l.store_id=k.store_id and l.item_id=k.item_id and trim(l.msku)=k.msku "
-                "left join commission on commission.store_id=k.store_id"
+                "left join lateral ("
+                "select rule.id rule_id,rule.commission_rate,rule.rule_version,rule.rule_scope,"
+                "rule.item_id,rule.price_min_amount,rule.price_max_amount "
+                "from ref_store_commission_rule_versions rule "
+                "where rule.source_account_ref=k.source_account_ref "
+                "and rule.platform_code='walmart' "
+                "and rule.store_id=k.store_id "
+                "and rule.is_active=true "
+                "and rule.effective_from<=k.business_date_la "
+                "and (rule.effective_to is null or rule.effective_to>k.business_date_la) "
+                "and ("
+                "rule.rule_scope='store' "
+                "or (rule.rule_scope='item' and rule.item_id=k.item_id) "
+                "or (rule.rule_scope='price_range' "
+                "and (rule.price_min_amount is null or (coalesce(s.sales_amount,0)/nullif(coalesce(s.sales_qty,0),0))>=rule.price_min_amount) "
+                "and (rule.price_max_amount is null or (coalesce(s.sales_amount,0)/nullif(coalesce(s.sales_qty,0),0))<rule.price_max_amount))"
+                ") "
+                "order by case rule.rule_scope when 'item' then 1 when 'price_range' then 2 when 'store' then 3 else 99 end,"
+                "rule.priority asc,rule.effective_from desc,rule.created_at desc "
+                "limit 1"
+                ") commission on true"
             ),
             {
                 "account": self.source_account_ref,
                 "day": self.business_date,
                 "runner": DAILY_SALES_V2_VERSION,
+                "default_commission_rate": DEFAULT_STORE_COMMISSION_RATE,
                 "now": now,
             },
         )
@@ -513,7 +565,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 text(
                     "select m.id,m.store_id,m.item_id,m.msku,m.local_sku,m.gross_sales_qty,"
                     "m.gross_order_count,m.gross_sales_amount,m.sample_order_count,m.sample_qty,m.sample_amount,"
-                    "m.cost_quantity,m.sales_qty,m.sales_amount,m.refund_amount,m.ad_spend_amount,"
+                    "m.cost_quantity,sample_qty,return_qty,m.sales_qty,m.sales_amount,m.refund_amount,m.ad_spend_amount,"
                     "m.commission_fee_amount,"
                     "coalesce((m.source_lineage_json->>'refund_unpriced_count')::int,0) refund_unpriced_count "
                     "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
@@ -536,6 +588,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             sample_qty = _decimal(row["sample_qty"]) or Decimal("0")
             sample_amount = _decimal(row["sample_amount"]) or Decimal("0")
             refund_amount = _decimal(row["refund_amount"]) or Decimal("0")
+            return_qty = _decimal(row["return_qty"]) or Decimal("0")
 
             sku_key = normalize_sku_key(row["local_sku"])
             cost = costs.get(sku_key) if sku_key is not None else None
@@ -610,6 +663,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 value is not None
                 for value in (purchase_total, first_leg_total, wfs_effective_total, storage_total)
             )
+            sample_cost_amount = _cost_loss_total(cost, sample_qty)
+            refund_cost_amount = _cost_loss_total(cost, return_qty)
             if not missing and complete_costs:
                 cost_status = "complete"
             elif cost is not None or int(row["refund_unpriced_count"] or 0) > 0:
@@ -674,6 +729,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             self.session.execute(
                 text(
                     "update mart_daily_sales_item_day set owner_ref=:owner_ref,return_rate_30d=:return_rate_30d,"
+                    "sample_amount=:sample_amount,refund_amount=:refund_amount,refund_currency_code='USD',"
                     "wfs_fee_unit_amount=:wfs_unit,wfs_fee_total_amount=:wfs_total,wfs_fee_currency_code='USD',"
                     "wfs_fee_expected_unit_amount=:wfs_unit,wfs_fee_expected_total_amount=:wfs_expected_total,"
                     "wfs_fee_actual_total_amount=:wfs_actual_total,wfs_fee_variance_amount=:wfs_variance,"
@@ -697,6 +753,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "id": str(row["id"]),
                     "owner_ref": cost.owner_ref if cost is not None else None,
                     "return_rate_30d": return_rate_30d,
+                    "sample_amount": sample_cost_amount,
+                    "refund_amount": refund_cost_amount,
                     "wfs_unit": cost.wfs_fee_unit_usd if cost is not None else None,
                     "wfs_total": wfs_effective_total,
                     "wfs_expected_total": wfs_expected_total,

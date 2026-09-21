@@ -29,7 +29,7 @@ function SalesDetailModal({ row, onClose }: SalesDetailModalProps) {
     { label: "MSKU / 商品ID", value: `${row.msku} / ${row.productId}`, icon: <TagsOutlined />, tone: "green" },
     { label: "SKU / 品名", value: `${row.sku} / ${row.productName}`, icon: <AppstoreOutlined />, tone: "purple" },
     { label: "销量 / 订单量 / 销售额", value: `${row.salesVolume} / ${row.orderCount} / $${row.salesAmount.toFixed(2)}`, icon: <BarChartOutlined /> },
-    { label: "退货 / 退款", value: `${row.returnCount} / $${row.refundAmount.toFixed(2)}`, icon: <RollbackOutlined />, tone: "orange" },
+    { label: "退货 / 退款", value: `${row.returnCount} / ${row.refundAmount == null ? "未匹配" : `$${row.refundAmount.toFixed(2)}`}`, icon: <RollbackOutlined />, tone: "orange" },
     { label: "广告 / 成本", value: `$${row.adSpend.toFixed(2)} / ${row.costStatus}`, icon: <NotificationOutlined />, tone: "red" },
     { label: "利润", value: `${money(row.orderProfit)} / ${percent(row.profitMargin)}`, icon: <RiseOutlined />, tone: "purple" },
     { label: "近 7 天趋势", value: row.sevenDaySales.join(" / "), icon: <LineChartOutlined />, tone: "green" },
