@@ -408,3 +408,40 @@ features/pmc-purchase/data/probe_20260915/  probe_20260917/                真�
 - no deployment
 
 - READY_FOR_PRP is PRP planning only, not production authorization
+
+---
+
+## 补充决策提案 2026-09-21：ItemID 归属来源调整（状态：`PROPOSED` — 待负责人决定）
+
+提出人：Rocky（业务负责人），2026-09-21；整理：代码 AI。**本节在负责人填写"负责人决定"块之前不生效**；
+PRP、业务规则、Gate 3 代码均继续按现行 v3 §5.1 执行（manual > from_system_plan > from_plan_remark >
+unresolved，`from_shipment` 预留）。
+
+### 提案内容
+
+1. 采购单明细行缺失 ItemID（计划备注无 `ITEMID:`，或引用的计划本地不存在）时，**不再由运营在采购看板人工指定**。
+2. 缺失的 ItemID 由**国内仓打包单**反向回填：国内仓规则 v11 已规定一张打包单 = 一个 ItemID + 一个 GTIN，且打包单
+   可对到 采购单 × SKU × 店铺批次；货到仓打包后采购单行自然获得 ItemID。历史上不会再打包的老采购单不再影响（国内仓
+   已有手工添加打包单功能兜底）。
+3. 因此规则 v3 §5.1 第 2 顺位"发货追溯 `from_shipment`（依赖 WFS 货件）"改为"打包单回填 `from_packing_slip`"
+   （来源：本系统国内仓打包单表）；§5.3 的 30 天窗口 / 发货占比拆分逻辑作废（打包单一单一 ItemID，按打包数量比例
+   即可）。优先级保持：manual > from_system_plan > from_plan_remark > from_packing_slip > unresolved。
+4. PRP §7.5 的 ItemID 人工指定 API（`POST /api/pmc/purchase/orders/{order_sn}/items/{item_row_id}/item-id`）与
+   `manual_purchase_item_itemid_override` 表**不再建设**；`manual_*` 只保留交期修正；Gate 3 范围相应从
+   "manual ×2 / 人工覆盖 API ×2" 调整为 "manual ×1 / 人工覆盖 API ×1"。
+5. 打包单表就绪前，此类行在看板显示"待打包回填"（`pending_packing_slip`），不进"待人工处理"清单。
+
+### 依赖与影响
+
+- 依赖国内仓模块打包单表暴露：打包单号、采购单号、采购单明细 id（或可追到的最细粒度）、SKU、店铺 ID（字符串）、
+  ItemID、GTIN、审批状态与时间、打包数量。字段由业务流 AI 定义；采购看板 DWS 只读不写。
+- 若负责人批准：随后另提 docs PR 修改 `PRPs/pmc-purchase-board.md` §3/§6/§7.5/§10 与
+  `docs/business-rules/pmc-purchase-rules.md` §5.1/§5.3（v3.1 → v4）；Gate 3 的 G3-A/G3-F 按调整后的范围提交。
+- 若负责人否决：Gate 3 按 PRP 现状建 `manual_purchase_item_itemid_override` 与 ItemID 人工指定 API。
+
+### 负责人决定（待填写）
+
+- 决定：
+- 批准人：
+- 批准日期：
+- 边界 / 条件：
