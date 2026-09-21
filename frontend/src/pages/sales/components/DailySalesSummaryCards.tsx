@@ -288,7 +288,7 @@ function DailySalesSummaryCards({
       accent: "#F97316",
       metrics: [
         {
-          label: "退款金额",
+          label: "退款损失",
           value: formatAmountOrDash(totals.refundAmount, currency),
           comparison: buildComparison(
             totals.refundAmount,

@@ -29,7 +29,6 @@ from app.modules.data_pages.models import (
     OrderProfitSkuDayMart,
     ProductCustomTag,
     ProductCustomTagAssignment,
-    WalmartRefundItemFact,
 )
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
@@ -219,104 +218,28 @@ class DailySalesRepository:
         keyword: str,
         batch_values: str,
     ) -> tuple[object, object, str | None]:
-        """Aggregate completed refunds by refund event day with the active page filters."""
+        """Aggregate refund quantity and refund loss from recalculated Daily Sales MART."""
 
-        statement = select(
-            func.coalesce(func.sum(WalmartRefundItemFact.quantity), 0),
-            func.coalesce(func.sum(WalmartRefundItemFact.refund_amount), 0),
-            func.max(WalmartRefundItemFact.refund_currency_code),
-        ).where(
-            WalmartRefundItemFact.source_account_ref.in_(account_refs),
-            WalmartRefundItemFact.refund_status_raw == "REFUND_COMPLETED",
-        )
-        if start_date is not None:
-            statement = statement.where(WalmartRefundItemFact.business_date_la >= start_date)
-        if end_date is not None:
-            statement = statement.where(WalmartRefundItemFact.business_date_la <= end_date)
-
-        store_values = _csv_values(store_id)
-        if store_values:
-            statement = statement.where(WalmartRefundItemFact.store_id.in_(store_values))
-
-        platform_values = _platform_filter_values(platform)
-        owner_values = _csv_values(owner_ref)
-        normalized_keyword = keyword.strip()
-        batch_filter_values = _csv_values(batch_values)
-
-        needs_daily_sales_scope = bool(
-            platform_values or owner_values or normalized_keyword or batch_filter_values
+        statement = self._filtered_statement(
+            account_refs=account_refs,
+            start_date=start_date,
+            end_date=end_date,
+            platform=platform,
+            store_id=store_id,
+            owner_ref=owner_ref,
+            search_field=search_field,
+            keyword=keyword,
+            batch_values=batch_values,
         )
 
-        if needs_daily_sales_scope:
-            scope = (
-                select(1)
-                .select_from(DailySalesItemDayMart)
-                .where(
-                    DailySalesItemDayMart.source_account_ref
-                    == WalmartRefundItemFact.source_account_ref,
-                    or_(
-                        and_(
-                            WalmartRefundItemFact.item_id.is_not(None),
-                            DailySalesItemDayMart.item_id == WalmartRefundItemFact.item_id,
-                        ),
-                        and_(
-                            WalmartRefundItemFact.local_sku.is_not(None),
-                            DailySalesItemDayMart.local_sku == WalmartRefundItemFact.local_sku,
-                        ),
-                        and_(
-                            WalmartRefundItemFact.msku.is_not(None),
-                            DailySalesItemDayMart.msku == WalmartRefundItemFact.msku,
-                        ),
-                    ),
-                )
-            )
+        row = self.session.execute(
+            statement.with_only_columns(
+                func.coalesce(func.sum(DailySalesItemDayMart.return_qty), 0),
+                func.coalesce(func.sum(DailySalesItemDayMart.refund_amount), 0),
+                func.max(DailySalesItemDayMart.refund_currency_code),
+            ).order_by(None)
+        ).one()
 
-            if start_date is not None:
-                scope = scope.where(DailySalesItemDayMart.business_date_la >= start_date)
-            if end_date is not None:
-                scope = scope.where(DailySalesItemDayMart.business_date_la <= end_date)
-            if store_values:
-                scope = scope.where(
-                    or_(
-                        DailySalesItemDayMart.store_id.in_(store_values),
-                        DailySalesItemDayMart.store_name.in_(store_values),
-                    )
-                )
-            if platform_values:
-                scope = scope.where(DailySalesItemDayMart.platform_code.in_(platform_values))
-            if owner_values:
-                scope = scope.where(DailySalesItemDayMart.owner_ref.in_(owner_values))
-
-            search_column = DAILY_SALES_SEARCH_COLUMNS.get(
-                search_field,
-                DailySalesItemDayMart.local_sku,
-            )
-            if normalized_keyword:
-                like_value = f"%{normalized_keyword}%"
-                if search_field == "product_name":
-                    scope = scope.where(
-                        or_(
-                            DailySalesItemDayMart.local_name.ilike(like_value),
-                            DailySalesItemDayMart.title.ilike(like_value),
-                        )
-                    )
-                else:
-                    scope = scope.where(search_column.ilike(like_value))
-
-            if batch_filter_values:
-                if search_field == "product_name":
-                    scope = scope.where(
-                        or_(
-                            DailySalesItemDayMart.local_name.in_(batch_filter_values),
-                            DailySalesItemDayMart.title.in_(batch_filter_values),
-                        )
-                    )
-                else:
-                    scope = scope.where(search_column.in_(batch_filter_values))
-
-            statement = statement.where(exists(scope))
-
-        row = self.session.execute(statement).one()
         return row[0], row[1], row[2]
 
     def order_profit_trend(
