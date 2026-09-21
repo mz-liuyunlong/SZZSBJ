@@ -527,7 +527,7 @@ class LingxingReadonlyClient:
         source_account_ref: str,
         run_id: str,
         work_item_id: str,
-        date_dimension: str | None = None,
+        date_dimension: str | int | None = None,
         extra: JsonValue = None,
     ) -> LingxingRawEnvelope:
         """Fetch one authorized PMC purchase-board page for the governed server sync.

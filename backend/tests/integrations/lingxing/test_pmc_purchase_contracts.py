@@ -29,6 +29,7 @@ from app.integrations.lingxing.pmc_purchase_contracts import (
     pmc_purchase_response_items,
     pmc_purchase_response_succeeded,
     pmc_purchase_response_total,
+    validate_pmc_purchase_date_dimension,
     validate_pmc_purchase_window,
 )
 
@@ -141,12 +142,14 @@ def test_builds_minimal_window_body() -> None:
         length=500,
         start_date=WINDOW_START,
         end_date=WINDOW_END,
+        date_dimension="create_time",
     )
     assert body == {
         "offset": 500,
         "length": 500,
         "start_date": "2026-08-01",
         "end_date": "2026-08-31",
+        "search_field_time": "create_time",
     }
 
 
@@ -157,7 +160,7 @@ def test_builds_body_with_dimension_and_extra_filters() -> None:
         length=200,
         start_date=WINDOW_START,
         end_date=WINDOW_END,
-        date_dimension="receive_time",
+        date_dimension=2,
         extra={"wid": 16168, "status": [3]},
     )
     assert body == {
@@ -165,10 +168,96 @@ def test_builds_body_with_dimension_and_extra_filters() -> None:
         "length": 200,
         "start_date": "2026-08-01",
         "end_date": "2026-08-31",
-        "date_type": "receive_time",
+        "date_type": 2,
         "wid": 16168,
         "status": [3],
     }
+
+
+# --- time dimension closed sets (live-provider evidence 2026-09-21, probe P1–P3) -----
+
+
+@pytest.mark.parametrize(
+    ("api_path", "value"),
+    [
+        (PURCHASE_PLAN_ENDPOINT, "creator_time"),
+        (PURCHASE_PLAN_ENDPOINT, "update_time"),
+        (PURCHASE_ORDER_ENDPOINT, "create_time"),
+        (PURCHASE_ORDER_ENDPOINT, "update_time"),
+        (RECEIPT_ORDER_ENDPOINT, 2),
+        (RECEIPT_ORDER_ENDPOINT, 3),
+    ],
+)
+def test_accepts_provider_time_dimensions(api_path: str, value: str | int) -> None:
+    validate_pmc_purchase_date_dimension(api_path, value)
+    body = build_pmc_purchase_page_body(
+        api_path,
+        offset=0,
+        length=10,
+        start_date=WINDOW_START,
+        end_date=WINDOW_END,
+        date_dimension=value,
+    )
+    spec = get_pmc_purchase_spec(api_path)
+    assert spec.date_dimension_field is not None
+    assert body[spec.date_dimension_field] == value  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("api_path", "value"),
+    [
+        # The production failure of 2026-09-21: plans do not accept ``create_time``.
+        (PURCHASE_PLAN_ENDPOINT, "create_time"),
+        (PURCHASE_PLAN_ENDPOINT, "receive_time"),
+        (PURCHASE_ORDER_ENDPOINT, "creator_time"),
+        (PURCHASE_ORDER_ENDPOINT, 2),
+        (RECEIPT_ORDER_ENDPOINT, "receive_time"),
+        (RECEIPT_ORDER_ENDPOINT, "2"),
+        (RECEIPT_ORDER_ENDPOINT, 0),
+        (RECEIPT_ORDER_ENDPOINT, True),
+    ],
+)
+def test_rejects_time_dimensions_outside_the_contract(api_path: str, value: object) -> None:
+    with pytest.raises(PmcPurchaseContractError, match="date dimension is outside"):
+        build_pmc_purchase_page_body(
+            api_path,
+            offset=0,
+            length=10,
+            start_date=WINDOW_START,
+            end_date=WINDOW_END,
+            date_dimension=value,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    "api_path", [PURCHASE_PLAN_ENDPOINT, PURCHASE_ORDER_ENDPOINT, RECEIPT_ORDER_ENDPOINT]
+)
+def test_window_body_requires_a_time_dimension(api_path: str) -> None:
+    # Omitting it is a provider error (plans) or a silent empty page (receipts, P3-3).
+    with pytest.raises(PmcPurchaseContractError, match="date dimension is required"):
+        build_pmc_purchase_page_body(
+            api_path,
+            offset=0,
+            length=10,
+            start_date=WINDOW_START,
+            end_date=WINDOW_END,
+        )
+
+
+def test_handler_window_dimensions_are_inside_each_contract() -> None:
+    from app.modules.integration_sync.handlers.lingxing_pmc_purchase_sync import (
+        WINDOW_DIMENSION,
+    )
+
+    # Owner decision 2026-09-21: incremental strategy is update time everywhere.
+    assert WINDOW_DIMENSION == {
+        "purchasePlanList": "update_time",
+        "purchaseOrderList": "update_time",
+        "purchaseReceiptOrderList": 4,
+    }
+    for interface_key, value in WINDOW_DIMENSION.items():
+        spec = PMC_PURCHASE_SPECS_BY_INTERFACE_KEY[interface_key]
+        validate_pmc_purchase_date_dimension(spec.api_path, value)
 
 
 @pytest.mark.parametrize(
@@ -189,6 +278,7 @@ def test_builder_rejects_contract_violations(kwargs: dict[str, object], message:
             PURCHASE_PLAN_ENDPOINT,
             start_date=WINDOW_START,
             end_date=WINDOW_END,
+            date_dimension="creator_time",
             **kwargs,  # type: ignore[arg-type]
         )
 
@@ -267,7 +357,7 @@ def test_transport_sends_only_contract_fields_and_keeps_auth_out_of_envelope() -
             page_no=1,
             start_date=WINDOW_START,
             end_date=WINDOW_END,
-            date_dimension="create_time",
+            date_dimension="creator_time",
             source_account_ref="primary",
             run_id=str(RUN_ID),
             work_item_id=str(uuid4()),
@@ -281,7 +371,7 @@ def test_transport_sends_only_contract_fields_and_keeps_auth_out_of_envelope() -
         "length": 500,
         "start_date": "2026-08-01",
         "end_date": "2026-08-31",
-        "search_field_time": "create_time",
+        "search_field_time": "creator_time",
     }
     assert token_provider.get_calls == 1
     assert result.is_success is True
@@ -316,6 +406,7 @@ def test_transport_is_single_attempt_and_refuses_when_calls_disabled() -> None:
             page_no=1,
             start_date=WINDOW_START,
             end_date=WINDOW_END,
+            date_dimension="create_time",
             source_account_ref="primary",
             run_id=str(RUN_ID),
             work_item_id=str(uuid4()),
@@ -340,6 +431,7 @@ def test_transport_is_single_attempt_and_refuses_when_calls_disabled() -> None:
                 page_no=1,
                 start_date=WINDOW_START,
                 end_date=WINDOW_END,
+                date_dimension="create_time",
                 source_account_ref="primary",
                 run_id=str(RUN_ID),
                 work_item_id=str(uuid4()),

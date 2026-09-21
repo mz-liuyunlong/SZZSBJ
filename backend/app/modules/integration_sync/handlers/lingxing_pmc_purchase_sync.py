@@ -84,11 +84,20 @@ PmcPurchaseOdsRow = (
 )
 
 DEFAULT_MAX_PAGES = 1000
-# Provider time dimension used for the incremental window per endpoint.
-WINDOW_DIMENSION: dict[str, str | None] = {
-    "purchasePlanList": "create_time",
-    "purchaseOrderList": "create_time",
-    "purchaseReceiptOrderList": None,
+# Provider time dimension used for the window per endpoint. Owner + Rocky decision
+# 2026-09-21: the incremental strategy is *update time* for all three, so later
+# windows re-fetch older documents whose status / quantity / arrival / receipt
+# changed (creation-time windows would never see those changes). Values are
+# checked against ``PmcPurchaseEndpointSpec.date_dimension_values`` before any
+# request. History: the first production run (2026-09-21, run 99cc1354) failed
+# with PROVIDER_ERROR because plans were sent ``create_time`` — the provider
+# spells the creation dimension ``creator_time`` for this endpoint only.
+# Receipts previously sent no ``date_type``, which the provider answers with an
+# empty result instead of an error (probe P3-3).
+WINDOW_DIMENSION: dict[str, str | int] = {
+    "purchasePlanList": "update_time",
+    "purchaseOrderList": "update_time",
+    "purchaseReceiptOrderList": 4,
 }
 HEADER_MODELS: dict[
     str, tuple[type[PmcPurchaseOdsRow], type[PmcPurchaseOdsRow] | None, str, str | None]
@@ -122,7 +131,7 @@ class PmcPurchasePageClient(Protocol):
         source_account_ref: str,
         run_id: str,
         work_item_id: str,
-        date_dimension: str | None = None,
+        date_dimension: str | int | None = None,
         extra: JsonValue = None,
     ) -> LingxingRawEnvelope: ...
 
