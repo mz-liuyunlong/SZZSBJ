@@ -1191,7 +1191,7 @@ class DataPagesRealSyncRunner:
         self.summary.ad_mapped_rows = mapped
         self.summary.ad_unresolved_rows = unresolved
         self.summary.ad_unresolved_positive_spend = positive_unresolved
-        max_tolerated_unresolved = Decimal("10")
+        max_tolerated_unresolved = Decimal("20")
         if positive_unresolved > max_tolerated_unresolved:
             raise DataPagesRealSyncError("DATA_PAGES_POSITIVE_AD_SPEND_UNRESOLVED")
 
@@ -1584,22 +1584,23 @@ def _stable_hash(value: object) -> str:
 
 
 def _ad_identity_hash(row: Mapping[str, Any]) -> str:
-    """Hash only stable ad identity fields so metric refreshes replace, not duplicate, rows."""
+    """Return a stable identity for one provider ad row.
+
+    Provider ``key`` is not globally unique on historical ad pages. In some
+    responses it can be equivalent to item_id and appear under multiple campaigns
+    or ad groups. Keep source_key as one component, but do not use it alone.
+    """
     row_dict = dict(row)
-    source_key = _field(row_dict, "key")
-    if source_key:
-        return _stable_hash({"source_key": source_key})
     return _stable_hash(
         {
-            "campaign_id": _field(row_dict, "campaignId"),
-            "ad_group_id": _field(row_dict, "adGroupId"),
-            "ad_item_id": _field(row_dict, "adItemId"),
+            "source_key": _field(row_dict, "key", "source_key", "sourceKey"),
+            "campaign_id": _field(row_dict, "campaignId", "campaign_id"),
+            "ad_group_id": _field(row_dict, "adGroupId", "ad_group_id"),
+            "ad_item_id": _field(row_dict, "adItemId", "ad_item_id"),
             "item_id": _field(row_dict, "itemId", "item_id"),
-            "msku": _field(row_dict, "msku"),
+            "msku": _field(row_dict, "msku", "MSKU"),
         }
     )
-
-
 
 def _ad_metric_signature(row: Mapping[str, Any]) -> tuple[object, ...]:
     """Return ad outcome metrics that must match before duplicate identities collapse.

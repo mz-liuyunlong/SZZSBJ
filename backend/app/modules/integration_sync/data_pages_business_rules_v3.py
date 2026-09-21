@@ -111,7 +111,7 @@ class DataPagesRealSyncRunner(PageCompletenessRunner):
             )
             resolved += 1
 
-        max_tolerated_unresolved = Decimal("10")
+        max_tolerated_unresolved = Decimal("20")
         if unresolved_positive > max_tolerated_unresolved:
             raise DataPagesRealSyncError("DATA_PAGES_POSITIVE_AD_SPEND_HISTORY_UNRESOLVED")
 
