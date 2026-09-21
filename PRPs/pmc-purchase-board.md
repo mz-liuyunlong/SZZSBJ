@@ -101,11 +101,16 @@ sensitive or critical domains: 财务（采购金额）/ 成本（输入）
 
 ## 7. API Contract
 
+> 路径规范（负责人 mz-liuyunlong 2026-09-21）：Gate 3 采购模块 API 使用 `/api/pmc/purchase/...`，不引入
+> `/api/v1/` 前缀，与仓库现有 `/api/data-pages/`、`/api/listings/` 等路由风格保持一致。`auth.py` 的只读
+> 预览前缀只覆盖本模块的 GET 只读接口；7.5 的人工覆盖 POST 不进入只读预览权限，按单独权限处理。
+
+
 ### 7.1 看板列表
 
 ```text
 method: GET
-path: /api/v1/pmc/purchase/board
+path: /api/pmc/purchase/board
 request schema: page, page_size, owner_uid[], store_id[], status[](s2|s3|s4|over|s9|s0), search_type(sku|item_id|gtin|msku) + search_values[], item_id_source[], order_date_from/to, product_tag[], category_id[], price_min/max, qty_min/max, sort
 response schema: items[{purchase_order_sn, status, stage_code, overdue_days, store{id,name}, sku, product_name, gtin, item_ids[{item_id,msku,source}], owner{uid,name}, quantity_total, quantity_receive, progress_pct, order_date, arrival_date, purchase_cycle_days, approval_cycle_days, sku_cycle{value_days,sample_count,unstable,source}, unit_price, amount_total, currency_code, plan_sns[], wfs_not_ready}], total
 error codes: 400 VALIDATION, 403 FORBIDDEN
@@ -114,17 +119,17 @@ meta.source_tables: dws_purchase_board, dws_purchase_sku_cycle, dim_lingxing_sto
 request_id: yes
 ```
 
-### 7.2 汇总卡片 `GET /api/v1/pmc/purchase/board/summary` → 7 张卡（待下单 / 待下单逾期 / 已下单未到货 / 下单逾期 / 部分到货 / ItemID 待处理 / 交期不稳定 SKU），同筛选参数。
+### 7.2 汇总卡片 `GET /api/pmc/purchase/board/summary` → 7 张卡（待下单 / 待下单逾期 / 已下单未到货 / 下单逾期 / 部分到货 / ItemID 待处理 / 交期不稳定 SKU），同筛选参数。
 
-### 7.3 详情 `GET /api/v1/pmc/purchase/orders/{order_sn}` → 单头 + 明细 × ItemID 拆分 + 收货记录 + 计划链 + 交期样本（近 5 条：单号、下单日、到仓日、天数、是否剔除）。
+### 7.3 详情 `GET /api/pmc/purchase/orders/{order_sn}` → 单头 + 明细 × ItemID 拆分 + 收货记录 + 计划链 + 交期样本（近 5 条：单号、下单日、到仓日、天数、是否剔除）。
 
-### 7.4 SKU 交期 `GET /api/v1/pmc/purchase/sku-cycles?sku=` → 有效样本、剔除样本、人工基准、不稳定标记。
+### 7.4 SKU 交期 `GET /api/pmc/purchase/sku-cycles?sku=` → 有效样本、剔除样本、人工基准、不稳定标记。
 
 ### 7.5 人工覆盖（`pmc.purchase.override`）
 
 ```text
-POST /api/v1/pmc/purchase/orders/{order_sn}/items/{item_row_id}/item-id   body: item_id, reason
-POST /api/v1/pmc/purchase/sku-cycles/{sku}/overrides                     body: kind(exclude|restore|arrival_date|baseline), purchase_order_sn?, value?, reason
+POST /api/pmc/purchase/orders/{order_sn}/items/{item_row_id}/item-id   body: item_id, reason
+POST /api/pmc/purchase/sku-cycles/{sku}/overrides                     body: kind(exclude|restore|arrival_date|baseline), purchase_order_sn?, value?, reason
 ```
 写入 `manual_*`，记录 before/after/operator/reason，触发 DWS 局部刷新。
 

@@ -8,7 +8,7 @@
 
 - 调查日期：2026-09-15 ~ 2026-09-17
 - 调查人：Rocky（业务）+ 代码 AI；真实数据探测由部署 AI 在旧系统只读执行
-- 目标 method/path：`GET /api/v1/pmc/purchase/board`（列表）、`GET /api/v1/pmc/purchase/board/summary`（卡片）、`GET /api/v1/pmc/purchase/orders/{order_sn}`（详情）、`GET /api/v1/pmc/purchase/sku-cycles`（SKU 实际交期）
+- 目标 method/path：`GET /api/pmc/purchase/board`（列表）、`GET /api/pmc/purchase/board/summary`（卡片）、`GET /api/pmc/purchase/orders/{order_sn}`（详情）、`GET /api/pmc/purchase/sku-cycles`（SKU 实际交期）
 - 业务用途：每张采购单的阶段/状态、进度率、采购交期、审批周期、金额，按店铺 + ItemID 可追溯；产出"待下单逾期""下单未到货逾期""ItemID 待处理""WFS 待转换""交期不稳定 SKU"清单（本期只做状态，不推送）
 - 接口总体状态：`READY_FOR_PRP`（PRP planning only，非生产授权）
 - 是否包含 NEED_OWNER_DECISION：否（原唯一阻塞项已由负责人于 2026-09-18 决定；ItemID 发货追溯本期明确不接入，不构成阻塞）
