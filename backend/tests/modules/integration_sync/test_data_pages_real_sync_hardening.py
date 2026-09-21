@@ -185,6 +185,27 @@ def test_ad_identity_hash_ignores_mutable_metrics() -> None:
     assert _ad_identity_hash(original) == _ad_identity_hash(refreshed)
 
 
+def test_ad_identity_hash_distinguishes_same_source_key_across_campaign_context() -> None:
+    first = {
+        "key": "same-provider-key",
+        "campaignId": "campaign-a",
+        "adGroupId": "group-a",
+        "adItemId": "ad-item-a",
+        "itemId": "item-1",
+        "msku": "sku-a",
+    }
+    second = {
+        "key": "same-provider-key",
+        "campaignId": "campaign-b",
+        "adGroupId": "group-b",
+        "adItemId": "ad-item-b",
+        "itemId": "item-1",
+        "msku": "sku-a",
+    }
+
+    assert _ad_identity_hash(first) != _ad_identity_hash(second)
+
+
 class _CaptureSession:
     def __init__(self) -> None:
         self.calls: list[tuple[Any, Any]] = []
