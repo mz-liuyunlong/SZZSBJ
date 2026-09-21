@@ -55,6 +55,15 @@ class PmcPurchaseEndpointSpec:
     store_field: str | None
     date_range_fields: tuple[str, str]
     date_dimension_field: str | None
+    # Closed set of provider-accepted values for ``date_dimension_field``. Verified
+    # against the live provider on 2026-09-21 (probe P1): purchase plans reject
+    # ``create_time`` (they spell it ``creator_time``), receipt orders silently return
+    # zero rows when ``date_type`` is omitted. Anything outside this set is refused
+    # before any network activity.
+    date_dimension_values: frozenset[str | int]
+    # Whether the window request must carry the dimension (omitting it is either a
+    # provider error or an empty result, so it is mandatory for all three today).
+    date_dimension_required: bool
     returns_total: bool
     max_page_size: int = PMC_PURCHASE_MAX_PAGE_SIZE
 
@@ -93,6 +102,10 @@ PMC_PURCHASE_ENDPOINT_SPECS: dict[str, PmcPurchaseEndpointSpec] = {
         store_field=None,
         date_range_fields=("start_date", "end_date"),
         date_dimension_field="search_field_time",
+        # Contract doc purchase-lx-03b82747b50a: creator_time / expect_arrive_time /
+        # update_time. NOTE the spelling: ``create_time`` is rejected by the provider.
+        date_dimension_values=frozenset({"creator_time", "expect_arrive_time", "update_time"}),
+        date_dimension_required=True,
         returns_total=True,
     ),
     PURCHASE_ORDER_ENDPOINT: PmcPurchaseEndpointSpec(
@@ -117,6 +130,10 @@ PMC_PURCHASE_ENDPOINT_SPECS: dict[str, PmcPurchaseEndpointSpec] = {
         store_field=None,
         date_range_fields=("start_date", "end_date"),
         date_dimension_field="search_field_time",
+        # Contract doc purchase-lx-d332f931885e: create_time (provider default) /
+        # expect_arrive_time / update_time. Sent explicitly so the window is unambiguous.
+        date_dimension_values=frozenset({"create_time", "expect_arrive_time", "update_time"}),
+        date_dimension_required=True,
         # Registry: returns_total=否. Pagination must stop on a short page.
         returns_total=False,
     ),
@@ -143,6 +160,11 @@ PMC_PURCHASE_ENDPOINT_SPECS: dict[str, PmcPurchaseEndpointSpec] = {
         store_field=None,
         date_range_fields=("start_date", "end_date"),
         date_dimension_field="date_type",
+        # Contract doc warehouse-receipt-lx-4b9473a2d2e1: 1 expected arrival, 2 receive
+        # time, 3 create time, 4 update time (int). Probe P3-3 (2026-09-21): omitting
+        # date_type returns code=0 with total=0, so it is mandatory here.
+        date_dimension_values=frozenset({1, 2, 3, 4}),
+        date_dimension_required=True,
         returns_total=True,
     ),
 }
@@ -172,6 +194,20 @@ def validate_pmc_purchase_window(start_date: date, end_date: date) -> None:
         raise PmcPurchaseContractError("PMC purchase window exceeds the allowed span")
 
 
+def validate_pmc_purchase_date_dimension(api_path: str, value: str | int) -> None:
+    """Refuse a time-dimension value the provider does not accept for this endpoint.
+
+    ``bool`` is excluded explicitly because it is an ``int`` subclass and would
+    otherwise pass a ``{1, 2, 3, 4}`` membership test.
+    """
+
+    spec = get_pmc_purchase_spec(api_path)
+    if spec.date_dimension_field is None:
+        raise PmcPurchaseContractError("PMC purchase endpoint has no date dimension")
+    if isinstance(value, bool) or value not in spec.date_dimension_values:
+        raise PmcPurchaseContractError("PMC purchase date dimension is outside the contract")
+
+
 def build_pmc_purchase_page_body(
     api_path: str,
     *,
@@ -179,7 +215,7 @@ def build_pmc_purchase_page_body(
     length: int,
     start_date: date,
     end_date: date,
-    date_dimension: str | None = None,
+    date_dimension: str | int | None = None,
     extra: JsonValue = None,
 ) -> JsonValue:
     """Build one offset-page request body that satisfies the endpoint contract.
@@ -208,7 +244,10 @@ def build_pmc_purchase_page_body(
     if date_dimension is not None:
         if spec.date_dimension_field is None:
             raise PmcPurchaseContractError("PMC purchase endpoint has no date dimension")
+        validate_pmc_purchase_date_dimension(api_path, date_dimension)
         body[spec.date_dimension_field] = date_dimension
+    elif spec.date_dimension_required:
+        raise PmcPurchaseContractError("PMC purchase date dimension is required")
 
     if extra is not None:
         if not isinstance(extra, dict):
