@@ -576,7 +576,7 @@ describe("DailySalesPage", () => {
     const summary = screen.getByRole("region", { name: "销售统计" });
     expect(within(summary).getByText("退款风险")).toBeVisible();
     expect(within(summary).getByText("退款量")).toBeVisible();
-    expect(within(summary).getByText("退款金额")).toBeVisible();
+    expect(within(summary).getByText("退款损失")).toBeVisible();
     expect(summary.querySelectorAll(".report-summary-pair-card__badge")).toHaveLength(4);
   });
 
@@ -710,7 +710,7 @@ describe("DailySalesPage", () => {
 
     const summary = screen.getByLabelText("销售统计");
     expect(summary).toBeVisible();
-    for (const metric of ["销售额", "销量", "广告费", "广告占比", "利润", "利润率", "退款金额", "退款量"]) {
+    for (const metric of ["销售额", "销量", "广告费", "广告占比", "利润", "利润率", "退款损失", "退款量"]) {
       expect(within(summary).getByText(metric)).toBeVisible();
     }
     for (const cardTitle of ["销售表现", "广告投入", "利润表现", "退款风险"]) {
