@@ -190,7 +190,7 @@ def test_plan_sync_paginates_with_total_and_writes_ods_and_lineage() -> None:
     assert [call["offset"] for call in client.calls] == [0, 2]
     assert all(call["start_date"] == date(2026, 8, 1) for call in client.calls)
     assert all(call["end_date"] == date(2026, 8, 31) for call in client.calls)
-    assert all(call["date_dimension"] == "creator_time" for call in client.calls)
+    assert all(call["date_dimension"] == "update_time" for call in client.calls)
     assert captured.work_items[0].request_safe_params == {
         "offset": 0,
         "length": 2,
@@ -290,7 +290,7 @@ def test_receipt_sync_reads_nested_list_and_skips_duplicate_keys_across_pages() 
     assert result.status == "succeeded"
     assert result.headers_written == 1 and result.lines_written == 1
     assert result.duplicates_skipped == 1
-    assert client.calls[0]["date_dimension"] == 2  # date_type=2: receive time (Rocky 2026-09-21)
+    assert client.calls[0]["date_dimension"] == 4  # date_type=4: update time (Owner 2026-09-21)
     assert isinstance(captured.ods[0], LingxingReceiptOrderOds)
     assert isinstance(captured.ods[1], LingxingReceiptOrderItemOds)
     assert captured.ods[1].order_item_id == "1"

@@ -249,10 +249,11 @@ def test_handler_window_dimensions_are_inside_each_contract() -> None:
         WINDOW_DIMENSION,
     )
 
+    # Owner decision 2026-09-21: incremental strategy is update time everywhere.
     assert WINDOW_DIMENSION == {
-        "purchasePlanList": "creator_time",
-        "purchaseOrderList": "create_time",
-        "purchaseReceiptOrderList": 2,
+        "purchasePlanList": "update_time",
+        "purchaseOrderList": "update_time",
+        "purchaseReceiptOrderList": 4,
     }
     for interface_key, value in WINDOW_DIMENSION.items():
         spec = PMC_PURCHASE_SPECS_BY_INTERFACE_KEY[interface_key]

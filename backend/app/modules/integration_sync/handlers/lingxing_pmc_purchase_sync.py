@@ -84,17 +84,20 @@ PmcPurchaseOdsRow = (
 )
 
 DEFAULT_MAX_PAGES = 1000
-# Provider time dimension used for the window per endpoint (Rocky 2026-09-21):
-# plans and orders by creation time, receipts by receive time. Values are checked
-# against ``PmcPurchaseEndpointSpec.date_dimension_values`` before any request.
-# History: the first production run (2026-09-21, run 99cc1354) failed with
-# PROVIDER_ERROR because plans were sent ``create_time`` — the provider spells it
-# ``creator_time`` for this endpoint only. Receipts previously sent no ``date_type``,
-# which the provider answers with an empty result instead of an error.
+# Provider time dimension used for the window per endpoint. Owner + Rocky decision
+# 2026-09-21: the incremental strategy is *update time* for all three, so later
+# windows re-fetch older documents whose status / quantity / arrival / receipt
+# changed (creation-time windows would never see those changes). Values are
+# checked against ``PmcPurchaseEndpointSpec.date_dimension_values`` before any
+# request. History: the first production run (2026-09-21, run 99cc1354) failed
+# with PROVIDER_ERROR because plans were sent ``create_time`` — the provider
+# spells the creation dimension ``creator_time`` for this endpoint only.
+# Receipts previously sent no ``date_type``, which the provider answers with an
+# empty result instead of an error (probe P3-3).
 WINDOW_DIMENSION: dict[str, str | int] = {
-    "purchasePlanList": "creator_time",
-    "purchaseOrderList": "create_time",
-    "purchaseReceiptOrderList": 2,
+    "purchasePlanList": "update_time",
+    "purchaseOrderList": "update_time",
+    "purchaseReceiptOrderList": 4,
 }
 HEADER_MODELS: dict[
     str, tuple[type[PmcPurchaseOdsRow], type[PmcPurchaseOdsRow] | None, str, str | None]
