@@ -7,7 +7,7 @@
 
 关联证据：`docs/integrations/lingxing-pmc-purchase-endpoint-evidence.md`；契约快照 `docs/integrations/lingxing/contracts/purchase-lx-03b82747b50a.md`、`purchase-lx-d332f931885e.md`、`warehouse-receipt-lx-4b9473a2d2e1.md`
 
-业务规则：`docs/business-rules/pmc-purchase-rules.md`（v3，Rocky 拍板）
+业务规则：`docs/business-rules/pmc-purchase-rules.md`（v4）
 
 Demo：`features/pmc-purchase/drafts/demo-v1.html`（antd 5 UMD，真实探测数据脱敏；仅供验收对照，不入仓库代码）
 
@@ -25,14 +25,14 @@ PMC 目标是提单、提利润、降人力：采购是补货链路第一段，�
 
 - [x] Gate 1（docs-only，#113 + 批准 PR）：数据源决策、证据、3 份契约快照、契约清单行更新（含收货单重评）、PRP、页面规格、业务规则副本
 - [ ] Gate 2：3 个 `integration_sync` handler/parser、ODS 5 张表、质量检查、Celery 任务（默认 disabled）、12 个月回填 runner（手动）
-- [ ] Gate 3：DWD 3 张、DWS 3 张、`manual_*` 2 张、规则表 1 张、4 个只读 API + 2 个人工覆盖 API
+- [ ] Gate 3：DWD 3 张、DWS 3 张、`manual_*` 1 张（交期修正；ItemID 人工指定不建，负责人 2026-09-21 决定）、规则表 1 张、4 个只读 API + 1 个人工覆盖 API
 - [ ] Gate 4：前端 `/pmc/purchase-board` 页面（PageShell + ReportTableShell + ConnectedSearch + 详情 Modal + ItemID/交期修正 Modal）
 - [ ] 跨模块最小改动（负责人 2026-09-18 已同意，各带条件）：`dim_walmart_listings.fulfillment_type` 列 + Listing 管理展示（**单独最小 PR，走 Alembic，不手改生产库，不影响现有 Listing 链路**）；`WalmartItemLink` 共享组件（**全系统唯一共享组件，先查 main 是否已有，采购看板 / Listing / 产品详情直接调用，不允许各页面自拼 URL**）；产品详情"采购交期"改读 `dws_purchase_sku_cycle`（**放 Gate 4 或 DWS 完成后，前端只经后端 BFF/DWS 读取，DWS 未完成前不接页面**）
 
 ### Out of scope
 
 - [ ] 任何领星写接口（createPurchasePlan、备货单、变更单）
-- [ ] WFS 货件同步与 ItemID 发货追溯（字段预留 `unresolved`）
+- [ ] WFS 货件同步；ItemID 发货追溯已由打包单回填替代（负责人 2026-09-21）
 - [ ] 通知推送（提醒、月报）——正式上线后另做
 - [ ] 成本核算、汇率换算、退换货、辅料/组合品、尾数报警
 - [ ] 生产领星调用、生产库写入、生产调度开启（另行书面授权）
@@ -70,8 +70,8 @@ dataset classifications:
 - 采购计划 / 采购单 / 收货单：REBUILD_SYNC
 - 店铺、Walmart 在线商品、产品负责人/标签/分类：EXISTING_NEW_SYSTEM_DATA
 - 阈值规则：NEW_SYSTEM_OWNED_VERSIONED_RULE
-- ItemID 指定 / 交期修正：NEW_SYSTEM_OWNED（manual_*）
-- ItemID 发货追溯：NEED_OWNER_DECISION → 本期不接入
+- 交期修正：NEW_SYSTEM_OWNED（manual_*）；ItemID 归属由国内仓打包单回填（`from_packing_slip`），不做人工指定
+- ItemID 打包单回填：依赖国内仓模块打包单表（业务流 AI 定义），就绪前显示 `pending_packing_slip`
 
 contains NEED_OWNER_DECISION:
 - no（原单项已由负责人决定；ItemID 发货追溯本期明确不接入，不构成待决事项）
@@ -93,7 +93,7 @@ legacy MySQL readonly tables: 无
 new PostgreSQL tables:
 - ods_lingxing_purchase_plan / ods_lingxing_purchase_order / ods_lingxing_purchase_order_item / ods_lingxing_receipt_order / ods_lingxing_receipt_order_item
 - dwd_purchase_plan / dwd_purchase_order / dwd_purchase_order_line_item
-- manual_purchase_item_itemid_override / manual_purchase_cycle_override / rule_purchase_thresholds
+- manual_purchase_cycle_override / rule_purchase_thresholds（`manual_purchase_item_itemid_override` 不建，见 §7.5）
 cache / mart tables:
 - dws_purchase_board / dws_purchase_sku_cycle / dws_purchase_pending
 sensitive or critical domains: 财务（采购金额）/ 成本（输入）
@@ -128,10 +128,13 @@ request_id: yes
 ### 7.5 人工覆盖（`pmc.purchase.override`）
 
 ```text
-POST /api/pmc/purchase/orders/{order_sn}/items/{item_row_id}/item-id   body: item_id, reason
 POST /api/pmc/purchase/sku-cycles/{sku}/overrides                     body: kind(exclude|restore|arrival_date|baseline), purchase_order_sn?, value?, reason
 ```
 写入 `manual_*`，记录 before/after/operator/reason，触发 DWS 局部刷新。
+
+> 负责人决定（2026-09-21，`docs/data-sources/decisions/pmc-purchase-board-decision.md` 补充决策）：**不建设** ItemID 人工指定接口
+> （原 `POST .../items/{item_row_id}/item-id`）与 `manual_purchase_item_itemid_override`。采购单明细缺失 ItemID 时由国内仓打包单
+> 反向回填（`from_packing_slip`），就绪前显示 `pending_packing_slip`；DWS 保留来源字段、来源单号/打包单号、匹配时间、匹配状态。
 
 ## 8. UI Requirements
 
@@ -161,7 +164,7 @@ helpUrl: /help/pmc/purchase-board
 Task 1（Gate 1，已完成）：docs-only —— 决策 / 证据 / 契约 ×3 / 清单行更新 / PRP / 页面规格 / 业务规则副本。负责人已决定 DO_NOT_USE 重评（方案 A）与 3 项跨模块事项（均同意，附条件）。
 Gate 2 起后端必须复用 `backend/app/modules/integration_sync/`（catalog / execution / importer / repository / router / scheduler / service / tasks / handlers / parsers），不新造同步框架，不绕过 `gov_integration_*`、`ods_api_raw_blobs` / `ods_api_raw_request_refs`、`gov_data_lineage`；Gate 4 前端必须复用 PageShell / ReportTableShell / ConnectedSearch / ResetButton / RuntimeColumnConfigDrawer / cells.tsx 及 shared/*（负责人 2026-09-18 要求）。
 Task 2（Gate 2）：backend/app/integrations/lingxing/pmc_purchase_contracts.py（3 端点、offset/length、页长 500、purchaseOrderList 无 total）；3 个 handler/parser 接入 integration_sync；Alembic：5 张 ODS；质量检查（明细合计=单头、收货归属率、店铺 ID 一致）；Celery 任务默认 disabled；回填 runner 手动。
-Task 3（Gate 3）：Alembic：DWD ×3、DWS ×3、manual ×2、rule ×1；刷新服务（归属优先级、合并单按计划比例拆分、50% 到仓、交期与剔除、近 5 样本与基准、不稳定判定、wfs_not_ready）；API 7.1–7.5；权限 3 个 key；OpenAPI + Markdown 文档。
+Task 3（Gate 3）：Alembic：DWD ×3、DWS ×3、manual ×1、rule ×1；刷新服务（归属优先级 from_system_plan > from_plan_remark > from_packing_slip > unresolved、合并单按计划比例拆分、打包单按数量比例拆分、50% 到仓、交期与剔除、近 5 样本与基准、不稳定判定、wfs_not_ready）；API 7.1–7.5（7.5 仅 SKU 交期覆盖）；权限 3 个 key；OpenAPI + Markdown 文档。
 Task 4（Gate 4）：frontend 页面与两个 Modal；WalmartItemLink（若批准）；Playwright 用例；SOP 页。
 Task 5：生产授权单独申请（真实调用 + 回填 + 调度），流程同 REAL-DATA-1。
 ```
