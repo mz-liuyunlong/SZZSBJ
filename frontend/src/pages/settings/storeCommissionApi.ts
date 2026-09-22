@@ -3,6 +3,33 @@ import { backendRequest } from "@/api/backendApi";
 export type CommissionRuleScope = "store" | "item" | "price_range";
 export type StoreCommissionSource = "store_rule" | "default_15_percent";
 export type StoreCommissionApplyScope = "all_dates" | "from_date";
+export type BusinessRuleOperationStatus = "queued" | "running" | "succeeded" | "failed";
+
+export interface BusinessRuleOperationLog {
+  id: string;
+  source_account_ref: string;
+  platform_code: string;
+  operation_type: string;
+  status: BusinessRuleOperationStatus;
+  store_id: string | null;
+  rule_scope: CommissionRuleScope | null;
+  item_ids: string[];
+  price_min_amount: string | null;
+  price_max_amount: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  days_recalculated: number;
+  daily_sales_rows: number;
+  order_profit_rows: number;
+  actor_ref: string;
+  request_id: string;
+  message: string | null;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
 
 interface StoreCommissionApiItem {
   id: string | null;
@@ -27,38 +54,15 @@ interface StoreCommissionApiItem {
   approved_at: string | null;
   needs_recalculate: boolean;
   active_operation_id: string | null;
-  active_operation_status: "queued" | "running" | "succeeded" | "failed" | null;
-}
-
-export interface BusinessRuleOperationLog {
-  id: string;
-  source_account_ref: string;
-  platform_code: string;
-  operation_type: string;
-  status: "queued" | "running" | "succeeded" | "failed";
-  store_id: string | null;
-  rule_scope: CommissionRuleScope | null;
-  item_ids: string[];
-  price_min_amount: string | null;
-  price_max_amount: string | null;
-  start_date: string | null;
-  end_date: string | null;
-  days_recalculated: number;
-  daily_sales_rows: number;
-  order_profit_rows: number;
-  actor_ref: string;
-  request_id: string;
-  message: string | null;
-  error_message: string | null;
-  created_at: string;
-  started_at: string | null;
-  finished_at: string | null;
-  updated_at: string;
+  active_operation_status: BusinessRuleOperationStatus | null;
+  active_operation_actor: string | null;
+  active_operation_created_at: string | null;
 }
 
 interface StoreCommissionListData {
   store_rules: StoreCommissionApiItem[];
   special_rules: StoreCommissionApiItem[];
+  active_operations: BusinessRuleOperationLog[];
   operation_logs: BusinessRuleOperationLog[];
 }
 
@@ -89,12 +93,15 @@ export interface StoreCommissionRecord {
   approvedAt: string | null;
   needsRecalculate: boolean;
   activeOperationId: string | null;
-  activeOperationStatus: "queued" | "running" | "succeeded" | "failed" | null;
+  activeOperationStatus: BusinessRuleOperationStatus | null;
+  activeOperationActor: string | null;
+  activeOperationCreatedAt: string | null;
 }
 
 export interface StoreCommissionListResult {
   storeRules: StoreCommissionRecord[];
   specialRules: StoreCommissionRecord[];
+  activeOperations: BusinessRuleOperationLog[];
   operationLogs: BusinessRuleOperationLog[];
 }
 
@@ -133,7 +140,7 @@ export interface RecalculateStoreCommissionResult {
   store_id: string;
   rule_scope: CommissionRuleScope;
   item_ids: string[];
-  status: "queued" | "running" | "succeeded" | "failed";
+  status: BusinessRuleOperationStatus;
   message: string;
 }
 
@@ -167,6 +174,8 @@ const normalizeRecord = (item: StoreCommissionApiItem): StoreCommissionRecord =>
   needsRecalculate: item.needs_recalculate,
   activeOperationId: item.active_operation_id,
   activeOperationStatus: item.active_operation_status,
+  activeOperationActor: item.active_operation_actor,
+  activeOperationCreatedAt: item.active_operation_created_at,
 });
 
 export async function listStoreCommissions(): Promise<StoreCommissionListResult> {
@@ -176,6 +185,7 @@ export async function listStoreCommissions(): Promise<StoreCommissionListResult>
   return {
     storeRules: response.data.store_rules.map(normalizeRecord),
     specialRules: response.data.special_rules.map(normalizeRecord),
+    activeOperations: response.data.active_operations,
     operationLogs: response.data.operation_logs,
   };
 }
@@ -239,7 +249,6 @@ export async function recalculateStoreCommission(payload: RecalculateStoreCommis
   );
   return response.data;
 }
-
 
 export async function listStoreCommissionLogs() {
   const response = await backendRequest<{ items: BusinessRuleOperationLog[] }>(

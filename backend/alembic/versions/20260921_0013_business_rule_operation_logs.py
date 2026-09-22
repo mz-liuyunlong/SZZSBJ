@@ -2,7 +2,7 @@
 
 Revision ID: 20260921_0013_business_rule_operation_logs
 Revises: 20260921_0012_extend_store_commission_rule_scope
-Create Date: 2026-09-21
+Create Date: 2026-09-22
 """
 
 from __future__ import annotations
@@ -93,13 +93,17 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index(
-        "ux_business_rule_active_store_recalculate", table_name="business_rule_operation_logs"
+        "ux_business_rule_active_store_recalculate",
+        table_name="business_rule_operation_logs",
     )
     op.drop_index(
-        "ix_business_rule_operation_logs_store_created", table_name="business_rule_operation_logs"
+        "ix_business_rule_operation_logs_store_created",
+        table_name="business_rule_operation_logs",
     )
     op.drop_constraint(
-        "ck_business_rule_operation_logs_status", "business_rule_operation_logs", type_="check"
+        "ck_business_rule_operation_logs_status",
+        "business_rule_operation_logs",
+        type_="check",
     )
     op.drop_constraint(
         "ck_business_rule_operation_logs_operation_type",
