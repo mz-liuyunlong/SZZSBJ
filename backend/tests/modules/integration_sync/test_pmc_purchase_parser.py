@@ -188,3 +188,32 @@ def test_parser_keys_are_versioned_per_endpoint() -> None:
         key.startswith("lingxing.pmc_purchase.") and key.endswith(".v1")
         for key in PARSER_KEYS.values()
     )
+
+
+def test_order_header_line_check_uses_actual_quantities() -> None:
+    # Production pattern (2026-09-22): buyer adjusted the lines after planning, so the
+    # header total equals Σ quantity_real (48 + 32 = 80), not Σ quantity_plan (100).
+    payload = {
+        "code": 0,
+        "data": [
+            {
+                "order_sn": "PO260901003",
+                "quantity_total": 80,
+                "item_list": [
+                    {"id": 9101, "quantity_plan": 60, "quantity_real": 48},
+                    {"id": 9102, "quantity_plan": 40, "quantity_real": 32},
+                ],
+            },
+            {
+                "order_sn": "PO260901004",
+                "quantity_total": 80,
+                "item_list": [
+                    {"id": 9103, "quantity_plan": 60, "quantity_real": 50},
+                    {"id": 9104, "quantity_plan": 40, "quantity_real": 32},
+                ],
+            },
+        ],
+    }
+    parsed = parse_purchase_page(PURCHASE_ORDER_ENDPOINT, payload)
+    assert parsed.quality.header_line_mismatches == 1  # only the second order (82 != 80)
+    assert parsed.headers[0].lines[0].columns["quantity_real"] == 48
