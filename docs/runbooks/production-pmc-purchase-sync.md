@@ -1,6 +1,6 @@
 # Production PMC Purchase Sync Runbook
 
-Status: **prepared — execution prohibited**. Code for Gate 2 is merged (PR #128 contracts,
+Status: **go-live window executed 2026-09-22** (see execution log). Further windows still require the Owner's written authorization per run; nothing here is scheduled. Code for Gate 2 is merged (PR #128 contracts,
 #129 ODS migration `20260919_0016`, #130 governance bootstrap, #131 handlers, this PR
 runner). Merging any of them authorizes nothing. Every step below is a production action
 that the Project Owner performs personally, one at a time, after writing an execution
@@ -226,4 +226,23 @@ but wasteful — avoid them.
 
 | Date (CST) | Step | Interface | Window | Operator | Result (counts / codes only) | Notes |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 2026-09-21 11:57 | 0 | — | — | deploy AI (Rocky-approved exception; Owner authorization in #132) | HEAD 118264f clean; APP_ENV=production; backup `<app-db-backup-before-pmc-purchase-20260921-115450>.dump` 980,898,422 B + .sha256; running=0; account ref `primary` | alembic already `20260921_0010` (0016 applied together with #136) |
+| 2026-09-21 | 1 (verify only) | — | — | deploy AI | 5 ODS tables present, all 0 rows | no `upgrade` run |
+| 2026-09-21 | 2 | all three | — | deploy AI | interface/policy/config `created` ×3, all disabled, page_size=500, max_attempts=1 | config ids b82eb148… / 9c74da63… / aa60c874… |
+| 2026-09-21 | 3 | purchasePlanList | — | deploy AI | enabled, verify 1 row | |
+| 2026-09-21 | 4 | purchasePlanList | 2026-08-01→2026-09-20 | deploy AI | exit 2 `PMC_PURCHASE_ONE_TIME_RUN_ENV_NOT_AUTHORIZED`, no request, no run | runbook omitted per-command LINGXING_* overrides → #139 |
+| 2026-09-21 | 5 | purchasePlanList | — | deploy AI | disabled, verify 0 rows | |
+| 2026-09-21 12:33 | 3 | purchasePlanList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 1 row | per #139 |
+| 2026-09-21 12:33 | 4 | purchasePlanList | 2026-08-01→2026-09-20 | deploy AI | exit 1, run `99cc1354-aa24-4e8e-a180-189fec851cd4` failed `PROVIDER_ERROR` (HTTP 200 / code 500: search_field_time enum), 1 raw_blob + 1 request_ref, ODS 0 | root cause: plans need `creator_time`, not `create_time` → #140; run kept as audit record |
+| 2026-09-21 12:33 | 5 | purchasePlanList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 0 rows | |
+| 2026-09-22 | 0 (re-check) | — | — | deploy AI | HEAD 1fbd9e1 (main, ≥ d744ae0) clean; /health ok; alembic current=heads=`20260921_0013`; running=0; three interfaces disabled; ODS 0 rows; failed run 99cc1354 retained | Owner deployed #140/#143/#145/#146 |
+| 2026-09-22 11:28 | 3 | purchasePlanList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 1 row | |
+| 2026-09-22 11:28 | 4 | purchasePlanList | 2026-08-01→2026-09-20 (update_time) | deploy AI | exit 0, run `58c69f5a-3dbf-4bb2-8bff-5157b50757c7` succeeded; headers_written=742 lines_written=0 duplicates_skipped=0; `quality=header_line_mismatches=0 missing_line_keys=0 non_string_store_ids=742 receipts_without_purchase_order=0`; 4 s | idempotency key `…:retry1`; non_string_store_ids = provider sends `sid` as JSON int (stored as string, no precision loss in Python json) |
+| 2026-09-22 11:28 | 5 | purchasePlanList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 0 rows | |
+| 2026-09-22 11:28 | 3 | purchaseOrderList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 1 row | |
+| 2026-09-22 11:28 | 4 | purchaseOrderList | 2026-08-01→2026-09-20 (update_time) | deploy AI | exit 0, run `86ff667e-f659-4d58-ac31-95517901bd5d` succeeded; headers_written=615 lines_written=657 duplicates_skipped=0; `quality=header_line_mismatches=138 missing_line_keys=0 non_string_store_ids=0 receipts_without_purchase_order=0`; 3 s | mismatches compare header `quantity_total` with Σ line `quantity_plan`; to be verified against Σ `quantity_real` before any hard gate |
+| 2026-09-22 11:28 | 5 | purchaseOrderList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 0 rows | |
+| 2026-09-22 11:28 | 3 | purchaseReceiptOrderList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 1 row | |
+| 2026-09-22 11:28 | 4 | purchaseReceiptOrderList | 2026-08-01→2026-09-20 (date_type=4) | deploy AI | exit 0, run `92c20513-fa3e-4c33-a028-b4a8a28e9488` succeeded; headers_written=543 lines_written=576 duplicates_skipped=0; `quality=header_line_mismatches=0 missing_line_keys=0 non_string_store_ids=0 receipts_without_purchase_order=0`; 7 s | |
+| 2026-09-22 11:29 | 5 | purchaseReceiptOrderList | — | deploy AI | UPDATE 1 / UPDATE 1, verify 0 rows | |
+| 2026-09-22 11:29 | final | all three | — | deploy AI | ODS rows: plans 742 / orders 615 / order_items 657 / receipts 543 / receipt_items 576; today raw_blobs +6, request_refs +6, parse_jobs +6 (all succeeded); enabled=0; running=0 | go-live window complete |
