@@ -188,7 +188,13 @@ def _parse_order(item: dict[str, Any], path: str) -> tuple[ParsedHeader, Purchas
             continue
         non_string_store_ids += _non_string_id(raw_line.get("sid"))
         quantity_plan = _int(raw_line.get("quantity_plan"))
-        planned_total += quantity_plan or 0
+        quantity_real = _int(raw_line.get("quantity_real"))
+        # Header quantity_total equals the sum of the lines' *actual* quantities;
+        # buyers may adjust a line after planning (rules §5.2 "采购员改过总量").
+        # Verified on the 2026-09-22 go-live data: all 138 header/line differences
+        # against Σ quantity_plan disappear against Σ quantity_real. Fall back to
+        # quantity_plan only when the provider omits quantity_real.
+        planned_total += quantity_real if quantity_real is not None else (quantity_plan or 0)
         lines.append(
             ParsedLine(
                 business_key=item_id,
@@ -203,7 +209,7 @@ def _parse_order(item: dict[str, Any], path: str) -> tuple[ParsedHeader, Purchas
                     "product_id": _id(raw_line.get("product_id")),
                     "fnsku": _str(raw_line.get("fnsku"), 64),
                     "quantity_plan": quantity_plan,
-                    "quantity_real": _int(raw_line.get("quantity_real")),
+                    "quantity_real": quantity_real,
                     "quantity_receive": _int(raw_line.get("quantity_receive")),
                     "quantity_qc": _int(raw_line.get("quantity_qc")),
                     "price": _decimal(raw_line.get("price")),
