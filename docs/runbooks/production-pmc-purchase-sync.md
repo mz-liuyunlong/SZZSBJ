@@ -226,7 +226,7 @@ but wasteful — avoid them.
 
 | Date (CST) | Step | Interface | Window | Operator | Result (counts / codes only) | Notes |
 |---|---|---|---|---|---|---|
-| 2026-09-21 11:57 | 0 | — | — | deploy AI (Rocky-approved exception; Owner authorization in #132) | HEAD 118264f clean; APP_ENV=production; backup `szzsbj_app_before_pmc_purchase_20260921_115450.dump` 980,898,422 B + .sha256; running=0; account ref `primary` | alembic already `20260921_0010` (0016 applied together with #136) |
+| 2026-09-21 11:57 | 0 | — | — | deploy AI (Rocky-approved exception; Owner authorization in #132) | HEAD 118264f clean; APP_ENV=production; backup `<app-db-backup-before-pmc-purchase-20260921-115450>.dump` 980,898,422 B + .sha256; running=0; account ref `primary` | alembic already `20260921_0010` (0016 applied together with #136) |
 | 2026-09-21 | 1 (verify only) | — | — | deploy AI | 5 ODS tables present, all 0 rows | no `upgrade` run |
 | 2026-09-21 | 2 | all three | — | deploy AI | interface/policy/config `created` ×3, all disabled, page_size=500, max_attempts=1 | config ids b82eb148… / 9c74da63… / aa60c874… |
 | 2026-09-21 | 3 | purchasePlanList | — | deploy AI | enabled, verify 1 row | |
