@@ -90,7 +90,6 @@ class OdsOrderItemLike(OdsRowLike, Protocol):
     plan_sn: str | None
     sid: str | None
     sku: str | None
-    product_name: str | None
     quantity_plan: int | None
     quantity_real: int | None
     quantity_receive: int | None
@@ -375,7 +374,8 @@ def _line(
         store_id=store_id,
         store_attributed=store_id is not None,
         sku=_clean(item.sku),
-        product_name=_clean(item.product_name),
+        # The ODS line table does not extract product_name; read it from the raw line.
+        product_name=_clean(item.payload_json.get("product_name") if item.payload_json else None),
         quantity_plan=item.quantity_plan,
         quantity_real=item.quantity_real,
         quantity_allocated=quantity,

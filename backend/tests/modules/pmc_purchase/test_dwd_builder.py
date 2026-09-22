@@ -73,7 +73,6 @@ class Item(_Row):
     plan_sn: str | None = "P1"
     sid: str | None = "110652398125259264"
     sku: str | None = "SKU-A"
-    product_name: str | None = "Widget"
     quantity_plan: int | None = 100
     quantity_real: int | None = 100
     quantity_receive: int | None = 0
