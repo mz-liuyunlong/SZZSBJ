@@ -19,6 +19,92 @@ class BusinessRulesRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def list_active_operations(self, *, account_refs: frozenset[str]) -> list[Mapping[str, Any]]:
+        statement = text(
+            """
+            select
+                cast(id as text) id,
+                source_account_ref,
+                platform_code,
+                operation_type,
+                status,
+                store_id,
+                rule_scope,
+                coalesce(item_ids,array[]::text[]) item_ids,
+                price_min_amount,
+                price_max_amount,
+                start_date,
+                end_date,
+                days_recalculated,
+                daily_sales_rows,
+                order_profit_rows,
+                actor_ref,
+                request_id,
+                message,
+                error_message,
+                created_at,
+                started_at,
+                finished_at,
+                updated_at
+            from business_rule_operation_logs
+            where source_account_ref in :account_refs
+              and operation_type='commission_recalculate'
+              and status in ('queued','running')
+            order by created_at desc
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return list(
+            self.session.execute(
+                statement,
+                {"account_refs": tuple(account_refs)},
+            ).mappings()
+        )
+
+    def list_operation_logs(
+        self,
+        *,
+        account_refs: frozenset[str],
+        limit: int = 80,
+    ) -> list[Mapping[str, Any]]:
+        statement = text(
+            """
+            select
+                cast(id as text) id,
+                source_account_ref,
+                platform_code,
+                operation_type,
+                status,
+                store_id,
+                rule_scope,
+                coalesce(item_ids,array[]::text[]) item_ids,
+                price_min_amount,
+                price_max_amount,
+                start_date,
+                end_date,
+                days_recalculated,
+                daily_sales_rows,
+                order_profit_rows,
+                actor_ref,
+                request_id,
+                message,
+                error_message,
+                created_at,
+                started_at,
+                finished_at,
+                updated_at
+            from business_rule_operation_logs
+            where source_account_ref in :account_refs
+            order by created_at desc
+            limit :limit
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return list(
+            self.session.execute(
+                statement,
+                {"account_refs": tuple(account_refs), "limit": limit},
+            ).mappings()
+        )
+
     def list_store_rules(self, account_refs: frozenset[str]) -> list[Mapping[str, Any]]:
         statement = text(
             """
@@ -86,6 +172,21 @@ class BusinessRulesRepository:
                   and effective_from <= current_date
                   and (effective_to is null or effective_to > current_date)
                 order by source_account_ref,platform_code,store_id,effective_from desc,created_at desc
+            ),
+            active_ops as (
+                select distinct on (source_account_ref,platform_code,store_id)
+                    id,
+                    source_account_ref,
+                    platform_code,
+                    store_id,
+                    status,
+                    actor_ref,
+                    created_at
+                from business_rule_operation_logs
+                where source_account_ref in :account_refs
+                  and operation_type='commission_recalculate'
+                  and status in ('queued','running')
+                order by source_account_ref,platform_code,store_id,created_at desc
             )
             select
                 cast(active_rule.id as text) id,
@@ -114,11 +215,18 @@ class BusinessRulesRepository:
                       and m.store_id=stores.store_id
                       and abs(coalesce(m.commission_rate,0)-coalesce(active_rule.commission_rate,:default_rate)) > 0.000001
                     limit 1
-                ) needs_recalculate
+                ) needs_recalculate,
+                cast(active_ops.id as text) active_operation_id,
+                active_ops.status active_operation_status,
+                active_ops.actor_ref active_operation_actor,
+                active_ops.created_at active_operation_created_at
             from stores
             left join active_rule on active_rule.source_account_ref=stores.source_account_ref
               and active_rule.platform_code=stores.platform_code
               and active_rule.store_id=stores.store_id
+            left join active_ops on active_ops.source_account_ref=stores.source_account_ref
+              and active_ops.platform_code=stores.platform_code
+              and active_ops.store_id=stores.store_id
             order by stores.store_name nulls last,stores.store_id
             """
         ).bindparams(bindparam("account_refs", expanding=True))
@@ -148,6 +256,21 @@ class BusinessRulesRepository:
                   and store_id is not null
                   and trim(store_id) <> ''
                 group by 1,2
+            ),
+            active_ops as (
+                select distinct on (source_account_ref,platform_code,store_id)
+                    id,
+                    source_account_ref,
+                    platform_code,
+                    store_id,
+                    status,
+                    actor_ref,
+                    created_at
+                from business_rule_operation_logs
+                where source_account_ref in :account_refs
+                  and operation_type='commission_recalculate'
+                  and status in ('queued','running')
+                order by source_account_ref,platform_code,store_id,created_at desc
             )
             select
                 cast(rule.id as text) id,
@@ -169,10 +292,17 @@ class BusinessRulesRepository:
                 rule.change_reason,
                 rule.approved_by,
                 rule.approved_at,
-                true needs_recalculate
+                true needs_recalculate,
+                cast(active_ops.id as text) active_operation_id,
+                active_ops.status active_operation_status,
+                active_ops.actor_ref active_operation_actor,
+                active_ops.created_at active_operation_created_at
             from ref_store_commission_rule_versions rule
             left join stores on stores.source_account_ref=rule.source_account_ref
               and stores.store_id=rule.store_id
+            left join active_ops on active_ops.source_account_ref=rule.source_account_ref
+              and active_ops.platform_code=rule.platform_code
+              and active_ops.store_id=rule.store_id
             where rule.source_account_ref in :account_refs
               and rule.platform_code='walmart'
               and rule.rule_scope in ('item','price_range')
@@ -188,338 +318,6 @@ class BusinessRulesRepository:
             self.session.execute(
                 statement,
                 {"account_refs": tuple(account_refs)},
-            ).mappings()
-        )
-
-    def close_existing_rules_for_target(
-        self,
-        *,
-        source_account_ref: str,
-        platform_code: str,
-        store_id: str,
-        rule_scope: str,
-        effective_from: date,
-        all_dates: bool,
-        item_id: str | None = None,
-    ) -> None:
-        base = """
-            source_account_ref=:source_account_ref
-            and platform_code=:platform_code
-            and store_id=:store_id
-            and rule_scope=:rule_scope
-            and is_active=true
-        """
-        params: dict[str, object] = {
-            "source_account_ref": source_account_ref,
-            "platform_code": platform_code,
-            "store_id": store_id,
-            "rule_scope": rule_scope,
-            "effective_from": effective_from,
-            "item_id": item_id,
-        }
-
-        if rule_scope == "item":
-            base += " and item_id=:item_id"
-
-        if all_dates:
-            self.session.execute(
-                text(
-                    f"update ref_store_commission_rule_versions set is_active=false, updated_at=now() where {base}"
-                ),
-                params,
-            )
-            return
-
-        self.session.execute(
-            text(
-                f"""
-                update ref_store_commission_rule_versions
-                set effective_to=:effective_from, updated_at=now()
-                where {base}
-                  and effective_from < :effective_from
-                  and (effective_to is null or effective_to > :effective_from)
-                """
-            ),
-            params,
-        )
-        self.session.execute(
-            text(
-                f"""
-                update ref_store_commission_rule_versions
-                set is_active=false, updated_at=now()
-                where {base}
-                  and effective_from >= :effective_from
-                """
-            ),
-            params,
-        )
-
-    def deactivate_rule(
-        self,
-        *,
-        source_account_ref: str,
-        rule_id: str,
-    ) -> int:
-        result = self.session.execute(
-            text(
-                """
-                update ref_store_commission_rule_versions
-                set is_active=false, updated_at=now()
-                where source_account_ref=:source_account_ref
-                  and cast(id as text)=:rule_id
-                  and is_active=true
-                """
-            ),
-            {
-                "source_account_ref": source_account_ref,
-                "rule_id": rule_id,
-            },
-        )
-        return int(result.rowcount or 0)
-
-    def insert_commission_rule(
-        self,
-        *,
-        source_account_ref: str,
-        platform_code: str,
-        store_id: str,
-        rule_scope: str,
-        item_id: str | None,
-        price_min_amount: Decimal | None,
-        price_max_amount: Decimal | None,
-        priority: int,
-        commission_rate: Decimal,
-        effective_from: date,
-        effective_to: date | None,
-        rule_version: str,
-        change_reason: str,
-        approved_by: str,
-        request_id: str,
-    ) -> Mapping[str, Any]:
-        return (
-            self.session.execute(
-                text(
-                    """
-                    insert into ref_store_commission_rule_versions (
-                        id,
-                        source_account_ref,
-                        platform_code,
-                        store_id,
-                        rule_scope,
-                        item_id,
-                        price_min_amount,
-                        price_max_amount,
-                        priority,
-                        commission_rate,
-                        effective_from,
-                        effective_to,
-                        is_active,
-                        rule_version,
-                        change_reason,
-                        approved_by,
-                        approved_at,
-                        request_id,
-                        created_at,
-                        updated_at
-                    )
-                    values (
-                        gen_random_uuid(),
-                        :source_account_ref,
-                        :platform_code,
-                        :store_id,
-                        :rule_scope,
-                        :item_id,
-                        :price_min_amount,
-                        :price_max_amount,
-                        :priority,
-                        :commission_rate,
-                        :effective_from,
-                        :effective_to,
-                        true,
-                        :rule_version,
-                        :change_reason,
-                        :approved_by,
-                        now(),
-                        :request_id,
-                        now(),
-                        now()
-                    )
-                    returning
-                        cast(id as text) id,
-                        source_account_ref,
-                        platform_code,
-                        store_id,
-                        null::text store_name,
-                        rule_scope,
-                        item_id,
-                        price_min_amount,
-                        price_max_amount,
-                        priority,
-                        commission_rate,
-                        'store_rule' source,
-                        effective_from,
-                        effective_to,
-                        is_active,
-                        rule_version,
-                        change_reason,
-                        approved_by,
-                        approved_at,
-                        true needs_recalculate
-                    """
-                ),
-                {
-                    "source_account_ref": source_account_ref,
-                    "platform_code": platform_code,
-                    "store_id": store_id,
-                    "rule_scope": rule_scope,
-                    "item_id": item_id,
-                    "price_min_amount": price_min_amount,
-                    "price_max_amount": price_max_amount,
-                    "priority": priority,
-                    "commission_rate": commission_rate,
-                    "effective_from": effective_from,
-                    "effective_to": effective_to,
-                    "rule_version": rule_version,
-                    "change_reason": change_reason,
-                    "approved_by": approved_by,
-                    "request_id": request_id,
-                },
-            )
-            .mappings()
-            .one()
-        )
-
-    def date_bounds_for_recalculate(
-        self,
-        *,
-        source_account_ref: str,
-        store_id: str,
-        item_ids: list[str],
-    ) -> tuple[date | None, date | None]:
-        item_filter = "and item_id in :item_ids" if item_ids else ""
-        statement = text(
-            f"""
-            select min(business_date_la) start_date,max(business_date_la) end_date
-            from (
-                select business_date_la
-                from fact_walmart_sales_item_daily
-                where source_account_ref=:source_account_ref
-                  and store_id=:store_id
-                  {item_filter}
-
-                union
-
-                select business_date_la
-                from mart_daily_sales_item_day
-                where source_account_ref=:source_account_ref
-                  and store_id=:store_id
-                  {item_filter}
-            ) d
-            """
-        )
-        if item_ids:
-            statement = statement.bindparams(bindparam("item_ids", expanding=True))
-        row = self.session.execute(
-            statement,
-            {
-                "source_account_ref": source_account_ref,
-                "store_id": store_id,
-                "item_ids": tuple(item_ids),
-            },
-        ).one()
-        return row[0], row[1]
-
-    def business_dates_for_recalculate(
-        self,
-        *,
-        source_account_ref: str,
-        store_id: str,
-        item_ids: list[str],
-        start_date: date,
-        end_date: date,
-    ) -> list[date]:
-        item_filter = "and item_id in :item_ids" if item_ids else ""
-        statement = text(
-            f"""
-            select distinct business_date_la
-            from (
-                select business_date_la
-                from fact_walmart_sales_item_daily
-                where source_account_ref=:source_account_ref
-                  and store_id=:store_id
-                  and business_date_la between :start_date and :end_date
-                  {item_filter}
-
-                union
-
-                select business_date_la
-                from mart_daily_sales_item_day
-                where source_account_ref=:source_account_ref
-                  and store_id=:store_id
-                  and business_date_la between :start_date and :end_date
-                  {item_filter}
-            ) d
-            order by business_date_la
-            """
-        )
-        if item_ids:
-            statement = statement.bindparams(bindparam("item_ids", expanding=True))
-        return [
-            row[0]
-            for row in self.session.execute(
-                statement,
-                {
-                    "source_account_ref": source_account_ref,
-                    "store_id": store_id,
-                    "item_ids": tuple(item_ids),
-                    "start_date": start_date,
-                    "end_date": end_date,
-                },
-            )
-        ]
-
-    def list_operation_logs(
-        self,
-        *,
-        account_refs: frozenset[str],
-        limit: int = 50,
-    ) -> list[Mapping[str, Any]]:
-        statement = text(
-            """
-            select
-                cast(id as text) id,
-                source_account_ref,
-                platform_code,
-                operation_type,
-                status,
-                store_id,
-                rule_scope,
-                coalesce(item_ids,array[]::text[]) item_ids,
-                price_min_amount,
-                price_max_amount,
-                start_date,
-                end_date,
-                days_recalculated,
-                daily_sales_rows,
-                order_profit_rows,
-                actor_ref,
-                request_id,
-                message,
-                error_message,
-                created_at,
-                started_at,
-                finished_at,
-                updated_at
-            from business_rule_operation_logs
-            where source_account_ref in :account_refs
-            order by created_at desc
-            limit :limit
-            """
-        ).bindparams(bindparam("account_refs", expanding=True))
-        return list(
-            self.session.execute(
-                statement,
-                {"account_refs": tuple(account_refs), "limit": limit},
             ).mappings()
         )
 
@@ -779,3 +577,298 @@ class BusinessRulesRepository:
             ),
             {"job_id": job_id, "error_message": error_message[:2000]},
         )
+
+    def close_existing_rules_for_target(
+        self,
+        *,
+        source_account_ref: str,
+        platform_code: str,
+        store_id: str,
+        rule_scope: str,
+        effective_from: date,
+        all_dates: bool,
+        item_id: str | None = None,
+    ) -> None:
+        base = """
+            source_account_ref=:source_account_ref
+            and platform_code=:platform_code
+            and store_id=:store_id
+            and rule_scope=:rule_scope
+            and is_active=true
+        """
+        params: dict[str, object] = {
+            "source_account_ref": source_account_ref,
+            "platform_code": platform_code,
+            "store_id": store_id,
+            "rule_scope": rule_scope,
+            "effective_from": effective_from,
+            "item_id": item_id,
+        }
+
+        if rule_scope == "item":
+            base += " and item_id=:item_id"
+
+        if all_dates:
+            self.session.execute(
+                text(
+                    f"""
+                    update ref_store_commission_rule_versions
+                    set is_active=false, updated_at=now()
+                    where {base}
+                    """
+                ),
+                params,
+            )
+            return
+
+        self.session.execute(
+            text(
+                f"""
+                update ref_store_commission_rule_versions
+                set effective_to=:effective_from, updated_at=now()
+                where {base}
+                  and effective_from < :effective_from
+                  and (effective_to is null or effective_to > :effective_from)
+                """
+            ),
+            params,
+        )
+        self.session.execute(
+            text(
+                f"""
+                update ref_store_commission_rule_versions
+                set is_active=false, updated_at=now()
+                where {base}
+                  and effective_from >= :effective_from
+                """
+            ),
+            params,
+        )
+
+    def deactivate_rule(
+        self,
+        *,
+        source_account_ref: str,
+        rule_id: str,
+    ) -> int:
+        result = self.session.execute(
+            text(
+                """
+                update ref_store_commission_rule_versions
+                set is_active=false, updated_at=now()
+                where source_account_ref=:source_account_ref
+                  and cast(id as text)=:rule_id
+                  and is_active=true
+                """
+            ),
+            {
+                "source_account_ref": source_account_ref,
+                "rule_id": rule_id,
+            },
+        )
+        return int(result.rowcount or 0)
+
+    def insert_commission_rule(
+        self,
+        *,
+        source_account_ref: str,
+        platform_code: str,
+        store_id: str,
+        rule_scope: str,
+        item_id: str | None,
+        price_min_amount: Decimal | None,
+        price_max_amount: Decimal | None,
+        priority: int,
+        commission_rate: Decimal,
+        effective_from: date,
+        effective_to: date | None,
+        rule_version: str,
+        change_reason: str,
+        approved_by: str,
+        request_id: str,
+    ) -> Mapping[str, Any]:
+        return (
+            self.session.execute(
+                text(
+                    """
+                    insert into ref_store_commission_rule_versions (
+                        id,
+                        source_account_ref,
+                        platform_code,
+                        store_id,
+                        rule_scope,
+                        item_id,
+                        price_min_amount,
+                        price_max_amount,
+                        priority,
+                        commission_rate,
+                        effective_from,
+                        effective_to,
+                        is_active,
+                        rule_version,
+                        change_reason,
+                        approved_by,
+                        approved_at,
+                        request_id,
+                        created_at,
+                        updated_at
+                    )
+                    values (
+                        gen_random_uuid(),
+                        :source_account_ref,
+                        :platform_code,
+                        :store_id,
+                        :rule_scope,
+                        :item_id,
+                        :price_min_amount,
+                        :price_max_amount,
+                        :priority,
+                        :commission_rate,
+                        :effective_from,
+                        :effective_to,
+                        true,
+                        :rule_version,
+                        :change_reason,
+                        :approved_by,
+                        now(),
+                        :request_id,
+                        now(),
+                        now()
+                    )
+                    returning
+                        cast(id as text) id,
+                        source_account_ref,
+                        platform_code,
+                        store_id,
+                        null::text store_name,
+                        rule_scope,
+                        item_id,
+                        price_min_amount,
+                        price_max_amount,
+                        priority,
+                        commission_rate,
+                        'store_rule' source,
+                        effective_from,
+                        effective_to,
+                        is_active,
+                        rule_version,
+                        change_reason,
+                        approved_by,
+                        approved_at,
+                        true needs_recalculate,
+                        null::text active_operation_id,
+                        null::text active_operation_status,
+                        null::text active_operation_actor,
+                        null::timestamptz active_operation_created_at
+                    """
+                ),
+                {
+                    "source_account_ref": source_account_ref,
+                    "platform_code": platform_code,
+                    "store_id": store_id,
+                    "rule_scope": rule_scope,
+                    "item_id": item_id,
+                    "price_min_amount": price_min_amount,
+                    "price_max_amount": price_max_amount,
+                    "priority": priority,
+                    "commission_rate": commission_rate,
+                    "effective_from": effective_from,
+                    "effective_to": effective_to,
+                    "rule_version": rule_version,
+                    "change_reason": change_reason,
+                    "approved_by": approved_by,
+                    "request_id": request_id,
+                },
+            )
+            .mappings()
+            .one()
+        )
+
+    def date_bounds_for_recalculate(
+        self,
+        *,
+        source_account_ref: str,
+        store_id: str,
+        item_ids: list[str],
+    ) -> tuple[date | None, date | None]:
+        item_filter = "and item_id in :item_ids" if item_ids else ""
+        statement = text(
+            f"""
+            select min(business_date_la) start_date,max(business_date_la) end_date
+            from (
+                select business_date_la
+                from fact_walmart_sales_item_daily
+                where source_account_ref=:source_account_ref
+                  and store_id=:store_id
+                  {item_filter}
+
+                union
+
+                select business_date_la
+                from mart_daily_sales_item_day
+                where source_account_ref=:source_account_ref
+                  and store_id=:store_id
+                  {item_filter}
+            ) d
+            """
+        )
+        if item_ids:
+            statement = statement.bindparams(bindparam("item_ids", expanding=True))
+        row = self.session.execute(
+            statement,
+            {
+                "source_account_ref": source_account_ref,
+                "store_id": store_id,
+                "item_ids": tuple(item_ids),
+            },
+        ).one()
+        return row[0], row[1]
+
+    def business_dates_for_recalculate(
+        self,
+        *,
+        source_account_ref: str,
+        store_id: str,
+        item_ids: list[str],
+        start_date: date,
+        end_date: date,
+    ) -> list[date]:
+        item_filter = "and item_id in :item_ids" if item_ids else ""
+        statement = text(
+            f"""
+            select distinct business_date_la
+            from (
+                select business_date_la
+                from fact_walmart_sales_item_daily
+                where source_account_ref=:source_account_ref
+                  and store_id=:store_id
+                  and business_date_la between :start_date and :end_date
+                  {item_filter}
+
+                union
+
+                select business_date_la
+                from mart_daily_sales_item_day
+                where source_account_ref=:source_account_ref
+                  and store_id=:store_id
+                  and business_date_la between :start_date and :end_date
+                  {item_filter}
+            ) d
+            order by business_date_la
+            """
+        )
+        if item_ids:
+            statement = statement.bindparams(bindparam("item_ids", expanding=True))
+        return [
+            row[0]
+            for row in self.session.execute(
+                statement,
+                {
+                    "source_account_ref": source_account_ref,
+                    "store_id": store_id,
+                    "item_ids": tuple(item_ids),
+                    "start_date": start_date,
+                    "end_date": end_date,
+                },
+            )
+        ]

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 CommissionRuleScope = Literal["store", "item", "price_range"]
 StoreCommissionSource = Literal["store_rule", "default_15_percent"]
 StoreCommissionApplyScope = Literal["all_dates", "from_date"]
+BusinessRuleOperationStatus = Literal["queued", "running", "succeeded", "failed"]
 
 
 def _split_text_values(value: object) -> list[str]:
@@ -30,9 +31,6 @@ def _split_text_values(value: object) -> list[str]:
         seen.add(item)
         normalized.append(item)
     return normalized
-
-
-BusinessRuleOperationStatus = Literal["queued", "running", "succeeded", "failed"]
 
 
 class BusinessRuleOperationRead(BaseModel):
@@ -85,11 +83,14 @@ class StoreCommissionRead(BaseModel):
     needs_recalculate: bool = False
     active_operation_id: str | None = None
     active_operation_status: BusinessRuleOperationStatus | None = None
+    active_operation_actor: str | None = None
+    active_operation_created_at: datetime | None = None
 
 
 class StoreCommissionListData(BaseModel):
     store_rules: list[StoreCommissionRead]
     special_rules: list[StoreCommissionRead]
+    active_operations: list[BusinessRuleOperationRead] = Field(default_factory=list)
     operation_logs: list[BusinessRuleOperationRead] = Field(default_factory=list)
 
 
@@ -151,9 +152,6 @@ class StoreCommissionUpsertRequest(BaseModel):
             and self.effective_to <= self.effective_from
         ):
             raise ValueError("effective_to must be greater than effective_from")
-
-        if self.rule_scope == "store":
-            return self
 
         if self.rule_scope == "item" and not self.normalized_item_ids():
             raise ValueError("item_ids is required when rule_scope is item")

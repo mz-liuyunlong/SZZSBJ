@@ -58,6 +58,24 @@ def list_store_commissions(
     )
 
 
+@router.get(
+    "/store-commissions/logs",
+    response_model=SuccessEnvelope[StoreCommissionOperationLogData, Any],
+    responses=ERRORS,
+)
+def list_store_commission_operation_logs(
+    request: Request,
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[StoreCommissionOperationLogData, Any]:
+    return success_response(
+        request,
+        data=BusinessRulesService(session).list_store_commission_operation_logs(account_refs),
+        meta=None,
+    )
+
+
 @router.post(
     "/store-commissions",
     status_code=status.HTTP_201_CREATED,
@@ -103,24 +121,6 @@ def deactivate_store_commission(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return success_response(request, data=data, meta=None)
-
-
-@router.get(
-    "/store-commissions/logs",
-    response_model=SuccessEnvelope[StoreCommissionOperationLogData, Any],
-    responses=ERRORS,
-)
-def list_store_commission_operation_logs(
-    request: Request,
-    session: db_session,
-    _: read_principal,
-    account_refs: source_scope,
-) -> SuccessEnvelope[StoreCommissionOperationLogData, Any]:
-    return success_response(
-        request,
-        data=BusinessRulesService(session).list_store_commission_operation_logs(account_refs),
-        meta=None,
-    )
 
 
 @router.post(

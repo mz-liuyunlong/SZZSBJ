@@ -1,6 +1,4 @@
 import {
-  message as antdMessage,
-  Modal,
   Alert,
   Button,
   Card,
@@ -9,6 +7,8 @@ import {
   Form,
   Input,
   InputNumber,
+  message as antdMessage,
+  Modal,
   Radio,
   Select,
   Space,
@@ -23,12 +23,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigationPage } from "@/config/navigation";
 import {
   deactivateStoreCommission,
+  listStoreCommissionLogs,
   listStoreCommissions,
   recalculateStoreCommission,
   saveStoreCommission,
+  type BusinessRuleOperationLog,
   type CommissionRuleScope,
   type StoreCommissionApplyScope,
-  type BusinessRuleOperationLog,
   type StoreCommissionRecord,
 } from "@/pages/settings/storeCommissionApi";
 import "./FeeRulesPage.css";
@@ -102,6 +103,7 @@ function FeeRulesPage({ page }: FeeRulesPageProps) {
   const [modalApi, modalContextHolder] = Modal.useModal();
   const [storeRules, setStoreRules] = useState<StoreCommissionRecord[]>([]);
   const [specialRules, setSpecialRules] = useState<StoreCommissionRecord[]>([]);
+  const [activeOperations, setActiveOperations] = useState<BusinessRuleOperationLog[]>([]);
   const [operationLogs, setOperationLogs] = useState<BusinessRuleOperationLog[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -119,6 +121,7 @@ function FeeRulesPage({ page }: FeeRulesPageProps) {
       const result = await listStoreCommissions();
       setStoreRules(result.storeRules);
       setSpecialRules(result.specialRules);
+      setActiveOperations(result.activeOperations);
       setOperationLogs(result.operationLogs);
     } catch (error) {
       console.error(error);
@@ -137,8 +140,11 @@ function FeeRulesPage({ page }: FeeRulesPageProps) {
         if (!cancelled) {
           setStoreRules(result.storeRules);
           setSpecialRules(result.specialRules);
+          setActiveOperations(result.activeOperations);
           setOperationLogs(result.operationLogs);
+      setActiveOperations(result.activeOperations);
       setOperationLogs(result.operationLogs);
+          setOperationLogs(result.operationLogs);
         }
       } catch (error) {
         console.error(error);
@@ -155,19 +161,21 @@ function FeeRulesPage({ page }: FeeRulesPageProps) {
     };
   }, [messageApi]);
 
+
+
   const activeStoreIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const log of operationLogs) {
+    for (const operation of activeOperations) {
       if (
-        log.operation_type === "commission_recalculate"
-        && (log.status === "queued" || log.status === "running")
-        && log.store_id
+        operation.operation_type === "commission_recalculate"
+        && (operation.status === "queued" || operation.status === "running")
+        && operation.store_id
       ) {
-        ids.add(log.store_id);
+        ids.add(operation.store_id);
       }
     }
     return ids;
-  }, [operationLogs]);
+  }, [activeOperations]);
 
   useEffect(() => {
     if (activeStoreIds.size === 0) return undefined;
@@ -537,6 +545,14 @@ function FeeRulesPage({ page }: FeeRulesPageProps) {
             onChange={setOnlyCustom}
           />
           <Button onClick={() => setLogOpen(true)}>日志</Button>
+          <Button
+            onClick={async () => {
+              setOperationLogs(await listStoreCommissionLogs());
+              setLogOpen(true);
+            }}
+          >
+            日志
+          </Button>
           <Button onClick={() => void load()}>刷新</Button>
         </div>
       </header>
@@ -631,6 +647,72 @@ function FeeRulesPage({ page }: FeeRulesPageProps) {
             {
               title: "结果",
               width: 220,
+              render: (_, row) => row.status === "succeeded"
+                ? `${row.days_recalculated}天 / DS ${row.daily_sales_rows} / OP ${row.order_profit_rows}`
+                : row.error_message || row.message || "—",
+            },
+          ]}
+        />
+      </Drawer>
+
+      <Drawer
+        title="费用规则操作日志"
+        width={760}
+        open={logOpen}
+        destroyOnHidden
+        onClose={() => setLogOpen(false)}
+        extra={
+          <Button
+            onClick={async () => {
+              setOperationLogs(await listStoreCommissionLogs());
+            }}
+          >
+            刷新
+          </Button>
+        }
+      >
+        <Table<BusinessRuleOperationLog>
+          rowKey="id"
+          size="small"
+          dataSource={operationLogs}
+          pagination={{ pageSize: 20 }}
+          columns={[
+            {
+              title: "状态",
+              dataIndex: "status",
+              width: 90,
+              render: (value) =>
+                value === "running" || value === "queued" ? (
+                  <Tag color="processing">重算中</Tag>
+                ) : value === "succeeded" ? (
+                  <Tag color="success">完成</Tag>
+                ) : (
+                  <Tag color="error">失败</Tag>
+                ),
+            },
+            { title: "操作人", dataIndex: "actor_ref", width: 140 },
+            { title: "店铺ID", dataIndex: "store_id", width: 180 },
+            {
+              title: "规则类型",
+              dataIndex: "rule_scope",
+              width: 120,
+              render: (value) => value ? ruleScopeLabel[value as CommissionRuleScope] : "—",
+            },
+            {
+              title: "创建时间",
+              dataIndex: "created_at",
+              width: 170,
+              render: (value) => value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "—",
+            },
+            {
+              title: "完成时间",
+              dataIndex: "finished_at",
+              width: 170,
+              render: (value) => value ? dayjs(value).format("YYYY-MM-DD HH:mm:ss") : "—",
+            },
+            {
+              title: "结果",
+              width: 240,
               render: (_, row) => row.status === "succeeded"
                 ? `${row.days_recalculated}天 / DS ${row.daily_sales_rows} / OP ${row.order_profit_rows}`
                 : row.error_message || row.message || "—",

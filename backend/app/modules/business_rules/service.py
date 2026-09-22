@@ -5,16 +5,20 @@ from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.config import get_database_url, get_settings
 from app.modules.business_rules.repository import (
     ALL_DATES_EFFECTIVE_FROM,
     BusinessRulesRepository,
 )
 from app.modules.business_rules.schemas import (
+    BusinessRuleOperationRead,
     StoreCommissionDeactivateRequest,
     StoreCommissionListData,
     StoreCommissionMutationData,
+    StoreCommissionOperationLogData,
     StoreCommissionRead,
     StoreCommissionRecalculateData,
     StoreCommissionRecalculateRequest,
@@ -41,6 +45,34 @@ def _safe_token(value: str | None, fallback: str = "rule") -> str:
     return token or fallback
 
 
+def _operation_read(row: Mapping[str, Any]) -> BusinessRuleOperationRead:
+    return BusinessRuleOperationRead(
+        id=str(row["id"]),
+        source_account_ref=str(row["source_account_ref"]),
+        platform_code=str(row["platform_code"]),
+        operation_type=str(row["operation_type"]),
+        status=row["status"],
+        store_id=row.get("store_id"),
+        rule_scope=row.get("rule_scope"),
+        item_ids=list(row.get("item_ids") or []),
+        price_min_amount=row.get("price_min_amount"),
+        price_max_amount=row.get("price_max_amount"),
+        start_date=row.get("start_date"),
+        end_date=row.get("end_date"),
+        days_recalculated=int(row.get("days_recalculated") or 0),
+        daily_sales_rows=int(row.get("daily_sales_rows") or 0),
+        order_profit_rows=int(row.get("order_profit_rows") or 0),
+        actor_ref=str(row["actor_ref"]),
+        request_id=str(row["request_id"]),
+        message=row.get("message"),
+        error_message=row.get("error_message"),
+        created_at=row["created_at"],
+        started_at=row.get("started_at"),
+        finished_at=row.get("finished_at"),
+        updated_at=row["updated_at"],
+    )
+
+
 def _store_commission_read(row: Mapping[str, Any]) -> StoreCommissionRead:
     rate = _decimal(row["commission_rate"])
     return StoreCommissionRead(
@@ -65,6 +97,10 @@ def _store_commission_read(row: Mapping[str, Any]) -> StoreCommissionRead:
         approved_by=row.get("approved_by"),
         approved_at=row.get("approved_at"),
         needs_recalculate=bool(row.get("needs_recalculate")),
+        active_operation_id=row.get("active_operation_id"),
+        active_operation_status=row.get("active_operation_status"),
+        active_operation_actor=row.get("active_operation_actor"),
+        active_operation_created_at=row.get("active_operation_created_at"),
     )
 
 
@@ -88,10 +124,25 @@ class BusinessRulesService:
                 _store_commission_read(row)
                 for row in self.repository.list_special_rules(account_refs)
             ],
+            active_operations=[
+                _operation_read(row)
+                for row in self.repository.list_active_operations(account_refs=account_refs)
+            ],
             operation_logs=[
                 _operation_read(row)
                 for row in self.repository.list_operation_logs(account_refs=account_refs)
             ],
+        )
+
+    def list_store_commission_operation_logs(
+        self,
+        account_refs: frozenset[str],
+    ) -> StoreCommissionOperationLogData:
+        return StoreCommissionOperationLogData(
+            items=[
+                _operation_read(row)
+                for row in self.repository.list_operation_logs(account_refs=account_refs)
+            ]
         )
 
     def upsert_store_commission(
@@ -104,6 +155,12 @@ class BusinessRulesService:
     ) -> StoreCommissionMutationData:
         if payload.source_account_ref not in account_refs:
             raise ValueError("SOURCE_ACCOUNT_SCOPE_DENIED")
+        if self.repository.find_active_recalculate_job(
+            source_account_ref=payload.source_account_ref,
+            platform_code=payload.platform_code,
+            store_id=payload.store_id,
+        ):
+            raise ValueError("STORE_RECALCULATE_RUNNING")
 
         effective_from = (
             ALL_DATES_EFFECTIVE_FROM
@@ -251,19 +308,6 @@ class BusinessRulesService:
             message="重算任务已创建",
         )
 
-    def list_store_commission_operation_logs(
-        self,
-        account_refs: frozenset[str],
-    ):
-        from app.modules.business_rules.schemas import StoreCommissionOperationLogData
-
-        return StoreCommissionOperationLogData(
-            items=[
-                _operation_read(row)
-                for row in self.repository.list_operation_logs(account_refs=account_refs)
-            ]
-        )
-
     def execute_recalculate_job(self, job_id: str) -> None:
         job = self.repository.get_operation_job(job_id=job_id)
         if job is None:
@@ -340,45 +384,9 @@ class BusinessRulesService:
             raise
 
 
-def _operation_read(row: Mapping[str, Any]):
-    from app.modules.business_rules.schemas import BusinessRuleOperationRead
-
-    return BusinessRuleOperationRead(
-        id=str(row["id"]),
-        source_account_ref=str(row["source_account_ref"]),
-        platform_code=str(row["platform_code"]),
-        operation_type=str(row["operation_type"]),
-        status=row["status"],
-        store_id=row.get("store_id"),
-        rule_scope=row.get("rule_scope"),
-        item_ids=list(row.get("item_ids") or []),
-        price_min_amount=row.get("price_min_amount"),
-        price_max_amount=row.get("price_max_amount"),
-        start_date=row.get("start_date"),
-        end_date=row.get("end_date"),
-        days_recalculated=int(row.get("days_recalculated") or 0),
-        daily_sales_rows=int(row.get("daily_sales_rows") or 0),
-        order_profit_rows=int(row.get("order_profit_rows") or 0),
-        actor_ref=str(row["actor_ref"]),
-        request_id=str(row["request_id"]),
-        message=row.get("message"),
-        error_message=row.get("error_message"),
-        created_at=row["created_at"],
-        started_at=row.get("started_at"),
-        finished_at=row.get("finished_at"),
-        updated_at=row["updated_at"],
-    )
-
-
 def run_store_commission_recalculate_job(job_id: str) -> None:
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-
-    from app.core.config import get_database_url, get_settings
-
     engine = create_engine(get_database_url(get_settings()))
     session_factory = sessionmaker(bind=engine)
 
     with session_factory() as session:
-        service = BusinessRulesService(session)
-        service.execute_recalculate_job(job_id)
+        BusinessRulesService(session).execute_recalculate_job(job_id)
