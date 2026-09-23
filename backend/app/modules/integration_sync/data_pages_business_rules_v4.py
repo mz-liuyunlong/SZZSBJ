@@ -76,7 +76,7 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
                 text(
                     "select count(*) from after_sales_refund_items "
                     "where source_account_ref=:account and platform_code='walmart' "
-                    "and refund_effective=true and refund_effective_date=:day "
+                    "and refund_effective=true and return_order_at::date=:day "
                     "and (store_id is null or item_id is null or msku is null or trim(msku)='')"
                 ),
                 {
