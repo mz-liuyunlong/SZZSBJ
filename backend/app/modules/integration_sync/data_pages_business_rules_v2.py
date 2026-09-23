@@ -665,7 +665,6 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 value is not None
                 for value in (purchase_total, first_leg_total, wfs_effective_total, storage_total)
             )
-            sample_cost_amount = _cost_loss_total(cost, sample_qty)
             refund_cost_amount = (
                 _decimal(row["refund_amount"]) if row["refund_amount"] is not None else None
             )
@@ -733,7 +732,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             self.session.execute(
                 text(
                     "update mart_daily_sales_item_day set owner_ref=:owner_ref,return_rate_30d=:return_rate_30d,"
-                    "sample_amount=:sample_amount,refund_amount=:refund_amount,refund_currency_code='USD',"
+                    "refund_amount=:refund_amount,refund_currency_code='USD',"
                     "wfs_fee_unit_amount=:wfs_unit,wfs_fee_total_amount=:wfs_total,wfs_fee_currency_code='USD',"
                     "wfs_fee_expected_unit_amount=:wfs_unit,wfs_fee_expected_total_amount=:wfs_expected_total,"
                     "wfs_fee_actual_total_amount=:wfs_actual_total,wfs_fee_variance_amount=:wfs_variance,"
@@ -757,7 +756,6 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "id": str(row["id"]),
                     "owner_ref": cost.owner_ref if cost is not None else None,
                     "return_rate_30d": return_rate_30d,
-                    "sample_amount": sample_cost_amount,
                     "refund_amount": refund_cost_amount,
                     "wfs_unit": cost.wfs_fee_unit_usd if cost is not None else None,
                     "wfs_total": wfs_effective_total,
