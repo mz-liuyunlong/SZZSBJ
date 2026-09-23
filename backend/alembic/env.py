@@ -8,6 +8,7 @@ import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metada
 import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
+import app.modules.pmc_purchase.gate3_models  # noqa: F401  # Register PMC purchase Gate 3.
 import app.modules.pmc_purchase.models  # noqa: F401  # Register PMC purchase ODS.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.

@@ -1,7 +1,7 @@
 """Pure business-rule calculations for the PMC purchase board (Gate 3, PR G3-C).
 
 Every function here is deterministic, side-effect free and database free, so
-the rules in ``docs/business-rules/pmc-purchase-rules.md`` (v3) can be tested
+the rules in ``docs/business-rules/pmc-purchase-rules.md`` (v4) can be tested
 one clause at a time. The DWD publisher and the DWS refresh call these
 functions; nothing here knows about SQLAlchemy sessions or provider clients.
 
@@ -44,8 +44,15 @@ FULFILLMENT_WFS: Final = "1"
 FULFILLMENT_NOT_READY: Final = frozenset({"0", "2"})
 
 type StageCode = Literal["S1", "S2", "S3", "S4", "S9", "S0", "UNKNOWN"]
+# Owner decision 2026-09-21 (#144): no manual ItemID assignment on the board; the
+# shipment-traceback slot is the domestic-warehouse packing slip. ``pending_packing_slip``
+# marks rows that will be back-filled once a packing slip exists.
 type ItemIdSource = Literal[
-    "manual", "from_system_plan", "from_plan_remark", "from_shipment", "unresolved"
+    "from_system_plan",
+    "from_plan_remark",
+    "from_packing_slip",
+    "pending_packing_slip",
+    "unresolved",
 ]
 type SkuCycleSource = Literal["samples", "baseline_mix", "lingxing_default", "no_baseline"]
 type SampleExclusion = Literal["auto_short", "manual", "before_baseline", "outside_window"]
@@ -154,22 +161,28 @@ class ItemIdAttribution:
 
 def resolve_item_id(
     *,
-    manual_item_id: str | None = None,
     system_plan_item_id: str | None = None,
     plan_remark_item_id: str | None = None,
+    packing_slip_item_id: str | None = None,
+    packing_slip_pending: bool = False,
 ) -> ItemIdAttribution:
-    """Apply the §5.1 priority: manual > from_system_plan > from_plan_remark > unresolved.
+    """Apply the §5.1 priority (rules v4, Owner decision 2026-09-21):
 
-    ``from_shipment`` (§5.3) is reserved for the WFS shipment module and is never
-    produced here. Blank strings count as absent.
+    ``from_system_plan`` > ``from_plan_remark`` > ``from_packing_slip`` > ``unresolved``.
+    There is no manual source: the board never accepts a hand-typed ItemID. When no
+    source resolves and the row is still waiting for a packing slip (``packing_slip_pending``),
+    the attribution is ``pending_packing_slip`` rather than ``unresolved`` so the board
+    can label it 待打包回填 instead of 待处理. Blank strings count as absent.
     """
 
-    if _nonblank(manual_item_id):
-        return ItemIdAttribution(str(manual_item_id).strip(), "manual")
     if _nonblank(system_plan_item_id):
         return ItemIdAttribution(str(system_plan_item_id).strip(), "from_system_plan")
     if _nonblank(plan_remark_item_id):
         return ItemIdAttribution(str(plan_remark_item_id).strip(), "from_plan_remark")
+    if _nonblank(packing_slip_item_id):
+        return ItemIdAttribution(str(packing_slip_item_id).strip(), "from_packing_slip")
+    if packing_slip_pending:
+        return ItemIdAttribution(None, "pending_packing_slip")
     return ItemIdAttribution(None, "unresolved")
 
 
@@ -181,7 +194,7 @@ def wfs_not_ready(item_id_source: ItemIdSource, fulfillment_type: object) -> boo
     ``2`` (seller fulfilled), ``False`` for ``1`` (WFS).
     """
 
-    if item_id_source == "unresolved":
+    if item_id_source in ("unresolved", "pending_packing_slip"):
         return None
     if fulfillment_type is None or isinstance(fulfillment_type, bool):
         return None

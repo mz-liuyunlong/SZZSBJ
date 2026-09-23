@@ -1,4 +1,4 @@
-"""Business-rule tests for app.modules.pmc_purchase.calculations (rules v3)."""
+"""Business-rule tests for app.modules.pmc_purchase.calculations (rules v4)."""
 
 from __future__ import annotations
 
@@ -104,24 +104,34 @@ def test_parse_itemid_remark_requires_exactly_eleven_digits(
     assert parse_itemid_remark(remark) == expected
 
 
-def test_resolve_item_id_priority_manual_over_system_plan_over_remark() -> None:
+def test_resolve_item_id_priority_system_plan_over_remark_over_packing_slip() -> None:
+    # Rules v4 §5.1 (Owner 2026-09-21): no manual source on the purchase board.
     assert (
         resolve_item_id(
-            manual_item_id="11111111111",
             system_plan_item_id="22222222222",
             plan_remark_item_id="33333333333",
+            packing_slip_item_id="44444444444",
         ).source
-        == "manual"
-    )
-    assert (
-        resolve_item_id(system_plan_item_id="22222222222", plan_remark_item_id="33333333333").source
         == "from_system_plan"
     )
-    remark_only = resolve_item_id(plan_remark_item_id=" 33333333333 ")
-    assert remark_only.source == "from_plan_remark"
-    assert remark_only.item_id == "33333333333"
-    unresolved = resolve_item_id(manual_item_id="  ", plan_remark_item_id="")
-    assert unresolved.source == "unresolved" and unresolved.item_id is None
+    assert (
+        resolve_item_id(
+            plan_remark_item_id="33333333333", packing_slip_item_id="44444444444"
+        ).source
+        == "from_plan_remark"
+    )
+    slip = resolve_item_id(packing_slip_item_id=" 44444444444 ")
+    assert (slip.source, slip.item_id) == ("from_packing_slip", "44444444444")
+    pending = resolve_item_id(plan_remark_item_id="", packing_slip_pending=True)
+    assert (pending.source, pending.item_id) == ("pending_packing_slip", None)
+    unresolved = resolve_item_id(plan_remark_item_id="  ")
+    assert (unresolved.source, unresolved.item_id) == ("unresolved", None)
+
+
+def test_resolve_item_id_has_no_manual_parameter() -> None:
+    import inspect
+
+    assert "manual_item_id" not in inspect.signature(resolve_item_id).parameters
 
 
 # --- §5.6 WFS readiness ----------------------------------------------------------------
@@ -131,12 +141,13 @@ def test_resolve_item_id_priority_manual_over_system_plan_over_remark() -> None:
     ("source", "fulfillment_type", "expected"),
     [
         ("from_plan_remark", "1", False),
-        ("manual", "0", True),
-        ("manual", "2", True),
-        ("manual", 2, True),
+        ("from_packing_slip", "0", True),
+        ("from_system_plan", "2", True),
+        ("from_packing_slip", 2, True),
         ("from_plan_remark", None, None),
         ("from_plan_remark", "9", None),
         ("unresolved", "0", None),  # not checked when unattributed
+        ("pending_packing_slip", "0", None),  # not checked while waiting for a slip
     ],
 )
 def test_wfs_not_ready_flags_only_attributed_non_wfs_listings(
