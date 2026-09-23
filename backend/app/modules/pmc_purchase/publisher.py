@@ -103,6 +103,7 @@ class DwdPublishResult:
     lines_inserted: int
     lines_updated: int
     lines_unchanged: int
+    lines_removed: int
     parse_jobs_written: int
     lineage_written: int
     stores_known: int
@@ -116,6 +117,7 @@ class DwdPublishResult:
             f"plans={self.plans_inserted}/{self.plans_updated}/{self.plans_unchanged} "
             f"orders={self.orders_inserted}/{self.orders_updated}/{self.orders_unchanged} "
             f"lines={self.lines_inserted}/{self.lines_updated}/{self.lines_unchanged} "
+            f"lines_removed={self.lines_removed} "
             f"parse_jobs={self.parse_jobs_written} lineage={self.lineage_written} "
             f"stores_known={self.stores_known} receipt_lines={self.receipt_lines} "
             f"(inserted/updated/unchanged)"
@@ -127,6 +129,7 @@ class _Counter:
     inserted: int = 0
     updated: int = 0
     unchanged: int = 0
+    removed: int = 0
 
 
 class PmcPurchaseDwdPublisher:
@@ -195,7 +198,7 @@ class PmcPurchaseDwdPublisher:
 
         plans = self._upsert_plans(built.plans, stores, today, lineage, touched_sources)
         orders = self._upsert_orders(built.orders, lineage, touched_sources)
-        lines = self._upsert_lines(built.lines, stores, lineage, touched_sources)
+        lines = self._upsert_lines(account, built.lines, stores, lineage, touched_sources)
 
         parse_jobs = self._record_parse_jobs(touched_sources)
         if lineage:
@@ -213,6 +216,7 @@ class PmcPurchaseDwdPublisher:
             lines_inserted=lines.inserted,
             lines_updated=lines.updated,
             lines_unchanged=lines.unchanged,
+            lines_removed=lines.removed,
             parse_jobs_written=parse_jobs,
             lineage_written=len(lineage),
             stores_known=len(stores),
@@ -348,24 +352,36 @@ class PmcPurchaseDwdPublisher:
 
     def _upsert_lines(
         self,
+        account: str,
         rows: Sequence[DwdOrderLineRow],
         stores: set[str],
         lineage: list[DataLineage],
         touched: dict[UUID, _Counter],
     ) -> _Counter:
+        """Upsert the current lines and remove stale ones.
+
+        ``dwd_purchase_order_line_item`` is a *current* layer: the builder already makes
+        every line follow the chosen (newest) version of its order header, so a line that
+        exists in DWD but is absent from this build — the newer version's ``item_list`` no
+        longer contains it, or it came back with ``is_delete=1`` — is a ghost of an older
+        version and must go (Owner review of #153). Keyed by
+        ``(source_account_ref, order_sn, order_item_id, plan_key)``; nothing is removed
+        when the build produced no lines at all (empty ODS / no succeeded run).
+        """
+
         counter = _Counter()
         existing = {
             (r.order_sn, r.order_item_id, r.plan_key): r
             for r in self.session.scalars(
                 select(DwdPurchaseOrderLineItem).where(
-                    DwdPurchaseOrderLineItem.source_account_ref.in_(
-                        {r.source_account_ref for r in rows}
-                    )
+                    DwdPurchaseOrderLineItem.source_account_ref == account
                 )
             )
         }
+        current_keys: set[tuple[str, str, str]] = set()
         for row in rows:
             plan_key = row.plan_sn or ""
+            current_keys.add((row.order_sn, row.order_item_id, plan_key))
             values: dict[str, Any] = {
                 "order_sn": row.order_sn,
                 "order_item_id": row.order_item_id,
@@ -424,6 +440,11 @@ class PmcPurchaseDwdPublisher:
                     current.id, "dwd_purchase_order_line_item", LINE_LINEAGE_FIELDS, row.source
                 )
             )
+        if rows:
+            for line_key, stale in existing.items():
+                if line_key not in current_keys:
+                    self.session.delete(stale)
+                    counter.removed += 1
         self.session.flush()
         return counter
 

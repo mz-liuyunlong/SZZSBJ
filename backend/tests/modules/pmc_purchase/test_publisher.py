@@ -349,3 +349,118 @@ def test_unknown_store_is_kept_but_flagged_unmatched(session: Session) -> None:
     plan = session.scalar(select(DwdPurchasePlan))
     assert plan is not None
     assert plan.store_id == "12345" and plan.store_attributed and not plan.store_matched
+
+
+def _seed_two_line_order(session: Session) -> None:
+    """PO1 with lines L1 + L2 (both on plan P1) in the first window."""
+
+    plan_run = _run(session, "purchasePlanList")
+    session.add(_plan(*plan_run))
+    run, ref = _run(session, "purchaseOrderList")
+    session.add(_order(run, ref, item_count=2))
+    session.add(_item(run, ref))
+    session.add(_item(run, ref, item_id="L2", line_ordinal=1, quantity_plan=50, quantity_real=50))
+    session.commit()
+
+
+def _line_keys(session: Session) -> set[tuple[str, str, str]]:
+    return {
+        (r.order_sn, r.order_item_id, r.plan_key)
+        for r in session.scalars(select(DwdPurchaseOrderLineItem))
+    }
+
+
+def test_stale_line_removed_when_newer_order_version_drops_it(session: Session) -> None:
+    """Scenario A: the newer version's item_list is shorter (L2 gone)."""
+
+    _seed_two_line_order(session)
+    first = PmcPurchaseDwdPublisher(session, now=T1).publish(source_account_ref=ACCOUNT)
+    assert (first.lines_inserted, first.lines_removed) == (2, 0)
+    assert _line_keys(session) == {("PO1", "L1", "P1"), ("PO1", "L2", "P1")}
+    order_id_before = session.scalar(select(DwdPurchaseOrder.id))
+    lineage_before = session.scalar(select(func.count(DataLineage.id)))
+
+    run, ref = _run(session, "purchaseOrderList")
+    session.add(
+        _order(
+            run,
+            ref,
+            item_count=1,
+            payload_json={"update_time": "2026-09-02 08:00:00"},
+            observed_at=T2,
+        )
+    )
+    session.add(_item(run, ref, observed_at=T2))  # only L1 comes back
+    session.commit()
+
+    second = PmcPurchaseDwdPublisher(session, now=T2).publish(source_account_ref=ACCOUNT)
+    assert second.lines_removed == 1
+    assert (second.lines_inserted, second.lines_updated) == (0, 1)  # L1 re-stamped to run 2
+    assert session.scalar(select(func.count(DwdPurchaseOrderLineItem.id))) == 1
+    assert _line_keys(session) == {("PO1", "L1", "P1")}
+    # header upsert and plan untouched; parse job / lineage still recorded for the new page
+    order = session.scalar(select(DwdPurchaseOrder))
+    assert order is not None and order.id == order_id_before and order.source_run_id == run
+    assert order.line_count == 1
+    assert session.scalar(select(func.count(DwdPurchasePlan.id))) == 1
+    assert second.parse_jobs_written == 1
+    job = session.scalar(select(ParseJob).where(ParseJob.raw_request_ref_id == ref))
+    assert job is not None and job.parser_key == PARSER_KEY
+    assert (session.scalar(select(func.count(DataLineage.id))) or 0) > (lineage_before or 0)
+
+
+def test_stale_line_removed_when_newer_version_marks_it_deleted(session: Session) -> None:
+    """Scenario B: L2 comes back with is_delete=1 → builder drops it → DWD must too."""
+
+    _seed_two_line_order(session)
+    PmcPurchaseDwdPublisher(session, now=T1).publish(source_account_ref=ACCOUNT)
+    assert session.scalar(select(func.count(DwdPurchaseOrderLineItem.id))) == 2
+
+    run, ref = _run(session, "purchaseOrderList")
+    session.add(
+        _order(
+            run,
+            ref,
+            item_count=2,
+            payload_json={"update_time": "2026-09-02 08:00:00"},
+            observed_at=T2,
+        )
+    )
+    session.add(_item(run, ref, observed_at=T2))
+    session.add(
+        _item(
+            run,
+            ref,
+            item_id="L2",
+            line_ordinal=1,
+            quantity_plan=50,
+            quantity_real=50,
+            is_delete=1,
+            observed_at=T2,
+        )
+    )
+    session.commit()
+
+    second = PmcPurchaseDwdPublisher(session, now=T2).publish(source_account_ref=ACCOUNT)
+    assert second.lines_removed == 1
+    assert _line_keys(session) == {("PO1", "L1", "P1")}
+    l1 = session.scalar(select(DwdPurchaseOrderLineItem))
+    assert l1 is not None and l1.order_item_id == "L1" and l1.source_run_id == run
+
+    # a third publish with nothing new is a no-op: nothing removed, nothing rewritten
+    third = PmcPurchaseDwdPublisher(session, now=T2).publish(source_account_ref=ACCOUNT)
+    assert (third.lines_removed, third.lines_updated, third.lines_unchanged) == (0, 0, 1)
+
+
+def test_no_lines_in_build_removes_nothing(session: Session) -> None:
+    """Safety: an empty build (e.g. only failed runs) never wipes the current layer."""
+
+    _seed_two_line_order(session)
+    PmcPurchaseDwdPublisher(session, now=T1).publish(source_account_ref=ACCOUNT)
+    # mark every run failed → builder sees no ODS rows
+    for run in session.scalars(select(IntegrationSyncRun)):
+        run.status = "failed"
+    session.commit()
+    result = PmcPurchaseDwdPublisher(session, now=T2).publish(source_account_ref=ACCOUNT)
+    assert result.report.orders_seen == 0 and result.lines_removed == 0
+    assert session.scalar(select(func.count(DwdPurchaseOrderLineItem.id))) == 2
