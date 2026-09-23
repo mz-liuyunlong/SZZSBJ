@@ -114,4 +114,3 @@ def test_daily_sales_preserves_sample_sales_amount() -> None:
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
     assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v1")
     assert len(DAILY_SALES_V2_VERSION) <= 64
-
