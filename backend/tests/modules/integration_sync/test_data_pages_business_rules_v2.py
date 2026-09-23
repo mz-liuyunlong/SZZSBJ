@@ -89,9 +89,9 @@ def test_daily_sales_uses_current_product_management_and_fact_backed_history() -
     assert legacy_history_query not in source
 
 
-def test_refund_attribution_requires_matching_salestat_key() -> None:
+def test_rolling_return_rate_uses_refund_management_event_dates() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
 
-    assert "and exists (" in source
-    assert "select 1 from s where s.source_account_ref=f.source_account_ref" in source
-    assert "and s.business_date_la=b.business_date_la" in source
+    assert "r.refund_effective_date between :start_day and :end_day" in source
+    assert "sum(coalesce(r.return_qty,0)) return_qty" in source
+    assert "fact_walmart_refund_items" not in source
