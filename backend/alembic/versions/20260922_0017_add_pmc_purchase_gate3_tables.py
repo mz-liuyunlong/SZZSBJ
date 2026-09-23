@@ -463,10 +463,12 @@ def upgrade() -> None:
             "sample_window, min_samples_for_average, unstable_min_samples, unstable_range_days, "
             "baseline_evict_at_samples, effective_from, effective_to, is_active, approved_by, "
             "approved_at, change_reason, created_at) VALUES (gen_random_uuid(), :rule_key, "
-            ":version, :s1_approval_days, :s2_pending_days, :default_cycle_days, :arrival_ratio, "
+            ":version, :s1_approval_days, :s2_pending_days, :default_cycle_days, "
+            "CAST(:arrival_ratio AS NUMERIC(5, 4)), "
             ":auto_exclude_below_days, :sample_window, :min_samples_for_average, "
             ":unstable_min_samples, :unstable_range_days, :baseline_evict_at_samples, "
-            ":effective_from, NULL, :is_active, :approved_by, now(), :change_reason, now())"
+            "CAST(:effective_from AS DATE), NULL, :is_active, :approved_by, "
+            "now(), :change_reason, now())"
         ).bindparams(**THRESHOLDS_V1)
     )
 
