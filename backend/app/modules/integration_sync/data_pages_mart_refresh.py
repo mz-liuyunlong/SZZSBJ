@@ -53,8 +53,7 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
             "dim_walmart_listings",
             "fact_walmart_sales_item_daily",
             "fact_walmart_sample_order_items",
-            "fact_walmart_refund_items",
-            "dws_walmart_refund_business_amounts",
+            "after_sales_refund_items",
             "fact_walmart_ad_item_sp_daily",
             "dwd_lingxing_sku_identity_index",
             "dwd_lingxing_sku_product_info_current",
@@ -67,7 +66,7 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
         boundary_notes=(
             "SaleStat data_type=1 is the authoritative daily-sales basis.",
             "Valid sample orders use a fixed UTC-7 business day converted to China time only for the Order V2 sample request.",
-            "Refund business amount is original order item sales times refunded quantity less the effective store commission.",
+            "Refund quantity, refund loss, and refund date come directly from after_sales_refund_items without purchase-date conversion.",
             "Owner, purchase cost, WFS fee, and first-leg cost are matched from Product Management by SKU.",
             "Ad spend keeps the existing interface time behavior and is aggregated by date, store, item, and MSKU.",
         ),
@@ -77,10 +76,7 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
         mart_table="mart_order_profit_sku_day",
         refresh_mode="delete_insert",
         granularity="business_date_sku",
-        source_tables=(
-            "mart_daily_sales_item_day",
-            "dws_walmart_refund_business_amounts",
-        ),
+        source_tables=("mart_daily_sales_item_day",),
         requires_business_date_window=True,
         boundary_notes=(
             "Order-profit sales totals inherit the authoritative SaleStat daily-sales basis from Daily Sales MART.",

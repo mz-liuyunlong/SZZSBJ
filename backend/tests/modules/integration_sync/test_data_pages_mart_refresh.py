@@ -32,8 +32,7 @@ def test_daily_sales_refresh_depends_on_authoritative_sales_and_business_sources
         "dim_walmart_listings",
         "fact_walmart_sales_item_daily",
         "fact_walmart_sample_order_items",
-        "fact_walmart_refund_items",
-        "dws_walmart_refund_business_amounts",
+        "after_sales_refund_items",
         "fact_walmart_ad_item_sp_daily",
         "dwd_lingxing_sku_identity_index",
         "dwd_lingxing_sku_product_info_current",
@@ -51,7 +50,6 @@ def test_order_profit_refresh_inherits_daily_sales_business_rules() -> None:
     assert spec.granularity == "business_date_sku"
     assert set(spec.source_tables) == {
         "mart_daily_sales_item_day",
-        "dws_walmart_refund_business_amounts",
     }
 
 
