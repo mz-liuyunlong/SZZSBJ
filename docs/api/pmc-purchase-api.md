@@ -10,7 +10,8 @@ rule table and `dim_lingxing_stores`. They never request Lingxing and never read
 The single write route (PRP §7.5, SKU cycle override) appends to
 `manual_purchase_cycle_override` and rebuilds the account's DWS; it never writes DWD / ODS /
 RAW. Merging this contract does not authorize any production migration, DWD publish or DWS
-refresh; those remain Owner-authorized runbook steps.
+refresh; those remain Owner-authorized runbook steps
+(`docs/runbooks/production-pmc-purchase-gate3.md`).
 
 Path prefix is `/api/pmc/purchase` (repository convention, no `v1`; Owner 2026-09-21).
 
