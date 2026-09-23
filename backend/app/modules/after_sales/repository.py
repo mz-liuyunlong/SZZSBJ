@@ -26,17 +26,14 @@ owner_map as (
 """
 
 _REASON_EXPR = (
-    "coalesce(nullif(r.return_reason_category,''), "
-    "nullif(r.return_reason_code,''), 'UNCLASSIFIED')"
+    "coalesce(nullif(r.return_reason_category,''), nullif(r.return_reason_code,''), 'UNCLASSIFIED')"
 )
 _SKU_EXPR = "coalesce(nullif(r.local_sku,''), nullif(r.msku,''), nullif(r.item_id,''), 'UNKNOWN')"
 _PRODUCT_KEY_EXPR = (
-    "json_build_array(coalesce(r.store_id,''), coalesce(r.item_id,''), "
-    "coalesce(r.msku,''))::text"
+    "json_build_array(coalesce(r.store_id,''), coalesce(r.item_id,''), coalesce(r.msku,''))::text"
 )
 _SALES_PRODUCT_KEY_EXPR = (
-    "json_build_array(coalesce(m.store_id,''), coalesce(m.item_id,''), "
-    "coalesce(m.msku,''))::text"
+    "json_build_array(coalesce(m.store_id,''), coalesce(m.item_id,''), coalesce(m.msku,''))::text"
 )
 _REFUND_PRODUCT_IDENTITY_READY = (
     "nullif(r.store_id,'') is not null and nullif(r.item_id,'') is not null "
@@ -324,9 +321,10 @@ class AfterSalesRefundRepository:
             include_search=False,
         )
         base_sql = " and ".join(base_where)
-        rows = self.session.execute(
-            text(
-                f"""
+        rows = (
+            self.session.execute(
+                text(
+                    f"""
                 with {_OWNER_CTE}
                 select distinct r.store_id as value,
                        coalesce({_STORE_NAME_EXPR}, '未匹配店铺') as label
@@ -339,14 +337,18 @@ class AfterSalesRefundRepository:
                 where {base_sql}
                 order by label
                 """
-            ),
-            params,
-        ).mappings().all()
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         stores = [dict(row) for row in rows]
 
-        rows = self.session.execute(
-            text(
-                f"""
+        rows = (
+            self.session.execute(
+                text(
+                    f"""
                 with {_OWNER_CTE}
                 select distinct om.owner_ref as value, om.owner_ref as label
                 from after_sales_refund_items r
@@ -360,14 +362,18 @@ class AfterSalesRefundRepository:
                   and btrim(om.owner_ref) <> ''
                 order by label
                 """
-            ),
-            params,
-        ).mappings().all()
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         owners = [dict(row) for row in rows]
 
-        rows = self.session.execute(
-            text(
-                f"""
+        rows = (
+            self.session.execute(
+                text(
+                    f"""
                 with {_OWNER_CTE}
                 select distinct {_REASON_EXPR} as value, {_REASON_EXPR} as label
                 from after_sales_refund_items r
@@ -379,9 +385,12 @@ class AfterSalesRefundRepository:
                 where {base_sql}
                 order by label
                 """
-            ),
-            params,
-        ).mappings().all()
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         reasons = [dict(row) for row in rows]
         return {
             "stores": stores,
@@ -407,11 +416,7 @@ class AfterSalesRefundRepository:
         sales_where, sales_params = self._sales_where(query, account_refs)
         sales_where.append(_SALES_PRODUCT_IDENTITY_READY)
         params.update(
-            {
-                f"sales_{key}": value
-                for key, value in sales_params.items()
-                if key != "accounts"
-            }
+            {f"sales_{key}": value for key, value in sales_params.items() if key != "accounts"}
         )
         params["limit"] = limit
 
@@ -553,10 +558,11 @@ class AfterSalesRefundRepository:
                 where {where_sql}
             )
         """
-        summary = self.session.execute(
-            text(
-                common
-                + """
+        summary = (
+            self.session.execute(
+                text(
+                    common
+                    + """
                 select
                     avg(lag_days) filter (where lag_days is not null) as average_days,
                     percentile_cont(0.5) within group (order by lag_days)
@@ -565,9 +571,12 @@ class AfterSalesRefundRepository:
                     count(*) filter (where lag_days is null)::int as missing_time_rows
                 from scoped
                 """
-            ),
-            params,
-        ).mappings().one()
+                ),
+                params,
+            )
+            .mappings()
+            .one()
+        )
 
         buckets = (
             self.session.execute(

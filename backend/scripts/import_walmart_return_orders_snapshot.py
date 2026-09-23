@@ -352,9 +352,7 @@ def main() -> int:
                     local_sku = (item.get("localSku") or "").strip() or None
                     msku = (item.get("msku") or "").strip() or None
                     return_qty = parse_qty(item.get("quantityDisplay"))
-                    current_refund_status = str(
-                        item.get("currentRefundStatus") or ""
-                    ).strip()
+                    current_refund_status = str(item.get("currentRefundStatus") or "").strip()
                     if current_refund_status in EXCLUDED_REFUND_STATUSES:
                         conn.execute(
                             text(
@@ -378,25 +376,17 @@ def main() -> int:
                     refund_completed = current_refund_status == REFUND_COMPLETED
                     refund_effective = True
                     status_time = parse_dt(item.get("statusTime"))
-                    refund_effective_date = (
-                        return_order_at.date()
-                        if return_order_at
-                        else None
-                    )
+                    refund_effective_date = return_order_at.date() if return_order_at else None
                     listing = lookup_listing(conn, listing_table, listing_cols, store_id, msku)
                     product = lookup_product(conn, product_table, product_cols, local_sku)
 
                     unit_total_cost = product["unit_total_cost"]
                     refund_loss_amount = (
-                        return_qty * unit_total_cost
-                        if unit_total_cost is not None
-                        else None
+                        return_qty * unit_total_cost if unit_total_cost is not None else None
                     )
 
                     refund_amount = decimal_or_none(item.get("lineTotalAmount"))
-                    refund_currency_code = (
-                        str(item.get("lineTotalCurrency") or "").strip() or None
-                    )
+                    refund_currency_code = str(item.get("lineTotalCurrency") or "").strip() or None
 
                     purchase_order_id = item.get("purchaseOrderId")
                     source_item_hash = stable_hash(order, item)

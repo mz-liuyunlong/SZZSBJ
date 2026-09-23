@@ -53,9 +53,7 @@ def _decimal(value: Any) -> Decimal:
 def _rate(numerator: Decimal, denominator: Decimal) -> Decimal | None:
     if denominator <= 0:
         return None
-    return (numerator / denominator * _HUNDRED).quantize(
-        Decimal("0.0001"), rounding=ROUND_HALF_UP
-    )
+    return (numerator / denominator * _HUNDRED).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
 def _change_rate(current: Decimal, previous: Decimal) -> Decimal | None:
@@ -113,9 +111,7 @@ class AfterSalesRefundService:
             refund_orders_change_rate=_change_rate(
                 Decimal(summary.refund_orders), Decimal(previous_summary.refund_orders)
             ),
-            refund_qty_change_rate=_change_rate(
-                summary.refund_qty, previous_summary.refund_qty
-            ),
+            refund_qty_change_rate=_change_rate(summary.refund_qty, previous_summary.refund_qty),
             refund_loss_change_rate=_change_rate(
                 summary.refund_loss_amount, previous_summary.refund_loss_amount
             ),
@@ -136,9 +132,7 @@ class AfterSalesRefundService:
             stores=[FilterOption(**item) for item in raw_facets["stores"]],
             owners=[FilterOption(**item) for item in raw_facets["owners"]],
             reasons=[FilterOption(**item) for item in raw_facets["reasons"]],
-            responsibilities=[
-                FilterOption(**item) for item in raw_facets["responsibilities"]
-            ],
+            responsibilities=[FilterOption(**item) for item in raw_facets["responsibilities"]],
         )
         return RefundOverviewData(
             summary=summary,
@@ -241,12 +235,8 @@ class AfterSalesRefundService:
             refund_loss_amount=refund_loss,
             sales_qty=sales_qty,
             refund_rate=_rate(refund_qty, sales_qty),
-            avg_refund_amount_per_unit=(
-                refund_amount / refund_qty if refund_qty > 0 else None
-            ),
-            avg_refund_loss_per_unit=(
-                refund_loss / refund_qty if refund_qty > 0 else None
-            ),
+            avg_refund_amount_per_unit=(refund_amount / refund_qty if refund_qty > 0 else None),
+            avg_refund_loss_per_unit=(refund_loss / refund_qty if refund_qty > 0 else None),
         )
 
     def _trend(
@@ -254,9 +244,7 @@ class AfterSalesRefundService:
         query: RefundBaseQuery,
         account_refs: frozenset[str],
     ) -> list[RefundTrendPoint]:
-        refund_rows = {
-            row["day"]: row for row in self.repository.refund_trend(query, account_refs)
-        }
+        refund_rows = {row["day"]: row for row in self.repository.refund_trend(query, account_refs)}
         sales_rows = {
             row["day"]: _decimal(row["sales_qty"])
             for row in self.repository.sales_trend(query, account_refs)
@@ -294,9 +282,7 @@ class AfterSalesRefundService:
             refund_amount=_decimal(row["refund_amount"]),
             refund_loss_amount=_decimal(row["refund_loss_amount"]),
             sales_qty=_decimal(row["sales_qty"]),
-            refund_rate=(
-                _decimal(row["refund_rate"]) if row["refund_rate"] is not None else None
-            ),
+            refund_rate=(_decimal(row["refund_rate"]) if row["refund_rate"] is not None else None),
             top_reason=row["top_reason"],
             risk_level="pending",
         )

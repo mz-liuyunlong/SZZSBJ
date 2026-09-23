@@ -35,17 +35,13 @@ PLATFORM_CODE = "walmart"
 REFUND_COMPLETED = "REFUND_COMPLETED"
 EXCLUDED_REFUND_STATUSES = frozenset({"NOT_REFUNDED", "CANCELLED"})
 
-RETURN_RAW_POLICY_KEY = (
-    "lingxing-data-pages-walmart-return-order-list-v1"
-)
+RETURN_RAW_POLICY_KEY = "lingxing-data-pages-walmart-return-order-list-v1"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
-    source_group = parser.add_mutually_exclusive_group(
-        required=True
-    )
+    source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
         "--input-json",
         help="Saved returnOrder/list response JSON file",
@@ -53,10 +49,7 @@ def parse_args() -> argparse.Namespace:
     source_group.add_argument(
         "--from-ods",
         action="store_true",
-        help=(
-            "Read Walmart returnOrder/list RAW directly "
-            "from ods_api_raw_blobs."
-        ),
+        help=("Read Walmart returnOrder/list RAW directly from ods_api_raw_blobs."),
     )
 
     parser.add_argument(
@@ -161,9 +154,7 @@ def filter_payload_for_target_date(
     selected: list[dict[str, Any]] = []
 
     for order in return_orders:
-        return_order_at = parse_datetime(
-            order.get("returnOrderDate")
-        )
+        return_order_at = parse_datetime(order.get("returnOrderDate"))
 
         if return_order_at is None:
             continue
@@ -186,9 +177,10 @@ def load_payload_from_ods(
 ) -> dict[str, Any]:
     """Load latest Walmart returnOrder rows from DATA-PAGES ODS."""
 
-    orders = conn.execute(
-        text(
-            """
+    orders = (
+        conn.execute(
+            text(
+                """
             with raw_orders as (
                 select
                     b.received_at,
@@ -230,21 +222,16 @@ def load_payload_from_ods(
             from latest_orders
             order by return_id
             """
-        ),
-        {
-            "policy_key": RETURN_RAW_POLICY_KEY,
-        },
-    ).scalars().all()
+            ),
+            {
+                "policy_key": RETURN_RAW_POLICY_KEY,
+            },
+        )
+        .scalars()
+        .all()
+    )
 
-    payload = {
-        "data": {
-            "list": [
-                order
-                for order in orders
-                if isinstance(order, dict)
-            ]
-        }
-    }
+    payload = {"data": {"list": [order for order in orders if isinstance(order, dict)]}}
 
     return filter_payload_for_target_date(
         payload,
@@ -476,21 +463,14 @@ def summarize_refund_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
             raw_item_rows += 1
             status = str(
-                item.get("currentRefundStatus")
-                or order.get("currentRefundStatus")
-                or ""
+                item.get("currentRefundStatus") or order.get("currentRefundStatus") or ""
             ).strip()
-            status_counts[status or "<BLANK>"] = status_counts.get(
-                status or "<BLANK>", 0
-            ) + 1
+            status_counts[status or "<BLANK>"] = status_counts.get(status or "<BLANK>", 0) + 1
 
             if status not in EXCLUDED_REFUND_STATUSES and return_order_id:
                 counted_order_ids.add(return_order_id)
 
-    excluded_rows = sum(
-        status_counts.get(status, 0)
-        for status in EXCLUDED_REFUND_STATUSES
-    )
+    excluded_rows = sum(status_counts.get(status, 0) for status in EXCLUDED_REFUND_STATUSES)
 
     return {
         "raw_item_rows": raw_item_rows,
@@ -499,7 +479,6 @@ def summarize_refund_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "counted_order_rows": len(counted_order_ids),
         "status_counts": status_counts,
     }
-
 
 
 def collect_excluded_item_keys(
@@ -519,9 +498,7 @@ def collect_excluded_item_keys(
         if not isinstance(items, list):
             continue
 
-        return_order_id = str(
-            order.get("returnOrderId") or ""
-        ).strip()
+        return_order_id = str(order.get("returnOrderId") or "").strip()
 
         if not return_order_id:
             continue
@@ -531,9 +508,7 @@ def collect_excluded_item_keys(
                 continue
 
             current_refund_status = str(
-                item.get("currentRefundStatus")
-                or order.get("currentRefundStatus")
-                or ""
+                item.get("currentRefundStatus") or order.get("currentRefundStatus") or ""
             ).strip()
 
             if current_refund_status not in EXCLUDED_REFUND_STATUSES:
@@ -631,44 +606,27 @@ def build_rows(
             if current_refund_status in EXCLUDED_REFUND_STATUSES:
                 continue
 
-            refund_completed = (
-                current_refund_status == REFUND_COMPLETED
-            )
+            refund_completed = current_refund_status == REFUND_COMPLETED
             refund_effective = True
 
-            return_order_at = parse_datetime(
-                order.get("returnOrderDate")
-            )
+            return_order_at = parse_datetime(order.get("returnOrderDate"))
 
             purchase_time_at = parse_datetime(
-                item.get("purchaseTimeLocale")
-                or order.get("purchaseTimeLocale")
+                item.get("purchaseTimeLocale") or order.get("purchaseTimeLocale")
             )
 
-            status_time = parse_datetime(
-                item.get("statusTime")
-                or order.get("statusTime")
-            )
+            status_time = parse_datetime(item.get("statusTime") or order.get("statusTime"))
 
             refund_effective_date = (
-                return_order_at.date()
-                if refund_effective and return_order_at
-                else None
+                return_order_at.date() if refund_effective and return_order_at else None
             )
 
             refund_loss_date = refund_effective_date
 
-            refund_amount = decimal_or_none(
-                item.get("lineTotalAmount")
-            )
-            refund_currency_code = (
-                str(item.get("lineTotalCurrency") or "").strip()
-                or None
-            )
+            refund_amount = decimal_or_none(item.get("lineTotalAmount"))
+            refund_currency_code = str(item.get("lineTotalCurrency") or "").strip() or None
 
-            return_qty = quantity_from_display(
-                item.get("quantityDisplay")
-            )
+            return_qty = quantity_from_display(item.get("quantityDisplay"))
 
             listing = listing_map.get((store_id or "", msku or ""), {})
             item_id = listing.get("item_id")
@@ -688,9 +646,7 @@ def build_rows(
 
             unit_total_cost = cost["unit_total_cost"]
             refund_loss_amount = (
-                return_qty * unit_total_cost
-                if unit_total_cost is not None
-                else None
+                return_qty * unit_total_cost if unit_total_cost is not None else None
             )
 
             rows.append(
@@ -710,26 +666,16 @@ def build_rows(
                     "site_code": None,
                     "raw_site_code": raw_site_code,
                     "return_type": order.get("returnType"),
-
                     "return_order_at": return_order_at,
                     "purchase_time_at": purchase_time_at,
-
                     # Temporary dual-write while duplicate
                     # after-sales columns are consolidated later.
                     "return_order_date": return_order_at,
-
                     "status_time": status_time,
-                    "current_refund_status": (
-                        current_refund_status or None
-                    ),
-
+                    "current_refund_status": (current_refund_status or None),
                     "refund_completed": refund_completed,
-
                     "refund_effective": True,
-                    "refund_effective_date": (
-                        refund_effective_date
-                    ),
-
+                    "refund_effective_date": (refund_effective_date),
                     "refund_loss_effective": True,
                     "refund_loss_date": refund_loss_date,
                     "refund_amount": refund_amount,
@@ -920,9 +866,7 @@ def upsert_rows(conn: Connection, rows: list[dict[str, Any]]) -> None:
 def main() -> None:
     args = parse_args()
 
-    target_date = date.fromisoformat(
-        args.target_date
-    )
+    target_date = date.fromisoformat(args.target_date)
 
     engine = create_engine(
         get_database_url(get_settings()),
@@ -939,18 +883,10 @@ def main() -> None:
 
         else:
             if not args.input_json:
-                raise ValueError(
-                    "--input-json is required"
-                )
+                raise ValueError("--input-json is required")
 
             source_payload = unwrap_response(
-                json.loads(
-                    Path(
-                        args.input_json
-                    ).read_text(
-                        encoding="utf-8"
-                    )
-                )
+                json.loads(Path(args.input_json).read_text(encoding="utf-8"))
             )
 
             payload = filter_payload_for_target_date(
@@ -960,9 +896,7 @@ def main() -> None:
 
             source_mode = "file"
 
-        listing_source_table = (
-            find_listing_source_table(conn)
-        )
+        listing_source_table = find_listing_source_table(conn)
 
         listing_map = build_listing_map(
             conn,
@@ -984,78 +918,32 @@ def main() -> None:
             cost_map=cost_map,
         )
 
-        completed = sum(
-            1
-            for row in rows
-            if row["refund_completed"]
-        )
+        completed = sum(1 for row in rows if row["refund_completed"])
 
-        refund_effective = sum(
-            1
-            for row in rows
-            if row["refund_effective"]
-        )
+        refund_effective = sum(1 for row in rows if row["refund_effective"])
 
-        loss_effective = sum(
-            1
-            for row in rows
-            if row["refund_loss_effective"]
-        )
+        loss_effective = sum(1 for row in rows if row["refund_loss_effective"])
 
-        refund_order_count = len(
-            {
-                row["return_order_id"]
-                for row in rows
-                if row["return_order_id"]
-            }
-        )
+        refund_order_count = len({row["return_order_id"] for row in rows if row["return_order_id"]})
 
         refund_amount_total = sum(
-            (
-                row["refund_amount"]
-                for row in rows
-                if row["refund_amount"] is not None
-            ),
+            (row["refund_amount"] for row in rows if row["refund_amount"] is not None),
             Decimal("0"),
         )
 
-        refund_amount_missing = sum(
-            1
-            for row in rows
-            if row["refund_amount"] is None
-        )
+        refund_amount_missing = sum(1 for row in rows if row["refund_amount"] is None)
 
         refund_currency_codes = sorted(
-            {
-                row["refund_currency_code"]
-                for row in rows
-                if row["refund_currency_code"]
-            }
+            {row["refund_currency_code"] for row in rows if row["refund_currency_code"]}
         )
 
-        matched_cost = sum(
-            1
-            for row in rows
-            if row["cost_match_status"] == "matched"
-        )
+        matched_cost = sum(1 for row in rows if row["cost_match_status"] == "matched")
 
-        matched_listing = sum(
-            1
-            for row in rows
-            if row["listing_match_status"] == "matched"
-        )
+        matched_listing = sum(1 for row in rows if row["listing_match_status"] == "matched")
 
-        blank_return_order_id = sum(
-            1
-            for row in rows
-            if not row["return_order_id"]
-        )
+        blank_return_order_id = sum(1 for row in rows if not row["return_order_id"])
 
-        blank_store_id = sum(
-            1
-            for row in rows
-            if not row["store_id"]
-        )
+        blank_store_id = sum(1 for row in rows if not row["store_id"])
 
         print(
             "source_mode=",
@@ -1143,20 +1031,14 @@ def main() -> None:
         )
 
         if args.dry_run:
-            print(
-                "dry_run=true, skip upsert"
-            )
+            print("dry_run=true, skip upsert")
             return
 
         if blank_return_order_id:
-            raise ValueError(
-                "return_order_id is missing"
-            )
+            raise ValueError("return_order_id is missing")
 
         if blank_store_id:
-            raise ValueError(
-                "store_id is missing"
-            )
+            raise ValueError("store_id is missing")
 
         excluded_item_keys = collect_excluded_item_keys(payload)
         delete_excluded_rows(

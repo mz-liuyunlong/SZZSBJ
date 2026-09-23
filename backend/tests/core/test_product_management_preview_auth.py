@@ -215,6 +215,7 @@ def test_correct_preview_token_creates_only_the_approved_principal(
                 "products:cost:read",
                 "integrations:read",
                 "sales:daily-sales:read",
+                "aftersales:refund-management:read",
                 "business-rules:read",
                 "business-rules:write",
                 "business-rules:execute",

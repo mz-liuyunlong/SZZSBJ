@@ -47,7 +47,6 @@ def test_product_risk_sales_join_uses_store_item_msku_and_same_date_window() -> 
     assert params["sales_end_date"] == date(2026, 9, 30)
 
 
-
 def test_product_risk_one_day_uses_same_one_day_sales_window() -> None:
     session = _CaptureSession()
     repository = AfterSalesRefundRepository(session)  # type: ignore[arg-type]
@@ -63,6 +62,7 @@ def test_product_risk_one_day_uses_same_one_day_sales_window() -> None:
     assert params["end_date"] == date(2026, 9, 1)
     assert params["sales_start_date"] == date(2026, 9, 1)
     assert params["sales_end_date"] == date(2026, 9, 1)
+
 
 def test_selected_product_sales_filter_uses_composite_identity() -> None:
     session = _CaptureSession()
