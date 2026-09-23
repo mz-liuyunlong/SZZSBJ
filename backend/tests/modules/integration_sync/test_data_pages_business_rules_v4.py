@@ -36,5 +36,5 @@ def test_v4_refund_identity_health_reads_refund_management_fact() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._resolve_refund_items)
 
     assert "after_sales_refund_items" in source
-    assert "refund_effective_date=:day" in source
+    assert "return_order_at::date=:day" in source
     assert "fact_walmart_refund_items" not in source
