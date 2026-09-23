@@ -6,6 +6,9 @@ runner). Merging any of them authorizes nothing. Every step below is a productio
 that the Project Owner performs personally, one at a time, after writing an execution
 record into the log at the end of this file. No step may run without its record.
 
+Gate 3 (migration → DWD publish → DWS refresh) has its own runbook:
+`docs/runbooks/production-pmc-purchase-gate3.md`; it starts from the ODS rows this one produced.
+
 Source decision: `docs/data-sources/decisions/pmc-purchase-board-decision.md`
 (`READY_FOR_PRP`, Owner approval 2026-09-18, 方案 A). PRP: `PRPs/pmc-purchase-board.md`.
 
