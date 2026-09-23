@@ -3,8 +3,8 @@
 
 > **2026-09-24 refund truth override:** Refund Management is the only refund source of truth.
 > Daily Sales consumes `after_sales_refund_items` directly for refund quantity, refund loss,
-> refund date, and 30-day return rate. The refund date is `refund_effective_date` as persisted
-> by Refund Management; do not convert `purchaseTimeLocale`, do not attribute refunds back to
+> refund date, and 30-day return rate. The refund date is the raw refund log date from
+> `return_order_at::date` (`returnOrderDate`); do not convert `purchaseTimeLocale`, do not attribute refunds back to
 > the original sales day, and do not use `fact_walmart_refund_items` or
 > `dws_walmart_refund_business_amounts` for Daily Sales. This rule supersedes older refund
 > statements later in this historical PRP.
@@ -78,12 +78,3 @@
 - [ ] 不做 SYNC-1 同步任务真实执行闭环验收。
 - [ ] 不做 WORKER-1 后台任务生产化。
 - [ ] 不接入生产数据库。
-- [ ] 不调用真实领星接口。
-- [ ] 不修改 `old-system/**`。
-- [ ] 不实现监控系统字段：购物车状态、是否被跟卖、沃尔玛卖家等。
-- [ ] 不实现旧库字段：停用原因、GPT 分析、系统运营日志、运营日志。
-- [ ] 不创建或修改平台 / ERP 状态。
-
-## 4. Navigation / Page
-
-```text
