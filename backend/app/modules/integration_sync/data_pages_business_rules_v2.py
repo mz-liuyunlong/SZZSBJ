@@ -29,7 +29,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+after-sales-purchase-day-refund-v1"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v1"
 
 
 def _money_decimal(value: object) -> Decimal | None:

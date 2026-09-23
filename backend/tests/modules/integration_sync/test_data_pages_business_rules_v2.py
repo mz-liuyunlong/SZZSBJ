@@ -2,6 +2,7 @@ import inspect
 from decimal import Decimal
 
 from app.modules.integration_sync.data_pages_business_rules_v2 import (
+    DAILY_SALES_V2_VERSION,
     DataPagesRealSyncRunner,
     _cost_totals,
     _money_decimal,
@@ -108,3 +109,8 @@ def test_daily_sales_preserves_sample_sales_amount() -> None:
     assert "sum(coalesce(s.unit_price_amount,0)*coalesce(s.quantity,0)) sample_amount" in source
     assert "sample_amount=:sample_amount" not in source
     assert "sample_cost_amount" not in source
+
+
+def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
+    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v1")
+    assert len(DAILY_SALES_V2_VERSION) <= 64
