@@ -1,0 +1,1697 @@
+.refund-management {
+  --refund-blue: #1677ff;
+  --refund-text: #1f2937;
+  --refund-text-2: #475467;
+  --refund-muted: #8a95a6;
+  --refund-line: #e5eaf0;
+  --refund-page: #f5f7fa;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 1180px;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--refund-text);
+}
+
+.refund-management--analysis {
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.refund-management--details {
+  overflow: hidden;
+}
+
+.refund-management__page-head {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.refund-management__page-head .ant-typography {
+  margin: 0;
+}
+
+.refund-management__page-head h3.ant-typography {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+.refund-management__page-head p.ant-typography {
+  flex: 0 1 auto;
+  margin: 0;
+  color: #8a95a6;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.refund-management__toolbar-card {
+  margin-top: 8px;
+  border-color: var(--refund-line);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.refund-management__toolbar-card > .ant-card-body {
+  padding: 7px 9px;
+}
+
+.refund-management__toolbar {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.refund-management__toolbar .ant-btn,
+.refund-management__toolbar .ant-select-selector,
+.refund-management__toolbar .ant-picker,
+.refund-management__toolbar .ant-radio-button-wrapper {
+  min-height: 34px;
+}
+
+.refund-management__toolbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.refund-management__date-presets {
+  flex: none;
+  white-space: nowrap;
+}
+
+.refund-management__date-presets .ant-radio-button-wrapper {
+  padding-inline: 12px;
+  line-height: 32px;
+}
+
+.refund-management__date-range {
+  width: 250px;
+  flex: 0 0 250px;
+}
+
+.refund-management__search {
+  width: 390px;
+  flex: 0 0 390px;
+}
+
+.refund-management__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.refund-management__kpi {
+  height: 104px;
+  position: relative;
+  overflow: hidden;
+  border-color: var(--refund-line);
+  border-radius: 11px;
+  box-shadow: none;
+}
+
+.refund-management__kpi > .ant-card-body {
+  padding: 10px 15px;
+}
+
+.refund-management__kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--kpi-accent);
+}
+
+.refund-management__kpi--blue {
+  --kpi-accent: #1677ff;
+  background: linear-gradient(135deg, #fff 68%, #eef6ff);
+}
+
+.refund-management__kpi--purple {
+  --kpi-accent: #7c5cff;
+  background: linear-gradient(135deg, #fff 68%, #f5f1ff);
+}
+
+.refund-management__kpi--green {
+  --kpi-accent: #16a36a;
+  background: linear-gradient(135deg, #fff 68%, #ecf9f3);
+}
+
+.refund-management__kpi--orange {
+  --kpi-accent: #f08a24;
+  background: linear-gradient(135deg, #fff 68%, #fff4eb);
+}
+
+.refund-management__kpi-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.refund-management__kpi-head em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.refund-management__kpi > .ant-card-body > strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 25px;
+  line-height: 28px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+}
+
+.refund-management__kpi-foot {
+  margin-top: 4px;
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.refund-management__kpi-foot b {
+  color: #e5484d;
+  font-weight: 700;
+}
+
+.refund-management__tabs {
+  margin-top: 10px;
+}
+
+.refund-management__tabs > .ant-tabs-nav {
+  height: 46px;
+  margin: 0 !important;
+  padding: 0 14px;
+  border: 1px solid var(--refund-line);
+  border-radius: 10px 10px 0 0;
+  background: #fff;
+}
+
+.refund-management__tabs > .ant-tabs-nav::before {
+  border-bottom: 0 !important;
+}
+
+.refund-management__tabs .ant-tabs-tab {
+  padding: 14px 3px 11px;
+  font-size: 12px;
+}
+
+.refund-management__tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 28px;
+}
+
+.refund-management__tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 800;
+}
+
+.refund-management__tabs .ant-tabs-ink-bar {
+  height: 3px !important;
+  border-radius: 3px;
+}
+
+.refund-management__tabs .ant-tabs-content-holder {
+  border: 1px solid var(--refund-line);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  background: #f7f9fc;
+}
+
+.refund-management__analysis {
+  padding: 10px;
+  background: #f7f9fc;
+}
+
+.refund-management__analysis-card {
+  border-color: var(--refund-line);
+  border-radius: 11px;
+  box-shadow: none;
+}
+
+.refund-management__analysis-card > .ant-card-body {
+  padding: 10px;
+}
+
+.refund-management__overview-grid {
+  display: grid;
+  grid-template-columns: minmax(620px, 1.35fr) minmax(420px, 0.65fr);
+  gap: 10px;
+}
+
+.refund-management__overview-grid > .ant-card {
+  height: 330px;
+}
+
+.refund-management__card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.refund-management__card-head--compact {
+  margin-bottom: 5px;
+}
+
+.refund-management__card-head h3 {
+  margin: 0;
+  color: #344054;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 850;
+}
+
+.refund-management__card-head p {
+  margin: 3px 0 0;
+  color: #98a2b3;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.refund-management__overview-chart {
+  height: 258px !important;
+}
+
+.refund-management__reason-list {
+  padding-top: 1px;
+}
+
+.refund-management__reason-row {
+  height: 51px;
+  display: grid;
+  grid-template-columns: 105px minmax(160px, 1fr) 55px 68px;
+  align-items: center;
+  gap: 12px;
+  padding-inline: 3px;
+  border-radius: 7px;
+  color: #475467;
+  font-size: 11px;
+}
+
+.refund-management__reason-row:hover {
+  background: #f7fbff;
+}
+
+.refund-management__reason-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eaf0f6;
+}
+
+.refund-management__reason-track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #68a9f6;
+}
+
+.refund-management__reason-row strong {
+  text-align: right;
+  color: #344054;
+  font-size: 11px;
+}
+
+.refund-management__reason-row em {
+  text-align: right;
+  color: #98a2b3;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.refund-management__section-head {
+  margin: 14px 2px 8px;
+}
+
+.refund-management__section-head h2 {
+  margin: 0;
+  color: #344054;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.refund-management__section-head p {
+  margin: 3px 0 0;
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.refund-management__diagnosis-grid {
+  display: grid;
+  margin-top: 10px;
+  grid-template-columns: 280px minmax(520px, 1fr) 330px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.refund-management__risk-card {
+  height: 620px;
+  overflow: hidden;
+}
+
+.refund-management__risk-card > .ant-card-body {
+  padding: 0;
+}
+
+.refund-management__risk-card-head {
+  min-height: 64px;
+  margin: 0;
+  padding: 10px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.refund-management__risk-list {
+  height: 555px;
+  overflow: auto;
+}
+
+.refund-management__risk-item {
+  width: 100%;
+  display: block;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid #eef2f6;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.refund-management__risk-item:hover,
+.refund-management__risk-item.is-active {
+  background: #f3f8ff;
+}
+
+.refund-management__risk-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.refund-management__risk-top strong {
+  display: block;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.refund-management__risk-top span:not(.ant-tag) {
+  display: block;
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.refund-management__risk-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.refund-management__risk-metrics small {
+  display: block;
+  color: #98a2b3;
+  font-size: 8.5px;
+}
+
+.refund-management__risk-metrics b {
+  display: block;
+  margin-top: 2px;
+  color: #344054;
+  font-size: 11px;
+}
+
+.refund-management__diagnosis-center {
+  display: grid;
+  grid-template-rows: 70px 330px 200px;
+  gap: 10px;
+}
+
+.refund-management__sku-focus > .ant-card-body {
+  height: 100%;
+}
+
+.refund-management__sku-focus-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refund-management__sku-name {
+  min-width: 170px;
+}
+
+.refund-management__sku-name strong {
+  display: block;
+  color: #344054;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.refund-management__sku-name span {
+  display: block;
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 10px;
+}
+
+.refund-management__sku-stats {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(74px, 1fr));
+  gap: 7px;
+}
+
+.refund-management__sku-stats span {
+  padding: 5px 7px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.refund-management__sku-stats small {
+  display: block;
+  color: #98a2b3;
+  font-size: 8.5px;
+}
+
+.refund-management__sku-stats b {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+}
+
+.refund-management__sku-trend-chart {
+  height: 255px !important;
+}
+
+.refund-management__diagnosis-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.refund-management__diagnosis-bottom > .ant-card {
+  height: 200px;
+}
+
+.refund-management__sku-reason-chart {
+  height: 138px !important;
+}
+
+.refund-management__insight {
+  margin-top: 8px;
+  padding: 11px;
+  border: 1px solid #e7ecf2;
+  border-radius: 9px;
+  background: #fafbfd;
+}
+
+.refund-management__insight strong {
+  color: #344054;
+  font-size: 10px;
+}
+
+.refund-management__insight p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 9px;
+  line-height: 1.65;
+}
+
+.refund-management__period-card {
+  height: 620px;
+}
+
+.refund-management__period-chart {
+  height: 285px !important;
+}
+
+.refund-management__period-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.refund-management__period-stats span {
+  padding: 10px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+
+.refund-management__period-stats small {
+  display: block;
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.refund-management__period-stats b {
+  display: block;
+  margin-top: 4px;
+  color: #344054;
+  font-size: 14px;
+}
+
+.refund-management__period-note {
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid #e7ecf2;
+  border-radius: 9px;
+  background: #fafbfd;
+}
+
+.refund-management__period-note strong {
+  display: block;
+  color: #344054;
+  font-size: 10px;
+}
+
+.refund-management__period-note p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.refund-management__owner-tag {
+  margin: 0;
+  background: #f3f6fa;
+  color: #667085;
+}
+
+@media (max-width: 1500px) {
+  .refund-management__toolbar {
+    flex-wrap: wrap;
+  }
+
+  .refund-management__toolbar-spacer {
+    display: none;
+  }
+
+  .refund-management__overview-grid {
+    grid-template-columns: minmax(600px, 1.1fr) minmax(400px, 0.9fr);
+  }
+
+  .refund-management__diagnosis-grid {
+    grid-template-columns: 270px minmax(500px, 1fr) 310px;
+  }
+}
+
+/* Refund details follows the same fill-remaining-space model as global report pages. */
+.refund-management--details .refund-management__page-head,
+.refund-management--details .refund-management__toolbar-card,
+.refund-management--details .refund-management__kpis {
+  flex: 0 0 auto;
+}
+
+.refund-management--details .refund-management__tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.refund-management--details .refund-management__tabs > .ant-tabs-nav {
+  flex: 0 0 46px;
+}
+
+.refund-management--details .refund-management__tabs > .ant-tabs-content-holder {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.refund-management--details .refund-management__tabs .ant-tabs-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.refund-management--details .refund-management__tabs .ant-tabs-tabpane-active {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.refund-management--details .refund-management__detail-shell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+
+.refund-management__ordered-at-picker.ant-picker {
+  width: 128px;
+  height: 30px;
+  padding-inline: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.refund-management__ordered-at-picker.ant-picker:hover,
+.refund-management__ordered-at-picker.ant-picker-focused {
+  border-color: #91caff;
+  background: #f5faff;
+}
+
+.refund-management__ordered-at-picker .ant-picker-input > input {
+  color: #262626;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.refund-management__ordered-at-picker .ant-picker-suffix {
+  opacity: 0;
+  color: #1677ff;
+  transition: opacity 160ms ease;
+}
+
+.refund-management__ordered-at-picker:hover .ant-picker-suffix,
+.refund-management__ordered-at-picker.ant-picker-focused .ant-picker-suffix {
+  opacity: 1;
+}
+
+
+.refund-management__order-time-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.refund-management__time-edit-button.ant-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #8a95a6;
+}
+
+.refund-management__time-edit-button.ant-btn:hover {
+  color: #1677ff;
+  border-color: #cfe3ff;
+  background: #eef6ff;
+}
+
+.refund-management__manual-time-tag.ant-tag {
+  height: 20px;
+  margin: 0;
+  padding-inline: 6px;
+  border-radius: 4px;
+  background: #fff7e6;
+  color: #ad6800;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.refund-management__time-editor {
+  padding-top: 4px;
+}
+
+.refund-management__time-editor-order {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid #dfe8f2;
+  border-radius: 8px;
+  background: #f7fbff;
+  color: #475467;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.refund-management__time-editor-order strong {
+  color: #344054;
+}
+
+.refund-management__time-editor-field {
+  margin-top: 14px;
+}
+
+.refund-management__time-editor-field > label {
+  display: block;
+  margin-bottom: 7px;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.refund-management__time-editor-field > p {
+  margin: 7px 0 0;
+  color: #98a2b3;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.refund-management__time-editor-error {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid #ffccc7;
+  border-radius: 7px;
+  background: #fff1f0;
+  color: #a8071a;
+  font-size: 10px;
+}
+
+
+/* ==========================================================
+   Refund analysis segmented controls
+   Keep Ant Design Segmented behavior, reproduce V8 appearance.
+   ========================================================== */
+
+.refund-management__metric-segment.ant-segmented,
+.refund-management__view-segment.ant-segmented {
+  min-height: 31px;
+  padding: 2px;
+  border-radius: 7px;
+  background: #f3f6fa;
+  box-shadow: none;
+}
+
+.refund-management__metric-segment .ant-segmented-group,
+.refund-management__view-segment .ant-segmented-group {
+  gap: 0;
+}
+
+.refund-management__metric-segment .ant-segmented-item,
+.refund-management__view-segment .ant-segmented-item {
+  min-height: 27px;
+  border-radius: 6px;
+  color: #667085;
+  font-size: 10px;
+  line-height: 27px;
+  transition: none;
+}
+
+.refund-management__metric-segment .ant-segmented-item-label,
+.refund-management__view-segment .ant-segmented-item-label {
+  min-height: 27px;
+  padding: 0 9px;
+  line-height: 27px;
+}
+
+.refund-management__metric-segment .ant-segmented-item-selected,
+.refund-management__view-segment .ant-segmented-item-selected {
+  background: #fff;
+  color: #1677ff;
+  font-weight: 750;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.08);
+}
+
+.refund-management__metric-segment .ant-segmented-thumb,
+.refund-management__view-segment .ant-segmented-thumb {
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.08);
+}
+
+
+/* ==========================================================
+   SKU risk sorting segmented control
+   V8 source: 25px high / 9px font
+   ========================================================== */
+
+.refund-management__sku-sort-segment.ant-segmented {
+  min-height: 29px;
+  padding: 2px;
+  border-radius: 7px;
+  background: #f3f6fa;
+  box-shadow: none;
+}
+
+.refund-management__sku-sort-segment .ant-segmented-group {
+  gap: 0;
+}
+
+.refund-management__sku-sort-segment .ant-segmented-item {
+  min-height: 25px;
+  border-radius: 6px;
+  color: #667085;
+  font-size: 9px;
+  line-height: 25px;
+  transition: none;
+}
+
+.refund-management__sku-sort-segment .ant-segmented-item-label {
+  min-height: 25px;
+  padding: 0 8px;
+  line-height: 25px;
+}
+
+.refund-management__sku-sort-segment .ant-segmented-item-selected {
+  background: #fff;
+  color: #1677ff;
+  font-weight: 750;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.refund-management__sku-sort-segment .ant-segmented-thumb {
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+/* Segmented text: exact horizontal + vertical centering */
+.refund-management__metric-segment .ant-segmented-item,
+.refund-management__view-segment .ant-segmented-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refund-management__metric-segment .ant-segmented-item-label,
+.refund-management__view-segment .ant-segmented-item-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 27px;
+  min-height: 27px;
+  padding: 0 9px;
+  line-height: normal;
+  text-align: center;
+}
+
+.refund-management__sku-sort-segment .ant-segmented-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refund-management__sku-sort-segment .ant-segmented-item-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 25px;
+  min-height: 25px;
+  padding: 0 8px;
+  line-height: normal;
+  text-align: center;
+}
+
+/* Refund details: keep breathing room between tabs and global table */
+.refund-management--details
+  .refund-management__tabs
+  > .ant-tabs-content-holder {
+  padding-top: 10px;
+  background: #f7f9fc;
+  box-sizing: border-box;
+}
+
+/* Refund detail table must use the same header tokens as global report tables */
+.refund-management--details
+  .refund-management__detail-shell
+  .ant-table-thead
+  > tr
+  > th {
+  height: 40px;
+  padding: 7px 8px;
+  color: #1f2937;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  background: #f4f7fb;
+  border-block-end: 1px solid #dce3ed;
+  border-inline-end: 1px solid #e5eaf3;
+}
+
+.refund-management--details
+  .refund-management__detail-shell
+  .ant-table-thead
+  > tr
+  > th.ant-table-column-sort {
+  background: #edf2f8;
+}
+
+/* ==========================================================
+   Refund Analysis scroll boundary
+   Page header / toolbar / KPI / tabs stay fixed.
+   Only the analysis tab content is vertically scrollable.
+   ========================================================== */
+
+.refund-management--analysis {
+  overflow: hidden;
+}
+
+.refund-management--analysis .refund-management__page-head,
+.refund-management--analysis .refund-management__toolbar-card,
+.refund-management--analysis .refund-management__kpis {
+  flex: 0 0 auto;
+}
+
+.refund-management--analysis .refund-management__tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.refund-management--analysis
+  .refund-management__tabs
+  > .ant-tabs-nav {
+  flex: 0 0 46px;
+  margin-bottom: 0 !important;
+}
+
+.refund-management--analysis
+  .refund-management__tabs
+  > .ant-tabs-content-holder {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.refund-management--analysis
+  .refund-management__tabs
+  .ant-tabs-content {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.refund-management--analysis
+  .refund-management__tabs
+  .ant-tabs-tabpane-active {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.refund-management--analysis
+  .refund-management__analysis {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* ==========================================================
+   Refund analysis typography
+   Only affects 退款分析, not toolbar / KPI / 退款明细表.
+   ========================================================== */
+
+.refund-management__analysis {
+  font-size: 12px;
+}
+
+/* 卡片标题 */
+.refund-management__analysis .refund-management__card-head h3 {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* 卡片说明 */
+.refund-management__analysis .refund-management__card-head p {
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* 售后原因 TOP */
+.refund-management__analysis .refund-management__reason-row {
+  font-size: 12px;
+}
+
+.refund-management__analysis .refund-management__reason-row strong,
+.refund-management__analysis .refund-management__reason-row em {
+  font-size: 12px;
+}
+
+/* SKU 风险列表标题及说明 */
+.refund-management__analysis .refund-management__risk-top strong {
+  font-size: 13px;
+}
+
+.refund-management__analysis .refund-management__risk-top span:not(.ant-tag) {
+  font-size: 11px;
+}
+
+/* SKU 风险列表指标 */
+.refund-management__analysis .refund-management__risk-metrics small {
+  font-size: 10px;
+}
+
+.refund-management__analysis .refund-management__risk-metrics b {
+  font-size: 13px;
+}
+
+/* 当前 SKU */
+.refund-management__analysis .refund-management__sku-name strong {
+  font-size: 18px;
+}
+
+.refund-management__analysis .refund-management__sku-name span {
+  font-size: 11px;
+}
+
+/* 当前 SKU 统计 */
+.refund-management__analysis .refund-management__sku-stats small {
+  font-size: 10px;
+}
+
+.refund-management__analysis .refund-management__sku-stats b {
+  font-size: 15px;
+}
+
+/* 诊断摘要 */
+.refund-management__analysis .refund-management__insight strong {
+  font-size: 12px;
+}
+
+.refund-management__analysis .refund-management__insight p {
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+/* 退款发生周期 */
+.refund-management__analysis .refund-management__period-stats small {
+  font-size: 10px;
+}
+
+.refund-management__analysis .refund-management__period-stats b {
+  font-size: 15px;
+}
+
+.refund-management__analysis .refund-management__period-note strong {
+  font-size: 12px;
+}
+
+.refund-management__analysis .refund-management__period-note p {
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+/* Segmented 文案也同步稍微放大 */
+.refund-management__analysis
+  .refund-management__metric-segment
+  .ant-segmented-item,
+.refund-management__analysis
+  .refund-management__view-segment
+  .ant-segmented-item {
+  font-size: 11px;
+}
+
+.refund-management__analysis
+  .refund-management__sku-sort-segment
+  .ant-segmented-item {
+  font-size: 10px;
+}
+
+/* ==========================================================
+   Refund details: tabs and report table are two clean surfaces.
+   Remove nested/double borders on both sides.
+   ========================================================== */
+
+/* 明细模式下 Tab 栏已经和表格分开，因此四个角都需要圆角 */
+.refund-management--details
+  .refund-management__tabs
+  > .ant-tabs-nav {
+  border-radius: 10px;
+}
+
+/* 不再让 Tabs content-holder 自己画第二层左右边框 */
+.refund-management--details
+  .refund-management__tabs
+  > .ant-tabs-content-holder {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 10px 间距放在真正的 Tab 内容区域 */
+.refund-management--details
+  .refund-management__tabs
+  .ant-tabs-tabpane-active {
+  min-height: 0;
+  padding-top: 10px;
+  box-sizing: border-box;
+}
+
+/* 全局 ReportTableShell 自己负责完整边框和圆角 */
+.refund-management--details
+  .refund-management__detail-shell {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+  border: 1px solid #dce3ed;
+  border-radius: 6px;
+}
+
+
+/* ==========================================================
+   Order time correction modal redesign
+   ========================================================== */
+
+.refund-management__time-modal .ant-modal-content {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.refund-management__time-modal .ant-modal-header {
+  margin: 0;
+  padding: 24px 28px 16px;
+  border-bottom: 1px solid #eef2f6;
+  background: #fff;
+}
+
+.refund-management__time-modal .ant-modal-title {
+  color: #101828;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.refund-management__time-modal .ant-modal-close {
+  top: 18px;
+  inset-inline-end: 20px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d8e2ef;
+  border-radius: 12px;
+  color: #98a2b3;
+  background: #fff;
+}
+
+.refund-management__time-modal .ant-modal-close:hover {
+  color: #1677ff;
+  border-color: #bfd7ff;
+  background: #f5f9ff;
+}
+
+.refund-management__time-modal .ant-modal-body {
+  padding: 22px 28px 24px;
+  background: #fff;
+}
+
+.refund-management__time-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.refund-management__time-editor-card {
+  padding: 16px 18px;
+  border: 1px solid #dbe7f3;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f4f8fd 100%);
+}
+
+.refund-management__time-editor-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.refund-management__time-editor-card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.refund-management__time-editor-card-row--stack {
+  margin-bottom: 14px;
+}
+
+.refund-management__time-editor-card-row--full {
+  grid-column: 1 / -1;
+}
+
+.refund-management__time-editor-label {
+  color: #98a2b3;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.refund-management__time-editor-order-id {
+  color: #101828;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+}
+
+.refund-management__time-editor-value {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.refund-management__time-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.refund-management__time-editor-field-label {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.refund-management__order-time-picker.ant-picker {
+  height: 44px;
+  padding-inline: 14px;
+  border: 1px solid #d0d9e5;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.refund-management__order-time-picker.ant-picker:hover,
+.refund-management__order-time-picker.ant-picker-focused {
+  border-color: #91caff;
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.08);
+}
+
+.refund-management__order-time-picker .ant-picker-input > input {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.refund-management__order-time-picker .ant-picker-suffix {
+  color: #98a2b3;
+}
+
+.refund-management__time-editor-hint {
+  padding: 10px 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f5f9ff;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.refund-management__time-editor-error {
+  padding: 10px 12px;
+  border: 1px solid #ffccc7;
+  border-radius: 10px;
+  background: #fff2f0;
+  color: #cf1322;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.refund-management__time-editor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.refund-management__time-editor-footer .ant-btn {
+  min-width: 116px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.refund-management__time-editor-footer .ant-btn-default {
+  border-color: #d0d9e5;
+  color: #344054;
+  background: #fff;
+}
+
+.refund-management__time-editor-footer .ant-btn-default:hover {
+  border-color: #91caff;
+  color: #1677ff;
+}
+
+.refund-management__time-editor-footer .ant-btn-primary {
+  box-shadow: 0 8px 20px rgba(22, 119, 255, 0.18);
+}
+
+@media (max-width: 768px) {
+  .refund-management__time-modal .ant-modal-content {
+    border-radius: 16px;
+  }
+
+  .refund-management__time-modal .ant-modal-header {
+    padding: 20px 20px 14px;
+  }
+
+  .refund-management__time-modal .ant-modal-body {
+    padding: 18px 20px 20px;
+  }
+
+  .refund-management__time-editor-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .refund-management__time-editor-order-id {
+    font-size: 22px;
+  }
+
+  .refund-management__time-editor-footer {
+    flex-direction: column-reverse;
+  }
+
+  .refund-management__time-editor-footer .ant-btn {
+    width: 100%;
+  }
+}
+
+/* ==========================================================
+   Selected SKU summary redesign
+   Flat metric strip instead of nested statistic cards.
+   ========================================================== */
+
+.refund-management__diagnosis-center {
+  grid-template-rows: 82px 330px 200px;
+}
+
+/* 整体只保留一个外层卡片 */
+.refund-management__sku-focus {
+  overflow: hidden;
+  border-color: #dce3ed;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.02);
+}
+
+.refund-management__sku-focus > .ant-card-body {
+  height: 100%;
+  padding: 0 16px;
+}
+
+.refund-management__sku-focus-inner {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+}
+
+/* SKU 身份区 */
+.refund-management__analysis .refund-management__sku-name {
+  min-width: 0;
+  flex: 0 0 190px;
+  padding-right: 18px;
+}
+
+.refund-management__analysis .refund-management__sku-name strong {
+  display: block;
+  overflow: hidden;
+  color: #101828;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refund-management__analysis .refund-management__sku-name span {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  color: #98a2b3;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 四个指标不再各自画卡片 */
+.refund-management__sku-stats {
+  display: grid;
+  height: 52px;
+  min-width: 0;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-right: 18px;
+  border-left: 1px solid #e8edf3;
+  border-right: 1px solid #e8edf3;
+}
+
+.refund-management__sku-stats span {
+  display: flex;
+  min-width: 0;
+  padding: 3px 14px;
+  justify-content: center;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.refund-management__sku-stats span + span {
+  border-left: 1px solid #e8edf3;
+}
+
+.refund-management__analysis .refund-management__sku-stats small {
+  display: block;
+  overflow: hidden;
+  color: #98a2b3;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refund-management__analysis .refund-management__sku-stats b {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #101828;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 查看明细作为唯一主操作 */
+.refund-management__sku-focus-inner > .ant-btn {
+  min-width: 116px;
+  height: 36px;
+  flex: 0 0 auto;
+  padding-inline: 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.refund-management__sku-focus-inner > .ant-btn-primary:hover {
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.16);
+}
+
+
+/* Refund toolbar currency select - follows global report filter style */
+.refund-management__currency-select {
+  width: 82px;
+  flex: 0 0 82px;
+}
+
+/* === refund-analysis-typography-v2 === */
+.refund-management .card-title,
+.refund-management .refund-management__card-title,
+.refund-management .refund-management__section-title {
+  font-size: 18px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.refund-management .card-sub,
+.refund-management .refund-management__card-sub,
+.refund-management .refund-management__section-subtitle {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #98a2b3;
+}
+
+.refund-management .curated-sort button,
+.refund-management .segment button,
+.refund-management .refund-management__analysis-switch button,
+.refund-management .refund-management__metric-switch button {
+  font-size: 14px;
+  line-height: 1;
+  min-width: 60px;
+}
+
+.refund-management .curated-insight,
+.refund-management .refund-management__diagnosis-summary {
+  font-size: 14px;
+}
+
+.refund-management .curated-insight h4,
+.refund-management .refund-management__diagnosis-summary h4 {
+  font-size: 18px;
+  line-height: 1.45;
+  margin-bottom: 8px;
+  color: #344054;
+}
+
+.refund-management .curated-insight p,
+.refund-management .refund-management__diagnosis-summary p {
+  font-size: 14px;
+  line-height: 1.85;
+  color: #667085;
+}
+
+.refund-management .curated-period-stat span,
+.refund-management .refund-management__period-stat span {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #98a2b3;
+}
+
+.refund-management .curated-period-stat b,
+.refund-management .refund-management__period-stat b {
+  font-size: 18px;
+  line-height: 1.4;
+  color: #344054;
+}
+
+.refund-management .curated-period-note b,
+.refund-management .refund-management__period-note b {
+  display: block;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #344054;
+}
+
+.refund-management .curated-period-note p,
+.refund-management .refund-management__period-note p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #667085;
+}
+
+.refund-management .curated-sku-list,
+.refund-management .risk-list,
+.refund-management .refund-management__sku-risk-list {
+  font-size: 14px;
+}
+
+.refund-management .curated-focus,
+.refund-management .refund-management__focus-panel {
+  font-size: 14px;
+}
+
+.refund-management .curated-focus h2,
+.refund-management .refund-management__focus-panel h2,
+.refund-management .refund-management__focus-title {
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.refund-management .curated-focus .meta,
+.refund-management .refund-management__focus-subtitle {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #98a2b3;
+}
+
+/* ==========================================================
+   Refund period panel layout refinement
+   Keep text readable without overflowing the card.
+   ========================================================== */
+
+.refund-management__period-card {
+  height: 620px;
+  min-height: 620px;
+  overflow: hidden;
+}
+
+/* 给底部判断区域腾空间 */
+.refund-management__period-chart {
+  height: 245px !important;
+  flex: 0 0 245px;
+}
+
+/* 四个周期指标稍微压紧 */
+.refund-management__period-stats {
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.refund-management__period-stats span {
+  padding: 8px 10px;
+}
+
+.refund-management__analysis
+  .refund-management__period-stats small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.refund-management__analysis
+  .refund-management__period-stats b {
+  margin-top: 3px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+/* 周期判断：保持清晰，但不要再撑出容器 */
+.refund-management__period-note {
+  min-height: 0;
+  margin-top: 8px;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.refund-management__analysis
+  .refund-management__period-note strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.refund-management__analysis
+  .refund-management__period-note p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
