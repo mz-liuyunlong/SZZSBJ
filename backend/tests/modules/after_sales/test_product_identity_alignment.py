@@ -100,3 +100,17 @@ def test_item_drilldown_accepts_exact_product_key() -> None:
     assert "json_build_array(coalesce(r.store_id,''), coalesce(r.item_id,'')" in sql
     assert "coalesce(r.msku,''))::text = :product_key" in sql
     assert params["product_key"] == product_key
+
+def test_refund_window_uses_governed_refund_effective_date() -> None:
+    session = _CaptureSession()
+    repository = AfterSalesRefundRepository(session)  # type: ignore[arg-type]
+
+    where, _ = repository._refund_where(  # noqa: SLF001
+        _query(),
+        frozenset({"primary"}),
+    )
+
+    sql = " and ".join(where)
+    assert "r.refund_effective_date is not null" in sql
+    assert "r.refund_effective_date between :start_date and :end_date" in sql
+    assert "r.return_order_at::date between" not in sql
