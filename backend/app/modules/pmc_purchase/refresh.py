@@ -143,6 +143,7 @@ class DwsRefreshResult:
     stage_counts: dict[str, int] = field(default_factory=dict)
     item_id_source_counts: dict[str, int] = field(default_factory=dict)
     pending_counts: dict[str, int] = field(default_factory=dict)
+    requested_skus: list[str] = field(default_factory=list)
 
     def as_message(self) -> str:
         stages = ",".join(f"{k}={v}" for k, v in sorted(self.stage_counts.items()))
@@ -214,12 +215,23 @@ class PmcPurchaseDwsRefresher:
         self.now = now or datetime.now(UTC)
         self.calc_version = calc_version
 
-    def refresh(self, *, source_account_ref: str, today: date | None = None) -> DwsRefreshResult:
+    def refresh(
+        self,
+        *,
+        source_account_ref: str,
+        today: date | None = None,
+        skus: set[str] | None = None,
+    ) -> DwsRefreshResult:
+        """Rebuild the account's DWS. ``skus`` names the SKUs a caller changed (manual
+        override, G3-F); the whole account is still recomputed because SKU cycles feed
+        order stages, so the argument only travels into the result for auditing."""
+
         account = (source_account_ref or "").strip()
         if not account:
             raise PmcPurchaseDwsRefreshError("PMC_PURCHASE_DWS_SOURCE_ACCOUNT_REF_INVALID")
         try:
             result = self._refresh(account, today or self.now.date())
+            result.requested_skus = sorted(skus) if skus else []
             self.session.commit()
         except PmcPurchaseDwsRefreshError:
             self.session.rollback()

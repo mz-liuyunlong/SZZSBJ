@@ -9,7 +9,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Literal
 
-PurchaseApiKey = Literal["board", "board_summary", "order_detail", "sku_cycles", "pending_plans"]
+PurchaseApiKey = Literal[
+    "board",
+    "board_summary",
+    "order_detail",
+    "sku_cycles",
+    "pending_plans",
+    "sku_cycle_overrides_list",
+    "sku_cycle_override_create",
+]
 
 READ_ONLY_BOUNDARY: Final = (
     "Read-only DWS/DWD API; no Lingxing call, no ODS/RAW read, no write, no Celery task, "
@@ -31,6 +39,7 @@ class PurchaseApiRegistryEntry:
 
 
 PERMISSION_READ: Final = "pmc:purchase:read"
+PERMISSION_OVERRIDE: Final = "pmc:purchase:override"
 
 PMC_PURCHASE_API_REGISTRY: Final[dict[PurchaseApiKey, PurchaseApiRegistryEntry]] = {
     "board": PurchaseApiRegistryEntry(
@@ -82,5 +91,29 @@ PMC_PURCHASE_API_REGISTRY: Final[dict[PurchaseApiKey, PurchaseApiRegistryEntry]]
         demo_ref="Demo v1.4 待采购超时（S2）弹窗：计划待采购",
         empty_data_behavior=EMPTY_DATA_BEHAVIOR,
         current_boundary=READ_ONLY_BOUNDARY,
+    ),
+    "sku_cycle_overrides_list": PurchaseApiRegistryEntry(
+        key="sku_cycle_overrides_list",
+        prp_ref="PRPs/pmc-purchase-board.md §7.5",
+        route_path="/api/pmc/purchase/sku-cycles/{sku}/overrides",
+        permission=PERMISSION_READ,
+        source_objects=("manual_purchase_cycle_override",),
+        demo_ref="Demo v1.4 实际采购交期悬浮 → 修正记录",
+        empty_data_behavior=EMPTY_DATA_BEHAVIOR,
+        current_boundary=READ_ONLY_BOUNDARY,
+    ),
+    "sku_cycle_override_create": PurchaseApiRegistryEntry(
+        key="sku_cycle_override_create",
+        prp_ref="PRPs/pmc-purchase-board.md §7.5",
+        route_path="/api/pmc/purchase/sku-cycles/{sku}/overrides",
+        permission=PERMISSION_OVERRIDE,
+        source_objects=("manual_purchase_cycle_override", "dws_purchase_sku_cycle"),
+        demo_ref="Demo v1.4 交期修正 Modal（剔除 / 恢复 / 改到仓日 / 基准）",
+        empty_data_behavior="404 when the SKU has no DWS cycle row in scope.",
+        current_boundary=(
+            "Append-only write to manual_purchase_cycle_override + DWS rebuild for the account; "
+            "never writes DWD/ODS/RAW; not reachable through the read-only preview principal; "
+            "no Lingxing call, no Celery task."
+        ),
     ),
 }
