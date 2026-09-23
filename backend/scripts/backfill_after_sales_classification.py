@@ -144,7 +144,7 @@ def main() -> int:
                         classification_rule_version = :classification_rule_version,
                         classified_at = :classified_at,
                         updated_at = now()
-                    where id = cast(:id as uuid)
+                    where id = :id
                     """
                 ),
                 updates,
