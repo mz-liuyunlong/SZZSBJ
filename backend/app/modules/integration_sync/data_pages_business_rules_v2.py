@@ -29,7 +29,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+after-sales-refund-truth-v1"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+after-sales-purchase-day-refund-v1"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -261,7 +261,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "where source_account_ref=:account and business_date_la=:day and store_id is not null "
                 "and item_id is not null and msku is not null and trim(msku)<>'' group by 1,2,3,4,5 "
                 "having sum(coalesce(ad_spend_amount,0))>0),"
-                "r as (select r.source_account_ref,r.return_order_at::date business_date_la,"
+                "r as (select r.source_account_ref,r.purchase_time_at::date business_date_la,"
                 "r.store_id,r.item_id,trim(r.msku) msku,max(r.local_sku) local_sku,"
                 "sum(coalesce(r.return_qty,0)) return_qty,"
                 "sum(coalesce(r.refund_amount,0)) provider_refund_amount,"
@@ -272,9 +272,14 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "and r.refund_loss_amount is null) refund_loss_missing_count "
                 "from after_sales_refund_items r "
                 "where r.source_account_ref=:account and r.platform_code='walmart' "
-                "and r.refund_effective=true and r.return_order_at::date=:day "
+                "and r.refund_effective=true and r.purchase_time_at is not null "
+                "and r.purchase_time_at::date=:day "
                 "and r.store_id is not null and r.item_id is not null "
-                "and r.msku is not null and trim(r.msku)<>'' group by 1,2,3,4,5),"
+                "and r.msku is not null and trim(r.msku)<>'' "
+                "and exists (select 1 from fact_walmart_sales_item_daily sale_day "
+                "where sale_day.source_account_ref=r.source_account_ref "
+                "and sale_day.business_date_la=r.purchase_time_at::date "
+                "and sale_day.allocation_status='direct') group by 1,2,3,4,5),"
                 "sample as (select s.source_account_ref,s.business_date_utc_minus_7 business_date_la,"
                 "s.store_id,s.item_id,trim(s.msku) msku,max(s.local_sku) local_sku,"
                 "count(distinct s.platform_order_no) sample_order_count,"
@@ -329,7 +334,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "jsonb_build_object('runner',cast(:runner as text),"
                 "'basis','sale_stat_union_positive_ad_spend_union_refund_union_sample',"
                 "'match_key','store_id+item_id+msku','refund_basis','after_sales_refund_items',"
-                "'refund_date_basis','return_order_at','refund_loss_missing_count',"
+                "'refund_date_basis','purchase_time_at','refund_loss_missing_count',"
                 "coalesce(r.refund_loss_missing_count,0),"
                 "'sample_order_count',coalesce(sample.sample_order_count,0),'sample_qty',coalesce(sample.sample_qty,0),"
                 "'commission_rule_version',commission.rule_version,"
@@ -513,10 +518,14 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(r.return_qty,0)) return_qty "
                         "from after_sales_refund_items r "
                         "where r.source_account_ref=:account and r.platform_code='walmart' "
-                        "and r.refund_effective=true "
-                        "and r.return_order_at::date between :start_day and :end_day "
+                        "and r.refund_effective=true and r.purchase_time_at is not null "
+                        "and r.purchase_time_at::date between :start_day and :end_day "
                         "and r.store_id is not null and r.item_id is not null "
-                        "and r.msku is not null and trim(r.msku)<>'' group by 1,2,3"
+                        "and r.msku is not null and trim(r.msku)<>'' "
+                        "and exists (select 1 from fact_walmart_sales_item_daily sale_day "
+                        "where sale_day.source_account_ref=r.source_account_ref "
+                        "and sale_day.business_date_la=r.purchase_time_at::date "
+                        "and sale_day.allocation_status='direct') group by 1,2,3"
                     ),
                     {
                         "account": self.source_account_ref,
