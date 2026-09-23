@@ -96,3 +96,11 @@ def test_rolling_return_rate_uses_refund_management_event_dates() -> None:
     assert "r.return_order_at::date between :start_day and :end_day" in source
     assert "sum(coalesce(r.return_qty,0)) return_qty" in source
     assert "fact_walmart_refund_items" not in source
+
+
+def test_daily_sales_preserves_sample_sales_amount() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+
+    assert "sum(coalesce(s.unit_price_amount,0)*coalesce(s.quantity,0)) sample_amount" in source
+    assert "sample_amount=:sample_amount" not in source
+    assert "sample_cost_amount" not in source
