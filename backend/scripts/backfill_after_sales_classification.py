@@ -151,9 +151,10 @@ def main() -> int:
             )
 
         target_ids = [str(row["id"]) for row in rows]
-        verification = conn.execute(
-            text(
-                """
+        verification = (
+            conn.execute(
+                text(
+                    """
                 select
                     count(*) as rows,
                     coalesce(sum(return_qty),0) as refund_qty,
@@ -164,9 +165,12 @@ def main() -> int:
                 from after_sales_refund_items
                 where id::text = any(:target_ids)
                 """
-            ),
-            {"target_ids": target_ids},
-        ).mappings().one()
+                ),
+                {"target_ids": target_ids},
+            )
+            .mappings()
+            .one()
+        )
 
         if int(verification["rows"]) != len(rows):
             raise RuntimeError("row count changed during classification backfill")

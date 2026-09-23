@@ -134,9 +134,7 @@ class AfterSalesReasonClassifier:
             normalized_reason_code=(
                 fallback_reason.reason_code if fallback_reason else "UNCLASSIFIED"
             ),
-            reason_category_code=(
-                fallback_reason.category_code if fallback_reason else "PENDING"
-            ),
+            reason_category_code=(fallback_reason.category_code if fallback_reason else "PENDING"),
             responsibility_code=(
                 fallback_responsibility.code if fallback_responsibility else "PENDING"
             ),

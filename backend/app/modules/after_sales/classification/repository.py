@@ -112,16 +112,12 @@ class AfterSalesClassificationRepository:
         return [
             ClassificationRule(
                 id=str(row["id"]),
-                raw_reason_code=(
-                    str(row["raw_reason_code"]) if row["raw_reason_code"] else None
-                ),
+                raw_reason_code=(str(row["raw_reason_code"]) if row["raw_reason_code"] else None),
                 match_type=str(row["match_type"]),  # type: ignore[arg-type]
                 match_value=str(row["match_value"]) if row["match_value"] else None,
                 keywords_all=tuple(str(value) for value in (row["keywords_all"] or [])),
                 keywords_any=tuple(str(value) for value in (row["keywords_any"] or [])),
-                keywords_exclude=tuple(
-                    str(value) for value in (row["keywords_exclude"] or [])
-                ),
+                keywords_exclude=tuple(str(value) for value in (row["keywords_exclude"] or [])),
                 normalized_reason_code=str(row["normalized_reason_code"]),
                 responsibility_code=str(row["responsibility_code"]),
                 priority=int(row["priority"]),
