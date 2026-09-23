@@ -25,6 +25,9 @@ from app.modules.after_sales.schemas import (
     RefundProductRead,
     RefundProductTrendPoint,
     RefundReasonRead,
+    RefundReasonTag,
+    RefundResponsibilityRead,
+    RefundResponsibilityTag,
     RefundSummary,
     RefundTrendPoint,
 )
@@ -38,6 +41,9 @@ _SOURCE_OBJECTS = [
     "products",
     "dwd_lingxing_sku_identity_index",
     "dwd_lingxing_sku_product_info_current",
+    "after_sales_reason_dict",
+    "after_sales_responsibility_dict",
+    "after_sales_reason_rules",
 ]
 _LAG_KEYS = ("0_3", "4_7", "8_14", "15_30", "31_plus")
 
@@ -127,6 +133,10 @@ class AfterSalesRefundService:
             RefundReasonRead(**row)
             for row in self.repository.reason_breakdown(query, account_refs, limit=20)
         ]
+        responsibilities = [
+            RefundResponsibilityRead(**row)
+            for row in self.repository.responsibility_breakdown(query, account_refs, limit=20)
+        ]
         raw_facets = self.repository.facets(query, account_refs)
         facets = RefundFacets(
             stores=[FilterOption(**item) for item in raw_facets["stores"]],
@@ -139,6 +149,7 @@ class AfterSalesRefundService:
             comparison=comparison,
             trend=trend,
             reasons=reasons,
+            responsibilities=responsibilities,
             facets=facets,
         )
 
@@ -210,7 +221,7 @@ class AfterSalesRefundService:
     ) -> tuple[RefundItemListData, int, Any]:
         rows, total, latest = self.repository.list_items(query, account_refs)
         return (
-            RefundItemListData(items=[RefundItemRead(**row) for row in rows]),
+            RefundItemListData(items=[self._item_read(row) for row in rows]),
             total,
             latest,
         )
@@ -283,8 +294,78 @@ class AfterSalesRefundService:
             refund_loss_amount=_decimal(row["refund_loss_amount"]),
             sales_qty=_decimal(row["sales_qty"]),
             refund_rate=(_decimal(row["refund_rate"]) if row["refund_rate"] is not None else None),
-            top_reason=row["top_reason"],
+            top_reason=(
+                RefundReasonTag(
+                    code=str(row["top_reason_code"]),
+                    name=row["top_reason_name"] or "未分类",
+                    category_code=row["top_reason_category_code"] or "PENDING",
+                    category_name=row["top_reason_category_name"] or "待判定",
+                    color=row["top_reason_color"] or "#8C8C8C",
+                )
+                if row.get("top_reason_code")
+                else None
+            ),
+            top_responsibility=(
+                RefundResponsibilityTag(
+                    code=str(row["top_responsibility_code"]),
+                    name=row["top_responsibility_name"] or "待判定",
+                    color=row["top_responsibility_color"] or "#8C8C8C",
+                    source="AGGREGATED",
+                    confidence="N/A",
+                )
+                if row.get("top_responsibility_code")
+                else None
+            ),
             risk_level="pending",
+        )
+
+    def _item_read(self, row: dict[str, Any]) -> RefundItemRead:
+        return RefundItemRead(
+            id=str(row["id"]),
+            store_id=str(row["store_id"]),
+            store_name=row["store_name"],
+            owner_ref=row["owner_ref"],
+            item_id=row["item_id"],
+            product_name=row["product_name"],
+            local_sku=row["local_sku"],
+            msku=row["msku"],
+            return_order_id=str(row["return_order_id"]),
+            customer_order_id=row["customer_order_id"],
+            purchase_order_id=row["purchase_order_id"],
+            platform_order_id=str(row["platform_order_id"]),
+            purchase_time_at=row["purchase_time_at"],
+            refund_time_at=row["refund_time_at"],
+            refund_lag_days=(
+                _decimal(row["refund_lag_days"]) if row["refund_lag_days"] is not None else None
+            ),
+            return_qty=_decimal(row["return_qty"]),
+            refund_amount=(
+                _decimal(row["refund_amount"]) if row["refund_amount"] is not None else None
+            ),
+            refund_currency_code=row["refund_currency_code"],
+            refund_loss_amount=(
+                _decimal(row["refund_loss_amount"])
+                if row["refund_loss_amount"] is not None
+                else None
+            ),
+            return_reason_code=row["return_reason_code"],
+            return_description=row["return_description"],
+            reason=RefundReasonTag(
+                code=str(row["reason_code"]),
+                name=str(row["reason_name"]),
+                category_code=str(row["reason_category_code"]),
+                category_name=str(row["reason_category_name"]),
+                color=str(row["reason_color"]),
+            ),
+            responsibility=RefundResponsibilityTag(
+                code=str(row["responsibility_code"]),
+                name=str(row["responsibility_name"]),
+                color=str(row["responsibility_color"]),
+                source=str(row["responsibility_source"]),
+                confidence=str(row["responsibility_confidence"]),
+            ),
+            current_refund_status=row["current_refund_status"],
+            refund_completed=bool(row["refund_completed"]),
         )
 
     def _product_trend(

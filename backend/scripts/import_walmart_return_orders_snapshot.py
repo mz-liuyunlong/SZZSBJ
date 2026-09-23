@@ -16,6 +16,7 @@ from typing import Any
 from sqlalchemy import create_engine, text
 
 from app.core.config import get_database_url, get_settings
+from app.modules.after_sales.classification import AfterSalesReasonClassifier
 
 REFUND_COMPLETED = "REFUND_COMPLETED"
 EXCLUDED_REFUND_STATUSES = frozenset({"NOT_REFUNDED", "CANCELLED"})
@@ -311,6 +312,9 @@ def main() -> int:
         if not table_exists(conn, "after_sales_refund_items"):
             raise SystemExit("after_sales_refund_items 不存在，请先执行 alembic upgrade head")
 
+        classifier = AfterSalesReasonClassifier.from_executor(conn)
+        classification_sources: dict[str, int] = {}
+
         store_names = load_store_names(conn, args.source_account_ref)
         listing_table, listing_cols = find_table(
             conn,
@@ -377,6 +381,7 @@ def main() -> int:
                     refund_effective = True
                     status_time = parse_dt(item.get("statusTime"))
                     refund_effective_date = return_order_at.date() if return_order_at else None
+
                     listing = lookup_listing(conn, listing_table, listing_cols, store_id, msku)
                     product = lookup_product(conn, product_table, product_cols, local_sku)
 
@@ -387,6 +392,14 @@ def main() -> int:
 
                     refund_amount = decimal_or_none(item.get("lineTotalAmount"))
                     refund_currency_code = str(item.get("lineTotalCurrency") or "").strip() or None
+
+                    classified = classifier.classify(
+                        item.get("returnReason"),
+                        item.get("returnDescription"),
+                    )
+                    classification_sources[classified.classification_source] = (
+                        classification_sources.get(classified.classification_source, 0) + 1
+                    )
 
                     purchase_order_id = item.get("purchaseOrderId")
                     source_item_hash = stable_hash(order, item)
@@ -422,6 +435,7 @@ def main() -> int:
                         "quantity_display_raw": item.get("quantityDisplay"),
                         "return_reason_code": item.get("returnReason"),
                         "return_description": item.get("returnDescription"),
+                        **classified.as_storage_values(),
                         "status_time": status_time,
                         "current_refund_status": current_refund_status,
                         "refund_completed": refund_completed,
@@ -457,11 +471,12 @@ def main() -> int:
                                 return_type, return_order_at, purchase_time_at, local_sku, msku,
                                 return_qty, quantity_display_raw, return_reason_code,
                                 return_description,
+                                normalized_reason_code, reason_category_code, responsibility_code,
+                                classification_source, classification_confidence,
+                                classification_rule_id, classification_rule_version, classified_at,
                                 status_time, current_refund_status, refund_completed,
-                                refund_effective,
-                                refund_effective_date,
-                                refund_loss_effective,
-                                refund_loss_date,
+                                refund_effective, refund_effective_date,
+                                refund_loss_effective, refund_loss_date,
                                 refund_amount, refund_currency_code,
                                 item_id, listing_image_url, listing_match_status,
                                 product_name, product_match_status, purchase_cost, first_leg_cost,
@@ -477,11 +492,14 @@ def main() -> int:
                                 :local_sku, :msku,
                                 :return_qty, :quantity_display_raw, :return_reason_code,
                                 :return_description,
+                                :normalized_reason_code, :reason_category_code,
+                                :responsibility_code,
+                                :classification_source, :classification_confidence,
+                                :classification_rule_id, :classification_rule_version,
+                                :classified_at,
                                 :status_time, :current_refund_status, :refund_completed,
-                                :refund_effective,
-                                :refund_effective_date,
-                                :refund_loss_effective,
-                                :refund_loss_date,
+                                :refund_effective, :refund_effective_date,
+                                :refund_loss_effective, :refund_loss_date,
                                 :refund_amount, :refund_currency_code,
                                 :item_id, :listing_image_url, :listing_match_status,
                                 :product_name, :product_match_status, :purchase_cost,
@@ -555,6 +573,10 @@ def main() -> int:
     )
     print(f"listing_table={listing_table or 'NOT_FOUND'}")
     print(f"product_table={product_table or 'NOT_FOUND'}")
+    print(
+        "classification_source_counts=",
+        json.dumps(classification_sources, ensure_ascii=False, sort_keys=True),
+    )
     return 0
 
 

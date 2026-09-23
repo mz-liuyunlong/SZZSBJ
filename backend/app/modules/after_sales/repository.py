@@ -25,9 +25,11 @@ owner_map as (
 )
 """
 
-_REASON_EXPR = (
-    "coalesce(nullif(r.return_reason_category,''), nullif(r.return_reason_code,''), 'UNCLASSIFIED')"
+_FINAL_REASON_CODE_EXPR = "coalesce(r.manual_reason_code, r.normalized_reason_code, 'UNCLASSIFIED')"
+_FINAL_RESPONSIBILITY_CODE_EXPR = (
+    "coalesce(r.manual_responsibility_code, r.responsibility_code, 'PENDING')"
 )
+_REASON_EXPR = _FINAL_REASON_CODE_EXPR
 _SKU_EXPR = "coalesce(nullif(r.local_sku,''), nullif(r.msku,''), nullif(r.item_id,''), 'UNKNOWN')"
 _PRODUCT_KEY_EXPR = (
     "json_build_array(coalesce(r.store_id,''), coalesce(r.item_id,''), coalesce(r.msku,''))::text"
@@ -283,7 +285,11 @@ class AfterSalesRefundRepository:
                     f"""
                     with {_OWNER_CTE}
                     select
-                        {_REASON_EXPR} as reason,
+                        {_FINAL_REASON_CODE_EXPR} as code,
+                        coalesce(rd.reason_name_cn, '未分类') as name,
+                        coalesce(rd.category_code, 'PENDING') as category_code,
+                        coalesce(rd.category_name_cn, '待判定') as category_name,
+                        coalesce(rd.tag_color, '#8C8C8C') as color,
                         count(distinct r.return_order_id)::int as refund_orders,
                         coalesce(sum(r.return_qty),0) as refund_qty,
                         coalesce(sum(r.refund_amount),0) as refund_amount,
@@ -296,9 +302,68 @@ class AfterSalesRefundRepository:
                      and om.store_id = r.store_id
                      and om.item_id = r.item_id
                      and om.msku = r.msku
+                    left join after_sales_reason_dict rd
+                      on rd.reason_code = {_FINAL_REASON_CODE_EXPR}
                     where {" and ".join(where)}
-                    group by {_REASON_EXPR}
-                    order by refund_qty desc, refund_orders desc, reason
+                    group by
+                        {_FINAL_REASON_CODE_EXPR},
+                        rd.reason_name_cn,
+                        rd.category_code,
+                        rd.category_name_cn,
+                        rd.tag_color
+                    order by refund_orders desc, refund_qty desc, code
+                    limit :limit
+                    """
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        return [dict(row) for row in rows]
+
+    def responsibility_breakdown(
+        self,
+        query: RefundBaseQuery,
+        account_refs: frozenset[str],
+        *,
+        product_key: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        where, params = self._refund_where(query, account_refs)
+        if product_key:
+            where.append(f"{_PRODUCT_KEY_EXPR} = :product_key")
+            params["product_key"] = product_key
+        params["limit"] = limit
+        rows = (
+            self.session.execute(
+                text(
+                    f"""
+                    with {_OWNER_CTE}
+                    select
+                        {_FINAL_RESPONSIBILITY_CODE_EXPR} as code,
+                        coalesce(resp.name_cn, '待判定') as name,
+                        coalesce(resp.tag_color, '#8C8C8C') as color,
+                        count(distinct r.return_order_id)::int as refund_orders,
+                        coalesce(sum(r.return_qty),0) as refund_qty,
+                        coalesce(sum(r.refund_amount),0) as refund_amount,
+                        coalesce(sum(r.refund_loss_amount) filter (
+                            where r.refund_loss_effective = true
+                        ),0) as refund_loss_amount
+                    from after_sales_refund_items r
+                    left join owner_map om
+                      on om.source_account_ref = r.source_account_ref
+                     and om.store_id = r.store_id
+                     and om.item_id = r.item_id
+                     and om.msku = r.msku
+                    left join after_sales_responsibility_dict resp
+                      on resp.code = {_FINAL_RESPONSIBILITY_CODE_EXPR}
+                    where {" and ".join(where)}
+                    group by
+                        {_FINAL_RESPONSIBILITY_CODE_EXPR},
+                        resp.name_cn,
+                        resp.tag_color
+                    order by refund_orders desc, refund_qty desc, code
                     limit :limit
                     """
                 ),
@@ -313,7 +378,7 @@ class AfterSalesRefundRepository:
         self,
         query: RefundBaseQuery,
         account_refs: frozenset[str],
-    ) -> dict[str, list[dict[str, str]]]:
+    ) -> dict[str, list[dict[str, str | None]]]:
         base_where, params = self._refund_where(
             query,
             account_refs,
@@ -327,7 +392,8 @@ class AfterSalesRefundRepository:
                     f"""
                 with {_OWNER_CTE}
                 select distinct r.store_id as value,
-                       coalesce({_STORE_NAME_EXPR}, '未匹配店铺') as label
+                       coalesce({_STORE_NAME_EXPR}, '未匹配店铺') as label,
+                       null::text as color
                 from after_sales_refund_items r
                 left join owner_map om
                   on om.source_account_ref = r.source_account_ref
@@ -350,7 +416,7 @@ class AfterSalesRefundRepository:
                 text(
                     f"""
                 with {_OWNER_CTE}
-                select distinct om.owner_ref as value, om.owner_ref as label
+                select distinct om.owner_ref as value, om.owner_ref as label, null::text as color
                 from after_sales_refund_items r
                 join owner_map om
                   on om.source_account_ref = r.source_account_ref
@@ -375,13 +441,18 @@ class AfterSalesRefundRepository:
                 text(
                     f"""
                 with {_OWNER_CTE}
-                select distinct {_REASON_EXPR} as value, {_REASON_EXPR} as label
+                select distinct
+                    {_FINAL_REASON_CODE_EXPR} as value,
+                    coalesce(rd.reason_name_cn, '未分类') as label,
+                    coalesce(rd.tag_color, '#8C8C8C') as color
                 from after_sales_refund_items r
                 left join owner_map om
                   on om.source_account_ref = r.source_account_ref
                  and om.store_id = r.store_id
                  and om.item_id = r.item_id
                  and om.msku = r.msku
+                left join after_sales_reason_dict rd
+                  on rd.reason_code = {_FINAL_REASON_CODE_EXPR}
                 where {base_sql}
                 order by label
                 """
@@ -392,11 +463,39 @@ class AfterSalesRefundRepository:
             .all()
         )
         reasons = [dict(row) for row in rows]
+
+        rows = (
+            self.session.execute(
+                text(
+                    f"""
+                with {_OWNER_CTE}
+                select distinct
+                    {_FINAL_RESPONSIBILITY_CODE_EXPR} as value,
+                    coalesce(resp.name_cn, '待判定') as label,
+                    coalesce(resp.tag_color, '#8C8C8C') as color
+                from after_sales_refund_items r
+                left join owner_map om
+                  on om.source_account_ref = r.source_account_ref
+                 and om.store_id = r.store_id
+                 and om.item_id = r.item_id
+                 and om.msku = r.msku
+                left join after_sales_responsibility_dict resp
+                  on resp.code = {_FINAL_RESPONSIBILITY_CODE_EXPR}
+                where {base_sql}
+                order by label
+                """
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        responsibilities = [dict(row) for row in rows]
         return {
             "stores": stores,
             "owners": owners,
             "reasons": reasons,
-            "responsibilities": [{"value": "pending", "label": "pending"}],
+            "responsibilities": responsibilities,
         }
 
     def product_summary(
@@ -410,6 +509,7 @@ class AfterSalesRefundRepository:
 
         Refund and sales quantities use the exact same user-selected date window.
         SKU remains descriptive metadata and is not used as the sales/refund join key.
+        Dominant reason/responsibility is ranked by refund quantity, then refund orders.
         """
         refund_where, params = self._refund_where(query, account_refs)
         refund_where.append(_REFUND_PRODUCT_IDENTITY_READY)
@@ -432,23 +532,15 @@ class AfterSalesRefundRepository:
                 text(
                     f"""
                     with {_OWNER_CTE},
-                    refund_agg as (
+                    scoped_refunds as (
                         select
+                            r.*,
                             {_PRODUCT_KEY_EXPR} as product_key,
-                            r.store_id,
-                            max({_STORE_NAME_EXPR}) as store_name,
-                            r.item_id,
-                            r.msku,
-                            max(r.local_sku) as local_sku,
-                            max({_PRODUCT_NAME_EXPR}) as product_name,
-                            max(om.owner_ref) as owner_ref,
-                            count(distinct r.return_order_id)::int as refund_orders,
-                            coalesce(sum(r.return_qty),0) as refund_qty,
-                            coalesce(sum(r.refund_amount),0) as refund_amount,
-                            coalesce(sum(r.refund_loss_amount) filter (
-                                where r.refund_loss_effective = true
-                            ),0) as refund_loss_amount,
-                            mode() within group (order by {_REASON_EXPR}) as top_reason
+                            {_STORE_NAME_EXPR} as display_store_name,
+                            {_PRODUCT_NAME_EXPR} as display_product_name,
+                            om.owner_ref,
+                            {_FINAL_REASON_CODE_EXPR} as final_reason_code,
+                            {_FINAL_RESPONSIBILITY_CODE_EXPR} as final_responsibility_code
                         from after_sales_refund_items r
                         left join owner_map om
                           on om.source_account_ref = r.source_account_ref
@@ -456,7 +548,53 @@ class AfterSalesRefundRepository:
                          and om.item_id = r.item_id
                          and om.msku = r.msku
                         where {" and ".join(refund_where)}
-                        group by {_PRODUCT_KEY_EXPR}, r.store_id, r.item_id, r.msku
+                    ),
+                    refund_agg as (
+                        select
+                            product_key,
+                            store_id,
+                            max(display_store_name) as store_name,
+                            item_id,
+                            msku,
+                            max(local_sku) as local_sku,
+                            max(display_product_name) as product_name,
+                            max(owner_ref) as owner_ref,
+                            count(distinct return_order_id)::int as refund_orders,
+                            coalesce(sum(return_qty),0) as refund_qty,
+                            coalesce(sum(refund_amount),0) as refund_amount,
+                            coalesce(sum(refund_loss_amount) filter (
+                                where refund_loss_effective = true
+                            ),0) as refund_loss_amount
+                        from scoped_refunds
+                        group by product_key, store_id, item_id, msku
+                    ),
+                    reason_rank as (
+                        select
+                            product_key,
+                            final_reason_code as reason_code,
+                            row_number() over (
+                                partition by product_key
+                                order by
+                                    sum(return_qty) desc,
+                                    count(distinct return_order_id) desc,
+                                    final_reason_code
+                            ) as rank_no
+                        from scoped_refunds
+                        group by product_key, final_reason_code
+                    ),
+                    responsibility_rank as (
+                        select
+                            product_key,
+                            final_responsibility_code as responsibility_code,
+                            row_number() over (
+                                partition by product_key
+                                order by
+                                    sum(return_qty) desc,
+                                    count(distinct return_order_id) desc,
+                                    final_responsibility_code
+                            ) as rank_no
+                        from scoped_refunds
+                        group by product_key, final_responsibility_code
                     ),
                     sales_agg as (
                         select
@@ -472,12 +610,30 @@ class AfterSalesRefundRepository:
                         r.*,
                         coalesce(s.sales_qty,0) as sales_qty,
                         case when coalesce(s.sales_qty,0) > 0
-                             then r.refund_qty / s.sales_qty * 100 end as refund_rate
+                             then r.refund_qty / s.sales_qty * 100 end as refund_rate,
+                        rr.reason_code as top_reason_code,
+                        rd.reason_name_cn as top_reason_name,
+                        rd.category_code as top_reason_category_code,
+                        rd.category_name_cn as top_reason_category_name,
+                        rd.tag_color as top_reason_color,
+                        rp.responsibility_code as top_responsibility_code,
+                        resp.name_cn as top_responsibility_name,
+                        resp.tag_color as top_responsibility_color
                     from refund_agg r
                     left join sales_agg s
                       on s.store_id = r.store_id
                      and s.item_id = r.item_id
                      and s.msku = r.msku
+                    left join reason_rank rr
+                      on rr.product_key = r.product_key
+                     and rr.rank_no = 1
+                    left join after_sales_reason_dict rd
+                      on rd.reason_code = rr.reason_code
+                    left join responsibility_rank rp
+                      on rp.product_key = r.product_key
+                     and rp.rank_no = 1
+                    left join after_sales_responsibility_dict resp
+                      on resp.code = rp.responsibility_code
                     order by refund_rate desc nulls last, r.refund_loss_amount desc,
                              r.refund_qty desc, r.item_id, r.msku
                     limit :limit
@@ -671,8 +827,22 @@ class AfterSalesRefundRepository:
                         r.refund_loss_amount,
                         r.return_reason_code,
                         r.return_description,
-                        {_REASON_EXPR} as return_reason,
-                        null::text as responsibility,
+                        {_FINAL_REASON_CODE_EXPR} as reason_code,
+                        coalesce(rd.reason_name_cn, '未分类') as reason_name,
+                        coalesce(rd.category_code, 'PENDING') as reason_category_code,
+                        coalesce(rd.category_name_cn, '待判定') as reason_category_name,
+                        coalesce(rd.tag_color, '#8C8C8C') as reason_color,
+                        {_FINAL_RESPONSIBILITY_CODE_EXPR} as responsibility_code,
+                        coalesce(resp.name_cn, '待判定') as responsibility_name,
+                        coalesce(resp.tag_color, '#8C8C8C') as responsibility_color,
+                        case
+                            when nullif(r.manual_responsibility_code,'') is not null then 'MANUAL'
+                            else coalesce(r.classification_source, 'FALLBACK')
+                        end as responsibility_source,
+                        case
+                            when nullif(r.manual_responsibility_code,'') is not null then 'HIGH'
+                            else coalesce(r.classification_confidence, 'LOW')
+                        end as responsibility_confidence,
                         r.current_refund_status,
                         r.refund_completed
                     from after_sales_refund_items r
@@ -681,6 +851,10 @@ class AfterSalesRefundRepository:
                      and om.store_id = r.store_id
                      and om.item_id = r.item_id
                      and om.msku = r.msku
+                    left join after_sales_reason_dict rd
+                      on rd.reason_code = {_FINAL_REASON_CODE_EXPR}
+                    left join after_sales_responsibility_dict resp
+                      on resp.code = {_FINAL_RESPONSIBILITY_CODE_EXPR}
                     where {where_sql}
                     order by {sort_col} {sort_dir} nulls last, r.id
                     limit :limit offset :offset
@@ -754,11 +928,12 @@ class AfterSalesRefundRepository:
                 params["owner_refs"] = owners
             reasons = split_csv(query.reason)
             if reasons:
-                where.append(f"{_REASON_EXPR} = any(:reasons)")
+                where.append(f"{_FINAL_REASON_CODE_EXPR} = any(:reasons)")
                 params["reasons"] = reasons
             responsibilities = split_csv(query.responsibility)
-            if responsibilities and "pending" not in responsibilities:
-                where.append("false")
+            if responsibilities:
+                where.append(f"{_FINAL_RESPONSIBILITY_CODE_EXPR} = any(:responsibilities)")
+                params["responsibilities"] = responsibilities
         if query.product_key:
             where.append(f"{_PRODUCT_KEY_EXPR} = :product_key")
             params["product_key"] = query.product_key
@@ -833,6 +1008,7 @@ class AfterSalesRefundRepository:
             "end_date",
             "store_ids",
             "owner_refs",
+            "responsibilities",
             "keyword",
             "batch_values",
             "product_key",

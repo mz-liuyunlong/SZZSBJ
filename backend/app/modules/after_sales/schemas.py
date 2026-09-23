@@ -59,6 +59,7 @@ class RefundItemQuery(RefundBaseQuery):
 class FilterOption(StrictSchema):
     value: str
     label: str
+    color: str | None = None
 
 
 class RefundFacets(StrictSchema):
@@ -100,8 +101,34 @@ class RefundTrendPoint(StrictSchema):
     refund_rate: Decimal | None
 
 
-class RefundReasonRead(StrictSchema):
-    reason: str
+class RefundReasonTag(StrictSchema):
+    code: str
+    name: str
+    category_code: str
+    category_name: str
+    color: str
+
+
+class RefundResponsibilityTag(StrictSchema):
+    code: str
+    name: str
+    color: str
+    source: str
+    confidence: str
+    editable: bool = True
+
+
+class RefundReasonRead(RefundReasonTag):
+    refund_orders: int
+    refund_qty: Decimal
+    refund_amount: Decimal
+    refund_loss_amount: Decimal
+
+
+class RefundResponsibilityRead(StrictSchema):
+    code: str
+    name: str
+    color: str
     refund_orders: int
     refund_qty: Decimal
     refund_amount: Decimal
@@ -113,6 +140,7 @@ class RefundOverviewData(StrictSchema):
     comparison: RefundComparison
     trend: list[RefundTrendPoint]
     reasons: list[RefundReasonRead]
+    responsibilities: list[RefundResponsibilityRead]
     facets: RefundFacets
 
 
@@ -138,7 +166,8 @@ class RefundProductRead(StrictSchema):
     refund_loss_amount: Decimal
     sales_qty: Decimal
     refund_rate: Decimal | None
-    top_reason: str | None
+    top_reason: RefundReasonTag | None
+    top_responsibility: RefundResponsibilityTag | None
     risk_level: RiskLevel = "pending"
 
 
@@ -211,8 +240,8 @@ class RefundItemRead(StrictSchema):
     refund_loss_amount: Decimal | None
     return_reason_code: str | None
     return_description: str | None
-    return_reason: str
-    responsibility: str | None
+    reason: RefundReasonTag
+    responsibility: RefundResponsibilityTag
     current_refund_status: str | None
     refund_completed: bool
 
