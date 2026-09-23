@@ -218,7 +218,7 @@ class AfterSalesRefundRepository:
                     f"""
                     with {_OWNER_CTE}
                     select
-                        r.refund_effective_date as day,
+                        r.return_order_at::date as day,
                         count(distinct r.return_order_id)::int as refund_orders,
                         coalesce(sum(r.return_qty),0) as refund_qty,
                         coalesce(sum(r.refund_amount),0) as refund_amount,
@@ -232,7 +232,7 @@ class AfterSalesRefundRepository:
                      and om.item_id = r.item_id
                      and om.msku = r.msku
                     where {" and ".join(where)}
-                    group by r.refund_effective_date
+                    group by r.return_order_at::date
                     order by day
                     """
                 ),
@@ -664,7 +664,7 @@ class AfterSalesRefundRepository:
                     with {_OWNER_CTE}
                     select
                         {_PRODUCT_KEY_EXPR} as product_key,
-                        r.refund_effective_date as day,
+                        r.return_order_at::date as day,
                         coalesce(sum(r.return_qty),0) as refund_qty
                     from after_sales_refund_items r
                     left join owner_map om
@@ -701,7 +701,7 @@ class AfterSalesRefundRepository:
                     r.*,
                     case
                         when r.purchase_time_at is not null
-                         and r.refund_effective_date is not null
+                         and r.return_order_at is not null
                          and r.return_order_at >= r.purchase_time_at
                         then extract(epoch from (r.return_order_at - r.purchase_time_at)) / 86400.0
                     end as lag_days
@@ -817,7 +817,7 @@ class AfterSalesRefundRepository:
                         r.return_order_at as refund_time_at,
                         case
                             when r.purchase_time_at is not null
-                             and r.refund_effective_date is not null
+                             and r.return_order_at is not null
                              and r.return_order_at >= r.purchase_time_at
                             then extract(epoch from (r.return_order_at-r.purchase_time_at))/86400.0
                         end as refund_lag_days,
@@ -909,8 +909,8 @@ class AfterSalesRefundRepository:
         where = [
             "r.source_account_ref = any(:accounts)",
             "r.platform_code = 'walmart'",
-            "r.refund_effective_date is not null",
-            "r.refund_effective_date between :start_date and :end_date",
+            "r.return_order_at is not null",
+            "r.return_order_at::date between :start_date and :end_date",
         ]
         params: dict[str, object] = {
             "accounts": list(account_refs),
