@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, model_validator
 
@@ -320,6 +321,80 @@ class PurchaseReadMeta(StrictSchema):
     page: int | None = None
     page_size: int | None = None
     total: int | None = None
+
+
+# --- manual cycle overrides (7.5, G3-F) --------------------------------------------------------
+
+type OverrideKind = Literal["exclude", "restore", "arrival_date", "baseline"]
+
+
+class CycleOverrideRequest(StrictSchema):
+    """One human correction to a SKU purchase cycle (rules §4.2; append-only)."""
+
+    source_account_ref: str = Field(min_length=1, max_length=128)
+    kind: OverrideKind
+    purchase_order_sn: str | None = Field(default=None, min_length=1, max_length=64)
+    value_days: int | None = Field(default=None, ge=0, le=365)
+    value_date: date | None = None
+    reason: str = Field(min_length=1, max_length=1000)
+    request_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def _shape(self) -> CycleOverrideRequest:
+        if not self.reason.strip():
+            raise ValueError("reason must not be blank")
+        if self.source_account_ref != self.source_account_ref.strip():
+            raise ValueError("source_account_ref must be canonical")
+        if self.kind in ("exclude", "restore"):
+            if not self.purchase_order_sn:
+                raise ValueError("purchase_order_sn is required for exclude / restore")
+            if self.value_days is not None or self.value_date is not None:
+                raise ValueError("exclude / restore take no value")
+        elif self.kind == "arrival_date":
+            if not self.purchase_order_sn or self.value_date is None:
+                raise ValueError("arrival_date requires purchase_order_sn and value_date")
+            if self.value_days is not None:
+                raise ValueError("arrival_date takes value_date only")
+        else:  # baseline
+            if self.value_days is None:
+                raise ValueError("baseline requires value_days")
+            if self.purchase_order_sn is not None or self.value_date is not None:
+                raise ValueError("baseline applies to the whole SKU")
+        return self
+
+
+class CycleOverrideRead(StrictSchema):
+    id: UUID
+    source_account_ref: str
+    sku: str
+    kind: OverrideKind
+    purchase_order_sn: str | None
+    value_days: int | None
+    value_date: date | None
+    before: dict[str, object]
+    after: dict[str, object]
+    reason: str
+    operator_ref: str
+    request_id: str | None
+    effective_from: datetime
+    effective_to: datetime | None
+    is_active: bool
+    created_at: datetime
+
+
+class CycleOverrideMutationData(StrictSchema):
+    override: CycleOverrideRead
+    replaced_override_id: UUID | None = Field(
+        description="previous active baseline closed by this record (baseline only)"
+    )
+    idempotent_replay: bool = Field(description="true when the request_id was already applied")
+    sku_cycle: SkuCycleRead | None = Field(description="SKU cycle after the refresh")
+    refresh_board_rows: int
+
+
+class CycleOverrideListData(StrictSchema):
+    sku: str
+    items: list[CycleOverrideRead]
 
 
 OrderDetailData.model_rebuild()

@@ -120,18 +120,17 @@ def test_openapi_lists_all_five_read_routes_with_response_models() -> None:
         get = schema["paths"][path]["get"]
         assert get["operationId"]
         assert "200" in get["responses"] and "403" in get["responses"]
-    assert all(
-        "post" not in schema["paths"][p] for p in ROUTES
-    )  # G3-E is read-only; overrides are G3-F
+    # the only write route is the G3-F SKU cycle override
+    posts = {p for p in ROUTES if "post" in schema["paths"][p]}
+    assert posts == {"/api/pmc/purchase/sku-cycles/{sku}/overrides"}
 
 
 def test_routes_fail_closed_for_permission_and_scope() -> None:
     # missing permission → 403 FORBIDDEN
     client = TestClient(_app("products:read"))
     for path in ROUTES:
-        body = _envelope(
-            client.get(path.replace("{order_sn}", "PO1"), params={"sku": "SKU-A"}), 403
-        )
+        target = path.replace("{order_sn}", "PO1").replace("{sku}", "SKU-A")
+        body = _envelope(client.get(target, params={"sku": "SKU-A"}), 403)
         assert body["error"]["code"] == "FORBIDDEN"
     # right permission but no account scope → 403 DATA_SCOPE_DENIED
     client = TestClient(_app(READ, scoped=False))
