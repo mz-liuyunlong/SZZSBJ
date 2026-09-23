@@ -164,6 +164,9 @@ def test_migration_keys_and_seed_follow_convention() -> None:
     ):
         assert f" {value}," in seed or f"({value}" in seed or f", {value}" in seed
     assert "'0.5000'" in seed and "'2026-08-01'" in seed
+    assert "CAST(" in seed
+    assert "AS NUMERIC(5, 4)" in seed
+    assert "AS DATE" in seed
     body = sql.split("-- Running upgrade")[-1]
     # The only UPDATE is Alembic's own version bookkeeping.
     assert body.count("UPDATE ") == 1 and "UPDATE alembic_version" in body
