@@ -76,9 +76,7 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
         mart_table="mart_order_profit_sku_day",
         refresh_mode="delete_insert",
         granularity="business_date_sku",
-        source_tables=(
-            "mart_daily_sales_item_day",
-        ),
+        source_tables=("mart_daily_sales_item_day",),
         requires_business_date_window=True,
         boundary_notes=(
             "Order-profit sales totals inherit the authoritative SaleStat daily-sales basis from Daily Sales MART.",
