@@ -26,6 +26,7 @@ PMC 目标是提单、提利润、降人力：采购是补货链路第一段，�
 - [x] Gate 1（docs-only，#113 + 批准 PR）：数据源决策、证据、3 份契约快照、契约清单行更新（含收货单重评）、PRP、页面规格、业务规则副本
 - [ ] Gate 2：3 个 `integration_sync` handler/parser、ODS 5 张表、质量检查、Celery 任务（默认 disabled）、12 个月回填 runner（手动）
 - [ ] Gate 3：DWD 3 张、DWS 3 张、`manual_*` 1 张（交期修正；ItemID 人工指定不建，负责人 2026-09-21 决定）、规则表 1 张、4 个只读 API + 1 个人工覆盖 API
+  - 进度：A 建表 #152、B 发布器 #148/#153、C 规则计算 #141、D DWS 刷新、E 只读 API ×4 + 待采购计划下钻 ×1（`docs/api/pmc-purchase-api.md`）已提交；F 人工覆盖 API 待开
 - [ ] Gate 4：前端 `/pmc/purchase-board` 页面（PageShell + ReportTableShell + ConnectedSearch + 详情 Modal + ItemID/交期修正 Modal）
 - [ ] 跨模块最小改动（负责人 2026-09-18 已同意，各带条件）：`dim_walmart_listings.fulfillment_type` 列 + Listing 管理展示（**单独最小 PR，走 Alembic，不手改生产库，不影响现有 Listing 链路**）；`WalmartItemLink` 共享组件（**全系统唯一共享组件，先查 main 是否已有，采购看板 / Listing / 产品详情直接调用，不允许各页面自拼 URL**）；产品详情"采购交期"改读 `dws_purchase_sku_cycle`（**放 Gate 4 或 DWS 完成后，前端只经后端 BFF/DWS 读取，DWS 未完成前不接页面**）
 
