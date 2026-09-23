@@ -41,6 +41,8 @@ def test_daily_sales_refresh_depends_on_authoritative_sales_and_business_sources
         "ref_product_pricing_rule_versions",
         "ref_store_commission_rule_versions",
     }
+    assert any("purchase_time_at::date" in note for note in spec.boundary_notes)
+    assert any("without authoritative direct SaleStat" in note for note in spec.boundary_notes)
 
 
 def test_order_profit_refresh_inherits_daily_sales_business_rules() -> None:

@@ -66,7 +66,8 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
         boundary_notes=(
             "SaleStat data_type=1 is the authoritative daily-sales basis.",
             "Valid sample orders use a fixed UTC-7 business day converted to China time only for the Order V2 sample request.",
-            "Refund quantity, refund loss, and refund date come directly from after_sales_refund_items without purchase-date conversion.",
+            "Refund Management keeps return_order_at as the refund-event date; Daily Sales attributes refunds by purchase_time_at::date directly, with no timezone conversion.",
+            "Refund purchase days without authoritative direct SaleStat are deferred until sales facts exist.",
             "Owner, purchase cost, WFS fee, and first-leg cost are matched from Product Management by SKU.",
             "Ad spend keeps the existing interface time behavior and is aggregated by date, store, item, and MSKU.",
         ),

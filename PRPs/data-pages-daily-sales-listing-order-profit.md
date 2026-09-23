@@ -2,12 +2,14 @@
 
 
 > **2026-09-24 refund truth override:** Refund Management is the only refund source of truth.
-> Daily Sales consumes `after_sales_refund_items` directly for refund quantity, refund loss,
-> refund date, and 30-day return rate. The refund date is the raw refund log date from
-> `return_order_at::date` (`returnOrderDate`); do not convert `purchaseTimeLocale`, do not attribute refunds back to
-> the original sales day, and do not use `fact_walmart_refund_items` or
-> `dws_walmart_refund_business_amounts` for Daily Sales. This rule supersedes older refund
-> statements later in this historical PRP.
+> Refund Management keeps the raw refund event date from `return_order_at::date`
+> (`returnOrderDate`). Daily Sales consumes `after_sales_refund_items` directly but attributes
+> refund quantity/loss to `purchase_time_at::date`. `purchase_time_at` is already the US order
+> time shown by Refund Management, so Daily Sales must not apply any timezone conversion.
+> A purchase date is included only when authoritative direct SaleStat exists for that date;
+> refund-only historical dates are deferred until sales facts are backfilled. The legacy
+> `fact_walmart_refund_items` / `dws_walmart_refund_business_amounts` chain remains retired.
+> This rule supersedes older conflicting refund statements later in this historical PRP.
 
 状态：`APPROVED_FOR_IMPLEMENTATION`
 

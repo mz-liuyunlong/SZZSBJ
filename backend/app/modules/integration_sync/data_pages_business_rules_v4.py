@@ -24,8 +24,11 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
     """Use Refund Management as the only refund truth for Daily Sales.
 
     Return API rows are written into after_sales_refund_items with the same governed
-    rules used by Refund Management. Daily Sales never converts refund logs back to
-    purchase dates and never reads the legacy refund fact/DWS chain.
+    rules used by Refund Management. Refund Management keeps the raw refund event date,
+    while Daily Sales attributes refund quantity/loss to purchase_time_at::date directly
+    (purchase_time_at is already the Walmart/US order time and is not timezone-shifted).
+    Purchase days without SaleStat are deferred until sales facts exist. The legacy
+    refund fact/DWS chain remains retired.
     """
 
     def _write_refunds(self, rows: Iterable[dict[str, Any]]) -> int:
@@ -73,7 +76,7 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
                 text(
                     "select count(*) from after_sales_refund_items "
                     "where source_account_ref=:account and platform_code='walmart' "
-                    "and refund_effective=true and refund_effective_date=:day "
+                    "and refund_effective=true and return_order_at::date=:day "
                     "and (store_id is null or item_id is null or msku is null or trim(msku)='')"
                 ),
                 {
@@ -85,11 +88,49 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         )
 
     def _reprice_refunds(self) -> int:
-        """Legacy original-sales-day refund repricing is intentionally disabled."""
+        """Collect purchase dates changed by the current refund-event-day sync."""
 
+        affected = (
+            self.session.execute(
+                text(
+                    "select distinct r.purchase_time_at::date "
+                    "from after_sales_refund_items r "
+                    "where r.source_account_ref=:account and r.platform_code='walmart' "
+                    "and r.refund_effective=true and r.return_order_at::date=:refund_day "
+                    "and r.purchase_time_at is not null "
+                    "and exists (select 1 from fact_walmart_sales_item_daily s "
+                    "where s.source_account_ref=r.source_account_ref "
+                    "and s.business_date_la=r.purchase_time_at::date "
+                    "and s.allocation_status='direct')"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "refund_day": self.business_date,
+                },
+            )
+            .scalars()
+            .all()
+        )
+        self._refund_affected_business_dates = tuple(
+            sorted(day for day in affected if day is not None)
+        )
         return 0
 
     def _refresh_daily_sales_mart(self) -> int:
-        """Refresh only the requested business day from current refund facts."""
+        """Refresh current day plus affected purchase days that already have SaleStat."""
 
-        return super()._refresh_daily_sales_mart()
+        current_day = self.business_date
+        affected_days = tuple(
+            day
+            for day in getattr(self, "_refund_affected_business_dates", ())
+            if day != current_day
+        )
+        try:
+            for day in affected_days:
+                self.business_date = day
+                super()._refresh_daily_sales_mart()
+                self._refresh_order_profit_mart()
+            self.business_date = current_day
+            return super()._refresh_daily_sales_mart()
+        finally:
+            self.business_date = current_day
