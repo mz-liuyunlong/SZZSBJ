@@ -24,6 +24,7 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "business-rules:read",
         "business-rules:write",
         "business-rules:execute",
+        "pmc:purchase:read",
     }
 )
 _PREVIEW_PATH_PREFIXES: Final = frozenset(
@@ -35,6 +36,7 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
         "/api/listings/",
         "/api/warehouse/",
         "/api/business-rules/",
+        "/api/pmc/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
