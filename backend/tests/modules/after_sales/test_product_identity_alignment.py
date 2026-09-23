@@ -102,7 +102,7 @@ def test_item_drilldown_accepts_exact_product_key() -> None:
     assert params["product_key"] == product_key
 
 
-def test_refund_window_uses_governed_refund_effective_date() -> None:
+def test_refund_window_uses_raw_return_order_date() -> None:
     session = _CaptureSession()
     repository = AfterSalesRefundRepository(session)  # type: ignore[arg-type]
 
