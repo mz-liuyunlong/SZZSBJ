@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.core.api import SuccessEnvelope, install_api_foundation, success_response
 from app.core.auth import enforce_protected_by_default
 from app.db.session import dispose_engine
+from app.modules.after_sales.router import router as after_sales_router
 from app.modules.business_rules.router import router as business_rules_router
 from app.modules.data_pages.router import router as data_pages_router
 from app.modules.integration_sync.router import router as integration_sync_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
         openapi_url=None,
     )
     install_api_foundation(application)
+    application.include_router(after_sales_router)
     application.include_router(business_rules_router)
     application.include_router(data_pages_router)
     application.include_router(integration_sync_router)
