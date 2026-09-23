@@ -49,7 +49,7 @@ def test_daily_sales_uses_strict_triple_and_includes_sample_only_rows() -> None:
     assert "cost_quantity" in source
     assert "coalesce(sample.sample_qty,0)" in source
     assert "after_sales_refund_items" in source
-    assert "return_order_at::date=:day" in source
+    assert "purchase_time_at::date=:day" in source
     assert "refund_loss_amount" in source
     assert "provider_refund_amount" in source
     assert "calculation_warnings_json" in source
@@ -69,7 +69,7 @@ def test_daily_sales_refund_truth_does_not_use_legacy_refund_chain() -> None:
 
     assert "after_sales_refund_items" in source
     assert "fact_walmart_refund_items" not in source
-    assert "'refund_date_basis','return_order_at'" in source
+    assert "'refund_date_basis','purchase_time_at'" in source
     assert "dws_walmart_refund_business_amounts" not in source
     assert "REFUND_COMPLETED" not in source
     assert "purchaseTimeLocale" not in source
@@ -90,12 +90,16 @@ def test_daily_sales_uses_current_product_management_and_fact_backed_history() -
     assert legacy_history_query not in source
 
 
-def test_rolling_return_rate_uses_refund_management_event_dates() -> None:
+def test_rolling_return_rate_uses_refund_purchase_dates_without_timezone_conversion() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
 
-    assert "r.return_order_at::date between :start_day and :end_day" in source
+    assert "r.purchase_time_at::date between :start_day and :end_day" in source
     assert "sum(coalesce(r.return_qty,0)) return_qty" in source
     assert "fact_walmart_refund_items" not in source
+    assert "interval '15 hours'" not in source
+    assert "timezone(" not in source
+    assert "sale_day.business_date_la=r.purchase_time_at::date" in source
+    assert "sale_day.allocation_status='direct'" in source
 
 
 def test_daily_sales_preserves_sample_sales_amount() -> None:
