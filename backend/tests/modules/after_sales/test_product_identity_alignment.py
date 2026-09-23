@@ -112,6 +112,6 @@ def test_refund_window_uses_raw_return_order_date() -> None:
     )
 
     sql = " and ".join(where)
-    assert "r.refund_effective_date is not null" in sql
-    assert "r.refund_effective_date between :start_date and :end_date" in sql
-    assert "r.return_order_at::date between" not in sql
+    assert "r.return_order_at is not null" in sql
+    assert "r.return_order_at::date between :start_date and :end_date" in sql
+    assert "r.refund_effective_date between" not in sql
