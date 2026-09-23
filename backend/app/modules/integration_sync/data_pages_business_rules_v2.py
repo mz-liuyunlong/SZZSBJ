@@ -591,7 +591,6 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             sample_qty = _decimal(row["sample_qty"]) or Decimal("0")
             sample_amount = _decimal(row["sample_amount"]) or Decimal("0")
             refund_amount = _decimal(row["refund_amount"]) or Decimal("0")
-            return_qty = _decimal(row["return_qty"]) or Decimal("0")
 
             sku_key = normalize_sku_key(row["local_sku"])
             cost = costs.get(sku_key) if sku_key is not None else None
