@@ -107,8 +107,8 @@ const defaultColumnWidths: Record<DetailColumnKey, number> = {
   refundLag: 100,
   qty: 100,
   loss: 110,
-  reason: 120,
-  responsibility: 120,
+  reason: 190,
+  responsibility: 150,
 };
 
 const createInitialFilters = (): RefundFilters => ({
@@ -199,10 +199,6 @@ const formatChange = (value: number | null, unit: "%" | "pp") => {
   const arrow = value > 0 ? "↑" : value < 0 ? "↓" : "→";
   return `${arrow} ${Math.abs(value).toFixed(2)}${unit}`;
 };
-
-const riskMeta = {
-  pending: { label: "待评估" },
-} as const;
 
 function trendOption(
   metric: RefundMetric,
@@ -410,8 +406,10 @@ function productReasonOption(product: RefundProductDetail) {
         name: "退款单数",
         type: "bar",
         barWidth: 10,
-        data: product.reasons.map((item) => item.count),
-        itemStyle: { color: "#78aef1", borderRadius: [0, 8, 8, 0] },
+        data: product.reasons.map((item) => ({
+          value: item.count,
+          itemStyle: { color: item.color, borderRadius: [0, 8, 8, 0] },
+        })),
         label: {
           show: true,
           position: "right",
@@ -487,6 +485,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
   const [activeTab, setActiveTab] = useState("analysis");
   const [metric, setMetric] = useState<RefundMetric>("qty");
   const [analysisView, setAnalysisView] = useState<RefundAnalysisView>("trend");
+  const [breakdownView, setBreakdownView] = useState<"reason" | "responsibility">("reason");
   const [productSort, setProductSort] = useState<RefundProductSort>("rate");
   const [selectedProductKey, setSelectedProductKey] = useState("");
   const [detailProductKey, setDetailProductKey] = useState("");
@@ -520,6 +519,8 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
 
   const selectedProduct = productAnalysis?.selected ?? null;
   const overviewReasons = overview?.reasons ?? [];
+  const overviewResponsibilities = overview?.responsibilities ?? [];
+  const breakdownRows = breakdownView === "reason" ? overviewReasons : overviewResponsibilities;
   const sortedProducts = useMemo(() => {
     const rows = [...(productAnalysis?.items ?? [])];
     const value = (item: (typeof rows)[number]) => {
@@ -547,11 +548,15 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
     })
   ), [itemResult?.rows, orderTimeAudit]);
 
-  const resetFilters = () => {
-    setFilters(createInitialFilters());
+  const resetProductScope = () => {
     setSelectedProductKey("");
     setDetailProductKey("");
     setCurrentPage(1);
+  };
+
+  const resetFilters = () => {
+    setFilters(createInitialFilters());
+    resetProductScope();
   };
 
   const copyText = async (value: string) => {
@@ -577,8 +582,8 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
         row.refundLagDays == null ? "" : row.refundLagDays.toFixed(2),
         row.qty,
         row.loss == null ? "" : -Math.abs(row.loss),
-        row.reason,
-        row.responsibility,
+        row.reason.name,
+        row.responsibility.name,
       ]),
     ];
 
@@ -791,12 +796,43 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
       title: "售后原因",
       key: "reason",
       render: (_, row) => (
-        <Tag bordered={false} color="orange">
-          {row.reason}
-        </Tag>
+        <Tooltip
+          title={(
+            <div>
+              <div>原始 Code：{row.rawReasonCode || "-"}</div>
+              <div>原始描述：{row.rawDescription || "-"}</div>
+              <div>标准分类：{row.reason.categoryName}</div>
+            </div>
+          )}
+        >
+          <span style={{ display: "flex", minWidth: 0, flexDirection: "column", gap: 2 }}>
+            <Tag bordered={false} color={row.reason.color} style={{ width: "fit-content" }}>
+              {row.reason.name}
+            </Tag>
+            {row.rawDescription && row.rawDescription !== row.reason.name ? (
+              <Typography.Text
+                type="secondary"
+                ellipsis={{ tooltip: row.rawDescription }}
+                style={{ maxWidth: 170, fontSize: 11 }}
+              >
+                {row.rawDescription}
+              </Typography.Text>
+            ) : null}
+          </span>
+        </Tooltip>
       ),
     },
-    { title: "责任归属", dataIndex: "responsibility", key: "responsibility" },
+    {
+      title: "责任归属",
+      key: "responsibility",
+      render: (_, row) => (
+        <Tooltip title={`判定来源：${row.responsibility.source} · 置信度：${row.responsibility.confidence}`}>
+          <Tag bordered={false} color={row.responsibility.color}>
+            {row.responsibility.name}
+          </Tag>
+        </Tooltip>
+      ),
+    },
   ];
 
   const columnMap = new Map(baseColumns.map((column) => [String(column.key), column]));
@@ -885,17 +921,31 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
           loading={overviewQuery.isLoading}
         >
           <div className="refund-management__card-head refund-management__card-head--compact">
-            <div><h3>售后原因 TOP</h3></div>
+            <div><h3>{breakdownView === "reason" ? "售后原因 TOP" : "责任归属 TOP"}</h3></div>
+            <Segmented
+              size="small"
+              value={breakdownView}
+              options={[
+                { label: "售后原因", value: "reason" },
+                { label: "责任归属", value: "responsibility" },
+              ]}
+              onChange={(value) => setBreakdownView(value as "reason" | "responsibility")}
+            />
           </div>
           <div className="refund-management__reason-list">
-            {overviewReasons.length > 0 ? (
-              overviewReasons.map((item) => {
-                const maxCount = Math.max(1, overviewReasons[0]?.count ?? 1);
+            {breakdownRows.length > 0 ? (
+              breakdownRows.map((item) => {
+                const maxCount = Math.max(1, ...breakdownRows.map((row) => row.count));
                 return (
-                  <div key={item.name} className="refund-management__reason-row">
-                    <span>{item.name}</span>
+                  <div key={item.code} className="refund-management__reason-row">
+                    <Tag bordered={false} color={item.color}>{item.name}</Tag>
                     <div className="refund-management__reason-track">
-                      <i style={{ width: `${(item.count / maxCount) * 100}%` }} />
+                      <i
+                        style={{
+                          width: `${(item.count / maxCount) * 100}%`,
+                          backgroundColor: item.color,
+                        }}
+                      />
                     </div>
                     <strong>{item.count}单</strong>
                     <em>{formatRefundMoneyCompact(item.loss)}</em>
@@ -903,7 +953,10 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
                 );
               })
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无原因数据" />
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={breakdownView === "reason" ? "暂无原因数据" : "暂无责任数据"}
+              />
             )}
           </div>
         </Card>
@@ -934,7 +987,6 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
           </div>
           <div className="refund-management__risk-list">
             {sortedProducts.length > 0 ? sortedProducts.map((product) => {
-              const meta = riskMeta[product.risk];
               const active = product.productKey === selectedProduct?.productKey;
               return (
                 <button
@@ -951,7 +1003,18 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
                       <strong>{product.name}</strong>
                       <span>{product.productId} / {product.msku} · {product.store}</span>
                     </div>
-                    <Tag bordered={false}>{meta.label}</Tag>
+                    <Space size={4} wrap>
+                      {product.topReason ? (
+                        <Tag bordered={false} color={product.topReason.color}>
+                          {product.topReason.name}
+                        </Tag>
+                      ) : null}
+                      {product.topResponsibility ? (
+                        <Tag bordered={false} color={product.topResponsibility.color}>
+                          {product.topResponsibility.name}
+                        </Tag>
+                      ) : null}
+                    </Space>
                   </div>
                   <div className="refund-management__risk-metrics">
                     <span>
@@ -1045,13 +1108,19 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
               </div>
               {selectedProduct ? (
                 <div className="refund-management__insight">
-                  <strong>{selectedProduct.reason} 是当前主要原因</strong>
+                  <strong>
+                    {selectedProduct.topReason?.name ?? "未分类"} 是当前主要原因
+                    {selectedProduct.topResponsibility
+                      ? ` · ${selectedProduct.topResponsibility.name}`
+                      : ""}
+                  </strong>
                   <p>
                     {selectedProduct.sales > 0
                       ? `该商品当前退款率 ${formatPercent(selectedProduct.rate)}`
                       : "该商品当前无同期销量，退款率不可计算"}
                     ，退款数量 {formatCount(selectedProduct.qty)} 件，
-                    退款损失 {formatRefundMoneyCompact(selectedProduct.loss)}。可结合退款周期与明细进一步定位集中问题。
+                    退款损失 {formatRefundMoneyCompact(selectedProduct.loss)}。原因与责任均由后端标准化规则返回，
+                    可结合退款周期与明细中的原始描述继续核查。
                   </p>
                 </div>
               ) : (
@@ -1178,9 +1247,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
               popupWidth={360}
               onChange={(value) => {
                 setFilters((current) => ({ ...current, stores: Array.isArray(value) ? value : [] }));
-                setSelectedProductKey("");
-                setDetailProductKey("");
-                setCurrentPage(1);
+                resetProductScope();
               }}
             />
             <ReportFacetSelect
@@ -1193,9 +1260,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
               triggerWidth={126}
               onChange={(value) => {
                 setFilters((current) => ({ ...current, owners: Array.isArray(value) ? value : [] }));
-                setSelectedProductKey("");
-                setDetailProductKey("");
-                setCurrentPage(1);
+                resetProductScope();
               }}
             />
             <ReportFacetSelect
@@ -1208,9 +1273,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
               triggerWidth={140}
               onChange={(value) => {
                 setFilters((current) => ({ ...current, reasons: Array.isArray(value) ? value : [] }));
-                setSelectedProductKey("");
-                setDetailProductKey("");
-                setCurrentPage(1);
+                resetProductScope();
               }}
             />
             <ReportFacetSelect
@@ -1226,9 +1289,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
                   ...current,
                   responsibilities: Array.isArray(value) ? value : [],
                 }));
-                setSelectedProductKey("");
-                setDetailProductKey("");
-                setCurrentPage(1);
+                resetProductScope();
               }}
             />
             <DatePicker.RangePicker
@@ -1254,9 +1315,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
                     end.format("YYYY-MM-DD"),
                   ],
                 }));
-                setSelectedProductKey("");
-                setDetailProductKey("");
-                setCurrentPage(1);
+                resetProductScope();
               }}
             />
             <Select
@@ -1294,9 +1353,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
                     keyword: "",
                     batchValues: values,
                   }));
-                  setSelectedProductKey("");
-                  setDetailProductKey("");
-                  setCurrentPage(1);
+                  resetProductScope();
                 },
               }}
               onCommit={({ searchField, keyword }) => {
@@ -1306,9 +1363,7 @@ function RefundManagementPage({ page }: RefundManagementPageProps) {
                   keyword,
                   batchValues: undefined,
                 }));
-                setSelectedProductKey("");
-                setDetailProductKey("");
-                setCurrentPage(1);
+                resetProductScope();
               }}
             />
             <ResetButton onClick={resetFilters} />

@@ -20,10 +20,37 @@ export interface RefundFilters {
 export interface RefundFilterOption {
   value: string;
   label: string;
+  color?: string;
 }
 
-export interface RefundReasonDatum {
+export interface RefundReasonTag {
+  code: string;
   name: string;
+  categoryCode: string;
+  categoryName: string;
+  color: string;
+}
+
+export interface RefundResponsibilityTag {
+  code: string;
+  name: string;
+  color: string;
+  source: string;
+  confidence: string;
+  editable: boolean;
+}
+
+export interface RefundReasonDatum extends RefundReasonTag {
+  count: number;
+  qty: number;
+  amount: number;
+  loss: number;
+}
+
+export interface RefundResponsibilityDatum {
+  code: string;
+  name: string;
+  color: string;
   count: number;
   qty: number;
   amount: number;
@@ -63,9 +90,10 @@ export interface RefundProductDatum {
   orders: number;
   qty: number;
   amount: number;
-  rate: number;
+  rate: number | null;
   loss: number;
-  reason: string;
+  topReason: RefundReasonTag | null;
+  topResponsibility: RefundResponsibilityTag | null;
   risk: "pending";
 }
 
@@ -93,10 +121,10 @@ export interface RefundDetailRow {
   amount: number | null;
   currency: "USD";
   loss: number | null;
-  reason: string;
-  reasonCode: string;
-  description: string;
-  responsibility: string;
+  rawReasonCode: string;
+  rawDescription: string;
+  reason: RefundReasonTag;
+  responsibility: RefundResponsibilityTag;
   status: string;
   completed: boolean;
 }
@@ -126,6 +154,7 @@ export interface RefundOverviewView {
     loss: number[];
   };
   reasons: RefundReasonDatum[];
+  responsibilities: RefundResponsibilityDatum[];
   stores: RefundFilterOption[];
   owners: RefundFilterOption[];
   reasonOptions: RefundFilterOption[];

@@ -7,15 +7,19 @@ import type {
   RefundLagAnalysis,
   RefundLagDatum,
   RefundOverviewView,
-  RefundReasonDatum,
   RefundProductAnalysisViewData,
   RefundProductDatum,
   RefundProductDetail,
+  RefundReasonDatum,
+  RefundReasonTag,
+  RefundResponsibilityDatum,
+  RefundResponsibilityTag,
 } from "@/pages/aftersales/refundManagementTypes";
 
 interface BackendFilterOption {
   value: string;
   label: string;
+  color: string | null;
 }
 
 interface BackendRefundSummary {
@@ -50,8 +54,34 @@ interface BackendRefundTrendPoint {
   refund_rate: string | null;
 }
 
-interface BackendRefundReason {
-  reason: string;
+interface BackendRefundReasonTag {
+  code: string;
+  name: string;
+  category_code: string;
+  category_name: string;
+  color: string;
+}
+
+interface BackendRefundResponsibilityTag {
+  code: string;
+  name: string;
+  color: string;
+  source: string;
+  confidence: string;
+  editable: boolean;
+}
+
+interface BackendRefundReason extends BackendRefundReasonTag {
+  refund_orders: number;
+  refund_qty: string;
+  refund_amount: string;
+  refund_loss_amount: string;
+}
+
+interface BackendRefundResponsibility {
+  code: string;
+  name: string;
+  color: string;
   refund_orders: number;
   refund_qty: string;
   refund_amount: string;
@@ -63,6 +93,7 @@ interface BackendRefundOverviewData {
   comparison: BackendRefundComparison;
   trend: BackendRefundTrendPoint[];
   reasons: BackendRefundReason[];
+  responsibilities: BackendRefundResponsibility[];
   facets: {
     stores: BackendFilterOption[];
     owners: BackendFilterOption[];
@@ -93,7 +124,8 @@ interface BackendRefundProduct {
   refund_loss_amount: string;
   sales_qty: string;
   refund_rate: string | null;
-  top_reason: string | null;
+  top_reason: BackendRefundReasonTag | null;
+  top_responsibility: BackendRefundResponsibilityTag | null;
   risk_level: "pending";
 }
 
@@ -161,8 +193,8 @@ interface BackendRefundItem {
   refund_loss_amount: string | null;
   return_reason_code: string | null;
   return_description: string | null;
-  return_reason: string;
-  responsibility: string | null;
+  reason: BackendRefundReasonTag;
+  responsibility: BackendRefundResponsibilityTag;
   current_refund_status: string | null;
   refund_completed: boolean;
 }
@@ -192,28 +224,36 @@ const nullableNumberValue = (value: string | number | null | undefined) => (
 );
 
 const lagLabels: Record<BackendRefundLagBucket["key"], string> = {
-  "0_3": "0\u20133\u5929",
-  "4_7": "4\u20137\u5929",
-  "8_14": "8\u201314\u5929",
-  "15_30": "15\u201330\u5929",
-  "31_plus": "30\u5929\u4ee5\u4e0a",
+  "0_3": "0–3天",
+  "4_7": "4–7天",
+  "8_14": "8–14天",
+  "15_30": "15–30天",
+  "31_plus": "30天以上",
 };
 
-const displayReason = (value: string | null | undefined) => {
-  if (!value || value === "UNCLASSIFIED") return "\u672a\u5206\u7c7b";
-  return value;
-};
+const toReasonTag = (item: BackendRefundReasonTag): RefundReasonTag => ({
+  code: item.code,
+  name: item.name,
+  categoryCode: item.category_code,
+  categoryName: item.category_name,
+  color: item.color,
+});
 
-const displayResponsibility = (value: string | null | undefined) => (
-  value && value !== "pending" ? value : "\u5f85\u5224\u5b9a"
-);
+const toResponsibilityTag = (
+  item: BackendRefundResponsibilityTag,
+): RefundResponsibilityTag => ({
+  code: item.code,
+  name: item.name,
+  color: item.color,
+  source: item.source,
+  confidence: item.confidence,
+  editable: item.editable,
+});
 
-const toFilterOptions = (
-  items: BackendFilterOption[],
-  kind?: "responsibility",
-): RefundFilterOption[] => items.map((item) => ({
+const toFilterOptions = (items: BackendFilterOption[]): RefundFilterOption[] => items.map((item) => ({
   value: item.value,
-  label: kind === "responsibility" ? displayResponsibility(item.label) : displayReason(item.label),
+  label: item.label,
+  color: item.color ?? undefined,
 }));
 
 const appendMulti = (search: URLSearchParams, key: string, values: string[]) => {
@@ -251,7 +291,19 @@ const buildRefundSearch = (filters: RefundFilters) => {
 };
 
 const toReason = (item: BackendRefundReason): RefundReasonDatum => ({
-  name: displayReason(item.reason),
+  ...toReasonTag(item),
+  count: item.refund_orders,
+  qty: numberValue(item.refund_qty),
+  amount: numberValue(item.refund_amount),
+  loss: numberValue(item.refund_loss_amount),
+});
+
+const toResponsibility = (
+  item: BackendRefundResponsibility,
+): RefundResponsibilityDatum => ({
+  code: item.code,
+  name: item.name,
+  color: item.color,
   count: item.refund_orders,
   qty: numberValue(item.refund_qty),
   amount: numberValue(item.refund_amount),
@@ -266,14 +318,17 @@ const toProduct = (item: BackendRefundProduct): RefundProductDatum => ({
   msku: item.msku ?? "-",
   productId: item.item_id ?? "-",
   name: item.product_name ?? "未匹配商品名称",
-  owner: item.owner_ref ?? "\u672a\u5206\u914d",
+  owner: item.owner_ref ?? "未分配",
   sales: numberValue(item.sales_qty),
   orders: item.refund_orders,
   qty: numberValue(item.refund_qty),
   amount: numberValue(item.refund_amount),
-  rate: nullableNumberValue(item.refund_rate) ?? 0,
+  rate: nullableNumberValue(item.refund_rate),
   loss: numberValue(item.refund_loss_amount),
-  reason: displayReason(item.top_reason),
+  topReason: item.top_reason ? toReasonTag(item.top_reason) : null,
+  topResponsibility: item.top_responsibility
+    ? toResponsibilityTag(item.top_responsibility)
+    : null,
   risk: "pending",
 });
 
@@ -315,7 +370,7 @@ const toDetailRow = (item: BackendRefundItem): RefundDetailRow => ({
   productName: item.product_name ?? "未匹配商品名称",
   sku: item.local_sku ?? "-",
   msku: item.msku ?? "-",
-  owner: item.owner_ref ?? "\u672a\u5206\u914d",
+  owner: item.owner_ref ?? "未分配",
   orderId: item.platform_order_id,
   returnOrderId: item.return_order_id,
   orderedAt: toDateTime(item.purchase_time_at),
@@ -323,12 +378,12 @@ const toDetailRow = (item: BackendRefundItem): RefundDetailRow => ({
   refundLagDays: nullableNumberValue(item.refund_lag_days),
   qty: numberValue(item.return_qty),
   amount: nullableNumberValue(item.refund_amount),
-  currency: item.refund_currency_code === "USD" ? "USD" : "USD",
+  currency: "USD",
   loss: nullableNumberValue(item.refund_loss_amount),
-  reason: displayReason(item.return_reason),
-  reasonCode: item.return_reason_code ?? "",
-  description: item.return_description ?? "",
-  responsibility: displayResponsibility(item.responsibility),
+  rawReasonCode: item.return_reason_code ?? "",
+  rawDescription: item.return_description ?? "",
+  reason: toReasonTag(item.reason),
+  responsibility: toResponsibilityTag(item.responsibility),
   status: item.current_refund_status ?? "",
   completed: item.refund_completed,
 });
@@ -367,13 +422,11 @@ export async function fetchRefundOverview(
       loss: envelope.data.trend.map((point) => numberValue(point.refund_loss_amount)),
     },
     reasons: envelope.data.reasons.map(toReason),
+    responsibilities: envelope.data.responsibilities.map(toResponsibility),
     stores: toFilterOptions(envelope.data.facets.stores),
     owners: toFilterOptions(envelope.data.facets.owners),
     reasonOptions: toFilterOptions(envelope.data.facets.reasons),
-    responsibilityOptions: toFilterOptions(
-      envelope.data.facets.responsibilities,
-      "responsibility",
-    ),
+    responsibilityOptions: toFilterOptions(envelope.data.facets.responsibilities),
     latestUpdatedAt: envelope.meta.latest_updated_at,
   };
 }

@@ -4,8 +4,7 @@ Current rules:
 - one counted return order item = one row in after_sales_refund_items
 - items[].currentRefundStatus NOT_REFUNDED / CANCELLED are excluded from refund
 - provider refund amount comes directly from items[].lineTotalAmount (no quantity multiply)
-- every status except NOT_REFUNDED / CANCELLED is an effective refund;
-  REFUND_COMPLETED is descriptive only and does not gate refund-loss accounting
+- every persisted refund status counts for refund loss; REFUND_COMPLETED is status metadata only
 - store_id + msku matches listing item_id when a listing-like table is available
 - local_sku matches cost from mart_daily_sales_item_day as the current cost snapshot source
 """
@@ -30,6 +29,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.core.config import get_database_url, get_settings  # noqa: E402
+from app.modules.after_sales.classification import AfterSalesReasonClassifier  # noqa: E402
 
 PLATFORM_CODE = "walmart"
 REFUND_COMPLETED = "REFUND_COMPLETED"
@@ -499,7 +499,6 @@ def collect_excluded_item_keys(
             continue
 
         return_order_id = str(order.get("returnOrderId") or "").strip()
-
         if not return_order_id:
             continue
 
@@ -510,18 +509,12 @@ def collect_excluded_item_keys(
             current_refund_status = str(
                 item.get("currentRefundStatus") or order.get("currentRefundStatus") or ""
             ).strip()
-
             if current_refund_status not in EXCLUDED_REFUND_STATUSES:
                 continue
 
-            key = (
-                return_order_id,
-                item_index,
-            )
-
+            key = (return_order_id, item_index)
             if key in seen:
                 continue
-
             seen.add(key)
             keys.append(key)
 
@@ -559,10 +552,7 @@ def delete_excluded_rows(
         for return_order_id, item_index in keys
     ]
 
-    conn.execute(
-        statement,
-        params,
-    )
+    conn.execute(statement, params)
 
 
 def build_rows(
@@ -601,8 +591,7 @@ def build_rows(
 
             # Confirmed Walmart refund-counting rule:
             # NOT_REFUNDED and CANCELLED do not count as refunds.
-            # Previously persisted rows for those exact RAW identities are
-            # reconciled before retained refund rows are upserted.
+            # Previously persisted rows for those exact RAW identities are reconciled before upsert.
             if current_refund_status in EXCLUDED_REFUND_STATUSES:
                 continue
 
@@ -617,9 +606,7 @@ def build_rows(
 
             status_time = parse_datetime(item.get("statusTime") or order.get("statusTime"))
 
-            refund_effective_date = (
-                return_order_at.date() if refund_effective and return_order_at else None
-            )
+            refund_effective_date = return_order_at.date() if return_order_at else None
 
             refund_loss_date = refund_effective_date
 
@@ -674,7 +661,7 @@ def build_rows(
                     "status_time": status_time,
                     "current_refund_status": (current_refund_status or None),
                     "refund_completed": refund_completed,
-                    "refund_effective": True,
+                    "refund_effective": refund_effective,
                     "refund_effective_date": (refund_effective_date),
                     "refund_loss_effective": True,
                     "refund_loss_date": refund_loss_date,
@@ -754,6 +741,14 @@ def upsert_rows(conn: Connection, rows: list[dict[str, Any]]) -> None:
             return_reason_code,
             return_description,
             return_reason_category,
+            normalized_reason_code,
+            reason_category_code,
+            responsibility_code,
+            classification_source,
+            classification_confidence,
+            classification_rule_id,
+            classification_rule_version,
+            classified_at,
             purchase_cost,
             first_leg_cost,
             wfs_fee,
@@ -803,6 +798,14 @@ def upsert_rows(conn: Connection, rows: list[dict[str, Any]]) -> None:
             :return_reason_code,
             :return_description,
             :return_reason_category,
+            :normalized_reason_code,
+            :reason_category_code,
+            :responsibility_code,
+            :classification_source,
+            :classification_confidence,
+            :classification_rule_id,
+            :classification_rule_version,
+            :classified_at,
             :purchase_cost,
             :first_leg_cost,
             :wfs_fee,
@@ -918,6 +921,18 @@ def main() -> None:
             cost_map=cost_map,
         )
 
+        classifier = AfterSalesReasonClassifier.from_executor(conn)
+        classification_sources: dict[str, int] = {}
+        for row in rows:
+            classified = classifier.classify(
+                row["return_reason_code"],
+                row["return_description"],
+            )
+            row.update(classified.as_storage_values())
+            classification_sources[classified.classification_source] = (
+                classification_sources.get(classified.classification_source, 0) + 1
+            )
+
         completed = sum(1 for row in rows if row["refund_completed"])
 
         refund_effective = sum(1 for row in rows if row["refund_effective"])
@@ -1028,6 +1043,14 @@ def main() -> None:
         print(
             "blank_store_id_rows=",
             blank_store_id,
+        )
+        print(
+            "classification_source_counts=",
+            json.dumps(
+                classification_sources,
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
         )
 
         if args.dry_run:
