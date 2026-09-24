@@ -41,6 +41,8 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 | RuntimeColumnConfigDrawer | Shared | `frontend/src/components/report-table/RuntimeColumnConfigDrawer.tsx` | 仅运行时生效的列显示与顺序配置 | 可配置列的报表表格 |
 | ResizableColumnTitle | Shared | `frontend/src/components/report-table/ResizableColumnTitle.tsx` | 拖拽参考线预览、松开后应用且无持久化的可访问列宽调整 | 支持列宽调整的报表表格 |
 | ReportTableCells | Shared | `frontend/src/components/report-table/cells.tsx` | 图片、复制文本、金额、百分比和状态展示 | 产品与销售报表单元格；ImageCell 支持独立 thumbnail/preview URL、lazy load 与 async decode |
+| WalmartItemLink | Shared | `frontend/src/components/report-table/cells.tsx` | 全系统唯一的 Walmart ItemID / 商品 ID 链接：新标签页打开商品页，页面不得自拼 URL（负责人 2026-09-18 条件；业务规则 pmc-purchase §5.5） | 采购看板 ItemID 列（首个消费者）；Listing 管理 / 产品详情 / 每日销售后续改用。Status: stable（PurchaseBoardPage.test 覆盖 href/target/rel）；Props Stability: evolving；Design Token Compliance: compliant；Notes: 空值渲染 "—"，`WalmartProductIdCell` 复用同一 URL 逻辑 |
+| ManagementStatCards | Shared | `frontend/src/components/report-table/ManagementStatCards.tsx` | 可点击的统计卡组（active 卡即筛选），tone normal/success/warning/danger | 由 `pages/products/components` 提升为 Shared（第二个真实消费者出现）；Used By: 产品管理、Listing 管理、采购看板；Status: stable；Props Stability: stable；Design Token Compliance: partial（accent 颜色写死在组件内，待接设计 token） |
 | ProductTagAssignmentModal | Shared | `frontend/src/components/product-tags/ProductTagAssignmentModal.tsx` | 为已选择商品多选并追加标签 | Listing 等支持批量标签操作的产品表格 |
 
 ## 组件登记规则

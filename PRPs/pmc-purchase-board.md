@@ -27,7 +27,9 @@ PMC 目标是提单、提利润、降人力：采购是补货链路第一段，�
 - [ ] Gate 2：3 个 `integration_sync` handler/parser、ODS 5 张表、质量检查、Celery 任务（默认 disabled）、12 个月回填 runner（手动）
 - [ ] Gate 3：DWD 3 张、DWS 3 张、`manual_*` 1 张（交期修正；ItemID 人工指定不建，负责人 2026-09-21 决定）、规则表 1 张、4 个只读 API + 1 个人工覆盖 API
   - 进度：A 建表 #152、B 发布器 #148/#153、C 规则计算 #141、D DWS 刷新、E 只读 API ×4 + 待采购计划下钻 ×1、F SKU 交期人工覆盖 API（`docs/api/pmc-purchase-api.md`）已提交；生产迁移 / 发布 / 刷新仍需负责人另行授权
-- [ ] Gate 4：前端 `/pmc/purchase-board` 页面（PageShell + ReportTableShell + ConnectedSearch + 详情 Modal + ItemID/交期修正 Modal）
+- [ ] Gate 4：前端 `/pmc/purchase-board` 页面（PageShell + ReportTableShell + ConnectedSearch + 详情 Modal + 交期修正 Modal；ItemID 修正 Modal 已取消，负责人 2026-09-21 #144）
+  - 4a 只读看板（列表 / 7 卡 / 详情 Modal / 待采购计划下钻 / `WalmartItemLink` 共享组件 / 新一级导航 PMC）已提交 PR #171；店铺下拉待 options 接口（Rocky 2026-09-24 决定先不做）；`status: testing`，Playwright 待仓库有 `test:e2e` 后补
+  - 4b 交期修正 Modal（`POST /sku-cycles/{sku}/overrides`，需 `pmc:purchase:override`，预览通道不可达）单独 PR
 - [ ] 跨模块最小改动（负责人 2026-09-18 已同意，各带条件）：`dim_walmart_listings.fulfillment_type` 列 + Listing 管理展示（**单独最小 PR，走 Alembic，不手改生产库，不影响现有 Listing 链路**）；`WalmartItemLink` 共享组件（**全系统唯一共享组件，先查 main 是否已有，采购看板 / Listing / 产品详情直接调用，不允许各页面自拼 URL**）；产品详情"采购交期"改读 `dws_purchase_sku_cycle`（**放 Gate 4 或 DWS 完成后，前端只经后端 BFF/DWS 读取，DWS 未完成前不接页面**）
 
 ### Out of scope
@@ -166,7 +168,7 @@ Task 1（Gate 1，已完成）：docs-only —— 决策 / 证据 / 契约 ×3 /
 Gate 2 起后端必须复用 `backend/app/modules/integration_sync/`（catalog / execution / importer / repository / router / scheduler / service / tasks / handlers / parsers），不新造同步框架，不绕过 `gov_integration_*`、`ods_api_raw_blobs` / `ods_api_raw_request_refs`、`gov_data_lineage`；Gate 4 前端必须复用 PageShell / ReportTableShell / ConnectedSearch / ResetButton / RuntimeColumnConfigDrawer / cells.tsx 及 shared/*（负责人 2026-09-18 要求）。
 Task 2（Gate 2）：backend/app/integrations/lingxing/pmc_purchase_contracts.py（3 端点、offset/length、页长 500、purchaseOrderList 无 total）；3 个 handler/parser 接入 integration_sync；Alembic：5 张 ODS；质量检查（明细合计=单头、收货归属率、店铺 ID 一致）；Celery 任务默认 disabled；回填 runner 手动。
 Task 3（Gate 3）：Alembic：DWD ×3、DWS ×3、manual ×1、rule ×1；刷新服务（归属优先级 from_system_plan > from_plan_remark > from_packing_slip > unresolved、合并单按计划比例拆分、打包单按数量比例拆分、50% 到仓、交期与剔除、近 5 样本与基准、不稳定判定、wfs_not_ready）；API 7.1–7.5（7.5 仅 SKU 交期覆盖）；权限 3 个 key；OpenAPI + Markdown 文档。
-Task 4（Gate 4）：frontend 页面与两个 Modal；WalmartItemLink（若批准）；Playwright 用例；SOP 页。
+Task 4（Gate 4）：4a frontend 只读页面 + 详情 Modal + WalmartItemLink + SOP 页；4b 交期修正 Modal；Playwright 用例待 `test:e2e` 脚本落地。
 Task 5：生产授权单独申请（真实调用 + 回填 + 调度），流程同 REAL-DATA-1。
 ```
 
