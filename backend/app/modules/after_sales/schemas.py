@@ -215,6 +215,7 @@ class RefundProductAnalysisData(StrictSchema):
     dates: list[date]
     items: list[RefundProductRead]
     heat: list[RefundHeatRow]
+    lag: RefundLagAnalysis
     selected: RefundProductDetail | None
 
 

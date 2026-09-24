@@ -180,6 +180,8 @@ class AfterSalesRefundService:
             for key in product_keys
         ]
 
+        overall_lag = self._lag(query, account_refs)
+
         selected_key = query.selected_product_key.strip()
         if selected_key and selected_key not in product_keys:
             selected_key = ""
@@ -199,18 +201,19 @@ class AfterSalesRefundService:
                     limit=10,
                 )
             ]
-            lag = self._lag(query, account_refs, selected_key)
+            product_lag = self._lag(query, account_refs, selected_key)
             selected = RefundProductDetail(
                 **base.model_dump(),
                 trend=trend,
                 reasons=reasons,
-                lag=lag,
+                lag=product_lag,
             )
 
         return RefundProductAnalysisData(
             dates=dates,
             items=items,
             heat=heat,
+            lag=overall_lag,
             selected=selected,
         )
 
@@ -412,7 +415,7 @@ class AfterSalesRefundService:
         self,
         query: RefundProductAnalysisQuery,
         account_refs: frozenset[str],
-        product_key: str,
+        product_key: str | None = None,
     ) -> RefundLagAnalysis:
         summary, rows = self.repository.lag_analysis(query, account_refs, product_key)
         by_key = {str(row["bucket_key"]): row for row in rows}

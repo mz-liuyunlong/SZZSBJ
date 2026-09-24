@@ -493,6 +493,18 @@ export function PercentCell({ value }: { value: number | null | undefined }) {
   return <span className="report-table-metric">{value.toFixed(2)}%</span>;
 }
 
+export function RoiCell({ value }: { value: number | null | undefined }) {
+  if (value == null || !Number.isFinite(value)) {
+    return <span className="report-table-metric">—</span>;
+  }
+
+  return (
+    <span className="report-table-metric">
+      {value.toFixed(2)}
+    </span>
+  );
+}
+
 export function StatusTagCell({ label, color }: { label: string; color: string }) {
   return <Tag color={color}>{label}</Tag>;
 }

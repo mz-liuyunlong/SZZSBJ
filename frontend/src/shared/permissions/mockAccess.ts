@@ -6,6 +6,7 @@ export const USER_VISIBLE_PAGE_KEYS = new Set([
   "products_listing_management",
   "sales_daily_sales",
   "sales_order_profit",
+  "aftersales_refund_management",
   "operations_log",
   "warehouse_wfs_fee_alert",
   "data_center_data_import",

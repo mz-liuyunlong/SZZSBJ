@@ -286,20 +286,51 @@
   height: 258px !important;
 }
 
+.refund-management__reason-card > .ant-card-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .refund-management__reason-list {
+  flex: 1;
+  min-height: 0;
   padding-top: 1px;
+  padding-right: 3px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.refund-management__reason-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.refund-management__reason-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #d8e1eb;
+}
+
+.refund-management__reason-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .refund-management__reason-row {
-  height: 51px;
+  height: 40px;
   display: grid;
-  grid-template-columns: 105px minmax(160px, 1fr) 55px 68px;
+  grid-template-columns: 145px minmax(110px, 1fr) 55px 68px;
   align-items: center;
   gap: 12px;
   padding-inline: 3px;
   border-radius: 7px;
   color: #475467;
   font-size: 11px;
+}
+
+.refund-management__reason-row > .ant-tag {
+  margin-inline-end: 0;
+  justify-self: start;
+  white-space: nowrap;
 }
 
 .refund-management__reason-row:hover {
@@ -353,7 +384,7 @@
 .refund-management__diagnosis-grid {
   display: grid;
   margin-top: 10px;
-  grid-template-columns: 280px minmax(520px, 1fr) 330px;
+  grid-template-columns: 280px minmax(520px, 1fr) 370px;
   gap: 10px;
   align-items: stretch;
 }
@@ -611,7 +642,7 @@
   }
 
   .refund-management__diagnosis-grid {
-    grid-template-columns: 270px minmax(500px, 1fr) 310px;
+    grid-template-columns: 270px minmax(500px, 1fr) 350px;
   }
 }
 
@@ -1694,4 +1725,71 @@
   line-height: 1.6;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Refund detail product identity:
+   column width follows product ID; long product names stay secondary. */
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-identity-stack {
+  width: 100%;
+  min-width: 0;
+}
+
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-copyable {
+  width: 100%;
+  min-width: 0;
+}
+
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-copyable__text,
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-copyable__link {
+  min-width: 0;
+  max-width: calc(100% - 26px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* 退款明细：商品列宽度只按商品 ID 设计，品名不得撑宽列 */
+.refund-management__detail-shell
+  .refund-management__product-column {
+  width: 140px !important;
+  min-width: 140px !important;
+  max-width: 140px !important;
+}
+
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-identity-stack {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-copyable {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-copyable__text,
+.refund-management__detail-shell
+  .refund-management__product-column
+  .report-table-copyable__link {
+  min-width: 0;
+  max-width: calc(100% - 26px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
