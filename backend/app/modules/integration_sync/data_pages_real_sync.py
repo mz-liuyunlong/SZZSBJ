@@ -686,6 +686,12 @@ class DataPagesRealSyncRunner:
         return count
 
     def _write_listings(self, rows: Iterable[dict[str, Any]]) -> int:
+        # walmart/list is a current-state endpoint.
+        # Snapshot it using the actual capture date in Los Angeles.
+        # Never stamp a historical runner business_date onto current inventory.
+        captured_at = _now()
+        snapshot_date_la = captured_at.astimezone(LA_TZ).date()
+
         count = 0
         for row in rows:
             item_id = _field(row, "item_id", "itemId")
@@ -749,6 +755,44 @@ class DataPagesRealSyncRunner:
                     **_timestamps(),
                 },
             )
+            self.session.execute(
+                text(
+                    "insert into fact_walmart_listing_inventory_daily "
+                    "(id,snapshot_date_la,source_account_ref,store_id,item_id,msku,local_sku,"
+                    "available_quantity,wfs_available_quantity,captured_at,created_at,updated_at) "
+                    "values (:id,:snapshot_date_la,:source_account_ref,:store_id,:item_id,:msku,"
+                    ":local_sku,:available_quantity,:wfs_available_quantity,:captured_at,"
+                    ":created_at,:updated_at) "
+                    "on conflict "
+                    "(snapshot_date_la,source_account_ref,store_id,item_id) "
+                    "do update set "
+                    "msku=excluded.msku,"
+                    "local_sku=excluded.local_sku,"
+                    "available_quantity=excluded.available_quantity,"
+                    "wfs_available_quantity=excluded.wfs_available_quantity,"
+                    "captured_at=excluded.captured_at,"
+                    "updated_at=excluded.updated_at"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "snapshot_date_la": snapshot_date_la,
+                    "source_account_ref": self.source_account_ref,
+                    "store_id": store_id,
+                    "item_id": item_id,
+                    "msku": _field(row, "msku"),
+                    "local_sku": _field(row, "local_sku", "sku"),
+                    "available_quantity": _decimal(
+                        row.get("available_quantity")
+                    ),
+                    "wfs_available_quantity": _decimal(
+                        row.get("wfs_available_quantity")
+                    ),
+                    "captured_at": captured_at,
+                    "created_at": captured_at,
+                    "updated_at": captured_at,
+                },
+            )
+
             count += 1
         return count
 
@@ -1258,7 +1302,7 @@ class DataPagesRealSyncRunner:
                 "l.local_name,l.title,l.picture_url,o.sales_qty,o.order_count,o.sales_amount,o.currency_code,"
                 "o.sample_amount,o.sales_excluding_sample,r.return_qty,r.refund_amount,r.refund_currency_code,"
                 "coalesce(a.ad_spend,0),'USD',case when o.sales_amount > 0 then coalesce(a.ad_spend,0)/o.sales_amount "
-                "else null end,l.wfs_available_quantity,"
+                "else null end,inv.wfs_available_quantity,"
                 "coalesce(commission.commission_rate,:default_commission_rate),"
                 "o.sales_amount*coalesce(commission.commission_rate,:default_commission_rate),"
                 "o.currency_code,'missing',"
@@ -1267,6 +1311,9 @@ class DataPagesRealSyncRunner:
                 "cast(:return_status as text),'unresolved_order_lines',cast(:unresolved as integer)),"
                 "cast(:runner as text),:now,:now,:now from o join dim_walmart_listings l on "
                 "l.source_account_ref=o.source_account_ref and l.store_id=o.store_id and l.item_id=o.item_id "
+                "left join fact_walmart_listing_inventory_daily inv on "
+                "inv.source_account_ref=o.source_account_ref and inv.snapshot_date_la=o.business_date_la "
+                "and inv.store_id=o.store_id and inv.item_id=o.item_id "
                 "left join r on r.source_account_ref=o.source_account_ref and r.business_date_la=o.business_date_la "
                 "and r.store_id=o.store_id and r.item_id=o.item_id left join a on "
                 "a.source_account_ref=o.source_account_ref and a.business_date_la=o.business_date_la "

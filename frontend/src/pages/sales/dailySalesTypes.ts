@@ -52,7 +52,7 @@ export interface DailySalesRow {
   firstLegUnitPriceCny: number | null;
   storageFee: number | null;
   storageUnitPrice: number | null;
-  wfsAvailableInventory: number;
+  wfsAvailableInventory: number | null;
   legacyGrossProfit: number | null;
   orderProfit: number | null;
   profitMargin: number | null;

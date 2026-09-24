@@ -164,6 +164,7 @@ class DailySalesSummaryRead(StrictSchema):
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None = "USD"
+    wfs_available_quantity: Money | None = None
     refund_event_qty: Money = Decimal("0")
     refund_event_amount: Money = Decimal("0")
     refund_event_currency_code: str | None = "USD"
