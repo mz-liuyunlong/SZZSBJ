@@ -30,6 +30,7 @@ def test_daily_sales_refresh_depends_on_authoritative_sales_and_business_sources
     assert set(spec.source_tables) == {
         "dim_lingxing_stores",
         "dim_walmart_listings",
+        "fact_walmart_listing_inventory_daily",
         "fact_walmart_sales_item_daily",
         "fact_walmart_sample_order_items",
         "after_sales_refund_items",
