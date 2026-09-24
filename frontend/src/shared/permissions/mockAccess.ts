@@ -9,6 +9,7 @@ export const USER_VISIBLE_PAGE_KEYS = new Set([
   "aftersales_refund_management",
   "operations_log",
   "warehouse_wfs_fee_alert",
+  "pmc_purchase_board",
   "data_center_data_import",
   "data_center_api_docs",
   "data_center_task_center",

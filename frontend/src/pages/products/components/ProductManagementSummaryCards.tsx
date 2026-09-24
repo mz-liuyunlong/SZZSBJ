@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import ManagementStatCards, {
   type ManagementStatCardItem,
-} from "@/pages/products/components/ManagementStatCards";
+} from "@/components/report-table/ManagementStatCards";
 import type {
   ProductManagementIssueCode,
   ProductManagementSummary,

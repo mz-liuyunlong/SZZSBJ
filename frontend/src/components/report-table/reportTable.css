@@ -2767,3 +2767,9 @@
   > th.report-table-resizable-header-cell.ant-table-cell-fix-right-first {
   z-index: 12;
 }
+
+/* WalmartItemLink: shared ItemID link, opens the Walmart item page in a new tab. */
+.report-table-walmart-item-link {
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
