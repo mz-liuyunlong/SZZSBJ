@@ -73,6 +73,15 @@ export const orderProfitSourceRecords: OrderProfitSourceRecord[] = Array.from({ 
       purchaseCost,
       firstLegCost,
       storageFee,
+      sampleQuantity: 0,
+      sampleAmount: 0,
+      costQuantity: 0,
+      returnRate30Days: 0,
+      wfsDeliveryUnitPrice: null,
+      purchaseUnitPriceCny: null,
+      firstLegUnitPriceCny: null,
+      storageUnitPrice: null,
+      wfsAvailableInventory: 0,
       costStatus,
     };
   });

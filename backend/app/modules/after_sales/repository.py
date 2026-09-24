@@ -688,11 +688,14 @@ class AfterSalesRefundRepository:
         self,
         query: RefundBaseQuery,
         account_refs: frozenset[str],
-        product_key: str,
+        product_key: str | None = None,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         where, params = self._refund_where(query, account_refs)
-        where.append(f"{_PRODUCT_KEY_EXPR} = :product_key")
-        params["product_key"] = product_key
+
+        if product_key:
+            where.append(f"{_PRODUCT_KEY_EXPR} = :product_key")
+            params["product_key"] = product_key
+
         where_sql = " and ".join(where)
         common = f"""
             with {_OWNER_CTE},

@@ -2689,3 +2689,81 @@
   background: #f8fafc;
   border-color: #e4e7ec;
 }
+
+
+/* Global report table fixed header
+   All tables inside ReportTableShell keep the header visible
+   while the table body scrolls vertically. */
+.report-table-shell .ant-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex: 0 0 auto;
+  background: #f4f7fb;
+}
+
+.report-table-shell .ant-table-thead > tr > th,
+.report-table-shell .ant-table-thead > tr > td {
+  position: sticky !important;
+  top: 0;
+  z-index: 10;
+  background: #f4f7fb;
+}
+
+/* Sorted header keeps the same fixed behavior. */
+.report-table-shell .ant-table-thead > tr > th.ant-table-column-sort {
+  background: #edf2f8;
+}
+
+/* Fixed left/right columns intersecting with the fixed header
+   must stay above normal header cells. */
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.ant-table-cell-fix-left,
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.ant-table-cell-fix-left-last,
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.ant-table-cell-fix-right,
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.ant-table-cell-fix-right-first {
+  z-index: 12;
+  background: #f4f7fb;
+}
+
+/* Resizable headers are still sticky.
+   Absolute resize handles remain positioned against the TH. */
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.report-table-resizable-header-cell {
+  position: sticky !important;
+  top: 0;
+  z-index: 10;
+}
+
+/* Fixed + resizable header intersection. */
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.report-table-resizable-header-cell.ant-table-cell-fix-left,
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.report-table-resizable-header-cell.ant-table-cell-fix-left-last,
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.report-table-resizable-header-cell.ant-table-cell-fix-right,
+.report-table-shell
+  .ant-table-thead
+  > tr
+  > th.report-table-resizable-header-cell.ant-table-cell-fix-right-first {
+  z-index: 12;
+}

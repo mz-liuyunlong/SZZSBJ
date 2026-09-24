@@ -166,6 +166,7 @@ export interface RefundProductAnalysisViewData {
   dates: string[];
   items: RefundProductDatum[];
   heat: number[][];
+  lag: RefundLagAnalysis;
   selected: RefundProductDetail | null;
   latestUpdatedAt: string | null;
 }

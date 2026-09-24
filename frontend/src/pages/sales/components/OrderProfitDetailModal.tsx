@@ -29,7 +29,7 @@ function OrderProfitDetailModal({ row, onClose }: OrderProfitDetailModalProps) {
     { label: "SKU / MSKU", value: `${row.sku} / ${row.msku}`, icon: <AppstoreOutlined />, tone: "purple" },
     { label: "平台 / 店铺 / 负责人", value: `${row.platform} · ${row.store} · ${row.owner}`, icon: <ShopOutlined /> },
     { label: "销量 / 订单量 / 销售额", value: `${row.salesVolume} / ${row.orderCount} / $${row.salesAmount.toFixed(2)}`, icon: <BarChartOutlined /> },
-    { label: "退款 / 广告", value: `$${row.refundAmount.toFixed(2)} / $${row.adSpend.toFixed(2)}`, icon: <RollbackOutlined />, tone: "orange" },
+    { label: "退款 / 广告", value: `$${(row.refundAmount ?? 0).toFixed(2)} / $${row.adSpend.toFixed(2)}`, icon: <RollbackOutlined />, tone: "orange" },
     { label: "配送 / 佣金", value: `${money(row.wfsDeliveryFee)} / ${row.commission.toFixed(2)}`, icon: <NotificationOutlined />, tone: "red" },
     { label: "总成本", value: `${money(row.totalCost)} / ${row.costStatus}`, icon: <DollarCircleOutlined />, tone: "gray" },
     { label: "订单利润", value: `${money(row.orderProfit)} / ${percent(row.profitMargin)}`, icon: <RiseOutlined />, tone: "purple" },

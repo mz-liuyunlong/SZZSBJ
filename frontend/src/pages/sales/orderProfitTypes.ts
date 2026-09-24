@@ -23,14 +23,32 @@ export interface OrderProfitSourceRecord {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+
+  sampleQuantity: number;
+  sampleAmount: number | null;
+  costQuantity: number;
+
   refundQuantity: number;
-  refundAmount: number;
+  refundAmount: number | null;
+  returnRate30Days: number | null;
+
   adSpend: number;
+
   wfsDeliveryFee: number | null;
+  wfsDeliveryUnitPrice: number | null;
+
   commission: number;
+
   purchaseCost: number | null;
+  purchaseUnitPriceCny: number | null;
+
   firstLegCost: number | null;
+  firstLegUnitPriceCny: number | null;
+
   storageFee: number | null;
+  storageUnitPrice: number | null;
+
+  wfsAvailableInventory: number;
   costStatus: OrderProfitCostStatus;
 }
 
@@ -47,15 +65,32 @@ export interface OrderProfitRow {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+
+  sampleQuantity: number;
+  sampleAmount: number | null;
+
   refundQuantity: number;
-  refundAmount: number;
+  refundAmount: number | null;
+  returnRate30Days: number | null;
+
   adSpend: number;
   adRatio: number | null;
+
   wfsDeliveryFee: number | null;
+  wfsDeliveryUnitPrice: number | null;
+
   commission: number;
+
   purchaseCost: number | null;
+  purchaseUnitPriceCny: number | null;
+
   firstLegCost: number | null;
+  firstLegUnitPriceCny: number | null;
+
   storageFee: number | null;
+  storageUnitPrice: number | null;
+
+  wfsAvailableInventory: number;
   totalCost: number | null;
   orderProfit: number | null;
   averageProfitPerOrder: number | null;
@@ -82,15 +117,32 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "salesVolume", title: "销量" },
   { key: "orderCount", title: "订单量" },
   { key: "salesAmount", title: "销售额" },
-  { key: "refundQuantity", title: "退款数量" },
-  { key: "refundAmount", title: "退款金额" },
+
+  { key: "sampleQuantity", title: "送样量" },
+  { key: "sampleAmount", title: "送样金额" },
+
+  { key: "refundQuantity", title: "退货量" },
+  { key: "refundAmount", title: "退款损失" },
+  { key: "returnRate30Days", title: "退货率30天" },
+
   { key: "adSpend", title: "广告费" },
   { key: "adRatio", title: "广告占比" },
+
   { key: "wfsDeliveryFee", title: "WFS总配送费" },
+  { key: "wfsDeliveryUnitPrice", title: "WFS配送单价" },
+
   { key: "commission", title: "佣金" },
+
   { key: "purchaseCost", title: "采购总成本" },
+  { key: "purchaseUnitPriceCny", title: "采购单价" },
+
   { key: "firstLegCost", title: "头程总成本" },
+  { key: "firstLegUnitPriceCny", title: "头程单价" },
+
   { key: "storageFee", title: "总仓储费" },
+  { key: "storageUnitPrice", title: "仓储单价" },
+
+  { key: "wfsAvailableInventory", title: "WFS可售库存" },
   { key: "totalCost", title: "总成本" },
   { key: "orderProfit", title: "订单利润" },
   { key: "averageProfitPerOrder", title: "平均利润/单" },
@@ -166,9 +218,127 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
     const salesVolume = bucket.reduce((total, row) => total + row.salesVolume, 0);
     const orderCount = bucket.reduce((total, row) => total + row.orderCount, 0);
     const salesAmount = bucket.reduce((total, row) => total + row.salesAmount, 0);
-    const refundQuantity = bucket.reduce((total, row) => total + row.refundQuantity, 0);
-    const refundAmount = bucket.reduce((total, row) => total + row.refundAmount, 0);
+
+    const sampleQuantity = bucket.reduce(
+      (total, row) => total + row.sampleQuantity,
+      0,
+    );
+
+    const sampleAmount = bucket.some((row) => row.sampleAmount == null)
+      ? null
+      : bucket.reduce(
+          (total, row) => total + (row.sampleAmount ?? 0),
+          0,
+        );
+
+    const refundQuantity = bucket.reduce(
+      (total, row) => total + row.refundQuantity,
+      0,
+    );
+
+    const refundAmount = bucket.some((row) => row.refundAmount == null)
+      ? null
+      : bucket.reduce(
+          (total, row) => total + (row.refundAmount ?? 0),
+          0,
+        );
+
     const adSpend = bucket.reduce((total, row) => total + row.adSpend, 0);
+
+    const weightedAverage = (
+      valueKey:
+        | "returnRate30Days"
+        | "wfsDeliveryUnitPrice"
+        | "purchaseUnitPriceCny"
+        | "firstLegUnitPriceCny"
+        | "storageUnitPrice",
+      weightKey: "salesVolume" | "costQuantity",
+    ) => {
+      let weightedTotal = 0;
+      let totalWeight = 0;
+      const fallbackValues: number[] = [];
+
+      for (const row of bucket) {
+        const value = row[valueKey];
+
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          continue;
+        }
+
+        fallbackValues.push(value);
+
+        const weight = row[weightKey];
+
+        if (Number.isFinite(weight) && weight > 0) {
+          weightedTotal += value * weight;
+          totalWeight += weight;
+        }
+      }
+
+      if (totalWeight > 0) {
+        return weightedTotal / totalWeight;
+      }
+
+      if (fallbackValues.length > 0) {
+        return fallbackValues.reduce((sum, value) => sum + value, 0)
+          / fallbackValues.length;
+      }
+
+      return null;
+    };
+
+    const returnRate30Days = weightedAverage(
+      "returnRate30Days",
+      "salesVolume",
+    );
+
+    const wfsDeliveryUnitPrice = weightedAverage(
+      "wfsDeliveryUnitPrice",
+      "salesVolume",
+    );
+
+    const purchaseUnitPriceCny = weightedAverage(
+      "purchaseUnitPriceCny",
+      "costQuantity",
+    );
+
+    const firstLegUnitPriceCny = weightedAverage(
+      "firstLegUnitPriceCny",
+      "costQuantity",
+    );
+
+    const storageUnitPrice = weightedAverage(
+      "storageUnitPrice",
+      "costQuantity",
+    );
+
+    // 库存是快照数据，不能把历史日期库存直接相加。
+    // 每个 店铺 + SKU + MSKU 只取筛选范围内最新一天库存，再汇总。
+    const latestInventoryRows = new Map<
+      string,
+      OrderProfitSourceRecord
+    >();
+
+    for (const row of bucket) {
+      const inventoryKey = [
+        row.store,
+        row.sku,
+        row.msku,
+      ].join("::");
+
+      const current = latestInventoryRows.get(inventoryKey);
+
+      if (!current || row.date > current.date) {
+        latestInventoryRows.set(inventoryKey, row);
+      }
+    }
+
+    const wfsAvailableInventory = Array.from(
+      latestInventoryRows.values(),
+    ).reduce(
+      (total, row) => total + row.wfsAvailableInventory,
+      0,
+    );
     const sumOptional = (key: "wfsDeliveryFee" | "purchaseCost" | "firstLegCost" | "storageFee") => (
       bucket.some((row) => row[key] == null)
         ? null
@@ -210,15 +380,32 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       salesVolume,
       orderCount,
       salesAmount,
+
+      sampleQuantity,
+      sampleAmount,
+
       refundQuantity,
       refundAmount,
+      returnRate30Days,
+
       adSpend,
       adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+
       wfsDeliveryFee,
+      wfsDeliveryUnitPrice,
+
       commission,
+
       purchaseCost,
+      purchaseUnitPriceCny,
+
       firstLegCost,
+      firstLegUnitPriceCny,
+
       storageFee,
+      storageUnitPrice,
+
+      wfsAvailableInventory,
       totalCost,
       orderProfit,
       averageProfitPerOrder: orderProfit != null && orderCount ? orderProfit / orderCount : null,
@@ -227,7 +414,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
         && purchaseCost != null
         && firstLegCost != null
         && purchaseCost + firstLegCost > 0
-        ? orderProfit / (purchaseCost + firstLegCost) * 100
+        ? orderProfit / (purchaseCost + firstLegCost)
         : null,
       costStatus: status,
       sevenDayDates: trendDates,

@@ -20,14 +20,23 @@ interface BackendDailySalesItem {
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
+  sample_qty: string;
+  sample_amount: string | null;
+  cost_quantity: string;
   return_qty: string | null;
   refund_amount: string | null;
+  return_rate_30d: string | null;
   ad_spend_amount: string | null;
   commission_fee_amount: string | null;
   wfs_fee_total_amount: string | null;
+  wfs_fee_unit_amount: string | null;
   purchase_cost_total_usd: string | null;
+  purchase_cost_unit_cny: string | null;
   first_leg_cost_total_usd: string | null;
+  first_leg_cost_unit_cny: string | null;
   storage_fee_total_amount: string | null;
+  storage_fee_unit_amount: string | null;
+  wfs_available_quantity: string | null;
   cost_status: "complete" | "partial" | "missing";
   missing_cost_codes: string[];
 }
@@ -186,14 +195,34 @@ const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSour
   salesVolume: numberValue(item.sales_qty),
   orderCount: numberValue(item.order_count),
   salesAmount: numberValue(item.sales_amount),
+
+  sampleQuantity: numberValue(item.sample_qty),
+  sampleAmount: nullableNumberValue(item.sample_amount),
+  costQuantity: numberValue(item.cost_quantity),
+
   refundQuantity: numberValue(item.return_qty),
-  refundAmount: numberValue(item.refund_amount),
+  refundAmount: nullableNumberValue(item.refund_amount),
+  returnRate30Days: item.return_rate_30d == null
+    ? null
+    : numberValue(item.return_rate_30d) * 100,
+
   adSpend: numberValue(item.ad_spend_amount),
+
   wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
+  wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
+
   commission: numberValue(item.commission_fee_amount),
+
   purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
+  purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
+
   firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
+  firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
+
   storageFee: nullableNumberValue(item.storage_fee_total_amount),
+  storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
+
+  wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
 });
 

@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { SERVER_STATE_STALE_TIME } from "@/api/queryClient";
 import {
@@ -43,7 +43,7 @@ export const refundManagementKeys = {
 export function useRefundOverviewQuery(filters: RefundFilters) {
   return useQuery({
     queryKey: refundManagementKeys.overview(filters),
-    queryFn: ({ signal }) => fetchRefundOverview({ filters, signal }),
+    queryFn: () => fetchRefundOverview({ filters }),
     enabled: hasDateRange(filters),
     staleTime: SERVER_STATE_STALE_TIME.summary,
     placeholderData: keepPreviousData,
@@ -56,15 +56,32 @@ export function useRefundProductAnalysisQuery(
 ) {
   return useQuery({
     queryKey: refundManagementKeys.productAnalysis(filters, selectedProductKey),
-    queryFn: ({ signal }) => fetchRefundProductAnalysis({
+    queryFn: () => fetchRefundProductAnalysis({
       filters,
       selectedProductKey,
-      signal,
     }),
     enabled: hasDateRange(filters),
     staleTime: SERVER_STATE_STALE_TIME.summary,
     placeholderData: keepPreviousData,
   });
+}
+
+export function usePrefetchRefundProductAnalysis(filters: RefundFilters) {
+  const queryClient = useQueryClient();
+
+  return (selectedProductKey: string) => {
+    const productKey = selectedProductKey.trim();
+    if (!productKey || !hasDateRange(filters)) return;
+
+    void queryClient.prefetchQuery({
+      queryKey: refundManagementKeys.productAnalysis(filters, productKey),
+      queryFn: () => fetchRefundProductAnalysis({
+        filters,
+        selectedProductKey: productKey,
+      }),
+      staleTime: SERVER_STATE_STALE_TIME.summary,
+    });
+  };
 }
 
 export function useRefundItemsQuery(
@@ -75,12 +92,11 @@ export function useRefundItemsQuery(
 ) {
   return useQuery({
     queryKey: refundManagementKeys.items(filters, page, pageSize, productKey),
-    queryFn: ({ signal }) => fetchRefundItems({
+    queryFn: () => fetchRefundItems({
       filters,
       page,
       pageSize,
       productKey,
-      signal,
     }),
     enabled: hasDateRange(filters),
     staleTime: SERVER_STATE_STALE_TIME.list,

@@ -168,6 +168,7 @@ interface BackendRefundProductAnalysisData {
   dates: string[];
   items: BackendRefundProduct[];
   heat: { product_key: string; values: string[] }[];
+  lag: BackendRefundLagAnalysis;
   selected: BackendRefundProductDetail | null;
 }
 
@@ -438,7 +439,7 @@ export async function fetchRefundProductAnalysis(
   if (params.selectedProductKey?.trim()) {
     search.set("selected_product_key", params.selectedProductKey.trim());
   }
-  search.set("limit", "20");
+  search.set("limit", "100");
   const envelope = await backendRequest<BackendRefundProductAnalysisData, BackendRefundReadMeta>(
     `/api/after-sales/refunds/product-analysis?${search.toString()}`,
     params.signal ? { signal: params.signal } : undefined,
@@ -453,6 +454,7 @@ export async function fetchRefundProductAnalysis(
     heat: envelope.data.items.map((item) => (
       heatByProduct.get(item.product_key)?.map(numberValue) ?? envelope.data.dates.map(() => 0)
     )),
+    lag: toLag(envelope.data.lag),
     selected: envelope.data.selected ? toProductDetail(envelope.data.selected) : null,
     latestUpdatedAt: envelope.meta.latest_updated_at,
   };

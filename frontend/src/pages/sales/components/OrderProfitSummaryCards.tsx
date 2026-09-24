@@ -93,7 +93,7 @@ const toFallbackTotals = (
   const salesVolume = rows.reduce((total, row) => total + row.salesVolume, 0);
   const salesAmount = rows.reduce((total, row) => total + row.salesAmount, 0) * rate;
   const refundQuantity = rows.reduce((total, row) => total + row.refundQuantity, 0);
-  const refundAmount = rows.reduce((total, row) => total + row.refundAmount, 0) * rate;
+  const refundAmount = rows.reduce((total, row) => total + (row.refundAmount ?? 0), 0) * rate;
   const orderProfit = incompleteProfit
     ? null
     : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate;

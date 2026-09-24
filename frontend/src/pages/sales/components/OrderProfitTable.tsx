@@ -18,6 +18,8 @@ import {
   TrendPreviewCell,
 } from "@/components/report-table/cells";
 import {
+  dynamicCurrencyTitle,
+  renderCnySourceMoney,
   renderUsdSourceMoney,
   renderUsdSourceProfitMoney,
 } from "@/components/report-table/moneyRenderers";
@@ -58,6 +60,17 @@ const statusColors: Record<OrderProfitCostStatus, string> = {
 const money = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => (
   renderUsdSourceMoney<OrderProfitRow>(key, currency, MOCK_USD_TO_CNY_RATE)
 );
+
+const cnyMoney = (
+  key: keyof OrderProfitRow,
+  currency: OrderProfitCurrency,
+) => (
+  renderCnySourceMoney<OrderProfitRow>(
+    key,
+    currency,
+    MOCK_USD_TO_CNY_RATE,
+  )
+);
 const profitMoney = (key: keyof OrderProfitRow, currency: OrderProfitCurrency) => (
   renderUsdSourceProfitMoney<OrderProfitRow>(key, currency, MOCK_USD_TO_CNY_RATE)
 );
@@ -67,6 +80,19 @@ const percent = (key: keyof OrderProfitRow) =>
     return <PercentCell value={typeof value === "number" ? value : null} />;
   };
 
+
+const roiValue = (_: unknown, row: OrderProfitRow) => {
+  const value = row.roi;
+
+  return (
+    <span className="report-table-metric">
+      {typeof value === "number" && Number.isFinite(value)
+        ? value.toFixed(2)
+        : "-"}
+    </span>
+  );
+};
+
 const sum = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => rows
   .reduce((total, row) => total + Number(row[key] ?? 0), 0);
 const sumNullable = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => (
@@ -75,6 +101,7 @@ const sumNullable = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => (
 
 const totalMoneyKeys = new Set([
   "salesAmount",
+  "sampleAmount",
   "refundAmount",
   "adSpend",
   "wfsDeliveryFee",
@@ -88,7 +115,9 @@ const totalMoneyKeys = new Set([
 const totalIntegerKeys = new Set([
   "salesVolume",
   "orderCount",
+  "sampleQuantity",
   "refundQuantity",
+  "wfsAvailableInventory",
 ]);
 
 function TotalCell({
@@ -130,8 +159,21 @@ function TotalCell({
       ? <MoneyCell value={orderProfit / orderCount * rate} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />
       : <MoneyCell value={null} currency={currency === "CNY" ? "¥" : "$"} tone="profit" />;
   }
+  if (columnKey === "returnRate30Days") {
+    const refundQuantity = sum(rows, "refundQuantity");
+    return salesAmount && sum(rows, "salesVolume") > 0
+      ? (
+          <PercentCell
+            value={refundQuantity / sum(rows, "salesVolume") * 100}
+          />
+        )
+      : <PercentCell value={null} />;
+  }
+
   if (columnKey === "adRatio") {
-    return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : null;
+    return salesAmount
+      ? <PercentCell value={adSpend / salesAmount * 100} />
+      : null;
   }
   if (columnKey === "profitMargin") {
     return salesAmount && orderProfit != null
@@ -144,12 +186,36 @@ function TotalCell({
     const denominator = purchaseCost != null && firstLegCost != null
       ? purchaseCost + firstLegCost
       : null;
+
     return orderProfit != null && denominator != null && denominator > 0
-      ? <PercentCell value={orderProfit / denominator * 100} />
-      : <PercentCell value={null} />;
+      ? (
+          <span className="report-table-metric">
+            {(orderProfit / denominator).toFixed(2)}
+          </span>
+        )
+      : <span className="report-table-metric">-</span>;
   }
   return null;
 }
+
+const dynamicCurrencyColumnTitles: Partial<Record<string, string>> = {
+  wfsDeliveryUnitPrice: "WFS配送单价",
+  purchaseUnitPriceCny: "采购单价",
+  firstLegUnitPriceCny: "头程单价",
+  storageUnitPrice: "仓储单价",
+};
+
+const columnTitle = (
+  key: string,
+  fallback: string,
+  currency: OrderProfitCurrency,
+) => {
+  const dynamic = dynamicCurrencyColumnTitles[key];
+
+  return dynamic
+    ? dynamicCurrencyTitle(dynamic, currency)
+    : fallback;
+};
 
 function createColumns(
   onCopy: (text: string) => void,
@@ -209,20 +275,37 @@ function createColumns(
     { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88 },
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88 },
     { title: "销售额", key: "salesAmount", width: 112, render: money("salesAmount", currency) },
-    { title: "退款数量", dataIndex: "refundQuantity", key: "refundQuantity", width: 104 },
-    { title: "退款金额", key: "refundAmount", width: 104, render: money("refundAmount", currency) },
+
+    { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88 },
+    { title: "送样金额", key: "sampleAmount", width: 112, render: money("sampleAmount", currency) },
+
+    { title: "退货量", dataIndex: "refundQuantity", key: "refundQuantity", width: 88 },
+    { title: "退款损失", key: "refundAmount", width: 104, render: money("refundAmount", currency) },
+    { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
+
     { title: "广告费", key: "adSpend", width: 104, render: money("adSpend", currency) },
     { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
+
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: money("wfsDeliveryFee", currency) },
+    { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, render: money("wfsDeliveryUnitPrice", currency) },
+
     { title: "佣金", key: "commission", width: 104, render: money("commission", currency) },
+
     { title: "采购总成本", key: "purchaseCost", width: 128, render: money("purchaseCost", currency) },
+    { title: "采购单价", key: "purchaseUnitPriceCny", width: 128, render: cnyMoney("purchaseUnitPriceCny", currency) },
+
     { title: "头程总成本", key: "firstLegCost", width: 128, render: money("firstLegCost", currency) },
+    { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, render: cnyMoney("firstLegUnitPriceCny", currency) },
+
     { title: "总仓储费", key: "storageFee", width: 112, render: money("storageFee", currency) },
+    { title: "仓储单价", key: "storageUnitPrice", width: 128, render: money("storageUnitPrice", currency) },
+
+    { title: "WFS可售库存", dataIndex: "wfsAvailableInventory", key: "wfsAvailableInventory", width: 128 },
     { title: "总成本", key: "totalCost", width: 112, render: money("totalCost", currency) },
     { title: "订单利润", key: "orderProfit", width: 112, render: profitMoney("orderProfit", currency) },
     { title: "平均利润/单", key: "averageProfitPerOrder", width: 128, render: profitMoney("averageProfitPerOrder", currency) },
     { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
-    { title: "ROI", key: "roi", width: 88, render: percent("roi") },
+    { title: "ROI", key: "roi", width: 88, render: roiValue },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
     {
       title: "操作",
@@ -255,7 +338,16 @@ function OrderProfitTable({
   const columns = appliedColumnKeys.flatMap((key) => {
     const column = columnMap.get(key);
     if (!column) return [];
-    const title = orderProfitColumnFields.find((field) => field.key === key)?.title ?? key;
+    const configuredTitle =
+      orderProfitColumnFields.find((field) => field.key === key)?.title
+      ?? key;
+
+    const title = columnTitle(
+      key,
+      configuredTitle,
+      currency,
+    );
+
     const width = columnWidths[key] ?? (Number(column.width) || 96);
     const minWidth = Math.max(key === "image" || key === "analysis" ? 72 : 88, title.length * 14 + 28);
     return [{
@@ -286,7 +378,7 @@ function OrderProfitTable({
         toolBarRender={false}
         tableAlertRender={false}
         tableAlertOptionRender={false}
-        scroll={{ x: "max-content" }}
+        scroll={{ x: "max-content", y: "100%" }}
         summary={() => (
           <Table.Summary fixed="bottom">
             <Table.Summary.Row className="order-profit__total-row" data-testid="order-profit-total-row">
