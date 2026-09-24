@@ -133,9 +133,7 @@ class DailySalesService:
             page=query.page,
             page_size=query.page_size,
         )
-        inventory_snapshots = (
-            self.repository.daily_sales_inventory_snapshot_map(rows)
-        )
+        inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
 
         (
             sales_qty,
@@ -196,9 +194,7 @@ class DailySalesService:
                     ad_spend_amount=_decimal(ad_spend_amount),
                     ad_spend_currency_code=ad_spend_currency or "USD",
                     wfs_available_quantity=(
-                        None
-                        if wfs_available_quantity is None
-                        else _decimal(wfs_available_quantity)
+                        None if wfs_available_quantity is None else _decimal(wfs_available_quantity)
                     ),
                     refund_event_qty=_decimal(refund_qty),
                     refund_event_amount=_decimal(refund_amount),

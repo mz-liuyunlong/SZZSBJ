@@ -116,11 +116,7 @@ class DailySalesRepository:
         """
         return bool(
             self.session.scalar(
-                text(
-                    "select to_regclass("
-                    "'public.fact_walmart_listing_inventory_daily'"
-                    ")"
-                )
+                text("select to_regclass('public.fact_walmart_listing_inventory_daily')")
             )
         )
 
@@ -290,27 +286,17 @@ class DailySalesRepository:
 
         latest_wfs_available_quantity = None
 
-        if (
-            latest_inventory_date is not None
-            and self._inventory_snapshot_table_ready()
-        ):
+        if latest_inventory_date is not None and self._inventory_snapshot_table_ready():
             expected_inventory_rows = self.session.scalar(
                 select(func.count())
                 .select_from(summary_base)
-                .where(
-                    summary_base.c.business_date_la
-                    == latest_inventory_date
-                )
+                .where(summary_base.c.business_date_la == latest_inventory_date)
             )
 
             inventory_row = self.session.execute(
                 select(
-                    func.count(
-                        WalmartListingInventoryDailyFact.wfs_available_quantity
-                    ),
-                    func.sum(
-                        WalmartListingInventoryDailyFact.wfs_available_quantity
-                    ),
+                    func.count(WalmartListingInventoryDailyFact.wfs_available_quantity),
+                    func.sum(WalmartListingInventoryDailyFact.wfs_available_quantity),
                 )
                 .select_from(WalmartListingInventoryDailyFact)
                 .join(
@@ -320,16 +306,11 @@ class DailySalesRepository:
                         == WalmartListingInventoryDailyFact.snapshot_date_la,
                         summary_base.c.source_account_ref
                         == WalmartListingInventoryDailyFact.source_account_ref,
-                        summary_base.c.store_id
-                        == WalmartListingInventoryDailyFact.store_id,
-                        summary_base.c.item_id
-                        == WalmartListingInventoryDailyFact.item_id,
+                        summary_base.c.store_id == WalmartListingInventoryDailyFact.store_id,
+                        summary_base.c.item_id == WalmartListingInventoryDailyFact.item_id,
                     ),
                 )
-                .where(
-                    WalmartListingInventoryDailyFact.snapshot_date_la
-                    == latest_inventory_date
-                )
+                .where(WalmartListingInventoryDailyFact.snapshot_date_la == latest_inventory_date)
             ).one()
 
             expected_count = int(expected_inventory_rows or 0)
