@@ -65,6 +65,23 @@ def test_daily_sales_storage_fee_sql_matches_persisted_model_column() -> None:
     assert "storage_fee_expected_total_amount" not in source
 
 
+def test_daily_sales_sales_amount_does_not_subtract_refunds() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+
+    expected_sales_formula = (
+        "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)"
+    )
+    assert expected_sales_formula in source
+    assert (
+        "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)"
+        "-coalesce(r.provider_refund_amount,0),0)" not in source
+    )
+    assert (
+        "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)"
+        "-coalesce(r.refund_amount,0),0)" not in source
+    )
+
+
 def test_daily_sales_refund_truth_does_not_use_legacy_refund_chain() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
 
@@ -112,5 +129,5 @@ def test_daily_sales_preserves_sample_sales_amount() -> None:
 
 
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v1")
+    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2")
     assert len(DAILY_SALES_V2_VERSION) <= 64
