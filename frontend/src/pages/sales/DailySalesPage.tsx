@@ -297,7 +297,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
       platform: row.platform,
       status: row.costStatus,
       store: row.store,
-      wfsAvailableInventory: row.wfsAvailableInventory,
+      wfsAvailableInventory: row.wfsAvailableInventory ?? undefined,
     });
   };
 
@@ -387,6 +387,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             <DailySalesTable
           rows={filteredRows}
           total={serverTotal || filteredRows.length}
+          wfsAvailableInventoryTotal={salesSummary?.wfsAvailableInventory ?? null}
           loading={isTableRequesting}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}

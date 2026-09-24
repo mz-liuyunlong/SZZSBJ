@@ -51,6 +51,7 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
         source_tables=(
             "dim_lingxing_stores",
             "dim_walmart_listings",
+            "fact_walmart_listing_inventory_daily",
             "fact_walmart_sales_item_daily",
             "fact_walmart_sample_order_items",
             "after_sales_refund_items",

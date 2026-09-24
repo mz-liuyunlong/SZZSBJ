@@ -82,6 +82,7 @@ interface BackendDailySalesSummary {
   refund_event_qty: string;
   refund_event_amount: string;
   refund_event_currency_code: string | null;
+  wfs_available_quantity: string | null;
 }
 
 interface BackendDailySalesData {
@@ -110,6 +111,7 @@ export interface DailySalesServerSummary {
   refundEventQuantity: number;
   refundEventAmount: number;
   refundEventCurrency: DailySalesCurrency;
+  wfsAvailableInventory?: number | null;
 }
 
 export interface DailySalesApiResult {
@@ -201,7 +203,7 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => ({
   firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
   storageFee: nullableNumberValue(item.storage_fee_total_amount),
   storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
-  wfsAvailableInventory: numberValue(item.wfs_available_quantity),
+  wfsAvailableInventory: nullableNumberValue(item.wfs_available_quantity),
   legacyGrossProfit: nullableNumberValue(item.gross_profit_amount),
   orderProfit: nullableNumberValue(item.gross_profit_amount),
   profitMargin: item.gross_margin == null ? null : numberValue(item.gross_margin) * 100,
@@ -235,6 +237,9 @@ const toDailySalesServerSummary = (
     refundEventQuantity: numberValue(summary.refund_event_qty),
     refundEventAmount: numberValue(summary.refund_event_amount),
     refundEventCurrency: currencyLabel(summary.refund_event_currency_code),
+    wfsAvailableInventory: nullableNumberValue(
+      summary.wfs_available_quantity,
+    ),
   };
 };
 

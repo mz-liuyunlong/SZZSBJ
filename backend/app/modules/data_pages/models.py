@@ -144,6 +144,85 @@ class WalmartListingDimension(Base):
     )
 
 
+class WalmartListingInventoryDailyFact(Base):
+    __tablename__ = "fact_walmart_listing_inventory_daily"
+    __table_args__ = (
+        UniqueConstraint(
+            "snapshot_date_la",
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            name="uq_fact_walmart_inventory_daily_identity",
+        ),
+        CheckConstraint(
+            "available_quantity IS NULL OR available_quantity >= 0",
+            name="ck_fact_walmart_inventory_daily_available_nonnegative",
+        ),
+        CheckConstraint(
+            "wfs_available_quantity IS NULL OR wfs_available_quantity >= 0",
+            name="ck_fact_walmart_inventory_daily_wfs_nonnegative",
+        ),
+        Index(
+            "ix_fact_walmart_inventory_daily_account_date",
+            "source_account_ref",
+            "snapshot_date_la",
+        ),
+        Index(
+            "ix_fact_walmart_inventory_daily_item_date",
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            "snapshot_date_la",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default=uuid4,
+    )
+    snapshot_date_la: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+    )
+    source_account_ref: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
+    store_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
+    item_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
+    msku: Mapped[str | None] = mapped_column(Text)
+    local_sku: Mapped[str | None] = mapped_column(Text)
+
+    available_quantity: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4),
+    )
+    wfs_available_quantity: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 4),
+    )
+
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
 class WalmartAdvertiserDimension(Base):
     __tablename__ = "dim_walmart_advertisers"
     __table_args__ = (

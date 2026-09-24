@@ -37,6 +37,7 @@ import {
 interface DailySalesTableProps {
   rows: DailySalesRow[];
   total?: number;
+  wfsAvailableInventoryTotal?: number | null;
   loading?: boolean;
   currency: DailySalesCurrency;
   appliedColumnKeys: string[];
@@ -165,16 +166,17 @@ const totalIntegerKeys = new Set([
   "orderCount",
   "sampleQuantity",
   "returnCount",
-  "wfsAvailableInventory",
 ]);
 function TotalCell({
   columnKey,
   currency,
   rows,
+  wfsAvailableInventoryTotal,
 }: {
   columnKey: string;
   currency: DailySalesCurrency;
   rows: DailySalesRow[];
+  wfsAvailableInventoryTotal?: number | null;
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
   if (columnKey === "purchaseCost") {
@@ -213,6 +215,16 @@ function TotalCell({
     const total = sumUsdSourceMoney(rows, columnKey as keyof DailySalesRow, currency);
     return <MoneyCell value={total} currency={currency === "CNY" ? "¥" : "$"} />;
   }
+  if (columnKey === "wfsAvailableInventory") {
+    return (
+      <span className="report-table-metric">
+        {wfsAvailableInventoryTotal == null
+          ? "—"
+          : wfsAvailableInventoryTotal.toLocaleString("zh-CN")}
+      </span>
+    );
+  }
+
   if (totalIntegerKeys.has(columnKey)) {
     return <span className="report-table-metric">{sum(rows, columnKey as keyof DailySalesRow).toLocaleString("zh-CN")}</span>;
   }
@@ -331,7 +343,18 @@ function createColumns(
     { title: "头程单价", key: "firstLegUnitPriceCny", width: 128, render: renderCnySourceMoney<DailySalesRow>("firstLegUnitPriceCny", currency, dailySalesFxRate) },
     { title: "总仓储费", key: "storageFee", width: 112, render: renderUsdSourceMoney<DailySalesRow>("storageFee", currency, dailySalesFxRate) },
     { title: "仓储单价", key: "storageUnitPrice", width: 128, render: renderUsdSourceMoney<DailySalesRow>("storageUnitPrice", currency, dailySalesFxRate) },
-    { title: "WFS可售库存", dataIndex: "wfsAvailableInventory", key: "wfsAvailableInventory", width: 128 },
+    {
+      title: "WFS可售库存",
+      key: "wfsAvailableInventory",
+      width: 128,
+      render: (_, row) => (
+        <span className="report-table-metric">
+          {row.wfsAvailableInventory == null
+            ? "—"
+            : row.wfsAvailableInventory.toLocaleString("zh-CN")}
+        </span>
+      ),
+    },
     { title: "订单利润", key: "orderProfit", width: 112, render: renderUsdSourceProfitMoney<DailySalesRow>("orderProfit", currency, dailySalesFxRate) },
     { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
     { title: "ROI", key: "roi", width: 88, render: percent("roi") },
@@ -344,6 +367,7 @@ function createColumns(
 function DailySalesTable({
   rows,
   total = rows.length,
+  wfsAvailableInventoryTotal = null,
   loading = false,
   currency,
   appliedColumnKeys,
@@ -410,7 +434,12 @@ function DailySalesTable({
                     align="left"
                     className={`daily-sales__total-cell daily-sales__total-cell--${key}`}
                   >
-                    <TotalCell columnKey={key} currency={currency} rows={rows} />
+                    <TotalCell
+                      columnKey={key}
+                      currency={currency}
+                      rows={rows}
+                      wfsAvailableInventoryTotal={wfsAvailableInventoryTotal}
+                    />
                   </Table.Summary.Cell>
                 );
               })}

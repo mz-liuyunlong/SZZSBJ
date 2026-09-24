@@ -18,6 +18,8 @@ from sqlalchemy import (
     or_,
     select,
     table,
+    text,
+    tuple_,
 )
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
@@ -29,6 +31,7 @@ from app.modules.data_pages.models import (
     OrderProfitSkuDayMart,
     ProductCustomTag,
     ProductCustomTagAssignment,
+    WalmartListingInventoryDailyFact,
 )
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
@@ -104,6 +107,19 @@ class DailySalesRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def _inventory_snapshot_table_ready(self) -> bool:
+        """Return whether the inventory snapshot migration is already applied.
+
+        The application code may be deployed before the database migration.
+        In that state Daily Sales must remain readable and inventory is reported
+        as unavailable instead of raising a 500 or falling back to fake history.
+        """
+        return bool(
+            self.session.scalar(
+                text("select to_regclass('public.fact_walmart_listing_inventory_daily')")
+            )
+        )
+
     def list_daily_sales(
         self,
         *,
@@ -164,6 +180,65 @@ class DailySalesRepository:
         ).all()
         return rows, int(total or 0), latest_calculated_at
 
+    def daily_sales_inventory_snapshot_map(
+        self,
+        rows: Sequence[DailySalesItemDayMart],
+    ) -> dict[tuple[date, str, str, str], object | None]:
+        """Read inventory from the actual listing capture day.
+
+        Daily-sales MART rows may be recalculated later. Therefore their persisted
+        WFS inventory must never be trusted as a substitute for the historical
+        point-in-time inventory snapshot.
+        """
+        if not self._inventory_snapshot_table_ready():
+            return {}
+
+        keys = {
+            (
+                row.business_date_la,
+                row.source_account_ref,
+                row.store_id,
+                row.item_id,
+            )
+            for row in rows
+        }
+
+        if not keys:
+            return {}
+
+        snapshot_rows = self.session.execute(
+            select(
+                WalmartListingInventoryDailyFact.snapshot_date_la,
+                WalmartListingInventoryDailyFact.source_account_ref,
+                WalmartListingInventoryDailyFact.store_id,
+                WalmartListingInventoryDailyFact.item_id,
+                WalmartListingInventoryDailyFact.wfs_available_quantity,
+            ).where(
+                tuple_(
+                    WalmartListingInventoryDailyFact.snapshot_date_la,
+                    WalmartListingInventoryDailyFact.source_account_ref,
+                    WalmartListingInventoryDailyFact.store_id,
+                    WalmartListingInventoryDailyFact.item_id,
+                ).in_(list(keys))
+            )
+        ).all()
+
+        return {
+            (
+                snapshot_date,
+                source_account_ref,
+                store_id,
+                item_id,
+            ): wfs_available_quantity
+            for (
+                snapshot_date,
+                source_account_ref,
+                store_id,
+                item_id,
+                wfs_available_quantity,
+            ) in snapshot_rows
+        }
+
     def daily_sales_summary(
         self,
         *,
@@ -190,6 +265,61 @@ class DailySalesRepository:
             batch_values=batch_values,
         )
 
+        # Inventory is a point-in-time metric.
+        # Find the latest business date in the full filtered Daily Sales result,
+        # then aggregate only genuine snapshots captured for that same LA date.
+        summary_base = (
+            statement.with_only_columns(
+                DailySalesItemDayMart.business_date_la,
+                DailySalesItemDayMart.source_account_ref,
+                DailySalesItemDayMart.store_id,
+                DailySalesItemDayMart.item_id,
+            )
+            .order_by(None)
+            .distinct()
+            .subquery()
+        )
+
+        latest_inventory_date = self.session.scalar(
+            select(func.max(summary_base.c.business_date_la))
+        )
+
+        latest_wfs_available_quantity = None
+
+        if latest_inventory_date is not None and self._inventory_snapshot_table_ready():
+            expected_inventory_rows = self.session.scalar(
+                select(func.count())
+                .select_from(summary_base)
+                .where(summary_base.c.business_date_la == latest_inventory_date)
+            )
+
+            inventory_row = self.session.execute(
+                select(
+                    func.count(WalmartListingInventoryDailyFact.wfs_available_quantity),
+                    func.sum(WalmartListingInventoryDailyFact.wfs_available_quantity),
+                )
+                .select_from(WalmartListingInventoryDailyFact)
+                .join(
+                    summary_base,
+                    and_(
+                        summary_base.c.business_date_la
+                        == WalmartListingInventoryDailyFact.snapshot_date_la,
+                        summary_base.c.source_account_ref
+                        == WalmartListingInventoryDailyFact.source_account_ref,
+                        summary_base.c.store_id == WalmartListingInventoryDailyFact.store_id,
+                        summary_base.c.item_id == WalmartListingInventoryDailyFact.item_id,
+                    ),
+                )
+                .where(WalmartListingInventoryDailyFact.snapshot_date_la == latest_inventory_date)
+            ).one()
+
+            expected_count = int(expected_inventory_rows or 0)
+            captured_count = int(inventory_row[0] or 0)
+
+            # Do not present a partial inventory total as complete.
+            if expected_count > 0 and captured_count == expected_count:
+                latest_wfs_available_quantity = inventory_row[1]
+
         row = self.session.execute(
             statement.with_only_columns(
                 func.coalesce(func.sum(DailySalesItemDayMart.sales_qty), 0),
@@ -203,7 +333,17 @@ class DailySalesRepository:
             ).order_by(None)
         ).one()
 
-        return row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+        return (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            latest_wfs_available_quantity,
+        )
 
     def refund_event_summary(
         self,

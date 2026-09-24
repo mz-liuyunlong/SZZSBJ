@@ -133,6 +133,8 @@ class DailySalesService:
             page=query.page,
             page_size=query.page_size,
         )
+        inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
+
         (
             sales_qty,
             order_count,
@@ -142,6 +144,7 @@ class DailySalesService:
             order_profit_currency,
             ad_spend_amount,
             ad_spend_currency,
+            wfs_available_quantity,
         ) = self.repository.daily_sales_summary(
             account_refs=account_refs,
             start_date=query.start_date,
@@ -167,7 +170,20 @@ class DailySalesService:
         )
         return (
             DailySalesListData(
-                items=[self._to_read(row) for row in rows],
+                items=[
+                    self._to_read(
+                        row,
+                        inventory_snapshots.get(
+                            (
+                                row.business_date_la,
+                                row.source_account_ref,
+                                row.store_id,
+                                row.item_id,
+                            )
+                        ),
+                    )
+                    for row in rows
+                ],
                 summary=DailySalesSummaryRead(
                     sales_qty=_decimal(sales_qty),
                     order_count=_decimal(order_count),
@@ -177,6 +193,9 @@ class DailySalesService:
                     order_profit_currency_code=order_profit_currency or "USD",
                     ad_spend_amount=_decimal(ad_spend_amount),
                     ad_spend_currency_code=ad_spend_currency or "USD",
+                    wfs_available_quantity=(
+                        None if wfs_available_quantity is None else _decimal(wfs_available_quantity)
+                    ),
                     refund_event_qty=_decimal(refund_qty),
                     refund_event_amount=_decimal(refund_amount),
                     refund_event_currency_code=refund_currency or "USD",
@@ -226,7 +245,11 @@ class DailySalesService:
             ],
         )
 
-    def _to_read(self, row: DailySalesItemDayMart) -> DailySalesItemRead:
+    def _to_read(
+        self,
+        row: DailySalesItemDayMart,
+        wfs_available_quantity: object | None,
+    ) -> DailySalesItemRead:
         return DailySalesItemRead(
             id=str(row.id),
             business_date_la=row.business_date_la,
@@ -260,7 +283,7 @@ class DailySalesService:
             ad_spend_amount=row.ad_spend_amount,
             ad_spend_currency_code=row.ad_spend_currency_code,
             ad_ratio=row.ad_ratio,
-            wfs_available_quantity=row.wfs_available_quantity,
+            wfs_available_quantity=wfs_available_quantity,
             wfs_fee_unit_amount=row.wfs_fee_unit_amount,
             wfs_fee_total_amount=row.wfs_fee_total_amount,
             wfs_fee_currency_code=row.wfs_fee_currency_code,
