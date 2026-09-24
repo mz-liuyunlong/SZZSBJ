@@ -29,7 +29,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v1"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -315,16 +315,16 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)+coalesce(sample.sample_qty,0),"
                 "greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0),"
                 "greatest(coalesce(s.order_count,0)-coalesce(sample.sample_order_count,0),0),"
-                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.provider_refund_amount,0),0),"
+                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
                 "coalesce(s.currency_code,'USD'),coalesce(sample.sample_amount,0),"
                 "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
                 "coalesce(r.return_qty,0),"
                 "case when coalesce(r.return_qty,0)>0 then r.refund_loss_amount else 0 end,'USD',"
                 "coalesce(a.ad_spend,0),'USD',"
-                "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)>0 "
-                "then coalesce(a.ad_spend,0)/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0) "
+                "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)>0 "
+                "then coalesce(a.ad_spend,0)/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) "
                 "else null end,inv.wfs_available_quantity,coalesce(commission.commission_rate,:default_commission_rate),commission.rule_id,"
-                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0)-coalesce(r.refund_amount,0),0)"
+                "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)"
                 "*coalesce(commission.commission_rate,:default_commission_rate),coalesce(s.currency_code,'USD'),"
                 "case when commission.rule_id is null then 'default_15_percent' "
                 "when commission.rule_scope='item' then 'item_commission_rule' "
