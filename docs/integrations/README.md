@@ -14,3 +14,4 @@
 ## 当前资料
 
 - `lingxing-walmart-openapi/`：领星 Walmart OpenAPI 精简只读参考资料。
+- `interface-registry-notice-20260923.md`：WFS / 物流探测结果的接口登记通知（新增登记、DO_NOT_USE 复核证据与建议、WFS Receipt 口径；不改任何既有状态）。
