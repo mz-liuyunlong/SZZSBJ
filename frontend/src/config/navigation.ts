@@ -29,6 +29,7 @@ import {
   CustomerServiceOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  DeploymentUnitOutlined,
   DollarOutlined,
   InboxOutlined,
   RobotOutlined,
@@ -248,6 +249,23 @@ export const navigation: NavigationGroup[] = [
     children: [
       page('purchase', 'plan', '采购计划', '/purchase/plan'),
       page('purchase', 'order', '采购单', '/purchase/order'),
+    ],
+  },
+  {
+    // PMC group approved by Rocky 2026-09-24 (PRP pmc-purchase-board §2, option A); owner review in PR.
+    key: 'pmc',
+    title: 'PMC',
+    icon: createElement(DeploymentUnitOutlined, { 'aria-hidden': true }),
+    children: [
+      page('pmc', 'purchase_board', '采购看板', '/pmc/purchase-board', {
+        status: 'testing',
+        source: 'new_postgres',
+        migrationMode: 'native',
+        sourceTables: ['dws_purchase_board', 'dws_purchase_sku_cycle', 'dws_purchase_pending', 'dwd_purchase_plan'],
+        readOnly: true,
+        // Backend permission key (docs/api/pmc-purchase-api.md); the frontend does not enforce it.
+        permissionKey: 'pmc:purchase:read',
+      }),
     ],
   },
   {

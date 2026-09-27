@@ -1,5 +1,6 @@
+/** Clickable stat cards for management/board summaries; the active card doubles as a filter. */
 import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
-import "./ManagementStatCards.css";
+import "@/components/report-table/ManagementStatCards.css";
 
 export type ManagementStatTone = "normal" | "success" | "warning" | "danger";
 

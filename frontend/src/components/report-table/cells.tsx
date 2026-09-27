@@ -81,6 +81,7 @@ export function CopyableTextCell({ text, label, link, onCopy, onOpen }: Copyable
 
 const WALMART_ITEM_URL_PREFIX = "https://www.walmart.com/ip/";
 
+/** The single place that turns a Walmart ItemID / product id into an item page URL. */
 const walmartItemUrl = (productId: string) => {
   const normalized = productId.trim();
   return `${WALMART_ITEM_URL_PREFIX}${encodeURIComponent(normalized)}`;
@@ -93,6 +94,34 @@ const openWalmartItem = (productId: string) => {
   const opened = window.open(walmartItemUrl(normalized), "_blank", "noopener,noreferrer");
   if (opened) opened.opener = null;
 };
+
+interface WalmartItemLinkProps {
+  itemId: string | null | undefined;
+  label?: string;
+  className?: string;
+}
+
+/**
+ * Shared Walmart item link (Owner condition, PRP pmc-purchase-board §9): every page renders
+ * ItemIDs through this component and never builds the URL itself. Opens in a new tab.
+ */
+export function WalmartItemLink({ itemId, label = "Walmart 商品页", className }: WalmartItemLinkProps) {
+  const normalized = itemId?.trim() ?? "";
+  if (!normalized || normalized === "-") {
+    return <span className="report-table-metric">—</span>;
+  }
+  return (
+    <a
+      className={["report-table-walmart-item-link", className].filter(Boolean).join(" ")}
+      href={walmartItemUrl(normalized)}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${label}：${normalized}（新标签页打开）`}
+    >
+      {normalized}
+    </a>
+  );
+}
 
 interface WalmartProductIdCellProps {
   productId: string;

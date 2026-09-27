@@ -23,6 +23,7 @@ import SyncTaskPage from '@/pages/data-center/SyncTaskPage'
 import ApiDocsPage from '@/pages/data-center/ApiDocsPage'
 import DataImportPage from '@/pages/data-center/DataImportPage'
 import WfsFeeAlertPage from '@/pages/warehouse/WfsFeeAlertPage'
+import PurchaseBoardPage from '@/pages/pmc/purchase-board/PurchaseBoardPage'
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
@@ -126,6 +127,8 @@ function BusinessRoute({
           <OperationLogPage page={page} />
         ) : page.key === 'warehouse_wfs_fee_alert' ? (
           <WfsFeeAlertPage page={page} />
+        ) : page.key === 'pmc_purchase_board' ? (
+          <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === 'data_center_data_import' ? (
           <DataImportPage page={page} />
         ) : page.key === 'data_center_api_docs' ? (
