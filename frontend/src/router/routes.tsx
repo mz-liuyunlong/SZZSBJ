@@ -19,6 +19,7 @@ import DailySalesPage from '@/pages/sales/DailySalesPage'
 import OrderProfitPage from '@/pages/sales/OrderProfitPage'
 import RefundManagementPage from '@/pages/aftersales/RefundManagementPage'
 import OperationLogPage from '@/pages/operations/OperationLogPage'
+import OperationPlanPage from '@/pages/operations/OperationPlanPage'
 import SyncTaskPage from '@/pages/data-center/SyncTaskPage'
 import ApiDocsPage from '@/pages/data-center/ApiDocsPage'
 import DataImportPage from '@/pages/data-center/DataImportPage'
@@ -125,6 +126,8 @@ function BusinessRoute({
           <RefundManagementPage page={page} />
         ) : page.key === 'operations_log' ? (
           <OperationLogPage page={page} />
+        ) : page.key === 'operations_plan' ? (
+          <OperationPlanPage page={page} />
         ) : page.key === 'warehouse_wfs_fee_alert' ? (
           <WfsFeeAlertPage page={page} />
         ) : page.key === 'pmc_purchase_board' ? (
