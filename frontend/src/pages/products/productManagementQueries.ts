@@ -11,13 +11,20 @@ import {
 } from "@/pages/products/productManagementApi";
 import type { ProductManagementFilters, ProductManagementRow } from "@/pages/products/productManagementTypes";
 
+const normalizeFilterKeyValues = (values?: string[], legacyValue?: string) => (
+  Array.from(new Set((values && values.length > 0 ? values : legacyValue ? [legacyValue] : [])
+    .map((value) => value.trim())
+    .filter(Boolean)))
+    .sort()
+);
+
 const baseFilterKey = (filters: ProductManagementFilters) => ({
-  ownerUid: filters.ownerUid ?? null,
-  developerUid: filters.developerUid ?? null,
-  tag: filters.tag ?? null,
+  ownerUids: normalizeFilterKeyValues(filters.ownerUids, filters.ownerUid),
+  developerUids: normalizeFilterKeyValues(filters.developerUids, filters.developerUid),
+  tags: normalizeFilterKeyValues(filters.tags, filters.tag),
   productGrade: filters.productGrade ?? null,
   keyword: filters.keyword.trim(),
-  batchValues: filters.batchValues ?? [],
+  batchValues: normalizeFilterKeyValues(filters.batchValues),
 });
 
 const listFilterKey = (filters: ProductManagementFilters) => ({
