@@ -13,6 +13,7 @@ from app.modules.business_rules.router import router as business_rules_router
 from app.modules.data_pages.router import router as data_pages_router
 from app.modules.integration_sync.router import router as integration_sync_router
 from app.modules.media_assets.router import router as media_assets_router
+from app.modules.operation_plans.router import router as operation_plans_router
 from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     application.include_router(data_pages_router)
     application.include_router(integration_sync_router)
     application.include_router(media_assets_router)
+    application.include_router(operation_plans_router)
     application.include_router(pmc_purchase_router)
     application.include_router(product_management_router)
     application.include_router(products_router)

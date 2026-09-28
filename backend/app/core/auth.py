@@ -25,6 +25,8 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "business-rules:write",
         "business-rules:execute",
         "pmc:purchase:read",
+        "operations:plan:read",
+        "operations:plan:write",
     }
 )
 _PREVIEW_PATH_PREFIXES: Final = frozenset(
@@ -37,6 +39,8 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
         "/api/warehouse/",
         "/api/business-rules/",
         "/api/pmc/",
+        "/api/operations/",
+        "/api/operations/plans/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
@@ -52,8 +56,15 @@ _PREVIEW_WRITE_PATHS: Final[frozenset[str]] = frozenset(
         "/api/business-rules/store-commissions",
         "/api/business-rules/store-commissions/deactivate",
         "/api/business-rules/store-commissions/recalculate",
+        "/api/operations/plans/import",
     }
 )
+_PREVIEW_WRITE_PATH_PREFIXES: Final[frozenset[str]] = frozenset(
+    {
+        "/api/operations/plans/products/",
+    }
+)
+_PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH"})
 
 
 def _constant_time_ascii_equals(provided: str, expected: SecretStr) -> bool:
@@ -78,16 +89,30 @@ class Principal:
 
 
 def get_optional_principal(request: Request) -> Principal | None:
-    """Return the temporary read-only preview principal or fail closed."""
+    """Return the temporary preview principal or fail closed."""
     path = request.scope.get("path")
     path_allowed = isinstance(path, str) and (
         any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
         or path in _PREVIEW_READ_PATHS
     )
     write_allowed = (
-        request.method == "POST" and isinstance(path, str) and path in _PREVIEW_WRITE_PATHS
+        request.method in _PREVIEW_WRITE_METHODS
+        and isinstance(path, str)
+        and (
+            path in _PREVIEW_WRITE_PATHS
+            or any(path.startswith(prefix) for prefix in _PREVIEW_WRITE_PATH_PREFIXES)
+        )
     )
-    if not ((request.method == "GET" and path_allowed) or write_allowed):
+    operation_plan_mutation_allowed = (
+        request.method in {"POST", "PATCH"}
+        and isinstance(path, str)
+        and path.startswith("/api/operations/plans/")
+    )
+    if not (
+        (request.method == "GET" and path_allowed)
+        or write_allowed
+        or operation_plan_mutation_allowed
+    ):
         return None
     try:
         settings = get_settings()

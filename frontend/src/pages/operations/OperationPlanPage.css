@@ -1,0 +1,1769 @@
+.page-shell:has(> .page-shell__content .operation-plan-page) {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-shell:has(> .page-shell__content .operation-plan-page) > .page-shell__content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page-shell:has(> .page-shell__content .operation-plan-page) > .page-shell__header > .page-shell__heading {
+  display: none;
+}
+
+.operation-plan-page {
+  display: flex;
+  min-width: 1280px;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f7fa;
+  color: #1f2937;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.operation-plan-title-row {
+  display: flex;
+  height: 40px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.operation-plan-title {
+  color: #172033;
+  font-size: 20px;
+  font-weight: 850;
+  letter-spacing: -0.2px;
+}
+
+.operation-plan-subtitle {
+  color: #8a95a6;
+  font-size: 11px;
+}
+
+.operation-plan-main-tabs {
+  display: flex;
+  height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 22px;
+  padding: 0 10px 0 14px;
+  overflow: visible;
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px 10px 0 0;
+}
+
+.operation-plan-tab {
+  position: relative;
+  display: flex;
+  height: 43px;
+  align-items: center;
+  padding: 0 3px;
+  color: #667085;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.operation-plan-tab.active {
+  color: #1677ff;
+  font-weight: 800;
+}
+
+.operation-plan-tab.active::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  content: "";
+  background: #1677ff;
+  border-radius: 3px;
+}
+
+.operation-plan-period {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.operation-plan-period .ant-segmented {
+  font-size: 11px;
+  border-radius: 7px;
+}
+
+.operation-plan-period .ant-segmented-item-label {
+  padding: 0 8px;
+  line-height: 28px;
+}
+
+.operation-plan-period .ant-picker {
+  height: 30px !important;
+  border-radius: 7px !important;
+  font-size: 11px !important;
+}
+
+.operation-plan-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.operation-plan-tab-actions .ant-btn {
+  height: 30px !important;
+  border-radius: 7px !important;
+  font-size: 10.5px !important;
+}
+
+.operation-plan-content-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 9px;
+  overflow: auto;
+  background: #f7f9fc;
+  border: 1px solid #e5eaf0;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+}
+
+.stats-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.stats-grid.goal-dual {
+  grid-template-columns: minmax(300px, 1.3fr) minmax(300px, 1.3fr) minmax(220px, 0.85fr) minmax(220px, 0.85fr);
+}
+
+.compact-goal-card,
+.compact-stat-card {
+  position: relative;
+  height: 96px;
+  padding: 10px 13px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 11px;
+}
+
+.compact-goal-card.sales {
+  box-shadow: inset 3px 0 0 #1677ff;
+}
+
+.compact-goal-card.profit {
+  box-shadow: inset 3px 0 0 #16a36a;
+}
+
+.compact-stat-card.purple {
+  box-shadow: inset 3px 0 0 #7c5cff;
+  background: linear-gradient(135deg, #fff 72%, #f5f1ff);
+}
+
+.compact-stat-card.orange {
+  box-shadow: inset 3px 0 0 #f08a24;
+  background: linear-gradient(135deg, #fff 72%, #fff5ec);
+}
+
+.compact-goal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.compact-goal-head small,
+.compact-stat-card small {
+  color: #98a2b3;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.compact-goal-main {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 7px;
+}
+
+.compact-goal-amount,
+.compact-stat-card b {
+  color: #172033;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 20px;
+}
+
+.compact-stat-card b {
+  display: block;
+  margin-top: 8px;
+  font-size: 24px;
+  line-height: 28px;
+}
+
+.compact-goal-amount small {
+  margin-left: 5px;
+  color: #98a2b3;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.compact-goal-rate {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.goal-track {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  background: #edf1f5;
+  border-radius: 99px;
+}
+
+.goal-fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.goal-fill.sales {
+  background: #1677ff;
+}
+
+.goal-fill.profit {
+  background: #16a36a;
+}
+
+.compact-goal-foot,
+.compact-stat-card span {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 5px;
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.compact-stat-card span {
+  display: block;
+  line-height: 18px;
+}
+
+.compact-goal-foot b {
+  color: #667085;
+}
+
+.owner-card {
+  margin-top: 9px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+}
+
+.card-head-inner {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.card-title {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.card-sub {
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 9.5px;
+}
+
+.owner-card .ant-table {
+  font-size: 10.5px;
+}
+
+.owner-card .ant-table-thead > tr > th {
+  padding: 7px 10px !important;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 780;
+  background: #fafbfd !important;
+  white-space: nowrap;
+}
+
+.owner-card .ant-table-tbody > tr > td {
+  padding: 9px 12px !important;
+  vertical-align: middle;
+}
+
+.owner-sort-trigger {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 0;
+  color: #667085;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.owner-sort-trigger:hover,
+.owner-sort-trigger.active {
+  color: #1677ff;
+}
+
+.owner-sort-trigger small,
+.owner-rank-head small {
+  color: #98a2b3;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+.owner-sort-clear {
+  display: inline-grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  margin-left: 1px;
+  color: #98a2b3;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.owner-sort-clear:hover {
+  color: #1677ff;
+  background: #eef5ff;
+}
+
+.owner-sort-caret {
+  color: #98a2b3;
+  font-size: 9px;
+  transform: translateY(-1px);
+}
+
+.owner-rank-head {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.owner-person {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+.owner-rank-wrap {
+  display: flex;
+  flex: none;
+  width: 30px;
+  align-items: center;
+  justify-content: center;
+}
+
+.owner-medal {
+  position: relative;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 8px;
+}
+
+.owner-medal.gold {
+  color: #8a5300;
+  background: linear-gradient(145deg, #fff3c4, #ffd666);
+  border: 1px solid #f3c24e;
+}
+
+.owner-medal.silver {
+  color: #586577;
+  background: linear-gradient(145deg, #f7f9fc, #d9e0ea);
+  border: 1px solid #cbd4df;
+}
+
+.owner-medal.bronze {
+  color: #87451f;
+  background: linear-gradient(145deg, #fff0e5, #eab08a);
+  border: 1px solid #dda177;
+}
+
+.owner-rank-plain {
+  width: 24px;
+  color: #98a2b3;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.owner-person-meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.owner-name {
+  padding: 0;
+  color: #1677ff;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 18px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+
+.owner-person-sub {
+  color: #98a2b3;
+  font-size: 9px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.owner-plan-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.2;
+}
+
+.owner-plan-actual {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.owner-plan-target {
+  color: #98a2b3;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.owner-plan-rate {
+  color: #344054;
+  font-size: 11px;
+  font-weight: 850;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.owner-plan-track {
+  height: 6px;
+  margin-top: 7px;
+  overflow: hidden;
+  background: #edf1f5;
+  border-radius: 99px;
+}
+
+.owner-plan-fill {
+  height: 100%;
+  background: #1677ff;
+  border-radius: 99px;
+}
+
+.owner-plan-cell.profit .owner-plan-fill {
+  background: #16a36a;
+}
+
+.owner-plan-foot-simple {
+  margin-top: 5px;
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.risk-summary {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 30px;
+  white-space: nowrap;
+}
+
+.risk-summary-item {
+  position: relative;
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  color: #667085;
+  font-size: 9.5px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.risk-summary-item:first-child {
+  padding-left: 0;
+}
+
+.risk-summary-item:not(:last-child)::after {
+  position: absolute;
+  top: 5px;
+  right: 0;
+  bottom: 5px;
+  width: 1px;
+  content: "";
+  background: #e8edf3;
+}
+
+.risk-summary-item b {
+  min-width: 10px;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 850;
+  text-align: right;
+}
+
+.risk-summary-item.lag.has-risk b {
+  color: #d99000;
+}
+
+.risk-summary-item.severe.has-risk b {
+  color: #e5484d;
+}
+
+.risk-summary-item.stock.has-risk b {
+  color: #7c5cff;
+}
+
+.risk-empty,
+.ops-muted {
+  color: #98a2b3;
+  font-size: 9.5px;
+}
+
+.operation-plan-product-tools {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 9px;
+}
+
+.operation-plan-search {
+  min-width: 400px;
+}
+
+.source-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  margin: 8px 0;
+  color: #52657b;
+  font-size: 10px;
+  background: #f6f9ff;
+  border: 1px solid #d9e8ff;
+  border-radius: 8px;
+}
+
+.plan-table-wrap {
+  position: relative;
+  min-height: 420px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e5eaf0;
+  border-radius: 10px;
+}
+
+.plan-table-wrap .ant-pro-table,
+.plan-table-wrap .ant-pro-card,
+.plan-table-wrap .ant-pro-card-body {
+  height: auto;
+}
+
+.plan-table-wrap .ant-table {
+  font-size: 10.5px;
+}
+
+.plan-table-wrap .ant-table-thead > tr > th {
+  height: 38px;
+  padding: 8px 8px !important;
+  color: #667085;
+  font-size: 10px;
+  font-weight: 800;
+  background: #fafbfd !important;
+  white-space: nowrap;
+}
+
+.plan-table-wrap .ant-table-tbody > tr > td {
+  padding: 9px 8px !important;
+  vertical-align: middle;
+}
+
+.ops-product-cell {
+  min-width: 0;
+}
+
+.product-name {
+  max-width: 180px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #344054;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtle {
+  margin-top: 2px;
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.last-perf-cell {
+  display: grid;
+  gap: 4px;
+  min-width: 126px;
+}
+
+.last-perf-cell > div:not(.last-perf-rate) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #98a2b3;
+  font-size: 9.5px;
+}
+
+.last-perf-cell b {
+  color: #344054;
+  font-size: 10.5px;
+}
+
+.last-perf-rate {
+  padding-top: 2px;
+  color: #98a2b3;
+  font-size: 9px;
+  border-top: 1px dashed #edf1f5;
+}
+
+.plan-cell {
+  min-width: 206px;
+}
+
+.plan-values {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+
+.plan-values span {
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.plan-values b {
+  margin-left: 3px;
+  color: #344054;
+  font-size: 10.5px;
+}
+
+.plan-progress {
+  display: grid;
+  grid-template-columns: 1fr 38px;
+  gap: 7px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.plan-progress .track {
+  height: 6px;
+  overflow: hidden;
+  background: #edf1f5;
+  border-radius: 99px;
+}
+
+.plan-progress .fill {
+  height: 100%;
+  border-radius: 99px;
+}
+
+.plan-progress .rate {
+  color: #475467;
+  font-size: 9.5px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.plan-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+  font-size: 9px;
+}
+
+.delta.good,
+.inventory-support b.good {
+  color: #16a36a;
+}
+
+.delta.warn {
+  color: #d99000;
+}
+
+.delta.bad,
+.inventory-support b.bad {
+  color: #e5484d;
+}
+
+.forecast {
+  color: #98a2b3;
+  white-space: nowrap;
+}
+
+.inventory-compact {
+  display: grid;
+  min-width: 168px;
+  gap: 5px;
+}
+
+.inventory-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #98a2b3;
+  font-size: 9.5px;
+}
+
+.inventory-line.two {
+  justify-content: flex-start;
+  gap: 18px;
+}
+
+.inventory-line b {
+  margin-left: 4px;
+  color: #344054;
+  font-size: 10.5px;
+}
+
+.inventory-support {
+  padding-top: 4px;
+  color: #667085;
+  font-size: 9.5px;
+  border-top: 1px dashed #edf1f5;
+}
+
+.inventory-support b {
+  margin-left: 6px;
+  font-size: 10.5px;
+}
+
+.status-stack {
+  display: flex;
+  max-width: 130px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.status-stack .ant-tag {
+  margin: 0;
+  padding-inline: 6px;
+  font-size: 9px;
+  line-height: 18px;
+}
+
+.status-adjust {
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.detail-grid,
+.import-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.import-summary {
+  grid-template-columns: repeat(4, 1fr);
+  margin: 12px 0;
+}
+
+.detail-box,
+.import-summary > div {
+  padding: 10px;
+  background: #fafbfd;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+}
+
+.detail-box span,
+.import-summary span {
+  display: block;
+  color: #98a2b3;
+  font-size: 9px;
+}
+
+.detail-box b,
+.import-summary b {
+  display: block;
+  margin-top: 3px;
+  color: #344054;
+  font-size: 14px;
+}
+
+.drawer-title {
+  margin-bottom: 8px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.history-row {
+  padding: 10px 0;
+  border-bottom: 1px solid #edf1f5;
+}
+
+.history-row b {
+  margin-left: 8px;
+}
+
+.history-row span {
+  margin-left: 8px;
+  color: #667085;
+}
+
+.history-row p {
+  margin: 6px 0 0;
+  color: #475467;
+}
+
+.import-steps {
+  margin: 2px 0 18px;
+}
+
+@media (max-width: 1450px) {
+  .stats-grid.goal-dual {
+    grid-template-columns: minmax(275px, 1.22fr) minmax(275px, 1.22fr) minmax(200px, 0.9fr) minmax(200px, 0.9fr);
+  }
+
+  .operation-plan-search {
+    min-width: 330px;
+  }
+
+  .operation-plan-product-tools {
+    gap: 4px;
+  }
+}
+
+
+/* Patch: ProTable must render natural height in this page. The shared shell can be flex-based,
+   but this page follows the provided HTML/effect image and needs visible mock rows by default. */
+.operation-plan-content-shell .ant-pro-table,
+.operation-plan-content-shell .ant-pro-card,
+.operation-plan-content-shell .ant-pro-card-body,
+.operation-plan-content-shell .ant-table-wrapper {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.owner-card {
+  min-height: 520px;
+}
+
+.owner-card .ant-pro-card-body,
+.plan-table-wrap .ant-pro-card-body {
+  padding: 0 !important;
+}
+
+.plan-table-wrap {
+  min-height: 560px;
+}
+
+
+/* Fix: ReportTableShell is flex-row by default; dashboard owner title must sit above the table. */
+.owner-card.report-table-shell {
+  display: flex !important;
+  width: 100%;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.owner-card .card-head-inner {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.owner-card .ant-pro-table,
+.owner-card .ant-pro-card,
+.owner-card .ant-pro-card-body,
+.owner-card .ant-table-wrapper,
+.owner-card .ant-spin-nested-loading,
+.owner-card .ant-spin-container,
+.owner-card .ant-table,
+.owner-card .ant-table-container {
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+}
+
+.owner-card .ant-table-body {
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+}
+
+/* Fix: selected product rows need the shared batch-action footer at the table bottom. */
+.plan-table-wrap.report-table-shell {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 0 0 auto !important;
+  padding-bottom: 46px;
+}
+
+.plan-table-wrap .ant-table-footer {
+  position: absolute;
+  right: auto;
+  bottom: 0;
+  left: 0;
+  z-index: 6;
+  width: 276px;
+  height: 46px;
+  padding: 6px 10px;
+  background: #fff;
+  border-top: 1px solid #e5eaf3;
+}
+
+.plan-table-wrap .ant-table-pagination.ant-pagination,
+.plan-table-wrap .ant-pagination {
+  min-height: 46px;
+  padding-left: 286px;
+}
+
+.plan-table-wrap .report-table-selection-bar {
+  height: 32px;
+}
+
+.operation-plan-bulk-preview {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  margin-top: 12px;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid #e5eaf0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.operation-plan-bulk-preview > div {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: #475467;
+  font-size: 12px;
+}
+
+.operation-plan-bulk-preview b {
+  color: #1677ff;
+  font-weight: 800;
+}
+
+.operation-plan-bulk-preview span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operation-plan-bulk-preview small {
+  color: #98a2b3;
+}
+
+
+/* Final layout fix: product table follows the shared report-table layout. */
+.operation-plan-content-shell {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.operation-plan-product-tools,
+.source-hint,
+.stats-grid {
+  flex: 0 0 auto;
+}
+
+/* Keep owner header above table; do not let ReportTableShell split it left/right. */
+.owner-card.report-table-shell {
+  display: flex !important;
+  width: 100%;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.owner-card .card-head-inner {
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+/* Product table must occupy the remaining page height so the pagination/selection footer sits at the bottom. */
+.plan-table-wrap.report-table-shell {
+  display: flex !important;
+  width: 100%;
+  min-height: 0 !important;
+  flex: 1 1 0 !important;
+  flex-direction: column !important;
+  padding-bottom: 0 !important;
+  overflow: hidden;
+}
+
+.plan-table-wrap .ant-pro-table,
+.plan-table-wrap .ant-pro-card,
+.plan-table-wrap .ant-pro-card-body,
+.plan-table-wrap .ant-table-wrapper,
+.plan-table-wrap .ant-spin-nested-loading,
+.plan-table-wrap .ant-spin-container,
+.plan-table-wrap .ant-table,
+.plan-table-wrap .ant-table-container {
+  display: flex;
+  width: 100%;
+  min-height: 0 !important;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.plan-table-wrap .ant-pro-card-body {
+  padding: 0 !important;
+}
+
+.plan-table-wrap .ant-table-container {
+  overflow: hidden;
+}
+
+.plan-table-wrap .ant-table-header {
+  flex: 0 0 auto;
+}
+
+.plan-table-wrap .ant-table-body {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  flex: 1 1 0;
+  overflow-y: auto !important;
+}
+
+/* Remove the previous always-visible empty footer box. Footer only exists when rows are selected. */
+.plan-table-wrap .ant-table-footer:empty {
+  display: none !important;
+}
+
+.plan-table-wrap .ant-table-footer {
+  background: transparent;
+}
+
+/* Use the same report-table typography color scale as other data pages. */
+.owner-card .ant-table,
+.plan-table-wrap .ant-table {
+  color: #262626;
+  font-size: 12px;
+}
+
+.owner-card .ant-table-thead > tr > th,
+.plan-table-wrap .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 7px 8px !important;
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  background: #f4f7fb !important;
+  border-block-end: 1px solid #dce3ed;
+}
+
+.owner-card .ant-table-tbody > tr > td,
+.plan-table-wrap .ant-table-tbody > tr > td {
+  height: 38px;
+  padding: 6px 8px !important;
+  color: #262626;
+  font-size: 12px;
+  line-height: 1.35;
+  border-block-end-color: #e5eaf3;
+}
+
+.product-name,
+.owner-name,
+.owner-plan-actual,
+.owner-plan-rate,
+.ops-metric-main {
+  color: #1f2937;
+  font-size: 12px;
+}
+
+.product-sub,
+.owner-person-sub,
+.owner-plan-target,
+.owner-plan-foot-simple,
+.ops-muted,
+.risk-empty {
+  color: #8c98aa;
+  font-size: 11px;
+}
+
+.owner-name,
+.report-table-copyable__link,
+.report-table-walmart-item-link {
+  color: #1677ff;
+  font-weight: 600;
+}
+
+.plan-table-wrap .ant-table-pagination.ant-pagination,
+.plan-table-wrap .ant-pagination {
+  flex: 0 0 auto;
+  min-height: 42px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0 !important;
+  padding: 5px 10px 5px 276px;
+  background: #fff;
+  border-block-start: 1px solid #e5eaf3;
+}
+
+
+/* Scroll fix: dashboard content must scroll as a page; product table keeps fixed footer/pagination. */
+.operation-plan-content-shell.is-dashboard {
+  display: block !important;
+  min-height: 0;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  padding-bottom: 18px;
+}
+
+.operation-plan-content-shell.is-dashboard .stats-grid {
+  display: grid;
+}
+
+.operation-plan-content-shell.is-dashboard .owner-card.report-table-shell {
+  display: flex !important;
+  width: 100%;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  flex-direction: column !important;
+  overflow: visible !important;
+}
+
+.operation-plan-content-shell.is-dashboard .owner-card .ant-pro-table,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-pro-card,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-pro-card-body,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-table-wrapper,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-spin-nested-loading,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-spin-container,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-table,
+.operation-plan-content-shell.is-dashboard .owner-card .ant-table-container {
+  display: block !important;
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+}
+
+.operation-plan-content-shell.is-dashboard .owner-card .ant-table-body {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.operation-plan-content-shell.is-products {
+  display: flex !important;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden !important;
+}
+
+.operation-plan-content-shell.is-products .operation-plan-product-tools,
+.operation-plan-content-shell.is-products .source-hint {
+  flex: 0 0 auto;
+}
+
+.operation-plan-content-shell.is-products .plan-table-wrap.report-table-shell {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+}
+
+
+/* Import modal fix: match provided 4-step flow: choose period -> upload -> validate -> confirm. */
+.operation-plan-import-modal .ant-modal-content {
+  border-radius: 12px;
+}
+
+.operation-plan-import-modal .ant-modal-header {
+  margin-bottom: 18px;
+}
+
+.operation-plan-import-modal .ant-modal-title {
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.operation-plan-import-modal .ant-modal-body {
+  padding-top: 2px;
+}
+
+.operation-plan-import-modal .import-steps {
+  margin: 4px 0 26px;
+}
+
+.operation-plan-import-modal .ant-steps-item-title {
+  color: #1f2937 !important;
+  font-weight: 650;
+}
+
+.operation-plan-import-modal .ant-steps-item-wait .ant-steps-item-title {
+  color: #8b95a5 !important;
+}
+
+.operation-plan-import-step {
+  min-height: 280px;
+}
+
+.operation-plan-import-step--period {
+  min-height: 330px;
+}
+
+.operation-plan-import-form .ant-form-item-label > label {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.operation-plan-import-form .ant-form-item {
+  margin-bottom: 28px;
+}
+
+.operation-plan-import-form .ant-segmented {
+  padding: 2px;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+
+.operation-plan-import-form .ant-segmented-item {
+  min-width: 58px;
+  height: 36px;
+  border-radius: 7px;
+  font-size: 14px;
+  line-height: 36px;
+}
+
+.operation-plan-import-form .ant-picker {
+  height: 40px;
+  border-color: #d8e0ec;
+  border-radius: 8px;
+}
+
+.operation-plan-import-actions {
+  display: flex;
+  margin-top: 20px;
+}
+
+.operation-plan-import-actions--right {
+  justify-content: flex-end;
+}
+
+.operation-plan-import-actions--between {
+  justify-content: space-between;
+}
+
+.operation-plan-import-actions .ant-btn-primary {
+  min-width: 88px;
+  height: 40px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.operation-plan-import-upload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.operation-plan-import-dragger .ant-upload-drag {
+  border-color: #d8e0ec;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.operation-plan-import-upload-title {
+  margin: 4px 0;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.operation-plan-import-upload-desc {
+  margin: 0;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+
+.operation-plan-import-guide {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid #dce3ed;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.operation-plan-import-guide--compact {
+  background: #ffffff;
+}
+
+.operation-plan-import-guide__title {
+  margin-bottom: 8px;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.operation-plan-import-guide__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.operation-plan-import-guide__item {
+  display: flex;
+  min-height: 92px;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.operation-plan-import-guide__item b,
+.operation-plan-import-rule-list b {
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.operation-plan-import-guide__item span {
+  color: #344054;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.operation-plan-import-guide__item small {
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.operation-plan-import-rule-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.operation-plan-import-rule-list code,
+.operation-plan-import-example code {
+  padding: 2px 6px;
+  color: #1677ff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  background: #edf5ff;
+  border-radius: 5px;
+}
+
+.operation-plan-import-example {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.operation-plan-import-example span {
+  color: #1f2937;
+  font-weight: 800;
+}
+
+.operation-plan-import-alert-detail p {
+  margin: 0 0 6px;
+}
+
+.operation-plan-import-alert-detail ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.operation-plan-import-alert-detail li + li {
+  margin-top: 3px;
+}
+
+.operation-plan-import-result-tag.ant-tag {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.import-summary.import-summary--five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0 0 12px;
+}
+
+.import-ok {
+  color: #16a36a !important;
+}
+
+.import-warn {
+  color: #d99000 !important;
+}
+
+.import-error {
+  color: #e5484d !important;
+}
+
+
+.operation-plan-import-alert {
+  margin: 0 0 12px;
+  border-radius: 10px;
+}
+
+.operation-plan-import-alert .ant-alert-message {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.operation-plan-import-alert .ant-alert-description {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.operation-plan-import-table.report-table-shell {
+  display: block !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
+
+.operation-plan-import-table .ant-pro-table,
+.operation-plan-import-table .ant-pro-card,
+.operation-plan-import-table .ant-pro-card-body,
+.operation-plan-import-table .ant-table-wrapper,
+.operation-plan-import-table .ant-spin-nested-loading,
+.operation-plan-import-table .ant-spin-container,
+.operation-plan-import-table .ant-table,
+.operation-plan-import-table .ant-table-container {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.operation-plan-import-table .ant-table-body {
+  height: auto !important;
+  max-height: 240px !important;
+}
+
+.operation-plan-import-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.operation-plan-import-impact-card {
+  padding: 12px;
+  border: 1px solid #edf1f5;
+  border-radius: 10px;
+  background: #fafbfd;
+}
+
+.operation-plan-import-impact-card span {
+  display: block;
+  color: #98a2b3;
+  font-size: 11px;
+}
+
+.operation-plan-import-impact-card b {
+  display: block;
+  margin-top: 6px;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.operation-plan-import-alert-detail .ant-btn {
+  margin-top: 8px;
+}
+
+
+.plan-values em {
+  display: block;
+  margin-top: 2px;
+  color: #7a8798;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+
+.operation-plan-progress {
+  width: 100%;
+  height: 8px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: #edf2f7;
+  border-radius: 999px;
+}
+
+.operation-plan-progress span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.operation-plan-progress--sales span {
+  background: linear-gradient(90deg, #1677ff 0%, #69b1ff 100%);
+}
+
+.operation-plan-progress--profit span {
+  background: linear-gradient(90deg, #10b981 0%, #6ee7b7 100%);
+}
+
+.operation-plan-progress--stock span {
+  background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 100%);
+}
+
+
+/* owner performance compact cell */
+.owner-plan-cell {
+  width: 100%;
+  min-width: 230px;
+  padding: 2px 0;
+}
+
+.owner-plan-main {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
+  margin-bottom: 7px;
+  white-space: nowrap;
+}
+
+.owner-plan-main span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.owner-plan-main em {
+  color: #8b98aa;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.owner-plan-main b {
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.owner-mini-track {
+  width: 72%;
+  height: 7px;
+  overflow: hidden;
+  background: #edf2f7;
+  border-radius: 999px;
+}
+
+.owner-mini-track i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.owner-plan-cell--sales .owner-mini-track i {
+  background: linear-gradient(90deg, #1677ff 0%, #69b1ff 100%);
+}
+
+.owner-plan-cell--profit .owner-mini-track i {
+  background: linear-gradient(90deg, #10b981 0%, #6ee7b7 100%);
+}
+
+.owner-plan-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  margin-top: 5px;
+  color: #8b98aa;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.owner-plan-footer b {
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+/* product plan progress compact patch */
+.plan-cell {
+  min-width: 210px;
+}
+
+.plan-values {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
+.plan-values span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.plan-values em {
+  color: #8b98aa;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.plan-values b {
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.plan-qty {
+  margin: 2px 0 7px;
+  color: #7a8798;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.plan-progress {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 48px;
+  align-items: center;
+  column-gap: 10px;
+  margin-top: 6px;
+}
+
+.plan-progress .track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  background: #edf2f7;
+  border-radius: 999px;
+}
+
+.plan-progress .fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.plan-cell--sales .plan-progress .fill {
+  background: linear-gradient(90deg, #1677ff 0%, #69b1ff 100%);
+}
+
+.plan-cell--profit .plan-progress .fill {
+  background: linear-gradient(90deg, #10b981 0%, #6ee7b7 100%);
+}
+
+.plan-progress .rate {
+  min-width: 48px;
+  text-align: right;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.plan-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.plan-foot .forecast {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+
+.formula-tip {
+  cursor: help;
+  text-decoration: underline dotted rgba(100, 116, 139, 0.55);
+  text-underline-offset: 3px;
+}
