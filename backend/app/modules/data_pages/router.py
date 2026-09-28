@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
@@ -229,6 +229,29 @@ def order_profit_trend(
             account_refs=account_refs,
         ),
         meta=None,
+    )
+
+
+@router.get(
+    "/api/listings/walmart/export",
+    response_class=Response,
+    responses=ERRORS,
+)
+def export_listing_management(
+    query: Annotated[ListingManagementQuery, Query()],
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> Response:
+    csv_text = ListingManagementService(session).export_listing_csv(query, account_refs)
+    filename = f"listing-management-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+
+    return Response(
+        content=csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 

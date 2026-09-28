@@ -793,6 +793,60 @@ class ListingManagementRepository:
             latest_calculated_at,
         )
 
+    def export_listings(
+        self,
+        *,
+        account_refs: frozenset[str],
+        store_id: str | None,
+        owner_ref: str | None = "",
+        product_type: str | None = "",
+        status: str | None = "",
+        tag: str | None = "",
+        summary_filter: str = "total",
+        search_field: str,
+        keyword: str,
+        batch_values: str = "",
+        max_rows: int = 10000,
+    ) -> Sequence[ListingManagementRowProjection]:
+        statement = self._filtered_listing_statement(
+            account_refs=account_refs,
+            store_id=store_id,
+            owner_ref=owner_ref,
+            product_type=product_type,
+            status=status,
+            tag=tag,
+            summary_filter=summary_filter,
+            search_field=search_field,
+            keyword=keyword,
+            batch_values=batch_values,
+        )
+
+        rows = self.session.execute(
+            statement.order_by(
+                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
+                ListingManagementCurrentMart.store_name.asc(),
+                ListingManagementCurrentMart.local_sku.asc(),
+                ListingManagementCurrentMart.item_id.asc(),
+            ).limit(max_rows)
+        ).all()
+
+        return [
+            ListingManagementRowProjection(
+                listing=listing,
+                owner_uid=owner_uid,
+                owner_name=owner_name,
+                product_developer_uid=product_developer_uid,
+                product_developer_name=product_developer_name,
+            )
+            for (
+                listing,
+                owner_uid,
+                owner_name,
+                product_developer_uid,
+                product_developer_name,
+            ) in rows
+        ]
+
     def listing_summary(
         self,
         *,

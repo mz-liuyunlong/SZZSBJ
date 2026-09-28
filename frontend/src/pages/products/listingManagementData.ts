@@ -14,6 +14,7 @@ export interface ListingManagementRow {
   salePrice: number;
   productStatus: string;
   lifecycle: string;
+  fulfillmentMethod: string;
   listedAt: string;
   category: string;
   wfsAvailableInventory: number;
@@ -46,6 +47,7 @@ export const listingColumnFields = [
   { key: "salePrice", title: "在售价" },
   { key: "productStatus", title: "产品状态" },
   { key: "lifecycle", title: "生命周期" },
+  { key: "fulfillmentMethod", title: "发货方式" },
   { key: "listedAt", title: "上架时间" },
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },
@@ -97,6 +99,7 @@ export const listingManagementMockData: ListingManagementRow[] = Array.from(
       salePrice: Number((16.99 + index * 0.65).toFixed(2)),
       productStatus,
       lifecycle: index % 4 === 0 ? "成长期" : "成熟期",
+      fulfillmentMethod: index % 2 === 0 ? "WFS" : "Seller Fulfilled",
       listedAt: `2026-08-${String(index % 28 + 1).padStart(2, "0")}`,
       category: categories[index % categories.length],
       wfsAvailableInventory: 40 + index * 3,

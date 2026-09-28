@@ -45,14 +45,6 @@ const TAG_COLORS = [
   { name: "灰", value: "#667085" },
 ];
 
-const DEFAULT_TAGS: CustomProductTag[] = [
-  { id: 1, name: "重点产品", color: "#E5484D", usage: 128 },
-  { id: 2, name: "主推", color: "#1677FF", usage: 86 },
-  { id: 3, name: "新品", color: "#7C5CFF", usage: 46 },
-  { id: 4, name: "高利润", color: "#16A36A", usage: 31 },
-  { id: 5, name: "清库存", color: "#D99000", usage: 12 },
-  { id: 6, name: "待优化", color: "#667085", usage: 8 },
-];
 
 const normalizeTagName = (value: string) => value.trim().replace(/\s+/g, " ");
 
@@ -111,7 +103,7 @@ function ColorOptions({ selectedColor, compact = false, onSelect }: ColorOptions
 function CustomTagManagerModal({
   open,
   onClose,
-  initialTags = DEFAULT_TAGS,
+  initialTags = [],
   loading = false,
   onTagsChange,
   onCreateTag,

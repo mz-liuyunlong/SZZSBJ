@@ -30,6 +30,7 @@ import {
   batchSetListingTags,
   createListingTag,
   deleteListingTag,
+  exportListingManagementRows,
   fetchListingManagementFilterOptions,
   fetchListingManagementRows,
   fetchListingManagementSummary,
@@ -47,21 +48,8 @@ import {
 import "@/pages/products/ListingManagementPage.css";
 
 const TEMPLATE_PENDING = "列模板接口待接入";
-const EXPORT_PENDING = "导出接口待接入";
 
 
-const DEFAULT_LISTING_ASSIGNMENT_TAGS: CustomProductTag[] = [
-  { id: "default-featured", name: "主推产品", color: "#1677FF", usage: 0 },
-  { id: "default-new", name: "新品", color: "#7C5CFF", usage: 0 },
-  { id: "default-high-profit", name: "高利润", color: "#16A36A", usage: 0 },
-  { id: "default-clearance", name: "清库存", color: "#D99000", usage: 0 },
-  { id: "default-needs-work", name: "待优化", color: "#667085", usage: 0 },
-  { id: "default-priority", name: "重点产品", color: "#E5484D", usage: 0 },
-  { id: "default-potential", name: "潜力款", color: "#13A8A8", usage: 0 },
-  { id: "default-campaign", name: "活动款", color: "#EB5B9A", usage: 0 },
-  { id: "default-stable", name: "稳定款", color: "#16A36A", usage: 0 },
-  { id: "default-observing", name: "观察中", color: "#D99000", usage: 0 },
-];
 
 
 const createInitialFilters = (): ListingManagementFilters => ({
@@ -169,6 +157,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, listingManagementPageRootRef, ".ant-table-body");
 
@@ -243,13 +232,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return Array.from(optionMap.values());
   }, [filterOptions.tags, managedTags]);
 
-  const assignmentTags = useMemo(() => {
-    const tagsByName = new Map(
-      DEFAULT_LISTING_ASSIGNMENT_TAGS.map((tag) => [tag.name, tag]),
-    );
-    for (const tag of managedTags) tagsByName.set(tag.name, tag);
-    return Array.from(tagsByName.values());
-  }, [managedTags]);
+  const assignmentTags = useMemo(() => managedTags, [managedTags]);
 
   const normalizedFilters = useMemo(() => {
     const owners = filters.owners && filters.owners.length > 0
@@ -364,6 +347,27 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     resetPageAndSelection();
   };
 
+  const handleExportListingRows = useCallback(async () => {
+    if (isExporting) return;
+
+    setIsExporting(true);
+    const closeLoading = messageApi.loading("正在导出 Listing 数据，请稍候", 0);
+
+    try {
+      await exportListingManagementRows({
+        ...normalizedFilters,
+        summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
+      });
+      closeLoading();
+      void messageApi.success("Listing 导出已开始下载");
+    } catch {
+      closeLoading();
+      void messageApi.error("Listing 导出失败，请稍后重试");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [isExporting, messageApi, normalizedFilters, summaryFilterKey]);
+
   const openListingAnalysis = (row: ListingManagementRow) => {
     setAnalysisSource({
       title: row.title || row.productName,
@@ -410,7 +414,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
               onOpenTagManager={() => setTagManagerOpen(true)}
               onOpenColumnConfig={() => setColumnConfigOpen(true)}
-              onDownload={() => void messageApi.info(EXPORT_PENDING)}
+              onDownload={() => void handleExportListingRows()}
+              downloadDisabled={isExporting}
+              downloadLoading={isExporting}
             />
           </Card>
 
@@ -449,7 +455,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                 }
                 setBatchTagOpen(true);
               }}
-              onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
+              onBulkExport={() => void handleExportListingRows()}
+              exporting={isExporting}
             />
           </div>
         </Card>

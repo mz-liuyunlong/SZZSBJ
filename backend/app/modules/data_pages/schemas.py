@@ -329,6 +329,8 @@ class ListingManagementItemRead(StrictSchema):
     sale_price_currency_code: str | None
     listing_status: str | None
     lifecycle_status: str | None
+    fulfillment_type: str | None = None
+    fulfillment_type_name: str | None = None
     listing_start_at_utc: datetime | None
     category: str | None
     wfs_available_quantity: Money | None
