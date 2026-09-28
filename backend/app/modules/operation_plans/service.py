@@ -724,6 +724,7 @@ def template_xlsx() -> bytes:
         sheet_name="计划模板",
     )
 
+
 def parse_import_file(*, file_name: str, file_bytes: bytes) -> list[ParsedImportRow]:
     suffix = file_name.lower().rsplit(".", 1)[-1] if "." in file_name else ""
     if suffix == "csv":
@@ -791,6 +792,7 @@ def _pick(row: dict[str, Any], *keys: str) -> str:
 
 def _has_content(row: ParsedImportRow) -> bool:
     return any([row.item_id, row.sales_raw, row.profit_raw, row.remark])
+
 
 def _read_shared_strings(archive: zipfile.ZipFile) -> list[str]:
     try:
@@ -965,6 +967,7 @@ def _parse_amount(
             return value, f"{label}必须大于 0"
 
     return value.quantize(Decimal("0.01")), None
+
 
 def _suggestion_for_errors(errors: list[str]) -> str:
     text_value = "；".join(errors)

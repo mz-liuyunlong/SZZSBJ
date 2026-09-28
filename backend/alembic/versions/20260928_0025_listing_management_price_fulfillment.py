@@ -15,23 +15,28 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     bind = op.get_bind()
 
-    bind.execute(text("""
+    bind.execute(
+        text("""
         alter table mart_listing_management_current
             add column if not exists strike_price_amount numeric(18, 4),
             add column if not exists strike_price_currency_code varchar(3),
             add column if not exists fulfillment_type varchar(64),
             add column if not exists fulfillment_type_name varchar(128)
-    """))
+    """)
+    )
 
-    bind.execute(text("""
+    bind.execute(
+        text("""
         alter table dim_walmart_listings
             add column if not exists strike_price_amount numeric(18, 4),
             add column if not exists strike_price_currency_code varchar(3),
             add column if not exists sale_price_amount numeric(18, 4),
             add column if not exists sale_price_currency_code varchar(3)
-    """))
+    """)
+    )
 
-    bind.execute(text("""
+    bind.execute(
+        text("""
         update mart_listing_management_current m
         set
             strike_price_amount = coalesce(
@@ -65,22 +70,27 @@ def upgrade() -> None:
         where d.source_account_ref = m.source_account_ref
           and d.store_id = m.store_id
           and d.item_id = m.item_id
-    """))
+    """)
+    )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
 
-    bind.execute(text("""
+    bind.execute(
+        text("""
         alter table mart_listing_management_current
             drop column if exists fulfillment_type_name,
             drop column if exists fulfillment_type
-    """))
+    """)
+    )
 
-    bind.execute(text("""
+    bind.execute(
+        text("""
         alter table dim_walmart_listings
             drop column if exists sale_price_currency_code,
             drop column if exists sale_price_amount,
             drop column if exists strike_price_currency_code,
             drop column if exists strike_price_amount
-    """))
+    """)
+    )

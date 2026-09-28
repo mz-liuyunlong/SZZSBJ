@@ -275,9 +275,7 @@ class OperationPlanRepository:
 
         def text_agg(candidates: Iterable[str]) -> str:
             expressions = [
-                f"max(nullif({name}::text, ''))"
-                for name in candidates
-                if name in columns
+                f"max(nullif({name}::text, ''))" for name in candidates if name in columns
             ]
             if not expressions:
                 return "null::text"
@@ -286,11 +284,7 @@ class OperationPlanRepository:
             return f"coalesce({', '.join(expressions)})"
 
         def count_distinct(candidates: Iterable[str]) -> str:
-            expressions = [
-                f"nullif({name}::text, '')"
-                for name in candidates
-                if name in columns
-            ]
+            expressions = [f"nullif({name}::text, '')" for name in candidates if name in columns]
             if not expressions:
                 return "0"
             if len(expressions) == 1:
@@ -754,7 +748,6 @@ class OperationPlanRepository:
             )
         """
 
-
     def list_products(
         self,
         *,
@@ -828,8 +821,7 @@ class OperationPlanRepository:
         """
         sort_rate_sql_map = {
             "sales_completion_rate": (
-                "coalesce(a.sales_actual_amount, 0) "
-                "/ nullif(p.target_sales_amount, 0)"
+                "coalesce(a.sales_actual_amount, 0) / nullif(p.target_sales_amount, 0)"
             ),
             "gross_profit_completion_rate": (
                 "coalesce(a.gross_profit_actual_amount, 0) "
@@ -1794,9 +1786,7 @@ class OperationPlanRepository:
         return {
             "owners": [row for row in rows if row["kind"] == "owner"],
             "stores": [],
-            "operation_status_counts": [
-                row for row in rows if row["kind"] == "operation_status"
-            ],
+            "operation_status_counts": [row for row in rows if row["kind"] == "operation_status"],
             "plan_status_counts": [row for row in rows if row["kind"] == "plan_status"],
             "stock_status_counts": [row for row in rows if row["kind"] == "stock_status"],
         }
