@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
+import csv
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from io import StringIO
 
 from sqlalchemy.orm import Session
 
@@ -583,6 +585,127 @@ class ListingManagementService:
             ],
         )
 
+    def export_listing_csv(
+        self,
+        query: ListingManagementQuery,
+        account_refs: frozenset[str],
+    ) -> str:
+        rows = self.repository.export_listings(
+            account_refs=account_refs,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            product_type=query.product_type,
+            status=query.status,
+            tag=query.tag,
+            summary_filter=query.summary_filter,
+            search_field=query.search_field,
+            keyword=query.keyword,
+            batch_values=query.batch_values,
+            max_rows=10000,
+        )
+        custom_tags = self.tag_repository.tags_for_listing_rows(rows)
+
+        output = StringIO()
+        writer = csv.writer(output)
+
+        writer.writerow(
+            [
+                "店铺",
+                "商品ID",
+                "SKU",
+                "MSKU",
+                "品名",
+                "标题",
+                "负责人",
+                "开发人",
+                "商品等级",
+                "自定义标签",
+                "划线价",
+                "售价",
+                "Listing状态",
+                "生命周期",
+                "发货方式",
+                "购物车状态",
+                "Walmart卖家",
+                "是否跟卖",
+                "评分",
+                "评论数",
+                "WFS可售库存",
+                "可售库存",
+                "在途库存",
+                "近7天销量",
+                "近14天销量",
+                "近30天销量",
+                "近30天广告费",
+                "类目",
+                "品牌",
+                "停用原因",
+                "GTIN",
+                "UPC",
+                "上架时间",
+                "检查时间",
+            ]
+        )
+
+        for row in rows:
+            item = self._to_read(
+                row,
+                custom_tags.get((str(row.source_account_ref), str(row.item_id))),
+            )
+
+            writer.writerow(
+                [
+                    self._csv_value(item.store_name or item.store_id),
+                    self._csv_value(item.item_id),
+                    self._csv_value(item.local_sku),
+                    self._csv_value(item.msku),
+                    self._csv_value(item.local_name),
+                    self._csv_value(item.title),
+                    self._csv_value(item.owner_name or item.owner_ref),
+                    self._csv_value(item.product_developer_name),
+                    self._csv_value(item.product_grade),
+                    self._csv_value(item.tags),
+                    self._csv_value(item.strike_price_amount),
+                    self._csv_value(item.sale_price_amount),
+                    self._csv_value(item.listing_status),
+                    self._csv_value(item.lifecycle_status),
+                    self._csv_value(item.fulfillment_type_name or item.fulfillment_type),
+                    self._csv_value(item.buybox_status),
+                    self._csv_value(item.walmart_seller),
+                    self._csv_value("是" if item.is_hijacked else "否"),
+                    self._csv_value(item.average_rating),
+                    self._csv_value(item.review_count),
+                    self._csv_value(item.wfs_available_quantity),
+                    self._csv_value(item.available_quantity),
+                    self._csv_value(item.inbound_quantity),
+                    self._csv_value(item.sales_7d),
+                    self._csv_value(item.sales_14d),
+                    self._csv_value(item.sales_30d),
+                    self._csv_value(item.ad_spend_30d_amount),
+                    self._csv_value(item.category),
+                    self._csv_value(item.brand),
+                    self._csv_value(item.disabled_reason),
+                    self._csv_value(item.gtin),
+                    self._csv_value(item.upc),
+                    self._csv_value(item.listing_start_at_utc),
+                    self._csv_value(item.calculated_at),
+                ]
+            )
+
+        return output.getvalue()
+
+    @staticmethod
+    def _csv_value(value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, list):
+            return "、".join(str(item) for item in value if item is not None)
+        return str(value)
+
     def list_tags(self, account_refs: frozenset[str]) -> ListingTagListData:
         return ListingTagListData(
             items=[
@@ -672,6 +795,8 @@ class ListingManagementService:
             sale_price_currency_code=row.sale_price_currency_code,
             listing_status=row.listing_status,
             lifecycle_status=row.lifecycle_status,
+            fulfillment_type=getattr(row, "fulfillment_type", None),
+            fulfillment_type_name=getattr(row, "fulfillment_type_name", None),
             listing_start_at_utc=row.listing_start_at_utc,
             category=row.category,
             wfs_available_quantity=row.wfs_available_quantity,

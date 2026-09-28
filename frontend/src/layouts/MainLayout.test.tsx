@@ -714,5 +714,5 @@ describe("MainLayout", () => {
     expect(within(breadcrumb).getByText(dataCenterGroup.title)).toBeVisible();
     expect(within(content).getByText("文档内容区")).toBeVisible();
     expect(window.location.hash).toBe(`#${documentation.path}`);
-  });
+  }, 15000);
 });

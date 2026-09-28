@@ -15,6 +15,8 @@ OperationStatus = Literal["normal", "new_product", "clearance"]
 PlanStatus = Literal["normal", "lagging", "severe_lagging", "unplanned", "clearance"]
 StockStatus = Literal["normal", "risk"]
 SearchField = Literal["item_id", "sku", "msku", "product_name"]
+OperationPlanSortField = Literal["sales_completion_rate", "gross_profit_completion_rate"]
+OperationPlanSortOrder = Literal["asc", "desc"]
 
 
 class OperationPlanMeta(BaseModel):
@@ -74,6 +76,8 @@ class OperationPlanProductQuery(BaseModel):
     operation_status: OperationStatus | None = None
     plan_status: PlanStatus | None = None
     stock_status: StockStatus | None = None
+    sort_field: OperationPlanSortField | None = None
+    sort_order: OperationPlanSortOrder = "desc"
     search_field: SearchField = "item_id"
     keyword: str | None = None
     batch_values: list[str] = Field(default_factory=list)
@@ -100,6 +104,9 @@ class OperationPlanProductRow(BaseModel):
     owner_name: str | None = None
     store_id: str | None = None
     store_name: str | None = None
+    store_count: int = 0
+    msku_count: int = 0
+    sku_count: int = 0
     last_sales_amount: Decimal = Decimal("0")
     last_gross_profit_amount: Decimal = Decimal("0")
     last_gross_profit_rate: Decimal = Decimal("0")
@@ -134,6 +141,7 @@ class OperationPlanProductListData(BaseModel):
 class SelectOption(BaseModel):
     label: str
     value: str
+    count: int | None = None
 
 
 class OperationPlanOptionsData(BaseModel):
@@ -172,7 +180,7 @@ class OperationPlanImportData(BaseModel):
 
 class OperationPlanTargetUpdateRequest(BaseModel):
     sales_target_amount: Decimal = Field(gt=0)
-    gross_profit_target_amount: Decimal = Field(ge=0)
+    gross_profit_target_amount: Decimal
     reason: str | None = None
 
     @field_validator("gross_profit_target_amount")

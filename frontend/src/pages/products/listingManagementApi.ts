@@ -1,4 +1,4 @@
-import { backendRequest } from "@/api/backendApi";
+import { BackendRequestError, backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import type { ReportFilterOption } from "@/shared/report-filters";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
@@ -24,6 +24,8 @@ interface BackendListingItem {
   sale_price_amount: string | null;
   listing_status: string | null;
   lifecycle_status: string | null;
+  fulfillment_type: string | null;
+  fulfillment_type_name: string | null;
   listing_start_at_utc: string | null;
   category: string | null;
   wfs_available_quantity: string | null;
@@ -177,6 +179,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   salePrice: numberValue(item.sale_price_amount),
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
+  fulfillmentMethod: item.fulfillment_type_name ?? item.fulfillment_type ?? "待确认",
   listedAt: toDateText(item.listing_start_at_utc),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
@@ -275,6 +278,39 @@ async function fetchListingManagementSummaryFromApi(
     resoldWarning: envelope.data.resold_warning,
     strikePriceException: envelope.data.strike_price_exception,
   };
+}
+
+export async function exportListingManagementRows(
+  params: ListingManagementParams = {},
+): Promise<void> {
+  const search = new URLSearchParams();
+  appendListingFilters(search, params);
+
+  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
+  const response = await fetch(`/api/listings/walmart/export?${search.toString()}`, {
+    credentials: "same-origin",
+    headers: {
+      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new BackendRequestError(response.status, "LISTING_EXPORT_FAILED");
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = filenameMatch?.[1] ?? "listing-management-export.csv";
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingManagementFilterOptions> {

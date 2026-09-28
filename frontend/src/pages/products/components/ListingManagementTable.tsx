@@ -32,6 +32,7 @@ const minColumnWidths: Record<string, number> = {
   salePrice: 110,
   productStatus: 120,
   lifecycle: 120,
+  fulfillmentMethod: 120,
   listedAt: 140,
   category: 120,
   wfsAvailableInventory: 140,
@@ -79,6 +80,7 @@ interface ListingManagementTableProps {
   onOpenDetail: (row: ListingManagementRow) => void;
   onBatchSetTags: () => void;
   onBulkExport: () => void;
+  exporting?: boolean;
 }
 
 function ListingManagementTable({
@@ -96,6 +98,7 @@ function ListingManagementTable({
   onOpenDetail,
   onBatchSetTags,
   onBulkExport,
+  exporting = false,
 }: ListingManagementTableProps) {
   const title = (key: string, label: string) => (
     <ResizableColumnTitle
@@ -282,6 +285,13 @@ function ListingManagementTable({
       dataIndex: "lifecycle",
       title: title("lifecycle", fieldTitle.lifecycle),
       width: columnWidths.lifecycle,
+      onHeaderCell: headerCell,
+    },
+    fulfillmentMethod: {
+      key: "fulfillmentMethod",
+      dataIndex: "fulfillmentMethod",
+      title: title("fulfillmentMethod", fieldTitle.fulfillmentMethod),
+      width: columnWidths.fulfillmentMethod,
       onHeaderCell: headerCell,
     },
     listedAt: {
@@ -503,7 +513,7 @@ function ListingManagementTable({
               {
                 key: "export",
                 label: "导出已选",
-                disabled: selectedRowKeys.length === 0,
+                disabled: selectedRowKeys.length === 0 || exporting,
                 onClick: onBulkExport,
               },
             ]}

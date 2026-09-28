@@ -34,7 +34,7 @@ import PageShell from "@/components/page/PageShell";
 import CommittedSearch, { type CommittedSearchPayload } from "@/components/report-table/CommittedSearch";
 import ReportTableShell, { ReportTableSelectionBar } from "@/components/report-table/ReportTableShell";
 import RuntimeColumnConfigDrawer, { type RuntimeColumnGroup } from "@/components/report-table/RuntimeColumnConfigDrawer";
-import { CopyableTextCell, WalmartProductIdCell } from "@/components/report-table/cells";
+import { WalmartProductIdCell } from "@/components/report-table/cells";
 import type { NavigationPage } from "@/config/navigation";
 import {
   clearOperationPlanProduct,
@@ -56,6 +56,8 @@ import {
   type OperationStatus,
   type PlanStatus,
   type SearchField,
+  type OperationPlanSortField,
+  type OperationPlanSortOrder,
   type StockStatus,
 } from "@/api/operationPlansApi";
 import ReportFacetSelect, { type ReportFacetSelectValue } from "@/shared/report-filters/ReportFacetSelect";
@@ -63,7 +65,7 @@ import "@/pages/operations/OperationPlanPage.css";
 
 type PeriodMode = "月度" | "季度";
 type TabKey = "dashboard" | "products";
-type SearchTypeLabel = "SKU" | "MSKU" | "商品ID" | "品名";
+type SearchTypeLabel = "商品ID" | "SKU" | "品名";
 
 interface OperationPlanPageProps {
   page: NavigationPage;
@@ -71,7 +73,6 @@ interface OperationPlanPageProps {
 
 interface ProductFilters {
   owner: string[];
-  store: string[];
   operation: string[];
   planStatus: string[];
   stockStatus: string[];
@@ -123,11 +124,10 @@ const targetSupportFormulaTitle = (
 );
 
 const importTemplateGuide = [
-  { field: "商品ID", rule: "必填；填写 Listing 管理中的 Walmart 商品ID；需要和 MSKU 组合匹配", example: "20277220088" },
-  { field: "MSKU", rule: "必填；填写 Listing 管理中的 MSKU；和商品ID组合后必须唯一命中", example: "YC00002-1A" },
+  { field: "商品ID", rule: "必填；一条商品ID就是一条运营计划，多店铺/MSKU自动合并", example: "20277220088" },
   { field: "销售额（$）", rule: "必填；填写本周期计划销售额，美元数字，必须大于 0", example: "22000" },
-  { field: "毛利润（$）", rule: "必填；填写本周期计划毛利润，美元数字，不能小于 0，不能大于销售额", example: "4200" },
-  { field: "备注", rule: "可空；记录重点商品、活动说明或调整原因", example: "本月重点商品" },
+  { field: "毛利润（$）", rule: "必填；填写本周期计划毛利润，美元数字，可以为负数，不能大于销售额", example: "-500" },
+  { field: "备注", rule: "可空；记录重点商品、活动说明、清货或调整原因", example: "清货计划" },
 ];
 
 const productColumnFields = [
@@ -145,7 +145,22 @@ const defaultProductColumnKeys = productColumnFields.map((field) => field.key);
 const fixedProductColumnKeys = ["product"];
 
 const money = (value: number | string | null | undefined) => `$${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+const money2 = (value: number | string | null | undefined) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (value: number | string | null | undefined) => `${Number(value || 0).toFixed(1)}%`;
+const inventorySupportLabel = (value: number | string | null | undefined) => {
+  const rate = Number(value || 0);
+  if (rate <= 0) return "无数据";
+  if (rate >= 100) return "充足";
+  return `${rate.toFixed(1)}%`;
+};
+
+const inventorySupportTimes = (value: number | string | null | undefined) => {
+  const rate = Number(value || 0);
+  if (rate <= 0) return "无可用支撑数据";
+  if (rate >= 100) return `库存充足，约 ${(rate / 100).toFixed(1)} 倍目标`;
+  return `库存不足，仅支撑 ${rate.toFixed(1)}% 目标`;
+};
+
 
 const periodTypeOf = (mode: PeriodMode): OperationPlanPeriodType => mode === "月度" ? "month" : "quarter";
 const quarterKeyOf = (value: Dayjs) => `${value.year()}-Q${Math.floor(value.month() / 3) + 1}`;
@@ -153,16 +168,14 @@ const periodKeyOf = (mode: PeriodMode, value: Dayjs) => mode === "月度" ? valu
 const periodLabelOf = (mode: PeriodMode, value: Dayjs) => mode === "月度" ? value.format("YYYY-MM") : quarterKeyOf(value);
 
 const searchFieldOptions = [
-  { label: "SKU", value: "SKU" },
-  { label: "MSKU", value: "MSKU" },
   { label: "商品ID", value: "商品ID" },
+  { label: "SKU", value: "SKU" },
   { label: "品名", value: "品名" },
 ];
 
 const searchFieldMap: Record<SearchTypeLabel, SearchField> = {
-  SKU: "sku",
-  MSKU: "msku",
   商品ID: "item_id",
+  SKU: "sku",
   品名: "product_name",
 };
 
@@ -219,14 +232,15 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   const [importPeriod, setImportPeriod] = useState<Dayjs>(period);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("skip_existing");
   const [importResult, setImportResult] = useState<OperationPlanImportData | null>(null);
+  const [sortField, setSortField] = useState<OperationPlanSortField>();
+  const [sortOrder, setSortOrder] = useState<OperationPlanSortOrder>();
   const [filters, setFilters] = useState<ProductFilters>({
     owner: [],
-    store: [],
     operation: [],
     planStatus: [],
     stockStatus: [],
     search: "",
-    searchType: "SKU",
+    searchType: "商品ID",
     batchValues: [],
   });
 
@@ -244,12 +258,11 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   });
 
   const productsQuery = useQuery({
-    queryKey: ["operation-plans", "products", periodType, periodKey, filters, pageNo, pageSize],
+    queryKey: ["operation-plans", "products", periodType, periodKey, filters, pageNo, pageSize, sortField, sortOrder],
     queryFn: () => fetchOperationPlanProducts({
       periodType,
       periodKey,
       ownerRef: filters.owner[0],
-      storeId: filters.store[0],
       operationStatus: filters.operation[0] as OperationStatus | undefined,
       planStatus: filters.planStatus[0] as PlanStatus | undefined,
       stockStatus: filters.stockStatus[0] as StockStatus | undefined,
@@ -258,6 +271,8 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
       batchValues: filters.batchValues,
       page: pageNo,
       pageSize,
+      sortField,
+      sortOrder,
     }),
   });
 
@@ -361,7 +376,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
   };
 
   const clearFilters = () => {
-    setFilters({ owner: [], store: [], operation: [], planStatus: [], stockStatus: [], search: "", searchType: "SKU", batchValues: [] });
+    setFilters({ owner: [], operation: [], planStatus: [], stockStatus: [], search: "", searchType: "商品ID", batchValues: [] });
     setSourceHint("");
     setSelectedKeys([]);
     setPageNo(1);
@@ -425,6 +440,32 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
     void messageApi.success(`已将 ${selectedRows.length} 个商品转为清货`);
   };
 
+
+  const toggleProductSort = (field: OperationPlanSortField) => {
+    setSortField(field);
+    setSortOrder((current) => {
+      if (sortField !== field) return "desc";
+      return current === "desc" ? "asc" : "desc";
+    });
+    setPageNo(1);
+  };
+
+  const sortableColumnTitle = (label: string, field: OperationPlanSortField) => {
+    const active = sortField === field;
+    const arrow = !active ? "↕" : sortOrder === "asc" ? "↑" : "↓";
+
+    return (
+      <button
+        type="button"
+        className={`ops-plan-sort-title ${active ? "active" : ""}`}
+        onClick={() => toggleProductSort(field)}
+      >
+        <span>{label}</span>
+        <span className="ops-plan-sort-title__arrow">{arrow}</span>
+      </button>
+    );
+  };
+
   const ownerColumns: ProColumns<OperationPlanOwnerRow>[] = [
     {
       title: "负责人",
@@ -473,7 +514,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
         <div className="plan-values">
           <span>
             <em>当前</em>
-            <b>{money(actual)}</b>
+            <b>{money2(actual)}</b>
           </span>
           <span>
             <em>目标</em>
@@ -504,14 +545,16 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
         <div className="ops-product-cell">
           <WalmartProductIdCell productId={row.item_id} />
           <div className="product-name">{row.product_name || "未命名商品"}</div>
-          <div className="subtle"><CopyableTextCell text={row.sku || "-"} label="SKU" /> / <CopyableTextCell text={row.msku} label="MSKU" /> · {row.owner_name || row.owner_ref || "未分配"}</div>
+          <div className="subtle">{row.sku || "-"} · {row.owner_name || row.owner_ref || "未分配"}</div>
         </div>
       ),
     },
     lastPerformance: { key: "lastPerformance", title: periodMode === "季度" ? "上季度表现" : "上月表现", width: 150, render: (_, row) => <div className="last-perf-cell"><div><span>销售额</span><b>{money(row.last_sales_amount)}</b></div><div><span>毛利润</span><b>{money(row.last_gross_profit_amount)}</b></div><div className="last-perf-rate">毛利率 {pct(row.last_gross_profit_rate)}</div></div> },
-    salesPlan: { key: "salesPlan", title: "销售计划", width: 230, render: (_, row) => renderPlanCell(row.sales_actual_amount, row.sales_target_amount, row.sales_forecast_amount, "sales") },
-    profitPlan: { key: "profitPlan", title: "毛利润计划", width: 230, render: (_, row) => renderPlanCell(row.gross_profit_actual_amount, row.gross_profit_target_amount, row.gross_profit_forecast_amount, "profit") },
-    inventory: { key: "inventory", title: "库存支撑", width: 190, render: (_, row) => <div className="inventory-compact"><div className="inventory-line two"><span>WFS<b>{Number(row.wfs_available_qty)}</b></span><span>在途<b>{Number(row.inbound_qty)}</b></span></div><div className="inventory-line"><span>本期到仓</span><b>{Number(row.arriving_qty)}</b></div><Tooltip title={targetSupportFormulaTitle} placement="top"><div className="inventory-support formula-tip">目标支撑 <b>{pct(row.inventory_support_rate)}</b></div></Tooltip></div> },
+    salesPlan: { key: "salesPlan", title: sortableColumnTitle("销售计划", "sales_completion_rate"), width: 230, render: (_, row) => renderPlanCell(row.sales_actual_amount, row.sales_target_amount, row.sales_forecast_amount, "sales") },
+    profitPlan: { key: "profitPlan", title: sortableColumnTitle("毛利润计划", "gross_profit_completion_rate"), width: 230, render: (_, row) => renderPlanCell(row.gross_profit_actual_amount, row.gross_profit_target_amount, row.gross_profit_forecast_amount, "profit") },
+    inventory: { key: "inventory", title: "库存支撑", width: 190, render: (_, row) => <div className="inventory-compact"><div className="inventory-line two"><span>WFS<b>{Number(row.wfs_available_qty)}</b></span><span>在途<b>{Number(row.inbound_qty)}</b></span></div><div className="inventory-line"><span>本期到仓</span><b>{Number(row.arriving_qty)}</b></div><Tooltip title={<div>{targetSupportFormulaTitle}<div style={{ marginTop: 8 }}>当前支撑：{inventorySupportTimes(row.inventory_support_rate)}</div></div>} placement="top">
+  <div className="inventory-support formula-tip">目标支撑 <b>{inventorySupportLabel(row.inventory_support_rate)}</b></div>
+</Tooltip></div> },
     status: { key: "status", title: "状态", width: 150, render: (_, row) => <div className="status-stack"><Tag color={statusColor(row.operation_status)}>{operationLabel[row.operation_status]}</Tag><Tag color={statusColor(row.plan_status)}>计划{planStatusLabel[row.plan_status]}</Tag>{row.stock_status === "risk" && <Tag color="purple">库存风险</Tag>}{row.adjusted && <div className="status-adjust">调整 {row.event_count} 次</div>}</div> },
     actions: {
       key: "actions",
@@ -590,11 +633,9 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
               <>
                 <div className="operation-plan-product-tools">
                   <ReportFacetSelect mode="multiple" ariaLabel="负责人" placeholder="负责人" value={filters.owner} options={optionsQuery.data?.owners ?? []} triggerWidth={128} onChange={(value) => updateFilter({ owner: toValues(value) })} />
-                  <ReportFacetSelect mode="multiple" ariaLabel="全部店铺" placeholder="全部店铺" value={filters.store} options={optionsQuery.data?.stores ?? []} triggerWidth={136} onChange={(value) => updateFilter({ store: toValues(value) })} />
-                  <ReportFacetSelect mode="multiple" ariaLabel="经营状态" placeholder="经营状态" value={filters.operation} options={optionsQuery.data?.operation_statuses ?? []} triggerWidth={136} onChange={(value) => updateFilter({ operation: toValues(value) })} />
                   <ReportFacetSelect mode="multiple" ariaLabel="计划状态" placeholder="计划状态" value={filters.planStatus} options={optionsQuery.data?.plan_statuses ?? []} triggerWidth={136} onChange={(value) => updateFilter({ planStatus: toValues(value) })} />
                   <ReportFacetSelect mode="multiple" ariaLabel="库存状态" placeholder="库存状态" value={filters.stockStatus} options={optionsQuery.data?.stock_statuses ?? []} triggerWidth={136} onChange={(value) => updateFilter({ stockStatus: toValues(value) })} />
-                  <CommittedSearch className="operation-plan-search" typeAriaLabel="搜索类型" typeOptions={searchFieldOptions} typeValue={filters.searchType} inputAriaLabel="搜索内容" inputPlaceholder="搜索 MSKU / SKU / 商品ID / 品名" inputValue={filters.search} batch={{ ariaLabel: "批量搜索", placeholder: "20277220088\nYC00002\nYC00002-1A", onCommit: onBatchSearchCommit, onMessage: (content) => void messageApi.warning(content) }} onCommit={onSearchCommit} />
+                  <CommittedSearch className="operation-plan-search" typeAriaLabel="搜索类型" typeOptions={searchFieldOptions} typeValue={filters.searchType} inputAriaLabel="搜索内容" inputPlaceholder="搜索 商品ID / SKU / 品名" inputValue={filters.search} batch={{ ariaLabel: "批量搜索", placeholder: "20277220088\nYC00002\nYC00002-1A", onCommit: onBatchSearchCommit, onMessage: (content) => void messageApi.warning(content) }} onCommit={onSearchCommit} />
                   <Button onClick={clearFilters}>重置</Button>
                   <Button onClick={() => setColumnConfigOpen(true)}>列配置</Button>
                 </div>
@@ -637,7 +678,7 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
         </Modal>
 
         <Modal open={Boolean(edit)} title={edit ? `编辑目标：${edit.item_id}` : "编辑目标"} onCancel={() => setEdit(null)} footer={null} destroyOnHidden>
-          {edit && <Form<TargetFormValues> layout="vertical" initialValues={{ salesTarget: edit.sales_target_amount, profitTarget: edit.gross_profit_target_amount, reason: "手动调整目标" }} onFinish={(values) => updateTargetsMutation.mutate({ planId: edit.plan_id, values })}><Form.Item label="销售目标" name="salesTarget" rules={[{ required: true }]}><InputNumber min={0} prefix="$" style={{ width: "100%" }} /></Form.Item><Form.Item label="毛利润目标" name="profitTarget" rules={[{ required: true }]}><InputNumber min={0} prefix="$" style={{ width: "100%" }} /></Form.Item><Form.Item label="调整原因" name="reason"><Input /></Form.Item><Space><Button onClick={() => setEdit(null)}>取消</Button><Button type="primary" htmlType="submit" loading={updateTargetsMutation.isPending} icon={<EditOutlined />}>保存</Button></Space></Form>}
+          {edit && <Form<TargetFormValues> layout="vertical" initialValues={{ salesTarget: edit.sales_target_amount, profitTarget: edit.gross_profit_target_amount, reason: "手动调整目标" }} onFinish={(values) => updateTargetsMutation.mutate({ planId: edit.plan_id, values })}><Form.Item label="销售目标" name="salesTarget" rules={[{ required: true }]}><InputNumber min={0} prefix="$" style={{ width: "100%" }} /></Form.Item><Form.Item label="毛利润目标" name="profitTarget" rules={[{ required: true }]}><InputNumber prefix="$" style={{ width: "100%" }} /></Form.Item><Form.Item label="调整原因" name="reason"><Input /></Form.Item><Space><Button onClick={() => setEdit(null)}>取消</Button><Button type="primary" htmlType="submit" loading={updateTargetsMutation.isPending} icon={<EditOutlined />}>保存</Button></Space></Form>}
         </Modal>
 
         <Modal open={bulkAction === "adjust"} title={`批量编辑目标：${selectedRows.length} 个商品`} okText="确认调整" cancelText="取消" onOk={() => void handleBulkAdjust()} onCancel={() => setBulkAction(null)} destroyOnHidden>
@@ -657,9 +698,9 @@ function OperationPlanPage({ page }: OperationPlanPageProps) {
 
           {importStep === 0 && <div className="operation-plan-import-step operation-plan-import-step--period"><Form layout="vertical" className="operation-plan-import-form"><Form.Item label="计划类型"><Segmented value={importPeriodMode} onChange={(value) => setImportPeriodMode(value as PeriodMode)} options={["月度", "季度"]} /></Form.Item><Form.Item label={importPeriodMode === "月度" ? "计划月份" : "计划季度"}><DatePicker picker={importPeriodMode === "月度" ? "month" : "quarter"} value={importPeriod} onChange={(value) => value && setImportPeriod(value)} allowClear={false} style={{ width: "100%" }} /></Form.Item><Form.Item label="已有计划处理"><Segmented value={conflictPolicy} onChange={(value) => setConflictPolicy(value as ConflictPolicy)} options={[{ label: "跳过已有计划", value: "skip_existing" }, { label: "覆盖目标金额", value: "overwrite_existing" }]} /></Form.Item></Form><div className="operation-plan-import-actions operation-plan-import-actions--right"><Button type="primary" onClick={() => setImportStep(1)}>下一步</Button></div></div>}
 
-          {importStep === 1 && <div className="operation-plan-import-step"><div className="operation-plan-import-upload-head"><span>模板表头：商品ID / MSKU / 销售额（$） / 毛利润（$） / 备注</span><Button size="small" loading={templateMutation.isPending} onClick={() => templateMutation.mutate()}>下载模板</Button></div><div className="operation-plan-import-guide"><div className="operation-plan-import-guide__title">表格填写要求</div><div className="operation-plan-import-guide__grid">{importTemplateGuide.map((item) => <div key={item.field} className="operation-plan-import-guide__item"><b>{item.field}</b><span>{item.rule}</span><small>示例：{item.example}</small></div>)}</div><div className="operation-plan-import-example"><span>正确示例</span><code>20277220088 | YC00002-1A | 22000 | 4200 | 本月重点商品</code></div></div><Upload.Dragger accept=".xlsx,.csv" beforeUpload={(file) => { importMutation.mutate(file); return false; }} showUploadList={false} className="operation-plan-import-dragger"><p className="ant-upload-drag-icon"><FileExcelOutlined /></p><p className="operation-plan-import-upload-title">点击或拖拽上传计划文件</p><p className="operation-plan-import-upload-desc">上传后后端会立即校验并导入成功行；失败行不会影响成功行</p></Upload.Dragger><div className="operation-plan-import-actions operation-plan-import-actions--between"><Button onClick={() => setImportStep(0)}>上一步</Button><Button loading={importMutation.isPending}>等待上传结果</Button></div></div>}
+          {importStep === 1 && <div className="operation-plan-import-step"><div className="operation-plan-import-upload-head"><span>模板表头：商品ID / 销售额（$） / 毛利润（$） / 备注</span><Button size="small" loading={templateMutation.isPending} onClick={() => templateMutation.mutate()}>下载模板</Button></div><div className="operation-plan-import-guide"><div className="operation-plan-import-guide__title">表格填写要求</div><div className="operation-plan-import-guide__grid">{importTemplateGuide.map((item) => <div key={item.field} className="operation-plan-import-guide__item"><b>{item.field}</b><span>{item.rule}</span><small>示例：{item.example}</small></div>)}</div><div className="operation-plan-import-example"><span>正确示例</span><code>20277220088 | 22000 | -500 | 清货计划</code></div></div><Upload.Dragger accept=".xlsx,.csv" beforeUpload={(file) => { importMutation.mutate(file); return false; }} showUploadList={false} className="operation-plan-import-dragger"><p className="ant-upload-drag-icon"><FileExcelOutlined /></p><p className="operation-plan-import-upload-title">点击或拖拽上传计划文件</p><p className="operation-plan-import-upload-desc">上传后按商品ID校验并导入；同商品ID下多店铺/MSKU会自动合并，失败行不会影响成功行</p></Upload.Dragger><div className="operation-plan-import-actions operation-plan-import-actions--between"><Button onClick={() => setImportStep(0)}>上一步</Button><Button loading={importMutation.isPending}>等待上传结果</Button></div></div>}
 
-          {importStep === 2 && importResult && <div className="operation-plan-import-step operation-plan-import-step--validate"><div className="import-summary import-summary--five"><div><span>总数据</span><b>{importResult.row_count}</b></div><div><span>成功处理</span><b className="import-ok">{importResult.success_count}</b></div><div><span>已有计划</span><b>{importResult.existing_count}</b></div><div><span>错误</span><b className="import-error">{importResult.failed_count}</b></div><div><span>新建/更新</span><b>{importResult.created_plan_count}/{importResult.updated_plan_count}</b></div></div>{importResult.failed_count > 0 && <Alert className="operation-plan-import-alert" type="warning" showIcon message={`失败 ${importResult.failed_count} 行未入库；成功行已直接入库`} description={<div className="operation-plan-import-alert-detail"><p>失败数据不会影响已成功商品。下载失败明细，补完商品ID、MSKU或金额后再次导入即可。</p><Button size="small" icon={<DownloadOutlined />} loading={failedDownloadMutation.isPending} onClick={() => failedDownloadMutation.mutate(importResult.batch_id)}>下载失败明细</Button></div>} />}{importResult.failed_count === 0 && <Alert className="operation-plan-import-alert" type="success" showIcon message="本次导入全部成功" description="成功行已经写入运营计划表。" />}<ReportTableShell label="导入结果" className="operation-plan-import-table"><ProTable<OperationPlanImportRowResult> rowKey="row_number" search={false} options={false} size="small" pagination={{ pageSize: 6, size: "small" }} dataSource={importResult.rows} columns={[{ title: "行号", dataIndex: "row_number", width: 80 }, { title: "商品ID", dataIndex: "item_id", width: 130 }, { title: "MSKU", dataIndex: "msku", width: 150 }, { title: "销售额（$）", dataIndex: "sales_target_amount", width: 110, align: "right", render: (_, row) => row.sales_target_amount ? money(row.sales_target_amount) : "-" }, { title: "毛利润（$）", dataIndex: "gross_profit_target_amount", width: 110, align: "right", render: (_, row) => row.gross_profit_target_amount ? money(row.gross_profit_target_amount) : "-" }, { title: "结果", dataIndex: "import_status", width: 120, render: (_, row) => <Tag color={row.import_status === "failed" ? "red" : row.import_status === "skipped" ? "orange" : "green"}>{row.import_status}</Tag> }, { title: "错误原因 / 建议", dataIndex: "error_message", width: 420, render: (_, row) => row.error_message ? <span>{row.error_message}；{row.suggestion}</span> : row.suggestion }]} /></ReportTableShell><div className="operation-plan-import-actions operation-plan-import-actions--between"><Button onClick={() => setImportStep(1)}>继续导入</Button><Space>{importResult.failed_count > 0 && <Button icon={<DownloadOutlined />} onClick={() => failedDownloadMutation.mutate(importResult.batch_id)}>下载失败明细</Button>}<Button type="primary" icon={<CheckCircleOutlined />} onClick={() => setImportStep(3)}>完成</Button></Space></div></div>}
+          {importStep === 2 && importResult && <div className="operation-plan-import-step operation-plan-import-step--validate"><div className="import-summary import-summary--five"><div><span>总数据</span><b>{importResult.row_count}</b></div><div><span>成功处理</span><b className="import-ok">{importResult.success_count}</b></div><div><span>已有计划</span><b>{importResult.existing_count}</b></div><div><span>错误</span><b className="import-error">{importResult.failed_count}</b></div><div><span>新建/更新</span><b>{importResult.created_plan_count}/{importResult.updated_plan_count}</b></div></div>{importResult.failed_count > 0 && <Alert className="operation-plan-import-alert" type="warning" showIcon message={`失败 ${importResult.failed_count} 行未入库；成功行已直接入库`} description={<div className="operation-plan-import-alert-detail"><p>失败数据不会影响已成功商品。下载失败明细，补完商品ID、MSKU或金额后再次导入即可。</p><Button size="small" icon={<DownloadOutlined />} loading={failedDownloadMutation.isPending} onClick={() => failedDownloadMutation.mutate(importResult.batch_id)}>下载失败明细</Button></div>} />}{importResult.failed_count === 0 && <Alert className="operation-plan-import-alert" type="success" showIcon message="本次导入全部成功" description="成功行已经写入运营计划表。" />}<ReportTableShell label="导入结果" className="operation-plan-import-table"><ProTable<OperationPlanImportRowResult> rowKey="row_number" search={false} options={false} size="small" pagination={{ pageSize: 6, size: "small" }} dataSource={importResult.rows} columns={[{ title: "行号", dataIndex: "row_number", width: 80 }, { title: "商品ID", dataIndex: "item_id", width: 130 }, { title: "销售额（$）", dataIndex: "sales_target_amount", width: 110, align: "right", render: (_, row) => row.sales_target_amount ? money(row.sales_target_amount) : "-" }, { title: "毛利润（$）", dataIndex: "gross_profit_target_amount", width: 110, align: "right", render: (_, row) => row.gross_profit_target_amount ? money(row.gross_profit_target_amount) : "-" }, { title: "结果", dataIndex: "import_status", width: 120, render: (_, row) => <Tag color={row.import_status === "failed" ? "red" : row.import_status === "skipped" ? "orange" : "green"}>{row.import_status}</Tag> }, { title: "错误原因 / 建议", dataIndex: "error_message", width: 420, render: (_, row) => row.error_message ? <span>{row.error_message}；{row.suggestion}</span> : row.suggestion }]} /></ReportTableShell><div className="operation-plan-import-actions operation-plan-import-actions--between"><Button onClick={() => setImportStep(1)}>继续导入</Button><Space>{importResult.failed_count > 0 && <Button icon={<DownloadOutlined />} onClick={() => failedDownloadMutation.mutate(importResult.batch_id)}>下载失败明细</Button>}<Button type="primary" icon={<CheckCircleOutlined />} onClick={() => setImportStep(3)}>完成</Button></Space></div></div>}
 
           {importStep === 3 && <div className="operation-plan-import-step operation-plan-import-step--confirm"><Alert type="success" showIcon message="导入流程已完成" description={`当前周期：${importPeriodMode} · ${periodLabelOf(importPeriodMode, importPeriod)}。成功行已入库，失败行可下载后补录。`} /><div className="operation-plan-import-actions operation-plan-import-actions--right"><Button type="primary" onClick={closeImportModal}>关闭</Button></div></div>}
         </Modal>

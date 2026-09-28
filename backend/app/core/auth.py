@@ -57,14 +57,17 @@ _PREVIEW_WRITE_PATHS: Final[frozenset[str]] = frozenset(
         "/api/business-rules/store-commissions/deactivate",
         "/api/business-rules/store-commissions/recalculate",
         "/api/operations/plans/import",
+        "/api/listings/tags",
+        "/api/listings/tags/batch-set",
     }
 )
 _PREVIEW_WRITE_PATH_PREFIXES: Final[frozenset[str]] = frozenset(
     {
         "/api/operations/plans/products/",
+        "/api/listings/tags/",
     }
 )
-_PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH"})
+_PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH", "DELETE"})
 
 
 def _constant_time_ascii_equals(provided: str, expected: SecretStr) -> bool:

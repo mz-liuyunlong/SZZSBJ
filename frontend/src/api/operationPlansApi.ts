@@ -5,6 +5,8 @@ export type OperationStatus = "normal" | "new_product" | "clearance";
 export type PlanStatus = "normal" | "lagging" | "severe_lagging" | "unplanned" | "clearance";
 export type StockStatus = "normal" | "risk";
 export type SearchField = "item_id" | "sku" | "msku" | "product_name";
+export type OperationPlanSortField = "sales_completion_rate" | "gross_profit_completion_rate";
+export type OperationPlanSortOrder = "asc" | "desc";
 export type ConflictPolicy = "skip_existing" | "overwrite_existing";
 
 export interface OperationPlanSummary {
@@ -57,6 +59,9 @@ export interface OperationPlanProductRow {
   owner_name?: string | null;
   store_id?: string | null;
   store_name?: string | null;
+  store_count?: number;
+  msku_count?: number;
+  sku_count?: number;
   last_sales_amount: number;
   last_gross_profit_amount: number;
   last_gross_profit_rate: number;
@@ -88,12 +93,18 @@ export interface OperationPlanProductListData {
   page_size: number;
 }
 
+export interface OperationPlanSelectOption {
+  label: string;
+  value: string;
+  count?: number;
+}
+
 export interface OperationPlanOptionsData {
-  owners: Array<{ label: string; value: string }>;
-  stores: Array<{ label: string; value: string }>;
-  operation_statuses: Array<{ label: string; value: string }>;
-  plan_statuses: Array<{ label: string; value: string }>;
-  stock_statuses: Array<{ label: string; value: string }>;
+  owners: OperationPlanSelectOption[];
+  stores: OperationPlanSelectOption[];
+  operation_statuses: OperationPlanSelectOption[];
+  plan_statuses: OperationPlanSelectOption[];
+  stock_statuses: OperationPlanSelectOption[];
 }
 
 export interface OperationPlanImportRowResult {
@@ -169,6 +180,8 @@ export async function fetchOperationPlanProducts(args: {
   batchValues?: string[];
   page: number;
   pageSize: number;
+  sortField?: OperationPlanSortField;
+  sortOrder?: OperationPlanSortOrder;
 }) {
   const params = new URLSearchParams();
   appendCommonParams(params, args.periodType, args.periodKey);
@@ -177,6 +190,8 @@ export async function fetchOperationPlanProducts(args: {
   if (args.operationStatus) params.set("operation_status", args.operationStatus);
   if (args.planStatus) params.set("plan_status", args.planStatus);
   if (args.stockStatus) params.set("stock_status", args.stockStatus);
+  if (args.sortField) params.set("sort_field", args.sortField);
+  if (args.sortOrder) params.set("sort_order", args.sortOrder);
   params.set("search_field", args.searchField);
   if (args.keyword) params.set("keyword", args.keyword);
   for (const value of args.batchValues ?? []) params.append("batch_values", value);

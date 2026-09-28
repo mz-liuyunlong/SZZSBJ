@@ -42,6 +42,8 @@ interface ListingManagementToolbarProps {
   onOpenTagManager?: () => void;
   onOpenColumnConfig: () => void;
   onDownload: () => void;
+  downloadDisabled?: boolean;
+  downloadLoading?: boolean;
 }
 
 const normalizeSelected = (values?: string[], legacyValue?: string) => (
@@ -71,6 +73,8 @@ function ListingManagementToolbar({
   onOpenTagManager,
   onOpenColumnConfig,
   onDownload,
+  downloadDisabled = false,
+  downloadLoading = false,
 }: ListingManagementToolbarProps) {
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchText, setBatchText] = useState("");
@@ -249,6 +253,8 @@ function ListingManagementToolbar({
         />
         <Button
           aria-label="下载"
+          disabled={downloadDisabled}
+          loading={downloadLoading}
           icon={<CloudDownloadOutlined aria-hidden="true" />}
           onClick={onDownload}
         />

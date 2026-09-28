@@ -254,14 +254,114 @@ class OperationPlanRepository:
             statement = statement.bindparams(bindparam("account_refs", expanding=True))
         return list(self.session.execute(statement, params).mappings())
 
+    def resolve_listing_by_item_id(
+        self,
+        *,
+        item_id: str,
+        account_refs: frozenset[str],
+    ) -> dict[str, Any] | None:
+        """Resolve one item-level planning identity from Listing Management.
+
+        Operation plan now treats item_id as the unique planning object. Multiple
+        stores/accounts/SKUs/MSKUs under the same Walmart item_id are merged into
+        one plan row and kept as detail dimensions outside the plan identity.
+        """
+        if not self.table_exists(LISTING_TABLE):
+            return None
+
+        columns = self.table_columns(LISTING_TABLE)
+        if "item_id" not in columns:
+            return None
+
+        def text_agg(candidates: Iterable[str]) -> str:
+            expressions = [
+                f"max(nullif({name}::text, ''))" for name in candidates if name in columns
+            ]
+            if not expressions:
+                return "null::text"
+            if len(expressions) == 1:
+                return expressions[0]
+            return f"coalesce({', '.join(expressions)})"
+
+        def count_distinct(candidates: Iterable[str]) -> str:
+            expressions = [f"nullif({name}::text, '')" for name in candidates if name in columns]
+            if not expressions:
+                return "0"
+            if len(expressions) == 1:
+                target = expressions[0]
+            else:
+                target = f"coalesce({', '.join(expressions)})"
+            return f"count(distinct {target})"
+
+        source_account_clause = ""
+        params: dict[str, Any] = {"item_id": item_id}
+
+        if "source_account_ref" in columns:
+            if not account_refs:
+                return None
+            source_account_clause = "and source_account_ref in :account_refs"
+            params["account_refs"] = tuple(sorted(account_refs))
+
+        store_count_expr = count_distinct(["store_id", "source_account_ref"])
+        product_name_expr = text_agg(
+            [
+                "product_name",
+                "local_name",
+                "title",
+                "product_title",
+                "product_name_snapshot",
+                "item_name",
+                "name",
+            ]
+        )
+        owner_ref_expr = text_agg(["owner_ref", "owner_uid"])
+        owner_name_expr = text_agg(["owner_name", "owner_name_snapshot"])
+
+        statement = text(
+            f"""
+            select
+                coalesce({text_agg(["platform_code"])}, 'walmart') as platform_code,
+                '__item_level__'::text as source_account_ref,
+                null::text as store_id,
+                case
+                    when {store_count_expr} > 1 then '多店铺'
+                    else {text_agg(["store_name", "store_name_snapshot"])}
+                end as store_name,
+                trim(item_id::text) as item_id,
+                {text_agg(["sku", "local_sku"])} as sku,
+                '__ITEM_LEVEL__'::text as msku,
+                {product_name_expr} as product_name,
+                {owner_ref_expr} as owner_ref,
+                {owner_name_expr} as owner_name,
+                {store_count_expr}::int as store_count,
+                {count_distinct(["msku"])}::int as msku_count,
+                {count_distinct(["sku", "local_sku"])}::int as sku_count
+            from {LISTING_TABLE}
+            where trim(item_id::text) = :item_id
+              {source_account_clause}
+            group by trim(item_id::text)
+            """
+        )
+
+        if source_account_clause:
+            statement = statement.bindparams(bindparam("account_refs", expanding=True))
+
+        row = self.session.execute(statement, params).mappings().first()
+        if row is None:
+            return None
+
+        result = dict(row)
+        result["platform_code"] = str(result.get("platform_code") or "walmart")
+        result["source_account_ref"] = "__item_level__"
+        result["msku"] = "__ITEM_LEVEL__"
+        return result
+
     def get_existing_plan(
         self,
         *,
         period_id: UUID,
         platform_code: str,
-        source_account_ref: str,
         item_id: str,
-        msku: str,
     ) -> RowMapping | None:
         return (
             self.session.execute(
@@ -271,17 +371,13 @@ class OperationPlanRepository:
                 from ops_operation_product_plans
                 where period_id = :period_id
                   and platform_code = :platform_code
-                  and source_account_ref = :source_account_ref
                   and item_id = :item_id
-                  and msku = :msku
                 """
                 ),
                 {
                     "period_id": period_id,
                     "platform_code": platform_code,
-                    "source_account_ref": source_account_ref,
                     "item_id": item_id,
-                    "msku": msku,
                 },
             )
             .mappings()
@@ -531,6 +627,127 @@ class OperationPlanRepository:
             .first()
         )
 
+    def _inventory_cte_sql(self) -> str:
+        """Build item-level inventory CTE from current Listing Management rows.
+
+        Operation plan is item-level, but WFS stock must come from the same current
+        Listing source that Product Management uses. Do not sum daily inventory
+        snapshots, otherwise one item can be multiplied by historical dates.
+        """
+        empty_cte = """
+            inventory_actuals as (
+                select
+                    null::text as item_id,
+                    0::numeric as wfs_available_qty,
+                    0::numeric as inbound_qty,
+                    0::numeric as arriving_qty
+                where false
+            )
+        """
+
+        if not self.table_exists(LISTING_TABLE):
+            return empty_cte
+
+        columns = self.table_columns(LISTING_TABLE)
+        if "item_id" not in columns:
+            return empty_cte
+
+        def first_column(candidates: list[str]) -> str | None:
+            return next((name for name in candidates if name in columns), None)
+
+        def value_expr(candidates: list[str], alias: str) -> str:
+            column = first_column(candidates)
+            if column is None:
+                return f"0::numeric as {alias}"
+            return f"coalesce({column}, 0)::numeric as {alias}"
+
+        def identity_expr(column: str) -> str:
+            if column in columns:
+                return f"coalesce({column}::text, '')"
+            return "''::text"
+
+        wfs_expr = value_expr(
+            [
+                "wfs_available_quantity",
+                "wfs_available_qty",
+                "wfs_available_inventory",
+                "wfs_sellable_quantity",
+                "wfs_sellable_qty",
+                "available_quantity",
+                "available_qty",
+                "fulfillable_quantity",
+                "fulfillable_qty",
+                "sellable_quantity",
+                "sellable_qty",
+            ],
+            "wfs_available_qty",
+        )
+        inbound_expr = value_expr(
+            [
+                "inbound_quantity",
+                "inbound_qty",
+                "wfs_inbound_quantity",
+                "wfs_inbound_qty",
+                "in_transit_quantity",
+                "in_transit_qty",
+            ],
+            "inbound_qty",
+        )
+        arriving_expr = value_expr(
+            [
+                "arriving_quantity",
+                "arriving_qty",
+                "receiving_quantity",
+                "receiving_qty",
+                "arrived_quantity",
+                "arrived_qty",
+            ],
+            "arriving_qty",
+        )
+
+        account_filter = ""
+        if "source_account_ref" in columns:
+            account_filter = "and source_account_ref in :account_refs"
+
+        return f"""
+            inventory_base as (
+                select
+                    trim(item_id::text) as item_id,
+                    {identity_expr("source_account_ref")} as source_account_ref,
+                    {identity_expr("store_id")} as store_id,
+                    {identity_expr("msku")} as msku,
+                    {identity_expr("sku")} as sku,
+                    {wfs_expr},
+                    {inbound_expr},
+                    {arriving_expr}
+                from {LISTING_TABLE}
+                where trim(item_id::text) <> ''
+                  {account_filter}
+            ),
+            inventory_dedup as (
+                select
+                    item_id,
+                    source_account_ref,
+                    store_id,
+                    msku,
+                    sku,
+                    max(wfs_available_qty) as wfs_available_qty,
+                    max(inbound_qty) as inbound_qty,
+                    max(arriving_qty) as arriving_qty
+                from inventory_base
+                group by item_id, source_account_ref, store_id, msku, sku
+            ),
+            inventory_actuals as (
+                select
+                    item_id,
+                    sum(wfs_available_qty)::numeric as wfs_available_qty,
+                    sum(inbound_qty)::numeric as inbound_qty,
+                    sum(arriving_qty)::numeric as arriving_qty
+                from inventory_dedup
+                group by item_id
+            )
+        """
+
     def list_products(
         self,
         *,
@@ -538,13 +755,90 @@ class OperationPlanRepository:
         query: OperationPlanProductQuery,
         account_refs: frozenset[str],
     ) -> tuple[list[RowMapping], int]:
-        clauses = ["p.period_id = :period_id", "p.source_account_ref in :account_refs"]
+        clauses = ["p.period_id = :period_id"]
         params: dict[str, Any] = {
             "period_id": period_id,
             "account_refs": tuple(sorted(account_refs)),
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
+        sort_direction = "asc" if query.sort_order == "asc" else "desc"
+        default_order_sql = """
+            order by
+                case
+                    when p.stock_status = 'risk'
+                      or (
+                        coalesce(p.target_sales_amount, 0)
+                            > coalesce(a.sales_actual_amount, 0)
+                        and coalesce(a.sales_actual_amount, 0) > 0
+                        and coalesce(a.sales_actual_qty, 0) > 0
+                        and (
+                            (
+                                coalesce(inv.wfs_available_qty, a.wfs_available_qty, 0)
+                                + coalesce(inv.inbound_qty, 0)
+                                + coalesce(inv.arriving_qty, 0)
+                            )
+                            / greatest(
+                                (
+                                    coalesce(p.target_sales_amount, 0)
+                                    - coalesce(a.sales_actual_amount, 0)
+                                )
+                                / greatest(
+                                    coalesce(a.sales_actual_amount, 0)
+                                    / greatest(coalesce(a.sales_actual_qty, 0), 1),
+                                    0.01
+                                ),
+                                1
+                            )
+                            * 100
+                        ) < 100
+                      )
+                        then 0
+                    else 1
+                end asc,
+                case coalesce(cs.plan_status, p.plan_status)
+                    when 'severe_lagging' then 0
+                    when 'lagging' then 1
+                    when 'normal' then 2
+                    when 'unplanned' then 3
+                    when 'clearance' then 4
+                    else 5
+                end asc,
+                (
+                    case
+                        when coalesce(p.target_gross_profit_amount, 0) > 0 then
+                            coalesce(a.gross_profit_actual_amount, 0)
+                            / nullif(p.target_gross_profit_amount, 0)
+                        else null
+                    end
+                ) asc nulls last,
+                (
+                    coalesce(a.sales_actual_amount, 0)
+                    / nullif(p.target_sales_amount, 0)
+                ) asc nulls last,
+                p.updated_at desc,
+                p.created_at desc
+        """
+        sort_rate_sql_map = {
+            "sales_completion_rate": (
+                "coalesce(a.sales_actual_amount, 0) / nullif(p.target_sales_amount, 0)"
+            ),
+            "gross_profit_completion_rate": (
+                "coalesce(a.gross_profit_actual_amount, 0) "
+                "/ nullif(p.target_gross_profit_amount, 0)"
+            ),
+        }
+        sort_rate_sql = sort_rate_sql_map.get(query.sort_field or "")
+        if sort_rate_sql:
+            order_sql = f"""
+                order by
+                    ({sort_rate_sql}) {sort_direction} nulls last,
+                    p.updated_at desc,
+                    p.created_at desc
+            """
+        else:
+            order_sql = default_order_sql
+
         owner_expr = (
             "coalesce("
             "nullif(p.owner_ref, ''), "
@@ -564,21 +858,23 @@ class OperationPlanRepository:
             clauses.append("p.operation_status = :operation_status")
             params["operation_status"] = query.operation_status
         if query.plan_status:
-            clauses.append("p.plan_status = :plan_status")
+            clauses.append("coalesce(cs.plan_status, p.plan_status) = :plan_status")
             params["plan_status"] = query.plan_status
         if query.stock_status:
-            if query.stock_status == "risk":
-                clauses.append(
-                    """
+            stock_risk_sql = """
                     (
-                        p.stock_status = :stock_status
+                        p.stock_status = 'risk'
                         or (
                             coalesce(p.target_sales_amount, 0)
                                 > coalesce(a.sales_actual_amount, 0)
                             and coalesce(a.sales_actual_amount, 0) > 0
                             and coalesce(a.sales_actual_qty, 0) > 0
                             and (
-                                coalesce(a.wfs_available_qty, 0)
+                                coalesce(
+                                    inv.wfs_available_qty,
+                                    a.wfs_available_qty,
+                                    0
+                                )
                                 / greatest(
                                     (
                                         coalesce(p.target_sales_amount, 0)
@@ -595,11 +891,20 @@ class OperationPlanRepository:
                             ) < 100
                         )
                     )
+            """
+
+            if query.stock_status == "risk":
+                clauses.append(stock_risk_sql)
+            else:
+                clauses.append(
+                    f"""
+                    (
+                        p.stock_status = :stock_status
+                        and not {stock_risk_sql}
+                    )
                     """
                 )
-            else:
-                clauses.append("p.stock_status = :stock_status")
-            params["stock_status"] = query.stock_status
+                params["stock_status"] = query.stock_status
         if query.keyword:
             column_map = {
                 "item_id": "p.item_id",
@@ -621,7 +926,9 @@ class OperationPlanRepository:
 
         where_sql = " and ".join(clauses)
 
-        actuals_cte = """
+        inventory_cte_sql = self._inventory_cte_sql()
+
+        actuals_cte = f"""
             with period_bounds as (
                 select
                     period_start_date,
@@ -636,6 +943,7 @@ class OperationPlanRepository:
                 from ops_operation_plan_periods p0
                 where p0.id = :period_id
             ),
+            {inventory_cte_sql},
             actuals as (
                 select
                     p.id as plan_id,
@@ -672,17 +980,15 @@ class OperationPlanRepository:
                     max(nullif(d.owner_ref, '')) as actual_owner_ref,
                     max(nullif(d.local_name, '')) as actual_local_name,
                     max(nullif(d.title, '')) as actual_title,
-                    max(coalesce(d.wfs_available_quantity, 0)) as wfs_available_qty
+                    sum(coalesce(d.wfs_available_quantity, 0)) filter (where d.business_date_la = b.data_end_date) as wfs_available_qty
                 from ops_operation_product_plans p
                 join period_bounds b on true
                 left join mart_daily_sales_item_day d
                   on trim(d.item_id::text) = trim(p.item_id::text)
-                 and trim(d.msku::text) = trim(p.msku::text)
-                 and d.source_account_ref = p.source_account_ref
+                 and d.source_account_ref in :account_refs
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
-                  and p.source_account_ref in :account_refs
                 group by p.id
             ),
             last_actuals as (
@@ -694,15 +1000,94 @@ class OperationPlanRepository:
                 join period_bounds b on true
                 left join mart_daily_sales_item_day d
                   on trim(d.item_id::text) = trim(p.item_id::text)
-                 and trim(d.msku::text) = trim(p.msku::text)
-                 and d.source_account_ref = p.source_account_ref
+                 and d.source_account_ref in :account_refs
                  and d.business_date_la >= (
                      b.period_start_date - (b.period_end_date - b.period_start_date + 1)
                  )
                  and d.business_date_la < b.period_start_date
                 where p.period_id = :period_id
-                  and p.source_account_ref in :account_refs
                 group by p.id
+
+            ),
+            computed_status as (
+                select
+                    p.id as plan_id,
+                    case
+                        when p.operation_status = 'clearance'
+                          or p.plan_status = 'clearance'
+                            then 'clearance'
+                        when p.plan_status = 'unplanned'
+                          or coalesce(p.target_sales_amount, 0) <= 0
+                            then 'unplanned'
+                        when coalesce(
+                            case
+                                when a.data_end_date is not null then
+                                    coalesce(a.sales_actual_amount, 0)
+                                    + (
+                                        (
+                                            coalesce(a.recent7_sales_amount, 0)
+                                            / greatest(
+                                                a.data_end_date
+                                                - greatest(a.period_start_date, a.data_end_date - 6)
+                                                + 1,
+                                                1
+                                            )
+                                            * 0.7
+                                        )
+                                        + (
+                                            coalesce(a.recent14_sales_amount, 0)
+                                            / greatest(
+                                                a.data_end_date
+                                                - greatest(a.period_start_date, a.data_end_date - 13)
+                                                + 1,
+                                                1
+                                            )
+                                            * 0.3
+                                        )
+                                    )
+                                    * greatest((a.period_end_date - a.data_end_date), 0)
+                                else coalesce(a.sales_actual_amount, 0)
+                            end,
+                            0
+                        ) < coalesce(p.target_sales_amount, 0) * 0.8
+                            then 'severe_lagging'
+                        when coalesce(
+                            case
+                                when a.data_end_date is not null then
+                                    coalesce(a.sales_actual_amount, 0)
+                                    + (
+                                        (
+                                            coalesce(a.recent7_sales_amount, 0)
+                                            / greatest(
+                                                a.data_end_date
+                                                - greatest(a.period_start_date, a.data_end_date - 6)
+                                                + 1,
+                                                1
+                                            )
+                                            * 0.7
+                                        )
+                                        + (
+                                            coalesce(a.recent14_sales_amount, 0)
+                                            / greatest(
+                                                a.data_end_date
+                                                - greatest(a.period_start_date, a.data_end_date - 13)
+                                                + 1,
+                                                1
+                                            )
+                                            * 0.3
+                                        )
+                                    )
+                                    * greatest((a.period_end_date - a.data_end_date), 0)
+                                else coalesce(a.sales_actual_amount, 0)
+                            end,
+                            0
+                        ) < coalesce(p.target_sales_amount, 0)
+                            then 'lagging'
+                        else 'normal'
+                    end as plan_status
+                from ops_operation_product_plans p
+                left join actuals a on a.plan_id = p.id
+                where p.period_id = :period_id
             )
         """
 
@@ -710,6 +1095,9 @@ class OperationPlanRepository:
             from ops_operation_product_plans p
             left join actuals a on a.plan_id = p.id
             left join last_actuals la on la.plan_id = p.id
+            left join inventory_actuals inv
+              on trim(inv.item_id::text) = trim(p.item_id::text)
+            left join computed_status cs on cs.plan_id = p.id
         """
         where_clause = f"where {where_sql}"
 
@@ -794,6 +1182,7 @@ class OperationPlanRepository:
             {actuals_cte}
             select
                 p.*,
+                coalesce(cs.plan_status, p.plan_status) as computed_plan_status,
                 coalesce(
                     p.product_name_snapshot,
                     a.actual_local_name,
@@ -818,9 +1207,10 @@ class OperationPlanRepository:
                     as gross_profit_actual_amount,
                 {forecast_sales_sql} as sales_forecast_amount,
                 {forecast_profit_sql} as gross_profit_forecast_amount,
-                coalesce(a.wfs_available_qty, 0)::numeric as wfs_available_qty,
-                0::numeric as inbound_qty,
-                0::numeric as arriving_qty,
+                coalesce(inv.wfs_available_qty, a.wfs_available_qty, 0)::numeric
+                    as wfs_available_qty,
+                coalesce(inv.inbound_qty, 0)::numeric as inbound_qty,
+                coalesce(inv.arriving_qty, 0)::numeric as arriving_qty,
                 coalesce(e.event_count, 0) as event_count
             {base_from}
             left join (
@@ -829,7 +1219,7 @@ class OperationPlanRepository:
                 group by product_plan_id
             ) e on e.product_plan_id = p.id
             {where_clause}
-            order by p.updated_at desc, p.created_at desc
+            {order_sql}
             limit :limit offset :offset
             """
         ).bindparams(bindparam("account_refs", expanding=True))
@@ -893,12 +1283,10 @@ class OperationPlanRepository:
                 join period_bounds b on true
                 left join mart_daily_sales_item_day d
                   on trim(d.item_id::text) = trim(p.item_id::text)
-                 and trim(d.msku::text) = trim(p.msku::text)
-                 and d.source_account_ref = p.source_account_ref
+                 and d.source_account_ref in :account_refs
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
-                  and p.source_account_ref in :account_refs
                 group by p.id
             ),
             plan_forecast as (
@@ -1002,7 +1390,6 @@ class OperationPlanRepository:
             cross join period_bounds b
             left join plan_forecast a on a.plan_id = p.id
             where p.period_id = :period_id
-              and p.source_account_ref in :account_refs
             """
         ).bindparams(bindparam("account_refs", expanding=True))
         return (
@@ -1015,78 +1402,199 @@ class OperationPlanRepository:
         )
 
     def owner_summary(self, *, period_id: UUID, account_refs: frozenset[str]) -> list[RowMapping]:
+        inventory_cte_sql = self._inventory_cte_sql()
+
         statement = text(
-            """
+            f"""
             with period_bounds as (
-                select period_start_date, period_end_date
-                from ops_operation_plan_periods
-                where id = :period_id
+                select
+                    period_start_date,
+                    period_end_date,
+                    (
+                        select max(d.business_date_la)
+                        from mart_daily_sales_item_day d
+                        where d.source_account_ref in :account_refs
+                          and d.business_date_la >= p0.period_start_date
+                          and d.business_date_la <= p0.period_end_date
+                    ) as data_end_date
+                from ops_operation_plan_periods p0
+                where p0.id = :period_id
             ),
+            {inventory_cte_sql},
             plan_actuals as (
                 select
                     p.id as plan_id,
                     sum(coalesce(d.sales_amount, 0)) as sales_actual_amount,
                     sum(coalesce(d.gross_profit_amount, 0)) as gross_profit_actual_amount,
                     sum(coalesce(d.sales_qty, 0)) as sales_actual_qty,
-                    max(coalesce(d.wfs_available_quantity, 0)) as wfs_available_qty,
-                    max(nullif(d.owner_ref, '')) as actual_owner_ref
+                    max(nullif(d.owner_ref, '')) as actual_owner_ref,
+                    sum(coalesce(d.sales_amount, 0)) filter (
+                        where d.business_date_la >= greatest(
+                            b.period_start_date,
+                            b.data_end_date - 6
+                        )
+                    ) as recent7_sales_amount,
+                    sum(coalesce(d.sales_amount, 0)) filter (
+                        where d.business_date_la >= greatest(
+                            b.period_start_date,
+                            b.data_end_date - 13
+                        )
+                    ) as recent14_sales_amount,
+                    max(b.period_start_date) as period_start_date,
+                    max(b.period_end_date) as period_end_date,
+                    max(b.data_end_date) as data_end_date
                 from ops_operation_product_plans p
                 join period_bounds b on true
                 left join mart_daily_sales_item_day d
                   on trim(d.item_id::text) = trim(p.item_id::text)
-                 and trim(d.msku::text) = trim(p.msku::text)
-                 and d.source_account_ref = p.source_account_ref
+                 and d.source_account_ref in :account_refs
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
-                  and p.source_account_ref in :account_refs
                 group by p.id
+            ),
+            plan_forecast as (
+                select
+                    plan_id,
+                    coalesce(
+                        case
+                            when data_end_date is not null then
+                                coalesce(sales_actual_amount, 0)
+                                + (
+                                    (
+                                        coalesce(recent7_sales_amount, 0)
+                                        / greatest(
+                                            data_end_date
+                                            - greatest(period_start_date, data_end_date - 6)
+                                            + 1,
+                                            1
+                                        )
+                                        * 0.7
+                                    )
+                                    + (
+                                        coalesce(recent14_sales_amount, 0)
+                                        / greatest(
+                                            data_end_date
+                                            - greatest(period_start_date, data_end_date - 13)
+                                            + 1,
+                                            1
+                                        )
+                                        * 0.3
+                                    )
+                                )
+                                * greatest((period_end_date - data_end_date), 0)
+                            else coalesce(sales_actual_amount, 0)
+                        end,
+                        0
+                    )::numeric as sales_forecast_amount
+                from plan_actuals
+            ),
+            computed as (
+                select
+                    p.id,
+                    coalesce(
+                        nullif(p.owner_ref, ''),
+                        nullif(p.owner_name_snapshot, ''),
+                        nullif(a.actual_owner_ref, ''),
+                        'unassigned'
+                    ) as owner_ref,
+                    coalesce(
+                        nullif(p.owner_name_snapshot, ''),
+                        nullif(p.owner_ref, ''),
+                        nullif(a.actual_owner_ref, ''),
+                        '未分配'
+                    ) as owner_name,
+                    coalesce(p.target_sales_amount, 0) as target_sales_amount,
+                    coalesce(p.target_gross_profit_amount, 0) as target_gross_profit_amount,
+                    coalesce(a.sales_actual_amount, 0) as sales_actual_amount,
+                    coalesce(a.gross_profit_actual_amount, 0) as gross_profit_actual_amount,
+                    coalesce(a.sales_actual_qty, 0) as sales_actual_qty,
+                    coalesce(inv.wfs_available_qty, 0)
+                      + coalesce(inv.inbound_qty, 0)
+                      + coalesce(inv.arriving_qty, 0) as available_qty,
+                    case
+                        when p.operation_status = 'clearance'
+                          or p.plan_status = 'clearance'
+                            then 'clearance'
+                        when p.plan_status = 'unplanned'
+                          or coalesce(p.target_sales_amount, 0) <= 0
+                            then 'unplanned'
+                        when coalesce(f.sales_forecast_amount, 0)
+                            < coalesce(p.target_sales_amount, 0) * 0.8
+                            then 'severe_lagging'
+                        when coalesce(f.sales_forecast_amount, 0)
+                            < coalesce(p.target_sales_amount, 0)
+                            then 'lagging'
+                        else 'normal'
+                    end as computed_plan_status,
+                    case
+                        when p.stock_status = 'risk'
+                          or (
+                            coalesce(p.target_sales_amount, 0)
+                                > coalesce(a.sales_actual_amount, 0)
+                            and coalesce(a.sales_actual_amount, 0) > 0
+                            and coalesce(a.sales_actual_qty, 0) > 0
+                            and (
+                                (
+                                    coalesce(inv.wfs_available_qty, 0)
+                                    + coalesce(inv.inbound_qty, 0)
+                                    + coalesce(inv.arriving_qty, 0)
+                                )
+                                / greatest(
+                                    (
+                                        coalesce(p.target_sales_amount, 0)
+                                        - coalesce(a.sales_actual_amount, 0)
+                                    )
+                                    / greatest(
+                                        coalesce(a.sales_actual_amount, 0)
+                                        / greatest(coalesce(a.sales_actual_qty, 0), 1),
+                                        0.01
+                                    ),
+                                    1
+                                )
+                                * 100
+                            ) < 100
+                          )
+                            then 'risk'
+                        else 'normal'
+                    end as computed_stock_status
+                from ops_operation_product_plans p
+                left join plan_actuals a on a.plan_id = p.id
+                left join plan_forecast f on f.plan_id = p.id
+                left join inventory_actuals inv
+                  on trim(inv.item_id::text) = trim(p.item_id::text)
+                where p.period_id = :period_id
             )
             select
-                coalesce(nullif(p.owner_ref, ''), nullif(p.owner_name_snapshot, ''), nullif(a.actual_owner_ref, ''), 'unassigned') as owner_ref,
-                coalesce(nullif(p.owner_name_snapshot, ''), nullif(p.owner_ref, ''), nullif(a.actual_owner_ref, ''), '未分配') as owner_name,
+                owner_ref,
+                owner_name,
                 count(*)::int as product_count,
-                coalesce(sum(p.target_sales_amount), 0) as sales_target_amount,
-                coalesce(sum(a.sales_actual_amount), 0) as sales_actual_amount,
-                coalesce(sum(p.target_gross_profit_amount), 0) as gross_profit_target_amount,
-                coalesce(sum(a.gross_profit_actual_amount), 0) as gross_profit_actual_amount,
-                count(*) filter (where p.plan_status = 'lagging')::int as lagging_count,
-                count(*) filter (where p.plan_status = 'severe_lagging')::int as severe_lagging_count,
-                count(*) filter (
-                    where p.stock_status = 'risk'
-                       or (
-                           coalesce(p.target_sales_amount, 0)
-                               > coalesce(a.sales_actual_amount, 0)
-                           and coalesce(a.sales_actual_amount, 0) > 0
-                           and coalesce(a.sales_actual_qty, 0) > 0
-                           and (
-                               coalesce(a.wfs_available_qty, 0)
-                               / greatest(
-                                   (
-                                       coalesce(p.target_sales_amount, 0)
-                                       - coalesce(a.sales_actual_amount, 0)
-                                   )
-                                   / greatest(
-                                       coalesce(a.sales_actual_amount, 0)
-                                       / greatest(coalesce(a.sales_actual_qty, 0), 1),
-                                       0.01
-                                   ),
-                                   1
-                               )
-                               * 100
-                           ) < 100
-                       )
-                )::int as stock_risk_count
-            from ops_operation_product_plans p
-            left join plan_actuals a on a.plan_id = p.id
-            where p.period_id = :period_id
-              and p.source_account_ref in :account_refs
-            group by
-                coalesce(nullif(p.owner_ref, ''), nullif(p.owner_name_snapshot, ''), nullif(a.actual_owner_ref, ''), 'unassigned'),
-                coalesce(nullif(p.owner_name_snapshot, ''), nullif(p.owner_ref, ''), nullif(a.actual_owner_ref, ''), '未分配')
-            order by sales_target_amount desc
+                coalesce(sum(target_sales_amount), 0) as sales_target_amount,
+                coalesce(sum(sales_actual_amount), 0) as sales_actual_amount,
+                coalesce(sum(sales_actual_qty), 0) as sales_actual_qty,
+                coalesce(sum(target_gross_profit_amount), 0) as gross_profit_target_amount,
+                coalesce(sum(gross_profit_actual_amount), 0) as gross_profit_actual_amount,
+                count(*) filter (where computed_plan_status = 'lagging')::int
+                    as lagging_count,
+                count(*) filter (where computed_plan_status = 'severe_lagging')::int
+                    as severe_lagging_count,
+                count(*) filter (where computed_stock_status = 'risk')::int
+                    as stock_risk_count
+            from computed
+            group by owner_ref, owner_name
+
+            order by
+                coalesce(sum(gross_profit_actual_amount), 0) desc,
+                case
+                    when coalesce(sum(target_gross_profit_amount), 0) = 0 then 0
+                    else
+                        coalesce(sum(gross_profit_actual_amount), 0)
+                        / coalesce(sum(target_gross_profit_amount), 0)
+                end desc,
+                coalesce(sum(sales_actual_amount), 0) desc
             """
         ).bindparams(bindparam("account_refs", expanding=True))
+
         return list(
             self.session.execute(
                 statement,
@@ -1097,64 +1605,191 @@ class OperationPlanRepository:
     def list_options(
         self, *, period_id: UUID, account_refs: frozenset[str]
     ) -> dict[str, list[RowMapping]]:
+        inventory_cte_sql = self._inventory_cte_sql()
         params = {"period_id": period_id, "account_refs": tuple(sorted(account_refs))}
-        bind = bindparam("account_refs", expanding=True)
-        owners = list(
-            self.session.execute(
-                text(
-                    """
+
+        statement = text(
+            f"""
             with period_bounds as (
-                select period_start_date, period_end_date
-                from ops_operation_plan_periods
-                where id = :period_id
+                select
+                    period_start_date,
+                    period_end_date,
+                    (
+                        select max(d.business_date_la)
+                        from mart_daily_sales_item_day d
+                        where d.source_account_ref in :account_refs
+                          and d.business_date_la >= p0.period_start_date
+                          and d.business_date_la <= p0.period_end_date
+                    ) as data_end_date
+                from ops_operation_plan_periods p0
+                where p0.id = :period_id
             ),
-            owner_actuals as (
+            {inventory_cte_sql},
+            plan_actuals as (
                 select
                     p.id as plan_id,
-                    max(nullif(d.owner_ref, '')) as actual_owner_ref
+                    sum(coalesce(d.sales_amount, 0)) as sales_actual_amount,
+                    sum(coalesce(d.sales_qty, 0)) as sales_actual_qty,
+                    max(nullif(d.owner_ref, '')) as actual_owner_ref,
+                    sum(coalesce(d.sales_amount, 0)) filter (
+                        where d.business_date_la >= greatest(
+                            b.period_start_date,
+                            b.data_end_date - 6
+                        )
+                    ) as recent7_sales_amount,
+                    sum(coalesce(d.sales_amount, 0)) filter (
+                        where d.business_date_la >= greatest(
+                            b.period_start_date,
+                            b.data_end_date - 13
+                        )
+                    ) as recent14_sales_amount,
+                    max(b.period_start_date) as period_start_date,
+                    max(b.period_end_date) as period_end_date,
+                    max(b.data_end_date) as data_end_date
                 from ops_operation_product_plans p
                 join period_bounds b on true
                 left join mart_daily_sales_item_day d
                   on trim(d.item_id::text) = trim(p.item_id::text)
-                 and trim(d.msku::text) = trim(p.msku::text)
-                 and d.source_account_ref = p.source_account_ref
+                 and d.source_account_ref in :account_refs
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
-                  and p.source_account_ref in :account_refs
                 group by p.id
+            ),
+            forecast as (
+                select
+                    plan_id,
+                    coalesce(
+                        case
+                            when data_end_date is not null then
+                                coalesce(sales_actual_amount, 0)
+                                + (
+                                    (
+                                        coalesce(recent7_sales_amount, 0)
+                                        / greatest(
+                                            data_end_date
+                                            - greatest(period_start_date, data_end_date - 6)
+                                            + 1,
+                                            1
+                                        )
+                                        * 0.7
+                                    )
+                                    + (
+                                        coalesce(recent14_sales_amount, 0)
+                                        / greatest(
+                                            data_end_date
+                                            - greatest(period_start_date, data_end_date - 13)
+                                            + 1,
+                                            1
+                                        )
+                                        * 0.3
+                                    )
+                                )
+                                * greatest((period_end_date - data_end_date), 0)
+                            else coalesce(sales_actual_amount, 0)
+                        end,
+                        0
+                    )::numeric as sales_forecast_amount
+                from plan_actuals
+            ),
+            computed as (
+                select
+                    p.id,
+                    coalesce(
+                        nullif(p.owner_ref, ''),
+                        nullif(p.owner_name_snapshot, ''),
+                        nullif(a.actual_owner_ref, ''),
+                        'unassigned'
+                    ) as owner_value,
+                    coalesce(
+                        nullif(p.owner_name_snapshot, ''),
+                        nullif(p.owner_ref, ''),
+                        nullif(a.actual_owner_ref, ''),
+                        '未分配'
+                    ) as owner_label,
+                    p.operation_status,
+                    case
+                        when p.operation_status = 'clearance'
+                          or p.plan_status = 'clearance'
+                            then 'clearance'
+                        when p.plan_status = 'unplanned'
+                          or coalesce(p.target_sales_amount, 0) <= 0
+                            then 'unplanned'
+                        when coalesce(f.sales_forecast_amount, 0)
+                            < coalesce(p.target_sales_amount, 0) * 0.8
+                            then 'severe_lagging'
+                        when coalesce(f.sales_forecast_amount, 0)
+                            < coalesce(p.target_sales_amount, 0)
+                            then 'lagging'
+                        else 'normal'
+                    end as plan_status,
+                    case
+                        when p.stock_status = 'risk'
+                          or (
+                            coalesce(p.target_sales_amount, 0)
+                                > coalesce(a.sales_actual_amount, 0)
+                            and coalesce(a.sales_actual_amount, 0) > 0
+                            and coalesce(a.sales_actual_qty, 0) > 0
+                            and (
+                                coalesce(inv.wfs_available_qty, 0)
+                                / greatest(
+                                    (
+                                        coalesce(p.target_sales_amount, 0)
+                                        - coalesce(a.sales_actual_amount, 0)
+                                    )
+                                    / greatest(
+                                        coalesce(a.sales_actual_amount, 0)
+                                        / greatest(coalesce(a.sales_actual_qty, 0), 1),
+                                        0.01
+                                    ),
+                                    1
+                                )
+                                * 100
+                            ) < 100
+                          )
+                            then 'risk'
+                        else 'normal'
+                    end as stock_status
+                from ops_operation_product_plans p
+                left join plan_actuals a on a.plan_id = p.id
+                left join forecast f on f.plan_id = p.id
+                left join inventory_actuals inv
+                  on trim(inv.item_id::text) = trim(p.item_id::text)
+                where p.period_id = :period_id
             )
-            select distinct
-                   coalesce(nullif(p.owner_ref, ''), nullif(p.owner_name_snapshot, ''), nullif(a.actual_owner_ref, '')) as value,
-                   coalesce(nullif(p.owner_name_snapshot, ''), nullif(p.owner_ref, ''), nullif(a.actual_owner_ref, '')) as label
-            from ops_operation_product_plans p
-            left join owner_actuals a on a.plan_id = p.id
-            where p.period_id = :period_id and p.source_account_ref in :account_refs
-              and coalesce(nullif(p.owner_ref, ''), nullif(p.owner_name_snapshot, ''), nullif(a.actual_owner_ref, '')) is not null
-            order by label
-            """
-                ).bindparams(bind),
-                params,
-            ).mappings()
-        )
+            select 'owner' as kind, owner_value as value, owner_label as label, count(*)::int as count
+            from computed
+            group by owner_value, owner_label
 
-        stores = list(
-            self.session.execute(
-                text(
-                    """
-            select distinct coalesce(store_id, '') as value,
-                   coalesce(store_name_snapshot, store_id, '未知店铺') as label
-            from ops_operation_product_plans
-            where period_id = :period_id and source_account_ref in :account_refs
-              and coalesce(store_id, '') <> ''
-            order by label
-            """
-                ).bindparams(bindparam("account_refs", expanding=True)),
-                params,
-            ).mappings()
-        )
+            union all
 
-        return {"owners": owners, "stores": stores}
+            select 'operation_status' as kind, operation_status as value, operation_status as label, count(*)::int as count
+            from computed
+            group by operation_status
+
+            union all
+
+            select 'plan_status' as kind, plan_status as value, plan_status as label, count(*)::int as count
+            from computed
+            group by plan_status
+
+            union all
+
+            select 'stock_status' as kind, stock_status as value, stock_status as label, count(*)::int as count
+            from computed
+            group by stock_status
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+
+        rows = list(self.session.execute(statement, params).mappings())
+
+        return {
+            "owners": [row for row in rows if row["kind"] == "owner"],
+            "stores": [],
+            "operation_status_counts": [row for row in rows if row["kind"] == "operation_status"],
+            "plan_status_counts": [row for row in rows if row["kind"] == "plan_status"],
+            "stock_status_counts": [row for row in rows if row["kind"] == "stock_status"],
+        }
 
     def list_events(self, plan_id: UUID) -> list[RowMapping]:
         return list(
