@@ -104,7 +104,9 @@ class OperationPlanRepository:
         )
         return period_id
 
-    def find_period_id(self, *, platform_code: str, period_type: str, period_key: str) -> UUID | None:
+    def find_period_id(
+        self, *, platform_code: str, period_type: str, period_key: str
+    ) -> UUID | None:
         value = self.session.execute(
             text(
                 """
@@ -231,16 +233,16 @@ class OperationPlanRepository:
         statement = text(
             f"""
             select
-                {column_or_null('platform_code', 'platform_code')} ,
-                {column_or_null('source_account_ref', 'source_account_ref')} ,
-                {column_or_null('store_id', 'store_id')} ,
-                {column_or_null('store_name', 'store_name')} ,
+                {column_or_null("platform_code", "platform_code")} ,
+                {column_or_null("source_account_ref", "source_account_ref")} ,
+                {column_or_null("store_id", "store_id")} ,
+                {column_or_null("store_name", "store_name")} ,
                 item_id as item_id,
-                {column_or_null('sku', 'sku', ['local_sku'])} ,
+                {column_or_null("sku", "sku", ["local_sku"])} ,
                 msku as msku,
-                {column_or_null('product_name', 'product_name', ['local_name', 'title', 'product_title', 'product_name_snapshot', 'item_name', 'name'])} ,
-                {column_or_null('owner_ref', 'owner_ref', ['owner_uid'])} ,
-                {column_or_null('owner_name', 'owner_name', ['owner_name_snapshot'])}
+                {column_or_null("product_name", "product_name", ["local_name", "title", "product_title", "product_name_snapshot", "item_name", "name"])} ,
+                {column_or_null("owner_ref", "owner_ref", ["owner_uid"])} ,
+                {column_or_null("owner_name", "owner_name", ["owner_name_snapshot"])}
             from {LISTING_TABLE}
             where trim(item_id::text) = :item_id
               and trim(msku::text) = :msku
@@ -261,9 +263,10 @@ class OperationPlanRepository:
         item_id: str,
         msku: str,
     ) -> RowMapping | None:
-        return self.session.execute(
-            text(
-                """
+        return (
+            self.session.execute(
+                text(
+                    """
                 select *
                 from ops_operation_product_plans
                 where period_id = :period_id
@@ -272,15 +275,18 @@ class OperationPlanRepository:
                   and item_id = :item_id
                   and msku = :msku
                 """
-            ),
-            {
-                "period_id": period_id,
-                "platform_code": platform_code,
-                "source_account_ref": source_account_ref,
-                "item_id": item_id,
-                "msku": msku,
-            },
-        ).mappings().first()
+                ),
+                {
+                    "period_id": period_id,
+                    "platform_code": platform_code,
+                    "source_account_ref": source_account_ref,
+                    "item_id": item_id,
+                    "msku": msku,
+                },
+            )
+            .mappings()
+            .first()
+        )
 
     def insert_plan(
         self,
@@ -456,7 +462,9 @@ class OperationPlanRepository:
                 "target_sales_raw": raw.get("sales"),
                 "target_gross_profit_raw": raw.get("profit"),
                 "remark_raw": raw.get("remark"),
-                "resolved_source_account_ref": listing.get("source_account_ref") if listing else None,
+                "resolved_source_account_ref": listing.get("source_account_ref")
+                if listing
+                else None,
                 "resolved_store_id": listing.get("store_id") if listing else None,
                 "resolved_store_name": listing.get("store_name") if listing else None,
                 "resolved_item_id": listing.get("item_id") if listing else None,
@@ -514,10 +522,14 @@ class OperationPlanRepository:
         )
 
     def get_plan(self, plan_id: UUID) -> RowMapping | None:
-        return self.session.execute(
-            text("select * from ops_operation_product_plans where id = :plan_id"),
-            {"plan_id": plan_id},
-        ).mappings().first()
+        return (
+            self.session.execute(
+                text("select * from ops_operation_product_plans where id = :plan_id"),
+                {"plan_id": plan_id},
+            )
+            .mappings()
+            .first()
+        )
 
     def list_products(
         self,
@@ -705,9 +717,7 @@ class OperationPlanRepository:
             f"{actuals_cte} select count(*) {base_from} {where_clause}"
         ).bindparams(bindparam("account_refs", expanding=True))
         if query.batch_values:
-            count_statement = count_statement.bindparams(
-                bindparam("batch_values", expanding=True)
-            )
+            count_statement = count_statement.bindparams(bindparam("batch_values", expanding=True))
 
         total = int(self.session.execute(count_statement, params).scalar_one())
 
@@ -825,9 +835,7 @@ class OperationPlanRepository:
         ).bindparams(bindparam("account_refs", expanding=True))
 
         if query.batch_values:
-            data_statement = data_statement.bindparams(
-                bindparam("batch_values", expanding=True)
-            )
+            data_statement = data_statement.bindparams(bindparam("batch_values", expanding=True))
 
         rows = list(self.session.execute(data_statement, params).mappings())
         return rows, total
@@ -997,10 +1005,14 @@ class OperationPlanRepository:
               and p.source_account_ref in :account_refs
             """
         ).bindparams(bindparam("account_refs", expanding=True))
-        return self.session.execute(
-            statement,
-            {"period_id": period_id, "account_refs": tuple(sorted(account_refs))},
-        ).mappings().one()
+        return (
+            self.session.execute(
+                statement,
+                {"period_id": period_id, "account_refs": tuple(sorted(account_refs))},
+            )
+            .mappings()
+            .one()
+        )
 
     def owner_summary(self, *, period_id: UUID, account_refs: frozenset[str]) -> list[RowMapping]:
         statement = text(
@@ -1082,11 +1094,15 @@ class OperationPlanRepository:
             ).mappings()
         )
 
-    def list_options(self, *, period_id: UUID, account_refs: frozenset[str]) -> dict[str, list[RowMapping]]:
+    def list_options(
+        self, *, period_id: UUID, account_refs: frozenset[str]
+    ) -> dict[str, list[RowMapping]]:
         params = {"period_id": period_id, "account_refs": tuple(sorted(account_refs))}
         bind = bindparam("account_refs", expanding=True)
-        owners = list(self.session.execute(text(
-            """
+        owners = list(
+            self.session.execute(
+                text(
+                    """
             with period_bounds as (
                 select period_start_date, period_end_date
                 from ops_operation_plan_periods
@@ -1117,10 +1133,15 @@ class OperationPlanRepository:
               and coalesce(nullif(p.owner_ref, ''), nullif(p.owner_name_snapshot, ''), nullif(a.actual_owner_ref, '')) is not null
             order by label
             """
-        ).bindparams(bind), params).mappings())
+                ).bindparams(bind),
+                params,
+            ).mappings()
+        )
 
-        stores = list(self.session.execute(text(
-            """
+        stores = list(
+            self.session.execute(
+                text(
+                    """
             select distinct coalesce(store_id, '') as value,
                    coalesce(store_name_snapshot, store_id, '未知店铺') as label
             from ops_operation_product_plans
@@ -1128,36 +1149,43 @@ class OperationPlanRepository:
               and coalesce(store_id, '') <> ''
             order by label
             """
-        ).bindparams(bindparam("account_refs", expanding=True)), params).mappings())
+                ).bindparams(bindparam("account_refs", expanding=True)),
+                params,
+            ).mappings()
+        )
 
         return {"owners": owners, "stores": stores}
 
     def list_events(self, plan_id: UUID) -> list[RowMapping]:
-        return list(self.session.execute(
-            text(
-                """
+        return list(
+            self.session.execute(
+                text(
+                    """
                 select id, event_type, after_data, reason, actor_ref, created_at
                 from ops_operation_plan_events
                 where product_plan_id = :plan_id
                 order by created_at desc
                 """
-            ),
-            {"plan_id": plan_id},
-        ).mappings())
+                ),
+                {"plan_id": plan_id},
+            ).mappings()
+        )
 
     def list_failed_import_rows(self, batch_id: UUID) -> list[RowMapping]:
-        return list(self.session.execute(
-            text(
-                """
+        return list(
+            self.session.execute(
+                text(
+                    """
                 select *
                 from ops_operation_plan_import_rows
                 where batch_id = :batch_id
                   and import_status = 'failed'
                 order by row_number asc
                 """
-            ),
-            {"batch_id": batch_id},
-        ).mappings())
+                ),
+                {"batch_id": batch_id},
+            ).mappings()
+        )
 
 
 def _json_dumps(value: object) -> str:

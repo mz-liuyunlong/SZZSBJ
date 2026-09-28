@@ -72,7 +72,9 @@ class OperationPlanService:
         period_label = "本月" if period_type == "month" else "本季度"
         if period_id is None:
             return OperationPlanSummaryData(
-                summary=OperationPlanSummary(period_label=period_label, period_progress_rate=period_progress),
+                summary=OperationPlanSummary(
+                    period_label=period_label, period_progress_rate=period_progress
+                ),
                 owners=[],
             )
         raw = self.repository.summary(period_id=period_id, account_refs=account_refs)
@@ -80,9 +82,7 @@ class OperationPlanService:
         period_total_days = int(raw.get("period_total_days") or 0)
         if period_total_days > 0:
             period_progress = (
-                Decimal(period_elapsed_days)
-                / Decimal(period_total_days)
-                * Decimal("100")
+                Decimal(period_elapsed_days) / Decimal(period_total_days) * Decimal("100")
             ).quantize(Decimal("0.1"))
 
         summary = OperationPlanSummary(
@@ -103,7 +103,10 @@ class OperationPlanService:
             period_label=period_label,
             period_progress_rate=period_progress,
         )
-        owners = [self._owner_row(row) for row in self.repository.owner_summary(period_id=period_id, account_refs=account_refs)]
+        owners = [
+            self._owner_row(row)
+            for row in self.repository.owner_summary(period_id=period_id, account_refs=account_refs)
+        ]
         return OperationPlanSummaryData(summary=summary, owners=owners)
 
     def list_products(
@@ -118,10 +121,16 @@ class OperationPlanService:
             period_key=query.period_key,
         )
         if period_id is None:
-            return OperationPlanProductListData(items=[], total=0, page=query.page, page_size=query.page_size)
-        rows, total = self.repository.list_products(period_id=period_id, query=query, account_refs=account_refs)
+            return OperationPlanProductListData(
+                items=[], total=0, page=query.page, page_size=query.page_size
+            )
+        rows, total = self.repository.list_products(
+            period_id=period_id, query=query, account_refs=account_refs
+        )
         items = [self._product_row(row) for row in rows]
-        return OperationPlanProductListData(items=items, total=total, page=query.page, page_size=query.page_size)
+        return OperationPlanProductListData(
+            items=items, total=total, page=query.page, page_size=query.page_size
+        )
 
     def options(
         self,
@@ -139,8 +148,14 @@ class OperationPlanService:
         store_options: list[SelectOption] = []
         if period_id is not None:
             raw = self.repository.list_options(period_id=period_id, account_refs=account_refs)
-            owner_options = [SelectOption(label=str(row["label"]), value=str(row["value"])) for row in raw["owners"]]
-            store_options = [SelectOption(label=str(row["label"]), value=str(row["value"])) for row in raw["stores"]]
+            owner_options = [
+                SelectOption(label=str(row["label"]), value=str(row["value"]))
+                for row in raw["owners"]
+            ]
+            store_options = [
+                SelectOption(label=str(row["label"]), value=str(row["value"]))
+                for row in raw["stores"]
+            ]
         return OperationPlanOptionsData(
             owners=owner_options,
             stores=store_options,
@@ -281,7 +296,9 @@ class OperationPlanService:
         if not msku:
             errors.append("MSKU不能为空")
         sales_amount, sales_error = _parse_amount(parsed.sales_raw, "销售额（$）", allow_zero=False)
-        profit_amount, profit_error = _parse_amount(parsed.profit_raw, "毛利润（$）", allow_zero=True)
+        profit_amount, profit_error = _parse_amount(
+            parsed.profit_raw, "毛利润（$）", allow_zero=True
+        )
         if sales_error:
             errors.append(sales_error)
         if profit_error:
@@ -410,7 +427,9 @@ class OperationPlanService:
             error_message=error_message,
             suggestion=suggestion,
             validation_errors=errors,
-            validation_warnings=[suggestion] if import_status in {"updated", "skipped"} and suggestion else [],
+            validation_warnings=[suggestion]
+            if import_status in {"updated", "skipped"} and suggestion
+            else [],
         )
         return OperationPlanImportRowResult(
             row_number=parsed.row_number,
@@ -505,7 +524,9 @@ class OperationPlanService:
                     event_type=row["event_type"],
                     event_label=event_labels.get(row["event_type"], row["event_type"]),
                     sales_target_amount=_decimal_or_none(after_data.get("target_sales_amount")),
-                    gross_profit_target_amount=_decimal_or_none(after_data.get("target_gross_profit_amount")),
+                    gross_profit_target_amount=_decimal_or_none(
+                        after_data.get("target_gross_profit_amount")
+                    ),
                     reason=row.get("reason"),
                     actor_name=str(row.get("actor_ref") or "系统"),
                     created_at=row["created_at"],
@@ -595,9 +616,7 @@ class OperationPlanService:
             gross_profit_target_amount=gross_target,
             gross_profit_actual_amount=gross_actual,
             gross_profit_completion_rate=_rate(gross_actual, gross_target),
-            gross_profit_forecast_amount=Decimal(
-                row.get("gross_profit_forecast_amount") or 0
-            ),
+            gross_profit_forecast_amount=Decimal(row.get("gross_profit_forecast_amount") or 0),
             wfs_available_qty=wfs_qty,
             inbound_qty=inbound_qty,
             arriving_qty=arriving_qty,
@@ -608,10 +627,7 @@ class OperationPlanService:
                 "risk"
                 if (
                     row["stock_status"] == "risk"
-                    or (
-                        remaining_target_amount > 0
-                        and inventory_support_rate < Decimal("100")
-                    )
+                    or (remaining_target_amount > 0 and inventory_support_rate < Decimal("100"))
                 )
                 else row["stock_status"]
             ),
@@ -624,7 +640,15 @@ class OperationPlanService:
 def template_xlsx() -> bytes:
     return write_xlsx(
         headers=TEMPLATE_HEADERS,
-        rows=[{"商品ID": "20277220088", "MSKU": "YC00002-1A", "销售额（$）": "22000", "毛利润（$）": "4200", "备注": "本月重点商品"}],
+        rows=[
+            {
+                "商品ID": "20277220088",
+                "MSKU": "YC00002-1A",
+                "销售额（$）": "22000",
+                "毛利润（$）": "4200",
+                "备注": "本月重点商品",
+            }
+        ],
         sheet_name="计划模板",
     )
 
@@ -725,7 +749,9 @@ def _first_sheet_path(archive: zipfile.ZipFile) -> str:
     sheet = workbook.find(".//main:sheets/main:sheet", ns)
     if sheet is None:
         return "xl/worksheets/sheet1.xml"
-    rel_id = sheet.attrib.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+    rel_id = sheet.attrib.get(
+        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+    )
     if not rel_id:
         return "xl/worksheets/sheet1.xml"
     for rel in rels:
@@ -787,7 +813,7 @@ def _worksheet_xml(*, headers: list[str], rows: list[dict[str, Any]]) -> str:
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-        f'<sheetData>{"".join(xml_rows)}</sheetData></worksheet>'
+        f"<sheetData>{''.join(xml_rows)}</sheetData></worksheet>"
     )
 
 
@@ -801,10 +827,7 @@ def _column_letter(index: int) -> str:
 
 def _xml_escape(value: str) -> str:
     return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 

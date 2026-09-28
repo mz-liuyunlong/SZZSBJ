@@ -94,7 +94,9 @@ def summary(
         period_key=period_key,
         account_refs=account_refs,
     )
-    return success_response(request, data=data, meta=_meta(period_type=period_type, period_key=period_key))
+    return success_response(
+        request, data=data, meta=_meta(period_type=period_type, period_key=period_key)
+    )
 
 
 @router.get(
@@ -145,7 +147,9 @@ def options(
         period_key=period_key,
         account_refs=account_refs,
     )
-    return success_response(request, data=data, meta=_meta(period_type=period_type, period_key=period_key))
+    return success_response(
+        request, data=data, meta=_meta(period_type=period_type, period_key=period_key)
+    )
 
 
 @router.get(
@@ -198,7 +202,9 @@ async def import_plans(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return success_response(request, data=data, meta=_meta(period_type=period_type, period_key=period_key))
+    return success_response(
+        request, data=data, meta=_meta(period_type=period_type, period_key=period_key)
+    )
 
 
 @router.get(

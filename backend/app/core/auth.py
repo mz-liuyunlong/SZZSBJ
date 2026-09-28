@@ -95,9 +95,13 @@ def get_optional_principal(request: Request) -> Principal | None:
         any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
         or path in _PREVIEW_READ_PATHS
     )
-    write_allowed = request.method in _PREVIEW_WRITE_METHODS and isinstance(path, str) and (
-        path in _PREVIEW_WRITE_PATHS
-        or any(path.startswith(prefix) for prefix in _PREVIEW_WRITE_PATH_PREFIXES)
+    write_allowed = (
+        request.method in _PREVIEW_WRITE_METHODS
+        and isinstance(path, str)
+        and (
+            path in _PREVIEW_WRITE_PATHS
+            or any(path.startswith(prefix) for prefix in _PREVIEW_WRITE_PATH_PREFIXES)
+        )
     )
     operation_plan_mutation_allowed = (
         request.method in {"POST", "PATCH"}
