@@ -37,7 +37,7 @@ from app.modules.operation_plans.schemas import (
 )
 
 PLATFORM_CODE = "walmart"
-TEMPLATE_HEADERS = ["商品ID", "MSKU", "销售额（$）", "毛利润（$）", "备注"]
+TEMPLATE_HEADERS = ["商品ID", "销售额（$）", "毛利润（$）", "备注"]
 FAILED_HEADERS = [*TEMPLATE_HEADERS, "错误原因", "建议处理"]
 
 
@@ -144,36 +144,105 @@ class OperationPlanService:
             period_type=period_type,
             period_key=period_key,
         )
+
         owner_options: list[SelectOption] = []
         store_options: list[SelectOption] = []
+        operation_count_by: dict[str, int] = {}
+        plan_count_by: dict[str, int] = {}
+        stock_count_by: dict[str, int] = {}
+
         if period_id is not None:
             raw = self.repository.list_options(period_id=period_id, account_refs=account_refs)
+
             owner_options = [
-                SelectOption(label=str(row["label"]), value=str(row["value"]))
+                SelectOption(
+                    label=str(row["label"]),
+                    value=str(row["value"]),
+                    count=int(row.get("count") or 0),
+                )
                 for row in raw["owners"]
             ]
+
             store_options = [
-                SelectOption(label=str(row["label"]), value=str(row["value"]))
-                for row in raw["stores"]
+                SelectOption(
+                    label=str(row["label"]),
+                    value=str(row["value"]),
+                    count=int(row.get("count") or 0),
+                )
+                for row in raw.get("stores", [])
             ]
+
+            operation_count_by = {
+                str(row["value"]): int(row.get("count") or 0)
+                for row in raw.get("operation_status_counts", [])
+            }
+            plan_count_by = {
+                str(row["value"]): int(row.get("count") or 0)
+                for row in raw.get("plan_status_counts", [])
+            }
+            stock_count_by = {
+                str(row["value"]): int(row.get("count") or 0)
+                for row in raw.get("stock_status_counts", [])
+            }
+
         return OperationPlanOptionsData(
             owners=owner_options,
             stores=store_options,
             operation_statuses=[
-                SelectOption(label="正常运营", value="normal"),
-                SelectOption(label="新品培育", value="new_product"),
-                SelectOption(label="清货中", value="clearance"),
+                SelectOption(
+                    label="正常运营",
+                    value="normal",
+                    count=operation_count_by.get("normal", 0),
+                ),
+                SelectOption(
+                    label="新品培育",
+                    value="new_product",
+                    count=operation_count_by.get("new_product", 0),
+                ),
+                SelectOption(
+                    label="清货中",
+                    value="clearance",
+                    count=operation_count_by.get("clearance", 0),
+                ),
             ],
             plan_statuses=[
-                SelectOption(label="正常", value="normal"),
-                SelectOption(label="落后", value="lagging"),
-                SelectOption(label="严重落后", value="severe_lagging"),
-                SelectOption(label="未制定", value="unplanned"),
-                SelectOption(label="清货", value="clearance"),
+                SelectOption(
+                    label="正常",
+                    value="normal",
+                    count=plan_count_by.get("normal", 0),
+                ),
+                SelectOption(
+                    label="落后",
+                    value="lagging",
+                    count=plan_count_by.get("lagging", 0),
+                ),
+                SelectOption(
+                    label="严重落后",
+                    value="severe_lagging",
+                    count=plan_count_by.get("severe_lagging", 0),
+                ),
+                SelectOption(
+                    label="未制定",
+                    value="unplanned",
+                    count=plan_count_by.get("unplanned", 0),
+                ),
+                SelectOption(
+                    label="清货",
+                    value="clearance",
+                    count=plan_count_by.get("clearance", 0),
+                ),
             ],
             stock_statuses=[
-                SelectOption(label="库存正常", value="normal"),
-                SelectOption(label="库存风险", value="risk"),
+                SelectOption(
+                    label="库存正常",
+                    value="normal",
+                    count=stock_count_by.get("normal", 0),
+                ),
+                SelectOption(
+                    label="库存风险",
+                    value="risk",
+                    count=stock_count_by.get("risk", 0),
+                ),
             ],
         )
 
@@ -291,14 +360,22 @@ class OperationPlanService:
         errors: list[str] = []
         item_id = parsed.item_id.strip()
         msku = parsed.msku.strip()
+
         if not item_id:
             errors.append("商品ID不能为空")
-        if not msku:
-            errors.append("MSKU不能为空")
-        sales_amount, sales_error = _parse_amount(parsed.sales_raw, "销售额（$）", allow_zero=False)
-        profit_amount, profit_error = _parse_amount(
-            parsed.profit_raw, "毛利润（$）", allow_zero=True
+
+        sales_amount, sales_error = _parse_amount(
+            parsed.sales_raw,
+            "销售额（$）",
+            allow_zero=False,
         )
+        profit_amount, profit_error = _parse_amount(
+            parsed.profit_raw,
+            "毛利润（$）",
+            allow_zero=True,
+            allow_negative=True,
+        )
+
         if sales_error:
             errors.append(sales_error)
         if profit_error:
@@ -315,36 +392,30 @@ class OperationPlanService:
         suggestion: str | None = None
 
         if not errors:
-            matches = self.repository.resolve_listing_by_item_msku(
+            listing = self.repository.resolve_listing_by_item_id(
                 item_id=item_id,
-                msku=msku,
                 account_refs=account_refs,
             )
-            if len(matches) == 0:
-                errors.append(f"商品ID + MSKU 没有在 Listing 管理中找到：{item_id} / {msku}")
+
+            if listing is None:
+                errors.append(f"商品ID没有在 Listing 管理中找到：{item_id}")
                 error_code = "LISTING_NOT_FOUND"
-            elif len(matches) > 1:
-                errors.append(f"商品ID + MSKU 匹配到多条 Listing：{item_id} / {msku}")
-                error_code = "LISTING_NOT_UNIQUE"
             else:
-                listing = dict(matches[0])
-                listing["source_account_ref"] = str(
-                    listing.get("source_account_ref") or next(iter(account_refs))
-                )
                 listing["platform_code"] = str(listing.get("platform_code") or PLATFORM_CODE)
-                source_account_ref = str(listing["source_account_ref"])
+                listing["source_account_ref"] = "__item_level__"
+                listing["msku"] = "__ITEM_LEVEL__"
+
                 platform_code = str(listing["platform_code"])
                 existing_plan = self.repository.get_existing_plan(
                     period_id=period_id,
                     platform_code=platform_code,
-                    source_account_ref=source_account_ref,
                     item_id=item_id,
-                    msku=msku,
                 )
+
                 if existing_plan is not None and conflict_policy == "skip_existing":
                     plan_id = UUID(str(existing_plan["id"]))
                     import_status = "skipped"
-                    suggestion = "该商品本周期已有计划，已按跳过已有计划处理；如需更新请重新选择覆盖已有计划导入。"
+                    suggestion = "该商品ID本周期已有计划，已按跳过已有计划处理；如需更新请重新选择覆盖已有计划导入。"
                 elif existing_plan is not None:
                     plan_id = UUID(str(existing_plan["id"]))
                     self.repository.update_plan_targets(
@@ -360,6 +431,7 @@ class OperationPlanService:
                         event_type="import_update",
                         before_data=dict(existing_plan),
                         after_data={
+                            "item_id": item_id,
                             "target_sales_amount": str(sales_amount),
                             "target_gross_profit_amount": str(profit_amount),
                             "remark": parsed.remark or None,
@@ -369,7 +441,7 @@ class OperationPlanService:
                         request_id=request_id,
                     )
                     import_status = "updated"
-                    suggestion = "已有计划已按导入文件覆盖目标金额。"
+                    suggestion = "已有商品ID计划已按导入文件覆盖目标金额。"
                 else:
                     plan_id = uuid4()
                     self.repository.insert_plan(
@@ -389,16 +461,17 @@ class OperationPlanService:
                         before_data=None,
                         after_data={
                             "item_id": item_id,
-                            "msku": msku,
                             "target_sales_amount": str(sales_amount),
                             "target_gross_profit_amount": str(profit_amount),
+                            "store_count": str(listing.get("store_count") or 0),
+                            "msku_count": str(listing.get("msku_count") or 0),
                         },
-                        reason=parsed.remark or "导入创建计划",
+                        reason=parsed.remark or "导入创建商品ID计划",
                         actor_ref=actor_ref,
                         request_id=request_id,
                     )
                     import_status = "success"
-                    suggestion = "已成功导入。"
+                    suggestion = "已成功导入；同商品ID下多店铺/MSKU已按商品ID合并。"
 
         if errors:
             error_message = "；".join(errors)
@@ -540,7 +613,6 @@ class OperationPlanService:
             rows.append(
                 {
                     "商品ID": row.get("item_id_raw") or "",
-                    "MSKU": row.get("msku_raw") or "",
                     "销售额（$）": row.get("target_sales_raw") or "",
                     "毛利润（$）": row.get("target_gross_profit_raw") or "",
                     "备注": row.get("remark_raw") or "",
@@ -585,6 +657,7 @@ class OperationPlanService:
 
         available_qty = wfs_qty + inbound_qty + arriving_qty
         remaining_target_amount = max(Decimal("0"), sales_target - sales_actual)
+        computed_plan_status = str(row.get("computed_plan_status") or row["plan_status"])
 
         if remaining_target_amount <= 0:
             inventory_support_rate = Decimal("100.0")
@@ -622,7 +695,7 @@ class OperationPlanService:
             arriving_qty=arriving_qty,
             inventory_support_rate=inventory_support_rate,
             operation_status=row["operation_status"],
-            plan_status=row["plan_status"],
+            plan_status=computed_plan_status,
             stock_status=(
                 "risk"
                 if (
@@ -643,15 +716,13 @@ def template_xlsx() -> bytes:
         rows=[
             {
                 "商品ID": "20277220088",
-                "MSKU": "YC00002-1A",
                 "销售额（$）": "22000",
-                "毛利润（$）": "4200",
-                "备注": "本月重点商品",
+                "毛利润（$）": "-500",
+                "备注": "清货计划",
             }
         ],
         sheet_name="计划模板",
     )
-
 
 def parse_import_file(*, file_name: str, file_bytes: bytes) -> list[ParsedImportRow]:
     suffix = file_name.lower().rsplit(".", 1)[-1] if "." in file_name else ""
@@ -719,8 +790,7 @@ def _pick(row: dict[str, Any], *keys: str) -> str:
 
 
 def _has_content(row: ParsedImportRow) -> bool:
-    return any([row.item_id, row.msku, row.sales_raw, row.profit_raw, row.remark])
-
+    return any([row.item_id, row.sales_raw, row.profit_raw, row.remark])
 
 def _read_shared_strings(archive: zipfile.ZipFile) -> list[str]:
     try:
@@ -870,31 +940,40 @@ def _styles_xml() -> str:
 <styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><fonts count=\"1\"><font><sz val=\"11\"/><name val=\"Arial\"/></font></fonts><fills count=\"1\"><fill><patternFill patternType=\"none\"/></fill></fills><borders count=\"1\"><border/></borders><cellXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/></cellXfs></styleSheet>"""
 
 
-def _parse_amount(raw: str, label: str, *, allow_zero: bool) -> tuple[Decimal | None, str | None]:
+def _parse_amount(
+    raw: str,
+    label: str,
+    *,
+    allow_zero: bool,
+    allow_negative: bool = False,
+) -> tuple[Decimal | None, str | None]:
     text_value = str(raw or "").strip()
     if not text_value:
         return None, f"{label}不能为空"
+
     normalized = re.sub(r"[$,，\s]", "", text_value)
     try:
         value = Decimal(normalized)
     except InvalidOperation:
         return None, f"{label}必须是数字"
-    if allow_zero:
-        if value < 0:
-            return value, f"{label}不能小于 0"
-    elif value <= 0:
-        return value, f"{label}必须大于 0"
-    return value.quantize(Decimal("0.01")), None
 
+    if not allow_negative:
+        if allow_zero:
+            if value < 0:
+                return value, f"{label}不能小于 0"
+        elif value <= 0:
+            return value, f"{label}必须大于 0"
+
+    return value.quantize(Decimal("0.01")), None
 
 def _suggestion_for_errors(errors: list[str]) -> str:
     text_value = "；".join(errors)
     if "Listing" in text_value or "商品ID" in text_value or "MSKU" in text_value:
-        return "请从 Listing 管理复制商品ID和MSKU，两个字段必须同时一致。"
+        return "请从 Listing 管理复制商品ID；商品ID代表一条链接，多店铺/MSKU会自动合并。"
     if "销售额" in text_value:
         return "销售额（$）填写大于 0 的美元数字，例如 22000。"
     if "毛利润" in text_value:
-        return "毛利润（$）填写美元数字，例如 4200，且不能大于销售额。"
+        return "毛利润（$）填写美元数字，可以为负数，例如 -500 或 4200，且不能大于销售额。"
     return "请按模板修正后重新上传。"
 
 

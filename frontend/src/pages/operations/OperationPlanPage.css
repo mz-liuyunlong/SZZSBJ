@@ -1767,3 +1767,239 @@
   text-decoration: underline dotted rgba(100, 116, 139, 0.55);
   text-underline-offset: 3px;
 }
+
+/* fix operation plan percent wrapping */
+.plan-progress {
+  grid-template-columns: minmax(120px, 1fr) 64px;
+}
+
+.plan-progress .rate {
+  min-width: 64px;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.plan-foot {
+  white-space: nowrap;
+}
+
+.plan-foot span,
+.plan-foot .forecast {
+  white-space: nowrap;
+}
+
+.inventory-support,
+.inventory-support b,
+.inventory-cell,
+.inventory-cell span,
+.inventory-cell b {
+  white-space: nowrap;
+}
+
+.owner-plan-main,
+.owner-plan-footer,
+.owner-plan-footer b {
+  white-space: nowrap;
+}
+
+.operation-plan-page .ant-table-cell {
+  word-break: keep-all;
+}
+
+.operation-plan-page .ant-tag {
+  white-space: nowrap;
+}
+
+
+/* compact product meta: MSKU + owner */
+.ops-product-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  color: #8b98aa;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ops-product-meta-dot {
+  color: #b6c0cf;
+  font-weight: 600;
+}
+
+.ops-product-owner {
+  color: #8b98aa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* force compact product meta */
+.ops-product-cell .ops-product-meta {
+  display: inline-flex !important;
+  width: auto !important;
+  max-width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px !important;
+  color: #8b98aa;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.ops-product-cell .ops-product-msku,
+.ops-product-cell .ops-product-owner,
+.ops-product-cell .ops-product-meta-dot {
+  display: inline-flex;
+  width: auto !important;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.ops-product-cell .ops-product-meta-dot {
+  color: #b6c0cf;
+}
+
+
+/* over target highlight */
+.plan-cell--over .track {
+  background: #e7f8ef;
+}
+
+.plan-cell--over .fill {
+  background: linear-gradient(90deg, #22c55e 0%, #34d399 100%) !important;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.08), 0 4px 10px rgba(34, 197, 94, 0.18);
+}
+
+.plan-cell--over .rate {
+  color: #15803d;
+  font-weight: 800;
+}
+
+.plan-cell--strong-over .track {
+  background: #ecfdf5;
+}
+
+.plan-cell--strong-over .fill {
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 48%, #86efac 100%) !important;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.12), 0 4px 12px rgba(34, 197, 94, 0.24);
+}
+
+.plan-cell--strong-over .rate {
+  color: #047857;
+  font-weight: 900;
+}
+
+.plan-cell--strong-over .plan-values b {
+  color: #111827;
+}
+
+
+/* OWNER_DASHBOARD_PLAN_COMPLETION_COLOR_V2 */
+/* 计划看板：负责人业绩完成/超额完成态 */
+.owner-dashboard-plan--over .owner-plan-track {
+  background: #e7f8ef !important;
+}
+
+.owner-dashboard-plan--over .owner-plan-fill {
+  background: linear-gradient(90deg, #22c55e 0%, #34d399 100%) !important;
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.08),
+    0 4px 10px rgba(34, 197, 94, 0.16);
+}
+
+.owner-dashboard-plan--over .owner-plan-rate {
+  color: #15803d !important;
+  font-weight: 900 !important;
+}
+
+.owner-dashboard-plan--strong-over .owner-plan-track {
+  background: #ecfdf5 !important;
+}
+
+.owner-dashboard-plan--strong-over .owner-plan-fill {
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 45%, #86efac 100%) !important;
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.12),
+    0 4px 12px rgba(34, 197, 94, 0.24);
+}
+
+.owner-dashboard-plan--strong-over .owner-plan-rate {
+  color: #047857 !important;
+  font-weight: 950 !important;
+}
+
+.owner-dashboard-plan--over .owner-plan-actual,
+.owner-dashboard-plan--strong-over .owner-plan-actual {
+  color: #111827;
+}
+
+
+/* OWNER_DASHBOARD_PLAN_ACTUAL_COMPLETION_V3 */
+/* 计划看板负责人业绩：actual >= target 时显示完成/超额完成态 */
+.owner-dashboard-plan--over .owner-plan-track,
+.owner-dashboard-plan--strong-over .owner-plan-track {
+  background: #e7f8ef !important;
+}
+
+.owner-dashboard-plan--over .owner-plan-fill {
+  background: linear-gradient(90deg, #22c55e 0%, #34d399 100%) !important;
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.08),
+    0 4px 10px rgba(34, 197, 94, 0.16) !important;
+}
+
+.owner-dashboard-plan--strong-over .owner-plan-fill {
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 45%, #86efac 100%) !important;
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.12),
+    0 4px 12px rgba(34, 197, 94, 0.24) !important;
+}
+
+.owner-dashboard-plan--over .owner-plan-rate {
+  color: #15803d !important;
+  font-weight: 900 !important;
+}
+
+.owner-dashboard-plan--strong-over .owner-plan-rate {
+  color: #047857 !important;
+  font-weight: 950 !important;
+}
+
+.owner-dashboard-plan--over .owner-plan-actual,
+.owner-dashboard-plan--strong-over .owner-plan-actual {
+  color: #111827 !important;
+}
+
+.owner-dashboard-plan--over .owner-plan-target,
+.owner-dashboard-plan--strong-over .owner-plan-target {
+  color: #64748b !important;
+}
+
+
+.ops-plan-sort-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ops-plan-sort-title:hover,
+.ops-plan-sort-title.active {
+  color: #1677ff;
+}
+
+.ops-plan-sort-title__arrow {
+  font-size: 12px;
+  color: #8c99ad;
+}
