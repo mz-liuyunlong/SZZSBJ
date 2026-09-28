@@ -221,6 +221,8 @@ def test_correct_preview_token_creates_only_the_approved_principal(
                 "business-rules:execute",
                 "warehouse:wfs-fee-alert:read",
                 "pmc:purchase:read",
+                "operations:plan:read",
+                "operations:plan:write",
             }
         ),
     )
