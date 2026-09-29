@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from sqlalchemy import (
@@ -27,6 +27,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.data_pages.models import (
     DailySalesItemDayMart,
+    ListingArchiveState,
+    ListingGptAnalysisLink,
     ListingManagementCurrentMart,
     OrderProfitSkuDayMart,
     ProductCustomTag,
@@ -737,6 +739,7 @@ class ListingManagementRepository:
         product_type: str | None = "",
         status: str | None = "",
         tag: str | None = "",
+        archive_status: str | None = "",
         summary_filter: str = "total",
         search_field: str,
         keyword: str,
@@ -751,6 +754,7 @@ class ListingManagementRepository:
             product_type=product_type,
             status=status,
             tag=tag,
+            archive_status=archive_status,
             summary_filter=summary_filter,
             search_field=search_field,
             keyword=keyword,
@@ -802,6 +806,7 @@ class ListingManagementRepository:
         product_type: str | None = "",
         status: str | None = "",
         tag: str | None = "",
+        archive_status: str | None = "",
         summary_filter: str = "total",
         search_field: str,
         keyword: str,
@@ -815,6 +820,7 @@ class ListingManagementRepository:
             product_type=product_type,
             status=status,
             tag=tag,
+            archive_status=archive_status,
             summary_filter=summary_filter,
             search_field=search_field,
             keyword=keyword,
@@ -856,6 +862,7 @@ class ListingManagementRepository:
         product_type: str | None,
         status: str | None,
         tag: str | None,
+        archive_status: str | None = "",
         search_field: str,
         keyword: str,
         batch_values: str,
@@ -867,6 +874,7 @@ class ListingManagementRepository:
             product_type=product_type,
             status=status,
             tag=tag,
+            archive_status=archive_status,
             summary_filter="total",
             search_field=search_field,
             keyword=keyword,
@@ -1029,6 +1037,7 @@ class ListingManagementRepository:
         product_type: str | None,
         status: str | None,
         tag: str | None,
+        archive_status: str | None = "",
         summary_filter: str,
         search_field: str,
         keyword: str,
@@ -1053,6 +1062,27 @@ class ListingManagementRepository:
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
+
+        archive_status_values = _csv_values(archive_status)
+        if archive_status_values:
+            statement = statement.outerjoin(
+                ListingArchiveState,
+                ListingArchiveState.listing_id == ListingManagementCurrentMart.id,
+            )
+
+            archive_status_conditions = []
+            if "archived" in archive_status_values:
+                archive_status_conditions.append(ListingArchiveState.is_archived.is_(True))
+            if "active" in archive_status_values:
+                archive_status_conditions.append(
+                    or_(
+                        ListingArchiveState.listing_id.is_(None),
+                        ListingArchiveState.is_archived.is_(False),
+                    )
+                )
+
+            if archive_status_conditions:
+                statement = statement.where(or_(*archive_status_conditions))
 
         store_values = _csv_values(store_id)
         if store_values:
@@ -1205,6 +1235,187 @@ class ListingManagementRepository:
             )
 
         return statement
+
+    def get_listing_by_id(
+        self,
+        *,
+        listing_id: str,
+        account_refs: frozenset[str],
+    ) -> ListingManagementCurrentMart | None:
+        try:
+            listing_uuid = UUID(str(listing_id))
+        except ValueError:
+            return None
+        return self.session.scalar(
+            select(ListingManagementCurrentMart).where(
+                ListingManagementCurrentMart.id == listing_uuid,
+                ListingManagementCurrentMart.source_account_ref.in_(account_refs),
+            )
+        )
+
+    def get_gpt_analysis_link(
+        self,
+        *,
+        listing_id: UUID,
+    ) -> ListingGptAnalysisLink | None:
+        return self.session.scalar(
+            select(ListingGptAnalysisLink).where(ListingGptAnalysisLink.listing_id == listing_id)
+        )
+
+    def upsert_gpt_analysis_link(
+        self,
+        *,
+        listing: ListingManagementCurrentMart,
+        keyword_analysis_url: str,
+        ad_analysis_url: str,
+        actor_ref: str,
+    ) -> ListingGptAnalysisLink:
+        link = self.get_gpt_analysis_link(listing_id=listing.id)
+        if link is None:
+            link = ListingGptAnalysisLink(
+                listing_id=listing.id,
+                source_account_ref=listing.source_account_ref,
+                store_id=listing.store_id,
+                item_id=listing.item_id,
+                msku=listing.msku,
+                updated_by=actor_ref,
+            )
+            self.session.add(link)
+
+        link.source_account_ref = listing.source_account_ref
+        link.store_id = listing.store_id
+        link.item_id = listing.item_id
+        link.msku = listing.msku
+        link.keyword_analysis_url = keyword_analysis_url.strip()
+        link.ad_analysis_url = ad_analysis_url.strip()
+        link.updated_by = actor_ref
+        self.session.commit()
+        self.session.refresh(link)
+        return link
+
+    def archive_status_filter_options(
+        self,
+        account_refs: frozenset[str],
+    ) -> list[dict[str, object]]:
+        table_name = ListingManagementCurrentMart.__tablename__
+        refs = sorted(account_refs)
+        params: dict[str, object] = {}
+        account_filter_sql = ""
+
+        if refs:
+            placeholders: list[str] = []
+            for index, account_ref in enumerate(refs):
+                key = f"account_ref_{index}"
+                placeholders.append(f":{key}")
+                params[key] = account_ref
+            account_filter_sql = f"where m.source_account_ref in ({', '.join(placeholders)})"
+
+        row = (
+            self.session.execute(
+                text(
+                    f"""
+                select
+                    coalesce(
+                        sum(
+                            case
+                                when coalesce(s.is_archived, false) = false
+                                then 1
+                                else 0
+                            end
+                        ),
+                        0
+                    ) as active_count,
+                    coalesce(
+                        sum(
+                            case
+                                when coalesce(s.is_archived, false) = true
+                                then 1
+                                else 0
+                            end
+                        ),
+                        0
+                    ) as archived_count
+                from {table_name} m
+                left join listing_archive_states s on s.listing_id = m.id
+                {account_filter_sql}
+                """
+                ),
+                params,
+            )
+            .mappings()
+            .one()
+        )
+
+        return [
+            {
+                "value": "active",
+                "label": "未归档",
+                "count": int(row["active_count"] or 0),
+            },
+            {
+                "value": "archived",
+                "label": "已归档",
+                "count": int(row["archived_count"] or 0),
+            },
+        ]
+
+    def archive_states_for_listing_rows(
+        self, rows: Sequence[ListingManagementCurrentMart]
+    ) -> dict[str, ListingArchiveState]:
+        listing_ids = [row.id for row in rows]
+        if not listing_ids:
+            return {}
+
+        table_exists = self.session.execute(
+            text("select to_regclass(:table_name)"),
+            {"table_name": "public.listing_archive_states"},
+        ).scalar_one_or_none()
+        if table_exists is None:
+            return {}
+
+        states = self.session.scalars(
+            select(ListingArchiveState).where(ListingArchiveState.listing_id.in_(listing_ids))
+        ).all()
+        return {str(state.listing_id): state for state in states}
+
+    def set_listing_archive_state(
+        self,
+        *,
+        listing: ListingManagementCurrentMart,
+        archived: bool,
+        actor_ref: str,
+        archive_reason: str | None = None,
+    ) -> ListingArchiveState:
+        state = self.session.scalar(
+            select(ListingArchiveState).where(ListingArchiveState.listing_id == listing.id)
+        )
+        if state is None:
+            state = ListingArchiveState(
+                listing_id=listing.id,
+                source_account_ref=listing.source_account_ref,
+                store_id=listing.store_id,
+                item_id=listing.item_id,
+                msku=listing.msku,
+            )
+            self.session.add(state)
+
+        now = datetime.now(UTC)
+        state.source_account_ref = listing.source_account_ref
+        state.store_id = listing.store_id
+        state.item_id = listing.item_id
+        state.msku = listing.msku
+        state.is_archived = archived
+        state.updated_at = now
+        if archived:
+            state.archive_reason = archive_reason
+            state.archived_at = now
+            state.archived_by = actor_ref
+        else:
+            state.restored_at = now
+            state.restored_by = actor_ref
+        self.session.commit()
+        self.session.refresh(state)
+        return state
 
 
 class ListingTagRepository:

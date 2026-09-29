@@ -26,6 +26,9 @@ from app.modules.data_pages.schemas import (
     DailySalesTrendPointRead,
     DataPageFilterOptionRead,
     DataPageFilterOptionsData,
+    ListingArchiveActionData,
+    ListingGptAnalysisLinkRead,
+    ListingGptAnalysisLinkUpdateRequest,
     ListingManagementFilterOptionsData,
     ListingManagementItemRead,
     ListingManagementListData,
@@ -483,6 +486,10 @@ class ListingManagementService:
         self.repository = ListingManagementRepository(session)
         self.tag_repository = ListingTagRepository(session)
 
+    @staticmethod
+    def _listing_archive_status_values(raw: str | None) -> set[str]:
+        return {value.strip() for value in (raw or "").split(",") if value.strip()}
+
     def list_listings(
         self,
         query: ListingManagementQuery,
@@ -495,6 +502,7 @@ class ListingManagementService:
             product_type=query.product_type,
             status=query.status,
             tag=query.tag,
+            archive_status=query.archive_status,
             summary_filter=query.summary_filter,
             search_field=query.search_field,
             keyword=query.keyword,
@@ -503,12 +511,23 @@ class ListingManagementService:
             page_size=query.page_size,
         )
         custom_tags = self.tag_repository.tags_for_listing_rows(rows)
+        archive_states = self.repository.archive_states_for_listing_rows(rows)
+        archive_states = self._normalize_listing_archive_state_keys(archive_states)
         return (
             ListingManagementListData(
                 items=[
                     self._to_read(
                         row,
                         custom_tags.get((str(row.source_account_ref), str(row.item_id))),
+                        bool(
+                            archive_states.get(str(row.id))
+                            and archive_states[str(row.id)].is_archived
+                        ),
+                        archive_reason=getattr(
+                            archive_states.get(str(row.id)),
+                            "archive_reason",
+                            None,
+                        ),
                     )
                     for row in rows
                 ],
@@ -536,6 +555,7 @@ class ListingManagementService:
             product_type=query.product_type,
             status=query.status,
             tag=query.tag,
+            archive_status=query.archive_status,
             search_field=query.search_field,
             keyword=query.keyword,
             batch_values=query.batch_values,
@@ -583,6 +603,7 @@ class ListingManagementService:
                     key=lambda item: item[1],
                 )
             ],
+            archive_statuses=self.repository.archive_status_filter_options(account_refs),
         )
 
     def export_listing_csv(
@@ -597,6 +618,7 @@ class ListingManagementService:
             product_type=query.product_type,
             status=query.status,
             tag=query.tag,
+            archive_status=query.archive_status,
             summary_filter=query.summary_filter,
             search_field=query.search_field,
             keyword=query.keyword,
@@ -706,6 +728,140 @@ class ListingManagementService:
             return "、".join(str(item) for item in value if item is not None)
         return str(value)
 
+    @staticmethod
+    def _normalize_listing_archive_state_keys(archive_states):
+        if not hasattr(archive_states, "items"):
+            return archive_states
+
+        from uuid import UUID
+
+        normalized = {}
+        for key, value in archive_states.items():
+            normalized[key] = value
+            normalized[str(key)] = value
+            try:
+                normalized[UUID(str(key))] = value
+            except (TypeError, ValueError):
+                pass
+
+        return normalized
+
+    def archive_listing(
+        self,
+        *,
+        listing_id: str,
+        account_refs: frozenset[str],
+        actor_ref: str,
+        reason: str,
+    ) -> ListingArchiveActionData:
+        listing = self.repository.get_listing_by_id(
+            listing_id=listing_id,
+            account_refs=account_refs,
+        )
+        if listing is None:
+            raise ValueError("Listing 不存在或无权访问")
+
+        archive_reason = reason.strip()
+        if len(archive_reason) < 2:
+            raise ValueError("归档原因至少需要 2 个字")
+        state = self.repository.set_listing_archive_state(
+            listing=listing,
+            archived=True,
+            actor_ref=actor_ref,
+            archive_reason=archive_reason,
+        )
+        self.repository.session.commit()
+        return self._to_archive_action_data(str(listing.id), state)
+
+    def restore_listing(
+        self,
+        *,
+        listing_id: str,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> ListingArchiveActionData:
+        listing = self.repository.get_listing_by_id(
+            listing_id=listing_id,
+            account_refs=account_refs,
+        )
+        if listing is None:
+            raise ValueError("Listing 不存在或无权访问")
+        state = self.repository.set_listing_archive_state(
+            listing=listing,
+            archived=False,
+            actor_ref=actor_ref,
+        )
+        self.repository.session.commit()
+        return self._to_archive_action_data(str(listing.id), state)
+
+    @staticmethod
+    def _to_archive_action_data(
+        listing_id: str,
+        state: object,
+    ) -> ListingArchiveActionData:
+        return ListingArchiveActionData(
+            listing_id=listing_id,
+            is_archived=bool(state.is_archived),
+            archive_reason=getattr(state, "archive_reason", None),
+            archived_at=getattr(state, "archived_at", None),
+            archived_by=getattr(state, "archived_by", None),
+            restored_at=getattr(state, "restored_at", None),
+            restored_by=getattr(state, "restored_by", None),
+        )
+
+    def get_gpt_analysis_link(
+        self,
+        *,
+        listing_id: str,
+        account_refs: frozenset[str],
+    ) -> ListingGptAnalysisLinkRead:
+        listing = self.repository.get_listing_by_id(
+            listing_id=listing_id,
+            account_refs=account_refs,
+        )
+        if listing is None:
+            raise ValueError("Listing 不存在或无权访问")
+        link = self.repository.get_gpt_analysis_link(listing_id=listing.id)
+        return self._to_gpt_analysis_link_read(str(listing.id), link)
+
+    def update_gpt_analysis_link(
+        self,
+        *,
+        listing_id: str,
+        payload: ListingGptAnalysisLinkUpdateRequest,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> ListingGptAnalysisLinkRead:
+        listing = self.repository.get_listing_by_id(
+            listing_id=listing_id,
+            account_refs=account_refs,
+        )
+        if listing is None:
+            raise ValueError("Listing 不存在或无权访问")
+        link = self.repository.upsert_gpt_analysis_link(
+            listing=listing,
+            keyword_analysis_url=payload.keyword_analysis_url,
+            ad_analysis_url=payload.ad_analysis_url,
+            actor_ref=actor_ref,
+        )
+        self.repository.session.commit()
+        return self._to_gpt_analysis_link_read(str(listing.id), link)
+
+    @staticmethod
+    def _to_gpt_analysis_link_read(
+        listing_id: str,
+        link: object | None,
+    ) -> ListingGptAnalysisLinkRead:
+        if link is None:
+            return ListingGptAnalysisLinkRead(listing_id=listing_id)
+        return ListingGptAnalysisLinkRead(
+            listing_id=listing_id,
+            keyword_analysis_url=str(link.keyword_analysis_url or ""),
+            ad_analysis_url=str(link.ad_analysis_url or ""),
+            updated_by=getattr(link, "updated_by", None),
+            updated_at=getattr(link, "updated_at", None),
+        )
+
     def list_tags(self, account_refs: frozenset[str]) -> ListingTagListData:
         return ListingTagListData(
             items=[
@@ -768,6 +924,8 @@ class ListingManagementService:
         self,
         row: ListingManagementCurrentMart,
         custom_tags: list[str] | None = None,
+        is_archived: bool = False,
+        archive_reason: str | None = None,
     ) -> ListingManagementItemRead:
         return ListingManagementItemRead(
             id=str(row.id),
@@ -819,4 +977,6 @@ class ListingManagementService:
             gtin=row.gtin,
             upc=row.upc,
             calculated_at=row.calculated_at,
+            is_archived=is_archived,
+            archive_reason=archive_reason,
         )

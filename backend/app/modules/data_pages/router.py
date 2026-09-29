@@ -17,6 +17,10 @@ from app.modules.data_pages.schemas import (
     DailySalesQuery,
     DailySalesReadMeta,
     DataPageFilterOptionsData,
+    ListingArchiveActionData,
+    ListingArchiveRequest,
+    ListingGptAnalysisLinkRead,
+    ListingGptAnalysisLinkUpdateRequest,
     ListingManagementFilterOptionsData,
     ListingManagementListData,
     ListingManagementQuery,
@@ -385,6 +389,101 @@ def listing_filter_options(
         data=ListingManagementService(session).listing_filter_options(account_refs),
         meta=None,
     )
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/{{listing_id}}/archive",
+    response_model=SuccessEnvelope[ListingArchiveActionData, Any],
+    responses=ERRORS,
+)
+def archive_listing_management_item(
+    request: Request,
+    listing_id: str,
+    payload: ListingArchiveRequest,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingArchiveActionData, Any]:
+    try:
+        data = ListingManagementService(session).archive_listing(
+            listing_id=listing_id,
+            account_refs=account_refs,
+            actor_ref=principal.user_id,
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/{{listing_id}}/restore",
+    response_model=SuccessEnvelope[ListingArchiveActionData, Any],
+    responses=ERRORS,
+)
+def restore_listing_management_item(
+    request: Request,
+    listing_id: str,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingArchiveActionData, Any]:
+    try:
+        data = ListingManagementService(session).restore_listing(
+            listing_id=listing_id,
+            account_refs=account_refs,
+            actor_ref=principal.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
+
+
+@router.get(
+    f"{_LISTING_REGISTRY.route_path}/{{listing_id}}/gpt-analysis",
+    response_model=SuccessEnvelope[ListingGptAnalysisLinkRead, Any],
+    responses=ERRORS,
+)
+def get_listing_gpt_analysis(
+    request: Request,
+    listing_id: str,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingGptAnalysisLinkRead, Any]:
+    try:
+        data = ListingManagementService(session).get_gpt_analysis_link(
+            listing_id=listing_id,
+            account_refs=account_refs,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
+
+
+@router.put(
+    f"{_LISTING_REGISTRY.route_path}/{{listing_id}}/gpt-analysis",
+    response_model=SuccessEnvelope[ListingGptAnalysisLinkRead, Any],
+    responses=ERRORS,
+)
+def update_listing_gpt_analysis(
+    request: Request,
+    listing_id: str,
+    payload: ListingGptAnalysisLinkUpdateRequest,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingGptAnalysisLinkRead, Any]:
+    try:
+        data = ListingManagementService(session).update_gpt_analysis_link(
+            listing_id=listing_id,
+            payload=payload,
+            account_refs=account_refs,
+            actor_ref=principal.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return success_response(request, data=data, meta=None)
 
 
 @router.get(

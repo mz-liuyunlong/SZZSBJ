@@ -813,3 +813,58 @@ class ProductCustomTagAssignment(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
+
+
+class ListingGptAnalysisLink(Base):
+    __tablename__ = "listing_gpt_analysis_links"
+    __table_args__ = (
+        UniqueConstraint("listing_id", name="uq_listing_gpt_analysis_listing"),
+        Index("ix_listing_gpt_analysis_item", "source_account_ref", "store_id", "item_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    listing_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    msku: Mapped[str | None] = mapped_column(Text)
+    keyword_analysis_url: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    ad_analysis_url: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )
+    updated_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+
+class ListingArchiveState(Base):
+    __tablename__ = "listing_archive_states"
+    __table_args__ = (
+        UniqueConstraint("listing_id", name="uq_listing_archive_listing"),
+        Index("ix_listing_archive_item", "source_account_ref", "store_id", "item_id"),
+        Index("ix_listing_archive_status", "is_archived"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    listing_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    msku: Mapped[str | None] = mapped_column(Text)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
+    archive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_by: Mapped[str | None] = mapped_column(String(255))
+    restored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    restored_by: Mapped[str | None] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )

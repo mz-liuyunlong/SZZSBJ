@@ -16,6 +16,7 @@ export interface ListingManagementFilters {
   productTypes?: string[];
   productStatuses?: string[];
   tagValues?: string[];
+  archiveStatuses?: string[];
 
   /** Legacy cached single-value filters. Kept only to migrate older page-state cache safely. */
   owner?: string;
@@ -33,6 +34,7 @@ interface ListingManagementToolbarProps {
   owners: ReportFilterOption[];
   productTypes: ReportFilterOption[];
   tags: ReportFilterOption[];
+  archiveStatuses?: ReportFilterOption[];
   statisticsVisible: boolean;
   onChange: (filters: ListingManagementFilters) => void;
   onReset: () => void;
@@ -50,6 +52,11 @@ const normalizeSelected = (values?: string[], legacyValue?: string) => (
   values && values.length > 0 ? values : legacyValue ? [legacyValue] : []
 );
 
+const archiveStatusOptions: ReportFilterOption[] = [
+  { value: "active", label: "未归档" },
+  { value: "archived", label: "已归档" },
+];
+
 const listingStatusOptions: ReportFilterOption[] = [
   "启用",
   "停用",
@@ -65,6 +72,7 @@ function ListingManagementToolbar({
   owners,
   productTypes,
   tags,
+  archiveStatuses = [],
   statisticsVisible,
   onChange,
   onReset,
@@ -175,6 +183,18 @@ function ListingManagementToolbar({
           ...filters,
           productStatuses: value as string[],
           productStatus: undefined,
+        })}
+      />
+      <ReportFacetSelect
+        mode="multiple"
+        ariaLabel="归档状态"
+        placeholder="归档状态"
+        unit="个状态"
+        value={filters.archiveStatuses ?? []}
+        options={(archiveStatuses ?? []).length > 0 ? archiveStatuses : archiveStatusOptions}
+        onChange={(value) => onChange({
+          ...filters,
+          archiveStatuses: value as string[],
         })}
       />
       <ReportFacetSelect
