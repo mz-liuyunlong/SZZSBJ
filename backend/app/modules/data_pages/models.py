@@ -814,6 +814,7 @@ class ProductCustomTagAssignment(Base):
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
 
+
 class ListingGptAnalysisLink(Base):
     __tablename__ = "listing_gpt_analysis_links"
     __table_args__ = (
@@ -840,6 +841,7 @@ class ListingGptAnalysisLink(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
     )
+
 
 class ListingArchiveState(Base):
     __tablename__ = "listing_archive_states"

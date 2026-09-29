@@ -437,6 +437,7 @@ class ListingTagBatchSetData(StrictSchema):
     tag_count: int = 0
     mode: Literal["replace", "append", "remove"]
 
+
 class ListingGptAnalysisLinkRead(StrictSchema):
     listing_id: str
     keyword_analysis_url: str = ""
@@ -454,6 +455,7 @@ class ListingGptAnalysisLinkUpdateRequest(StrictSchema):
         str,
         StringConstraints(strip_whitespace=True, max_length=2048),
     ] = ""
+
 
 class ListingArchiveActionData(StrictSchema):
     listing_id: str

@@ -490,7 +490,6 @@ class ListingManagementService:
     def _listing_archive_status_values(raw: str | None) -> set[str]:
         return {value.strip() for value in (raw or "").split(",") if value.strip()}
 
-
     def list_listings(
         self,
         query: ListingManagementQuery,
@@ -747,7 +746,6 @@ class ListingManagementService:
 
         return normalized
 
-
     def archive_listing(
         self,
         *,
@@ -810,6 +808,7 @@ class ListingManagementService:
             restored_at=getattr(state, "restored_at", None),
             restored_by=getattr(state, "restored_by", None),
         )
+
     def get_gpt_analysis_link(
         self,
         *,
@@ -847,6 +846,7 @@ class ListingManagementService:
         )
         self.repository.session.commit()
         return self._to_gpt_analysis_link_read(str(listing.id), link)
+
     @staticmethod
     def _to_gpt_analysis_link_read(
         listing_id: str,

@@ -1308,13 +1308,12 @@ class ListingManagementRepository:
                 key = f"account_ref_{index}"
                 placeholders.append(f":{key}")
                 params[key] = account_ref
-            account_filter_sql = (
-                f"where m.source_account_ref in ({', '.join(placeholders)})"
-            )
+            account_filter_sql = f"where m.source_account_ref in ({', '.join(placeholders)})"
 
-        row = self.session.execute(
-            text(
-                f"""
+        row = (
+            self.session.execute(
+                text(
+                    f"""
                 select
                     coalesce(
                         sum(
@@ -1340,9 +1339,12 @@ class ListingManagementRepository:
                 left join listing_archive_states s on s.listing_id = m.id
                 {account_filter_sql}
                 """
-            ),
-            params,
-        ).mappings().one()
+                ),
+                params,
+            )
+            .mappings()
+            .one()
+        )
 
         return [
             {
@@ -1356,7 +1358,6 @@ class ListingManagementRepository:
                 "count": int(row["archived_count"] or 0),
             },
         ]
-
 
     def archive_states_for_listing_rows(
         self, rows: Sequence[ListingManagementCurrentMart]
@@ -1373,9 +1374,7 @@ class ListingManagementRepository:
             return {}
 
         states = self.session.scalars(
-            select(ListingArchiveState).where(
-                ListingArchiveState.listing_id.in_(listing_ids)
-            )
+            select(ListingArchiveState).where(ListingArchiveState.listing_id.in_(listing_ids))
         ).all()
         return {str(state.listing_id): state for state in states}
 
