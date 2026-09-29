@@ -33,6 +33,8 @@ export interface ListingManagementRow {
   tags: string[];
   gtin: string;
   productGrade: string;
+  archiveReason?: string | null;
+  isArchived: boolean;
 }
 
 export const listingColumnFields = [
@@ -48,6 +50,7 @@ export const listingColumnFields = [
   { key: "productStatus", title: "产品状态" },
   { key: "lifecycle", title: "生命周期" },
   { key: "fulfillmentMethod", title: "发货方式" },
+  { key: "gptAnalysis", title: "GPT分析" },
   { key: "listedAt", title: "上架时间" },
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },
@@ -66,6 +69,7 @@ export const listingColumnFields = [
   { key: "tags", title: "标签" },
   { key: "gtin", title: "GTIN" },
   { key: "productGrade", title: "产品等级" },
+  { key: "archiveReason", title: "归档原因" },
 ] as const;
 
 export const fixedListingColumnKeys = ["image", "productIdName", "skuMsku"];
@@ -118,6 +122,7 @@ export const listingManagementMockData: ListingManagementRow[] = Array.from(
       tags: tagPatterns[index % tagPatterns.length],
       gtin: `0085000${String(100000 + number)}`,
       productGrade: ["A级", "B级", "C级"][index % 3],
+      isArchived: false,
     };
   },
 );

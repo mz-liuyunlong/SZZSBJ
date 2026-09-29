@@ -41,6 +41,8 @@ interface BackendListingItem {
   disabled_reason: string | null;
   gtin: string | null;
   calculated_at: string;
+  archive_reason?: string | null;
+  is_archived?: boolean;
 }
 
 interface BackendListingData {
@@ -56,11 +58,22 @@ interface BackendListingSummaryData {
   strike_price_exception: number;
 }
 
+interface BackendListingArchiveActionData {
+  listing_id: string;
+  is_archived: boolean;
+  archive_reason?: string | null;
+  archived_at?: string | null;
+  archived_by?: string | null;
+  restored_at?: string | null;
+  restored_by?: string | null;
+}
+
 interface BackendListingFilterOptionsData {
   stores: ReportFilterOption[];
   owners: ReportFilterOption[];
   product_types: ReportFilterOption[];
   tags?: ReportFilterOption[];
+  archive_statuses?: ReportFilterOption[];
 }
 
 interface BackendListingTag {
@@ -107,6 +120,35 @@ export interface ListingManagementApiResult {
   meta: ListingManagementApiMeta;
 }
 
+interface BackendListingGptAnalysisLink {
+  listing_id: string;
+  keyword_analysis_url: string;
+  ad_analysis_url: string;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface ListingGptAnalysisLink {
+  listingId: string;
+  keywordAnalysisUrl: string;
+  adAnalysisUrl: string;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+export interface ListingGptAnalysisPayload {
+  keywordAnalysisUrl: string;
+  adAnalysisUrl: string;
+}
+
+const toListingGptAnalysisLink = (item: BackendListingGptAnalysisLink): ListingGptAnalysisLink => ({
+  listingId: item.listing_id,
+  keywordAnalysisUrl: item.keyword_analysis_url ?? "",
+  adAnalysisUrl: item.ad_analysis_url ?? "",
+  updatedBy: item.updated_by,
+  updatedAt: item.updated_at,
+});
+
 export interface ListingManagementSummary {
   total: number;
   online: number;
@@ -121,6 +163,7 @@ export interface ListingManagementFilterOptions {
   owners: ReportFilterOption[];
   productTypes: ReportFilterOption[];
   tags: ReportFilterOption[];
+  archiveStatuses?: ReportFilterOption[];
 }
 
 export interface ListingManagementParams {
@@ -129,6 +172,7 @@ export interface ListingManagementParams {
   productTypes?: string[];
   productStatuses?: string[];
   tagValues?: string[];
+  archiveStatuses?: string[];
   searchType?: "sku" | "msku" | "productId" | "productName";
   keyword?: string;
   batchValues?: string[];
@@ -179,7 +223,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   salePrice: numberValue(item.sale_price_amount),
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
-  fulfillmentMethod: item.fulfillment_type_name ?? item.fulfillment_type ?? "待确认",
+  fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
   listedAt: toDateText(item.listing_start_at_utc),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
@@ -198,6 +242,8 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   tags: item.tags,
   gtin: item.gtin ?? "-",
   productGrade: item.product_grade ?? "未分级",
+  archiveReason: item.archive_reason ?? null,
+  isArchived: Boolean(item.is_archived ?? (item as { isArchived?: boolean }).isArchived ?? false),
 });
 
 const backendSearchField = (field: ListingManagementParams["searchType"] | undefined) => {
@@ -221,6 +267,7 @@ const appendListingFilters = (search: URLSearchParams, params: ListingManagement
   appendMultiParam(search, "product_type", params.productTypes);
   appendMultiParam(search, "status", params.productStatuses);
   appendMultiParam(search, "tag", params.tagValues);
+  appendMultiParam(search, "archive_status", params.archiveStatuses);
 
   if (params.summaryFilter && params.summaryFilter !== "total") {
     search.set("summary_filter", params.summaryFilter);
@@ -323,6 +370,7 @@ async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingMana
     owners: envelope.data.owners,
     productTypes: envelope.data.product_types,
     tags: envelope.data.tags ?? [],
+    archiveStatuses: envelope.data.archive_statuses ?? [],
   };
 }
 
@@ -357,6 +405,58 @@ export async function updateListingTag(
   });
 
   return toListingCustomTag(envelope.data);
+}
+
+export async function archiveListingManagementRow(
+  listingId: string,
+  reason: string,
+): Promise<BackendListingArchiveActionData> {
+  const envelope = await backendRequest<BackendListingArchiveActionData>(
+    `/api/listings/walmart/${listingId}/archive`,
+    {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    },
+  );
+
+  return envelope.data;
+}
+
+export async function restoreListingManagementRow(
+  listingId: string,
+): Promise<BackendListingArchiveActionData> {
+  const envelope = await backendRequest<BackendListingArchiveActionData>(
+    `/api/listings/walmart/${listingId}/restore`,
+    {
+      method: "POST",
+    },
+  );
+
+  return envelope.data;
+}
+
+export async function fetchListingGptAnalysisLink(listingId: string): Promise<ListingGptAnalysisLink> {
+  const envelope = await backendRequest<BackendListingGptAnalysisLink>(
+    `/api/listings/walmart/${encodeURIComponent(listingId)}/gpt-analysis`,
+  );
+  return toListingGptAnalysisLink(envelope.data);
+}
+
+export async function saveListingGptAnalysisLink(
+  listingId: string,
+  payload: ListingGptAnalysisPayload,
+): Promise<ListingGptAnalysisLink> {
+  const envelope = await backendRequest<BackendListingGptAnalysisLink>(
+    `/api/listings/walmart/${encodeURIComponent(listingId)}/gpt-analysis`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        keyword_analysis_url: payload.keywordAnalysisUrl,
+        ad_analysis_url: payload.adAnalysisUrl,
+      }),
+    },
+  );
+  return toListingGptAnalysisLink(envelope.data);
 }
 
 export async function deleteListingTag(tagId: string): Promise<void> {

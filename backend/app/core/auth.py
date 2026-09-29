@@ -65,9 +65,10 @@ _PREVIEW_WRITE_PATH_PREFIXES: Final[frozenset[str]] = frozenset(
     {
         "/api/operations/plans/products/",
         "/api/listings/tags/",
+        "/api/listings/walmart/",
     }
 )
-_PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH", "DELETE"})
+_PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH", "PUT", "DELETE"})
 
 
 def _constant_time_ascii_equals(provided: str, expected: SecretStr) -> bool:

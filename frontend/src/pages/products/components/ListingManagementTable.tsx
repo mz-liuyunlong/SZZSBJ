@@ -1,7 +1,9 @@
+import { RobotOutlined } from "@ant-design/icons";
 import {
   Button,
   Space,
   Tag,
+  Popconfirm,
   Tooltip } from "antd"; import { ProTable,
   type ProColumns } from "@ant-design/pro-components"; import type { Key } from "react"; import ReportTableShell,
   {   ReportTableSelectionBar,
@@ -33,6 +35,7 @@ const minColumnWidths: Record<string, number> = {
   productStatus: 120,
   lifecycle: 120,
   fulfillmentMethod: 120,
+  gptAnalysis: 96,
   listedAt: 140,
   category: 120,
   wfsAvailableInventory: 140,
@@ -51,7 +54,8 @@ const minColumnWidths: Record<string, number> = {
   tags: 130,
   gtin: 160,
   productGrade: 120,
-  actions: 110,
+  archiveReason: 180,
+  actions: 148,
 };
 
 const statusColorMap: Record<string, string> = {
@@ -78,7 +82,12 @@ interface ListingManagementTableProps {
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
   onOpenDetail: (row: ListingManagementRow) => void;
+  onOpenGptAnalysis?: (row: ListingManagementRow) => void;
+  onArchiveListing?: (row: ListingManagementRow) => void;
+  onRestoreListing?: (row: ListingManagementRow) => void;
   onBatchSetTags: () => void;
+  onBatchArchive?: () => void;
+  onBatchRestore?: () => void;
   onBulkExport: () => void;
   exporting?: boolean;
 }
@@ -96,7 +105,12 @@ function ListingManagementTable({
   onPageSizeChange,
   onSelectionChange,
   onOpenDetail,
+  onOpenGptAnalysis,
+  onArchiveListing,
+  onRestoreListing,
   onBatchSetTags,
+  onBatchArchive,
+  onBatchRestore,
   onBulkExport,
   exporting = false,
 }: ListingManagementTableProps) {
@@ -294,6 +308,24 @@ function ListingManagementTable({
       width: columnWidths.fulfillmentMethod,
       onHeaderCell: headerCell,
     },
+    gptAnalysis: {
+      key: "gptAnalysis",
+      title: title("gptAnalysis", fieldTitle.gptAnalysis ?? "GPT分析"),
+      width: columnWidths.gptAnalysis,
+      align: "center",
+      onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Tooltip title="保存GPT关键词/广告分析链接">
+          <Button
+            type="text"
+            size="small"
+            className="listing-management__gpt-analysis-button"
+            icon={<RobotOutlined />}
+            onClick={() => onOpenGptAnalysis?.(row)}
+          />
+        </Tooltip>
+      ),
+    },
     listedAt: {
       key: "listedAt",
       dataIndex: "listedAt",
@@ -431,6 +463,23 @@ function ListingManagementTable({
       width: columnWidths.gtin,
       onHeaderCell: headerCell,
     },
+    archiveReason: {
+      key: "archiveReason",
+      dataIndex: "archiveReason",
+      title: title("archiveReason", fieldTitle.archiveReason ?? "归档原因"),
+      width: columnWidths.archiveReason ?? 180,
+      ellipsis: true,
+      onHeaderCell: headerCell,
+      render: (_, row) => {
+        const reason = row.archiveReason?.trim();
+        if (!reason) return "-";
+        return (
+          <Tooltip title={reason}>
+            <span>{reason}</span>
+          </Tooltip>
+        );
+      },
+    },
     productGrade: {
       key: "productGrade",
       dataIndex: "productGrade",
@@ -460,9 +509,28 @@ function ListingManagementTable({
       fixed: "right",
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <Tooltip title="打开 Listing 详情">
-          <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
-        </Tooltip>
+        <Space size={2}>
+          <Tooltip title="打开 Listing 详情">
+            <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
+          </Tooltip>
+          <Popconfirm
+            title={row.isArchived ? "确认恢复该 Listing？" : "确认归档该 Listing？"}
+            description={
+              row.isArchived
+                ? "恢复后该 Listing 会重新回到正常状态。"
+                : "归档后按钮会变为恢复，不会删除 Listing 数据。"
+            }
+            okText={row.isArchived ? "确认恢复" : "确认归档"}
+            cancelText="取消"
+            onConfirm={() => (
+              row.isArchived ? onRestoreListing?.(row) : onArchiveListing?.(row)
+            )}
+          >
+            <Button type="link" danger={!row.isArchived}>
+              {row.isArchived ? "恢复" : "归档"}
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     });
 
@@ -509,6 +577,18 @@ function ListingManagementTable({
                 key: "set-tags",
                 label: "设置标签",
                 onClick: onBatchSetTags,
+              },
+              {
+                key: "batch-archive",
+                label: "批量归档",
+                disabled: selectedRowKeys.length === 0 || !onBatchArchive,
+                onClick: () => onBatchArchive?.(),
+              },
+              {
+                key: "batch-restore",
+                label: "批量恢复",
+                disabled: selectedRowKeys.length === 0 || !onBatchRestore,
+                onClick: () => onBatchRestore?.(),
               },
               {
                 key: "export",

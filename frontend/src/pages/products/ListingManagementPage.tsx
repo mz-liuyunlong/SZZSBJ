@@ -1,7 +1,7 @@
 /** Listing-management page backed by DATA-PAGES MART API. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type Key } from "react";
-import { Card, message } from "antd";
+import { Card, Form, Input, Modal, message } from "antd";
 
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
@@ -27,17 +27,21 @@ import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
 import {
+  archiveListingManagementRow,
   batchSetListingTags,
   createListingTag,
   deleteListingTag,
   exportListingManagementRows,
+  fetchListingGptAnalysisLink,
   fetchListingManagementFilterOptions,
   fetchListingManagementRows,
   fetchListingManagementSummary,
   fetchListingTags,
+  restoreListingManagementRow,
+  saveListingGptAnalysisLink,
+  updateListingTag,
   type ListingManagementFilterOptions,
   type ListingManagementSummary,
-  updateListingTag,
 } from "@/pages/products/listingManagementApi";
 import {
   fixedListingColumnKeys,
@@ -58,6 +62,7 @@ const createInitialFilters = (): ListingManagementFilters => ({
   productTypes: [],
   productStatuses: [],
   tagValues: [],
+  archiveStatuses: [],
   searchType: "sku",
   keyword: "",
 });
@@ -76,9 +81,10 @@ const emptyFilterOptions: ListingManagementFilterOptions = {
   owners: [],
   productTypes: [],
   tags: [],
+  archiveStatuses: [],
 };
 
-const DEFAULT_LISTING_SUMMARY_FILTER_KEY: ListingManagementSummaryCardKey = "online";
+const DEFAULT_LISTING_SUMMARY_FILTER_KEY: ListingManagementSummaryCardKey = "total";
 
 
 
@@ -99,6 +105,8 @@ const defaultColumnWidths: Record<string, number> = {
   salePrice: 110,
   productStatus: 120,
   lifecycle: 120,
+  fulfillmentMethod: 120,
+  gptAnalysis: 96,
   listedAt: 140,
   category: 120,
   wfsAvailableInventory: 140,
@@ -117,6 +125,7 @@ const defaultColumnWidths: Record<string, number> = {
   tags: 130,
   gtin: 160,
   productGrade: 120,
+  archiveReason: 180,
   actions: 112,
 };
 
@@ -128,8 +137,24 @@ interface ListingManagementPageProps {
   page: NavigationPage;
 }
 
+
+interface ListingArchiveDialogState {
+  mode: "single" | "batch";
+  rows: ListingManagementRow[];
+}
+
+interface ListingRestoreDialogState {
+  rows: ListingManagementRow[];
+}
+
+interface ListingGptAnalysisFormValues {
+  keywordAnalysisUrl: string;
+  adAnalysisUrl: string;
+}
+
 function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
+  const [gptAnalysisForm] = Form.useForm<ListingGptAnalysisFormValues>();
   const [managedTags, setManagedTags] = useState<CustomProductTag[]>([]);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
@@ -152,14 +177,43 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
 
   const [rows, setRows] = useState<ListingManagementRow[]>([]);
+  const [archiveStateOverrides, setArchiveStateOverrides] = useState<Record<string, boolean>>({});
+  const applyArchiveStateOverrides = useCallback(
+    (currentRows: ListingManagementRow[]) =>
+      currentRows.map((currentRow) =>
+        Object.prototype.hasOwnProperty.call(archiveStateOverrides, currentRow.id)
+          ? {
+              ...currentRow,
+              isArchived: Boolean(archiveStateOverrides[currentRow.id]),
+            }
+          : currentRow,
+      ),
+    [archiveStateOverrides],
+  );
+
   const [totalRows, setTotalRows] = useState(0);
   const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
   const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
+  const [gptAnalysisRow, setGptAnalysisRow] = useState<ListingManagementRow | null>(null);
+  const [isGptAnalysisLoading, setIsGptAnalysisLoading] = useState(false);
+  const [isGptAnalysisSaving, setIsGptAnalysisSaving] = useState(false);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [archiveDialog, setArchiveDialog] = useState<ListingArchiveDialogState | null>(null);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false);
+  const [restoreDialog, setRestoreDialog] = useState<ListingRestoreDialogState | null>(null);
+  const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
   useElementScrollRestoration(`${pageStateKey}:tableScroll`, listingManagementPageRootRef, ".ant-table-body");
+
+  useEffect(() => {
+    setAppliedColumnKeys((current) => (
+      current.includes("gptAnalysis") ? current : [...current, "gptAnalysis"]
+    ));
+  }, [setAppliedColumnKeys]);
+
 
   const reloadListingTags = useCallback(async (options: { showError?: boolean } = {}) => {
     setIsTagManagerLoading(true);
@@ -197,7 +251,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       void reloadListingTags({ showError: false });
     }, 0);
 
-    return () => window.clearTimeout(timer);
+
+  return () => window.clearTimeout(timer);
   }, [reloadListingTags]);
 
   useEffect(() => {
@@ -251,6 +306,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       productTypes,
       productStatuses,
       tagValues: filters.tagValues ?? [],
+      archiveStatuses: filters.archiveStatuses ?? [],
       searchType: filters.searchType,
       keyword: filters.keyword,
       batchValues: filters.batchValues,
@@ -333,6 +389,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const updateFilters = (nextFilters: ListingManagementFilters) => {
     setFilters(nextFilters);
     setSummaryFilterKey(DEFAULT_LISTING_SUMMARY_FILTER_KEY);
+    setListingRefreshToken((current) => current + 1);
     resetPageAndSelection();
   };
 
@@ -346,6 +403,159 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     setSummaryFilterKey(DEFAULT_LISTING_SUMMARY_FILTER_KEY);
     resetPageAndSelection();
   };
+
+  const runArchiveListing = useCallback(async (row: ListingManagementRow, reason: string) => {
+    try {
+      const archiveResult = (await archiveListingManagementRow(row.id, reason)) as unknown as
+        | {
+            isArchived?: boolean;
+            is_archived?: boolean;
+            archiveReason?: string | null;
+            archive_reason?: string | null;
+            data?: {
+              isArchived?: boolean;
+              is_archived?: boolean;
+              archiveReason?: string | null;
+              archive_reason?: string | null;
+            };
+          }
+        | undefined;
+
+      const nextIsArchived =
+        archiveResult?.data?.isArchived ??
+        archiveResult?.data?.is_archived ??
+        archiveResult?.isArchived ??
+        archiveResult?.is_archived ??
+        true;
+      const nextArchiveReason =
+        archiveResult?.data?.archiveReason ??
+        archiveResult?.data?.archive_reason ??
+        archiveResult?.archiveReason ??
+        archiveResult?.archive_reason ??
+        reason;
+
+      setArchiveStateOverrides?.((current) => ({ ...current, [row.id]: Boolean(nextIsArchived) }));
+      setRows((currentRows) =>
+        currentRows.map((item) =>
+          item.id === row.id
+            ? {
+                ...item,
+                isArchived: Boolean(nextIsArchived),
+                archiveReason: nextArchiveReason,
+              }
+            : item,
+        ),
+      );
+      void messageApi.success("已归档");
+    } catch {
+      void messageApi.error("归档失败，请稍后重试");
+    }
+  }, [messageApi]);
+
+  const handleArchiveListing = useCallback((row: ListingManagementRow) => {
+    setArchiveReason("");
+    setArchiveDialog({ mode: "single", rows: [row] });
+  }, []);
+
+  const handleArchiveDialogCancel = useCallback(() => {
+    if (archiveSubmitting) return;
+    setArchiveDialog(null);
+    setArchiveReason("");
+  }, [archiveSubmitting]);
+
+  const handleArchiveDialogOk = useCallback(async () => {
+    const reason = archiveReason.trim();
+
+    if (reason.length < 2) {
+      void messageApi.warning("归档原因至少需要 2 个字");
+      return;
+    }
+
+    const targetRows = archiveDialog?.rows ?? [];
+    if (targetRows.length === 0) {
+      setArchiveDialog(null);
+      setArchiveReason("");
+      return;
+    }
+
+    setArchiveSubmitting(true);
+
+    try {
+      if (archiveDialog?.mode === "single") {
+        await runArchiveListing(targetRows[0], reason);
+      } else {
+        const results = await Promise.allSettled(
+          targetRows.map((row) => archiveListingManagementRow(row.id, reason)),
+        );
+        const succeededIds = new Set(
+          targetRows
+            .filter((_, index) => results[index]?.status === "fulfilled")
+            .map((row) => row.id),
+        );
+
+        setRows((currentRows) =>
+          currentRows.map((row) =>
+            succeededIds.has(row.id)
+              ? {
+                  ...row,
+                  isArchived: true,
+                  archiveReason: reason,
+                }
+              : row,
+          ),
+        );
+
+        setSelectedRowKeys([]);
+        setListingRefreshToken((current) => current + 1);
+
+        const failed = results.length - succeededIds.size;
+        if (failed > 0) {
+          void messageApi.warning(`批量归档完成：成功 ${succeededIds.size} 个，失败 ${failed} 个`);
+        } else {
+          void messageApi.success(`已归档 ${succeededIds.size} 个 Listing`);
+        }
+      }
+
+      setArchiveDialog(null);
+      setArchiveReason("");
+    } catch {
+      void messageApi.error("归档失败，请稍后重试");
+    } finally {
+      setArchiveSubmitting(false);
+    }
+  }, [
+    archiveDialog,
+    archiveReason,
+    messageApi,
+    runArchiveListing,
+    setSelectedRowKeys,
+  ]);
+
+  const handleRestoreListing = useCallback(async (row: ListingManagementRow) => {
+    try {
+      const restoreResult = (await restoreListingManagementRow(row.id)) as unknown as
+        | {
+            isArchived?: boolean;
+            is_archived?: boolean;
+            data?: { isArchived?: boolean; is_archived?: boolean };
+          }
+        | undefined;
+      const nextIsArchived =
+        restoreResult?.data?.isArchived ??
+        restoreResult?.data?.is_archived ??
+        restoreResult?.isArchived ??
+        restoreResult?.is_archived ??
+        false;
+      setArchiveStateOverrides((current) => ({ ...current, [row.id]: nextIsArchived }));
+      setRows((current) => current.map((item) => (
+        item.id === row.id ? { ...item, isArchived: nextIsArchived } : item
+      )));
+      setListingRefreshToken((current) => current + 1);
+      void messageApi.success("已恢复");
+    } catch {
+      void messageApi.error("恢复失败，请稍后重试");
+    }
+  }, [messageApi]);
 
   const handleExportListingRows = useCallback(async () => {
     if (isExporting) return;
@@ -386,6 +596,132 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     });
   };
 
+  const openGptAnalysisModal = useCallback((row: ListingManagementRow) => {
+    setGptAnalysisRow(row);
+    gptAnalysisForm.setFieldsValue({
+      keywordAnalysisUrl: "",
+      adAnalysisUrl: "",
+    });
+    setIsGptAnalysisLoading(true);
+
+    void fetchListingGptAnalysisLink(row.id)
+      .then((data) => {
+        gptAnalysisForm.setFieldsValue({
+          keywordAnalysisUrl: data.keywordAnalysisUrl,
+          adAnalysisUrl: data.adAnalysisUrl,
+        });
+      })
+      .catch(() => {
+        void messageApi.warning("GPT分析链接加载失败，可重新填写后保存");
+      })
+      .finally(() => setIsGptAnalysisLoading(false));
+  }, [gptAnalysisForm, messageApi]);
+
+  const closeGptAnalysisModal = useCallback(() => {
+    setGptAnalysisRow(null);
+    gptAnalysisForm.resetFields();
+  }, [gptAnalysisForm]);
+
+  const saveGptAnalysisLinks = useCallback(async () => {
+    if (!gptAnalysisRow) return;
+
+    try {
+      const values = await gptAnalysisForm.validateFields();
+      setIsGptAnalysisSaving(true);
+      await saveListingGptAnalysisLink(gptAnalysisRow.id, {
+        keywordAnalysisUrl: values.keywordAnalysisUrl ?? "",
+        adAnalysisUrl: values.adAnalysisUrl ?? "",
+      });
+      void messageApi.success("GPT分析链接已保存");
+      closeGptAnalysisModal();
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "errorFields" in error) return;
+      void messageApi.error("GPT分析链接保存失败，请稍后重试");
+    } finally {
+      setIsGptAnalysisSaving(false);
+    }
+  }, [closeGptAnalysisModal, gptAnalysisForm, gptAnalysisRow, messageApi]);
+
+
+  const selectedListingRows = useMemo(() => {
+    const selectedIds = new Set(selectedRowKeys.map(String));
+    return rows.filter((row) => selectedIds.has(row.id));
+  }, [rows, selectedRowKeys]);
+
+  const handleBatchArchiveListings = useCallback(() => {
+    if (selectedListingRows.length === 0) {
+      void messageApi.warning("请先选择 Listing");
+      return;
+    }
+
+    setArchiveReason("");
+    setArchiveDialog({ mode: "batch", rows: selectedListingRows });
+  }, [messageApi, selectedListingRows]);
+
+  const handleBatchRestoreListings = useCallback(() => {
+    if (selectedListingRows.length === 0) {
+      void messageApi.warning("请先选择 Listing");
+      return;
+    }
+
+    setRestoreDialog({ rows: selectedListingRows });
+  }, [messageApi, selectedListingRows]);
+
+  const handleRestoreDialogCancel = useCallback(() => {
+    if (restoreSubmitting) return;
+    setRestoreDialog(null);
+  }, [restoreSubmitting]);
+
+  const handleRestoreDialogOk = useCallback(async () => {
+    const targetRows = restoreDialog?.rows ?? [];
+
+    if (targetRows.length === 0) {
+      setRestoreDialog(null);
+      return;
+    }
+
+    setRestoreSubmitting(true);
+
+    try {
+      const results = await Promise.allSettled(
+        targetRows.map((row) => restoreListingManagementRow(row.id)),
+      );
+      const succeededIds = new Set(
+        targetRows
+          .filter((_, index) => results[index]?.status === "fulfilled")
+          .map((row) => row.id),
+      );
+
+      setRows((currentRows) =>
+        currentRows.map((row) =>
+          succeededIds.has(row.id)
+            ? {
+                ...row,
+                isArchived: false,
+              }
+            : row,
+        ),
+      );
+
+      setSelectedRowKeys([]);
+      setListingRefreshToken((current) => current + 1);
+
+      const failed = results.length - succeededIds.size;
+      if (failed > 0) {
+        void messageApi.warning(`批量恢复完成：成功 ${succeededIds.size} 个，失败 ${failed} 个`);
+      } else {
+        void messageApi.success(`已恢复 ${succeededIds.size} 个 Listing`);
+      }
+
+      setRestoreDialog(null);
+    } catch {
+      void messageApi.error("批量恢复失败，请稍后重试");
+    } finally {
+      setRestoreSubmitting(false);
+    }
+  }, [messageApi, restoreDialog, setSelectedRowKeys]);
+
+
   return (
     <PageShell page={page}>
       {messageContextHolder}
@@ -406,6 +742,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               owners={filterOptions.owners}
               productTypes={filterOptions.productTypes}
               tags={tagOptions}
+              archiveStatuses={filterOptions.archiveStatuses}
               statisticsVisible={statisticsVisible}
               onChange={updateFilters}
               onReset={resetFilters}
@@ -430,7 +767,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
           <div className="listing-management__table-wrap">
             <ListingManagementTable
-              rows={rows}
+              rows={applyArchiveStateOverrides(rows)}
               total={totalRows}
               appliedColumnKeys={appliedColumnKeys}
               columnWidths={columnWidths}
@@ -448,6 +785,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               }}
               onSelectionChange={setSelectedRowKeys}
               onOpenDetail={openListingAnalysis}
+              onOpenGptAnalysis={openGptAnalysisModal}
+              onArchiveListing={(row) => void handleArchiveListing(row)}
+              onRestoreListing={(row) => void handleRestoreListing(row)}
+              onBatchArchive={handleBatchArchiveListings}
+              onBatchRestore={handleBatchRestoreListings}
               onBatchSetTags={() => {
                 if (selectedRowKeys.length === 0) {
                   void messageApi.warning("请先选择商品");
@@ -471,6 +813,41 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           onClose={() => setColumnConfigOpen(false)}
           onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
         />
+        <Modal
+          open={gptAnalysisRow !== null}
+          title={gptAnalysisRow ? `GPT分析：${gptAnalysisRow.productId}` : "GPT分析"}
+          okText="保存"
+          cancelText="取消"
+          confirmLoading={isGptAnalysisSaving}
+          onOk={() => void saveGptAnalysisLinks()}
+          onCancel={closeGptAnalysisModal}
+          destroyOnHidden
+        >
+          <div className="listing-management__gpt-analysis-meta">
+            <span>{gptAnalysisRow?.productName ?? "-"}</span>
+            <small>{gptAnalysisRow?.sku ?? "-"} / {gptAnalysisRow?.msku ?? "-"}</small>
+          </div>
+          <Form<ListingGptAnalysisFormValues>
+            form={gptAnalysisForm}
+            layout="vertical"
+            disabled={isGptAnalysisLoading || isGptAnalysisSaving}
+          >
+            <Form.Item
+              name="keywordAnalysisUrl"
+              label="关键词分析链接"
+              rules={[{ max: 2048, message: "链接不能超过 2048 个字符" }]}
+            >
+              <Input allowClear placeholder="粘贴关键词分析链接" />
+            </Form.Item>
+            <Form.Item
+              name="adAnalysisUrl"
+              label="广告分析链接"
+              rules={[{ max: 2048, message: "链接不能超过 2048 个字符" }]}
+            >
+              <Input allowClear placeholder="粘贴广告分析链接" />
+            </Form.Item>
+          </Form>
+        </Modal>
         <ListingAnalysisModal
           open={analysisSource !== null}
           source={analysisSource ?? undefined}
@@ -520,6 +897,46 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           onTagsChange={setManagedTags}
           onClose={() => setTagManagerOpen(false)}
         />
+        <Modal
+          title={archiveDialog?.mode === "batch"
+            ? `批量归档 ${archiveDialog.rows.length} 个 Listing`
+            : "填写归档原因"}
+          open={archiveDialog !== null}
+          okText={archiveDialog?.mode === "batch" ? "确认批量归档" : "确认归档"}
+          cancelText="取消"
+          confirmLoading={archiveSubmitting}
+          maskClosable={!archiveSubmitting}
+          destroyOnHidden
+          onCancel={handleArchiveDialogCancel}
+          onOk={() => void handleArchiveDialogOk()}
+        >
+          <div className="listing-management__archive-modal">
+            <div className="listing-management__archive-modal-label">归档原因</div>
+            <Input.TextArea
+              autoFocus
+              rows={4}
+              maxLength={200}
+              showCount
+              value={archiveReason}
+              placeholder="请输入归档原因，例如：暂停运营、重复 Listing、异常数据、暂不推广等"
+              onChange={(event) => setArchiveReason(event.target.value)}
+            />
+          </div>
+        </Modal>
+
+        <Modal
+          title={`批量恢复 ${restoreDialog?.rows.length ?? 0} 个 Listing`}
+          open={restoreDialog !== null}
+          okText="确认恢复"
+          cancelText="取消"
+          confirmLoading={restoreSubmitting}
+          maskClosable={!restoreSubmitting}
+          destroyOnHidden
+          onCancel={handleRestoreDialogCancel}
+          onOk={() => void handleRestoreDialogOk()}
+        >
+          <p>恢复后这些 Listing 会重新回到正常状态。</p>
+        </Modal>
     </PageShell>
   );
 }

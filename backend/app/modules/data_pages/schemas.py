@@ -282,6 +282,10 @@ class ListingManagementQuery(StrictSchema):
     owner_ref: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     product_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     status: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
+    archive_status: str | None = Field(
+        default=None,
+        description="Archive status csv: active,archived",
+    )
     tag: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     summary_filter: Literal[
         "total",
@@ -353,6 +357,8 @@ class ListingManagementItemRead(StrictSchema):
     gtin: str | None
     upc: str | None
     calculated_at: datetime
+    is_archived: bool = False
+    archive_reason: str | None = None
 
 
 class ListingManagementSummaryData(StrictSchema):
@@ -369,6 +375,7 @@ class ListingManagementFilterOptionsData(StrictSchema):
     owners: list[DataPageFilterOptionRead] = Field(default_factory=list)
     product_types: list[DataPageFilterOptionRead] = Field(default_factory=list)
     tags: list[DataPageFilterOptionRead] = Field(default_factory=list)
+    archive_statuses: list[DataPageFilterOptionRead] = Field(default_factory=list)
 
 
 class ListingManagementListData(StrictSchema):
@@ -429,3 +436,37 @@ class ListingTagBatchSetData(StrictSchema):
     updated_listings: int = 0
     tag_count: int = 0
     mode: Literal["replace", "append", "remove"]
+
+class ListingGptAnalysisLinkRead(StrictSchema):
+    listing_id: str
+    keyword_analysis_url: str = ""
+    ad_analysis_url: str = ""
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class ListingGptAnalysisLinkUpdateRequest(StrictSchema):
+    keyword_analysis_url: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=2048),
+    ] = ""
+    ad_analysis_url: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=2048),
+    ] = ""
+
+class ListingArchiveActionData(StrictSchema):
+    listing_id: str
+    is_archived: bool
+    archive_reason: str | None = None
+    archived_at: datetime | None = None
+    archived_by: str | None = None
+    restored_at: datetime | None = None
+    restored_by: str | None = None
+
+
+class ListingArchiveRequest(StrictSchema):
+    reason: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, min_length=2, max_length=200),
+    ]
