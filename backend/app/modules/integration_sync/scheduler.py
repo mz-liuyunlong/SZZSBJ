@@ -9,6 +9,7 @@ from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 CRON_SEARCH_DAYS = 40 * 366
 QUEUED_RECOVERY_GRACE = timedelta(minutes=1)
+LEGACY_PRODUCTLIST_LEASE_GRACE = timedelta(minutes=5)
 DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
     {
         "walmartListingList",
@@ -106,7 +107,7 @@ class IntegrationSchedulerService:
         limit: int = 100,
         now: datetime | None = None,
     ) -> list[UUID]:
-        """Fail only runs whose lock lease has actually expired."""
+        """Fail expired leases and pre-lease ProductList orphan runs."""
 
         if not 1 <= limit <= 100:
             raise ValueError("scheduler expired-run batch limit is invalid")
@@ -115,27 +116,52 @@ class IntegrationSchedulerService:
         for lock in self.repository.list_expired_locks_for_update(current, limit=limit):
             run = self.repository.get_run_for_update(lock.run_id)
             if run is not None and run.status == "running":
-                run.status = "failed"
-                run.finished_at = current
-                run.error_code = "SYNC_LOCK_LEASE_EXPIRED"
-                run.error_message = "同步锁租约已过期"
-                self.repository.add_event(
-                    IntegrationSyncRunEvent(
-                        run_id=run.id,
-                        sequence_no=self.repository.next_event_sequence(run.id),
-                        event_type="state_transition",
-                        from_status="running",
-                        to_status="failed",
-                        message_code="SYNC_LOCK_LEASE_EXPIRED",
-                        safe_details=None,
-                        occurred_at=current,
-                        actor_ref="scheduler",
-                    )
-                )
+                self._fail_running_run(run, current, "SYNC_LOCK_LEASE_EXPIRED")
                 recovered.append(run.id)
             self.repository.delete_lock(lock)
+
+        remaining = limit - len(recovered)
+        if remaining > 0:
+            legacy_runs = self.repository.list_stale_unleased_productlist_runs_for_update(
+                current - LEGACY_PRODUCTLIST_LEASE_GRACE,
+                limit=remaining,
+            )
+            for run in legacy_runs:
+                self._fail_running_run(run, current, "SYNC_LOCK_LEASE_MISSING")
+                recovered.append(run.id)
         self.session.commit()
         return recovered
+
+    def _fail_running_run(
+        self,
+        run: IntegrationSyncRun,
+        finished_at: datetime,
+        error_code: str,
+    ) -> None:
+        run.status = "failed"
+        run.finished_at = finished_at
+        run.error_code = error_code
+        run.error_message = "同步任务租约已失效"
+        running_work_items = self.repository.list_running_work_items_for_update(run.id)
+        for work in running_work_items:
+            work.status = "failed"
+            work.finished_at = finished_at
+            work.error_code = error_code
+            work.error_message = "同步任务租约已失效"
+        run.work_items_failed += len(running_work_items)
+        self.repository.add_event(
+            IntegrationSyncRunEvent(
+                run_id=run.id,
+                sequence_no=self.repository.next_event_sequence(run.id),
+                event_type="state_transition",
+                from_status="running",
+                to_status="failed",
+                message_code=error_code,
+                safe_details=None,
+                occurred_at=finished_at,
+                actor_ref="scheduler",
+            )
+        )
 
     def create_due_runs(
         self,

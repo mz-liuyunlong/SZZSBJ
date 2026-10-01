@@ -644,6 +644,31 @@ class IntegrationSyncRepository:
             ).all()
         )
 
+    def list_stale_unleased_productlist_runs_for_update(
+        self,
+        started_before: datetime,
+        *,
+        limit: int,
+    ) -> list[IntegrationSyncRun]:
+        return list(
+            self.session.scalars(
+                select(IntegrationSyncRun)
+                .where(
+                    IntegrationSyncRun.provider == "lingxing",
+                    IntegrationSyncRun.interface_key == "productList",
+                    IntegrationSyncRun.status == "running",
+                    IntegrationSyncRun.started_at.is_not(None),
+                    IntegrationSyncRun.started_at <= started_before,
+                    ~select(IntegrationSyncLock.id)
+                    .where(IntegrationSyncLock.run_id == IntegrationSyncRun.id)
+                    .exists(),
+                )
+                .order_by(IntegrationSyncRun.started_at, IntegrationSyncRun.id)
+                .with_for_update(skip_locked=True)
+                .limit(limit)
+            ).all()
+        )
+
     def _page[ModelT](
         self, statement: Select[tuple[ModelT]], page: int, page_size: int
     ) -> tuple[list[ModelT], int]:

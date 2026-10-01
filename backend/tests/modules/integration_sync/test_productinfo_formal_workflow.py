@@ -311,10 +311,13 @@ def test_scheduler_fails_only_expired_running_leases() -> None:
         finished_at=None,
         error_code=None,
         error_message=None,
+        work_items_failed=0,
     )
     lock = SimpleNamespace(run_id=run.id)
     repository.list_expired_locks_for_update.return_value = [lock]
+    repository.list_stale_unleased_productlist_runs_for_update.return_value = []
     repository.get_run_for_update.return_value = run
+    repository.list_running_work_items_for_update.return_value = []
     repository.next_event_sequence.return_value = 2
 
     recovered = scheduler.recover_expired_runs(now=NOW)
@@ -323,6 +326,46 @@ def test_scheduler_fails_only_expired_running_leases() -> None:
     assert run.status == "failed"
     assert run.error_code == "SYNC_LOCK_LEASE_EXPIRED"
     repository.delete_lock.assert_called_once_with(lock)
+    repository.add_event.assert_called_once()
+    session.commit.assert_called_once()
+
+
+def test_scheduler_recovers_stale_unleased_productlist_run_and_work_item() -> None:
+    session = MagicMock(spec=Session)
+    scheduler = IntegrationSchedulerService(session)
+    repository = MagicMock()
+    scheduler.repository = repository
+    run = SimpleNamespace(
+        id=UUID(int=702),
+        status="running",
+        finished_at=None,
+        error_code=None,
+        error_message=None,
+        work_items_failed=0,
+    )
+    work = SimpleNamespace(
+        status="running",
+        finished_at=None,
+        error_code=None,
+        error_message=None,
+    )
+    repository.list_expired_locks_for_update.return_value = []
+    repository.list_stale_unleased_productlist_runs_for_update.return_value = [run]
+    repository.list_running_work_items_for_update.return_value = [work]
+    repository.next_event_sequence.return_value = 2
+
+    recovered = scheduler.recover_expired_runs(now=NOW)
+
+    assert recovered == [run.id]
+    assert run.status == "failed"
+    assert run.error_code == "SYNC_LOCK_LEASE_MISSING"
+    assert run.work_items_failed == 1
+    assert work.status == "failed"
+    assert work.error_code == "SYNC_LOCK_LEASE_MISSING"
+    repository.list_stale_unleased_productlist_runs_for_update.assert_called_once_with(
+        NOW - timedelta(minutes=5),
+        limit=100,
+    )
     repository.add_event.assert_called_once()
     session.commit.assert_called_once()
 
