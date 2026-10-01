@@ -90,6 +90,7 @@ const task = {
   configId: "config-1",
   latestRunId: "run-1",
   scheduleCron: "0 8 * * *",
+  backfillDays: null,
   interfaceId: "synthetic-interface",
   interfaceKey: "productList",
   taskName: "ProductInfo controlled sync",

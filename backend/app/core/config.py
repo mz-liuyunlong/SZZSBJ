@@ -135,6 +135,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="LINGXING_ALLOW_STRUCTURED_WRITE",
     )
+    data_pages_real_sync_authorized: bool = Field(
+        default=False,
+        validation_alias="DATA_PAGES_REAL_SYNC_AUTHORIZED",
+    )
+    productlist_real_sync_authorized: bool = Field(
+        default=False,
+        validation_alias="PRODUCTLIST_REAL_SYNC_AUTHORIZED",
+    )
     lingxing_allow_full_sync: bool = Field(
         default=False,
         validation_alias="LINGXING_ALLOW_FULL_SYNC",
@@ -266,10 +274,34 @@ class Settings(BaseSettings):
             and self.lingxing_allow_structured_write
             and not self.lingxing_allow_full_sync
         )
-        if (
-            self.lingxing_enable_batch_product_info_requests or self.lingxing_allow_structured_write
-        ) and not product_info_execute_mode:
+        data_pages_execute_mode = (
+            self.app_env is not AppEnvironment.TEST
+            and self.data_pages_real_sync_authorized
+            and self.lingxing_enable_token_requests
+            and self.lingxing_enable_real_calls
+            and not self.lingxing_dry_run
+            and self.lingxing_allow_raw_write
+            and self.lingxing_allow_structured_write
+            and not self.lingxing_allow_full_sync
+        )
+        productlist_execute_mode = (
+            self.app_env is not AppEnvironment.TEST
+            and self.productlist_real_sync_authorized
+            and self.lingxing_enable_token_requests
+            and self.lingxing_enable_real_calls
+            and not self.lingxing_dry_run
+            and self.lingxing_allow_raw_write
+            and self.lingxing_allow_structured_write
+            and not self.lingxing_allow_full_sync
+        )
+        if self.lingxing_enable_batch_product_info_requests and not product_info_execute_mode:
             raise ValueError("Lingxing ProductInfo execution settings are not authorized")
+        if self.lingxing_allow_structured_write and not (
+            product_info_execute_mode or data_pages_execute_mode or productlist_execute_mode
+        ):
+            raise ValueError("Lingxing structured write execution settings are not authorized")
+        if self.productlist_real_sync_authorized and not productlist_execute_mode:
+            raise ValueError("Lingxing ProductList execution settings are not authorized")
         if self.lingxing_enable_token_requests and (
             self.lingxing_base_url is None
             or not self.lingxing_app_id
@@ -309,7 +341,7 @@ class Settings(BaseSettings):
         return (
             self.product_management_preview_auth_enabled
             and token is not None
-            and len(token) >= PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH
+            and len(token.get_secret_value()) >= PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH
         )
 
     @property

@@ -104,6 +104,7 @@ def test_bootstrap_creates_three_rows_and_is_idempotent(database: Engine) -> Non
         assert config is not None
         assert config.interface_id == interface.id
         assert config.retention_policy_id == policy.id
+
         assert config.schedule_enabled is False
         assert config.schedule_cron is None
         assert config.page_size == 1000
@@ -124,10 +125,12 @@ def test_bootstrap_repairs_only_approved_governance_fields(database: Engine) -> 
         policy = session.scalar(select(RawRetentionPolicy))
         config = session.scalar(select(IntegrationSyncConfig))
         assert interface is not None and policy is not None and config is not None
+
         interface.handler_key = "disabled"
         interface.outbound_enabled = False
         policy.hot_retention_days = 1
         policy.is_active = False
+
         config.schedule_enabled = True
         config.schedule_cron = "* * * * *"
         config.page_size = 1
@@ -138,15 +141,16 @@ def test_bootstrap_repairs_only_approved_governance_fields(database: Engine) -> 
 
         assert result.interface_status == "updated"
         assert result.retention_policy_status == "updated"
-        assert result.sync_config_status == "updated"
+        assert result.sync_config_status == "unchanged"
         assert interface.handler_key == "lingxing.product_list_sync.v1"
         assert interface.outbound_enabled is True
         assert policy.hot_retention_days == 365
         assert policy.is_active is True
-        assert config.schedule_enabled is False
-        assert config.schedule_cron is None
-        assert config.page_size == 1000
-        assert config.max_pages == 10000
+
+        assert config.schedule_enabled is True
+        assert config.schedule_cron == "* * * * *"
+        assert config.page_size == 1
+        assert config.max_pages == 1
 
 
 def test_authorized_command_outputs_only_safe_summary(

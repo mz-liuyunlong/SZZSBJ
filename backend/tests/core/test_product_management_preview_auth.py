@@ -214,6 +214,9 @@ def test_correct_preview_token_creates_only_the_approved_principal(
                 "products:pricing_rules:read",
                 "products:cost:read",
                 "integrations:read",
+                "integrations:raw_metadata:read",
+                "integrations:update",
+                "integrations:execute",
                 "sales:daily-sales:read",
                 "aftersales:refund-management:read",
                 "business-rules:read",
@@ -255,7 +258,7 @@ def test_correct_preview_token_is_path_bound_and_export_remains_forbidden(
     assert table_view_write.json()["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_preview_token_allows_only_the_three_integration_list_reads(
+def test_preview_token_allows_integration_list_reads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -288,31 +291,76 @@ def test_preview_token_allows_only_the_three_integration_list_reads(
 
 
 @pytest.mark.parametrize(
-    ("method", "path"),
+    "path",
     (
-        ("PATCH", "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001"),
-        ("POST", "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001/run"),
-        ("POST", "/api/integrations/sync-runs/00000000-0000-0000-0000-000000000001/retry"),
-        ("POST", "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001/backfill"),
+        "/api/integrations/sync-runs/00000000-0000-0000-0000-000000000001/work-items",
+        "/api/integrations/sync-runs/00000000-0000-0000-0000-000000000001/raw-request-refs",
     ),
 )
-def test_preview_token_does_not_authorize_integration_writes(
+def test_preview_token_allows_integration_run_detail_reads(
     monkeypatch: pytest.MonkeyPatch,
-    method: str,
     path: str,
 ) -> None:
     token = _enable_preview(monkeypatch, source_account_refs="acct-a")
+    scope: dict[str, Any] = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "headers": [(PREVIEW_AUTH_HEADER.lower().encode(), token.encode())],
+    }
 
-    response = TestClient(_app()).request(
-        method,
-        path,
-        headers={PREVIEW_AUTH_HEADER: token},
-        json={},
-    )
+    principal = get_optional_principal(Request(scope))
 
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "UNAUTHORIZED"
-    assert token not in response.text
+    assert principal is not None
+    assert principal.user_id == PREVIEW_PRINCIPAL_ID
+    assert "integrations:read" in principal.permissions
+    assert "integrations:raw_metadata:read" in principal.permissions
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "permission"),
+    (
+        (
+            "PATCH",
+            "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001",
+            "integrations:update",
+        ),
+        (
+            "POST",
+            "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001/run",
+            "integrations:execute",
+        ),
+        (
+            "POST",
+            "/api/integrations/sync-runs/00000000-0000-0000-0000-000000000001/retry",
+            "integrations:execute",
+        ),
+        (
+            "POST",
+            "/api/integrations/sync-configs/00000000-0000-0000-0000-000000000001/backfill",
+            "integrations:execute",
+        ),
+    ),
+)
+def test_preview_token_authorizes_integration_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    permission: str,
+) -> None:
+    token = _enable_preview(monkeypatch, source_account_refs="acct-a")
+    scope: dict[str, Any] = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "headers": [(PREVIEW_AUTH_HEADER.lower().encode(), token.encode())],
+    }
+
+    principal = get_optional_principal(Request(scope))
+
+    assert principal is not None
+    assert principal.user_id == PREVIEW_PRINCIPAL_ID
+    assert permission in principal.permissions
 
 
 def test_preview_product_scope_only_allows_expected_principal_and_resource(
@@ -415,3 +463,53 @@ def test_configured_source_scope_allows_read_routes(
     }
     assert token not in listed.text
     assert token not in rules.text
+
+
+def test_preview_auth_configured_uses_secret_value_length(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@127.0.0.1:5432/db")
+    monkeypatch.setenv("PRODUCT_MANAGEMENT_PREVIEW_AUTH_ENABLED", "true")
+    monkeypatch.setenv(
+        "PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN",
+        "local_preview_token_0123456789abcdef0123456789abcdef",
+    )
+
+    settings = get_settings()
+    assert settings.product_management_preview_auth_configured is True
+    get_settings.cache_clear()
+
+
+def test_local_data_pages_runtime_allows_structured_write_without_productinfo_executor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pass@127.0.0.1:5432/db")
+    monkeypatch.setenv("PRODUCT_MANAGEMENT_PREVIEW_AUTH_ENABLED", "true")
+    monkeypatch.setenv(
+        "PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN",
+        "local_preview_token_0123456789abcdef0123456789abcdef",
+    )
+    monkeypatch.setenv("LINGXING_BASE_URL", "https://openapi.lingxing.com")
+    monkeypatch.setenv("LINGXING_APP_ID", "test_app_id")
+    monkeypatch.setenv("LINGXING_APP_SECRET", "test_app_secret")
+    monkeypatch.setenv("LINGXING_ENABLE_TOKEN_REQUESTS", "true")
+    monkeypatch.setenv("LINGXING_ENABLE_REAL_CALLS", "true")
+    monkeypatch.setenv("LINGXING_DRY_RUN", "false")
+    monkeypatch.setenv("LINGXING_ALLOW_RAW_WRITE", "true")
+    monkeypatch.setenv("LINGXING_ALLOW_STRUCTURED_WRITE", "true")
+    monkeypatch.setenv("DATA_PAGES_REAL_SYNC_AUTHORIZED", "true")
+    monkeypatch.setenv("PRODUCTLIST_REAL_SYNC_AUTHORIZED", "true")
+    monkeypatch.setenv("LINGXING_ENABLE_BATCH_PRODUCT_INFO_REQUESTS", "false")
+    monkeypatch.setenv("LINGXING_ALLOW_FULL_SYNC", "false")
+
+    settings = get_settings()
+    assert settings.product_management_preview_auth_configured is True
+    assert settings.lingxing_allow_structured_write is True
+    assert settings.productlist_real_sync_authorized is True
+    get_settings.cache_clear()

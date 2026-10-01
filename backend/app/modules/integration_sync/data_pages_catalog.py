@@ -35,7 +35,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="seller_list_multi_platform",
         interface_key="getSellerList",
-        display_name="Lingxing Seller List",
+        display_name="店铺列表同步",
         endpoint_path="/pb/mp/shop/v2/getSellerList",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.get_seller_list.v1",
@@ -48,7 +48,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_listing_list",
         interface_key="walmartListingList",
-        display_name="Lingxing Walmart Listing List",
+        display_name="Listing 管理同步",
         endpoint_path="/basicOpen/multiplatform/walmart/list",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.walmart_listing_list.v1",
@@ -60,7 +60,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="sale_stat_page_list",
         interface_key="saleStatPageList",
-        display_name="Lingxing Sale Stat Page List",
+        display_name="每日销售同步",
         endpoint_path="/basicOpen/platformStatisticsV2/saleStat/pageList",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.sale_stat_page_list.v1",
@@ -75,7 +75,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="order_v2_list",
         interface_key="orderV2List",
-        display_name="Lingxing Order V2 List",
+        display_name="订单明细同步",
         endpoint_path="/pb/mp/order/v2/list",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.order_v2_list.v1",
@@ -88,7 +88,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_return_order_list",
         interface_key="walmartReturnOrderList",
-        display_name="Lingxing Walmart Return Order List",
+        display_name="退款退货同步",
         endpoint_path="/basicOpen/openapi/multiplatform/walmart/returnOrder/list",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.walmart_return_order_list.v1",
@@ -101,7 +101,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_advertiser_list",
         interface_key="walmartAdvertiserList",
-        display_name="Lingxing Walmart Advertiser List",
+        display_name="广告账户同步",
         endpoint_path="/basicOpen/adReport/advertiser/list",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.walmart_advertiser_list.v1",
@@ -114,7 +114,7 @@ DATA_PAGES_SYNC_INTERFACE_SPECS: Final[tuple[DataPagesSyncInterfaceSpec, ...]] =
     DataPagesSyncInterfaceSpec(
         parser_key="walmart_ad_item_sp_list",
         interface_key="walmartAdItemSpList",
-        display_name="Lingxing Walmart SP Ad Item Report",
+        display_name="广告报表同步",
         endpoint_path="/basicOpen/multiplatform/ads/reportAdItemSpList",
         request_kind="offset_page",
         handler_key="lingxing.data_pages.walmart_ad_item_sp_list.v1",

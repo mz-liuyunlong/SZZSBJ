@@ -26,6 +26,7 @@ describe("wfsFeeAlertTypes", () => {
   it("filters locally by store, status, reason and search field", () => {
     const filters = {
       ...createWfsFeeAlertInitialFilters(),
+      dateRange: ["2026-09-01", "2026-09-30"] as [string, string],
       stores: ["美国一店"],
       statuses: ["跟进中"],
       reasons: ["尺寸重量异常"],

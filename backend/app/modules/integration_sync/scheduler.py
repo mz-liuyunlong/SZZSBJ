@@ -9,6 +9,14 @@ from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 CRON_SEARCH_DAYS = 40 * 366
 QUEUED_RECOVERY_GRACE = timedelta(minutes=1)
+DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
+    {
+        "walmartListingList",
+        "saleStatPageList",
+        "walmartReturnOrderList",
+        "walmartAdItemSpList",
+    }
+)
 
 
 class ScheduleExpressionError(ValueError):
@@ -92,6 +100,43 @@ class IntegrationSchedulerService:
             limit=limit,
         )
 
+    def recover_expired_runs(
+        self,
+        *,
+        limit: int = 100,
+        now: datetime | None = None,
+    ) -> list[UUID]:
+        """Fail only runs whose lock lease has actually expired."""
+
+        if not 1 <= limit <= 100:
+            raise ValueError("scheduler expired-run batch limit is invalid")
+        current = (now or datetime.now(UTC)).astimezone(UTC)
+        recovered: list[UUID] = []
+        for lock in self.repository.list_expired_locks_for_update(current, limit=limit):
+            run = self.repository.get_run_for_update(lock.run_id)
+            if run is not None and run.status == "running":
+                run.status = "failed"
+                run.finished_at = current
+                run.error_code = "SYNC_LOCK_LEASE_EXPIRED"
+                run.error_message = "同步锁租约已过期"
+                self.repository.add_event(
+                    IntegrationSyncRunEvent(
+                        run_id=run.id,
+                        sequence_no=self.repository.next_event_sequence(run.id),
+                        event_type="state_transition",
+                        from_status="running",
+                        to_status="failed",
+                        message_code="SYNC_LOCK_LEASE_EXPIRED",
+                        safe_details=None,
+                        occurred_at=current,
+                        actor_ref="scheduler",
+                    )
+                )
+                recovered.append(run.id)
+            self.repository.delete_lock(lock)
+        self.session.commit()
+        return recovered
+
     def create_due_runs(
         self,
         *,
@@ -115,17 +160,7 @@ class IntegrationSchedulerService:
                     continue
 
                 interface = self.repository.get_interface(config.interface_id)
-                if (
-                    interface is not None
-                    and interface.provider == "lingxing"
-                    and interface.interface_key == "productList"
-                ):
-                    # ProductList is permanently manual-only. Short-circuit
-                    # before reading schedule fields so stale schedule rows
-                    # cannot make it schedulable or break the scheduler tick.
-                    config.next_run_at = None
-                    continue
-
+                # Product Management is now schedulable from Sync Task settings.
                 schedule_cron = config.schedule_cron
                 if config.schedule_timezone != "UTC" or not schedule_cron:
                     config.next_run_at = None
@@ -138,7 +173,12 @@ class IntegrationSchedulerService:
                     config.next_run_at = None
                     continue
 
-                if interface is None or not interface.outbound_enabled:
+                is_data_pages = (
+                    interface is not None
+                    and interface.provider == "lingxing"
+                    and interface.interface_key in DATA_PAGES_EXECUTABLE_INTERFACE_KEYS
+                )
+                if interface is None or (not interface.outbound_enabled and not is_data_pages):
                     config.next_run_at = next_run_at
                     continue
 

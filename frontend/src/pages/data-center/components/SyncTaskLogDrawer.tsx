@@ -23,6 +23,7 @@ import type {
   SyncTaskTriggerType,
   SyncTaskWorkItem,
 } from "@/pages/data-center/syncTaskTypes";
+import { formatSyncTaskDateTime } from "@/pages/data-center/syncTaskDisplayFormatters";
 
 interface SyncTaskLogDrawerProps {
   open: boolean;
@@ -103,7 +104,13 @@ function SyncTaskLogDrawer({ open, task, logs, onClose }: SyncTaskLogDrawerProps
   };
 
   const logColumns: TableColumnsType<SyncTaskLog> = [
-    { title: "执行时间", dataIndex: "runAt", key: "runAt", width: 150 },
+    {
+      title: "执行时间",
+      dataIndex: "runAt",
+      key: "runAt",
+      width: 150,
+      render: (value: string) => formatSyncTaskDateTime(value) ?? "-",
+    },
     { title: "触发方式", dataIndex: "triggerType", key: "triggerType", width: 92 },
     {
       title: "执行状态",

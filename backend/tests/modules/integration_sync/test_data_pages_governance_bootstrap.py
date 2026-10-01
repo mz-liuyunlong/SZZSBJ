@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -89,3 +90,36 @@ def test_data_pages_governance_bootstrap_rejects_unsafe_account_ref(
         IntegrationCatalogService(governance_session).bootstrap_data_pages_governance(" default")
 
     assert str(exc_info.value) == "DATA_PAGES_GOVERNANCE_BOOTSTRAP_SOURCE_ACCOUNT_REF_INVALID"
+
+
+def test_data_pages_governance_bootstrap_preserves_existing_runtime_schedule(
+    governance_session: Session,
+) -> None:
+    service = IntegrationCatalogService(governance_session)
+    service.bootstrap_data_pages_governance("default")
+
+    config = governance_session.scalars(
+        select(IntegrationSyncConfig)
+        .join(IntegrationInterface, IntegrationSyncConfig.interface_id == IntegrationInterface.id)
+        .where(IntegrationInterface.interface_key == "saleStatPageList")
+    ).one()
+
+    config.is_enabled = True
+    config.schedule_enabled = True
+    config.schedule_cron = "*/30 * * * *"
+    config.schedule_timezone = "UTC"
+    config.max_pages = 3
+    config.max_attempts = 3
+    config.next_run_at = datetime(2026, 9, 30, 9, 30)
+    governance_session.commit()
+
+    service.bootstrap_data_pages_governance("default")
+    governance_session.refresh(config)
+
+    assert config.is_enabled is True
+    assert config.schedule_enabled is True
+    assert config.schedule_cron == "*/30 * * * *"
+    assert config.schedule_timezone == "UTC"
+    assert config.max_pages == 3
+    assert config.max_attempts == 3
+    assert config.next_run_at == datetime(2026, 9, 30, 9, 30)

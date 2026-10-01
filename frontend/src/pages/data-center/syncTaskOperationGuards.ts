@@ -12,6 +12,30 @@ export interface SyncTaskOperationGuard {
 
 const anomalyStatuses = new Set<SyncTaskStatus>(["失败", "超时", "部分成功"]);
 
+const dataPagesInterfaceKeys = new Set([
+  "getSellerList",
+  "walmartListingList",
+  "saleStatPageList",
+  "orderV2List",
+  "walmartReturnOrderList",
+  "walmartAdvertiserList",
+  "walmartAdItemSpList",
+]);
+
+const executableDataPagesInterfaceKeys = new Set([
+  "walmartListingList",
+  "saleStatPageList",
+  "walmartReturnOrderList",
+  "walmartAdItemSpList",
+])
+
+const nonExecutableDataPagesReason = "该接口是 Data Pages 总同步的组成接口，不单独配置定时任务。请配置「Listing 管理同步」「每日销售同步」「退款退货同步」或「广告报表同步」。";
+
+const isNonExecutableDataPagesTask = (row: SyncTaskRow) => (
+  dataPagesInterfaceKeys.has(row.interfaceKey)
+  && !executableDataPagesInterfaceKeys.has(row.interfaceKey)
+);
+
 const guard = (
   operation: SyncTaskOperationKey,
   allowed: boolean,
@@ -27,6 +51,16 @@ const guard = (
 });
 
 export function getManualSyncGuard(row: SyncTaskRow): SyncTaskOperationGuard {
+  if (isNonExecutableDataPagesTask(row)) {
+    return guard(
+      "manualSync",
+      false,
+      nonExecutableDataPagesReason,
+      "确认立即同步",
+      "该接口不作为独立生产同步任务执行。",
+    );
+  }
+
   if (!row.configId) {
     return guard(
       "manualSync",
@@ -51,9 +85,9 @@ export function getManualSyncGuard(row: SyncTaskRow): SyncTaskOperationGuard {
     return guard(
       "manualSync",
       false,
-      "接口或同步配置未启用。",
+      "同步配置未启用，请先进入配置页保存一次任务配置。",
       "确认立即同步",
-      "该接口或同步配置未启用，不能发起真实同步。",
+      "该任务当前未启用，不能直接发起真实同步。",
     );
   }
 
@@ -67,6 +101,16 @@ export function getManualSyncGuard(row: SyncTaskRow): SyncTaskOperationGuard {
 }
 
 export function getRetryGuard(row: SyncTaskRow): SyncTaskOperationGuard {
+  if (isNonExecutableDataPagesTask(row)) {
+    return guard(
+      "retry",
+      false,
+      nonExecutableDataPagesReason,
+      "确认重试任务",
+      "该接口不作为独立生产同步任务执行。",
+    );
+  }
+
   if (!row.latestRunId) {
     return guard(
       "retry",
@@ -107,6 +151,16 @@ export function getRetryGuard(row: SyncTaskRow): SyncTaskOperationGuard {
 }
 
 export function getAutoSyncGuard(row: SyncTaskRow, checked: boolean): SyncTaskOperationGuard {
+  if (isNonExecutableDataPagesTask(row)) {
+    return guard(
+      "autoSync",
+      false,
+      nonExecutableDataPagesReason,
+      "确认修改自动同步",
+      "该接口不作为独立生产同步任务执行。",
+    );
+  }
+
   if (!row.configId) {
     return guard(
       "autoSync",
@@ -114,16 +168,6 @@ export function getAutoSyncGuard(row: SyncTaskRow, checked: boolean): SyncTaskOp
       "当前任务缺少同步配置，不能修改自动同步。",
       "确认修改自动同步",
       "该任务没有可写入的同步配置 ID。",
-    );
-  }
-
-  if (row.status === "disabled") {
-    return guard(
-      "autoSync",
-      false,
-      "接口或同步配置未启用。",
-      "确认修改自动同步",
-      "该接口或同步配置未启用，不能修改自动同步状态。",
     );
   }
 
@@ -143,12 +187,22 @@ export function getAutoSyncGuard(row: SyncTaskRow, checked: boolean): SyncTaskOp
     checked ? "可开启自动同步，执行前必须二次确认。" : "可关闭自动同步，执行前必须二次确认。",
     checked ? "确认开启自动同步" : "确认关闭自动同步",
     checked
-      ? "确认后会写入调度配置，后续可能由 Scheduler 自动触发。"
+      ? "确认后会写入调度配置，后续由后端 Scheduler 自动触发。"
       : "确认后会关闭该任务自动调度，不影响手动同步。",
   );
 }
 
 export function getSaveConfigGuard(row: SyncTaskRow): SyncTaskOperationGuard {
+  if (isNonExecutableDataPagesTask(row)) {
+    return guard(
+      "saveConfig",
+      false,
+      nonExecutableDataPagesReason,
+      "确认保存配置",
+      "该接口不作为独立生产同步任务执行。",
+    );
+  }
+
   if (!row.configId) {
     return guard(
       "saveConfig",
@@ -159,21 +213,11 @@ export function getSaveConfigGuard(row: SyncTaskRow): SyncTaskOperationGuard {
     );
   }
 
-  if (row.status === "disabled") {
-    return guard(
-      "saveConfig",
-      false,
-      "接口或同步配置未启用。",
-      "确认保存配置",
-      "该接口或同步配置未启用，不能保存调度配置。",
-    );
-  }
-
   return guard(
     "saveConfig",
     true,
     "可保存配置，执行前必须二次确认。",
     "确认保存配置",
-    "确认后会写入同步配置，包括自动同步、cron 计划和重试次数。",
+    "确认后会写入同步配置，包括启用任务、自动同步、cron 计划和重试次数。",
   );
 }

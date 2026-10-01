@@ -1,6 +1,7 @@
 import { Button, Drawer, Radio, Space, Tag, Typography } from "antd";
 import { useState } from "react";
 import type { SyncScheduleItem, SyncScheduleTab, SyncTaskStatus } from "@/pages/data-center/syncTaskTypes";
+import { formatSyncTaskDateTime, formatSyncTaskFrequency } from "@/pages/data-center/syncTaskDisplayFormatters";
 
 interface SyncTaskScheduleDrawerProps {
   open: boolean;
@@ -10,6 +11,9 @@ interface SyncTaskScheduleDrawerProps {
   onClose: () => void;
   onOpenGlobalLog: () => void;
 }
+
+const scheduleTimeText = (value: string) => formatSyncTaskDateTime(value) ?? value;
+const scheduleFrequencyText = (value: string) => formatSyncTaskFrequency(value);
 
 const statusColors: Record<SyncTaskStatus, string> = {
   成功: "success",
@@ -25,11 +29,11 @@ function ScheduleTimeline({ items }: { items: SyncScheduleItem[] }) {
     <div className="sync-task__timeline">
       {items.map((item) => (
         <div key={item.id} className="sync-task__time-row">
-          <div className="sync-task__time">{item.time}</div>
+          <div className="sync-task__time">{scheduleTimeText(item.time)}</div>
           <div>
             <div className="sync-task__time-title">{item.taskName}</div>
             <div className="sync-task__time-sub">
-              {item.frequency} · {item.module} · {item.status}
+              {scheduleFrequencyText(item.frequency)} · {item.module} · {item.status}
             </div>
           </div>
           <Tag color={statusColors[item.status]}>{item.status}</Tag>
@@ -44,9 +48,9 @@ function WeeklyList({ items, weeklyOnly }: { items: SyncScheduleItem[]; weeklyOn
     <div className="sync-task__week-list">
       {items.map((item) => (
         <div key={item.id} className="sync-task__week-row">
-          <strong>{weeklyOnly ? item.taskName : `${item.weekDay ?? "周任务"} ${item.time} · ${item.taskName}`}</strong>
+          <strong>{weeklyOnly ? item.taskName : `${item.weekDay ?? "周任务"} ${scheduleTimeText(item.time)} · ${item.taskName}`}</strong>
           <div className="sync-task__time-sub">
-            {weeklyOnly ? item.frequency : `${item.module} · ${item.frequency}`} · 自动同步
+            {weeklyOnly ? scheduleFrequencyText(item.frequency) : `${item.module} · ${scheduleFrequencyText(item.frequency)}`} · 自动同步
           </div>
         </div>
       ))}

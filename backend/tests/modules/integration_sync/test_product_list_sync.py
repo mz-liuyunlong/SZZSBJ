@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
-from app.core.config import Settings
+from app.core.config import AppEnvironment, Settings
 from app.integrations.lingxing.client import (
     LingxingClientError,
     LingxingRawEnvelope,
@@ -237,7 +237,7 @@ def test_productlist_transport_uses_mocked_token_and_keeps_auth_out_of_envelope(
     assert captured_auth["sign"] not in serialized
 
 
-def test_default_productlist_client_requires_production_environment(
+def test_default_productlist_client_requires_explicit_runtime_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -247,13 +247,54 @@ def test_default_productlist_client_requires_production_environment(
 
     with pytest.raises(
         ProductListSyncError,
-        match="SYNC_PRODUCTLIST_SERVER_ENVIRONMENT_REQUIRED",
+        match="SYNC_PRODUCTLIST_RUNTIME_NOT_AUTHORIZED",
     ):
         with product_list_client():
             pass
 
 
-def test_handler_rejects_default_client_before_marking_run_running(
+def test_default_productlist_client_suppresses_signed_httpx_access_logs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = SimpleNamespace(
+        app_env=AppEnvironment.LOCAL,
+        productlist_real_sync_authorized=True,
+    )
+    token_client = MagicMock()
+    token_manager = MagicMock()
+    readonly_client = MagicMock()
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_product_list_sync.get_settings",
+        lambda: settings,
+    )
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_product_list_sync.LingxingTokenClient",
+        lambda current_settings: token_client,
+    )
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_product_list_sync.LingxingTokenManager",
+        lambda current_client, current_settings: token_manager,
+    )
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_product_list_sync.LingxingReadonlyClient",
+        lambda current_settings, **kwargs: readonly_client,
+    )
+    httpx_logger = logging.getLogger("httpx")
+    original_level = httpx_logger.level
+    httpx_logger.setLevel(logging.INFO)
+
+    try:
+        with product_list_client() as client:
+            assert client is readonly_client
+        assert httpx_logger.level == logging.WARNING
+    finally:
+        httpx_logger.setLevel(original_level)
+
+    readonly_client.close.assert_called_once_with()
+    token_client.close.assert_called_once_with()
+
+
+def test_handler_rejects_unauthorized_default_client_before_marking_run_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -266,7 +307,7 @@ def test_handler_rejects_default_client_before_marking_run_running(
     result = handler.execute(run, _interface())
 
     assert result.status == "failed"
-    assert run.error_code == "SYNC_PRODUCTLIST_SERVER_ENVIRONMENT_REQUIRED"
+    assert run.error_code == "SYNC_PRODUCTLIST_RUNTIME_NOT_AUTHORIZED"
     assert run.started_at is None
     session.commit.assert_called_once_with()
 
@@ -338,6 +379,18 @@ def test_handler_paginates_raw_first_upserts_identity_and_reconciles() -> None:
     assert repository.add_parse_job.call_count == 0
     observed = repository.deactivate_absent_identities.call_args.kwargs["observed_ids"]
     assert observed == {"a", "b", "c"}
+
+
+@pytest.mark.parametrize("trigger_type", ["retry", "schedule"])
+def test_handler_preflight_allows_retry_and_schedule(trigger_type: str) -> None:
+    run = _run()
+    run.trigger_type = trigger_type
+    handler, repository, _ = _handler(None)
+
+    config, policy = handler._preflight(run, _interface())
+
+    assert config is repository.get_config.return_value
+    assert policy is repository.get_retention_policy.return_value
 
 
 def test_handler_commits_raw_before_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -550,10 +603,9 @@ def test_execution_routes_productlist_without_lock_or_event_writes(
             False,
             "SYNC_PRODUCTLIST_ONLY",
         ),
-        (_interface(), True, "SYNC_PRODUCTLIST_MANUAL_ONLY"),
     ],
 )
-def test_manual_trigger_rejects_other_interfaces_and_scheduled_productlist(
+def test_manual_trigger_rejects_other_interfaces(
     interface: SimpleNamespace,
     schedule_enabled: bool,
     error_code: str,
@@ -616,18 +668,35 @@ def test_productlist_manual_trigger_writes_run_without_unapproved_event() -> Non
     session.commit.assert_called_once_with()
 
 
-def test_scheduler_never_creates_productlist_run() -> None:
+def test_scheduler_creates_productlist_run() -> None:
     session = MagicMock(spec=Session)
     service = IntegrationSchedulerService(session)
     service.repository = MagicMock()
     service.repository.list_due_configs.return_value = [
-        SimpleNamespace(interface_id=INTERFACE_ID, next_run_at=NOW)
+        SimpleNamespace(
+            id=CONFIG_ID,
+            interface_id=INTERFACE_ID,
+            source_account_ref="default",
+            next_run_at=NOW,
+            schedule_cron="0 * * * *",
+            schedule_timezone="UTC",
+        )
     ]
     service.repository.get_interface.return_value = _interface()
+    service.repository.find_run_by_idempotency.return_value = None
 
-    assert service.create_due_runs() == []
-    service.repository.add_run.assert_not_called()
-    service.repository.add_event.assert_not_called()
+    def add_run(run: IntegrationSyncRun) -> IntegrationSyncRun:
+        run.id = RUN_ID
+        return run
+
+    service.repository.add_run.side_effect = add_run
+    service.repository.add_event.side_effect = lambda event: event
+
+    assert service.create_due_runs(now=NOW) == [RUN_ID]
+    run = service.repository.add_run.call_args.args[0]
+    assert run.interface_key == "productList"
+    assert run.trigger_type == "schedule"
+    service.repository.add_event.assert_called_once()
     session.commit.assert_called_once_with()
 
 

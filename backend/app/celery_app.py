@@ -63,6 +63,7 @@ def create_celery_app(
     celery = Celery(APP_NAME, broker=effective_broker_url, include=TASK_IMPORTS)
 
     celery.conf.update(
+        broker_url=effective_broker_url,
         task_queues=(
             Queue(MEDIA_QUEUE, exchange, routing_key=MEDIA_QUEUE),
             Queue(INTEGRATION_QUEUE, exchange, routing_key=INTEGRATION_QUEUE),
@@ -78,6 +79,12 @@ def create_celery_app(
         worker_hijack_root_logger=False,
         timezone="UTC",
         enable_utc=True,
+        beat_schedule={
+            "integration-sync-scheduler": {
+                "task": "integration_sync.scheduler_tick",
+                "schedule": 60.0,
+            },
+        },
     )
     return celery
 

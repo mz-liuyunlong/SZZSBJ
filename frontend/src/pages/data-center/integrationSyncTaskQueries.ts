@@ -11,6 +11,7 @@ import {
 } from "@/pages/data-center/integrationSyncTaskApi";
 
 const emptyRunId = "__none__";
+const syncTaskPollIntervalMs = 5_000;
 
 export const integrationSyncTaskKeys = {
   all: ["integration-sync-tasks"] as const,
@@ -36,6 +37,7 @@ export function useIntegrationSyncTasksQuery() {
     queryFn: listIntegrationSyncTasks,
     staleTime: SERVER_STATE_STALE_TIME.list,
     placeholderData: keepPreviousData,
+    refetchInterval: syncTaskPollIntervalMs,
   });
 }
 
@@ -51,6 +53,7 @@ export function useIntegrationSyncRunWorkItemsQuery(
     },
     enabled: Boolean(runId) && enabled,
     staleTime: SERVER_STATE_STALE_TIME.detail,
+    refetchInterval: syncTaskPollIntervalMs,
   });
 }
 
@@ -66,6 +69,7 @@ export function useIntegrationSyncRunRawRequestRefsQuery(
     },
     enabled: Boolean(runId) && enabled,
     staleTime: SERVER_STATE_STALE_TIME.detail,
+    refetchInterval: syncTaskPollIntervalMs,
   });
 }
 

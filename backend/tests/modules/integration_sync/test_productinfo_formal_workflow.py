@@ -11,6 +11,8 @@ import app.modules.integration_sync.execution as execution_module
 import app.modules.integration_sync.tasks as task_module
 from app.core.api import ApiError
 from app.modules.integration_sync.execution import SyncRunExecutionService
+from app.modules.integration_sync.repository import RECOVERABLE_INTERFACE_KEYS
+from app.modules.integration_sync.scheduler import IntegrationSchedulerService
 from app.modules.integration_sync.schemas import BackfillRequest, TriggerRequest, TriggerType
 from app.modules.integration_sync.service import (
     SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED,
@@ -189,6 +191,7 @@ def test_scheduler_tick_dispatches_every_due_run(
     run_ids = [UUID(int=401), UUID(int=402)]
     create_due_runs = MagicMock(return_value=run_ids)
     recoverable_queued_run_ids = MagicMock(return_value=[])
+    recover_expired_runs = MagicMock(return_value=[])
     monkeypatch.setattr(
         task_module.IntegrationSchedulerService,
         "create_due_runs",
@@ -199,6 +202,11 @@ def test_scheduler_tick_dispatches_every_due_run(
         "recoverable_queued_run_ids",
         recoverable_queued_run_ids,
     )
+    monkeypatch.setattr(
+        task_module.IntegrationSchedulerService,
+        "recover_expired_runs",
+        recover_expired_runs,
+    )
 
     dispatched: list[UUID] = []
     monkeypatch.setattr(task_module, "dispatch_sync_run", dispatched.append)
@@ -206,6 +214,7 @@ def test_scheduler_tick_dispatches_every_due_run(
     task_module.scheduler_tick.run()
 
     assert dispatched == run_ids
+    recover_expired_runs.assert_called_once_with()
     create_due_runs.assert_called_once_with()
     recoverable_queued_run_ids.assert_called_once_with()
 
@@ -291,6 +300,113 @@ def test_execution_heartbeat_renews_owned_lock(
     session.commit.assert_called_once()
 
 
+def test_scheduler_fails_only_expired_running_leases() -> None:
+    session = MagicMock(spec=Session)
+    scheduler = IntegrationSchedulerService(session)
+    repository = MagicMock()
+    scheduler.repository = repository
+    run = SimpleNamespace(
+        id=UUID(int=701),
+        status="running",
+        finished_at=None,
+        error_code=None,
+        error_message=None,
+    )
+    lock = SimpleNamespace(run_id=run.id)
+    repository.list_expired_locks_for_update.return_value = [lock]
+    repository.get_run_for_update.return_value = run
+    repository.next_event_sequence.return_value = 2
+
+    recovered = scheduler.recover_expired_runs(now=NOW)
+
+    assert recovered == [run.id]
+    assert run.status == "failed"
+    assert run.error_code == "SYNC_LOCK_LEASE_EXPIRED"
+    repository.delete_lock.assert_called_once_with(lock)
+    repository.add_event.assert_called_once()
+    session.commit.assert_called_once()
+
+
+def test_data_pages_tasks_remain_queued_and_recoverable() -> None:
+    assert {
+        "walmartListingList",
+        "saleStatPageList",
+        "walmartReturnOrderList",
+        "walmartAdItemSpList",
+    }.issubset(RECOVERABLE_INTERFACE_KEYS)
+
+
+def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    runner = MagicMock()
+    runner.summary = SimpleNamespace()
+    runner._fetch_offset_all.side_effect = [
+        [{"store_id": "store-1"}],
+        [{"order_id": "order-1"}],
+    ]
+    runner._fetch_page_all.side_effect = [[], [], []]
+    runner._write_stores.return_value = 1
+    runner._write_sales.return_value = 0
+    runner._write_orders.return_value = 1
+    runner._resolve_order_items.return_value = 0
+    runner._refresh_daily_sales_mart.return_value = 1
+    runner._refresh_order_profit_mart.return_value = 1
+
+    service._execute_data_pages_interface("saleStatPageList", runner)
+
+    assert [call.args[0] for call in runner._fetch_page_all.call_args_list] == [
+        "sale_stat_page_list",
+        "sale_stat_page_list",
+        "sale_stat_page_list",
+    ]
+    assert [call.args[0] for call in runner._fetch_offset_all.call_args_list] == [
+        "seller_list_multi_platform",
+        "order_v2_list",
+    ]
+    runner._fetch_return_all.assert_not_called()
+    runner._fetch_ads_all.assert_not_called()
+
+
+def test_refund_execution_does_not_run_sales_or_ad_fetches() -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    runner = MagicMock()
+    runner.summary = SimpleNamespace()
+    runner._fetch_offset_all.return_value = [{"store_id": "store-1"}]
+    runner._fetch_return_all.return_value = [{"return_order_id": "return-1"}]
+    runner._write_stores.return_value = 1
+    runner._write_refunds.return_value = 1
+    runner._resolve_refund_items.return_value = 0
+    runner._refresh_daily_sales_mart.return_value = 1
+    runner._refresh_order_profit_mart.return_value = 1
+
+    service._execute_data_pages_interface("walmartReturnOrderList", runner)
+
+    runner._fetch_return_all.assert_called_once_with()
+    runner._fetch_page_all.assert_not_called()
+    runner._fetch_ads_all.assert_not_called()
+
+
+def test_ad_execution_does_not_run_sales_or_refund_fetches() -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    runner = MagicMock(max_advertisers=20)
+    runner.summary = SimpleNamespace()
+    runner._fetch_page_all.return_value = [{"advertiserId": "advertiser-1"}]
+    runner._fetch_ads_all.return_value = [{"ad_item_id": "ad-1"}]
+    runner._write_advertisers.return_value = 1
+    runner._write_ads.return_value = 1
+    runner._refresh_daily_sales_mart.return_value = 1
+    runner._refresh_order_profit_mart.return_value = 1
+
+    service._execute_data_pages_interface("walmartAdItemSpList", runner)
+
+    runner._fetch_ads_all.assert_called_once_with("advertiser-1")
+    runner._fetch_offset_all.assert_not_called()
+    runner._fetch_return_all.assert_not_called()
+
+
 def test_scheduler_tick_recovers_queued_runs_and_continues_after_dispatch_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -312,6 +428,11 @@ def test_scheduler_tick_recovers_queued_runs_and_continues_after_dispatch_failur
         task_module.IntegrationSchedulerService,
         "recoverable_queued_run_ids",
         MagicMock(return_value=[new_run, recovered_run]),
+    )
+    monkeypatch.setattr(
+        task_module.IntegrationSchedulerService,
+        "recover_expired_runs",
+        MagicMock(return_value=[]),
     )
 
     attempted: list[UUID] = []

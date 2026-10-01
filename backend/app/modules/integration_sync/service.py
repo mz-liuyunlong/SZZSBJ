@@ -58,6 +58,15 @@ SYNC_PRODUCTLIST_MANUAL_ONLY = "SYNC_PRODUCTLIST_MANUAL_ONLY"
 SYNC_PRODUCTINFO_RETRY_PLAN_INVALID = "SYNC_PRODUCTINFO_RETRY_PLAN_INVALID"
 SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED = "SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED"
 
+DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
+    {
+        "walmartListingList",
+        "saleStatPageList",
+        "walmartReturnOrderList",
+        "walmartAdItemSpList",
+    }
+)
+
 audit_logger = logging.getLogger("app.audit.integration_sync")
 
 
@@ -111,12 +120,8 @@ class IntegrationSyncService:
             raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
         if schedule_enabled:
             interface = self.repository.get_interface(config.interface_id)
-            if (
-                interface is not None
-                and interface.provider == "lingxing"
-                and interface.interface_key == "productList"
-            ):
-                raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
+            if interface is None:
+                raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
         schedule_changed = "schedule_enabled" in values or "schedule_cron" in values
         schedule_now = utc_now()
@@ -212,8 +217,7 @@ class IntegrationSyncService:
         account_refs: frozenset[str],
     ) -> SyncRunCreated:
         source = self._require_run(source_run_id, account_refs)
-        if source.provider == "lingxing" and source.interface_key == "productList":
-            raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
+        # Product Management retry is allowed from the Sync Task page.
         if source.status not in {RunStatus.FAILED, RunStatus.CANCELED}:
             raise ApiError(code=SYNC_RUN_NOT_RETRYABLE, status_code=409)
         if source.provider == "lingxing" and source.interface_key == "batchGetProductInfo":
@@ -450,7 +454,12 @@ class IntegrationSyncService:
         interface = self.repository.get_interface(config.interface_id)
         if interface is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
-        if not config.is_enabled or not interface.outbound_enabled:
+        is_data_pages = (
+            interface.provider == "lingxing"
+            and interface.interface_key in DATA_PAGES_EXECUTABLE_INTERFACE_KEYS
+            and interface.method == "POST"
+        )
+        if not config.is_enabled or (not interface.outbound_enabled and not is_data_pages):
             raise ApiError(code=SYNC_INTERFACE_DISABLED, status_code=409)
         is_productlist = (
             interface.provider == "lingxing"
@@ -476,11 +485,11 @@ class IntegrationSyncService:
             and interface.request_kind == "offset_page"
             and interface.handler_key == purchase_spec.handler_key
         )
-        if productlist_only and not (is_productlist or is_productinfo or is_pmc_purchase):
+        if productlist_only and not (
+            is_productlist or is_productinfo or is_pmc_purchase or is_data_pages
+        ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
-            raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
-        if is_productlist and (trigger is not TriggerType.MANUAL or config.schedule_enabled):
             raise ApiError(code=SYNC_PRODUCTLIST_MANUAL_ONLY, status_code=409)
         if is_productinfo and trigger is TriggerType.BACKFILL:
             raise ApiError(

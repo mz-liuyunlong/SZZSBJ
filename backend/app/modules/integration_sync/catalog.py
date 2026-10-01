@@ -208,6 +208,7 @@ class IntegrationCatalogService:
 
             config = self.repository.get_config_by_scope(interface.id, source_account_ref)
             if config is None:
+                # 首次创建仍然默认手动任务；是否自动同步由任务中心配置。
                 self.repository.add_catalog_record(
                     IntegrationSyncConfig(
                         id=uuid4(),
@@ -225,17 +226,12 @@ class IntegrationCatalogService:
                 )
                 sync_config_status: BootstrapStatus = "created"
             else:
+                # 已有配置是任务中心维护的运行配置，bootstrap 不允许覆盖。
                 sync_config_status = _apply_approved_values(
                     config,
-                    is_enabled=True,
-                    schedule_enabled=False,
-                    schedule_cron=None,
-                    schedule_timezone="UTC",
-                    page_size=1000,
-                    max_pages=10000,
-                    max_attempts=1,
                     retention_policy_id=policy.id,
                 )
+
             self.session.commit()
             return ProductListGovernanceBootstrapResult(
                 interface_status=interface_status,
@@ -269,6 +265,7 @@ class IntegrationCatalogService:
                     policy,
                     spec,
                     source_account_ref,
+                    preserve_runtime_config=True,
                 )
                 interface_statuses.append(interface_status)
                 retention_policy_statuses.append(retention_policy_status)
@@ -394,9 +391,11 @@ class IntegrationCatalogService:
         policy: RawRetentionPolicy,
         spec: SyncInterfaceSpecLike,
         source_account_ref: str,
+        *,
+        preserve_runtime_config: bool = False,
     ) -> BootstrapStatus:
         config = self.repository.get_config_by_scope(interface.id, source_account_ref)
-        approved_values = {
+        create_values = {
             "is_enabled": False,
             "schedule_enabled": spec.schedule_enabled,
             "schedule_cron": None,
@@ -415,11 +414,23 @@ class IntegrationCatalogService:
                     id=uuid4(),
                     interface_id=interface.id,
                     source_account_ref=source_account_ref,
-                    **approved_values,
+                    **create_values,
                 )
             )
             return "created"
-        return _apply_approved_values(config, **approved_values)
+
+        if preserve_runtime_config:
+            # Data Pages configs are edited from the Sync Task page. Bootstrap is
+            # allowed to repair catalog references only; it must not wipe runtime
+            # scheduling fields such as is_enabled, schedule_enabled, schedule_cron,
+            # max_pages, next_run_at or last_scheduled_at.
+            return _apply_approved_values(
+                config,
+                retention_policy_id=policy.id,
+            )
+
+        # PMC purchase governance remains catalog-managed and disabled by default.
+        return _apply_approved_values(config, **create_values)
 
     def _interface(
         self,

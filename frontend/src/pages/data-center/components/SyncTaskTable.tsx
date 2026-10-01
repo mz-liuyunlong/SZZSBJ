@@ -7,6 +7,7 @@ import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import type { SyncTaskRow, SyncTaskStatus } from "@/pages/data-center/syncTaskTypes";
 import { getAutoSyncGuard, getManualSyncGuard, getRetryGuard } from "@/pages/data-center/syncTaskOperationGuards";
+import { formatSyncTaskDateTime, formatSyncTaskFrequency } from "@/pages/data-center/syncTaskDisplayFormatters";
 
 interface SyncTaskTableProps {
   rows: SyncTaskRow[];
@@ -40,13 +41,7 @@ const anomalyStatuses = new Set<SyncTaskStatus>(["失败", "超时", "部分成�
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 const compareDate = (left?: string | null, right?: string | null) => Date.parse(left ?? "") - Date.parse(right ?? "");
 
-function manualSyncDisabledReason(row: SyncTaskRow) {
-  return getManualSyncGuard(row).reason;
-}
 
-function retryDisabledReason(row: SyncTaskRow) {
-  return getRetryGuard(row).reason;
-}
 
 function autoSyncDisabledReason(row: SyncTaskRow) {
   return getAutoSyncGuard(row, !row.autoSync).reason;
@@ -98,10 +93,11 @@ function SyncTaskTable({
       key: "autoSync",
       width: 94,
       render: (_, row) => (
-        <Tooltip title={autoSyncDisabledReason(row)}>
+        <Tooltip title={row.lastStatus === "运行中" ? "任务运行中，暂不能修改自动同步" : autoSyncDisabledReason(row)}>
           <Switch
             size="small"
             checked={row.autoSync}
+            disabled={row.lastStatus === "运行中"}
             aria-label={`${row.taskName}自动同步开关`}
             onChange={(checked) => onToggleAutoSync(row, checked)}
           />
@@ -112,7 +108,11 @@ function SyncTaskTable({
       title: "同步频率",
       dataIndex: "frequency",
       key: "frequency",
-      width: 120,
+      width: 150,
+      render: (_, row) => {
+        const label = formatSyncTaskFrequency(row.frequency);
+        return label === "-" ? <Typography.Text type="secondary">-</Typography.Text> : label;
+      },
     },
     {
       title: "下次同步时间",
@@ -120,7 +120,7 @@ function SyncTaskTable({
       key: "nextRunAt",
       width: 158,
       sorter: (left, right) => compareDate(left.nextRunAt, right.nextRunAt),
-      render: (_, row) => row.nextRunAt ?? <Typography.Text type="secondary">-</Typography.Text>,
+      render: (_, row) => formatSyncTaskDateTime(row.nextRunAt) ?? <Typography.Text type="secondary">-</Typography.Text>,
     },
     {
       title: "最近状态",
@@ -135,7 +135,7 @@ function SyncTaskTable({
       key: "lastRunAt",
       width: 158,
       sorter: (left, right) => compareDate(left.lastRunAt, right.lastRunAt),
-      render: (_, row) => row.lastRunAt ?? <Typography.Text type="secondary">-</Typography.Text>,
+      render: (_, row) => formatSyncTaskDateTime(row.lastRunAt) ?? <Typography.Text type="secondary">-</Typography.Text>,
     },
     {
       title: "今日成功/失败",
@@ -150,13 +150,32 @@ function SyncTaskTable({
       width: 178,
       fixed: "right",
       render: (_, row) => {
+        const retryGuard = getRetryGuard(row);
+        const manualSyncGuard = getManualSyncGuard(row);
         const primaryAction = anomalyStatuses.has(row.lastStatus) ? (
-          <Tooltip title={retryDisabledReason(row)}>
-            <Button type="link" danger onClick={() => onRequestRetry(row)}>重试</Button>
+          <Tooltip title={retryGuard.reason}>
+            <span>
+              <Button
+                type="link"
+                danger
+                disabled={!retryGuard.allowed}
+                onClick={() => retryGuard.allowed && onRequestRetry(row)}
+              >
+                重试
+              </Button>
+            </span>
           </Tooltip>
         ) : (
-          <Tooltip title={manualSyncDisabledReason(row)}>
-            <Button type="link" onClick={() => onRequestSync(row)}>立即同步</Button>
+          <Tooltip title={manualSyncGuard.reason}>
+            <span>
+              <Button
+                type="link"
+                disabled={!manualSyncGuard.allowed}
+                onClick={() => manualSyncGuard.allowed && onRequestSync(row)}
+              >
+                立即同步
+              </Button>
+            </span>
           </Tooltip>
         );
 
