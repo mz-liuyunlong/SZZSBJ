@@ -242,6 +242,13 @@ def test_execution_recovers_expired_lease_before_claiming_run() -> None:
         finished_at=None,
         error_code=None,
         error_message=None,
+        work_items_failed=0,
+    )
+    stale_work = SimpleNamespace(
+        status="running",
+        finished_at=None,
+        error_code=None,
+        error_message=None,
     )
     expired_lock = SimpleNamespace(
         run_id=stale_run.id,
@@ -251,12 +258,16 @@ def test_execution_recovers_expired_lease_before_claiming_run() -> None:
     service.repository.get_interface.return_value = SimpleNamespace(handler_key="disabled")
     service.repository.get_lock_for_interface.return_value = expired_lock
     service.repository.get_lock_for_run.return_value = None
+    service.repository.list_running_work_items_for_update.return_value = [stale_work]
     service.repository.next_event_sequence.return_value = 1
 
     service.execute(ID)
 
     assert stale_run.status == "failed"
     assert stale_run.error_code == "SYNC_LOCK_LEASE_EXPIRED"
+    assert stale_run.work_items_failed == 1
+    assert stale_work.status == "failed"
+    assert stale_work.error_code == "SYNC_LOCK_LEASE_EXPIRED"
     service.repository.delete_lock.assert_called_once_with(expired_lock)
     service.repository.add_lock.assert_called_once()
     assert run.status == "failed"

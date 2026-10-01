@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -120,11 +120,18 @@ class LingxingProductListSyncHandler:
     handler_key = PRODUCT_LIST_HANDLER_KEY
     request_kind = "offset_page"
 
-    def __init__(self, session: Session, *, client: ProductListPageClient | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        client: ProductListPageClient | None = None,
+        heartbeat: Callable[[], None] | None = None,
+    ) -> None:
         register_productlist_sync_models()
         self.session = session
         self.repository = IntegrationSyncRepository(session)
         self._client = client
+        self.heartbeat = heartbeat or (lambda: None)
 
     def execute(
         self,
@@ -148,16 +155,17 @@ class LingxingProductListSyncHandler:
                 _require_productlist_runtime(settings)
             except ProductListSyncError as error:
                 return self._fail_run(run, None, str(error))
-        try:
-            run.status = "running"
-            run.started_at = utc_now()
-            self.session.commit()
-        except IntegrityError:
-            self.session.rollback()
-            recovered = self.repository.get_run_for_update(run.id)
-            if recovered is None:
-                raise ProductListSyncError("SYNC_PRODUCTLIST_RUN_MISSING") from None
-            return self._fail_run(recovered, None, "SYNC_PRODUCTLIST_ALREADY_RUNNING")
+        if run.status != "running":
+            try:
+                run.status = "running"
+                run.started_at = utc_now()
+                self.session.commit()
+            except IntegrityError:
+                self.session.rollback()
+                recovered = self.repository.get_run_for_update(run.id)
+                if recovered is None:
+                    raise ProductListSyncError("SYNC_PRODUCTLIST_RUN_MISSING") from None
+                return self._fail_run(recovered, None, "SYNC_PRODUCTLIST_ALREADY_RUNNING")
 
         if self._client is not None:
             return self._execute_pages(run, self._client, policy, page_size, max_pages)
@@ -206,6 +214,7 @@ class LingxingProductListSyncHandler:
             for page_no in range(1, max_pages + 1):
                 work = self._start_work_item(run, page_no, offset, page_size)
                 current_work_id = work.id
+                self.heartbeat()
                 try:
                     envelope = client.fetch_product_list_page(
                         offset=offset,
@@ -249,6 +258,7 @@ class LingxingProductListSyncHandler:
                 projected_count = offset + inspected.response_count
                 if expected_total is not None and projected_count > expected_total:
                     return self._fail_run(run, work, "SYNC_PRODUCTLIST_TOTAL_MISMATCH")
+                self.heartbeat()
                 try:
                     self._publish_page(run, work, envelope.pulled_at, inspected.values)
                 except ProductListSyncError as error:

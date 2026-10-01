@@ -73,9 +73,7 @@ class SyncRunExecutionService:
             and run.interface_key in DATA_PAGES_EXECUTABLE_INTERFACE_KEYS
             and interface.method == "POST"
         )
-        if run.provider == "lingxing" and run.interface_key == "productList":
-            LingxingProductListSyncHandler(self.session).execute(run, interface)
-            return
+        is_productlist = run.provider == "lingxing" and run.interface_key == "productList"
 
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
         if (
@@ -143,6 +141,15 @@ class SyncRunExecutionService:
                 stale_run.finished_at = now
                 stale_run.error_code = "SYNC_LOCK_LEASE_EXPIRED"
                 stale_run.error_message = "同步锁租约已过期"
+                running_work_items = self.repository.list_running_work_items_for_update(
+                    stale_run.id
+                )
+                for work in running_work_items:
+                    work.status = "failed"
+                    work.finished_at = now
+                    work.error_code = "SYNC_LOCK_LEASE_EXPIRED"
+                    work.error_message = "同步锁租约已过期"
+                stale_run.work_items_failed += len(running_work_items)
                 self._event(
                     stale_run.id,
                     "running",
@@ -175,6 +182,13 @@ class SyncRunExecutionService:
         try:
             if is_data_pages:
                 self._execute_data_pages_run(run)
+                return
+
+            if is_productlist:
+                LingxingProductListSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
                 return
 
             if interface.handler_key != LingxingBatchGetProductInfoSyncHandler.handler_key:

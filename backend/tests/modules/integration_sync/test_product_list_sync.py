@@ -152,9 +152,14 @@ def _handler(
     client: FakePageClient | None,
     *,
     page_size: int = 2,
+    heartbeat: MagicMock | None = None,
 ) -> tuple[LingxingProductListSyncHandler, MagicMock, MagicMock]:
     session = MagicMock(spec=Session)
-    handler = LingxingProductListSyncHandler(session, client=client)
+    handler = LingxingProductListSyncHandler(
+        session,
+        client=client,
+        heartbeat=heartbeat,
+    )
     repository = MagicMock()
     handler.repository = repository
     repository.get_config.return_value = SimpleNamespace(
@@ -346,6 +351,7 @@ def test_productlist_transport_is_disabled_before_token_and_network() -> None:
 
 
 def test_handler_paginates_raw_first_upserts_identity_and_reconciles() -> None:
+    heartbeat = MagicMock()
     client = FakePageClient(
         [
             _envelope(
@@ -360,7 +366,7 @@ def test_handler_paginates_raw_first_upserts_identity_and_reconciles() -> None:
             ),
         ]
     )
-    handler, repository, _ = _handler(client)
+    handler, repository, _ = _handler(client, heartbeat=heartbeat)
     result = handler.execute(_run(), _interface())
 
     assert result.status == "succeeded"
@@ -368,6 +374,7 @@ def test_handler_paginates_raw_first_upserts_identity_and_reconciles() -> None:
     assert result.work_items_count == 2
     assert result.inactive_ids_count == 1
     assert client.calls == [(0, 2, 1), (2, 2, 2)]
+    assert heartbeat.call_count == 4
     assert repository.add_raw_blob.call_count == 2
     assert repository.add_raw_request_ref.call_count == 2
     raw_ref = repository.add_raw_request_ref.call_args_list[0].args[0]
@@ -556,7 +563,7 @@ def test_nested_productlist_data_ids_are_supported_without_exposing_values() -> 
     assert len(inspected.values) == 1
 
 
-def test_execution_routes_productlist_without_lock_or_event_writes(
+def test_execution_routes_productlist_through_lock_and_heartbeat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = MagicMock(spec=Session)
@@ -566,13 +573,23 @@ def test_execution_routes_productlist_without_lock_or_event_writes(
     run = _run()
     repository.get_run_for_update.return_value = run
     repository.get_interface.return_value = _interface()
+    repository.get_lock_for_interface.return_value = None
+    repository.get_lock_for_run.side_effect = lambda _: repository.add_lock.call_args.args[0]
+    repository.get_lock_for_run_for_update.return_value = SimpleNamespace(
+        heartbeat_at=None,
+        expires_at=None,
+    )
+    repository.next_event_sequence.return_value = 1
     execute = MagicMock()
 
     class FakeHandler:
-        def __init__(self, handler_session: Session) -> None:
+        def __init__(self, handler_session: Session, *, heartbeat: object) -> None:
             assert handler_session is session
+            assert callable(heartbeat)
+            self.heartbeat = heartbeat
 
         def execute(self, handler_run: IntegrationSyncRun, interface: IntegrationInterface) -> None:
+            self.heartbeat()
             execute(handler_run, interface)
 
     monkeypatch.setattr(
@@ -583,8 +600,10 @@ def test_execution_routes_productlist_without_lock_or_event_writes(
     service.execute(RUN_ID)
 
     execute.assert_called_once_with(run, repository.get_interface.return_value)
-    repository.add_lock.assert_not_called()
-    repository.add_event.assert_not_called()
+    repository.add_lock.assert_called_once()
+    repository.add_event.assert_called_once()
+    repository.delete_lock.assert_called_once_with(repository.add_lock.call_args.args[0])
+    repository.get_lock_for_run_for_update.assert_called_once_with(RUN_ID)
 
 
 @pytest.mark.parametrize(
