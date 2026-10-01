@@ -18,6 +18,9 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "products:pricing_rules:read",
         "products:cost:read",
         "integrations:read",
+        "integrations:raw_metadata:read",
+        "integrations:update",
+        "integrations:execute",
         "sales:daily-sales:read",
         "aftersales:refund-management:read",
         "warehouse:wfs-fee-alert:read",
@@ -41,6 +44,7 @@ _PREVIEW_PATH_PREFIXES: Final = frozenset(
         "/api/pmc/",
         "/api/operations/",
         "/api/operations/plans/",
+        "/api/integrations/sync-runs/",
     }
 )
 _PREVIEW_READ_PATHS: Final[frozenset[str]] = frozenset(
@@ -66,6 +70,8 @@ _PREVIEW_WRITE_PATH_PREFIXES: Final[frozenset[str]] = frozenset(
         "/api/operations/plans/products/",
         "/api/listings/tags/",
         "/api/listings/walmart/",
+        "/api/integrations/sync-configs/",
+        "/api/integrations/sync-runs/",
     }
 )
 _PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH", "PUT", "DELETE"})

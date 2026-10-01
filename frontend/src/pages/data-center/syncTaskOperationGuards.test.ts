@@ -48,6 +48,7 @@ const baseTask = {
   retryEnabled: true,
   retryTimes: null,
   retryInterval: null,
+  backfillDays: null,
   notificationScenes: [],
   notificationChannels: [],
   notificationTargets: null,

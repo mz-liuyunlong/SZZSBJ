@@ -29,6 +29,7 @@ import type {
   SyncScheduleTab,
   SyncTaskFilters,
   SyncTaskLog,
+  SyncTaskModule,
   SyncTaskRow,
   SyncTaskStatus,
 } from "@/pages/data-center/syncTaskTypes";
@@ -65,15 +66,6 @@ const emptySyncTaskOverview: SyncTaskOverview = {
 };
 
 
-const weekDayMap: Record<string, number> = {
-  周一: 1,
-  周二: 2,
-  周三: 3,
-  周四: 4,
-  周五: 5,
-  周六: 6,
-  周日: 0,
-};
 
 const parseTime = (value?: string) => {
   const match = value?.trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -84,25 +76,55 @@ const parseTime = (value?: string) => {
   return { hour, minute };
 };
 
+const CHINA_UTC_OFFSET_HOURS = 8;
+const toSchedulerUtcHour = (chinaHour: number) => (
+  (chinaHour - CHINA_UTC_OFFSET_HOURS + 24) % 24
+);
+
 const buildScheduleCron = (values: SyncTaskConfigFormValues) => {
-  if (!values.autoSync || values.cycle === "手动任务") return null;
-  const firstTime = parseTime(values.runTimes?.[0]);
-  if (!firstTime) return null;
-  if (values.cycle === "周任务") {
-    const days = values.weekDays?.map((day) => weekDayMap[day]).filter((day) => day !== undefined);
-    if (!days || days.length === 0) return null;
-    return `${firstTime.minute} ${firstTime.hour} * * ${days.join(",")}`;
-  }
-  return `${firstTime.minute} ${firstTime.hour} * * *`;
+  if (!values.autoSync) return null;
+
+  if (values.frequencyPreset === "30m") return "*/30 * * * *";
+  if (values.frequencyPreset === "1h") return "0 * * * *";
+  if (values.frequencyPreset === "2h") return "0 */2 * * *";
+
+  const runTimes = values.fixedRunTimes?.length ? values.fixedRunTimes : values.runTimes;
+  const parsedTimes = runTimes
+    ?.map(parseTime)
+    .filter((time): time is { hour: number; minute: number } => Boolean(time)) ?? [];
+
+  if (parsedTimes.length === 0) return null;
+
+  const minutes = Array.from(new Set(parsedTimes.map((time) => time.minute)));
+  if (minutes.length !== 1) return null;
+
+  const schedulerHours = Array.from(
+    new Set(parsedTimes.map((time) => toSchedulerUtcHour(time.hour))),
+  ).sort((left, right) => left - right);
+
+  return `${minutes[0]} ${schedulerHours.join(",")} * * *`;
 };
 
 const buildConfigPayload = (values: SyncTaskConfigFormValues) => {
   const scheduleCron = buildScheduleCron(values);
-  return {
+  const payload: {
+    is_enabled: boolean;
+    schedule_enabled: boolean;
+    schedule_cron: string | null;
+    max_attempts: number;
+    max_pages?: number;
+  } = {
+    is_enabled: true,
     schedule_enabled: Boolean(values.autoSync && scheduleCron),
     schedule_cron: scheduleCron,
-    max_attempts: values.retryEnabled ? Math.max((values.retryTimes ?? 0) + 1, 1) : 1,
+    max_attempts: 3,
   };
+
+  if (values.backfillDays !== undefined) {
+    payload.max_pages = values.backfillDays;
+  }
+
+  return payload;
 };
 
 interface SyncTaskPageProps {
@@ -133,7 +155,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   const retryRunMutation = useRetryIntegrationSyncRunMutation();
   const updateConfigMutation = useUpdateIntegrationSyncConfigMutation();
   const syncTaskOverview = tasksQuery.data ?? emptySyncTaskOverview;
-  const rows = syncTaskOverview.rows;
+  const rows: SyncTaskRow[] = syncTaskOverview.rows;
   const logs = syncTaskOverview.logs;
   const scheduleItems = syncTaskOverview.schedules;
 
@@ -151,13 +173,13 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
     void messageApiRef.current.error(text);
   }, [tasksQuery.error]);
 
-  const syncTaskModules = useMemo(() => Array.from(new Set(rows.map((row) => row.module))), [rows]);
+  const syncTaskModules = useMemo<SyncTaskModule[]>(() => Array.from(new Set(rows.map((row: SyncTaskRow) => row.module))), [rows]);
   const syncTaskStatuses: SyncTaskStatus[] = ["成功", "失败", "运行中", "部分成功", "超时", "已停用"];
 
   const filteredRows = useMemo(() => {
     const keyword = filters.keyword.trim().toLocaleLowerCase();
 
-    return rows.filter((row) => {
+    return rows.filter((row: SyncTaskRow) => {
       const keywordTarget = `${row.taskName}${row.interfaceName}${row.module}${row.lastStatus}`.toLocaleLowerCase();
       return (
         (!filters.module || row.module === filters.module)
@@ -298,8 +320,10 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
             configId: task.configId!,
             payload: checked
               ? {
+                  is_enabled: true,
                   schedule_enabled: true,
                   schedule_cron: task.scheduleCron,
+                  max_attempts: 3,
                 }
               : {
                   schedule_enabled: false,
@@ -322,7 +346,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
 
     const payload = buildConfigPayload(values);
     if (values.autoSync && !payload.schedule_cron) {
-      void messageApi.warning("开启自动同步需要至少一个有效执行时间，例如 08:00");
+      void messageApi.warning("开启自动同步需要选择执行频率；固定时间任务需要选择每天几点执行。");
       return;
     }
 

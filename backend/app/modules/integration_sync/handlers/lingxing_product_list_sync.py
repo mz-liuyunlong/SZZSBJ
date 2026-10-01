@@ -14,7 +14,7 @@ from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import AppEnvironment, get_settings
+from app.core.config import AppEnvironment, Settings, get_settings
 from app.db.model_registry import register_productlist_sync_models
 from app.integrations.lingxing.client import (
     LingxingEndpoint,
@@ -93,8 +93,10 @@ def product_list_response_succeeded(
 @contextmanager
 def product_list_client() -> Iterator[LingxingReadonlyClient]:
     settings = get_settings()
-    if settings.app_env is not AppEnvironment.PRODUCTION:
-        raise ProductListSyncError("SYNC_PRODUCTLIST_SERVER_ENVIRONMENT_REQUIRED")
+    _require_productlist_runtime(settings)
+    # httpx INFO access logs include the signed query string. Keep provider
+    # authentication material out of local and production task logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     token_client = LingxingTokenClient(settings)
     token_manager = LingxingTokenManager(token_client, settings)
     client = LingxingReadonlyClient(
@@ -107,6 +109,14 @@ def product_list_client() -> Iterator[LingxingReadonlyClient]:
     finally:
         client.close()
         token_client.close()
+
+
+def _require_productlist_runtime(settings: Settings) -> None:
+    if (
+        settings.app_env is AppEnvironment.TEST
+        or not settings.productlist_real_sync_authorized
+    ):
+        raise ProductListSyncError("SYNC_PRODUCTLIST_RUNTIME_NOT_AUTHORIZED")
 
 
 class LingxingProductListSyncHandler:
@@ -134,15 +144,13 @@ class LingxingProductListSyncHandler:
             return self._fail_run(run, None, "SYNC_PRODUCTLIST_PAGE_SIZE_INVALID")
         if self._client is None:
             try:
-                app_env = get_settings().app_env
+                settings = get_settings()
             except Exception:
                 return self._fail_run(run, None, "SYNC_PRODUCTLIST_CONFIG_INVALID")
-            if app_env is not AppEnvironment.PRODUCTION:
-                return self._fail_run(
-                    run,
-                    None,
-                    "SYNC_PRODUCTLIST_SERVER_ENVIRONMENT_REQUIRED",
-                )
+            try:
+                _require_productlist_runtime(settings)
+            except ProductListSyncError as error:
+                return self._fail_run(run, None, str(error))
         try:
             run.status = "running"
             run.started_at = utc_now()
@@ -165,7 +173,7 @@ class LingxingProductListSyncHandler:
         interface: IntegrationInterface,
     ) -> tuple[IntegrationSyncConfig, RawRetentionPolicy]:
         if (
-            run.trigger_type != "manual"
+            run.trigger_type not in {"manual", "retry", "schedule"}
             or run.provider != "lingxing"
             or run.interface_key != "productList"
             or interface.provider != "lingxing"
@@ -180,8 +188,8 @@ class LingxingProductListSyncHandler:
         policy = self.repository.get_retention_policy("lingxing-productlist-v1")
         if config is None or policy is None:
             raise ProductListSyncError("SYNC_PRODUCTLIST_METADATA_MISSING")
-        if not config.is_enabled or config.schedule_enabled:
-            raise ProductListSyncError("SYNC_PRODUCTLIST_MANUAL_ONLY")
+        if not config.is_enabled:
+            raise ProductListSyncError("SYNC_PRODUCTLIST_CONFIG_DISABLED")
         return config, policy
 
     def _execute_pages(

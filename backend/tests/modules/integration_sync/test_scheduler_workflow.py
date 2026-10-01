@@ -233,7 +233,7 @@ def test_scheduler_duplicate_slot_is_idempotent_and_still_advances() -> None:
     session.commit.assert_called_once()
 
 
-def test_scheduler_never_schedules_productlist() -> None:
+def test_scheduler_schedules_productlist_and_advances_next_run() -> None:
     session = MagicMock(spec=Session)
     scheduler = IntegrationSchedulerService(session)
     repository = MagicMock()
@@ -242,13 +242,23 @@ def test_scheduler_never_schedules_productlist() -> None:
     config = _config()
     repository.list_due_configs.return_value = [config]
     repository.get_interface.return_value = _interface("productList")
+    repository.find_run_by_idempotency.return_value = None
+
+    def add_run(run: object) -> object:
+        run.id = UUID(int=201)  # type: ignore[attr-defined]
+        return run
+
+    repository.add_run.side_effect = add_run
+    repository.add_event.side_effect = lambda event: event
 
     run_ids = scheduler.create_due_runs(now=datetime(2026, 1, 1, 12, 34, tzinfo=UTC))
 
-    assert run_ids == []
-    repository.add_run.assert_not_called()
-    assert config.next_run_at is None
-
+    assert run_ids == [UUID(int=201)]
+    run = repository.add_run.call_args.args[0]
+    assert run.interface_key == "productList"
+    assert run.trigger_type == "schedule"
+    assert config.next_run_at == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
+    session.commit.assert_called_once()
 
 def test_scheduler_recovery_applies_grace_window_to_queued_runs() -> None:
     session = MagicMock(spec=Session)

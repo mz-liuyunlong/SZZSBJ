@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import os
 import time as sleep_time
 from collections import defaultdict
@@ -11,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable, Mapping, cast
+from typing import Any, Callable, Iterable, Mapping, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -37,6 +38,7 @@ DEFAULT_PAGE_SIZE = 100
 WALMART_PLATFORM_CODE = "10008"
 WALMART_PLATFORM_CODE_INT = 10008
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
+LA_TZ = ZoneInfo("America/Los_Angeles")
 SP_CAMPAIGN_TYPES = ("sponsoredProducts-manual", "sponsoredProducts-auto", "sba", "video")
 
 
@@ -128,6 +130,8 @@ class DataPagesRealHttpClient:
     ) -> None:
         if settings.lingxing_base_url is None:
             raise DataPagesRealSyncError("DATA_PAGES_BASE_URL_UNAVAILABLE")
+        # httpx logs full query strings at INFO; provider auth parameters must not reach logs.
+        logging.getLogger("httpx").setLevel(logging.WARNING)
         self._settings = settings
         self._token_manager = token_manager
         self._sleeper = sleeper
@@ -255,6 +259,8 @@ def parse_args() -> argparse.Namespace:
 @contextmanager
 def data_pages_client() -> Iterable[DataPagesRealHttpClient]:
     settings = get_settings()
+    if not settings.data_pages_real_sync_authorized:
+        raise DataPagesRealSyncError("DATA_PAGES_REAL_SYNC_NOT_AUTHORIZED")
     token_client = LingxingTokenClient(settings)
     token_manager = LingxingTokenManager(token_client, settings)
     client = DataPagesRealHttpClient(settings, token_manager)
@@ -288,6 +294,7 @@ class DataPagesRealSyncRunner:
         page_size: int,
         campaign_type: str,
         max_advertisers: int,
+        heartbeat: Callable[[], None] | None = None,
     ) -> None:
         self.session = session
         self.client = client
@@ -296,6 +303,7 @@ class DataPagesRealSyncRunner:
         self.page_size = page_size
         self.campaign_type = campaign_type
         self.max_advertisers = max(1, max_advertisers)
+        self.heartbeat = heartbeat
         self.summary = DataPagesRealSyncSummary(source_account_ref, business_date)
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
@@ -377,6 +385,8 @@ class DataPagesRealSyncRunner:
     ) -> ProviderResponse:
         if self.client is None:
             raise DataPagesRealSyncError("DATA_PAGES_REAL_SYNC_CLIENT_REQUIRED")
+        if self.heartbeat is not None:
+            self.heartbeat()
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
         response = self.client.post(
             parser_key,
@@ -385,6 +395,8 @@ class DataPagesRealSyncRunner:
             page_size=page_size,
             label=f"{parser_key}:{body_suffix or page_no}",
         )
+        if self.heartbeat is not None:
+            self.heartbeat()
         self.summary.requested_interfaces.append(spec.interface_key)
         self._persist_raw_blob(parser_key, response.response_json, response.pulled_at)
         if response.provider_code not in {None, 0, 200}:

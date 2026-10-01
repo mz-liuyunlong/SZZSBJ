@@ -27,6 +27,7 @@ export interface SyncTaskRow {
   configId: string | null;
   latestRunId: string | null;
   scheduleCron: string | null;
+  backfillDays: number | null;
   interfaceId: string;
   interfaceKey: string;
   taskName: string;

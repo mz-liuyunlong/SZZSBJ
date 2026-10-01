@@ -137,20 +137,163 @@ const productDetailDependencyKeys = new Set([
   "productInfo",
 ]);
 
+const hiddenStandaloneInterfaceKeys = new Set([
+  "getSellerList",
+  "orderV2List",
+  "walmartAdvertiserList",
+]);
+
+const shouldDisplayTaskRow = (task: SyncTaskRow) => (
+  !hiddenStandaloneInterfaceKeys.has(task.interfaceKey)
+);
+
+
+const dataPagesInterfaceKeys = new Set([
+  "getSellerList",
+  "walmartListingList",
+  "saleStatPageList",
+  "orderV2List",
+  "walmartReturnOrderList",
+  "walmartAdvertiserList",
+  "walmartAdItemSpList",
+]);
+
+const pmcPurchaseInterfaceKeys = new Set([
+  "purchasePlanList",
+  "purchaseOrderList",
+  "purchaseReceiptOrderList",
+]);
+
+const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
+  if (dataPagesInterfaceKeys.has(item.interface_key)) {
+    if (
+      item.interface_key === "walmartAdvertiserList"
+      || item.interface_key === "walmartAdItemSpList"
+    ) {
+      return "广告";
+    }
+
+    if (item.interface_key === "walmartReturnOrderList") {
+      return "售后";
+    }
+
+    if (
+      item.interface_key === "saleStatPageList"
+      || item.interface_key === "orderV2List"
+    ) {
+      return "订单";
+    }
+
+    return "商品";
+  }
+
+  if (pmcPurchaseInterfaceKeys.has(item.interface_key)) return "仓库";
+  if (item.interface_key === "productList" || productDetailDependencyKeys.has(item.interface_key)) return "商品";
+
+  return "商品";
+};
+
+
+const chineseTaskNames: Record<string, string> = {
+  getSellerList: "店铺列表同步",
+  walmartListingList: "Listing 管理同步",
+  saleStatPageList: "每日销售同步",
+  orderV2List: "订单明细同步",
+  walmartReturnOrderList: "退款退货同步",
+  walmartAdvertiserList: "广告账户同步",
+  walmartAdItemSpList: "广告报表同步",
+  productList: "产品管理同步",
+  batchGetProductInfo: "产品详情同步",
+  purchasePlanList: "采购计划同步",
+  purchaseOrderList: "采购单同步",
+  purchaseReceiptOrderList: "采购入库同步",
+};
+
+const chineseInterfaceNames: Record<string, string> = {
+  getSellerList: "领星店铺列表接口",
+  walmartListingList: "沃尔玛 Listing 列表接口",
+  saleStatPageList: "沃尔玛销售统计接口",
+  orderV2List: "沃尔玛订单明细接口",
+  walmartReturnOrderList: "沃尔玛退款退货接口",
+  walmartAdvertiserList: "沃尔玛广告账户接口",
+  walmartAdItemSpList: "沃尔玛广告商品报表接口",
+  productList: "领星产品列表接口",
+  batchGetProductInfo: "领星产品详情接口",
+  purchasePlanList: "领星采购计划接口",
+  purchaseOrderList: "领星采购单接口",
+  purchaseReceiptOrderList: "领星采购入库接口",
+};
+
+const descriptionForInterface = (item: InterfaceDto) => {
+  if (item.interface_key === "productList") {
+    return "前端只显示一个产品管理同步任务：同步 ProductList、ProductInfo，并刷新产品管理当前数据。";
+  }
+
+  if (item.interface_key === "walmartListingList") {
+    return "前端可配置的 Listing 管理同步：同步店铺与 Listing，并刷新 Listing 管理 MART；不按日期回刷。";
+  }
+
+  if (item.interface_key === "saleStatPageList") {
+    return "前端可配置的每日销售同步：同步销售统计与订单明细，可按美国业务日期回刷最近几天。";
+  }
+
+  if (item.interface_key === "walmartReturnOrderList") {
+    return "前端可配置的退款退货同步：同步退款退货数据，可按美国业务日期回刷最近几天。";
+  }
+
+  if (item.interface_key === "walmartAdItemSpList") {
+    return "前端可配置的广告报表同步：同步广告账户与广告报表，可按美国业务日期回刷最近几天。";
+  }
+
+  if (
+    item.interface_key === "getSellerList"
+    || item.interface_key === "orderV2List"
+    || item.interface_key === "walmartAdvertiserList"
+  ) {
+    return "组成接口，不单独配置定时任务；由对应业务同步任务统一执行。";
+  }
+
+  if (productDetailDependencyKeys.has(item.interface_key)) {
+    return "ProductInfo 依赖 ProductList 的 active Product ID，前端合并到产品管理同步展示。";
+  }
+
+  if (pmcPurchaseInterfaceKeys.has(item.interface_key)) {
+    return "PMC 采购接口需后端治理配置启用后才能执行。";
+  }
+
+  return item.display_name;
+};
+
+
+const taskNameForInterface = (item: InterfaceDto) => (
+  chineseTaskNames[item.interface_key] ?? item.display_name
+);
+
+const interfaceNameForInterface = (item: InterfaceDto) => (
+  chineseInterfaceNames[item.interface_key] ?? item.display_name
+);
+
+
 const isProductListTask = (task: SyncTaskRow) => {
   const key = task.interfaceKey.toLowerCase();
   const name = task.interfaceName.toLowerCase();
+
   return productListInterfaceKeys.has(task.interfaceKey)
     || key.includes("productlist")
-    || name.includes("productlist");
+    || name.includes("productlist")
+    || task.taskName.includes("产品管理")
+    || task.taskName.includes("产品列表");
 };
 
 const isProductDetailDependencyTask = (task: SyncTaskRow) => {
   const key = task.interfaceKey.toLowerCase();
   const name = task.interfaceName.toLowerCase();
+
   return productDetailDependencyKeys.has(task.interfaceKey)
     || key.includes("batchgetproductinfo")
-    || (name.includes("batch") && name.includes("product info"));
+    || key.includes("productinfo")
+    || (name.includes("batch") && name.includes("product info"))
+    || task.taskName.includes("产品详情");
 };
 
 const latestDate = (...values: Array<string | null | undefined>) => (
@@ -189,10 +332,10 @@ const mergeProductDetailDependency = (
   lastRunFinishedAt: latestDate(parent.lastRunFinishedAt, dependency.lastRunFinishedAt),
   updatedAt: latestDate(parent.updatedAt, dependency.updatedAt),
   errorCode: parent.errorCode ?? dependency.errorCode,
-  description: "ProductList 与产品详情依赖同步合并展示；详情步骤依赖 Product ID，不单独展示为前端任务。",
+  description: "ProductList 与 ProductInfo 合并展示为一个产品管理同步任务。",
 });
 
-const foldProductDetailDependencyRows = (rows: SyncTaskRow[]) => {
+const foldProductDetailDependencyRows = (rows: SyncTaskRow[]): SyncTaskRow[] => {
   const dependencies = rows.filter(isProductDetailDependencyTask);
   if (dependencies.length === 0) return rows;
 
@@ -213,7 +356,6 @@ const foldProductDetailDependencyRows = (rows: SyncTaskRow[]) => {
   });
 };
 
-
 function row(
   item: InterfaceDto,
   config: ConfigDto | undefined,
@@ -227,15 +369,16 @@ function row(
     configId: config?.id ?? run?.config_id ?? null,
     latestRunId: run?.id ?? null,
     scheduleCron: config?.schedule_cron ?? null,
+    backfillDays: config?.max_pages ?? null,
     interfaceId: item.id,
     interfaceKey: item.interface_key,
-    interfaceName: item.display_name,
+    interfaceName: interfaceNameForInterface(item),
     provider: item.provider,
     source: config?.source_account_ref ?? run?.source_account_ref ?? null,
     taskType: item.request_kind,
     status: (config?.is_enabled ?? item.outbound_enabled) ? "enabled" : "disabled",
-    taskName: item.display_name,
-    module: "商品",
+    taskName: taskNameForInterface(item),
+    module: moduleForInterface(item),
     autoSync: config?.schedule_enabled ?? false,
     frequency: config?.schedule_cron ?? "手动任务",
     nextRunAt: config?.next_run_at ?? undefined,
@@ -252,7 +395,7 @@ function row(
     errorCode: run?.error_code ?? null,
     dryRun: null,
     updatedAt: config?.updated_at ?? run?.created_at ?? null,
-    description: item.display_name,
+    description: descriptionForInterface(item),
     cycle: config?.schedule_enabled ? "日任务" : "手动任务",
     dailyRunCount: null,
     runTimes: [],
@@ -284,7 +427,7 @@ export async function listIntegrationSyncTasks() {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
     rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
   }
-  const visibleRows = foldProductDetailDependencyRows(rows);
+  const visibleRows = foldProductDetailDependencyRows(rows).filter(shouldDisplayTaskRow);
   const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
     id: run.id,
     taskId: run.config_id ?? run.id,

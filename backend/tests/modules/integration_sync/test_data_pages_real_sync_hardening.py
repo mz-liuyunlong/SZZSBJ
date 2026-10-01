@@ -1,9 +1,11 @@
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
 
+from app.modules.integration_sync import data_pages_real_sync
 from app.modules.integration_sync.data_pages_real_sync import (
     SP_CAMPAIGN_TYPES,
     DataPagesRealSyncError,
@@ -159,6 +161,45 @@ def test_ads_ignore_unreliable_total_and_stop_on_short_page() -> None:
     assert len(client.calls) == 2
     assert client.calls[0]["body"]["pageNum"] == 1
     assert client.calls[1]["body"]["pageNum"] == 2
+
+
+def test_each_provider_page_renews_the_run_lease() -> None:
+    client = _SequenceClient([_response(parser_key="sale_stat_page_list")])
+    heartbeats: list[str] = []
+    runner = DataPagesRealSyncRunner(
+        session=cast(Session, object()),
+        client=cast(Any, client),
+        source_account_ref="primary",
+        business_date=date(2026, 9, 2),
+        page_size=100,
+        campaign_type="SP",
+        max_advertisers=10,
+        heartbeat=lambda: heartbeats.append("beat"),
+    )
+    runner._persist_raw_blob = cast(Any, lambda *args, **kwargs: None)
+
+    runner._request_page(
+        "sale_stat_page_list",
+        {},
+        page_no=1,
+        page_size=100,
+    )
+
+    assert heartbeats == ["beat", "beat"]
+
+
+def test_data_pages_client_requires_explicit_runtime_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        data_pages_real_sync,
+        "get_settings",
+        lambda: SimpleNamespace(data_pages_real_sync_authorized=False),
+    )
+
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_REAL_SYNC_NOT_AUTHORIZED"):
+        with data_pages_real_sync.data_pages_client():
+            pass
 
 
 def test_sp_campaign_types_include_manual_auto_sba_and_video() -> None:

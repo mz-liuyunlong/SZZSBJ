@@ -85,6 +85,8 @@ def test_scheduler_deterministic_idempotency_skips_duplicate_tick() -> None:
         interface_id=ID,
         source_account_ref="default",
         next_run_at=datetime(2026, 1, 1, tzinfo=UTC),
+        schedule_cron="0 * * * *",
+        schedule_timezone="UTC",
     )
     interface = SimpleNamespace(
         id=ID,
@@ -99,7 +101,6 @@ def test_scheduler_deterministic_idempotency_skips_duplicate_tick() -> None:
     assert service.create_due_runs() == []
     service.repository.add_run.assert_not_called()
     session.commit.assert_called_once_with()
-
 
 def test_sku_detail_publication_commits_multi_source_dws_lineage() -> None:
     session = MagicMock(spec=Session)

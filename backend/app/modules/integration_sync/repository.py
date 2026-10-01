@@ -30,6 +30,10 @@ RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
     "purchasePlanList",
     "purchaseOrderList",
     "purchaseReceiptOrderList",
+    "walmartListingList",
+    "saleStatPageList",
+    "walmartReturnOrderList",
+    "walmartAdItemSpList",
 )
 
 
@@ -620,6 +624,22 @@ class IntegrationSyncRepository:
                     IntegrationSyncRun.queued_at <= queued_before,
                 )
                 .order_by(IntegrationSyncRun.queued_at, IntegrationSyncRun.id)
+                .limit(limit)
+            ).all()
+        )
+
+    def list_expired_locks_for_update(
+        self,
+        now: datetime,
+        *,
+        limit: int,
+    ) -> list[IntegrationSyncLock]:
+        return list(
+            self.session.scalars(
+                select(IntegrationSyncLock)
+                .where(IntegrationSyncLock.expires_at <= now)
+                .order_by(IntegrationSyncLock.expires_at, IntegrationSyncLock.id)
+                .with_for_update(skip_locked=True)
                 .limit(limit)
             ).all()
         )
