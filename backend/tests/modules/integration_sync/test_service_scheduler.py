@@ -102,6 +102,7 @@ def test_scheduler_deterministic_idempotency_skips_duplicate_tick() -> None:
     service.repository.add_run.assert_not_called()
     session.commit.assert_called_once_with()
 
+
 def test_sku_detail_publication_commits_multi_source_dws_lineage() -> None:
     session = MagicMock(spec=Session)
     service = SkuDetailPublicationService(session)

@@ -58,12 +58,14 @@ SYNC_PRODUCTLIST_MANUAL_ONLY = "SYNC_PRODUCTLIST_MANUAL_ONLY"
 SYNC_PRODUCTINFO_RETRY_PLAN_INVALID = "SYNC_PRODUCTINFO_RETRY_PLAN_INVALID"
 SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED = "SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED"
 
-DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset({
-    "walmartListingList",
-    "saleStatPageList",
-    "walmartReturnOrderList",
-    "walmartAdItemSpList",
-})
+DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
+    {
+        "walmartListingList",
+        "saleStatPageList",
+        "walmartReturnOrderList",
+        "walmartAdItemSpList",
+    }
+)
 
 audit_logger = logging.getLogger("app.audit.integration_sync")
 

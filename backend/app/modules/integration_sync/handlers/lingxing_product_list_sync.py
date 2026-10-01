@@ -112,10 +112,7 @@ def product_list_client() -> Iterator[LingxingReadonlyClient]:
 
 
 def _require_productlist_runtime(settings: Settings) -> None:
-    if (
-        settings.app_env is AppEnvironment.TEST
-        or not settings.productlist_real_sync_authorized
-    ):
+    if settings.app_env is AppEnvironment.TEST or not settings.productlist_real_sync_authorized:
         raise ProductListSyncError("SYNC_PRODUCTLIST_RUNTIME_NOT_AUTHORIZED")
 
 

@@ -260,6 +260,7 @@ def test_scheduler_schedules_productlist_and_advances_next_run() -> None:
     assert config.next_run_at == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
     session.commit.assert_called_once()
 
+
 def test_scheduler_recovery_applies_grace_window_to_queued_runs() -> None:
     session = MagicMock(spec=Session)
     scheduler = IntegrationSchedulerService(session)

@@ -43,12 +43,14 @@ DATA_PAGES_DEFAULT_PAGE_SIZE = 100
 DATA_PAGES_DEFAULT_CAMPAIGN_TYPE = "SP"
 DATA_PAGES_DEFAULT_MAX_ADVERTISERS = 20
 DATA_PAGES_MAX_BACKFILL_DAYS = 31
-DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset({
-    "walmartListingList",
-    "saleStatPageList",
-    "walmartReturnOrderList",
-    "walmartAdItemSpList",
-})
+DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
+    {
+        "walmartListingList",
+        "saleStatPageList",
+        "walmartReturnOrderList",
+        "walmartAdItemSpList",
+    }
+)
 
 
 class SyncRunExecutionService:

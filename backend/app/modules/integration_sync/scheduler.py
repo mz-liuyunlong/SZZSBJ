@@ -9,12 +9,15 @@ from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 CRON_SEARCH_DAYS = 40 * 366
 QUEUED_RECOVERY_GRACE = timedelta(minutes=1)
-DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset({
-    "walmartListingList",
-    "saleStatPageList",
-    "walmartReturnOrderList",
-    "walmartAdItemSpList",
-})
+DATA_PAGES_EXECUTABLE_INTERFACE_KEYS = frozenset(
+    {
+        "walmartListingList",
+        "saleStatPageList",
+        "walmartReturnOrderList",
+        "walmartAdItemSpList",
+    }
+)
+
 
 class ScheduleExpressionError(ValueError):
     "Safe invalid-schedule error without echoing the cron expression."

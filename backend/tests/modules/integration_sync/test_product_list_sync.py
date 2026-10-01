@@ -699,6 +699,7 @@ def test_scheduler_creates_productlist_run() -> None:
     service.repository.add_event.assert_called_once()
     session.commit.assert_called_once_with()
 
+
 def test_productlist_logs_only_safe_aggregates(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger="app.integration_sync.product_list")
     client = FakePageClient(

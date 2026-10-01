@@ -116,6 +116,7 @@ def test_bootstrap_creates_three_rows_and_is_idempotent(database: Engine) -> Non
         "gov_raw_retention_policies",
     }
 
+
 def test_bootstrap_repairs_only_approved_governance_fields(database: Engine) -> None:
     with Session(database) as session:
         service = IntegrationCatalogService(session)
@@ -150,6 +151,7 @@ def test_bootstrap_repairs_only_approved_governance_fields(database: Engine) -> 
         assert config.schedule_cron == "* * * * *"
         assert config.page_size == 1
         assert config.max_pages == 1
+
 
 def test_authorized_command_outputs_only_safe_summary(
     monkeypatch: pytest.MonkeyPatch,
