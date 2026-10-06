@@ -44,7 +44,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == ["20260929_0028_listing_archive_reason"]
+    assert script.get_heads() == ["20261006_0029_legacy_selected_mirror_tables"]
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -66,6 +66,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20260922_0016_after_sales_refund_items_schema_repair.py",
         "20260922_0017_add_after_sales_refund_amount.py",
         "20260923_0018_merge_after_sales_pmc_heads.py",
+        "20261006_0029_legacy_selected_mirror_tables.py",
     } <= revisions
 
     revision = (
@@ -74,6 +75,19 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     assert revision.count('name=op.f("ck_raw_lingxing_api_api_path")') == 1
     assert '"ix_raw_lingxing_api_raw_hash"' in revision
     assert '"ix_raw_lingxing_api_object_type"' not in revision
+
+    legacy_revision = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "20261006_0029_legacy_selected_mirror_tables.py"
+    ).read_text()
+    assert "create schema if not exists legacy_mirror" in legacy_revision
+    assert "legacy_mirror.biz_product_operation_log" in legacy_revision
+    assert "legacy_mirror.event_wfs_fee_case" in legacy_revision
+    assert "legacy_mirror.event_ops_action_log" in legacy_revision
+    assert "legacy_mirror.raw_walmart_sem_csv" in legacy_revision
+    assert "create table if not exists app_users" in legacy_revision
 
 
 @pytest.mark.parametrize("migration_auth_value", [None, "false", "yes", "1", "on"])
