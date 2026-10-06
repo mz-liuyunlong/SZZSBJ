@@ -239,7 +239,7 @@ def upgrade() -> None:
             create table if not exists app_users (
                 id integer primary key,
                 username varchar(64) not null unique,
-                feishu_member_id varchar(64) not null,
+                feishu_member_id varchar(64),
                 password_hash varchar(255) not null,
                 is_active smallint not null,
                 created_at timestamp not null,
