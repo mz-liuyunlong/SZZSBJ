@@ -5,11 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import alembic
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-import alembic
 from app.core.config import SettingsError, get_settings
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -77,10 +77,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     assert '"ix_raw_lingxing_api_object_type"' not in revision
 
     legacy_revision = (
-        BACKEND_ROOT
-        / "alembic"
-        / "versions"
-        / "20261006_0029_legacy_selected_mirror_tables.py"
+        BACKEND_ROOT / "alembic" / "versions" / "20261006_0029_legacy_selected_mirror_tables.py"
     ).read_text()
     assert "create schema if not exists legacy_mirror" in legacy_revision
     assert "legacy_mirror.biz_product_operation_log" in legacy_revision
