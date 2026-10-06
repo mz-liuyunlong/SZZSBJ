@@ -5,11 +5,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import alembic
 import pytest
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
+import alembic
 from app.core.config import SettingsError, get_settings
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]

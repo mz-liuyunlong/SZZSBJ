@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision: str = "20261006_0029_legacy_selected_mirror_tables"
 down_revision: str | Sequence[str] | None = "20260929_0028_listing_archive_reason"
