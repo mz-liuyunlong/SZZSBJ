@@ -333,6 +333,7 @@ function createColumns(
     { title: "退款损失", key: "refundAmount", width: 104, render: renderCostMatchedUsdMoney("refundAmount", "returnCount", currency) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
     { title: "广告费", key: "adSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
+    { title: "SEM费用", key: "semAdSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("semAdSpend", currency, dailySalesFxRate) },
     { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryFee", currency, dailySalesFxRate) },
     { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryUnitPrice", currency, dailySalesFxRate) },

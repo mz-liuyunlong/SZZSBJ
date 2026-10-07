@@ -538,6 +538,7 @@ class DailySalesItemDayMart(Base):
         UniqueConstraint("business_date_la", "source_account_ref", "store_id", "item_id", "msku"),
         CheckConstraint(f"cost_status IN ({COST_STATUSES})", name="cost_status"),
         CheckConstraint("sales_qty >= 0 AND order_count >= 0", name="nonnegative_counts"),
+        CheckConstraint("sem_ad_spend_amount >= 0", name="sem_ad_spend_amount_nonnegative"),
         CheckConstraint("gross_margin IS NULL OR gross_margin > -10", name="gross_margin_floor"),
         Index("ix_mart_daily_sales_store_date", "store_id", "business_date_la"),
         Index("ix_mart_daily_sales_item_date", "item_id", "business_date_la"),
@@ -579,6 +580,9 @@ class DailySalesItemDayMart(Base):
     refund_currency_code: Mapped[str | None] = mapped_column(String(3))
     return_rate_30d: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     ad_spend_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    sem_ad_spend_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("0"), server_default=text("0"), nullable=False
+    )
     ad_spend_currency_code: Mapped[str | None] = mapped_column(String(3))
     ad_ratio: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     wfs_available_quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))

@@ -253,7 +253,18 @@ class DailySalesRepository:
         search_field: str,
         keyword: str,
         batch_values: str,
-    ) -> tuple[object, object, object, str | None, object, str | None, object, str | None]:
+    ) -> tuple[
+        object,
+        object,
+        object,
+        str | None,
+        object,
+        str | None,
+        object,
+        object,
+        str | None,
+        object | None,
+    ]:
         """Aggregate daily-sales metrics for the full filtered range, independent of pagination."""
         statement = self._filtered_statement(
             account_refs=account_refs,
@@ -331,6 +342,7 @@ class DailySalesRepository:
                 func.coalesce(func.sum(DailySalesItemDayMart.gross_profit_amount), 0),
                 func.max(DailySalesItemDayMart.gross_profit_currency_code),
                 func.coalesce(func.sum(DailySalesItemDayMart.ad_spend_amount), 0),
+                func.coalesce(func.sum(DailySalesItemDayMart.sem_ad_spend_amount), 0),
                 func.max(DailySalesItemDayMart.ad_spend_currency_code),
             ).order_by(None)
         ).one()
@@ -344,6 +356,7 @@ class DailySalesRepository:
             row[5],
             row[6],
             row[7],
+            row[8],
             latest_wfs_available_quantity,
         )
 

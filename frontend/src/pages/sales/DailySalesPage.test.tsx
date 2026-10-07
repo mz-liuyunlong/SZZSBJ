@@ -79,6 +79,7 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
         orderProfitAmount: sum(rows, "orderProfit"),
         orderProfitCurrency: "USD",
         adSpendAmount: sum(rows, "adSpend"),
+        semAdSpendAmount: sum(rows, "semAdSpend"),
         adSpendCurrency: "USD",
         refundEventQuantity: sum(rows, "returnCount"),
         refundEventAmount: sum(rows, "refundAmount"),
@@ -568,6 +569,7 @@ describe("DailySalesPage", () => {
     expect(screen.queryByText("父体")).not.toBeInTheDocument();
     expect(headers).toContain("送样量");
     expect(headers).toContain("送样金额");
+    expect(headers).toContain("SEM费用");
   });
 
   it("shows refund event cards separately from row-level refund attribution", async () => {

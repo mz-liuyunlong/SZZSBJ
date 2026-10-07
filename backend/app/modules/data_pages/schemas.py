@@ -108,6 +108,7 @@ class DailySalesItemRead(StrictSchema):
     refund_currency_code: str | None
     return_rate_30d: Ratio | None
     ad_spend_amount: Money | None
+    sem_ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None
     ad_ratio: Ratio | None
     wfs_available_quantity: Money | None
@@ -163,6 +164,7 @@ class DailySalesSummaryRead(StrictSchema):
     order_profit_amount: Money = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
+    sem_ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None = "USD"
     wfs_available_quantity: Money | None = None
     refund_event_qty: Money = Decimal("0")
