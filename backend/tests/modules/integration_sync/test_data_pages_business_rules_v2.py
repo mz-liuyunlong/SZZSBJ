@@ -128,6 +128,17 @@ def test_daily_sales_preserves_sample_sales_amount() -> None:
     assert "sample_cost_amount" not in source
 
 
+def test_daily_sales_profit_deducts_sem_spend_without_merging_ad_spend() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+    order_profit_source = inspect.getsource(DataPagesRealSyncRunner._refresh_order_profit_mart)
+
+    assert "m.sem_ad_spend_amount,m.commission_fee_amount" in source
+    assert 'sem_ad_spend = _decimal(row["sem_ad_spend_amount"]) or Decimal("0")' in source
+    assert "- sem_ad_spend" in source
+    assert "sum(coalesce(ad_spend_amount,0))" in order_profit_source
+    assert "sum(gross_profit_amount)" in order_profit_source
+
+
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2")
+    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2+sem")
     assert len(DAILY_SALES_V2_VERSION) <= 64
