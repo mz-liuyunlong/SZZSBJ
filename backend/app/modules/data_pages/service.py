@@ -148,6 +148,7 @@ class DailySalesService:
             order_profit_amount,
             order_profit_currency,
             ad_spend_amount,
+            sem_ad_spend_amount,
             ad_spend_currency,
             wfs_available_quantity,
         ) = self.repository.daily_sales_summary(
@@ -197,6 +198,7 @@ class DailySalesService:
                     order_profit_amount=_decimal(order_profit_amount),
                     order_profit_currency_code=order_profit_currency or "USD",
                     ad_spend_amount=_decimal(ad_spend_amount),
+                    sem_ad_spend_amount=_decimal(sem_ad_spend_amount),
                     ad_spend_currency_code=ad_spend_currency or "USD",
                     wfs_available_quantity=(
                         None if wfs_available_quantity is None else _decimal(wfs_available_quantity)
@@ -286,6 +288,7 @@ class DailySalesService:
             refund_currency_code=row.refund_currency_code,
             return_rate_30d=row.return_rate_30d,
             ad_spend_amount=row.ad_spend_amount,
+            sem_ad_spend_amount=_decimal(row.sem_ad_spend_amount),
             ad_spend_currency_code=row.ad_spend_currency_code,
             ad_ratio=row.ad_ratio,
             wfs_available_quantity=wfs_available_quantity,

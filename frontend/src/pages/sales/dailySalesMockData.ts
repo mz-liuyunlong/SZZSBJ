@@ -23,6 +23,7 @@ export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (
   const salesAmount = orderCount * (18.5 + (index % 9));
   const purchaseCost = salesAmount * (0.31 + (index % 4) * 0.02);
   const adSpend = salesAmount * (0.08 + (index % 3) * 0.01);
+  const semAdSpend = adSpend * 0.12;
   const orderProfit = salesAmount - purchaseCost - adSpend - orderCount * 3.25;
 
   return {
@@ -48,6 +49,7 @@ export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (
     refundAmount: (index % 6) * 19.9,
     returnRate30Days: 1.2 + (index % 8) * 0.55,
     adSpend,
+    semAdSpend,
     adRatio: (adSpend / salesAmount) * 100,
     wfsDeliveryFee: orderCount * 3.25,
     wfsDeliveryUnitPrice: 3.25,

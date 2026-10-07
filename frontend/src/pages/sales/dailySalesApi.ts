@@ -38,6 +38,7 @@ interface BackendDailySalesItem {
   refund_amount: string | null;
   return_rate_30d: string | null;
   ad_spend_amount: string | null;
+  sem_ad_spend_amount: string | null;
   ad_ratio: string | null;
   wfs_available_quantity: string | null;
   wfs_fee_unit_amount: string | null;
@@ -78,6 +79,7 @@ interface BackendDailySalesSummary {
   order_profit_amount: string;
   order_profit_currency_code: string | null;
   ad_spend_amount: string;
+  sem_ad_spend_amount: string;
   ad_spend_currency_code: string | null;
   refund_event_qty: string;
   refund_event_amount: string;
@@ -107,6 +109,7 @@ export interface DailySalesServerSummary {
   orderProfitAmount: number;
   orderProfitCurrency: DailySalesCurrency;
   adSpendAmount: number;
+  semAdSpendAmount: number;
   adSpendCurrency: DailySalesCurrency;
   refundEventQuantity: number;
   refundEventAmount: number;
@@ -188,6 +191,7 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => ({
   refundAmount: nullableNumberValue(item.refund_amount),
   returnRate30Days: numberValue(item.return_rate_30d) * 100,
   adSpend: numberValue(item.ad_spend_amount),
+  semAdSpend: numberValue(item.sem_ad_spend_amount),
   adRatio: numberValue(item.ad_ratio) * 100,
   wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
   wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
@@ -233,6 +237,7 @@ const toDailySalesServerSummary = (
     orderProfitAmount: numberValue(summary.order_profit_amount),
     orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
     adSpendAmount: numberValue(summary.ad_spend_amount),
+    semAdSpendAmount: numberValue(summary.sem_ad_spend_amount),
     adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
     refundEventQuantity: numberValue(summary.refund_event_qty),
     refundEventAmount: numberValue(summary.refund_event_amount),
