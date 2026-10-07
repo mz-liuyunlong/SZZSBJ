@@ -29,7 +29,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2+sem"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -605,7 +605,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "select m.id,m.store_id,m.item_id,m.msku,m.local_sku,m.gross_sales_qty,"
                     "m.gross_order_count,m.gross_sales_amount,m.sample_order_count,m.sample_qty,m.sample_amount,"
                     "m.cost_quantity,sample_qty,return_qty,m.sales_qty,m.sales_amount,m.refund_amount,m.ad_spend_amount,"
-                    "m.commission_fee_amount,"
+                    "m.sem_ad_spend_amount,m.commission_fee_amount,"
                     "coalesce((m.source_lineage_json->>'refund_loss_missing_count')::int,0) refund_loss_missing_count "
                     "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
                 ),
@@ -619,6 +619,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             cost_quantity = _decimal(row["cost_quantity"]) or Decimal("0")
             sales = _decimal(row["sales_amount"]) or Decimal("0")
             ad_spend = _decimal(row["ad_spend_amount"]) or Decimal("0")
+            sem_ad_spend = _decimal(row["sem_ad_spend_amount"]) or Decimal("0")
             commission = _decimal(row["commission_fee_amount"]) or Decimal("0")
             gross_qty = _decimal(row["gross_sales_qty"]) or Decimal("0")
             gross_orders = _decimal(row["gross_order_count"]) or Decimal("0")
@@ -714,6 +715,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             gross_profit = (
                 sales
                 - ad_spend
+                - sem_ad_spend
                 - commission
                 - purchase_total
                 - first_leg_total
