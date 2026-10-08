@@ -437,6 +437,14 @@ class DailySalesRepository:
                 func.coalesce(func.sum(base.c.gross_profit_amount), 0).label("order_profit_amount"),
                 func.max(base.c.gross_profit_currency_code).label("order_profit_currency_code"),
                 func.coalesce(func.sum(base.c.ad_spend_amount), 0).label("ad_spend_amount"),
+                func.coalesce(func.sum(base.c.sem_ad_spend_amount), 0).label("sem_ad_spend_amount"),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(base.c.ad_spend_amount, 0)
+                        + func.coalesce(base.c.sem_ad_spend_amount, 0)
+                    ),
+                    0,
+                ).label("total_ad_spend_amount"),
                 func.max(base.c.ad_spend_currency_code).label("ad_spend_currency_code"),
             )
             .group_by(base.c.business_date_la)
@@ -705,11 +713,24 @@ class OrderProfitRepository:
                 func.coalesce(func.sum(OrderProfitSkuDayMart.gross_profit_amount), 0),
                 func.max(OrderProfitSkuDayMart.gross_profit_currency_code),
                 func.coalesce(func.sum(OrderProfitSkuDayMart.ad_spend_amount), 0),
+                func.coalesce(func.sum(OrderProfitSkuDayMart.sem_ad_spend_amount), 0),
                 func.max(OrderProfitSkuDayMart.sales_currency_code),
             ).order_by(None)
         ).one()
 
-        return row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9]
+        return (
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+            row[10],
+        )
 
     def _filtered_statement(
         self,

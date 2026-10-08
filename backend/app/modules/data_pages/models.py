@@ -675,6 +675,9 @@ class OrderProfitSkuDayMart(Base):
     sales_currency_code: Mapped[str | None] = mapped_column(String(3))
     refund_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     ad_spend_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    sem_ad_spend_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("0"), server_default=text("0"), nullable=False
+    )
     commission_fee_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     purchase_cost_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.setConfig({ testTimeout: 30_000 });
 import { navigation } from "@/config/navigation";
 import OrderProfitPage from "@/pages/sales/OrderProfitPage";
+import { fetchOrderProfitRows } from "@/pages/sales/orderProfitApi";
 import { aggregateOrderProfitRows } from "@/pages/sales/orderProfitTypes";
 import { orderProfitSourceRecords } from "@/pages/sales/orderProfitMockData";
 import { orderProfitColumnFields } from "@/pages/sales/orderProfitTypes";
@@ -37,6 +38,7 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
     + Number(row.salesAmount ?? 0)
     - Number(row.refundAmount ?? 0)
     - Number(row.adSpend ?? 0)
+    - Number(row.semAdSpend ?? 0)
     - Number(row.wfsDeliveryFee ?? 0)
     - Number(row.commission ?? 0)
     - Number(row.purchaseCost ?? 0)
@@ -92,7 +94,12 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
         orderProfitAmount: sumOrderProfit(records),
         orderProfitCurrency: "USD",
         adSpendAmount: sum(records, "adSpend"),
+        semAdSpendAmount: sum(records, "semAdSpend"),
+        totalAdSpendAmount: sum(records, "adSpend") + sum(records, "semAdSpend"),
         adSpendCurrency: "USD",
+        adRatio: sum(records, "salesAmount")
+          ? (sum(records, "adSpend") + sum(records, "semAdSpend")) / sum(records, "salesAmount") * 100
+          : null,
       },
       meta: {
         latest_calculated_at: null,
@@ -105,10 +112,24 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
     };
   });
 
+  const fetchOrderProfitRows = vi.fn(async (params = {}) => {
+    const result = await fetchOrderProfitSourceRecords(params);
+    return {
+      rows: aggregateOrderProfitRows(result.records),
+      summary: result.summary,
+      meta: {
+        ...result.meta,
+        total: aggregateOrderProfitRows(result.records).length,
+      },
+    };
+  });
+
   return {
+    fetchOrderProfitRows,
     fetchOrderProfitSourceRecords,
     fetchAllOrderProfitSourceRecords: fetchOrderProfitSourceRecords,
     fetchOrderProfitTrendPoints: vi.fn(async () => []),
+    preloadOrderProfitRows: vi.fn(),
     preloadOrderProfitSourceRecords: vi.fn(),
   };
 });
@@ -559,6 +580,10 @@ describe("OrderProfitPage", () => {
     expect(orderProfitSourceRecords).toHaveLength(800);
     expect(referenceRows).toHaveLength(100);
     expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", String(referenceRows.length));
+    expect(fetchOrderProfitRows).toHaveBeenCalledWith(expect.objectContaining({
+      page: 1,
+      pageSize: expect.any(Number),
+    }));
     expect(screen.getByText("商品ID/品名")).toBeVisible();
     expect(screen.getByText("SKU/MSKU")).toBeVisible();
     expect(screen.queryByText("系统运营日志")).not.toBeInTheDocument();
@@ -591,7 +616,7 @@ describe("OrderProfitPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /显示图表$/ }));
     expect(screen.getByLabelText("订单利润趋势图")).toBeVisible();
     const metricSelector = screen.getByLabelText("图表指标");
-    for (const metric of ["销量", "销售额", "订单利润", "利润率", "广告费", "广告占比"]) {
+    for (const metric of ["销量", "销售额", "订单利润", "利润率", "总广告费", "广告占比"]) {
       expect(within(metricSelector).getByRole("button", { name: metric })).toBeVisible();
     }
   });

@@ -24,14 +24,12 @@ import ListingAnalysisModal from "@/shared/listing-analysis";
 import OrderProfitToolbar, {
   type OrderProfitFilters,
 } from "@/pages/sales/components/OrderProfitToolbar";
-import { fetchAllOrderProfitSourceRecords, fetchOrderProfitSourceRecords, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
+import { fetchOrderProfitRows, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
 import {
-  aggregateOrderProfitRows,
   dateRangeForPreset,
   fixedOrderProfitColumnKeys,
   orderProfitColumnFields,
   type OrderProfitRow,
-  type OrderProfitSourceRecord,
 } from "@/pages/sales/orderProfitTypes";
 import { fetchSalesFilterOptions, emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import { mergeSelectedFilterOptions } from "@/shared/report-filters";
@@ -91,7 +89,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const pageStateKey = "order-profit:v4";
   const orderProfitPageRootRef = useRef<HTMLDivElement | null>(null);
   const [filters, setFilters] = useState(createInitialFilters);
-  const [sourceRecords, setSourceRecords] = useState<OrderProfitSourceRecord[]>([]);
+  const [orderProfitRows, setOrderProfitRows] = useState<OrderProfitRow[]>([]);
   const [orderProfitTrendPoints, setOrderProfitTrendPoints] = useState<OrderProfitTrendPoint[]>([]);
   const [orderProfitSummary, setOrderProfitSummary] = useState<OrderProfitServerSummary | null>(null);
   const [previousOrderProfitSummary, setPreviousOrderProfitSummary] = useState<OrderProfitServerSummary | null>(null);
@@ -107,6 +105,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [analysisSource, setAnalysisSource] = useState<OrderProfitAnalysisSource | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+  const [orderProfitTotal, setOrderProfitTotal] = useState(0);
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
 
   // ORDER_PROFIT_RESET_FILTERS_ON_MOUNT
@@ -140,24 +139,28 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     queueMicrotask(() => {
       if (active) setIsTableRequesting(true);
     });
-    void fetchAllOrderProfitSourceRecords({
+    void fetchOrderProfitRows({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
+      page: currentPage,
+      pageSize,
       platforms: filters.platforms,
       owners: filters.owners,
       stores: filters.stores,
       searchField: filters.searchField,
       keyword: filters.keyword,
     })
-      .then(({ records, summary }) => {
+      .then(({ rows, summary, meta }) => {
         if (!active) return;
-        setSourceRecords(Array.isArray(records) ? records : []);
+        setOrderProfitRows(Array.isArray(rows) ? rows : []);
         setOrderProfitSummary(summary);
+        setOrderProfitTotal(Number(meta?.total ?? rows.length ?? 0));
       })
       .catch(() => {
         if (!active) return;
-        setSourceRecords([]);
+        setOrderProfitRows([]);
         setOrderProfitSummary(null);
+        setOrderProfitTotal(0);
       })
       .finally(() => {
         if (active) setIsTableRequesting(false);
@@ -167,7 +170,18 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       active = false;
       setIsTableRequesting(false);
     };
-  }, [dateRangeStart, dateRangeEnd, filters.keyword, filters.owners, filters.platforms, filters.searchField, filters.stores, isPageActive]);
+  }, [
+    currentPage,
+    dateRangeStart,
+    dateRangeEnd,
+    filters.keyword,
+    filters.owners,
+    filters.platforms,
+    filters.searchField,
+    filters.stores,
+    isPageActive,
+    pageSize,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -189,7 +203,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
       setPreviousOrderProfitSummaryRange(previousOrderProfitSummaryRangeLabel);
     });
 
-    void fetchOrderProfitSourceRecords({
+    void fetchOrderProfitRows({
       startDate: previousDateRange.startDate,
       endDate: previousDateRange.endDate,
       page: 1,
@@ -295,12 +309,6 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     filters.stores,
   ]);
 
-  const safeSourceRecords = useMemo(
-    () => (Array.isArray(sourceRecords) ? sourceRecords : []),
-    [sourceRecords],
-  );
-
-
   const platformOptions = useMemo(
     () => mergeSelectedFilterOptions(filters.platforms, filterOptions.platforms),
     [filterOptions.platforms, filters.platforms],
@@ -319,12 +327,10 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
     setSelectedRowKeys([]);
   };
 
-  const filteredSourceRecords = useMemo(
-    () => safeSourceRecords,
-    [safeSourceRecords],
+  const filteredRows = useMemo(
+    () => (Array.isArray(orderProfitRows) ? orderProfitRows : []),
+    [orderProfitRows],
   );
-
-  const filteredRows = useMemo(() => aggregateOrderProfitRows(filteredSourceRecords), [filteredSourceRecords]);
 
   const updateFilters = (nextFilters: OrderProfitFilters) => {
     setFilters(nextFilters);
@@ -452,7 +458,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
             <OrderProfitTable
           rows={filteredRows}
-          total={filteredRows.length}
+          total={orderProfitTotal}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}

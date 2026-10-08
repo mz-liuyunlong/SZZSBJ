@@ -58,6 +58,18 @@ def _decimal(value: object, default: Decimal = Decimal("0")) -> Decimal:
         return default
 
 
+def _optional_decimal(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    return _decimal(value)
+
+
+def _percent_ratio(numerator: Decimal, denominator: Decimal) -> Decimal | None:
+    if not denominator:
+        return None
+    return (numerator / denominator * Decimal("100")).quantize(Decimal("0.000001"))
+
+
 def _trend_points(value: object) -> list[DailySalesTrendPointRead]:
     if not isinstance(value, list):
         return []
@@ -199,6 +211,7 @@ class DailySalesService:
                     order_profit_currency_code=order_profit_currency or "USD",
                     ad_spend_amount=_decimal(ad_spend_amount),
                     sem_ad_spend_amount=_decimal(sem_ad_spend_amount),
+                    total_ad_spend_amount=_decimal(ad_spend_amount) + _decimal(sem_ad_spend_amount),
                     ad_spend_currency_code=ad_spend_currency or "USD",
                     wfs_available_quantity=(
                         None if wfs_available_quantity is None else _decimal(wfs_available_quantity)
@@ -289,6 +302,7 @@ class DailySalesService:
             return_rate_30d=row.return_rate_30d,
             ad_spend_amount=row.ad_spend_amount,
             sem_ad_spend_amount=_decimal(row.sem_ad_spend_amount),
+            total_ad_spend_amount=_decimal(row.ad_spend_amount) + _decimal(row.sem_ad_spend_amount),
             ad_spend_currency_code=row.ad_spend_currency_code,
             ad_ratio=row.ad_ratio,
             wfs_available_quantity=wfs_available_quantity,
@@ -326,6 +340,16 @@ class DailySalesService:
             commission_source=row.commission_source,
             gross_profit_amount=row.gross_profit_amount,
             gross_profit_currency_code=row.gross_profit_currency_code,
+            total_cost_amount=(
+                None
+                if row.gross_profit_amount is None
+                else _decimal(row.sales_amount) - _decimal(row.gross_profit_amount)
+            ),
+            average_profit_per_order=(
+                None
+                if row.gross_profit_amount is None or not _decimal(row.order_count)
+                else _decimal(row.gross_profit_amount) / _decimal(row.order_count)
+            ),
             gross_margin=row.gross_margin,
             roi=row.roi,
             cost_status=row.cost_status,
@@ -371,6 +395,7 @@ class OrderProfitService:
             order_profit_amount,
             order_profit_currency,
             ad_spend_amount,
+            sem_ad_spend_amount,
             ad_spend_currency,
         ) = self.repository.order_profit_summary(
             account_refs=account_refs,
@@ -394,7 +419,13 @@ class OrderProfitService:
                     order_profit_amount=_decimal(order_profit_amount),
                     order_profit_currency_code=order_profit_currency or "USD",
                     ad_spend_amount=_decimal(ad_spend_amount),
+                    sem_ad_spend_amount=_decimal(sem_ad_spend_amount),
+                    total_ad_spend_amount=_decimal(ad_spend_amount) + _decimal(sem_ad_spend_amount),
                     ad_spend_currency_code=ad_spend_currency or "USD",
+                    ad_ratio=_percent_ratio(
+                        _decimal(ad_spend_amount) + _decimal(sem_ad_spend_amount),
+                        _decimal(sales_amount),
+                    ),
                 ),
             ),
             total,
@@ -418,17 +449,14 @@ class OrderProfitService:
             keyword=query.keyword,
         )
 
-        def percent_ratio(numerator: Decimal, denominator: Decimal) -> Decimal | None:
-            if not denominator:
-                return None
-            return (numerator / denominator * Decimal("100")).quantize(Decimal("0.000001"))
-
         items: list[OrderProfitTrendPointRead] = []
         for row in rows:
             value = row._mapping
             sales_amount = _decimal(value["sales_amount"])
             order_profit_amount = _decimal(value["order_profit_amount"])
             ad_spend_amount = _decimal(value["ad_spend_amount"])
+            sem_ad_spend_amount = _decimal(value["sem_ad_spend_amount"])
+            total_ad_spend_amount = _decimal(value["total_ad_spend_amount"])
 
             items.append(
                 OrderProfitTrendPointRead(
@@ -441,10 +469,12 @@ class OrderProfitService:
                     refund_currency_code=value["refund_currency_code"] or "USD",
                     order_profit_amount=order_profit_amount,
                     order_profit_currency_code=value["order_profit_currency_code"] or "USD",
-                    profit_margin=percent_ratio(order_profit_amount, sales_amount),
+                    profit_margin=_percent_ratio(order_profit_amount, sales_amount),
                     ad_spend_amount=ad_spend_amount,
+                    sem_ad_spend_amount=sem_ad_spend_amount,
+                    total_ad_spend_amount=total_ad_spend_amount,
                     ad_spend_currency_code=value["ad_spend_currency_code"] or "USD",
-                    ad_ratio=percent_ratio(ad_spend_amount, sales_amount),
+                    ad_ratio=_percent_ratio(total_ad_spend_amount, sales_amount),
                 )
             )
 
@@ -466,6 +496,12 @@ class OrderProfitService:
             sales_currency_code=row.sales_currency_code,
             refund_amount=row.refund_amount,
             ad_spend_amount=row.ad_spend_amount,
+            sem_ad_spend_amount=_decimal(row.sem_ad_spend_amount),
+            total_ad_spend_amount=_decimal(row.ad_spend_amount) + _decimal(row.sem_ad_spend_amount),
+            ad_ratio=_percent_ratio(
+                _decimal(row.ad_spend_amount) + _decimal(row.sem_ad_spend_amount),
+                _decimal(row.sales_amount),
+            ),
             commission_fee_amount=row.commission_fee_amount,
             wfs_fee_total_amount=row.wfs_fee_total_amount,
             purchase_cost_total_usd=row.purchase_cost_total_usd,

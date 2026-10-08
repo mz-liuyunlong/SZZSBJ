@@ -33,6 +33,8 @@ export interface OrderProfitSourceRecord {
   returnRate30Days: number | null;
 
   adSpend: number;
+  semAdSpend?: number;
+  totalAdSpend?: number;
 
   wfsDeliveryFee: number | null;
   wfsDeliveryUnitPrice: number | null;
@@ -74,6 +76,8 @@ export interface OrderProfitRow {
   returnRate30Days: number | null;
 
   adSpend: number;
+  semAdSpend: number;
+  totalAdSpend: number;
   adRatio: number | null;
 
   wfsDeliveryFee: number | null;
@@ -126,6 +130,8 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "returnRate30Days", title: "退货率30天" },
 
   { key: "adSpend", title: "广告费" },
+  { key: "semAdSpend", title: "SEM费用" },
+  { key: "totalAdSpend", title: "总广告费" },
   { key: "adRatio", title: "广告占比" },
 
   { key: "wfsDeliveryFee", title: "WFS总配送费" },
@@ -244,6 +250,11 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
         );
 
     const adSpend = bucket.reduce((total, row) => total + row.adSpend, 0);
+    const semAdSpend = bucket.reduce((total, row) => total + Number(row.semAdSpend ?? 0), 0);
+    const totalAdSpend = bucket.reduce(
+      (total, row) => total + Number(row.totalAdSpend ?? row.adSpend + Number(row.semAdSpend ?? 0)),
+      0,
+    );
 
     const weightedAverage = (
       valueKey:
@@ -353,7 +364,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       && purchaseCost != null
       && firstLegCost != null
       && storageFee != null
-      ? adSpend + wfsDeliveryFee + commission + purchaseCost + firstLegCost + storageFee
+      ? totalAdSpend + wfsDeliveryFee + commission + purchaseCost + firstLegCost + storageFee
       : null;
     const orderProfit = totalCost == null ? null : salesAmount - totalCost;
     const status = bucket.reduce((current, row) => (
@@ -389,7 +400,9 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       returnRate30Days,
 
       adSpend,
-      adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+      semAdSpend,
+      totalAdSpend,
+      adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
 
       wfsDeliveryFee,
       wfsDeliveryUnitPrice,

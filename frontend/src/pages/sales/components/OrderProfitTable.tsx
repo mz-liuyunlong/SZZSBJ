@@ -104,6 +104,8 @@ const totalMoneyKeys = new Set([
   "sampleAmount",
   "refundAmount",
   "adSpend",
+  "semAdSpend",
+  "totalAdSpend",
   "wfsDeliveryFee",
   "commission",
   "purchaseCost",
@@ -151,7 +153,7 @@ function TotalCell({
   }
   const salesAmount = sum(rows, "salesAmount");
   const orderCount = sum(rows, "orderCount");
-  const adSpend = sum(rows, "adSpend");
+  const totalAdSpend = sum(rows, "totalAdSpend");
   const orderProfit = sumNullable(rows, "orderProfit");
   if (columnKey === "averageProfitPerOrder") {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
@@ -172,7 +174,7 @@ function TotalCell({
 
   if (columnKey === "adRatio") {
     return salesAmount
-      ? <PercentCell value={adSpend / salesAmount * 100} />
+      ? <PercentCell value={totalAdSpend / salesAmount * 100} />
       : null;
   }
   if (columnKey === "profitMargin") {
@@ -284,6 +286,8 @@ function createColumns(
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
 
     { title: "广告费", key: "adSpend", width: 104, render: money("adSpend", currency) },
+    { title: "SEM费用", key: "semAdSpend", width: 104, render: money("semAdSpend", currency) },
+    { title: "总广告费", key: "totalAdSpend", width: 112, render: money("totalAdSpend", currency) },
     { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
 
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: money("wfsDeliveryFee", currency) },

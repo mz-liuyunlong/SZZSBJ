@@ -1,63 +1,64 @@
 import { backendRequest } from "@/api/backendApi";
 import type {
+  OrderProfitCostStatus,
   OrderProfitCurrency,
-  OrderProfitSourceRecord,
+  OrderProfitRow,
 } from "@/pages/sales/orderProfitTypes";
 
-interface BackendDailySalesItem {
+interface BackendOrderProfitItem {
   id: string;
   business_date_la: string;
-  store_id: string;
-  store_name: string | null;
-  owner_ref: string | null;
-  item_id: string;
-  msku: string | null;
-  local_sku: string | null;
-  local_name: string | null;
-  title: string | null;
-  platform_code: string | null;
+  business_timezone: string;
+  local_sku: string;
+  item_ids: string[];
+  store_ids: string[];
+  store_count: number;
+  item_count: number;
   sales_qty: string;
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
-  sample_qty: string;
-  sample_amount: string | null;
-  cost_quantity: string;
-  return_qty: string | null;
   refund_amount: string | null;
-  return_rate_30d: string | null;
   ad_spend_amount: string | null;
+  sem_ad_spend_amount: string | null;
+  total_ad_spend_amount: string | null;
+  ad_ratio: string | null;
   commission_fee_amount: string | null;
   wfs_fee_total_amount: string | null;
-  wfs_fee_unit_amount: string | null;
   purchase_cost_total_usd: string | null;
-  purchase_cost_unit_cny: string | null;
   first_leg_cost_total_usd: string | null;
-  first_leg_cost_unit_cny: string | null;
   storage_fee_total_amount: string | null;
-  storage_fee_unit_amount: string | null;
-  wfs_available_quantity: string | null;
+  gross_profit_amount: string | null;
+  gross_profit_currency_code: string | null;
+  total_cost_amount: string | null;
+  average_profit_per_order: string | null;
+  gross_margin: string | null;
+  roi: string | null;
   cost_status: "complete" | "partial" | "missing";
   missing_cost_codes: string[];
+  calc_version: string;
+  calculated_at: string;
 }
 
-interface BackendDailySalesSummary {
+interface BackendOrderProfitSummary {
   sales_qty: string;
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
-  refund_event_qty: string;
-  refund_event_amount: string;
-  refund_event_currency_code: string | null;
+  refund_amount: string;
+  refund_currency_code: string | null;
   order_profit_amount: string;
   order_profit_currency_code: string | null;
   ad_spend_amount: string;
+  sem_ad_spend_amount: string;
+  total_ad_spend_amount: string;
   ad_spend_currency_code: string | null;
+  ad_ratio: string | null;
 }
 
-interface BackendDailySalesData {
-  items: BackendDailySalesItem[];
-  summary?: BackendDailySalesSummary;
+interface BackendOrderProfitData {
+  items: BackendOrderProfitItem[];
+  summary?: BackendOrderProfitSummary;
 }
 
 interface BackendOrderProfitTrendPoint {
@@ -72,6 +73,8 @@ interface BackendOrderProfitTrendPoint {
   order_profit_currency_code: string | null;
   profit_margin: string | null;
   ad_spend_amount: string;
+  sem_ad_spend_amount: string;
+  total_ad_spend_amount: string;
   ad_spend_currency_code: string | null;
   ad_ratio: string | null;
 }
@@ -100,11 +103,14 @@ export interface OrderProfitServerSummary {
   orderProfitAmount: number;
   orderProfitCurrency: OrderProfitCurrency;
   adSpendAmount: number;
+  semAdSpendAmount: number;
+  totalAdSpendAmount: number;
   adSpendCurrency: OrderProfitCurrency;
+  adRatio: number | null;
 }
 
 export interface OrderProfitApiResult {
-  records: OrderProfitSourceRecord[];
+  rows: OrderProfitRow[];
   summary: OrderProfitServerSummary | null;
   meta: OrderProfitApiMeta;
 }
@@ -121,6 +127,8 @@ export interface OrderProfitTrendPoint {
   orderProfitCurrency: OrderProfitCurrency;
   profitMargin: number | null;
   adSpend: number;
+  semAdSpend: number;
+  totalAdSpend: number;
   adSpendCurrency: OrderProfitCurrency;
   adRatio: number | null;
 }
@@ -147,103 +155,14 @@ const currencyLabel = (currencyCode: string | null): OrderProfitCurrency => (
   currencyCode === "CNY" ? "CNY" : "USD"
 );
 
-const platformLabel = (platformCode: string | null): OrderProfitSourceRecord["platform"] => {
-  if (platformCode === "amazon") return "Amazon";
-  if (platformCode === "temu") return "TEMU";
-  return "Walmart";
-};
-
 const costStatusLabel = (
-  status: BackendDailySalesItem["cost_status"],
+  status: BackendOrderProfitItem["cost_status"],
   missingCodes: string[],
-): OrderProfitSourceRecord["costStatus"] => {
+): OrderProfitCostStatus => {
   if (missingCodes.length > 0) return "部分缺失";
   if (status === "complete") return "已完成";
   if (status === "partial") return "部分缺失";
   return "待补齐";
-};
-
-const toOrderProfitTrendPoint = (
-  item: BackendOrderProfitTrendPoint,
-): OrderProfitTrendPoint => ({
-  date: item.date,
-  salesVolume: numberValue(item.sales_qty),
-  orderCount: numberValue(item.order_count),
-  salesAmount: numberValue(item.sales_amount),
-  salesCurrency: currencyLabel(item.sales_currency_code),
-  refundAmount: numberValue(item.refund_amount),
-  refundCurrency: currencyLabel(item.refund_currency_code),
-  orderProfit: numberValue(item.order_profit_amount),
-  orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
-  profitMargin: nullableNumberValue(item.profit_margin),
-  adSpend: numberValue(item.ad_spend_amount),
-  adSpendCurrency: currencyLabel(item.ad_spend_currency_code),
-  adRatio: nullableNumberValue(item.ad_ratio),
-});
-
-const toOrderProfitSourceRecord = (item: BackendDailySalesItem): OrderProfitSourceRecord => ({
-  id: item.id,
-  date: item.business_date_la,
-  store: item.store_name ?? item.store_id,
-  owner: item.owner_ref ?? "未分配",
-  msku: item.msku ?? "-",
-  productId: item.item_id,
-  sku: item.local_sku ?? "-",
-  productName: item.local_name ?? item.title ?? item.local_sku ?? item.item_id,
-  platform: platformLabel(item.platform_code),
-  currency: currencyLabel(item.sales_currency_code),
-  salesVolume: numberValue(item.sales_qty),
-  orderCount: numberValue(item.order_count),
-  salesAmount: numberValue(item.sales_amount),
-
-  sampleQuantity: numberValue(item.sample_qty),
-  sampleAmount: nullableNumberValue(item.sample_amount),
-  costQuantity: numberValue(item.cost_quantity),
-
-  refundQuantity: numberValue(item.return_qty),
-  refundAmount: nullableNumberValue(item.refund_amount),
-  returnRate30Days: item.return_rate_30d == null
-    ? null
-    : numberValue(item.return_rate_30d) * 100,
-
-  adSpend: numberValue(item.ad_spend_amount),
-
-  wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
-  wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
-
-  commission: numberValue(item.commission_fee_amount),
-
-  purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
-  purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
-
-  firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
-  firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
-
-  storageFee: nullableNumberValue(item.storage_fee_total_amount),
-  storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
-
-  wfsAvailableInventory: numberValue(item.wfs_available_quantity),
-  costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
-});
-
-const toOrderProfitServerSummary = (
-  summary: BackendDailySalesSummary | undefined,
-): OrderProfitServerSummary | null => {
-  if (!summary) return null;
-
-  return {
-    salesQuantity: numberValue(summary.sales_qty),
-    orderCount: numberValue(summary.order_count),
-    salesAmount: numberValue(summary.sales_amount),
-    salesCurrency: currencyLabel(summary.sales_currency_code),
-    refundQuantity: numberValue(summary.refund_event_qty),
-    refundAmount: numberValue(summary.refund_event_amount),
-    refundCurrency: currencyLabel(summary.refund_event_currency_code),
-    orderProfitAmount: numberValue(summary.order_profit_amount),
-    orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
-    adSpendAmount: numberValue(summary.ad_spend_amount),
-    adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
-  };
 };
 
 const backendSearchField = (field: string | undefined) => {
@@ -273,7 +192,114 @@ const appendOrderProfitFilters = (search: URLSearchParams, params: OrderProfitPa
   }
 };
 
-export async function fetchOrderProfitSourceRecords(
+const joinedText = (values: string[], fallback = "-") => {
+  const clean = values.map((value) => String(value).trim()).filter(Boolean);
+  if (clean.length === 0) return fallback;
+  if (clean.length === 1) return clean[0];
+  return `${clean[0]} 等${clean.length}个`;
+};
+
+const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
+  const itemIds = Array.isArray(item.item_ids) ? item.item_ids : [];
+  const storeIds = Array.isArray(item.store_ids) ? item.store_ids : [];
+  const productId = itemIds[0] ?? item.local_sku;
+
+  return {
+    id: item.id,
+    productId,
+    productName: item.local_sku,
+    sku: item.local_sku,
+    msku: joinedText(itemIds),
+    platform: "Walmart",
+    store: joinedText(storeIds),
+    owner: "-",
+    currency: currencyLabel(item.sales_currency_code),
+    salesVolume: numberValue(item.sales_qty),
+    orderCount: numberValue(item.order_count),
+    salesAmount: numberValue(item.sales_amount),
+
+    sampleQuantity: 0,
+    sampleAmount: null,
+
+    refundQuantity: 0,
+    refundAmount: nullableNumberValue(item.refund_amount),
+    returnRate30Days: null,
+
+    adSpend: numberValue(item.ad_spend_amount),
+    semAdSpend: numberValue(item.sem_ad_spend_amount),
+    totalAdSpend: numberValue(item.total_ad_spend_amount),
+    adRatio: nullableNumberValue(item.ad_ratio),
+
+    wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
+    wfsDeliveryUnitPrice: null,
+
+    commission: numberValue(item.commission_fee_amount),
+
+    purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
+    purchaseUnitPriceCny: null,
+
+    firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
+    firstLegUnitPriceCny: null,
+
+    storageFee: nullableNumberValue(item.storage_fee_total_amount),
+    storageUnitPrice: null,
+
+    wfsAvailableInventory: 0,
+    totalCost: nullableNumberValue(item.total_cost_amount),
+    orderProfit: nullableNumberValue(item.gross_profit_amount),
+    averageProfitPerOrder: nullableNumberValue(item.average_profit_per_order),
+    profitMargin: item.gross_margin == null ? null : numberValue(item.gross_margin) * 100,
+    roi: item.roi == null ? null : numberValue(item.roi),
+    costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
+    sevenDayDates: [],
+    sevenDaySales: [],
+  };
+};
+
+const toOrderProfitServerSummary = (
+  summary: BackendOrderProfitSummary | undefined,
+): OrderProfitServerSummary | null => {
+  if (!summary) return null;
+
+  return {
+    salesQuantity: numberValue(summary.sales_qty),
+    orderCount: numberValue(summary.order_count),
+    salesAmount: numberValue(summary.sales_amount),
+    salesCurrency: currencyLabel(summary.sales_currency_code),
+    refundQuantity: 0,
+    refundAmount: numberValue(summary.refund_amount),
+    refundCurrency: currencyLabel(summary.refund_currency_code),
+    orderProfitAmount: numberValue(summary.order_profit_amount),
+    orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
+    adSpendAmount: numberValue(summary.ad_spend_amount),
+    semAdSpendAmount: numberValue(summary.sem_ad_spend_amount),
+    totalAdSpendAmount: numberValue(summary.total_ad_spend_amount),
+    adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
+    adRatio: nullableNumberValue(summary.ad_ratio),
+  };
+};
+
+const toOrderProfitTrendPoint = (
+  item: BackendOrderProfitTrendPoint,
+): OrderProfitTrendPoint => ({
+  date: item.date,
+  salesVolume: numberValue(item.sales_qty),
+  orderCount: numberValue(item.order_count),
+  salesAmount: numberValue(item.sales_amount),
+  salesCurrency: currencyLabel(item.sales_currency_code),
+  refundAmount: numberValue(item.refund_amount),
+  refundCurrency: currencyLabel(item.refund_currency_code),
+  orderProfit: numberValue(item.order_profit_amount),
+  orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
+  profitMargin: nullableNumberValue(item.profit_margin),
+  adSpend: numberValue(item.ad_spend_amount),
+  semAdSpend: numberValue(item.sem_ad_spend_amount),
+  totalAdSpend: numberValue(item.total_ad_spend_amount),
+  adSpendCurrency: currencyLabel(item.ad_spend_currency_code),
+  adRatio: nullableNumberValue(item.ad_ratio),
+});
+
+export async function fetchOrderProfitRows(
   params: OrderProfitParams,
 ): Promise<OrderProfitApiResult> {
   const page = params.page ?? 1;
@@ -288,53 +314,17 @@ export async function fetchOrderProfitSourceRecords(
 
   const requestOptions = params.signal ? { signal: params.signal } : undefined;
 
-  const envelope = await backendRequest<BackendDailySalesData, OrderProfitApiMeta>(
-    `/api/sales/daily-sales?${search.toString()}`,
+  const envelope = await backendRequest<BackendOrderProfitData, OrderProfitApiMeta>(
+    `/api/sales/order-profit?${search.toString()}`,
     requestOptions,
   );
 
   const items = Array.isArray(envelope.data.items) ? envelope.data.items : [];
 
   return {
-    records: items.map(toOrderProfitSourceRecord),
+    rows: items.map(toOrderProfitRow),
     summary: toOrderProfitServerSummary(envelope.data.summary),
     meta: envelope.meta,
-  };
-}
-
-const ORDER_PROFIT_SOURCE_PAGE_SIZE = 1000;
-
-export async function fetchAllOrderProfitSourceRecords(
-  params: OrderProfitParams,
-): Promise<OrderProfitApiResult> {
-  const firstPage = await fetchOrderProfitSourceRecords({
-    ...params,
-    page: 1,
-    pageSize: ORDER_PROFIT_SOURCE_PAGE_SIZE,
-  });
-  const totalPages = Math.ceil(firstPage.meta.total / ORDER_PROFIT_SOURCE_PAGE_SIZE);
-
-  if (totalPages <= 1) return firstPage;
-
-  const restPages = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, index) => fetchOrderProfitSourceRecords({
-      ...params,
-      page: index + 2,
-      pageSize: ORDER_PROFIT_SOURCE_PAGE_SIZE,
-    })),
-  );
-
-  return {
-    records: [
-      ...firstPage.records,
-      ...restPages.flatMap((pageResult) => pageResult.records),
-    ],
-    summary: firstPage.summary,
-    meta: {
-      ...firstPage.meta,
-      page: 1,
-      page_size: ORDER_PROFIT_SOURCE_PAGE_SIZE,
-    },
   };
 }
 
@@ -357,6 +347,10 @@ export async function fetchOrderProfitTrendPoints(
   return items.map(toOrderProfitTrendPoint);
 }
 
+export function preloadOrderProfitRows(params: OrderProfitParams): void {
+  void fetchOrderProfitRows(params).catch(() => undefined);
+}
+
 export function preloadOrderProfitSourceRecords(params: OrderProfitParams): void {
-  void fetchOrderProfitSourceRecords(params).catch(() => undefined);
+  preloadOrderProfitRows(params);
 }

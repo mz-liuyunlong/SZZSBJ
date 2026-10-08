@@ -28,6 +28,8 @@ interface SummaryTotals {
   orderProfit: number | null;
   profitRate: number | null;
   adSpend: number | null;
+  semAdSpend: number | null;
+  totalAdSpend: number | null;
   adRatio: number | null;
   refundQuantity: number | null;
   refundAmount: number | null;
@@ -70,6 +72,8 @@ const toServerTotals = (
   const orderProfit = summary.orderProfitAmount
     * currencyRate(summary.orderProfitCurrency, currency);
   const adSpend = summary.adSpendAmount * currencyRate(summary.adSpendCurrency, currency);
+  const semAdSpend = summary.semAdSpendAmount * currencyRate(summary.adSpendCurrency, currency);
+  const totalAdSpend = summary.totalAdSpendAmount * currencyRate(summary.adSpendCurrency, currency);
 
   return {
     salesVolume: summary.salesQuantity,
@@ -77,7 +81,9 @@ const toServerTotals = (
     orderProfit,
     profitRate: salesAmount ? orderProfit / salesAmount * 100 : null,
     adSpend,
-    adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+    semAdSpend,
+    totalAdSpend,
+    adRatio: summary.adRatio,
     refundQuantity: summary.refundQuantity ?? null,
     refundAmount,
   };
@@ -105,7 +111,9 @@ const toFallbackTotals = (
     orderProfit,
     profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
     adSpend,
-    adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+    semAdSpend: rows.reduce((total, row) => total + row.semAdSpend, 0) * rate,
+    totalAdSpend: rows.reduce((total, row) => total + row.totalAdSpend, 0) * rate,
+    adRatio: null,
     refundQuantity,
     refundAmount,
   };
@@ -222,11 +230,11 @@ function OrderProfitSummaryCards({
       accent: "#7C3AED",
       metrics: [
         {
-          label: "广告费",
-          value: formatAmountOrDash(totals.adSpend, currency),
+          label: "总广告费",
+          value: formatAmountOrDash(totals.totalAdSpend, currency),
           comparison: buildComparison(
-            totals.adSpend,
-            previous?.adSpend ?? null,
+            totals.totalAdSpend,
+            previous?.totalAdSpend ?? null,
             (value) => formatAmountOrDash(value, currency)
           ),
         },

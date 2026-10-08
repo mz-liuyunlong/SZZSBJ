@@ -128,17 +128,45 @@ def test_daily_sales_preserves_sample_sales_amount() -> None:
     assert "sample_cost_amount" not in source
 
 
-def test_daily_sales_profit_deducts_sem_spend_without_merging_ad_spend() -> None:
+def test_daily_sales_profit_deducts_refund_and_sem_spend_without_merging_ad_spend() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
     order_profit_source = inspect.getsource(DataPagesRealSyncRunner._refresh_order_profit_mart)
 
     assert "m.sem_ad_spend_amount,m.commission_fee_amount" in source
     assert 'sem_ad_spend = _decimal(row["sem_ad_spend_amount"]) or Decimal("0")' in source
+    assert 'refund_loss = refund_cost_amount or Decimal("0")' in source
+    assert "- refund_loss" in source
     assert "- sem_ad_spend" in source
     assert "sum(coalesce(ad_spend_amount,0))" in order_profit_source
     assert "sum(gross_profit_amount)" in order_profit_source
 
 
+def test_daily_sales_profit_formula_matches_refund_loss_example() -> None:
+    sales = Decimal("38.99")
+    refund_loss = Decimal("24.94")
+    ad_spend = Decimal("5.25")
+    sem_ad_spend = Decimal("0.21")
+    wfs_fee = Decimal("7.75")
+    commission = Decimal("4.68")
+    purchase_cost = Decimal("10.00")
+    first_leg_cost = Decimal("7.17")
+    storage_fee = Decimal("0.02")
+
+    gross_profit = (
+        sales
+        - refund_loss
+        - ad_spend
+        - sem_ad_spend
+        - wfs_fee
+        - commission
+        - purchase_cost
+        - first_leg_cost
+        - storage_fee
+    )
+
+    assert gross_profit == Decimal("-21.03")
+
+
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2+sem")
+    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2+sem+rp")
     assert len(DAILY_SALES_V2_VERSION) <= 64

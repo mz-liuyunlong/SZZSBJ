@@ -15,3 +15,6 @@ backend/htmlcov/
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Local Celery runtime env
+backend/.local-celery.env

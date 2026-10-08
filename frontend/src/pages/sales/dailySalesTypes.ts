@@ -38,6 +38,7 @@ export interface DailySalesRow {
   returnRate30Days: number;
   adSpend: number;
   semAdSpend: number;
+  totalAdSpend: number;
   adRatio: number;
   wfsDeliveryFee: number | null;
   wfsDeliveryUnitPrice: number | null;
@@ -101,6 +102,7 @@ export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "returnRate30Days", title: "退货率30天" },
   { key: "adSpend", title: "广告费" },
   { key: "semAdSpend", title: "SEM费用" },
+  { key: "totalAdSpend", title: "总广告费" },
   { key: "adRatio", title: "广告占比" },
   { key: "wfsDeliveryFee", title: "WFS总配送费" },
   { key: "wfsDeliveryUnitPrice", title: "WFS配送单价" },
