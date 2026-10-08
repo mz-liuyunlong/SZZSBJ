@@ -80,7 +80,9 @@ def _sum(rows: Iterable[object], attr: str) -> Decimal:
     return _optional_sum(rows, attr) or ZERO
 
 
-def _first_nonblank(rows: Iterable[object], attr: str, default: str | None = None) -> str | None:
+def _first_nonblank(
+    rows: Iterable[object], attr: str, default: str | None = None
+) -> str | None:
     for row in rows:
         value = getattr(row, attr, None)
         if value is not None and str(value).strip():
@@ -141,21 +143,28 @@ def _missing_cost_codes(rows: Sequence[object]) -> list[str]:
     return codes
 
 
-def _projection_for_sku(local_sku: str, rows: Sequence[object]) -> OrderProfitRangeProjection:
+def _projection_for_sku(
+    local_sku: str, rows: Sequence[object]
+) -> OrderProfitRangeProjection:
     latest_row = max(rows, key=lambda row: getattr(row, "business_date_la"))
     latest_calculated_row = max(rows, key=lambda row: getattr(row, "calculated_at"))
     sales_amount = _sum(rows, "sales_amount")
     gross_profit_amount = _optional_sum(rows, "gross_profit_amount")
     refund_loss_amount = _sum(rows, "refund_loss_amount")
+    range_key = (
+        "szzsbj:order-profit-range:"
+        f"{local_sku}:{getattr(rows[0], 'business_date_la')}:"
+        f"{getattr(latest_row, 'business_date_la')}"
+    )
 
     projection = OrderProfitRangeProjection(
-        id=uuid5(
-            NAMESPACE_URL,
-            "szzsbj:order-profit-range:"
-            f"{local_sku}:{getattr(rows[0], 'business_date_la')}:{getattr(latest_row, 'business_date_la')}",
-        ),
+        id=uuid5(NAMESPACE_URL, range_key),
         business_date_la=getattr(latest_row, "business_date_la"),
-        business_timezone=_first_nonblank(rows, "business_timezone", "America/Los_Angeles")
+        business_timezone=_first_nonblank(
+            rows,
+            "business_timezone",
+            "America/Los_Angeles",
+        )
         or "America/Los_Angeles",
         local_sku=local_sku,
         item_ids_json=_distinct_json_values(rows, "item_ids_json"),
@@ -208,7 +217,10 @@ def aggregate_order_profit_rows(rows: Sequence[object]) -> list[OrderProfitRange
             continue
         grouped.setdefault(local_sku, []).append(row)
 
-    projections = [_projection_for_sku(local_sku, sku_rows) for local_sku, sku_rows in grouped.items()]
+    projections = [
+        _projection_for_sku(local_sku, sku_rows)
+        for local_sku, sku_rows in grouped.items()
+    ]
     projections.sort(key=_order_profit_sort_key)
     return projections
 
@@ -245,7 +257,11 @@ def _list_order_profit_range_summary(
     grouped_rows = aggregate_order_profit_rows(raw_rows)
     offset = (page - 1) * page_size
     latest_calculated_at = max(
-        (getattr(row, "calculated_at") for row in raw_rows if getattr(row, "calculated_at", None)),
+        (
+            getattr(row, "calculated_at")
+            for row in raw_rows
+            if getattr(row, "calculated_at", None)
+        ),
         default=None,
     )
     return grouped_rows[offset : offset + page_size], len(grouped_rows), latest_calculated_at
@@ -256,4 +272,8 @@ def install_order_profit_range_summary() -> None:
     if getattr(current, "_order_profit_range_summary", False):
         return
     setattr(_list_order_profit_range_summary, "_order_profit_range_summary", True)
-    OrderProfitRepository.list_order_profit = _list_order_profit_range_summary  # type: ignore[method-assign]
+    setattr(
+        OrderProfitRepository,
+        "list_order_profit",
+        _list_order_profit_range_summary,
+    )
