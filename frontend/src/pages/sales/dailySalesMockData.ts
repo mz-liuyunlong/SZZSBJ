@@ -50,7 +50,7 @@ export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (
     sampleExcludedAmount: salesAmount * 0.96,
     returnCount: index % 6,
     refundAmount,
-    refundLossAmount: refundAmount * (1 - MOCK_DEFAULT_STORE_COMMISSION_RATE),
+    refundLossAmount: refundAmount,
     returnRate30Days: 1.2 + (index % 8) * 0.55,
     adSpend,
     semAdSpend,
