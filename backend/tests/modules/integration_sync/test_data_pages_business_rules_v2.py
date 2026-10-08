@@ -138,7 +138,7 @@ def test_daily_sales_profit_deducts_refund_sales_and_sem_spend_without_merging_a
     assert 'sem_ad_spend = _decimal(row["sem_ad_spend_amount"]) or Decimal("0")' in source
     assert "refund_amount = _estimated_refund_sales_amount" in source
     assert "net_commission = (" in source
-    assert "- (refund_amount or Decimal(\"0\"))" in source
+    assert '- (refund_amount or Decimal("0"))' in source
     assert "- sem_ad_spend" in source
     assert "commission_fee_amount=:commission" in source
     assert "sum(coalesce(ad_spend_amount,0))" in order_profit_source
@@ -151,11 +151,14 @@ def test_refund_amount_uses_average_sales_price_and_return_qty() -> None:
         Decimal("4"),
         Decimal("2"),
     ) == Decimal("20.00")
-    assert _estimated_refund_sales_amount(
-        Decimal("40.00"),
-        Decimal("0"),
-        Decimal("1"),
-    ) is None
+    assert (
+        _estimated_refund_sales_amount(
+            Decimal("40.00"),
+            Decimal("0"),
+            Decimal("1"),
+        )
+        is None
+    )
     assert _estimated_refund_sales_amount(
         Decimal("40.00"),
         Decimal("4"),
@@ -179,12 +182,7 @@ def test_daily_sales_profit_formula_returns_refunded_commission() -> None:
     )
     assert net_commission == Decimal("0.0000")
 
-    gross_profit = (
-        sales
-        - refund_amount
-        - net_commission
-        - Decimal("7.00")
-    )
+    gross_profit = sales - refund_amount - net_commission - Decimal("7.00")
 
     assert gross_profit == Decimal("-7.0000")
 
