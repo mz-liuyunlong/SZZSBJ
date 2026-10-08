@@ -154,6 +154,8 @@ const totalMoneyKeys = new Set([
   "sampleExcludedAmount",
   "refundAmount",
   "adSpend",
+  "semAdSpend",
+  "totalAdSpend",
   "wfsDeliveryFee",
   "commission",
   "purchaseCost",
@@ -230,12 +232,12 @@ function TotalCell({
   }
   const salesVolume = sum(rows, "salesVolume");
   const salesAmount = sum(rows, "salesAmount");
-  const adSpend = sum(rows, "adSpend");
+  const totalAdSpend = sum(rows, "totalAdSpend");
   if (columnKey === "returnRate30Days") {
     return salesVolume ? <PercentCell value={sum(rows, "returnCount") / salesVolume * 100} /> : null;
   }
   if (columnKey === "adRatio") {
-    return salesAmount ? <PercentCell value={adSpend / salesAmount * 100} /> : null;
+    return salesAmount ? <PercentCell value={totalAdSpend / salesAmount * 100} /> : null;
   }
   if (columnKey === "profitMargin") {
     const orderProfit = sumNullable(rows, "orderProfit");
@@ -334,6 +336,7 @@ function createColumns(
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
     { title: "广告费", key: "adSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
     { title: "SEM费用", key: "semAdSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("semAdSpend", currency, dailySalesFxRate) },
+    { title: "总广告费", key: "totalAdSpend", width: 112, render: renderUsdSourceMoney("totalAdSpend", currency, dailySalesFxRate) },
     { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryFee", currency, dailySalesFxRate) },
     { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, render: renderUsdSourceMoney<DailySalesRow>("wfsDeliveryUnitPrice", currency, dailySalesFxRate) },

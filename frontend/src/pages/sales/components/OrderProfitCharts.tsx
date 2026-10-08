@@ -15,18 +15,18 @@ interface OrderProfitChartsProps {
   endDate?: string;
 }
 
-type ChartMetric = "salesVolume" | "salesAmount" | "orderProfit" | "profitMargin" | "adSpend" | "adRatio";
+type ChartMetric = "salesVolume" | "salesAmount" | "orderProfit" | "profitMargin" | "totalAdSpend" | "adRatio";
 
 const metricOptions: { label: string; value: ChartMetric }[] = [
   { label: "销量", value: "salesVolume" },
   { label: "销售额", value: "salesAmount" },
   { label: "订单利润", value: "orderProfit" },
   { label: "利润率", value: "profitMargin" },
-  { label: "广告费", value: "adSpend" },
+  { label: "总广告费", value: "totalAdSpend" },
   { label: "广告占比", value: "adRatio" },
 ];
 
-const amountMetrics: ChartMetric[] = ["salesAmount", "orderProfit", "adSpend"];
+const amountMetrics: ChartMetric[] = ["salesAmount", "orderProfit", "totalAdSpend"];
 const percentMetrics: ChartMetric[] = ["profitMargin", "adRatio"];
 
 function OrderProfitCharts({ points, currency, endDate }: OrderProfitChartsProps) {

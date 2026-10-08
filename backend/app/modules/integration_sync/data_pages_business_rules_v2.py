@@ -29,7 +29,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2+sem"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2+sem+rp"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -344,7 +344,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "case when coalesce(r.return_qty,0)>0 then r.refund_loss_amount else 0 end,'USD',"
                 "coalesce(a.ad_spend,0),coalesce(sem.sem_ad_spend,0),'USD',"
                 "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)>0 "
-                "then coalesce(a.ad_spend,0)/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) "
+                "then (coalesce(a.ad_spend,0)+coalesce(sem.sem_ad_spend,0))/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) "
                 "else null end,inv.wfs_available_quantity,coalesce(commission.commission_rate,:default_commission_rate),commission.rule_id,"
                 "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)"
                 "*coalesce(commission.commission_rate,:default_commission_rate),coalesce(s.currency_code,'USD'),"
@@ -705,6 +705,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             refund_cost_amount = (
                 _decimal(row["refund_amount"]) if row["refund_amount"] is not None else None
             )
+            refund_loss = refund_cost_amount or Decimal("0")
             if not missing and complete_costs:
                 cost_status = "complete"
             elif cost is not None or int(row["refund_loss_missing_count"] or 0) > 0:
@@ -714,6 +715,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
 
             gross_profit = (
                 sales
+                - refund_loss
                 - ad_spend
                 - sem_ad_spend
                 - commission
@@ -870,14 +872,15 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             text(
                 "insert into mart_order_profit_sku_day "
                 "(id,business_date_la,source_account_ref,local_sku,item_ids_json,store_ids_json,store_count,item_count,"
-                "sales_qty,order_count,sales_amount,sales_currency_code,refund_amount,ad_spend_amount,"
+                "sales_qty,order_count,sales_amount,sales_currency_code,refund_amount,ad_spend_amount,sem_ad_spend_amount,"
                 "commission_fee_amount,wfs_fee_total_amount,purchase_cost_total_usd,first_leg_cost_total_usd,"
                 "storage_fee_total_amount,gross_profit_amount,gross_profit_currency_code,gross_margin,roi,cost_status,"
                 "missing_cost_codes_json,source_lineage_json,calc_version,calculated_at,created_at,updated_at) "
                 "select gen_random_uuid(),business_date_la,source_account_ref,coalesce(nullif(local_sku,''),item_id),"
                 "jsonb_agg(distinct item_id),jsonb_agg(distinct store_id),count(distinct store_id),count(distinct item_id),"
                 "sum(coalesce(sales_qty,0)),sum(coalesce(order_count,0)),sum(coalesce(sales_amount,0)),"
-                "coalesce(max(sales_currency_code),'USD'),sum(coalesce(refund_amount,0)),sum(coalesce(ad_spend_amount,0)),"
+                "coalesce(max(sales_currency_code),'USD'),sum(coalesce(refund_amount,0)),"
+                "sum(coalesce(ad_spend_amount,0)),sum(coalesce(sem_ad_spend_amount,0)),"
                 "sum(coalesce(commission_fee_amount,0)),sum(coalesce(wfs_fee_total_amount,0)),"
                 "sum(coalesce(purchase_cost_total_usd,0)),sum(coalesce(first_leg_cost_total_usd,0)),"
                 "sum(coalesce(storage_fee_total_amount,0)),"

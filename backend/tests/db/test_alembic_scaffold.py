@@ -44,7 +44,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == ["20261007_0030_daily_sales_sem_ad_spend"]
+    assert script.get_heads() == ["20261008_0031_order_profit_sem_ad_spend"]
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -68,6 +68,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20260923_0018_merge_after_sales_pmc_heads.py",
         "20261006_0029_legacy_selected_mirror_tables.py",
         "20261007_0030_daily_sales_sem_ad_spend.py",
+        "20261008_0031_order_profit_sem_ad_spend.py",
     } <= revisions
 
     revision = (

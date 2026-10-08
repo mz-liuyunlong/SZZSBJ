@@ -109,6 +109,7 @@ class DailySalesItemRead(StrictSchema):
     return_rate_30d: Ratio | None
     ad_spend_amount: Money | None
     sem_ad_spend_amount: Money = Decimal("0")
+    total_ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None
     ad_ratio: Ratio | None
     wfs_available_quantity: Money | None
@@ -146,6 +147,8 @@ class DailySalesItemRead(StrictSchema):
     commission_source: str | None = None
     gross_profit_amount: Money | None
     gross_profit_currency_code: str | None
+    total_cost_amount: Money | None = None
+    average_profit_per_order: Money | None = None
     gross_margin: Ratio | None
     roi: Ratio | None
     cost_status: Literal["complete", "partial", "missing"]
@@ -165,6 +168,7 @@ class DailySalesSummaryRead(StrictSchema):
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
     sem_ad_spend_amount: Money = Decimal("0")
+    total_ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None = "USD"
     wfs_available_quantity: Money | None = None
     refund_event_qty: Money = Decimal("0")
@@ -215,6 +219,9 @@ class OrderProfitItemRead(StrictSchema):
     sales_currency_code: str | None
     refund_amount: Money | None
     ad_spend_amount: Money | None
+    sem_ad_spend_amount: Money = Decimal("0")
+    total_ad_spend_amount: Money = Decimal("0")
+    ad_ratio: Ratio | None = None
     commission_fee_amount: Money | None
     wfs_fee_total_amount: Money | None
     purchase_cost_total_usd: Money | None
@@ -240,7 +247,10 @@ class OrderProfitSummaryRead(StrictSchema):
     order_profit_amount: Money = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
+    sem_ad_spend_amount: Money = Decimal("0")
+    total_ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None = "USD"
+    ad_ratio: Ratio | None = None
 
 
 class OrderProfitTrendPointRead(StrictSchema):
@@ -255,6 +265,8 @@ class OrderProfitTrendPointRead(StrictSchema):
     order_profit_currency_code: str | None = "USD"
     profit_margin: Ratio | None = None
     ad_spend_amount: Money = Decimal("0")
+    sem_ad_spend_amount: Money = Decimal("0")
+    total_ad_spend_amount: Money = Decimal("0")
     ad_spend_currency_code: str | None = "USD"
     ad_ratio: Ratio | None = None
 
