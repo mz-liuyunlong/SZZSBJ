@@ -1,4 +1,6 @@
 import { backendRequest } from "@/api/backendApi";
+import { normalizeReportFilterOptions } from "@/shared/report-filters";
+import type { SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import type {
   OrderProfitCostStatus,
   OrderProfitCurrency,
@@ -12,23 +14,35 @@ interface BackendOrderProfitItem {
   local_sku: string;
   item_ids: string[];
   store_ids: string[];
+  store_names: string[];
+  owner_refs: string[];
+  mskus: string[];
+  product_name: string | null;
   store_count: number;
   item_count: number;
   sales_qty: string;
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
+  sample_qty: string | null;
+  sample_amount: string | null;
   return_qty: string;
   refund_amount: string | null;
   refund_loss_amount: string | null;
+  return_rate_30d: string | null;
   ad_spend_amount: string | null;
   sem_ad_spend_amount: string | null;
   total_ad_spend_amount: string | null;
   ad_ratio: string | null;
+  wfs_available_quantity: string | null;
+  wfs_fee_unit_amount: string | null;
   commission_fee_amount: string | null;
   wfs_fee_total_amount: string | null;
+  purchase_cost_unit_cny: string | null;
   purchase_cost_total_usd: string | null;
+  first_leg_cost_unit_cny: string | null;
   first_leg_cost_total_usd: string | null;
+  storage_fee_unit_amount: string | null;
   storage_fee_total_amount: string | null;
   gross_profit_amount: string | null;
   gross_profit_currency_code: string | null;
@@ -201,16 +215,28 @@ const appendOrderProfitFilters = (search: URLSearchParams, params: OrderProfitPa
   }
 };
 
+const normalizedTextValues = (values: string[]) => (
+  values.map((value) => String(value).trim()).filter(Boolean)
+);
+
 const joinedText = (values: string[], fallback = "-") => {
-  const clean = values.map((value) => String(value).trim()).filter(Boolean);
+  const clean = normalizedTextValues(values);
   if (clean.length === 0) return fallback;
-  if (clean.length === 1) return clean[0];
-  return `${clean[0]} 等${clean.length}个`;
+  if (clean.length <= 2) return clean.join(" / ");
+  return `${clean[0]} / ${clean[1]} 等${clean.length}个`;
+};
+
+const fullJoinedText = (values: string[], fallback = "-") => {
+  const clean = normalizedTextValues(values);
+  return clean.length > 0 ? clean.join(" / ") : fallback;
 };
 
 const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
   const itemIds = Array.isArray(item.item_ids) ? item.item_ids : [];
   const storeIds = Array.isArray(item.store_ids) ? item.store_ids : [];
+  const storeNames = Array.isArray(item.store_names) ? item.store_names : [];
+  const ownerRefs = Array.isArray(item.owner_refs) ? item.owner_refs : [];
+  const mskus = Array.isArray(item.mskus) ? item.mskus : [];
   const productId = itemIds[0] ?? item.local_sku;
   const salesVolume = numberValue(item.sales_qty);
   const salesAmount = numberValue(item.sales_amount);
@@ -218,29 +244,35 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
   const adSpend = numberValue(item.ad_spend_amount);
   const semAdSpend = numberValue(item.sem_ad_spend_amount);
   const totalAdSpend = numberValue(item.total_ad_spend_amount);
+  const displayStores = storeNames.length > 0 ? storeNames : storeIds;
+  const displayMskus = mskus.length > 0 ? mskus : itemIds;
 
   return {
     id: item.id,
     productId,
-    productName: item.local_sku,
+    productName: item.product_name ?? item.local_sku ?? productId,
     sku: item.local_sku,
-    msku: joinedText(itemIds),
+    skuFullText: item.local_sku,
+    msku: joinedText(displayMskus),
+    mskuFullText: fullJoinedText(displayMskus),
     platform: "Walmart",
-    store: joinedText(storeIds),
-    owner: "-",
+    store: joinedText(displayStores),
+    storeFullText: fullJoinedText(displayStores),
+    owner: joinedText(ownerRefs),
+    ownerFullText: fullJoinedText(ownerRefs),
     currency: currencyLabel(item.sales_currency_code),
     salesVolume,
     orderCount: numberValue(item.order_count),
     salesAmount,
     averagePrice: salesVolume ? salesAmount / salesVolume : null,
 
-    sampleQuantity: 0,
-    sampleAmount: null,
+    sampleQuantity: numberValue(item.sample_qty),
+    sampleAmount: nullableNumberValue(item.sample_amount),
 
     refundQuantity: numberValue(item.return_qty),
     refundAmount,
     refundLossAmount: refundAmount,
-    returnRate30Days: null,
+    returnRate30Days: item.return_rate_30d == null ? null : numberValue(item.return_rate_30d) * 100,
 
     adSpend,
     semAdSpend,
@@ -248,20 +280,20 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
     adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
 
     wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
-    wfsDeliveryUnitPrice: null,
+    wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
 
     commission: numberValue(item.commission_fee_amount),
 
     purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
-    purchaseUnitPriceCny: null,
+    purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
 
     firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
-    firstLegUnitPriceCny: null,
+    firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
 
     storageFee: nullableNumberValue(item.storage_fee_total_amount),
-    storageUnitPrice: null,
+    storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
 
-    wfsAvailableInventory: 0,
+    wfsAvailableInventory: numberValue(item.wfs_available_quantity),
     totalCost: nullableNumberValue(item.total_cost_amount),
     orderProfit: nullableNumberValue(item.gross_profit_amount),
     averageProfitPerOrder: nullableNumberValue(item.average_profit_per_order),
@@ -326,6 +358,87 @@ const toOrderProfitTrendPoint = (
     adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
   };
 };
+
+export async function fetchOrderProfitFilterOptions(
+  params: OrderProfitParams,
+): Promise<SalesFilterOptions> {
+  const search = new URLSearchParams();
+
+  if (params.startDate) search.set("start_date", params.startDate);
+  if (params.endDate) search.set("end_date", params.endDate);
+  appendOrderProfitFilters(search, params);
+
+  const suffix = search.toString();
+  const requestOptions = params.signal ? { signal: params.signal } : undefined;
+
+  const envelope = await backendRequest<SalesFilterOptions, unknown>(
+    `/api/sales/order-profit/filter-options${suffix ? `?${suffix}` : ""}`,
+    requestOptions,
+  );
+
+  return {
+    platforms: normalizeReportFilterOptions(envelope.data.platforms),
+    owners: normalizeReportFilterOptions(envelope.data.owners),
+    stores: normalizeReportFilterOptions(envelope.data.stores),
+  };
+}
+
+
+export type OrderProfitExportPeriod = "day" | "month";
+export type OrderProfitExportDimension = "item_id" | "sku" | "msku";
+
+export interface OrderProfitExportParams extends OrderProfitParams {
+  period: OrderProfitExportPeriod;
+  dimension: OrderProfitExportDimension;
+  columns: string[];
+}
+
+export async function downloadOrderProfitExportCsv(
+  params: OrderProfitExportParams,
+): Promise<void> {
+  const search = new URLSearchParams();
+
+  if (params.startDate) search.set("start_date", params.startDate);
+  if (params.endDate) search.set("end_date", params.endDate);
+  search.set("period", params.period);
+  search.set("dimension", params.dimension);
+
+  if (params.columns.length > 0) {
+    search.set("columns", params.columns.join(","));
+  }
+
+  appendOrderProfitFilters(search, params);
+
+  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
+  const response = await fetch(`/api/sales/order-profit/export?${search.toString()}`, {
+    credentials: "same-origin",
+    headers: {
+      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`ORDER_PROFIT_EXPORT_FAILED_${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = /filename="?([^"]+)"?/i.exec(disposition);
+  const filename = filenameMatch?.[1] ?? `order-profit-${params.period}.csv`;
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 
 export async function fetchOrderProfitRows(
   params: OrderProfitParams,

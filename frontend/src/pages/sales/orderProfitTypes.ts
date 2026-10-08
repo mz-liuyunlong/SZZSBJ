@@ -64,7 +64,11 @@ export interface OrderProfitRow {
   msku: string;
   platform: OrderProfitPlatform;
   store: string;
+  storeFullText?: string;
   owner: string;
+  ownerFullText?: string;
+  skuFullText?: string;
+  mskuFullText?: string;
   currency: OrderProfitCurrency;
   salesVolume: number;
   orderCount: number;
