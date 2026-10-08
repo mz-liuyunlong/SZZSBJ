@@ -11,6 +11,7 @@ from app.modules.data_pages.repository import OrderProfitRepository
 
 ZERO = Decimal("0")
 RATIO_SCALE = Decimal("0.000001")
+DAILY_SALES_COST_INCOMPLETE = "daily_sales_cost_incomplete"
 
 
 @dataclass(frozen=True)
@@ -18,14 +19,15 @@ class OrderProfitRangeProjection:
     """Date-range order-profit row shaped like OrderProfitSkuDayMart.
 
     Order Profit is a range summary page, not a daily-detail page. The persisted
-    MART table is daily by SKU, so this projection collapses the filtered date
-    range into one row per local SKU while preserving the attributes consumed by
-    OrderProfitService._to_read().
+    MART table is daily by account + SKU, so this projection collapses the
+    filtered date range into one row per account + local SKU while preserving the
+    attributes consumed by OrderProfitService._to_read().
     """
 
     id: UUID
     business_date_la: date
     business_timezone: str
+    source_account_ref: str
     local_sku: str
     item_ids_json: list[str]
     store_ids_json: list[str]
@@ -104,28 +106,33 @@ def _distinct_json_values(rows: Iterable[object], attr: str) -> list[str]:
     return values
 
 
-def _ratio(numerator: Decimal | None, denominator: Decimal) -> Decimal | None:
-    if numerator is None or not denominator:
+def _ratio(numerator: Decimal | None, denominator: Decimal | None) -> Decimal | None:
+    if numerator is None or denominator is None or denominator <= 0:
         return None
     return (numerator / denominator).quantize(RATIO_SCALE)
 
 
-def _total_cost_amount(row: OrderProfitRangeProjection) -> Decimal | None:
-    if row.gross_profit_amount is None:
-        return None
-    return row.sales_amount - row.gross_profit_amount
+def _normalized_status(value: object) -> str:
+    status = str(value or "missing").strip().lower()
+    if status in {"complete", "partial", "missing"}:
+        return status
+    return "partial"
 
 
 def _cost_status(rows: Sequence[object]) -> str:
-    statuses = {str(getattr(row, "cost_status", "missing")) for row in rows}
-    if "missing" in statuses:
-        return "missing"
-    if "partial" in statuses:
+    """Aggregate range status using the persisted MART rollup semantics."""
+    statuses = [_normalized_status(getattr(row, "cost_status", "missing")) for row in rows]
+    if statuses and all(status == "complete" for status in statuses):
+        return "complete"
+    if any(status != "missing" for status in statuses):
         return "partial"
-    return "complete"
+    return "missing"
 
 
 def _missing_cost_codes(rows: Sequence[object]) -> list[str]:
+    if _cost_status(rows) == "complete":
+        return []
+
     codes: list[str] = []
     seen: set[str] = set()
     for row in rows:
@@ -138,30 +145,57 @@ def _missing_cost_codes(rows: Sequence[object]) -> list[str]:
                 continue
             seen.add(normalized)
             codes.append(normalized)
+
+    if not codes:
+        return [DAILY_SALES_COST_INCOMPLETE]
     return codes
 
 
-def _projection_for_sku(local_sku: str, rows: Sequence[object]) -> OrderProfitRangeProjection:
-    latest_row = max(rows, key=lambda row: getattr(row, "business_date_la"))
-    latest_calculated_row = max(rows, key=lambda row: getattr(row, "calculated_at"))
-    sales_amount = _sum(rows, "sales_amount")
-    gross_profit_amount = _optional_sum(rows, "gross_profit_amount")
-    refund_loss_amount = _sum(rows, "refund_loss_amount")
+def _range_id(
+    *,
+    source_account_ref: str,
+    local_sku: str,
+    start_date: date,
+    end_date: date,
+) -> UUID:
     range_key = (
         "szzsbj:order-profit-range:"
-        f"{local_sku}:{getattr(rows[0], 'business_date_la')}:"
-        f"{getattr(latest_row, 'business_date_la')}"
+        f"{source_account_ref}:{local_sku}:{start_date}:{end_date}"
     )
+    return uuid5(NAMESPACE_URL, range_key)
 
-    projection = OrderProfitRangeProjection(
-        id=uuid5(NAMESPACE_URL, range_key),
-        business_date_la=getattr(latest_row, "business_date_la"),
+
+def _projection_for_sku(
+    source_account_ref: str,
+    local_sku: str,
+    rows: Sequence[object],
+) -> OrderProfitRangeProjection:
+    latest_row = max(rows, key=lambda row: getattr(row, "business_date_la"))
+    latest_calculated_row = max(rows, key=lambda row: getattr(row, "calculated_at"))
+    start_date = min(getattr(row, "business_date_la") for row in rows)
+    end_date = getattr(latest_row, "business_date_la")
+
+    sales_amount = _sum(rows, "sales_amount")
+    gross_profit_amount = _optional_sum(rows, "gross_profit_amount")
+    purchase_cost_total_usd = _optional_sum(rows, "purchase_cost_total_usd")
+    first_leg_cost_total_usd = _optional_sum(rows, "first_leg_cost_total_usd")
+    roi_denominator = _decimal(purchase_cost_total_usd) + _decimal(first_leg_cost_total_usd)
+
+    return OrderProfitRangeProjection(
+        id=_range_id(
+            source_account_ref=source_account_ref,
+            local_sku=local_sku,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        business_date_la=end_date,
         business_timezone=_first_nonblank(
             rows,
             "business_timezone",
             "America/Los_Angeles",
         )
         or "America/Los_Angeles",
+        source_account_ref=source_account_ref,
         local_sku=local_sku,
         item_ids_json=_distinct_json_values(rows, "item_ids_json"),
         store_ids_json=_distinct_json_values(rows, "store_ids_json"),
@@ -173,30 +207,22 @@ def _projection_for_sku(local_sku: str, rows: Sequence[object]) -> OrderProfitRa
         sales_currency_code=_first_nonblank(rows, "sales_currency_code", "USD"),
         return_qty=_sum(rows, "return_qty"),
         refund_amount=_optional_sum(rows, "refund_amount"),
-        refund_loss_amount=refund_loss_amount,
+        refund_loss_amount=_sum(rows, "refund_loss_amount"),
         ad_spend_amount=_optional_sum(rows, "ad_spend_amount"),
         sem_ad_spend_amount=_sum(rows, "sem_ad_spend_amount"),
         commission_fee_amount=_optional_sum(rows, "commission_fee_amount"),
         wfs_fee_total_amount=_optional_sum(rows, "wfs_fee_total_amount"),
-        purchase_cost_total_usd=_optional_sum(rows, "purchase_cost_total_usd"),
-        first_leg_cost_total_usd=_optional_sum(rows, "first_leg_cost_total_usd"),
+        purchase_cost_total_usd=purchase_cost_total_usd,
+        first_leg_cost_total_usd=first_leg_cost_total_usd,
         storage_fee_total_amount=_optional_sum(rows, "storage_fee_total_amount"),
         gross_profit_amount=gross_profit_amount,
         gross_profit_currency_code=_first_nonblank(rows, "gross_profit_currency_code", "USD"),
         gross_margin=_ratio(gross_profit_amount, sales_amount),
-        roi=None,
+        roi=_ratio(gross_profit_amount, roi_denominator),
         cost_status=_cost_status(rows),
         missing_cost_codes_json=_missing_cost_codes(rows),
         calc_version=_first_nonblank(rows, "calc_version", "range-summary") or "range-summary",
         calculated_at=getattr(latest_calculated_row, "calculated_at"),
-    )
-
-    total_cost = _total_cost_amount(projection)
-    return OrderProfitRangeProjection(
-        **{
-            **projection.__dict__,
-            "roi": _ratio(gross_profit_amount, total_cost or ZERO),
-        }
     )
 
 
@@ -205,15 +231,19 @@ def _order_profit_sort_key(row: OrderProfitRangeProjection) -> tuple[Decimal, De
 
 
 def aggregate_order_profit_rows(rows: Sequence[object]) -> list[OrderProfitRangeProjection]:
-    """Collapse daily SKU MART rows into one date-range row per SKU."""
-    grouped: dict[str, list[object]] = {}
+    """Collapse daily SKU MART rows into one date-range row per account + SKU."""
+    grouped: dict[tuple[str, str], list[object]] = {}
     for row in rows:
+        source_account_ref = str(getattr(row, "source_account_ref", "")).strip()
         local_sku = str(getattr(row, "local_sku", "")).strip()
-        if not local_sku:
+        if not source_account_ref or not local_sku:
             continue
-        grouped.setdefault(local_sku, []).append(row)
+        grouped.setdefault((source_account_ref, local_sku), []).append(row)
 
-    projections = [_projection_for_sku(local_sku, sku_rows) for local_sku, sku_rows in grouped.items()]
+    projections = [
+        _projection_for_sku(source_account_ref, local_sku, sku_rows)
+        for (source_account_ref, local_sku), sku_rows in grouped.items()
+    ]
     projections.sort(key=_order_profit_sort_key)
     return projections
 
@@ -242,6 +272,7 @@ def _list_order_profit_range_summary(
     raw_rows = list(
         self.session.scalars(
             statement.order_by(
+                OrderProfitSkuDayMart.source_account_ref.asc(),
                 OrderProfitSkuDayMart.local_sku.asc(),
                 OrderProfitSkuDayMart.business_date_la.asc(),
             )
