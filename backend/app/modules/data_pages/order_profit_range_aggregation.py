@@ -158,10 +158,7 @@ def _range_id(
     start_date: date,
     end_date: date,
 ) -> UUID:
-    range_key = (
-        "szzsbj:order-profit-range:"
-        f"{source_account_ref}:{local_sku}:{start_date}:{end_date}"
-    )
+    range_key = f"szzsbj:order-profit-range:{source_account_ref}:{local_sku}:{start_date}:{end_date}"
     return uuid5(NAMESPACE_URL, range_key)
 
 
