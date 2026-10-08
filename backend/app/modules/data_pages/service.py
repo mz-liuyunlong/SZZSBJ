@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from io import StringIO
 
 from sqlalchemy.orm import Session
@@ -348,7 +348,9 @@ class DailySalesService:
             average_profit_per_order=(
                 None
                 if row.gross_profit_amount is None or not _decimal(row.order_count)
-                else _decimal(row.gross_profit_amount) / _decimal(row.order_count)
+                else (_decimal(row.gross_profit_amount) / _decimal(row.order_count)).quantize(
+                    Decimal("0.0001"), rounding=ROUND_HALF_UP
+                )
             ),
             gross_margin=row.gross_margin,
             roi=row.roi,
