@@ -25,7 +25,7 @@ def _api_decimal(value: Decimal, info: SerializationInfo) -> str:
 
 Money = Annotated[
     Decimal,
-    Field(max_digits=18, decimal_places=4),
+    Field(max_digits=18),
     PlainSerializer(_api_decimal, return_type=str, when_used="json"),
 ]
 Ratio = Annotated[
