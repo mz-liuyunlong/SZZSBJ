@@ -29,7 +29,7 @@ interface SummaryTotals {
   salesAmount: number | null;
   orderProfit: number | null;
   profitRate: number | null;
-  adSpend: number | null;
+  totalAdSpend: number | null;
   adRatio: number | null;
   refundQuantity: number | null;
   refundAmount: number | null;
@@ -70,7 +70,8 @@ const toServerTotals = (
   const salesAmount = summary.salesAmount * currencyRate(summary.salesCurrency, currency);
   const orderProfit = summary.orderProfitAmount
     * currencyRate(summary.orderProfitCurrency, currency);
-  const adSpend = summary.adSpendAmount * currencyRate(summary.adSpendCurrency, currency);
+  const totalAdSpend = summary.totalAdSpendAmount
+    * currencyRate(summary.adSpendCurrency, currency);
   const refundAmount = summary.refundEventAmount
     * currencyRate(summary.refundEventCurrency, currency);
 
@@ -79,8 +80,8 @@ const toServerTotals = (
     salesAmount,
     orderProfit,
     profitRate: salesAmount ? orderProfit / salesAmount * 100 : null,
-    adSpend,
-    adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+    totalAdSpend,
+    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
     refundQuantity: summary.refundEventQuantity,
     refundAmount,
   };
@@ -104,7 +105,7 @@ const toFallbackTotals = (
   const orderProfit = incompleteProfit
     ? null
     : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate;
-  const adSpend = rows.reduce((total, row) => total + row.adSpend, 0) * rate;
+  const totalAdSpend = rows.reduce((total, row) => total + row.totalAdSpend, 0) * rate;
   const refundAmount = refundSummary == null ? null : refundSummary.amount * refundRate;
 
   return {
@@ -112,8 +113,8 @@ const toFallbackTotals = (
     salesAmount,
     orderProfit,
     profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
-    adSpend,
-    adRatio: salesAmount ? adSpend / salesAmount * 100 : null,
+    totalAdSpend,
+    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
     refundQuantity: refundSummary?.quantity ?? null,
     refundAmount,
   };
@@ -235,11 +236,11 @@ function DailySalesSummaryCards({
       accent: "#7C3AED",
       metrics: [
         {
-          label: "广告费",
-          value: formatAmountOrDash(totals.adSpend, currency),
+          label: "总广告费",
+          value: formatAmountOrDash(totals.totalAdSpend, currency),
           comparison: buildComparison(
-            totals.adSpend,
-            previous?.adSpend ?? null,
+            totals.totalAdSpend,
+            previous?.totalAdSpend ?? null,
             (value) => formatAmountOrDash(value, currency)
           ),
         },
