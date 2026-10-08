@@ -8,7 +8,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.modules.data_pages.models import DailySalesItemDayMart
 from app.modules.data_pages.schemas import OrderProfitListData, OrderProfitSummaryRead
-from app.modules.data_pages.service import OrderProfitService, _decimal, _percent_ratio
+from app.modules.data_pages.service import OrderProfitService, _percent_ratio
 
 ZERO = Decimal("0")
 RATIO_SCALE = Decimal("0.000001")
@@ -171,7 +171,9 @@ def _range_id(
     start_date: date,
     end_date: date,
 ) -> UUID:
-    range_key = f"szzsbj:order-profit-item-range:{source_account_ref}:{item_id}:{start_date}:{end_date}"
+    range_key = (
+        f"szzsbj:order-profit-item-range:{source_account_ref}:{item_id}:{start_date}:{end_date}"
+    )
     return uuid5(NAMESPACE_URL, range_key)
 
 
@@ -189,7 +191,9 @@ def _projection_for_item(
     gross_profit_amount = _optional_sum(rows, "gross_profit_amount")
     purchase_cost_total_usd = _optional_sum(rows, "purchase_cost_total_usd")
     first_leg_cost_total_usd = _optional_sum(rows, "first_leg_cost_total_usd")
-    roi_denominator = _coerce_decimal(purchase_cost_total_usd) + _coerce_decimal(first_leg_cost_total_usd)
+    roi_denominator = _coerce_decimal(purchase_cost_total_usd) + _coerce_decimal(
+        first_leg_cost_total_usd
+    )
     store_ids = _distinct_values(rows, "store_id")
 
     return OrderProfitRangeProjection(
@@ -307,7 +311,8 @@ def _summary_from_daily_rows(rows: Sequence[DailySalesItemDayMart]) -> OrderProf
         refund_loss_amount=_refund_loss_from_daily_rows(rows),
         refund_currency_code=_first_nonblank(rows, "refund_currency_code", "USD") or "USD",
         order_profit_amount=order_profit_amount,
-        order_profit_currency_code=_first_nonblank(rows, "gross_profit_currency_code", "USD") or "USD",
+        order_profit_currency_code=_first_nonblank(rows, "gross_profit_currency_code", "USD")
+        or "USD",
         ad_spend_amount=ad_spend_amount,
         sem_ad_spend_amount=sem_ad_spend_amount,
         total_ad_spend_amount=total_ad_spend_amount,
