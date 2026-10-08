@@ -80,9 +80,7 @@ def _sum(rows: Iterable[object], attr: str) -> Decimal:
     return _optional_sum(rows, attr) or ZERO
 
 
-def _first_nonblank(
-    rows: Iterable[object], attr: str, default: str | None = None
-) -> str | None:
+def _first_nonblank(rows: Iterable[object], attr: str, default: str | None = None) -> str | None:
     for row in rows:
         value = getattr(row, attr, None)
         if value is not None and str(value).strip():
@@ -143,9 +141,7 @@ def _missing_cost_codes(rows: Sequence[object]) -> list[str]:
     return codes
 
 
-def _projection_for_sku(
-    local_sku: str, rows: Sequence[object]
-) -> OrderProfitRangeProjection:
+def _projection_for_sku(local_sku: str, rows: Sequence[object]) -> OrderProfitRangeProjection:
     latest_row = max(rows, key=lambda row: getattr(row, "business_date_la"))
     latest_calculated_row = max(rows, key=lambda row: getattr(row, "calculated_at"))
     sales_amount = _sum(rows, "sales_amount")
@@ -217,10 +213,7 @@ def aggregate_order_profit_rows(rows: Sequence[object]) -> list[OrderProfitRange
             continue
         grouped.setdefault(local_sku, []).append(row)
 
-    projections = [
-        _projection_for_sku(local_sku, sku_rows)
-        for local_sku, sku_rows in grouped.items()
-    ]
+    projections = [_projection_for_sku(local_sku, sku_rows) for local_sku, sku_rows in grouped.items()]
     projections.sort(key=_order_profit_sort_key)
     return projections
 
@@ -257,11 +250,7 @@ def _list_order_profit_range_summary(
     grouped_rows = aggregate_order_profit_rows(raw_rows)
     offset = (page - 1) * page_size
     latest_calculated_at = max(
-        (
-            getattr(row, "calculated_at")
-            for row in raw_rows
-            if getattr(row, "calculated_at", None)
-        ),
+        (getattr(row, "calculated_at") for row in raw_rows if getattr(row, "calculated_at", None)),
         default=None,
     )
     return grouped_rows[offset : offset + page_size], len(grouped_rows), latest_calculated_at
