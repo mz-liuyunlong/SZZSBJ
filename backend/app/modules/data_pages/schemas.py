@@ -213,26 +213,40 @@ class OrderProfitItemRead(StrictSchema):
     local_sku: str
     item_ids: list[str]
     store_ids: list[str]
+    store_names: list[str] = Field(default_factory=list)
+    owner_refs: list[str] = Field(default_factory=list)
+    mskus: list[str] = Field(default_factory=list)
+    product_name: str | None = None
     store_count: int
     item_count: int
     sales_qty: Money
     order_count: Money
     sales_amount: Money
     sales_currency_code: str | None
+    sample_qty: Money = Decimal("0")
+    sample_amount: Money | None = None
     return_qty: Money = Decimal("0")
     refund_amount: Money | None
     refund_loss_amount: Money = Decimal("0")
+    return_rate_30d: Ratio | None = None
     ad_spend_amount: Money | None
     sem_ad_spend_amount: Money = Decimal("0")
     total_ad_spend_amount: Money = Decimal("0")
     ad_ratio: Ratio | None = None
+    wfs_available_quantity: Money | None = None
+    wfs_fee_unit_amount: Money | None = None
     commission_fee_amount: Money | None
     wfs_fee_total_amount: Money | None
+    purchase_cost_unit_cny: Money | None = None
     purchase_cost_total_usd: Money | None
+    first_leg_cost_unit_cny: Money | None = None
     first_leg_cost_total_usd: Money | None
+    storage_fee_unit_amount: Money | None = None
     storage_fee_total_amount: Money | None
     gross_profit_amount: Money | None
     gross_profit_currency_code: str | None
+    total_cost_amount: Money | None = None
+    average_profit_per_order: Money | None = None
     gross_margin: Ratio | None
     roi: Ratio | None
     cost_status: Literal["complete", "partial", "missing"]

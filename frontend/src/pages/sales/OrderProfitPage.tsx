@@ -20,23 +20,24 @@ import type { NavigationPage } from "@/config/navigation";
 import OrderProfitCharts from "@/pages/sales/components/OrderProfitCharts";
 import OrderProfitSummaryCards from "@/pages/sales/components/OrderProfitSummaryCards";
 import OrderProfitTable from "@/pages/sales/components/OrderProfitTable";
+import OrderProfitExportModal from "@/pages/sales/components/OrderProfitExportModal";
 import ListingAnalysisModal from "@/shared/listing-analysis";
 import OrderProfitToolbar, {
   type OrderProfitFilters,
 } from "@/pages/sales/components/OrderProfitToolbar";
-import { fetchOrderProfitRows, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
+import { fetchOrderProfitFilterOptions, fetchOrderProfitRows, fetchOrderProfitTrendPoints, type OrderProfitServerSummary, type OrderProfitTrendPoint } from "@/pages/sales/orderProfitApi";
 import {
   dateRangeForPreset,
   fixedOrderProfitColumnKeys,
   orderProfitColumnFields,
   type OrderProfitRow,
 } from "@/pages/sales/orderProfitTypes";
-import { fetchSalesFilterOptions, emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
+import { emptySalesFilterOptions, type SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import { mergeSelectedFilterOptions } from "@/shared/report-filters";
 import { previousComparableDateRange } from "@/pages/sales/summaryComparison";
 import "@/pages/sales/OrderProfitPage.css";
 
-const EXPORT_PENDING = "导出接口待接入";
+const EXPORT_PENDING = "导出";
 
 const TEMPLATE_PENDING = "列模板接口待接入";
 
@@ -98,6 +99,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [appliedColumnKeys, setAppliedColumnKeys] = useState(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
@@ -278,7 +280,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
 
   useEffect(() => {
     let active = true;
-    void fetchSalesFilterOptions({
+    void fetchOrderProfitFilterOptions({
       startDate: dateRangeStart,
       endDate: dateRangeEnd,
       platforms: filters.platforms,
@@ -406,7 +408,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
           className="order-profit__toolbar-icon-button"
           aria-label="下载"
           icon={<CloudDownloadOutlined aria-hidden="true" />}
-          onClick={() => void messageApi.info(EXPORT_PENDING)}
+          onClick={() => setExportModalOpen(true)}
         />
       </Tooltip>
     </>
@@ -475,7 +477,7 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
             resetPageAndSelection();
           }}
           onSelectionChange={setSelectedRowKeys}
-          onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
+          onBulkExport={() => setExportModalOpen(true)}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={openOrderProfitAnalysis}
           />
@@ -491,6 +493,11 @@ function OrderProfitPage({ page }: OrderProfitPageProps) {
         onApply={setAppliedColumnKeys}
         onClose={() => setColumnConfigOpen(false)}
         onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
+      />
+      <OrderProfitExportModal
+        open={exportModalOpen}
+        filters={filters}
+        onClose={() => setExportModalOpen(false)}
       />
       <ListingAnalysisModal
         open={analysisSource !== null}

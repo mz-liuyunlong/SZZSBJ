@@ -126,8 +126,46 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
     };
   });
 
+  const toFilterOptions = (values: string[]) => Array.from(new Set(values.filter(Boolean)))
+    .map((value) => ({
+      value,
+      label: value,
+      count: values.filter((item) => item === value).length,
+    }));
+
+  const fetchOrderProfitFilterOptions = vi.fn(async (
+    params: {
+      startDate?: string;
+      endDate?: string;
+      platforms?: string[];
+      owners?: string[];
+      stores?: string[];
+      searchField?: keyof OrderProfitMockRecord;
+      keyword?: string;
+    } = {},
+  ) => {
+    const keyword = params.keyword?.trim().toLocaleLowerCase() ?? "";
+    const searchField = params.searchField ?? "productId";
+    const records = orderProfitSourceRecords.filter((row) => {
+      const target = String(row[searchField] ?? "");
+
+      return inDateRange(row, params)
+        && (!params.platforms?.length || params.platforms.includes(row.platform))
+        && (!params.owners?.length || params.owners.includes(row.owner))
+        && (!params.stores?.length || params.stores.includes(row.store))
+        && (!keyword || target.toLocaleLowerCase().includes(keyword));
+    });
+
+    return {
+      platforms: toFilterOptions(records.map((row) => row.platform)),
+      owners: toFilterOptions(records.map((row) => row.owner)),
+      stores: toFilterOptions(records.map((row) => row.store)),
+    };
+  });
+
   return {
     fetchOrderProfitRows,
+    fetchOrderProfitFilterOptions,
     fetchOrderProfitSourceRecords,
     fetchAllOrderProfitSourceRecords: fetchOrderProfitSourceRecords,
     fetchOrderProfitTrendPoints: vi.fn(async () => []),

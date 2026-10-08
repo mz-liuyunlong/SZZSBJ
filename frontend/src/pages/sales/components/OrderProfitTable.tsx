@@ -1,7 +1,7 @@
 /** Product-ID order-profit report table with the daily-sales interaction model. */
 import { BarChartOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Empty, Table } from "antd";
+import { Button, Empty, Table, Tooltip } from "antd";
 import type { Key } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
@@ -276,7 +276,22 @@ function createColumns(
       ),
     },
     { title: "平台", dataIndex: "platform", key: "platform", width: 96 },
-    { title: "店铺", dataIndex: "store", key: "store", width: 120 },
+    {
+      title: "店铺",
+      dataIndex: "store",
+      key: "store",
+      width: 160,
+      render: (_, row) => {
+        const fullText = row.storeFullText ?? row.store;
+        return fullText && fullText !== row.store
+          ? (
+              <Tooltip title={fullText}>
+                <span className="report-table-text-ellipsis">{row.store}</span>
+              </Tooltip>
+            )
+          : row.store;
+      },
+    },
     { title: "负责人", dataIndex: "owner", key: "owner", width: 96 },
     {
       title: "前7天销量趋势",
