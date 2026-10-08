@@ -8,6 +8,11 @@ from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.modules.data_pages.refund_loss_overlay import (
+    apply_daily_sales_refund_loss,
+    apply_order_profit_refund_loss,
+    apply_order_profit_trend_refund_loss,
+)
 from app.modules.data_pages.registry import (
     DATA_PAGE_API_REGISTRY,
     registry_source_objects,
@@ -170,6 +175,12 @@ def list_daily_sales(
         query,
         account_refs,
     )
+    apply_daily_sales_refund_loss(
+        session,
+        data=data,
+        query=query,
+        account_refs=account_refs,
+    )
     return success_response(
         request,
         data=data,
@@ -200,6 +211,12 @@ def list_order_profit(
         query=query,
         account_refs=account_refs,
     )
+    apply_order_profit_refund_loss(
+        session,
+        data=data,
+        query=query,
+        account_refs=account_refs,
+    )
     return success_response(
         request,
         data=data,
@@ -226,12 +243,19 @@ def order_profit_trend(
     _: order_profit_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[OrderProfitTrendData, Any]:
+    data = OrderProfitService(session).order_profit_trend(
+        query=query,
+        account_refs=account_refs,
+    )
+    apply_order_profit_trend_refund_loss(
+        session,
+        data=data,
+        query=query,
+        account_refs=account_refs,
+    )
     return success_response(
         request,
-        data=OrderProfitService(session).order_profit_trend(
-            query=query,
-            account_refs=account_refs,
-        ),
+        data=data,
         meta=None,
     )
 
