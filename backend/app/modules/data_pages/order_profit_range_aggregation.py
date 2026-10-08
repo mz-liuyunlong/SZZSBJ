@@ -6,22 +6,25 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-from app.modules.data_pages.models import OrderProfitSkuDayMart
-from app.modules.data_pages.repository import OrderProfitRepository
+from app.modules.data_pages.models import DailySalesItemDayMart
+from app.modules.data_pages.schemas import OrderProfitListData, OrderProfitSummaryRead
+from app.modules.data_pages.service import OrderProfitService, _decimal, _percent_ratio
 
 ZERO = Decimal("0")
 RATIO_SCALE = Decimal("0.000001")
 DAILY_SALES_COST_INCOMPLETE = "daily_sales_cost_incomplete"
+_INSTALLED = False
 
 
 @dataclass(frozen=True)
 class OrderProfitRangeProjection:
-    """Date-range order-profit row shaped like OrderProfitSkuDayMart.
+    """Date-range order-profit row shaped for OrderProfitService._to_read().
 
-    Order Profit is a range summary page, not a daily-detail page. The persisted
-    MART table is daily by account + SKU, so this projection collapses the
-    filtered date range into one row per account + local SKU while preserving the
-    attributes consumed by OrderProfitService._to_read().
+    Order Profit is a product range-summary page. The persisted order-profit MART
+    is daily by account + SKU and cannot answer item/store/owner filtered totals
+    without mixing sibling item IDs under the same local SKU. This projection is
+    built from filtered Daily Sales item-day rows, so filters are applied before
+    aggregation.
     """
 
     id: UUID
@@ -57,7 +60,7 @@ class OrderProfitRangeProjection:
     calculated_at: datetime
 
 
-def _decimal(value: object, default: Decimal = ZERO) -> Decimal:
+def _coerce_decimal(value: object, default: Decimal = ZERO) -> Decimal:
     if value is None:
         return default
     try:
@@ -74,7 +77,7 @@ def _optional_sum(rows: Iterable[object], attr: str) -> Decimal | None:
         if value is None:
             continue
         seen_value = True
-        total += _decimal(value)
+        total += _coerce_decimal(value)
     return total if seen_value else None
 
 
@@ -90,19 +93,18 @@ def _first_nonblank(rows: Iterable[object], attr: str, default: str | None = Non
     return default
 
 
-def _distinct_json_values(rows: Iterable[object], attr: str) -> list[str]:
+def _distinct_values(rows: Iterable[object], attr: str) -> list[str]:
     values: list[str] = []
     seen: set[str] = set()
     for row in rows:
-        raw_values = getattr(row, attr, None)
-        if not isinstance(raw_values, list):
+        raw_value = getattr(row, attr, None)
+        if raw_value is None:
             continue
-        for value in raw_values:
-            normalized = str(value).strip()
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            values.append(normalized)
+        normalized = str(raw_value).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        values.append(normalized)
     return values
 
 
@@ -151,23 +153,32 @@ def _missing_cost_codes(rows: Sequence[object]) -> list[str]:
     return codes
 
 
+def _refund_loss_from_daily_rows(rows: Sequence[object]) -> Decimal:
+    total = ZERO
+    for row in rows:
+        refund_amount = getattr(row, "refund_amount", None)
+        if refund_amount is None:
+            continue
+        commission_rate = _coerce_decimal(getattr(row, "commission_rate", None))
+        total += max(_coerce_decimal(refund_amount) * (Decimal("1") - commission_rate), ZERO)
+    return total
+
+
 def _range_id(
     *,
     source_account_ref: str,
-    local_sku: str,
+    item_id: str,
     start_date: date,
     end_date: date,
 ) -> UUID:
-    range_key = (
-        f"szzsbj:order-profit-range:{source_account_ref}:{local_sku}:{start_date}:{end_date}"
-    )
+    range_key = f"szzsbj:order-profit-item-range:{source_account_ref}:{item_id}:{start_date}:{end_date}"
     return uuid5(NAMESPACE_URL, range_key)
 
 
-def _projection_for_sku(
+def _projection_for_item(
     source_account_ref: str,
-    local_sku: str,
-    rows: Sequence[object],
+    item_id: str,
+    rows: Sequence[DailySalesItemDayMart],
 ) -> OrderProfitRangeProjection:
     latest_row = max(rows, key=lambda row: row.business_date_la)
     latest_calculated_row = max(rows, key=lambda row: row.calculated_at)
@@ -178,35 +189,32 @@ def _projection_for_sku(
     gross_profit_amount = _optional_sum(rows, "gross_profit_amount")
     purchase_cost_total_usd = _optional_sum(rows, "purchase_cost_total_usd")
     first_leg_cost_total_usd = _optional_sum(rows, "first_leg_cost_total_usd")
-    roi_denominator = _decimal(purchase_cost_total_usd) + _decimal(first_leg_cost_total_usd)
+    roi_denominator = _coerce_decimal(purchase_cost_total_usd) + _coerce_decimal(first_leg_cost_total_usd)
+    store_ids = _distinct_values(rows, "store_id")
 
     return OrderProfitRangeProjection(
         id=_range_id(
             source_account_ref=source_account_ref,
-            local_sku=local_sku,
+            item_id=item_id,
             start_date=start_date,
             end_date=end_date,
         ),
         business_date_la=end_date,
-        business_timezone=_first_nonblank(
-            rows,
-            "business_timezone",
-            "America/Los_Angeles",
-        )
+        business_timezone=_first_nonblank(rows, "business_timezone", "America/Los_Angeles")
         or "America/Los_Angeles",
         source_account_ref=source_account_ref,
-        local_sku=local_sku,
-        item_ids_json=_distinct_json_values(rows, "item_ids_json"),
-        store_ids_json=_distinct_json_values(rows, "store_ids_json"),
-        store_count=len(_distinct_json_values(rows, "store_ids_json")),
-        item_count=len(_distinct_json_values(rows, "item_ids_json")),
+        local_sku=_first_nonblank(rows, "local_sku", item_id) or item_id,
+        item_ids_json=[item_id],
+        store_ids_json=store_ids,
+        store_count=len(store_ids),
+        item_count=1,
         sales_qty=_sum(rows, "sales_qty"),
         order_count=_sum(rows, "order_count"),
         sales_amount=sales_amount,
         sales_currency_code=_first_nonblank(rows, "sales_currency_code", "USD"),
         return_qty=_sum(rows, "return_qty"),
         refund_amount=_optional_sum(rows, "refund_amount"),
-        refund_loss_amount=_sum(rows, "refund_loss_amount"),
+        refund_loss_amount=_refund_loss_from_daily_rows(rows),
         ad_spend_amount=_optional_sum(rows, "ad_spend_amount"),
         sem_ad_spend_amount=_sum(rows, "sem_ad_spend_amount"),
         commission_fee_amount=_optional_sum(rows, "commission_fee_amount"),
@@ -220,75 +228,118 @@ def _projection_for_sku(
         roi=_ratio(gross_profit_amount, roi_denominator),
         cost_status=_cost_status(rows),
         missing_cost_codes_json=_missing_cost_codes(rows),
-        calc_version=_first_nonblank(rows, "calc_version", "range-summary") or "range-summary",
+        calc_version=_first_nonblank(rows, "calc_version", "daily-sales-range-summary")
+        or "daily-sales-range-summary",
         calculated_at=latest_calculated_row.calculated_at,
     )
 
 
 def _order_profit_sort_key(row: OrderProfitRangeProjection) -> tuple[Decimal, Decimal, str]:
-    return (-_decimal(row.sales_qty), -_decimal(row.sales_amount), row.local_sku)
+    return (-_coerce_decimal(row.sales_qty), -_coerce_decimal(row.sales_amount), row.local_sku)
 
 
-def aggregate_order_profit_rows(rows: Sequence[object]) -> list[OrderProfitRangeProjection]:
-    """Collapse daily SKU MART rows into one date-range row per account + SKU."""
-    grouped: dict[tuple[str, str], list[object]] = {}
+def aggregate_order_profit_rows(
+    rows: Sequence[DailySalesItemDayMart],
+) -> list[OrderProfitRangeProjection]:
+    """Collapse filtered item-day rows into one date-range row per account + item."""
+    grouped: dict[tuple[str, str], list[DailySalesItemDayMart]] = {}
     for row in rows:
-        source_account_ref = str(getattr(row, "source_account_ref", "")).strip()
-        local_sku = str(getattr(row, "local_sku", "")).strip()
-        if not source_account_ref or not local_sku:
+        source_account_ref = str(row.source_account_ref or "").strip()
+        item_id = str(row.item_id or "").strip()
+        if not source_account_ref or not item_id:
             continue
-        grouped.setdefault((source_account_ref, local_sku), []).append(row)
+        grouped.setdefault((source_account_ref, item_id), []).append(row)
 
     projections = [
-        _projection_for_sku(source_account_ref, local_sku, sku_rows)
-        for (source_account_ref, local_sku), sku_rows in grouped.items()
+        _projection_for_item(source_account_ref, item_id, item_rows)
+        for (source_account_ref, item_id), item_rows in grouped.items()
     ]
     projections.sort(key=_order_profit_sort_key)
     return projections
 
 
-def _list_order_profit_range_summary(
-    self: OrderProfitRepository,
+def _filtered_daily_sales_rows(
+    service: OrderProfitService,
     *,
+    query: object,
     account_refs: frozenset[str],
-    start_date: date | None,
-    end_date: date | None,
-    store_id: str | None,
-    search_field: str,
-    keyword: str,
-    page: int,
-    page_size: int,
-) -> tuple[Sequence[OrderProfitRangeProjection], int, datetime | None]:
-    statement = self._filtered_statement(
+) -> list[DailySalesItemDayMart]:
+    statement = service.daily_sales_repository._filtered_statement(
         account_refs=account_refs,
-        start_date=start_date,
-        end_date=end_date,
-        store_id=store_id,
-        search_field=search_field,
-        keyword=keyword,
+        start_date=query.start_date,
+        end_date=query.end_date,
+        platform=query.platform,
+        store_id=query.store_id,
+        owner_ref=query.owner_ref,
+        search_field=query.search_field,
+        keyword=query.keyword,
+        batch_values="",
     )
-
-    raw_rows = list(
-        self.session.scalars(
+    return list(
+        service.daily_sales_repository.session.scalars(
             statement.order_by(
-                OrderProfitSkuDayMart.source_account_ref.asc(),
-                OrderProfitSkuDayMart.local_sku.asc(),
-                OrderProfitSkuDayMart.business_date_la.asc(),
+                DailySalesItemDayMart.source_account_ref.asc(),
+                DailySalesItemDayMart.item_id.asc(),
+                DailySalesItemDayMart.business_date_la.asc(),
             )
         ).all()
     )
-    grouped_rows = aggregate_order_profit_rows(raw_rows)
-    offset = (page - 1) * page_size
-    latest_calculated_at = max(
-        (row.calculated_at for row in raw_rows if getattr(row, "calculated_at", None)),
-        default=None,
+
+
+def _latest_calculated_at(rows: Sequence[DailySalesItemDayMart]) -> datetime | None:
+    return max((row.calculated_at for row in rows if row.calculated_at), default=None)
+
+
+def _summary_from_daily_rows(rows: Sequence[DailySalesItemDayMart]) -> OrderProfitSummaryRead:
+    sales_amount = _sum(rows, "sales_amount")
+    ad_spend_amount = _sum(rows, "ad_spend_amount")
+    sem_ad_spend_amount = _sum(rows, "sem_ad_spend_amount")
+    total_ad_spend_amount = ad_spend_amount + sem_ad_spend_amount
+    order_profit_amount = _sum(rows, "gross_profit_amount")
+
+    return OrderProfitSummaryRead(
+        sales_qty=_sum(rows, "sales_qty"),
+        order_count=_sum(rows, "order_count"),
+        sales_amount=sales_amount,
+        sales_currency_code=_first_nonblank(rows, "sales_currency_code", "USD") or "USD",
+        return_qty=_sum(rows, "return_qty"),
+        refund_amount=_sum(rows, "refund_amount"),
+        refund_loss_amount=_refund_loss_from_daily_rows(rows),
+        refund_currency_code=_first_nonblank(rows, "refund_currency_code", "USD") or "USD",
+        order_profit_amount=order_profit_amount,
+        order_profit_currency_code=_first_nonblank(rows, "gross_profit_currency_code", "USD") or "USD",
+        ad_spend_amount=ad_spend_amount,
+        sem_ad_spend_amount=sem_ad_spend_amount,
+        total_ad_spend_amount=total_ad_spend_amount,
+        ad_spend_currency_code=_first_nonblank(rows, "ad_spend_currency_code", "USD") or "USD",
+        ad_ratio=_percent_ratio(total_ad_spend_amount, sales_amount),
     )
-    return grouped_rows[offset : offset + page_size], len(grouped_rows), latest_calculated_at
+
+
+def _list_order_profit_from_daily_sales(
+    self: OrderProfitService,
+    *,
+    query: object,
+    account_refs: frozenset[str],
+) -> tuple[OrderProfitListData, int, datetime | None]:
+    raw_rows = _filtered_daily_sales_rows(self, query=query, account_refs=account_refs)
+    grouped_rows = aggregate_order_profit_rows(raw_rows)
+    offset = (query.page - 1) * query.page_size
+    page_rows = grouped_rows[offset : offset + query.page_size]
+
+    return (
+        OrderProfitListData(
+            items=[self._to_read(row) for row in page_rows],
+            summary=_summary_from_daily_rows(raw_rows),
+        ),
+        len(grouped_rows),
+        _latest_calculated_at(raw_rows),
+    )
 
 
 def install_order_profit_range_summary() -> None:
-    current = OrderProfitRepository.list_order_profit
-    if getattr(current, "_order_profit_range_summary", False):
+    global _INSTALLED
+    if _INSTALLED:
         return
-    _list_order_profit_range_summary._order_profit_range_summary = True
-    OrderProfitRepository.list_order_profit = _list_order_profit_range_summary
+    OrderProfitService.list_order_profit = _list_order_profit_from_daily_sales
+    _INSTALLED = True
