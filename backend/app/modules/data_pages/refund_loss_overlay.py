@@ -156,9 +156,7 @@ def _daily_loss_summary(session: Session, base: object) -> tuple[Decimal, str | 
                 func.sum(func.coalesce(AFTER_SALES_REFUND_ITEMS.c.refund_loss_amount, 0)),
                 0,
             ).label("refund_loss_amount"),
-            func.max(AFTER_SALES_REFUND_ITEMS.c.refund_currency_code).label(
-                "refund_currency_code"
-            ),
+            func.max(AFTER_SALES_REFUND_ITEMS.c.refund_currency_code).label("refund_currency_code"),
         )
         .select_from(base)
         .join(
@@ -255,9 +253,7 @@ def _order_profit_loss_summary(session: Session, base: object) -> tuple[Decimal,
                 func.sum(func.coalesce(AFTER_SALES_REFUND_ITEMS.c.refund_loss_amount, 0)),
                 0,
             ).label("refund_loss_amount"),
-            func.max(AFTER_SALES_REFUND_ITEMS.c.refund_currency_code).label(
-                "refund_currency_code"
-            ),
+            func.max(AFTER_SALES_REFUND_ITEMS.c.refund_currency_code).label("refund_currency_code"),
         )
         .select_from(base)
         .join(
@@ -374,7 +370,9 @@ def apply_daily_sales_refund_loss(
             Decimal("0"),
         )
 
-    base = _daily_sales_base(_daily_sales_statement(session, query=query, account_refs=account_refs))
+    base = _daily_sales_base(
+        _daily_sales_statement(session, query=query, account_refs=account_refs)
+    )
     loss_amount, currency = _daily_loss_summary(session, base)
     data.summary.refund_loss_amount = loss_amount
     if currency:
@@ -396,7 +394,9 @@ def apply_order_profit_refund_loss(
             Decimal("0"),
         )
 
-    base = _order_profit_base(_order_profit_statement(session, query=query, account_refs=account_refs))
+    base = _order_profit_base(
+        _order_profit_statement(session, query=query, account_refs=account_refs)
+    )
     loss_amount, currency = _order_profit_loss_summary(session, base)
     data.summary.refund_loss_amount = loss_amount
     if currency:
