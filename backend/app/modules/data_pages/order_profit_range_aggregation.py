@@ -169,10 +169,10 @@ def _projection_for_sku(
     local_sku: str,
     rows: Sequence[object],
 ) -> OrderProfitRangeProjection:
-    latest_row = max(rows, key=lambda row: getattr(row, "business_date_la"))
-    latest_calculated_row = max(rows, key=lambda row: getattr(row, "calculated_at"))
-    start_date = min(getattr(row, "business_date_la") for row in rows)
-    end_date = getattr(latest_row, "business_date_la")
+    latest_row = max(rows, key=lambda row: row.business_date_la)
+    latest_calculated_row = max(rows, key=lambda row: row.calculated_at)
+    start_date = min(row.business_date_la for row in rows)
+    end_date = latest_row.business_date_la
 
     sales_amount = _sum(rows, "sales_amount")
     gross_profit_amount = _optional_sum(rows, "gross_profit_amount")
@@ -221,7 +221,7 @@ def _projection_for_sku(
         cost_status=_cost_status(rows),
         missing_cost_codes_json=_missing_cost_codes(rows),
         calc_version=_first_nonblank(rows, "calc_version", "range-summary") or "range-summary",
-        calculated_at=getattr(latest_calculated_row, "calculated_at"),
+        calculated_at=latest_calculated_row.calculated_at,
     )
 
 
@@ -280,7 +280,7 @@ def _list_order_profit_range_summary(
     grouped_rows = aggregate_order_profit_rows(raw_rows)
     offset = (page - 1) * page_size
     latest_calculated_at = max(
-        (getattr(row, "calculated_at") for row in raw_rows if getattr(row, "calculated_at", None)),
+        (row.calculated_at for row in raw_rows if getattr(row, "calculated_at", None)),
         default=None,
     )
     return grouped_rows[offset : offset + page_size], len(grouped_rows), latest_calculated_at
@@ -290,9 +290,5 @@ def install_order_profit_range_summary() -> None:
     current = OrderProfitRepository.list_order_profit
     if getattr(current, "_order_profit_range_summary", False):
         return
-    setattr(_list_order_profit_range_summary, "_order_profit_range_summary", True)
-    setattr(
-        OrderProfitRepository,
-        "list_order_profit",
-        _list_order_profit_range_summary,
-    )
+    _list_order_profit_range_summary._order_profit_range_summary = True
+    OrderProfitRepository.list_order_profit = _list_order_profit_range_summary
