@@ -80,6 +80,7 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
         orderProfitCurrency: "USD",
         adSpendAmount: sum(rows, "adSpend"),
         semAdSpendAmount: sum(rows, "semAdSpend"),
+        totalAdSpendAmount: sum(rows, "totalAdSpend"),
         adSpendCurrency: "USD",
         refundEventQuantity: sum(rows, "returnCount"),
         refundEventAmount: sum(rows, "refundAmount"),
@@ -712,7 +713,7 @@ describe("DailySalesPage", () => {
 
     const summary = screen.getByLabelText("销售统计");
     expect(summary).toBeVisible();
-    for (const metric of ["销售额", "销量", "广告费", "广告占比", "利润", "利润率", "退款损失", "退款量"]) {
+    for (const metric of ["销售额", "销量", "总广告费", "广告占比", "利润", "利润率", "退款损失", "退款量"]) {
       expect(within(summary).getByText(metric)).toBeVisible();
     }
     for (const cardTitle of ["销售表现", "广告投入", "利润表现", "退款风险"]) {
@@ -727,11 +728,11 @@ describe("DailySalesPage", () => {
     expect(screen.queryByLabelText("销售统计")).not.toBeInTheDocument();
     expect(screen.getByLabelText("销售趋势图")).toBeVisible();
     const metricSelector = screen.getByLabelText("图表指标");
-    for (const metric of ["销量", "销售额", "订单利润", "利润率", "广告费", "广告占比"]) {
+    for (const metric of ["销量", "销售额", "订单利润", "利润率", "总广告费", "广告占比"]) {
       expect(within(metricSelector).getByRole("button", { name: metric })).toBeVisible();
     }
-    fireEvent.click(within(metricSelector).getByRole("button", { name: "广告费" }));
-    expect(screen.getByLabelText("广告费趋势")).toBeVisible();
+    fireEvent.click(within(metricSelector).getByRole("button", { name: "总广告费" }));
+    expect(screen.getByLabelText("总广告费趋势")).toBeVisible();
     expect(screen.getByRole("button", { name: /显示统计$/ })).toBeVisible();
     expect(screen.getByRole("button", { name: /隐藏图表$/ })).toBeVisible();
   });

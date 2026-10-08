@@ -5,7 +5,9 @@ from app.modules.integration_sync.data_pages_business_rules_v2 import (
     DAILY_SALES_V2_VERSION,
     DataPagesRealSyncRunner,
     _cost_totals,
+    _estimated_refund_sales_amount,
     _money_decimal,
+    _net_commission_after_refund,
 )
 from app.modules.product_management.daily_sales_costs import DailySalesCostResolution
 
@@ -51,8 +53,8 @@ def test_daily_sales_uses_strict_triple_and_includes_sample_only_rows() -> None:
     assert "coalesce(sample.sample_qty,0)" in source
     assert "after_sales_refund_items" in source
     assert "purchase_time_at::date=:day" in source
-    assert "refund_loss_amount" in source
     assert "provider_refund_amount" in source
+    assert "avg_paid_sales_price_x_return_qty" in source
     assert "calculation_warnings_json" in source
     assert "return_rate_30d" in source
     assert "fact_walmart_wfs_fee_actual" in source
@@ -128,45 +130,63 @@ def test_daily_sales_preserves_sample_sales_amount() -> None:
     assert "sample_cost_amount" not in source
 
 
-def test_daily_sales_profit_deducts_refund_and_sem_spend_without_merging_ad_spend() -> None:
+def test_daily_sales_profit_deducts_refund_sales_and_sem_spend_without_merging_ad_spend() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
     order_profit_source = inspect.getsource(DataPagesRealSyncRunner._refresh_order_profit_mart)
 
-    assert "m.sem_ad_spend_amount,m.commission_fee_amount" in source
+    assert "m.sem_ad_spend_amount,m.commission_rate,m.commission_fee_amount" in source
     assert 'sem_ad_spend = _decimal(row["sem_ad_spend_amount"]) or Decimal("0")' in source
-    assert 'refund_loss = refund_cost_amount or Decimal("0")' in source
-    assert "- refund_loss" in source
+    assert "refund_amount = _estimated_refund_sales_amount" in source
+    assert "net_commission = (" in source
+    assert '- (refund_amount or Decimal("0"))' in source
     assert "- sem_ad_spend" in source
+    assert "commission_fee_amount=:commission" in source
     assert "sum(coalesce(ad_spend_amount,0))" in order_profit_source
     assert "sum(gross_profit_amount)" in order_profit_source
 
 
-def test_daily_sales_profit_formula_matches_refund_loss_example() -> None:
-    sales = Decimal("38.99")
-    refund_loss = Decimal("24.94")
-    ad_spend = Decimal("5.25")
-    sem_ad_spend = Decimal("0.21")
-    wfs_fee = Decimal("7.75")
-    commission = Decimal("4.68")
-    purchase_cost = Decimal("10.00")
-    first_leg_cost = Decimal("7.17")
-    storage_fee = Decimal("0.02")
-
-    gross_profit = (
-        sales
-        - refund_loss
-        - ad_spend
-        - sem_ad_spend
-        - wfs_fee
-        - commission
-        - purchase_cost
-        - first_leg_cost
-        - storage_fee
+def test_refund_amount_uses_average_sales_price_and_return_qty() -> None:
+    assert _estimated_refund_sales_amount(
+        Decimal("40.00"),
+        Decimal("4"),
+        Decimal("2"),
+    ) == Decimal("20.00")
+    assert (
+        _estimated_refund_sales_amount(
+            Decimal("40.00"),
+            Decimal("0"),
+            Decimal("1"),
+        )
+        is None
     )
+    assert _estimated_refund_sales_amount(
+        Decimal("40.00"),
+        Decimal("4"),
+        Decimal("0"),
+    ) == Decimal("0")
 
-    assert gross_profit == Decimal("-21.03")
+
+def test_daily_sales_profit_formula_returns_refunded_commission() -> None:
+    sales = Decimal("10.00")
+    refund_amount = _estimated_refund_sales_amount(
+        sales,
+        Decimal("1"),
+        Decimal("1"),
+    )
+    assert refund_amount == Decimal("10.00")
+
+    net_commission = _net_commission_after_refund(
+        sales,
+        refund_amount,
+        Decimal("0.10"),
+    )
+    assert net_commission == Decimal("0.0000")
+
+    gross_profit = sales - refund_amount - net_commission - Decimal("7.00")
+
+    assert gross_profit == Decimal("-7.0000")
 
 
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2+sem+rp")
+    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2+sem+rp+rnc")
     assert len(DAILY_SALES_V2_VERSION) <= 64

@@ -29,7 +29,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2+sem+rp"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2+sem+rp+rnc"
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -70,6 +70,30 @@ def _cost_totals(
         cost.storage_fee_unit_usd * quantity if cost.storage_fee_unit_usd is not None else None
     )
     return purchase, first_leg, wfs, storage
+
+
+def _estimated_refund_sales_amount(
+    sales_amount: Decimal,
+    sales_qty: Decimal,
+    return_qty: Decimal,
+) -> Decimal | None:
+    """Estimate refunded sales value from paid average unit price."""
+
+    if return_qty <= 0:
+        return Decimal("0")
+    if sales_qty <= 0:
+        return None
+    return sales_amount / sales_qty * return_qty
+
+
+def _net_commission_after_refund(
+    sales_amount: Decimal,
+    refund_amount: Decimal,
+    commission_rate: Decimal,
+) -> Decimal:
+    """Commission cost after refunded sales get their platform commission returned."""
+
+    return max(sales_amount - refund_amount, Decimal("0")) * commission_rate
 
 
 def _cost_loss_total(
@@ -286,12 +310,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "r as (select r.source_account_ref,r.purchase_time_at::date business_date_la,"
                 "r.store_id,r.item_id,trim(r.msku) msku,max(r.local_sku) local_sku,"
                 "sum(coalesce(r.return_qty,0)) return_qty,"
-                "sum(coalesce(r.refund_amount,0)) provider_refund_amount,"
-                "case when count(*) filter (where r.refund_loss_effective=true "
-                "and r.refund_loss_amount is null)>0 then null "
-                "else sum(r.refund_loss_amount) filter (where r.refund_loss_effective=true) end refund_loss_amount,"
-                "count(*) filter (where r.refund_loss_effective=true "
-                "and r.refund_loss_amount is null) refund_loss_missing_count "
+                "sum(coalesce(r.refund_amount,0)) provider_refund_amount "
                 "from after_sales_refund_items r "
                 "where r.source_account_ref=:account and r.platform_code='walmart' "
                 "and r.refund_effective=true and r.purchase_time_at is not null "
@@ -341,7 +360,12 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "coalesce(s.currency_code,'USD'),coalesce(sample.sample_amount,0),"
                 "greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0),"
                 "coalesce(r.return_qty,0),"
-                "case when coalesce(r.return_qty,0)>0 then r.refund_loss_amount else 0 end,'USD',"
+                "case when coalesce(r.return_qty,0)>0 "
+                "and greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0)>0 "
+                "then greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)"
+                "/nullif(greatest(coalesce(s.sales_qty,0)-coalesce(sample.sample_qty,0),0),0)"
+                "*coalesce(r.return_qty,0) "
+                "when coalesce(r.return_qty,0)>0 then null else 0 end,'USD',"
                 "coalesce(a.ad_spend,0),coalesce(sem.sem_ad_spend,0),'USD',"
                 "case when greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0)>0 "
                 "then (coalesce(a.ad_spend,0)+coalesce(sem.sem_ad_spend,0))/greatest(coalesce(s.sales_amount,0)-coalesce(sample.sample_amount,0),0) "
@@ -356,8 +380,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "jsonb_build_object('runner',cast(:runner as text),"
                 "'basis','sale_stat_union_positive_ad_spend_union_refund_union_sample',"
                 "'match_key','store_id+item_id+msku','refund_basis','after_sales_refund_items',"
-                "'refund_date_basis','purchase_time_at','refund_loss_missing_count',"
-                "coalesce(r.refund_loss_missing_count,0),"
+                "'refund_date_basis','purchase_time_at',"
+                "'refund_amount_basis','avg_paid_sales_price_x_return_qty',"
+                "'provider_refund_amount',coalesce(r.provider_refund_amount,0),"
                 "'sample_order_count',coalesce(sample.sample_order_count,0),'sample_qty',coalesce(sample.sample_qty,0),"
                 "'commission_rule_version',commission.rule_version,"
                 "'commission_rule_scope',commission.rule_scope,"
@@ -605,8 +630,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "select m.id,m.store_id,m.item_id,m.msku,m.local_sku,m.gross_sales_qty,"
                     "m.gross_order_count,m.gross_sales_amount,m.sample_order_count,m.sample_qty,m.sample_amount,"
                     "m.cost_quantity,sample_qty,return_qty,m.sales_qty,m.sales_amount,m.refund_amount,m.ad_spend_amount,"
-                    "m.sem_ad_spend_amount,m.commission_fee_amount,"
-                    "coalesce((m.source_lineage_json->>'refund_loss_missing_count')::int,0) refund_loss_missing_count "
+                    "m.sem_ad_spend_amount,m.commission_rate,m.commission_fee_amount "
                     "from mart_daily_sales_item_day m where m.source_account_ref=:account and m.business_date_la=:day"
                 ),
                 {"account": self.source_account_ref, "day": self.business_date},
@@ -618,16 +642,23 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         for row in mart_rows:
             cost_quantity = _decimal(row["cost_quantity"]) or Decimal("0")
             sales = _decimal(row["sales_amount"]) or Decimal("0")
+            sales_qty = _decimal(row["sales_qty"]) or Decimal("0")
+            return_qty = _decimal(row["return_qty"]) or Decimal("0")
             ad_spend = _decimal(row["ad_spend_amount"]) or Decimal("0")
             sem_ad_spend = _decimal(row["sem_ad_spend_amount"]) or Decimal("0")
-            commission = _decimal(row["commission_fee_amount"]) or Decimal("0")
+            commission_rate = _decimal(row["commission_rate"]) or Decimal("0")
             gross_qty = _decimal(row["gross_sales_qty"]) or Decimal("0")
             gross_orders = _decimal(row["gross_order_count"]) or Decimal("0")
             gross_sales = _decimal(row["gross_sales_amount"]) or Decimal("0")
             sample_orders = _decimal(row["sample_order_count"]) or Decimal("0")
             sample_qty = _decimal(row["sample_qty"]) or Decimal("0")
             sample_amount = _decimal(row["sample_amount"]) or Decimal("0")
-            refund_amount = _decimal(row["refund_amount"]) or Decimal("0")
+            refund_amount = _estimated_refund_sales_amount(sales, sales_qty, return_qty)
+            net_commission = (
+                _net_commission_after_refund(sales, refund_amount, commission_rate)
+                if refund_amount is not None
+                else None
+            )
 
             sku_key = normalize_sku_key(row["local_sku"])
             cost = costs.get(sku_key) if sku_key is not None else None
@@ -640,8 +671,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             if sample_amount > gross_sales:
                 warnings.append("sample_amount_exceeds_gross_sales_amount")
             paid_sales = max(gross_sales - sample_amount, Decimal("0"))
-            if refund_amount > paid_sales:
-                warnings.append("refund_loss_exceeds_paid_sales_amount")
+            if refund_amount is None:
+                missing.append("refund_amount_missing")
+                warnings.append("refund_amount_missing")
+            elif refund_amount > paid_sales:
+                warnings.append("refund_amount_exceeds_paid_sales_amount")
 
             purchase_total = first_leg_total = wfs_expected_total = storage_total = None
             if cost is None:
@@ -664,9 +698,6 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     or cost.first_leg_cost_unit_cny is not None
                 ) and (cost.exchange_rate is None or cost.exchange_rate <= 0):
                     missing.append("fx_rate_missing")
-            if int(row["refund_loss_missing_count"] or 0) > 0:
-                missing.append("refund_loss_missing")
-                warnings.append("refund_loss_missing")
             warnings.extend(code for code in missing if code not in warnings)
             if not history_7d_complete:
                 warnings.append("sales_history_7d_incomplete")
@@ -702,29 +733,26 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 value is not None
                 for value in (purchase_total, first_leg_total, wfs_effective_total, storage_total)
             )
-            refund_cost_amount = (
-                _decimal(row["refund_amount"]) if row["refund_amount"] is not None else None
-            )
-            refund_loss = refund_cost_amount or Decimal("0")
             if not missing and complete_costs:
                 cost_status = "complete"
-            elif cost is not None or int(row["refund_loss_missing_count"] or 0) > 0:
+            elif cost is not None or refund_amount is None:
                 cost_status = "partial"
             else:
                 cost_status = "missing"
 
             gross_profit = (
                 sales
-                - refund_loss
                 - ad_spend
                 - sem_ad_spend
-                - commission
+                - (refund_amount or Decimal("0"))
+                - (net_commission or Decimal("0"))
                 - purchase_total
                 - first_leg_total
                 - wfs_effective_total
                 - storage_total
                 if complete_costs
-                and int(row["refund_loss_missing_count"] or 0) == 0
+                and refund_amount is not None
+                and net_commission is not None
                 and purchase_total is not None
                 and first_leg_total is not None
                 and wfs_effective_total is not None
@@ -787,6 +815,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "storage_fee_estimated_total_amount=:storage_total,storage_fee_actual_total_amount=null,"
                     "storage_fee_source=:storage_source,storage_fee_currency_code='USD',"
                     "exchange_rate=:exchange_rate,fx_date=:fx_date,fx_source=:fx_source,"
+                    "commission_fee_amount=:commission,"
                     "gross_profit_amount=:gross_profit,gross_profit_currency_code='USD',gross_margin=:gross_margin,"
                     "roi=:roi,cost_status=:cost_status,missing_cost_codes_json=cast(:missing_codes as jsonb),"
                     "calculation_warnings_json=cast(:warnings as jsonb),"
@@ -796,7 +825,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "id": str(row["id"]),
                     "owner_ref": cost.owner_ref if cost is not None else None,
                     "return_rate_30d": return_rate_30d,
-                    "refund_amount": refund_cost_amount,
+                    "refund_amount": refund_amount,
                     "wfs_unit": cost.wfs_fee_unit_usd if cost is not None else None,
                     "wfs_total": wfs_effective_total,
                     "wfs_expected_total": wfs_expected_total,
@@ -818,6 +847,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "fx_source": cost.fx_source
                     if cost is not None
                     else "daily-sales-default-fx-6.6",
+                    "commission": net_commission,
                     "gross_profit": gross_profit,
                     "gross_margin": gross_margin,
                     "roi": roi,

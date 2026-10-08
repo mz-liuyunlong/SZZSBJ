@@ -17,17 +17,17 @@ interface DailySalesChartsProps {
 const labels = Array.from({ length: 7 }, (_, index) => dayjs()
   .subtract(6 - index, "day")
   .format("MM-DD"));
-type ChartMetric = "salesVolume" | "salesAmount" | "orderProfit" | "profitMargin" | "adSpend" | "adRatio";
+type ChartMetric = "salesVolume" | "salesAmount" | "orderProfit" | "profitMargin" | "totalAdSpend" | "adRatio";
 
 const metricOptions: { label: string; value: ChartMetric }[] = [
   { label: "销量", value: "salesVolume" },
   { label: "销售额", value: "salesAmount" },
   { label: "订单利润", value: "orderProfit" },
   { label: "利润率", value: "profitMargin" },
-  { label: "广告费", value: "adSpend" },
+  { label: "总广告费", value: "totalAdSpend" },
   { label: "广告占比", value: "adRatio" },
 ];
-const amountMetrics: ChartMetric[] = ["salesAmount", "orderProfit", "adSpend"];
+const amountMetrics: ChartMetric[] = ["salesAmount", "orderProfit", "totalAdSpend"];
 const percentMetrics: ChartMetric[] = ["profitMargin", "adRatio"];
 
 function DailySalesCharts({ rows, currency }: DailySalesChartsProps) {
@@ -42,12 +42,12 @@ function DailySalesCharts({ rows, currency }: DailySalesChartsProps) {
     const orderProfit = profitIncomplete
       ? null
       : dateRows.reduce((sum, row) => sum + (row.orderProfit ?? 0), 0);
-    const adSpend = dateRows.reduce((sum, row) => sum + row.adSpend, 0);
+    const totalAdSpend = dateRows.reduce((sum, row) => sum + row.totalAdSpend, 0);
     if (metric === "orderProfit") return orderProfit == null ? null : orderProfit * rate;
     if (metric === "profitMargin") {
       return salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null;
     }
-    if (metric === "adRatio") return salesAmount ? adSpend / salesAmount * 100 : null;
+    if (metric === "adRatio") return salesAmount ? totalAdSpend / salesAmount * 100 : null;
     const value = dateRows.reduce((sum, row) => sum + Number(row[metric] ?? 0), 0);
     return amountMetrics.includes(metric) ? value * rate : value;
   });
