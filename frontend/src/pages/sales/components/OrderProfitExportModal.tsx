@@ -140,14 +140,25 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    let active = true;
 
-    const nextRange = normalizeRange(filters);
-    setPeriod("day");
-    setDimension("msku");
-    setDateRange(nextRange);
-    setMonthDate(nextRange[0]);
-    setSelectedColumns(defaultExportColumns);
+    if (open) {
+      const nextRange = normalizeRange(filters);
+
+      queueMicrotask(() => {
+        if (!active) return;
+
+        setPeriod("day");
+        setDimension("msku");
+        setDateRange(nextRange);
+        setMonthDate(nextRange[0]);
+        setSelectedColumns(defaultExportColumns);
+      });
+    }
+
+    return () => {
+      active = false;
+    };
   }, [filters, open]);
 
   const selectedColumnSet = useMemo(() => new Set(selectedColumns), [selectedColumns]);
