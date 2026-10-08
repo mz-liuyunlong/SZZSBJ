@@ -36,7 +36,7 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
   const sumOrderProfit = (rows: OrderProfitMockRecord[]) => rows.reduce((total, row) => (
     total
     + Number(row.salesAmount ?? 0)
-    - Number(row.refundAmount ?? 0)
+    - Number(row.refundLossAmount ?? row.refundAmount ?? 0)
     - Number(row.adSpend ?? 0)
     - Number(row.semAdSpend ?? 0)
     - Number(row.wfsDeliveryFee ?? 0)
@@ -89,7 +89,9 @@ vi.mock("@/pages/sales/orderProfitApi", async () => {
         orderCount: sum(records, "orderCount"),
         salesAmount: sum(records, "salesAmount"),
         salesCurrency: "USD",
+        refundQuantity: sum(records, "refundQuantity"),
         refundAmount: sum(records, "refundAmount"),
+        refundLossAmount: sum(records, "refundLossAmount"),
         refundCurrency: "USD",
         orderProfitAmount: sumOrderProfit(records),
         orderProfitCurrency: "USD",
@@ -586,6 +588,8 @@ describe("OrderProfitPage", () => {
     }));
     expect(screen.getByText("商品ID/品名")).toBeVisible();
     expect(screen.getByText("SKU/MSKU")).toBeVisible();
+    expect(screen.getByText("平均售价")).toBeVisible();
+    expect(screen.getAllByText("退款损失").length).toBeGreaterThan(0);
     expect(screen.queryByText("系统运营日志")).not.toBeInTheDocument();
     expect(screen.queryByText("运营日志")).not.toBeInTheDocument();
     expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.length);

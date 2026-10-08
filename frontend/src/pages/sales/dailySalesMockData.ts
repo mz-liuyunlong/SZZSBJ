@@ -26,6 +26,7 @@ export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (
   const semAdSpend = adSpend * 0.12;
   const totalAdSpend = adSpend + semAdSpend;
   const orderProfit = salesAmount - purchaseCost - totalAdSpend - orderCount * 3.25;
+  const refundAmount = (index % 6) * 19.9;
 
   return {
     id: `daily-sales-acceptance-${serial}`,
@@ -45,9 +46,11 @@ export const dailySalesMockData: DailySalesRow[] = Array.from({ length: 100 }, (
     salesVolume,
     orderCount,
     salesAmount,
+    averagePrice: salesVolume ? salesAmount / salesVolume : null,
     sampleExcludedAmount: salesAmount * 0.96,
     returnCount: index % 6,
-    refundAmount: (index % 6) * 19.9,
+    refundAmount,
+    refundLossAmount: refundAmount * (1 - MOCK_DEFAULT_STORE_COMMISSION_RATE),
     returnRate30Days: 1.2 + (index % 8) * 0.55,
     adSpend,
     semAdSpend,

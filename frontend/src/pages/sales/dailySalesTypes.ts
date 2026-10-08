@@ -32,9 +32,11 @@ export interface DailySalesRow {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+  averagePrice: number | null;
   sampleExcludedAmount: number | null;
   returnCount: number;
   refundAmount: number | null;
+  refundLossAmount: number | null;
   returnRate30Days: number;
   adSpend: number;
   semAdSpend: number;
@@ -95,10 +97,11 @@ export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "salesVolume", title: "销量" },
   { key: "orderCount", title: "订单量" },
   { key: "salesAmount", title: "销售额" },
+  { key: "averagePrice", title: "平均售价" },
   { key: "sampleQuantity", title: "送样量" },
   { key: "sampleExcludedAmount", title: "送样金额" },
   { key: "returnCount", title: "退货量" },
-  { key: "refundAmount", title: "退款损失" },
+  { key: "refundLossAmount", title: "退款损失" },
   { key: "returnRate30Days", title: "退货率30天" },
   { key: "adSpend", title: "广告费" },
   { key: "semAdSpend", title: "SEM费用" },

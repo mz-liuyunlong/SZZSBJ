@@ -141,6 +141,11 @@ def test_daily_sales_profit_deducts_refund_sales_and_sem_spend_without_merging_a
     assert '- (refund_amount or Decimal("0"))' in source
     assert "- sem_ad_spend" in source
     assert "commission_fee_amount=:commission" in source
+    assert "sum(coalesce(return_qty,0))" in order_profit_source
+    assert "refund_loss_amount" in order_profit_source
+    assert (
+        "sum(coalesce(refund_amount,0) * (1 - coalesce(commission_rate,0)))" in order_profit_source
+    )
     assert "sum(coalesce(ad_spend_amount,0))" in order_profit_source
     assert "sum(gross_profit_amount)" in order_profit_source
 

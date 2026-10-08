@@ -102,7 +102,7 @@ const sumNullable = (rows: OrderProfitRow[], key: keyof OrderProfitRow) => (
 const totalMoneyKeys = new Set([
   "salesAmount",
   "sampleAmount",
-  "refundAmount",
+  "refundLossAmount",
   "adSpend",
   "semAdSpend",
   "totalAdSpend",
@@ -152,9 +152,19 @@ function TotalCell({
     return <span className="report-table-metric">{sum(rows, columnKey as keyof OrderProfitRow).toLocaleString("zh-CN")}</span>;
   }
   const salesAmount = sum(rows, "salesAmount");
+  const salesVolume = sum(rows, "salesVolume");
   const orderCount = sum(rows, "orderCount");
   const totalAdSpend = sum(rows, "totalAdSpend");
   const orderProfit = sumNullable(rows, "orderProfit");
+  if (columnKey === "averagePrice") {
+    const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
+    return (
+      <MoneyCell
+        value={salesVolume ? salesAmount / salesVolume * rate : null}
+        currency={currency === "CNY" ? "¥" : "$"}
+      />
+    );
+  }
   if (columnKey === "averageProfitPerOrder") {
     const rate = currency === "CNY" ? MOCK_USD_TO_CNY_RATE : 1;
     return orderCount && orderProfit != null
@@ -277,12 +287,13 @@ function createColumns(
     { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88 },
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88 },
     { title: "销售额", key: "salesAmount", width: 112, render: money("salesAmount", currency) },
+    { title: "平均售价", key: "averagePrice", width: 112, render: money("averagePrice", currency) },
 
     { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88 },
     { title: "送样金额", key: "sampleAmount", width: 112, render: money("sampleAmount", currency) },
 
     { title: "退货量", dataIndex: "refundQuantity", key: "refundQuantity", width: 88 },
-    { title: "退款损失", key: "refundAmount", width: 104, render: money("refundAmount", currency) },
+    { title: "退款损失", key: "refundLossAmount", width: 104, render: money("refundLossAmount", currency) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
 
     { title: "广告费", key: "adSpend", width: 104, render: money("adSpend", currency) },

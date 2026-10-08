@@ -372,7 +372,7 @@ class DailySalesRepository:
         search_field: str,
         keyword: str,
         batch_values: str,
-    ) -> tuple[object, object, str | None]:
+    ) -> tuple[object, object, object, str | None]:
         """Aggregate refund quantity and refund loss from recalculated Daily Sales MART."""
 
         statement = self._filtered_statement(
@@ -391,11 +391,18 @@ class DailySalesRepository:
             statement.with_only_columns(
                 func.coalesce(func.sum(DailySalesItemDayMart.return_qty), 0),
                 func.coalesce(func.sum(DailySalesItemDayMart.refund_amount), 0),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(DailySalesItemDayMart.refund_amount, 0)
+                        * (1 - func.coalesce(DailySalesItemDayMart.commission_rate, 0))
+                    ),
+                    0,
+                ),
                 func.max(DailySalesItemDayMart.refund_currency_code),
             ).order_by(None)
         ).one()
 
-        return row[0], row[1], row[2]
+        return row[0], row[1], row[2], row[3]
 
     def order_profit_trend(
         self,
@@ -432,7 +439,15 @@ class DailySalesRepository:
                 func.coalesce(func.sum(base.c.order_count), 0).label("order_count"),
                 func.coalesce(func.sum(base.c.sales_amount), 0).label("sales_amount"),
                 func.max(base.c.sales_currency_code).label("sales_currency_code"),
+                func.coalesce(func.sum(base.c.return_qty), 0).label("return_qty"),
                 func.coalesce(func.sum(base.c.refund_amount), 0).label("refund_amount"),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(base.c.refund_amount, 0)
+                        * (1 - func.coalesce(base.c.commission_rate, 0))
+                    ),
+                    0,
+                ).label("refund_loss_amount"),
                 func.max(base.c.refund_currency_code).label("refund_currency_code"),
                 func.coalesce(func.sum(base.c.gross_profit_amount), 0).label("order_profit_amount"),
                 func.max(base.c.gross_profit_currency_code).label("order_profit_currency_code"),
@@ -686,9 +701,12 @@ class OrderProfitRepository:
         object,
         str | None,
         object,
+        object,
+        object,
         str | None,
         object,
         str | None,
+        object,
         object,
         str | None,
     ]:
@@ -708,7 +726,9 @@ class OrderProfitRepository:
                 func.coalesce(func.sum(OrderProfitSkuDayMart.order_count), 0),
                 func.coalesce(func.sum(OrderProfitSkuDayMart.sales_amount), 0),
                 func.max(OrderProfitSkuDayMart.sales_currency_code),
+                func.coalesce(func.sum(OrderProfitSkuDayMart.return_qty), 0),
                 func.coalesce(func.sum(OrderProfitSkuDayMart.refund_amount), 0),
+                func.coalesce(func.sum(OrderProfitSkuDayMart.refund_loss_amount), 0),
                 func.max(OrderProfitSkuDayMart.sales_currency_code),
                 func.coalesce(func.sum(OrderProfitSkuDayMart.gross_profit_amount), 0),
                 func.max(OrderProfitSkuDayMart.gross_profit_currency_code),
@@ -730,6 +750,8 @@ class OrderProfitRepository:
             row[8],
             row[9],
             row[10],
+            row[11],
+            row[12],
         )
 
     def _filtered_statement(

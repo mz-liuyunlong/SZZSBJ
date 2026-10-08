@@ -137,6 +137,7 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
                 summary=DailySalesSummaryRead(
                     refund_event_qty=Decimal("36"),
                     refund_event_amount=Decimal("674.80"),
+                    refund_loss_amount=Decimal("573.58"),
                     refund_event_currency_code="USD",
                 ),
             ),
@@ -166,6 +167,7 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
     assert body["data"]["items"][0]["sales_amount"] == "39.99"
     assert body["data"]["summary"]["refund_event_qty"] == "36.00"
     assert body["data"]["summary"]["refund_event_amount"] == "674.80"
+    assert body["data"]["summary"]["refund_loss_amount"] == "573.58"
     assert body["meta"]["source_objects"] == [
         "mart_daily_sales_item_day",
         "fact_walmart_refund_items",
