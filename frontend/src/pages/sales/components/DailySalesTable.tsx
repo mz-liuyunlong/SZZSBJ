@@ -152,7 +152,7 @@ const sumCnyUnitTotalOrUsdSourceMoney = (
 const totalMoneyKeys = new Set([
   "salesAmount",
   "sampleExcludedAmount",
-  "refundAmount",
+  "refundLossAmount",
   "adSpend",
   "semAdSpend",
   "totalAdSpend",
@@ -233,6 +233,15 @@ function TotalCell({
   const salesVolume = sum(rows, "salesVolume");
   const salesAmount = sum(rows, "salesAmount");
   const totalAdSpend = sum(rows, "totalAdSpend");
+  if (columnKey === "averagePrice") {
+    const totalSalesAmount = sumUsdSourceMoney(rows, "salesAmount", currency);
+    return (
+      <MoneyCell
+        value={salesVolume && totalSalesAmount != null ? totalSalesAmount / salesVolume : null}
+        currency={currency === "CNY" ? "¥" : "$"}
+      />
+    );
+  }
   if (columnKey === "returnRate30Days") {
     return salesVolume ? <PercentCell value={sum(rows, "returnCount") / salesVolume * 100} /> : null;
   }
@@ -329,10 +338,11 @@ function createColumns(
     { title: "销量", dataIndex: "salesVolume", key: "salesVolume", width: 88 },
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88 },
     { title: "销售额", key: "salesAmount", width: 112, render: renderUsdSourceMoney<DailySalesRow>("salesAmount", currency, dailySalesFxRate) },
+    { title: "平均售价", key: "averagePrice", width: 112, render: renderUsdSourceMoney<DailySalesRow>("averagePrice", currency, dailySalesFxRate) },
     { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88 },
     { title: "送样金额", key: "sampleExcludedAmount", width: 112, render: renderCostMatchedUsdMoney("sampleExcludedAmount", "sampleQuantity", currency) },
     { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88 },
-    { title: "退款损失", key: "refundAmount", width: 104, render: renderCostMatchedUsdMoney("refundAmount", "returnCount", currency) },
+    { title: "退款损失", key: "refundLossAmount", width: 104, render: renderCostMatchedUsdMoney("refundLossAmount", "returnCount", currency) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
     { title: "广告费", key: "adSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
     { title: "SEM费用", key: "semAdSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("semAdSpend", currency, dailySalesFxRate) },

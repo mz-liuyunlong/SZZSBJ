@@ -36,6 +36,7 @@ interface BackendDailySalesItem {
   sales_amount_excluding_sample: string | null;
   return_qty: string | null;
   refund_amount: string | null;
+  refund_loss_amount: string | null;
   return_rate_30d: string | null;
   ad_spend_amount: string | null;
   sem_ad_spend_amount: string | null;
@@ -60,6 +61,7 @@ interface BackendDailySalesItem {
   commission_source: string | null;
   exchange_rate: string | null;
   fx_source: string | null;
+  commission_rate: string | null;
   purchase_cost_source: string | null;
   first_leg_cost_source: string | null;
   storage_fee_source: string | null;
@@ -85,6 +87,7 @@ interface BackendDailySalesSummary {
   ad_spend_currency_code: string | null;
   refund_event_qty: string;
   refund_event_amount: string;
+  refund_loss_amount: string;
   refund_event_currency_code: string | null;
   wfs_available_quantity: string | null;
 }
@@ -116,6 +119,7 @@ export interface DailySalesServerSummary {
   adSpendCurrency: DailySalesCurrency;
   refundEventQuantity: number;
   refundEventAmount: number;
+  refundLossAmount: number;
   refundEventCurrency: DailySalesCurrency;
   wfsAvailableInventory?: number | null;
 }
@@ -166,67 +170,81 @@ const costStatusLabel = (
   return "待补齐";
 };
 
-const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => ({
-  id: item.id,
-  date: item.business_date_la,
-  store: item.store_name ?? item.store_id,
-  owner: item.owner_ref ?? "未分配",
-  sevenDayDates: item.sales_7d_trend.map((point) => point.date),
-  sevenDaySales: item.sales_7d_trend.map((point) => numberValue(point.sales_qty)),
-  msku: item.msku ?? "-",
-  productId: item.item_id,
-  sku: item.local_sku ?? "-",
-  productName: item.local_name ?? item.title ?? "-",
-  platform: platformLabel(item.platform_code),
-  currency: currencyLabel(item.sales_currency_code),
-  grossSalesVolume: numberValue(item.gross_sales_qty),
-  grossOrderCount: numberValue(item.gross_order_count),
-  grossSalesAmount: numberValue(item.gross_sales_amount),
-  sampleOrderCount: numberValue(item.sample_order_count),
-  sampleQuantity: numberValue(item.sample_qty),
-  sampleAmount: nullableNumberValue(item.sample_amount),
-  costQuantity: numberValue(item.cost_quantity),
-  salesVolume: numberValue(item.sales_qty),
-  orderCount: numberValue(item.order_count),
-  salesAmount: numberValue(item.sales_amount),
-  sampleExcludedAmount: nullableNumberValue(item.sample_amount),
-  returnCount: numberValue(item.return_qty),
-  refundAmount: nullableNumberValue(item.refund_amount),
-  returnRate30Days: numberValue(item.return_rate_30d) * 100,
-  adSpend: numberValue(item.ad_spend_amount),
-  semAdSpend: numberValue(item.sem_ad_spend_amount),
-  totalAdSpend: numberValue(item.total_ad_spend_amount),
-  adRatio: numberValue(item.ad_ratio) * 100,
-  wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
-  wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
-  wfsExpectedFee: numberValue(item.wfs_fee_expected_total_amount),
-  wfsActualFee: item.wfs_fee_actual_total_amount == null ? null : numberValue(item.wfs_fee_actual_total_amount),
-  wfsVarianceAmount: item.wfs_fee_variance_amount == null ? null : numberValue(item.wfs_fee_variance_amount),
-  wfsVarianceRate: item.wfs_fee_variance_rate == null ? null : numberValue(item.wfs_fee_variance_rate) * 100,
-  wfsFeeSource: item.wfs_fee_source ?? "product_management",
-  commission: nullableNumberValue(item.commission_fee_amount),
-  purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
-  purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
-  firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
-  firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
-  storageFee: nullableNumberValue(item.storage_fee_total_amount),
-  storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
-  wfsAvailableInventory: nullableNumberValue(item.wfs_available_quantity),
-  legacyGrossProfit: nullableNumberValue(item.gross_profit_amount),
-  orderProfit: nullableNumberValue(item.gross_profit_amount),
-  profitMargin: item.gross_margin == null ? null : numberValue(item.gross_margin) * 100,
-  roi: item.roi == null ? null : numberValue(item.roi) * 100,
-  exchangeRate: numberValue(item.exchange_rate),
-  fxSource: item.fx_source ?? "daily-sales-default-fx-6.6",
-  commissionSource: item.commission_source ?? "default_15_percent",
-  purchaseCostSource: item.purchase_cost_source ?? "product_management",
-  firstLegCostSource: item.first_leg_cost_source ?? "product_management",
-  storageFeeSource: item.storage_fee_source ?? "product_management",
-  calculationWarnings: item.calculation_warnings,
-  costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
-  systemOperationLog: "系统运营日志待接入",
-  operationLog: "运营日志待接入",
-});
+const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
+  const salesVolume = numberValue(item.sales_qty);
+  const salesAmount = numberValue(item.sales_amount);
+  const refundAmount = nullableNumberValue(item.refund_amount);
+  const commissionRate = numberValue(item.commission_rate);
+  const refundLossAmount = nullableNumberValue(item.refund_loss_amount)
+    ?? (refundAmount == null ? null : Math.max(refundAmount * (1 - commissionRate), 0));
+  const adSpend = numberValue(item.ad_spend_amount);
+  const semAdSpend = numberValue(item.sem_ad_spend_amount);
+  const totalAdSpend = numberValue(item.total_ad_spend_amount);
+
+  return {
+    id: item.id,
+    date: item.business_date_la,
+    store: item.store_name ?? item.store_id,
+    owner: item.owner_ref ?? "未分配",
+    sevenDayDates: item.sales_7d_trend.map((point) => point.date),
+    sevenDaySales: item.sales_7d_trend.map((point) => numberValue(point.sales_qty)),
+    msku: item.msku ?? "-",
+    productId: item.item_id,
+    sku: item.local_sku ?? "-",
+    productName: item.local_name ?? item.title ?? "-",
+    platform: platformLabel(item.platform_code),
+    currency: currencyLabel(item.sales_currency_code),
+    grossSalesVolume: numberValue(item.gross_sales_qty),
+    grossOrderCount: numberValue(item.gross_order_count),
+    grossSalesAmount: numberValue(item.gross_sales_amount),
+    sampleOrderCount: numberValue(item.sample_order_count),
+    sampleQuantity: numberValue(item.sample_qty),
+    sampleAmount: nullableNumberValue(item.sample_amount),
+    costQuantity: numberValue(item.cost_quantity),
+    salesVolume,
+    orderCount: numberValue(item.order_count),
+    salesAmount,
+    averagePrice: salesVolume ? salesAmount / salesVolume : null,
+    sampleExcludedAmount: nullableNumberValue(item.sample_amount),
+    returnCount: numberValue(item.return_qty),
+    refundAmount,
+    refundLossAmount,
+    returnRate30Days: numberValue(item.return_rate_30d) * 100,
+    adSpend,
+    semAdSpend,
+    totalAdSpend,
+    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : 0,
+    wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
+    wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
+    wfsExpectedFee: numberValue(item.wfs_fee_expected_total_amount),
+    wfsActualFee: item.wfs_fee_actual_total_amount == null ? null : numberValue(item.wfs_fee_actual_total_amount),
+    wfsVarianceAmount: item.wfs_fee_variance_amount == null ? null : numberValue(item.wfs_fee_variance_amount),
+    wfsVarianceRate: item.wfs_fee_variance_rate == null ? null : numberValue(item.wfs_fee_variance_rate) * 100,
+    wfsFeeSource: item.wfs_fee_source ?? "product_management",
+    commission: nullableNumberValue(item.commission_fee_amount),
+    purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
+    purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
+    firstLegCost: nullableNumberValue(item.first_leg_cost_total_usd),
+    firstLegUnitPriceCny: nullableNumberValue(item.first_leg_cost_unit_cny),
+    storageFee: nullableNumberValue(item.storage_fee_total_amount),
+    storageUnitPrice: nullableNumberValue(item.storage_fee_unit_amount),
+    wfsAvailableInventory: nullableNumberValue(item.wfs_available_quantity),
+    legacyGrossProfit: nullableNumberValue(item.gross_profit_amount),
+    orderProfit: nullableNumberValue(item.gross_profit_amount),
+    profitMargin: item.gross_margin == null ? null : numberValue(item.gross_margin) * 100,
+    roi: item.roi == null ? null : numberValue(item.roi) * 100,
+    exchangeRate: numberValue(item.exchange_rate),
+    fxSource: item.fx_source ?? "daily-sales-default-fx-6.6",
+    commissionSource: item.commission_source ?? "default_15_percent",
+    purchaseCostSource: item.purchase_cost_source ?? "product_management",
+    firstLegCostSource: item.first_leg_cost_source ?? "product_management",
+    storageFeeSource: item.storage_fee_source ?? "product_management",
+    calculationWarnings: item.calculation_warnings,
+    costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
+    systemOperationLog: "系统运营日志待接入",
+    operationLog: "运营日志待接入",
+  };
+};
 
 const toDailySalesServerSummary = (
   summary: BackendDailySalesSummary | undefined,
@@ -246,6 +264,7 @@ const toDailySalesServerSummary = (
     adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
     refundEventQuantity: numberValue(summary.refund_event_qty),
     refundEventAmount: numberValue(summary.refund_event_amount),
+    refundLossAmount: numberValue(summary.refund_loss_amount),
     refundEventCurrency: currencyLabel(summary.refund_event_currency_code),
     wfsAvailableInventory: nullableNumberValue(
       summary.wfs_available_quantity,
@@ -310,7 +329,7 @@ async function fetchDailySalesRowsFromApi(
   const refundSummary = summary
     ? {
         quantity: summary.refundEventQuantity,
-        amount: summary.refundEventAmount,
+        amount: summary.refundLossAmount,
         currency: summary.refundEventCurrency,
       }
     : null;

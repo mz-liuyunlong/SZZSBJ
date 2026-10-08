@@ -72,7 +72,7 @@ const toServerTotals = (
     * currencyRate(summary.orderProfitCurrency, currency);
   const totalAdSpend = summary.totalAdSpendAmount
     * currencyRate(summary.adSpendCurrency, currency);
-  const refundAmount = summary.refundEventAmount
+  const refundAmount = summary.refundLossAmount
     * currencyRate(summary.refundEventCurrency, currency);
 
   return {

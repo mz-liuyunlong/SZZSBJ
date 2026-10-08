@@ -68,7 +68,7 @@ const toServerTotals = (
   currency: OrderProfitCurrency,
 ): SummaryTotals => {
   const salesAmount = summary.salesAmount * currencyRate(summary.salesCurrency, currency);
-  const refundAmount = summary.refundAmount * currencyRate(summary.refundCurrency, currency);
+  const refundAmount = summary.refundLossAmount * currencyRate(summary.refundCurrency, currency);
   const orderProfit = summary.orderProfitAmount
     * currencyRate(summary.orderProfitCurrency, currency);
   const adSpend = summary.adSpendAmount * currencyRate(summary.adSpendCurrency, currency);
@@ -83,7 +83,7 @@ const toServerTotals = (
     adSpend,
     semAdSpend,
     totalAdSpend,
-    adRatio: summary.adRatio,
+    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
     refundQuantity: summary.refundQuantity ?? null,
     refundAmount,
   };
@@ -99,7 +99,7 @@ const toFallbackTotals = (
   const salesVolume = rows.reduce((total, row) => total + row.salesVolume, 0);
   const salesAmount = rows.reduce((total, row) => total + row.salesAmount, 0) * rate;
   const refundQuantity = rows.reduce((total, row) => total + row.refundQuantity, 0);
-  const refundAmount = rows.reduce((total, row) => total + (row.refundAmount ?? 0), 0) * rate;
+  const refundAmount = rows.reduce((total, row) => total + (row.refundLossAmount ?? 0), 0) * rate;
   const orderProfit = incompleteProfit
     ? null
     : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate;
@@ -113,7 +113,9 @@ const toFallbackTotals = (
     adSpend,
     semAdSpend: rows.reduce((total, row) => total + row.semAdSpend, 0) * rate,
     totalAdSpend: rows.reduce((total, row) => total + row.totalAdSpend, 0) * rate,
-    adRatio: null,
+    adRatio: salesAmount
+      ? rows.reduce((total, row) => total + row.totalAdSpend, 0) / (salesAmount / rate) * 100
+      : null,
     refundQuantity,
     refundAmount,
   };
@@ -283,7 +285,7 @@ function OrderProfitSummaryCards({
       accent: "#F97316",
       metrics: [
         {
-          label: "退款金额",
+          label: "退款损失",
           value: formatAmountOrDash(totals.refundAmount, currency),
           comparison: buildComparison(
             totals.refundAmount,

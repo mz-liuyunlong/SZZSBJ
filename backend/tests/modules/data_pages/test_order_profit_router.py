@@ -53,7 +53,9 @@ def _order_profit_item() -> OrderProfitItemRead:
         order_count=Decimal("2"),
         sales_amount=Decimal("39.99"),
         sales_currency_code="USD",
+        return_qty=Decimal("1"),
         refund_amount=Decimal("0"),
+        refund_loss_amount=Decimal("0"),
         ad_spend_amount=Decimal("5.25"),
         commission_fee_amount=Decimal("6.00"),
         wfs_fee_total_amount=Decimal("10.50"),
@@ -126,5 +128,7 @@ def test_order_profit_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
     assert captured["query"].page_size == 50
     assert body["data"]["items"][0]["local_sku"] == "sku-1"
     assert body["data"]["items"][0]["sales_amount"] == "39.99"
+    assert body["data"]["items"][0]["return_qty"] == "1.00"
+    assert body["data"]["items"][0]["refund_loss_amount"] == "0.00"
     assert body["meta"]["source_objects"] == ["mart_order_profit_sku_day"]
     assert body["meta"]["total"] == 1

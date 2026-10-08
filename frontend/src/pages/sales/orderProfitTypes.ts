@@ -23,6 +23,7 @@ export interface OrderProfitSourceRecord {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+  averagePrice?: number | null;
 
   sampleQuantity: number;
   sampleAmount: number | null;
@@ -30,6 +31,7 @@ export interface OrderProfitSourceRecord {
 
   refundQuantity: number;
   refundAmount: number | null;
+  refundLossAmount?: number | null;
   returnRate30Days: number | null;
 
   adSpend: number;
@@ -67,12 +69,14 @@ export interface OrderProfitRow {
   salesVolume: number;
   orderCount: number;
   salesAmount: number;
+  averagePrice: number | null;
 
   sampleQuantity: number;
   sampleAmount: number | null;
 
   refundQuantity: number;
   refundAmount: number | null;
+  refundLossAmount: number | null;
   returnRate30Days: number | null;
 
   adSpend: number;
@@ -121,12 +125,13 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "salesVolume", title: "销量" },
   { key: "orderCount", title: "订单量" },
   { key: "salesAmount", title: "销售额" },
+  { key: "averagePrice", title: "平均售价" },
 
   { key: "sampleQuantity", title: "送样量" },
   { key: "sampleAmount", title: "送样金额" },
 
   { key: "refundQuantity", title: "退货量" },
-  { key: "refundAmount", title: "退款损失" },
+  { key: "refundLossAmount", title: "退款损失" },
   { key: "returnRate30Days", title: "退货率30天" },
 
   { key: "adSpend", title: "广告费" },
@@ -224,6 +229,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
     const salesVolume = bucket.reduce((total, row) => total + row.salesVolume, 0);
     const orderCount = bucket.reduce((total, row) => total + row.orderCount, 0);
     const salesAmount = bucket.reduce((total, row) => total + row.salesAmount, 0);
+    const averagePrice = salesVolume ? salesAmount / salesVolume : null;
 
     const sampleQuantity = bucket.reduce(
       (total, row) => total + row.sampleQuantity,
@@ -246,6 +252,12 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       ? null
       : bucket.reduce(
           (total, row) => total + (row.refundAmount ?? 0),
+          0,
+        );
+    const refundLossAmount = bucket.some((row) => (row.refundLossAmount ?? row.refundAmount) == null)
+      ? null
+      : bucket.reduce(
+          (total, row) => total + (row.refundLossAmount ?? row.refundAmount ?? 0),
           0,
         );
 
@@ -391,12 +403,14 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       salesVolume,
       orderCount,
       salesAmount,
+      averagePrice,
 
       sampleQuantity,
       sampleAmount,
 
       refundQuantity,
       refundAmount,
+      refundLossAmount,
       returnRate30Days,
 
       adSpend,

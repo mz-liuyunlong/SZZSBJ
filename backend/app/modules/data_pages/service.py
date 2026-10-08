@@ -70,6 +70,17 @@ def _percent_ratio(numerator: Decimal, denominator: Decimal) -> Decimal | None:
     return (numerator / denominator * Decimal("100")).quantize(Decimal("0.000001"))
 
 
+def _refund_loss_amount(
+    refund_amount: object,
+    commission_rate: object,
+) -> Decimal | None:
+    amount = _optional_decimal(refund_amount)
+    if amount is None:
+        return None
+    rate = _decimal(commission_rate)
+    return max(amount * (Decimal("1") - rate), Decimal("0"))
+
+
 def _trend_points(value: object) -> list[DailySalesTrendPointRead]:
     if not isinstance(value, list):
         return []
@@ -175,7 +186,12 @@ class DailySalesService:
             batch_values=query.batch_values,
         )
 
-        refund_qty, refund_amount, refund_currency = self.repository.refund_event_summary(
+        (
+            refund_qty,
+            refund_amount,
+            refund_loss_amount,
+            refund_currency,
+        ) = self.repository.refund_event_summary(
             account_refs=account_refs,
             start_date=query.start_date,
             end_date=query.end_date,
@@ -218,6 +234,7 @@ class DailySalesService:
                     ),
                     refund_event_qty=_decimal(refund_qty),
                     refund_event_amount=_decimal(refund_amount),
+                    refund_loss_amount=_decimal(refund_loss_amount),
                     refund_event_currency_code=refund_currency or "USD",
                 ),
             ),
@@ -298,6 +315,7 @@ class DailySalesService:
             sales_amount_excluding_sample=row.sales_amount_excluding_sample,
             return_qty=row.return_qty,
             refund_amount=row.refund_amount,
+            refund_loss_amount=_refund_loss_amount(row.refund_amount, row.commission_rate),
             refund_currency_code=row.refund_currency_code,
             return_rate_30d=row.return_rate_30d,
             ad_spend_amount=row.ad_spend_amount,
@@ -392,7 +410,9 @@ class OrderProfitService:
             order_count,
             sales_amount,
             sales_currency,
+            return_qty,
             refund_amount,
+            refund_loss_amount,
             refund_currency,
             order_profit_amount,
             order_profit_currency,
@@ -416,7 +436,9 @@ class OrderProfitService:
                     order_count=_decimal(order_count),
                     sales_amount=_decimal(sales_amount),
                     sales_currency_code=sales_currency or "USD",
+                    return_qty=_decimal(return_qty),
                     refund_amount=_decimal(refund_amount),
+                    refund_loss_amount=_decimal(refund_loss_amount),
                     refund_currency_code=refund_currency or "USD",
                     order_profit_amount=_decimal(order_profit_amount),
                     order_profit_currency_code=order_profit_currency or "USD",
@@ -467,7 +489,9 @@ class OrderProfitService:
                     order_count=_decimal(value["order_count"]),
                     sales_amount=sales_amount,
                     sales_currency_code=value["sales_currency_code"] or "USD",
+                    return_qty=_decimal(value["return_qty"]),
                     refund_amount=_decimal(value["refund_amount"]),
+                    refund_loss_amount=_decimal(value["refund_loss_amount"]),
                     refund_currency_code=value["refund_currency_code"] or "USD",
                     order_profit_amount=order_profit_amount,
                     order_profit_currency_code=value["order_profit_currency_code"] or "USD",
@@ -496,7 +520,9 @@ class OrderProfitService:
             order_count=_decimal(row.order_count),
             sales_amount=_decimal(row.sales_amount),
             sales_currency_code=row.sales_currency_code,
+            return_qty=_decimal(row.return_qty),
             refund_amount=row.refund_amount,
+            refund_loss_amount=_decimal(row.refund_loss_amount),
             ad_spend_amount=row.ad_spend_amount,
             sem_ad_spend_amount=_decimal(row.sem_ad_spend_amount),
             total_ad_spend_amount=_decimal(row.ad_spend_amount) + _decimal(row.sem_ad_spend_amount),

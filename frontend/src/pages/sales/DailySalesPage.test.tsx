@@ -84,11 +84,12 @@ vi.mock("@/pages/sales/dailySalesApi", async () => {
         adSpendCurrency: "USD",
         refundEventQuantity: sum(rows, "returnCount"),
         refundEventAmount: sum(rows, "refundAmount"),
+        refundLossAmount: sum(rows, "refundLossAmount"),
         refundEventCurrency: "USD",
       },
       refundSummary: {
         quantity: sum(rows, "returnCount"),
-        amount: sum(rows, "refundAmount"),
+        amount: sum(rows, "refundLossAmount"),
         currency: "USD",
       },
       meta: {
@@ -570,6 +571,7 @@ describe("DailySalesPage", () => {
     expect(screen.queryByText("父体")).not.toBeInTheDocument();
     expect(headers).toContain("送样量");
     expect(headers).toContain("送样金额");
+    expect(headers).toContain("平均售价");
     expect(headers).toContain("SEM费用");
   });
 

@@ -18,7 +18,9 @@ interface BackendOrderProfitItem {
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
+  return_qty: string;
   refund_amount: string | null;
+  refund_loss_amount: string | null;
   ad_spend_amount: string | null;
   sem_ad_spend_amount: string | null;
   total_ad_spend_amount: string | null;
@@ -45,7 +47,9 @@ interface BackendOrderProfitSummary {
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
+  return_qty: string;
   refund_amount: string;
+  refund_loss_amount: string;
   refund_currency_code: string | null;
   order_profit_amount: string;
   order_profit_currency_code: string | null;
@@ -67,7 +71,9 @@ interface BackendOrderProfitTrendPoint {
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
+  return_qty: string;
   refund_amount: string;
+  refund_loss_amount: string;
   refund_currency_code: string | null;
   order_profit_amount: string;
   order_profit_currency_code: string | null;
@@ -99,6 +105,7 @@ export interface OrderProfitServerSummary {
   salesCurrency: OrderProfitCurrency;
   refundQuantity: number;
   refundAmount: number;
+  refundLossAmount: number;
   refundCurrency: OrderProfitCurrency;
   orderProfitAmount: number;
   orderProfitCurrency: OrderProfitCurrency;
@@ -122,6 +129,8 @@ export interface OrderProfitTrendPoint {
   salesAmount: number;
   salesCurrency: OrderProfitCurrency;
   refundAmount: number;
+  refundQuantity: number;
+  refundLossAmount: number;
   refundCurrency: OrderProfitCurrency;
   orderProfit: number;
   orderProfitCurrency: OrderProfitCurrency;
@@ -203,6 +212,11 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
   const itemIds = Array.isArray(item.item_ids) ? item.item_ids : [];
   const storeIds = Array.isArray(item.store_ids) ? item.store_ids : [];
   const productId = itemIds[0] ?? item.local_sku;
+  const salesVolume = numberValue(item.sales_qty);
+  const salesAmount = numberValue(item.sales_amount);
+  const adSpend = numberValue(item.ad_spend_amount);
+  const semAdSpend = numberValue(item.sem_ad_spend_amount);
+  const totalAdSpend = numberValue(item.total_ad_spend_amount);
 
   return {
     id: item.id,
@@ -214,21 +228,23 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
     store: joinedText(storeIds),
     owner: "-",
     currency: currencyLabel(item.sales_currency_code),
-    salesVolume: numberValue(item.sales_qty),
+    salesVolume,
     orderCount: numberValue(item.order_count),
-    salesAmount: numberValue(item.sales_amount),
+    salesAmount,
+    averagePrice: salesVolume ? salesAmount / salesVolume : null,
 
     sampleQuantity: 0,
     sampleAmount: null,
 
-    refundQuantity: 0,
+    refundQuantity: numberValue(item.return_qty),
     refundAmount: nullableNumberValue(item.refund_amount),
+    refundLossAmount: nullableNumberValue(item.refund_loss_amount),
     returnRate30Days: null,
 
-    adSpend: numberValue(item.ad_spend_amount),
-    semAdSpend: numberValue(item.sem_ad_spend_amount),
-    totalAdSpend: numberValue(item.total_ad_spend_amount),
-    adRatio: nullableNumberValue(item.ad_ratio),
+    adSpend,
+    semAdSpend,
+    totalAdSpend,
+    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
 
     wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
     wfsDeliveryUnitPrice: null,
@@ -266,8 +282,9 @@ const toOrderProfitServerSummary = (
     orderCount: numberValue(summary.order_count),
     salesAmount: numberValue(summary.sales_amount),
     salesCurrency: currencyLabel(summary.sales_currency_code),
-    refundQuantity: 0,
+    refundQuantity: numberValue(summary.return_qty),
     refundAmount: numberValue(summary.refund_amount),
+    refundLossAmount: numberValue(summary.refund_loss_amount),
     refundCurrency: currencyLabel(summary.refund_currency_code),
     orderProfitAmount: numberValue(summary.order_profit_amount),
     orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
@@ -275,29 +292,38 @@ const toOrderProfitServerSummary = (
     semAdSpendAmount: numberValue(summary.sem_ad_spend_amount),
     totalAdSpendAmount: numberValue(summary.total_ad_spend_amount),
     adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
-    adRatio: nullableNumberValue(summary.ad_ratio),
+    adRatio: numberValue(summary.sales_amount)
+      ? numberValue(summary.total_ad_spend_amount) / numberValue(summary.sales_amount) * 100
+      : null,
   };
 };
 
 const toOrderProfitTrendPoint = (
   item: BackendOrderProfitTrendPoint,
-): OrderProfitTrendPoint => ({
-  date: item.date,
-  salesVolume: numberValue(item.sales_qty),
-  orderCount: numberValue(item.order_count),
-  salesAmount: numberValue(item.sales_amount),
-  salesCurrency: currencyLabel(item.sales_currency_code),
-  refundAmount: numberValue(item.refund_amount),
-  refundCurrency: currencyLabel(item.refund_currency_code),
-  orderProfit: numberValue(item.order_profit_amount),
-  orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
-  profitMargin: nullableNumberValue(item.profit_margin),
-  adSpend: numberValue(item.ad_spend_amount),
-  semAdSpend: numberValue(item.sem_ad_spend_amount),
-  totalAdSpend: numberValue(item.total_ad_spend_amount),
-  adSpendCurrency: currencyLabel(item.ad_spend_currency_code),
-  adRatio: nullableNumberValue(item.ad_ratio),
-});
+): OrderProfitTrendPoint => {
+  const salesAmount = numberValue(item.sales_amount);
+  const totalAdSpend = numberValue(item.total_ad_spend_amount);
+
+  return {
+    date: item.date,
+    salesVolume: numberValue(item.sales_qty),
+    orderCount: numberValue(item.order_count),
+    salesAmount,
+    salesCurrency: currencyLabel(item.sales_currency_code),
+    refundQuantity: numberValue(item.return_qty),
+    refundAmount: numberValue(item.refund_amount),
+    refundLossAmount: numberValue(item.refund_loss_amount),
+    refundCurrency: currencyLabel(item.refund_currency_code),
+    orderProfit: numberValue(item.order_profit_amount),
+    orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
+    profitMargin: nullableNumberValue(item.profit_margin),
+    adSpend: numberValue(item.ad_spend_amount),
+    semAdSpend: numberValue(item.sem_ad_spend_amount),
+    totalAdSpend,
+    adSpendCurrency: currencyLabel(item.ad_spend_currency_code),
+    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
+  };
+};
 
 export async function fetchOrderProfitRows(
   params: OrderProfitParams,

@@ -43,6 +43,7 @@ export const orderProfitSourceRecords: OrderProfitSourceRecord[] = Array.from({ 
     const salesAmount = orderCount * unitPrice;
     const refundQuantity = (productIndex + dayOffset) % 4;
     const refundAmount = refundQuantity * (4.35 + (productIndex % 3) * 0.8);
+    const refundLossAmount = refundAmount * (1 - MOCK_DEFAULT_STORE_COMMISSION_RATE);
     const adSpend = salesAmount * (0.07 + (productIndex % 4) * 0.008);
     const wfsDeliveryFee = orderCount * (2.9 + (productIndex % 3) * 0.35);
     const commission = salesAmount * MOCK_DEFAULT_STORE_COMMISSION_RATE;
@@ -65,8 +66,10 @@ export const orderProfitSourceRecords: OrderProfitSourceRecord[] = Array.from({ 
       salesVolume,
       orderCount,
       salesAmount,
+      averagePrice: salesVolume ? salesAmount / salesVolume : null,
       refundQuantity,
       refundAmount,
+      refundLossAmount,
       adSpend,
       wfsDeliveryFee,
       commission,
