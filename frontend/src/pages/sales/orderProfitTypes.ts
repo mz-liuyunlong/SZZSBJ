@@ -131,7 +131,7 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "sampleAmount", title: "送样金额" },
 
   { key: "refundQuantity", title: "退货量" },
-  { key: "refundLossAmount", title: "退款损失" },
+  { key: "refundLossAmount", title: "退款金额" },
   { key: "returnRate30Days", title: "退货率30天" },
 
   { key: "adSpend", title: "广告费" },
@@ -254,12 +254,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
           (total, row) => total + (row.refundAmount ?? 0),
           0,
         );
-    const refundLossAmount = bucket.some((row) => (row.refundLossAmount ?? row.refundAmount) == null)
-      ? null
-      : bucket.reduce(
-          (total, row) => total + (row.refundLossAmount ?? row.refundAmount ?? 0),
-          0,
-        );
+    const refundLossAmount = refundAmount;
 
     const adSpend = bucket.reduce((total, row) => total + row.adSpend, 0);
     const semAdSpend = bucket.reduce((total, row) => total + Number(row.semAdSpend ?? 0), 0);

@@ -342,7 +342,7 @@ function createColumns(
     { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88 },
     { title: "送样金额", key: "sampleExcludedAmount", width: 112, render: renderCostMatchedUsdMoney("sampleExcludedAmount", "sampleQuantity", currency) },
     { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88 },
-    { title: "退款损失", key: "refundLossAmount", width: 104, render: renderCostMatchedUsdMoney("refundLossAmount", "returnCount", currency) },
+    { title: "退款金额", key: "refundLossAmount", width: 104, render: renderCostMatchedUsdMoney("refundLossAmount", "returnCount", currency) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
     { title: "广告费", key: "adSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("adSpend", currency, dailySalesFxRate) },
     { title: "SEM费用", key: "semAdSpend", width: 104, render: renderUsdSourceMoney<DailySalesRow>("semAdSpend", currency, dailySalesFxRate) },

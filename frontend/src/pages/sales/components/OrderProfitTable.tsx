@@ -293,7 +293,7 @@ function createColumns(
     { title: "送样金额", key: "sampleAmount", width: 112, render: money("sampleAmount", currency) },
 
     { title: "退货量", dataIndex: "refundQuantity", key: "refundQuantity", width: 88 },
-    { title: "退款损失", key: "refundLossAmount", width: 104, render: money("refundLossAmount", currency) },
+    { title: "退款金额", key: "refundLossAmount", width: 104, render: money("refundLossAmount", currency) },
     { title: "退货率30天", key: "returnRate30Days", width: 120, render: percent("returnRate30Days") },
 
     { title: "广告费", key: "adSpend", width: 104, render: money("adSpend", currency) },

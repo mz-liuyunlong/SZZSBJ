@@ -72,7 +72,7 @@ const toServerTotals = (
     * currencyRate(summary.orderProfitCurrency, currency);
   const totalAdSpend = summary.totalAdSpendAmount
     * currencyRate(summary.adSpendCurrency, currency);
-  const refundAmount = summary.refundLossAmount
+  const refundAmount = summary.refundEventAmount
     * currencyRate(summary.refundEventCurrency, currency);
 
   return {
@@ -289,7 +289,7 @@ function DailySalesSummaryCards({
       accent: "#F97316",
       metrics: [
         {
-          label: "退款损失",
+          label: "退款金额",
           value: formatAmountOrDash(totals.refundAmount, currency),
           comparison: buildComparison(
             totals.refundAmount,

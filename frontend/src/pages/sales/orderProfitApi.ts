@@ -214,6 +214,7 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
   const productId = itemIds[0] ?? item.local_sku;
   const salesVolume = numberValue(item.sales_qty);
   const salesAmount = numberValue(item.sales_amount);
+  const refundAmount = nullableNumberValue(item.refund_amount);
   const adSpend = numberValue(item.ad_spend_amount);
   const semAdSpend = numberValue(item.sem_ad_spend_amount);
   const totalAdSpend = numberValue(item.total_ad_spend_amount);
@@ -237,8 +238,8 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
     sampleAmount: null,
 
     refundQuantity: numberValue(item.return_qty),
-    refundAmount: nullableNumberValue(item.refund_amount),
-    refundLossAmount: nullableNumberValue(item.refund_loss_amount),
+    refundAmount,
+    refundLossAmount: refundAmount,
     returnRate30Days: null,
 
     adSpend,
@@ -284,7 +285,7 @@ const toOrderProfitServerSummary = (
     salesCurrency: currencyLabel(summary.sales_currency_code),
     refundQuantity: numberValue(summary.return_qty),
     refundAmount: numberValue(summary.refund_amount),
-    refundLossAmount: numberValue(summary.refund_loss_amount),
+    refundLossAmount: numberValue(summary.refund_amount),
     refundCurrency: currencyLabel(summary.refund_currency_code),
     orderProfitAmount: numberValue(summary.order_profit_amount),
     orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
@@ -302,6 +303,7 @@ const toOrderProfitTrendPoint = (
   item: BackendOrderProfitTrendPoint,
 ): OrderProfitTrendPoint => {
   const salesAmount = numberValue(item.sales_amount);
+  const refundAmount = numberValue(item.refund_amount);
   const totalAdSpend = numberValue(item.total_ad_spend_amount);
 
   return {
@@ -311,8 +313,8 @@ const toOrderProfitTrendPoint = (
     salesAmount,
     salesCurrency: currencyLabel(item.sales_currency_code),
     refundQuantity: numberValue(item.return_qty),
-    refundAmount: numberValue(item.refund_amount),
-    refundLossAmount: numberValue(item.refund_loss_amount),
+    refundAmount,
+    refundLossAmount: refundAmount,
     refundCurrency: currencyLabel(item.refund_currency_code),
     orderProfit: numberValue(item.order_profit_amount),
     orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
