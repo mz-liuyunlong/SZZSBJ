@@ -174,9 +174,6 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
   const salesVolume = numberValue(item.sales_qty);
   const salesAmount = numberValue(item.sales_amount);
   const refundAmount = nullableNumberValue(item.refund_amount);
-  const commissionRate = numberValue(item.commission_rate);
-  const refundLossAmount = nullableNumberValue(item.refund_loss_amount)
-    ?? (refundAmount == null ? null : Math.max(refundAmount * (1 - commissionRate), 0));
   const adSpend = numberValue(item.ad_spend_amount);
   const semAdSpend = numberValue(item.sem_ad_spend_amount);
   const totalAdSpend = numberValue(item.total_ad_spend_amount);
@@ -208,7 +205,7 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     sampleExcludedAmount: nullableNumberValue(item.sample_amount),
     returnCount: numberValue(item.return_qty),
     refundAmount,
-    refundLossAmount,
+    refundLossAmount: refundAmount,
     returnRate30Days: numberValue(item.return_rate_30d) * 100,
     adSpend,
     semAdSpend,
@@ -264,7 +261,7 @@ const toDailySalesServerSummary = (
     adSpendCurrency: currencyLabel(summary.ad_spend_currency_code),
     refundEventQuantity: numberValue(summary.refund_event_qty),
     refundEventAmount: numberValue(summary.refund_event_amount),
-    refundLossAmount: numberValue(summary.refund_loss_amount),
+    refundLossAmount: numberValue(summary.refund_event_amount),
     refundEventCurrency: currencyLabel(summary.refund_event_currency_code),
     wfsAvailableInventory: nullableNumberValue(
       summary.wfs_available_quantity,
@@ -329,7 +326,7 @@ async function fetchDailySalesRowsFromApi(
   const refundSummary = summary
     ? {
         quantity: summary.refundEventQuantity,
-        amount: summary.refundLossAmount,
+        amount: summary.refundEventAmount,
         currency: summary.refundEventCurrency,
       }
     : null;
