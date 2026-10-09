@@ -63,6 +63,8 @@ class ProductListGovernanceBootstrapResult:
     interface_status: BootstrapStatus
     retention_policy_status: BootstrapStatus
     sync_config_status: BootstrapStatus
+    product_info_interface_status: BootstrapStatus = "unchanged"
+    product_info_sync_config_status: BootstrapStatus = "unchanged"
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,11 +234,80 @@ class IntegrationCatalogService:
                     retention_policy_id=policy.id,
                 )
 
+            product_info_interface = self.repository.get_interface_by_key(
+                "lingxing",
+                "batchGetProductInfo",
+            )
+            if product_info_interface is None:
+                product_info_interface = self.repository.add_catalog_record(
+                    IntegrationInterface(
+                        id=uuid4(),
+                        provider="lingxing",
+                        interface_key="batchGetProductInfo",
+                        display_name="Lingxing Batch Product Info",
+                        method="POST",
+                        endpoint_path="/erp/sc/routing/data/local_inventory/batchGetProductInfo",
+                        request_kind="id_batch_page",
+                        handler_key="lingxing.batch_get_product_info.v1",
+                        contract_version="v1",
+                        outbound_enabled=True,
+                    )
+                )
+                product_info_interface_status: BootstrapStatus = "created"
+            else:
+                product_info_interface_status = _apply_approved_values(
+                    product_info_interface,
+                    display_name="Lingxing Batch Product Info",
+                    method="POST",
+                    endpoint_path="/erp/sc/routing/data/local_inventory/batchGetProductInfo",
+                    request_kind="id_batch_page",
+                    handler_key="lingxing.batch_get_product_info.v1",
+                    contract_version="v1",
+                    outbound_enabled=True,
+                )
+
+            product_info_config = self.repository.get_config_by_scope(
+                product_info_interface.id,
+                source_account_ref,
+            )
+            if product_info_config is None:
+                self.repository.add_catalog_record(
+                    IntegrationSyncConfig(
+                        id=uuid4(),
+                        interface_id=product_info_interface.id,
+                        source_account_ref=source_account_ref,
+                        is_enabled=True,
+                        schedule_enabled=False,
+                        schedule_cron=None,
+                        schedule_timezone="UTC",
+                        page_size=None,
+                        batch_size=20,
+                        max_pages=None,
+                        max_attempts=3,
+                        retention_policy_id=policy.id,
+                    )
+                )
+                product_info_sync_config_status: BootstrapStatus = "created"
+            else:
+                product_info_sync_config_status = _apply_approved_values(
+                    product_info_config,
+                    is_enabled=True,
+                    schedule_enabled=False,
+                    schedule_cron=None,
+                    schedule_timezone="UTC",
+                    batch_size=20,
+                    max_attempts=3,
+                    retention_policy_id=policy.id,
+                    next_run_at=None,
+                )
+
             self.session.commit()
             return ProductListGovernanceBootstrapResult(
                 interface_status=interface_status,
                 retention_policy_status=retention_policy_status,
                 sync_config_status=sync_config_status,
+                product_info_interface_status=product_info_interface_status,
+                product_info_sync_config_status=product_info_sync_config_status,
             )
         except Exception:
             self.session.rollback()
