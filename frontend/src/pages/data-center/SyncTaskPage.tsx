@@ -24,6 +24,7 @@ import {
   getSaveConfigGuard,
 } from "@/pages/data-center/syncTaskOperationGuards";
 import { formatSyncTaskOperationError } from "@/pages/data-center/syncTaskOperationMessages";
+import { formatSyncTaskFrequency } from "@/pages/data-center/syncTaskDisplayFormatters";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import type {
@@ -125,47 +126,8 @@ const buildScheduleCron = (values: SyncTaskConfigFormValues) => {
   return `${minutes[0]} ${schedulerHours.join(",")} * * *`;
 };
 
-const formatAutoSyncPlan = (task: SyncTaskRow) => {
-  const rawValue = task.scheduleCron || task.frequency;
-  const value = rawValue?.trim();
-
-  if (!value || value === "-") return "-";
-
-  const minuteStep = value.match(/^\*\/(\d+) \* \* \* \*$/);
-  if (minuteStep) {
-    return `每 ${minuteStep[1]} 分钟执行一次`;
-  }
-
-  const hourlyMinute = value.match(/^(\d{1,2}) \* \* \* \*$/);
-  if (hourlyMinute) {
-    const minute = hourlyMinute[1].padStart(2, "0");
-    return minute === "00"
-      ? "每小时执行一次"
-      : `每小时第 ${minute} 分钟执行一次`;
-  }
-
-  const hourStep = value.match(/^0 \*\/(\d+) \* \* \*$/);
-  if (hourStep) {
-    return `每 ${hourStep[1]} 小时执行一次`;
-  }
-
-  const dailyTimes = value.match(/^(\d{1,2}) ([\d,]+) \* \* \*$/);
-  if (dailyTimes) {
-    const minute = dailyTimes[1].padStart(2, "0");
-    const times = dailyTimes[2]
-      .split(",")
-      .map(
-        (hour) =>
-          `${String((Number(hour) + CHINA_UTC_OFFSET_HOURS) % 24).padStart(2, "0")}:${minute}`,
-      )
-      .join("、");
-    return `每天 ${times} 执行`;
-  }
-
-  if (!value.includes("*")) return value;
-
-  return "高级计划";
-};
+const formatAutoSyncPlan = (task: SyncTaskRow) =>
+  formatSyncTaskFrequency(task.scheduleCron || task.frequency);
 
 const buildConfigPayload = (values: SyncTaskConfigFormValues) => {
   const scheduleCron = buildScheduleCron(values);
@@ -523,18 +485,42 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
       return;
     }
 
+    const autoSyncText = payload.schedule_enabled ? "开启" : "关闭";
+    const planText = payload.schedule_enabled
+      ? formatSyncTaskFrequency(payload.schedule_cron)
+      : "未开启";
+
     modalApi.confirm({
-      title: operationGuard.confirmTitle,
+      centered: true,
+      icon: null,
+      title: null,
+      width: 400,
+      className: "sync-task__switch-confirm-modal",
       content: (
-        <div>
-          <Typography.Paragraph>
-            {operationGuard.confirmDescription}
+        <div className="sync-task__switch-confirm">
+          <Typography.Title
+            level={5}
+            className="sync-task__switch-confirm-title"
+          >
+            保存同步配置
+          </Typography.Title>
+          <Typography.Paragraph className="sync-task__switch-confirm-desc">
+            保存后会更新该任务的同步配置，不会立即执行同步任务。
           </Typography.Paragraph>
-          <Typography.Paragraph type="secondary">
-            任务：{task.taskName}；自动同步：
-            {payload.schedule_enabled ? "开启" : "关闭"}；cron：
-            {payload.schedule_cron ?? "-"}
-          </Typography.Paragraph>
+          <div className="sync-task__switch-confirm-info">
+            <div>
+              <span>任务</span>
+              <strong>{task.taskName}</strong>
+            </div>
+            <div>
+              <span>自动同步</span>
+              <strong>{autoSyncText}</strong>
+            </div>
+            <div>
+              <span>当前计划</span>
+              <strong>{planText}</strong>
+            </div>
+          </div>
         </div>
       ),
       okText: "确认保存",

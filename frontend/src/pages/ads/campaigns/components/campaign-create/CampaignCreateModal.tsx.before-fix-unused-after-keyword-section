@@ -1,0 +1,1046 @@
+import {
+  DeleteOutlined,
+  InboxOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
+import {
+  Button,
+  Card,
+  Checkbox,
+  DatePicker,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Radio,
+  Select,
+  Space,
+  Switch,
+  Table,
+  Tabs,
+  Typography,
+  Upload,
+} from "antd";
+import zhCN from "antd/es/date-picker/locale/zh_CN";
+import dayjs from "dayjs";
+import "dayjs/locale/zh-cn";
+import type { ColumnsType } from "antd/es/table";
+import type { UploadProps } from "antd";
+import { useMemo, useState } from "react";
+
+import "./CampaignCreateModal.css";
+
+dayjs.locale("zh-cn");
+
+export type CampaignCreateType = "SP" | "SB" | "SV";
+type DeliveryMode = "auto" | "manual";
+type MatchType = "broad" | "phrase" | "exact";
+
+interface ProductCandidate {
+  id: string;
+  name: string;
+  availableQuantity: number;
+}
+
+interface SelectedProduct extends ProductCandidate {
+  bid?: number;
+  status?: string;
+}
+
+interface SelectedKeyword {
+  id: string;
+  keyword: string;
+  matchType: MatchType;
+  suggestedBid?: number;
+  bid: number;
+}
+
+export interface CampaignCreateValues {
+  campaignType: CampaignCreateType;
+  values: Record<string, unknown>;
+  products: SelectedProduct[];
+  keywords: SelectedKeyword[];
+}
+
+interface CampaignCreateModalProps {
+  open: boolean;
+  initialType?: CampaignCreateType;
+  onCancel: () => void;
+  onSubmit: (values: CampaignCreateValues) => void;
+}
+
+const productPool: ProductCandidate[] = [
+  {
+    id: "20226216904",
+    name: "Trash Bag Holder with Bamboo Lid",
+    availableQuantity: 261,
+  },
+  {
+    id: "20250072767",
+    name: "50PC Toilet Bowl Wand Refill Set",
+    availableQuantity: 46,
+  },
+  {
+    id: "20259123190",
+    name: "4PCS Handwoven Wicker Laundry Basket",
+    availableQuantity: 36,
+  },
+  {
+    id: "20266522460",
+    name: "2 Tier Metal Side Table with Storage",
+    availableQuantity: 0,
+  },
+  {
+    id: "20277220088",
+    name: "2-Pack 8-Inch Non-Stick Square Pan",
+    availableQuantity: 0,
+  },
+  {
+    id: "20298803702",
+    name: "2.2lb Pullman Loaf Pan with Cover",
+    availableQuantity: 0,
+  },
+  {
+    id: "20315102386",
+    name: "3 Tier Fruit Basket for Kitchen",
+    availableQuantity: 1,
+  },
+  {
+    id: "20318200110",
+    name: "Oil Rubbed Bronze Toilet Paper Holder",
+    availableQuantity: 0,
+  },
+  {
+    id: "20320092118",
+    name: "6 Pack Wood Wall Hooks Natural",
+    availableQuantity: 0,
+  },
+  {
+    id: "20351287318",
+    name: "8-Slot Sunglass Organizer Tray",
+    availableQuantity: 0,
+  },
+];
+
+const shopOptions = [
+  {
+    label: "CN2601-瑞盈龙盛(刘云龙)-571910",
+    value: "CN2601-瑞盈龙盛(刘云龙)-571910",
+  },
+  {
+    label: "CN2602-添洋商贸(邓添祥)-574861",
+    value: "CN2602-添洋商贸(邓添祥)-574861",
+  },
+];
+
+const matchTypeLabel: Record<MatchType, string> = {
+  broad: "广泛",
+  phrase: "词组",
+  exact: "精准",
+};
+
+const maxProductsByType: Record<CampaignCreateType, number> = {
+  SP: 2000,
+  SB: 20,
+  SV: 20,
+};
+
+const minProductsByType: Partial<Record<CampaignCreateType, number>> = {
+  SB: 2,
+};
+
+const truncateText = (value: string, length = 28) =>
+  value.length > length ? `${value.slice(0, length)}...` : value;
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card size="small" className="campaign-create-modal__section">
+      <Typography.Title
+        level={5}
+        className="campaign-create-modal__section-title"
+      >
+        {title}
+      </Typography.Title>
+      {children}
+    </Card>
+  );
+}
+
+function PriceInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value?: number | null;
+  onChange?: (value: number | null) => void;
+  placeholder?: string;
+}) {
+  return (
+    <Space.Compact className="campaign-create-modal__price-input">
+      <Button disabled>$</Button>
+      <InputNumber
+        min={0}
+        controls={false}
+        value={value}
+        placeholder={placeholder}
+        onChange={(nextValue) =>
+          onChange?.(typeof nextValue === "number" ? nextValue : null)
+        }
+      />
+    </Space.Compact>
+  );
+}
+
+function BaseSettingsSection({ type }: { type: CampaignCreateType }) {
+  const defaultDeliveryMode: DeliveryMode = type === "SP" ? "auto" : "manual";
+
+  return (
+    <SectionCard title="设置">
+      <div className="campaign-create-modal__form-grid">
+        <Form.Item
+          label="店铺"
+          name="shop"
+          rules={[{ required: true, message: "请选择店铺" }]}
+          initialValue={shopOptions[0]?.value}
+        >
+          <Select options={shopOptions} />
+        </Form.Item>
+
+        <Form.Item
+          label="广告活动名称"
+          name="campaignName"
+          rules={[{ required: true, message: "请输入广告活动名称" }]}
+        >
+          <Input maxLength={255} showCount />
+        </Form.Item>
+
+        <Form.Item
+          label="投放类型"
+          name="deliveryMode"
+          rules={[{ required: true }]}
+          initialValue={defaultDeliveryMode}
+        >
+          <Radio.Group>
+            {type === "SP" && <Radio value="auto">自动投放</Radio>}
+            <Radio value="manual">手动投放</Radio>
+          </Radio.Group>
+        </Form.Item>
+      </div>
+    </SectionCard>
+  );
+}
+
+function ScheduleBudgetSection() {
+  return (
+    <SectionCard title="日期及预算">
+      <div className="campaign-create-modal__form-grid">
+        <Form.Item label="开始结束日期" required>
+          <Space.Compact>
+            <Form.Item
+              name="startDate"
+              noStyle
+              rules={[{ required: true, message: "请选择开始时间" }]}
+            >
+              <DatePicker
+                locale={zhCN}
+                format="YYYY-MM-DD"
+                placeholder="开始日期"
+              />
+            </Form.Item>
+            <Form.Item name="endDate" noStyle>
+              <DatePicker
+                locale={zhCN}
+                format="YYYY-MM-DD"
+                placeholder="无结束日期"
+              />
+            </Form.Item>
+          </Space.Compact>
+        </Form.Item>
+
+        <Form.Item
+          label="预算"
+          required
+          className="campaign-create-modal__nested-item"
+        >
+          <Space direction="vertical" size={12}>
+            <Space align="center">
+              <span className="campaign-create-modal__sub-label">
+                预算类型：
+              </span>
+              <Form.Item name="budgetType" noStyle initialValue="daily">
+                <Select
+                  className="campaign-create-modal__small-select"
+                  options={[{ label: "每日预算", value: "daily" }]}
+                />
+              </Form.Item>
+              <Typography.Text type="secondary">
+                广告活动生效后，预算类型不可更改
+              </Typography.Text>
+            </Space>
+
+            <Space align="center">
+              <span className="campaign-create-modal__sub-label">
+                每日预算：
+              </span>
+              <Form.Item
+                name="dailyBudget"
+                noStyle
+                rules={[{ required: true, message: "请输入每日预算" }]}
+              >
+                <PriceInput />
+              </Form.Item>
+              <Typography.Text type="secondary">
+                3P最小日预算为10，1P最小日预算为50
+              </Typography.Text>
+            </Space>
+          </Space>
+        </Form.Item>
+      </div>
+    </SectionCard>
+  );
+}
+
+function SpTargetingSettingsSection() {
+  return (
+    <SectionCard title="广告投放设置">
+      <div className="campaign-create-modal__option-grid">
+        <Form.Item
+          name="brandTargeting"
+          valuePropName="checked"
+          initialValue
+          className="campaign-create-modal__option-form-item"
+        >
+          <Checkbox className="campaign-create-modal__option-check">
+            <span className="campaign-create-modal__option-title">
+              品牌定向
+            </span>
+            <Typography.Paragraph
+              type="secondary"
+              className="campaign-create-modal__desc"
+            >
+              当用户搜索其他品牌的同类目产品时，将展示您的广告。
+            </Typography.Paragraph>
+          </Checkbox>
+        </Form.Item>
+
+        <Form.Item
+          name="complementaryTargeting"
+          valuePropName="checked"
+          initialValue
+          className="campaign-create-modal__option-form-item"
+        >
+          <Checkbox className="campaign-create-modal__option-check">
+            <span className="campaign-create-modal__option-title">
+              互补商品定向
+            </span>
+            <Typography.Paragraph
+              type="secondary"
+              className="campaign-create-modal__desc"
+            >
+              当用户搜索与您的商品相关的商品时，将展示您的广告。
+            </Typography.Paragraph>
+          </Checkbox>
+        </Form.Item>
+      </div>
+    </SectionCard>
+  );
+}
+
+function SpBiddingStrategySection() {
+  return (
+    <SectionCard title="竞价策略">
+      <Form.Item
+        name="biddingStrategy"
+        initialValue="dynamic"
+        className="campaign-create-modal__option-form-item"
+      >
+        <Radio.Group className="campaign-create-modal__option-grid campaign-create-modal__bidding-grid">
+          <Radio
+            className="campaign-create-modal__option-radio"
+            value="dynamic"
+          >
+            <span className="campaign-create-modal__option-title">
+              动态竞价
+            </span>
+            <Typography.Paragraph
+              type="secondary"
+              className="campaign-create-modal__desc"
+            >
+              有助于提高转化并优化广告活动支出。平台会根据客户在搜索中看到广告后购买商品的可能性，自动实时地将您的竞价提高或降低。
+            </Typography.Paragraph>
+          </Radio>
+
+          <Radio className="campaign-create-modal__option-radio" value="fixed">
+            <span className="campaign-create-modal__option-title">
+              固定竞价
+            </span>
+            <Typography.Paragraph
+              type="secondary"
+              className="campaign-create-modal__desc"
+            >
+              竞价将完全按您设置的出价执行，适用于所有搜索广告活动。
+            </Typography.Paragraph>
+          </Radio>
+        </Radio.Group>
+      </Form.Item>
+    </SectionCard>
+  );
+}
+
+function SpPlacementSwitchesSection() {
+  const placementItems = [
+    ["Search Ingrid", "placementSearchIngrid", true],
+    ["Search Carousel", "placementSearchCarousel", false],
+    ["Item Buybox", "placementItemBuybox", true],
+    ["Item Carousel", "placementItemCarousel", false],
+  ] as const;
+
+  return (
+    <SectionCard title="展示位置">
+      <div className="campaign-create-modal__placement-switch-grid">
+        {placementItems.map(([label, name, defaultChecked]) => (
+          <div
+            className="campaign-create-modal__placement-switch-item"
+            key={name}
+          >
+            <Form.Item
+              name={name}
+              valuePropName="checked"
+              initialValue={defaultChecked}
+              noStyle
+            >
+              <Switch size="small" />
+            </Form.Item>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+function SpBidMultipliersSection() {
+  const placementItems = [
+    ["Buy-Box", "buyBoxMultiplier"],
+    ["Search Ingrid", "searchIngridMultiplier"],
+    ["Home Page", "homePageMultiplier"],
+    ["Stock Up", "stockUpMultiplier"],
+  ] as const;
+
+  const platformItems = [
+    ["PC端", "pcMultiplier"],
+    ["App", "appMultiplier"],
+    ["移动端", "mobileMultiplier"],
+  ] as const;
+
+  const renderMultiplier = (label: string, name: string) => (
+    <div className="campaign-create-modal__multiplier-item" key={name}>
+      <span>{label}:</span>
+      <Space.Compact className="campaign-create-modal__percent-input">
+        <Form.Item name={name} noStyle initialValue={0}>
+          <InputNumber min={0} max={900} controls={false} />
+        </Form.Item>
+        <Button disabled>%</Button>
+      </Space.Compact>
+    </div>
+  );
+
+  return (
+    <SectionCard title="竞价倍数">
+      <div className="campaign-create-modal__multiplier-group">
+        <Typography.Text strong>广告位:</Typography.Text>
+        <div className="campaign-create-modal__multiplier-row">
+          {placementItems.map(([label, name]) => renderMultiplier(label, name))}
+        </div>
+      </div>
+
+      <div className="campaign-create-modal__multiplier-group">
+        <Typography.Text strong>展示平台:</Typography.Text>
+        <div className="campaign-create-modal__multiplier-row">
+          {platformItems.map(([label, name]) => renderMultiplier(label, name))}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function AdGroupSettingsSection() {
+  return (
+    <>
+      <Typography.Title
+        level={5}
+        className="campaign-create-modal__page-subtitle"
+      >
+        创建广告组
+      </Typography.Title>
+      <SectionCard title="广告组设置">
+        <Form.Item
+          label="广告组名称"
+          name="adGroupName"
+          rules={[{ required: true, message: "请输入广告组名称" }]}
+          className="campaign-create-modal__short-field"
+        >
+          <Input maxLength={255} showCount />
+        </Form.Item>
+      </SectionCard>
+    </>
+  );
+}
+
+function ImageTitleSection() {
+  const uploadProps: UploadProps = {
+    beforeUpload: () => false,
+    maxCount: 1,
+    accept: ".png,image/png",
+  };
+
+  return (
+    <SectionCard title="图片及标题">
+      <div className="campaign-create-modal__form-grid">
+        <Form.Item
+          label="品牌名称"
+          name="brandName"
+          rules={[{ required: true, message: "请输入品牌名称" }]}
+        >
+          <Input />
+        </Form.Item>
+
+        <Form.Item
+          label="标题"
+          name="headline"
+          rules={[{ required: true, message: "请输入标题" }]}
+        >
+          <Input />
+        </Form.Item>
+
+        <Form.Item
+          label="品牌logo"
+          name="brandLogo"
+          valuePropName="fileList"
+          getValueFromEvent={(event) =>
+            Array.isArray(event) ? event : event?.fileList
+          }
+          rules={[{ required: true, message: "请上传品牌 Logo" }]}
+        >
+          <Upload.Dragger
+            {...uploadProps}
+            className="campaign-create-modal__upload"
+          >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p>点击或拖拽上传</p>
+          </Upload.Dragger>
+        </Form.Item>
+
+        <div className="campaign-create-modal__upload-rules">
+          <p>1. 图片只能是 .png 格式</p>
+          <p>2. 图片大小必须小于等于 200kb</p>
+          <p>3. 推荐使用300 × 180像素的图片</p>
+        </div>
+
+        <Form.Item
+          label="链接"
+          name="landingUrl"
+          rules={[{ required: true, message: "请输入链接" }]}
+        >
+          <Input placeholder="请粘贴URL链接" />
+        </Form.Item>
+
+        <Typography.Text
+          type="secondary"
+          className="campaign-create-modal__link-tip"
+        >
+          此处可以选择沃尔玛搜索页面、浏览页面、品牌商店、品牌货架的链接进行粘贴
+        </Typography.Text>
+      </div>
+    </SectionCard>
+  );
+}
+
+function VideoCreativeSection() {
+  const uploadProps: UploadProps = {
+    beforeUpload: () => false,
+    maxCount: 1,
+    accept: "video/*",
+  };
+
+  return (
+    <SectionCard title="视频">
+      <Form.Item
+        label="选择视频"
+        name="video"
+        valuePropName="fileList"
+        getValueFromEvent={(event) =>
+          Array.isArray(event) ? event : event?.fileList
+        }
+        rules={[{ required: true, message: "请上传视频" }]}
+      >
+        <Upload.Dragger
+          {...uploadProps}
+          className="campaign-create-modal__video-upload"
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p>点击选择视频</p>
+        </Upload.Dragger>
+      </Form.Item>
+    </SectionCard>
+  );
+}
+
+function ProductPickerSection({ type }: { type: CampaignCreateType }) {
+  const [keyword, setKeyword] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(
+    [],
+  );
+
+  const maxProducts = maxProductsByType[type];
+  const minProducts = minProductsByType[type];
+
+  const selectedProductIds = useMemo(
+    () => new Set(selectedProducts.map((item) => item.id)),
+    [selectedProducts],
+  );
+
+  const filteredProducts = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+
+    return productPool.filter((product) => {
+      if (selectedProductIds.has(product.id)) return false;
+      if (!normalizedKeyword) return true;
+      return (
+        product.name.toLowerCase().includes(normalizedKeyword) ||
+        product.id.includes(normalizedKeyword)
+      );
+    });
+  }, [keyword, selectedProductIds]);
+
+  const addProduct = (product: ProductCandidate) => {
+    setSelectedProducts((current) => {
+      if (
+        current.length >= maxProducts ||
+        current.some((item) => item.id === product.id)
+      )
+        return current;
+      return [...current, { ...product, bid: 0.45, status: "已添加" }];
+    });
+  };
+
+  const addAll = () => {
+    setSelectedProducts((current) => {
+      const currentIds = new Set(current.map((item) => item.id));
+      const nextProducts = filteredProducts
+        .filter((product) => !currentIds.has(product.id))
+        .slice(0, Math.max(maxProducts - current.length, 0))
+        .map((product) => ({ ...product, bid: 0.45, status: "已添加" }));
+
+      return [...current, ...nextProducts];
+    });
+  };
+
+  const removeProduct = (id: string) => {
+    setSelectedProducts((current) => current.filter((item) => item.id !== id));
+  };
+
+  const availableColumns: ColumnsType<ProductCandidate> = [
+    {
+      title: "商品名称",
+      dataIndex: "name",
+      width: 260,
+      render: (value: string) => (
+        <span title={value}>{truncateText(value)}</span>
+      ),
+    },
+    { title: "商品ID", dataIndex: "id", width: 130, ellipsis: true },
+    { title: "可售库存", dataIndex: "availableQuantity", width: 90 },
+    {
+      title: "操作",
+      key: "action",
+      width: 74,
+      render: (_, record) => (
+        <Button type="link" onClick={() => addProduct(record)}>
+          添加
+        </Button>
+      ),
+    },
+  ];
+
+  const selectedColumns: ColumnsType<SelectedProduct> = [
+    {
+      title: "商品名称",
+      dataIndex: "name",
+      width: 260,
+      render: (value: string) => (
+        <span title={value}>{truncateText(value)}</span>
+      ),
+    },
+    { title: "商品ID", dataIndex: "id", width: 130, ellipsis: true },
+    {
+      title:
+        type === "SP" ? (
+          <Space size={4}>
+            <span>竞价</span>
+            <Button type="link" size="small">
+              批量
+            </Button>
+          </Space>
+        ) : (
+          "状态"
+        ),
+      dataIndex: type === "SP" ? "bid" : "status",
+      width: 130,
+      render: (_, record) =>
+        type === "SP" ? (
+          <PriceInput
+            value={record.bid}
+            onChange={(value) => {
+              setSelectedProducts((current) =>
+                current.map((item) =>
+                  item.id === record.id ? { ...item, bid: value ?? 0 } : item,
+                ),
+              );
+            }}
+          />
+        ) : (
+          (record.status ?? "--")
+        ),
+    },
+    {
+      title: "操作",
+      key: "action",
+      width: 74,
+      render: (_, record) => (
+        <Button
+          type="link"
+          danger
+          icon={<DeleteOutlined />}
+          onClick={() => removeProduct(record.id)}
+        >
+          移除
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <SectionCard title="添加广告商品">
+      <div className="campaign-create-modal__transfer">
+        <div className="campaign-create-modal__transfer-pane">
+          <div className="campaign-create-modal__pane-toolbar">
+            <Input
+              allowClear
+              className="campaign-create-modal__search"
+              prefix={<SearchOutlined />}
+              placeholder="请输入商品名称、商品ID查询"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+            />
+            <Button type="link" onClick={addAll}>
+              添加全部
+            </Button>
+          </div>
+
+          <Table<ProductCandidate>
+            rowKey="id"
+            size="small"
+            tableLayout="fixed"
+            columns={availableColumns}
+            dataSource={filteredProducts}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: false,
+              showTotal: (total) => `共 ${total} 条`,
+            }}
+            scroll={{ y: 360 }}
+          />
+        </div>
+
+        <div className="campaign-create-modal__transfer-pane campaign-create-modal__transfer-pane--selected">
+          <div className="campaign-create-modal__pane-toolbar">
+            <Typography.Text>
+              已选择 <strong>{selectedProducts.length}</strong> 个商品
+              <Typography.Text type="secondary">
+                （最多可添加{maxProducts}个
+                {minProducts ? `，最少${minProducts}个` : ""}）
+              </Typography.Text>
+            </Typography.Text>
+            <Button type="link" onClick={() => setSelectedProducts([])}>
+              移除全部
+            </Button>
+          </div>
+
+          <Table<SelectedProduct>
+            rowKey="id"
+            size="small"
+            tableLayout="fixed"
+            columns={selectedColumns}
+            dataSource={selectedProducts}
+            locale={{ emptyText: <Empty description="暂无数据" /> }}
+            pagination={false}
+            scroll={{ y: 420 }}
+          />
+        </div>
+      </div>
+
+      <Form.Item name="selectedProducts" hidden initialValue={selectedProducts}>
+        <Input />
+      </Form.Item>
+    </SectionCard>
+  );
+}
+
+function KeywordManualSection() {
+  const keywordColumns = [
+    {
+      title: "关键词",
+      dataIndex: "keyword",
+      key: "keyword",
+      width: 180,
+    },
+    {
+      title: "匹配方式",
+      dataIndex: "matchType",
+      key: "matchType",
+      width: 120,
+    },
+    {
+      title: (
+        <Space size={4}>
+          建议竞价
+          <Typography.Text type="secondary">ⓘ</Typography.Text>
+        </Space>
+      ),
+      dataIndex: "suggestedBid",
+      key: "suggestedBid",
+      width: 120,
+    },
+    {
+      title: "竞价",
+      dataIndex: "bid",
+      key: "bid",
+      width: 120,
+    },
+    {
+      title: "操作",
+      dataIndex: "action",
+      key: "action",
+      width: 100,
+      render: () => <Button type="link">删除</Button>,
+    },
+  ];
+
+  return (
+    <SectionCard title="添加关键词">
+      <div className="campaign-create-modal__keyword-manual-layout">
+        <div className="campaign-create-modal__keyword-manual-left">
+          <div className="campaign-create-modal__manual-keyword-tab">
+            手动输入
+          </div>
+
+          <div className="campaign-create-modal__manual-keyword-form">
+            <Form.Item
+              label="竞价"
+              className="campaign-create-modal__manual-row"
+            >
+              <Space.Compact className="campaign-create-modal__manual-price-compact">
+                <Button
+                  disabled
+                  className="campaign-create-modal__manual-price-prefix"
+                >
+                  $
+                </Button>
+                <InputNumber
+                  controls={false}
+                  className="campaign-create-modal__manual-price-input"
+                  min={0}
+                  placeholder=""
+                />
+              </Space.Compact>
+            </Form.Item>
+
+            <Form.Item
+              label="匹配方式"
+              name="manualKeywordMatchTypes"
+              initialValue={["broad"]}
+              className="campaign-create-modal__manual-row"
+            >
+              <Checkbox.Group className="campaign-create-modal__manual-match-group">
+                <Checkbox value="broad">广泛</Checkbox>
+                <Checkbox value="phrase">词组</Checkbox>
+                <Checkbox value="exact">精准</Checkbox>
+              </Checkbox.Group>
+            </Form.Item>
+
+            <Form.Item
+              name="manualKeywordsText"
+              className="campaign-create-modal__manual-textarea-wrap"
+            >
+              <Input.TextArea
+                rows={15}
+                className="campaign-create-modal__keyword-input-area"
+                placeholder="请输入或粘贴需要投放的关键词，一行一个，手动输入的关键词不支持提供建议竞价"
+              />
+            </Form.Item>
+
+            <Button type="primary">添加关键词</Button>
+          </div>
+        </div>
+
+        <div className="campaign-create-modal__keyword-manual-right">
+          <div className="campaign-create-modal__manual-keyword-header">
+            <div className="campaign-create-modal__manual-keyword-count">
+              已选择 <span>0</span> 个关键词 <em>（最多可添加1000个）</em>
+            </div>
+
+            <Button type="link">全部移除</Button>
+          </div>
+
+          <Table
+            columns={keywordColumns}
+            dataSource={[]}
+            pagination={false}
+            tableLayout="fixed"
+            locale={{
+              emptyText: (
+                <div className="campaign-create-modal__manual-keyword-empty">
+                  <Empty description="暂无数据" />
+                </div>
+              ),
+            }}
+            className="campaign-create-modal__manual-keyword-table"
+          />
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function CampaignCreateModal({
+  open,
+  initialType = "SP",
+  onCancel,
+  onSubmit,
+}: CampaignCreateModalProps) {
+  const [form] = Form.useForm();
+  const [campaignType, setCampaignType] =
+    useState<CampaignCreateType>(initialType);
+  const deliveryMode = Form.useWatch("deliveryMode", form) as
+    DeliveryMode | undefined;
+  const effectiveDeliveryMode: DeliveryMode =
+    campaignType === "SP" ? (deliveryMode ?? "auto") : "manual";
+  const isSpManual =
+    campaignType === "SP" && effectiveDeliveryMode === "manual";
+
+  const resetModal = () => {
+    form.resetFields();
+    setCampaignType(initialType);
+  };
+
+  const handleCancel = () => {
+    resetModal();
+    onCancel();
+  };
+
+  const handleSubmit = async () => {
+    const values = await form.validateFields();
+
+    onSubmit({
+      campaignType,
+      values,
+      products: [],
+      keywords: [],
+    });
+
+    resetModal();
+  };
+
+  return (
+    <Modal
+      open={open}
+      title="创建广告活动"
+      width={1280}
+      centered
+      destroyOnHidden
+      onCancel={handleCancel}
+      footer={[
+        <Button key="cancel" onClick={handleCancel}>
+          取消
+        </Button>,
+        <Button key="submit" type="primary" onClick={() => void handleSubmit()}>
+          创建广告活动
+        </Button>,
+      ]}
+      className="campaign-create-modal"
+    >
+      <Radio.Group
+        className="campaign-create-modal__type-switch"
+        value={campaignType}
+        optionType="button"
+        buttonStyle="solid"
+        onChange={(event) => {
+          const nextType = event.target.value as CampaignCreateType;
+          const nextDeliveryMode: DeliveryMode =
+            nextType === "SP" ? "auto" : "manual";
+
+          setCampaignType(nextType);
+          form.resetFields();
+          form.setFieldsValue({ deliveryMode: nextDeliveryMode });
+        }}
+      >
+        <Radio.Button value="SP">SP广告</Radio.Button>
+        <Radio.Button value="SB">SB广告</Radio.Button>
+        <Radio.Button value="SV">SV广告</Radio.Button>
+      </Radio.Group>
+
+      <Form
+        form={form}
+        layout="horizontal"
+        labelCol={{ flex: "96px" }}
+        wrapperCol={{ flex: "420px" }}
+        colon={false}
+        requiredMark
+        className="campaign-create-modal__form"
+      >
+        <BaseSettingsSection type={campaignType} />
+        <ScheduleBudgetSection />
+        {campaignType === "SP" && effectiveDeliveryMode === "auto" && (
+          <>
+            <SpTargetingSettingsSection />
+            <SpBiddingStrategySection />
+            <SpBidMultipliersSection />
+          </>
+        )}
+
+        {campaignType === "SP" && effectiveDeliveryMode === "manual" && (
+          <>
+            <SpBiddingStrategySection />
+            <SpPlacementSwitchesSection />
+            <SpBidMultipliersSection />
+          </>
+        )}
+
+        <AdGroupSettingsSection />
+
+        {campaignType === "SB" && <ImageTitleSection />}
+        {campaignType === "SV" && <VideoCreativeSection />}
+
+        <ProductPickerSection type={campaignType} />
+
+        {(campaignType === "SB" || campaignType === "SV") && (
+          <KeywordManualSection />
+        )}
+      </Form>
+    </Modal>
+  );
+}
+
+export default CampaignCreateModal;

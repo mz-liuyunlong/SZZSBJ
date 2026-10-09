@@ -1,0 +1,3617 @@
+import CreateNegativeKeywordModal from "../components/CreateNegativeKeywordModal";
+import CreateKeywordModal from "../components/CreateKeywordModal";
+import CreateAdProductModal from "../components/CreateAdProductModal";
+import CreateAdGroupModal from "../components/CreateAdGroupModal";
+import CampaignDetailHeader from "../components/CampaignDetailHeader";
+import CampaignCreateModal, {
+  type CampaignCreateType,
+} from "../components/campaign-create/CampaignCreateModal";
+import CampaignCreateModal, {
+  type CampaignCreateType,
+} from "../components/campaign-create/CampaignCreateModal";
+import {
+  CalendarOutlined,
+  CheckCircleFilled,
+  PlusOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
+import { ProTable, type ProColumns } from "@ant-design/pro-components";
+import {
+  Button,
+  Card,
+  Checkbox,
+  DatePicker,
+  Dropdown,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Radio,
+  Space,
+  Steps,
+  Switch,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
+  message,
+} from "antd";
+import datePickerZhCN from "antd/es/date-picker/locale/zh_CN";
+import dayjs, { type Dayjs } from "dayjs";
+import "dayjs/locale/zh-cn";
+import updateLocale from "dayjs/plugin/updateLocale";
+import { useMemo, useState, type Key, type ReactNode } from "react";
+import CommittedSearch from "@/components/report-table/CommittedSearch";
+import ReportTableShell, {
+  ReportTableSelectionBar,
+} from "@/components/report-table/ReportTableShell";
+import {
+  CopyableTextCell,
+  MoneyCell,
+  PercentCell,
+  RoiCell,
+  StatusTagCell,
+} from "@/components/report-table/cells";
+import ReportFacetSelect from "@/shared/report-filters/ReportFacetSelect";
+import { disableFutureDate } from "@/shared/date/disableFutureDate";
+import {
+  campaignDetailRows,
+  campaignDetailTabLabels,
+  campaignRows,
+} from "@/pages/ads/campaigns/adsCampaignMockData";
+import CampaignSettingsModal, {
+  type CampaignSettingsValues,
+} from "../components/CampaignSettingsModal";
+import type {
+  AdsCampaign,
+  CampaignDatePreset,
+  CampaignDetailRow,
+  CampaignDetailTab,
+  CampaignFilters,
+  CampaignStatus,
+  CampaignType,
+} from "@/pages/ads/campaigns/adsCampaignTypes";
+
+dayjs.extend(updateLocale);
+dayjs.locale("zh-cn");
+dayjs.updateLocale("zh-cn", { weekStart: 0 });
+
+const allAdTypes: CampaignType[] = ["SP", "SB", "SV"];
+
+const datePickerLocale = {
+  ...datePickerZhCN,
+  lang: {
+    ...datePickerZhCN.lang,
+    monthFormat: "M 月",
+    shortWeekDays: ["日", "一", "二", "三", "四", "五", "六"],
+  },
+};
+
+const rangePresets = (): { label: string; value: [Dayjs, Dayjs] }[] => {
+  const today = dayjs();
+  return [
+    { label: "今天", value: [today, today] },
+    {
+      label: "昨天",
+      value: [today.subtract(1, "day"), today.subtract(1, "day")],
+    },
+    { label: "最近7天", value: [today.subtract(6, "day"), today] },
+    { label: "最近30天", value: [today.subtract(29, "day"), today] },
+    { label: "本月", value: [today.startOf("month"), today] },
+    {
+      label: "上月",
+      value: [
+        today.subtract(1, "month").startOf("month"),
+        today.subtract(1, "month").endOf("month"),
+      ],
+    },
+    { label: "本年", value: [today.startOf("year"), today] },
+    {
+      label: "去年",
+      value: [
+        today.subtract(1, "year").startOf("year"),
+        today.subtract(1, "year").endOf("year"),
+      ],
+    },
+  ];
+};
+
+const formatDate = (value: Dayjs) => value.format("YYYY-MM-DD");
+
+const actualTodayRange = (): [string, string] => {
+  const today = formatDate(dayjs());
+  return [today, today];
+};
+
+const shortcutDateRange = (
+  datePreset: Exclude<CampaignDatePreset, "custom">,
+): [string, string] => {
+  const today = dayjs();
+
+  if (datePreset === "today") return actualTodayRange();
+  if (datePreset === "week")
+    return [formatDate(today.startOf("week")), formatDate(today)];
+  if (datePreset === "month")
+    return [formatDate(today.startOf("month")), formatDate(today)];
+  return [formatDate(today.startOf("year")), formatDate(today)];
+};
+
+const shortcutDatePresetValue = (datePreset?: CampaignDatePreset) =>
+  datePreset === "custom" ? undefined : datePreset;
+
+const initialFilters: CampaignFilters = {
+  accounts: [],
+  datePreset: "today",
+  dateRange: actualTodayRange(),
+  adTypes: allAdTypes,
+  statuses: [],
+  searchField: "name",
+  keyword: "",
+};
+
+const statusLabel: Record<CampaignStatus, string> = {
+  enabled: "进行中",
+  paused: "已暂停",
+  ended: "已结束",
+};
+
+const statusColor: Record<CampaignStatus, string> = {
+  enabled: "success",
+  paused: "default",
+  ended: "warning",
+};
+
+const accountOptions = [
+  {
+    value: "Saiyu Artcave TECHN...",
+    label: "Saiyu Artcave TECHN...",
+    count: 2,
+  },
+  { value: "FUNME LIHANG TEC...", label: "FUNME LIHANG TEC...", count: 2 },
+  {
+    value: "shenzhenshisikeyang...",
+    label: "shenzhenshisikeyang...",
+    count: 1,
+  },
+  {
+    value: "HAOHUI Hong Interna...",
+    label: "HAOHUI Hong Interna...",
+    count: 1,
+  },
+];
+
+const adTypeOptions = [
+  { value: "SP", label: "SP 广告", count: 6 },
+  { value: "SB", label: "SB 广告", count: 0 },
+  { value: "SV", label: "SV 广告", count: 0 },
+];
+
+const statusOptions = [
+  { value: "enabled", label: "进行中", count: 5 },
+  { value: "paused", label: "已暂停", count: 1 },
+  { value: "ended", label: "已结束", count: 0 },
+];
+
+const searchOptions = [
+  { label: "名称", value: "name" },
+  { label: "活动ID", value: "campaignId" },
+  { label: "广告账号", value: "account" },
+];
+
+interface CreateCampaignValues {
+  name: string;
+  type: CampaignType;
+  target: string;
+  dailyBudget: number;
+  startDate: string;
+  endDate?: string;
+  adGroupName: string;
+  defaultBid: number;
+  itemIds: string;
+  keywords: string;
+}
+
+const campaignTypeLabel = (value: CampaignType) => {
+  if (value === "SP") return "SP";
+  if (value === "SB") return "SB";
+  return "SV";
+};
+
+const campaignStatusTag = (status: CampaignStatus) => (
+  <StatusTagCell label={statusLabel[status]} color={statusColor[status]} />
+);
+
+const numberText = (value: number) => value.toLocaleString("en-US");
+
+const resolveTableScrollX = <RowType,>(
+  columns: ProColumns<RowType>[],
+  minWidth: number,
+) =>
+  Math.max(
+    minWidth,
+    columns.reduce((total, column) => {
+      const width = column.width;
+      if (typeof width === "number") return total + width;
+      if (typeof width === "string") {
+        const parsedWidth = Number.parseInt(width, 10);
+        return total + (Number.isFinite(parsedWidth) ? parsedWidth : 112);
+      }
+      return total + 112;
+    }, 56),
+  );
+
+function sumBy(rows: readonly AdsCampaign[], key: keyof AdsCampaign) {
+  return rows.reduce((total, row) => {
+    const value = row[key];
+    return total + (typeof value === "number" ? value : 0);
+  }, 0);
+}
+
+function KpiCard({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  tone?: "green" | "orange" | "purple";
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={[
+        "ads-campaigns-kpi-card",
+        tone ? `ads-campaigns-kpi-card--${tone}` : "",
+        active ? "ads-campaigns-kpi-card--active" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </button>
+  );
+}
+
+function ActionModalContent({ children }: { children: ReactNode }) {
+  return <div className="ads-campaigns-action-modal">{children}</div>;
+}
+
+function DeliveryManagementTab() {
+  const [messageApi, messageContextHolder] = message.useMessage();
+  const [modalApi, modalContextHolder] = Modal.useModal();
+  const [rows, setRows] = useState<AdsCampaign[]>(campaignRows);
+  const [budgetDrafts, setBudgetDrafts] = useState<
+    Record<string, number | null>
+  >({});
+  const [keywordBidDrafts, setKeywordBidDrafts] = useState<
+    Record<string, number | null>
+  >({});
+  const [filters, setFilters] = useState<CampaignFilters>(initialFilters);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+  const [detailSelectedRowKeys, setDetailSelectedRowKeys] = useState<Key[]>([]);
+  const [view, setView] = useState<"list" | "detail" | "create">("list");
+  const [activeCampaignId, setActiveCampaignId] = useState(campaignRows[0]?.id);
+  const [campaignSettingsOpen, setCampaignSettingsOpen] = useState(false);
+  const [campaignSettingsTarget, setCampaignSettingsTarget] =
+    useState<AdsCampaign | null>(null);
+  const [createAdGroupOpen, setCreateAdGroupOpen] = useState(false);
+  const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
+  const [createCampaignType, setCreateCampaignType] =
+    useState<CampaignCreateType>("SP");
+
+  const openCampaignCreateModal = (nextType: CampaignCreateType) => {
+    setCreateCampaignType(nextType);
+    setCreateCampaignOpen(true);
+  };
+
+  const [createAdProductOpen, setCreateAdProductOpen] = useState(false);
+  const [createKeywordOpen, setCreateKeywordOpen] = useState(false);
+  const [createNegativeKeywordOpen, setCreateNegativeKeywordOpen] =
+    useState(false);
+  const [detailTab, setDetailTab] = useState<CampaignDetailTab>("adGroups");
+  const [detailDateRange, setDetailDateRange] = useState<
+    [string, string] | undefined
+  >(actualTodayRange());
+  const [activeKpi, setActiveKpi] = useState("impressions");
+  const [createForm] = Form.useForm<CreateCampaignValues>();
+
+  const filteredRows = useMemo(() => {
+    const keyword = (filters.keyword ?? "").trim().toLocaleLowerCase();
+    const selectedAccounts = filters.accounts ?? [];
+    const selectedAdTypes = filters.adTypes ?? [];
+    const selectedStatuses = filters.statuses ?? [];
+
+    return rows.filter((row) => {
+      const searchTarget =
+        filters.searchField === "campaignId"
+          ? row.id
+          : filters.searchField === "account"
+            ? row.account
+            : row.name;
+
+      return (
+        (selectedAccounts.length === 0 ||
+          selectedAccounts.includes(row.account)) &&
+        (selectedAdTypes.length === 0 || selectedAdTypes.includes(row.type)) &&
+        (selectedStatuses.length === 0 ||
+          selectedStatuses.includes(row.status)) &&
+        (!keyword || searchTarget.toLocaleLowerCase().includes(keyword))
+      );
+    });
+  }, [filters, rows]);
+
+  const activeCampaign = useMemo(
+    () => rows.find((row) => row.id === activeCampaignId) ?? rows[0],
+    [activeCampaignId, rows],
+  );
+
+  const shouldShowDetailDateFilter = detailTab !== "negatives";
+  const canBatchUpdateDetailStatus = [
+    "adGroups",
+    "adItems",
+    "keywords",
+    "negatives",
+  ].includes(detailTab);
+  const canBatchAdjustDetailBid = detailTab === "keywords";
+  const canAddDetailRowsToNegatives =
+    detailTab === "keywords" || detailTab === "searchTerms";
+  const selectedDetailActionCount = detailSelectedRowKeys.length;
+
+  const ensureDetailSelection = (actionName: string) => {
+    if (selectedDetailActionCount === 0) {
+      void messageApi.warning(`请先选择要${actionName}的数据`);
+      return false;
+    }
+    return true;
+  };
+
+  const handleBatchDetailStatus = () => {
+    if (!ensureDetailSelection("调整状态")) return;
+    void messageApi.success(
+      `已提交 ${selectedDetailActionCount} 条批量状态调整`,
+    );
+  };
+
+  const handleBatchDetailBid = () => {
+    if (!ensureDetailSelection("调价")) return;
+    void messageApi.success(`已提交 ${selectedDetailActionCount} 条批量调价`);
+  };
+
+  const handleAddDetailRowsToNegatives = () => {
+    if (!ensureDetailSelection("添加为否定关键词")) return;
+    void messageApi.success(`已添加 ${selectedDetailActionCount} 条否定关键词`);
+  };
+
+  const detailCreateActionLabel: Partial<Record<CampaignDetailTab, string>> = {
+    adGroups: "创建广告组",
+    adItems: "创建广告商品",
+    keywords: "创建关键词",
+    negatives: "添加否定关键词",
+  };
+
+  const handleDetailCreateAction = () => {
+    const label = detailCreateActionLabel[detailTab];
+    if (!label) return;
+
+    switch (detailTab as CampaignDetailTab) {
+      case "adGroups":
+        setCreateAdGroupOpen(true);
+        return;
+      case "adItems":
+        setCreateAdProductOpen(true);
+        return;
+      case "keywords":
+        setCreateKeywordOpen(true);
+        return;
+      case "negatives":
+        setCreateNegativeKeywordOpen(true);
+        return;
+      default:
+        void messageApi.info(`${label}功能已打开`);
+    }
+  };
+
+  const detailSelectionActions = [
+    ...(canBatchUpdateDetailStatus
+      ? [
+          {
+            key: "status",
+            label: "批量调整状态",
+            disabled: selectedDetailActionCount === 0,
+            onClick: handleBatchDetailStatus,
+          },
+        ]
+      : []),
+    ...(canBatchAdjustDetailBid
+      ? [
+          {
+            key: "bid",
+            label: "批量调价",
+            disabled: selectedDetailActionCount === 0,
+            onClick: handleBatchDetailBid,
+          },
+        ]
+      : []),
+    ...(canAddDetailRowsToNegatives
+      ? [
+          {
+            key: "add-negative",
+            label: "添加为否定关键词",
+            disabled: selectedDetailActionCount === 0,
+            onClick: handleAddDetailRowsToNegatives,
+          },
+        ]
+      : []),
+  ];
+
+  const kpiValues = useMemo(() => {
+    const spend = sumBy(filteredRows, "spend");
+    const sales = sumBy(filteredRows, "sales");
+    const acos = sales > 0 ? (spend / sales) * 100 : 0;
+
+    return {
+      impressions: numberText(sumBy(filteredRows, "impressions")),
+      spend: `$${spend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      acos: `${acos.toFixed(2)}%`,
+      sales: `$${sales.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      clicks: numberText(sumBy(filteredRows, "clicks")),
+    };
+  }, [filteredRows]);
+
+  const campaignSummary = useMemo(() => {
+    const spend = sumBy(filteredRows, "spend");
+    const impressions = sumBy(filteredRows, "impressions");
+    const clicks = sumBy(filteredRows, "clicks");
+    const orders = sumBy(filteredRows, "orders");
+    const sales = sumBy(filteredRows, "sales");
+    const dailyBudget = sumBy(filteredRows, "dailyBudget");
+
+    return {
+      spend,
+      impressions,
+      clicks,
+      orders,
+      sales,
+      dailyBudget,
+      spendShare: spend > 0 ? 100 : 0,
+      impressionShare: impressions > 0 ? 100 : 0,
+      clickShare: clicks > 0 ? 100 : 0,
+      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      cpc: clicks > 0 ? spend / clicks : 0,
+      acos: sales > 0 ? (spend / sales) * 100 : 0,
+      roas: spend > 0 ? sales / spend : 0,
+    };
+  }, [filteredRows]);
+
+  const updateCampaign = (id: string, patch: Partial<AdsCampaign>) => {
+    setRows((currentRows) =>
+      currentRows.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
+  };
+
+  const openConfirm = (
+    title: string,
+    content: ReactNode,
+    onOk: () => void,
+    danger = false,
+  ) => {
+    modalApi.confirm({
+      title: undefined,
+      icon: null,
+      content: (
+        <ActionModalContent>
+          <div className="ads-campaigns-confirm">
+            <Typography.Title
+              level={5}
+              className="ads-campaigns-confirm__title"
+            >
+              {title}
+            </Typography.Title>
+            <div className="ads-campaigns-confirm__body">{content}</div>
+          </div>
+        </ActionModalContent>
+      ),
+      okText: "确认",
+      cancelText: "取消",
+      okButtonProps: danger ? { danger: true } : undefined,
+      onOk,
+    });
+  };
+
+  const toggleCampaignStatus = (campaign: AdsCampaign, checked: boolean) => {
+    const nextStatus: CampaignStatus = checked ? "enabled" : "paused";
+    openConfirm(
+      checked ? "启用广告活动" : "暂停广告活动",
+      <Typography.Paragraph>
+        确认{checked ? "启用" : "暂停"}：{campaign.name}？
+      </Typography.Paragraph>,
+      () => {
+        updateCampaign(campaign.id, { status: nextStatus });
+        void messageApi.success("广告活动状态已更新");
+      },
+      !checked,
+    );
+  };
+
+  const saveDailyBudget = (campaign: AdsCampaign) => {
+    const value = budgetDrafts[campaign.id] ?? campaign.dailyBudget;
+
+    if (value == null || value < 1) {
+      void messageApi.warning("每日预算必须大于 0");
+      return;
+    }
+
+    updateCampaign(campaign.id, { dailyBudget: value });
+    setBudgetDrafts((current) => {
+      const next = { ...current };
+      delete next[campaign.id];
+      return next;
+    });
+    void messageApi.success("每日预算已保存");
+  };
+
+  const bulkStatus = () => {
+    openConfirm(
+      "批量调整状态",
+      <Space direction="vertical">
+        <Typography.Text>
+          已选择 {selectedRowKeys.length} 个广告活动。
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          当前为交互版页面，提交后只更新页面状态。
+        </Typography.Text>
+      </Space>,
+      () => {
+        const selected = new Set(selectedRowKeys.map(String));
+        setRows((currentRows) =>
+          currentRows.map((row) =>
+            selected.has(row.id) ? { ...row, status: "paused" } : row,
+          ),
+        );
+        setSelectedRowKeys([]);
+        void messageApi.success("批量状态已提交");
+      },
+      true,
+    );
+  };
+
+  const bulkBudget = () => {
+    openConfirm(
+      "批量调整预算",
+      <Space direction="vertical">
+        <Typography.Text>
+          已选择 {selectedRowKeys.length} 个广告活动。
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          示例动作：统一设置每日预算为 $30。
+        </Typography.Text>
+      </Space>,
+      () => {
+        const selected = new Set(selectedRowKeys.map(String));
+        setRows((currentRows) =>
+          currentRows.map((row) =>
+            selected.has(row.id) ? { ...row, dailyBudget: 30 } : row,
+          ),
+        );
+        void messageApi.success("批量预算已提交");
+      },
+    );
+  };
+
+  const openDetail = (campaign: AdsCampaign) => {
+    setActiveCampaignId(campaign.id);
+    setDetailTab("adGroups");
+    setDetailSelectedRowKeys([]);
+    setView("detail");
+  };
+
+  const submitCreate = async () => {
+    const values = await createForm.validateFields();
+    const campaign: AdsCampaign = {
+      id: `YC${Math.floor(Math.random() * 90000 + 10000)}`,
+      account: "Saiyu Artcave TECHN...",
+      name: values.name,
+      type: values.type,
+      target: values.target,
+      status: "enabled",
+      startDate: values.startDate,
+      endDate: values.endDate || "--",
+      budgetType: "每日预算",
+      totalBudget: "--",
+      dailyBudget: values.dailyBudget,
+      spend: 0,
+      spendShare: 0,
+      impressions: 0,
+      impressionShare: 0,
+      clicks: 0,
+      clickShare: 0,
+      ctr: 0,
+      cpc: Number(values.defaultBid),
+      orders: 0,
+      sales: 0,
+      acos: 0,
+      roas: 0,
+    };
+
+    setRows((currentRows) => [campaign, ...currentRows]);
+    setActiveCampaignId(campaign.id);
+    setDetailTab("adGroups");
+    setView("detail");
+    void messageApi.success("广告活动已创建");
+  };
+
+  const selectedCampaignIdSet = new Set(selectedRowKeys.map(String));
+  const filteredCampaignIds = filteredRows.map((row) => row.id);
+  const isAllFilteredCampaignSelected =
+    filteredRows.length > 0 &&
+    filteredCampaignIds.every((id) => selectedCampaignIdSet.has(id));
+  const isPartlyFilteredCampaignSelected =
+    filteredCampaignIds.some((id) => selectedCampaignIdSet.has(id)) &&
+    !isAllFilteredCampaignSelected;
+
+  const toggleCampaignSelection = (id: string, checked: boolean) => {
+    setSelectedRowKeys((current) => {
+      const currentIds = new Set(current.map(String));
+      if (checked) currentIds.add(id);
+      else currentIds.delete(id);
+      return Array.from(currentIds);
+    });
+  };
+
+  const toggleAllFilteredCampaignSelection = (checked: boolean) => {
+    const visibleIds = new Set(filteredCampaignIds);
+    setSelectedRowKeys((current) => {
+      const currentIds = new Set(current.map(String));
+      if (checked) {
+        visibleIds.forEach((id) => currentIds.add(id));
+      } else {
+        visibleIds.forEach((id) => currentIds.delete(id));
+      }
+      return Array.from(currentIds);
+    });
+  };
+
+  const currentDetailRows = campaignDetailRows[detailTab];
+  const selectedDetailIdSet = new Set(detailSelectedRowKeys.map(String));
+  const currentDetailIds = currentDetailRows.map((row) => row.id);
+  const isAllCurrentDetailSelected =
+    currentDetailRows.length > 0 &&
+    currentDetailIds.every((id) => selectedDetailIdSet.has(id));
+  const isPartlyCurrentDetailSelected =
+    currentDetailIds.some((id) => selectedDetailIdSet.has(id)) &&
+    !isAllCurrentDetailSelected;
+
+  const toggleDetailSelection = (id: string, checked: boolean) => {
+    setDetailSelectedRowKeys((current) => {
+      const currentIds = new Set(current.map(String));
+      if (checked) currentIds.add(id);
+      else currentIds.delete(id);
+      return Array.from(currentIds);
+    });
+  };
+
+  const toggleAllCurrentDetailSelection = (checked: boolean) => {
+    const visibleIds = new Set(currentDetailIds);
+    setDetailSelectedRowKeys((current) => {
+      const currentIds = new Set(current.map(String));
+      if (checked) {
+        visibleIds.forEach((id) => currentIds.add(id));
+      } else {
+        visibleIds.forEach((id) => currentIds.delete(id));
+      }
+      return Array.from(currentIds);
+    });
+  };
+
+  const campaignColumns: ProColumns<AdsCampaign>[] = [
+    {
+      key: "selection",
+      title: (
+        <Checkbox
+          aria-label="选择全部广告活动"
+          checked={isAllFilteredCampaignSelected}
+          indeterminate={isPartlyFilteredCampaignSelected}
+          onChange={(event) =>
+            toggleAllFilteredCampaignSelection(event.target.checked)
+          }
+        />
+      ),
+      dataIndex: "selection",
+      width: 48,
+      fixed: "left",
+      align: "center",
+      className: "ads-campaigns-selection-cell",
+      render: (_, row) => (
+        <Checkbox
+          aria-label={`选择广告活动：${row.name}`}
+          checked={selectedCampaignIdSet.has(row.id)}
+          onChange={(event) =>
+            toggleCampaignSelection(row.id, event.target.checked)
+          }
+        />
+      ),
+    },
+
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 96,
+      fixed: "left",
+      render: (_, row) => (
+        <Switch
+          size="small"
+          checked={row.status === "enabled"}
+          onChange={(checked) => toggleCampaignStatus(row, checked)}
+        />
+      ),
+    },
+    {
+      title: "广告活动",
+      dataIndex: "name",
+      width: 280,
+      fixed: "left",
+      render: (_, row) => (
+        <Space size={6}>
+          <span
+            className={[
+              "ads-campaigns-status-dot",
+              row.status !== "enabled" ? "ads-campaigns-status-dot--muted" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          />
+          <CopyableTextCell
+            text={row.name}
+            label="广告活动"
+            link
+            onOpen={() => openDetail(row)}
+          />
+        </Space>
+      ),
+    },
+    {
+      title: "广告账号",
+      dataIndex: "account",
+      width: 170,
+      ellipsis: true,
+    },
+    {
+      title: "活动类型",
+      dataIndex: "type",
+      width: 90,
+      render: (_, row) => <Tag color="blue">{campaignTypeLabel(row.type)}</Tag>,
+    },
+    {
+      title: "投放类型",
+      dataIndex: "target",
+      width: 100,
+    },
+    {
+      title: "开始时间",
+      dataIndex: "startDate",
+      width: 112,
+    },
+    {
+      title: "结束时间",
+      dataIndex: "endDate",
+      width: 112,
+    },
+    {
+      title: "预算类型",
+      dataIndex: "budgetType",
+      width: 100,
+    },
+    {
+      title: "总预算",
+      dataIndex: "totalBudget",
+      width: 90,
+    },
+    {
+      title: "广告花费",
+      dataIndex: "spend",
+      width: 112,
+      sorter: (left, right) => left.spend - right.spend,
+      render: (_, row) => <MoneyCell value={row.spend} />,
+    },
+    {
+      title: "花费占比",
+      dataIndex: "spendShare",
+      width: 96,
+      render: (_, row) => <PercentCell value={row.spendShare} />,
+    },
+    {
+      title: "每日预算",
+      dataIndex: "dailyBudget",
+      width: 170,
+      render: (_, row) => (
+        <Space.Compact
+          className="ads-campaigns-price-editor ads-campaigns-budget-compact"
+          size="small"
+        >
+          <Button
+            className="ads-campaigns-price-prefix ads-campaigns-budget-prefix"
+            disabled
+          >
+            $
+          </Button>
+          <InputNumber
+            className="ads-campaigns-price-input ads-campaigns-budget-input"
+            size="small"
+            min={1}
+            controls={false}
+            value={budgetDrafts[row.id] ?? row.dailyBudget}
+            onChange={(value) =>
+              setBudgetDrafts((current) => ({
+                ...current,
+                [row.id]: typeof value === "number" ? value : null,
+              }))
+            }
+          />
+          <Button
+            type="text"
+            className="ads-campaigns-price-save ads-campaigns-budget-save"
+            aria-label={`保存每日预算：${row.name}`}
+            icon={<CheckCircleFilled />}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => saveDailyBudget(row)}
+          />
+        </Space.Compact>
+      ),
+    },
+    {
+      title: "曝光量",
+      dataIndex: "impressions",
+      width: 118,
+      sorter: (left, right) => left.impressions - right.impressions,
+      render: (_, row) => (
+        <span className="report-table-metric">
+          {numberText(row.impressions)}
+        </span>
+      ),
+    },
+    {
+      title: "曝光占比",
+      dataIndex: "impressionShare",
+      width: 96,
+      render: (_, row) => <PercentCell value={row.impressionShare} />,
+    },
+    {
+      title: "点击",
+      dataIndex: "clicks",
+      width: 82,
+      sorter: (left, right) => left.clicks - right.clicks,
+      render: (_, row) => (
+        <span className="report-table-metric">{numberText(row.clicks)}</span>
+      ),
+    },
+    {
+      title: "点击占比",
+      dataIndex: "clickShare",
+      width: 96,
+      render: (_, row) => <PercentCell value={row.clickShare} />,
+    },
+    {
+      title: "CTR",
+      dataIndex: "ctr",
+      width: 82,
+      render: (_, row) => <PercentCell value={row.ctr} />,
+    },
+    {
+      title: "CPC",
+      dataIndex: "cpc",
+      width: 82,
+      render: (_, row) => <MoneyCell value={row.cpc} />,
+    },
+    {
+      title: "订单",
+      dataIndex: "orders",
+      width: 82,
+    },
+    {
+      title: "广告销售额",
+      dataIndex: "sales",
+      width: 118,
+      render: (_, row) => <MoneyCell value={row.sales} />,
+    },
+    {
+      title: "ACOS",
+      dataIndex: "acos",
+      width: 86,
+      render: (_, row) => <PercentCell value={row.acos} />,
+    },
+    {
+      title: "ROAS",
+      dataIndex: "roas",
+      width: 82,
+      render: (_, row) => <RoiCell value={row.roas} />,
+    },
+    {
+      title: "操作",
+      valueType: "option",
+      width: 132,
+      fixed: "right",
+      render: (_, row) => [
+        <Button key="detail" type="link" onClick={() => openDetail(row)}>
+          详情
+        </Button>,
+        <Button
+          key="toggle"
+          type="link"
+          danger={row.status === "enabled"}
+          onClick={() => toggleCampaignStatus(row, row.status !== "enabled")}
+        >
+          {row.status === "enabled" ? "暂停" : "启用"}
+        </Button>,
+      ],
+    },
+  ];
+
+  const campaignScrollX = resolveTableScrollX(campaignColumns, 1880);
+
+  const saveKeywordBid = (row: CampaignDetailRow) => {
+    const value = keywordBidDrafts[row.id] ?? row.bid;
+
+    if (value == null || value < 0) {
+      void messageApi.warning("竞价不能小于 0");
+      return;
+    }
+
+    setKeywordBidDrafts((current) => ({
+      ...current,
+      [row.id]: value,
+    }));
+    void messageApi.success("关键词竞价已保存");
+  };
+
+  const saveAdItemBid = (row: CampaignDetailRow) => {
+    const value = keywordBidDrafts[row.id] ?? row.bid;
+
+    if (value == null || value < 0) {
+      void messageApi.warning("竞价不能小于 0");
+      return;
+    }
+
+    setKeywordBidDrafts((current) => ({
+      ...current,
+      [row.id]: value,
+    }));
+    void messageApi.success("广告商品竞价已保存");
+  };
+
+  const detailColumns: ProColumns<CampaignDetailRow>[] = (() => {
+    if (detailTab === "placements") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部广告位"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择广告位：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 250,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.campaignName ?? "").localeCompare(right.campaignName ?? ""),
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.campaignName ?? activeCampaign?.name ?? "--"}
+                label="广告活动"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "广告位",
+          dataIndex: "placementName",
+          width: 140,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.placementName ?? left.name).localeCompare(
+              right.placementName ?? right.name,
+            ),
+          render: (_, row) => row.placementName ?? row.name,
+        },
+        {
+          title: "竞价策略",
+          dataIndex: "biddingStrategy",
+          width: 120,
+          render: (_, row) => row.biddingStrategy ?? "--",
+        },
+        {
+          title: "竞价调整",
+          dataIndex: "bidAdjustment",
+          width: 110,
+          render: (_, row) => row.bidAdjustment ?? "--",
+        },
+        {
+          title: "开始时间",
+          dataIndex: "startDate",
+          width: 120,
+          render: (_, row) => row.startDate ?? "--",
+        },
+        {
+          title: "结束时间",
+          dataIndex: "endDate",
+          width: 120,
+          render: (_, row) => row.endDate ?? "--",
+        },
+        {
+          title: "预算类型",
+          dataIndex: "budgetType",
+          width: 110,
+          render: (_, row) => row.budgetType ?? "--",
+        },
+        {
+          title: "总预算",
+          dataIndex: "totalBudget",
+          width: 100,
+          render: (_, row) => <MoneyCell value={row.totalBudget} />,
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "广告花费百分比",
+          dataIndex: "spendShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.spendShare} />,
+        },
+        {
+          title: "每日预算",
+          dataIndex: "dailyBudget",
+          width: 110,
+          render: (_, row) => <MoneyCell value={row.dailyBudget} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 110,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 90,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 88,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "广告销售额",
+          dataIndex: "sales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.sales} />,
+        },
+        {
+          title: "广告销售额百分比",
+          dataIndex: "salesShare",
+          width: 150,
+          render: (_, row) => <PercentCell value={row.salesShare} />,
+        },
+        {
+          title: "广告销量",
+          dataIndex: "units",
+          width: 110,
+          render: (_, row) =>
+            row.units == null ? "--" : numberText(row.units),
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "ACOS",
+          dataIndex: "acos",
+          width: 96,
+          render: (_, row) => <PercentCell value={row.acos} />,
+        },
+        {
+          title: "ROAS",
+          dataIndex: "roas",
+          width: 96,
+          render: (_, row) => <RoiCell value={row.roas} />,
+        },
+        {
+          title: "AOV",
+          dataIndex: "aov",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.aov} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "直接销售额",
+          dataIndex: "directSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.directSales} />,
+        },
+        {
+          title: "关联销售额",
+          dataIndex: "associatedSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.associatedSales} />,
+        },
+      ];
+    }
+
+    if (detailTab === "adGroups") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部广告组"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择广告组：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "状态",
+          dataIndex: "status",
+          width: 82,
+          fixed: "left",
+          render: (_, row) => (
+            <Switch
+              size="small"
+              checked={row.status === "enabled"}
+              onChange={() => void messageApi.info("广告组状态已更新")}
+            />
+          ),
+        },
+        {
+          title: "广告账号",
+          dataIndex: "account",
+          width: 190,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.account ?? "").localeCompare(right.account ?? ""),
+          render: (_, row) => row.account ?? "--",
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 220,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.campaignName ?? "").localeCompare(right.campaignName ?? ""),
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.campaignName ?? activeCampaign?.name ?? "--"}
+                label="广告活动"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "广告组",
+          dataIndex: "adGroupName",
+          width: 220,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.adGroupName ?? left.name).localeCompare(
+              right.adGroupName ?? right.name,
+            ),
+          render: (_, row) => (
+            <CopyableTextCell
+              text={row.adGroupName ?? row.name}
+              label="广告组"
+              link
+            />
+          ),
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "广告花费百分比",
+          dataIndex: "spendShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.spendShare} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 110,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 90,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 88,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "广告销售额",
+          dataIndex: "sales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.sales} />,
+        },
+        {
+          title: "广告销售额百分比",
+          dataIndex: "salesShare",
+          width: 150,
+          render: (_, row) => <PercentCell value={row.salesShare} />,
+        },
+        {
+          title: "广告销量",
+          dataIndex: "units",
+          width: 110,
+          render: (_, row) =>
+            row.units == null ? "--" : numberText(row.units),
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "ACOS",
+          dataIndex: "acos",
+          width: 96,
+          render: (_, row) => <PercentCell value={row.acos} />,
+        },
+        {
+          title: "ROAS",
+          dataIndex: "roas",
+          width: 96,
+          render: (_, row) => <RoiCell value={row.roas} />,
+        },
+        {
+          title: "AOV",
+          dataIndex: "aov",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.aov} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "直接销售额",
+          dataIndex: "directSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.directSales} />,
+        },
+        {
+          title: "关联销售额",
+          dataIndex: "associatedSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.associatedSales} />,
+        },
+      ];
+    }
+
+    if (detailTab === "pageTypes") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部页面类型"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择页面类型：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "页面类型",
+          dataIndex: "name",
+          width: 120,
+          fixed: "left",
+          sorter: (left, right) => left.name.localeCompare(right.name),
+          render: (_, row) => row.name,
+        },
+        {
+          title: "广告账号",
+          dataIndex: "account",
+          width: 190,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.account ?? "").localeCompare(right.account ?? ""),
+          render: (_, row) => row.account ?? "--",
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 240,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.campaignName ?? "").localeCompare(right.campaignName ?? ""),
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.campaignName ?? activeCampaign?.name ?? "--"}
+                label="广告活动"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "广告花费百分比",
+          dataIndex: "spendShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.spendShare} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 110,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 90,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 88,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "广告销售额",
+          dataIndex: "sales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.sales} />,
+        },
+        {
+          title: "广告销售额百分比",
+          dataIndex: "salesShare",
+          width: 150,
+          render: (_, row) => <PercentCell value={row.salesShare} />,
+        },
+        {
+          title: "广告销量",
+          dataIndex: "units",
+          width: 110,
+          render: (_, row) =>
+            row.units == null ? "--" : numberText(row.units),
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "ACOS",
+          dataIndex: "acos",
+          width: 96,
+          render: (_, row) => <PercentCell value={row.acos} />,
+        },
+        {
+          title: "ROAS",
+          dataIndex: "roas",
+          width: 96,
+          render: (_, row) => <RoiCell value={row.roas} />,
+        },
+        {
+          title: "AOV",
+          dataIndex: "aov",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.aov} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "直接销售额",
+          dataIndex: "directSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.directSales} />,
+        },
+        {
+          title: "创建日期",
+          dataIndex: "createdAt",
+          width: 120,
+          render: (_, row) => row.createdAt ?? "--",
+        },
+      ];
+    }
+
+    if (detailTab === "platforms") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部平台"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择平台：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "平台",
+          dataIndex: "name",
+          width: 110,
+          fixed: "left",
+          sorter: (left, right) => left.name.localeCompare(right.name),
+          render: (_, row) => row.name,
+        },
+        {
+          title: "广告账号",
+          dataIndex: "account",
+          width: 190,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.account ?? "").localeCompare(right.account ?? ""),
+          render: (_, row) => row.account ?? "--",
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 240,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.campaignName ?? "").localeCompare(right.campaignName ?? ""),
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.campaignName ?? activeCampaign?.name ?? "--"}
+                label="广告活动"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "广告花费百分比",
+          dataIndex: "spendShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.spendShare} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 110,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 90,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 88,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "广告销售额",
+          dataIndex: "sales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.sales} />,
+        },
+        {
+          title: "广告销售额百分比",
+          dataIndex: "salesShare",
+          width: 150,
+          render: (_, row) => <PercentCell value={row.salesShare} />,
+        },
+        {
+          title: "广告销量",
+          dataIndex: "units",
+          width: 110,
+          render: (_, row) =>
+            row.units == null ? "--" : numberText(row.units),
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "ACOS",
+          dataIndex: "acos",
+          width: 96,
+          render: (_, row) => <PercentCell value={row.acos} />,
+        },
+        {
+          title: "ROAS",
+          dataIndex: "roas",
+          width: 96,
+          render: (_, row) => <RoiCell value={row.roas} />,
+        },
+        {
+          title: "AOV",
+          dataIndex: "aov",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.aov} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "直接销售额",
+          dataIndex: "directSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.directSales} />,
+        },
+        {
+          title: "创建日期",
+          dataIndex: "createdAt",
+          width: 120,
+          render: (_, row) => row.createdAt ?? "--",
+        },
+      ];
+    }
+
+    if (detailTab === "adItems") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部广告商品"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择广告商品：${row.productName ?? row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "状态",
+          dataIndex: "status",
+          width: 82,
+          fixed: "left",
+          render: (_, row) => (
+            <Switch
+              size="small"
+              checked={row.status === "enabled"}
+              onChange={() => void messageApi.info("广告商品状态已更新")}
+            />
+          ),
+        },
+        {
+          title: "广告账号",
+          dataIndex: "account",
+          width: 180,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.account ?? "").localeCompare(right.account ?? ""),
+          render: (_, row) => row.account ?? "--",
+        },
+        {
+          title: "广告",
+          dataIndex: "productName",
+          width: 220,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.productName ?? "").localeCompare(right.productName ?? ""),
+          render: (_, row) => row.productName ?? row.name ?? "--",
+        },
+        {
+          title: "广告组",
+          dataIndex: "adGroupName",
+          width: 180,
+          sorter: (left, right) =>
+            (left.adGroupName ?? "").localeCompare(right.adGroupName ?? ""),
+          render: (_, row) => (
+            <CopyableTextCell
+              text={row.adGroupName ?? "--"}
+              label="广告组"
+              link
+            />
+          ),
+        },
+        {
+          title: "商品ID",
+          dataIndex: "productId",
+          width: 130,
+          render: (_, row) => row.productId ?? "--",
+        },
+        {
+          title: "竞价",
+          dataIndex: "bid",
+          width: 130,
+          sorter: (left, right) => (left.bid ?? 0) - (right.bid ?? 0),
+          render: (_, row) => (
+            <Space.Compact className="ads-campaigns-price-editor ads-campaigns-ad-item-bid">
+              <Button className="ads-campaigns-price-prefix" disabled>
+                $
+              </Button>
+              <InputNumber
+                className="ads-campaigns-price-input"
+                size="small"
+                min={0}
+                controls={false}
+                value={keywordBidDrafts[row.id] ?? row.bid ?? 0}
+                onChange={(value) =>
+                  setKeywordBidDrafts((current) => ({
+                    ...current,
+                    [row.id]: typeof value === "number" ? value : null,
+                  }))
+                }
+              />
+              <Button
+                type="text"
+                className="ads-campaigns-price-save ads-campaigns-ad-item-bid-save"
+                aria-label={`保存广告商品竞价：${row.productName ?? row.name}`}
+                icon={<CheckCircleFilled />}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => saveAdItemBid(row)}
+              />
+            </Space.Compact>
+          ),
+        },
+        {
+          title: "基础项",
+          dataIndex: "baseBid",
+          width: 100,
+          render: (_, row) => row.baseBid ?? "--",
+        },
+        {
+          title: "可售库存",
+          dataIndex: "availableQuantity",
+          width: 110,
+          sorter: (left, right) =>
+            (left.availableQuantity ?? 0) - (right.availableQuantity ?? 0),
+          render: (_, row) => row.availableQuantity ?? "--",
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "广告花费百分比",
+          dataIndex: "spendShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.spendShare} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 110,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 90,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 88,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "广告销售额",
+          dataIndex: "sales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.sales} />,
+        },
+        {
+          title: "广告销售额百分比",
+          dataIndex: "salesShare",
+          width: 150,
+          render: (_, row) => <PercentCell value={row.salesShare} />,
+        },
+        {
+          title: "广告销量",
+          dataIndex: "units",
+          width: 110,
+          render: (_, row) =>
+            row.units == null ? "--" : numberText(row.units),
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "ACOS",
+          dataIndex: "acos",
+          width: 96,
+          render: (_, row) => <PercentCell value={row.acos} />,
+        },
+        {
+          title: "ROAS",
+          dataIndex: "roas",
+          width: 96,
+          render: (_, row) => <RoiCell value={row.roas} />,
+        },
+        {
+          title: "AOV",
+          dataIndex: "aov",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.aov} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "直接销售额",
+          dataIndex: "directSales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.directSales} />,
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 170,
+          render: (_, row) => (
+            <CopyableTextCell
+              text={row.campaignName ?? activeCampaign?.name ?? "--"}
+              label="广告活动"
+              link
+            />
+          ),
+        },
+        {
+          title: "建议竞价",
+          dataIndex: "suggestedBid",
+          width: 110,
+          render: (_, row) =>
+            row.suggestedBid == null ? "--" : `$${row.suggestedBid}`,
+        },
+        {
+          title: "审核状态",
+          dataIndex: "reviewStatus",
+          width: 110,
+          render: (_, row) => row.reviewStatus ?? "--",
+        },
+        {
+          title: "创建日期",
+          dataIndex: "createdAt",
+          width: 120,
+          render: (_, row) => row.createdAt ?? "--",
+        },
+        {
+          title: "广告销量百分比",
+          dataIndex: "unitShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.unitShare} />,
+        },
+      ];
+    }
+
+    if (detailTab === "keywords") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部关键词"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择关键词：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "状态",
+          dataIndex: "status",
+          width: 82,
+          fixed: "left",
+          render: (_, row) => (
+            <Switch
+              size="small"
+              checked={row.status === "enabled"}
+              onChange={() => void messageApi.info("关键词状态已更新")}
+            />
+          ),
+        },
+        {
+          title: "广告账号",
+          dataIndex: "account",
+          width: 170,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.account ?? "").localeCompare(right.account ?? ""),
+          render: (_, row) => row.account ?? "--",
+        },
+        {
+          title: "关键词",
+          dataIndex: "name",
+          width: 170,
+          fixed: "left",
+          sorter: (left, right) => left.name.localeCompare(right.name),
+          render: (_, row) => (
+            <CopyableTextCell text={row.name} label="关键词" link />
+          ),
+        },
+        {
+          title: "匹配方式",
+          dataIndex: "matchType",
+          width: 110,
+          sorter: (left, right) =>
+            (left.matchType ?? "").localeCompare(right.matchType ?? ""),
+          render: (_, row) => row.matchType ?? "--",
+        },
+        {
+          title: "竞价",
+          dataIndex: "bid",
+          width: 130,
+          sorter: (left, right) => (left.bid ?? 0) - (right.bid ?? 0),
+          render: (_, row) => (
+            <Space.Compact className="ads-campaigns-price-editor ads-campaigns-keyword-bid">
+              <Button className="ads-campaigns-price-prefix" disabled>
+                $
+              </Button>
+              <InputNumber
+                className="ads-campaigns-price-input"
+                size="small"
+                min={0}
+                controls={false}
+                value={keywordBidDrafts[row.id] ?? row.bid ?? 0}
+                onChange={(value) =>
+                  setKeywordBidDrafts((current) => ({
+                    ...current,
+                    [row.id]: typeof value === "number" ? value : null,
+                  }))
+                }
+              />
+              <Button
+                type="text"
+                className="ads-campaigns-price-save ads-campaigns-keyword-bid-save"
+                aria-label={`保存关键词竞价：${row.name}`}
+                icon={<CheckCircleFilled />}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => saveKeywordBid(row)}
+              />
+            </Space.Compact>
+          ),
+        },
+        {
+          title: "审核状态",
+          dataIndex: "reviewStatus",
+          width: 110,
+          render: (_, row) => row.reviewStatus ?? "--",
+        },
+        {
+          title: "广告组",
+          dataIndex: "adGroupName",
+          width: 180,
+          sorter: (left, right) =>
+            (left.adGroupName ?? "").localeCompare(right.adGroupName ?? ""),
+          render: (_, row) => (
+            <CopyableTextCell
+              text={row.adGroupName ?? "--"}
+              label="广告组"
+              link
+            />
+          ),
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "广告花费百分比",
+          dataIndex: "spendShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.spendShare} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 110,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 90,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 88,
+          sorter: (left, right) => (left.ctr ?? 0) - (right.ctr ?? 0),
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 88,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          sorter: (left, right) => (left.orders ?? 0) - (right.orders ?? 0),
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "广告销售额",
+          dataIndex: "sales",
+          width: 120,
+          render: (_, row) => <MoneyCell value={row.sales} />,
+        },
+        {
+          title: "广告销售额百分比",
+          dataIndex: "salesShare",
+          width: 150,
+          render: (_, row) => <PercentCell value={row.salesShare} />,
+        },
+        {
+          title: "广告销量",
+          dataIndex: "units",
+          width: 110,
+          sorter: (left, right) => (left.units ?? 0) - (right.units ?? 0),
+          render: (_, row) =>
+            row.units == null ? "--" : numberText(row.units),
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 88,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "ACOS",
+          dataIndex: "acos",
+          width: 96,
+          render: (_, row) => <PercentCell value={row.acos} />,
+        },
+        {
+          title: "ROAS",
+          dataIndex: "roas",
+          width: 96,
+          render: (_, row) => <RoiCell value={row.roas} />,
+        },
+        {
+          title: "AOV",
+          dataIndex: "aov",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.aov} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 96,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "创建日期",
+          dataIndex: "createdAt",
+          width: 120,
+          sorter: (left, right) =>
+            (left.createdAt ?? "").localeCompare(right.createdAt ?? ""),
+          render: (_, row) => row.createdAt ?? "--",
+        },
+        {
+          title: "广告销量百分比",
+          dataIndex: "unitShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.unitShare} />,
+        },
+      ];
+    }
+
+    if (detailTab === "searchTerms") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部搜索词"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择搜索词：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "广告账号",
+          dataIndex: "account",
+          width: 190,
+          fixed: "left",
+          sorter: (left, right) =>
+            (left.account ?? "").localeCompare(right.account ?? ""),
+          render: (_, row) => row.account ?? "--",
+        },
+        {
+          title: "搜索词",
+          dataIndex: "name",
+          width: 210,
+          fixed: "left",
+          sorter: (left, right) => left.name.localeCompare(right.name),
+          render: (_, row) => (
+            <CopyableTextCell text={row.name} label="搜索词" />
+          ),
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 260,
+          sorter: (left, right) =>
+            (left.campaignName ?? "").localeCompare(right.campaignName ?? ""),
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.campaignName ?? activeCampaign?.name ?? "--"}
+                label="广告活动"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "广告花费",
+          dataIndex: "spend",
+          width: 110,
+          sorter: (left, right) => (left.spend ?? 0) - (right.spend ?? 0),
+          render: (_, row) => <MoneyCell value={row.spend} />,
+        },
+        {
+          title: "曝光量",
+          dataIndex: "impressions",
+          width: 120,
+          sorter: (left, right) =>
+            (left.impressions ?? 0) - (right.impressions ?? 0),
+          render: (_, row) =>
+            row.impressions == null ? "--" : numberText(row.impressions),
+        },
+        {
+          title: "曝光量百分比",
+          dataIndex: "impressionShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.impressionShare} />,
+        },
+        {
+          title: "点击",
+          dataIndex: "clicks",
+          width: 96,
+          sorter: (left, right) => (left.clicks ?? 0) - (right.clicks ?? 0),
+          render: (_, row) =>
+            row.clicks == null ? "--" : numberText(row.clicks),
+        },
+        {
+          title: "点击百分比",
+          dataIndex: "clickShare",
+          width: 120,
+          render: (_, row) => <PercentCell value={row.clickShare} />,
+        },
+        {
+          title: "CTR",
+          dataIndex: "ctr",
+          width: 90,
+          sorter: (left, right) => (left.ctr ?? 0) - (right.ctr ?? 0),
+          render: (_, row) => <PercentCell value={row.ctr} />,
+        },
+        {
+          title: "CPC",
+          dataIndex: "cpc",
+          width: 90,
+          render: (_, row) => <MoneyCell value={row.cpc} />,
+        },
+        {
+          title: "广告订单",
+          dataIndex: "orders",
+          width: 110,
+          sorter: (left, right) => (left.orders ?? 0) - (right.orders ?? 0),
+          render: (_, row) =>
+            row.orders == null ? "--" : numberText(row.orders),
+        },
+        {
+          title: "广告订单百分比",
+          dataIndex: "orderShare",
+          width: 140,
+          render: (_, row) => <PercentCell value={row.orderShare} />,
+        },
+        {
+          title: "CVR",
+          dataIndex: "cvr",
+          width: 90,
+          render: (_, row) => <PercentCell value={row.cvr} />,
+        },
+        {
+          title: "CPA",
+          dataIndex: "cpa",
+          width: 90,
+          render: (_, row) => <MoneyCell value={row.cpa} />,
+        },
+        {
+          title: "直接销售额",
+          dataIndex: "directSales",
+          width: 130,
+          render: (_, row) => <MoneyCell value={row.directSales} />,
+        },
+        {
+          title: "关联销售额",
+          dataIndex: "associatedSales",
+          width: 130,
+          render: (_, row) => <MoneyCell value={row.associatedSales} />,
+        },
+        {
+          title: "创建日期",
+          dataIndex: "createdAt",
+          width: 120,
+          sorter: (left, right) =>
+            (left.createdAt ?? "").localeCompare(right.createdAt ?? ""),
+          render: (_, row) => row.createdAt ?? "--",
+        },
+      ];
+    }
+
+    if ((detailTab as CampaignDetailTab) === "negatives") {
+      return [
+        {
+          key: "selection",
+          title: (
+            <Checkbox
+              aria-label="选择全部否定关键词"
+              checked={isAllCurrentDetailSelected}
+              indeterminate={isPartlyCurrentDetailSelected}
+              onChange={(event) =>
+                toggleAllCurrentDetailSelection(event.target.checked)
+              }
+            />
+          ),
+          dataIndex: "selection",
+          width: 48,
+          fixed: "left",
+          align: "center",
+          className: "ads-campaigns-selection-cell",
+          render: (_, row) => (
+            <Checkbox
+              aria-label={`选择否定关键词：${row.name}`}
+              checked={selectedDetailIdSet.has(row.id)}
+              onChange={(event) =>
+                toggleDetailSelection(row.id, event.target.checked)
+              }
+            />
+          ),
+        },
+        {
+          title: "状态",
+          dataIndex: "status",
+          width: 90,
+          fixed: "left",
+          render: (_, row) => (
+            <Switch
+              size="small"
+              checked={row.status === "enabled"}
+              onChange={() => void messageApi.info("否定关键词状态已更新")}
+            />
+          ),
+        },
+        {
+          title: "否定关键词",
+          dataIndex: "name",
+          width: 320,
+          fixed: "left",
+          sorter: (left, right) => left.name.localeCompare(right.name),
+          render: (_, row) => (
+            <CopyableTextCell text={row.name} label="否定关键词" link />
+          ),
+        },
+        {
+          title: "否定类型",
+          dataIndex: "type",
+          width: 180,
+        },
+        {
+          title: "广告活动",
+          dataIndex: "campaignName",
+          width: 360,
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.campaignName ?? activeCampaign?.name ?? "--"}
+                label="广告活动"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "广告组",
+          dataIndex: "adGroupName",
+          width: 360,
+          render: (_, row) => (
+            <Space size={6}>
+              <span className="ads-campaigns-status-dot" />
+              <CopyableTextCell
+                text={row.adGroupName ?? "--"}
+                label="广告组"
+                link
+              />
+            </Space>
+          ),
+        },
+        {
+          title: "创建日期",
+          dataIndex: "createdAt",
+          width: 140,
+          sorter: (left, right) =>
+            (left.createdAt ?? "").localeCompare(right.createdAt ?? ""),
+          render: (_, row) => row.createdAt ?? "--",
+        },
+      ];
+    }
+
+    const baseColumns: ProColumns<CampaignDetailRow>[] = [
+      {
+        key: "selection",
+        title: (
+          <Checkbox
+            aria-label={`选择全部${campaignDetailTabLabels[detailTab]}`}
+            checked={isAllCurrentDetailSelected}
+            indeterminate={isPartlyCurrentDetailSelected}
+            onChange={(event) =>
+              toggleAllCurrentDetailSelection(event.target.checked)
+            }
+          />
+        ),
+        dataIndex: "selection",
+        width: 48,
+        fixed: "left",
+        align: "center",
+        className: "ads-campaigns-selection-cell",
+        render: (_, row) => (
+          <Checkbox
+            aria-label={`选择${campaignDetailTabLabels[detailTab]}：${row.name}`}
+            checked={selectedDetailIdSet.has(row.id)}
+            onChange={(event) =>
+              toggleDetailSelection(row.id, event.target.checked)
+            }
+          />
+        ),
+      },
+
+      {
+        title: "状态",
+        dataIndex: "status",
+        width: 86,
+        fixed: "left",
+        render: (_, row) => (row.status ? campaignStatusTag(row.status) : "-"),
+      },
+      {
+        title: "对象名称",
+        dataIndex: "name",
+        width: 230,
+        fixed: "left",
+        render: (_, row) => (
+          <CopyableTextCell text={row.name} label="对象名称" />
+        ),
+      },
+      {
+        title: "类型/匹配",
+        dataIndex: "type",
+        width: 120,
+        render: (_, row) => row.type ?? row.scope ?? "-",
+      },
+      {
+        title:
+          (detailTab as CampaignDetailTab) === "placements" ||
+          (detailTab as CampaignDetailTab) === "platforms"
+            ? "加价"
+            : "出价",
+        dataIndex: "bid",
+        width: 96,
+        render: (_, row) =>
+          row.multiplier ??
+          (row.bid == null ? "-" : <MoneyCell value={row.bid} />),
+      },
+      {
+        title: "广告花费",
+        dataIndex: "spend",
+        width: 108,
+        render: (_, row) => <MoneyCell value={row.spend} />,
+      },
+      {
+        title: "曝光量",
+        dataIndex: "impressions",
+        width: 108,
+        render: (_, row) =>
+          row.impressions == null ? "-" : numberText(row.impressions),
+      },
+      {
+        title: "点击",
+        dataIndex: "clicks",
+        width: 82,
+      },
+      {
+        title: "CTR",
+        dataIndex: "ctr",
+        width: 82,
+        render: (_, row) => <PercentCell value={row.ctr} />,
+      },
+      {
+        title: "广告订单",
+        dataIndex: "orders",
+        width: 96,
+      },
+      {
+        title: "广告销售额",
+        dataIndex: "sales",
+        width: 112,
+        render: (_, row) => <MoneyCell value={row.sales} />,
+      },
+      {
+        title: "ACOS",
+        dataIndex: "acos",
+        width: 86,
+        render: (_, row) => <PercentCell value={row.acos} />,
+      },
+      {
+        title: "ROAS",
+        dataIndex: "roas",
+        width: 82,
+        render: (_, row) => <RoiCell value={row.roas} />,
+      },
+      {
+        title: "建议/来源",
+        dataIndex: "suggestion",
+        width: 120,
+        render: (_, row) =>
+          row.suggestion ? (
+            <Tag color={row.suggestion.includes("否定") ? "orange" : "green"}>
+              {row.suggestion}
+            </Tag>
+          ) : (
+            (row.source ?? "-")
+          ),
+      },
+      {
+        title: "操作",
+        valueType: "option",
+        width: 142,
+        fixed: "right",
+        render: (_, row) => [
+          <Button key="edit" type="link" onClick={() => openEntityEditor(row)}>
+            编辑
+          </Button>,
+          <Button key="detail" type="link" onClick={() => openRowDetail(row)}>
+            详情
+          </Button>,
+        ],
+      },
+    ];
+
+    if ((detailTab as CampaignDetailTab) === "negatives") {
+      return baseColumns.filter(
+        (column) =>
+          ![
+            "bid",
+            "spend",
+            "impressions",
+            "clicks",
+            "ctr",
+            "orders",
+            "sales",
+            "acos",
+            "roas",
+          ].includes(String(column.dataIndex)),
+      );
+    }
+
+    return baseColumns;
+  })();
+
+  const openEntityEditor = (row: CampaignDetailRow) => {
+    modalApi.info({
+      title: `编辑：${row.name}`,
+      width: 720,
+      content: (
+        <ActionModalContent>
+          <div className="ads-campaigns-form-grid">
+            <label>
+              <span>对象 ID</span>
+              <Input value={row.id} readOnly />
+            </label>
+            <label>
+              <span>出价 / 加价</span>
+              <Input defaultValue={row.multiplier ?? row.bid ?? "0.45"} />
+            </label>
+            <label>
+              <span>状态</span>
+              <Input
+                defaultValue={row.status ? statusLabel[row.status] : "启用"}
+              />
+            </label>
+          </div>
+        </ActionModalContent>
+      ),
+    });
+  };
+
+  const openRowDetail = (row: CampaignDetailRow) => {
+    modalApi.info({
+      title: `数据详情：${row.name}`,
+      width: 860,
+      content: (
+        <ActionModalContent>
+          <div className="ads-campaigns-preview-grid">
+            <Card size="small">
+              <Typography.Text type="secondary">ID</Typography.Text>
+              <strong>{row.id}</strong>
+            </Card>
+            <Card size="small">
+              <Typography.Text type="secondary">广告花费</Typography.Text>
+              <strong>${row.spend ?? 0}</strong>
+            </Card>
+            <Card size="small">
+              <Typography.Text type="secondary">销售额</Typography.Text>
+              <strong>${row.sales ?? 0}</strong>
+            </Card>
+            <Card size="small">
+              <Typography.Text type="secondary">ACOS</Typography.Text>
+              <strong>{row.acos ?? "-"}%</strong>
+            </Card>
+          </div>
+        </ActionModalContent>
+      ),
+    });
+  };
+
+  const openCampaignSettings = (campaign: AdsCampaign) => {
+    setCampaignSettingsTarget(campaign);
+    setCampaignSettingsOpen(true);
+  };
+
+  const closeCampaignSettings = () => {
+    setCampaignSettingsOpen(false);
+    setCampaignSettingsTarget(null);
+  };
+
+  const handleSaveCampaignSettings = (values: CampaignSettingsValues) => {
+    if (!campaignSettingsTarget) return;
+
+    updateCampaign(campaignSettingsTarget.id, {
+      name: values.name,
+      dailyBudget: values.dailyBudget,
+      startDate: values.startDate,
+      endDate: values.endDate ?? "--",
+    });
+
+    closeCampaignSettings();
+    void messageApi.success("广告活动设置已保存");
+  };
+
+  const showCampaignSettings = () => {
+    if (!activeCampaign) return;
+    openCampaignSettings(activeCampaign);
+  };
+
+  const showOperationLog = () => {
+    modalApi.info({
+      title: "操作日志",
+      width: 860,
+      content: (
+        <ActionModalContent>
+          <ProTable
+            rowKey="time"
+            search={false}
+            options={false}
+            pagination={false}
+            size="small"
+            dataSource={[
+              {
+                time: "2026-10-08 10:11",
+                operator: "运营A",
+                target: "关键词 kitchen storage",
+                action: "出价 0.42 → 0.48",
+                result: "成功",
+              },
+              {
+                time: "2026-10-08 09:40",
+                operator: "系统",
+                target: "广告活动",
+                action: "同步 Walmart Connect",
+                result: "成功",
+              },
+            ]}
+            columns={[
+              { title: "时间", dataIndex: "time" },
+              { title: "操作人", dataIndex: "operator" },
+              { title: "对象", dataIndex: "target" },
+              { title: "动作", dataIndex: "action" },
+              {
+                title: "结果",
+                dataIndex: "result",
+                render: () => <Tag color="success">成功</Tag>,
+              },
+            ]}
+          />
+        </ActionModalContent>
+      ),
+    });
+  };
+
+  if (view === "create") {
+    return (
+      <>
+        {messageContextHolder}
+        {modalContextHolder}
+        <CampaignCreateModal
+          key={createCampaignType}
+          initialType={createCampaignType}
+          open={createCampaignOpen}
+          onCancel={() => setCreateCampaignOpen(false)}
+          onSubmit={(values) => {
+            setCreateCampaignOpen(false);
+            void messageApi.success(`已创建${values.campaignType}广告活动`);
+          }}
+        />
+        <div className="ads-campaigns-create">
+          <div className="ads-campaigns-create__header">
+            <div>
+              <Typography.Title level={4}>创建广告活动</Typography.Title>
+              <Typography.Text type="secondary">
+                按正式投放流程配置基础信息、预算、广告组、商品与关键词。
+              </Typography.Text>
+            </div>
+            <Space>
+              <Button onClick={() => setView("list")}>返回列表</Button>
+              <Button type="primary" onClick={() => void submitCreate()}>
+                提交创建
+              </Button>
+            </Space>
+          </div>
+
+          <div className="ads-campaigns-create__layout">
+            <Card className="ads-campaigns-create__steps" size="small">
+              <Steps
+                direction="vertical"
+                current={0}
+                items={[
+                  { title: "基础设置" },
+                  { title: "预算日期" },
+                  { title: "广告组商品" },
+                  { title: "关键词与预览" },
+                ]}
+              />
+            </Card>
+            <Form
+              form={createForm}
+              layout="vertical"
+              className="ads-campaigns-create__form"
+              initialValues={{
+                name: "SP-新品推广-0001",
+                type: "SP",
+                target: "手动投放",
+                dailyBudget: 30,
+                startDate: "2026-10-09",
+                endDate: "",
+                adGroupName: "主推广告组",
+                defaultBid: 0.45,
+                itemIds: "588921443, 588921521",
+                keywords: "kitchen storage\ncabinet organizer",
+              }}
+            >
+              <Card title="基础设置" size="small">
+                <div className="ads-campaigns-form-grid">
+                  <Form.Item
+                    name="name"
+                    label="广告活动名称"
+                    rules={[{ required: true }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item
+                    name="type"
+                    label="广告类型"
+                    rules={[{ required: true }]}
+                  >
+                    <Tabs
+                      className="ads-campaigns-inline-tabs"
+                      items={[
+                        { key: "SP", label: "SP" },
+                        { key: "SB", label: "SB" },
+                        { key: "SV", label: "SV" },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="target"
+                    label="投放类型"
+                    rules={[{ required: true }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                </div>
+              </Card>
+              <Card title="预算与日期" size="small">
+                <div className="ads-campaigns-form-grid">
+                  <Form.Item
+                    name="dailyBudget"
+                    label="每日预算"
+                    rules={[{ required: true }]}
+                  >
+                    <InputNumber min={1} />
+                  </Form.Item>
+                  <Form.Item
+                    name="startDate"
+                    label="开始日期"
+                    rules={[{ required: true }]}
+                  >
+                    <Input />
+                  </Form.Item>
+                  <Form.Item name="endDate" label="结束日期">
+                    <Input placeholder="无结束时间" />
+                  </Form.Item>
+                </div>
+              </Card>
+              <Card title="广告组、商品与关键词" size="small">
+                <div className="ads-campaigns-form-grid">
+                  <Form.Item name="adGroupName" label="广告组名称">
+                    <Input />
+                  </Form.Item>
+                  <Form.Item name="defaultBid" label="默认出价">
+                    <InputNumber min={0.01} step={0.01} />
+                  </Form.Item>
+                  <Form.Item name="itemIds" label="投放商品">
+                    <Input />
+                  </Form.Item>
+                </div>
+                <Form.Item name="keywords" label="关键词，一行一个">
+                  <Input.TextArea rows={5} />
+                </Form.Item>
+              </Card>
+            </Form>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (view === "detail" && activeCampaign) {
+    const detailRows = campaignDetailRows[detailTab].filter(
+      (row) => !row.id.includes("SUMMARY") && row.name !== "汇总",
+    );
+    const detailScrollX = resolveTableScrollX(
+      detailColumns,
+      detailTab === "searchTerms" ? 2140 : 1280,
+    );
+
+    return (
+      <>
+        {messageContextHolder}
+        {modalContextHolder}
+        <div className="ads-campaigns-detail">
+          <CampaignDetailHeader
+            campaign={activeCampaign}
+            onBack={() => {
+              setView("list");
+              setDetailSelectedRowKeys([]);
+            }}
+            onOpenSettings={showCampaignSettings}
+            onOpenOperationLog={showOperationLog}
+          />
+
+          <Tabs
+            className="ads-campaigns-detail__tabs ads-campaigns-detail__tabs--flat"
+            activeKey={detailTab}
+            onChange={(key) => {
+              setDetailTab(key as CampaignDetailTab);
+              setDetailSelectedRowKeys([]);
+            }}
+            items={(
+              [
+                "placements",
+                "adGroups",
+                "pageTypes",
+                "platforms",
+                "adItems",
+                "keywords",
+                "negatives",
+                "searchTerms",
+              ] as CampaignDetailTab[]
+            ).map((key) => ({
+              key,
+              label: campaignDetailTabLabels[key],
+            }))}
+          />
+
+          <ReportTableShell
+            label="广告活动详情表格"
+            className="ads-campaigns-table-shell"
+          >
+            <div className="ads-campaigns-table-head ads-campaigns-table-head--actions-only">
+              <Space wrap>
+                {detailCreateActionLabel[detailTab] && (
+                  <Button type="primary" onClick={handleDetailCreateAction}>
+                    {detailCreateActionLabel[detailTab]}
+                  </Button>
+                )}
+                {shouldShowDetailDateFilter && (
+                  <>
+                    <DatePicker.RangePicker
+                      className="ads-campaigns-date-range"
+                      aria-label={`${campaignDetailTabLabels[detailTab]}日期范围`}
+                      locale={datePickerLocale}
+                      value={
+                        detailDateRange
+                          ? [
+                              dayjs(detailDateRange[0]),
+                              dayjs(detailDateRange[1]),
+                            ]
+                          : undefined
+                      }
+                      presets={rangePresets()}
+                      format="YYYY-MM-DD"
+                      disabledDate={disableFutureDate}
+                      separator="~"
+                      onChange={(dates) => {
+                        setDetailDateRange(
+                          dates
+                            ? [
+                                dates[0]?.format("YYYY-MM-DD") ?? "",
+                                dates[1]?.format("YYYY-MM-DD") ?? "",
+                              ]
+                            : undefined,
+                        );
+                      }}
+                    />
+                  </>
+                )}
+                {canBatchUpdateDetailStatus && (
+                  <Button
+                    disabled={selectedDetailActionCount === 0}
+                    onClick={handleBatchDetailStatus}
+                  >
+                    {(detailTab as CampaignDetailTab) === "negatives"
+                      ? "调整状态"
+                      : "批量调整状态"}
+                  </Button>
+                )}
+                {canBatchAdjustDetailBid && (
+                  <Button
+                    disabled={selectedDetailActionCount === 0}
+                    onClick={handleBatchDetailBid}
+                  >
+                    批量调价
+                  </Button>
+                )}
+                {canAddDetailRowsToNegatives && (
+                  <Button
+                    type="primary"
+                    disabled={selectedDetailActionCount === 0}
+                    onClick={handleAddDetailRowsToNegatives}
+                  >
+                    添加为否定关键词
+                  </Button>
+                )}
+                <CommittedSearch
+                  className="ads-campaigns-detail-search"
+                  typeAriaLabel="详情搜索类型"
+                  typeOptions={[
+                    { label: "名称", value: "name" },
+                    { label: "ID", value: "id" },
+                  ]}
+                  typeValue="name"
+                  inputAriaLabel="详情搜索"
+                  inputPlaceholder="搜索当前表"
+                  inputValue=""
+                  onCommit={() => void messageApi.info("已按当前表搜索")}
+                />
+              </Space>
+            </div>
+            <ProTable<CampaignDetailRow>
+              rowKey="id"
+              size="small"
+              search={false}
+              options={false}
+              columns={detailColumns}
+              dataSource={detailRows}
+              tableAlertRender={false}
+              toolBarRender={false}
+              bordered
+              tableLayout="fixed"
+              pagination={{ pageSize: 25, showSizeChanger: true }}
+              scroll={{ x: detailScrollX, y: "100%" }}
+              footer={() => (
+                <ReportTableSelectionBar
+                  selectedCount={detailSelectedRowKeys.length}
+                  actions={detailSelectionActions}
+                />
+              )}
+            />
+          </ReportTableShell>
+          <CampaignSettingsModal
+            open={campaignSettingsOpen}
+            campaign={campaignSettingsTarget}
+            onCancel={closeCampaignSettings}
+            onSubmit={handleSaveCampaignSettings}
+          />
+          <CreateAdGroupModal
+            open={createAdGroupOpen}
+            campaign={activeCampaign}
+            onCancel={() => setCreateAdGroupOpen(false)}
+            onSubmit={(values) => {
+              setCreateAdGroupOpen(false);
+              void messageApi.success(`广告组 ${values.name} 已创建`);
+            }}
+          />
+          <CreateAdProductModal
+            open={createAdProductOpen}
+            currentCampaign={activeCampaign ?? null}
+            campaigns={rows}
+            adGroups={campaignDetailRows.adGroups}
+            onCancel={() => setCreateAdProductOpen(false)}
+            onSubmit={(values) => {
+              setCreateAdProductOpen(false);
+              void messageApi.success(
+                `已添加 ${values.products.length} 个广告商品`,
+              );
+            }}
+          />
+          <CreateKeywordModal
+            open={createKeywordOpen}
+            currentCampaign={activeCampaign ?? null}
+            campaigns={rows}
+            adGroups={campaignDetailRows.adGroups}
+            onCancel={() => setCreateKeywordOpen(false)}
+            onSubmit={(values) => {
+              setCreateKeywordOpen(false);
+              void messageApi.success(
+                `已添加 ${values.keywords.length} 个关键词`,
+              );
+            }}
+          />
+          <CreateNegativeKeywordModal
+            open={createNegativeKeywordOpen}
+            currentCampaign={activeCampaign ?? null}
+            campaigns={rows}
+            adGroups={campaignDetailRows.adGroups}
+            onCancel={() => setCreateNegativeKeywordOpen(false)}
+            onSubmit={(values) => {
+              setCreateNegativeKeywordOpen(false);
+              void messageApi.success(
+                `已添加 ${values.negativeKeywords.length} 个否定关键词`,
+              );
+            }}
+          />
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {messageContextHolder}
+      {modalContextHolder}
+      <div className="ads-campaigns-delivery">
+        <section className="ads-campaigns-kpi-grid" aria-label="广告活动指标">
+          <KpiCard
+            label="曝光量"
+            value={kpiValues.impressions}
+            active={activeKpi === "impressions"}
+            onClick={() => setActiveKpi("impressions")}
+          />
+          <KpiCard
+            label="广告花费"
+            value={kpiValues.spend}
+            tone="green"
+            active={activeKpi === "spend"}
+            onClick={() => setActiveKpi("spend")}
+          />
+          <KpiCard
+            label="ACOS"
+            value={kpiValues.acos}
+            tone="orange"
+            active={activeKpi === "acos"}
+            onClick={() => setActiveKpi("acos")}
+          />
+          <KpiCard
+            label="广告销售额"
+            value={kpiValues.sales}
+            active={activeKpi === "sales"}
+            onClick={() => setActiveKpi("sales")}
+          />
+          <KpiCard
+            label="点击"
+            value={kpiValues.clicks}
+            tone="purple"
+            active={activeKpi === "clicks"}
+            onClick={() => setActiveKpi("clicks")}
+          />
+        </section>
+
+        <Card className="ads-campaigns-toolbar" size="small">
+          <Space wrap>
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: [
+                  { key: "SP", label: "创建 SP 广告活动" },
+                  { key: "SB", label: "创建 SB 广告活动" },
+                  { key: "SV", label: "创建 SV 广告活动" },
+                ],
+                onClick: (info) =>
+                  openCampaignCreateModal(info.key as CampaignCreateType),
+              }}
+            >
+              <Button type="primary" icon={<PlusOutlined />}>
+                创建广告活动
+              </Button>
+            </Dropdown>
+            <ReportFacetSelect
+              mode="multiple"
+              ariaLabel="广告账号"
+              placeholder="广告账号"
+              unit="个账号"
+              value={filters.accounts ?? []}
+              options={accountOptions}
+              triggerWidth={172}
+              onChange={(value) =>
+                setFilters((current) => ({
+                  ...current,
+                  accounts: Array.isArray(value) ? (value as string[]) : [],
+                }))
+              }
+            />
+            <Radio.Group
+              key={`date-preset-${filters.datePreset}`}
+              className="ads-campaigns-date-presets"
+              aria-label="日期快捷项"
+              optionType="button"
+              buttonStyle="solid"
+              value={shortcutDatePresetValue(filters.datePreset)}
+              options={[
+                { label: "今日", value: "today" },
+                { label: "本周", value: "week" },
+                { label: "本月", value: "month" },
+                { label: "今年", value: "year" },
+              ]}
+              onChange={(event) => {
+                const datePreset = event.target.value as Exclude<
+                  CampaignDatePreset,
+                  "custom"
+                >;
+                setFilters((current) => ({
+                  ...current,
+                  datePreset,
+                  dateRange: shortcutDateRange(datePreset),
+                }));
+              }}
+            />
+            <DatePicker.RangePicker
+              className="ads-campaigns-date-range"
+              aria-label="日期范围"
+              locale={datePickerLocale}
+              value={
+                filters.dateRange
+                  ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
+                  : undefined
+              }
+              presets={rangePresets()}
+              format="YYYY-MM-DD"
+              disabledDate={disableFutureDate}
+              separator="~"
+              onChange={(dates) => {
+                setFilters((current) => ({
+                  ...current,
+                  datePreset: "custom",
+                  dateRange: dates
+                    ? [
+                        dates[0]?.format("YYYY-MM-DD") ?? "",
+                        dates[1]?.format("YYYY-MM-DD") ?? "",
+                      ]
+                    : undefined,
+                }));
+              }}
+            />
+            <ReportFacetSelect
+              mode="multiple"
+              ariaLabel="广告类型"
+              placeholder="广告类型"
+              value={filters.adTypes ?? []}
+              options={adTypeOptions}
+              unit="类"
+              triggerWidth={126}
+              onChange={(value) =>
+                setFilters((current) => ({
+                  ...current,
+                  adTypes: Array.isArray(value)
+                    ? (value as CampaignType[])
+                    : [],
+                }))
+              }
+            />
+            <ReportFacetSelect
+              mode="multiple"
+              ariaLabel="广告活动状态"
+              placeholder="广告活动状态"
+              unit="个状态"
+              value={filters.statuses ?? []}
+              options={statusOptions}
+              triggerWidth={140}
+              onChange={(value) =>
+                setFilters((current) => ({
+                  ...current,
+                  statuses: Array.isArray(value)
+                    ? (value as CampaignStatus[])
+                    : [],
+                }))
+              }
+            />
+            <CommittedSearch
+              className="ads-campaigns-search"
+              typeAriaLabel="广告活动搜索类型"
+              typeOptions={searchOptions}
+              typeValue={filters.searchField}
+              inputAriaLabel="广告活动搜索"
+              inputPlaceholder="请输入广告活动名称"
+              inputValue={filters.keyword}
+              batch={{
+                ariaLabel: "广告活动批量搜索",
+                placeholder: "一行一个广告活动名称或ID",
+                onCommit: (values, searchField) => {
+                  setFilters((current) => ({
+                    ...current,
+                    searchField: searchField as CampaignFilters["searchField"],
+                    keyword: values[0] ?? "",
+                  }));
+                  void messageApi.info(
+                    `已读取 ${values.length} 行批量搜索内容`,
+                  );
+                },
+                onMessage: (content) => void messageApi.warning(content),
+              }}
+              onCommit={({ searchField, keyword }) =>
+                setFilters((current) => ({
+                  ...current,
+                  searchField: searchField as CampaignFilters["searchField"],
+                  keyword,
+                }))
+              }
+            />
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => {
+                setFilters(initialFilters);
+                setSelectedRowKeys([]);
+                void messageApi.success("筛选条件已重置");
+              }}
+            >
+              重置
+            </Button>
+          </Space>
+        </Card>
+
+        <ReportTableShell
+          label="广告活动表格"
+          className="ads-campaigns-table-shell"
+        >
+          <div className="ads-campaigns-table-head">
+            <div>
+              <Typography.Text strong>广告活动</Typography.Text>
+              <Typography.Text type="secondary">
+                {" "}
+                已选 {selectedRowKeys.length} 条数据
+              </Typography.Text>
+            </div>
+            <Space wrap>
+              <Button
+                disabled={selectedRowKeys.length === 0}
+                onClick={bulkStatus}
+              >
+                批量调整状态
+              </Button>
+              <Button
+                disabled={selectedRowKeys.length === 0}
+                onClick={bulkBudget}
+              >
+                批量调整预算
+              </Button>
+            </Space>
+          </div>
+          <ProTable<AdsCampaign>
+            rowKey="id"
+            size="small"
+            search={false}
+            options={false}
+            columns={campaignColumns}
+            dataSource={filteredRows}
+            tableAlertRender={false}
+            toolBarRender={false}
+            bordered
+            tableLayout="fixed"
+            pagination={{
+              pageSize: 25,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条数据`,
+            }}
+            scroll={{ x: campaignScrollX, y: "100%" }}
+            footer={() => (
+              <ReportTableSelectionBar
+                selectedCount={selectedRowKeys.length}
+                actions={[
+                  {
+                    key: "status",
+                    label: "批量调整状态",
+                    danger: true,
+                    onClick: bulkStatus,
+                  },
+                  { key: "budget", label: "批量调整预算", onClick: bulkBudget },
+                ]}
+              />
+            )}
+            summary={() => (
+              <Table.Summary fixed>
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0}>
+                    <span className="report-table-summary-label">汇总</span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={2}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={3}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={4}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={5}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={6}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={7}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={8}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={9}>--</Table.Summary.Cell>
+                  <Table.Summary.Cell index={10}>
+                    <MoneyCell value={campaignSummary.spend} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={11}>
+                    <PercentCell value={campaignSummary.spendShare} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={12}>
+                    <span className="report-table-metric">
+                      {campaignSummary.dailyBudget.toLocaleString("en-US")}
+                    </span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={13}>
+                    <span className="report-table-metric">
+                      {numberText(campaignSummary.impressions)}
+                    </span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={14}>
+                    <PercentCell value={campaignSummary.impressionShare} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={15}>
+                    <span className="report-table-metric">
+                      {numberText(campaignSummary.clicks)}
+                    </span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={16}>
+                    <PercentCell value={campaignSummary.clickShare} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={17}>
+                    <PercentCell value={campaignSummary.ctr} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={18}>
+                    <MoneyCell value={campaignSummary.cpc} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={19}>
+                    <span className="report-table-metric">
+                      {numberText(campaignSummary.orders)}
+                    </span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={20}>
+                    <MoneyCell value={campaignSummary.sales} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={21}>
+                    <PercentCell value={campaignSummary.acos} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={22}>
+                    <RoiCell value={campaignSummary.roas} />
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={23}>--</Table.Summary.Cell>
+                </Table.Summary.Row>
+              </Table.Summary>
+            )}
+          />
+        </ReportTableShell>
+
+        <div className="ads-campaigns-footer-hint">
+          <CalendarOutlined aria-hidden="true" />
+          <span>
+            当前为广告活动页面前端交互版；后续接 Walmart Connect API
+            时沿用此页面结构。
+          </span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default DeliveryManagementTab;

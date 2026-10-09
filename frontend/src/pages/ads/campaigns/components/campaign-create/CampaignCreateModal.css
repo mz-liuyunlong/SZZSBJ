@@ -1,0 +1,1008 @@
+.campaign-create-modal .ant-modal-body {
+  max-height: 78vh;
+  overflow: auto;
+  background: #eef2f7;
+  padding: 14px;
+}
+
+.campaign-create-modal__type-switch {
+  margin-bottom: 14px;
+  background: #fff;
+}
+
+.campaign-create-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.campaign-create-modal__section {
+  border-color: #dce3ed;
+  border-radius: 6px;
+}
+
+.campaign-create-modal__section .ant-card-body {
+  padding: 22px 26px;
+}
+
+.campaign-create-modal__section-title.ant-typography {
+  position: relative;
+  margin: 0 0 20px;
+  padding-left: 10px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.campaign-create-modal__section-title.ant-typography::before {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #1677ff;
+  content: "";
+}
+
+.campaign-create-modal__form-grid {
+  display: grid;
+  width: 760px;
+  gap: 18px;
+}
+
+.campaign-create-modal__form-grid .ant-form-item {
+  margin-bottom: 0;
+}
+
+.campaign-create-modal__short-field {
+  width: 440px;
+  margin-bottom: 0;
+}
+
+.campaign-create-modal__page-subtitle.ant-typography {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.campaign-create-modal__nested-item .ant-form-item-control-input-content {
+  display: flex;
+  align-items: center;
+}
+
+.campaign-create-modal__sub-label {
+  color: #667085;
+  font-size: 13px;
+}
+
+.campaign-create-modal__small-select {
+  width: 150px;
+}
+
+.campaign-create-modal__desc.ant-typography {
+  margin: 6px 0 0 24px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.campaign-create-modal__radio-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.campaign-create-modal__multiplier-group
+  + .campaign-create-modal__multiplier-group {
+  margin-top: 24px;
+}
+
+.campaign-create-modal__multiplier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 78px;
+  margin-top: 16px;
+}
+
+.campaign-create-modal__multiplier-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.campaign-create-modal__multiplier-item > span {
+  min-width: 92px;
+  color: #4b5563;
+  text-align: right;
+}
+
+.campaign-create-modal__percent-input .ant-input-number {
+  width: 94px;
+}
+
+.campaign-create-modal__percent-input .ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.campaign-create-modal__price-input {
+  display: inline-flex;
+  width: 200px;
+}
+
+.campaign-create-modal__price-input > .ant-btn {
+  width: 36px;
+  min-width: 36px;
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.campaign-create-modal__price-input > .ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.campaign-create-modal__price-input .ant-input-number {
+  flex: 1;
+  min-width: 0;
+}
+
+.campaign-create-modal__upload {
+  width: 160px;
+  height: 160px;
+}
+
+.campaign-create-modal__upload .ant-upload-drag {
+  height: 160px;
+}
+
+.campaign-create-modal__upload-rules {
+  margin-left: 106px;
+  margin-top: -12px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.campaign-create-modal__upload-rules p {
+  margin: 0;
+}
+
+.campaign-create-modal__link-tip {
+  margin-left: 106px;
+  margin-top: -12px;
+  font-size: 13px;
+}
+
+.campaign-create-modal__video-upload {
+  width: 180px;
+  height: 180px;
+}
+
+.campaign-create-modal__video-upload .ant-upload-drag {
+  height: 180px;
+}
+
+.campaign-create-modal__transfer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 520px;
+  margin: -22px -26px;
+}
+
+.campaign-create-modal__transfer-pane {
+  min-width: 0;
+  padding: 20px 26px;
+}
+
+.campaign-create-modal__transfer-pane + .campaign-create-modal__transfer-pane {
+  border-left: 1px solid #dce3ed;
+}
+
+.campaign-create-modal__pane-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.campaign-create-modal__search {
+  max-width: 340px;
+}
+
+.campaign-create-modal__keyword-input-area {
+  width: 100%;
+}
+
+.campaign-create-modal__keyword-input-area .ant-input {
+  max-width: 560px;
+}
+
+@media (max-width: 1280px) {
+  .campaign-create-modal__transfer {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-create-modal__transfer-pane
+    + .campaign-create-modal__transfer-pane {
+    border-top: 1px solid #dce3ed;
+    border-left: 0;
+  }
+}
+
+/* 广告类型切换：SP / SB / SV */
+.campaign-create-modal__type-switch {
+  display: inline-flex;
+  padding: 4px;
+  background: #f2f4f7;
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+}
+
+.campaign-create-modal__type-switch .ant-segmented-group {
+  gap: 4px;
+}
+
+.campaign-create-modal__type-switch .ant-segmented-item {
+  min-width: 104px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.campaign-create-modal__type-switch .ant-segmented-item-label {
+  min-height: 38px;
+  line-height: 38px;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #344054;
+  text-align: center;
+}
+
+.campaign-create-modal__type-switch .ant-segmented-thumb {
+  background: #1677ff;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(22, 119, 255, 0.22);
+}
+
+.campaign-create-modal__type-switch
+  .ant-segmented-item-selected
+  .ant-segmented-item-label {
+  color: #ffffff;
+}
+
+.campaign-create-modal__type-switch
+  .ant-segmented-item:not(.ant-segmented-item-selected):hover
+  .ant-segmented-item-label {
+  color: #1677ff;
+}
+
+/* FINAL: 广告类型切换选中态修复 */
+.campaign-create-modal__type-switch.ant-segmented {
+  display: inline-flex;
+  padding: 4px;
+  background: #f3f6fb;
+  border: 1px solid #cfd8e6;
+  border-radius: 12px;
+}
+
+.campaign-create-modal__type-switch.ant-segmented .ant-segmented-group {
+  gap: 4px;
+}
+
+.campaign-create-modal__type-switch.ant-segmented .ant-segmented-thumb {
+  display: none !important;
+}
+
+.campaign-create-modal__type-switch.ant-segmented .ant-segmented-item {
+  min-width: 104px;
+  height: 38px;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.campaign-create-modal__type-switch.ant-segmented .ant-segmented-item-label {
+  height: 38px;
+  line-height: 38px;
+  padding: 0 18px;
+  color: #344054 !important;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.campaign-create-modal__type-switch.ant-segmented .ant-segmented-item-selected {
+  background: #1677ff !important;
+  box-shadow: 0 4px 10px rgba(22, 119, 255, 0.22);
+}
+
+.campaign-create-modal__type-switch.ant-segmented
+  .ant-segmented-item-selected
+  .ant-segmented-item-label {
+  color: #ffffff !important;
+}
+
+.campaign-create-modal__type-switch.ant-segmented
+  .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+  background: #eaf2ff;
+}
+
+.campaign-create-modal__type-switch.ant-segmented
+  .ant-segmented-item:not(.ant-segmented-item-selected):hover
+  .ant-segmented-item-label {
+  color: #1677ff !important;
+}
+
+/* FINAL: SP / SB / SV 广告类型切换，Radio.Button 稳定选中态 */
+.campaign-create-modal__type-switch.ant-radio-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  background: #f3f6fb;
+  border: 1px solid #cfd8e6;
+  border-radius: 12px;
+}
+
+.campaign-create-modal__type-switch.ant-radio-group .ant-radio-button-wrapper {
+  min-width: 104px;
+  height: 38px;
+  padding: 0 18px;
+  color: #344054;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 38px;
+  text-align: center;
+  background: transparent;
+  border: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.campaign-create-modal__type-switch.ant-radio-group
+  .ant-radio-button-wrapper::before {
+  display: none !important;
+}
+
+.campaign-create-modal__type-switch.ant-radio-group
+  .ant-radio-button-wrapper:hover {
+  color: #1677ff;
+  background: #eaf2ff;
+}
+
+.campaign-create-modal__type-switch.ant-radio-group
+  .ant-radio-button-wrapper-checked,
+.campaign-create-modal__type-switch.ant-radio-group
+  .ant-radio-button-wrapper-checked:hover,
+.campaign-create-modal__type-switch.ant-radio-group
+  .ant-radio-button-wrapper-checked:focus-within {
+  color: #ffffff !important;
+  background: #1677ff !important;
+  border-color: #1677ff !important;
+  box-shadow: 0 4px 10px rgba(22, 119, 255, 0.22) !important;
+}
+
+.campaign-create-modal__type-switch.ant-radio-group
+  .ant-radio-button-wrapper-checked
+  span {
+  color: #ffffff !important;
+}
+
+/* FINAL: 创建广告活动弹窗表单重新排版，减少右侧空白 */
+.campaign-create-modal__section .ant-card-body {
+  padding: 22px 28px;
+}
+
+/* 基础设置 / 日期预算：两列排版 */
+.campaign-create-modal__form-grid {
+  display: grid !important;
+  width: 100% !important;
+  max-width: none !important;
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  column-gap: 56px;
+  row-gap: 18px;
+  align-items: start;
+}
+
+.campaign-create-modal__form-grid .ant-form-item {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.campaign-create-modal__form-grid .ant-form-item-control {
+  min-width: 0;
+}
+
+.campaign-create-modal__form-grid .ant-input,
+.campaign-create-modal__form-grid .ant-select,
+.campaign-create-modal__form-grid .ant-picker,
+.campaign-create-modal__form-grid .ant-input-number,
+.campaign-create-modal__form-grid .ant-input-affix-wrapper {
+  width: 100%;
+}
+
+/* 广告活动名称占一列，不要挤太窄 */
+.campaign-create-modal__form-grid .ant-input-show-count {
+  width: 100%;
+}
+
+/* 投放类型单独一行，视觉更清楚 */
+.campaign-create-modal__form-grid .ant-form-item:has(.ant-radio-group) {
+  grid-column: 1 / 2;
+}
+
+/* 日期区里的日期选择不要太短 */
+.campaign-create-modal__form-grid .ant-space-compact {
+  width: 100%;
+}
+
+.campaign-create-modal__form-grid .ant-space-compact .ant-picker {
+  flex: 1 1 0;
+}
+
+/* 预算区横向展开，不要堆在左侧 */
+.campaign-create-modal__nested-item {
+  grid-column: 1 / -1;
+}
+
+.campaign-create-modal__nested-item
+  .ant-form-item-control-input-content
+  > .ant-space {
+  width: 100%;
+}
+
+.campaign-create-modal__nested-item .ant-space-item {
+  min-width: 0;
+}
+
+.campaign-create-modal__nested-item .campaign-create-modal__price-input {
+  width: 260px;
+}
+
+/* 广告投放设置：两个选项左右排 */
+.campaign-create-modal__section
+  .ant-space-vertical:has(.campaign-create-modal__desc) {
+  display: grid !important;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  column-gap: 56px;
+  row-gap: 18px;
+}
+
+.campaign-create-modal__section
+  .ant-space-vertical:has(.campaign-create-modal__desc)
+  > .ant-space-item {
+  min-width: 0;
+}
+
+/* 竞价策略：动态竞价 / 固定竞价左右排 */
+.campaign-create-modal__radio-stack {
+  display: grid !important;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(360px, 1fr));
+  column-gap: 56px;
+  row-gap: 18px;
+}
+
+/* 广告组名称不要只占很短 */
+.campaign-create-modal__short-field {
+  width: 520px;
+  max-width: 100%;
+}
+
+/* 小屏幕回到单列 */
+@media (max-width: 1280px) {
+  .campaign-create-modal__form-grid,
+  .campaign-create-modal__section
+    .ant-space-vertical:has(.campaign-create-modal__desc),
+  .campaign-create-modal__radio-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-create-modal__nested-item {
+    grid-column: auto;
+  }
+}
+
+/* FINAL: 创建广告活动表单字段对齐 */
+.campaign-create-modal__form-grid {
+  display: grid !important;
+  width: 100% !important;
+  max-width: none !important;
+  grid-template-columns: repeat(2, minmax(520px, 1fr)) !important;
+  column-gap: 72px !important;
+  row-gap: 18px !important;
+  align-items: start !important;
+}
+
+.campaign-create-modal__form .ant-form-item {
+  margin-bottom: 0;
+}
+
+.campaign-create-modal__form .ant-form-item-row {
+  display: flex !important;
+  align-items: center !important;
+  width: 100%;
+}
+
+.campaign-create-modal__form .ant-form-item-label {
+  flex: 0 0 112px !important;
+  max-width: 112px !important;
+  width: 112px !important;
+  padding-right: 12px !important;
+  text-align: right !important;
+}
+
+.campaign-create-modal__form .ant-form-item-label > label {
+  width: 100%;
+  justify-content: flex-end;
+  color: #667085;
+  font-size: 14px;
+}
+
+.campaign-create-modal__form .ant-form-item-control {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: 460px !important;
+}
+
+.campaign-create-modal__form .ant-input,
+.campaign-create-modal__form .ant-select,
+.campaign-create-modal__form .ant-picker,
+.campaign-create-modal__form .ant-input-number,
+.campaign-create-modal__form .ant-input-affix-wrapper {
+  width: 100% !important;
+}
+
+/* 投放类型行跟上面输入框左边对齐 */
+.campaign-create-modal__form .ant-radio-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* 日期范围：两个日期框同高同宽 */
+.campaign-create-modal__form-grid .ant-space-compact {
+  display: inline-flex !important;
+  width: 420px !important;
+}
+
+.campaign-create-modal__form-grid .ant-space-compact .ant-picker {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+}
+
+/* 预算区：整行占满，但内部仍按固定 label 对齐 */
+.campaign-create-modal__nested-item {
+  grid-column: 1 / -1 !important;
+}
+
+.campaign-create-modal__nested-item .ant-form-item-row {
+  align-items: flex-start !important;
+}
+
+.campaign-create-modal__nested-item .ant-form-item-control {
+  max-width: none !important;
+}
+
+.campaign-create-modal__nested-item
+  .ant-form-item-control-input-content
+  > .ant-space {
+  width: 100%;
+}
+
+.campaign-create-modal__nested-item .ant-space-vertical {
+  width: 100%;
+  gap: 12px !important;
+}
+
+.campaign-create-modal__nested-item .ant-space-vertical > .ant-space-item {
+  width: 100%;
+}
+
+.campaign-create-modal__nested-item .ant-space-align-center {
+  display: flex !important;
+  align-items: center !important;
+  width: 100%;
+}
+
+.campaign-create-modal__nested-item .campaign-create-modal__sub-label {
+  flex: 0 0 84px;
+  width: 84px;
+  color: #667085;
+  text-align: right;
+}
+
+.campaign-create-modal__nested-item .campaign-create-modal__small-select {
+  width: 170px !important;
+}
+
+.campaign-create-modal__nested-item .campaign-create-modal__price-input {
+  width: 240px !important;
+}
+
+/* 说明文字不要掉到下一列 */
+.campaign-create-modal__nested-item .ant-typography {
+  margin-left: 8px;
+  white-space: normal;
+}
+
+/* 广告投放设置：复选框说明左侧对齐 */
+.campaign-create-modal__section .ant-checkbox-wrapper {
+  align-items: flex-start;
+}
+
+.campaign-create-modal__desc.ant-typography {
+  margin: 6px 0 0 24px !important;
+  color: #667085;
+  line-height: 1.6;
+}
+
+/* 竞价策略：左右两块顶部对齐 */
+.campaign-create-modal__radio-stack {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(420px, 1fr)) !important;
+  column-gap: 72px !important;
+  align-items: start !important;
+}
+
+/* 广告组名称也跟基础表单同一套宽度 */
+.campaign-create-modal__short-field {
+  width: 572px !important;
+  max-width: 100% !important;
+}
+
+.campaign-create-modal__short-field .ant-form-item-row {
+  display: flex !important;
+}
+
+.campaign-create-modal__short-field .ant-form-item-control {
+  max-width: 420px !important;
+}
+
+/* 小屏幕回单列 */
+@media (max-width: 1320px) {
+  .campaign-create-modal__form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .campaign-create-modal__radio-stack {
+    grid-template-columns: 1fr !important;
+  }
+
+  .campaign-create-modal__nested-item {
+    grid-column: auto !important;
+  }
+}
+
+/* FINAL: Checkbox / Radio 选项内部对齐 */
+.campaign-create-modal__option-grid {
+  display: grid !important;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
+  column-gap: 72px;
+  row-gap: 20px;
+  align-items: start;
+}
+
+.campaign-create-modal__option-form-item {
+  width: 100%;
+  margin-bottom: 0 !important;
+}
+
+.campaign-create-modal__option-form-item .ant-form-item-row,
+.campaign-create-modal__option-form-item .ant-form-item-control,
+.campaign-create-modal__option-form-item .ant-form-item-control-input,
+.campaign-create-modal__option-form-item .ant-form-item-control-input-content {
+  width: 100%;
+  max-width: none !important;
+  align-items: flex-start !important;
+}
+
+/* 关键：勾选框/单选框跟标题第一行对齐，不跟说明文字整体居中 */
+.campaign-create-modal__option-check.ant-checkbox-wrapper,
+.campaign-create-modal__option-radio.ant-radio-wrapper {
+  display: flex !important;
+  align-items: flex-start !important;
+  width: 100%;
+  margin: 0 !important;
+  padding: 0;
+  line-height: 1.4;
+}
+
+/* 勾选框固定在标题第一行 */
+.campaign-create-modal__option-check.ant-checkbox-wrapper > .ant-checkbox,
+.campaign-create-modal__option-radio.ant-radio-wrapper > .ant-radio {
+  flex: 0 0 16px;
+  margin-top: 3px !important;
+  align-self: flex-start !important;
+}
+
+/* 右侧文字容器：标题和说明使用同一个左边界 */
+.campaign-create-modal__option-check.ant-checkbox-wrapper
+  > span:not(.ant-checkbox),
+.campaign-create-modal__option-radio.ant-radio-wrapper > span:not(.ant-radio) {
+  display: block !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-inline-start: 10px !important;
+}
+
+/* 标题 */
+.campaign-create-modal__option-title {
+  display: block;
+  margin: 0;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+/* 说明文字：不要再 margin-left: 24px，必须和标题左边对齐 */
+.campaign-create-modal__option-check
+  .campaign-create-modal__desc.ant-typography,
+.campaign-create-modal__option-radio
+  .campaign-create-modal__desc.ant-typography {
+  display: block;
+  margin: 6px 0 0 0 !important;
+  padding: 0 !important;
+  max-width: 620px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.65;
+  text-align: left;
+}
+
+/* 压掉旧的通用 desc 偏移 */
+.campaign-create-modal__desc.ant-typography {
+  margin-left: 0 !important;
+}
+
+/* 竞价策略复用同一套两列 */
+.campaign-create-modal__bidding-grid.campaign-create-modal__option-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(420px, 1fr)) !important;
+  column-gap: 72px !important;
+  row-gap: 20px !important;
+  align-items: start !important;
+}
+
+@media (max-width: 1320px) {
+  .campaign-create-modal__option-grid,
+  .campaign-create-modal__bidding-grid.campaign-create-modal__option-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* FINAL: 商品选择表格不允许横向滚动 */
+.campaign-create-modal__transfer-pane .ant-table-content {
+  overflow-x: hidden !important;
+}
+
+.campaign-create-modal__transfer-pane .ant-table {
+  width: 100%;
+}
+
+.campaign-create-modal__transfer-pane .ant-table-cell {
+  white-space: nowrap;
+}
+
+.campaign-create-modal__transfer-pane .ant-table-cell .ant-btn-link {
+  padding-inline: 0;
+}
+
+/* FINAL: SP 手动投放 - 展示位置 */
+.campaign-create-modal__placement-switch-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(4, max-content);
+  column-gap: 28px;
+  row-gap: 12px;
+  align-items: center;
+}
+
+.campaign-create-modal__placement-switch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #344054;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.campaign-create-modal__placement-switch-item .ant-switch {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1320px) {
+  .campaign-create-modal__placement-switch-grid {
+    grid-template-columns: repeat(2, max-content);
+  }
+}
+
+/* FINAL: SP 手动投放 - 展示位置 */
+.campaign-create-modal__placement-switch-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(4, max-content);
+  column-gap: 28px;
+  row-gap: 12px;
+  align-items: center;
+}
+
+.campaign-create-modal__placement-switch-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #344054;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.campaign-create-modal__placement-switch-item .ant-switch {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1320px) {
+  .campaign-create-modal__placement-switch-grid {
+    grid-template-columns: repeat(2, max-content);
+  }
+}
+
+/* FINAL: SP 手动投放 - 添加关键词完整布局 */
+.campaign-create-modal__keyword-manual-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 640px;
+  margin: -22px -28px;
+}
+
+.campaign-create-modal__keyword-manual-left,
+.campaign-create-modal__keyword-manual-right {
+  min-width: 0;
+  padding: 24px 30px;
+}
+
+.campaign-create-modal__keyword-manual-right {
+  border-left: 1px solid #dce3ed;
+}
+
+.campaign-create-modal__manual-keyword-tab {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 24px;
+  margin-bottom: 18px;
+  color: #1677ff;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 3px solid #1677ff;
+}
+
+.campaign-create-modal__manual-keyword-form {
+  width: 100%;
+}
+
+.campaign-create-modal__manual-row {
+  margin-bottom: 18px !important;
+}
+
+.campaign-create-modal__manual-row .ant-form-item-row {
+  align-items: center !important;
+}
+
+.campaign-create-modal__manual-row .ant-form-item-label {
+  flex: 0 0 76px !important;
+  width: 76px !important;
+  max-width: 76px !important;
+  padding-right: 12px !important;
+  text-align: right !important;
+}
+
+.campaign-create-modal__manual-row .ant-form-item-control {
+  max-width: none !important;
+}
+
+.campaign-create-modal__manual-price-compact {
+  width: 160px;
+}
+
+.campaign-create-modal__manual-price-prefix.ant-btn {
+  width: 38px;
+  padding-inline: 0;
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d0d5dd;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.campaign-create-modal__manual-price-prefix.ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d0d5dd;
+}
+
+.campaign-create-modal__manual-price-input.ant-input-number {
+  width: 122px;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.campaign-create-modal__manual-match-group {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.campaign-create-modal__manual-textarea-wrap {
+  margin-bottom: 16px !important;
+}
+
+.campaign-create-modal__manual-textarea-wrap .ant-form-item-control {
+  max-width: none !important;
+}
+
+.campaign-create-modal__keyword-input-area.ant-input {
+  width: 100%;
+  min-height: 360px;
+  resize: none;
+}
+
+.campaign-create-modal__manual-keyword-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.campaign-create-modal__manual-keyword-count {
+  color: #101828;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.campaign-create-modal__manual-keyword-count span {
+  color: #f97316;
+}
+
+.campaign-create-modal__manual-keyword-count em {
+  color: #667085;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.campaign-create-modal__manual-keyword-table .ant-table {
+  width: 100%;
+}
+
+.campaign-create-modal__manual-keyword-table .ant-table-container {
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.campaign-create-modal__manual-keyword-table .ant-table-cell {
+  white-space: nowrap;
+}
+
+.campaign-create-modal__manual-keyword-empty {
+  padding: 170px 0;
+}
+
+@media (max-width: 1320px) {
+  .campaign-create-modal__keyword-manual-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-create-modal__keyword-manual-right {
+    border-top: 1px solid #dce3ed;
+    border-left: 0;
+  }
+}

@@ -1,0 +1,132 @@
+.create-negative-keyword-modal {
+  display: flex;
+  max-height: 76vh;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.create-negative-keyword-modal__section {
+  border-color: #dce3ed;
+  border-radius: 6px;
+}
+
+.create-negative-keyword-modal__section .ant-card-body {
+  padding: 18px 22px;
+}
+
+.create-negative-keyword-modal__section-title.ant-typography {
+  position: relative;
+  margin: 0 0 18px;
+  padding-left: 10px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.create-negative-keyword-modal__section-title.ant-typography::before {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #1677ff;
+  content: "";
+}
+
+.create-negative-keyword-modal__settings-grid {
+  display: grid;
+  width: 430px;
+  gap: 16px;
+}
+
+.create-negative-keyword-modal__field-row {
+  display: grid;
+  grid-template-columns: 10px 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.create-negative-keyword-modal__required {
+  color: #ff4d4f;
+}
+
+.create-negative-keyword-modal__field-label {
+  color: #667085;
+  font-size: 13px;
+  text-align: right;
+}
+
+.create-negative-keyword-modal__keyword-section .ant-card-head {
+  min-height: 52px;
+  border-bottom-color: #dce3ed;
+}
+
+.create-negative-keyword-modal__keyword-section .ant-card-head-title {
+  position: relative;
+  padding-left: 10px;
+  color: #111827;
+  font-weight: 700;
+}
+
+.create-negative-keyword-modal__keyword-section .ant-card-head-title::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #1677ff;
+  content: "";
+}
+
+.create-negative-keyword-modal__keyword-section .ant-card-body {
+  padding: 0;
+}
+
+.create-negative-keyword-modal__layout {
+  display: grid;
+  min-height: 540px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.create-negative-keyword-modal__pane {
+  min-width: 0;
+  padding: 18px 22px;
+}
+
+.create-negative-keyword-modal__pane + .create-negative-keyword-modal__pane {
+  border-left: 1px solid #dce3ed;
+}
+
+.create-negative-keyword-modal__type-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 12px 0 24px;
+}
+
+.create-negative-keyword-modal__textarea {
+  margin-bottom: 12px;
+}
+
+.create-negative-keyword-modal__pane-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1280px) {
+  .create-negative-keyword-modal__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .create-negative-keyword-modal__pane + .create-negative-keyword-modal__pane {
+    border-top: 1px solid #dce3ed;
+    border-left: 0;
+  }
+}
