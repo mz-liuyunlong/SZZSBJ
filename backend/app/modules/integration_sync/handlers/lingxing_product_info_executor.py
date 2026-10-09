@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Protocol, cast
@@ -91,6 +92,8 @@ def product_info_response_succeeded(
 @contextmanager
 def product_info_client() -> Iterator[LingxingReadonlyClient]:
     settings = get_settings()
+    # httpx INFO access logs include signed URLs with access tokens.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     if settings.app_env is not AppEnvironment.PRODUCTION:
         raise ProductInfoOneTimeRunError("PRODUCT_INFO_SERVER_ENVIRONMENT_REQUIRED")
     token_client = LingxingTokenClient(settings)

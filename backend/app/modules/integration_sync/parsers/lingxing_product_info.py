@@ -121,7 +121,7 @@ def _contract_data(payload: object, *, list_expected: bool) -> dict[str, object]
 
 
 def _parse_detail(data: dict[str, object]) -> ParsedSkuDetail:
-    owner = _one_mapping(data.get("permission_user_info"), "PRODUCT_INFO_OWNER_CARDINALITY")
+    owner = _owner_mapping(data)
     logistics = _one_us_logistics(data.get("product_logistics_relation"))
     purchase_cost = _decimal(data.get("cg_price"))
     first_leg_cost = _decimal(logistics.get("US_cg_transport_costs"))
@@ -236,6 +236,163 @@ def _https_url(value: object) -> str | None:
     if result is not None and not result.startswith("https://"):
         raise ProductInfoParseError("PRODUCT_INFO_URL_INVALID")
     return result
+
+
+CREATOR_UID_KEYS = (
+    "creator_uid",
+    "creator_id",
+    "create_uid",
+    "create_user_uid",
+    "create_user_id",
+    "created_uid",
+    "created_user_uid",
+    "created_user_id",
+    "created_by_uid",
+    "created_by_id",
+    "create_by_uid",
+    "create_by_id",
+)
+
+CREATOR_NAME_KEYS = (
+    "creator_name",
+    "creator",
+    "create_user_name",
+    "create_username",
+    "create_name",
+    "created_user_name",
+    "created_username",
+    "created_name",
+    "created_by_name",
+    "create_by_name",
+    "create_operator_name",
+)
+
+CREATOR_OBJECT_KEYS = (
+    "creator_info",
+    "creator",
+    "create_user_info",
+    "create_user",
+    "created_user_info",
+    "created_by_info",
+    "created_by",
+)
+
+
+def _safe_identifier(value: object) -> str | None:
+    try:
+        return _identifier(value)
+    except ProductInfoParseError:
+        return None
+
+
+def _safe_name(value: object) -> str | None:
+    try:
+        return _text(value)
+    except ProductInfoParseError:
+        return None
+
+
+def _first_creator_value(
+    data: dict[str, object], keys: tuple[str, ...], *, is_name: bool
+) -> str | None:
+    for key in keys:
+        value = data.get(key)
+        result = _safe_name(value) if is_name else _safe_identifier(value)
+        if result:
+            return result
+    return None
+
+
+def _creator_refs_from_object(value: object) -> tuple[str | None, str | None]:
+    mappings: list[dict[str, object]] = []
+    if isinstance(value, dict):
+        mappings = [value]
+    elif isinstance(value, list):
+        mappings = [item for item in value if isinstance(item, dict)]
+
+    for item in mappings:
+        uid = (
+            _safe_identifier(item.get("uid"))
+            or _safe_identifier(item.get("id"))
+            or _safe_identifier(item.get("user_id"))
+            or _safe_identifier(item.get("userId"))
+            or _safe_identifier(item.get("user_uid"))
+            or _safe_identifier(item.get("userUid"))
+            or _safe_identifier(item.get("creator_uid"))
+            or _safe_identifier(item.get("create_user_id"))
+        )
+        name = (
+            _safe_name(item.get("name"))
+            or _safe_name(item.get("user_name"))
+            or _safe_name(item.get("userName"))
+            or _safe_name(item.get("username"))
+            or _safe_name(item.get("nick_name"))
+            or _safe_name(item.get("nickName"))
+            or _safe_name(item.get("real_name"))
+            or _safe_name(item.get("realName"))
+            or _safe_name(item.get("creator_name"))
+            or _safe_name(item.get("create_user_name"))
+        )
+        if uid or name:
+            return uid, name
+    return None, None
+
+
+def _creator_refs(data: dict[str, object]) -> tuple[str | None, str | None]:
+    creator_uid = _first_creator_value(data, CREATOR_UID_KEYS, is_name=False)
+    creator_name = _first_creator_value(data, CREATOR_NAME_KEYS, is_name=True)
+
+    if creator_uid and creator_name:
+        return creator_uid, creator_name
+
+    for key in CREATOR_OBJECT_KEYS:
+        object_uid, object_name = _creator_refs_from_object(data.get(key))
+        creator_uid = creator_uid or object_uid
+        creator_name = creator_name or object_name
+        if creator_uid and creator_name:
+            break
+
+    return creator_uid, creator_name
+
+
+def _owner_mapping(data: dict[str, object]) -> dict[str, object]:
+    value = data.get("permission_user_info")
+    if value is None:
+        return {}
+
+    if not isinstance(value, list):
+        raise ProductInfoParseError(CONTRACT_FIELD_MISMATCH)
+
+    if any(not isinstance(item, dict) for item in value):
+        raise ProductInfoParseError("PRODUCT_INFO_OWNER_CARDINALITY")
+
+    if len(value) <= 1:
+        return {} if not value else value[0]
+
+    creator_uid, creator_name = _creator_refs(data)
+    if not creator_uid and not creator_name:
+        raise ProductInfoParseError("PRODUCT_INFO_OWNER_CARDINALITY")
+
+    remaining: list[dict[str, object]] = []
+    for owner in value:
+        owner_uid = _identifier(owner.get("permission_uid"))
+        owner_name = _text(owner.get("permission_user_name"))
+
+        is_creator = False
+        if creator_uid and owner_uid and creator_uid == owner_uid:
+            is_creator = True
+        elif creator_name and owner_name and creator_name == owner_name:
+            is_creator = True
+
+        if not is_creator:
+            remaining.append(owner)
+
+    if len(remaining) == 1:
+        return remaining[0]
+    if len(remaining) == 0:
+        return {}
+
+    raise ProductInfoParseError("PRODUCT_INFO_OWNER_CARDINALITY")
 
 
 def _one_mapping(value: object, error: str) -> dict[str, object]:
