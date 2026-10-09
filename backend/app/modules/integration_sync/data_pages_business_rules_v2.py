@@ -29,7 +29,9 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+purchase-day-refund-v2+sem+rp+rnc"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-v3-lpds"
+LOW_PRICE_DELIVERY_THRESHOLD = Decimal("10")
+LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT = Decimal("1")
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -70,6 +72,26 @@ def _cost_totals(
         cost.storage_fee_unit_usd * quantity if cost.storage_fee_unit_usd is not None else None
     )
     return purchase, first_leg, wfs, storage
+
+
+def _low_price_delivery_surcharge(
+    sales_amount: Decimal,
+    sales_qty: Decimal,
+) -> Decimal:
+    """Walmart low-price delivery surcharge.
+
+    Business rule:
+    - Use paid sales unit price after samples.
+    - If average paid unit price is lower than 10 USD, add 1 USD per paid unit.
+    - Sample-only rows and zero-quantity rows do not trigger this surcharge.
+    """
+
+    if sales_qty <= 0:
+        return Decimal("0")
+    average_unit_price = sales_amount / sales_qty
+    if average_unit_price < LOW_PRICE_DELIVERY_THRESHOLD:
+        return sales_qty * LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT
+    return Decimal("0")
 
 
 def _estimated_refund_sales_amount(
@@ -709,6 +731,17 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             wfs_effective_total = (
                 wfs_actual_total if wfs_actual_total is not None else wfs_expected_total
             )
+            low_price_surcharge = _low_price_delivery_surcharge(sales, sales_qty)
+            wfs_total = (
+                wfs_effective_total + low_price_surcharge
+                if wfs_effective_total is not None
+                else None
+            )
+            wfs_unit = (
+                wfs_total / cost_quantity
+                if wfs_total is not None and cost_quantity > 0
+                else (cost.wfs_fee_unit_usd if cost is not None else None)
+            )
             wfs_variance = (
                 wfs_actual_total - wfs_expected_total
                 if wfs_actual_total is not None and wfs_expected_total is not None
@@ -731,7 +764,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
 
             complete_costs = all(
                 value is not None
-                for value in (purchase_total, first_leg_total, wfs_effective_total, storage_total)
+                for value in (purchase_total, first_leg_total, wfs_total, storage_total)
             )
             if not missing and complete_costs:
                 cost_status = "complete"
@@ -748,14 +781,14 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 - (net_commission or Decimal("0"))
                 - purchase_total
                 - first_leg_total
-                - wfs_effective_total
+                - wfs_total
                 - storage_total
                 if complete_costs
                 and refund_amount is not None
                 and net_commission is not None
                 and purchase_total is not None
                 and first_leg_total is not None
-                and wfs_effective_total is not None
+                and wfs_total is not None
                 and storage_total is not None
                 else None
             )
@@ -801,7 +834,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 text(
                     "update mart_daily_sales_item_day set owner_ref=:owner_ref,return_rate_30d=:return_rate_30d,"
                     "refund_amount=:refund_amount,refund_currency_code='USD',"
-                    "wfs_fee_unit_amount=:wfs_unit,wfs_fee_total_amount=:wfs_total,wfs_fee_currency_code='USD',"
+                    "wfs_fee_unit_amount=:wfs_unit,wfs_fee_total_amount=:wfs_total,"
+                    "wfs_low_price_surcharge_amount=:wfs_low_price_surcharge,wfs_fee_currency_code='USD',"
                     "wfs_fee_expected_unit_amount=:wfs_unit,wfs_fee_expected_total_amount=:wfs_expected_total,"
                     "wfs_fee_actual_total_amount=:wfs_actual_total,wfs_fee_variance_amount=:wfs_variance,"
                     "wfs_fee_variance_rate=:wfs_variance_rate,wfs_fee_source=:wfs_source,"
@@ -826,8 +860,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "owner_ref": cost.owner_ref if cost is not None else None,
                     "return_rate_30d": return_rate_30d,
                     "refund_amount": refund_amount,
-                    "wfs_unit": cost.wfs_fee_unit_usd if cost is not None else None,
-                    "wfs_total": wfs_effective_total,
+                    "wfs_unit": wfs_unit,
+                    "wfs_total": wfs_total,
+                    "wfs_low_price_surcharge": low_price_surcharge,
                     "wfs_expected_total": wfs_expected_total,
                     "wfs_actual_total": wfs_actual_total,
                     "wfs_variance": wfs_variance,
@@ -904,7 +939,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "(id,business_date_la,source_account_ref,local_sku,item_ids_json,store_ids_json,store_count,item_count,"
                 "sales_qty,order_count,sales_amount,sales_currency_code,return_qty,refund_amount,"
                 "refund_loss_amount,ad_spend_amount,sem_ad_spend_amount,"
-                "commission_fee_amount,wfs_fee_total_amount,purchase_cost_total_usd,first_leg_cost_total_usd,"
+                "commission_fee_amount,wfs_fee_total_amount,wfs_low_price_surcharge_amount,"
+                "purchase_cost_total_usd,first_leg_cost_total_usd,"
                 "storage_fee_total_amount,gross_profit_amount,gross_profit_currency_code,gross_margin,roi,cost_status,"
                 "missing_cost_codes_json,source_lineage_json,calc_version,calculated_at,created_at,updated_at) "
                 "select gen_random_uuid(),business_date_la,source_account_ref,coalesce(nullif(local_sku,''),item_id),"
@@ -915,6 +951,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "sum(coalesce(refund_amount,0) * (1 - coalesce(commission_rate,0))),"
                 "sum(coalesce(ad_spend_amount,0)),sum(coalesce(sem_ad_spend_amount,0)),"
                 "sum(coalesce(commission_fee_amount,0)),sum(coalesce(wfs_fee_total_amount,0)),"
+                "sum(coalesce(wfs_low_price_surcharge_amount,0)),"
                 "sum(coalesce(purchase_cost_total_usd,0)),sum(coalesce(first_leg_cost_total_usd,0)),"
                 "sum(coalesce(storage_fee_total_amount,0)),"
                 "case when bool_and(gross_profit_amount is not null) then sum(gross_profit_amount) end,'USD',"

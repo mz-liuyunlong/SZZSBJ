@@ -42,6 +42,7 @@ DAILY_SALES_EXPORT_COLUMNS: dict[str, str] = {
     "ad_spend": "广告花费",
     "sem_ad_spend": "SEM广告费",
     "wfs_fee_total": "WFS总配送费",
+    "wfs_low_price_surcharge": "低价配送附加费",
     "wfs_fee_unit": "WFS配送单价",
     "commission": "佣金",
     "purchase_cost_total": "采购总成本",
@@ -378,6 +379,7 @@ def _row_value_map(
         "ad_spend": ad_spend_amount,
         "sem_ad_spend": sem_ad_spend_amount,
         "wfs_fee_total": _optional_sum(rows, "wfs_fee_total_amount"),
+        "wfs_low_price_surcharge": _sum(rows, "wfs_low_price_surcharge_amount"),
         "wfs_fee_unit": _weighted_average(
             rows,
             value_attr="wfs_fee_unit_amount",
@@ -435,8 +437,12 @@ def export_daily_sales_csv(
     columns: str | None,
 ) -> tuple[str, str]:
     rows = _filtered_daily_sales_rows(service, query=query, account_refs=account_refs)
-    inventory_snapshots = service.repository.daily_sales_inventory_snapshot_map(rows)
     selected_columns = _selected_columns(columns)
+    inventory_snapshots = (
+        service.repository.daily_sales_inventory_snapshot_map(rows)
+        if "wfs_inventory" in selected_columns
+        else {}
+    )
 
     output = StringIO()
     writer = csv.writer(output)

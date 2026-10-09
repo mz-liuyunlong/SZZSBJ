@@ -54,7 +54,7 @@ const createInitialFilters = (): OrderProfitFilters => ({
 
 const defaultColumnKeys = orderProfitColumnFields
   .map((field) => field.key)
-  .filter((key) => key !== "platform");
+  .filter((key) => !["platform", "wfsLowPriceSurcharge"].includes(key));
 const defaultColumnWidths: Record<string, number> = Object.fromEntries(orderProfitColumnFields.map((field) => [
   field.key,
   field.key === "image" || field.key === "analysis"

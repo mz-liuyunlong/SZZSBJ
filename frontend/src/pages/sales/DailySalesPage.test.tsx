@@ -542,7 +542,7 @@ const renderPage = async () => {
 };
 const referenceDay = dayjs().subtract(1, "day").format("YYYY-MM-DD");
 const referenceRows = dailySalesMockData.filter((row) => row.date === referenceDay);
-const visibleDailySalesColumnFields = dailySalesColumnFields.filter((field) => field.key !== "platform");
+const visibleDailySalesColumnFields = dailySalesColumnFields.filter((field) => !["platform", "wfsLowPriceSurcharge"].includes(field.key));
 const usdHeaders = visibleDailySalesColumnFields.map((field) => ({
   wfsDeliveryUnitPrice: "WFS配送单价($)",
   purchaseUnitPriceCny: "采购单价($)",

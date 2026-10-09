@@ -116,6 +116,7 @@ class DailySalesItemRead(StrictSchema):
     wfs_available_quantity: Money | None
     wfs_fee_unit_amount: Money | None
     wfs_fee_total_amount: Money | None
+    wfs_low_price_surcharge_amount: Money = Decimal("0")
     wfs_fee_currency_code: str | None
     wfs_fee_expected_unit_amount: Money | None = None
     wfs_fee_expected_total_amount: Money | None = None
@@ -237,6 +238,7 @@ class OrderProfitItemRead(StrictSchema):
     wfs_fee_unit_amount: Money | None = None
     commission_fee_amount: Money | None
     wfs_fee_total_amount: Money | None
+    wfs_low_price_surcharge_amount: Money = Decimal("0")
     purchase_cost_unit_cny: Money | None = None
     purchase_cost_total_usd: Money | None
     first_leg_cost_unit_cny: Money | None = None

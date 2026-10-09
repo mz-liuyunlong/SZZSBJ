@@ -106,6 +106,7 @@ const totalMoneyKeys = new Set([
   "semAdSpend",
   "totalAdSpend",
   "wfsDeliveryFee",
+  "wfsLowPriceSurcharge",
   "commission",
   "purchaseCost",
   "firstLegCost",
@@ -305,6 +306,7 @@ render: (_, row) => (
     { title: "广告占比", key: "adRatio", width: 104, render: percent("adRatio") },
 
     { title: "WFS总配送费", key: "wfsDeliveryFee", width: 132, render: money("wfsDeliveryFee", currency) },
+    { title: "低价配送附加费", key: "wfsLowPriceSurcharge", width: 144, render: money("wfsLowPriceSurcharge", currency) },
     { title: "WFS配送单价", key: "wfsDeliveryUnitPrice", width: 148, render: money("wfsDeliveryUnitPrice", currency) },
 
     { title: "佣金", key: "commission", width: 104, render: money("commission", currency) },

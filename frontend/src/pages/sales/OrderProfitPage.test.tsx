@@ -630,7 +630,7 @@ describe("OrderProfitPage", () => {
     expect(screen.getAllByText("退款损失").length).toBeGreaterThan(0);
     expect(screen.queryByText("系统运营日志")).not.toBeInTheDocument();
     expect(screen.queryByText("运营日志")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.filter((field) => field.key !== "platform").length);
+    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.filter((field) => !["platform", "wfsLowPriceSurcharge"].includes(field.key)).length);
   });
 
   it("leaves global sync and help to MainLayout while keeping page actions in the toolbar", async () => {

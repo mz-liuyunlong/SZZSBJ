@@ -43,6 +43,7 @@ export interface DailySalesRow {
   totalAdSpend: number;
   adRatio: number;
   wfsDeliveryFee: number | null;
+  wfsLowPriceSurcharge?: number;
   wfsDeliveryUnitPrice: number | null;
   wfsExpectedFee?: number;
   wfsActualFee?: number | null;
@@ -107,6 +108,7 @@ export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "totalAdSpend", title: "总广告费" },
   { key: "adRatio", title: "广告占比" },
   { key: "wfsDeliveryFee", title: "WFS总配送费" },
+  { key: "wfsLowPriceSurcharge", title: "低价配送附加费" },
   { key: "wfsDeliveryUnitPrice", title: "WFS配送单价" },
   { key: "commission", title: "佣金" },
   { key: "purchaseCost", title: "采购总成本" },

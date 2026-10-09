@@ -38,6 +38,7 @@ interface BackendOrderProfitItem {
   wfs_fee_unit_amount: string | null;
   commission_fee_amount: string | null;
   wfs_fee_total_amount: string | null;
+  wfs_low_price_surcharge_amount: string;
   purchase_cost_unit_cny: string | null;
   purchase_cost_total_usd: string | null;
   first_leg_cost_unit_cny: string | null;
@@ -280,6 +281,7 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
     adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
 
     wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
+    wfsLowPriceSurcharge: numberValue(item.wfs_low_price_surcharge_amount),
     wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
 
     commission: numberValue(item.commission_fee_amount),
