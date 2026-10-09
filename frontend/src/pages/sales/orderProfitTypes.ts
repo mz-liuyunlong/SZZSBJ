@@ -120,7 +120,6 @@ export interface OrderProfitColumnField {
 
 export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "image", title: "图片" },
-  { key: "analysis", title: "分析" },
   { key: "productIdName", title: "商品ID/品名" },
   { key: "skuMsku", title: "SKU/MSKU" },
   { key: "platform", title: "平台" },
@@ -169,8 +168,8 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
 
 export const fixedOrderProfitColumnKeys = [
   "image",
-  "analysis",
   "productIdName",
+  "skuMsku",
 ];
 
 /** Acceptance-only display rate; replace with approved daily FX data when the API is implemented. */

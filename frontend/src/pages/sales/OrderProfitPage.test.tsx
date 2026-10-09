@@ -630,7 +630,7 @@ describe("OrderProfitPage", () => {
     expect(screen.getAllByText("退款损失").length).toBeGreaterThan(0);
     expect(screen.queryByText("系统运营日志")).not.toBeInTheDocument();
     expect(screen.queryByText("运营日志")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.length);
+    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(orderProfitColumnFields.filter((field) => field.key !== "platform").length);
   });
 
   it("leaves global sync and help to MainLayout while keeping page actions in the toolbar", async () => {
@@ -684,7 +684,7 @@ describe("OrderProfitPage", () => {
     fireEvent.change(screen.getByLabelText("搜索内容"), { target: { value: referenceRows[0].productId } });
     fireEvent.click(screen.getByLabelText("搜索"));
     await waitFor(() => expect(screen.getByTestId("pro-table")).toHaveAttribute("data-total", "1"));
-    fireEvent.click(screen.getByRole("button", { name: /查看订单利润详情/ }));
+    fireEvent.click(screen.getByRole("button", { name: "详情" }));
     expect(screen.getByRole("dialog", { name: "Listing经营分析中心" })).toBeInTheDocument();
     expect(
       screen.getByText((content) => content.includes(`Listing #${referenceRows[0].productId}`)),

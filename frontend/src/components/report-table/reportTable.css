@@ -2774,3 +2774,61 @@
   word-break: break-all;
 }
 
+.report-table-identity-stack {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.report-table-identity-stack .ant-space-item {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.report-table-product-name-ellipsis {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.report-table-product-name-ellipsis .report-table-copyable {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.report-table-product-name-ellipsis .report-table-copyable__text {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-table-product-name-ellipsis .report-table-copyable__button {
+  flex: 0 0 22px;
+}
+
+/* compact-identity-columns-start */
+.report-table-shell .report-table-product-identity-column,
+.report-table-shell .report-table-sku-msku-identity-column {
+  width: 188px !important;
+  max-width: 188px !important;
+  overflow: hidden !important;
+}
+
+.report-table-shell .report-table-product-identity-stack,
+.report-table-shell .report-table-sku-msku-identity-stack {
+  width: 176px !important;
+  max-width: 176px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.report-table-shell .report-table-product-identity-stack .report-table-copyable,
+.report-table-shell .report-table-sku-msku-identity-stack .report-table-copyable {
+  max-width: 176px !important;
+  overflow: hidden !important;
+}
+/* compact-identity-columns-end */

@@ -17,6 +17,7 @@ import type { NavigationPage } from "@/config/navigation";
 import DailySalesCharts from "@/pages/sales/components/DailySalesCharts";
 import DailySalesSummaryCards from "@/pages/sales/components/DailySalesSummaryCards";
 import DailySalesTable from "@/pages/sales/components/DailySalesTable";
+import DailySalesExportModal from "@/pages/sales/components/DailySalesExportModal";
 import DailySalesToolbar, {
   type DailySalesFilters,
 } from "@/pages/sales/components/DailySalesToolbar";
@@ -34,7 +35,7 @@ import { mergeSelectedFilterOptions } from "@/shared/report-filters";
 import { previousComparableDateRange } from "@/pages/sales/summaryComparison";
 import "@/pages/sales/DailySalesPage.css";
 
-const EXPORT_PENDING = "导出接口待接入";
+const EXPORT_PENDING = "导出";
 
 const TEMPLATE_PENDING = "列模板接口待接入";
 
@@ -49,15 +50,19 @@ const createInitialFilters = (): DailySalesFilters => ({
   keyword: "",
 });
 
-const defaultColumnKeys = dailySalesColumnFields.map((field) => field.key);
+const defaultColumnKeys = dailySalesColumnFields
+  .map((field) => field.key)
+  .filter((key) => key !== "platform");
 const defaultColumnWidths = Object.fromEntries(dailySalesColumnFields.map((field) => [
   field.key,
-  field.key === "image" || field.key === "analysis"
+  field.key === "image"
     ? 72
     : field.key === "mskuProductId" || field.key === "skuProductName"
       ? 210
-      : field.key.includes("Log")
-        ? 180
+      : field.key === "actions"
+        ? 96
+        : field.key.includes("Log")
+          ? 180
         : 112,
 ]));
 const columnGroups = [{ title: "每日销售字段", fields: dailySalesColumnFields }];
@@ -81,6 +86,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [statisticsVisible, setStatisticsVisible] = useState(true);
   const [chartsVisible, setChartsVisible] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [appliedColumnKeys, setAppliedColumnKeys] = useState(defaultColumnKeys);
   const [columnWidths, setColumnWidths] = useState(defaultColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
@@ -338,7 +344,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           className="daily-sales__toolbar-icon-button"
           aria-label="下载"
           icon={<CloudDownloadOutlined aria-hidden="true" />}
-          onClick={() => void messageApi.info(EXPORT_PENDING)}
+          onClick={() => setExportModalOpen(true)}
         />
       </Tooltip>
     </>
@@ -405,7 +411,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
             resetPageAndSelection();
           }}
           onSelectionChange={setSelectedRowKeys}
-          onBulkExport={() => void messageApi.info(EXPORT_PENDING)}
+          onBulkExport={() => setExportModalOpen(true)}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={openDailySalesAnalysis}
           />
@@ -421,6 +427,11 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         onApply={setAppliedColumnKeys}
         onClose={() => setColumnConfigOpen(false)}
         onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
+      />
+      <DailySalesExportModal
+        open={exportModalOpen}
+        filters={filters}
+        onClose={() => setExportModalOpen(false)}
       />
       <ListingAnalysisModal
         open={analysisSource !== null}

@@ -8,6 +8,7 @@ from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.modules.data_pages.daily_sales_export import export_daily_sales_csv
 from app.modules.data_pages.order_profit_export import export_order_profit_csv
 from app.modules.data_pages.registry import (
     DATA_PAGE_API_REGISTRY,
@@ -175,6 +176,38 @@ def get_order_profit_filter_options(
 
 
 @router.get(
+    f"{_DAILY_SALES_REGISTRY.route_path}/export",
+    response_class=Response,
+    responses=ERRORS,
+)
+def export_daily_sales(
+    query: Annotated[DailySalesQuery, Depends()],
+    session: db_session,
+    _: daily_sales_principal,
+    account_refs: source_scope,
+    period: Annotated[Literal["day", "month"], Query()] = "day",
+    dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "item_id",
+    columns: Annotated[str | None, Query()] = None,
+) -> Response:
+    csv_text, filename = export_daily_sales_csv(
+        DailySalesService(session),
+        query=query,
+        account_refs=account_refs,
+        period=period,
+        dimension=dimension,
+        columns=columns,
+    )
+
+    return Response(
+        content=csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.get(
     _DAILY_SALES_REGISTRY.route_path,
     response_model=SuccessEnvelope[DailySalesListData, DailySalesReadMeta],
     responses=ERRORS,
@@ -245,7 +278,7 @@ def export_order_profit(
     _: order_profit_principal,
     account_refs: source_scope,
     period: Annotated[Literal["day", "month"], Query()] = "day",
-    dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "msku",
+    dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "item_id",
     columns: Annotated[str | None, Query()] = None,
 ) -> Response:
     csv_text, filename = export_order_profit_csv(

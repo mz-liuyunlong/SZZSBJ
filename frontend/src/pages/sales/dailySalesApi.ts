@@ -342,6 +342,62 @@ async function fetchDailySalesRowsFromApi(
 
 
 
+export type DailySalesExportPeriod = "day" | "month";
+export type DailySalesExportDimension = "item_id" | "sku" | "msku";
+
+export interface DailySalesExportParams extends DailySalesParams {
+  period: DailySalesExportPeriod;
+  dimension: DailySalesExportDimension;
+  columns: string[];
+}
+
+export async function downloadDailySalesExportCsv(
+  params: DailySalesExportParams,
+): Promise<void> {
+  const search = new URLSearchParams();
+
+  if (params.startDate) search.set("start_date", params.startDate);
+  if (params.endDate) search.set("end_date", params.endDate);
+  search.set("period", params.period);
+  search.set("dimension", params.dimension);
+
+  if (params.columns.length > 0) {
+    search.set("columns", params.columns.join(","));
+  }
+
+  appendDailySalesFilters(search, params);
+
+  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
+  const response = await fetch(`/api/sales/daily-sales/export?${search.toString()}`, {
+    credentials: "same-origin",
+    headers: {
+      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`DAILY_SALES_EXPORT_FAILED_${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = /filename="?([^"]+)"?/i.exec(disposition);
+  const filename = filenameMatch?.[1] ?? `daily-sales-${params.period}.csv`;
+  const url = URL.createObjectURL(blob);
+
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+
 export function fetchDailySalesRows(
   params: DailySalesParams,
 ): Promise<DailySalesApiResult> {

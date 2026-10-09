@@ -2,15 +2,20 @@
 import { CheckOutlined, CopyOutlined, PictureOutlined } from "@ant-design/icons";
 import { Button, Popover, Space, Tag, Tooltip } from "antd";
 import ReactECharts from "echarts-for-react";
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import "@/components/report-table/reportTable.css";
 
 interface CopyableTextCellProps {
   text: string;
+  displayText?: string;
   label: string;
   link?: boolean;
   onCopy?: (text: string) => void;
   onOpen?: () => void;
+  className?: string;
+  textClassName?: string;
+  textStyle?: CSSProperties;
+  containerStyle?: CSSProperties;
 }
 
 async function copyTextWithFallback(text: string) {
@@ -32,8 +37,20 @@ async function copyTextWithFallback(text: string) {
   document.body.removeChild(textarea);
 }
 
-export function CopyableTextCell({ text, label, link, onCopy, onOpen }: CopyableTextCellProps) {
+export function CopyableTextCell({
+  text,
+  displayText,
+  label,
+  link,
+  onCopy,
+  onOpen,
+  className,
+  textClassName,
+  textStyle,
+  containerStyle,
+}: CopyableTextCellProps) {
   const [copied, setCopied] = useState(false);
+  const visibleText = displayText ?? text;
 
   const copy = async (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -53,14 +70,23 @@ export function CopyableTextCell({ text, label, link, onCopy, onOpen }: Copyable
   };
 
   return (
-    <span className="report-table-copyable" data-copyable-text={text}>
+    <span
+      className={["report-table-copyable", className].filter(Boolean).join(" ")}
+      data-copyable-text={text}
+      style={containerStyle}
+    >
       <Tooltip title={text}>
         {link ? (
-          <Button className="report-table-copyable__link" type="link" onClick={onOpen}>
-            {text}
+          <Button className="report-table-copyable__link" type="link" style={textStyle} onClick={onOpen}>
+            {visibleText}
           </Button>
         ) : (
-          <span className="report-table-copyable__text">{text}</span>
+          <span
+            className={["report-table-copyable__text", textClassName].filter(Boolean).join(" ")}
+            style={textStyle}
+          >
+            {visibleText}
+          </span>
         )}
       </Tooltip>
       <Tooltip title={copied ? `已复制${label}` : `复制${label}`}>
@@ -76,8 +102,6 @@ export function CopyableTextCell({ text, label, link, onCopy, onOpen }: Copyable
     </span>
   );
 }
-
-
 
 const WALMART_ITEM_URL_PREFIX = "https://www.walmart.com/ip/";
 
@@ -126,9 +150,16 @@ export function WalmartItemLink({ itemId, label = "Walmart 商品页", className
 interface WalmartProductIdCellProps {
   productId: string;
   onCopy?: (text: string) => void;
+  containerStyle?: CSSProperties;
+  textStyle?: CSSProperties;
 }
 
-export function WalmartProductIdCell({ productId, onCopy }: WalmartProductIdCellProps) {
+export function WalmartProductIdCell({
+  productId,
+  onCopy,
+  containerStyle,
+  textStyle,
+}: WalmartProductIdCellProps) {
   return (
     <span className="report-table-product-id-cell">
       <CopyableTextCell
@@ -137,6 +168,8 @@ export function WalmartProductIdCell({ productId, onCopy }: WalmartProductIdCell
         link
         onCopy={onCopy}
         onOpen={() => openWalmartItem(productId)}
+        containerStyle={containerStyle}
+        textStyle={textStyle}
       />
     </span>
   );
@@ -148,15 +181,50 @@ interface ProductIdentityCellProps {
   onCopy?: (text: string) => void;
 }
 
+const productIdentityLineStyle: CSSProperties = {
+  display: "inline-flex",
+  width: 176,
+  maxWidth: 176,
+  minWidth: 0,
+  alignItems: "center",
+  gap: 4,
+  overflow: "hidden",
+  verticalAlign: "bottom",
+};
+
+const productIdentityTextEllipsisStyle: CSSProperties = {
+  display: "inline-block",
+  width: 150,
+  maxWidth: 150,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  verticalAlign: "bottom",
+};
+
 export function ProductIdentityCell({
   productId,
   productName,
   onCopy,
 }: ProductIdentityCellProps) {
   return (
-    <Space direction="vertical" size={0} className="report-table-identity-stack">
-      <WalmartProductIdCell productId={productId} onCopy={onCopy} />
-      <CopyableTextCell text={productName} label="品名" onCopy={onCopy} />
+    <Space direction="vertical" size={0} className="report-table-identity-stack report-table-product-identity-stack">
+      <WalmartProductIdCell
+        productId={productId}
+        onCopy={onCopy}
+        containerStyle={productIdentityLineStyle}
+        textStyle={productIdentityTextEllipsisStyle}
+      />
+      <CopyableTextCell
+        text={productName}
+        label="品名"
+        onCopy={onCopy}
+        className="report-table-product-name-copyable"
+        textClassName="report-table-product-name-text"
+        containerStyle={productIdentityLineStyle}
+        textStyle={productIdentityTextEllipsisStyle}
+      />
     </Space>
   );
 }
@@ -169,14 +237,24 @@ interface SkuMskuIdentityCellProps {
 
 export function SkuMskuIdentityCell({ sku, msku, onCopy }: SkuMskuIdentityCellProps) {
   return (
-    <Space direction="vertical" size={0} className="report-table-identity-stack">
-      <CopyableTextCell text={sku} label="SKU" onCopy={onCopy} />
-      <CopyableTextCell text={msku} label="MSKU" onCopy={onCopy} />
+    <Space direction="vertical" size={0} className="report-table-identity-stack report-table-sku-msku-identity-stack">
+      <CopyableTextCell
+        text={sku}
+        label="SKU"
+        onCopy={onCopy}
+        containerStyle={productIdentityLineStyle}
+        textStyle={productIdentityTextEllipsisStyle}
+      />
+      <CopyableTextCell
+        text={msku}
+        label="MSKU"
+        onCopy={onCopy}
+        containerStyle={productIdentityLineStyle}
+        textStyle={productIdentityTextEllipsisStyle}
+      />
     </Space>
   );
 }
-
-
 
 interface ImageCellProps {
   image?: string;

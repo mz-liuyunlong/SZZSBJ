@@ -1,5 +1,4 @@
 /** Dense daily-sales report table. */
-import { BarChartOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Table, Tooltip } from "antd";
 import type { Key } from "react";
@@ -75,6 +74,24 @@ const percent = (key: keyof DailySalesRow) =>
   (_: unknown, row: DailySalesRow) => {
     const value = row[key];
     return <PercentCell value={typeof value === "number" ? value : null} />;
+  };
+
+const formatRoiRatio = (value: number | null | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return value.toLocaleString("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+function RoiCell({ value }: { value: number | null | undefined }) {
+  return <span className="report-table-metric">{formatRoiRatio(value)}</span>;
+}
+
+const roiRatio = (key: keyof DailySalesRow) =>
+  (_: unknown, row: DailySalesRow) => {
+    const value = row[key];
+    return <RoiCell value={typeof value === "number" ? value / 100 : null} />;
   };
 
 const sum = (rows: DailySalesRow[], key: keyof DailySalesRow) => rows
@@ -262,8 +279,8 @@ function TotalCell({
       ? purchaseCost + firstLegCost
       : null;
     return orderProfit != null && denominator != null && denominator > 0
-      ? <PercentCell value={orderProfit / denominator * 100} />
-      : <PercentCell value={null} />;
+      ? <RoiCell value={orderProfit / denominator} />
+      : <RoiCell value={null} />;
   }
   return null;
 }
@@ -287,21 +304,7 @@ function createColumns(
 ): ProColumns<DailySalesRow>[] {
   return [
     { title: "图片", key: "image", width: 72, fixed: "left", render: () => <ImageCell label="每日销售商品图片占位" /> },
-    {
-      title: "分析",
-      key: "analysis",
-      width: 72,
-      fixed: "left",
-      render: (_, row) => (
-        <Button
-          type="text"
-          aria-label={`查看销售详情：${row.sku}`}
-          icon={<BarChartOutlined aria-hidden="true" />}
-          onClick={() => onOpenDetail(row)}
-        />
-      ),
-    },
-    { title: "日期", dataIndex: "date", key: "date", width: 112, fixed: "left" },
+    { title: "日期", dataIndex: "date", key: "date", width: 112 },
     { title: "店铺", dataIndex: "store", key: "store", width: 120 },
     { title: "负责人", dataIndex: "owner", key: "owner", width: 96 },
     {
@@ -313,8 +316,10 @@ function createColumns(
     {
       title: "商品ID/品名",
       key: "mskuProductId",
-      width: 240,
-      render: (_, row) => (
+      width: 188,
+      fixed: "left",
+            className: "report-table-product-identity-column",
+render: (_, row) => (
         <ProductIdentityCell
           productId={row.productId}
           productName={row.productName}
@@ -325,8 +330,10 @@ function createColumns(
     {
       title: "SKU/MSKU",
       key: "skuProductName",
-      width: 190,
-      render: (_, row) => (
+      width: 188,
+      fixed: "left",
+            className: "report-table-sku-msku-identity-column",
+render: (_, row) => (
         <SkuMskuIdentityCell
           sku={row.sku}
           msku={row.msku}
@@ -371,10 +378,17 @@ function createColumns(
     },
     { title: "订单利润", key: "orderProfit", width: 112, render: renderUsdSourceProfitMoney<DailySalesRow>("orderProfit", currency, dailySalesFxRate) },
     { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
-    { title: "ROI", key: "roi", width: 88, render: percent("roi") },
+    { title: "ROI", key: "roi", width: 88, render: roiRatio("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
     { title: "系统运营日志", key: "systemOperationLog", width: 180, render: (_, row) => <LogCell text={row.systemOperationLog} /> },
     { title: "运营日志", key: "operationLog", width: 180, render: (_, row) => <LogCell text={row.operationLog} /> },
+    {
+      title: "操作",
+      key: "actions",
+      width: 96,
+      fixed: "right",
+      render: (_, row) => <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>,
+    },
   ];
 }
 
@@ -397,14 +411,18 @@ function DailySalesTable({
   onCopy,
   onOpenDetail,
 }: DailySalesTableProps) {
+  const compactIdentityColumnWidths: Record<string, number> = {
+    mskuProductId: 188,
+    skuProductName: 188,
+  };
   const columnMap = new Map(createColumns(onCopy, onOpenDetail, currency).map((column) => [String(column.key), column]));
   const columns = appliedColumnKeys.flatMap((key) => {
     const column = columnMap.get(key);
     if (!column) return [];
     const configuredTitle = dailySalesColumnFields.find((field) => field.key === key)?.title ?? key;
     const title = columnTitle(key, configuredTitle, currency);
-    const width = columnWidths[key] ?? (Number(column.width) || 96);
-    const minWidth = Math.max(key === "image" || key === "analysis" ? 72 : 88, title.length * 14 + 28);
+    const width = compactIdentityColumnWidths[key] ?? columnWidths[key] ?? (Number(column.width) || 96);
+    const minWidth = Math.max(key === "image" ? 72 : 88, title.length * 14 + 28);
     return [{
       ...column,
       align: "left" as const,

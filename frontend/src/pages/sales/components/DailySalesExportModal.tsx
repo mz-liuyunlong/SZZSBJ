@@ -4,25 +4,26 @@ import dayjs, { type Dayjs } from "dayjs";
 import "dayjs/locale/zh-cn";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
-  downloadOrderProfitExportCsv,
-  type OrderProfitExportDimension,
-  type OrderProfitExportPeriod,
-} from "@/pages/sales/orderProfitApi";
+  downloadDailySalesExportCsv,
+  type DailySalesExportDimension,
+  type DailySalesExportPeriod,
+} from "@/pages/sales/dailySalesApi";
 
 dayjs.locale("zh-cn");
 
-interface OrderProfitExportFilters {
+interface DailySalesExportFilters {
   dateRange?: [string | null, string | null] | null;
   platforms: string[];
   owners: string[];
   stores: string[];
   searchField: string;
   keyword: string;
+  batchValues?: string[];
 }
 
-interface OrderProfitExportModalProps {
+interface DailySalesExportModalProps {
   open: boolean;
-  filters: OrderProfitExportFilters;
+  filters: DailySalesExportFilters;
   onClose: () => void;
 }
 
@@ -52,10 +53,14 @@ const exportColumnGroups: ExportColumnGroup[] = [
   {
     title: "销售信息",
     fields: [
+      { key: "gross_sales_qty", label: "毛销量" },
+      { key: "gross_order_count", label: "毛订单量" },
+      { key: "gross_sales_amount", label: "毛销售额" },
       { key: "sales_qty", label: "销量" },
       { key: "order_count", label: "订单量" },
       { key: "sales_amount", label: "销售额" },
       { key: "avg_price", label: "平均售价" },
+      { key: "sample_order_count", label: "送样单量" },
       { key: "sample_qty", label: "送样量" },
       { key: "sample_amount", label: "送样金额" },
     ],
@@ -89,7 +94,7 @@ const exportColumnGroups: ExportColumnGroup[] = [
       { key: "first_leg_unit_cny", label: "头程单价" },
       { key: "storage_fee_total", label: "仓储费" },
       { key: "storage_unit", label: "仓储单价" },
-      { key: "wfs_inventory", label: "WFS实时库存" },
+      { key: "wfs_inventory", label: "WFS历史库存" },
       { key: "total_cost", label: "总成本" },
     ],
   },
@@ -109,18 +114,18 @@ const defaultExportColumns = exportColumnGroups.flatMap((group) =>
   group.fields.map((field) => field.key),
 );
 
-const dimensionOptions: Array<{ value: OrderProfitExportDimension; label: string }> = [
+const dimensionOptions: Array<{ value: DailySalesExportDimension; label: string }> = [
   { value: "item_id", label: "商品ID" },
   { value: "msku", label: "MSKU" },
   { value: "sku", label: "SKU" },
 ];
 
-const periodOptions: Array<{ value: OrderProfitExportPeriod; label: string }> = [
+const periodOptions: Array<{ value: DailySalesExportPeriod; label: string }> = [
   { value: "day", label: "按天" },
   { value: "month", label: "按月" },
 ];
 
-const dimensionFieldKeyMap: Record<OrderProfitExportDimension, string> = {
+const dimensionFieldKeyMap: Record<DailySalesExportDimension, string> = {
   item_id: "product_id",
   msku: "msku",
   sku: "sku",
@@ -187,16 +192,16 @@ const modalStyles: {
   },
 };
 
-function normalizeRange(filters: OrderProfitExportFilters): [Dayjs | null, Dayjs | null] {
+function normalizeRange(filters: DailySalesExportFilters): [Dayjs | null, Dayjs | null] {
   const start = filters.dateRange?.[0] ? dayjs(filters.dateRange[0]) : dayjs();
   const end = filters.dateRange?.[1] ? dayjs(filters.dateRange[1]) : start;
   return [start, end];
 }
 
-function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportModalProps) {
+function DailySalesExportModal({ open, filters, onClose }: DailySalesExportModalProps) {
   const [messageApi, contextHolder] = message.useMessage();
-  const [period, setPeriod] = useState<OrderProfitExportPeriod>("day");
-  const [dimension, setDimension] = useState<OrderProfitExportDimension>("item_id");
+  const [period, setPeriod] = useState<DailySalesExportPeriod>("day");
+  const [dimension, setDimension] = useState<DailySalesExportDimension>("item_id");
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null]>(() =>
     normalizeRange(filters),
   );
@@ -294,7 +299,7 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
 
     setExporting(true);
 
-    const exportRequest = downloadOrderProfitExportCsv({
+    const exportRequest = downloadDailySalesExportCsv({
       startDate,
       endDate,
       period,
@@ -305,6 +310,7 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
       stores: filters.stores,
       searchField: filters.searchField,
       keyword: filters.keyword,
+      batchValues: filters.batchValues,
     });
 
     onClose();
@@ -449,7 +455,7 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
                 options={dimensionOptions}
                 disabled={exporting}
                 style={{ width: "100%", height: 42, marginTop: 10 }}
-                onChange={(nextDimension: OrderProfitExportDimension) => {
+                onChange={(nextDimension: DailySalesExportDimension) => {
                   setDimension(nextDimension);
                   const nextRequiredColumn = dimensionFieldKeyMap[nextDimension];
                   setSelectedColumns((current) => {
@@ -636,4 +642,4 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
   );
 }
 
-export default OrderProfitExportModal;
+export default DailySalesExportModal;
