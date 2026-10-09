@@ -167,7 +167,7 @@ def test_bootstrap_does_not_touch_other_interfaces(governance_session: Session) 
         )
         == before.id
     )
-    assert len(governance_session.scalars(select(IntegrationInterface)).all()) == 4
+    assert len(governance_session.scalars(select(IntegrationInterface)).all()) == 5
 
 
 @pytest.mark.parametrize("value", ["", " primary", "primary ", "x" * 129])

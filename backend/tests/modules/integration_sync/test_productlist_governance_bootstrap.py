@@ -72,7 +72,7 @@ def test_command_rejects_invalid_source_account_ref(
     session_factory.assert_not_called()
 
 
-def test_bootstrap_creates_three_rows_and_is_idempotent(database: Engine) -> None:
+def test_bootstrap_creates_product_management_rows_and_is_idempotent(database: Engine) -> None:
     with Session(database) as session:
         service = IntegrationCatalogService(session)
         first = service.bootstrap_productlist_governance("synthetic-account")
@@ -92,13 +92,29 @@ def test_bootstrap_creates_three_rows_and_is_idempotent(database: Engine) -> Non
             second.retention_policy_status,
             second.sync_config_status,
         ) == ("unchanged", "unchanged", "unchanged")
-        assert session.scalar(select(func.count()).select_from(IntegrationInterface)) == 1
+        assert session.scalar(select(func.count()).select_from(IntegrationInterface)) == 2
         assert session.scalar(select(func.count()).select_from(RawRetentionPolicy)) == 1
-        assert session.scalar(select(func.count()).select_from(IntegrationSyncConfig)) == 1
+        assert session.scalar(select(func.count()).select_from(IntegrationSyncConfig)) == 2
         assert interface is not None
         assert interface.endpoint_path == "/erp/sc/routing/data/local_inventory/productList"
         assert interface.request_kind == "offset_page"
         assert interface.handler_key == "lingxing.product_list_sync.v1"
+
+        product_info_interface = session.scalars(
+            select(IntegrationInterface).where(
+                IntegrationInterface.interface_key == "batchGetProductInfo"
+            )
+        ).one()
+        product_info_config = session.scalars(
+            select(IntegrationSyncConfig).where(
+                IntegrationSyncConfig.interface_id == product_info_interface.id
+            )
+        ).one()
+
+        assert product_info_interface.outbound_enabled is True
+        assert product_info_interface.request_kind == "id_batch_page"
+        assert product_info_interface.handler_key == "lingxing.batch_get_product_info.v1"
+
         assert policy is not None
         assert policy.hot_retention_days == 365
         assert config is not None
@@ -109,6 +125,13 @@ def test_bootstrap_creates_three_rows_and_is_idempotent(database: Engine) -> Non
         assert config.schedule_cron is None
         assert config.page_size == 1000
         assert config.max_pages == 10000
+
+        assert product_info_config.is_enabled is True
+        assert product_info_config.schedule_enabled is False
+        assert product_info_config.schedule_cron is None
+        assert product_info_config.batch_size == 20
+        assert product_info_config.max_attempts == 3
+        assert product_info_config.retention_policy_id == policy.id
 
     assert set(inspect(database).get_table_names()) == {
         "gov_integration_interfaces",

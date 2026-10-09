@@ -185,10 +185,14 @@ class SyncRunExecutionService:
                 return
 
             if is_productlist:
-                LingxingProductListSyncHandler(
+                result = LingxingProductListSyncHandler(
                     self.session,
                     heartbeat=lambda: self._heartbeat_lock(run.id),
                 ).execute(run, interface)
+                if getattr(result, "status", None) == "succeeded":
+                    child_run = self._queue_product_info_child_run(run)
+                    if child_run is not None and child_run.status == "queued":
+                        self.execute(child_run.id)
                 return
 
             if interface.handler_key != LingxingBatchGetProductInfoSyncHandler.handler_key:
@@ -224,6 +228,79 @@ class SyncRunExecutionService:
             if current_lock is not None:
                 self.repository.delete_lock(current_lock)
                 self.session.commit()
+
+    def _queue_product_info_child_run(
+        self,
+        parent_run: IntegrationSyncRun,
+    ) -> IntegrationSyncRun | None:
+        """Queue ProductInfo as the second phase of Product Management sync."""
+
+        interface = self.repository.get_interface_by_key("lingxing", "batchGetProductInfo")
+        if interface is None:
+            self.repository.add_event(
+                IntegrationSyncRunEvent(
+                    run_id=parent_run.id,
+                    sequence_no=self.repository.next_event_sequence(parent_run.id),
+                    event_type="dependency_missing",
+                    from_status=parent_run.status,
+                    to_status=parent_run.status,
+                    message_code="PRODUCT_INFO_INTERFACE_MISSING",
+                    safe_details=None,
+                    occurred_at=utc_now(),
+                    actor_ref="worker",
+                )
+            )
+            self.session.commit()
+            return None
+
+        config = self.repository.get_config_by_scope(
+            interface.id,
+            parent_run.source_account_ref,
+        )
+        idempotency_key = f"product-management:{parent_run.id}:batchGetProductInfo"
+        existing = self.repository.find_run_by_idempotency(idempotency_key)
+        if existing is not None:
+            return existing
+
+        child = IntegrationSyncRun(
+            config_id=config.id if config is not None else None,
+            interface_id=interface.id,
+            provider=interface.provider,
+            interface_key=interface.interface_key,
+            source_account_ref=parent_run.source_account_ref,
+            trigger_type=parent_run.trigger_type,
+            status="queued",
+            parent_run_id=parent_run.id,
+            retry_of_run_id=None,
+            idempotency_key=idempotency_key,
+            requested_by=parent_run.requested_by or "worker",
+            request_id=parent_run.request_id,
+            reason="product_management_detail_sync",
+            window_start=parent_run.window_start,
+            window_end=parent_run.window_end,
+            queued_at=utc_now(),
+            work_items_total=0,
+            work_items_succeeded=0,
+            work_items_failed=0,
+            records_seen=0,
+            records_written=0,
+        )
+        self.repository.add_run(child)
+        self.repository.add_event(
+            IntegrationSyncRunEvent(
+                run_id=child.id,
+                sequence_no=1,
+                event_type="state_transition",
+                from_status=None,
+                to_status="queued",
+                message_code="SYNC_RUN_QUEUED",
+                safe_details={"parent_interface_key": parent_run.interface_key},
+                occurred_at=utc_now(),
+                actor_ref="worker",
+            )
+        )
+        self.session.commit()
+        return child
 
     def _execute_data_pages_run(self, run: IntegrationSyncRun) -> None:
         """Execute configured DATA-PAGES business tasks.

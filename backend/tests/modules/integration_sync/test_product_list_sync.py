@@ -730,3 +730,54 @@ def test_productlist_logs_only_safe_aggregates(caplog: pytest.LogCaptureFixture)
 
     assert SYNTHETIC_ACCESS not in caplog.text
     assert "productlist_sync_succeeded" in caplog.text
+
+
+def test_productlist_success_queues_productinfo_child_run() -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    repository = MagicMock()
+    service.repository = repository
+
+    parent = _run()
+    parent.status = "succeeded"
+    parent.requested_by = "operator"
+    parent.request_id = "request-1"
+
+    product_info_interface = IntegrationInterface(
+        id=UUID("00000000-0000-0000-0000-000000000005"),
+        provider="lingxing",
+        interface_key="batchGetProductInfo",
+        method="POST",
+        endpoint_path="/erp/sc/routing/data/local_inventory/batchGetProductInfo",
+        request_kind="id_batch_page",
+        handler_key="lingxing.batch_get_product_info.v1",
+        contract_version="v1",
+        outbound_enabled=True,
+    )
+    product_info_config = SimpleNamespace(
+        id=UUID("00000000-0000-0000-0000-000000000006"),
+    )
+
+    repository.get_interface_by_key.return_value = product_info_interface
+    repository.get_config_by_scope.return_value = product_info_config
+    repository.find_run_by_idempotency.return_value = None
+    repository.add_run.side_effect = lambda run: run
+    repository.next_event_sequence.return_value = 1
+
+    child = service._queue_product_info_child_run(parent)
+
+    assert child is not None
+    assert child.config_id == product_info_config.id
+    assert child.interface_id == product_info_interface.id
+    assert child.provider == "lingxing"
+    assert child.interface_key == "batchGetProductInfo"
+    assert child.source_account_ref == parent.source_account_ref
+    assert child.trigger_type == parent.trigger_type
+    assert child.status == "queued"
+    assert child.parent_run_id == parent.id
+    assert child.idempotency_key == f"product-management:{parent.id}:batchGetProductInfo"
+    assert child.reason == "product_management_detail_sync"
+
+    repository.add_run.assert_called_once_with(child)
+    repository.add_event.assert_called_once()
+    session.commit.assert_called_once()
