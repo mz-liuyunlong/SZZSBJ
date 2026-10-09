@@ -727,7 +727,6 @@ def test_scheduler_enqueues_productlist_schedule_and_advances_next_run() -> None
     service.repository.add_run.assert_not_called()
 
 
-
 def test_productlist_logs_only_safe_aggregates(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger="app.integration_sync.product_list")
     client = FakePageClient(
