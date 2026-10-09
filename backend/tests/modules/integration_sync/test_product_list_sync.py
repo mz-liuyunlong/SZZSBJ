@@ -687,7 +687,7 @@ def test_productlist_manual_trigger_writes_run_without_unapproved_event() -> Non
     session.commit.assert_called_once_with()
 
 
-def test_scheduler_skips_productlist_schedule_and_advances_next_run() -> None:
+def test_scheduler_enqueues_productlist_schedule_and_advances_next_run() -> None:
     session = MagicMock(spec=Session)
     service = IntegrationSchedulerService(session)
     service.repository = MagicMock()
@@ -703,12 +703,28 @@ def test_scheduler_skips_productlist_schedule_and_advances_next_run() -> None:
     service.repository.get_interface.return_value = _interface()
     service.repository.find_run_by_idempotency.return_value = None
 
-    assert service.create_due_runs(now=NOW) == []
-    service.repository.add_run.assert_not_called()
-    service.repository.add_event.assert_not_called()
-    service.repository.find_run_by_idempotency.assert_not_called()
+    def add_run(run: IntegrationSyncRun) -> IntegrationSyncRun:
+        run.id = RUN_ID
+        return run
+
+    service.repository.add_run.side_effect = add_run
+
+    assert service.create_due_runs(now=NOW) == [RUN_ID]
+    service.repository.add_run.assert_called_once()
+    run = service.repository.add_run.call_args.args[0]
+    assert run.trigger_type == "schedule"
+    assert run.interface_key == "productList"
+    assert run.idempotency_key == f"schedule:{CONFIG_ID}:{NOW.isoformat()}"
+    service.repository.add_event.assert_called_once()
+    assert config.last_scheduled_at == NOW
     assert config.next_run_at == datetime(2026, 1, 1, 1, tzinfo=UTC)
     session.commit.assert_called_once()
+
+    config.next_run_at = NOW
+    service.repository.find_run_by_idempotency.return_value = SimpleNamespace(id=RUN_ID)
+    service.repository.add_run.reset_mock()
+    assert service.create_due_runs(now=NOW) == []
+    service.repository.add_run.assert_not_called()
 
 
 def test_productlist_logs_only_safe_aggregates(caplog: pytest.LogCaptureFixture) -> None:
