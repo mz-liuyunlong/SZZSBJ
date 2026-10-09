@@ -81,6 +81,7 @@ const exportColumnGroups: ExportColumnGroup[] = [
     title: "成本信息",
     fields: [
       { key: "wfs_fee_total", label: "WFS总配送费" },
+      { key: "wfs_low_price_surcharge", label: "低价配送附加费" },
       { key: "wfs_fee_unit", label: "WFS配送单价" },
       { key: "commission", label: "佣金" },
       { key: "purchase_cost_total", label: "采购总成本" },

@@ -193,5 +193,5 @@ def test_daily_sales_profit_formula_returns_refunded_commission() -> None:
 
 
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+purchase-day-refund-v2+sem+rp+rnc")
+    assert DAILY_SALES_V2_VERSION.endswith("+refund-v3-lpds")
     assert len(DAILY_SALES_V2_VERSION) <= 64

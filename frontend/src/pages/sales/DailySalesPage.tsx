@@ -52,7 +52,7 @@ const createInitialFilters = (): DailySalesFilters => ({
 
 const defaultColumnKeys = dailySalesColumnFields
   .map((field) => field.key)
-  .filter((key) => key !== "platform");
+  .filter((key) => !["platform", "wfsLowPriceSurcharge"].includes(key));
 const defaultColumnWidths = Object.fromEntries(dailySalesColumnFields.map((field) => [
   field.key,
   field.key === "image"

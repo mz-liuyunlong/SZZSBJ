@@ -203,27 +203,36 @@ class DailySalesRepository:
                 row.item_id,
             )
             for row in rows
+            if row.business_date_la and row.source_account_ref and row.store_id and row.item_id
         }
 
         if not keys:
             return {}
 
-        snapshot_rows = self.session.execute(
-            select(
-                WalmartListingInventoryDailyFact.snapshot_date_la,
-                WalmartListingInventoryDailyFact.source_account_ref,
-                WalmartListingInventoryDailyFact.store_id,
-                WalmartListingInventoryDailyFact.item_id,
-                WalmartListingInventoryDailyFact.wfs_available_quantity,
-            ).where(
-                tuple_(
-                    WalmartListingInventoryDailyFact.snapshot_date_la,
-                    WalmartListingInventoryDailyFact.source_account_ref,
-                    WalmartListingInventoryDailyFact.store_id,
-                    WalmartListingInventoryDailyFact.item_id,
-                ).in_(list(keys))
+        key_batch_size = 200
+        key_list = sorted(keys)
+        snapshot_rows = []
+
+        for offset in range(0, len(key_list), key_batch_size):
+            batch_keys = key_list[offset : offset + key_batch_size]
+            snapshot_rows.extend(
+                self.session.execute(
+                    select(
+                        WalmartListingInventoryDailyFact.snapshot_date_la,
+                        WalmartListingInventoryDailyFact.source_account_ref,
+                        WalmartListingInventoryDailyFact.store_id,
+                        WalmartListingInventoryDailyFact.item_id,
+                        WalmartListingInventoryDailyFact.wfs_available_quantity,
+                    ).where(
+                        tuple_(
+                            WalmartListingInventoryDailyFact.snapshot_date_la,
+                            WalmartListingInventoryDailyFact.source_account_ref,
+                            WalmartListingInventoryDailyFact.store_id,
+                            WalmartListingInventoryDailyFact.item_id,
+                        ).in_(batch_keys)
+                    )
+                ).all()
             )
-        ).all()
 
         return {
             (

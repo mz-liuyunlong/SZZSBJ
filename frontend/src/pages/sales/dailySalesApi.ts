@@ -45,6 +45,7 @@ interface BackendDailySalesItem {
   wfs_available_quantity: string | null;
   wfs_fee_unit_amount: string | null;
   wfs_fee_total_amount: string | null;
+  wfs_low_price_surcharge_amount: string;
   wfs_fee_expected_unit_amount: string | null;
   wfs_fee_expected_total_amount: string | null;
   wfs_fee_actual_total_amount: string | null;
@@ -212,6 +213,7 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     totalAdSpend,
     adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : 0,
     wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
+    wfsLowPriceSurcharge: numberValue(item.wfs_low_price_surcharge_amount),
     wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
     wfsExpectedFee: numberValue(item.wfs_fee_expected_total_amount),
     wfsActualFee: item.wfs_fee_actual_total_amount == null ? null : numberValue(item.wfs_fee_actual_total_amount),

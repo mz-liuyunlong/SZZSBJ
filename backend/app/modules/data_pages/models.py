@@ -539,6 +539,10 @@ class DailySalesItemDayMart(Base):
         CheckConstraint(f"cost_status IN ({COST_STATUSES})", name="cost_status"),
         CheckConstraint("sales_qty >= 0 AND order_count >= 0", name="nonnegative_counts"),
         CheckConstraint("sem_ad_spend_amount >= 0", name="sem_ad_spend_amount_nonnegative"),
+        CheckConstraint(
+            "wfs_low_price_surcharge_amount >= 0",
+            name="wfs_low_price_surcharge_amount_nonnegative",
+        ),
         CheckConstraint("gross_margin IS NULL OR gross_margin > -10", name="gross_margin_floor"),
         Index("ix_mart_daily_sales_store_date", "store_id", "business_date_la"),
         Index("ix_mart_daily_sales_item_date", "item_id", "business_date_la"),
@@ -588,6 +592,9 @@ class DailySalesItemDayMart(Base):
     wfs_available_quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    wfs_low_price_surcharge_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("0"), server_default=text("0"), nullable=False
+    )
     wfs_fee_currency_code: Mapped[str | None] = mapped_column(String(3))
     wfs_fee_expected_unit_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_expected_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
@@ -652,6 +659,10 @@ class OrderProfitSkuDayMart(Base):
         UniqueConstraint("business_date_la", "source_account_ref", "local_sku"),
         CheckConstraint(f"cost_status IN ({COST_STATUSES})", name="cost_status"),
         CheckConstraint("store_count >= 0 AND item_count >= 0", name="nonnegative_counts"),
+        CheckConstraint(
+            "wfs_low_price_surcharge_amount >= 0",
+            name="order_profit_wfs_low_price_surcharge_amount_nonnegative",
+        ),
         Index("ix_mart_order_profit_sku_date", "local_sku", "business_date_la"),
     )
 
@@ -686,6 +697,9 @@ class OrderProfitSkuDayMart(Base):
     )
     commission_fee_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     wfs_fee_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    wfs_low_price_surcharge_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), default=Decimal("0"), server_default=text("0"), nullable=False
+    )
     purchase_cost_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     first_leg_cost_total_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
     storage_fee_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))

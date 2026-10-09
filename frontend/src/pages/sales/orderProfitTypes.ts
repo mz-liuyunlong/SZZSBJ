@@ -39,6 +39,7 @@ export interface OrderProfitSourceRecord {
   totalAdSpend?: number;
 
   wfsDeliveryFee: number | null;
+  wfsLowPriceSurcharge?: number;
   wfsDeliveryUnitPrice: number | null;
 
   commission: number;
@@ -89,6 +90,7 @@ export interface OrderProfitRow {
   adRatio: number | null;
 
   wfsDeliveryFee: number | null;
+  wfsLowPriceSurcharge?: number;
   wfsDeliveryUnitPrice: number | null;
 
   commission: number;
@@ -143,6 +145,7 @@ export const orderProfitColumnFields: OrderProfitColumnField[] = [
   { key: "adRatio", title: "广告占比" },
 
   { key: "wfsDeliveryFee", title: "WFS总配送费" },
+  { key: "wfsLowPriceSurcharge", title: "低价配送附加费" },
   { key: "wfsDeliveryUnitPrice", title: "WFS配送单价" },
 
   { key: "commission", title: "佣金" },
@@ -366,6 +369,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
         : bucket.reduce((total, row) => total + (row[key] ?? 0), 0)
     );
     const wfsDeliveryFee = sumOptional("wfsDeliveryFee");
+    const wfsLowPriceSurcharge = bucket.reduce((total, row) => total + Number(row.wfsLowPriceSurcharge ?? 0), 0);
     const commission = bucket.reduce((total, row) => total + row.commission, 0);
     const purchaseCost = sumOptional("purchaseCost");
     const firstLegCost = sumOptional("firstLegCost");
@@ -417,6 +421,7 @@ export const aggregateOrderProfitRows = (records: OrderProfitSourceRecord[]): Or
       adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
 
       wfsDeliveryFee,
+      wfsLowPriceSurcharge,
       wfsDeliveryUnitPrice,
 
       commission,
