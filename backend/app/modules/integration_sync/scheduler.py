@@ -199,6 +199,18 @@ class IntegrationSchedulerService:
                     config.next_run_at = None
                     continue
 
+                # Temporary production rollback:
+                # Product Management's scheduled ProductList path is isolated because
+                # it caused fast AUTH_ERROR failures after becoming schedulable.
+                # Manual and retry ProductList runs remain executable.
+                if (
+                    interface is not None
+                    and interface.provider == "lingxing"
+                    and interface.interface_key == "productList"
+                ):
+                    config.next_run_at = next_run_at
+                    continue
+
                 is_data_pages = (
                     interface is not None
                     and interface.provider == "lingxing"
