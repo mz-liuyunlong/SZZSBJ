@@ -1,10 +1,21 @@
-import { Alert, Button, Drawer, Form, Input, Radio, Select, Tooltip, Typography } from "antd";
-import { useEffect } from "react";
 import {
-  normalizeSyncTaskBackfillDays,
-  parseSyncTaskSchedule,
-} from "@/pages/data-center/syncTaskDisplayFormatters";
-import type { SyncTaskCycle, SyncTaskModule, SyncTaskRow } from "@/pages/data-center/syncTaskTypes";
+  Button,
+  Drawer,
+  Form,
+  Input,
+  Radio,
+  Select,
+  Tag,
+  Tooltip,
+  Typography,
+} from "antd";
+import { useEffect } from "react";
+import { normalizeSyncTaskBackfillDays } from "@/pages/data-center/syncTaskDisplayFormatters";
+import type {
+  SyncTaskCycle,
+  SyncTaskModule,
+  SyncTaskRow,
+} from "@/pages/data-center/syncTaskTypes";
 
 interface SyncTaskConfigDrawerProps {
   open: boolean;
@@ -14,7 +25,16 @@ interface SyncTaskConfigDrawerProps {
   onSave: (task: SyncTaskRow, values: SyncTaskConfigFormValues) => void;
 }
 
-export type SyncTaskFrequencyPreset = "30m" | "1h" | "2h" | "daily_fixed";
+export type SyncTaskFrequencyPreset =
+  | "5m"
+  | "10m"
+  | "15m"
+  | "30m"
+  | "1h"
+  | "2h"
+  | "hourly_minutes"
+  | "daily_fixed"
+  | "advanced_cron";
 
 export interface SyncTaskConfigFormValues {
   taskName: string;
@@ -25,6 +45,8 @@ export interface SyncTaskConfigFormValues {
   autoSync: boolean;
   frequencyPreset: SyncTaskFrequencyPreset;
   fixedRunTimes?: string[];
+  hourlyMinutes?: number[];
+  customCron?: string;
   backfillDays?: number;
   dailyRunCount?: number;
   runTimes: string[];
@@ -44,10 +66,15 @@ const notificationSceneOptions = ["失败", "部分成功", "超时", "恢复成
 const notificationChannelOptions = ["站内信", "飞书", "邮件"];
 
 const frequencyOptions = [
+  { label: "每 5 分钟", value: "5m" },
+  { label: "每 10 分钟", value: "10m" },
+  { label: "每 15 分钟", value: "15m" },
   { label: "每 30 分钟", value: "30m" },
   { label: "每 1 小时", value: "1h" },
   { label: "每 2 小时", value: "2h" },
+  { label: "每小时指定分钟", value: "hourly_minutes" },
   { label: "每天固定时间", value: "daily_fixed" },
+  { label: "高级 Cron", value: "advanced_cron" },
 ];
 
 const dateRangeTaskKeys = new Set([
@@ -56,21 +83,30 @@ const dateRangeTaskKeys = new Set([
   "walmartAdItemSpList",
 ]);
 
+const dataPagesKeys = new Set([
+  "walmartListingList",
+  "saleStatPageList",
+  "walmartReturnOrderList",
+  "walmartAdItemSpList",
+]);
 
+const minuteOptions = Array.from({ length: 12 }, (_, index) => index * 5).map(
+  (value) => ({
+    label: `第 ${String(value).padStart(2, "0")} 分钟`,
+    value,
+  }),
+);
 
-const defaultFrequencyForTask = (task: SyncTaskRow): SyncTaskFrequencyPreset => {
-  if (task.interfaceKey === "productList") return "daily_fixed";
-  if (task.interfaceKey === "walmartListingList") return "30m";
-  if (task.interfaceKey === "saleStatPageList") return "30m";
-  if (task.interfaceKey === "walmartReturnOrderList") return "1h";
-  if (task.interfaceKey === "walmartAdItemSpList") return "1h";
-  return "1h";
-};
+const quarterHourOptions = Array.from({ length: 24 * 4 }, (_, index) => {
+  const hour = Math.floor(index / 4);
+  const minute = (index % 4) * 15;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}).map((value) => ({ label: value, value }));
 
-const defaultFixedTimeForTask = (task: SyncTaskRow) => {
-  if (task.interfaceKey === "productList") return "03:00";
-  return task.runTimes?.[0] ?? "03:00";
-};
+const toChinaHour = (schedulerHour: number) => (schedulerHour + 8) % 24;
+
+const formatTime = (hour: number, minute: number) =>
+  `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 
 const defaultBackfillDaysForTask = (task: SyncTaskRow) => {
   if (task.interfaceKey === "walmartReturnOrderList") return 7;
@@ -79,56 +115,171 @@ const defaultBackfillDaysForTask = (task: SyncTaskRow) => {
   return undefined;
 };
 
-const taskPolicyText = (task?: SyncTaskRow) => {
-  if (!task) return "系统按任务类型自动设置超时、重试和重复触发策略。";
+const defaultHourlyMinutesForTask = (task: SyncTaskRow) => {
+  if (task.interfaceKey === "productList") return [5, 35];
+  if (task.interfaceKey === "saleStatPageList") return [15, 45];
+  if (task.interfaceKey === "walmartListingList") return [25];
+  if (task.interfaceKey === "walmartReturnOrderList") return [40];
+  if (task.interfaceKey === "walmartAdItemSpList") return [55];
+  return [0];
+};
 
-  if (task.interfaceKey === "productList") {
-    return "产品管理同步默认每天固定时间执行；失败自动重试 2 次；运行中再次触发会跳过本次。";
+const defaultFrequencyForTask = (
+  task: SyncTaskRow,
+): SyncTaskFrequencyPreset => {
+  if (task.interfaceKey === "productList") return "hourly_minutes";
+  if (task.interfaceKey === "walmartListingList") return "hourly_minutes";
+  if (task.interfaceKey === "saleStatPageList") return "hourly_minutes";
+  if (task.interfaceKey === "walmartReturnOrderList") return "hourly_minutes";
+  if (task.interfaceKey === "walmartAdItemSpList") return "hourly_minutes";
+  return "1h";
+};
+
+const defaultFixedRunTimesForTask = (task: SyncTaskRow) => {
+  if (task.interfaceKey === "productList") return ["03:00"];
+  return task.runTimes?.length ? task.runTimes : ["03:00"];
+};
+
+const parseCronToFormValues = (task: SyncTaskRow) => {
+  const cron = task.scheduleCron?.trim();
+
+  if (!cron) {
+    return {
+      frequencyPreset: defaultFrequencyForTask(task),
+      hourlyMinutes: defaultHourlyMinutesForTask(task),
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
   }
 
-  if (task.interfaceKey === "walmartListingList") {
-    return "Listing 管理同步默认全天 24 小时执行；失败自动重试 2 次；其他同步运行中时新任务排队等待。";
+  if (cron === "*/5 * * * *") {
+    return {
+      frequencyPreset: "5m" as const,
+      hourlyMinutes: defaultHourlyMinutesForTask(task),
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
   }
 
-  if (task.interfaceKey === "saleStatPageList") {
-    return "每日销售同步按美国洛杉矶业务日期回刷；失败自动重试 2 次；其他同步运行中时新任务排队等待。";
+  if (cron === "*/10 * * * *") {
+    return {
+      frequencyPreset: "10m" as const,
+      hourlyMinutes: defaultHourlyMinutesForTask(task),
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
   }
 
-  if (task.interfaceKey === "walmartReturnOrderList") {
-    return "退款退货同步按美国洛杉矶业务日期回刷；失败自动重试 2 次；其他同步运行中时新任务排队等待。";
+  if (cron === "*/15 * * * *") {
+    return {
+      frequencyPreset: "15m" as const,
+      hourlyMinutes: defaultHourlyMinutesForTask(task),
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
   }
 
-  if (task.interfaceKey === "walmartAdItemSpList") {
-    return "广告报表同步按美国洛杉矶业务日期回刷；失败自动重试 2 次；其他同步运行中时新任务排队等待。";
+  if (cron === "*/30 * * * *") {
+    return {
+      frequencyPreset: "30m" as const,
+      hourlyMinutes: defaultHourlyMinutesForTask(task),
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
   }
 
-  return "系统按任务类型自动设置超时、重试和重复触发策略。";
+  if (cron === "0 * * * *") {
+    return {
+      frequencyPreset: "1h" as const,
+      hourlyMinutes: [0],
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
+  }
+
+  if (cron === "0 */2 * * *") {
+    return {
+      frequencyPreset: "2h" as const,
+      hourlyMinutes: [0],
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
+  }
+
+  const hourlyMinuteMatch = cron.match(/^([0-9]+(?:,[0-9]+)*) \* \* \* \*$/);
+  if (hourlyMinuteMatch) {
+    return {
+      frequencyPreset: "hourly_minutes" as const,
+      hourlyMinutes: hourlyMinuteMatch[1]
+        .split(",")
+        .map(Number)
+        .filter(
+          (value) => Number.isInteger(value) && value >= 0 && value <= 59,
+        ),
+      fixedRunTimes: defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
+  }
+
+  const dailyMatch = cron.match(/^([0-9]+) ([0-9]+(?:,[0-9]+)*) \* \* \*$/);
+  if (dailyMatch) {
+    const minute = Number(dailyMatch[1]);
+    const fixedRunTimes = dailyMatch[2]
+      .split(",")
+      .map(Number)
+      .filter((value) => Number.isInteger(value) && value >= 0 && value <= 23)
+      .map((hour) => formatTime(toChinaHour(hour), minute));
+    return {
+      frequencyPreset: "daily_fixed" as const,
+      hourlyMinutes: defaultHourlyMinutesForTask(task),
+      fixedRunTimes: fixedRunTimes.length
+        ? fixedRunTimes
+        : defaultFixedRunTimesForTask(task),
+      customCron: "",
+    };
+  }
+
+  return {
+    frequencyPreset: "advanced_cron" as const,
+    hourlyMinutes: defaultHourlyMinutesForTask(task),
+    fixedRunTimes: defaultFixedRunTimesForTask(task),
+    customCron: cron,
+  };
+};
+
+const lockGroupText = (task?: SyncTaskRow) => {
+  if (!task) return "未选择任务";
+  if (dataPagesKeys.has(task.interfaceKey))
+    return "dataPages，同组串行，建议错峰";
+  if (task.interfaceKey === "productList")
+    return "productManagement，产品列表与产品详情合并展示";
+  return "独立任务组";
 };
 
 function SyncTaskConfigDrawer({
   open,
   task,
-  modules,
   onClose,
   onSave,
 }: SyncTaskConfigDrawerProps) {
   const [form] = Form.useForm<SyncTaskConfigFormValues>();
   const autoSync = Form.useWatch("autoSync", form);
   const watchedFrequencyPreset = Form.useWatch("frequencyPreset", form);
-  const frequencyPreset = watchedFrequencyPreset ?? (task ? defaultFrequencyForTask(task) : undefined);
-  const showBackfillDays = Boolean(task && dateRangeTaskKeys.has(task.interfaceKey));
+  const frequencyPreset =
+    watchedFrequencyPreset ??
+    (task ? defaultFrequencyForTask(task) : undefined);
+  const showBackfillDays = Boolean(
+    task && dateRangeTaskKeys.has(task.interfaceKey),
+  );
+  const showHourlyMinutes = frequencyPreset === "hourly_minutes";
   const showFixedRunTime = frequencyPreset === "daily_fixed";
+  const showAdvancedCron = frequencyPreset === "advanced_cron";
   const showFrequency = Boolean(task);
-  const showNoDateRangeNotice = Boolean(task && !dateRangeTaskKeys.has(task.interfaceKey));
 
   useEffect(() => {
     if (!open || !task) return;
 
-    const savedSchedule = parseSyncTaskSchedule(task.scheduleCron);
-    const frequency = savedSchedule?.preset ?? defaultFrequencyForTask(task);
-    const fixedRunTimes = savedSchedule?.fixedRunTimes.length
-      ? savedSchedule.fixedRunTimes
-      : [defaultFixedTimeForTask(task)];
+    const scheduleValues = parseCronToFormValues(task);
     const backfillDays = normalizeSyncTaskBackfillDays(
       task.backfillDays,
       defaultBackfillDaysForTask(task),
@@ -141,11 +292,13 @@ function SyncTaskConfigDrawer({
       description: task.description,
       cycle: task.autoSync ? "日任务" : "手动任务",
       autoSync: task.autoSync,
-      frequencyPreset: frequency,
-      fixedRunTimes,
+      frequencyPreset: scheduleValues.frequencyPreset,
+      fixedRunTimes: scheduleValues.fixedRunTimes,
+      hourlyMinutes: scheduleValues.hourlyMinutes,
+      customCron: scheduleValues.customCron,
       backfillDays,
       dailyRunCount: undefined,
-      runTimes: fixedRunTimes,
+      runTimes: scheduleValues.fixedRunTimes,
       weekDays: task.weekDays,
       timeoutSeconds: undefined,
       maxFailureTimes: undefined,
@@ -161,63 +314,84 @@ function SyncTaskConfigDrawer({
 
   return (
     <Drawer
-      className="sync-task__config-drawer"
+      className="sync-task__config-drawer sync-task__config-drawer-v2"
       title="配置同步任务"
-      width={680}
+      width={760}
       open={open}
       destroyOnHidden
       onClose={onClose}
-      extra={(
+      extra={
         <Typography.Text type="secondary">
           {task ? task.taskName : "未选择任务"}
         </Typography.Text>
-      )}
+      }
     >
-      <Alert
-        showIcon
-        type="info"
-        message="只配置业务需要的内容"
-        description="系统会全天 24 小时按频率自动执行；执行超时、失败重试、重复触发策略由底层默认控制。"
-        style={{ marginBottom: 16 }}
-      />
-
       <Form
         form={form}
         layout="vertical"
-        className="sync-task__config-form"
+        className="sync-task__config-form sync-task__config-form-v2"
       >
         <section className="sync-task__drawer-section">
-          <h3>基础信息</h3>
-          <Typography.Paragraph type="secondary">
-            基础信息来自接口目录，仅作展示；本页保存执行计划，不会修改任务名称、模块、接口或说明。
-          </Typography.Paragraph>
-          <div className="sync-task__form-grid">
-            <Form.Item name="taskName" label="任务名称">
-              <Input disabled />
-            </Form.Item>
-            <Form.Item name="module" label="所属模块">
-              <Select disabled options={modules.map((module) => ({ label: module, value: module }))} />
-            </Form.Item>
-            <Form.Item name="interfaceName" label="包含接口">
-              <Input disabled />
-            </Form.Item>
-            <Form.Item name="description" label="任务说明" className="sync-task__form-grid-full">
-              <Input.TextArea disabled rows={3} />
-            </Form.Item>
+          <h3>任务介绍</h3>
+          <div className="sync-task__intro-card">
+            <div className="sync-task__intro-main">
+              <div className="sync-task__intro-title-row">
+                <strong>{task?.taskName ?? "未选择任务"}</strong>
+                <Tag
+                  color={
+                    task && dataPagesKeys.has(task.interfaceKey)
+                      ? "blue"
+                      : "green"
+                  }
+                >
+                  {task?.module ?? "-"}
+                </Tag>
+              </div>
+              <Typography.Text type="secondary">
+                {task?.description ??
+                  "基础信息来自接口目录，仅作展示；本页只保存执行计划。"}
+              </Typography.Text>
+            </div>
+          </div>
+
+          <div className="sync-task__intro-grid">
+            <div className="sync-task__intro-item">
+              <span>包含接口</span>
+              <strong>{task?.interfaceName ?? "-"}</strong>
+            </div>
+            <div className="sync-task__intro-item">
+              <span>接口 Key</span>
+              <strong>{task?.interfaceKey ?? "-"}</strong>
+            </div>
+            <div className="sync-task__intro-item">
+              <span>同步组 / 并发策略</span>
+              <strong>{lockGroupText(task)}</strong>
+            </div>
+            <div className="sync-task__intro-item">
+              <span>数据源账号</span>
+              <strong>{task?.source ?? "primary"}</strong>
+            </div>
           </div>
         </section>
 
         <section className="sync-task__drawer-section">
           <h3>执行计划</h3>
           <div className="sync-task__form-grid">
-            <Form.Item name="autoSync" label="运行方式" rules={[{ required: true, message: "请选择运行方式" }]}>
+            <Form.Item
+              name="autoSync"
+              label="运行方式"
+              rules={[{ required: true, message: "请选择运行方式" }]}
+            >
               <Radio.Group
                 options={[
                   { label: "自动任务", value: true },
                   { label: "手动任务", value: false },
                 ]}
                 onChange={(event) => {
-                  form.setFieldValue("cycle", event.target.value ? "日任务" : "手动任务");
+                  form.setFieldValue(
+                    "cycle",
+                    event.target.value ? "日任务" : "手动任务",
+                  );
                 }}
               />
             </Form.Item>
@@ -227,90 +401,98 @@ function SyncTaskConfigDrawer({
             </Form.Item>
 
             {autoSync && showFrequency && (
-              <Form.Item name="frequencyPreset" label="执行频率" rules={[{ required: true, message: "请选择执行频率" }]}>
-                <Radio.Group options={frequencyOptions} />
+              <Form.Item
+                name="frequencyPreset"
+                label="调度模式"
+                className="sync-task__schedule-mode-field"
+                rules={[{ required: true, message: "请选择调度模式" }]}
+              >
+                <Select
+                  className="sync-task__schedule-mode-select"
+                  options={frequencyOptions}
+                  placeholder="选择自动同步的执行方式"
+                />
+              </Form.Item>
+            )}
+
+            {autoSync && showHourlyMinutes && (
+              <Form.Item
+                name="hourlyMinutes"
+                label="每小时第几分钟执行"
+                rules={[
+                  {
+                    required: true,
+                    type: "array",
+                    min: 1,
+                    message: "请选择至少一个分钟点",
+                  },
+                ]}
+              >
+                <Select
+                  mode="multiple"
+                  maxTagCount="responsive"
+                  options={minuteOptions}
+                  placeholder="例如 15、45，表示每小时第 15 和 45 分钟执行"
+                />
               </Form.Item>
             )}
 
             {autoSync && showFixedRunTime && (
               <Form.Item
                 name="fixedRunTimes"
-                label="每天几点执行"
-                rules={[{ required: true, type: "array", min: 1, message: "请选择至少一个执行时间" }]}
+                label="每天固定时间"
+                rules={[
+                  {
+                    required: true,
+                    type: "array",
+                    min: 1,
+                    message: "请选择至少一个执行时间",
+                  },
+                ]}
               >
                 <Select
                   mode="multiple"
+                  showSearch
                   maxTagCount="responsive"
-                  options={[
-                    "00:00",
-                    "01:00",
-                    "02:00",
-                    "03:00",
-                    "04:00",
-                    "05:00",
-                    "06:00",
-                    "08:00",
-                    "10:00",
-                    "12:00",
-                    "14:00",
-                    "16:00",
-                    "18:00",
-                    "20:00",
-                    "22:00",
-                  ].map((value) => ({ label: value, value }))}
-                  placeholder="可多选，例如 03:00、08:00、14:00"
+                  options={quarterHourOptions}
+                  placeholder="可多选，例如 08:15、12:15、18:15"
                 />
+              </Form.Item>
+            )}
+
+            {autoSync && showAdvancedCron && (
+              <Form.Item
+                name="customCron"
+                label="高级 Cron"
+                rules={[{ required: true, message: "请输入 Cron 表达式" }]}
+              >
+                <Input placeholder="例如：15,45 * * * *" />
               </Form.Item>
             )}
 
             {autoSync && showBackfillDays && (
               <Form.Item
                 name="backfillDays"
-                label="每次回刷范围"
+                label="业务日期回刷范围"
+                className="sync-task__backfill-field"
                 rules={[{ required: true, message: "请选择每次回刷范围" }]}
               >
-                <Radio.Group
+                <Select
+                  className="sync-task__backfill-select"
                   options={[
                     { label: "仅今天", value: 1 },
                     { label: "最近 2 天", value: 2 },
                     { label: "最近 3 天", value: 3 },
+                    { label: "最近 5 天", value: 5 },
                     { label: "最近 7 天", value: 7 },
+                    { label: "最近 10 天", value: 10 },
                     { label: "最近 14 天", value: 14 },
+                    { label: "最近 30 天", value: 30 },
                   ]}
+                  placeholder="选择每次自动同步要回刷的业务日期范围"
                 />
               </Form.Item>
             )}
-
-            {autoSync && showNoDateRangeNotice && (
-              <Form.Item label="回刷说明" className="sync-task__form-grid-full">
-                <Typography.Text type="secondary">
-                  当前任务同步当前状态，不需要选择回刷天数。
-                </Typography.Text>
-              </Form.Item>
-            )}
-
-            {autoSync && (
-              <Form.Item label="执行说明" className="sync-task__form-grid-full">
-                <Typography.Text type="secondary">
-                  系统全天 24 小时自动执行；业务日期按美国洛杉矶时间计算。
-                </Typography.Text>
-              </Form.Item>
-            )}
-          </div>
-        </section>
-
-        <section className="sync-task__drawer-section">
-          <h3>系统默认策略</h3>
-          <Alert
-            type="success"
-            showIcon
-            message="底层自动处理"
-            description={taskPolicyText(task)}
-          />
-          <div style={{ marginTop: 12 }}>
-            <Typography.Text type="secondary">
-              默认策略：失败自动重试 2 次；重试间隔 15 分钟、30 分钟；重复触发策略由任务类型控制，不取消健康运行中的任务；执行超时按任务类型自动设置。
-            </Typography.Text>
           </div>
         </section>
 
@@ -323,14 +505,20 @@ function SyncTaskConfigDrawer({
             <Select
               disabled
               mode="multiple"
-              options={notificationSceneOptions.map((value) => ({ label: value, value }))}
+              options={notificationSceneOptions.map((value) => ({
+                label: value,
+                value,
+              }))}
             />
           </Form.Item>
           <Form.Item name="notificationChannels" label="通知方式">
             <Select
               disabled
               mode="multiple"
-              options={notificationChannelOptions.map((value) => ({ label: value, value }))}
+              options={notificationChannelOptions.map((value) => ({
+                label: value,
+                value,
+              }))}
             />
           </Form.Item>
           <Form.Item name="notificationTargets" label="通知对象">
@@ -341,7 +529,10 @@ function SyncTaskConfigDrawer({
         <div className="sync-task__drawer-actions">
           <Button onClick={onClose}>取消</Button>
           <Tooltip title="保存前会进行二次确认">
-            <Button type="primary" onClick={() => task && onSave(task, form.getFieldsValue())}>
+            <Button
+              type="primary"
+              onClick={() => task && onSave(task, form.getFieldsValue())}
+            >
               保存配置
             </Button>
           </Tooltip>
