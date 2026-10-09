@@ -6,7 +6,7 @@ from typing import Final, Literal
 
 from app.modules.data_pages.registry import DATA_PAGE_API_REGISTRY, DataPageKey
 
-RefreshMode = Literal["delete_insert"]
+RefreshMode = Literal["delete_insert", "upsert"]
 RefreshGranularity = Literal["business_date_item", "business_date_sku", "current_listing"]
 
 
@@ -19,7 +19,7 @@ class DataPagesMartRefreshSpec:
     """Refresh contract for one DATA-PAGES MART object.
 
     The spec is metadata-only. A future authorized runner may use it to execute a
-    delete-insert refresh, but this module does not run SQL or connect to production.
+    governed refresh, but this module does not run SQL or connect to production.
     """
 
     key: DataPageKey
@@ -88,7 +88,7 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
     "listing_management": DataPagesMartRefreshSpec(
         key="listing_management",
         mart_table="mart_listing_management_current",
-        refresh_mode="delete_insert",
+        refresh_mode="upsert",
         granularity="current_listing",
         source_tables=(
             "dim_lingxing_stores",
@@ -98,7 +98,9 @@ DATA_PAGES_MART_REFRESH_SPECS: Final[dict[DataPageKey, DataPagesMartRefreshSpec]
         ),
         requires_business_date_window=False,
         boundary_notes=(
-            "Listing management refreshes the current listing snapshot.",
+            "Listing management upserts by source_account_ref + store_id + item_id.",
+            "Existing listing UUIDs and business-owned fields are preserved.",
+            "Source-absent listings are retained instead of physically deleted.",
             "Rolling 7/14/30 day metrics are derived from sales and ad facts.",
         ),
     ),

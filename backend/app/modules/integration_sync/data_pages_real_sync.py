@@ -41,6 +41,114 @@ CHINA_TZ = ZoneInfo("Asia/Shanghai")
 LA_TZ = ZoneInfo("America/Los_Angeles")
 SP_CAMPAIGN_TYPES = ("sponsoredProducts-manual", "sponsoredProducts-auto", "sba", "video")
 
+# Listing refresh owns only provider-sourced attributes and derived metrics.  Fields
+# maintained by operators or other business modules deliberately do not appear here.
+# The target-first expression for listing_start_at_utc preserves an existing/manual
+# value while still allowing a future, independently validated normalizer to fill a
+# previously empty value.
+LISTING_MART_REFRESH_UPDATE_EXPRESSIONS: Mapping[str, str] = {
+    "platform_code": "coalesce(excluded.platform_code, current_listing.platform_code)",
+    "store_name": "coalesce(excluded.store_name, current_listing.store_name)",
+    "msku": "coalesce(excluded.msku, current_listing.msku)",
+    "local_sku": "coalesce(excluded.local_sku, current_listing.local_sku)",
+    "local_name": "coalesce(excluded.local_name, current_listing.local_name)",
+    "title": "coalesce(excluded.title, current_listing.title)",
+    "picture_url": "coalesce(excluded.picture_url, current_listing.picture_url)",
+    "item_url": "coalesce(excluded.item_url, current_listing.item_url)",
+    "sale_price_amount": (
+        "coalesce(excluded.sale_price_amount, current_listing.sale_price_amount)"
+    ),
+    "sale_price_currency_code": (
+        "coalesce(excluded.sale_price_currency_code, current_listing.sale_price_currency_code)"
+    ),
+    "listing_status": "coalesce(excluded.listing_status, current_listing.listing_status)",
+    "fulfillment_type": ("coalesce(excluded.fulfillment_type, current_listing.fulfillment_type)"),
+    "fulfillment_type_name": (
+        "coalesce(excluded.fulfillment_type_name, current_listing.fulfillment_type_name)"
+    ),
+    "listing_start_at_utc": (
+        "coalesce(current_listing.listing_start_at_utc, excluded.listing_start_at_utc)"
+    ),
+    "wfs_available_quantity": (
+        "coalesce(excluded.wfs_available_quantity, current_listing.wfs_available_quantity)"
+    ),
+    "available_quantity": (
+        "coalesce(excluded.available_quantity, current_listing.available_quantity)"
+    ),
+    "sales_7d": "excluded.sales_7d",
+    "sales_14d": "excluded.sales_14d",
+    "sales_30d": "excluded.sales_30d",
+    "ad_spend_30d_amount": "excluded.ad_spend_30d_amount",
+    "ad_spend_currency_code": "excluded.ad_spend_currency_code",
+    "average_rating": "coalesce(excluded.average_rating, current_listing.average_rating)",
+    "review_count": "coalesce(excluded.review_count, current_listing.review_count)",
+    "brand": "coalesce(excluded.brand, current_listing.brand)",
+    "gtin": "coalesce(excluded.gtin, current_listing.gtin)",
+    "upc": "coalesce(excluded.upc, current_listing.upc)",
+    "source_lineage_json": "excluded.source_lineage_json",
+    "calculated_at": "excluded.calculated_at",
+    "updated_at": "excluded.updated_at",
+}
+
+LISTING_MART_BUSINESS_OWNED_COLUMNS = frozenset(
+    {
+        "id",
+        "owner_ref",
+        "product_grade",
+        "tags_json",
+        "strike_price_amount",
+        "strike_price_currency_code",
+        "lifecycle_status",
+        "listing_start_at_utc",
+        "category",
+        "inbound_quantity",
+        "buybox_status",
+        "walmart_seller",
+        "is_hijacked",
+        "disabled_reason",
+        "wfs_fee_amount",
+        "wfs_fee_currency_code",
+        "gpt_analysis_links_json",
+        "created_at",
+    }
+)
+
+LISTING_MART_FILL_ONLY_COLUMNS = frozenset({"listing_start_at_utc"})
+
+
+def _listing_mart_refresh_sql() -> str:
+    update_clause = ",".join(
+        f"{column}={expression}"
+        for column, expression in LISTING_MART_REFRESH_UPDATE_EXPRESSIONS.items()
+    )
+    return (
+        "with sales as (select store_id,item_id,"
+        "sum(sales_qty) filter (where business_date_la between :day - 6 and :day) sales_7d,"
+        "sum(sales_qty) filter (where business_date_la between :day - 13 and :day) sales_14d,"
+        "sum(sales_qty) filter (where business_date_la between :day - 29 and :day) sales_30d "
+        "from mart_daily_sales_item_day where source_account_ref=:account and business_date_la between :day - 29 and :day "
+        "group by store_id,item_id), ads as (select store_id,item_id,msku,sum(coalesce(ad_spend_amount,0)) ad_spend_30d "
+        "from fact_walmart_ad_item_sp_daily where source_account_ref=:account and business_date_la between :day - 29 and :day "
+        "and store_id is not null and item_id is not null and msku is not null and trim(msku)<>'' group by store_id,item_id,msku) "
+        "insert into mart_listing_management_current as current_listing "
+        "(id,source_account_ref,platform_code,store_id,store_name,item_id,msku,local_sku,local_name,title,picture_url,"
+        "item_url,sale_price_amount,sale_price_currency_code,listing_status,fulfillment_type,fulfillment_type_name,"
+        "listing_start_at_utc,wfs_available_quantity,available_quantity,sales_7d,sales_14d,sales_30d,"
+        "ad_spend_30d_amount,ad_spend_currency_code,average_rating,review_count,brand,gtin,upc,tags_json,"
+        "gpt_analysis_links_json,source_lineage_json,calculated_at,created_at,updated_at) "
+        "select gen_random_uuid(),l.source_account_ref,l.platform_code,l.store_id,l.store_name,l.item_id,l.msku,l.local_sku,"
+        "l.local_name,l.title,l.picture_url,l.item_url,l.price_amount,l.price_currency_code,l.standard_status,"
+        "l.fulfillment_type,l.fulfillment_type_name,l.listing_start_at_utc,l.wfs_available_quantity,l.available_quantity,"
+        "coalesce(s.sales_7d,0),coalesce(s.sales_14d,0),coalesce(s.sales_30d,0),coalesce(a.ad_spend_30d,0),'USD',"
+        "l.average_rating,l.review_count,l.brand,l.gtin,l.upc,'[]'::jsonb,'[]'::jsonb,"
+        "jsonb_build_object('runner',cast(:runner as text),'as_of_date',cast(:day as text),"
+        "'ads_match_key','store_id+item_id+msku'),:now,:now,:now from dim_walmart_listings l "
+        "left join sales s on s.store_id=l.store_id and s.item_id=l.item_id "
+        "left join ads a on a.store_id=l.store_id and a.item_id=l.item_id and a.msku=l.msku "
+        "where l.source_account_ref=:account "
+        "on conflict (source_account_ref,store_id,item_id) do update set " + update_clause
+    )
+
 
 class DataPagesRealSyncError(RuntimeError):
     """Safe real-sync error that never includes credentials or raw payloads."""
@@ -726,14 +834,30 @@ class DataPagesRealSyncRunner:
                     ":average_rating, :review_count, :gtin, :upc, :brand, :raw_status, :standard_status, "
                     ":fulfillment_type, :fulfillment_type_name, :variant_unique_id, :synced_at, :created_at, "
                     ":updated_at) on conflict (source_account_ref, store_id, item_id) do update set "
-                    "store_name = excluded.store_name, msku = excluded.msku, local_sku = excluded.local_sku, "
-                    "local_name = excluded.local_name, title = excluded.title, picture_url = excluded.picture_url, "
-                    "item_url = excluded.item_url, price_amount = excluded.price_amount, "
-                    "price_currency_code = excluded.price_currency_code, available_quantity = excluded.available_quantity, "
-                    "wfs_available_quantity = excluded.wfs_available_quantity, review_count = excluded.review_count, "
-                    "average_rating = excluded.average_rating, raw_status = excluded.raw_status, "
-                    "standard_status = excluded.standard_status, synced_at = excluded.synced_at, "
-                    "updated_at = excluded.updated_at"
+                    "store_name = coalesce(excluded.store_name, dim_walmart_listings.store_name), "
+                    "msku = coalesce(excluded.msku, dim_walmart_listings.msku), "
+                    "local_sku = coalesce(excluded.local_sku, dim_walmart_listings.local_sku), "
+                    "local_name = coalesce(excluded.local_name, dim_walmart_listings.local_name), "
+                    "title = coalesce(excluded.title, dim_walmart_listings.title), "
+                    "picture_url = coalesce(excluded.picture_url, dim_walmart_listings.picture_url), "
+                    "item_url = coalesce(excluded.item_url, dim_walmart_listings.item_url), "
+                    "price_amount = coalesce(excluded.price_amount, dim_walmart_listings.price_amount), "
+                    "price_currency_code = coalesce(excluded.price_currency_code, dim_walmart_listings.price_currency_code), "
+                    "available_quantity = coalesce(excluded.available_quantity, dim_walmart_listings.available_quantity), "
+                    "wfs_available_quantity = coalesce(excluded.wfs_available_quantity, dim_walmart_listings.wfs_available_quantity), "
+                    "review_count = coalesce(excluded.review_count, dim_walmart_listings.review_count), "
+                    "average_rating = coalesce(excluded.average_rating, dim_walmart_listings.average_rating), "
+                    "raw_status = coalesce(excluded.raw_status, dim_walmart_listings.raw_status), "
+                    "standard_status = coalesce(excluded.standard_status, dim_walmart_listings.standard_status), "
+                    "listing_start_source_raw = coalesce(nullif(trim(excluded.listing_start_source_raw), ''), "
+                    "dim_walmart_listings.listing_start_source_raw), "
+                    "gtin = coalesce(excluded.gtin, dim_walmart_listings.gtin), "
+                    "upc = coalesce(excluded.upc, dim_walmart_listings.upc), "
+                    "brand = coalesce(excluded.brand, dim_walmart_listings.brand), "
+                    "fulfillment_type = coalesce(excluded.fulfillment_type, dim_walmart_listings.fulfillment_type), "
+                    "fulfillment_type_name = coalesce(excluded.fulfillment_type_name, dim_walmart_listings.fulfillment_type_name), "
+                    "variant_unique_id = coalesce(excluded.variant_unique_id, dim_walmart_listings.variant_unique_id), "
+                    "synced_at = excluded.synced_at, updated_at = excluded.updated_at"
                 ),
                 {
                     "id": str(uuid4()),
@@ -793,12 +917,8 @@ class DataPagesRealSyncRunner:
                     "item_id": item_id,
                     "msku": _field(row, "msku"),
                     "local_sku": _field(row, "local_sku", "sku"),
-                    "available_quantity": _decimal(
-                        row.get("available_quantity")
-                    ),
-                    "wfs_available_quantity": _decimal(
-                        row.get("wfs_available_quantity")
-                    ),
+                    "available_quantity": _decimal(row.get("available_quantity")),
+                    "wfs_available_quantity": _decimal(row.get("wfs_available_quantity")),
                     "captured_at": captured_at,
                     "created_at": captured_at,
                     "updated_at": captured_at,
@@ -1435,34 +1555,7 @@ class DataPagesRealSyncRunner:
     def _refresh_listing_mart(self) -> int:
         now = _now()
         self.session.execute(
-            text("delete from mart_listing_management_current where source_account_ref = :account"),
-            {"account": self.source_account_ref},
-        )
-        self.session.execute(
-            text(
-                "with sales as (select store_id,item_id,"
-                "sum(sales_qty) filter (where business_date_la between :day - 6 and :day) sales_7d,"
-                "sum(sales_qty) filter (where business_date_la between :day - 13 and :day) sales_14d,"
-                "sum(sales_qty) filter (where business_date_la between :day - 29 and :day) sales_30d "
-                "from mart_daily_sales_item_day where source_account_ref=:account and business_date_la between :day - 29 and :day "
-                "group by store_id,item_id), ads as (select store_id,item_id,msku,sum(coalesce(ad_spend_amount,0)) ad_spend_30d "
-                "from fact_walmart_ad_item_sp_daily where source_account_ref=:account and business_date_la between :day - 29 and :day "
-                "and store_id is not null and item_id is not null and msku is not null and trim(msku)<>'' group by store_id,item_id,msku) "
-                "insert into mart_listing_management_current "
-                "(id,source_account_ref,platform_code,store_id,store_name,item_id,msku,local_sku,local_name,title,picture_url,"
-                "item_url,sale_price_amount,sale_price_currency_code,listing_status,listing_start_at_utc,wfs_available_quantity,"
-                "available_quantity,sales_7d,sales_14d,sales_30d,ad_spend_30d_amount,ad_spend_currency_code,average_rating,"
-                "review_count,brand,gtin,upc,tags_json,gpt_analysis_links_json,source_lineage_json,calculated_at,created_at,updated_at) "
-                "select gen_random_uuid(),l.source_account_ref,l.platform_code,l.store_id,l.store_name,l.item_id,l.msku,l.local_sku,"
-                "l.local_name,l.title,l.picture_url,l.item_url,l.price_amount,l.price_currency_code,l.standard_status,l.listing_start_at_utc,"
-                "l.wfs_available_quantity,l.available_quantity,coalesce(s.sales_7d,0),coalesce(s.sales_14d,0),coalesce(s.sales_30d,0),"
-                "coalesce(a.ad_spend_30d,0),'USD',l.average_rating,l.review_count,l.brand,l.gtin,l.upc,'[]'::jsonb,'[]'::jsonb,"
-                "jsonb_build_object('runner',cast(:runner as text),'as_of_date',cast(:day as text),"
-                "'ads_match_key','store_id+item_id+msku'),:now,:now,:now from dim_walmart_listings l "
-                "left join sales s on s.store_id=l.store_id and s.item_id=l.item_id "
-                "left join ads a on a.store_id=l.store_id and a.item_id=l.item_id and a.msku=l.msku "
-                "where l.source_account_ref=:account"
-            ),
+            text(_listing_mart_refresh_sql()),
             {
                 "account": self.source_account_ref,
                 "day": self.business_date,

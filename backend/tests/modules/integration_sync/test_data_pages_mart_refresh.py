@@ -18,8 +18,11 @@ def test_mart_refresh_specs_match_data_page_registry() -> None:
 
     for key, spec in DATA_PAGES_MART_REFRESH_SPECS.items():
         assert spec.mart_table == DATA_PAGE_API_REGISTRY[key].mart_object
-        assert spec.refresh_mode == "delete_insert"
         assert spec.source_tables
+
+    assert mart_refresh_spec_for("daily_sales").refresh_mode == "delete_insert"
+    assert mart_refresh_spec_for("order_profit").refresh_mode == "delete_insert"
+    assert mart_refresh_spec_for("listing_management").refresh_mode == "upsert"
 
 
 def test_daily_sales_refresh_depends_on_authoritative_sales_and_business_sources() -> None:
@@ -65,6 +68,7 @@ def test_listing_management_refresh_can_build_current_snapshot_plan() -> None:
     assert plan.mart_table == "mart_listing_management_current"
     assert plan.business_date_from is None
     assert plan.business_date_to is None
+    assert plan.refresh_mode == "upsert"
     assert "dim_walmart_listings" in plan.source_tables
 
 
