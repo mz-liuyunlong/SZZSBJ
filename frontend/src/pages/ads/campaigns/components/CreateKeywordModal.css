@@ -1,0 +1,161 @@
+.create-keyword-modal {
+  display: flex;
+  max-height: 76vh;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.create-keyword-modal__section {
+  border-color: #dce3ed;
+  border-radius: 6px;
+}
+
+.create-keyword-modal__section .ant-card-body {
+  padding: 18px 22px;
+}
+
+.create-keyword-modal__section-title.ant-typography {
+  position: relative;
+  margin: 0 0 18px;
+  padding-left: 10px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.create-keyword-modal__section-title.ant-typography::before {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #1677ff;
+  content: "";
+}
+
+.create-keyword-modal__settings-grid {
+  display: grid;
+  width: 430px;
+  gap: 16px;
+}
+
+.create-keyword-modal__field-row {
+  display: grid;
+  grid-template-columns: 10px 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.create-keyword-modal__required {
+  color: #ff4d4f;
+}
+
+.create-keyword-modal__field-label {
+  color: #667085;
+  font-size: 13px;
+  text-align: right;
+}
+
+.create-keyword-modal__keyword-section .ant-card-head {
+  min-height: 52px;
+  border-bottom-color: #dce3ed;
+}
+
+.create-keyword-modal__keyword-section .ant-card-head-title {
+  position: relative;
+  padding-left: 10px;
+  color: #111827;
+  font-weight: 700;
+}
+
+.create-keyword-modal__keyword-section .ant-card-head-title::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #1677ff;
+  content: "";
+}
+
+.create-keyword-modal__keyword-section .ant-card-body {
+  padding: 0;
+}
+
+.create-keyword-modal__keyword-layout {
+  display: grid;
+  min-height: 560px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.create-keyword-modal__keyword-pane {
+  min-width: 0;
+  padding: 18px 22px;
+}
+
+.create-keyword-modal__keyword-pane + .create-keyword-modal__keyword-pane {
+  border-left: 1px solid #dce3ed;
+}
+
+.create-keyword-modal__filters {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin: 6px 0 28px;
+}
+
+.create-keyword-modal__bid-mode {
+  width: 128px;
+}
+
+.create-keyword-modal__pane-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.create-keyword-modal__search {
+  max-width: 350px;
+}
+
+.create-keyword-modal__bid {
+  width: 116px;
+}
+
+.create-keyword-modal__bid .ant-input-number {
+  width: 74px;
+}
+
+.create-keyword-modal__bid .ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.create-keyword-modal__manual {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.create-keyword-modal__manual .ant-input {
+  max-width: 560px;
+}
+
+@media (max-width: 1280px) {
+  .create-keyword-modal__keyword-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .create-keyword-modal__keyword-pane + .create-keyword-modal__keyword-pane {
+    border-top: 1px solid #dce3ed;
+    border-left: 0;
+  }
+}

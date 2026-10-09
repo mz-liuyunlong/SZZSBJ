@@ -18,6 +18,7 @@ import ProductManagementPage from '@/pages/products/ProductManagementPage'
 import DailySalesPage from '@/pages/sales/DailySalesPage'
 import OrderProfitPage from '@/pages/sales/OrderProfitPage'
 import RefundManagementPage from '@/pages/aftersales/RefundManagementPage'
+import AdsCampaignsPage from '@/pages/ads/campaigns/AdsCampaignsPage'
 import OperationLogPage from '@/pages/operations/OperationLogPage'
 import OperationPlanPage from '@/pages/operations/OperationPlanPage'
 import SyncTaskPage from '@/pages/data-center/SyncTaskPage'
@@ -122,6 +123,8 @@ function BusinessRoute({
           <DailySalesPage page={page} />
         ) : page.key === 'sales_order_profit' ? (
           <OrderProfitPage page={page} />
+        ) : page.key === 'ads_campaigns' ? (
+          <AdsCampaignsPage page={page} />
         ) : page.key === 'aftersales_refund_management' ? (
           <RefundManagementPage page={page} />
         ) : page.key === 'operations_log' ? (

@@ -1,0 +1,654 @@
+.ads-campaigns-page {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  background: #fff;
+}
+
+.ads-campaigns-page__main-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ads-campaigns-page__main-tabs > .ant-tabs-nav {
+  margin: 0;
+  padding: 0 10px;
+  min-height: 42px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ads-campaigns-page__main-tabs > .ant-tabs-content-holder {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.ads-campaigns-page__main-tabs > .ant-tabs-content-holder > .ant-tabs-content {
+  height: 100%;
+}
+
+.ads-campaigns-page__main-tabs
+  > .ant-tabs-content-holder
+  > .ant-tabs-content
+  > .ant-tabs-tabpane {
+  height: 100%;
+  min-height: 0;
+}
+
+.ads-campaigns-delivery,
+.ads-campaigns-reports,
+.ads-campaigns-system,
+.ads-campaigns-detail,
+.ads-campaigns-create {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.ads-campaigns-kpi-grid {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ads-campaigns-kpi-card {
+  position: relative;
+  height: 64px;
+  overflow: hidden;
+  padding: 9px 12px 9px 14px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #fff;
+  color: #101828;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background-color 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.14s ease;
+}
+
+.ads-campaigns-kpi-card::before {
+  position: absolute;
+  inset-block: 9px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: #1677ff;
+  content: "";
+  opacity: 0.8;
+}
+
+.ads-campaigns-kpi-card:hover,
+.ads-campaigns-kpi-card--active {
+  border-color: #91caff;
+  background: #fbfdff;
+  box-shadow: 0 6px 16px rgb(31 41 55 / 6%);
+  transform: translateY(-1px);
+}
+
+.ads-campaigns-kpi-card--green::before {
+  background: #52c41a;
+}
+
+.ads-campaigns-kpi-card--orange::before {
+  background: #f79009;
+}
+
+.ads-campaigns-kpi-card--purple::before {
+  background: #7c3aed;
+}
+
+.ads-campaigns-kpi-card span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.ads-campaigns-kpi-card strong,
+.ads-campaigns-kpi-grid .ant-card strong,
+.ads-campaigns-preview-grid .ant-card strong {
+  display: block;
+  margin-top: 5px;
+  color: #101828;
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 25px;
+  letter-spacing: -0.2px;
+}
+
+.ads-campaigns-toolbar {
+  flex: 0 0 auto;
+  border-color: #e5eaf3;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.ads-campaigns-toolbar .ant-card-body {
+  padding: 8px 10px;
+}
+
+.ads-campaigns-search {
+  width: 400px;
+  min-width: 360px;
+  max-width: 400px;
+}
+
+.ads-campaigns-detail-search {
+  width: 330px;
+  min-width: 300px;
+  max-width: 330px;
+}
+
+.ads-campaigns-table-shell {
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border-color: #dce3ed;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 3%);
+}
+
+.ads-campaigns-table-shell > .ant-pro-table {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.ads-campaigns-table-head {
+  display: flex;
+  flex: 0 0 42px;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid #e5eaf3;
+  background: #fff;
+}
+
+.ads-campaigns-table-head .ant-typography-secondary {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.ads-campaigns-budget-compact {
+  width: 158px;
+}
+
+.ads-campaigns-budget-prefix.ant-btn {
+  width: 34px;
+  padding-inline: 0;
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.ads-campaigns-budget-prefix.ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.ads-campaigns-budget-input.ant-input-number {
+  width: 88px;
+}
+
+.ads-campaigns-budget-save.ant-btn {
+  width: 32px;
+  padding-inline: 0;
+  color: #22b573;
+  border-color: #d6dfec;
+  background: #fff;
+}
+
+.ads-campaigns-budget-save.ant-btn:hover {
+  color: #14945b !important;
+  border-color: #86efac !important;
+  background: #f0fdf4 !important;
+}
+
+.ads-campaigns-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+.ads-campaigns-status-dot--muted {
+  background: #98a2b3;
+}
+
+.ads-campaigns-footer-hint {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.ads-campaigns-create__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ads-campaigns-create__header h4 {
+  margin: 0;
+}
+
+.ads-campaigns-create__layout {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+}
+
+.ads-campaigns-create__steps {
+  min-height: 0;
+  align-self: start;
+}
+
+.ads-campaigns-create__form {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ads-campaigns-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ads-campaigns-form-grid label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ads-campaigns-inline-tabs .ant-tabs-nav {
+  margin: 0;
+}
+
+.ads-campaigns-sub-tabs {
+  flex: 0 0 auto;
+}
+
+.ads-campaigns-sub-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+}
+
+.ads-campaigns-preview-grid {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ads-campaigns-preview-grid .ant-card {
+  border-color: #e5eaf3;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.ads-campaigns-preview-grid .ant-card span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+}
+
+.ads-campaigns-action-modal {
+  color: #344054;
+}
+
+@media (max-width: 1360px) {
+  .ads-campaigns-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ads-campaigns-detail__info,
+  .ads-campaigns-form-grid,
+  .ads-campaigns-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ads-campaigns-search {
+    width: 360px;
+    min-width: 320px;
+  }
+}
+
+.ads-campaigns-confirm__title {
+  margin: 0 0 10px;
+  color: #101828;
+  font-size: 16px !important;
+  font-weight: 750 !important;
+  line-height: 22px !important;
+}
+
+.ads-campaigns-confirm__body {
+  color: #344054;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ads-campaigns-confirm__body .ant-typography {
+  margin-bottom: 0;
+}
+
+.ads-campaigns-date-presets {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.ads-campaigns-date-presets .ant-radio-button-wrapper {
+  min-width: 48px;
+  height: 32px;
+  flex: 0 0 auto;
+  line-height: 30px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ads-campaigns-date-range.ant-picker {
+  width: 266px;
+  min-width: 266px;
+  height: 32px;
+  flex: 0 0 266px;
+}
+
+.ads-campaigns-selection-cell {
+  text-align: center !important;
+}
+
+.ads-campaigns-selection-cell .ant-checkbox-wrapper,
+.ads-campaigns-selection-cell .ant-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ads-campaigns-detail__tabs {
+  flex: 0 0 auto;
+  border-bottom: 1px solid #e7edf5;
+}
+
+.ads-campaigns-detail__tabs > .ant-tabs-nav {
+  margin: 0;
+}
+
+.ads-campaigns-detail__tabs .ant-tabs-tab {
+  padding: 12px 2px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.ads-campaigns-detail__tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 32px;
+}
+
+.ads-campaigns-detail__tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #1677ff;
+  font-weight: 700;
+}
+
+.ads-campaigns-table-head--actions-only {
+  justify-content: flex-start;
+}
+
+.ads-campaigns-keyword-bid {
+  width: 110px;
+}
+
+.ads-campaigns-keyword-bid .ant-input-number {
+  width: 72px;
+}
+
+.ads-campaigns-keyword-bid .ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+/* Price editors: only show the green save check after the input is focused. */
+.ads-campaigns-budget-compact .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-keyword-bid .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-keyword-bid .ads-campaigns-keyword-bid-save.ant-btn,
+.ads-campaigns-bid-editor .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-bid-editor .ads-campaigns-keyword-bid-save.ant-btn {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.12s ease,
+    visibility 0.12s ease;
+}
+
+.ads-campaigns-budget-compact:focus-within .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-keyword-bid:focus-within .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-keyword-bid:focus-within .ads-campaigns-keyword-bid-save.ant-btn,
+.ads-campaigns-bid-editor:focus-within .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-bid-editor:focus-within .ads-campaigns-keyword-bid-save.ant-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Unified inline price editor: $ prefix + input + save check inside the input area. */
+.ads-campaigns-price-editor {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ads-campaigns-price-prefix.ant-btn {
+  width: 34px;
+  height: 32px;
+  padding-inline: 0;
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.ads-campaigns-price-prefix.ant-btn[disabled] {
+  color: #344054;
+  background: #f8fafc;
+  border-color: #d6dfec;
+}
+
+.ads-campaigns-price-input.ant-input-number {
+  width: 96px;
+}
+
+.ads-campaigns-budget-compact .ads-campaigns-price-input.ant-input-number {
+  width: 112px;
+}
+
+.ads-campaigns-price-input.ant-input-number .ant-input-number-input {
+  padding-right: 30px;
+}
+
+.ads-campaigns-price-save.ant-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  margin-left: -30px;
+  padding-inline: 0;
+  border: 0;
+  background: transparent;
+  color: #22b573;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 3;
+  transition:
+    opacity 0.12s ease,
+    visibility 0.12s ease;
+}
+
+.ads-campaigns-price-save.ant-btn:hover {
+  color: #14945b !important;
+  background: transparent !important;
+}
+
+.ads-campaigns-price-editor:focus-within .ads-campaigns-price-save.ant-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.ads-campaigns-budget-compact {
+  width: 158px;
+}
+
+.ads-campaigns-keyword-bid {
+  width: 132px;
+}
+
+.ads-campaigns-ad-item-bid {
+  width: 132px;
+}
+
+/* FINAL unified ads price editor style */
+.ads-campaigns-price-editor,
+.ads-campaigns-budget-compact,
+.ads-campaigns-keyword-bid,
+.ads-campaigns-ad-item-bid {
+  display: inline-flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+  vertical-align: middle;
+}
+
+.ads-campaigns-price-prefix.ant-btn,
+.ads-campaigns-budget-prefix.ant-btn,
+.ads-campaigns-keyword-bid > .ant-btn:first-child,
+.ads-campaigns-ad-item-bid > .ant-btn:first-child {
+  flex: 0 0 36px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  height: 32px !important;
+  padding-inline: 0 !important;
+  margin: 0 !important;
+  color: #344054 !important;
+  background: #f8fafc !important;
+  border: 1px solid #d6dfec !important;
+  border-right: 0 !important;
+  border-radius: 6px 0 0 6px !important;
+  box-shadow: none !important;
+}
+
+.ads-campaigns-price-prefix.ant-btn[disabled],
+.ads-campaigns-budget-prefix.ant-btn[disabled],
+.ads-campaigns-keyword-bid > .ant-btn:first-child[disabled],
+.ads-campaigns-ad-item-bid > .ant-btn:first-child[disabled] {
+  color: #344054 !important;
+  background: #f8fafc !important;
+  border-color: #d6dfec !important;
+}
+
+.ads-campaigns-price-input.ant-input-number,
+.ads-campaigns-budget-input.ant-input-number,
+.ads-campaigns-keyword-bid .ant-input-number,
+.ads-campaigns-ad-item-bid .ant-input-number {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 32px !important;
+  margin: 0 !important;
+  border-color: #d6dfec !important;
+  border-radius: 0 6px 6px 0 !important;
+  box-shadow: none !important;
+}
+
+.ads-campaigns-price-input.ant-input-number:hover,
+.ads-campaigns-budget-input.ant-input-number:hover,
+.ads-campaigns-keyword-bid .ant-input-number:hover,
+.ads-campaigns-ad-item-bid .ant-input-number:hover {
+  border-color: #1677ff !important;
+}
+
+.ads-campaigns-price-input.ant-input-number-focused,
+.ads-campaigns-budget-input.ant-input-number-focused,
+.ads-campaigns-keyword-bid .ant-input-number-focused,
+.ads-campaigns-ad-item-bid .ant-input-number-focused {
+  border-color: #1677ff !important;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 10%) !important;
+}
+
+.ads-campaigns-price-input.ant-input-number .ant-input-number-input,
+.ads-campaigns-budget-input.ant-input-number .ant-input-number-input,
+.ads-campaigns-keyword-bid .ant-input-number .ant-input-number-input,
+.ads-campaigns-ad-item-bid .ant-input-number .ant-input-number-input {
+  height: 30px !important;
+  padding-right: 30px !important;
+  line-height: 30px !important;
+}
+
+.ads-campaigns-price-save.ant-btn,
+.ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-keyword-bid-save.ant-btn,
+.ads-campaigns-ad-item-bid-save.ant-btn {
+  flex: 0 0 24px !important;
+  width: 24px !important;
+  min-width: 24px !important;
+  height: 24px !important;
+  margin-top: 4px !important;
+  margin-left: -30px !important;
+  padding-inline: 0 !important;
+  color: #22b573 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 3;
+  transition:
+    opacity 0.12s ease,
+    visibility 0.12s ease;
+}
+
+.ads-campaigns-price-save.ant-btn:hover,
+.ads-campaigns-budget-save.ant-btn:hover,
+.ads-campaigns-keyword-bid-save.ant-btn:hover,
+.ads-campaigns-ad-item-bid-save.ant-btn:hover {
+  color: #14945b !important;
+  background: transparent !important;
+}
+
+.ads-campaigns-price-editor:focus-within .ads-campaigns-price-save.ant-btn,
+.ads-campaigns-budget-compact:focus-within .ads-campaigns-budget-save.ant-btn,
+.ads-campaigns-keyword-bid:focus-within .ads-campaigns-keyword-bid-save.ant-btn,
+.ads-campaigns-ad-item-bid:focus-within
+  .ads-campaigns-ad-item-bid-save.ant-btn {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+/* END FINAL unified ads price editor style */

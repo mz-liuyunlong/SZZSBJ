@@ -4,14 +4,19 @@ const toChinaHour = (hour: number) => (hour + CHINA_UTC_OFFSET_HOURS) % 24;
 
 export type SyncTaskSchedulePreset = "30m" | "1h" | "2h" | "daily_fixed";
 
-const supportedBackfillDays = new Set([1, 2, 3, 7, 14]);
+const supportedBackfillDays = new Set([1, 2, 3, 5, 7, 10, 14, 30]);
 
 export const normalizeSyncTaskBackfillDays = (
   value: number | null | undefined,
   fallback: number | undefined,
-) => (value !== null && value !== undefined && supportedBackfillDays.has(value) ? value : fallback);
+) =>
+  value !== null && value !== undefined && supportedBackfillDays.has(value)
+    ? value
+    : fallback;
 
-export const parseSyncTaskSchedule = (value?: string | null): {
+export const parseSyncTaskSchedule = (
+  value?: string | null,
+): {
   preset: SyncTaskSchedulePreset;
   fixedRunTimes: string[];
 } | null => {
@@ -69,25 +74,53 @@ export const formatSyncTaskFrequency = (value?: string | null) => {
   if (!value || value === "-") return "-";
 
   const cron = value.trim();
-
-  if (cron === "*/30 * * * *") return "每 30 分钟";
-  if (cron === "0 * * * *") return "每 1 小时";
-  if (cron === "0 */2 * * *") return "每 2 小时";
+  if (!cron) return "-";
+  if (cron === "手动任务") return "手动任务";
 
   const parts = cron.split(/\s+/);
   if (parts.length !== 5) return cron;
 
-  const [minute, hour, , , weekDay] = parts;
-  const isNumber = (text: string) => /^\d+$/.test(text);
+  const [minute, hour, dayOfMonth, month, weekDay] = parts;
+  const isEveryDay = dayOfMonth === "*" && month === "*";
+  const isStep = (text: string) => /^\*\/\d+$/.test(text);
+  const parseNumberList = (text: string, min: number, max: number) => {
+    if (!/^\d+(,\d+)*$/.test(text)) return null;
+    const values = text.split(",").map(Number);
+    if (
+      values.some((item) => !Number.isInteger(item) || item < min || item > max)
+    ) {
+      return null;
+    }
+    return Array.from(new Set(values)).sort((left, right) => left - right);
+  };
 
-  if (!isNumber(minute)) return cron;
+  if (isStep(minute) && hour === "*" && isEveryDay && weekDay === "*") {
+    return `每 ${minute.slice(2)} 分钟`;
+  }
 
-  if (/^\d+(,\d+)*$/.test(hour)) {
-    const times = hour
-      .split(",")
-      .map((item) => toChinaHour(Number(item)))
-      .sort((left, right) => left - right)
-      .map((localHour) => `${pad2(localHour)}:${pad2(Number(minute))}`)
+  const minutes = parseNumberList(minute, 0, 59);
+
+  if (minutes && hour === "*" && isEveryDay && weekDay === "*") {
+    if (minutes.length === 1 && minutes[0] === 0) return "每小时";
+    return `每小时第 ${minutes.map(pad2).join("、")} 分钟`;
+  }
+
+  const hourStep = hour.match(/^\*\/(\d+)$/);
+  if (minutes?.length === 1 && hourStep && isEveryDay && weekDay === "*") {
+    return minutes[0] === 0
+      ? `每 ${hourStep[1]} 小时`
+      : `每 ${hourStep[1]} 小时第 ${pad2(minutes[0])} 分钟`;
+  }
+
+  const hours = parseNumberList(hour, 0, 23);
+  if (minutes && hours && isEveryDay) {
+    const times = hours
+      .flatMap((item) =>
+        minutes.map(
+          (minuteValue) => `${pad2(toChinaHour(item))}:${pad2(minuteValue)}`,
+        ),
+      )
+      .sort()
       .join("、");
 
     if (weekDay === "*") return `每天 ${times}`;
@@ -100,5 +133,7 @@ export const formatSyncTaskFrequency = (value?: string | null) => {
     return `每周${days} ${times}`;
   }
 
-  return cron;
+  if (!cron.includes("*")) return cron;
+
+  return "高级计划";
 };
