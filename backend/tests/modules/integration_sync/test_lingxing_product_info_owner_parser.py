@@ -105,3 +105,20 @@ def test_owner_non_list_still_fails():
         _parse(payload)
 
     assert str(exc.value) == "CONTRACT_FIELD_MISMATCH"
+
+
+def test_multiple_owners_filters_cg_opt_username_as_creator_operator():
+    parsed = _parse(
+        _payload(
+            [
+                {"permission_uid": "developer-uid", "permission_user_name": "产品负责人"},
+                {"permission_uid": "operator-uid", "permission_user_name": "创建操作人"},
+            ],
+            product_developer="产品负责人",
+            product_developer_uid="developer-uid",
+            cg_opt_username="创建操作人",
+        )
+    )
+
+    assert parsed.owner_uid == "developer-uid"
+    assert parsed.owner_name == "产品负责人"

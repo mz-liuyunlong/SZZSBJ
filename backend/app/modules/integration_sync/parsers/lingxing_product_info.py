@@ -254,6 +254,7 @@ CREATOR_UID_KEYS = (
 )
 
 CREATOR_NAME_KEYS = (
+    "cg_opt_username",
     "creator_name",
     "creator",
     "create_user_name",
