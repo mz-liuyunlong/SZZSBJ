@@ -374,6 +374,7 @@ class ListingManagementItemRead(StrictSchema):
     fulfillment_type: str | None = None
     fulfillment_type_name: str | None = None
     listing_start_at_utc: datetime | None
+    listing_start_source_raw: str | None = None
     category: str | None
     wfs_available_quantity: Money | None
     available_quantity: Money | None

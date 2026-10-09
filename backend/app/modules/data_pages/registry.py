@@ -11,7 +11,7 @@ FALLBACK_BEHAVIOR: Final = (
     "while MART sync is not implemented."
 )
 READ_ONLY_BOUNDARY: Final = (
-    "Read-only MART API; no Lingxing call, parser writer, backfill, "
+    "Read-only governed data-page API; no Lingxing call, parser writer, backfill, "
     "Celery task, production migration, or production database operation."
 )
 
@@ -85,7 +85,7 @@ DATA_PAGE_API_REGISTRY: Final[dict[DataPageKey, DataPageRegistryEntry]] = {
         current_boundary=READ_ONLY_BOUNDARY,
         quality_checks=(
             "source_account_ref is constrained by the caller's integration source-account scope.",
-            "meta.source_objects contains only mart_listing_management_current.",
+            "meta.source_objects includes the listing MART and its stable-key DIM raw-time source.",
             "listing rows expose display-safe fields only and do not expose RAW payloads.",
             "tags are normalized to string lists for frontend rendering.",
             "latest_calculated_at reflects MART calculation freshness when rows exist.",
@@ -98,4 +98,6 @@ def registry_source_objects(key: DataPageKey) -> list[str]:
     objects = [DATA_PAGE_API_REGISTRY[key].mart_object]
     if key == "daily_sales":
         objects.append("fact_walmart_refund_items")
+    elif key == "listing_management":
+        objects.append("dim_walmart_listings")
     return objects
