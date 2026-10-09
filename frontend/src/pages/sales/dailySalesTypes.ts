@@ -86,7 +86,6 @@ export interface DailySalesColumnField {
 
 export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "image", title: "图片" },
-  { key: "analysis", title: "分析" },
   { key: "date", title: "日期" },
   { key: "store", title: "店铺" },
   { key: "owner", title: "负责人" },
@@ -123,12 +122,13 @@ export const dailySalesColumnFields: DailySalesColumnField[] = [
   { key: "costStatus", title: "成本状态" },
   { key: "systemOperationLog", title: "系统运营日志" },
   { key: "operationLog", title: "运营日志" },
+  { key: "actions", title: "操作" },
 ];
 
 export const fixedDailySalesColumnKeys = [
   "image",
-  "analysis",
-  "date",
+  "mskuProductId",
+  "skuProductName",
 ];
 
 /** Acceptance-only display rate; replace with approved daily FX data when the API is implemented. */

@@ -542,7 +542,8 @@ const renderPage = async () => {
 };
 const referenceDay = dayjs().subtract(1, "day").format("YYYY-MM-DD");
 const referenceRows = dailySalesMockData.filter((row) => row.date === referenceDay);
-const usdHeaders = dailySalesColumnFields.map((field) => ({
+const visibleDailySalesColumnFields = dailySalesColumnFields.filter((field) => field.key !== "platform");
+const usdHeaders = visibleDailySalesColumnFields.map((field) => ({
   wfsDeliveryUnitPrice: "WFS配送单价($)",
   purchaseUnitPriceCny: "采购单价($)",
   firstLegUnitPriceCny: "头程单价($)",
@@ -566,7 +567,7 @@ describe("DailySalesPage", () => {
       .slice(1)
       .map((header) => header.textContent);
     expect(headers).toEqual(usdHeaders);
-    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(dailySalesColumnFields.length);
+    expect(screen.getAllByRole("separator", { name: /调整列宽/ })).toHaveLength(visibleDailySalesColumnFields.length);
     expect(screen.queryByText("商品 ID")).not.toBeInTheDocument();
     expect(screen.queryByText("父体")).not.toBeInTheDocument();
     expect(headers).toContain("送样量");
@@ -603,13 +604,19 @@ describe("DailySalesPage", () => {
     expect(within(toolbar).getByRole("button", { name: /显示图表$/ })).toBeVisible();
 
     fireEvent.click(downloadButton);
-    expect(messageInfo).toHaveBeenCalledWith("导出接口待接入");
+    const exportModalSubtitle = await screen.findByText("配置导出范围与字段");
+    expect(exportModalSubtitle).toBeInTheDocument();
+    const exportModalContent = exportModalSubtitle.closest(".ant-modal-content") as HTMLElement | null;
+    expect(exportModalContent).not.toBeNull();
+    const exportModalCloseButton = exportModalContent!.querySelector(".ant-modal-close") as HTMLElement | null;
+    expect(exportModalCloseButton).not.toBeNull();
+    fireEvent.click(exportModalCloseButton!);
 
     fireEvent.click(columnButton);
     const drawer = screen.getByRole("dialog", { name: "列配置" });
     expect(drawer).toBeVisible();
     expect(within(drawer).getAllByRole("checkbox")).toHaveLength(dailySalesColumnFields.length);
-    for (const title of ["图片", "分析", "日期"]) {
+    for (const title of ["图片", "商品ID/品名", "SKU/MSKU"]) {
       expect(within(drawer).getByRole("checkbox", { name: `显示列：${title}` })).toBeChecked();
       expect(within(drawer).getByRole("checkbox", { name: `显示列：${title}` })).toBeDisabled();
     }
@@ -747,7 +754,8 @@ describe("DailySalesPage", () => {
     expect(totalRow).toHaveTextContent(
       referenceRows.reduce((total, row) => total + row.salesVolume, 0).toLocaleString("zh-CN"),
     );
-    expect(totalRow.querySelector(".daily-sales__total-cell--analysis")).toBeEmptyDOMElement();
+    expect(totalRow.querySelector(".daily-sales__total-cell--mskuProductId")).toBeEmptyDOMElement();
+    expect(totalRow.querySelector(".daily-sales__total-cell--skuProductName")).toBeEmptyDOMElement();
     expect(totalRow.querySelector(".daily-sales__total-cell--date")).toBeEmptyDOMElement();
     expect(totalRow.querySelector(".daily-sales__total-cell--salesVolume"))
       .toHaveAttribute("align", "left");
@@ -775,7 +783,7 @@ describe("DailySalesPage", () => {
     fireEvent.mouseEnter(screen.getByRole("img", { name: "前7天销量趋势图" }));
     expect(screen.getByRole("img", { name: "销量图表" })).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: /查看销售详情/ }));
+    fireEvent.click(screen.getByRole("button", { name: "详情" }));
     expect(screen.getByRole("dialog", { name: "Listing经营分析中心" })).toBeInTheDocument();
   });
 });

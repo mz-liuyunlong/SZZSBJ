@@ -1,5 +1,4 @@
 /** Product-ID order-profit report table with the daily-sales interaction model. */
-import { BarChartOutlined } from "@ant-design/icons";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Table, Tooltip } from "antd";
 import type { Key } from "react";
@@ -237,37 +236,26 @@ function createColumns(
   return [
     { title: "图片", key: "image", width: 72, fixed: "left", render: () => <ImageCell label="订单利润商品图片占位" /> },
     {
-      title: "分析",
-      key: "analysis",
-      width: 72,
-      fixed: "left",
-      render: (_, row) => (
-        <Button
-          type="text"
-          aria-label={`查看订单利润详情：${row.productId}`}
-          icon={<BarChartOutlined aria-hidden="true" />}
-          onClick={() => onOpenDetail(row)}
-        />
-      ),
-    },
-    {
       title: "商品ID/品名",
       key: "productIdName",
-      width: 240,
+      width: 188,
       fixed: "left",
-      render: (_, row) => (
+            className: "report-table-product-identity-column",
+render: (_, row) => (
         <ProductIdentityCell
-          productId={row.productId}
-          productName={row.productName}
-          onCopy={onCopy}
-        />
+            productId={row.productId}
+            productName={row.productName}
+            onCopy={onCopy}
+          />
       ),
     },
     {
       title: "SKU/MSKU",
       key: "skuMsku",
-      width: 190,
-      render: (_, row) => (
+      width: 188,
+      fixed: "left",
+            className: "report-table-sku-msku-identity-column",
+render: (_, row) => (
         <SkuMskuIdentityCell
           sku={row.sku}
           msku={row.msku}
@@ -364,6 +352,10 @@ function OrderProfitTable({
   onCopy,
   onOpenDetail,
 }: OrderProfitTableProps) {
+  const compactIdentityColumnWidths: Record<string, number> = {
+    productIdName: 188,
+    skuMsku: 188,
+  };
   const columnMap = new Map(createColumns(onCopy, onOpenDetail, currency).map((column) => [String(column.key), column]));
   const columns = appliedColumnKeys.flatMap((key) => {
     const column = columnMap.get(key);
@@ -378,8 +370,8 @@ function OrderProfitTable({
       currency,
     );
 
-    const width = columnWidths[key] ?? (Number(column.width) || 96);
-    const minWidth = Math.max(key === "image" || key === "analysis" ? 72 : 88, title.length * 14 + 28);
+    const width = compactIdentityColumnWidths[key] ?? columnWidths[key] ?? (Number(column.width) || 96);
+    const minWidth = Math.max(key === "image" ? 72 : 88, title.length * 14 + 28);
     return [{
       ...column,
       align: "left" as const,
