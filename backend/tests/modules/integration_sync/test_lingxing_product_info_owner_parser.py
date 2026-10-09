@@ -122,3 +122,37 @@ def test_multiple_owners_filters_cg_opt_username_as_creator_operator():
 
     assert parsed.owner_uid == "developer-uid"
     assert parsed.owner_name == "产品负责人"
+
+
+def test_multiple_owners_prefers_product_developer_when_operator_is_not_in_owner_list():
+    parsed = _parse(
+        _payload(
+            [
+                {"permission_uid": "developer-uid", "permission_user_name": "产品负责人"},
+                {"permission_uid": "other-uid", "permission_user_name": "其他人员"},
+            ],
+            product_developer="产品负责人",
+            product_developer_uid="developer-uid",
+            cg_opt_username="创建操作人",
+        )
+    )
+
+    assert parsed.owner_uid == "developer-uid"
+    assert parsed.owner_name == "产品负责人"
+
+
+def test_multiple_owners_prefers_product_developer_before_creator_filter():
+    parsed = _parse(
+        _payload(
+            [
+                {"permission_uid": "developer-uid", "permission_user_name": "产品负责人"},
+                {"permission_uid": "operator-uid", "permission_user_name": "创建操作人"},
+            ],
+            product_developer="产品负责人",
+            product_developer_uid="developer-uid",
+            cg_opt_username="创建操作人",
+        )
+    )
+
+    assert parsed.owner_uid == "developer-uid"
+    assert parsed.owner_name == "产品负责人"

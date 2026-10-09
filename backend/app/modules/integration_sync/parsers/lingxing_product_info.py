@@ -356,6 +356,22 @@ def _creator_refs(data: dict[str, object]) -> tuple[str | None, str | None]:
     return creator_uid, creator_name
 
 
+def _owner_matches_product_developer(
+    owner: dict[str, object],
+    data: dict[str, object],
+) -> bool:
+    developer_uid = _safe_identifier(data.get("product_developer_uid"))
+    developer_name = _safe_name(data.get("product_developer"))
+    owner_uid = _identifier(owner.get("permission_uid"))
+    owner_name = _text(owner.get("permission_user_name"))
+
+    if developer_uid and owner_uid and developer_uid == owner_uid:
+        return True
+    if developer_name and owner_name and developer_name == owner_name:
+        return True
+    return False
+
+
 def _owner_mapping(data: dict[str, object]) -> dict[str, object]:
     value = data.get("permission_user_info")
     if value is None:
@@ -369,6 +385,12 @@ def _owner_mapping(data: dict[str, object]) -> dict[str, object]:
 
     if len(value) <= 1:
         return {} if not value else value[0]
+
+    developer_matches = [owner for owner in value if _owner_matches_product_developer(owner, data)]
+    if len(developer_matches) == 1:
+        return developer_matches[0]
+    if len(developer_matches) > 1:
+        raise ProductInfoParseError("PRODUCT_INFO_OWNER_CARDINALITY")
 
     creator_uid, creator_name = _creator_refs(data)
     if not creator_uid and not creator_name:
