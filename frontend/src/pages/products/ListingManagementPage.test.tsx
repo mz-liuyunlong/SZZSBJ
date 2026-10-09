@@ -80,11 +80,12 @@ afterEach(() => {
 });
 
 describe("ListingManagementPage acceptance contract", () => {
-  it("uses the raw listing start time unchanged when normalized time is missing", () => {
-    expect(toListingStartText(null, "2021-03-25 00:00:00"))
-      .toBe("2021-03-25 00:00:00");
-    expect(toListingStartText("2026-10-10T08:00:00Z", "2021-03-25 00:00:00"))
-      .toBe("2026-10-10");
+  it("shows listing start values as date-only text without timezone conversion", () => {
+    expect(toListingStartText("2026-09-08T16:31:47Z", null)).toBe("2026-09-08");
+    expect(toListingStartText(null, "2026-09-08 09:31:47")).toBe("2026-09-08");
+    expect(toListingStartText(null, "2026-09-08")).toBe("2026-09-08");
+    expect(toListingStartText(null, null)).toBe("");
+    expect(toListingStartText(null, "待确认")).toBe("待确认");
   });
 
   it("keeps 100 local rows and the owner-approved column order", () => {

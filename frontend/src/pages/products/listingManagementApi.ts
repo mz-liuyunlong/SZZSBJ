@@ -192,7 +192,11 @@ const toDateText = (value: string | null): string => {
 export const toListingStartText = (
   normalizedValue: string | null,
   sourceRawValue: string | null | undefined,
-): string => normalizedValue ? toDateText(normalizedValue) : (sourceRawValue ?? "");
+): string => {
+  if (normalizedValue) return toDateText(normalizedValue);
+  if (!sourceRawValue?.trim()) return "";
+  return sourceRawValue.trim().match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? sourceRawValue;
+};
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
 
