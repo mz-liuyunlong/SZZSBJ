@@ -27,6 +27,7 @@ interface BackendListingItem {
   fulfillment_type: string | null;
   fulfillment_type_name: string | null;
   listing_start_at_utc: string | null;
+  listing_start_source_raw?: string | null;
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -188,6 +189,11 @@ const toDateText = (value: string | null): string => {
   return value.slice(0, 10);
 };
 
+export const toListingStartText = (
+  normalizedValue: string | null,
+  sourceRawValue: string | null | undefined,
+): string => normalizedValue ? toDateText(normalizedValue) : (sourceRawValue ?? "");
+
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
 
 const normalizeListingStatus = (value: string | null) => {
@@ -224,7 +230,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toDateText(item.listing_start_at_utc),
+  listedAt: toListingStartText(item.listing_start_at_utc, item.listing_start_source_raw),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),

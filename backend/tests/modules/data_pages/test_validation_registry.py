@@ -15,7 +15,10 @@ def test_data_pages_registry_covers_expected_pages() -> None:
             "fact_walmart_refund_items",
         ],
         "order_profit": ["mart_order_profit_sku_day"],
-        "listing_management": ["mart_listing_management_current"],
+        "listing_management": [
+            "mart_listing_management_current",
+            "dim_walmart_listings",
+        ],
     }
 
     for key, entry in DATA_PAGE_API_REGISTRY.items():

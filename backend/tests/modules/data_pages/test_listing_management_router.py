@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
+from app.modules.data_pages.repository import ListingManagementRepository
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
     ListingManagementListData,
@@ -66,6 +67,7 @@ def _listing_item() -> ListingManagementItemRead:
         listing_status="在线",
         lifecycle_status="成长期",
         listing_start_at_utc=NOW,
+        listing_start_source_raw="2026-09-17 08:00:00",
         category="家居",
         wfs_available_quantity=Decimal("12"),
         available_quantity=Decimal("2"),
@@ -93,6 +95,28 @@ def _listing_item() -> ListingManagementItemRead:
 def test_openapi_contains_listing_management_route() -> None:
     paths = create_app().openapi()["paths"]
     assert "/api/listings/walmart" in paths
+
+
+def test_listing_query_reads_raw_start_time_by_stable_business_key() -> None:
+    repository = ListingManagementRepository(MagicMock(spec=Session))
+    statement = repository._filtered_listing_statement(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        owner_ref="",
+        product_type="",
+        status="",
+        tag="",
+        summary_filter="total",
+        search_field="sku",
+        keyword="",
+        batch_values="",
+    )
+
+    sql = str(statement.compile())
+    assert "LEFT OUTER JOIN dim_walmart_listings" in sql
+    assert "dim_walmart_listings.source_account_ref =" in sql
+    assert "dim_walmart_listings.store_id =" in sql
+    assert "dim_walmart_listings.item_id =" in sql
 
 
 def test_listing_management_route_fails_closed_for_auth_permission_and_scope() -> None:
@@ -143,5 +167,9 @@ def test_listing_management_route_returns_envelope_and_meta(monkeypatch: Any) ->
     assert captured["query"].page_size == 50
     assert body["data"]["items"][0]["local_sku"] == "sku-1"
     assert body["data"]["items"][0]["sale_price_amount"] == "39.99"
-    assert body["meta"]["source_objects"] == ["mart_listing_management_current"]
+    assert body["data"]["items"][0]["listing_start_source_raw"] == "2026-09-17 08:00:00"
+    assert body["meta"]["source_objects"] == [
+        "mart_listing_management_current",
+        "dim_walmart_listings",
+    ]
     assert body["meta"]["total"] == 1

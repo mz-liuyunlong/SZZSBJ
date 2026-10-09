@@ -33,6 +33,7 @@ from app.modules.data_pages.models import (
     OrderProfitSkuDayMart,
     ProductCustomTag,
     ProductCustomTagAssignment,
+    WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
 
@@ -73,6 +74,7 @@ class ListingManagementRowProjection:
     """Listing row plus SKU owner/developer fields resolved from ProductInfo current."""
 
     listing: ListingManagementCurrentMart
+    listing_start_source_raw: str | None
     owner_uid: str | None
     owner_name: str | None
     product_developer_uid: str | None
@@ -845,6 +847,7 @@ class ListingManagementRepository:
             [
                 ListingManagementRowProjection(
                     listing=listing,
+                    listing_start_source_raw=listing_start_source_raw,
                     owner_uid=owner_uid,
                     owner_name=owner_name,
                     product_developer_uid=product_developer_uid,
@@ -852,6 +855,7 @@ class ListingManagementRepository:
                 )
                 for (
                     listing,
+                    listing_start_source_raw,
                     owner_uid,
                     owner_name,
                     product_developer_uid,
@@ -904,6 +908,7 @@ class ListingManagementRepository:
         return [
             ListingManagementRowProjection(
                 listing=listing,
+                listing_start_source_raw=listing_start_source_raw,
                 owner_uid=owner_uid,
                 owner_name=owner_name,
                 product_developer_uid=product_developer_uid,
@@ -911,6 +916,7 @@ class ListingManagementRepository:
             )
             for (
                 listing,
+                listing_start_source_raw,
                 owner_uid,
                 owner_name,
                 product_developer_uid,
@@ -1112,10 +1118,20 @@ class ListingManagementRepository:
         statement = (
             select(
                 ListingManagementCurrentMart,
+                WalmartListingDimension.listing_start_source_raw,
                 owner_lookup.c.owner_uid,
                 owner_lookup.c.owner_name,
                 owner_lookup.c.product_developer_uid,
                 owner_lookup.c.product_developer_name,
+            )
+            .outerjoin(
+                WalmartListingDimension,
+                and_(
+                    WalmartListingDimension.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    WalmartListingDimension.store_id == ListingManagementCurrentMart.store_id,
+                    WalmartListingDimension.item_id == ListingManagementCurrentMart.item_id,
+                ),
             )
             .outerjoin(
                 owner_lookup,

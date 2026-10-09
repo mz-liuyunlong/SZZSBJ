@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingManagementSummaryCards from "@/pages/products/components/ListingManagementSummaryCards";
+import { toListingStartText } from "@/pages/products/listingManagementApi";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -79,6 +80,13 @@ afterEach(() => {
 });
 
 describe("ListingManagementPage acceptance contract", () => {
+  it("uses the raw listing start time unchanged when normalized time is missing", () => {
+    expect(toListingStartText(null, "2021-03-25 00:00:00"))
+      .toBe("2021-03-25 00:00:00");
+    expect(toListingStartText("2026-10-10T08:00:00Z", "2021-03-25 00:00:00"))
+      .toBe("2026-10-10");
+  });
+
   it("keeps 100 local rows and the owner-approved column order", () => {
     expect(listingManagementMockData).toHaveLength(100);
     expect(new Set(listingManagementMockData.map((row) => row.id)).size).toBe(100);

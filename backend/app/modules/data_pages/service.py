@@ -1039,6 +1039,7 @@ class ListingManagementService:
             fulfillment_type=getattr(row, "fulfillment_type", None),
             fulfillment_type_name=getattr(row, "fulfillment_type_name", None),
             listing_start_at_utc=row.listing_start_at_utc,
+            listing_start_source_raw=getattr(row, "listing_start_source_raw", None),
             category=row.category,
             wfs_available_quantity=row.wfs_available_quantity,
             available_quantity=row.available_quantity,
