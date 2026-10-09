@@ -177,7 +177,7 @@ def test_formal_execution_rechecks_governance_before_productinfo_outbound(
     session.commit.assert_called_once()
 
 
-def test_scheduler_tick_dispatches_every_due_run(
+def test_scheduler_tick_dispatches_first_due_run_per_tick(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = MagicMock(spec=Session)
@@ -213,7 +213,7 @@ def test_scheduler_tick_dispatches_every_due_run(
 
     task_module.scheduler_tick.run()
 
-    assert dispatched == run_ids
+    assert dispatched == run_ids[:1]
     recover_expired_runs.assert_called_once_with()
     create_due_runs.assert_called_once_with()
     recoverable_queued_run_ids.assert_called_once_with()
@@ -450,7 +450,7 @@ def test_ad_execution_does_not_run_sales_or_refund_fetches() -> None:
     runner._fetch_return_all.assert_not_called()
 
 
-def test_scheduler_tick_recovers_queued_runs_and_continues_after_dispatch_failure(
+def test_scheduler_tick_recovers_queued_runs_and_defers_remaining_after_dispatch_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = MagicMock(spec=Session)
@@ -489,4 +489,4 @@ def test_scheduler_tick_recovers_queued_runs_and_continues_after_dispatch_failur
 
     task_module.scheduler_tick.run()
 
-    assert attempted == [new_run, recovered_run]
+    assert attempted == [new_run]

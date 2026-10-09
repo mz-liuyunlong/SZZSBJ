@@ -38,3 +38,32 @@ def test_v4_refund_identity_health_reads_refund_management_fact() -> None:
     assert "after_sales_refund_items" in source
     assert "return_order_at::date=:day" in source
     assert "fact_walmart_refund_items" not in source
+
+
+def test_refund_empty_list_is_valid_payload() -> None:
+    from datetime import date
+
+    from scripts.import_after_sales_refund_items import (
+        build_rows,
+        collect_excluded_item_keys,
+        find_return_list,
+        summarize_refund_payload,
+    )
+
+    payload = {"data": {"list": []}}
+
+    assert find_return_list(payload) == []
+    assert (
+        build_rows(
+            payload,
+            source_account_ref="primary",
+            target_date=date(2026, 10, 9),
+            listing_map={},
+            cost_map={},
+        )
+        == []
+    )
+    assert collect_excluded_item_keys(payload) == []
+    summary = summarize_refund_payload(payload)
+    assert summary["raw_item_rows"] == 0
+    assert summary["counted_rows"] == 0

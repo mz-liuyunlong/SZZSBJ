@@ -76,6 +76,7 @@ def create_celery_app(
         task_create_missing_queues=False,
         result_backend=None,
         task_ignore_result=True,
+        worker_prefetch_multiplier=1,
         worker_hijack_root_logger=False,
         timezone="UTC",
         enable_utc=True,

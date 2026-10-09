@@ -101,17 +101,24 @@ def unwrap_response(payload: Any) -> dict[str, Any]:
 
 
 def find_return_list(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
-    """Find body.data.list or similar list payload."""
+    """Find body.data.list or similar list payload.
+
+    Empty lists are valid API responses. Do not use ``or`` to choose candidate
+    fields here, because ``[]`` is falsy and would be misclassified as a missing
+    return list during scheduled refund syncs.
+    """
 
     data = payload.get("data")
     if isinstance(data, dict):
-        rows = data.get("list") or data.get("records") or data.get("items")
+        for key in ("list", "records", "items"):
+            rows = data.get(key)
+            if isinstance(rows, list):
+                return [row for row in rows if isinstance(row, dict)]
+
+    for key in ("list", "records", "items"):
+        rows = payload.get(key)
         if isinstance(rows, list):
             return [row for row in rows if isinstance(row, dict)]
-
-    rows = payload.get("list") or payload.get("records") or payload.get("items")
-    if isinstance(rows, list):
-        return [row for row in rows if isinstance(row, dict)]
 
     return None
 

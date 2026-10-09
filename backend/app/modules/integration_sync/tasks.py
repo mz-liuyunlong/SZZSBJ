@@ -30,7 +30,15 @@ def scheduler_tick() -> None:
         recovery_run_ids = scheduler.recoverable_queued_run_ids()
 
     run_ids = list(dict.fromkeys((*new_run_ids, *recovery_run_ids)))
-    for run_id in run_ids:
+    if len(run_ids) > 1:
+        logger.info(
+            "integration_sync_dispatch_limited run_count=%s dispatched_run_id=%s deferred_count=%s",
+            len(run_ids),
+            run_ids[0],
+            len(run_ids) - 1,
+        )
+
+    for run_id in run_ids[:1]:
         try:
             dispatch_sync_run(run_id)
         except TaskDispatchError:
