@@ -687,36 +687,28 @@ def test_productlist_manual_trigger_writes_run_without_unapproved_event() -> Non
     session.commit.assert_called_once_with()
 
 
-def test_scheduler_creates_productlist_run() -> None:
+def test_scheduler_skips_productlist_schedule_and_advances_next_run() -> None:
     session = MagicMock(spec=Session)
     service = IntegrationSchedulerService(session)
     service.repository = MagicMock()
-    service.repository.list_due_configs.return_value = [
-        SimpleNamespace(
-            id=CONFIG_ID,
-            interface_id=INTERFACE_ID,
-            source_account_ref="default",
-            next_run_at=NOW,
-            schedule_cron="0 * * * *",
-            schedule_timezone="UTC",
-        )
-    ]
+    config = SimpleNamespace(
+        id=CONFIG_ID,
+        interface_id=INTERFACE_ID,
+        source_account_ref="default",
+        next_run_at=NOW,
+        schedule_cron="0 * * * *",
+        schedule_timezone="UTC",
+    )
+    service.repository.list_due_configs.return_value = [config]
     service.repository.get_interface.return_value = _interface()
     service.repository.find_run_by_idempotency.return_value = None
 
-    def add_run(run: IntegrationSyncRun) -> IntegrationSyncRun:
-        run.id = RUN_ID
-        return run
-
-    service.repository.add_run.side_effect = add_run
-    service.repository.add_event.side_effect = lambda event: event
-
-    assert service.create_due_runs(now=NOW) == [RUN_ID]
-    run = service.repository.add_run.call_args.args[0]
-    assert run.interface_key == "productList"
-    assert run.trigger_type == "schedule"
-    service.repository.add_event.assert_called_once()
-    session.commit.assert_called_once_with()
+    assert service.create_due_runs(now=NOW) == []
+    service.repository.add_run.assert_not_called()
+    service.repository.add_event.assert_not_called()
+    service.repository.find_run_by_idempotency.assert_not_called()
+    assert config.next_run_at == datetime(2026, 1, 1, 1, tzinfo=UTC)
+    session.commit.assert_called_once()
 
 
 def test_productlist_logs_only_safe_aggregates(caplog: pytest.LogCaptureFixture) -> None:
