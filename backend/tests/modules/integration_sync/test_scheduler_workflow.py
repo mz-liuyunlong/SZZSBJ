@@ -266,7 +266,6 @@ def test_scheduler_enqueues_scheduled_productlist_and_advances_next_run() -> Non
     session.commit.assert_called_once()
 
 
-
 def test_scheduler_recovery_applies_grace_window_to_queued_runs() -> None:
     session = MagicMock(spec=Session)
     scheduler = IntegrationSchedulerService(session)
