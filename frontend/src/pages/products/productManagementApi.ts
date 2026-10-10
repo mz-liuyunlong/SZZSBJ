@@ -1,4 +1,4 @@
-import { backendRequest } from "@/api/backendApi";
+import { BackendRequestError, backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import { formatDate } from "@/shared/formatters";
 import type {
@@ -539,29 +539,45 @@ async function getProductManagementOptionsFromApi(filters?: ProductManagementFil
 
 export async function requestProductManagementExport(
   filters: ProductManagementFilters,
+  columns?: string[],
 ) {
   const query = listQuery(filters, 1, 100);
-  return backendRequest<{ status: string; file_created: false }>(
-    "/api/product-management/skus/export",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        query: {
-          sku: query.get("sku"),
-          product_name: query.get("product_name"),
-          category: query.get("category"),
-          sku_batch: query.getAll("sku_batch"),
-          product_grade: query.get("product_grade"),
-          owner_uid: query.getAll("owner_uid"),
-          developer_uid: query.getAll("developer_uid"),
-          source_tag: query.getAll("source_tag"),
-          issue_code: query.get("issue_code"),
-        },
-        max_rows: 5_000,
-      }),
+  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
+  const selectedColumns = (columns ?? []).map((column) => column.trim()).filter(Boolean);
+
+  query.set("max_rows", "5000");
+  if (selectedColumns.length > 0) {
+    query.set("columns", selectedColumns.join(","));
+  }
+
+  const response = await fetch(`/api/product-management/skus/export?${query.toString()}`, {
+    method: "GET",
+    credentials: "same-origin",
+    headers: {
+      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
     },
-  );
+  });
+
+  if (!response.ok) {
+    throw new BackendRequestError(response.status, "PRODUCT_MANAGEMENT_EXPORT_FAILED");
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = filenameMatch?.[1] ?? "product-management-export.csv";
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
+
+
 
 export async function getProductManagementTableView() {
   return (await backendRequest<BackendTableView>(

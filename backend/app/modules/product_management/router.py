@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
@@ -13,7 +13,6 @@ from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.product_management.schemas import (
     ExportRequest,
-    ExportResult,
     PricingBreakdownRead,
     PricingRuleRead,
     PricingRulesData,
@@ -168,32 +167,111 @@ def get_product_management_options(
     )
 
 
+@router.get(
+    "/api/product-management/skus/export",
+    response_class=Response,
+    responses=ERRORS,
+    dependencies=[product_scope_dependency],
+)
+def export_product_management_skus_readonly(
+    request: Request,
+    session: db_session,
+    principal: read_principal,
+    account_refs: source_scope,
+    max_rows: Annotated[int, Query(ge=1, le=5000)] = 5000,
+    columns: Annotated[str | None, Query()] = None,
+) -> Response:
+    query_params = request.query_params
+
+    def _values(name: str) -> list[str]:
+        return [
+            value.strip()
+            for value in query_params.getlist(name)
+            if value.strip()
+        ]
+
+    query = ProductManagementListQuery(
+        page=int(query_params.get("page") or 1),
+        page_size=int(query_params.get("page_size") or 100),
+        sku=query_params.get("sku") or None,
+        sku_batch=_values("sku_batch"),
+        product_name=query_params.get("product_name") or None,
+        category=query_params.get("category") or None,
+        internal_tag=query_params.get("internal_tag") or None,
+        owner_uid=_values("owner_uid"),
+        developer_uid=_values("developer_uid"),
+        source_tag=_values("source_tag"),
+        product_grade=query_params.get("product_grade") or None,
+        calculation_status=query_params.get("calculation_status") or None,
+        sort_by=query_params.get("sort_by") or "sku",
+        sort_order=query_params.get("sort_order") or "asc",
+        issue_code=query_params.get("issue_code") or None,
+    )
+
+    include_costs = "products:cost:read" in principal.permissions
+    payload = ExportRequest(
+        query=query,
+        max_rows=max_rows,
+        columns=[
+            value.strip()
+            for value in (columns or "").split(",")
+            if value.strip()
+        ],
+    )
+    csv_text, filename = ProductManagementService(session).export_csv(
+        payload,
+        account_refs,
+        include_costs=include_costs,
+    )
+    audit_logger.info(
+        "product_export_created actor_ref=%s request_id=%s "
+        "row_limit=%s include_costs=%s method=get",
+        principal.user_id,
+        get_request_id(request),
+        max_rows,
+        include_costs,
+    )
+    return Response(
+        content=csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
 @router.post(
     "/api/product-management/skus/export",
-    response_model=SuccessEnvelope[ExportResult, ProductManagementReadMeta],
+    response_class=Response,
     responses=ERRORS,
-    dependencies=[
-        Depends(require_permission("products:export")),
-        product_scope_dependency,
-    ],
+    dependencies=[product_scope_dependency],
 )
 def export_product_management_skus(
     request: Request,
     payload: ExportRequest,
+    session: db_session,
     principal: read_principal,
-    _: source_scope,
-) -> SuccessEnvelope[ExportResult, ProductManagementReadMeta]:
+    account_refs: source_scope,
+) -> Response:
+    include_costs = "products:cost:read" in principal.permissions
+    csv_text, filename = ProductManagementService(session).export_csv(
+        payload,
+        account_refs,
+        include_costs=include_costs,
+    )
     audit_logger.info(
-        "product_export_requested actor_ref=%s request_id=%s "
-        "row_limit=%s status=not_implemented_safe",
+        "product_export_created actor_ref=%s request_id=%s row_limit=%s include_costs=%s",
         principal.user_id,
         get_request_id(request),
         payload.max_rows,
+        include_costs,
     )
-    return success_response(
-        request,
-        data=ProductManagementService.export(payload),
-        meta=_meta("products", "dws_product_management_pricing_current"),
+    return Response(
+        content=csv_text.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )
 
 

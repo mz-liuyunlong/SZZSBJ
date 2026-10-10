@@ -19,6 +19,9 @@ import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import ListingAnalysisModal, { type ListingAnalysisSource } from "@/shared/listing-analysis";
 import type { NavigationPage } from "@/config/navigation";
 
+import ListExportModal, {
+  type ListExportColumnGroup,
+} from "@/pages/products/components/ListExportModal";
 import ListingManagementSummaryCards, {
   type ListingManagementSummaryCardKey,
 } from "@/pages/products/components/ListingManagementSummaryCards";
@@ -66,6 +69,69 @@ const createInitialFilters = (): ListingManagementFilters => ({
   searchType: "sku",
   keyword: "",
 });
+
+const listingExportColumnGroups: ListExportColumnGroup[] = [
+  {
+    title: "基础信息",
+    fields: [
+      { key: "store", label: "店铺" },
+      { key: "item_id", label: "商品ID" },
+      { key: "sku", label: "SKU" },
+      { key: "msku", label: "MSKU" },
+      { key: "local_name", label: "品名" },
+      { key: "title", label: "标题" },
+      { key: "owner", label: "负责人" },
+      { key: "developer", label: "开发人" },
+      { key: "product_grade", label: "商品等级" },
+      { key: "tags", label: "自定义标签" },
+    ],
+  },
+  {
+    title: "价格状态",
+    fields: [
+      { key: "strike_price", label: "划线价" },
+      { key: "sale_price", label: "售价" },
+      { key: "listing_status", label: "Listing状态" },
+      { key: "lifecycle_status", label: "生命周期" },
+      { key: "fulfillment_type", label: "发货方式" },
+      { key: "buybox_status", label: "购物车状态" },
+      { key: "walmart_seller", label: "Walmart卖家" },
+      { key: "is_hijacked", label: "是否跟卖" },
+    ],
+  },
+  {
+    title: "库存销量",
+    fields: [
+      { key: "wfs_available_quantity", label: "WFS可售库存" },
+      { key: "available_quantity", label: "可售库存" },
+      { key: "inbound_quantity", label: "在途库存" },
+      { key: "sales_7d", label: "近7天销量" },
+      { key: "sales_14d", label: "近14天销量" },
+      { key: "sales_30d", label: "近30天销量" },
+      { key: "ad_spend_30d", label: "近30天广告费" },
+    ],
+  },
+  {
+    title: "评价标识",
+    fields: [
+      { key: "average_rating", label: "评分" },
+      { key: "review_count", label: "评论数" },
+      { key: "category", label: "类目" },
+      { key: "brand", label: "品牌" },
+      { key: "disabled_reason", label: "停用原因" },
+      { key: "gtin", label: "GTIN" },
+      { key: "upc", label: "UPC" },
+      { key: "listed_at", label: "上架时间" },
+      { key: "checked_at", label: "检查时间" },
+      { key: "archive_status", label: "归档状态" },
+      { key: "archive_reason", label: "归档原因" },
+    ],
+  },
+];
+
+const listingDefaultExportColumnKeys = listingExportColumnGroups.flatMap((group) =>
+  group.fields.map((field) => field.key),
+);
 
 const emptySummary: ListingManagementSummary = {
   total: 0,
@@ -200,6 +266,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [isGptAnalysisSaving, setIsGptAnalysisSaving] = useState(false);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [archiveDialog, setArchiveDialog] = useState<ListingArchiveDialogState | null>(null);
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
@@ -557,18 +624,22 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     }
   }, [messageApi]);
 
-  const handleExportListingRows = useCallback(async () => {
+  const handleExportListingRows = useCallback(async (columnKeys?: string[]) => {
     if (isExporting) return;
 
     setIsExporting(true);
     const closeLoading = messageApi.loading("正在导出 Listing 数据，请稍候", 0);
 
     try {
-      await exportListingManagementRows({
-        ...normalizedFilters,
-        summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
-      });
+      await exportListingManagementRows(
+        {
+          ...normalizedFilters,
+          summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
+        },
+        columnKeys,
+      );
       closeLoading();
+      setExportModalOpen(false);
       void messageApi.success("Listing 导出已开始下载");
     } catch {
       closeLoading();
@@ -577,6 +648,16 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       setIsExporting(false);
     }
   }, [isExporting, messageApi, normalizedFilters, summaryFilterKey]);
+
+  const openExportModal = useCallback(() => {
+    if (isExporting) return;
+    setExportModalOpen(true);
+  }, [isExporting]);
+
+  const closeExportModal = useCallback(() => {
+    if (isExporting) return;
+    setExportModalOpen(false);
+  }, [isExporting]);
 
   const openListingAnalysis = (row: ListingManagementRow) => {
     setAnalysisSource({
@@ -751,7 +832,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
               onOpenTagManager={() => setTagManagerOpen(true)}
               onOpenColumnConfig={() => setColumnConfigOpen(true)}
-              onDownload={() => void handleExportListingRows()}
+              onDownload={openExportModal}
               downloadDisabled={isExporting}
               downloadLoading={isExporting}
             />
@@ -797,11 +878,22 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                 }
                 setBatchTagOpen(true);
               }}
-              onBulkExport={() => void handleExportListingRows()}
+              onBulkExport={openExportModal}
               exporting={isExporting}
             />
           </div>
         </Card>
+
+        <ListExportModal
+          open={exportModalOpen}
+          title="导出数据"
+          subtitle="配置导出字段"
+          columnGroups={listingExportColumnGroups}
+          defaultSelectedColumnKeys={listingDefaultExportColumnKeys}
+          exporting={isExporting}
+          onClose={closeExportModal}
+          onExport={handleExportListingRows}
+        />
 
         <RuntimeColumnConfigDrawer
           open={columnConfigOpen}

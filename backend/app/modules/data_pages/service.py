@@ -693,6 +693,8 @@ class ListingManagementService:
         self,
         query: ListingManagementQuery,
         account_refs: frozenset[str],
+        *,
+        columns: str | None = None,
     ) -> str:
         rows = self.repository.export_listings(
             account_refs=account_refs,
@@ -709,95 +711,124 @@ class ListingManagementService:
             max_rows=10000,
         )
         custom_tags = self.tag_repository.tags_for_listing_rows(rows)
+        archive_states = self.repository.archive_states_for_listing_rows(rows)
+        archive_states = self._normalize_listing_archive_state_keys(archive_states)
 
         output = StringIO()
         writer = csv.writer(output)
 
-        writer.writerow(
-            [
-                "店铺",
-                "商品ID",
-                "SKU",
-                "MSKU",
-                "品名",
-                "标题",
-                "负责人",
-                "开发人",
-                "商品等级",
-                "自定义标签",
-                "划线价",
-                "售价",
-                "Listing状态",
-                "生命周期",
+        column_definitions = [
+            ("store", "店铺", lambda item: item.store_name or item.store_id),
+            ("item_id", "商品ID", lambda item: item.item_id),
+            ("sku", "SKU", lambda item: item.local_sku),
+            ("msku", "MSKU", lambda item: item.msku),
+            ("local_name", "品名", lambda item: item.local_name),
+            ("title", "标题", lambda item: item.title),
+            ("owner", "负责人", lambda item: item.owner_name or item.owner_ref),
+            ("developer", "开发人", lambda item: item.product_developer_name),
+            ("product_grade", "商品等级", lambda item: item.product_grade),
+            ("tags", "自定义标签", lambda item: item.tags),
+            ("strike_price", "划线价", lambda item: item.strike_price_amount),
+            ("sale_price", "售价", lambda item: item.sale_price_amount),
+            ("listing_status", "Listing状态", lambda item: item.listing_status),
+            ("lifecycle_status", "生命周期", lambda item: item.lifecycle_status),
+            (
+                "fulfillment_type",
                 "发货方式",
-                "购物车状态",
-                "Walmart卖家",
-                "是否跟卖",
-                "评分",
-                "评论数",
-                "WFS可售库存",
-                "可售库存",
-                "在途库存",
-                "近7天销量",
-                "近14天销量",
-                "近30天销量",
-                "近30天广告费",
-                "类目",
-                "品牌",
-                "停用原因",
-                "GTIN",
-                "UPC",
+                lambda item: item.fulfillment_type_name or item.fulfillment_type,
+            ),
+            ("buybox_status", "购物车状态", lambda item: item.buybox_status),
+            ("walmart_seller", "Walmart卖家", lambda item: item.walmart_seller),
+            ("is_hijacked", "是否跟卖", lambda item: "是" if item.is_hijacked else "否"),
+            ("average_rating", "评分", lambda item: item.average_rating),
+            ("review_count", "评论数", lambda item: item.review_count),
+            ("wfs_available_quantity", "WFS可售库存", lambda item: item.wfs_available_quantity),
+            ("available_quantity", "可售库存", lambda item: item.available_quantity),
+            ("inbound_quantity", "在途库存", lambda item: item.inbound_quantity),
+            ("sales_7d", "近7天销量", lambda item: item.sales_7d),
+            ("sales_14d", "近14天销量", lambda item: item.sales_14d),
+            ("sales_30d", "近30天销量", lambda item: item.sales_30d),
+            ("ad_spend_30d", "近30天广告费", lambda item: item.ad_spend_30d_amount),
+            ("category", "类目", lambda item: item.category),
+            ("brand", "品牌", lambda item: item.brand),
+            ("disabled_reason", "停用原因", lambda item: item.disabled_reason),
+            ("gtin", "GTIN", lambda item: item.gtin),
+            ("upc", "UPC", lambda item: item.upc),
+            (
+                "listed_at",
                 "上架时间",
-                "检查时间",
-            ]
-        )
+                lambda item: self._listing_start_csv_value(
+                    item.listing_start_at_utc,
+                    item.listing_start_source_raw,
+                ),
+            ),
+            ("checked_at", "检查时间", lambda item: item.calculated_at),
+            (
+                "archive_status",
+                "归档状态",
+                lambda item: "已归档" if getattr(item, "is_archived", False) else "正常",
+            ),
+            (
+                "archive_reason",
+                "归档原因",
+                lambda item: getattr(item, "archive_reason", None),
+            ),
+        ]
+
+        available_keys = [column[0] for column in column_definitions]
+        requested_keys = [
+            key.strip()
+            for key in (columns or "").split(",")
+            if key.strip() in set(available_keys)
+        ]
+        selected_keys = requested_keys or available_keys
+        selected_key_set = set(selected_keys)
+        selected_columns = [
+            column
+            for column in column_definitions
+            if column[0] in selected_key_set
+        ]
+
+        writer.writerow([column[1] for column in selected_columns])
 
         for row in rows:
+            archive_state = archive_states.get(str(row.id))
             item = self._to_read(
                 row,
                 custom_tags.get((str(row.source_account_ref), str(row.item_id))),
+                bool(archive_state and archive_state.is_archived),
+                archive_reason=getattr(archive_state, "archive_reason", None),
             )
 
-            writer.writerow(
-                [
-                    self._csv_value(item.store_name or item.store_id),
-                    self._csv_value(item.item_id),
-                    self._csv_value(item.local_sku),
-                    self._csv_value(item.msku),
-                    self._csv_value(item.local_name),
-                    self._csv_value(item.title),
-                    self._csv_value(item.owner_name or item.owner_ref),
-                    self._csv_value(item.product_developer_name),
-                    self._csv_value(item.product_grade),
-                    self._csv_value(item.tags),
-                    self._csv_value(item.strike_price_amount),
-                    self._csv_value(item.sale_price_amount),
-                    self._csv_value(item.listing_status),
-                    self._csv_value(item.lifecycle_status),
-                    self._csv_value(item.fulfillment_type_name or item.fulfillment_type),
-                    self._csv_value(item.buybox_status),
-                    self._csv_value(item.walmart_seller),
-                    self._csv_value("是" if item.is_hijacked else "否"),
-                    self._csv_value(item.average_rating),
-                    self._csv_value(item.review_count),
-                    self._csv_value(item.wfs_available_quantity),
-                    self._csv_value(item.available_quantity),
-                    self._csv_value(item.inbound_quantity),
-                    self._csv_value(item.sales_7d),
-                    self._csv_value(item.sales_14d),
-                    self._csv_value(item.sales_30d),
-                    self._csv_value(item.ad_spend_30d_amount),
-                    self._csv_value(item.category),
-                    self._csv_value(item.brand),
-                    self._csv_value(item.disabled_reason),
-                    self._csv_value(item.gtin),
-                    self._csv_value(item.upc),
-                    self._csv_value(item.listing_start_at_utc),
-                    self._csv_value(item.calculated_at),
-                ]
-            )
+            writer.writerow([
+                self._csv_value(value_getter(item))
+                for _key, _label, value_getter in selected_columns
+            ])
+
 
         return output.getvalue()
+
+    @staticmethod
+    def _listing_start_csv_value(
+        normalized_value: object,
+        source_raw_value: object,
+    ) -> object:
+        if isinstance(normalized_value, datetime):
+            return normalized_value.date().isoformat()
+        if isinstance(normalized_value, date):
+            return normalized_value.isoformat()
+        if normalized_value is not None and str(normalized_value).strip():
+            return str(normalized_value).strip()[:10]
+
+        if source_raw_value is None:
+            return ""
+
+        raw_value = str(source_raw_value).strip()
+        if not raw_value:
+            return ""
+        if len(raw_value) >= 10 and raw_value[4:5] == "-" and raw_value[7:8] == "-":
+            return raw_value[:10]
+        return raw_value
 
     @staticmethod
     def _csv_value(value: object) -> str:

@@ -1,5 +1,5 @@
 import { Card, message } from "antd";
-import { useEffect, useMemo, useRef, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import RuntimeColumnConfigDrawer, {
@@ -11,6 +11,9 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import ProductDetailModal from "@/pages/products/components/ProductDetailModal";
+import ListExportModal, {
+  type ListExportColumnGroup,
+} from "@/pages/products/components/ListExportModal";
 import ProductManagementSummaryCards from "@/pages/products/components/ProductManagementSummaryCards";
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
@@ -116,6 +119,58 @@ const columnGroups: RuntimeColumnGroup[] = [
   { title: "可选基本信息字段", fields: [...configurableProductColumnFields.slice(8)] },
 ];
 
+const productExportColumnGroups: ListExportColumnGroup[] = [
+  {
+    title: "基础信息",
+    fields: [
+      { key: "sku", label: "SKU" },
+      { key: "product_name", label: "品名" },
+      { key: "category", label: "类目" },
+      { key: "product_grade", label: "产品等级" },
+      { key: "owner", label: "负责人" },
+      { key: "developer", label: "开发" },
+      { key: "tags", label: "标签" },
+      { key: "source_tags", label: "来源标签" },
+    ],
+  },
+  {
+    title: "资料状态",
+    fields: [
+      { key: "image_count", label: "图片数" },
+      { key: "listing_count", label: "Listing数" },
+      { key: "completeness_status", label: "资料完整状态" },
+      { key: "missing_codes", label: "缺失项" },
+      { key: "observed_at", label: "最近观测时间" },
+      { key: "calculated_at", label: "计算时间" },
+    ],
+  },
+  {
+    title: "计价状态",
+    fields: [
+      { key: "calculation_status", label: "计价状态" },
+      { key: "wfs_status", label: "WFS状态" },
+      { key: "storage_status", label: "仓储状态" },
+      { key: "first_leg_status", label: "头程状态" },
+    ],
+  },
+  {
+    title: "成本价格",
+    fields: [
+      { key: "purchase_cost_cny", label: "采购价(CNY)" },
+      { key: "first_leg_fee_cny", label: "头程费(CNY)" },
+      { key: "wfs_fulfillment_fee", label: "WFS配送费" },
+      { key: "storage_fee_usd", label: "仓储费(USD)" },
+      { key: "suggested_price_usd", label: "建议售价(USD)" },
+      { key: "minimum_price_usd", label: "最低售价(USD)" },
+      { key: "clearance_price_usd", label: "清仓价(USD)" },
+    ],
+  },
+];
+
+const productDefaultExportColumnKeys = productExportColumnGroups.flatMap((group) =>
+  group.fields.map((field) => field.key),
+);
+
 const emptySummary: ProductManagementSummary = {
   total: 0,
   syncedDetailCount: 0,
@@ -165,6 +220,8 @@ function ProductManagementPage({
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
   const [detailRowId, setDetailRowId] = usePageStateCache<string | undefined>(`${pageStateKey}:detailRowId`, undefined);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     messageApiRef.current = messageApi;
@@ -271,6 +328,32 @@ function ProductManagementPage({
     resetPageAndSelection();
   };
 
+  const openExportModal = () => {
+    setExportModalOpen(true);
+  };
+
+  const closeExportModal = () => {
+    if (isExporting) return;
+    setExportModalOpen(false);
+  };
+
+  const handleExport = async (columnKeys: string[]) => {
+    if (isExporting) return;
+    setIsExporting(true);
+
+    try {
+      await requestProductManagementExport(filters, columnKeys);
+      setExportModalOpen(false);
+      void messageApi.success("产品管理导出已开始下载");
+    } catch (reason: unknown) {
+      void messageApi.error(
+        reason instanceof Error ? reason.message : "PRODUCT_MANAGEMENT_EXPORT_FAILED",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const persistColumns = (nextKeys: string[]) => {
     const normalizedKeys = normalizeProductColumnKeys(nextKeys);
     const previousPreference: ProductTablePreference = {
@@ -344,11 +427,7 @@ function ProductManagementPage({
               onMessage={(content) => void messageApi.info(content)}
               onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
               onOpenColumnConfig={() => setColumnConfigOpen(true)}
-              onDownload={() => void requestProductManagementExport(filters)
-                .then(() => messageApi.info("导出任务未启用，未创建文件"))
-                .catch((reason: unknown) => messageApi.error(
-                  reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-                ))}
+              onDownload={openExportModal}
             />
           </Card>
 
@@ -383,14 +462,21 @@ function ProductManagementPage({
               }}
               onSelectionChange={setSelectedRowKeys}
               onOpenDetail={(row) => setDetailRowId(row.id)}
-              onBulkExport={() => void requestProductManagementExport(filters)
-                .then(() => messageApi.info("导出任务未启用，未创建文件"))
-                .catch((reason: unknown) => messageApi.error(
-                  reason instanceof Error ? reason.message : "BACKEND_REQUEST_FAILED",
-                ))}
+              onBulkExport={openExportModal}
             />
           </div>
           </Card>
+
+        <ListExportModal
+          open={exportModalOpen}
+          title="导出数据"
+          subtitle="配置导出字段"
+          columnGroups={productExportColumnGroups}
+          defaultSelectedColumnKeys={productDefaultExportColumnKeys}
+          exporting={isExporting}
+          onClose={closeExportModal}
+          onExport={handleExport}
+        />
 
         <RuntimeColumnConfigDrawer
           open={columnConfigOpen}

@@ -512,6 +512,7 @@ class ProductManagementOptionsData(StrictSchema):
 class ExportRequest(StrictSchema):
     query: ProductManagementListQuery = Field(default_factory=ProductManagementListQuery)
     max_rows: int = Field(default=5000, ge=1, le=5000)
+    columns: list[Nonblank128] = Field(default_factory=list, max_length=100)
 
 
 class ExportResult(StrictSchema):

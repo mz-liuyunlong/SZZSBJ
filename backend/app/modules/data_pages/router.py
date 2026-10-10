@@ -327,12 +327,17 @@ def order_profit_trend(
     responses=ERRORS,
 )
 def export_listing_management(
-    query: Annotated[ListingManagementQuery, Query()],
+    query: Annotated[ListingManagementQuery, Depends()],
     session: db_session,
     _: listing_principal,
     account_refs: source_scope,
+    columns: Annotated[str | None, Query()] = None,
 ) -> Response:
-    csv_text = ListingManagementService(session).export_listing_csv(query, account_refs)
+    csv_text = ListingManagementService(session).export_listing_csv(
+        query,
+        account_refs,
+        columns=columns,
+    )
     filename = f"listing-management-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
 
     return Response(
