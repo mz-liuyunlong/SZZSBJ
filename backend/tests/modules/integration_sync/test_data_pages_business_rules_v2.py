@@ -150,6 +150,13 @@ def test_daily_sales_profit_deducts_refund_sales_and_sem_spend_without_merging_a
     assert "sum(gross_profit_amount)" in order_profit_source
 
 
+def test_order_profit_json_rollups_are_deterministically_ordered() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_order_profit_mart)
+
+    assert "jsonb_agg(distinct item_id order by item_id)" in source
+    assert "jsonb_agg(distinct store_id order by store_id)" in source
+
+
 def test_refund_amount_uses_average_sales_price_and_return_qty() -> None:
     assert _estimated_refund_sales_amount(
         Decimal("40.00"),

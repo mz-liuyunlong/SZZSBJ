@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import AppEnvironment
 from app.modules.data_pages.models import DailySalesItemDayMart, OrderProfitSkuDayMart
+from app.modules.integration_sync import data_pages_mart_invariants as mart_invariants
 from app.modules.integration_sync.data_pages_business_rules_v2 import (
     DAILY_SALES_V2_VERSION,
     _low_price_delivery_surcharge,
@@ -193,16 +194,6 @@ class DaySnapshot:
     business_date: date
     daily: TableSnapshot
     order_profit: TableSnapshot
-
-
-@dataclass(frozen=True, slots=True)
-class ProfitGapSummary:
-    comparable_profit_groups: int
-    mixed_null_profit_groups: int
-    comparable_profit_delta_daily: Decimal
-    comparable_profit_delta_order: Decimal
-    mixed_null_explained_gap_change: Decimal
-    unexplained_profit_gap_change: Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -1383,16 +1374,10 @@ def _validate_restoration(
 
 
 def _assert_surcharge_rollup(snapshot: DaySnapshot) -> None:
-    daily_by_sku: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-    for row in snapshot.daily.rows:
-        key = str(row.get("local_sku") or row.get("item_id") or "")
-        daily_by_sku[key] += _decimal(row.get("wfs_low_price_surcharge_amount"))
-    order_by_sku = {
-        str(row.get("local_sku") or ""): _decimal(row.get("wfs_low_price_surcharge_amount"))
-        for row in snapshot.order_profit.rows
-    }
-    if dict(daily_by_sku) != order_by_sku:
-        raise LpdsHistoryRecalcError("LPDS_SURCHARGE_ROLLUP_MISMATCH")
+    try:
+        mart_invariants.assert_surcharge_rollup(snapshot)
+    except mart_invariants.DataPagesMartInvariantError:
+        raise LpdsHistoryRecalcError("LPDS_SURCHARGE_ROLLUP_MISMATCH") from None
 
 
 def _assert_profit_gap_invariant(
@@ -1415,167 +1400,16 @@ def _profit_gap_summary(
     *,
     require_lpds_explanation: bool,
     validate: bool,
-) -> ProfitGapSummary:
-    daily_keys = _business_key_columns(DAILY_TABLE.name)
-    before_daily = _rows_by_rollup(before.daily.rows, daily=True)
-    after_daily = _rows_by_rollup(after.daily.rows, daily=True)
-    before_order = _rows_by_rollup(before.order_profit.rows, daily=False)
-    after_order = _rows_by_rollup(after.order_profit.rows, daily=False)
-    all_key_sets = (
-        set(before_daily),
-        set(after_daily),
-        set(before_order),
-        set(after_order),
-    )
-    failures = 0 if all(keys == all_key_sets[0] for keys in all_key_sets[1:]) else 1
-    comparable_groups = 0
-    mixed_null_groups = 0
-    comparable_daily_delta = Decimal("0")
-    comparable_order_delta = Decimal("0")
-    mixed_null_explained_gap_change = Decimal("0")
-
-    for key in set.union(*all_key_sets):
-        before_daily_rows = before_daily.get(key, ())
-        after_daily_rows = after_daily.get(key, ())
-        before_order_rows = before_order.get(key, ())
-        after_order_rows = after_order.get(key, ())
-        if (
-            not before_daily_rows
-            or not after_daily_rows
-            or len(before_order_rows) != 1
-            or len(after_order_rows) != 1
-        ):
-            failures += 1
-            continue
-
-        before_by_identity = {
-            tuple(row.get(column) for column in daily_keys): row for row in before_daily_rows
-        }
-        after_by_identity = {
-            tuple(row.get(column) for column in daily_keys): row for row in after_daily_rows
-        }
-        if (
-            len(before_by_identity) != len(before_daily_rows)
-            or len(after_by_identity) != len(after_daily_rows)
-            or set(before_by_identity) != set(after_by_identity)
-        ):
-            failures += 1
-            continue
-
-        before_order_row = before_order_rows[0]
-        after_order_row = after_order_rows[0]
-        before_has_null = any(row.get("gross_profit_amount") is None for row in before_daily_rows)
-        after_has_null = any(row.get("gross_profit_amount") is None for row in after_daily_rows)
-        before_order_null = before_order_row.get("gross_profit_amount") is None
-        after_order_null = after_order_row.get("gross_profit_amount") is None
-        daily_delta = _sum_decimal(after_daily_rows, "gross_profit_amount") - _sum_decimal(
-            before_daily_rows,
-            "gross_profit_amount",
+) -> mart_invariants.ProfitGapSummary:
+    try:
+        return mart_invariants.profit_gap_summary(
+            before,
+            after,
+            require_lpds_explanation=require_lpds_explanation,
+            validate=validate,
         )
-        order_delta = _decimal(after_order_row.get("gross_profit_amount")) - _decimal(
-            before_order_row.get("gross_profit_amount")
-        )
-        daily_surcharge_delta = _sum_decimal(
-            after_daily_rows,
-            "wfs_low_price_surcharge_amount",
-        ) - _sum_decimal(before_daily_rows, "wfs_low_price_surcharge_amount")
-        before_surcharge_matches = _sum_decimal(
-            before_daily_rows,
-            "wfs_low_price_surcharge_amount",
-        ) == _decimal(before_order_row.get("wfs_low_price_surcharge_amount"))
-        after_surcharge_matches = _sum_decimal(
-            after_daily_rows,
-            "wfs_low_price_surcharge_amount",
-        ) == _decimal(after_order_row.get("wfs_low_price_surcharge_amount"))
-
-        if not before_has_null and not before_order_null:
-            comparable_groups += 1
-            comparable_daily_delta += daily_delta
-            comparable_order_delta += order_delta
-            group_pre_gap = _decimal(before_order_row.get("gross_profit_amount")) - _sum_decimal(
-                before_daily_rows,
-                "gross_profit_amount",
-            )
-            group_post_gap = _decimal(after_order_row.get("gross_profit_amount")) - _sum_decimal(
-                after_daily_rows,
-                "gross_profit_amount",
-            )
-            if (
-                after_has_null
-                or after_order_null
-                or daily_delta != order_delta
-                or group_pre_gap != group_post_gap
-                or not before_surcharge_matches
-                or not after_surcharge_matches
-                or (require_lpds_explanation and daily_delta != -daily_surcharge_delta)
-            ):
-                failures += 1
-            continue
-
-        mixed_null_groups += 1
-        explained_gap_change = Decimal("0")
-        if (
-            not before_has_null
-            or not before_order_null
-            or not after_has_null
-            or not after_order_null
-            or not before_surcharge_matches
-            or not after_surcharge_matches
-        ):
-            failures += 1
-        for identity, before_row in before_by_identity.items():
-            after_row = after_by_identity[identity]
-            before_profit = before_row.get("gross_profit_amount")
-            after_profit = after_row.get("gross_profit_amount")
-            if (before_profit is None) != (after_profit is None):
-                failures += 1
-                continue
-            if before_profit is None:
-                continue
-            row_surcharge_delta = _decimal(
-                after_row.get("wfs_low_price_surcharge_amount")
-            ) - _decimal(before_row.get("wfs_low_price_surcharge_amount"))
-            if _decimal(after_profit) - _decimal(before_profit) != -row_surcharge_delta:
-                failures += 1
-            explained_gap_change += row_surcharge_delta
-        if order_delta != 0 or daily_delta != -explained_gap_change:
-            failures += 1
-        mixed_null_explained_gap_change += explained_gap_change
-
-    global_gap_change = (
-        after.order_profit.profit_sum
-        - after.daily.profit_sum
-        - before.order_profit.profit_sum
-        + before.daily.profit_sum
-    )
-    unexplained_profit_gap_change = global_gap_change - mixed_null_explained_gap_change
-    summary = ProfitGapSummary(
-        comparable_profit_groups=comparable_groups,
-        mixed_null_profit_groups=mixed_null_groups,
-        comparable_profit_delta_daily=comparable_daily_delta,
-        comparable_profit_delta_order=comparable_order_delta,
-        mixed_null_explained_gap_change=mixed_null_explained_gap_change,
-        unexplained_profit_gap_change=unexplained_profit_gap_change,
-    )
-    if validate and (
-        failures
-        or comparable_daily_delta != comparable_order_delta
-        or unexplained_profit_gap_change != 0
-    ):
-        raise LpdsHistoryRecalcError("LPDS_PROFIT_GAP_INVARIANT_FAILED")
-    return summary
-
-
-def _rows_by_rollup(
-    rows: Sequence[Mapping[str, Any]],
-    *,
-    daily: bool,
-) -> dict[str, tuple[Mapping[str, Any], ...]]:
-    grouped: defaultdict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for row in rows:
-        key = _daily_rollup_key(row) if daily else str(row.get("local_sku") or "")
-        grouped[key].append(row)
-    return {key: tuple(group) for key, group in grouped.items()}
+    except mart_invariants.DataPagesMartInvariantError:
+        raise LpdsHistoryRecalcError("LPDS_PROFIT_GAP_INVARIANT_FAILED") from None
 
 
 def _project_lpds_only_snapshot(before: DaySnapshot) -> DaySnapshot:
