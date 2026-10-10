@@ -46,7 +46,7 @@ Run from `backend/` using the deployed project's Python environment:
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date 2026-01-15 \
+  --date '<approved-business-date>' \
   --mode canonical \
   --dry-run \
   --limit-days 1
@@ -62,7 +62,7 @@ Historical LPDS-only dry-run:
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date 2026-01-15 \
+  --date '<approved-business-date>' \
   --mode lpds-only \
   --dry-run \
   --limit-days 1
@@ -81,7 +81,7 @@ commit additionally requires a protected backup directory and the exact confirma
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date 2026-01-15 \
+  --date '<approved-business-date>' \
   --mode canonical \
   --commit \
   --allow-production \
