@@ -117,17 +117,32 @@ requires all of the following:
 7. both MARTs have unique business keys and the expected new calc version;
 8. every Daily Sales LPDS value matches the canonical LPDS helper;
 9. Daily Sales and Order Profit LPDS aggregates match by local SKU;
-10. Daily Sales and Order Profit profit deltas match exactly, and the pre-existing aggregate
-    profit gap remains unchanged;
+10. comparable profit groups have exact Daily Sales / Order Profit delta and gap invariance,
+    while mixed-null groups have no unexplained profit-gap change;
 11. non-target dates remain byte-content stable.
 
 In `lpds-only` mode, an additional byte/hash gate requires every column outside the six-field
 allowlist above to remain unchanged. The runner also compares the persisted transaction result
 with its deterministic preserved-input projection before commit.
 
-Daily Sales and Order Profit profit totals are not required to be equal. The runner only permits
-the recalculation when both totals move by the same `Decimal` amount, which preserves any
-pre-existing aggregate gap. A changed gap fails validation before commit and rolls back the day.
+Daily Sales and Order Profit profit totals are not required to be equal. For a comparable group,
+all Daily Sales profits and the corresponding Order Profit are non-NULL; its two profit deltas
+must match exactly and its pre-existing gap must remain unchanged.
+
+A mixed-null group contains at least one Daily Sales row with a NULL profit, and its Order Profit
+is NULL under the canonical `bool_and(gross_profit_amount is not null)` aggregation rule. That
+group is not forced into the two-sided profit-delta comparison because a non-NULL Daily Sales row
+can receive LPDS while the NULL Order Profit remains excluded from `SUM`. The runner instead
+requires stable business keys and NULL semantics, exact surcharge rollup, and a per-row `Decimal`
+profit change equal to the negative LPDS change for every non-NULL Daily Sales row. The explained
+LPDS amount must account for the entire global gap change; any remainder fails with
+`LPDS_PROFIT_GAP_INVARIANT_FAILED` before commit.
+
+The production audit for `2026-08-30` found one mixed-null group: one partial-cost Daily Sales row
+had NULL profit, another non-NULL row received USD 4 LPDS, and Order Profit remained NULL. The USD
+4 LPDS fully explained the USD 4 aggregate gap change. No product identifier is part of this
+runbook evidence. The fix does not permit unmatched or duplicate keys, changed NULL semantics,
+surcharge rollup drift, non-LPDS profit drift, or any unexplained gap.
 
 The canonical execution order is Daily Sales first, Order Profit second. No amount is updated by
 ad hoc SQL.
@@ -179,17 +194,16 @@ uv run python scripts/recalculate_lpds_history.py \
 Restore replaces only the two MART slices recorded for the validated account and business date.
 It does not call an external API, trigger sync, or apply a partial fee update.
 
-## Next production sequence after a future authorization
+## Next production sequence after this validation fix
 
 1. Confirm clean, merged production `main`, the exact Alembic revision, and no active overlapping
    DATA-PAGES work.
-2. Run only `2026-08-10` with `--mode lpds-only --dry-run`.
-3. Review row counts, frozen-field hashes, LPDS/profit deltas, profit-gap invariance, and rollback
-   verification.
-4. Stop. Do not commit and do not process the remaining historical dates.
-5. Obtain separate Owner authorization before a `2026-08-10` LPDS-only commit rehearsal.
-6. After that commit is separately reviewed, obtain another authorization before proposing the
-   remaining 17 old-version dates.
+2. After this PR is merged and deployed, run only `2026-08-30` with
+   `--mode lpds-only --dry-run`.
+3. Review row counts, frozen-field hashes, comparable and mixed-null profit summaries,
+   LPDS/profit deltas, unexplained gap, and rollback verification.
+4. Stop. Do not commit `2026-08-30` and do not process later historical dates.
+5. Obtain separate Owner authorization before any `2026-08-30` commit or resumed batch plan.
 
 Do not use current Product Management costs to rewrite historical profit unless the Owner approves
 that separate business change.
