@@ -41,6 +41,7 @@ const personalCenterPage = requireNavigationItem(
   findRouteByKey("settings_personal_center"),
   "MainLayout personal center navigation page is missing",
 ).page;
+const ONBOARDING_GUIDE_PATH = "/help/onboarding";
 const documentationPage = requireNavigationItem(
   findRouteByKey("data_center_documentation"),
   "MainLayout documentation navigation page is missing",
@@ -226,6 +227,12 @@ function MainLayout({
     closeSecondaryMenu();
   };
 
+  const openOnboardingGuide = () => {
+    const returnTo = encodeURIComponent(activePage.path);
+    navigate(`${ONBOARDING_GUIDE_PATH}?returnTo=${returnTo}`);
+    closeSecondaryMenu();
+  };
+
   const openPageByKey = (pageKey: string) => {
     const selection = findRouteByKey(pageKey);
     if (!selection) return;
@@ -334,14 +341,7 @@ function MainLayout({
               className="main-layout__topbar-help"
               type="link"
               icon={<QuestionCircleOutlined aria-hidden="true" />}
-              onClick={() => {
-                if (activePage.help.enabled) {
-                  window.open(activePage.help.helpUrl, "_blank", "noopener,noreferrer");
-                  return;
-                }
-
-                openPageByKey(documentationPage.key);
-              }}
+              onClick={openOnboardingGuide}
             >
               帮助
             </Button>

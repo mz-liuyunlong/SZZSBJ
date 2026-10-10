@@ -4,10 +4,12 @@ export type FieldPermissionValue = "visible" | "hidden" | "adminOnly";
 
 export interface RoleManagementRow {
   id: string;
+  roleKey: string;
   name: string;
   description: string;
   preset: boolean;
   userCount: number;
+  permissionKeys: string[];
 }
 
 export interface PermissionGroup {

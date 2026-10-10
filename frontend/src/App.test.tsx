@@ -1,7 +1,7 @@
 /** Verifies the App-level memory-only mock login and logout flow. */
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { HashRouter } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
@@ -101,6 +101,12 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
     await logIn(true);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/listings/walmart?page=1&page_size=50"),
+        expect.objectContaining({ credentials: "same-origin" }),
+      );
+    });
     fetchMock.mockClear();
 
     await openLogoutDialog();

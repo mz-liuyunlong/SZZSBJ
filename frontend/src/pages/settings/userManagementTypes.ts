@@ -1,6 +1,23 @@
 export type UserStatus = "启用" | "停用";
 
-export type UserRoleName = "AI助手" | "运营" | "采购" | "仓库管理" | "财务管理" | "管理员";
+export type UserRoleName = string;
+
+export interface FeishuDirectoryUser {
+  name: string;
+  openId: string;
+  userId?: string;
+  unionId?: string;
+  employeeId?: string;
+  departmentIds: string[];
+}
+
+export interface FeishuDirectorySearchResult {
+  queryName: string;
+  matchedCount: number;
+  isUnique: boolean;
+  users: FeishuDirectoryUser[];
+}
+
 
 export interface UserManagementRow {
   id: string;
@@ -10,6 +27,12 @@ export interface UserManagementRow {
   email: string;
   status: UserStatus;
   roles: UserRoleName[];
+  feishuName?: string;
+  feishuOpenId?: string;
+  feishuUserId?: string;
+  feishuUnionId?: string;
+  feishuEmployeeId?: string;
+  feishuDepartmentIds?: string[];
   createdAt: string;
   lastLoginAt: string;
 }
@@ -25,8 +48,15 @@ export interface UserFormValues {
   realName: string;
   phone?: string;
   email?: string;
+  password?: string;
   status: UserStatus;
   roles: UserRoleName[];
+  feishuName?: string;
+  feishuOpenId?: string;
+  feishuUserId?: string;
+  feishuUnionId?: string;
+  feishuEmployeeId?: string;
+  feishuDepartmentIds?: string[];
 }
 
 export interface UserManagementColumnField {
@@ -34,16 +64,22 @@ export interface UserManagementColumnField {
   title: string;
 }
 
+export interface UserRoleOption {
+  key: string;
+  name: UserRoleName;
+}
+
 export const userStatusOptions: UserStatus[] = ["启用", "停用"];
 
-export const userRoleOptions: UserRoleName[] = [
-  "AI助手",
-  "运营",
-  "采购",
-  "仓库管理",
-  "财务管理",
-  "管理员",
+export const fallbackUserRoleOptions: UserRoleOption[] = [
+  { key: "operations", name: "运营" },
+  { key: "purchase", name: "采购" },
+  { key: "warehouse", name: "仓库" },
+  { key: "finance", name: "财务" },
+  { key: "admin", name: "管理员" },
 ];
+
+export const userRoleOptions: UserRoleName[] = fallbackUserRoleOptions.map((role) => role.name);
 
 export const userManagementColumnFields: UserManagementColumnField[] = [
   { key: "username", title: "用户名" },
