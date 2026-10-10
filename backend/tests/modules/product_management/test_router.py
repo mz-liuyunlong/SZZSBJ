@@ -392,11 +392,31 @@ def test_read_export_recalculate_and_view_contracts(
         lambda self, payload, principal_ref: view,
     )
     client = TestClient(_app())
+    export_response = client.post(
+        "/api/product-management/skus/export",
+        json={"max_rows": 100},
+    )
+    assert export_response.status_code == 200
+    assert export_response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in export_response.headers["content-disposition"]
+    assert "product-management-skus-" in export_response.headers["content-disposition"]
+
+    export_text = export_response.content.decode("utf-8-sig")
+    assert "SKU,品名,类目,产品等级" in export_text
+    assert "SYNTHETIC-SKU" in export_text
+    assert "Synthetic Product" in export_text
+    assert "采购价(CNY)" in export_text
+    assert "头程费(CNY)" in export_text
+    lowered_export = export_text.lower()
+    assert "payload_json" not in lowered_export
+    assert "authorization" not in lowered_export
+    assert "access_token" not in lowered_export
+    assert "refresh_token" not in lowered_export
+
     responses = [
         client.get("/api/product-management/skus"),
         client.get(f"/api/product-management/skus/{SKU_ID}"),
         client.get("/api/product-management/options"),
-        client.post("/api/product-management/skus/export", json={"max_rows": 100}),
         client.post(
             "/api/product-management/skus/recalculate-pricing",
             json={
@@ -453,16 +473,10 @@ def test_read_export_recalculate_and_view_contracts(
         "storage_fee_usd",
     ):
         assert len(list_item[field].rsplit(".", 1)[1]) == 2
-    assert responses[7].json()["data"]["data_completeness_rate"] == "80.00"
+    assert responses[-1].json()["data"]["data_completeness_rate"] == "80.00"
 
-    export_body = responses[3].json()["data"]
-    assert export_body == {
-        "status": "not_implemented_safe",
-        "row_limit": 100,
-        "file_created": False,
-    }
-    assert captured_request_ids == [responses[4].json()["request_id"]]
-    assert set(responses[7].json()["data"]) == {
+    assert captured_request_ids == [responses[3].json()["request_id"]]
+    assert set(responses[-1].json()["data"]) == {
         "total",
         "synced_detail_count",
         "data_completeness_rate",

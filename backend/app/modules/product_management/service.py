@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import logging
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
+from io import StringIO
 from typing import Literal, Never, cast
 from uuid import UUID, uuid4
 
@@ -398,6 +400,142 @@ class ProductManagementService:
                 for value, label, color, count in counts["source_tags"]
             ],
         )
+
+    @staticmethod
+    def _export_text(value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, Decimal):
+            return format(value, "f")
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return str(value)
+
+    @staticmethod
+    def _export_labels(values: object) -> str:
+        if not isinstance(values, list):
+            return ""
+        labels: list[str] = []
+        for value in values:
+            label = getattr(value, "label", None)
+            if label is not None and str(label).strip():
+                labels.append(str(label).strip())
+        return "、".join(labels)
+
+    @staticmethod
+    def _export_grade(value: object) -> str:
+        return {
+            "A": "A级",
+            "B": "B级",
+            "C": "C级",
+            "exception": "异常",
+        }.get(str(value or ""), ProductManagementService._export_text(value))
+
+    @staticmethod
+    def _export_missing_codes(values: object) -> str:
+        if not isinstance(values, list):
+            return ""
+        return "、".join(str(value) for value in values if value is not None and str(value).strip())
+
+    def export_csv(
+        self,
+        payload: ExportRequest,
+        account_refs: frozenset[str],
+        *,
+        include_costs: bool,
+    ) -> tuple[str, str]:
+        max_rows = payload.max_rows
+        page_size = min(100, max_rows)
+        page = 1
+        exported_items: list[ProductManagementListItem] = []
+
+        while len(exported_items) < max_rows:
+            active_page_size = min(page_size, max_rows - len(exported_items))
+            query = payload.query.model_copy(
+                update={
+                    "page": page,
+                    "page_size": active_page_size,
+                },
+            )
+            data, total, _list_freshness, _latest_observed = self.list_skus(
+                query,
+                account_refs,
+                include_costs=include_costs,
+            )
+            if not data.items:
+                break
+
+            exported_items.extend(data.items)
+
+            if len(exported_items) >= total or len(data.items) < active_page_size:
+                break
+
+            page += 1
+
+        base_columns = [
+            ("sku", "SKU", lambda item: item.sku),
+            ("product_name", "品名", lambda item: item.product_name),
+            ("category", "类目", lambda item: item.category),
+            ("product_grade", "产品等级", lambda item: self._export_grade(item.product_grade)),
+            ("owner", "负责人", lambda item: item.owner_name or item.owner_uid),
+            (
+                "developer",
+                "开发",
+                lambda item: item.product_developer_name or item.product_developer_uid,
+            ),
+            ("tags", "标签", lambda item: self._export_labels(item.internal_tags)),
+            ("source_tags", "来源标签", lambda item: self._export_labels(item.source_tags)),
+            ("image_count", "图片数", lambda item: item.image_count),
+            ("listing_count", "Listing数", lambda item: item.linked_platform_sku_count),
+            (
+                "completeness_status",
+                "资料完整状态",
+                lambda item: "完整" if item.billing_root_complete else "缺失",
+            ),
+            (
+                "missing_codes",
+                "缺失项",
+                lambda item: self._export_missing_codes(item.root_missing_codes),
+            ),
+            ("calculation_status", "计价状态", lambda item: item.calculation_status),
+            ("wfs_status", "WFS状态", lambda item: item.wfs_calc_status),
+            ("storage_status", "仓储状态", lambda item: item.storage_calc_status),
+            ("first_leg_status", "头程状态", lambda item: item.first_leg_calc_status),
+            ("observed_at", "最近观测时间", lambda item: item.source_observed_at),
+            ("calculated_at", "计算时间", lambda item: item.calculated_at),
+        ]
+
+        cost_columns = [
+            ("purchase_cost_cny", "采购价(CNY)", lambda item: item.purchase_cost_cny),
+            ("first_leg_fee_cny", "头程费(CNY)", lambda item: item.first_leg_fee_cny),
+            ("wfs_fulfillment_fee", "WFS配送费", lambda item: item.wfs_fulfillment_fee),
+            ("storage_fee_usd", "仓储费(USD)", lambda item: item.storage_fee_usd),
+            ("suggested_price_usd", "建议售价(USD)", lambda item: item.suggested_price_usd),
+            ("minimum_price_usd", "最低售价(USD)", lambda item: item.minimum_price_usd),
+            ("clearance_price_usd", "清仓价(USD)", lambda item: item.clearance_price_usd),
+        ]
+
+        available_columns = base_columns + (cost_columns if include_costs else [])
+        available_keys = [column[0] for column in available_columns]
+        requested_keys = [key for key in payload.columns if key in set(available_keys)]
+        selected_keys = requested_keys or available_keys
+        selected_key_set = set(selected_keys)
+        selected_columns = [column for column in available_columns if column[0] in selected_key_set]
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow([column[1] for column in selected_columns])
+
+        for item in exported_items:
+            writer.writerow(
+                [
+                    self._export_text(value_getter(item))
+                    for _key, _label, value_getter in selected_columns
+                ]
+            )
+
+        filename = f"product-management-skus-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+        return output.getvalue(), filename
 
     @staticmethod
     def export(payload: ExportRequest) -> ExportResult:

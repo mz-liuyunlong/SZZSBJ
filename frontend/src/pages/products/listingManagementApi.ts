@@ -339,9 +339,13 @@ async function fetchListingManagementSummaryFromApi(
 
 export async function exportListingManagementRows(
   params: ListingManagementParams = {},
+  columns?: string[],
 ): Promise<void> {
   const search = new URLSearchParams();
   appendListingFilters(search, params);
+  if (columns && columns.length > 0) {
+    search.set("columns", columns.join(","));
+  }
 
   const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
   const response = await fetch(`/api/listings/walmart/export?${search.toString()}`, {
