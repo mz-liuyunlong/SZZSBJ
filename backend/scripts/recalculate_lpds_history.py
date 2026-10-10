@@ -1,7 +1,7 @@
 """CLI for bounded, controlled LPDS history recalculation.
 
-No external API client is created.  Omitting ``--commit`` always performs the real
-MART rebuild inside a transaction and then rolls it back.
+No external API client is created. Omitting ``--commit`` performs the selected
+recalculation mode inside a transaction and then rolls it back.
 """
 
 from __future__ import annotations
@@ -31,9 +31,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--date", type=date.fromisoformat)
     parser.add_argument("--start-date", type=date.fromisoformat)
     parser.add_argument("--end-date", type=date.fromisoformat)
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", help="Explicit rollback mode (default).")
-    mode.add_argument("--commit", action="store_true", help="Persist after all gates pass.")
+    parser.add_argument(
+        "--mode",
+        choices=("canonical", "lpds-only"),
+        default="canonical",
+        help="Rebuild all MART inputs or preserve historical non-LPDS inputs.",
+    )
+    write_mode = parser.add_mutually_exclusive_group()
+    write_mode.add_argument(
+        "--dry-run", action="store_true", help="Explicit rollback mode (default)."
+    )
+    write_mode.add_argument("--commit", action="store_true", help="Persist after all gates pass.")
     parser.add_argument("--restore-from", type=Path)
     parser.add_argument("--backup-dir", type=Path)
     parser.add_argument("--limit-days", type=int, default=1)
@@ -61,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             allow_production=args.allow_production,
             confirm_token=args.confirm_token,
             restore_from=args.restore_from,
+            recalculation_mode=args.mode,
         )
     except LpdsHistoryRecalcError as error:
         print(f"LPDS_HISTORY_FAILED code={error}")

@@ -6,6 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -26,8 +27,10 @@ from app.modules.integration_sync.lpds_history_recalc_runner import (
     LpdsHistoryRepository,
     ScopeDigest,
     _canonical_runner,
+    _project_lpds_only_snapshot,
     _snapshot_from_backup,
     _snapshot_from_rows,
+    _validate_recalculation,
     classify_version_profiles,
     read_backup,
     resolve_bounded_dates,
@@ -156,6 +159,7 @@ class _Repository:
             ORDER_TABLE.name: ScopeDigest(8, "order-non-target"),
         }
         self.restore_calls: list[tuple[str, DaySnapshot]] = []
+        self.lpds_only_calls: list[DaySnapshot] = []
 
     def configure_transaction(self) -> None:
         return None
@@ -181,12 +185,31 @@ class _Repository:
     def restore_snapshot(self, account: str, snapshot: DaySnapshot) -> None:
         self.restore_calls.append((account, snapshot))
 
+    def apply_lpds_only(self, before: DaySnapshot) -> None:
+        self.lpds_only_calls.append(before)
+
 
 def test_cli_defaults_to_dry_run() -> None:
     args = parse_args(["--source-account-ref", ACCOUNT, "--date", DAY.isoformat()])
 
     assert args.commit is False
     assert args.dry_run is False
+    assert args.mode == "canonical"
+
+
+def test_cli_accepts_lpds_only_mode() -> None:
+    args = parse_args(
+        [
+            "--source-account-ref",
+            ACCOUNT,
+            "--date",
+            DAY.isoformat(),
+            "--mode",
+            "lpds-only",
+        ]
+    )
+
+    assert args.mode == "lpds-only"
 
 
 def test_unbounded_or_oversized_date_scope_is_rejected() -> None:
@@ -308,6 +331,232 @@ def test_daily_refresh_precedes_order_profit_and_dry_run_rolls_back(
     assert result.after.daily.surcharge_sum - result.before.daily.surcharge_sum == Decimal("1")
     assert "synthetic-item" not in "\n".join(result.safe_lines())
     assert ACCOUNT not in "\n".join(result.safe_lines())
+
+
+def test_lpds_only_mode_bypasses_canonical_rebuild_and_rolls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = _snapshot(version=LEGACY_CALC_VERSION, surcharge=Decimal("0"))
+    after = _project_lpds_only_snapshot(before)
+    session = _Session()
+    repository = _Repository([before, after])
+    runner = LpdsHistoryRecalcRunner(
+        lambda: session,
+        app_env=AppEnvironment.TEST,
+        repository_factory=lambda _: repository,
+        canonical_runner_factory=pytest.fail,
+    )
+    monkeypatch.setattr(runner, "_verify_persisted_state", lambda *_: None)
+
+    result = runner._recalculate_day(
+        ACCOUNT,
+        DAY,
+        mode="dry-run",
+        backup_dir=None,
+        recalculation_mode="lpds-only",
+    )
+
+    assert repository.lpds_only_calls == [before]
+    assert session.transaction.rolled_back is True
+    assert result.recalculation_mode == "lpds-only"
+    assert "recalculation_mode=lpds-only" in "\n".join(result.safe_lines())
+
+
+def test_lpds_only_projection_changes_only_lpds_and_profit_fields() -> None:
+    daily = _daily_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=Decimal("4"),
+    )
+    daily.update(
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000001"),
+            "gross_margin": Decimal("0.444444"),
+            "roi": Decimal("2.000000"),
+            "purchase_cost_total_usd": Decimal("1"),
+            "first_leg_cost_total_usd": Decimal("1"),
+            "cost_status": "complete",
+        }
+    )
+    order = _order_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=Decimal("4"),
+    )
+    order.update(
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000002"),
+            "sales_amount": Decimal("9"),
+            "gross_margin": Decimal("0.444444"),
+            "roi": Decimal("2.000000"),
+            "purchase_cost_total_usd": Decimal("1"),
+            "first_leg_cost_total_usd": Decimal("1"),
+            "cost_status": "complete",
+        }
+    )
+    before = DaySnapshot(
+        DAY,
+        _snapshot_from_rows(DAILY_TABLE.name, (daily,)),
+        _snapshot_from_rows(ORDER_TABLE.name, (order,)),
+    )
+
+    after = _project_lpds_only_snapshot(before)
+
+    projected_daily = after.daily.rows[0]
+    projected_order = after.order_profit.rows[0]
+    assert projected_daily["wfs_low_price_surcharge_amount"] == Decimal("1.0000")
+    assert projected_daily["wfs_fee_total_amount"] == Decimal("6.0000")
+    assert projected_daily["gross_profit_amount"] == Decimal("3.0000")
+    assert projected_daily["purchase_cost_total_usd"] == Decimal("1")
+    assert projected_daily["cost_status"] == "complete"
+    assert projected_order["wfs_low_price_surcharge_amount"] == Decimal("1.0000")
+    assert projected_order["gross_profit_amount"] == Decimal("3.0000")
+    assert projected_order["purchase_cost_total_usd"] == Decimal("1")
+    _validate_recalculation(
+        before,
+        after,
+        {},
+        {},
+        recalculation_mode="lpds-only",
+    )
+
+
+def test_lpds_only_preserves_2026_08_10_partial_profit_and_historical_costs() -> None:
+    complete = _daily_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=Decimal("5"),
+        item_id="complete-item",
+    )
+    complete.update(
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000011"),
+            "msku": "complete-msku",
+            "sales_amount": Decimal("20"),
+            "purchase_cost_total_usd": Decimal("3"),
+            "first_leg_cost_total_usd": Decimal("2"),
+            "cost_status": "complete",
+        }
+    )
+    partial = _daily_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=None,
+        item_id="partial-item",
+    )
+    partial.update(
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000012"),
+            "msku": "partial-msku",
+            "sales_amount": Decimal("20"),
+            "gross_profit_amount": None,
+            "wfs_fee_total_amount": None,
+            "purchase_cost_total_usd": None,
+            "cost_status": "partial",
+        }
+    )
+    order = _order_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=None,
+    )
+    order.update(
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000013"),
+            "sales_amount": Decimal("40"),
+            "gross_profit_amount": None,
+            "gross_margin": None,
+            "roi": None,
+            "cost_status": "partial",
+        }
+    )
+    before = DaySnapshot(
+        DAY,
+        _snapshot_from_rows(DAILY_TABLE.name, (complete, partial)),
+        _snapshot_from_rows(ORDER_TABLE.name, (order,)),
+    )
+
+    after = _project_lpds_only_snapshot(before)
+
+    assert after.daily.rows[0]["purchase_cost_total_usd"] == Decimal("3")
+    assert after.daily.rows[0]["gross_profit_amount"] == Decimal("5.0000")
+    assert after.daily.rows[1]["purchase_cost_total_usd"] is None
+    assert after.daily.rows[1]["gross_profit_amount"] is None
+    assert after.daily.rows[1]["cost_status"] == "partial"
+    assert after.order_profit.rows[0]["gross_profit_amount"] is None
+    assert after.order_profit.rows[0]["cost_status"] == "partial"
+    assert after.order_profit.profit_sum - after.daily.profit_sum == (
+        before.order_profit.profit_sum - before.daily.profit_sum
+    )
+    _validate_recalculation(
+        before,
+        after,
+        {},
+        {},
+        recalculation_mode="lpds-only",
+    )
+
+
+def test_lpds_only_rejects_non_lpds_field_drift() -> None:
+    before = _snapshot(version=LEGACY_CALC_VERSION, surcharge=Decimal("0"))
+    projected = _project_lpds_only_snapshot(before)
+    drifted_daily = dict(projected.daily.rows[0])
+    drifted_daily["purchase_cost_total_usd"] = Decimal("99")
+    drifted = DaySnapshot(
+        DAY,
+        _snapshot_from_rows(DAILY_TABLE.name, (drifted_daily,)),
+        projected.order_profit,
+    )
+
+    with pytest.raises(LpdsHistoryRecalcError, match="LPDS_NON_LPDS_FIELDS_CHANGED"):
+        _validate_recalculation(
+            before,
+            drifted,
+            {},
+            {},
+            recalculation_mode="lpds-only",
+        )
+
+
+def test_lpds_only_keeps_null_profit_null_when_surcharge_is_added() -> None:
+    daily = _daily_row(version=LEGACY_CALC_VERSION, surcharge=Decimal("0"))
+    daily.update(
+        {
+            "gross_profit_amount": None,
+            "wfs_fee_total_amount": None,
+            "cost_status": "partial",
+        }
+    )
+    order = _order_row(version=LEGACY_CALC_VERSION, surcharge=Decimal("0"))
+    order.update(
+        {
+            "sales_amount": Decimal("9"),
+            "gross_profit_amount": None,
+            "wfs_fee_total_amount": None,
+            "cost_status": "partial",
+        }
+    )
+    before = DaySnapshot(
+        DAY,
+        _snapshot_from_rows(DAILY_TABLE.name, (daily,)),
+        _snapshot_from_rows(ORDER_TABLE.name, (order,)),
+    )
+
+    after = _project_lpds_only_snapshot(before)
+
+    assert after.daily.rows[0]["wfs_low_price_surcharge_amount"] == Decimal("1.0000")
+    assert after.daily.rows[0]["wfs_fee_total_amount"] is None
+    assert after.daily.rows[0]["gross_profit_amount"] is None
+    assert after.order_profit.rows[0]["wfs_low_price_surcharge_amount"] == Decimal("1.0000")
+    assert after.order_profit.rows[0]["wfs_fee_total_amount"] is None
+    assert after.order_profit.rows[0]["gross_profit_amount"] is None
+    _validate_recalculation(
+        before,
+        after,
+        {},
+        {},
+        recalculation_mode="lpds-only",
+    )
 
 
 def test_preexisting_profit_gap_is_preserved_and_reported(
@@ -688,5 +937,27 @@ def test_real_postgresql_dry_run_rolls_back_when_isolated_database_is_configured
                     )
                 ).scalar_one()
                 assert persisted_version == LEGACY_CALC_VERSION
+
+            lpds_only_result = LpdsHistoryRecalcRunner(
+                lambda: Session(bind=connection),
+                app_env=AppEnvironment.TEST,
+            ).run(
+                source_account_ref=ACCOUNT,
+                exact_date=DAY,
+                recalculation_mode="lpds-only",
+            )
+
+            assert lpds_only_result.completed[0].after.daily.surcharge_sum == Decimal("1.0000")
+            with Session(bind=connection) as verify:
+                persisted = verify.execute(
+                    select(
+                        DAILY_TABLE.c.calc_version,
+                        DAILY_TABLE.c.wfs_low_price_surcharge_amount,
+                    ).where(
+                        DAILY_TABLE.c.source_account_ref == ACCOUNT,
+                        DAILY_TABLE.c.business_date_la == DAY,
+                    )
+                ).one()
+                assert persisted == (LEGACY_CALC_VERSION, Decimal("0.0000"))
     finally:
         engine.dispose()
