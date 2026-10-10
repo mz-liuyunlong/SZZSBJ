@@ -6,8 +6,16 @@ from typing import Any
 from sqlalchemy import text
 
 from app.modules.after_sales.classification import AfterSalesReasonClassifier
+from app.modules.integration_sync.data_pages_business_rules_v2 import (
+    DAILY_SALES_V2_VERSION,
+    _low_price_delivery_surcharge,
+)
 from app.modules.integration_sync.data_pages_business_rules_v3 import (
     DataPagesRealSyncRunner as HistoricalAdRunner,
+)
+from app.modules.integration_sync.data_pages_mart_invariants import (
+    snapshot_automatic_marts,
+    validate_automatic_mart_replay,
 )
 from scripts.import_after_sales_refund_items import (
     build_cost_map,
@@ -117,7 +125,7 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
         return 0
 
     def _refresh_daily_sales_mart(self) -> int:
-        """Refresh current day plus affected purchase days that already have SaleStat."""
+        """Refresh and replay-validate current and refund-affected purchase days."""
 
         current_day = self.business_date
         affected_days = tuple(
@@ -125,12 +133,48 @@ class DataPagesRealSyncRunner(HistoricalAdRunner):
             for day in getattr(self, "_refund_affected_business_dates", ())
             if day != current_day
         )
+        current_daily_rows = 0
+        current_order_rows = 0
         try:
-            for day in affected_days:
+            for day in (*affected_days, current_day):
                 self.business_date = day
                 super()._refresh_daily_sales_mart()
-                self._refresh_order_profit_mart()
-            self.business_date = current_day
-            return super()._refresh_daily_sales_mart()
+                super()._refresh_order_profit_mart()
+                first = snapshot_automatic_marts(
+                    self.session,
+                    self.source_account_ref,
+                    day,
+                )
+                if self.heartbeat is not None:
+                    self.heartbeat()
+
+                daily_rows = super()._refresh_daily_sales_mart()
+                order_rows = super()._refresh_order_profit_mart()
+                replay = snapshot_automatic_marts(
+                    self.session,
+                    self.source_account_ref,
+                    day,
+                )
+                validate_automatic_mart_replay(
+                    first,
+                    replay,
+                    expected_calc_version=DAILY_SALES_V2_VERSION,
+                    surcharge_for=_low_price_delivery_surcharge,
+                )
+                if day == current_day:
+                    current_daily_rows = daily_rows
+                    current_order_rows = order_rows
+
+            self._guarded_order_profit_result = (current_day, current_order_rows)
+            return current_daily_rows
         finally:
             self.business_date = current_day
+
+    def _refresh_order_profit_mart(self) -> int:
+        """Return the already validated current-day rollup to legacy callers."""
+
+        guarded = getattr(self, "_guarded_order_profit_result", None)
+        if guarded is not None and guarded[0] == self.business_date:
+            del self._guarded_order_profit_result
+            return int(guarded[1])
+        return super()._refresh_order_profit_mart()

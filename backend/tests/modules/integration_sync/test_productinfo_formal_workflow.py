@@ -1,5 +1,6 @@
+import inspect
 from contextlib import AbstractContextManager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -10,6 +11,9 @@ from sqlalchemy.orm import Session
 import app.modules.integration_sync.execution as execution_module
 import app.modules.integration_sync.tasks as task_module
 from app.core.api import ApiError
+from app.modules.integration_sync.data_pages_mart_invariants import (
+    DataPagesMartInvariantError,
+)
 from app.modules.integration_sync.execution import SyncRunExecutionService
 from app.modules.integration_sync.repository import RECOVERABLE_INTERFACE_KEYS
 from app.modules.integration_sync.scheduler import IntegrationSchedulerService
@@ -379,6 +383,32 @@ def test_data_pages_tasks_remain_queued_and_recoverable() -> None:
     }.issubset(RECOVERABLE_INTERFACE_KEYS)
 
 
+def test_data_pages_heartbeat_does_not_commit_business_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    business_session = MagicMock(spec=Session)
+    heartbeat_session = MagicMock(spec=Session)
+    lock = SimpleNamespace(heartbeat_at=None, expires_at=None)
+    heartbeat_repository = MagicMock()
+    heartbeat_repository.get_lock_for_run_for_update.return_value = lock
+    session_factory = MagicMock(return_value=heartbeat_session)
+    monkeypatch.setattr(execution_module, "get_session_factory", lambda: session_factory)
+    monkeypatch.setattr(
+        execution_module,
+        "IntegrationSyncRepository",
+        MagicMock(return_value=heartbeat_repository),
+    )
+
+    SyncRunExecutionService(business_session)._heartbeat_data_pages_lock(UUID(int=701))
+
+    business_session.commit.assert_not_called()
+    heartbeat_session.commit.assert_called_once_with()
+    heartbeat_session.rollback.assert_not_called()
+    heartbeat_session.close.assert_called_once_with()
+    assert lock.heartbeat_at is not None
+    assert lock.expires_at == lock.heartbeat_at + execution_module.LOCK_LEASE_DURATION
+
+
 def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     session = MagicMock(spec=Session)
     service = SyncRunExecutionService(session)
@@ -409,6 +439,8 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     ]
     runner._fetch_return_all.assert_not_called()
     runner._fetch_ads_all.assert_not_called()
+    runner._refresh_daily_sales_mart.assert_called_once_with()
+    runner._refresh_order_profit_mart.assert_called_once_with()
 
 
 def test_refund_execution_does_not_run_sales_or_ad_fetches() -> None:
@@ -429,6 +461,8 @@ def test_refund_execution_does_not_run_sales_or_ad_fetches() -> None:
     runner._fetch_return_all.assert_called_once_with()
     runner._fetch_page_all.assert_not_called()
     runner._fetch_ads_all.assert_not_called()
+    runner._refresh_daily_sales_mart.assert_called_once_with()
+    runner._refresh_order_profit_mart.assert_called_once_with()
 
 
 def test_ad_execution_does_not_run_sales_or_refund_fetches() -> None:
@@ -448,6 +482,91 @@ def test_ad_execution_does_not_run_sales_or_refund_fetches() -> None:
     runner._fetch_ads_all.assert_called_once_with("advertiser-1")
     runner._fetch_offset_all.assert_not_called()
     runner._fetch_return_all.assert_not_called()
+    runner._refresh_daily_sales_mart.assert_called_once_with()
+    runner._refresh_order_profit_mart.assert_called_once_with()
+
+
+def test_data_pages_mart_failure_rolls_back_day_and_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = MagicMock(spec=Session)
+    service = SyncRunExecutionService(session)
+    repository = MagicMock()
+    service.repository = repository
+    first_day = date(2026, 1, 14)
+    second_day = date(2026, 1, 15)
+    run = SimpleNamespace(
+        id=UUID(int=910),
+        config_id=UUID(int=911),
+        source_account_ref="synthetic-account",
+        interface_key="saleStatPageList",
+        status="running",
+        work_items_total=0,
+        work_items_succeeded=0,
+        work_items_failed=0,
+        records_seen=0,
+        records_written=0,
+        error_code=None,
+        error_message=None,
+        finished_at=None,
+    )
+    repository.get_config.return_value = SimpleNamespace(page_size=100)
+    repository.get_run_for_update.return_value = run
+    repository.next_event_sequence.side_effect = [2, 3]
+    service._data_pages_business_dates_for_run = MagicMock(return_value=(first_day, second_day))
+    service._heartbeat_data_pages_lock = MagicMock()
+    successful_summary = SimpleNamespace(
+        store_rows=1,
+        listing_rows=0,
+        advertiser_rows=0,
+        sales_rows=2,
+        order_rows=1,
+        refund_rows=0,
+        ad_rows=0,
+        mart_daily_sales_rows=2,
+        mart_order_profit_rows=1,
+        mart_listing_rows=0,
+    )
+    service._execute_data_pages_interface = MagicMock(
+        side_effect=[
+            DataPagesMartInvariantError(
+                "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED",
+                business_date=first_day,
+            ),
+            successful_summary,
+        ]
+    )
+    client_context = MagicMock(spec=AbstractContextManager)
+    client_context.__enter__.return_value = object()
+    client_context.__exit__.return_value = False
+    monkeypatch.setattr(execution_module, "data_pages_client", lambda: client_context)
+    monkeypatch.setattr(
+        execution_module,
+        "DataPagesRealSyncRunner",
+        MagicMock(side_effect=[MagicMock(), MagicMock()]),
+    )
+
+    service._execute_data_pages_run(run)
+
+    assert service._execute_data_pages_interface.call_count == 2
+    session.rollback.assert_called_once_with()
+    assert run.status == "failed"
+    assert run.work_items_succeeded == 1
+    assert run.work_items_failed == 1
+    assert run.error_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
+    assert run.records_written == 3
+    assert service._heartbeat_data_pages_lock.call_count == 1
+    events = [call.args[0] for call in repository.add_event.call_args_list]
+    assert events[0].message_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
+    assert events[0].safe_details == {"business_date": first_day.isoformat()}
+    assert events[1].safe_details == {"failed_business_dates": 1}
+
+
+def test_listing_management_path_does_not_write_sales_profit_marts() -> None:
+    source = inspect.getsource(SyncRunExecutionService._execute_listing_management_run)
+
+    assert "_refresh_daily_sales_mart" not in source
+    assert "_refresh_order_profit_mart" not in source
 
 
 def test_scheduler_tick_recovers_queued_runs_and_defers_remaining_after_dispatch_failure(

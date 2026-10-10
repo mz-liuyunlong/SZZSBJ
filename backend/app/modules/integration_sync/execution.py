@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.db.session import get_session_factory
 from app.modules.integration_sync.data_pages_business_rules_v4 import DataPagesRealSyncRunner
+from app.modules.integration_sync.data_pages_mart_invariants import (
+    DataPagesMartInvariantError,
+)
 from app.modules.integration_sync.data_pages_real_sync import (
     DataPagesRealSyncSummary,
     data_pages_client,
@@ -341,6 +345,7 @@ class SyncRunExecutionService:
 
         records_seen = 0
         records_written = 0
+        mart_failures: list[DataPagesMartInvariantError] = []
 
         with data_pages_client() as client:
             for business_date in days:
@@ -352,9 +357,27 @@ class SyncRunExecutionService:
                     page_size=page_size,
                     campaign_type=DATA_PAGES_DEFAULT_CAMPAIGN_TYPE,
                     max_advertisers=DATA_PAGES_DEFAULT_MAX_ADVERTISERS,
-                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                    heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 )
-                summary = self._execute_data_pages_interface(run.interface_key, runner)
+                try:
+                    summary = self._execute_data_pages_interface(run.interface_key, runner)
+                except DataPagesMartInvariantError as error:
+                    self.session.rollback()
+                    active_run = self.repository.get_run_for_update(run.id)
+                    if active_run is None or active_run.status != "running":
+                        return
+                    mart_failures.append(error)
+                    self._event(
+                        active_run.id,
+                        "running",
+                        "running",
+                        error.code,
+                        safe_details={
+                            "business_date": (error.business_date or business_date).isoformat(),
+                        },
+                    )
+                    self.session.commit()
+                    continue
 
                 records_seen += (
                     summary.store_rows
@@ -370,21 +393,27 @@ class SyncRunExecutionService:
                     + summary.mart_order_profit_rows
                     + summary.mart_listing_rows
                 )
-                self._heartbeat_lock(run.id)
+                self._heartbeat_data_pages_lock(run.id)
 
         completed = self.repository.get_run_for_update(run.id)
         if completed is None:
             return
         from_status = completed.status
-        completed.status = "succeeded"
+        completed.status = "failed" if mart_failures else "succeeded"
         completed.finished_at = utc_now()
-        completed.work_items_succeeded = len(days)
-        completed.work_items_failed = 0
+        completed.work_items_succeeded = len(days) - len(mart_failures)
+        completed.work_items_failed = len(mart_failures)
         completed.records_seen = records_seen
         completed.records_written = records_written
-        completed.error_code = None
-        completed.error_message = None
-        self._event(completed.id, from_status, "succeeded", "SYNC_RUN_SUCCEEDED")
+        completed.error_code = mart_failures[0].code if mart_failures else None
+        completed.error_message = "同步业务日校验失败" if mart_failures else None
+        self._event(
+            completed.id,
+            from_status,
+            completed.status,
+            mart_failures[0].code if mart_failures else "SYNC_RUN_SUCCEEDED",
+            safe_details=({"failed_business_dates": len(mart_failures)} if mart_failures else None),
+        )
         self.session.commit()
 
     def _execute_data_pages_interface(
@@ -631,6 +660,26 @@ class SyncRunExecutionService:
         lock.expires_at = now + LOCK_LEASE_DURATION
         self.session.commit()
 
+    @staticmethod
+    def _heartbeat_data_pages_lock(run_id: UUID) -> None:
+        """Renew a DATA-PAGES lease without committing its business-day transaction."""
+
+        heartbeat_session = get_session_factory()()
+        try:
+            repository = IntegrationSyncRepository(heartbeat_session)
+            lock = repository.get_lock_for_run_for_update(run_id)
+            if lock is None:
+                raise ProductInfoOneTimeRunError("SYNC_LOCK_LEASE_LOST")
+            now = utc_now()
+            lock.heartbeat_at = now
+            lock.expires_at = now + LOCK_LEASE_DURATION
+            heartbeat_session.commit()
+        except Exception:
+            heartbeat_session.rollback()
+            raise
+        finally:
+            heartbeat_session.close()
+
     def _fail(self, run: IntegrationSyncRun, error_code: str) -> None:
         from_status = run.status
         run.status = "failed"
@@ -646,6 +695,7 @@ class SyncRunExecutionService:
         from_status: str | None,
         to_status: str,
         message_code: str,
+        safe_details: dict[str, object] | None = None,
     ) -> None:
         self.repository.add_event(
             IntegrationSyncRunEvent(
@@ -655,7 +705,7 @@ class SyncRunExecutionService:
                 from_status=from_status,
                 to_status=to_status,
                 message_code=message_code,
-                safe_details=None,
+                safe_details=safe_details,
                 occurred_at=utc_now(),
                 actor_ref="worker",
             )
