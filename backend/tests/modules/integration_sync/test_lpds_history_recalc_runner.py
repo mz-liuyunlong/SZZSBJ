@@ -40,7 +40,7 @@ from app.modules.integration_sync.lpds_history_recalc_runner import (
 )
 from scripts.recalculate_lpds_history import parse_args
 
-DAY = date(2026, 9, 26)
+DAY = date(2026, 1, 15)
 ACCOUNT = "synthetic-account"
 
 

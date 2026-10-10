@@ -27,24 +27,17 @@ Both modes:
 It must not be reused for manual fixes to commissions, WFS base fees, storage fees, refunds,
 advertising costs, or any other amount.
 
-The `lpds-only` mode exists because a canonical rehearsal for `2026-08-10` correctly failed the
-#207 profit-gap gate: the LPDS delta was valid, but current Product Management costs also changed
+The `lpds-only` mode exists because an audited single-day dry-run case correctly failed the #207
+profit-gap gate: the LPDS delta was valid, but current Product Management costs also changed
 historical non-LPDS amounts. Freezing those historical inputs is an explicit business decision;
 the #207 gate remains mandatory and must not be weakened.
 
-## Audited historical scope
+## Historical scope
 
-The pre-implementation read-only audit found:
-
-- 102 old-version account business days;
-- an estimated aggregate LPDS increase of USD 4,439;
-- recommended first rehearsal date: `2026-09-26`;
-- that first date contained 249 Daily Sales rows, 221 Order Profit rows, four LPDS-eligible
-  rows, and an estimated USD 13 increase at audit time.
-
-Those figures are audit evidence, not immutable runtime expectations. The runner rechecks the
-current target day and stops if it is empty, mixed-version, unknown-version, or has changed in a
-way that violates its gates.
+Production target counts, dates, and financial amounts are intentionally excluded from this
+public runbook. The runner derives the current bounded scope at execution time and rechecks each
+target day. It stops if a target is empty, mixed-version, unknown-version, or has changed in a way
+that violates its gates.
 
 ## CLI
 
@@ -53,7 +46,7 @@ Run from `backend/` using the deployed project's Python environment:
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date 2026-09-26 \
+  --date 2026-01-15 \
   --mode canonical \
   --dry-run \
   --limit-days 1
@@ -69,7 +62,7 @@ Historical LPDS-only dry-run:
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date 2026-08-10 \
+  --date 2026-01-15 \
   --mode lpds-only \
   --dry-run \
   --limit-days 1
@@ -88,7 +81,7 @@ commit additionally requires a protected backup directory and the exact confirma
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date 2026-09-26 \
+  --date 2026-01-15 \
   --mode canonical \
   --commit \
   --allow-production \
@@ -138,11 +131,12 @@ profit change equal to the negative LPDS change for every non-NULL Daily Sales r
 LPDS amount must account for the entire global gap change; any remainder fails with
 `LPDS_PROFIT_GAP_INVARIANT_FAILED` before commit.
 
-The production audit for `2026-08-30` found one mixed-null group: one partial-cost Daily Sales row
-had NULL profit, another non-NULL row received USD 4 LPDS, and Order Profit remained NULL. The USD
-4 LPDS fully explained the USD 4 aggregate gap change. No product identifier is part of this
-runbook evidence. The fix does not permit unmatched or duplicate keys, changed NULL semantics,
-surcharge rollup drift, non-LPDS profit drift, or any unexplained gap.
+An audited single-day dry-run case confirmed a fully explained mixed-null profit gap: one
+partial-cost Daily Sales row had NULL profit, another non-NULL row received the expected LPDS
+delta, and Order Profit remained NULL. That LPDS delta fully explained the aggregate gap change.
+No product identifier is part of this runbook evidence. The fix does not permit unmatched or
+duplicate keys, changed NULL semantics, surcharge rollup drift, non-LPDS profit drift, or any
+unexplained gap.
 
 The canonical execution order is Daily Sales first, Order Profit second. No amount is updated by
 ad hoc SQL.
@@ -198,12 +192,12 @@ It does not call an external API, trigger sync, or apply a partial fee update.
 
 1. Confirm clean, merged production `main`, the exact Alembic revision, and no active overlapping
    DATA-PAGES work.
-2. After this PR is merged and deployed, run only `2026-08-30` with
+2. After this PR is merged and deployed, run only the approved single-day dry-run target with
    `--mode lpds-only --dry-run`.
 3. Review row counts, frozen-field hashes, comparable and mixed-null profit summaries,
    LPDS/profit deltas, unexplained gap, and rollback verification.
-4. Stop. Do not commit `2026-08-30` and do not process later historical dates.
-5. Obtain separate Owner authorization before any `2026-08-30` commit or resumed batch plan.
+4. Stop. Do not commit the target and do not process later historical dates.
+5. Obtain separate Owner authorization before any commit or resumed batch plan.
 
 Do not use current Product Management costs to rewrite historical profit unless the Owner approves
 that separate business change.
