@@ -70,6 +70,7 @@ class OrderProfitRangeProjection:
     wfs_available_quantity: Decimal | None
     wfs_fee_unit_amount: Decimal | None
     wfs_fee_total_amount: Decimal | None
+    wfs_low_price_surcharge_amount: Decimal | None
     purchase_cost_unit_cny: Decimal | None
     purchase_cost_total_usd: Decimal | None
     first_leg_cost_unit_cny: Decimal | None
@@ -432,6 +433,7 @@ def _projection_for_item(
             weight_attr="sales_qty",
         ),
         wfs_fee_total_amount=_optional_sum(rows, "wfs_fee_total_amount"),
+        wfs_low_price_surcharge_amount=_optional_sum(rows, "wfs_low_price_surcharge_amount"),
         purchase_cost_unit_cny=_weighted_average(
             rows,
             value_attr="purchase_cost_unit_cny",
