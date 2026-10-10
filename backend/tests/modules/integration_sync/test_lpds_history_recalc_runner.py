@@ -21,6 +21,7 @@ from app.modules.integration_sync.lpds_history_recalc_runner import (
     EXPECTED_CALC_VERSION,
     LEGACY_CALC_VERSION,
     ORDER_TABLE,
+    DayRunResult,
     DaySnapshot,
     LpdsHistoryRecalcError,
     LpdsHistoryRecalcRunner,
@@ -39,7 +40,7 @@ from app.modules.integration_sync.lpds_history_recalc_runner import (
 )
 from scripts.recalculate_lpds_history import parse_args
 
-DAY = date(2026, 9, 26)
+DAY = date(2026, 1, 15)
 ACCOUNT = "synthetic-account"
 
 
@@ -102,6 +103,57 @@ def _snapshot(
             ORDER_TABLE.name,
             (_order_row(version=version, surcharge=surcharge, profit=order_profit),),
         ),
+    )
+
+
+def _mixed_null_snapshot() -> DaySnapshot:
+    partial = _daily_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=None,
+        item_id="synthetic-partial-item",
+    )
+    partial.update(
+        {
+            "msku": "synthetic-partial-msku",
+            "sales_amount": Decimal("10"),
+            "gross_profit_amount": None,
+            "wfs_fee_total_amount": None,
+            "cost_status": "partial",
+        }
+    )
+    complete = _daily_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=Decimal("9.6985"),
+        item_id="synthetic-complete-item",
+    )
+    complete.update(
+        {
+            "msku": "synthetic-complete-msku",
+            "sales_qty": Decimal("4"),
+            "sales_amount": Decimal("36"),
+            "cost_status": "complete",
+        }
+    )
+    order = _order_row(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        profit=None,
+    )
+    order.update(
+        {
+            "sales_amount": Decimal("46"),
+            "gross_profit_amount": None,
+            "gross_margin": None,
+            "roi": None,
+            "cost_status": "partial",
+        }
+    )
+    return DaySnapshot(
+        DAY,
+        _snapshot_from_rows(DAILY_TABLE.name, (partial, complete)),
+        _snapshot_from_rows(ORDER_TABLE.name, (order,)),
     )
 
 
@@ -359,7 +411,14 @@ def test_lpds_only_mode_bypasses_canonical_rebuild_and_rolls_back(
     assert repository.lpds_only_calls == [before]
     assert session.transaction.rolled_back is True
     assert result.recalculation_mode == "lpds-only"
-    assert "recalculation_mode=lpds-only" in "\n".join(result.safe_lines())
+    output = "\n".join(result.safe_lines())
+    assert "recalculation_mode=lpds-only" in output
+    assert "comparable_profit_groups=1" in output
+    assert "mixed_null_profit_groups=0" in output
+    assert "comparable_profit_delta_daily=-1.0000" in output
+    assert "comparable_profit_delta_order=-1.0000" in output
+    assert "mixed_null_explained_gap_change=0" in output
+    assert "unexplained_profit_gap_change=0.0000" in output
 
 
 def test_lpds_only_projection_changes_only_lpds_and_profit_fields() -> None:
@@ -557,6 +616,99 @@ def test_lpds_only_keeps_null_profit_null_when_surcharge_is_added() -> None:
         {},
         recalculation_mode="lpds-only",
     )
+    result = DayRunResult(
+        DAY,
+        "dry-run",
+        before,
+        after,
+        None,
+        recalculation_mode="lpds-only",
+    )
+    output = "\n".join(result.safe_lines())
+    assert "mixed_null_profit_groups=1" in output
+    assert "mixed_null_explained_gap_change=0" in output
+    assert "unexplained_profit_gap_change=0" in output
+
+
+def test_lpds_only_allows_explained_mixed_null_profit_gap_change() -> None:
+    before = _mixed_null_snapshot()
+    after = _project_lpds_only_snapshot(before)
+
+    _validate_recalculation(
+        before,
+        after,
+        {},
+        {},
+        recalculation_mode="lpds-only",
+    )
+
+    assert before.order_profit.rows[0]["gross_profit_amount"] is None
+    assert after.order_profit.rows[0]["gross_profit_amount"] is None
+    assert after.daily.profit_sum - before.daily.profit_sum == Decimal("-4.0000")
+    assert after.order_profit.profit_sum - before.order_profit.profit_sum == 0
+    output = "\n".join(
+        DayRunResult(
+            DAY,
+            "dry-run",
+            before,
+            after,
+            None,
+            recalculation_mode="lpds-only",
+        ).safe_lines()
+    )
+    assert "comparable_profit_groups=0" in output
+    assert "mixed_null_profit_groups=1" in output
+    assert "mixed_null_explained_gap_change=4.0000" in output
+    assert "unexplained_profit_gap_change=0.0000" in output
+
+
+def test_lpds_only_rejects_unexplained_mixed_null_profit_gap_change() -> None:
+    before = _mixed_null_snapshot()
+    projected = _project_lpds_only_snapshot(before)
+    daily_rows = [dict(row) for row in projected.daily.rows]
+    complete = next(row for row in daily_rows if row["item_id"] == "synthetic-complete-item")
+    complete["gross_profit_amount"] = Decimal("5.6984")
+    invalid_after = DaySnapshot(
+        DAY,
+        _snapshot_from_rows(DAILY_TABLE.name, daily_rows),
+        projected.order_profit,
+    )
+
+    with pytest.raises(
+        LpdsHistoryRecalcError,
+        match="LPDS_PROFIT_GAP_INVARIANT_FAILED",
+    ):
+        _validate_recalculation(
+            before,
+            invalid_after,
+            {},
+            {},
+            recalculation_mode="lpds-only",
+        )
+
+
+def test_lpds_only_rejects_mixed_null_surcharge_rollup_mismatch() -> None:
+    before = _mixed_null_snapshot()
+    projected = _project_lpds_only_snapshot(before)
+    order_row = dict(projected.order_profit.rows[0])
+    order_row["wfs_low_price_surcharge_amount"] = Decimal("3.0000")
+    invalid_after = DaySnapshot(
+        DAY,
+        projected.daily,
+        _snapshot_from_rows(ORDER_TABLE.name, (order_row,)),
+    )
+
+    with pytest.raises(
+        LpdsHistoryRecalcError,
+        match="LPDS_SURCHARGE_ROLLUP_MISMATCH",
+    ):
+        _validate_recalculation(
+            before,
+            invalid_after,
+            {},
+            {},
+            recalculation_mode="lpds-only",
+        )
 
 
 def test_preexisting_profit_gap_is_preserved_and_reported(
