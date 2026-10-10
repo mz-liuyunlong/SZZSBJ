@@ -184,11 +184,7 @@ def export_product_management_skus_readonly(
     query_params = request.query_params
 
     def _values(name: str) -> list[str]:
-        return [
-            value.strip()
-            for value in query_params.getlist(name)
-            if value.strip()
-        ]
+        return [value.strip() for value in query_params.getlist(name) if value.strip()]
 
     query = ProductManagementListQuery(
         page=int(query_params.get("page") or 1),
@@ -212,11 +208,7 @@ def export_product_management_skus_readonly(
     payload = ExportRequest(
         query=query,
         max_rows=max_rows,
-        columns=[
-            value.strip()
-            for value in (columns or "").split(",")
-            if value.strip()
-        ],
+        columns=[value.strip() for value in (columns or "").split(",") if value.strip()],
     )
     csv_text, filename = ProductManagementService(session).export_csv(
         payload,

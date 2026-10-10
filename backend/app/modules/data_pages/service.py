@@ -777,16 +777,12 @@ class ListingManagementService:
 
         available_keys = [column[0] for column in column_definitions]
         requested_keys = [
-            key.strip()
-            for key in (columns or "").split(",")
-            if key.strip() in set(available_keys)
+            key.strip() for key in (columns or "").split(",") if key.strip() in set(available_keys)
         ]
         selected_keys = requested_keys or available_keys
         selected_key_set = set(selected_keys)
         selected_columns = [
-            column
-            for column in column_definitions
-            if column[0] in selected_key_set
+            column for column in column_definitions if column[0] in selected_key_set
         ]
 
         writer.writerow([column[1] for column in selected_columns])
@@ -800,11 +796,12 @@ class ListingManagementService:
                 archive_reason=getattr(archive_state, "archive_reason", None),
             )
 
-            writer.writerow([
-                self._csv_value(value_getter(item))
-                for _key, _label, value_getter in selected_columns
-            ])
-
+            writer.writerow(
+                [
+                    self._csv_value(value_getter(item))
+                    for _key, _label, value_getter in selected_columns
+                ]
+            )
 
         return output.getvalue()
 

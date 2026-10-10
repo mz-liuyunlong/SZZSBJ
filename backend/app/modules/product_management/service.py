@@ -527,14 +527,15 @@ class ProductManagementService:
         writer.writerow([column[1] for column in selected_columns])
 
         for item in exported_items:
-            writer.writerow([
-                self._export_text(value_getter(item))
-                for _key, _label, value_getter in selected_columns
-            ])
+            writer.writerow(
+                [
+                    self._export_text(value_getter(item))
+                    for _key, _label, value_getter in selected_columns
+                ]
+            )
 
         filename = f"product-management-skus-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
         return output.getvalue(), filename
-
 
     @staticmethod
     def export(payload: ExportRequest) -> ExportResult:
