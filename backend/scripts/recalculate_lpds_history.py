@@ -33,6 +33,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--end-date", type=date.fromisoformat)
     parser.add_argument(
         "--mode",
+        "--recalculation-mode",
+        dest="mode",
         choices=("canonical", "lpds-only"),
         default="canonical",
         help="Rebuild all MART inputs or preserve historical non-LPDS inputs.",
@@ -47,6 +49,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--limit-days", type=int, default=1)
     parser.add_argument("--allow-production", action="store_true")
     parser.add_argument("--confirm-token")
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help="Rollback failed dates, record them in the manifest, and continue.",
+    )
+    parser.add_argument(
+        "--manifest-jsonl",
+        type=Path,
+        help="Write one safe aggregate JSON object per processed date.",
+    )
+    parser.add_argument(
+        "--only-success-manifest",
+        type=Path,
+        help="Commit only dates marked succeeded by a prior dry-run manifest.",
+    )
+    parser.add_argument(
+        "--max-failures",
+        type=int,
+        default=50,
+        help="Stop a continue-on-error batch after this many date failures.",
+    )
     return parser.parse_args(argv)
 
 
@@ -70,6 +93,10 @@ def main(argv: list[str] | None = None) -> int:
             confirm_token=args.confirm_token,
             restore_from=args.restore_from,
             recalculation_mode=args.mode,
+            continue_on_error=args.continue_on_error,
+            manifest_jsonl=args.manifest_jsonl,
+            only_success_manifest=args.only_success_manifest,
+            max_failures=args.max_failures,
         )
     except LpdsHistoryRecalcError as error:
         print(f"LPDS_HISTORY_FAILED code={error}")
@@ -80,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for line in result.safe_lines():
         print(line)
-    return 0
+    return 2 if result.failed or result.failure_limit_reached else 0
 
 
 if __name__ == "__main__":

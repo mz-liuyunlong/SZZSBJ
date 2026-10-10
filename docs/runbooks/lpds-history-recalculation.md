@@ -5,7 +5,7 @@
 This runbook documents the database-only runner introduced for the historical Walmart
 low-price delivery surcharge (LPDS) recalculation. Merging the runner does **not** authorize
 production execution. Production dry-run, commit, and restore each require a separate Owner
-authorization naming the account and bounded business date.
+authorization naming the account and bounded business-date scope.
 
 The runner supports two explicit recalculation modes:
 
@@ -21,7 +21,9 @@ Both modes:
 - never creates a Lingxing, Walmart, advertising, order, refund, or Token API client;
 - never dispatches a task-center or Celery sync;
 - defaults to a real transactional dry-run followed by `ROLLBACK`;
-- processes one account business day per transaction and stops after the first failure;
+- processes one account business day per transaction;
+- can record a safe JSONL manifest and continue after an isolated, rolled-back date failure;
+- always stops on system-level safety failures or when the configured failure limit is reached;
 - writes no product identifiers or URLs to its console summary.
 
 It must not be reused for manual fixes to commissions, WFS base fees, storage fees, refunds,
@@ -36,8 +38,9 @@ the #207 gate remains mandatory and must not be weakened.
 
 Production target counts, dates, and financial amounts are intentionally excluded from this
 public runbook. The runner derives the current bounded scope at execution time and rechecks each
-target day. It stops if a target is empty, mixed-version, unknown-version, or has changed in a way
-that violates its gates.
+target day. Current-version and empty dates are skipped. Mixed/unknown versions and date-level
+validation failures are rolled back and recorded; they can be bypassed only by an explicitly
+authorized `--continue-on-error` batch. System-level failures always stop the batch.
 
 ## CLI
 
@@ -68,6 +71,27 @@ uv run python scripts/recalculate_lpds_history.py \
   --limit-days 1
 ```
 
+Approved batch LPDS-only dry-run:
+
+```bash
+uv run python scripts/recalculate_lpds_history.py \
+  --source-account-ref '<approved-account-ref>' \
+  --start-date '<approved-start-date>' \
+  --end-date '<approved-end-date>' \
+  --recalculation-mode lpds-only \
+  --dry-run \
+  --continue-on-error \
+  --manifest-jsonl '<protected-new-dry-run-manifest.jsonl>' \
+  --max-failures '<approved-failure-limit>' \
+  --limit-days '<approved-day-limit>'
+```
+
+`--manifest-jsonl` must name a new file. It is created with mode `0600`. A date-level validation
+failure is rolled back and recorded before the next date starts. Database-contract, active-sync,
+backup, external-client, non-target-data, rollback, and post-transaction verification failures
+remain fail-closed for the whole batch. The CLI exits non-zero when any date failed, even when
+later dates were safely processed.
+
 `lpds-only` changes only `wfs_low_price_surcharge_amount`, `wfs_fee_total_amount`,
 `gross_profit_amount`, `gross_margin`, `roi`, and `calc_version`. It preserves system and business
 timestamps, business keys, sales, samples, refunds, advertising, SEM, commission, purchase,
@@ -76,22 +100,40 @@ profit remains NULL. Order Profit receives the LPDS rollup from the updated Dail
 preserving the same NULL-profit aggregation semantics.
 
 In production, even dry-run requires the separately authorized `--allow-production` flag. A
-commit additionally requires a protected backup directory and the exact confirmation phrase:
+recalculation commit additionally requires a protected backup directory, the exact confirmation
+phrase, and a mode-matching dry-run success manifest:
 
 ```bash
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
-  --date '<approved-business-date>' \
-  --mode canonical \
+  --recalculation-mode lpds-only \
   --commit \
   --allow-production \
   --backup-dir '<protected-directory-outside-the-repository>' \
+  --only-success-manifest '<validated-dry-run-manifest.jsonl>' \
+  --manifest-jsonl '<protected-new-commit-manifest.jsonl>' \
+  --continue-on-error \
+  --max-failures '<approved-failure-limit>' \
   --confirm-token CONFIRM_LPDS_HISTORY_RECALC \
-  --limit-days 1
+  --limit-days '<approved-day-limit>'
 ```
 
 Do not run this commit command from an unmerged branch. Do not place backups in Git, a shared
-directory, or a web-served directory.
+directory, or a web-served directory. Commit date arguments are intentionally omitted: the
+runner reads only `succeeded` dates from the dry-run manifest. Failed or skipped dry-run dates
+cannot enter the commit scope.
+
+## Batch manifest
+
+The manifest contains one JSON object per attempted account business day. Its allowlisted fields
+are limited to the business date, run/recalculation mode, status, safe error code, stage, elapsed
+seconds, aggregate row/group counts, aggregate profit-gap diagnostics, and the fixed safety
+markers `external_api=NOT_CALLED` and `sync=NOT_TRIGGERED`. It must not contain an account
+reference, SKU, MSKU, ItemID, title, URL, payload, Token, key, or row-level value.
+
+Only a `dry-run` record with `status=succeeded`, the requested recalculation mode, no error code,
+and `stage=complete` is a valid commit input. The input manifest must be a regular non-symlink
+file with mode `0600`, contain no duplicate successful date, and stay within `--limit-days`.
 
 ## Production hard gates
 
@@ -147,6 +189,12 @@ Dry-run executes the selected recalculation mode and the same validations as com
 transaction. It then rolls back and uses a new session to verify that the target content hash and
 all non-target content remain unchanged. It does not create a formal before-image file.
 
+Each batch date opens and closes its own transaction and post-rollback verification. A safely
+classified date-level failure is eligible for `--continue-on-error` only after rollback succeeds.
+Mixed-version, formula, rollup, business-key, and profit-invariant failures therefore cannot be
+misreported as success. `--max-failures` bounds the number of such failures before the remaining
+batch is left untouched.
+
 ## Commit backups
 
 Before a commit changes a target day, the runner writes the full Daily Sales and Order Profit
@@ -155,7 +203,9 @@ SHA-256 payload hash. The file is created exclusively with mode `0600`; only its
 name and aggregate summary may appear in logs.
 
 After commit, a new database session rechecks the persisted target snapshot and non-target
-digest. A validation failure rolls back that day and prevents all later dates from running.
+digest. A pre-commit date validation failure rolls back only that date and may continue when the
+batch was explicitly configured to do so. A rollback failure or post-commit verification failure
+stops the whole batch because persistence can no longer be safely classified.
 
 ## Restore
 
@@ -188,16 +238,17 @@ uv run python scripts/recalculate_lpds_history.py \
 Restore replaces only the two MART slices recorded for the validated account and business date.
 It does not call an external API, trigger sync, or apply a partial fee update.
 
-## Next production sequence after this validation fix
+## Next production sequence after this batch enhancement
 
 1. Confirm clean, merged production `main`, the exact Alembic revision, and no active overlapping
    DATA-PAGES work.
-2. After this PR is merged and deployed, run only the approved single-day dry-run target with
-   `--mode lpds-only --dry-run`.
-3. Review row counts, frozen-field hashes, comparable and mixed-null profit summaries,
-   LPDS/profit deltas, unexplained gap, and rollback verification.
-4. Stop. Do not commit the target and do not process later historical dates.
-5. Obtain separate Owner authorization before any commit or resumed batch plan.
+2. After this PR is merged and deployed, obtain separate Owner authorization for a bounded batch
+   dry-run scope and failure limit.
+3. Review the dry-run manifest, row counts, frozen-field hashes, comparable and mixed-null profit
+   summaries, LPDS/profit deltas, unexplained gaps, and rollback verification.
+4. Resolve or explicitly defer failed/skipped dates; do not edit the manifest to relabel them.
+5. Obtain separate Owner authorization before a commit that consumes only the successful
+   dry-run manifest.
 
 Do not use current Product Management costs to rewrite historical profit unless the Owner approves
 that separate business change.

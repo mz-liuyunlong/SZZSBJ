@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +21,7 @@ from app.modules.integration_sync.lpds_history_recalc_runner import (
     EXPECTED_CALC_VERSION,
     LEGACY_CALC_VERSION,
     ORDER_TABLE,
+    DayManifestEntry,
     DayRunResult,
     DaySnapshot,
     LpdsHistoryRecalcError,
@@ -33,10 +34,13 @@ from app.modules.integration_sync.lpds_history_recalc_runner import (
     _snapshot_from_rows,
     _validate_recalculation,
     classify_version_profiles,
+    prepare_manifest_output,
     read_backup,
+    read_success_manifest,
     resolve_bounded_dates,
     validate_lpds_formula,
     write_backup,
+    write_manifest_entry,
 )
 from scripts.recalculate_lpds_history import parse_args
 
@@ -241,6 +245,47 @@ class _Repository:
         self.lpds_only_calls.append(before)
 
 
+def _day_result(day: date, *, mode: str = "dry-run") -> DayRunResult:
+    before_snapshot = _snapshot(version=LEGACY_CALC_VERSION, surcharge=Decimal("0"))
+    before = DaySnapshot(day, before_snapshot.daily, before_snapshot.order_profit)
+    projected = _project_lpds_only_snapshot(before)
+    return DayRunResult(
+        day,
+        mode,  # type: ignore[arg-type]
+        before,
+        projected,
+        "synthetic-backup.json" if mode == "commit" else None,
+        recalculation_mode="lpds-only",
+    )
+
+
+def _write_dry_run_manifest(
+    path: Path,
+    *,
+    succeeded: tuple[date, ...],
+    failed: tuple[date, ...] = (),
+) -> None:
+    prepare_manifest_output(path)
+    for business_date in succeeded:
+        write_manifest_entry(
+            path,
+            DayManifestEntry.succeeded(_day_result(business_date), 0.1),
+        )
+    for business_date in failed:
+        write_manifest_entry(
+            path,
+            DayManifestEntry.empty(
+                business_date=business_date,
+                mode="dry-run",
+                recalculation_mode="lpds-only",
+                status="failed",
+                error_code="LPDS_FORMULA_MISMATCH",
+                stage="validation",
+                elapsed_seconds=0.1,
+            ),
+        )
+
+
 def test_cli_defaults_to_dry_run() -> None:
     args = parse_args(["--source-account-ref", ACCOUNT, "--date", DAY.isoformat()])
 
@@ -262,6 +307,27 @@ def test_cli_accepts_lpds_only_mode() -> None:
     )
 
     assert args.mode == "lpds-only"
+
+    alias_args = parse_args(
+        [
+            "--source-account-ref",
+            ACCOUNT,
+            "--date",
+            DAY.isoformat(),
+            "--recalculation-mode",
+            "lpds-only",
+            "--continue-on-error",
+            "--manifest-jsonl",
+            "batch.jsonl",
+            "--max-failures",
+            "3",
+        ]
+    )
+
+    assert alias_args.mode == "lpds-only"
+    assert alias_args.continue_on_error is True
+    assert alias_args.manifest_jsonl == Path("batch.jsonl")
+    assert alias_args.max_failures == 3
 
 
 def test_unbounded_or_oversized_date_scope_is_rejected() -> None:
@@ -325,6 +391,14 @@ def test_commit_requires_explicit_confirmation_and_backup_dir(tmp_path: Path) ->
             commit=True,
             confirm_token=COMMIT_CONFIRM_TOKEN,
         )
+    with pytest.raises(LpdsHistoryRecalcError, match="LPDS_COMMIT_SUCCESS_MANIFEST_REQUIRED"):
+        runner.run(
+            source_account_ref=ACCOUNT,
+            exact_date=DAY,
+            commit=True,
+            backup_dir=tmp_path,
+            confirm_token=COMMIT_CONFIRM_TOKEN,
+        )
 
 
 def test_production_even_dry_run_requires_allow_production() -> None:
@@ -352,6 +426,226 @@ def test_current_version_date_is_skipped_without_rebuild() -> None:
 
     assert result.completed == ()
     assert result.skipped_current_dates == (DAY,)
+
+
+def test_batch_dry_run_rolls_back_failed_day_and_continues(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    days = (DAY, DAY + timedelta(days=1), DAY + timedelta(days=2))
+    manifest_path = tmp_path / "dry-run.jsonl"
+    runner = LpdsHistoryRecalcRunner(lambda: _Session(), app_env=AppEnvironment.TEST)
+    calls: list[date] = []
+    monkeypatch.setattr(
+        runner,
+        "_version_profiles",
+        lambda *_: ({LEGACY_CALC_VERSION: 1}, {LEGACY_CALC_VERSION: 1}),
+    )
+
+    def recalculate(_: str, day: date, **__: object) -> DayRunResult:
+        calls.append(day)
+        if day == days[1]:
+            raise LpdsHistoryRecalcError(
+                "LPDS_FORMULA_MISMATCH",
+                stage="validation",
+                rolled_back=True,
+            )
+        return _day_result(day)
+
+    monkeypatch.setattr(runner, "_recalculate_day", recalculate)
+
+    result = runner.run(
+        source_account_ref=ACCOUNT,
+        start_date=days[0],
+        end_date=days[-1],
+        limit_days=3,
+        recalculation_mode="lpds-only",
+        continue_on_error=True,
+        manifest_jsonl=manifest_path,
+    )
+
+    assert calls == list(days)
+    assert tuple(item.business_date for item in result.completed) == (days[0], days[2])
+    assert len(result.failed) == 1
+    assert result.failed[0].business_date == days[1]
+    assert result.failed[0].error_code == "LPDS_FORMULA_MISMATCH"
+    assert result.failed[0].stage == "validation"
+    assert manifest_path.stat().st_mode & 0o777 == 0o600
+    payloads = [json.loads(line) for line in manifest_path.read_text().splitlines()]
+    assert [payload["status"] for payload in payloads] == ["succeeded", "failed", "succeeded"]
+    assert all(set(payload) == set(payloads[0]) for payload in payloads)
+    manifest_text = manifest_path.read_text()
+    assert ACCOUNT not in manifest_text
+    assert "synthetic-item" not in manifest_text
+    assert all(payload["external_api"] == "NOT_CALLED" for payload in payloads)
+    assert all(payload["sync"] == "NOT_TRIGGERED" for payload in payloads)
+
+
+def test_commit_reads_only_dry_run_success_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    succeeded = (DAY, DAY + timedelta(days=2))
+    failed = (DAY + timedelta(days=1),)
+    dry_run_manifest = tmp_path / "dry-run.jsonl"
+    commit_manifest = tmp_path / "commit.jsonl"
+    _write_dry_run_manifest(dry_run_manifest, succeeded=succeeded, failed=failed)
+    assert (
+        read_success_manifest(
+            dry_run_manifest,
+            recalculation_mode="lpds-only",
+            limit_days=3,
+        )
+        == succeeded
+    )
+
+    runner = LpdsHistoryRecalcRunner(lambda: _Session(), app_env=AppEnvironment.TEST)
+    calls: list[date] = []
+    monkeypatch.setattr(
+        runner,
+        "_version_profiles",
+        lambda *_: ({LEGACY_CALC_VERSION: 1}, {LEGACY_CALC_VERSION: 1}),
+    )
+
+    def recalculate(_: str, day: date, **__: object) -> DayRunResult:
+        calls.append(day)
+        return _day_result(day, mode="commit")
+
+    monkeypatch.setattr(runner, "_recalculate_day", recalculate)
+
+    result = runner.run(
+        source_account_ref=ACCOUNT,
+        limit_days=3,
+        commit=True,
+        backup_dir=tmp_path / "backups",
+        confirm_token=COMMIT_CONFIRM_TOKEN,
+        recalculation_mode="lpds-only",
+        only_success_manifest=dry_run_manifest,
+        manifest_jsonl=commit_manifest,
+    )
+
+    assert calls == list(succeeded)
+    assert tuple(item.business_date for item in result.completed) == succeeded
+    assert failed[0] not in calls
+
+
+def test_batch_commit_rolls_back_failed_day_and_continues(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    days = (DAY, DAY + timedelta(days=1), DAY + timedelta(days=2))
+    dry_run_manifest = tmp_path / "dry-run.jsonl"
+    commit_manifest = tmp_path / "commit.jsonl"
+    _write_dry_run_manifest(dry_run_manifest, succeeded=days)
+
+    runner = LpdsHistoryRecalcRunner(lambda: _Session(), app_env=AppEnvironment.TEST)
+    calls: list[date] = []
+    monkeypatch.setattr(
+        runner,
+        "_version_profiles",
+        lambda *_: ({LEGACY_CALC_VERSION: 1}, {LEGACY_CALC_VERSION: 1}),
+    )
+
+    def recalculate(_: str, day: date, **__: object) -> DayRunResult:
+        calls.append(day)
+        if day == days[1]:
+            raise LpdsHistoryRecalcError(
+                "LPDS_PROFIT_GAP_INVARIANT_FAILED",
+                stage="validation",
+                rolled_back=True,
+            )
+        return _day_result(day, mode="commit")
+
+    monkeypatch.setattr(runner, "_recalculate_day", recalculate)
+
+    result = runner.run(
+        source_account_ref=ACCOUNT,
+        limit_days=3,
+        commit=True,
+        backup_dir=tmp_path / "backups",
+        confirm_token=COMMIT_CONFIRM_TOKEN,
+        recalculation_mode="lpds-only",
+        continue_on_error=True,
+        manifest_jsonl=commit_manifest,
+        only_success_manifest=dry_run_manifest,
+    )
+
+    assert calls == list(days)
+    assert tuple(item.business_date for item in result.completed) == (days[0], days[2])
+    assert result.failed[0].business_date == days[1]
+    assert result.failed[0].error_code == "LPDS_PROFIT_GAP_INVARIANT_FAILED"
+
+
+def test_batch_stops_after_max_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    days = (DAY, DAY + timedelta(days=1), DAY + timedelta(days=2))
+    manifest_path = tmp_path / "dry-run.jsonl"
+    runner = LpdsHistoryRecalcRunner(lambda: _Session(), app_env=AppEnvironment.TEST)
+    calls: list[date] = []
+    monkeypatch.setattr(
+        runner,
+        "_version_profiles",
+        lambda *_: ({LEGACY_CALC_VERSION: 1}, {LEGACY_CALC_VERSION: 1}),
+    )
+
+    def recalculate(_: str, day: date, **__: object) -> DayRunResult:
+        calls.append(day)
+        raise LpdsHistoryRecalcError(
+            "LPDS_FORMULA_MISMATCH",
+            stage="validation",
+            rolled_back=True,
+        )
+
+    monkeypatch.setattr(runner, "_recalculate_day", recalculate)
+
+    result = runner.run(
+        source_account_ref=ACCOUNT,
+        start_date=days[0],
+        end_date=days[-1],
+        limit_days=3,
+        recalculation_mode="lpds-only",
+        continue_on_error=True,
+        manifest_jsonl=manifest_path,
+        max_failures=2,
+    )
+
+    assert calls == list(days[:2])
+    assert len(result.failed) == 2
+    assert result.failure_limit_reached is True
+
+
+def test_system_level_failure_stops_batch_even_with_continue_on_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = LpdsHistoryRecalcRunner(lambda: _Session(), app_env=AppEnvironment.TEST)
+    monkeypatch.setattr(
+        runner,
+        "_version_profiles",
+        lambda *_: ({LEGACY_CALC_VERSION: 1}, {LEGACY_CALC_VERSION: 1}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_recalculate_day",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            LpdsHistoryRecalcError(
+                "LPDS_ACTIVE_DATA_PAGES_SYNC",
+                stage="concurrency_gate",
+                rolled_back=True,
+            )
+        ),
+    )
+
+    with pytest.raises(LpdsHistoryRecalcError, match="LPDS_ACTIVE_DATA_PAGES_SYNC"):
+        runner.run(
+            source_account_ref=ACCOUNT,
+            exact_date=DAY,
+            recalculation_mode="lpds-only",
+            continue_on_error=True,
+            manifest_jsonl=tmp_path / "dry-run.jsonl",
+        )
 
 
 def test_daily_refresh_precedes_order_profit_and_dry_run_rolls_back(
