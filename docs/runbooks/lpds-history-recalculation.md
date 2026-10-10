@@ -85,7 +85,13 @@ requires all of the following:
 7. both MARTs have unique business keys and the expected new calc version;
 8. every Daily Sales LPDS value matches the canonical LPDS helper;
 9. Daily Sales and Order Profit LPDS aggregates match by local SKU;
-10. non-target dates remain byte-content stable.
+10. Daily Sales and Order Profit profit deltas match exactly, and the pre-existing aggregate
+    profit gap remains unchanged;
+11. non-target dates remain byte-content stable.
+
+Daily Sales and Order Profit profit totals are not required to be equal. The runner only permits
+the recalculation when both totals move by the same `Decimal` amount, which preserves any
+pre-existing aggregate gap. A changed gap fails validation before commit and rolls back the day.
 
 The canonical execution order is Daily Sales first, Order Profit second. No amount is updated by
 ad hoc SQL.
