@@ -1,8 +1,8 @@
 """Controlled, database-only LPDS historical recalculation.
 
-The runner deliberately calls the canonical DATA-PAGES MART refresh methods with no
-provider client.  It is dry-run by default at the CLI boundary and never dispatches a
-sync task or calls an external API.
+The runner supports canonical rebuilds and preserved-input LPDS-only projections. It is
+dry-run by default at the CLI boundary and never dispatches a sync task or calls an
+external API.
 """
 
 from __future__ import annotations
@@ -15,13 +15,13 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, Final, Literal, Protocol, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Table, delete, func, insert, select, text
+from sqlalchemy import Table, delete, func, insert, select, text, update
 from sqlalchemy.orm import Session
 
 from app.core.config import AppEnvironment
@@ -52,7 +52,32 @@ DATA_PAGES_INTERFACE_KEYS: Final = frozenset(
 LA_TZ: Final = ZoneInfo("America/Los_Angeles")
 
 RunMode = Literal["dry-run", "commit"]
+RecalculationMode = Literal["canonical", "lpds-only"]
 DaySelection = Literal["eligible", "skip-current", "empty"]
+
+MONEY_QUANTUM: Final = Decimal("0.0001")
+RATIO_QUANTUM: Final = Decimal("0.000001")
+
+DAILY_LPDS_ONLY_COLUMNS: Final = frozenset(
+    {
+        "wfs_low_price_surcharge_amount",
+        "wfs_fee_total_amount",
+        "gross_profit_amount",
+        "gross_margin",
+        "roi",
+        "calc_version",
+    }
+)
+ORDER_LPDS_ONLY_COLUMNS: Final = frozenset(
+    {
+        "wfs_low_price_surcharge_amount",
+        "wfs_fee_total_amount",
+        "gross_profit_amount",
+        "gross_margin",
+        "roi",
+        "calc_version",
+    }
+)
 
 DAILY_TABLE: Final[Table] = cast(Table, DailySalesItemDayMart.__table__)
 ORDER_TABLE: Final[Table] = cast(Table, OrderProfitSkuDayMart.__table__)
@@ -101,6 +126,7 @@ class DayRunResult:
     before: DaySnapshot
     after: DaySnapshot
     backup_filename: str | None
+    recalculation_mode: RecalculationMode = "canonical"
 
     def safe_lines(self) -> tuple[str, ...]:
         surcharge_delta = self.after.daily.surcharge_sum - self.before.daily.surcharge_sum
@@ -114,6 +140,7 @@ class DayRunResult:
             (
                 "LPDS_DAY_COMPLETE "
                 f"date={self.business_date.isoformat()} mode={self.mode} "
+                f"recalculation_mode={self.recalculation_mode} "
                 f"daily_rows={self.after.daily.row_count} "
                 f"order_profit_rows={self.after.order_profit.row_count}"
             ),
@@ -171,6 +198,7 @@ class LpdsHistoryRunResult:
     completed: tuple[DayRunResult, ...]
     skipped_current_dates: tuple[date, ...]
     skipped_empty_dates: tuple[date, ...]
+    recalculation_mode: RecalculationMode = "canonical"
 
     def safe_lines(self) -> tuple[str, ...]:
         lines: list[str] = []
@@ -178,7 +206,8 @@ class LpdsHistoryRunResult:
             lines.extend(result.safe_lines())
         lines.append(
             "LPDS_HISTORY_COMPLETE "
-            f"mode={self.mode} completed_days={len(self.completed)} "
+            f"mode={self.mode} recalculation_mode={self.recalculation_mode} "
+            f"completed_days={len(self.completed)} "
             f"skipped_current_days={len(self.skipped_current_dates)} "
             f"skipped_empty_days={len(self.skipped_empty_dates)} "
             "external_api=NOT_CALLED sync=NOT_TRIGGERED"
@@ -365,6 +394,39 @@ class LpdsHistoryRepository:
             if table_snapshot.rows:
                 self.session.execute(insert(table), list(table_snapshot.rows))
 
+    def apply_lpds_only(self, before: DaySnapshot) -> None:
+        """Apply only the LPDS projection while preserving every historical input."""
+        projected = _project_lpds_only_snapshot(before)
+        self._apply_projected_rows(
+            DAILY_TABLE,
+            projected.daily.rows,
+            DAILY_LPDS_ONLY_COLUMNS,
+        )
+        self._apply_projected_rows(
+            ORDER_TABLE,
+            projected.order_profit.rows,
+            ORDER_LPDS_ONLY_COLUMNS,
+        )
+
+    def _apply_projected_rows(
+        self,
+        table: Table,
+        rows: Sequence[Mapping[str, Any]],
+        allowed_columns: frozenset[str],
+    ) -> None:
+        for row in rows:
+            row_id = row.get("id")
+            if row_id is None:
+                raise LpdsHistoryRecalcError("LPDS_ONLY_ROW_ID_MISSING")
+            values = {column: row.get(column) for column in allowed_columns}
+            result = self.session.execute(
+                update(table)
+                .where(table.c.id == row_id)
+                .values(**values, updated_at=table.c.updated_at)
+            )
+            if getattr(result, "rowcount", None) != 1:
+                raise LpdsHistoryRecalcError("LPDS_ONLY_ROW_UPDATE_MISMATCH")
+
     def _version_profile(
         self,
         table: Table,
@@ -440,8 +502,11 @@ class LpdsHistoryRecalcRunner:
         allow_production: bool = False,
         confirm_token: str | None = None,
         restore_from: Path | None = None,
+        recalculation_mode: RecalculationMode = "canonical",
     ) -> LpdsHistoryRunResult:
         account = _validate_account(source_account_ref)
+        if recalculation_mode not in ("canonical", "lpds-only"):
+            raise LpdsHistoryRecalcError("LPDS_RECALCULATION_MODE_INVALID")
         mode: RunMode = "commit" if commit else "dry-run"
         self._validate_authorization(
             mode=mode,
@@ -451,6 +516,8 @@ class LpdsHistoryRecalcRunner:
             backup_dir=backup_dir,
         )
         if restore_from is not None:
+            if recalculation_mode != "canonical":
+                raise LpdsHistoryRecalcError("LPDS_RESTORE_MODE_FORBIDDEN")
             if any(value is not None for value in (exact_date, start_date, end_date)):
                 raise LpdsHistoryRecalcError("LPDS_RESTORE_DATE_SCOPE_FORBIDDEN")
             backup = read_backup(restore_from)
@@ -461,7 +528,7 @@ class LpdsHistoryRecalcRunner:
                 mode=mode,
                 backup_dir=backup_dir,
             )
-            return LpdsHistoryRunResult(mode, (result,), (), ())
+            return LpdsHistoryRunResult(mode, (result,), (), (), recalculation_mode)
 
         days = resolve_bounded_dates(
             exact_date=exact_date,
@@ -492,6 +559,7 @@ class LpdsHistoryRecalcRunner:
                     day,
                     mode=mode,
                     backup_dir=backup_dir,
+                    recalculation_mode=recalculation_mode,
                 )
             )
         return LpdsHistoryRunResult(
@@ -499,6 +567,7 @@ class LpdsHistoryRecalcRunner:
             tuple(completed),
             tuple(skipped_current),
             tuple(skipped_empty),
+            recalculation_mode,
         )
 
     def _validate_authorization(
@@ -526,6 +595,7 @@ class LpdsHistoryRecalcRunner:
         *,
         mode: RunMode,
         backup_dir: Path | None,
+        recalculation_mode: RecalculationMode = "canonical",
     ) -> DayRunResult:
         session = self.session_factory()
         transaction = session.begin()
@@ -549,15 +619,24 @@ class LpdsHistoryRecalcRunner:
                     purpose="before-recalculation",
                 ).name
 
-            canonical = self.canonical_runner_factory(session, account, day)
-            if getattr(canonical, "client", None) is not None:
-                raise LpdsHistoryRecalcError("LPDS_EXTERNAL_CLIENT_FORBIDDEN")
-            canonical._refresh_daily_sales_mart()
-            canonical._refresh_order_profit_mart()
+            if recalculation_mode == "canonical":
+                canonical = self.canonical_runner_factory(session, account, day)
+                if getattr(canonical, "client", None) is not None:
+                    raise LpdsHistoryRecalcError("LPDS_EXTERNAL_CLIENT_FORBIDDEN")
+                canonical._refresh_daily_sales_mart()
+                canonical._refresh_order_profit_mart()
+            else:
+                repository.apply_lpds_only(before)
 
             after = repository.snapshot(account, day)
             non_target_after = repository.non_target_digest(account, day)
-            _validate_recalculation(before, after, non_target_before, non_target_after)
+            _validate_recalculation(
+                before,
+                after,
+                non_target_before,
+                non_target_after,
+                recalculation_mode=recalculation_mode,
+            )
             if mode == "commit":
                 transaction.commit()
             else:
@@ -571,7 +650,14 @@ class LpdsHistoryRecalcRunner:
 
         persisted = after if mode == "commit" else before
         self._verify_persisted_state(account, persisted, non_target_before)
-        return DayRunResult(day, mode, before, after, backup_filename)
+        return DayRunResult(
+            day,
+            mode,
+            before,
+            after,
+            backup_filename,
+            recalculation_mode,
+        )
 
     def _restore_day(
         self,
@@ -756,6 +842,8 @@ def _validate_recalculation(
     after: DaySnapshot,
     non_target_before: Mapping[str, ScopeDigest],
     non_target_after: Mapping[str, ScopeDigest],
+    *,
+    recalculation_mode: RecalculationMode = "canonical",
 ) -> None:
     if before.business_date != after.business_date:
         raise LpdsHistoryRecalcError("LPDS_DATE_CHANGED")
@@ -780,6 +868,8 @@ def _validate_recalculation(
     validate_lpds_formula(after.daily.rows)
     _assert_surcharge_rollup(after)
     _assert_profit_gap_invariant(before, after)
+    if recalculation_mode == "lpds-only":
+        _assert_lpds_only_projection(before, after)
     if non_target_before != non_target_after:
         raise LpdsHistoryRecalcError("LPDS_NON_TARGET_ROWS_CHANGED")
 
@@ -816,6 +906,169 @@ def _assert_profit_gap_invariant(before: DaySnapshot, after: DaySnapshot) -> Non
     post_profit_gap = after.order_profit.profit_sum - after.daily.profit_sum
     if daily_profit_delta != order_profit_delta or pre_profit_gap != post_profit_gap:
         raise LpdsHistoryRecalcError("LPDS_PROFIT_GAP_INVARIANT_FAILED")
+
+
+def _project_lpds_only_snapshot(before: DaySnapshot) -> DaySnapshot:
+    daily_rows = tuple(_project_lpds_only_daily_row(row) for row in before.daily.rows)
+    daily_by_sku: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in daily_rows:
+        daily_by_sku[_daily_rollup_key(row)].append(row)
+    order_rows = tuple(
+        _project_lpds_only_order_row(row, daily_by_sku.get(str(row.get("local_sku")), []))
+        for row in before.order_profit.rows
+    )
+    return DaySnapshot(
+        before.business_date,
+        _snapshot_from_rows(DAILY_TABLE.name, daily_rows),
+        _snapshot_from_rows(ORDER_TABLE.name, order_rows),
+    )
+
+
+def _project_lpds_only_daily_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    projected = dict(row)
+    old_surcharge = _decimal(row.get("wfs_low_price_surcharge_amount"))
+    new_surcharge = _money(
+        _low_price_delivery_surcharge(
+            _decimal(row.get("sales_amount")),
+            _decimal(row.get("sales_qty")),
+        )
+    )
+    surcharge_delta = new_surcharge - old_surcharge
+    projected["wfs_low_price_surcharge_amount"] = new_surcharge
+    projected["wfs_fee_total_amount"] = _adjust_optional_money(
+        row.get("wfs_fee_total_amount"),
+        surcharge_delta,
+    )
+    _apply_profit_delta(projected, row, surcharge_delta)
+    projected["calc_version"] = EXPECTED_CALC_VERSION
+    return projected
+
+
+def _project_lpds_only_order_row(
+    row: Mapping[str, Any],
+    daily_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    projected = dict(row)
+    new_surcharge = _money(
+        sum(
+            (_decimal(daily.get("wfs_low_price_surcharge_amount")) for daily in daily_rows),
+            Decimal("0"),
+        )
+    )
+    surcharge_delta = new_surcharge - _decimal(row.get("wfs_low_price_surcharge_amount"))
+    projected["wfs_low_price_surcharge_amount"] = new_surcharge
+    projected["wfs_fee_total_amount"] = _adjust_optional_money(
+        row.get("wfs_fee_total_amount"),
+        surcharge_delta,
+    )
+    if row.get("gross_profit_amount") is None or any(
+        daily.get("gross_profit_amount") is None for daily in daily_rows
+    ):
+        projected["gross_profit_amount"] = None
+        projected["gross_margin"] = None
+        projected["roi"] = None
+    else:
+        _apply_profit_delta(projected, row, surcharge_delta)
+    projected["calc_version"] = EXPECTED_CALC_VERSION
+    return projected
+
+
+def _apply_profit_delta(
+    projected: dict[str, Any],
+    original: Mapping[str, Any],
+    surcharge_delta: Decimal,
+) -> None:
+    if surcharge_delta == 0:
+        return
+    original_profit = original.get("gross_profit_amount")
+    if original_profit is None:
+        projected["gross_profit_amount"] = None
+        projected["gross_margin"] = original.get("gross_margin")
+        projected["roi"] = original.get("roi")
+        return
+
+    new_profit = _money(_decimal(original_profit) - surcharge_delta)
+    projected["gross_profit_amount"] = new_profit
+    projected["gross_margin"] = _adjust_optional_ratio(
+        original.get("gross_margin"),
+        new_profit,
+        _decimal(original.get("sales_amount")),
+    )
+    roi_denominator = (
+        _decimal(original.get("purchase_cost_total_usd"))
+        + _decimal(original.get("first_leg_cost_total_usd"))
+        if original.get("purchase_cost_total_usd") is not None
+        and original.get("first_leg_cost_total_usd") is not None
+        else None
+    )
+    projected["roi"] = _adjust_optional_ratio(
+        original.get("roi"),
+        new_profit,
+        roi_denominator,
+    )
+
+
+def _adjust_optional_money(value: Any, delta: Decimal) -> Decimal | None:
+    if value is None:
+        return None
+    if delta == 0:
+        return _decimal(value)
+    return _money(_decimal(value) + delta)
+
+
+def _adjust_optional_ratio(
+    original: Any,
+    numerator: Decimal,
+    denominator: Decimal | None,
+) -> Decimal | None:
+    if original is None:
+        return None
+    if denominator is None or denominator <= 0:
+        raise LpdsHistoryRecalcError("LPDS_ONLY_PROFIT_RATIO_INPUT_INVALID")
+    return (numerator / denominator).quantize(RATIO_QUANTUM, rounding=ROUND_HALF_UP)
+
+
+def _assert_lpds_only_projection(before: DaySnapshot, after: DaySnapshot) -> None:
+    _assert_preserved_columns(
+        before.daily.rows,
+        after.daily.rows,
+        DAILY_TABLE,
+        DAILY_LPDS_ONLY_COLUMNS,
+    )
+    _assert_preserved_columns(
+        before.order_profit.rows,
+        after.order_profit.rows,
+        ORDER_TABLE,
+        ORDER_LPDS_ONLY_COLUMNS,
+    )
+    expected = _project_lpds_only_snapshot(before)
+    if (
+        expected.daily.content_hash != after.daily.content_hash
+        or expected.order_profit.content_hash != after.order_profit.content_hash
+    ):
+        raise LpdsHistoryRecalcError("LPDS_ONLY_PROJECTION_MISMATCH")
+
+
+def _assert_preserved_columns(
+    before: Sequence[Mapping[str, Any]],
+    after: Sequence[Mapping[str, Any]],
+    table: Table,
+    allowed_columns: frozenset[str],
+) -> None:
+    frozen_columns = tuple(column.name for column in table.c if column.name not in allowed_columns)
+    if _rows_hash(before, include_columns=frozen_columns) != _rows_hash(
+        after,
+        include_columns=frozen_columns,
+    ):
+        raise LpdsHistoryRecalcError("LPDS_NON_LPDS_FIELDS_CHANGED")
+
+
+def _daily_rollup_key(row: Mapping[str, Any]) -> str:
+    return str(row.get("local_sku") or row.get("item_id") or "")
+
+
+def _money(value: Decimal) -> Decimal:
+    return value.quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP)
 
 
 def _assert_unique(rows: Iterable[Mapping[str, Any]], keys: Sequence[str]) -> None:

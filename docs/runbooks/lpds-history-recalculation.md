@@ -7,10 +7,17 @@ low-price delivery surcharge (LPDS) recalculation. Merging the runner does **not
 production execution. Production dry-run, commit, and restore each require a separate Owner
 authorization naming the account and bounded business date.
 
-The runner:
+The runner supports two explicit recalculation modes:
 
-- rebuilds Daily Sales and then Order Profit by calling the existing canonical DATA-PAGES MART
-  methods;
+- `canonical` (the default) rebuilds Daily Sales and then Order Profit through the existing
+  canonical DATA-PAGES MART methods. It can therefore pick up currently effective Product
+  Management cost inputs.
+- `lpds-only` is the historical repair mode. It computes LPDS from the persisted historical
+  Daily Sales rows and freezes every non-LPDS input. It does not reread Product Management
+  costs.
+
+Both modes:
+
 - never creates a Lingxing, Walmart, advertising, order, refund, or Token API client;
 - never dispatches a task-center or Celery sync;
 - defaults to a real transactional dry-run followed by `ROLLBACK`;
@@ -19,6 +26,11 @@ The runner:
 
 It must not be reused for manual fixes to commissions, WFS base fees, storage fees, refunds,
 advertising costs, or any other amount.
+
+The `lpds-only` mode exists because a canonical rehearsal for `2026-08-10` correctly failed the
+#207 profit-gap gate: the LPDS delta was valid, but current Product Management costs also changed
+historical non-LPDS amounts. Freezing those historical inputs is an explicit business decision;
+the #207 gate remains mandatory and must not be weakened.
 
 ## Audited historical scope
 
@@ -42,6 +54,7 @@ Run from `backend/` using the deployed project's Python environment:
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
   --date 2026-09-26 \
+  --mode canonical \
   --dry-run \
   --limit-days 1
 ```
@@ -51,6 +64,24 @@ exceed `--limit-days`; the safe default is one day. Dates already entirely on
 `real-data-2.0+business-rules-1+refund-v3-lpds` are skipped. Mixed or unknown versions fail
 closed.
 
+Historical LPDS-only dry-run:
+
+```bash
+uv run python scripts/recalculate_lpds_history.py \
+  --source-account-ref '<approved-account-ref>' \
+  --date 2026-08-10 \
+  --mode lpds-only \
+  --dry-run \
+  --limit-days 1
+```
+
+`lpds-only` changes only `wfs_low_price_surcharge_amount`, `wfs_fee_total_amount`,
+`gross_profit_amount`, `gross_margin`, `roi`, and `calc_version`. It preserves system and business
+timestamps, business keys, sales, samples, refunds, advertising, SEM, commission, purchase,
+first-leg, base WFS, storage, cost status, and all identity/linkage fields. A NULL historical
+profit remains NULL. Order Profit receives the LPDS rollup from the updated Daily Sales rows while
+preserving the same NULL-profit aggregation semantics.
+
 In production, even dry-run requires the separately authorized `--allow-production` flag. A
 commit additionally requires a protected backup directory and the exact confirmation phrase:
 
@@ -58,6 +89,7 @@ commit additionally requires a protected backup directory and the exact confirma
 uv run python scripts/recalculate_lpds_history.py \
   --source-account-ref '<approved-account-ref>' \
   --date 2026-09-26 \
+  --mode canonical \
   --commit \
   --allow-production \
   --backup-dir '<protected-directory-outside-the-repository>' \
@@ -89,6 +121,10 @@ requires all of the following:
     profit gap remains unchanged;
 11. non-target dates remain byte-content stable.
 
+In `lpds-only` mode, an additional byte/hash gate requires every column outside the six-field
+allowlist above to remain unchanged. The runner also compares the persisted transaction result
+with its deterministic preserved-input projection before commit.
+
 Daily Sales and Order Profit profit totals are not required to be equal. The runner only permits
 the recalculation when both totals move by the same `Decimal` amount, which preserves any
 pre-existing aggregate gap. A changed gap fails validation before commit and rolls back the day.
@@ -98,9 +134,9 @@ ad hoc SQL.
 
 ## Dry-run behavior
 
-Dry-run executes the same canonical rebuild and validations as commit inside the transaction. It
-then rolls back and uses a new session to verify that the target content hash and all non-target
-content remain unchanged. It does not create a formal before-image file.
+Dry-run executes the selected recalculation mode and the same validations as commit inside the
+transaction. It then rolls back and uses a new session to verify that the target content hash and
+all non-target content remain unchanged. It does not create a formal before-image file.
 
 ## Commit backups
 
@@ -143,12 +179,17 @@ uv run python scripts/recalculate_lpds_history.py \
 Restore replaces only the two MART slices recorded for the validated account and business date.
 It does not call an external API, trigger sync, or apply a partial fee update.
 
-## First production sequence after a future authorization
+## Next production sequence after a future authorization
 
 1. Confirm clean, merged production `main`, the exact Alembic revision, and no active overlapping
    DATA-PAGES work.
-2. Run only `2026-09-26` in dry-run mode.
-3. Review row counts, hashes, LPDS/profit deltas, and rollback verification.
-4. Stop. Do not proceed to full history.
-5. Obtain a separate explicit authorization before the `2026-09-26` commit rehearsal.
-6. Only after that commit and its new-session verification may a later bounded batch be proposed.
+2. Run only `2026-08-10` with `--mode lpds-only --dry-run`.
+3. Review row counts, frozen-field hashes, LPDS/profit deltas, profit-gap invariance, and rollback
+   verification.
+4. Stop. Do not commit and do not process the remaining historical dates.
+5. Obtain separate Owner authorization before a `2026-08-10` LPDS-only commit rehearsal.
+6. After that commit is separately reviewed, obtain another authorization before proposing the
+   remaining 17 old-version dates.
+
+Do not use current Product Management costs to rewrite historical profit unless the Owner approves
+that separate business change.
