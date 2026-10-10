@@ -1,6 +1,3 @@
-/**
- * Renders the frontend-only mock login experience; it does not provide authentication or authorization.
- */
 import {
   Alert,
   Button,
@@ -13,6 +10,8 @@ import {
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { loginWithPassword } from "@/pages/auth/authApi";
+import type { AuthUser } from "@/pages/auth/authTypes";
 import {
   authenticateMockLogin,
   MOCK_PASSWORD,
@@ -21,7 +20,7 @@ import {
 } from "@/mocks/auth";
 import "@/pages/auth/LoginPage.css";
 
-export const REMEMBERED_USERNAME_KEY = "mock_login_remembered_username";
+export const REMEMBERED_USERNAME_KEY = "login_remembered_username";
 
 interface LoginValues {
   username: string;
@@ -30,50 +29,89 @@ interface LoginValues {
 }
 
 interface LoginPageProps {
-  onLogin: (user: MockAuthUser) => void;
+  onLogin: (user: AuthUser) => void;
+}
+
+const isFrontendTestMode = () => import.meta.env.MODE === "test";
+
+function toTestAuthUser(user: MockAuthUser): AuthUser {
+  return {
+    id: user.username === "admin" ? 1 : 2,
+    username: user.username,
+    role: user.role,
+    displayName: user.displayName,
+    account: user.account,
+    avatarSrc: user.avatarSrc,
+    online: user.online,
+    roleKeys: [user.role],
+    roles: [user.role === "admin" ? "管理员" : "普通用户"],
+    permissions: user.role === "admin" ? ["*"] : [],
+  };
+}
+
+async function authenticateLogin(values: LoginValues): Promise<AuthUser> {
+  if (isFrontendTestMode()) {
+    const mockUser = authenticateMockLogin(values.username, values.password);
+    if (!mockUser) throw new Error("mock login failed");
+    return toTestAuthUser(mockUser);
+  }
+
+  return loginWithPassword({
+    username: values.username.trim(),
+    password: values.password,
+  });
 }
 
 function LoginPage({ onLogin }: LoginPageProps) {
   const [rememberedUsername] = useState(() =>
     localStorage.getItem(REMEMBERED_USERNAME_KEY),
   );
-  const [loginError, setLoginError] = useState(false);
+  const [loginError, setLoginError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
 
-  const submitLogin: FormProps<LoginValues>["onFinish"] = (values) => {
-    const user = authenticateMockLogin(values.username, values.password);
+  const submitLogin: FormProps<LoginValues>["onFinish"] = async (values) => {
+    setSubmitting(true);
+    setLoginError(undefined);
 
-    if (!user) {
-      setLoginError(true);
-      return;
+    try {
+      const user = await authenticateLogin(values);
+
+      if (values.remember) {
+        localStorage.setItem(REMEMBERED_USERNAME_KEY, values.username.trim());
+      } else {
+        localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+      }
+
+      onLogin(user);
+    } catch {
+      setLoginError(
+        isFrontendTestMode()
+          ? "账号或密码错误"
+          : "账号或密码错误，或该账号已停用",
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    setLoginError(false);
-    if (values.remember) {
-      localStorage.setItem(REMEMBERED_USERNAME_KEY, values.username);
-    } else {
-      localStorage.removeItem(REMEMBERED_USERNAME_KEY);
-    }
-    onLogin(user);
   };
 
   return (
     <section className="login-page" aria-label="登录表单区域">
       <Typography.Title level={2}>欢迎回来 👋</Typography.Title>
       <Typography.Paragraph type="secondary">
-        请输入您的账户信息以开始管理您的项目
+        请输入您的账户信息以开始管理掌上便捷系统
       </Typography.Paragraph>
 
       <Form<LoginValues>
-        name="mock-login"
+        name="login"
         layout="vertical"
         requiredMark={false}
         initialValues={{
-          username: rememberedUsername ?? MOCK_USERNAME,
-          password: MOCK_PASSWORD,
+          username: rememberedUsername ?? (isFrontendTestMode() ? MOCK_USERNAME : ""),
+          password: isFrontendTestMode() ? MOCK_PASSWORD : "",
           remember: rememberedUsername !== null,
         }}
         onFinish={submitLogin}
-        onValuesChange={() => setLoginError(false)}
+        onValuesChange={() => setLoginError(undefined)}
       >
         <Form.Item
           name="username"
@@ -83,7 +121,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
           <Input
             size="large"
             prefix={<UserOutlined aria-hidden="true" />}
-            placeholder="请输入账号：admin 或 user"
+            placeholder="请输入账号"
             autoComplete="username"
           />
         </Form.Item>
@@ -95,7 +133,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
           <Input.Password
             size="large"
             prefix={<LockOutlined aria-hidden="true" />}
-            placeholder="请输入密码：12345678"
+            placeholder="请输入密码"
             autoComplete="current-password"
           />
         </Form.Item>
@@ -105,7 +143,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
             className="login-page__feedback"
             type="error"
             showIcon
-            message="账号或密码错误"
+            message={loginError}
           />
         )}
 
@@ -113,9 +151,11 @@ function LoginPage({ onLogin }: LoginPageProps) {
           <Form.Item name="remember" valuePropName="checked" noStyle>
             <Checkbox>记住账号</Checkbox>
           </Form.Item>
-          <Link className="login-page__forgot-link" to="/forgot-password">
-            忘记密码
-          </Link>
+          <div>
+            <Link className="login-page__forgot-link" to="/forgot-password">
+              忘记密码
+            </Link>
+          </div>
         </div>
 
         <Button
@@ -124,6 +164,7 @@ function LoginPage({ onLogin }: LoginPageProps) {
           size="large"
           htmlType="submit"
           aria-label="登录"
+          loading={submitting}
           block
         >
           登录

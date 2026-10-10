@@ -9,6 +9,7 @@ from app.core.api import ApiError, ErrorCode
 from app.core.config import SettingsError, get_settings
 
 PUBLIC_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset({"/health"})
+PUBLIC_AUTH_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset({"/api/auth/login"})
 PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset({"/api/media/image-assets/"})
 PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
@@ -100,6 +101,19 @@ class Principal:
 
 def get_optional_principal(request: Request) -> Principal | None:
     """Return the temporary preview principal or fail closed."""
+    authorization = request.headers.get("Authorization")
+    if authorization and authorization.startswith("Bearer "):
+        access_token = authorization.removeprefix("Bearer ").strip()
+        if access_token:
+            try:
+                from app.modules.iam.service import resolve_principal_from_token
+
+                token_principal = resolve_principal_from_token(access_token)
+            except Exception:
+                token_principal = None
+            if token_principal is not None:
+                return token_principal
+
     path = request.scope.get("path")
     path_allowed = isinstance(path, str) and (
         any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
@@ -154,7 +168,7 @@ def enforce_protected_by_default(
     principal: Annotated[Principal | None, Depends(get_optional_principal)],
 ) -> None:
     path = request.scope.get("path")
-    if path in PUBLIC_ENDPOINT_PATHS:
+    if path in PUBLIC_ENDPOINT_PATHS or path in PUBLIC_AUTH_ENDPOINT_PATHS:
         return
     if (
         request.method == "GET"

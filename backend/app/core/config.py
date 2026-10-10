@@ -203,6 +203,21 @@ class Settings(BaseSettings):
         le=5,
         validation_alias="MEDIA_MAX_ATTEMPTS",
     )
+    feishu_bot_enabled: bool = Field(
+        default=False,
+        validation_alias="FEISHU_BOT_ENABLED",
+    )
+    feishu_app_id: str | None = Field(default=None, validation_alias="FEISHU_APP_ID")
+    feishu_app_secret: SecretStr | None = Field(
+        default=None,
+        validation_alias="FEISHU_APP_SECRET",
+    )
+    feishu_offboarding_notice_open_id: str | None = Field(
+        default=None, validation_alias="FEISHU_OFFBOARDING_NOTICE_OPEN_ID"
+    )
+    feishu_offboarding_notice_user_id: str | None = Field(
+        default=None, validation_alias="FEISHU_OFFBOARDING_NOTICE_USER_ID"
+    )
 
     @field_validator("database_url", "test_database_url")
     @classmethod

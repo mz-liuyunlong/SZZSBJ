@@ -1,10 +1,42 @@
-/** Verifies the forgot-password mock stays local, uniform, and network-free. */
+/** Verifies the internal forgot-password flow requests a Feishu password setup notice. */
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import ForgotPasswordPage from "@/pages/auth/ForgotPasswordPage";
+
+interface JsonResponseBody {
+  success: boolean;
+  data: { message: string };
+  error: null;
+  meta: null;
+  request_id: string;
+}
+
+function jsonResponse(body: JsonResponseBody) {
+  return {
+    ok: true,
+    status: 200,
+    url: "/api/auth/password-reset/request",
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === "content-type" ? "application/json" : null,
+    },
+    json: vi.fn().mockResolvedValue(body),
+    text: vi.fn().mockResolvedValue(JSON.stringify(body)),
+  } as unknown as Response;
+}
+
+const successBody: JsonResponseBody = {
+  success: true,
+  data: {
+    message: "如果姓名匹配到在职员工，系统会通过飞书发送设置密码通知。",
+  },
+  error: null,
+  meta: null,
+  request_id: "test-request-id",
+};
 
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
@@ -25,7 +57,7 @@ beforeAll(() => {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
-  vi.stubGlobal("fetch", vi.fn());
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(successBody)));
 });
 
 afterEach(() => {
@@ -40,7 +72,9 @@ function LocationProbe() {
   const location = useLocation();
   return (
     <output aria-label="当前路径">
-      {location.pathname}{location.search}{location.hash}
+      {location.pathname}
+      {location.search}
+      {location.hash}
     </output>
   );
 }
@@ -57,43 +91,44 @@ const renderPage = () =>
   );
 
 describe("ForgotPasswordPage", () => {
-  it("renders the reset form and validates an empty name", async () => {
+  it("keeps the original forgot-password visual shell and validates an empty name", async () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "忘记密码? 🙋🏻‍♂️" })).toBeVisible();
     expect(
-      screen.getByText(
-        "请输入真实飞书姓名，系统将向本人飞书发送密码重置卡片，请在卡片中设置新密码。",
-      ),
+      screen.getByText("请输入真实飞书姓名，系统将向本人飞书发送设置登录密码通知。"),
     ).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "发送重置卡片" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送飞书设置密码通知" }));
     expect(await screen.findByText("请输入你的真实姓名")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("returns the same local mock result for every non-empty name", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  it("submits a real name to request a Feishu password setup notice", async () => {
     renderPage();
-    const nameInput = screen.getByPlaceholderText("请输入你的真实姓名");
-    const submitButton = screen.getByRole("button", { name: "发送重置卡片" });
-    expect(nameInput).toHaveAttribute("autocomplete", "off");
+    const nameInput = screen.getByRole("textbox", { name: "飞书姓名" });
+    const submitButton = screen.getByRole("button", {
+      name: "发送飞书设置密码通知",
+    });
 
-    fireEvent.change(nameInput, { target: { value: "测试用户" } });
-    fireEvent.click(submitButton);
-    expect(
-      await screen.findByText("模拟提交成功：当前不会实际发送飞书卡片。"),
-    ).toBeVisible();
+    expect(nameInput).toHaveAttribute("autocomplete", "name");
 
-    fireEvent.change(nameInput, { target: { value: "不存在的用户" } });
+    fireEvent.change(nameInput, { target: { value: "刘云龙" } });
     fireEvent.click(submitButton);
+
     expect(
-      await screen.findByText("模拟提交成功：当前不会实际发送飞书卡片。"),
+      await screen.findByText("如果姓名匹配到在职员工，系统会通过飞书发送设置密码通知。"),
     ).toBeVisible();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/auth/password-reset/request",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ real_name: "刘云龙" }),
+      }),
+    );
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/forgot-password");
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
-    expect(fetch).not.toHaveBeenCalled();
-    expect(logSpy).not.toHaveBeenCalled();
   });
 
   it("returns explicitly to login", () => {
