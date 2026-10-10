@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
+from time import monotonic
 from typing import Any, Final, Literal, Protocol, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -54,6 +55,69 @@ LA_TZ: Final = ZoneInfo("America/Los_Angeles")
 RunMode = Literal["dry-run", "commit"]
 RecalculationMode = Literal["canonical", "lpds-only"]
 DaySelection = Literal["eligible", "skip-current", "empty"]
+ManifestStatus = Literal["succeeded", "failed", "skipped"]
+
+MANIFEST_FIELDS: Final = frozenset(
+    {
+        "business_date",
+        "mode",
+        "recalculation_mode",
+        "status",
+        "error_code",
+        "stage",
+        "elapsed_seconds",
+        "daily_rows",
+        "order_profit_rows",
+        "comparable_profit_groups",
+        "mixed_null_profit_groups",
+        "comparable_profit_delta_daily",
+        "comparable_profit_delta_order",
+        "mixed_null_explained_gap_change",
+        "unexplained_profit_gap_change",
+        "external_api",
+        "sync",
+    }
+)
+MANIFEST_STAGES: Final = frozenset(
+    {
+        "selection",
+        "transaction_setup",
+        "transaction_configuration",
+        "database_contract",
+        "concurrency_gate",
+        "eligibility",
+        "snapshot",
+        "backup",
+        "recalculation",
+        "validation",
+        "commit",
+        "rollback",
+        "post_transaction_verification",
+        "complete",
+    }
+)
+CONTINUABLE_DAY_ERROR_CODES: Final = frozenset(
+    {
+        "LPDS_BUSINESS_KEYS_CHANGED",
+        "LPDS_DAILY_CALC_VERSION_INVALID",
+        "LPDS_DATE_CHANGED",
+        "LPDS_DUPLICATE_BUSINESS_KEY",
+        "LPDS_FORMULA_MISMATCH",
+        "LPDS_NON_LPDS_FIELDS_CHANGED",
+        "LPDS_ONLY_PROFIT_RATIO_INPUT_INVALID",
+        "LPDS_ONLY_PROJECTION_MISMATCH",
+        "LPDS_ONLY_ROW_ID_MISSING",
+        "LPDS_ONLY_ROW_UPDATE_MISMATCH",
+        "LPDS_ORDER_CALC_VERSION_INVALID",
+        "LPDS_PROFIT_GAP_INVARIANT_FAILED",
+        "LPDS_ROW_COUNT_CHANGED",
+        "LPDS_SURCHARGE_NULL",
+        "LPDS_SURCHARGE_ROLLUP_MISMATCH",
+        "LPDS_TARGET_NO_LONGER_ELIGIBLE",
+        "LPDS_VERSION_PROFILE_INCOMPLETE",
+        "LPDS_VERSION_PROFILE_MIXED_OR_UNKNOWN",
+    }
+)
 
 MONEY_QUANTUM: Final = Decimal("0.0001")
 RATIO_QUANTUM: Final = Decimal("0.000001")
@@ -87,6 +151,18 @@ TABLE_BY_NAME: Final[dict[str, Table]] = {table.name: table for table in TABLES}
 
 class LpdsHistoryRecalcError(RuntimeError):
     """Safe runner failure containing only a stable error code."""
+
+    def __init__(
+        self,
+        code: str,
+        *,
+        stage: str | None = None,
+        rolled_back: bool | None = None,
+    ) -> None:
+        super().__init__(code)
+        self.code = code
+        self.stage = stage
+        self.rolled_back = rolled_back
 
 
 class SessionFactory(Protocol):
@@ -219,23 +295,139 @@ class DayRunResult:
 
 
 @dataclass(frozen=True, slots=True)
+class DayManifestEntry:
+    business_date: date
+    mode: RunMode
+    recalculation_mode: RecalculationMode
+    status: ManifestStatus
+    error_code: str | None
+    stage: str
+    elapsed_seconds: float
+    daily_rows: int
+    order_profit_rows: int
+    comparable_profit_groups: int
+    mixed_null_profit_groups: int
+    comparable_profit_delta_daily: Decimal
+    comparable_profit_delta_order: Decimal
+    mixed_null_explained_gap_change: Decimal
+    unexplained_profit_gap_change: Decimal
+
+    @classmethod
+    def succeeded(cls, result: DayRunResult, elapsed_seconds: float) -> DayManifestEntry:
+        summary = _profit_gap_summary(
+            result.before,
+            result.after,
+            require_lpds_explanation=result.recalculation_mode == "lpds-only",
+            validate=False,
+        )
+        return cls(
+            business_date=result.business_date,
+            mode=result.mode,
+            recalculation_mode=result.recalculation_mode,
+            status="succeeded",
+            error_code=None,
+            stage="complete",
+            elapsed_seconds=elapsed_seconds,
+            daily_rows=result.after.daily.row_count,
+            order_profit_rows=result.after.order_profit.row_count,
+            comparable_profit_groups=summary.comparable_profit_groups,
+            mixed_null_profit_groups=summary.mixed_null_profit_groups,
+            comparable_profit_delta_daily=summary.comparable_profit_delta_daily,
+            comparable_profit_delta_order=summary.comparable_profit_delta_order,
+            mixed_null_explained_gap_change=summary.mixed_null_explained_gap_change,
+            unexplained_profit_gap_change=summary.unexplained_profit_gap_change,
+        )
+
+    @classmethod
+    def empty(
+        cls,
+        *,
+        business_date: date,
+        mode: RunMode,
+        recalculation_mode: RecalculationMode,
+        status: ManifestStatus,
+        error_code: str,
+        stage: str,
+        elapsed_seconds: float,
+        daily_rows: int = 0,
+        order_profit_rows: int = 0,
+    ) -> DayManifestEntry:
+        return cls(
+            business_date=business_date,
+            mode=mode,
+            recalculation_mode=recalculation_mode,
+            status=status,
+            error_code=error_code,
+            stage=stage,
+            elapsed_seconds=elapsed_seconds,
+            daily_rows=daily_rows,
+            order_profit_rows=order_profit_rows,
+            comparable_profit_groups=0,
+            mixed_null_profit_groups=0,
+            comparable_profit_delta_daily=Decimal("0"),
+            comparable_profit_delta_order=Decimal("0"),
+            mixed_null_explained_gap_change=Decimal("0"),
+            unexplained_profit_gap_change=Decimal("0"),
+        )
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "business_date": self.business_date.isoformat(),
+            "mode": self.mode,
+            "recalculation_mode": self.recalculation_mode,
+            "status": self.status,
+            "error_code": self.error_code,
+            "stage": self.stage,
+            "elapsed_seconds": round(self.elapsed_seconds, 3),
+            "daily_rows": self.daily_rows,
+            "order_profit_rows": self.order_profit_rows,
+            "comparable_profit_groups": self.comparable_profit_groups,
+            "mixed_null_profit_groups": self.mixed_null_profit_groups,
+            "comparable_profit_delta_daily": str(self.comparable_profit_delta_daily),
+            "comparable_profit_delta_order": str(self.comparable_profit_delta_order),
+            "mixed_null_explained_gap_change": str(self.mixed_null_explained_gap_change),
+            "unexplained_profit_gap_change": str(self.unexplained_profit_gap_change),
+            "external_api": "NOT_CALLED",
+            "sync": "NOT_TRIGGERED",
+        }
+
+    def safe_line(self) -> str:
+        return (
+            "LPDS_DAY_MANIFEST "
+            f"date={self.business_date.isoformat()} mode={self.mode} "
+            f"recalculation_mode={self.recalculation_mode} status={self.status} "
+            f"error_code={self.error_code or 'NONE'} stage={self.stage} "
+            f"elapsed_seconds={self.elapsed_seconds:.3f}"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class LpdsHistoryRunResult:
     mode: RunMode
     completed: tuple[DayRunResult, ...]
     skipped_current_dates: tuple[date, ...]
     skipped_empty_dates: tuple[date, ...]
     recalculation_mode: RecalculationMode = "canonical"
+    manifest_entries: tuple[DayManifestEntry, ...] = ()
+    failure_limit_reached: bool = False
+
+    @property
+    def failed(self) -> tuple[DayManifestEntry, ...]:
+        return tuple(entry for entry in self.manifest_entries if entry.status == "failed")
 
     def safe_lines(self) -> tuple[str, ...]:
         lines: list[str] = []
         for result in self.completed:
             lines.extend(result.safe_lines())
+        lines.extend(entry.safe_line() for entry in self.manifest_entries)
         lines.append(
             "LPDS_HISTORY_COMPLETE "
             f"mode={self.mode} recalculation_mode={self.recalculation_mode} "
             f"completed_days={len(self.completed)} "
             f"skipped_current_days={len(self.skipped_current_dates)} "
             f"skipped_empty_days={len(self.skipped_empty_dates)} "
+            f"failed_days={len(self.failed)} "
+            f"failure_limit_reached={str(self.failure_limit_reached).lower()} "
             "external_api=NOT_CALLED sync=NOT_TRIGGERED"
         )
         return tuple(lines)
@@ -269,6 +461,121 @@ def resolve_bounded_dates(
     if count > limit_days:
         raise LpdsHistoryRecalcError("LPDS_DATE_SCOPE_EXCEEDS_LIMIT")
     return tuple(start_date + timedelta(days=offset) for offset in range(count))
+
+
+def prepare_manifest_output(path: Path) -> None:
+    if path.is_symlink():
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_PERMISSIONS_INVALID")
+    if path.exists():
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_ALREADY_EXISTS")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags, 0o600)
+        os.fchmod(descriptor, 0o600)
+        os.fsync(descriptor)
+    except OSError:
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_WRITE_FAILED") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def write_manifest_entry(path: Path, entry: DayManifestEntry) -> None:
+    flags = os.O_WRONLY | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError:
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_WRITE_FAILED") from None
+    try:
+        if os.fstat(descriptor).st_mode & 0o777 != 0o600:
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_PERMISSIONS_INVALID")
+        line = json.dumps(
+            entry.payload(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        with os.fdopen(descriptor, "a", encoding="utf-8") as handle:
+            descriptor = -1
+            handle.write(f"{line}\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+    except LpdsHistoryRecalcError:
+        raise
+    except OSError:
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_WRITE_FAILED") from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def read_success_manifest(
+    path: Path,
+    *,
+    recalculation_mode: RecalculationMode,
+    limit_days: int,
+) -> tuple[date, ...]:
+    if not 1 <= limit_days <= 366:
+        raise LpdsHistoryRecalcError("LPDS_LIMIT_DAYS_INVALID")
+    if path.is_symlink() or not path.is_file():
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_PERMISSIONS_INVALID")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        if os.fstat(descriptor).st_mode & 0o777 != 0o600:
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_PERMISSIONS_INVALID")
+        with os.fdopen(descriptor, encoding="utf-8") as handle:
+            descriptor = None
+            lines = handle.read().splitlines()
+    except LpdsHistoryRecalcError:
+        raise
+    except OSError:
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_INVALID") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+    succeeded: list[date] = []
+    seen: set[date] = set()
+    for line in lines:
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_INVALID") from None
+        if not isinstance(payload, dict) or set(payload) != MANIFEST_FIELDS:
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_INVALID")
+        if payload.get("external_api") != "NOT_CALLED" or payload.get("sync") != "NOT_TRIGGERED":
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_SAFETY_INVALID")
+        try:
+            business_date = date.fromisoformat(str(payload["business_date"]))
+        except (TypeError, ValueError):
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_INVALID") from None
+        if business_date in seen:
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_DUPLICATE_DATE")
+        seen.add(business_date)
+        if (
+            payload.get("mode") != "dry-run"
+            or payload.get("recalculation_mode") != recalculation_mode
+            or payload.get("status") not in ("succeeded", "failed", "skipped")
+            or payload.get("stage") not in MANIFEST_STAGES
+        ):
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_INVALID")
+        if payload["status"] != "succeeded":
+            error_code = payload.get("error_code")
+            if not isinstance(error_code, str) or not error_code.startswith("LPDS_"):
+                raise LpdsHistoryRecalcError("LPDS_MANIFEST_INVALID")
+            continue
+        if payload.get("error_code") is not None or payload.get("stage") != "complete":
+            raise LpdsHistoryRecalcError("LPDS_MANIFEST_SUCCESS_INVALID")
+        succeeded.append(business_date)
+
+    if not succeeded:
+        raise LpdsHistoryRecalcError("LPDS_MANIFEST_NO_SUCCEEDED_DATES")
+    if len(succeeded) > limit_days:
+        raise LpdsHistoryRecalcError("LPDS_DATE_SCOPE_EXCEEDS_LIMIT")
+    return tuple(succeeded)
 
 
 def classify_version_profiles(
@@ -529,10 +836,16 @@ class LpdsHistoryRecalcRunner:
         confirm_token: str | None = None,
         restore_from: Path | None = None,
         recalculation_mode: RecalculationMode = "canonical",
+        continue_on_error: bool = False,
+        manifest_jsonl: Path | None = None,
+        only_success_manifest: Path | None = None,
+        max_failures: int = 50,
     ) -> LpdsHistoryRunResult:
         account = _validate_account(source_account_ref)
         if recalculation_mode not in ("canonical", "lpds-only"):
             raise LpdsHistoryRecalcError("LPDS_RECALCULATION_MODE_INVALID")
+        if max_failures < 1:
+            raise LpdsHistoryRecalcError("LPDS_MAX_FAILURES_INVALID")
         mode: RunMode = "commit" if commit else "dry-run"
         self._validate_authorization(
             mode=mode,
@@ -542,6 +855,8 @@ class LpdsHistoryRecalcRunner:
             backup_dir=backup_dir,
         )
         if restore_from is not None:
+            if continue_on_error or manifest_jsonl is not None or only_success_manifest is not None:
+                raise LpdsHistoryRecalcError("LPDS_RESTORE_BATCH_OPTIONS_FORBIDDEN")
             if recalculation_mode != "canonical":
                 raise LpdsHistoryRecalcError("LPDS_RESTORE_MODE_FORBIDDEN")
             if any(value is not None for value in (exact_date, start_date, end_date)):
@@ -556,45 +871,155 @@ class LpdsHistoryRecalcRunner:
             )
             return LpdsHistoryRunResult(mode, (result,), (), (), recalculation_mode)
 
-        days = resolve_bounded_dates(
-            exact_date=exact_date,
-            start_date=start_date,
-            end_date=end_date,
-            limit_days=limit_days,
-        )
-        eligible: list[date] = []
-        skipped_current: list[date] = []
-        skipped_empty: list[date] = []
-        for day in days:
-            with self.session_factory() as session:
-                daily, order = self.repository_factory(session).version_profiles(account, day)
-                selection = classify_version_profiles(daily, order)
-                session.rollback()
-            if selection == "eligible":
-                eligible.append(day)
-            elif selection == "skip-current":
-                skipped_current.append(day)
-            else:
-                skipped_empty.append(day)
+        if continue_on_error and manifest_jsonl is None:
+            raise LpdsHistoryRecalcError("LPDS_CONTINUE_REQUIRES_MANIFEST")
+        if commit and only_success_manifest is None:
+            raise LpdsHistoryRecalcError("LPDS_COMMIT_SUCCESS_MANIFEST_REQUIRED")
+        if not commit and only_success_manifest is not None:
+            raise LpdsHistoryRecalcError("LPDS_DRY_RUN_SUCCESS_MANIFEST_FORBIDDEN")
+        if manifest_jsonl is not None and only_success_manifest is not None:
+            if manifest_jsonl.resolve() == only_success_manifest.resolve():
+                raise LpdsHistoryRecalcError("LPDS_MANIFEST_PATH_CONFLICT")
+        if only_success_manifest is not None:
+            if any(value is not None for value in (exact_date, start_date, end_date)):
+                raise LpdsHistoryRecalcError("LPDS_MANIFEST_DATE_SCOPE_AMBIGUOUS")
+            days = read_success_manifest(
+                only_success_manifest,
+                recalculation_mode=recalculation_mode,
+                limit_days=limit_days,
+            )
+        else:
+            days = resolve_bounded_dates(
+                exact_date=exact_date,
+                start_date=start_date,
+                end_date=end_date,
+                limit_days=limit_days,
+            )
+        if manifest_jsonl is not None:
+            prepare_manifest_output(manifest_jsonl)
 
         completed: list[DayRunResult] = []
-        for day in eligible:
-            completed.append(
-                self._recalculate_day(
-                    account,
-                    day,
+        skipped_current: list[date] = []
+        skipped_empty: list[date] = []
+        manifest_entries: list[DayManifestEntry] = []
+        failures = 0
+        failure_limit_reached = False
+        for day in days:
+            started_at = monotonic()
+            try:
+                daily, order = self._version_profiles(account, day)
+                selection = classify_version_profiles(daily, order)
+                if selection == "skip-current":
+                    skipped_current.append(day)
+                    entry = DayManifestEntry.empty(
+                        business_date=day,
+                        mode=mode,
+                        recalculation_mode=recalculation_mode,
+                        status="skipped",
+                        error_code="LPDS_ALREADY_CURRENT",
+                        stage="selection",
+                        elapsed_seconds=monotonic() - started_at,
+                        daily_rows=sum(daily.values()),
+                        order_profit_rows=sum(order.values()),
+                    )
+                elif selection == "empty":
+                    skipped_empty.append(day)
+                    entry = DayManifestEntry.empty(
+                        business_date=day,
+                        mode=mode,
+                        recalculation_mode=recalculation_mode,
+                        status="skipped",
+                        error_code="LPDS_EMPTY_DATE",
+                        stage="selection",
+                        elapsed_seconds=monotonic() - started_at,
+                    )
+                else:
+                    result = self._recalculate_day(
+                        account,
+                        day,
+                        mode=mode,
+                        backup_dir=backup_dir,
+                        recalculation_mode=recalculation_mode,
+                    )
+                    completed.append(result)
+                    entry = DayManifestEntry.succeeded(result, monotonic() - started_at)
+            except LpdsHistoryRecalcError as error:
+                entry = DayManifestEntry.empty(
+                    business_date=day,
                     mode=mode,
-                    backup_dir=backup_dir,
                     recalculation_mode=recalculation_mode,
+                    status="failed",
+                    error_code=error.code,
+                    stage=error.stage or "selection",
+                    elapsed_seconds=monotonic() - started_at,
                 )
-            )
+                manifest_entries.append(entry)
+                if manifest_jsonl is not None:
+                    write_manifest_entry(manifest_jsonl, entry)
+                if (
+                    not continue_on_error
+                    or error.code not in CONTINUABLE_DAY_ERROR_CODES
+                    or error.rolled_back is False
+                ):
+                    raise
+                failures += 1
+                if failures >= max_failures:
+                    failure_limit_reached = True
+                    break
+                continue
+
+            manifest_entries.append(entry)
+            if manifest_jsonl is not None:
+                write_manifest_entry(manifest_jsonl, entry)
+
         return LpdsHistoryRunResult(
-            mode,
-            tuple(completed),
-            tuple(skipped_current),
-            tuple(skipped_empty),
-            recalculation_mode,
+            mode=mode,
+            completed=tuple(completed),
+            skipped_current_dates=tuple(skipped_current),
+            skipped_empty_dates=tuple(skipped_empty),
+            recalculation_mode=recalculation_mode,
+            manifest_entries=tuple(manifest_entries),
+            failure_limit_reached=failure_limit_reached,
         )
+
+    def _version_profiles(
+        self,
+        account: str,
+        day: date,
+    ) -> tuple[dict[str, int], dict[str, int]]:
+        with self.session_factory() as session:
+            try:
+                versions = self.repository_factory(session).version_profiles(account, day)
+                session.rollback()
+            except LpdsHistoryRecalcError as error:
+                try:
+                    session.rollback()
+                except Exception:
+                    raise LpdsHistoryRecalcError(
+                        "LPDS_ROLLBACK_FAILED",
+                        stage="selection",
+                        rolled_back=False,
+                    ) from None
+                raise LpdsHistoryRecalcError(
+                    error.code,
+                    stage=error.stage or "selection",
+                    rolled_back=True,
+                ) from error
+            except Exception:
+                try:
+                    session.rollback()
+                except Exception:
+                    raise LpdsHistoryRecalcError(
+                        "LPDS_ROLLBACK_FAILED",
+                        stage="selection",
+                        rolled_back=False,
+                    ) from None
+                raise LpdsHistoryRecalcError(
+                    "LPDS_UNEXPECTED_ERROR",
+                    stage="selection",
+                    rolled_back=True,
+                ) from None
+        return versions
 
     def _validate_authorization(
         self,
@@ -626,18 +1051,25 @@ class LpdsHistoryRecalcRunner:
         session = self.session_factory()
         transaction = session.begin()
         backup_filename: str | None = None
+        stage = "transaction_setup"
         try:
             repository = self.repository_factory(session)
+            stage = "transaction_configuration"
             repository.configure_transaction()
             repository.lock_controlled_tables()
+            stage = "database_contract"
             repository.assert_database_contract(self.app_env)
+            stage = "concurrency_gate"
             repository.assert_no_active_data_pages_sync(account, day)
+            stage = "eligibility"
             daily_versions, order_versions = repository.version_profiles(account, day)
             if classify_version_profiles(daily_versions, order_versions) != "eligible":
                 raise LpdsHistoryRecalcError("LPDS_TARGET_NO_LONGER_ELIGIBLE")
+            stage = "snapshot"
             before = repository.snapshot(account, day)
             non_target_before = repository.non_target_digest(account, day)
             if mode == "commit":
+                stage = "backup"
                 backup_filename = write_backup(
                     cast(Path, backup_dir),
                     account,
@@ -645,6 +1077,7 @@ class LpdsHistoryRecalcRunner:
                     purpose="before-recalculation",
                 ).name
 
+            stage = "recalculation"
             if recalculation_mode == "canonical":
                 canonical = self.canonical_runner_factory(session, account, day)
                 if getattr(canonical, "client", None) is not None:
@@ -654,6 +1087,7 @@ class LpdsHistoryRecalcRunner:
             else:
                 repository.apply_lpds_only(before)
 
+            stage = "validation"
             after = repository.snapshot(account, day)
             non_target_after = repository.non_target_digest(account, day)
             _validate_recalculation(
@@ -663,19 +1097,51 @@ class LpdsHistoryRecalcRunner:
                 non_target_after,
                 recalculation_mode=recalculation_mode,
             )
+            stage = "commit" if mode == "commit" else "rollback"
             if mode == "commit":
                 transaction.commit()
             else:
                 transaction.rollback()
-        except Exception:
-            if transaction.is_active:
-                transaction.rollback()
-            raise
+        except Exception as error:
+            rolled_back = False
+            try:
+                if transaction.is_active:
+                    transaction.rollback()
+                    rolled_back = True
+            except Exception:
+                raise LpdsHistoryRecalcError(
+                    "LPDS_ROLLBACK_FAILED",
+                    stage=stage,
+                    rolled_back=False,
+                ) from None
+            if isinstance(error, LpdsHistoryRecalcError):
+                raise LpdsHistoryRecalcError(
+                    error.code,
+                    stage=error.stage or stage,
+                    rolled_back=rolled_back,
+                ) from error
+            raise LpdsHistoryRecalcError(
+                "LPDS_UNEXPECTED_ERROR",
+                stage=stage,
+                rolled_back=rolled_back,
+            ) from None
         finally:
             session.close()
 
         persisted = after if mode == "commit" else before
-        self._verify_persisted_state(account, persisted, non_target_before)
+        try:
+            self._verify_persisted_state(account, persisted, non_target_before)
+        except Exception as error:
+            code = (
+                error.code
+                if isinstance(error, LpdsHistoryRecalcError)
+                else "LPDS_POST_TRANSACTION_VERIFICATION_FAILED"
+            )
+            raise LpdsHistoryRecalcError(
+                code,
+                stage="post_transaction_verification",
+                rolled_back=mode == "dry-run",
+            ) from error
         return DayRunResult(
             day,
             mode,
