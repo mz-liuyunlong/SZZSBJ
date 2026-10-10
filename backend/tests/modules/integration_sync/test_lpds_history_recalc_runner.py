@@ -44,6 +44,7 @@ def _daily_row(
     *,
     version: str,
     surcharge: Decimal,
+    profit: Decimal | None = None,
     item_id: str = "synthetic-item",
 ) -> dict[str, Any]:
     values = {
@@ -57,35 +58,46 @@ def _daily_row(
         "sales_amount": Decimal("9"),
         "wfs_low_price_surcharge_amount": surcharge,
         "wfs_fee_total_amount": Decimal("5") + surcharge,
-        "gross_profit_amount": Decimal("4") - surcharge,
+        "gross_profit_amount": profit if profit is not None else Decimal("4") - surcharge,
         "calc_version": version,
     }
     return {column.name: values.get(column.name) for column in DAILY_TABLE.c}
 
 
-def _order_row(*, version: str, surcharge: Decimal) -> dict[str, Any]:
+def _order_row(
+    *,
+    version: str,
+    surcharge: Decimal,
+    profit: Decimal | None = None,
+) -> dict[str, Any]:
     values = {
         "business_date_la": DAY,
         "source_account_ref": ACCOUNT,
         "local_sku": "synthetic-sku",
         "wfs_low_price_surcharge_amount": surcharge,
         "wfs_fee_total_amount": Decimal("5") + surcharge,
-        "gross_profit_amount": Decimal("4") - surcharge,
+        "gross_profit_amount": profit if profit is not None else Decimal("4") - surcharge,
         "calc_version": version,
     }
     return {column.name: values.get(column.name) for column in ORDER_TABLE.c}
 
 
-def _snapshot(*, version: str, surcharge: Decimal) -> DaySnapshot:
+def _snapshot(
+    *,
+    version: str,
+    surcharge: Decimal,
+    daily_profit: Decimal | None = None,
+    order_profit: Decimal | None = None,
+) -> DaySnapshot:
     return DaySnapshot(
         DAY,
         _snapshot_from_rows(
             DAILY_TABLE.name,
-            (_daily_row(version=version, surcharge=surcharge),),
+            (_daily_row(version=version, surcharge=surcharge, profit=daily_profit),),
         ),
         _snapshot_from_rows(
             ORDER_TABLE.name,
-            (_order_row(version=version, surcharge=surcharge),),
+            (_order_row(version=version, surcharge=surcharge, profit=order_profit),),
         ),
     )
 
@@ -296,6 +308,87 @@ def test_daily_refresh_precedes_order_profit_and_dry_run_rolls_back(
     assert result.after.daily.surcharge_sum - result.before.daily.surcharge_sum == Decimal("1")
     assert "synthetic-item" not in "\n".join(result.safe_lines())
     assert ACCOUNT not in "\n".join(result.safe_lines())
+
+
+def test_preexisting_profit_gap_is_preserved_and_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = _snapshot(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        daily_profit=Decimal("691.7949"),
+        order_profit=Decimal("694.9721"),
+    )
+    after = _snapshot(
+        version=EXPECTED_CALC_VERSION,
+        surcharge=Decimal("1"),
+        daily_profit=Decimal("625.7982"),
+        order_profit=Decimal("628.9754"),
+    )
+    session = _Session()
+    repository = _Repository([before, after])
+    canonical = SimpleNamespace(
+        client=None,
+        _refresh_daily_sales_mart=lambda: None,
+        _refresh_order_profit_mart=lambda: None,
+    )
+    runner = LpdsHistoryRecalcRunner(
+        lambda: session,  # type: ignore[arg-type]
+        app_env=AppEnvironment.TEST,
+        repository_factory=lambda _: repository,  # type: ignore[arg-type,return-value]
+        canonical_runner_factory=lambda *_: canonical,
+    )
+    monkeypatch.setattr(runner, "_verify_persisted_state", lambda *_: None)
+
+    result = runner._recalculate_day(ACCOUNT, DAY, mode="dry-run", backup_dir=None)
+
+    output = "\n".join(result.safe_lines())
+    assert "daily_profit_delta=-65.9967" in output
+    assert "order_profit_delta=-65.9967" in output
+    assert "pre_profit_gap=3.1772" in output
+    assert "post_profit_gap=3.1772" in output
+    assert session.transaction.rolled_back is True
+
+
+def test_profit_gap_change_rolls_back_before_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = _snapshot(
+        version=LEGACY_CALC_VERSION,
+        surcharge=Decimal("0"),
+        daily_profit=Decimal("691.7949"),
+        order_profit=Decimal("694.9721"),
+    )
+    invalid_after = _snapshot(
+        version=EXPECTED_CALC_VERSION,
+        surcharge=Decimal("1"),
+        daily_profit=Decimal("625.7982"),
+        order_profit=Decimal("628.9755"),
+    )
+    session = _Session()
+    repository = _Repository([before, invalid_after])
+    canonical = SimpleNamespace(
+        client=None,
+        _refresh_daily_sales_mart=lambda: None,
+        _refresh_order_profit_mart=lambda: None,
+    )
+    runner = LpdsHistoryRecalcRunner(
+        lambda: session,  # type: ignore[arg-type]
+        app_env=AppEnvironment.TEST,
+        repository_factory=lambda _: repository,  # type: ignore[arg-type,return-value]
+        canonical_runner_factory=lambda *_: canonical,
+    )
+    monkeypatch.setattr(runner, "_verify_persisted_state", lambda *_: None)
+
+    with pytest.raises(
+        LpdsHistoryRecalcError,
+        match="LPDS_PROFIT_GAP_INVARIANT_FAILED",
+    ):
+        runner._recalculate_day(ACCOUNT, DAY, mode="commit", backup_dir=tmp_path)
+
+    assert session.transaction.rolled_back is True
+    assert session.transaction.committed is False
 
 
 def test_external_api_client_is_rejected_before_refresh(

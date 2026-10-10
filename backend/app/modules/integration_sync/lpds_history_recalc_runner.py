@@ -104,7 +104,12 @@ class DayRunResult:
 
     def safe_lines(self) -> tuple[str, ...]:
         surcharge_delta = self.after.daily.surcharge_sum - self.before.daily.surcharge_sum
-        profit_delta = self.after.daily.profit_sum - self.before.daily.profit_sum
+        daily_profit_delta = self.after.daily.profit_sum - self.before.daily.profit_sum
+        order_profit_delta = (
+            self.after.order_profit.profit_sum - self.before.order_profit.profit_sum
+        )
+        pre_profit_gap = self.before.order_profit.profit_sum - self.before.daily.profit_sum
+        post_profit_gap = self.after.order_profit.profit_sum - self.after.daily.profit_sum
         return (
             (
                 "LPDS_DAY_COMPLETE "
@@ -119,7 +124,7 @@ class DayRunResult:
                 f"surcharge_delta={surcharge_delta} "
                 f"profit_before={self.before.daily.profit_sum} "
                 f"profit_after={self.after.daily.profit_sum} "
-                f"profit_delta={profit_delta}"
+                f"profit_delta={daily_profit_delta}"
             ),
             (
                 "LPDS_DAY_ORDER_PROFIT_SUMMARY "
@@ -127,8 +132,16 @@ class DayRunResult:
                 f"surcharge_after={self.after.order_profit.surcharge_sum} "
                 f"profit_before={self.before.order_profit.profit_sum} "
                 f"profit_after={self.after.order_profit.profit_sum} "
+                f"profit_delta={order_profit_delta} "
                 f"wfs_before={self.before.order_profit.wfs_sum} "
                 f"wfs_after={self.after.order_profit.wfs_sum}"
+            ),
+            (
+                "LPDS_DAY_PROFIT_GAP_SUMMARY "
+                f"daily_profit_delta={daily_profit_delta} "
+                f"order_profit_delta={order_profit_delta} "
+                f"pre_profit_gap={pre_profit_gap} "
+                f"post_profit_gap={post_profit_gap}"
             ),
             (
                 "LPDS_DAY_HASHES "
@@ -766,6 +779,7 @@ def _validate_recalculation(
     _assert_unique(after.order_profit.rows, _business_key_columns(ORDER_TABLE.name))
     validate_lpds_formula(after.daily.rows)
     _assert_surcharge_rollup(after)
+    _assert_profit_gap_invariant(before, after)
     if non_target_before != non_target_after:
         raise LpdsHistoryRecalcError("LPDS_NON_TARGET_ROWS_CHANGED")
 
@@ -793,6 +807,15 @@ def _assert_surcharge_rollup(snapshot: DaySnapshot) -> None:
     }
     if dict(daily_by_sku) != order_by_sku:
         raise LpdsHistoryRecalcError("LPDS_SURCHARGE_ROLLUP_MISMATCH")
+
+
+def _assert_profit_gap_invariant(before: DaySnapshot, after: DaySnapshot) -> None:
+    daily_profit_delta = after.daily.profit_sum - before.daily.profit_sum
+    order_profit_delta = after.order_profit.profit_sum - before.order_profit.profit_sum
+    pre_profit_gap = before.order_profit.profit_sum - before.daily.profit_sum
+    post_profit_gap = after.order_profit.profit_sum - after.daily.profit_sum
+    if daily_profit_delta != order_profit_delta or pre_profit_gap != post_profit_gap:
+        raise LpdsHistoryRecalcError("LPDS_PROFIT_GAP_INVARIANT_FAILED")
 
 
 def _assert_unique(rows: Iterable[Mapping[str, Any]], keys: Sequence[str]) -> None:
