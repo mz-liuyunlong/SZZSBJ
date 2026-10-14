@@ -80,6 +80,48 @@ def list_wfs_fee_alerts(
     )
 
 
+@router.post(
+    "/api/warehouse/wfs-fee-cases/sync-legacy-preview",
+    response_model=SuccessEnvelope[WfsFeeLegacySyncResult, None],
+    responses=ERRORS,
+)
+def preview_sync_legacy_wfs_fee_cases(
+    request: Request,
+    session: db_session,
+    _: write_principal,
+) -> SuccessEnvelope[WfsFeeLegacySyncResult, None]:
+    result = WfsFeeAlertService(session).sync_legacy_cases(execute=False)
+    return success_response(request, data=result, meta=None)
+
+
+@router.post(
+    "/api/warehouse/wfs-fee-cases/sync-legacy-execute",
+    response_model=SuccessEnvelope[WfsFeeLegacySyncResult, None],
+    responses=ERRORS,
+)
+def execute_sync_legacy_wfs_fee_cases(
+    request: Request,
+    session: db_session,
+    _: write_principal,
+) -> SuccessEnvelope[WfsFeeLegacySyncResult, None]:
+    result = WfsFeeAlertService(session).sync_legacy_cases(execute=True)
+    return success_response(request, data=result, meta=None)
+
+
+@router.get(
+    "/api/warehouse/wfs-fee-cases/legacy-compare",
+    response_model=SuccessEnvelope[WfsFeeLegacyCompareResult, None],
+    responses=ERRORS,
+)
+def compare_legacy_wfs_fee_cases(
+    request: Request,
+    session: db_session,
+    _: write_principal,
+) -> SuccessEnvelope[WfsFeeLegacyCompareResult, None]:
+    result = WfsFeeAlertService(session).compare_legacy_cases()
+    return success_response(request, data=result, meta=None)
+
+
 @router.get(
     "/api/warehouse/wfs-fee-cases/{case_id}",
     response_model=SuccessEnvelope[WfsFeeCaseRead, None],
@@ -179,45 +221,3 @@ def mark_wfs_fee_case_recovered(
 ) -> SuccessEnvelope[dict[str, bool], None]:
     WfsFeeAlertService(session).mark_recovered(case_id, payload, account_refs, principal.user_id)
     return success_response(request, data={"updated": True}, meta=None)
-
-
-@router.post(
-    "/api/warehouse/wfs-fee-cases/sync-legacy-preview",
-    response_model=SuccessEnvelope[WfsFeeLegacySyncResult, None],
-    responses=ERRORS,
-)
-def preview_sync_legacy_wfs_fee_cases(
-    request: Request,
-    session: db_session,
-    _: write_principal,
-) -> SuccessEnvelope[WfsFeeLegacySyncResult, None]:
-    result = WfsFeeAlertService(session).sync_legacy_cases(execute=False)
-    return success_response(request, data=result, meta=None)
-
-
-@router.post(
-    "/api/warehouse/wfs-fee-cases/sync-legacy-execute",
-    response_model=SuccessEnvelope[WfsFeeLegacySyncResult, None],
-    responses=ERRORS,
-)
-def execute_sync_legacy_wfs_fee_cases(
-    request: Request,
-    session: db_session,
-    _: write_principal,
-) -> SuccessEnvelope[WfsFeeLegacySyncResult, None]:
-    result = WfsFeeAlertService(session).sync_legacy_cases(execute=True)
-    return success_response(request, data=result, meta=None)
-
-
-@router.get(
-    "/api/warehouse/wfs-fee-cases/legacy-compare",
-    response_model=SuccessEnvelope[WfsFeeLegacyCompareResult, None],
-    responses=ERRORS,
-)
-def compare_legacy_wfs_fee_cases(
-    request: Request,
-    session: db_session,
-    _: write_principal,
-) -> SuccessEnvelope[WfsFeeLegacyCompareResult, None]:
-    result = WfsFeeAlertService(session).compare_legacy_cases()
-    return success_response(request, data=result, meta=None)
