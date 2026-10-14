@@ -1,0 +1,673 @@
+html.onboarding-guide-html,
+body.onboarding-guide-body {
+  width: 100%;
+  min-height: 100%;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+body.onboarding-guide-body {
+  background: #f4f8ff;
+}
+
+body.onboarding-guide-body #root {
+  min-height: 100vh;
+  height: auto;
+  overflow: visible;
+}
+
+.onboarding-guide-page {
+  --guide-page-max: 1500px;
+  --guide-side-width: 304px;
+  --guide-gap: 32px;
+  --guide-blue: #1677ff;
+  --guide-blue-2: #4096ff;
+  --guide-cyan: #13c2c2;
+  --guide-purple: #7c3aed;
+  --guide-ink: #172033;
+  --guide-muted: #667085;
+  --guide-card: rgba(255, 255, 255, 0.9);
+  --guide-line: rgba(22, 119, 255, 0.12);
+
+  min-height: 100vh;
+  padding-top: 72px;
+  background:
+    radial-gradient(circle at 7% 8%, rgba(22, 119, 255, 0.18), transparent 26%),
+    radial-gradient(circle at 92% 10%, rgba(124, 58, 237, 0.14), transparent 28%),
+    radial-gradient(circle at 72% 78%, rgba(19, 194, 194, 0.1), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #eef5ff 42%, #f7f9fc 100%);
+  color: var(--guide-ink);
+  overflow: visible;
+}
+
+.onboarding-guide-page__topbar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  height: 72px;
+  padding: 0 max(28px, calc((100vw - var(--guide-page-max)) / 2 + 24px));
+  border-bottom: 1px solid var(--guide-line);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 36px rgba(31, 45, 61, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.onboarding-guide-page__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  color: #101828;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.onboarding-guide-page__brand img {
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 8px 14px rgba(22, 119, 255, 0.24));
+}
+
+.onboarding-guide-page__top-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.onboarding-guide-page__top-title strong {
+  font-size: 16px;
+}
+
+.onboarding-guide-page__top-title .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.onboarding-guide-page__top-actions .ant-btn {
+  border-radius: 12px;
+}
+
+.onboarding-guide-page__shell {
+  position: relative;
+  display: block;
+  max-width: var(--guide-page-max);
+  margin: 0 auto;
+  padding: 30px 24px 76px;
+}
+
+.onboarding-guide-page__sidebar {
+  position: fixed;
+  top: 96px;
+  left: max(24px, calc((100vw - var(--guide-page-max)) / 2 + 24px));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: var(--guide-side-width);
+  height: calc(100vh - 120px);
+  padding: 18px;
+  border: 1px solid var(--guide-line);
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 250, 255, 0.9) 100%);
+  box-shadow: 0 24px 64px rgba(31, 45, 61, 0.14);
+  backdrop-filter: blur(18px);
+  overflow: visible;
+}
+
+
+.onboarding-guide-page__sidebar-title {
+  margin: 2px 0 14px 6px;
+  color: var(--guide-muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.onboarding-guide-page__side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.onboarding-guide-page__side-nav button {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 17px;
+  background: transparent;
+  color: #344054;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.onboarding-guide-page__side-nav button .anticon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
+  background: #eef6ff;
+  color: var(--guide-blue);
+}
+
+.onboarding-guide-page__side-nav button:hover {
+  transform: translateX(3px);
+  background: #eef6ff;
+  color: var(--guide-blue);
+}
+
+.onboarding-guide-page__side-nav button.is-active {
+  background: linear-gradient(135deg, var(--guide-blue) 0%, var(--guide-blue-2) 100%);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(22, 119, 255, 0.28);
+}
+
+.onboarding-guide-page__side-nav button.is-active .anticon {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.onboarding-guide-page__sidebar-card {
+  display: block;
+  margin-top: auto;
+  border: 1px solid rgba(22, 119, 255, 0.12);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(22, 119, 255, 0.12), transparent 38%),
+    linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+  box-shadow: none;
+}
+
+.onboarding-guide-page__sidebar-card .ant-card-body {
+  padding: 18px;
+}
+
+.onboarding-guide-page__sidebar-card .ant-typography {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.onboarding-guide-page__content {
+  min-width: 0;
+  margin-left: calc(var(--guide-side-width) + var(--guide-gap));
+}
+
+.onboarding-guide-page__hero,
+.onboarding-guide-page__section,
+.onboarding-guide-page__complete {
+  position: relative;
+  border: 1px solid var(--guide-line);
+  border-radius: 34px;
+  background: var(--guide-card);
+  box-shadow: 0 24px 70px rgba(31, 45, 61, 0.11);
+  backdrop-filter: blur(18px);
+  scroll-margin-top: 100px;
+  overflow: hidden;
+}
+
+.onboarding-guide-page__hero {
+  min-height: 420px;
+  padding: 56px 60px;
+  margin-bottom: 26px;
+  border-top: 4px solid transparent;
+  background:
+    linear-gradient(var(--guide-card), var(--guide-card)) padding-box,
+    linear-gradient(90deg, var(--guide-blue), var(--guide-cyan), var(--guide-purple)) border-box;
+}
+
+
+.onboarding-guide-page__hero::after {
+  content: "Start here";
+  position: absolute;
+  right: 42px;
+  bottom: 34px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.1), rgba(124, 58, 237, 0.1));
+  color: rgba(22, 119, 255, 0.76);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.onboarding-guide-page__hero .ant-tag {
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-weight: 800;
+}
+
+.onboarding-guide-page__hero h1.ant-typography {
+  margin: 20px 0 18px;
+  max-width: 900px;
+  background: linear-gradient(135deg, #101828 0%, #1677ff 54%, #7c3aed 100%);
+  background-clip: text;
+  color: transparent;
+  font-size: clamp(48px, 5vw, 76px);
+  line-height: 1.02;
+  letter-spacing: -0.06em;
+}
+
+.onboarding-guide-page__hero .ant-typography {
+  max-width: 900px;
+  color: #344054;
+  font-size: 17px;
+  line-height: 1.95;
+}
+
+.onboarding-guide-page__hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.onboarding-guide-page__hero-actions .ant-btn {
+  height: 46px;
+  border-radius: 15px;
+  font-weight: 800;
+}
+
+.onboarding-guide-page__section {
+  padding: 34px;
+  margin-bottom: 26px;
+}
+
+.onboarding-guide-page__section::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(90deg, var(--guide-blue), var(--guide-cyan), transparent);
+  opacity: 0.78;
+}
+
+.onboarding-guide-page__section-heading {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.onboarding-guide-page__section-heading > .anticon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border-radius: 17px;
+  background: linear-gradient(135deg, #eef6ff 0%, #e8fbff 100%);
+  color: var(--guide-blue);
+  font-size: 22px;
+}
+
+.onboarding-guide-page__section-heading h2.ant-typography {
+  margin: 0 0 4px;
+  color: #101828;
+  font-size: 30px;
+  letter-spacing: -0.035em;
+}
+
+.onboarding-guide-page__entry-card,
+.onboarding-guide-page__sop-card,
+.onboarding-guide-page__timeline-card,
+.onboarding-guide-page__support-card {
+  border: 1px solid #e6efff;
+  border-radius: 23px;
+  box-shadow: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.onboarding-guide-page__entry-card:hover,
+.onboarding-guide-page__support-card:hover,
+.onboarding-guide-page__module-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(22, 119, 255, 0.38);
+  box-shadow: 0 16px 34px rgba(22, 119, 255, 0.13);
+}
+
+.onboarding-guide-page__entry-card .ant-card-body {
+  min-height: 176px;
+  padding: 24px;
+}
+
+.onboarding-guide-page__entry-card h4.ant-typography {
+  margin-top: 0;
+}
+
+.onboarding-guide-page__module-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.onboarding-guide-page__module-card {
+  min-height: 134px;
+  padding: 18px;
+  border: 1px solid #e6efff;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f8ff 100%);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.onboarding-guide-page__module-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #1559b5;
+  font-size: 16px;
+}
+
+.onboarding-guide-page__module-card span {
+  color: var(--guide-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.onboarding-guide-page__role-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.onboarding-guide-page__role-shortcuts button {
+  min-height: 78px;
+  padding: 12px;
+  border: 1px solid #dceaff;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
+  color: #344054;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.onboarding-guide-page__role-shortcuts button:hover,
+.onboarding-guide-page__role-shortcuts button.is-active {
+  transform: translateY(-2px);
+  border-color: var(--guide-blue);
+  color: var(--guide-blue);
+}
+
+.onboarding-guide-page__role-shortcuts button.is-active {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(22, 119, 255, 0.14), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+  box-shadow: 0 12px 26px rgba(22, 119, 255, 0.16);
+}
+
+.onboarding-guide-page__role-shortcuts span {
+  display: block;
+  font-weight: 900;
+}
+
+.onboarding-guide-page__role-shortcuts small {
+  display: block;
+  margin-top: 6px;
+  color: var(--guide-muted);
+}
+
+.onboarding-guide-page__sop-card .ant-card-body {
+  padding: 24px;
+}
+
+.onboarding-guide-page__role-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.1fr);
+  gap: 22px;
+  margin-top: 18px;
+  padding: 24px;
+  border: 1px solid #e4efff;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(22, 119, 255, 0.12), transparent 35%),
+    linear-gradient(135deg, #f8fbff 0%, #edf6ff 100%);
+}
+
+.onboarding-guide-page__role-panel h3.ant-typography {
+  margin-top: 0;
+}
+
+.onboarding-guide-page__role-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.9;
+}
+
+.onboarding-guide-page__focus-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onboarding-guide-page__focus-tags .ant-tag {
+  border-radius: 999px;
+}
+
+.onboarding-guide-page__metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.onboarding-guide-page__metric-grid button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 0 14px;
+  border: 1px solid #e6efff;
+  border-radius: 18px;
+  background: #f8fbff;
+  color: #344054;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.onboarding-guide-page__metric-grid button:hover {
+  transform: translateY(-2px);
+  border-color: var(--guide-blue);
+  color: var(--guide-blue);
+}
+
+.onboarding-guide-page__rules-grid {
+  margin-top: 18px;
+}
+
+.onboarding-guide-page__rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border: 1px solid #ffe0b8;
+  border-radius: 18px;
+  background: #fff8ee;
+  color: #5f370e;
+  font-weight: 800;
+}
+
+.onboarding-guide-page__rule .anticon {
+  color: #d46b08;
+}
+
+.onboarding-guide-page__faq {
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.onboarding-guide-page__support-card .ant-card-body {
+  display: grid;
+  gap: 8px;
+  min-height: 120px;
+}
+
+.onboarding-guide-page__support-card .anticon {
+  color: var(--guide-blue);
+  font-size: 22px;
+}
+
+.onboarding-guide-page__support-card strong {
+  font-size: 16px;
+}
+
+.onboarding-guide-page__support-card span {
+  color: var(--guide-muted);
+}
+
+.onboarding-guide-page__complete {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 260px;
+  gap: 24px;
+  align-items: center;
+  padding: 30px 34px;
+  background:
+    linear-gradient(135deg, rgba(22, 119, 255, 0.08), rgba(19, 194, 194, 0.08)),
+    rgba(255, 255, 255, 0.92);
+}
+
+.onboarding-guide-page__complete h3.ant-typography {
+  margin-top: 0;
+}
+
+.onboarding-guide-page__complete-actions {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .onboarding-guide-page__topbar {
+    grid-template-columns: 180px minmax(0, 1fr);
+    height: auto;
+    min-height: 72px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .onboarding-guide-page__top-actions {
+    grid-column: 1 / -1;
+  }
+
+  .onboarding-guide-page {
+    padding-top: 118px;
+  }
+
+  .onboarding-guide-page__shell {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .onboarding-guide-page__sidebar {
+    position: sticky;
+    top: 118px;
+    left: auto;
+    width: auto;
+    height: auto;
+    max-height: none;
+    padding: 10px;
+    border-radius: 24px;
+    overflow: visible;
+  }
+
+  .onboarding-guide-page__sidebar-title {
+    display: none;
+  }
+
+  .onboarding-guide-page__side-nav {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .onboarding-guide-page__side-nav button {
+    width: auto;
+    min-width: 118px;
+  }
+
+  .onboarding-guide-page__sidebar-card {
+    display: none;
+  }
+
+  .onboarding-guide-page__content {
+    margin-left: 0;
+  }
+
+  .onboarding-guide-page__module-grid,
+  .onboarding-guide-page__metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .onboarding-guide-page__role-shortcuts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .onboarding-guide-page__role-panel,
+  .onboarding-guide-page__complete {
+    grid-template-columns: 1fr;
+  }
+
+  .onboarding-guide-page__complete .ant-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .onboarding-guide-page {
+    padding-top: 146px;
+  }
+
+  .onboarding-guide-page__topbar {
+    grid-template-columns: 1fr;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .onboarding-guide-page__shell {
+    padding: 18px 16px 42px;
+  }
+
+  .onboarding-guide-page__hero,
+  .onboarding-guide-page__section,
+  .onboarding-guide-page__complete {
+    border-radius: 24px;
+  }
+
+  .onboarding-guide-page__hero {
+    min-height: 360px;
+    padding: 32px 24px;
+  }
+
+  .onboarding-guide-page__hero h1.ant-typography {
+    font-size: 38px;
+  }
+
+  .onboarding-guide-page__section {
+    padding: 22px;
+  }
+
+  .onboarding-guide-page__module-grid,
+  .onboarding-guide-page__metric-grid,
+  .onboarding-guide-page__role-shortcuts {
+    grid-template-columns: 1fr;
+  }
+}

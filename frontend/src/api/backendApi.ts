@@ -1,4 +1,5 @@
 import { beginBackendRequest } from "@/shared/network/backendRequestBusy";
+import { readAuthToken } from "@/pages/auth/authSession";
 export interface BackendEnvelope<T, M = Record<string, unknown>> {
   success: boolean;
   data: T;
@@ -29,11 +30,13 @@ export async function backendRequest<T, M = Record<string, unknown>>(
 
   try {
     const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
+    const authToken = readAuthToken();
     const response = await fetch(path, {
       credentials: "same-origin",
       ...init,
       headers: {
         ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
       },

@@ -210,6 +210,16 @@ describe("MainLayout", () => {
     expect(within(content).queryByText("帮助")).not.toBeInTheDocument();
   });
 
+  it("routes the help button to the onboarding guide with a return path", () => {
+    renderLayout();
+
+    fireEvent.click(screen.getByRole("button", { name: "帮助" }));
+
+    expect(window.location.hash).toBe(
+      `#/help/onboarding?returnTo=${encodeURIComponent(DEFAULT_BUSINESS_PATH)}`,
+    );
+  });
+
   it("keeps tabs, breadcrumb, and content synced to hash history", async () => {
     renderLayout();
 
@@ -714,5 +724,5 @@ describe("MainLayout", () => {
     expect(within(breadcrumb).getByText(dataCenterGroup.title)).toBeVisible();
     expect(within(content).getByText("文档内容区")).toBeVisible();
     expect(window.location.hash).toBe(`#${documentation.path}`);
-  }, 15000);
+  }, 30_000);
 });

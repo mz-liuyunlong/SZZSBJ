@@ -6,7 +6,7 @@ import {
   type RolePermissionState,
 } from "@/pages/settings/roleManagementTypes";
 
-const baseRoleManagementMockData: RoleManagementRow[] = [
+const baseRoleManagementMockData: Omit<RoleManagementRow, "roleKey" | "permissionKeys">[] = [
   { id: "role-ai-assistant", name: "AI助手", description: "AI 调整广告、分析数据辅助角色", preset: true, userCount: 1 },
   { id: "role-operator", name: "运营", description: "日常运营角色", preset: false, userCount: 18 },
   { id: "role-buyer", name: "采购", description: "采购计划、采购单与供应商资料维护", preset: false, userCount: 4 },
@@ -17,7 +17,7 @@ const baseRoleManagementMockData: RoleManagementRow[] = [
   { id: "role-admin", name: "管理员", description: "系统配置、用户、角色和权限维护", preset: true, userCount: 2 },
 ];
 
-const generatedRoleManagementRows: RoleManagementRow[] = Array.from({ length: 92 }, (_, index) => {
+const generatedRoleManagementRows: Omit<RoleManagementRow, "roleKey" | "permissionKeys">[] = Array.from({ length: 92 }, (_, index) => {
   const serial = String(index + baseRoleManagementMockData.length + 1).padStart(3, "0");
   return {
     id: `role-generated-${serial}`,
@@ -31,7 +31,11 @@ const generatedRoleManagementRows: RoleManagementRow[] = Array.from({ length: 92
 export const roleManagementMockData: RoleManagementRow[] = [
   ...baseRoleManagementMockData,
   ...generatedRoleManagementRows,
-];
+].map((role) => ({
+  ...role,
+  roleKey: role.id,
+  permissionKeys: [],
+}));
 
 export const pagePermissionGroups: PermissionGroup[] = [
   { title: "工作台", items: ["今日销售", "今日利润", "库存预警", "待办任务"] },
