@@ -258,7 +258,7 @@ def upgrade() -> None:
 
     op.execute("""
         create table if not exists iam_password_reset_tokens (
-            id uuid primary key default gen_random_uuid(),
+            id uuid primary key,
             user_id integer not null references app_users(id) on delete cascade,
             token_hash varchar(128) not null,
             purpose varchar(32) not null,

@@ -382,6 +382,26 @@ class IamRepository:
             },
         )
 
+    def clear_user_feishu_binding(self, user_id: int) -> None:
+        self.session.execute(
+            text(
+                """
+                update app_users
+                set
+                    feishu_name = null,
+                    feishu_open_id = null,
+                    feishu_user_id = null,
+                    feishu_union_id = null,
+                    feishu_employee_id = null,
+                    feishu_department_ids = null,
+                    feishu_last_synced_at = null,
+                    updated_at = :now
+                where id = :user_id
+                """
+            ),
+            {"user_id": user_id, "now": now_utc()},
+        )
+
     def reset_password(self, *, user_id: int, password_hash: str) -> None:
         self.session.execute(
             text(

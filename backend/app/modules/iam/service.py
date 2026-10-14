@@ -283,6 +283,7 @@ class IamService:
             feishu_department_ids=None,
             is_active=False,
         )
+        self.repository.clear_user_feishu_binding(user_id)
         self.repository.revoke_user_sessions(user_id)
         self.repository.revoke_user_password_setup_tokens(user_id)
         self.session.commit()

@@ -5,6 +5,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -127,7 +128,7 @@ def _insert_password_setup_token(
                 is_revoked
             )
             values (
-                gen_random_uuid(),
+                :id,
                 :user_id,
                 :token_hash,
                 :purpose,
@@ -141,6 +142,7 @@ def _insert_password_setup_token(
             """
         ),
         {
+            "id": str(uuid4()),
             "user_id": user_id,
             "token_hash": token_hash,
             "purpose": purpose,
