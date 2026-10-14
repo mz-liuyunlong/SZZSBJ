@@ -20,6 +20,7 @@ from app.modules.iam.security import hash_password
 
 IAM_USER_TABLE = "app_users"
 RESET_TOKEN_TTL_MINUTES = 10
+ONBOARDING_TOKEN_TTL_HOURS = 24
 PASSWORD_MIN_LENGTH = 12
 PUBLIC_RESET_MESSAGE = "如果姓名匹配到在职员工，系统会通过飞书发送设置密码通知。"
 
@@ -156,6 +157,28 @@ def _insert_password_setup_token(
     return token
 
 
+def _revoke_active_password_setup_tokens(
+    session: Session,
+    *,
+    user_id: int,
+    purpose: str | None = None,
+) -> None:
+    purpose_filter = "and purpose = :purpose" if purpose else ""
+    session.execute(
+        text(
+            f"""
+            update iam_password_reset_tokens
+            set is_revoked = true
+            where user_id = :user_id
+              {purpose_filter}
+              and used_at is null
+              and is_revoked = false
+            """
+        ),
+        {"user_id": user_id, "purpose": purpose},
+    )
+
+
 def request_password_reset(
     session: Session,
     *,
@@ -219,12 +242,19 @@ def create_employee_onboarding_password_setup(
             message="新员工未绑定飞书用户，无法发送入职设置密码通知",
         )
 
+    _revoke_active_password_setup_tokens(
+        session,
+        user_id=user_id,
+        purpose=EMPLOYEE_ONBOARDING_PURPOSE,
+    )
+    expires_at = _now() + timedelta(hours=ONBOARDING_TOKEN_TTL_HOURS)
+
     token = _insert_password_setup_token(
         session,
         user_id=user_id,
         purpose=EMPLOYEE_ONBOARDING_PURPOSE,
         delivery_target=recipient_open_id or recipient_user_id,
-        expires_at=None,
+        expires_at=expires_at,
         context=PasswordResetContext(),
     )
     session.commit()
@@ -353,6 +383,10 @@ def confirm_password_reset(
             """
         ),
         {"now": now, "token_id": reset_token["id"]},
+    )
+    _revoke_active_password_setup_tokens(
+        session,
+        user_id=int(reset_token["user_id"]),
     )
     session.commit()
 

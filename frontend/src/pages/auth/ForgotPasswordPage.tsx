@@ -12,13 +12,18 @@ function ForgotPasswordPage() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string>();
 
   const submitRequest: FormProps<ForgotPasswordValues>["onFinish"] = async (values) => {
     setSubmitting(true);
+    setError(undefined);
 
     try {
       await requestPasswordReset({ realName: values.realName.trim() });
       setSubmitted(true);
+    } catch {
+      setSubmitted(false);
+      setError("发送失败，请稍后重试或联系管理员。");
     } finally {
       setSubmitting(false);
     }
@@ -36,7 +41,10 @@ function ForgotPasswordPage() {
         layout="vertical"
         requiredMark={false}
         onFinish={submitRequest}
-        onValuesChange={() => setSubmitted(false)}
+        onValuesChange={() => {
+          setSubmitted(false);
+          setError(undefined);
+        }}
       >
         <Form.Item
           name="realName"
@@ -51,6 +59,16 @@ function ForgotPasswordPage() {
             autoComplete="name"
           />
         </Form.Item>
+
+        {error && (
+          <Alert
+            className="forgot-password-page__feedback"
+            type="error"
+            showIcon
+            message={error}
+            role="alert"
+          />
+        )}
 
         {submitted && (
           <Alert

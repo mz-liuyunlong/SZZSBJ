@@ -1,10 +1,8 @@
 import { backendRequest } from "@/api/backendApi";
-import {
-  actionPermissionGroups,
-  createDefaultRolePermissions,
-  pagePermissionGroups,
-} from "@/pages/settings/roleManagementMockData";
+import { navigation } from "@/config/navigation";
+import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
 import type {
+  PermissionGroup,
   RoleFormValues,
   RoleManagementRow,
   RolePermissionState,
@@ -20,39 +18,25 @@ interface BackendRole {
   permission_keys: string[];
 }
 
-const uiPermissionMap: Record<string, string[]> = {
-  今日销售: ["sales:daily-sales:read"],
-  今日利润: ["sales:daily-sales:read"],
-  产品管理: ["products:read"],
-  Listing管理: ["products:read"],
-  每日销售: ["sales:daily-sales:read"],
-  订单利润: ["sales:daily-sales:read"],
-  退款管理: ["aftersales:refund-management:read"],
-  库存明细: ["warehouse:wfs-fee-alert:read"],
-  库存预警: ["warehouse:wfs-fee-alert:read"],
-  采购计划: ["pmc:purchase:read"],
-  采购单: ["pmc:purchase:read"],
-  用户管理: ["settings:users:read"],
-  角色管理: ["settings:roles:read"],
-  费用规则: ["business-rules:read"],
-  查看: [
-    "products:read",
-    "sales:daily-sales:read",
-    "aftersales:refund-management:read",
-    "warehouse:wfs-fee-alert:read",
-    "pmc:purchase:read",
-  ],
-  新增: ["settings:users:write", "settings:roles:write"],
-  编辑: ["settings:users:write", "settings:roles:write", "business-rules:write"],
-  删除: ["settings:users:write", "settings:roles:write"],
-  导出: ["products:read", "sales:daily-sales:read"],
-  下载: ["products:read", "sales:daily-sales:read"],
-  设置角色: ["settings:roles:write"],
-  重置密码: ["settings:users:write"],
-  停用用户: ["settings:users:write"],
-  删除用户: ["settings:users:write"],
-  同步产品资料: ["integrations:execute"],
-  同步Listing: ["integrations:execute"],
+interface BackendPermission {
+  permission_key: string;
+  name: string;
+  group_key: string;
+  description: string | null;
+}
+
+export interface RolePermissionCatalog {
+  pagePermissionGroups: PermissionGroup[];
+  actionPermissionGroups: PermissionGroup[];
+  permissionLabels: Record<string, string>;
+  permissionDescriptions: Record<string, string>;
+}
+
+export const emptyRolePermissionCatalog: RolePermissionCatalog = {
+  pagePermissionGroups: [],
+  actionPermissionGroups: [],
+  permissionLabels: {},
+  permissionDescriptions: {},
 };
 
 function makeRoleKey(name: string): string {
@@ -77,25 +61,115 @@ function toRow(role: BackendRole): RoleManagementRow {
   };
 }
 
-function allBooleanItems() {
-  return [
-    ...pagePermissionGroups.flatMap((group) => group.items),
-    ...actionPermissionGroups.flatMap((group) => group.items),
-  ];
+function createBooleanState(groups: PermissionGroup[]) {
+  return Object.fromEntries(
+    groups.flatMap((group) => group.items.map((item) => [item, false])),
+  ) as Record<string, boolean>;
 }
 
-export function permissionKeysToState(permissionKeys: string[]): RolePermissionState {
-  const state = createDefaultRolePermissions();
+function catalogPermissionKeys(catalog: RolePermissionCatalog) {
+  return new Set([
+    ...catalog.pagePermissionGroups.flatMap((group) => group.items),
+    ...catalog.actionPermissionGroups.flatMap((group) => group.items),
+  ]);
+}
+
+function buildRolePermissionCatalog(
+  backendPermissions: BackendPermission[],
+): RolePermissionCatalog {
+  const backendPermissionKeys = new Set(
+    backendPermissions.map((permission) => permission.permission_key),
+  );
+  const permissionLabels: Record<string, string> = {};
+  const permissionDescriptions: Record<string, string> = {};
+
+  backendPermissions.forEach((permission) => {
+    permissionLabels[permission.permission_key] = permission.name;
+    if (permission.description) {
+      permissionDescriptions[permission.permission_key] = permission.description;
+    }
+  });
+
+  const navigationPermissionKeys = new Set<string>();
+  const pageLabelsByPermissionKey = new Map<string, string[]>();
+
+  const pagePermissionGroups = navigation
+    .map((group) => {
+      const items: string[] = [];
+      const groupPermissionKeys = new Set<string>();
+
+      group.children.forEach((page) => {
+        if (page.status === "hidden" || page.status === "disabled") return;
+
+        const permissionKey = getPagePermissionKey(page);
+        if (!backendPermissionKeys.has(permissionKey)) return;
+
+        navigationPermissionKeys.add(permissionKey);
+
+        if (!groupPermissionKeys.has(permissionKey)) {
+          groupPermissionKeys.add(permissionKey);
+          items.push(permissionKey);
+        }
+
+        const labels = pageLabelsByPermissionKey.get(permissionKey) ?? [];
+        if (!labels.includes(page.title)) labels.push(page.title);
+        pageLabelsByPermissionKey.set(permissionKey, labels);
+      });
+
+      return { title: group.title, items };
+    })
+    .filter((group) => group.items.length > 0);
+
+  pageLabelsByPermissionKey.forEach((labels, permissionKey) => {
+    permissionLabels[permissionKey] = labels.join(" / ");
+  });
+
+  const actionGroupsByTitle = new Map<string, string[]>();
+
+  backendPermissions.forEach((permission) => {
+    const permissionKey = permission.permission_key;
+    if (navigationPermissionKeys.has(permissionKey)) return;
+
+    const title = permission.group_key || "功能权限";
+    const items = actionGroupsByTitle.get(title) ?? [];
+    if (!items.includes(permissionKey)) items.push(permissionKey);
+    actionGroupsByTitle.set(title, items);
+  });
+
+  const actionPermissionGroups = Array.from(actionGroupsByTitle.entries()).map(
+    ([title, items]) => ({ title, items }),
+  );
+
+  return {
+    pagePermissionGroups,
+    actionPermissionGroups,
+    permissionLabels,
+    permissionDescriptions,
+  };
+}
+
+export function createDefaultRolePermissions(
+  catalog: RolePermissionCatalog = emptyRolePermissionCatalog,
+): RolePermissionState {
+  return {
+    pagePermissions: createBooleanState(catalog.pagePermissionGroups),
+    actionPermissions: createBooleanState(catalog.actionPermissionGroups),
+    fieldPermissions: {},
+  };
+}
+
+export function permissionKeysToState(
+  permissionKeys: string[],
+  catalog: RolePermissionCatalog = emptyRolePermissionCatalog,
+): RolePermissionState {
+  const state = createDefaultRolePermissions(catalog);
   const keySet = new Set(permissionKeys);
 
-  allBooleanItems().forEach((item) => {
-    const mappedKeys = uiPermissionMap[item] ?? [];
-    const checked = mappedKeys.length === 0
-      ? true
-      : mappedKeys.some((permissionKey) => keySet.has(permissionKey));
-
-    if (item in state.pagePermissions) state.pagePermissions[item] = checked;
-    if (item in state.actionPermissions) state.actionPermissions[item] = checked;
+  Object.keys(state.pagePermissions).forEach((permissionKey) => {
+    state.pagePermissions[permissionKey] = keySet.has(permissionKey);
+  });
+  Object.keys(state.actionPermissions).forEach((permissionKey) => {
+    state.actionPermissions[permissionKey] = keySet.has(permissionKey);
   });
 
   return state;
@@ -104,25 +178,50 @@ export function permissionKeysToState(permissionKeys: string[]): RolePermissionS
 export function stateToPermissionKeys(
   state: RolePermissionState,
   existingPermissionKeys: string[],
+  catalog: RolePermissionCatalog,
 ): string[] {
-  const next = new Set(existingPermissionKeys);
+  const catalogKeys = catalogPermissionKeys(catalog);
+  const next = new Set(
+    existingPermissionKeys.filter((permissionKey) => !catalogKeys.has(permissionKey)),
+  );
 
-  for (const [item, mappedKeys] of Object.entries(uiPermissionMap)) {
-    const checked = state.pagePermissions[item] ?? state.actionPermissions[item];
-    if (checked === undefined) continue;
-
-    mappedKeys.forEach((permissionKey) => {
-      if (checked) next.add(permissionKey);
-      else next.delete(permissionKey);
+  catalog.pagePermissionGroups.forEach((group) => {
+    group.items.forEach((permissionKey) => {
+      if (state.pagePermissions[permissionKey] === true) {
+        next.add(permissionKey);
+      }
     });
-  }
+  });
+
+  catalog.actionPermissionGroups.forEach((group) => {
+    group.items.forEach((permissionKey) => {
+      if (state.actionPermissions[permissionKey] === true) {
+        next.add(permissionKey);
+      }
+    });
+  });
 
   return Array.from(next).sort();
 }
 
+export async function loadRoleManagementData(): Promise<{
+  roles: RoleManagementRow[];
+  permissionCatalog: RolePermissionCatalog;
+}> {
+  const [rolesResponse, permissionsResponse] = await Promise.all([
+    backendRequest<BackendRole[]>("/api/settings/roles"),
+    backendRequest<BackendPermission[]>("/api/settings/permissions"),
+  ]);
+
+  return {
+    roles: rolesResponse.data.map(toRow),
+    permissionCatalog: buildRolePermissionCatalog(permissionsResponse.data),
+  };
+}
+
 export async function listRoles(): Promise<RoleManagementRow[]> {
-  const response = await backendRequest<BackendRole[]>("/api/settings/roles");
-  return response.data.map(toRow);
+  const data = await loadRoleManagementData();
+  return data.roles;
 }
 
 export async function createRole(values: RoleFormValues): Promise<RoleManagementRow> {
@@ -142,11 +241,12 @@ export async function createRole(values: RoleFormValues): Promise<RoleManagement
 export async function saveRolePermissions(
   role: RoleManagementRow,
   permissions: RolePermissionState,
+  catalog: RolePermissionCatalog,
 ): Promise<RoleManagementRow> {
   const response = await backendRequest<BackendRole>(`/api/settings/roles/${role.roleKey}`, {
     method: "PATCH",
     body: JSON.stringify({
-      permission_keys: stateToPermissionKeys(permissions, role.permissionKeys),
+      permission_keys: stateToPermissionKeys(permissions, role.permissionKeys, catalog),
     }),
   });
 

@@ -238,7 +238,7 @@ class FeishuService:
             else f"你好 {message.real_name}，请设置你的掌上便捷系统登录密码。"
         )
         validity_text = (
-            "入职设置链接长期有效，设置成功后自动失效。" if is_onboarding else "有效期：10 分钟。"
+            "有效期：24 小时。设置成功后自动失效。" if is_onboarding else "有效期：10 分钟。"
         )
 
         elements: list[dict[str, Any]] = [

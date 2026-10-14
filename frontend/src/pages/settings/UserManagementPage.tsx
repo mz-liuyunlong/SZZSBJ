@@ -2,6 +2,7 @@ import { PlusOutlined } from "@ant-design/icons";
 import { Button, Input, Modal, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
+import { fetchCurrentUser } from "@/pages/auth/authApi";
 import {
   REPORT_TABLE_DEFAULT_PAGE_SIZE,
   normalizeReportTablePageSize,
@@ -13,7 +14,7 @@ import UserManagementToolbar from "@/pages/settings/components/UserManagementToo
 import UserRoleModal from "@/pages/settings/components/UserRoleModal";
 import {
   createUser,
-  deactivateUser,
+  deleteUserPermanently,
   loadUserManagementData,
   resetUserPassword,
   updateUser,
@@ -49,6 +50,8 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserManagementRow>();
   const [roleUser, setRoleUser] = useState<UserManagementRow>();
+  const [currentUserId, setCurrentUserId] = useState<string>();
+  const [canHardDelete, setCanHardDelete] = useState(false);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -58,9 +61,14 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const refreshUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await loadUserManagementData();
+      const [data, currentUser] = await Promise.all([
+        loadUserManagementData(),
+        fetchCurrentUser(),
+      ]);
       setUsers(data.users);
       setRoleOptions(data.roleOptions);
+      setCurrentUserId(currentUser ? String(currentUser.id) : undefined);
+      setCanHardDelete(Boolean(currentUser?.permissions.includes("*")));
     } catch {
       void messageApi.error("用户/角色数据加载失败，请确认已登录管理员账号");
     } finally {
@@ -209,12 +217,16 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   };
 
   const deleteUser = (user: UserManagementRow) => {
-    confirmAction("删除用户", `确认删除 ${user.username}？V1 将执行停用处理。`, async () => {
-      await deactivateUser(user.id);
-      setSelectedRowKeys((current) => current.filter((key) => key !== user.id));
-      await refreshUsers();
-      void messageApi.success("用户已停用");
-    });
+    confirmAction(
+      "永久删除用户",
+      `确认永久删除 ${user.username}？此操作不可恢复。`,
+      async () => {
+        await deleteUserPermanently(user.id);
+        setSelectedRowKeys((current) => current.filter((key) => key !== user.id));
+        await refreshUsers();
+        void messageApi.success("用户已删除");
+      },
+    );
   };
 
   const bulkDisable = () => {
@@ -240,7 +252,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
             <div>
               <Typography.Title level={4}>用户管理</Typography.Title>
               <Typography.Text type="secondary">
-                真实账号管理：新增用户、设置角色、重置密码、停用/启用、删除。
+                真实账号管理：新增用户、设置角色、重置密码、停用/启用；超级管理员可永久删除。
               </Typography.Text>
             </div>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
@@ -254,6 +266,8 @@ function UserManagementPage({ page }: UserManagementPageProps) {
             currentPage={currentPage}
             pageSize={pageSize}
             selectedRowKeys={selectedRowKeys}
+            canHardDelete={canHardDelete}
+            currentUserId={currentUserId}
             onColumnWidthChange={(key, width) => setColumnWidths((current) => ({ ...current, [key]: width }))}
             onCurrentPageChange={setCurrentPage}
             onPageSizeChange={(nextPageSize) => {

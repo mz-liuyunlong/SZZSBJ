@@ -31,6 +31,7 @@ import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
+import { navigation } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
 import { isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
@@ -61,6 +62,29 @@ function PublicAuthRoute({ children }: { children: ReactNode }) {
   return <AuthLayout>{children}</AuthLayout>;
 }
 
+function shouldShowOnboardingAfterLogin() {
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem("szzsbj_show_onboarding_after_login") === "1";
+}
+
+function clearShowOnboardingAfterLogin(): void {
+  try {
+    sessionStorage.removeItem("szzsbj_show_onboarding_after_login");
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function firstAccessibleBusinessPath(user: AuthUser): string {
+  const page = navigation
+    .flatMap((group) => group.children)
+    .find((item) =>
+      isMockPageAccessibleForRole(user.role, item, user.permissions),
+    );
+
+  return page?.path ?? "/help/onboarding";
+}
+
 function LoginRoute({
   mockLoggedIn,
   onLogin,
@@ -72,8 +96,14 @@ function LoginRoute({
       <LoginPage
         onLogin={(user) => {
           const { activePath } = readTabWorkspace();
+          const shouldOpenOnboarding = shouldShowOnboardingAfterLogin();
+
           onLogin(user);
-          navigate(activePath, { replace: true });
+          clearShowOnboardingAfterLogin();
+
+          navigate(shouldOpenOnboarding ? "/help/onboarding" : activePath, {
+            replace: true,
+          });
         }}
       />
     </AuthRoute>
@@ -94,9 +124,10 @@ function BusinessRoute({
   }
 
   const activeUser = currentUser ?? DEFAULT_AUTH_USER;
+  const defaultPath = firstAccessibleBusinessPath(activeUser);
 
   if (location.pathname === "/") {
-    return <Navigate replace to={DEFAULT_BUSINESS_PATH} />;
+    return <Navigate replace to={defaultPath} />;
   }
 
   if (resolution.kind === "unknown") {
@@ -104,11 +135,17 @@ function BusinessRoute({
   }
 
   if (resolution.kind === "disabled") {
-    return <Navigate replace to={DEFAULT_BUSINESS_PATH} />;
+    return <Navigate replace to={defaultPath} />;
   }
 
-  if (!isMockPageAccessibleForRole(activeUser.role, resolution.route.page)) {
-    return <Navigate replace to={DEFAULT_BUSINESS_PATH} />;
+  if (
+    !isMockPageAccessibleForRole(
+      activeUser.role,
+      resolution.route.page,
+      activeUser.permissions,
+    )
+  ) {
+    return <Navigate replace to={defaultPath} />;
   }
 
   return (

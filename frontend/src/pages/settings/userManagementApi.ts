@@ -130,6 +130,7 @@ function toUserRow(user: BackendUser, roleOptions: UserRoleOption[]): UserManage
     email: user.email || "-",
     status: user.is_active ? "启用" : "停用",
     roles: roleNames,
+    isSuperAdmin: user.is_super_admin,
     feishuName: user.feishu_name ?? undefined,
     feishuOpenId: user.feishu_open_id ?? undefined,
     feishuUserId: user.feishu_user_id ?? undefined,
@@ -230,7 +231,7 @@ export async function resetUserPassword(userId: string, newPassword: string): Pr
   });
 }
 
-export async function deactivateUser(userId: string): Promise<void> {
+export async function deleteUserPermanently(userId: string): Promise<void> {
   await backendRequest<BackendUser>(`/api/settings/users/${userId}`, {
     method: "DELETE",
   });
