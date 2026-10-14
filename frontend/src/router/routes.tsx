@@ -62,12 +62,9 @@ function PublicAuthRoute({ children }: { children: ReactNode }) {
   return <AuthLayout>{children}</AuthLayout>;
 }
 
-function shouldShowOnboardingAfterLogin(): boolean {
-  try {
-    return sessionStorage.getItem("szzsbj_show_onboarding_after_login") === "1";
-  } catch {
-    return false;
-  }
+function shouldShowOnboardingAfterLogin() {
+  if (typeof window === "undefined") return false;
+  return window.sessionStorage.getItem("szzsbj_show_onboarding_after_login") === "1";
 }
 
 function clearShowOnboardingAfterLogin(): void {
@@ -88,18 +85,6 @@ function firstAccessibleBusinessPath(user: AuthUser): string {
   return page?.path ?? "/help/onboarding";
 }
 
-function isPathAccessibleForUser(path: string, user: AuthUser): boolean {
-  const resolution = resolveRoute(path);
-  return (
-    resolution.kind === "allowed" &&
-    isMockPageAccessibleForRole(
-      user.role,
-      resolution.route.page,
-      user.permissions,
-    )
-  );
-}
-
 function LoginRoute({
   mockLoggedIn,
   onLogin,
@@ -111,19 +96,14 @@ function LoginRoute({
       <LoginPage
         onLogin={(user) => {
           const { activePath } = readTabWorkspace();
-          const openOnboarding = shouldShowOnboardingAfterLogin();
+          const shouldOpenOnboarding = shouldShowOnboardingAfterLogin();
+
           onLogin(user);
-          if (openOnboarding) {
-            clearShowOnboardingAfterLogin();
-            navigate("/help/onboarding", { replace: true });
-            return;
-          }
-          navigate(
-            isPathAccessibleForUser(activePath, user)
-              ? activePath
-              : firstAccessibleBusinessPath(user),
-            { replace: true },
-          );
+          clearShowOnboardingAfterLogin();
+
+          navigate(shouldOpenOnboarding ? "/help/onboarding" : activePath, {
+            replace: true,
+          });
         }}
       />
     </AuthRoute>
