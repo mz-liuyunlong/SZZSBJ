@@ -1,6 +1,6 @@
 /** Listing-management page backed by DATA-PAGES MART API. */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type Key } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Key } from "react";
 import { Card, Form, Input, Modal, message } from "antd";
 
 import PageShell from "@/components/page/PageShell";
@@ -257,6 +257,12 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     [archiveStateOverrides],
   );
 
+  // Keep stable row and record references across unrelated dialog/filter state updates.
+  const displayedRows = useMemo(
+    () => applyArchiveStateOverrides(rows),
+    [rows, applyArchiveStateOverrides],
+  );
+
   const [totalRows, setTotalRows] = useState(0);
   const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
   const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
@@ -273,7 +279,46 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [restoreDialog, setRestoreDialog] = useState<ListingRestoreDialogState | null>(null);
   const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
-  useElementScrollRestoration(`${pageStateKey}:tableScroll`, listingManagementPageRootRef, ".ant-table-body");
+  const isLargeListingPage = pageSize >= 500;
+  const listingTableWrapRef = useRef<HTMLDivElement | null>(null);
+  const [virtualScrollY, setVirtualScrollY] = useState(360);
+
+  // AntD virtual Table requires a numeric scroll.y. Measure the existing flex area
+  // instead of hard-coding 620px, which previously left a blank region under rows.
+  useLayoutEffect(() => {
+    if (!isLargeListingPage) return undefined;
+    const element = listingTableWrapRef.current;
+    if (!element) return undefined;
+
+    const updateHeight = () => {
+      const height = element.getBoundingClientRect().height;
+      if (!Number.isFinite(height) || height <= 0) return;
+      // Existing table header ~40px, pagination ~42px, borders/rounding ~2px.
+      const next = Math.max(120, Math.floor(height - 84));
+      setVirtualScrollY((current) => current === next ? current : next);
+    };
+
+    updateHeight();
+    const observer = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(updateHeight)
+      : null;
+    observer?.observe(element);
+    window.addEventListener("resize", updateHeight);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateHeight);
+    };
+  }, [isLargeListingPage]);
+
+  // Save scroll only after the user stops scrolling (opt-in for this page).
+  // When virtualized, the scroll element is the virtual list holder.
+  useElementScrollRestoration(
+    `${pageStateKey}:tableScroll`,
+    listingManagementPageRootRef,
+    isLargeListingPage ? ".ant-table-tbody-virtual-holder" : ".ant-table-body",
+    160,
+  );
 
   useEffect(() => {
     setAppliedColumnKeys((current) => (
@@ -846,9 +891,14 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             />
           )}
 
-          <div className="listing-management__table-wrap">
+          <div
+            ref={listingTableWrapRef}
+            className="listing-management__table-wrap"
+            style={{ "--listing-virtual-scroll-y": `${virtualScrollY}px` } as CSSProperties}
+          >
             <ListingManagementTable
-              rows={applyArchiveStateOverrides(rows)}
+              rows={displayedRows}
+              virtualScrollY={virtualScrollY}
               total={totalRows}
               appliedColumnKeys={appliedColumnKeys}
               columnWidths={columnWidths}

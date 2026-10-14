@@ -16,9 +16,14 @@ import {
 interface CapturedTableProps {
   columns: Array<{
     key?: string;
+    fixed?: "left" | "right" | boolean;
     sorter?: (left: ListingManagementRow, right: ListingManagementRow) => number;
   }>;
   pagination: { pageSizeOptions: string[] };
+  scroll?: { x?: number; y?: number | string };
+  virtual?: boolean;
+  listItemHeight?: number;
+  rowSelection?: { fixed?: boolean };
   summary?: () => ReactNode;
 }
 
@@ -159,4 +164,38 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
       .map((option) => option.textContent)).toEqual(["50", "100", "200", "500", "1000"]);
   });
+
+  it("keeps pinned columns, sorting, selection and actions at 1000 rows with virtual scroll", () => {
+    const rows = listingManagementMockData.slice(0, 2);
+    render(
+      <ListingManagementTable
+        rows={rows}
+        total={1000}
+        appliedColumnKeys={listingColumnFields.map((field) => field.key)}
+        columnWidths={{}}
+        currentPage={1}
+        pageSize={1000}
+        virtualScrollY={456}
+        selectedRowKeys={[]}
+        onColumnWidthChange={() => undefined}
+        onCurrentPageChange={() => undefined}
+        onPageSizeChange={() => undefined}
+        onSelectionChange={() => undefined}
+        onOpenDetail={() => undefined}
+        onBatchSetTags={() => undefined}
+        onBulkExport={() => undefined}
+      />,
+    );
+
+    expect(capturedTableProps?.virtual).toBe(true);
+    expect(capturedTableProps?.listItemHeight).toBe(61);
+    expect(capturedTableProps?.scroll?.y).toBe(456);
+    expect(capturedTableProps?.rowSelection?.fixed).toBe(true);
+    expect(capturedTableProps?.columns.find((col) => col.key === "productIdName")?.fixed).toBe("left");
+    expect(capturedTableProps?.columns.find((col) => col.key === "actions")?.fixed).toBe("right");
+    expect(typeof capturedTableProps?.columns.find((col) => col.key === "skuMsku")?.sorter).toBe("function");
+    expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
+      .map((option) => option.textContent)).toEqual(["50", "100", "200", "500", "1000"]);
+  });
+
 });

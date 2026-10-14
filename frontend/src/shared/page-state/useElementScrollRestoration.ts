@@ -22,12 +22,14 @@ export function useElementScrollRestoration(
   cacheKey: string,
   rootRef: RefObject<HTMLElement | null>,
   targetSelector?: string,
+  saveDebounceMs = 0,
 ) {
   useEffect(() => {
     const rootElement = rootRef.current;
     let disposed = false;
     let animationFrame = 0;
     let cleanupScrollListener: (() => void) | undefined;
+    let pendingSaveTimer: number | undefined;
     let observedTarget: HTMLElement | null = null;
     let restoreAttempts = 0;
 
@@ -48,9 +50,26 @@ export function useElementScrollRestoration(
           cleanupScrollListener?.();
           observedTarget = target;
 
-          const handleScroll = () => saveScrollPosition(target);
+          const handleScroll = () => {
+            if (saveDebounceMs <= 0) {
+              saveScrollPosition(target);
+              return;
+            }
+            if (pendingSaveTimer !== undefined) window.clearTimeout(pendingSaveTimer);
+            pendingSaveTimer = window.setTimeout(() => {
+              pendingSaveTimer = undefined;
+              saveScrollPosition(target);
+            }, saveDebounceMs);
+          };
           target.addEventListener("scroll", handleScroll, { passive: true });
-          cleanupScrollListener = () => target.removeEventListener("scroll", handleScroll);
+          cleanupScrollListener = () => {
+            target.removeEventListener("scroll", handleScroll);
+            if (pendingSaveTimer !== undefined) {
+              window.clearTimeout(pendingSaveTimer);
+              pendingSaveTimer = undefined;
+              saveScrollPosition(target);
+            }
+          };
         }
 
         const savedPosition = readPageStateCache<ScrollPosition>(cacheKey);
@@ -78,5 +97,5 @@ export function useElementScrollRestoration(
       if (observedTarget) saveScrollPosition(observedTarget);
       cleanupScrollListener?.();
     };
-  }, [cacheKey, rootRef, targetSelector]);
+  }, [cacheKey, rootRef, targetSelector, saveDebounceMs]);
 }

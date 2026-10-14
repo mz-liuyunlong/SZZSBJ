@@ -30,6 +30,7 @@ from app.modules.data_pages.models import (
     ListingArchiveState,
     ListingGptAnalysisLink,
     ListingManagementCurrentMart,
+    ListingWfsFirstStock,
     OrderProfitSkuDayMart,
     ProductCustomTag,
     ProductCustomTagAssignment,
@@ -79,6 +80,8 @@ class ListingManagementRowProjection:
     owner_name: str | None
     product_developer_uid: str | None
     product_developer_name: str | None
+    launch_date_cn: date | None = None
+    first_wfs_seen_at_utc: datetime | None = None
 
     def __getattr__(self, name: str) -> object:
         return getattr(self.listing, name)
@@ -848,6 +851,8 @@ class ListingManagementRepository:
                 ListingManagementRowProjection(
                     listing=listing,
                     listing_start_source_raw=listing_start_source_raw,
+                    launch_date_cn=launch_date_cn,
+                    first_wfs_seen_at_utc=first_wfs_seen_at_utc,
                     owner_uid=owner_uid,
                     owner_name=owner_name,
                     product_developer_uid=product_developer_uid,
@@ -856,6 +861,8 @@ class ListingManagementRepository:
                 for (
                     listing,
                     listing_start_source_raw,
+                    launch_date_cn,
+                    first_wfs_seen_at_utc,
                     owner_uid,
                     owner_name,
                     product_developer_uid,
@@ -909,6 +916,8 @@ class ListingManagementRepository:
             ListingManagementRowProjection(
                 listing=listing,
                 listing_start_source_raw=listing_start_source_raw,
+                launch_date_cn=launch_date_cn,
+                first_wfs_seen_at_utc=first_wfs_seen_at_utc,
                 owner_uid=owner_uid,
                 owner_name=owner_name,
                 product_developer_uid=product_developer_uid,
@@ -917,6 +926,8 @@ class ListingManagementRepository:
             for (
                 listing,
                 listing_start_source_raw,
+                launch_date_cn,
+                first_wfs_seen_at_utc,
                 owner_uid,
                 owner_name,
                 product_developer_uid,
@@ -1119,6 +1130,8 @@ class ListingManagementRepository:
             select(
                 ListingManagementCurrentMart,
                 WalmartListingDimension.listing_start_source_raw,
+                ListingWfsFirstStock.launch_date_cn,
+                ListingWfsFirstStock.first_wfs_seen_at_utc,
                 owner_lookup.c.owner_uid,
                 owner_lookup.c.owner_name,
                 owner_lookup.c.product_developer_uid,
@@ -1131,6 +1144,16 @@ class ListingManagementRepository:
                     == ListingManagementCurrentMart.source_account_ref,
                     WalmartListingDimension.store_id == ListingManagementCurrentMart.store_id,
                     WalmartListingDimension.item_id == ListingManagementCurrentMart.item_id,
+                ),
+            )
+            .outerjoin(
+                ListingWfsFirstStock,
+                and_(
+                    ListingWfsFirstStock.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    ListingWfsFirstStock.store_id == ListingManagementCurrentMart.store_id,
+                    ListingWfsFirstStock.item_id == ListingManagementCurrentMart.item_id,
+                    ListingWfsFirstStock.msku == ListingManagementCurrentMart.msku,
                 ),
             )
             .outerjoin(

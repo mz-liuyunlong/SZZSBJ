@@ -722,6 +722,35 @@ class OrderProfitSkuDayMart(Base):
     )
 
 
+class ListingWfsFirstStock(Base):
+    """First real stock instant for a *newly monitored* exact Walmart MSKU."""
+
+    __tablename__ = "listing_wfs_first_stock"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            "msku",
+            name="uq_listing_wfs_first_stock_identity",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    msku: Mapped[str] = mapped_column(Text, nullable=False)
+    monitoring_started_at_utc: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    first_wfs_seen_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    launch_date_cn: Mapped[date | None] = mapped_column(Date)
+    date_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ListingManagementCurrentMart(Base):
     __tablename__ = "mart_listing_management_current"
     __table_args__ = (

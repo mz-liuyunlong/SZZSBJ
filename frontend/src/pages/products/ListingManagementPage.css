@@ -887,3 +887,16 @@
   font-weight: 600;
   color: #1f2937;
 }
+
+/* Listing-only virtual scrolling. Match the existing flex viewport; never force
+   a hard-coded 620px body height and never override AntD's virtual-list holder. */
+.listing-management__table-shell--virtual .ant-table-body {
+  height: var(--listing-virtual-scroll-y, 360px) !important;
+  max-height: var(--listing-virtual-scroll-y, 360px) !important;
+  flex: 0 0 auto !important;
+}
+
+.listing-management__table-shell--virtual .ant-table-tbody-virtual-holder {
+  min-height: 0;
+  overscroll-behavior: contain;
+}
