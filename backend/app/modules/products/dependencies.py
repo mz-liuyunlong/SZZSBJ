@@ -25,7 +25,13 @@ def get_product_scope_provider() -> ProductScopeProvider | None:
         return None
 
     def preview_scope(principal: Principal, resource: str) -> bool:
-        return principal.user_id == PREVIEW_PRINCIPAL_ID and resource == PRODUCT_SCOPE_RESOURCE
+        if resource != PRODUCT_SCOPE_RESOURCE:
+            return False
+        if principal.user_id == PREVIEW_PRINCIPAL_ID:
+            return True
+        if principal.permissions:
+            return True
+        return False
 
     return preview_scope
 

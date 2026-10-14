@@ -14,8 +14,8 @@ def require_permission(permission_key: str) -> Callable[..., Principal]:
     def dependency(
         principal: Annotated[Principal, Depends(require_principal)],
     ) -> Principal:
-        if permission_key not in principal.permissions:
-            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        return principal
+        if "*" in principal.permissions or permission_key in principal.permissions:
+            return principal
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
     return dependency

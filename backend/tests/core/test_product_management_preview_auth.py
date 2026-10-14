@@ -363,7 +363,7 @@ def test_preview_token_authorizes_integration_writes(
     assert permission in principal.permissions
 
 
-def test_preview_product_scope_only_allows_expected_principal_and_resource(
+def test_preview_product_scope_allows_preview_and_authenticated_principals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_preview(monkeypatch, source_account_refs="acct-a")
@@ -371,13 +371,20 @@ def test_preview_product_scope_only_allows_expected_principal_and_resource(
     assert provider is not None
 
     preview = Principal(user_id=PREVIEW_PRINCIPAL_ID)
-    other = Principal(user_id="synthetic-user")
+    authenticated = Principal(
+        user_id="synthetic-user",
+        permissions=frozenset({"products:read"}),
+    )
+    unauthenticated = Principal(user_id="synthetic-user")
+
     assert provider(preview, "product_management") is True
-    assert provider(other, "product_management") is False
+    assert provider(authenticated, "product_management") is True
+    assert provider(unauthenticated, "product_management") is False
     assert provider(preview, "other_resource") is False
+    assert provider(authenticated, "other_resource") is False
 
 
-def test_preview_source_account_scope_parses_and_rejects_other_principals(
+def test_preview_source_account_scope_parses_and_allows_authenticated_principals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     empty = Settings.model_validate(
@@ -398,8 +405,17 @@ def test_preview_source_account_scope_parses_and_rejects_other_principals(
     _enable_preview(monkeypatch, source_account_refs="acct-a, acct-b,acct-a")
     provider = get_source_account_scope_provider()
     assert provider is not None
-    assert provider(Principal(user_id=PREVIEW_PRINCIPAL_ID)) == frozenset({"acct-a", "acct-b"})
-    assert provider(Principal(user_id="synthetic-user")) == frozenset()
+
+    preview = Principal(user_id=PREVIEW_PRINCIPAL_ID)
+    authenticated = Principal(
+        user_id="synthetic-user",
+        permissions=frozenset({"products:read"}),
+    )
+    unauthenticated = Principal(user_id="synthetic-user")
+
+    assert provider(preview) == frozenset({"acct-a", "acct-b"})
+    assert provider(authenticated) == frozenset({"acct-a", "acct-b"})
+    assert provider(unauthenticated) == frozenset()
 
 
 def test_missing_source_account_scope_denies_all_preview_routes(
