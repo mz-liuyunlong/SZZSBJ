@@ -757,9 +757,12 @@ class ListingManagementService:
             (
                 "listed_at",
                 "上架时间",
-                lambda item: self._listing_start_csv_value(
-                    item.listing_start_at_utc,
-                    item.listing_start_source_raw,
+                lambda item: (
+                    item.launch_date_cn
+                    or self._listing_start_csv_value(
+                        item.listing_start_at_utc,
+                        item.listing_start_source_raw,
+                    )
                 ),
             ),
             ("checked_at", "检查时间", lambda item: item.calculated_at),
@@ -1068,6 +1071,10 @@ class ListingManagementService:
             fulfillment_type_name=getattr(row, "fulfillment_type_name", None),
             listing_start_at_utc=row.listing_start_at_utc,
             listing_start_source_raw=getattr(row, "listing_start_source_raw", None),
+            launch_date_cn=(
+                getattr(row, "launch_date_cn", None) if row.listing_start_at_utc is None else None
+            ),
+            first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
             category=row.category,
             wfs_available_quantity=row.wfs_available_quantity,
             available_quantity=row.available_quantity,

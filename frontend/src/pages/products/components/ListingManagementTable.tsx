@@ -18,6 +18,9 @@ import {
   type ListingManagementRow,
 } from "@/pages/products/listingManagementData";
 
+/** Match the observed two-line Listing row height without changing its visual size. */
+const LISTING_VIRTUAL_ROW_HEIGHT_ESTIMATE = 61;
+
 const minColumnWidths: Record<string, number> = {
   image: 72,
   productIdName: 240,
@@ -76,6 +79,7 @@ interface ListingManagementTableProps {
   columnWidths: Record<string, number>;
   currentPage: number;
   pageSize: number;
+  virtualScrollY?: number;
   selectedRowKeys: Key[];
   onColumnWidthChange: (key: string, width: number) => void;
   onCurrentPageChange: (page: number) => void;
@@ -99,6 +103,7 @@ function ListingManagementTable({
   columnWidths,
   currentPage,
   pageSize,
+  virtualScrollY = 360,
   selectedRowKeys,
   onColumnWidthChange,
   onCurrentPageChange,
@@ -114,6 +119,9 @@ function ListingManagementTable({
   onBulkExport,
   exporting = false,
 }: ListingManagementTableProps) {
+  // Only the large pages need row virtualization. Original columns, pinned columns,
+  // sorters, selection and all per-row actions are kept unchanged in both modes.
+  const virtual = pageSize >= 500;
   const title = (key: string, label: string) => (
     <ResizableColumnTitle
       label={label}
@@ -534,21 +542,36 @@ function ListingManagementTable({
       ),
     });
 
+  // Avoid repainting unchanged row contents when selection or other page state
+  // changes. Updated records are replaced immutably by the page's mutation handlers.
+  const optimizedColumns = columns.map((column) => ({
+    ...column,
+    shouldCellUpdate: (record: ListingManagementRow, previous: ListingManagementRow) => (
+      record !== previous
+    ),
+  }));
   const scrollX = columns.reduce((sum, column) => sum + Number(column.width ?? 112), 56);
 
   return (
-    <ReportTableShell label="Listing 管理表格" className="listing-management__table-shell">
+    <ReportTableShell
+      label="Listing 管理表格"
+      className={virtual
+        ? "listing-management__table-shell listing-management__table-shell--virtual"
+        : "listing-management__table-shell"}
+    >
       <ProTable<ListingManagementRow>
         rowKey="id"
         search={false}
         options={false}
         dataSource={rows}
-        columns={columns}
+        columns={optimizedColumns}
         tableAlertRender={false}
         toolBarRender={false}
         bordered
         size="small"
-        scroll={{ x: scrollX, y: "100%" }}
+        scroll={{ x: scrollX, y: virtual ? virtualScrollY : "100%" }}
+        virtual={virtual}
+        {...(virtual ? { listItemHeight: LISTING_VIRTUAL_ROW_HEIGHT_ESTIMATE } : {})}
         tableLayout="fixed"
         rowSelection={{
           fixed: true,

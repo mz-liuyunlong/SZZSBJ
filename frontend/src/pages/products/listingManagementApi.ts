@@ -28,6 +28,7 @@ interface BackendListingItem {
   fulfillment_type_name: string | null;
   listing_start_at_utc: string | null;
   listing_start_source_raw?: string | null;
+  launch_date_cn?: string | null;
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -192,8 +193,10 @@ const toDateText = (value: string | null): string => {
 export const toListingStartText = (
   normalizedValue: string | null,
   sourceRawValue: string | null | undefined,
+  launchDateCn?: string | null,
 ): string => {
   if (normalizedValue) return toDateText(normalizedValue);
+  if (launchDateCn) return launchDateCn;
   if (!sourceRawValue?.trim()) return "";
   return sourceRawValue.trim().match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? sourceRawValue;
 };
@@ -234,7 +237,9 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toListingStartText(item.listing_start_at_utc, item.listing_start_source_raw),
+  listedAt: toListingStartText(
+    item.listing_start_at_utc, item.listing_start_source_raw, item.launch_date_cn,
+  ),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),

@@ -30,6 +30,10 @@ from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
 from app.modules.integration_sync.parsers.lingxing_data_pages import DataPagesParserKey
+from app.modules.integration_sync.wfs_first_stock import (
+    listing_identity,
+    observe_first_wfs_stock,
+)
 
 AUTHORIZED_ENV = "DATA_PAGES_REAL_SYNC_AUTHORIZED"
 RUNNER_VERSION = "real-data-2.0"
@@ -413,6 +417,7 @@ class DataPagesRealSyncRunner:
         self.max_advertisers = max(1, max_advertisers)
         self.heartbeat = heartbeat
         self.summary = DataPagesRealSyncSummary(source_account_ref, business_date)
+        self._listing_capture_by_identity: dict[tuple[str, str, str], datetime] = {}
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
 
@@ -525,6 +530,8 @@ class DataPagesRealSyncRunner:
         minimum_page_size: int = 1,
     ) -> list[dict[str, Any]]:
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
+        if parser_key == "walmart_listing_list":
+            self._listing_capture_by_identity.clear()
         size = max(self.page_size, minimum_page_size)
         offset = 0
         page_no = 1
@@ -542,6 +549,18 @@ class DataPagesRealSyncRunner:
             if current and previous_signature == signature:
                 raise DataPagesRealSyncError(f"DATA_PAGES_PAGINATION_STALLED:{spec.interface_key}")
             previous_signature = signature
+            if parser_key == "walmart_listing_list":
+                for listing_row in current:
+                    identity = listing_identity(
+                        _field(listing_row, "store_id", "sid"),
+                        _field(listing_row, "item_id", "itemId"),
+                        _field(listing_row, "msku"),
+                    )
+                    if identity is None:
+                        continue
+                    earlier = self._listing_capture_by_identity.get(identity)
+                    if earlier is None or response.pulled_at < earlier:
+                        self._listing_capture_by_identity[identity] = response.pulled_at
             rows.extend(current)
             total = _total_of(response.response_json)
             if not current or len(current) < size or (total and len(rows) >= total):
@@ -819,6 +838,20 @@ class DataPagesRealSyncRunner:
             if not item_id or not store_id:
                 self.summary.listing_skipped_rows += 1
                 continue
+            identity = listing_identity(store_id, item_id, _field(row, "msku"))
+            captured_listing_at = (
+                self._listing_capture_by_identity.get(identity) if identity is not None else None
+            )
+            if captured_listing_at is not None:
+                observe_first_wfs_stock(
+                    self.session,
+                    source_account_ref=self.source_account_ref,
+                    store_id=store_id,
+                    item_id=item_id,
+                    msku=identity[2],
+                    wfs_quantity=_decimal(row.get("wfs_available_quantity")),
+                    observed_at_utc=captured_listing_at,
+                )
             self.session.execute(
                 text(
                     "insert into dim_walmart_listings "
