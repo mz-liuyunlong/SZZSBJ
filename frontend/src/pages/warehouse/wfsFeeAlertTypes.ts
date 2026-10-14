@@ -1,6 +1,6 @@
 export type WfsFeeAlertCurrency = "USD" | "CNY";
 export type WfsFeeAlertDatePreset = "today" | "last7" | "last30" | "last90" | "custom";
-export type WfsFeeAlertCaseStatus = "未开Case" | "已开Case" | "跟进中" | "已追回" | "驳回" | "已关闭";
+export type WfsFeeAlertCaseStatus = "未开Case" | "已开Case" | "跟进中" | "待归档审核" | "已追回" | "已归档" | "驳回" | "已关闭";
 export type WfsFeeAlertPriority = "高" | "中" | "低";
 export type WfsFeeAlertSearchField = "sku" | "msku" | "productId" | "productName";
 
@@ -86,17 +86,17 @@ export const wfsFeeAlertColumnFields: WfsFeeAlertColumnField[] = [
   { key: "owner", title: "负责人" },
   { key: "productId", title: "商品ID" },
   { key: "category", title: "类目" },
-  { key: "orders", title: "订单量" },
-  { key: "units", title: "计费量（销量+送样）" },
-  { key: "chargedFee", title: "已收WFS费用" },
-  { key: "standardFee", title: "应收WFS费用" },
-  { key: "overFee", title: "多收金额" },
+  { key: "orders", title: "受影响销量" },
+  { key: "units", title: "受影响计费量" },
+  { key: "chargedFee", title: "实收WFS费用" },
+  { key: "standardFee", title: "人工配送费测算" },
+  { key: "overFee", title: "预计追回" },
   { key: "unitOverFee", title: "单件多收" },
   { key: "reason", title: "异常原因" },
   { key: "level", title: "优先级" },
   { key: "status", title: "Case状态" },
   { key: "caseNo", title: "Case编号" },
-  { key: "caseOpenedAt", title: "开Case时间" },
+  { key: "caseOpenedAt", title: "立案时间" },
   { key: "nextFollowAt", title: "下次跟进" },
   { key: "recoveredAmount", title: "已追回金额" },
   { key: "latestFollow", title: "最新跟进" },
@@ -116,7 +116,6 @@ export const createWfsFeeAlertInitialFilters = (): WfsFeeAlertFilters => ({
   searchField: "sku",
   keyword: "",
 });
-
 
 export const formatWfsMoney = (value: number, currency: WfsFeeAlertCurrency) => {
   const converted = currency === "CNY" ? value * WFS_FEE_ALERT_USD_TO_CNY_RATE : value;
@@ -156,6 +155,6 @@ export const getWfsFeeAlertSummary = (rows: WfsFeeAlertRow[]) => {
     pendingAmount: Math.max(totalOverFee - totalRecoveredAmount, 0),
     openedCaseCount,
     unopenedCaseCount: rows.length - openedCaseCount,
-    followDueCount: rows.filter((row) => row.nextFollowAt !== "-" && row.status !== "已追回" && row.status !== "已关闭").length,
+    followDueCount: rows.filter((row) => row.nextFollowAt !== "-" && row.status !== "已追回" && row.status !== "已关闭" && row.status !== "已归档").length,
   };
 };
