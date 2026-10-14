@@ -1,71 +1,507 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.modules.warehouse_wfs.schemas import (
-    WfsFeeActualWrite,
-    WfsFeeActualWriteResult,
     WfsFeeAlertListData,
     WfsFeeAlertQuery,
     WfsFeeAlertRead,
+    WfsFeeArchiveRequestWrite,
+    WfsFeeArchiveReviewWrite,
+    WfsFeeCaseFollowWrite,
+    WfsFeeCaseListData,
+    WfsFeeCaseQuery,
+    WfsFeeCaseRead,
     WfsFeeCaseWrite,
+    WfsFeeLegacyCompareResult,
+    WfsFeeLegacySyncResult,
+    WfsFeeRecoveredWrite,
 )
+
+LEGACY_STATUS_TO_CASE_STATUS = {
+    "waiting": "pending_confirm",
+    "following": "following",
+    "approving": "archive_pending",
+    "closed": "archived",
+    "done": "recovered",
+}
+
+CASE_STATUS_TO_LABEL = {
+    "pending_confirm": "未开Case",
+    "following": "跟进中",
+    "archive_pending": "驳回",
+    "archived": "已关闭",
+    "recovered": "已追回",
+}
+
+CASE_LABEL_TO_STATUS = {
+    "未开Case": "pending_confirm",
+    "已开Case": "following",
+    "跟进中": "following",
+    "驳回": "archive_pending",
+    "已关闭": "archived",
+    "已追回": "recovered",
+}
+
+PRIORITY_TO_LABEL = {"high": "高", "medium": "中", "low": "低"}
+PRIORITY_LABEL_TO_VALUE = {"高": "high", "中": "medium", "低": "low"}
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def map_legacy_status(status: str | None) -> str:
+    return LEGACY_STATUS_TO_CASE_STATUS.get(str(status or "").strip(), "pending_confirm")
+
+
+def map_priority_by_amount(amount: Decimal | None) -> str:
+    value = amount or Decimal("0")
+    if value >= Decimal("500"):
+        return "high"
+    if value >= Decimal("100"):
+        return "medium"
+    return "low"
+
+
+def stable_legacy_uuid_expr(alias: str = "l") -> str:
+    # Keep SQL-side UUID deterministic without relying on pgcrypto/gen_random_uuid.
+    return (
+        "(substr(md5(" + alias + ".id::text),1,8)||'-'||"
+        "substr(md5(" + alias + ".id::text),9,4)||'-'||"
+        "substr(md5(" + alias + ".id::text),13,4)||'-'||"
+        "substr(md5(" + alias + ".id::text),17,4)||'-'||"
+        "substr(md5(" + alias + ".id::text),21,12))::uuid"
+    )
 
 
 class WfsFeeAlertService:
-    """Reconcile Product Management WFS expectations with actual Walmart fee facts."""
+    """Manage formal WFS anomaly cases.
+
+    This service intentionally does not update Daily Sales, Order Profit, or
+    fact_walmart_wfs_fee_actual. Current production evidence shows WFS fee RAW is
+    not in ODS; legacy_mirror.event_wfs_fee_case is the transitional source of
+    truth for case workflow data.
+    """
 
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def list_cases(
+        self,
+        query: WfsFeeCaseQuery,
+        account_refs: frozenset[str],
+    ) -> tuple[WfsFeeCaseListData, int]:
+        rows, total = self._fetch_case_rows(query, account_refs)
+        return WfsFeeCaseListData(items=[WfsFeeCaseRead(**dict(row)) for row in rows]), total
 
     def list_alerts(
         self,
         query: WfsFeeAlertQuery,
         account_refs: frozenset[str],
     ) -> tuple[WfsFeeAlertListData, int]:
-        where = [
-            "m.source_account_ref = any(:accounts)",
-            "m.wfs_fee_actual_total_amount is not null",
-            "coalesce(m.wfs_fee_variance_amount,0) > 0",
-        ]
+        normalized = WfsFeeCaseQuery(
+            start_date=query.start_date,
+            end_date=query.end_date,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            status=CASE_LABEL_TO_STATUS.get(str(query.status), query.status) if query.status else None,
+            keyword=query.keyword,
+            page=query.page,
+            page_size=query.page_size,
+        )
+        rows, total = self._fetch_case_rows(normalized, account_refs)
+        items = [self._to_alert_compat(dict(row)) for row in rows]
+        return WfsFeeAlertListData(items=items), total
+
+    def get_case(self, case_id: UUID, account_refs: frozenset[str]) -> WfsFeeCaseRead:
+        row = (
+            self.session.execute(
+                text(
+                    self._case_select_sql()
+                    + " where id=:case_id and source_account_ref=any(:accounts) and is_deleted=false"
+                ),
+                {"case_id": str(case_id), "accounts": list(account_refs)},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+        return WfsFeeCaseRead(**dict(row))
+
+    def save_follow(
+        self,
+        case_id: UUID,
+        payload: WfsFeeCaseFollowWrite,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> None:
+        self._assert_case_visible(case_id, account_refs)
+        now = utc_now()
+        self.session.execute(
+            text(
+                """
+                update ops_wfs_fee_anomaly_cases set
+                  status = 'following',
+                  archive_review_status = case
+                    when archive_review_status = 'pending' then 'rejected'
+                    else archive_review_status
+                  end,
+                  case_nos = nullif(:case_nos, ''),
+                  latest_follow_note = :latest_follow_note,
+                  follow_log = concat_ws(E'\n', nullif(follow_log, ''), :latest_follow_note),
+                  log_updated_at = :now,
+                  next_follow_at = :next_follow_at,
+                  follow_count = follow_count + 1,
+                  last_follow_by = :actor,
+                  last_follow_at = :now,
+                  walmart_response_summary = nullif(:walmart_response_summary, ''),
+                  evidence_summary = nullif(:evidence_summary, ''),
+                  status_changed_at = :now,
+                  status_changed_by = :actor,
+                  updated_by = :actor,
+                  updated_at = :now
+                where id = :case_id
+                """
+            ),
+            {
+                "case_id": str(case_id),
+                "case_nos": payload.case_nos,
+                "latest_follow_note": payload.latest_follow_note,
+                "next_follow_at": payload.next_follow_at,
+                "walmart_response_summary": payload.walmart_response_summary,
+                "evidence_summary": payload.evidence_summary,
+                "actor": actor_ref,
+                "now": now,
+            },
+        )
+        self.session.commit()
+
+    def update_case(
+        self,
+        case_id: UUID,
+        payload: WfsFeeCaseWrite,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> None:
+        """Compatibility action for the current frontend follow modal."""
+
+        self._assert_case_visible(case_id, account_refs)
+        status = CASE_LABEL_TO_STATUS[payload.status]
+        priority = PRIORITY_LABEL_TO_VALUE[payload.priority]
+        latest_note = payload.latest_follow or payload.reason or payload.status
+        now = utc_now()
+        self.session.execute(
+            text(
+                """
+                update ops_wfs_fee_anomaly_cases set
+                  status = :status,
+                  priority = :priority,
+                  case_nos = nullif(:case_no, ''),
+                  reason = nullif(:reason, ''),
+                  claim_amount = :claim_amount,
+                  recovered_amount = :recovered_amount,
+                  recovered_at = case when :status = 'recovered' then coalesce(recovered_at, :now)
+                                      else recovered_at end,
+                  case_opened_at = :case_opened_at,
+                  next_follow_at = :next_follow_at,
+                  latest_follow_note = nullif(:latest_follow, ''),
+                  follow_log = case when nullif(:latest_follow, '') is null then follow_log
+                    else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow) end,
+                  log_updated_at = case when nullif(:latest_follow, '') is null then log_updated_at
+                    else :now end,
+                  done_at = case when :status = 'recovered' then coalesce(done_at, :now) else done_at end,
+                  archived_at = case when :status = 'archived' then coalesce(archived_at, :now)
+                    else archived_at end,
+                  status_changed_at = :now,
+                  status_changed_by = :actor,
+                  updated_by = :actor,
+                  updated_at = :now
+                where id = :case_id
+                """
+            ),
+            {
+                "case_id": str(case_id),
+                "status": status,
+                "priority": priority,
+                "case_no": payload.case_no,
+                "reason": payload.reason,
+                "claim_amount": payload.claim_amount,
+                "recovered_amount": payload.recovered_amount,
+                "case_opened_at": payload.case_opened_at,
+                "next_follow_at": payload.next_follow_at,
+                "latest_follow": latest_note,
+                "actor": actor_ref,
+                "now": now,
+            },
+        )
+        self.session.commit()
+
+    def request_archive(
+        self,
+        case_id: UUID,
+        payload: WfsFeeArchiveRequestWrite,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> None:
+        self._assert_case_visible(case_id, account_refs)
+        now = utc_now()
+        self.session.execute(
+            text(
+                """
+                update ops_wfs_fee_anomaly_cases set
+                  status = 'archive_pending',
+                  archive_review_status = 'pending',
+                  archive_requested_by = :actor,
+                  archive_requested_at = :now,
+                  archive_reason_type = :archive_reason_type,
+                  archive_reason = :archive_reason,
+                  archive_evidence = nullif(:archive_evidence, ''),
+                  status_changed_at = :now,
+                  status_changed_by = :actor,
+                  updated_by = :actor,
+                  updated_at = :now
+                where id = :case_id
+                  and status in ('pending_confirm','following','archive_pending')
+                """
+            ),
+            {
+                "case_id": str(case_id),
+                "archive_reason_type": payload.archive_reason_type,
+                "archive_reason": payload.archive_reason,
+                "archive_evidence": payload.archive_evidence,
+                "actor": actor_ref,
+                "now": now,
+            },
+        )
+        self.session.commit()
+
+    def review_archive(
+        self,
+        case_id: UUID,
+        payload: WfsFeeArchiveReviewWrite,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> None:
+        self._assert_case_visible(case_id, account_refs)
+        now = utc_now()
+        if payload.decision == "approved":
+            values = {
+                "status": "archived",
+                "review_status": "approved",
+                "archived_at": now,
+                "last_reopened_at": None,
+            }
+        else:
+            values = {
+                "status": "following",
+                "review_status": "rejected",
+                "archived_at": None,
+                "last_reopened_at": now,
+            }
+        self.session.execute(
+            text(
+                """
+                update ops_wfs_fee_anomaly_cases set
+                  status = :status,
+                  archive_review_status = :review_status,
+                  archive_reviewed_by = :actor,
+                  archive_reviewed_at = :now,
+                  archive_review_note = nullif(:note, ''),
+                  archived_at = coalesce(:archived_at, archived_at),
+                  last_reopened_at = coalesce(:last_reopened_at, last_reopened_at),
+                  reopen_count = case when :review_status='rejected'
+                    then reopen_count + 1 else reopen_count end,
+                  status_changed_at = :now,
+                  status_changed_by = :actor,
+                  updated_by = :actor,
+                  updated_at = :now
+                where id = :case_id
+                  and status = 'archive_pending'
+                  and archive_review_status = 'pending'
+                """
+            ),
+            {
+                "case_id": str(case_id),
+                "actor": actor_ref,
+                "now": now,
+                "note": payload.archive_review_note,
+                **values,
+            },
+        )
+        self.session.commit()
+
+    def mark_recovered(
+        self,
+        case_id: UUID,
+        payload: WfsFeeRecoveredWrite,
+        account_refs: frozenset[str],
+        actor_ref: str,
+    ) -> None:
+        self._assert_case_visible(case_id, account_refs)
+        now = utc_now()
+        self.session.execute(
+            text(
+                """
+                update ops_wfs_fee_anomaly_cases set
+                  status = 'recovered',
+                  claim_amount = coalesce(:claim_amount, claim_amount),
+                  recovered_amount = :recovered_amount,
+                  recovered_at = :now,
+                  done_at = :now,
+                  latest_follow_note = coalesce(nullif(:latest_follow_note, ''), latest_follow_note),
+                  follow_log = case when nullif(:latest_follow_note, '') is null then follow_log
+                    else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow_note) end,
+                  log_updated_at = case when nullif(:latest_follow_note, '') is null then log_updated_at
+                    else :now end,
+                  status_changed_at = :now,
+                  status_changed_by = :actor,
+                  updated_by = :actor,
+                  updated_at = :now
+                where id = :case_id
+                """
+            ),
+            {
+                "case_id": str(case_id),
+                "claim_amount": payload.claim_amount,
+                "recovered_amount": payload.recovered_amount,
+                "latest_follow_note": payload.latest_follow_note,
+                "actor": actor_ref,
+                "now": now,
+            },
+        )
+        self.session.commit()
+
+    def sync_legacy_cases(self, *, execute: bool) -> WfsFeeLegacySyncResult:
+        summary = self._legacy_sync_summary()
+        if not execute:
+            return summary
+        result = self.session.execute(text(self._legacy_upsert_sql()))
+        self.session.commit()
+        return WfsFeeLegacySyncResult(
+            **summary.model_dump(exclude={"execute", "inserted_or_updated"}),
+            execute=True,
+            inserted_or_updated=int(result.rowcount or 0),
+        )
+
+    def compare_legacy_cases(self) -> WfsFeeLegacyCompareResult:
+        row = (
+            self.session.execute(
+                text(
+                    """
+                    with legacy as (
+                      select
+                        id legacy_case_id,
+                        manual_fee,
+                        actual_fee,
+                        total_units affected_units,
+                        est_recover estimated_recover_amount
+                      from legacy_mirror.event_wfs_fee_case
+                      where platform = 'walmart'
+                    ), formal as (
+                      select
+                        legacy_case_id,
+                        manual_unit_fee,
+                        actual_unit_fee,
+                        affected_units,
+                        estimated_recover_amount
+                      from ops_wfs_fee_anomaly_cases
+                      where source_kind = 'legacy_mirror' and is_deleted = false
+                    ), paired as (
+                      select
+                        l.legacy_case_id l_id,
+                        f.legacy_case_id f_id,
+                        l.manual_fee,
+                        f.manual_unit_fee,
+                        l.actual_fee,
+                        f.actual_unit_fee,
+                        l.affected_units l_units,
+                        f.affected_units f_units,
+                        l.estimated_recover_amount l_est,
+                        f.estimated_recover_amount f_est
+                      from legacy l
+                      full join formal f on f.legacy_case_id = l.legacy_case_id
+                    )
+                    select
+                      count(*) filter (where l_id is not null and f_id is not null) compared,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and abs(actual_fee - actual_unit_fee) <= 0.01
+                          and abs(manual_fee - manual_unit_fee) <= 0.01
+                          and l_units = f_units
+                          and abs(l_est - f_est) <= 1
+                      ) matched,
+                      count(*) filter (where l_id is not null and f_id is null) only_in_legacy,
+                      count(*) filter (where l_id is null and f_id is not null) only_in_formal,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and abs(actual_fee - actual_unit_fee) > 0.01
+                      ) actual_fee_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and abs(manual_fee - manual_unit_fee) > 0.01
+                      ) manual_fee_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null and l_units <> f_units
+                      ) affected_units_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null and abs(l_est - f_est) > 1
+                      ) estimated_recover_diff
+                    from paired
+                    """
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return WfsFeeLegacyCompareResult(**dict(row))
+
+    def _fetch_case_rows(
+        self,
+        query: WfsFeeCaseQuery,
+        account_refs: frozenset[str],
+    ) -> tuple[list[dict], int]:
+        where = ["source_account_ref = any(:accounts)", "is_deleted = false"]
         params: dict[str, object] = {"accounts": list(account_refs)}
         if query.start_date is not None:
-            where.append("m.business_date_la >= :start_date")
+            where.append("coalesce(first_alert_at, created_at)::date >= :start_date")
             params["start_date"] = query.start_date
         if query.end_date is not None:
-            where.append("m.business_date_la <= :end_date")
+            where.append("coalesce(first_alert_at, created_at)::date <= :end_date")
             params["end_date"] = query.end_date
         if query.store_id is not None:
-            where.append("m.store_id = :store_id")
+            where.append("store_id = :store_id")
             params["store_id"] = query.store_id
         if query.owner_ref is not None:
-            where.append("m.owner_ref = :owner_ref")
+            where.append("owner_ref = :owner_ref")
             params["owner_ref"] = query.owner_ref
         if query.status is not None:
-            where.append("coalesce(c.status,'未开Case') = :status")
+            where.append("status = :status")
             params["status"] = query.status
+        if query.priority is not None:
+            where.append("priority = :priority")
+            params["priority"] = query.priority
+        if query.archive_review_status is not None:
+            where.append("archive_review_status = :archive_review_status")
+            params["archive_review_status"] = query.archive_review_status
         if query.keyword:
             where.append(
-                "(m.local_sku ilike :keyword or m.msku ilike :keyword or "
-                "m.item_id ilike :keyword or m.local_name ilike :keyword or m.title ilike :keyword)"
+                "(store_name_snapshot ilike :keyword or item_id ilike :keyword or "
+                "msku ilike :keyword or case_nos ilike :keyword or "
+                "owner_name_snapshot ilike :keyword or product_name_snapshot ilike :keyword)"
             )
             params["keyword"] = f"%{query.keyword}%"
         where_sql = " and ".join(where)
         total = int(
             self.session.execute(
-                text(
-                    "select count(*) from mart_daily_sales_item_day m "
-                    "left join ops_wfs_fee_anomaly_cases c "
-                    "on c.source_account_ref=m.source_account_ref "
-                    "and c.business_date_la=m.business_date_la and c.store_id=m.store_id "
-                    "and c.item_id=m.item_id and trim(c.msku)=trim(m.msku) where " + where_sql
-                ),
+                text(f"select count(*) from ops_wfs_fee_anomaly_cases where {where_sql}"),
                 params,
             ).scalar_one()
         )
@@ -73,221 +509,371 @@ class WfsFeeAlertService:
         rows = (
             self.session.execute(
                 text(
-                    "select m.id,m.business_date_la,m.store_id,m.store_name,m.owner_ref,"
-                    "m.item_id,m.msku,m.local_sku,coalesce(m.local_name,m.title) product_name,"
-                    "m.order_count,m.sales_qty,"
-                    "m.cost_quantity,m.wfs_fee_expected_total_amount expected_fee_amount,"
-                    "m.wfs_fee_actual_total_amount actual_fee_amount,"
-                    "m.wfs_fee_variance_amount variance_amount,"
-                    "m.wfs_fee_variance_rate variance_rate,"
-                    "m.wfs_fee_expected_unit_amount expected_unit_amount,"
-                    "case when m.cost_quantity>0 then "
-                    "m.wfs_fee_actual_total_amount/m.cost_quantity end actual_unit_amount,"
-                    "coalesce(c.status,'未开Case') status,c.case_no,c.reason,"
-                    "coalesce(c.priority,'中') priority,"
-                    "c.claim_amount,coalesce(c.recovered_amount,0) recovered_amount,"
-                    "c.case_opened_at,"
-                    "c.next_follow_at,c.latest_follow "
-                    "from mart_daily_sales_item_day m "
-                    "left join ops_wfs_fee_anomaly_cases c "
-                    "on c.source_account_ref=m.source_account_ref "
-                    "and c.business_date_la=m.business_date_la "
-                    "and c.store_id=m.store_id and c.item_id=m.item_id "
-                    "and trim(c.msku)=trim(m.msku) "
-                    "where "
-                    + where_sql
-                    + " order by m.wfs_fee_variance_amount desc,m.business_date_la desc "
-                    "limit :limit offset :offset"
+                    self._case_select_sql()
+                    + f" where {where_sql} "
+                    + " order by case status "
+                    + " when 'archive_pending' then 1 "
+                    + " when 'following' then 2 "
+                    + " when 'pending_confirm' then 3 "
+                    + " when 'recovered' then 4 "
+                    + " else 5 end, estimated_recover_amount desc, updated_at desc "
+                    + " limit :limit offset :offset"
                 ),
                 params,
             )
             .mappings()
             .all()
         )
-        items = []
-        for row in rows:
-            variance = row["variance_amount"] or Decimal("0")
-            recovered = row["recovered_amount"] or Decimal("0")
-            items.append(
-                WfsFeeAlertRead(
-                    **dict(row),
-                    pending_recovery_amount=max(variance - recovered, Decimal("0")),
-                )
-            )
-        return WfsFeeAlertListData(items=items), total
+        return [dict(row) for row in rows], total
 
-    def write_actual(
-        self,
-        payload: WfsFeeActualWrite,
-        account_refs: frozenset[str],
-    ) -> WfsFeeActualWriteResult:
-        if payload.source_account_ref not in account_refs:
-            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        matched = self.session.execute(
-            text(
-                "select count(*) from dim_walmart_listings where source_account_ref=:account "
-                "and store_id=:store_id and item_id=:item_id and trim(msku)=trim(:msku)"
-            ),
-            {
-                "account": payload.source_account_ref,
-                "store_id": payload.store_id,
-                "item_id": payload.item_id,
-                "msku": payload.msku,
-            },
-        ).scalar_one()
-        if int(matched or 0) != 1:
-            raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
-        now = datetime.now(UTC)
-        self.session.execute(
-            text(
-                "insert into fact_walmart_wfs_fee_actual "
-                "(id,source_account_ref,business_date_la,store_id,item_id,msku,source_line_ref,"
-                "actual_fee_amount,currency_code,source_type,source_observed_at,"
-                "created_at,updated_at) "
-                "values (:id,:account,:day,:store_id,:item_id,:msku,:source_line_ref,"
-                ":actual_fee_amount,"
-                ":currency_code,:source_type,:source_observed_at,:now,:now) "
-                "on conflict (source_account_ref,source_line_ref) do update set "
-                "business_date_la=excluded.business_date_la,store_id=excluded.store_id,"
-                "item_id=excluded.item_id,"
-                "msku=excluded.msku,actual_fee_amount=excluded.actual_fee_amount,"
-                "currency_code=excluded.currency_code,"
-                "source_type=excluded.source_type,"
-                "source_observed_at=excluded.source_observed_at,"
-                "updated_at=excluded.updated_at"
-            ),
-            {
-                "id": str(uuid4()),
-                "account": payload.source_account_ref,
-                "day": payload.business_date_la,
-                "store_id": payload.store_id,
-                "item_id": payload.item_id,
-                "msku": payload.msku,
-                "source_line_ref": payload.source_line_ref,
-                "actual_fee_amount": payload.actual_fee_amount,
-                "currency_code": payload.currency_code,
-                "source_type": payload.source_type,
-                "source_observed_at": payload.source_observed_at,
-                "now": now,
-            },
-        )
-        result = self.session.execute(
-            text(
-                "with actual as (select sum(actual_fee_amount) total "
-                "from fact_walmart_wfs_fee_actual "
-                "where source_account_ref=:account and business_date_la=:day "
-                "and store_id=:store_id "
-                "and item_id=:item_id and trim(msku)=trim(:msku)) "
-                "update mart_daily_sales_item_day m set "
-                "wfs_fee_actual_total_amount=actual.total,"
-                "wfs_fee_variance_amount=actual.total-m.wfs_fee_expected_total_amount,"
-                "wfs_fee_variance_rate=case when m.wfs_fee_expected_total_amount>0 "
-                "then (actual.total-m.wfs_fee_expected_total_amount)"
-                "/m.wfs_fee_expected_total_amount end,"
-                "wfs_fee_source='walmart_statement',wfs_fee_total_amount=actual.total,"
-                "gross_profit_amount=case when m.purchase_cost_total_usd is not null "
-                "and m.first_leg_cost_total_usd is not null "
-                "and m.storage_fee_total_amount is not null "
-                "then m.sales_amount-coalesce(m.ad_spend_amount,0)"
-                "-coalesce(m.commission_fee_amount,0)-actual.total "
-                "-m.purchase_cost_total_usd-m.first_leg_cost_total_usd"
-                "-m.storage_fee_total_amount end,"
-                "gross_margin=case when m.sales_amount>0 and m.purchase_cost_total_usd is not null "
-                "and m.first_leg_cost_total_usd is not null "
-                "and m.storage_fee_total_amount is not null "
-                "then (m.sales_amount-coalesce(m.ad_spend_amount,0)"
-                "-coalesce(m.commission_fee_amount,0)-actual.total "
-                "-m.purchase_cost_total_usd-m.first_leg_cost_total_usd"
-                "-m.storage_fee_total_amount)/m.sales_amount end,"
-                "roi=case when coalesce(m.purchase_cost_total_usd,0)"
-                "+coalesce(m.first_leg_cost_total_usd,0)>0 "
-                "and m.purchase_cost_total_usd is not null "
-                "and m.first_leg_cost_total_usd is not null "
-                "and m.storage_fee_total_amount is not null "
-                "then (m.sales_amount-coalesce(m.ad_spend_amount,0)"
-                "-coalesce(m.commission_fee_amount,0)-actual.total "
-                "-m.purchase_cost_total_usd-m.first_leg_cost_total_usd"
-                "-m.storage_fee_total_amount)"
-                "/(m.purchase_cost_total_usd+m.first_leg_cost_total_usd) end,updated_at=:now "
-                "from actual where m.source_account_ref=:account and m.business_date_la=:day "
-                "and m.store_id=:store_id and m.item_id=:item_id and trim(m.msku)=trim(:msku)"
-            ),
-            {
-                "account": payload.source_account_ref,
-                "day": payload.business_date_la,
-                "store_id": payload.store_id,
-                "item_id": payload.item_id,
-                "msku": payload.msku,
-                "now": now,
-            },
-        )
-        self.session.commit()
-        return WfsFeeActualWriteResult(
-            source_line_ref=payload.source_line_ref,
-            mart_updated=bool(result.rowcount),
+    def _to_alert_compat(self, row: dict) -> WfsFeeAlertRead:
+        affected_units = Decimal(row["affected_units"] or 0)
+        expected_total = (row["manual_unit_fee"] or Decimal("0")) * affected_units
+        actual_total = (row["actual_unit_fee"] or Decimal("0")) * affected_units
+        variance = row["estimated_recover_amount"] or Decimal("0")
+        expected_unit = row["manual_unit_fee"]
+        variance_rate = None
+        if expected_total and expected_total > 0:
+            variance_rate = variance / expected_total
+        return WfsFeeAlertRead(
+            id=row["id"],
+            business_date_la=(row["first_alert_at"] or row["created_at"]).date(),
+            store_id=row["store_id"],
+            store_name=row["store_name_snapshot"],
+            owner_ref=row["owner_ref"],
+            item_id=row["item_id"],
+            msku=row["msku"],
+            local_sku=row["local_sku_snapshot"],
+            product_name=row["product_name_snapshot"],
+            order_count=affected_units,
+            sales_qty=affected_units,
+            cost_quantity=affected_units,
+            expected_fee_amount=expected_total,
+            actual_fee_amount=actual_total,
+            variance_amount=variance,
+            variance_rate=variance_rate,
+            expected_unit_amount=expected_unit,
+            actual_unit_amount=row["actual_unit_fee"],
+            status=CASE_STATUS_TO_LABEL[row["status"]],
+            case_no=row["case_nos"],
+            reason=row["reason"] or row["archive_reason"],
+            priority=PRIORITY_TO_LABEL[row["priority"]],
+            claim_amount=row["claim_amount"],
+            recovered_amount=row["recovered_amount"],
+            pending_recovery_amount=row["pending_recover_amount"],
+            case_opened_at=row["case_opened_at"],
+            next_follow_at=row["next_follow_at"],
+            latest_follow=row["latest_follow_note"] or row["follow_log"],
         )
 
-    def update_case(
-        self,
-        mart_id: UUID,
-        payload: WfsFeeCaseWrite,
-        account_refs: frozenset[str],
-        actor_ref: str,
-    ) -> None:
-        identity = (
+    def _assert_case_visible(self, case_id: UUID, account_refs: frozenset[str]) -> None:
+        exists = self.session.execute(
+            text(
+                """
+                select 1
+                from ops_wfs_fee_anomaly_cases
+                where id=:case_id and source_account_ref=any(:accounts) and is_deleted=false
+                """
+            ),
+            {"case_id": str(case_id), "accounts": list(account_refs)},
+        ).first()
+        if exists is None:
+            raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+
+    def _legacy_sync_summary(self) -> WfsFeeLegacySyncResult:
+        row = (
             self.session.execute(
                 text(
-                    "select source_account_ref,business_date_la,store_id,item_id,msku "
-                    "from mart_daily_sales_item_day where id=:id "
-                    "and source_account_ref=any(:accounts)"
-                ),
-                {"id": str(mart_id), "accounts": list(account_refs)},
+                    """
+                    with legacy as (
+                      select * from legacy_mirror.event_wfs_fee_case where platform = 'walmart'
+                    ), enriched as (
+                      select l.id
+                      from legacy l
+                      join lateral (
+                        select m.source_account_ref
+                        from mart_daily_sales_item_day m
+                        where m.store_id = l.store_id
+                          and m.item_id = l.item_id
+                          and trim(m.msku) = trim(l.msku)
+                        order by m.business_date_la desc
+                        limit 1
+                      ) m on true
+                    ), existing as (
+                      select legacy_case_id from ops_wfs_fee_anomaly_cases
+                      where source_kind = 'legacy_mirror'
+                    ), status_counts as (
+                      select jsonb_object_agg(status, cases) data
+                      from (
+                        select status, count(*) cases from legacy group by status
+                      ) s
+                    )
+                    select
+                      (select count(*) from legacy) legacy_total,
+                      (select count(*) from enriched) matched_identities,
+                      (select count(*) from legacy) - (select count(*) from enriched)
+                        unmatched_identities,
+                      (select count(*) from existing) existing_cases,
+                      (select count(*) from enriched e left join existing x
+                        on x.legacy_case_id=e.id where x.legacy_case_id is null) will_insert,
+                      (select count(*) from enriched e join existing x
+                        on x.legacy_case_id=e.id) will_update,
+                      coalesce((select data from status_counts), '{}'::jsonb) status_breakdown
+                    """
+                )
             )
             .mappings()
-            .first()
+            .one()
         )
-        if identity is None:
-            raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
-        now = datetime.now(UTC)
-        self.session.execute(
-            text(
-                "insert into ops_wfs_fee_anomaly_cases "
-                "(id,source_account_ref,business_date_la,store_id,item_id,msku,status,case_no,reason,priority,"
-                "claim_amount,recovered_amount,case_opened_at,next_follow_at,"
-                "latest_follow,updated_by,created_at,updated_at) "
-                "values (:id,:account,:day,:store_id,:item_id,:msku,:status,"
-                ":case_no,:reason,:priority,"
-                ":claim_amount,:recovered_amount,:case_opened_at,:next_follow_at,"
-                ":latest_follow,:updated_by,:now,:now) "
-                "on conflict (source_account_ref,business_date_la,store_id,item_id,msku) "
-                "do update set "
-                "status=excluded.status,case_no=excluded.case_no,"
-                "reason=excluded.reason,priority=excluded.priority,"
-                "claim_amount=excluded.claim_amount,"
-                "recovered_amount=excluded.recovered_amount,"
-                "case_opened_at=excluded.case_opened_at,"
-                "next_follow_at=excluded.next_follow_at,"
-                "latest_follow=excluded.latest_follow,updated_by=excluded.updated_by,"
-                "updated_at=excluded.updated_at"
-            ),
-            {
-                "id": str(uuid4()),
-                "account": identity["source_account_ref"],
-                "day": identity["business_date_la"],
-                "store_id": identity["store_id"],
-                "item_id": identity["item_id"],
-                "msku": identity["msku"],
-                "status": payload.status,
-                "case_no": payload.case_no or None,
-                "reason": payload.reason or None,
-                "priority": payload.priority,
-                "claim_amount": payload.claim_amount,
-                "recovered_amount": payload.recovered_amount,
-                "case_opened_at": payload.case_opened_at,
-                "next_follow_at": payload.next_follow_at,
-                "latest_follow": payload.latest_follow or None,
-                "updated_by": actor_ref,
-                "now": now,
-            },
+        return WfsFeeLegacySyncResult(
+            execute=False,
+            legacy_total=int(row["legacy_total"]),
+            matched_identities=int(row["matched_identities"]),
+            unmatched_identities=int(row["unmatched_identities"]),
+            existing_cases=int(row["existing_cases"]),
+            will_insert=int(row["will_insert"]),
+            will_update=int(row["will_update"]),
+            inserted_or_updated=0,
+            status_breakdown={str(k): int(v) for k, v in dict(row["status_breakdown"]).items()},
         )
-        self.session.commit()
+
+    def _legacy_upsert_sql(self) -> str:
+        id_expr = stable_legacy_uuid_expr("l")
+        return f"""
+        with legacy as (
+          select
+            l.*,
+            md5(concat_ws('|',
+              l.id::text, l.status, l.manual_fee::text, l.actual_fee::text,
+              l.total_units::text, l.est_recover::text, coalesce(l.case_nos,''),
+              coalesce(l.follow_log,''), coalesce(l.reason,''), coalesce(l.remark,''),
+              coalesce(l.claim_amount::text,''), coalesce(l.recovered_amount::text,''),
+              coalesce(l.updated_at::text,'')
+            )) sync_hash_value
+          from legacy_mirror.event_wfs_fee_case l
+          where l.platform = 'walmart'
+        ), enriched as (
+          select
+            l.*,
+            m.source_account_ref,
+            m.owner_ref,
+            m.local_sku,
+            coalesce(m.local_name, m.title) product_name
+          from legacy l
+          join lateral (
+            select m.source_account_ref, m.owner_ref, m.local_sku, m.local_name, m.title
+            from mart_daily_sales_item_day m
+            where m.store_id = l.store_id
+              and m.item_id = l.item_id
+              and trim(m.msku) = trim(l.msku)
+            order by m.business_date_la desc
+            limit 1
+          ) m on true
+        )
+        insert into ops_wfs_fee_anomaly_cases (
+          id, source_kind, source_case_ref, legacy_case_id, legacy_status,
+          legacy_updated_at, last_mirrored_at, sync_hash, platform, source_account_ref,
+          store_id, item_id, msku, store_name_snapshot, local_sku_snapshot,
+          product_name_snapshot, owner_ref, owner_name_snapshot, currency_code,
+          manual_unit_fee, actual_unit_fee, unit_fee_diff, fee_source, fee_source_ref,
+          fee_calculated_at, calculation_version, affected_units, affected_units_source,
+          estimated_recover_amount, estimate_formula, estimate_calculated_at,
+          claim_amount, recovered_amount, recovered_at, status, priority, severity,
+          status_changed_at, first_alert_at, case_opened_at, done_at, archived_at,
+          case_nos, follow_log, latest_follow_note, log_updated_at, archive_requested_by,
+          archive_requested_at, archive_reason, archive_review_status, archive_reviewed_by,
+          archive_reviewed_at, reason, remark, updated_by, created_at, updated_at, is_deleted
+        )
+        select
+          {id_expr},
+          'legacy_mirror',
+          'legacy_wfs_fee_case:' || id::text,
+          id,
+          status,
+          updated_at,
+          now(),
+          sync_hash_value,
+          platform,
+          source_account_ref,
+          store_id,
+          item_id,
+          trim(msku),
+          store_name,
+          local_sku,
+          product_name,
+          owner_ref,
+          owner_name,
+          'USD',
+          manual_fee,
+          actual_fee,
+          greatest(actual_fee - manual_fee, 0),
+          'legacy_case',
+          'legacy_wfs_fee_case:' || id::text,
+          updated_at,
+          'legacy_wfs_case_v1',
+          total_units,
+          'legacy_total_units',
+          est_recover,
+          'legacy:(actual_fee-manual_fee)*total_units',
+          updated_at,
+          claim_amount,
+          coalesce(recovered_amount, 0),
+          case when status='done' then done_at else null end,
+          case status
+            when 'waiting' then 'pending_confirm'
+            when 'following' then 'following'
+            when 'approving' then 'archive_pending'
+            when 'closed' then 'archived'
+            when 'done' then 'recovered'
+            else 'pending_confirm'
+          end,
+          case when est_recover >= 500 then 'high'
+               when est_recover >= 100 then 'medium'
+               else 'low' end,
+          case when est_recover >= 500 then 'high'
+               when est_recover >= 100 then 'medium'
+               else 'low' end,
+          updated_at,
+          first_alert_at,
+          case when coalesce(trim(case_nos),'') <> '' then first_alert_at else null end,
+          done_at,
+          case when status='closed' then coalesce(approved_at, updated_at) else null end,
+          nullif(case_nos, ''),
+          follow_log,
+          nullif(split_part(coalesce(follow_log,''), E'\n', 1), ''),
+          log_updated_at,
+          nullif(decided_by, ''),
+          case when status in ('approving','closed') then updated_at else null end,
+          nullif(reason, ''),
+          case when status='approving' then 'pending'
+               when status='closed' then 'approved'
+               else 'none' end,
+          nullif(approved_by, ''),
+          approved_at,
+          nullif(reason, ''),
+          nullif(remark, ''),
+          'legacy_mirror',
+          created_at,
+          now(),
+          false
+        from enriched l
+        on conflict (source_account_ref, store_id, item_id, msku) do update set
+          source_kind = excluded.source_kind,
+          source_case_ref = excluded.source_case_ref,
+          legacy_case_id = excluded.legacy_case_id,
+          legacy_status = excluded.legacy_status,
+          legacy_updated_at = excluded.legacy_updated_at,
+          last_mirrored_at = excluded.last_mirrored_at,
+          sync_hash = excluded.sync_hash,
+          store_name_snapshot = excluded.store_name_snapshot,
+          local_sku_snapshot = excluded.local_sku_snapshot,
+          product_name_snapshot = excluded.product_name_snapshot,
+          owner_ref = excluded.owner_ref,
+          owner_name_snapshot = excluded.owner_name_snapshot,
+          manual_unit_fee = excluded.manual_unit_fee,
+          actual_unit_fee = excluded.actual_unit_fee,
+          unit_fee_diff = excluded.unit_fee_diff,
+          affected_units = excluded.affected_units,
+          estimated_recover_amount = excluded.estimated_recover_amount,
+          claim_amount = excluded.claim_amount,
+          recovered_amount = excluded.recovered_amount,
+          recovered_at = excluded.recovered_at,
+          status = excluded.status,
+          priority = excluded.priority,
+          severity = excluded.severity,
+          status_changed_at = excluded.status_changed_at,
+          first_alert_at = excluded.first_alert_at,
+          case_opened_at = excluded.case_opened_at,
+          done_at = excluded.done_at,
+          archived_at = excluded.archived_at,
+          case_nos = excluded.case_nos,
+          follow_log = excluded.follow_log,
+          latest_follow_note = excluded.latest_follow_note,
+          log_updated_at = excluded.log_updated_at,
+          archive_requested_by = excluded.archive_requested_by,
+          archive_requested_at = excluded.archive_requested_at,
+          archive_reason = excluded.archive_reason,
+          archive_review_status = excluded.archive_review_status,
+          archive_reviewed_by = excluded.archive_reviewed_by,
+          archive_reviewed_at = excluded.archive_reviewed_at,
+          reason = excluded.reason,
+          remark = excluded.remark,
+          updated_by = excluded.updated_by,
+          updated_at = excluded.updated_at,
+          is_deleted = false
+        """
+
+    def _case_select_sql(self) -> str:
+        return """
+        select
+          id::text id,
+          source_kind,
+          source_case_ref,
+          legacy_case_id,
+          legacy_status,
+          legacy_updated_at,
+          last_mirrored_at,
+          platform,
+          source_account_ref,
+          store_id,
+          item_id,
+          msku,
+          store_name_snapshot,
+          local_sku_snapshot,
+          product_name_snapshot,
+          owner_ref,
+          owner_name_snapshot,
+          currency_code,
+          manual_unit_fee,
+          actual_unit_fee,
+          unit_fee_diff,
+          fee_source,
+          fee_source_ref,
+          fee_calculated_at,
+          calculation_version,
+          affected_units,
+          affected_sales_start_date,
+          affected_sales_end_date,
+          affected_units_source,
+          estimated_recover_amount,
+          greatest(estimated_recover_amount - recovered_amount, 0) pending_recover_amount,
+          claim_amount,
+          recovered_amount,
+          recovered_at,
+          status,
+          priority,
+          severity,
+          status_changed_at,
+          status_changed_by,
+          first_alert_at,
+          case_opened_at,
+          done_at,
+          archived_at,
+          case_nos,
+          follow_log,
+          latest_follow_note,
+          log_updated_at,
+          next_follow_at,
+          follow_count,
+          last_follow_by,
+          last_follow_at,
+          walmart_response_summary,
+          last_rejection_reason,
+          evidence_summary,
+          archive_requested_by,
+          archive_requested_at,
+          archive_reason_type,
+          archive_reason,
+          archive_evidence,
+          archive_review_status,
+          archive_reviewed_by,
+          archive_reviewed_at,
+          archive_review_note,
+          reason,
+          remark,
+          internal_note,
+          created_at,
+          updated_at,
+          updated_by
+        from ops_wfs_fee_anomaly_cases
+        """
