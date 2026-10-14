@@ -85,12 +85,9 @@ afterEach(() => {
 });
 
 describe("ListingManagementPage acceptance contract", () => {
-  it("shows listing start values as date-only text without timezone conversion", () => {
-    expect(toListingStartText("2026-09-08T16:31:47Z", null)).toBe("2026-09-08");
-    expect(toListingStartText(null, "2026-09-08 09:31:47")).toBe("2026-09-08");
-    expect(toListingStartText(null, "2026-09-08")).toBe("2026-09-08");
-    expect(toListingStartText(null, null)).toBe("");
-    expect(toListingStartText(null, "待确认")).toBe("待确认");
+  it("shows listing start values from MART only and never falls back to raw source dates", () => {
+    expect(toListingStartText("2026-09-08T16:31:47Z")).toBe("2026-09-08");
+    expect(toListingStartText(null)).toBe("");
   });
 
   it("keeps 100 local rows and the owner-approved column order", () => {

@@ -190,15 +190,9 @@ const toDateText = (value: string | null): string => {
   return value.slice(0, 10);
 };
 
-export const toListingStartText = (
-  normalizedValue: string | null,
-  sourceRawValue: string | null | undefined,
-  launchDateCn?: string | null,
-): string => {
+export const toListingStartText = (normalizedValue: string | null): string => {
   if (normalizedValue) return toDateText(normalizedValue);
-  if (launchDateCn) return launchDateCn;
-  if (!sourceRawValue?.trim()) return "";
-  return sourceRawValue.trim().match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? sourceRawValue;
+  return "";
 };
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
@@ -237,9 +231,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toListingStartText(
-    item.listing_start_at_utc, item.listing_start_source_raw, item.launch_date_cn,
-  ),
+  listedAt: toListingStartText(item.listing_start_at_utc),
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),

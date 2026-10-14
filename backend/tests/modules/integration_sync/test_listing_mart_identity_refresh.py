@@ -84,7 +84,7 @@ def test_listing_mart_refresh_does_not_clear_listing_start_at() -> None:
     assert LISTING_MART_FILL_ONLY_COLUMNS == {"listing_start_at_utc"}
     assert "listing_start_at_utc" in LISTING_MART_BUSINESS_OWNED_COLUMNS
     assert LISTING_MART_REFRESH_UPDATE_EXPRESSIONS["listing_start_at_utc"] == (
-        "coalesce(current_listing.listing_start_at_utc, excluded.listing_start_at_utc)"
+        "current_listing.listing_start_at_utc"
     )
 
 
