@@ -1,19 +1,19 @@
-/** Modal for assigning one or more roles to a selected user. */
 import { Checkbox, Modal, Typography } from "antd";
 import { useState } from "react";
 import {
-  userRoleOptions,
   type UserManagementRow,
   type UserRoleName,
+  type UserRoleOption,
 } from "@/pages/settings/userManagementTypes";
 
 interface UserRoleModalProps {
   user?: UserManagementRow;
+  roleOptions: UserRoleOption[];
   onCancel: () => void;
   onSubmit: (userId: string, roles: UserRoleName[]) => void;
 }
 
-function UserRoleModal({ user, onCancel, onSubmit }: UserRoleModalProps) {
+function UserRoleModal({ user, roleOptions, onCancel, onSubmit }: UserRoleModalProps) {
   const [roleOverride, setRoleOverride] = useState<{
     userId: string;
     roles: UserRoleName[];
@@ -50,7 +50,7 @@ function UserRoleModal({ user, onCancel, onSubmit }: UserRoleModalProps) {
       <Checkbox.Group
         className="user-role-modal__checks"
         value={roles}
-        options={userRoleOptions.map((value) => ({ value, label: value }))}
+        options={roleOptions.map((role) => ({ value: role.name, label: role.name }))}
         onChange={(values) => {
           if (user) setRoleOverride({ userId: user.id, roles: values as UserRoleName[] });
         }}
