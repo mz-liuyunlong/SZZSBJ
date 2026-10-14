@@ -246,7 +246,7 @@ def upgrade() -> None:
     )
     _execute(
         """
-        insert into app_users (user_id, role_id, created_at)
+        insert into app_user_roles (user_id, role_id, created_at)
         select id, cast(:role_id as uuid), now()
         from app_users
         where username = 'admin'
@@ -285,19 +285,30 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-
     op.execute("drop index if exists ix_iam_password_reset_tokens_user_id_created")
     op.execute("drop index if exists ix_iam_password_reset_tokens_token_hash")
     op.execute("drop table if exists iam_password_reset_tokens")
 
     _execute("drop table if exists app_sessions")
-    _execute("drop table if exists app_users")
+    _execute("drop table if exists app_user_roles")
     _execute("drop table if exists app_role_permissions")
     _execute("drop table if exists app_permissions")
     _execute("drop table if exists app_roles")
+
+    _execute("drop index if exists ix_app_users_feishu_open_id")
+    _execute("drop index if exists ix_app_users_feishu_user_id")
+    _execute("drop index if exists ix_app_users_feishu_union_id")
+
     _execute("alter table app_users drop column if exists password_updated_at")
     _execute("alter table app_users drop column if exists last_login_at")
     _execute("alter table app_users drop column if exists is_super_admin")
+    _execute("alter table app_users drop column if exists feishu_last_synced_at")
+    _execute("alter table app_users drop column if exists feishu_department_ids")
+    _execute("alter table app_users drop column if exists feishu_employee_id")
+    _execute("alter table app_users drop column if exists feishu_union_id")
+    _execute("alter table app_users drop column if exists feishu_user_id")
+    _execute("alter table app_users drop column if exists feishu_open_id")
+    _execute("alter table app_users drop column if exists feishu_name")
     _execute("alter table app_users drop column if exists email")
     _execute("alter table app_users drop column if exists phone")
     _execute("alter table app_users drop column if exists display_name")

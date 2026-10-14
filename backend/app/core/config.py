@@ -212,6 +212,20 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FEISHU_APP_SECRET",
     )
+    feishu_base_url: str = Field(
+        default="https://open.feishu.cn",
+        validation_alias="FEISHU_BASE_URL",
+    )
+    feishu_request_timeout_ms: int = Field(
+        default=5_000,
+        ge=100,
+        le=30_000,
+        validation_alias="FEISHU_REQUEST_TIMEOUT_MS",
+    )
+    feishu_password_setup_base_url: str = Field(
+        default="http://localhost:5173/#/password/setup",
+        validation_alias="FEISHU_PASSWORD_SETUP_BASE_URL",
+    )
     feishu_offboarding_notice_open_id: str | None = Field(
         default=None, validation_alias="FEISHU_OFFBOARDING_NOTICE_OPEN_ID"
     )
@@ -270,6 +284,44 @@ class Settings(BaseSettings):
             raise ValueError("LINGXING_BASE_URL must be a credential-free HTTPS origin")
         return value.rstrip("/")
 
+    @field_validator("feishu_base_url")
+    @classmethod
+    def validate_feishu_base_url(cls, value: str) -> str:
+        try:
+            parsed = urlsplit(value)
+            hostname = parsed.hostname
+        except ValueError:
+            raise ValueError("FEISHU_BASE_URL must be a credential-free HTTPS origin") from None
+        if (
+            parsed.scheme != "https"
+            or not hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("FEISHU_BASE_URL must be a credential-free HTTPS origin")
+        return value.rstrip("/")
+
+    @field_validator("feishu_password_setup_base_url")
+    @classmethod
+    def validate_feishu_password_setup_base_url(cls, value: str) -> str:
+        try:
+            parsed = urlsplit(value)
+            hostname = parsed.hostname
+        except ValueError:
+            raise ValueError(
+                "FEISHU_PASSWORD_SETUP_BASE_URL must be a valid frontend URL"
+            ) from None
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError("FEISHU_PASSWORD_SETUP_BASE_URL must be a valid frontend URL")
+        return value.rstrip("/")
+
     @model_validator(mode="after")
     def require_environment_url(self) -> Self:
         if self.app_env is AppEnvironment.TEST:
@@ -325,6 +377,18 @@ class Settings(BaseSettings):
             raise ValueError("Lingxing token request settings are missing or invalid")
         if self.lingxing_allow_full_sync:
             raise ValueError("Lingxing full sync is not approved")
+        if self.feishu_bot_enabled and (
+            not self.feishu_app_id
+            or self.feishu_app_secret is None
+            or not self.feishu_password_setup_base_url
+        ):
+            raise ValueError("Feishu bot settings are missing or invalid")
+        if (
+            self.app_env is AppEnvironment.PRODUCTION
+            and self.feishu_bot_enabled
+            and "localhost" in self.feishu_password_setup_base_url
+        ):
+            raise ValueError("FEISHU_PASSWORD_SETUP_BASE_URL must be configured for production")
         if self.media_cache_enabled:
             secret = self.media_signing_secret
             hosts = self.media_allowed_source_host_set
