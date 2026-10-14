@@ -21,7 +21,11 @@ def get_source_account_scope_provider() -> SourceAccountScopeProvider | None:
         return None
 
     def preview_scope(principal: Principal) -> frozenset[str]:
-        return refs if principal.user_id == PREVIEW_PRINCIPAL_ID else frozenset()
+        if principal.user_id == PREVIEW_PRINCIPAL_ID:
+            return refs
+        if principal.permissions:
+            return refs
+        return frozenset()
 
     return preview_scope
 
