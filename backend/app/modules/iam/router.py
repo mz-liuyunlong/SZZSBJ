@@ -38,6 +38,14 @@ def require_permission(permission_key: str):
     return dependency
 
 
+def require_super_admin(
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> Principal:
+    if "*" in principal.permissions:
+        return principal
+    raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+
+
 def bearer_token_from_header(authorization: str | None) -> str:
     if authorization is None or not authorization.startswith("Bearer "):
         raise ApiError(code=ErrorCode.UNAUTHORIZED, status_code=401)
@@ -147,10 +155,17 @@ def reset_password(
 def delete_user(
     request: Request,
     user_id: int,
-    _: Annotated[Principal, Depends(require_permission("settings:users:write"))],
+    principal: Annotated[Principal, Depends(require_super_admin)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
-    return success_response(request, data=IamService(session).deactivate_user(user_id), meta=None)
+    return success_response(
+        request,
+        data=IamService(session).hard_delete_user(
+            user_id,
+            actor_user_id=int(principal.user_id),
+        ),
+        meta=None,
+    )
 
 
 @router.get("/api/settings/roles", response_model=SuccessEnvelope[list[RoleRead], None])

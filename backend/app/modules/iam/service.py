@@ -290,6 +290,26 @@ class IamService:
         self._send_offboarding_notice(user)
         return to_user_read(self._user_row_or_404(user_id))
 
+    def hard_delete_user(self, user_id: int, *, actor_user_id: int) -> UserRead:
+        user = self._user_row_or_404(user_id)
+        if user_id == actor_user_id:
+            raise ApiError(
+                code=ErrorCode.INVALID_REQUEST,
+                status_code=400,
+                message="不能删除当前登录账号",
+            )
+        if int(user.get("is_super_admin") or 0) == 1:
+            raise ApiError(
+                code=ErrorCode.INVALID_REQUEST,
+                status_code=400,
+                message="不能删除超级管理员账号",
+            )
+
+        deleted_user = to_user_read(user)
+        self.repository.hard_delete_user(user_id)
+        self.session.commit()
+        return deleted_user
+
     def list_roles(self) -> list[RoleRead]:
         return [to_role_read(row) for row in self.repository.list_roles()]
 

@@ -51,7 +51,7 @@ interface MainLayoutProps {
   children?: ReactNode;
   onLogout?: () => void;
   renderPage?: (page: NavigationPage) => ReactNode;
-  currentUser?: MockAuthUser;
+  currentUser?: MockAuthUser & { permissions?: readonly string[] };
 }
 
 
@@ -142,10 +142,10 @@ function MainLayout({
     navigation
       .map((group) => ({
         ...group,
-        children: group.children.filter((page) => isMockPageVisibleForRole(currentUser.role, page)),
+        children: group.children.filter((page) => isMockPageVisibleForRole(currentUser.role, page, currentUser.permissions)),
       }))
       .filter((group) => group.children.length > 0)
-  ), [currentUser.role]);
+  ), [currentUser.permissions, currentUser.role]);
 
   useEffect(() => {
     preloadPrimaryPageData();
@@ -166,10 +166,15 @@ function MainLayout({
   const activeGroup = secondaryOpen
     ? visibleNavigation.find((group) => group.key === flyoutGroupKey) ?? activePageGroup
     : activePageGroup;
-  const secondaryPages = activeGroup.children.filter((page) => isMockPageVisibleForRole(currentUser.role, page));
+  const secondaryPages = activeGroup.children.filter((page) => isMockPageVisibleForRole(currentUser.role, page, currentUser.permissions));
   const openRoutes = openPaths.flatMap((path) => {
     const resolution = resolveRoute(path);
-    return resolution.kind === "allowed"
+    return resolution.kind === "allowed" &&
+      isMockPageAccessibleForRole(
+        currentUser.role,
+        resolution.route.page,
+        currentUser.permissions,
+      )
       ? [
           {
             path,
@@ -236,7 +241,7 @@ function MainLayout({
   const openPageByKey = (pageKey: string) => {
     const selection = findRouteByKey(pageKey);
     if (!selection) return;
-    if (!isMockPageAccessibleForRole(currentUser.role, selection.page)) {
+    if (!isMockPageAccessibleForRole(currentUser.role, selection.page, currentUser.permissions)) {
       void messageApi.warning("当前账号无权访问该页面。");
       closeSecondaryMenu();
       return;
@@ -354,7 +359,7 @@ function MainLayout({
           />
           <TopbarActions
             currentUser={currentUser}
-            canOpenPage={(page) => isMockPageAccessibleForRole(currentUser.role, page)}
+            canOpenPage={(page) => isMockPageAccessibleForRole(currentUser.role, page, currentUser.permissions)}
             aiAssistantPage={aiAssistantPage}
             personalCenterPage={personalCenterPage}
             documentationPage={documentationPage}

@@ -21,7 +21,14 @@ export async function loginWithPassword(payload: LoginPayload): Promise<AuthUser
   });
 
   writeAuthToken(response.data.access_token);
-  return toAuthUser(response.data.user);
+
+  try {
+    const currentUserResponse = await backendRequest<BackendCurrentUser>("/api/auth/me");
+    return toAuthUser(currentUserResponse.data);
+  } catch (error) {
+    clearAuthToken();
+    throw error;
+  }
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser | undefined> {

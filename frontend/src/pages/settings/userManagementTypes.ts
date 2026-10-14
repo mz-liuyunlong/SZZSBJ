@@ -27,6 +27,7 @@ export interface UserManagementRow {
   email: string;
   status: UserStatus;
   roles: UserRoleName[];
+  isSuperAdmin?: boolean;
   feishuName?: string;
   feishuOpenId?: string;
   feishuUserId?: string;

@@ -39,6 +39,11 @@ function PasswordSetupPage() {
         token,
         newPassword: values.password,
       });
+      try {
+        sessionStorage.setItem("szzsbj_show_onboarding_after_login", "1");
+      } catch {
+        // Ignore storage failures; users can still open the onboarding guide manually.
+      }
       setSucceeded(true);
     } catch {
       setError("密码设置失败，请重新发起忘记密码流程");
@@ -70,7 +75,7 @@ function PasswordSetupPage() {
         <Result
           status="success"
           title="登录密码设置成功"
-          subTitle="请使用新密码登录掌上便捷系统。"
+          subTitle="请使用新密码登录掌上便捷系统，登录后将自动进入入职指引。"
           extra={
             <Link to="/login">
               <Button type="primary">返回登录</Button>

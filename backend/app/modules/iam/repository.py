@@ -416,6 +416,12 @@ class IamRepository:
             {"user_id": user_id, "password_hash": password_hash, "now": now_utc()},
         )
 
+    def hard_delete_user(self, user_id: int) -> None:
+        self.session.execute(
+            text("delete from app_users where id = :user_id"),
+            {"user_id": user_id},
+        )
+
     def set_user_roles(self, *, user_id: int, role_keys: Iterable[str]) -> None:
         self.session.execute(
             text("delete from app_user_roles where user_id = :user_id"), {"user_id": user_id}

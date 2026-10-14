@@ -8,9 +8,11 @@ import RoleListPanel from "@/pages/settings/components/RoleListPanel";
 import RolePermissionEditor from "@/pages/settings/components/RolePermissionEditor";
 import {
   createRole,
-  listRoles,
+  emptyRolePermissionCatalog,
+  loadRoleManagementData,
   permissionKeysToState,
   saveRolePermissions,
+  type RolePermissionCatalog,
 } from "@/pages/settings/roleManagementApi";
 import {
   type PermissionTabKey,
@@ -38,14 +40,21 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
   const [roleKeyword, setRoleKeyword] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [permissionsByRole, setPermissionsByRole] = useState<Record<string, RolePermissionState>>({});
+  const [permissionCatalog, setPermissionCatalog] = useState<RolePermissionCatalog>(
+    emptyRolePermissionCatalog,
+  );
 
   const refreshRoles = useCallback(async () => {
     try {
-      const nextRoles = await listRoles();
-      setRoles(nextRoles);
-      setActiveRoleId((current) => current || nextRoles[0]?.id || "");
+      const data = await loadRoleManagementData();
+      setRoles(data.roles);
+      setPermissionCatalog(data.permissionCatalog);
+      setActiveRoleId((current) => current || data.roles[0]?.id || "");
       setPermissionsByRole(Object.fromEntries(
-        nextRoles.map((role) => [role.id, permissionKeysToState(role.permissionKeys)]),
+        data.roles.map((role) => [
+          role.id,
+          permissionKeysToState(role.permissionKeys, data.permissionCatalog),
+        ]),
       ));
     } catch {
       void messageApi.error("角色数据加载失败，请确认已登录管理员账号");
@@ -65,8 +74,9 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
     [activeRoleId, roles],
   );
   const activePermissions = activeRole
-    ? permissionsByRole[activeRole.id] ?? permissionKeysToState(activeRole.permissionKeys)
-    : permissionKeysToState([]);
+    ? permissionsByRole[activeRole.id] ??
+      permissionKeysToState(activeRole.permissionKeys, permissionCatalog)
+    : permissionKeysToState([], permissionCatalog);
 
   const updateActivePermissions = (permissions: RolePermissionState) => {
     if (!activeRole) return;
@@ -92,13 +102,13 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
     if (!activeRole) return;
 
     try {
-      const updatedRole = await saveRolePermissions(activeRole, activePermissions);
+      const updatedRole = await saveRolePermissions(activeRole, activePermissions, permissionCatalog);
       setRoles((current) => current.map((role) => (
         role.id === updatedRole.id ? updatedRole : role
       )));
       setPermissionsByRole((current) => ({
         ...current,
-        [updatedRole.id]: permissionKeysToState(updatedRole.permissionKeys),
+        [updatedRole.id]: permissionKeysToState(updatedRole.permissionKeys, permissionCatalog),
       }));
       void messageApi.success("权限已保存");
     } catch {
@@ -137,6 +147,7 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
                   role={activeRole}
                   activeTab={activeTab}
                   permissions={activePermissions}
+                  permissionCatalog={permissionCatalog}
                   onTabChange={setActiveTab}
                   onChange={updateActivePermissions}
                 />
@@ -147,7 +158,7 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
                 <Button
                   onClick={() => {
                     if (!activeRole) return;
-                    updateActivePermissions(permissionKeysToState(activeRole.permissionKeys));
+                    updateActivePermissions(permissionKeysToState(activeRole.permissionKeys, permissionCatalog));
                     void messageApi.info("已恢复本次修改");
                   }}
                 >
