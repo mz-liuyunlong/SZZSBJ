@@ -204,6 +204,8 @@ class WfsFeeAlertService:
 
         self._assert_case_visible(case_id, account_refs)
         status = CASE_LABEL_TO_STATUS[payload.status]
+        if status not in ('pending_confirm', 'following'):
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=422)
         priority = PRIORITY_LABEL_TO_VALUE[payload.priority]
         latest_note = payload.latest_follow or payload.reason or payload.status
         now = utc_now()
@@ -216,9 +218,6 @@ class WfsFeeAlertService:
                   case_nos = nullif(:case_no, ''),
                   reason = nullif(:reason, ''),
                   claim_amount = :claim_amount,
-                  recovered_amount = :recovered_amount,
-                  recovered_at = case when :status = 'recovered' then coalesce(recovered_at, :now)
-                                      else recovered_at end,
                   case_opened_at = :case_opened_at,
                   next_follow_at = :next_follow_at,
                   latest_follow_note = nullif(:latest_follow, ''),
@@ -226,10 +225,6 @@ class WfsFeeAlertService:
                     else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow) end,
                   log_updated_at = case when nullif(:latest_follow, '') is null then log_updated_at
                     else :now end,
-                  done_at = case when :status = 'recovered'
-                    then coalesce(done_at, :now) else done_at end,
-                  archived_at = case when :status = 'archived' then coalesce(archived_at, :now)
-                    else archived_at end,
                   status_changed_at = :now,
                   status_changed_by = :actor,
                   updated_by = :actor,
@@ -244,7 +239,6 @@ class WfsFeeAlertService:
                 "case_no": payload.case_no,
                 "reason": payload.reason,
                 "claim_amount": payload.claim_amount,
-                "recovered_amount": payload.recovered_amount,
                 "case_opened_at": payload.case_opened_at,
                 "next_follow_at": payload.next_follow_at,
                 "latest_follow": latest_note,
