@@ -8,6 +8,7 @@ export interface MockAuthUser {
   account: string;
   avatarSrc: string;
   online: boolean;
+  /** Tests must exercise the same permission-key boundary as real authenticated users. */
   permissions?: readonly string[];
   isSuperAdmin?: boolean;
 }
