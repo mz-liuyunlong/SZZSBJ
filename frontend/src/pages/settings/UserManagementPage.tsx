@@ -1,13 +1,14 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Input, Modal, Typography, message } from "antd";
+import { Alert, Button, Input, Modal, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
-import { fetchCurrentUser } from "@/pages/auth/authApi";
 import {
   REPORT_TABLE_DEFAULT_PAGE_SIZE,
   normalizeReportTablePageSize,
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
+import { fetchCurrentUser } from "@/pages/auth/authApi";
+import type { AuthUser } from "@/pages/auth/authTypes";
 import UserFormModal from "@/pages/settings/components/UserFormModal";
 import UserManagementTable from "@/pages/settings/components/UserManagementTable";
 import UserManagementToolbar from "@/pages/settings/components/UserManagementToolbar";
@@ -18,17 +19,18 @@ import {
   loadUserManagementData,
   resetUserPassword,
   updateUser,
+  updateUserRoles,
   updateUserStatus,
 } from "@/pages/settings/userManagementApi";
 import {
   defaultUserColumnWidths,
-  fallbackUserRoleOptions,
   type UserFormValues,
   type UserManagementFilters,
   type UserManagementRow,
   type UserRoleName,
   type UserRoleOption,
 } from "@/pages/settings/userManagementTypes";
+import { hasPermission } from "@/shared/permissions/mockAccess";
 import "@/pages/settings/UserManagementPage.css";
 
 const createInitialFilters = (): UserManagementFilters => ({ keyword: "" });
@@ -37,11 +39,18 @@ interface UserManagementPageProps {
   page: NavigationPage;
 }
 
+function permitted(user: AuthUser | undefined, permission: string, legacy?: string) {
+  return hasPermission(user?.permissions, permission)
+    || Boolean(legacy && hasPermission(user?.permissions, legacy));
+}
+
 function UserManagementPage({ page }: UserManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [users, setUsers] = useState<UserManagementRow[]>([]);
-  const [roleOptions, setRoleOptions] = useState<UserRoleOption[]>(fallbackUserRoleOptions);
+  const [roleOptions, setRoleOptions] = useState<UserRoleOption[]>([]);
+  const [currentUser, setCurrentUser] = useState<AuthUser>();
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string>();
   const [filters, setFilters] = useState(createInitialFilters);
   const [columnWidths, setColumnWidths] = useState(defaultUserColumnWidths);
   const [currentPage, setCurrentPage] = useState(1);
@@ -50,8 +59,41 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserManagementRow>();
   const [roleUser, setRoleUser] = useState<UserManagementRow>();
-  const [currentUserId, setCurrentUserId] = useState<string>();
-  const [canHardDelete, setCanHardDelete] = useState(false);
+
+  const canCreate = permitted(
+    currentUser,
+    "action:settings:user-management:create",
+    "settings:users:write",
+  );
+  const canEdit = permitted(
+    currentUser,
+    "action:settings:user-management:edit",
+    "settings:users:write",
+  );
+  const canAssignRole = permitted(
+    currentUser,
+    "action:settings:user-management:assign-role",
+    "settings:users:write",
+  );
+  const canResetPassword = permitted(
+    currentUser,
+    "action:settings:user-management:reset-password",
+    "settings:users:write",
+  );
+  const canEnableDisable = permitted(
+    currentUser,
+    "action:settings:user-management:enable-disable",
+    "settings:users:write",
+  );
+  const canViewPhone = permitted(
+    currentUser,
+    "field:settings:user-management:phone",
+  );
+  const canViewEmail = permitted(
+    currentUser,
+    "field:settings:user-management:email",
+  );
+  const canHardDelete = Boolean(currentUser?.isSuperAdmin);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -61,20 +103,23 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const refreshUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, currentUser] = await Promise.all([
+      const [data, authenticatedUser] = await Promise.all([
         loadUserManagementData(),
         fetchCurrentUser(),
       ]);
+      if (!authenticatedUser) throw new Error("missing current user");
+      setLoadError(undefined);
       setUsers(data.users);
       setRoleOptions(data.roleOptions);
-      setCurrentUserId(currentUser ? String(currentUser.id) : undefined);
-      setCanHardDelete(Boolean(currentUser?.permissions.includes("*")));
+      setCurrentUser(authenticatedUser);
     } catch {
-      void messageApi.error("用户/角色数据加载失败，请确认已登录管理员账号");
+      setUsers([]);
+      setRoleOptions([]);
+      setLoadError("用户或可分配角色加载失败；页面不会展示本地假数据。");
     } finally {
       setLoading(false);
     }
-  }, [messageApi]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -92,11 +137,19 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       && (!keyword
         || user.username.toLocaleLowerCase().includes(keyword)
         || user.realName.toLocaleLowerCase().includes(keyword)
-        || user.phone.toLocaleLowerCase().includes(keyword)
+        || (canViewPhone && user.phone.toLocaleLowerCase().includes(keyword))
+        || (canViewEmail && user.email.toLocaleLowerCase().includes(keyword))
         || (user.feishuName ?? "").toLocaleLowerCase().includes(keyword)
         || (user.feishuUserId ?? "").toLocaleLowerCase().includes(keyword))
     ));
-  }, [filters, users]);
+  }, [canViewEmail, canViewPhone, filters, users]);
+
+  const currentUserId = currentUser ? String(currentUser.id) : undefined;
+  const currentUserIsSuperAdmin = Boolean(currentUser?.isSuperAdmin);
+
+  const isProtectedTarget = (user: UserManagementRow) => (
+    user.isSuperAdmin && !currentUserIsSuperAdmin
+  );
 
   const updateFilters = (nextFilters: UserManagementFilters) => {
     setFilters(nextFilters);
@@ -109,11 +162,13 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   };
 
   const openCreateModal = () => {
+    if (!canCreate || !canAssignRole) return;
     setEditingUser(undefined);
     setFormOpen(true);
   };
 
   const openEditModal = (user: UserManagementRow) => {
+    if (!canEdit || isProtectedTarget(user)) return;
     setEditingUser(user);
     setFormOpen(true);
   };
@@ -121,9 +176,14 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const saveUser = async (values: UserFormValues) => {
     try {
       if (editingUser) {
-        await updateUser(editingUser.id, values, roleOptions);
+        if (!canEdit || isProtectedTarget(editingUser)) return;
+        await updateUser(editingUser.id, values);
+        if (canAssignRole && !editingUser.isSuperAdmin) {
+          await updateUserRoles(editingUser.id, values.roles, roleOptions);
+        }
         void messageApi.success("用户已保存");
       } else {
+        if (!canCreate || !canAssignRole) return;
         await createUser(values, roleOptions);
         void messageApi.success("用户已新增");
       }
@@ -133,29 +193,16 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       resetPageAndSelection();
       await refreshUsers();
     } catch {
-      void messageApi.error("保存失败，请检查账号是否重复或权限是否不足");
+      void messageApi.error("保存失败，请检查角色、账号或权限配置");
     }
   };
 
   const saveRoles = async (userId: string, roles: UserRoleName[]) => {
     const target = users.find((user) => user.id === userId);
-    if (!target) return;
+    if (!target || !canAssignRole || target.isSuperAdmin || isProtectedTarget(target)) return;
 
     try {
-      await updateUser(userId, {
-        username: target.username,
-        realName: target.realName,
-        phone: target.phone === "-" ? "" : target.phone,
-        email: target.email === "-" ? "" : target.email,
-        status: target.status,
-        roles,
-        feishuName: target.feishuName,
-        feishuOpenId: target.feishuOpenId,
-        feishuUserId: target.feishuUserId,
-        feishuUnionId: target.feishuUnionId,
-        feishuEmployeeId: target.feishuEmployeeId,
-        feishuDepartmentIds: target.feishuDepartmentIds,
-      }, roleOptions);
+      await updateUserRoles(userId, roles, roleOptions);
       setRoleUser(undefined);
       await refreshUsers();
       void messageApi.success("角色已更新");
@@ -164,7 +211,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
     }
   };
 
-  const confirmAction = (title: string, content: string, onOk: () => void | Promise<void>) => {
+  const confirmAction = (title: string, content: string, onOk: () => Promise<void>) => {
     Modal.confirm({
       title,
       content,
@@ -175,6 +222,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   };
 
   const resetPassword = (user: UserManagementRow) => {
+    if (!canResetPassword || isProtectedTarget(user)) return;
     let nextPassword = "";
 
     Modal.confirm({
@@ -182,7 +230,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       content: (
         <div>
           <Typography.Paragraph>
-            请输入 {user.username} 的新密码，密码至少 8 位。
+            请输入 {user.username} 的新密码，密码至少 8 位。重置后旧会话立即失效。
           </Typography.Paragraph>
           <Input.Password
             autoComplete="new-password"
@@ -200,14 +248,19 @@ function UserManagementPage({ page }: UserManagementPageProps) {
           void messageApi.error("密码至少 8 位");
           return Promise.reject(new Error("password too short"));
         }
-
         await resetUserPassword(user.id, nextPassword);
-        void messageApi.success("密码已重置");
+        void messageApi.success("密码已重置，旧会话已撤销");
       },
     });
   };
 
   const toggleStatus = (user: UserManagementRow) => {
+    if (
+      !canEnableDisable
+      || user.id === currentUserId
+      || user.isSuperAdmin
+      || isProtectedTarget(user)
+    ) return;
     const nextStatus = user.status === "启用" ? "停用" : "启用";
     confirmAction(`${nextStatus}用户`, `确认${nextStatus} ${user.username}？`, async () => {
       await updateUserStatus(user.id, nextStatus === "启用");
@@ -217,6 +270,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   };
 
   const deleteUser = (user: UserManagementRow) => {
+    if (!canHardDelete || user.id === currentUserId || user.isSuperAdmin) return;
     confirmAction(
       "永久删除用户",
       `确认永久删除 ${user.username}？此操作不可恢复。`,
@@ -230,13 +284,18 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   };
 
   const bulkDisable = () => {
-    if (selectedRowKeys.length === 0) {
+    const targets = users.filter((user) => selectedRowKeys.includes(user.id));
+    if (!canEnableDisable || targets.length === 0) {
       void messageApi.info("请先选择用户");
       return;
     }
+    if (targets.some((user) => user.id === currentUserId || user.isSuperAdmin)) {
+      void messageApi.warning("不能批量停用当前账号或超级管理员");
+      return;
+    }
 
-    confirmAction("批量停用", `确认停用 ${selectedRowKeys.length} 个用户？`, async () => {
-      await Promise.all(selectedRowKeys.map((key) => updateUserStatus(String(key), false)));
+    confirmAction("批量停用", `确认停用 ${targets.length} 个用户？`, async () => {
+      await Promise.all(targets.map((user) => updateUserStatus(user.id, false)));
       resetPageAndSelection();
       await refreshUsers();
       void messageApi.success("批量停用完成");
@@ -252,36 +311,58 @@ function UserManagementPage({ page }: UserManagementPageProps) {
             <div>
               <Typography.Title level={4}>用户管理</Typography.Title>
               <Typography.Text type="secondary">
-                真实账号管理：新增用户、设置角色、重置密码、停用/启用；超级管理员可永久删除。
+                用户、角色选项和操作权限均来自后端真实 RBAC 数据。
               </Typography.Text>
             </div>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
-              新增用户
-            </Button>
+            {canCreate && canAssignRole && (
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
+                新增用户
+              </Button>
+            )}
           </div>
-          <UserManagementToolbar filters={filters} onChange={updateFilters} onReset={resetFilters} />
-          <UserManagementTable
-            rows={filteredUsers}
-            columnWidths={columnWidths}
-            currentPage={currentPage}
-            pageSize={pageSize}
-            selectedRowKeys={selectedRowKeys}
-            canHardDelete={canHardDelete}
-            currentUserId={currentUserId}
-            onColumnWidthChange={(key, width) => setColumnWidths((current) => ({ ...current, [key]: width }))}
-            onCurrentPageChange={setCurrentPage}
-            onPageSizeChange={(nextPageSize) => {
-              setPageSize(normalizeReportTablePageSize(nextPageSize));
-              resetPageAndSelection();
-            }}
-            onSelectionChange={setSelectedRowKeys}
-            onEdit={openEditModal}
-            onSetRole={setRoleUser}
-            onResetPassword={resetPassword}
-            onToggleStatus={toggleStatus}
-            onDelete={deleteUser}
-            onBulkDisable={bulkDisable}
-          />
+          {loadError ? (
+            <Alert type="error" showIcon message={loadError} />
+          ) : (
+            <>
+              <UserManagementToolbar
+                filters={filters}
+                onChange={updateFilters}
+                onReset={resetFilters}
+              />
+              <UserManagementTable
+                rows={filteredUsers}
+                columnWidths={columnWidths}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                selectedRowKeys={selectedRowKeys}
+                currentUserId={currentUserId}
+                currentUserIsSuperAdmin={currentUserIsSuperAdmin}
+                canViewPhone={canViewPhone}
+                canViewEmail={canViewEmail}
+                canEdit={canEdit}
+                canAssignRole={canAssignRole}
+                canResetPassword={canResetPassword}
+                canEnableDisable={canEnableDisable}
+                canHardDelete={canHardDelete}
+                onColumnWidthChange={(key, width) => setColumnWidths((current) => ({
+                  ...current,
+                  [key]: width,
+                }))}
+                onCurrentPageChange={setCurrentPage}
+                onPageSizeChange={(nextPageSize) => {
+                  setPageSize(normalizeReportTablePageSize(nextPageSize));
+                  resetPageAndSelection();
+                }}
+                onSelectionChange={setSelectedRowKeys}
+                onEdit={openEditModal}
+                onSetRole={setRoleUser}
+                onResetPassword={resetPassword}
+                onToggleStatus={toggleStatus}
+                onDelete={deleteUser}
+                onBulkDisable={bulkDisable}
+              />
+            </>
+          )}
           {loading && <Typography.Text type="secondary">正在加载真实用户数据...</Typography.Text>}
         </section>
       </div>
@@ -289,6 +370,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
         open={formOpen}
         editingUser={editingUser}
         roleOptions={roleOptions}
+        canAssignRoles={canAssignRole}
         onCancel={() => {
           setFormOpen(false);
           setEditingUser(undefined);

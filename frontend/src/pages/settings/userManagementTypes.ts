@@ -18,7 +18,6 @@ export interface FeishuDirectorySearchResult {
   users: FeishuDirectoryUser[];
 }
 
-
 export interface UserManagementRow {
   id: string;
   username: string;
@@ -27,7 +26,7 @@ export interface UserManagementRow {
   email: string;
   status: UserStatus;
   roles: UserRoleName[];
-  isSuperAdmin?: boolean;
+  isSuperAdmin: boolean;
   feishuName?: string;
   feishuOpenId?: string;
   feishuUserId?: string;
@@ -68,19 +67,12 @@ export interface UserManagementColumnField {
 export interface UserRoleOption {
   key: string;
   name: UserRoleName;
+  description?: string;
+  isSystem: boolean;
+  assignable: boolean;
 }
 
 export const userStatusOptions: UserStatus[] = ["启用", "停用"];
-
-export const fallbackUserRoleOptions: UserRoleOption[] = [
-  { key: "operations", name: "运营" },
-  { key: "purchase", name: "采购" },
-  { key: "warehouse", name: "仓库" },
-  { key: "finance", name: "财务" },
-  { key: "admin", name: "管理员" },
-];
-
-export const userRoleOptions: UserRoleName[] = fallbackUserRoleOptions.map((role) => role.name);
 
 export const userManagementColumnFields: UserManagementColumnField[] = [
   { key: "username", title: "用户名" },

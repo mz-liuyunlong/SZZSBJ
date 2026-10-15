@@ -13,6 +13,7 @@ interface UserFormModalProps {
   open: boolean;
   editingUser?: UserManagementRow;
   roleOptions: UserRoleOption[];
+  canAssignRoles: boolean;
   onCancel: () => void;
   onSubmit: (values: UserFormValues) => void;
 }
@@ -37,17 +38,21 @@ function UserFormModal({
   open,
   editingUser,
   roleOptions,
+  canAssignRoles,
   onCancel,
   onSubmit,
 }: UserFormModalProps) {
   const [form] = Form.useForm<UserFormValues>();
   const [feishuSearchLoading, setFeishuSearchLoading] = useState(false);
   const [feishuSearchNotice, setFeishuSearchNotice] = useState<string>();
-  const [feishuSearchNoticeType, setFeishuSearchNoticeType] = useState<"success" | "info" | "warning">("info");
+  const [feishuSearchNoticeType, setFeishuSearchNoticeType] = useState<
+    "success" | "info" | "warning"
+  >("info");
 
   const boundFeishuOpenId = Form.useWatch("feishuOpenId", form);
   const boundFeishuName = Form.useWatch("feishuName", form);
   const boundFeishuUserId = Form.useWatch("feishuUserId", form);
+  const assignableRoleOptions = roleOptions.filter((role) => role.assignable);
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +64,7 @@ function UserFormModal({
       email: editingUser.email === "-" ? "" : editingUser.email,
       password: "",
       status: editingUser.status,
-      roles: editingUser.roles,
+      roles: editingUser.roles.filter((role) => role !== "超级管理员"),
       feishuName: editingUser.feishuName ?? "",
       feishuOpenId: editingUser.feishuOpenId ?? "",
       feishuUserId: editingUser.feishuUserId ?? "",
@@ -98,20 +103,20 @@ function UserFormModal({
 
       if (result.matchedCount === 0) {
         setFeishuSearchNoticeType("warning");
-        setFeishuSearchNotice(`飞书通讯录未找到「${realName}」。请确认姓名是否和飞书一致。`);
+        setFeishuSearchNotice(`飞书通讯录未找到「${realName}」。请确认姓名是否一致。`);
         return;
       }
 
       if (!result.isUnique || result.users.length !== 1) {
         setFeishuSearchNoticeType("warning");
-        setFeishuSearchNotice(`飞书通讯录找到 ${result.matchedCount} 个同名员工。为避免绑定错误，请联系管理员确认。`);
+        setFeishuSearchNotice(`飞书通讯录找到 ${result.matchedCount} 个同名员工。`);
         return;
       }
 
       const [user] = result.users;
       applyFeishuUser(user);
       setFeishuSearchNoticeType("success");
-      setFeishuSearchNotice(`已绑定飞书员工：${user.name} / ${user.userId ?? user.openId}`);
+      setFeishuSearchNotice(`已绑定飞书员工：${user.name}`);
     } catch {
       setFeishuSearchNoticeType("warning");
       setFeishuSearchNotice("飞书通讯录查询失败，请确认后端飞书配置和管理员权限。");
@@ -168,9 +173,6 @@ function UserFormModal({
               搜索飞书
             </Button>
           </Space.Compact>
-          <Typography.Paragraph type="secondary" style={{ margin: "8px 0 0" }}>
-            绑定后可用于忘记密码、入职设置密码、离职通知和飞书消息触达。
-          </Typography.Paragraph>
           {feishuSearchNotice && (
             <Alert
               showIcon
@@ -181,40 +183,26 @@ function UserFormModal({
           )}
         </Form.Item>
 
-        <Form.Item name="feishuName" hidden>
-          <Input />
-        </Form.Item>
-        <Form.Item name="feishuOpenId" hidden>
-          <Input />
-        </Form.Item>
-        <Form.Item name="feishuUserId" hidden>
-          <Input />
-        </Form.Item>
-        <Form.Item name="feishuUnionId" hidden>
-          <Input />
-        </Form.Item>
-        <Form.Item name="feishuEmployeeId" hidden>
-          <Input />
-        </Form.Item>
+        <Form.Item name="feishuName" hidden><Input /></Form.Item>
+        <Form.Item name="feishuOpenId" hidden><Input /></Form.Item>
+        <Form.Item name="feishuUserId" hidden><Input /></Form.Item>
+        <Form.Item name="feishuUnionId" hidden><Input /></Form.Item>
+        <Form.Item name="feishuEmployeeId" hidden><Input /></Form.Item>
 
         {!editingUser && (
           <Form.Item
             name="password"
             label="初始密码（可选）"
-            extra="绑定飞书员工后可不填，系统会通过飞书发送入职设置密码卡片。"
+            extra="绑定飞书员工后可不填，由员工自行设置。"
             rules={[{ min: 8, message: "密码至少 8 位" }]}
           >
-            <Input.Password placeholder="可不填，绑定飞书后由员工自行设置" />
+            <Input.Password placeholder="可不填" />
           </Form.Item>
         )}
 
         <div className="user-management-modal__grid">
-          <Form.Item name="phone" label="手机号">
-            <Input placeholder="请输入手机号" />
-          </Form.Item>
-          <Form.Item name="email" label="邮箱">
-            <Input placeholder="请输入邮箱" />
-          </Form.Item>
+          <Form.Item name="phone" label="手机号"><Input placeholder="请输入手机号" /></Form.Item>
+          <Form.Item name="email" label="邮箱"><Input placeholder="请输入邮箱" /></Form.Item>
         </div>
 
         <Form.Item
@@ -225,17 +213,22 @@ function UserFormModal({
           <Select options={userStatusOptions.map((value) => ({ value, label: value }))} />
         </Form.Item>
 
-        <Form.Item
-          name="roles"
-          label="角色"
-          rules={[{ required: true, message: "至少选择一个角色" }]}
-        >
-          <Select
-            mode="multiple"
-            placeholder="请选择角色"
-            options={roleOptions.map((role) => ({ value: role.name, label: role.name }))}
-          />
-        </Form.Item>
+        {canAssignRoles && (
+          <Form.Item
+            name="roles"
+            label="角色"
+            rules={[{ required: true, message: "至少选择一个角色" }]}
+          >
+            <Select
+              mode="multiple"
+              placeholder="请选择角色"
+              options={assignableRoleOptions.map((role) => ({
+                value: role.name,
+                label: role.name,
+              }))}
+            />
+          </Form.Item>
+        )}
       </Form>
     </Modal>
   );

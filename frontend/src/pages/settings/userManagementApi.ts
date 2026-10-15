@@ -1,6 +1,5 @@
 import { backendRequest } from "@/api/backendApi";
 import {
-  fallbackUserRoleOptions,
   type FeishuDirectorySearchResult,
   type FeishuDirectoryUser,
   type UserFormValues,
@@ -47,23 +46,13 @@ interface BackendFeishuDirectorySearchResult {
   users: BackendFeishuDirectoryUser[];
 }
 
-interface BackendRole {
-  id: string;
+interface BackendRoleOption {
   role_key: string;
   name: string;
   description: string | null;
   is_system: boolean;
-  user_count: number;
-  permission_keys: string[];
+  assignable: boolean;
 }
-
-const roleDisplayNameByKey: Record<string, string> = {
-  admin: "管理员",
-  operations: "运营",
-  purchase: "采购",
-  warehouse: "仓库",
-  finance: "财务",
-};
 
 function optionalString(value: string | undefined): string | undefined {
   const normalized = value?.trim();
@@ -95,24 +84,23 @@ function formatDate(value: string | null | undefined): string {
   });
 }
 
-function toRoleOptions(roles: BackendRole[]): UserRoleOption[] {
-  if (roles.length === 0) return fallbackUserRoleOptions;
-
+function toRoleOptions(roles: BackendRoleOption[]): UserRoleOption[] {
   return roles.map((role) => ({
     key: role.role_key,
-    name: roleDisplayNameByKey[role.role_key] ?? role.name,
+    name: role.name,
+    description: role.description ?? undefined,
+    isSystem: role.is_system,
+    assignable: role.assignable,
   }));
 }
 
 function roleNameFromKey(roleKey: string, roleOptions: UserRoleOption[]): UserRoleName {
-  return roleOptions.find((role) => role.key === roleKey)?.name
-    ?? roleDisplayNameByKey[roleKey]
-    ?? roleKey;
+  return roleOptions.find((role) => role.key === roleKey)?.name ?? roleKey;
 }
 
 function roleKeysFromNames(names: UserRoleName[], roleOptions: UserRoleOption[]): string[] {
   return names.flatMap((name) => {
-    const role = roleOptions.find((item) => item.name === name);
+    const role = roleOptions.find((item) => item.name === name && item.assignable);
     return role ? [role.key] : [];
   });
 }
@@ -129,7 +117,9 @@ function toUserRow(user: BackendUser, roleOptions: UserRoleOption[]): UserManage
     phone: user.phone || "-",
     email: user.email || "-",
     status: user.is_active ? "启用" : "停用",
-    roles: roleNames,
+    roles: user.is_super_admin
+      ? ["超级管理员", ...roleNames.filter((name) => name !== "管理员")]
+      : roleNames,
     isSuperAdmin: user.is_super_admin,
     feishuName: user.feishu_name ?? undefined,
     feishuOpenId: user.feishu_open_id ?? undefined,
@@ -146,12 +136,12 @@ export async function loadUserManagementData(): Promise<{
   users: UserManagementRow[];
   roleOptions: UserRoleOption[];
 }> {
-  const [usersResponse, rolesResponse] = await Promise.all([
+  const [usersResponse, roleOptionsResponse] = await Promise.all([
     backendRequest<BackendUser[]>("/api/settings/users"),
-    backendRequest<BackendRole[]>("/api/settings/roles"),
+    backendRequest<BackendRoleOption[]>("/api/settings/user-role-options"),
   ]);
 
-  const roleOptions = toRoleOptions(rolesResponse.data);
+  const roleOptions = toRoleOptions(roleOptionsResponse.data);
   return {
     roleOptions,
     users: usersResponse.data.map((user) => toUserRow(user, roleOptions)),
@@ -188,7 +178,9 @@ export async function createUser(
       feishu_user_id: optionalString(values.feishuUserId),
       feishu_union_id: optionalString(values.feishuUnionId),
       feishu_employee_id: optionalString(values.feishuEmployeeId),
-      feishu_department_ids: values.feishuDepartmentIds?.length ? values.feishuDepartmentIds : undefined,
+      feishu_department_ids: values.feishuDepartmentIds?.length
+        ? values.feishuDepartmentIds
+        : undefined,
       role_keys: roleKeysFromNames(values.roles, roleOptions),
     }),
   });
@@ -197,7 +189,6 @@ export async function createUser(
 export async function updateUser(
   userId: string,
   values: UserFormValues,
-  roleOptions: UserRoleOption[],
 ): Promise<void> {
   await backendRequest<BackendUser>(`/api/settings/users/${userId}`, {
     method: "PATCH",
@@ -210,9 +201,23 @@ export async function updateUser(
       feishu_user_id: optionalString(values.feishuUserId),
       feishu_union_id: optionalString(values.feishuUnionId),
       feishu_employee_id: optionalString(values.feishuEmployeeId),
-      feishu_department_ids: values.feishuDepartmentIds?.length ? values.feishuDepartmentIds : undefined,
+      feishu_department_ids: values.feishuDepartmentIds?.length
+        ? values.feishuDepartmentIds
+        : undefined,
       is_active: values.status === "启用",
-      role_keys: roleKeysFromNames(values.roles, roleOptions),
+    }),
+  });
+}
+
+export async function updateUserRoles(
+  userId: string,
+  roles: UserRoleName[],
+  roleOptions: UserRoleOption[],
+): Promise<void> {
+  await backendRequest<BackendUser>(`/api/settings/users/${userId}/roles`, {
+    method: "PUT",
+    body: JSON.stringify({
+      role_keys: roleKeysFromNames(roles, roleOptions),
     }),
   });
 }
