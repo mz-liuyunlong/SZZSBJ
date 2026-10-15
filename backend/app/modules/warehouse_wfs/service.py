@@ -257,7 +257,7 @@ class WfsFeeAlertService:
     ) -> None:
         self._assert_case_visible(case_id, account_refs)
         now = utc_now()
-        self.session.execute(
+        result = self.session.execute(
             text(
                 """
                 update ops_wfs_fee_anomaly_cases set
@@ -285,6 +285,9 @@ class WfsFeeAlertService:
                 "now": now,
             },
         )
+        if result.rowcount != 1:
+            self.session.rollback()
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         self.session.commit()
 
     def review_archive(
@@ -310,7 +313,7 @@ class WfsFeeAlertService:
                 "archived_at": None,
                 "last_reopened_at": now,
             }
-        self.session.execute(
+        result = self.session.execute(
             text(
                 """
                 update ops_wfs_fee_anomaly_cases set
@@ -330,6 +333,7 @@ class WfsFeeAlertService:
                 where id = :case_id
                   and status = 'archive_pending'
                   and archive_review_status = 'pending'
+                  and archive_requested_by is distinct from :actor
                 """
             ),
             {
@@ -340,6 +344,9 @@ class WfsFeeAlertService:
                 **values,
             },
         )
+        if result.rowcount != 1:
+            self.session.rollback()
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         self.session.commit()
 
     def mark_recovered(
