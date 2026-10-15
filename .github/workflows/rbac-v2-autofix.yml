@@ -38,24 +38,20 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           routes = Path("frontend/src/router/routes.test.tsx")
           text = routes.read_text()
 
-          text = text.replace(
-              'import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";\n',
-              'import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";\n'
-              'import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";\n',
-              1,
-          )
-          text = text.replace(
-              '''vi.mock("@/pages/auth/LoginPage", () => ({
-            default: ({ onLogin }: { onLogin: () => void }) => (
-              <button type="button" onClick={onLogin}>
-                模拟登录
-              </button>
-            ),
-          }));''',
+          import_line = 'import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";\n'
+          if import_line not in text:
+              marker = 'import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";\n'
+              if marker not in text:
+                  raise SystemExit("routeResolver import marker not found")
+              text = text.replace(marker, marker + import_line, 1)
+
+          text, count = re.subn(
+              r'''vi\.mock\("@/pages/auth/LoginPage", \(\) => \(\{.*?\n\}\)\);''',
               '''vi.mock("@/pages/auth/LoginPage", () => ({
             default: ({ onLogin }: { onLogin: (user: AuthUser) => void }) => (
               <button type="button" onClick={() => onLogin(DEFAULT_AUTH_USER)}>
@@ -63,19 +59,16 @@ jobs:
               </button>
             ),
           }));''',
-              1,
+              text,
+              count=1,
+              flags=re.S,
           )
-          old_harness = '''function RoutesHarness({ initialLoggedIn }: { initialLoggedIn: boolean }) {
-            const [mockLoggedIn, setMockLoggedIn] = useState(initialLoggedIn);
-            return (
-              <AppRoutes
-                mockLoggedIn={mockLoggedIn}
-                onLogin={() => setMockLoggedIn(true)}
-                onLogout={() => setMockLoggedIn(false)}
-              />
-            );
-          }'''
-          new_harness = '''function RoutesHarness({ initialLoggedIn }: { initialLoggedIn: boolean }) {
+          if count != 1:
+              raise SystemExit("LoginPage mock block not found")
+
+          text, count = re.subn(
+              r'''function RoutesHarness\(\{ initialLoggedIn \}: \{ initialLoggedIn: boolean \}\) \{.*?\n\}\n\nconst renderRoutes''',
+              '''function RoutesHarness({ initialLoggedIn }: { initialLoggedIn: boolean }) {
             const [mockLoggedIn, setMockLoggedIn] = useState(initialLoggedIn);
             const [currentUser, setCurrentUser] = useState<AuthUser | undefined>(
               initialLoggedIn ? DEFAULT_AUTH_USER : undefined,
@@ -94,42 +87,52 @@ jobs:
                 }}
               />
             );
-          }'''
-          if old_harness not in text:
-              raise SystemExit("RoutesHarness block not found")
-          text = text.replace(old_harness, new_harness, 1)
-          text = text.replace(
-              'const restoredPath = "/data-center/documentation";',
-              'const restoredPath = "/sales/daily-sales";',
-              1,
-          )
-          text = text.replace(
-              '''expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-              "文档",
-            );''',
-              '''expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-              "每日销售",
-            );''',
-              1,
-          )
-          old_hidden = '''  it("renders the default and hidden business routes when mock logged in", async () => {
-            const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
-            expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
-            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-              "Listing管理",
-            );
-            expect(screen.getByText("products_listing_management")).toBeVisible();
+          }
 
-            unmount();
-            renderRoutes("/data-center/documentation", true);
-            expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
-            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-              "文档",
+          const renderRoutes''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("RoutesHarness block not found")
+
+          restore_test = '''  it("keeps mock auth in memory while restoring the path-only workspace after login", async () => {
+            const restoredPath = "/sales/daily-sales";
+            sessionStorage.setItem(
+              TAB_WORKSPACE_STORAGE_KEY,
+              JSON.stringify({
+                version: TAB_WORKSPACE_VERSION,
+                openPaths: [DEFAULT_BUSINESS_PATH, restoredPath],
+                activePath: restoredPath,
+              }),
             );
-            expect(screen.getByLabelText("页面状态：hidden")).toHaveTextContent("hidden");
-            expect(screen.getByLabelText("当前路径")).toHaveTextContent("/data-center/documentation");
-          });'''
-          new_hidden = '''  it("renders the default route and rejects hidden business routes", async () => {
+            renderRoutes(restoredPath);
+
+            expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
+            expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+
+            fireEvent.click(screen.getByRole("button", { name: "模拟登录" }));
+            await waitFor(() => {
+              expect(screen.getByLabelText("当前路径")).toHaveTextContent(restoredPath);
+            });
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "每日销售",
+            );
+          });
+
+          it("redirects unauthenticated business visits to login"'''
+          text, count = re.subn(
+              r'''  it\("keeps mock auth in memory while restoring the path-only workspace after login".*?\n  it\("redirects unauthenticated business visits to login"''',
+              restore_test,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit("workspace restore test block not found")
+
+          hidden_test = '''  it("renders the default route and rejects hidden business routes", async () => {
             const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
             expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
             expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
@@ -149,30 +152,23 @@ jobs:
               "今日销售",
             );
             expect(screen.queryByLabelText("页面状态：hidden")).not.toBeInTheDocument();
-          });'''
-          if old_hidden not in text:
+          });
+
+          it("uses the approved product page shells'''
+          text, count = re.subn(
+              r'''  it\("renders the default and hidden business routes when mock logged in".*?\n  it\("uses the approved product page shells''',
+              hidden_test,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
               raise SystemExit("hidden route test block not found")
-          routes.write_text(text.replace(old_hidden, new_hidden, 1))
+          routes.write_text(text)
 
           layout = Path("frontend/src/layouts/MainLayout.test.tsx")
           text = layout.read_text()
-          old_tail = '''    fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
-            fireEvent.click(await screen.findByRole("menuitem", { name: personalCenter.title }));
-            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-              personalCenter.title,
-            );
-            expect(within(breadcrumb).getByText(settingsGroup.title)).toBeVisible();
-            expect(within(content).getByText("个人中心内容区")).toBeVisible();
-
-            fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
-            fireEvent.click(await screen.findByRole("menuitem", { name: documentation.title }));
-            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-              documentation.title,
-            );
-            expect(within(breadcrumb).getByText(dataCenterGroup.title)).toBeVisible();
-            expect(within(content).getByText("文档内容区")).toBeVisible();
-            expect(window.location.hash).toBe(`#${documentation.path}`);'''
-          new_tail = '''    fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
+          replacement = '''    fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
             expect(await screen.findByRole("menuitem", { name: "退出" })).toBeVisible();
             expect(
               screen.queryByRole("menuitem", { name: personalCenter.title }),
@@ -180,10 +176,18 @@ jobs:
             expect(
               screen.queryByRole("menuitem", { name: documentation.title }),
             ).not.toBeInTheDocument();
-            expect(window.location.hash).toBe(`#${aiAssistant.path}`);'''
-          if old_tail not in text:
+            expect(window.location.hash).toBe(`#${aiAssistant.path}`);
+          }, 30_000);'''
+          text, count = re.subn(
+              r'''    fireEvent\.mouseEnter\(screen\.getByRole\("button", \{ name: "用户菜单" \}\)\);\n    fireEvent\.click\(await screen\.findByRole\("menuitem", \{ name: personalCenter\.title \}\)\);.*?    expect\(window\.location\.hash\)\.toBe\(`#\$\{documentation\.path\}`\);\n  \}, 30_000\);''',
+              replacement,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
               raise SystemExit("MainLayout hidden topbar test block not found")
-          layout.write_text(text.replace(old_tail, new_tail, 1))
+          layout.write_text(text)
           PY
 
       - name: Format backend RBAC files
@@ -196,6 +200,19 @@ jobs:
             app/modules/iam/rbac_router.py \
             app/modules/iam/rbac_service.py \
             tests/core/test_permission_policy_v2.py
+
+      - name: Commit autofix and remove one-time workflow
+        run: |
+          git rm .github/workflows/rbac-v2-autofix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend frontend
+          git commit -m "fix(ci): format RBAC and align permission-aware tests [rbac-autofix]"
+          git push origin HEAD:feat/iam-rbac-v2-complete
+
+      - name: Verify backend
+        working-directory: backend
+        run: |
           uv run ruff format --check .
           uv run ruff check .
           uv run pytest
@@ -208,15 +225,3 @@ jobs:
           npm run lint --if-present
           npm run test --if-present -- --run
           npm run build --if-present
-
-      - name: Commit autofix
-        run: |
-          if git diff --quiet; then
-            echo "No autofix changes required."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend frontend
-          git commit -m "fix(ci): format RBAC and align permission-aware tests [rbac-autofix]"
-          git push origin HEAD:feat/iam-rbac-v2-complete
