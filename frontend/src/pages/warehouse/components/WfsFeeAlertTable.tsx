@@ -43,6 +43,8 @@ const statusColor: Record<WfsFeeAlertRow["status"], string> = {
   未开Case: "warning",
   已开Case: "processing",
   跟进中: "blue",
+  待归档审核: "warning",
+  已归档: "default",
   已追回: "success",
   驳回: "error",
   已关闭: "default",
