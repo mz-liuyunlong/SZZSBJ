@@ -234,6 +234,7 @@ class WfsFeeLegacySyncResult(StrictSchema):
     duplicate_identities: int
     invalid_values: int
     protected_cases: int
+    case_ref_conflicts: int
     existing_cases: int
     will_insert: int
     will_update: int

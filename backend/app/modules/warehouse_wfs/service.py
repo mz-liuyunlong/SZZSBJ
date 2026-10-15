@@ -394,7 +394,7 @@ class WfsFeeAlertService:
             or summary.ambiguous_identities
             or summary.duplicate_identities
             or summary.invalid_values
-            or summary.protected_cases
+            or summary.case_ref_conflicts
         ):
             raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         result = self.session.execute(text(self._legacy_upsert_sql()))
@@ -626,7 +626,14 @@ class WfsFeeAlertService:
                  where not (c.source_kind='legacy_mirror'
                    and c.updated_by='legacy_mirror'
                    and c.legacy_case_id=e.id
-                   and c.is_deleted=false)) protected_cases
+                   and c.is_deleted=false)) protected_cases,
+                (select count(*) from enriched e
+                 join ops_wfs_fee_anomaly_cases c
+                   on c.source_case_ref = 'legacy_wfs_fee_case:' || e.id::text
+                 where c.source_account_ref <> e.source_account_ref
+                    or c.store_id <> e.store_id
+                    or c.item_id <> e.item_id
+                    or c.msku <> e.normalized_msku) case_ref_conflicts
                 """
                 )
             )
@@ -642,6 +649,7 @@ class WfsFeeAlertService:
             duplicate_identities=int(row["duplicate_identities"]),
             invalid_values=int(row["invalid_values"]),
             protected_cases=int(row["protected_cases"]),
+            case_ref_conflicts=int(row["case_ref_conflicts"]),
             existing_cases=int(row["existing_cases"]),
             will_insert=int(row["will_insert"]),
             will_update=int(row["will_update"]),

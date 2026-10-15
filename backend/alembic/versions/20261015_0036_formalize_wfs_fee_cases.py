@@ -55,7 +55,10 @@ def upgrade() -> None:
                 'warehouse:wfs-fee-alert:sync'
             ))
            or (r.role_key in ('warehouse', 'operations')
-            and p.permission_key = 'warehouse:wfs-fee-alert:write')
+            and p.permission_key in (
+                'warehouse:wfs-fee-alert:read',
+                'warehouse:wfs-fee-alert:write'
+            ))
         on conflict do nothing
         """
     )

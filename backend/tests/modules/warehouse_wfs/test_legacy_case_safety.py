@@ -26,6 +26,9 @@ def test_account_resolution_refuses_ambiguous_store_identity() -> None:
     assert "mart_daily_sales_item_day" in LEGACY_IDENTITY_CTE
     assert "ambiguous_identities" in LEGACY_IDENTITY_PREFLIGHT_SQL
     assert "duplicate_identities" in LEGACY_IDENTITY_PREFLIGHT_SQL
+    assert "status not in ('waiting', 'following', 'approving', 'closed', 'done')" in (
+        LEGACY_IDENTITY_PREFLIGHT_SQL
+    )
 
 
 def test_upsert_does_not_override_manually_edited_case() -> None:
@@ -33,6 +36,7 @@ def test_upsert_does_not_override_manually_edited_case() -> None:
     assert "ops_wfs_fee_anomaly_cases.updated_by = 'legacy_mirror'" in query
     assert "ops_wfs_fee_anomaly_cases.legacy_case_id = excluded.legacy_case_id" in query
     assert "on conflict (source_account_ref, store_id, item_id, msku)" in query
+    assert "where true" in query
 
 
 def test_legacy_follow_cannot_mark_recovered_or_archived(monkeypatch: pytest.MonkeyPatch) -> None:
