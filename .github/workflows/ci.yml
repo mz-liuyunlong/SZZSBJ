@@ -174,3 +174,4 @@ jobs:
                   )
               ).scalar_one() is not None
           PY
+          uv run python scripts/ci_wfs_case_smoke.py
