@@ -92,3 +92,54 @@ jobs:
           uv run ruff check .
           uv run pytest
           uv run python -c "import app.main"
+
+  wfs-migration-smoke:
+    name: WFS PostgreSQL migration smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: szzsbj_ci
+          POSTGRES_USER: szzsbj_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U szzsbj_ci -d szzsbj_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: dev
+      DATABASE_URL: postgresql+psycopg://szzsbj_ci:local_ci_only@127.0.0.1:5432/szzsbj_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Upgrade isolated PostgreSQL from base to WFS 0036
+        working-directory: backend
+        run: |
+          uv sync
+          uv run alembic upgrade head
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+          from app.core.config import get_database_url
+
+          with create_engine(get_database_url()).connect() as conn:
+              head = conn.execute(
+                  text("select version_num from alembic_version")
+              ).scalar_one()
+              assert head == "20261015_0036_formalize_wfs_fee_cases"
+              assert conn.execute(
+                  text("select to_regclass('public.ops_wfs_fee_anomaly_cases')")
+              ).scalar_one() is not None
+              assert conn.execute(
+                  text(
+                      "select to_regclass("
+                      "'public.ops_wfs_fee_anomaly_cases_legacy_shape_backup')"
+                  )
+              ).scalar_one() is not None
+          PY
