@@ -74,6 +74,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261007_0030_daily_sales_sem_ad_spend.py",
         "20261008_0031_order_profit_sem_ad_spend.py",
         "20261008_0032_order_profit_return_qty_refund_loss.py",
+        "20261010_0033_add_wfs_low_price_surcharge.py",
+        "20261013_0034_listing_wfs_first_stock.py",
+        "20261014_0035_add_auth_rbac.py",
+        "20261015_0036_formalize_wfs_fee_cases.py",
     } <= revisions
 
     revision = (

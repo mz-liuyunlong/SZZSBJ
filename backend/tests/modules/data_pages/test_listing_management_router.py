@@ -67,7 +67,7 @@ def _listing_item() -> ListingManagementItemRead:
         listing_status="在线",
         lifecycle_status="成长期",
         listing_start_at_utc=NOW,
-        listing_start_source_raw="2026-09-17 08:00:00",
+        listing_start_source_raw=None,
         category="家居",
         wfs_available_quantity=Decimal("12"),
         available_quantity=Decimal("2"),
@@ -167,7 +167,7 @@ def test_listing_management_route_returns_envelope_and_meta(monkeypatch: Any) ->
     assert captured["query"].page_size == 50
     assert body["data"]["items"][0]["local_sku"] == "sku-1"
     assert body["data"]["items"][0]["sale_price_amount"] == "39.99"
-    assert body["data"]["items"][0]["listing_start_source_raw"] == "2026-09-17 08:00:00"
+    assert body["data"]["items"][0]["listing_start_source_raw"] is None
     assert body["meta"]["source_objects"] == [
         "mart_listing_management_current",
         "dim_walmart_listings",

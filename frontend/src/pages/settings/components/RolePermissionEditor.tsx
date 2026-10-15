@@ -1,14 +1,8 @@
-/** Edits page, action and field permissions for one selected role using local acceptance state. */
-import { Checkbox, Radio, Table, Tabs, Typography, type TableColumnsType } from "antd";
+/** Edits page and action permissions from the backend permission catalog. */
+import { Alert, Checkbox, Empty, Tabs, Typography } from "antd";
+import type { RolePermissionCatalog } from "@/pages/settings/roleManagementApi";
 import {
-  actionPermissionGroups,
-  fieldPermissionNames,
-  pagePermissionGroups,
-} from "@/pages/settings/roleManagementMockData";
-import {
-  fieldPermissionOptions,
   permissionTabs,
-  type FieldPermissionValue,
   type PermissionGroup,
   type PermissionTabKey,
   type RoleManagementRow,
@@ -19,58 +13,26 @@ interface RolePermissionEditorProps {
   role: RoleManagementRow;
   activeTab: PermissionTabKey;
   permissions: RolePermissionState;
+  permissionCatalog: RolePermissionCatalog;
   onTabChange: (tab: PermissionTabKey) => void;
   onChange: (permissions: RolePermissionState) => void;
 }
 
-interface PermissionItemRow {
-  key: string;
-  field: string;
-}
-
-const fieldColumns = (
-  permissions: RolePermissionState,
-  onChange: (next: RolePermissionState) => void,
-): TableColumnsType<PermissionItemRow> => [
-  {
-    title: "字段",
-    dataIndex: "field",
-    key: "field",
-    width: 220,
-    render: (field: string) => <Typography.Text strong>{field}</Typography.Text>,
-  },
-  {
-    title: "权限",
-    key: "permission",
-    render: (_, row) => (
-      <Radio.Group
-        options={fieldPermissionOptions}
-        value={permissions.fieldPermissions[row.field] ?? "visible"}
-        onChange={(event) => onChange({
-          ...permissions,
-          fieldPermissions: {
-            ...permissions.fieldPermissions,
-            [row.field]: event.target.value as FieldPermissionValue,
-          },
-        })}
-      />
-    ),
-  },
-];
-
 function PermissionGroupSection({
   group,
   values,
+  permissionCatalog,
   onGroupChange,
   onItemChange,
 }: {
   group: PermissionGroup;
   values: Record<string, boolean>;
+  permissionCatalog: RolePermissionCatalog;
   onGroupChange: (checked: boolean) => void;
   onItemChange: (item: string, checked: boolean) => void;
 }) {
-  const checkedCount = group.items.filter((item) => values[item] !== false).length;
-  const allChecked = checkedCount === group.items.length;
+  const checkedCount = group.items.filter((item) => values[item] === true).length;
+  const allChecked = group.items.length > 0 && checkedCount === group.items.length;
   const partialChecked = checkedCount > 0 && checkedCount < group.items.length;
 
   return (
@@ -87,12 +49,16 @@ function PermissionGroupSection({
       </div>
       <div className="role-management__permission-grid">
         {group.items.map((item) => (
-          <label key={item} className="role-management__permission-check">
+          <label
+            key={item}
+            className="role-management__permission-check"
+            title={permissionCatalog.permissionDescriptions[item] ?? item}
+          >
             <Checkbox
-              checked={values[item] !== false}
+              checked={values[item] === true}
               onChange={(event) => onItemChange(item, event.target.checked)}
             />
-            <span>{item}</span>
+            <span>{permissionCatalog.permissionLabels[item] ?? item}</span>
           </label>
         ))}
       </div>
@@ -104,6 +70,7 @@ function RolePermissionEditor({
   role,
   activeTab,
   permissions,
+  permissionCatalog,
   onTabChange,
   onChange,
 }: RolePermissionEditorProps) {
@@ -112,24 +79,29 @@ function RolePermissionEditor({
     keyName: "pagePermissions" | "actionPermissions",
   ) => (
     <div className="role-management__permission-scroll">
-      {groups.map((group) => (
-        <PermissionGroupSection
-          key={group.title}
-          group={group}
-          values={permissions[keyName]}
-          onGroupChange={(checked) => {
-            const nextValues = { ...permissions[keyName] };
-            group.items.forEach((item) => {
-              nextValues[item] = checked;
-            });
-            onChange({ ...permissions, [keyName]: nextValues });
-          }}
-          onItemChange={(item, checked) => onChange({
-            ...permissions,
-            [keyName]: { ...permissions[keyName], [item]: checked },
-          })}
-        />
-      ))}
+      {groups.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可配置权限" />
+      ) : (
+        groups.map((group) => (
+          <PermissionGroupSection
+            key={group.title}
+            group={group}
+            values={permissions[keyName]}
+            permissionCatalog={permissionCatalog}
+            onGroupChange={(checked) => {
+              const nextValues = { ...permissions[keyName] };
+              group.items.forEach((item) => {
+                nextValues[item] = checked;
+              });
+              onChange({ ...permissions, [keyName]: nextValues });
+            }}
+            onItemChange={(item, checked) => onChange({
+              ...permissions,
+              [keyName]: { ...permissions[keyName], [item]: checked },
+            })}
+          />
+        ))
+      )}
     </div>
   );
 
@@ -148,17 +120,17 @@ function RolePermissionEditor({
         items={permissionTabs.map((item) => ({ key: item.key, label: item.label }))}
         onChange={(key) => onTabChange(key as PermissionTabKey)}
       />
-      {activeTab === "pages" && renderBooleanGroups(pagePermissionGroups, "pagePermissions")}
-      {activeTab === "actions" && renderBooleanGroups(actionPermissionGroups, "actionPermissions")}
+      {activeTab === "pages" &&
+        renderBooleanGroups(permissionCatalog.pagePermissionGroups, "pagePermissions")}
+      {activeTab === "actions" &&
+        renderBooleanGroups(permissionCatalog.actionPermissionGroups, "actionPermissions")}
       {activeTab === "fields" && (
         <div className="role-management__permission-scroll">
-          <Table<PermissionItemRow>
-            className="role-management__field-table"
-            rowKey="key"
-            pagination={false}
-            size="small"
-            columns={fieldColumns(permissions, onChange)}
-            dataSource={fieldPermissionNames.map((field) => ({ key: field, field }))}
+          <Alert
+            type="info"
+            showIcon
+            message="字段权限后端未接入"
+            description="当前版本不再展示前端假字段权限，避免保存后误以为字段级控制已生效。后续需要新增字段权限表、字段权限接口和页面字段级渲染控制后再开放。"
           />
         </div>
       )}

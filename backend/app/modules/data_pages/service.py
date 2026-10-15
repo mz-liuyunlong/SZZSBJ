@@ -757,13 +757,7 @@ class ListingManagementService:
             (
                 "listed_at",
                 "上架时间",
-                lambda item: (
-                    item.launch_date_cn
-                    or self._listing_start_csv_value(
-                        item.listing_start_at_utc,
-                        item.listing_start_source_raw,
-                    )
-                ),
+                lambda item: self._listing_start_csv_value(item.listing_start_at_utc),
             ),
             ("checked_at", "检查时间", lambda item: item.calculated_at),
             (
@@ -809,26 +803,14 @@ class ListingManagementService:
         return output.getvalue()
 
     @staticmethod
-    def _listing_start_csv_value(
-        normalized_value: object,
-        source_raw_value: object,
-    ) -> object:
+    def _listing_start_csv_value(normalized_value: object) -> object:
         if isinstance(normalized_value, datetime):
             return normalized_value.date().isoformat()
         if isinstance(normalized_value, date):
             return normalized_value.isoformat()
         if normalized_value is not None and str(normalized_value).strip():
             return str(normalized_value).strip()[:10]
-
-        if source_raw_value is None:
-            return ""
-
-        raw_value = str(source_raw_value).strip()
-        if not raw_value:
-            return ""
-        if len(raw_value) >= 10 and raw_value[4:5] == "-" and raw_value[7:8] == "-":
-            return raw_value[:10]
-        return raw_value
+        return ""
 
     @staticmethod
     def _csv_value(value: object) -> str:
@@ -1070,10 +1052,8 @@ class ListingManagementService:
             fulfillment_type=getattr(row, "fulfillment_type", None),
             fulfillment_type_name=getattr(row, "fulfillment_type_name", None),
             listing_start_at_utc=row.listing_start_at_utc,
-            listing_start_source_raw=getattr(row, "listing_start_source_raw", None),
-            launch_date_cn=(
-                getattr(row, "launch_date_cn", None) if row.listing_start_at_utc is None else None
-            ),
+            listing_start_source_raw=None,
+            launch_date_cn=None,
             first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
             category=row.category,
             wfs_available_quantity=row.wfs_available_quantity,

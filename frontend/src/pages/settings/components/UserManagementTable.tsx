@@ -20,6 +20,8 @@ interface UserManagementTableProps {
   currentPage: number;
   pageSize: number;
   selectedRowKeys: Key[];
+  canHardDelete: boolean;
+  currentUserId?: string;
   onColumnWidthChange: (key: string, width: number) => void;
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
@@ -49,6 +51,8 @@ const roleColors: Record<UserRoleName, string> = {
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 
 function createColumns(
+  canHardDelete: boolean,
+  currentUserId: string | undefined,
   onEdit: (row: UserManagementRow) => void,
   onSetRole: (row: UserManagementRow) => void,
   onResetPassword: (row: UserManagementRow) => void,
@@ -103,15 +107,22 @@ function createColumns(
       title: "操作",
       key: "operation",
       fixed: "right",
-      render: (_, row) => (
-        <Space size={0} className="user-management__row-actions">
-          <Button type="link" onClick={() => onEdit(row)}>编辑</Button>
-          <Button type="link" onClick={() => onSetRole(row)}>设置角色</Button>
-          <Button type="link" onClick={() => onResetPassword(row)}>重置密码</Button>
-          <Button type="link" onClick={() => onToggleStatus(row)}>{row.status === "启用" ? "停用" : "启用"}</Button>
-          <Button type="link" danger onClick={() => onDelete(row)}>删除</Button>
-        </Space>
-      ),
+      render: (_, row) => {
+        const showHardDelete =
+          canHardDelete && row.id !== currentUserId && !row.isSuperAdmin;
+
+        return (
+          <Space size={0} className="user-management__row-actions">
+            <Button type="link" onClick={() => onEdit(row)}>编辑</Button>
+            <Button type="link" onClick={() => onSetRole(row)}>设置角色</Button>
+            <Button type="link" onClick={() => onResetPassword(row)}>重置密码</Button>
+            <Button type="link" onClick={() => onToggleStatus(row)}>{row.status === "启用" ? "停用" : "启用"}</Button>
+            {showHardDelete && (
+              <Button type="link" danger onClick={() => onDelete(row)}>删除</Button>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 }
@@ -122,6 +133,8 @@ function UserManagementTable({
   currentPage,
   pageSize,
   selectedRowKeys,
+  canHardDelete,
+  currentUserId,
   onColumnWidthChange,
   onCurrentPageChange,
   onPageSizeChange,
@@ -134,6 +147,8 @@ function UserManagementTable({
   onBulkDisable,
 }: UserManagementTableProps) {
   const columnMap = new Map(createColumns(
+    canHardDelete,
+    currentUserId,
     onEdit,
     onSetRole,
     onResetPassword,

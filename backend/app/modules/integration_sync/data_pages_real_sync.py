@@ -70,9 +70,7 @@ LISTING_MART_REFRESH_UPDATE_EXPRESSIONS: Mapping[str, str] = {
     "fulfillment_type_name": (
         "coalesce(excluded.fulfillment_type_name, current_listing.fulfillment_type_name)"
     ),
-    "listing_start_at_utc": (
-        "coalesce(current_listing.listing_start_at_utc, excluded.listing_start_at_utc)"
-    ),
+    "listing_start_at_utc": "current_listing.listing_start_at_utc",
     "wfs_available_quantity": (
         "coalesce(excluded.wfs_available_quantity, current_listing.wfs_available_quantity)"
     ),
@@ -142,7 +140,7 @@ def _listing_mart_refresh_sql() -> str:
         "gpt_analysis_links_json,source_lineage_json,calculated_at,created_at,updated_at) "
         "select gen_random_uuid(),l.source_account_ref,l.platform_code,l.store_id,l.store_name,l.item_id,l.msku,l.local_sku,"
         "l.local_name,l.title,l.picture_url,l.item_url,l.price_amount,l.price_currency_code,l.standard_status,"
-        "l.fulfillment_type,l.fulfillment_type_name,l.listing_start_at_utc,l.wfs_available_quantity,l.available_quantity,"
+        "l.fulfillment_type,l.fulfillment_type_name,NULL::timestamptz,l.wfs_available_quantity,l.available_quantity,"
         "coalesce(s.sales_7d,0),coalesce(s.sales_14d,0),coalesce(s.sales_30d,0),coalesce(a.ad_spend_30d,0),'USD',"
         "l.average_rating,l.review_count,l.brand,l.gtin,l.upc,'[]'::jsonb,'[]'::jsonb,"
         "jsonb_build_object('runner',cast(:runner as text),'as_of_date',cast(:day as text),"
