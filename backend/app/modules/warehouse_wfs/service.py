@@ -741,6 +741,7 @@ class WfsFeeAlertService:
           now(),
           false
         from enriched l
+        where true
         on conflict (source_account_ref, store_id, item_id, msku) do update set
           source_kind = excluded.source_kind,
           source_case_ref = excluded.source_case_ref,
