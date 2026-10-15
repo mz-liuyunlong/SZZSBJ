@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -127,7 +127,10 @@ class WfsFeeAlertService:
             self.session.execute(
                 text(
                     self._case_select_sql()
-                    + " where id=:case_id and source_account_ref=any(:accounts) and is_deleted=false"
+                    + (
+                        " where id=:case_id and source_account_ref=any(:accounts)"
+                        " and is_deleted=false"
+                    )
                 ),
                 {"case_id": str(case_id), "accounts": list(account_refs)},
             )
@@ -219,7 +222,8 @@ class WfsFeeAlertService:
                     else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow) end,
                   log_updated_at = case when nullif(:latest_follow, '') is null then log_updated_at
                     else :now end,
-                  done_at = case when :status = 'recovered' then coalesce(done_at, :now) else done_at end,
+                  done_at = case when :status = 'recovered'
+                    then coalesce(done_at, :now) else done_at end,
                   archived_at = case when :status = 'archived' then coalesce(archived_at, :now)
                     else archived_at end,
                   status_changed_at = :now,
@@ -358,10 +362,12 @@ class WfsFeeAlertService:
                   recovered_amount = :recovered_amount,
                   recovered_at = :now,
                   done_at = :now,
-                  latest_follow_note = coalesce(nullif(:latest_follow_note, ''), latest_follow_note),
+                  latest_follow_note =
+                    coalesce(nullif(:latest_follow_note, ''), latest_follow_note),
                   follow_log = case when nullif(:latest_follow_note, '') is null then follow_log
                     else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow_note) end,
-                  log_updated_at = case when nullif(:latest_follow_note, '') is null then log_updated_at
+                  log_updated_at = case when nullif(:latest_follow_note, '') is null
+                    then log_updated_at
                     else :now end,
                   status_changed_at = :now,
                   status_changed_by = :actor,
