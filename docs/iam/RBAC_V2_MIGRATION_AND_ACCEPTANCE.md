@@ -17,21 +17,36 @@ RBAC v2 将权限拆成四个相互独立的边界：
 本 PR 只提交 migration 和应用代码，不执行生产迁移、生产写入、部署或服务重启。
 合并前必须先在独立测试数据库完整演练。生产执行必须获得单独授权。
 
-迁移顺序：
+当前 `main` 的既有基线为：
 
-1. `20261015_0036_rbac_v2`
+```text
+20261014_0035_add_auth_rbac
+  -> 20261015_0036_wfs_cases
+```
+
+RBAC v2 迁移严格接在已合入的 `20261015_0036_wfs_cases` 后，不改写、重命名或复用
+其他分支已经提交的 revision ID：
+
+1. `20261015_0037_rbac_v2`
    - 扩展权限元数据；
    - 增加角色版本；
    - 增加角色/用户数据范围；
    - 增加 IAM 审计事件；
    - 写入页面、功能、字段权限目录；
    - 将旧权限映射到新权限。
-2. `20261015_0037_retire_legacy_rbac_permissions`
+2. `20261015_0038_retire_legacy_rbac_permissions`
    - 删除角色上的旧权限关联；
    - 将旧权限标记为停用。
-3. `20261015_0038_restrict_default_data_scopes`
+3. `20261015_0039_restrict_default_data_scopes`
    - 删除非管理员角色的默认全量数据范围；
    - 未显式配置数据范围的普通角色按拒绝访问处理。
+4. `20261015_0040_wfs_rbac_actions`
+   - 将已合入的 WFS Case 功能权限映射为页面专属 action 权限；
+   - 保留 WFS 正式 Case 流程的权限边界；
+   - 停用对应旧 WFS action 权限关联。
+
+合并前必须再次同步最新 `main` 并执行 `alembic heads`。若并行分支新增迁移造成多 head，
+只新增 Alembic merge revision，不修改任何已合入或他人分支的历史 migration。
 
 ## 3. 测试库演练
 
@@ -72,15 +87,17 @@ uv run alembic current
 - 每个 `action:*` 都带所属页面；
 - 每个 `field:*` 都带所属页面；
 - 旧权限已停用且不再关联角色；
-- 非管理员角色没有隐式 `source_account:*`。
+- 非管理员角色没有隐式 `source_account:*`；
+- WFS Case 页面专属 action 权限存在且旧 WFS action 权限已停用。
 
 ## 4. 回滚演练
 
-在独立测试库执行：
+RBAC v2 的回滚边界是已合入的 WFS 基线 `20261015_0036_wfs_cases`，不得回退或覆盖
+该迁移：
 
 ```bash
 cd backend
-uv run alembic downgrade 20261014_0035_add_auth_rbac
+uv run alembic downgrade 20261015_0036_wfs_cases
 ```
 
 回滚后核对：
@@ -88,7 +105,8 @@ uv run alembic downgrade 20261014_0035_add_auth_rbac
 - 新增的数据范围和审计表已删除；
 - 旧权限恢复为启用；
 - 旧角色权限关联已恢复；
-- `app_roles.version` 和权限元数据列已移除。
+- `app_roles.version` 和权限元数据列已移除；
+- `20261015_0036_wfs_cases` 及其正式 WFS Case 表结构仍然保留。
 
 回滚会移除 v2 期间新增的审计与数据范围记录，生产环境执行前必须有可恢复备份。
 
@@ -200,7 +218,8 @@ npm test -- --run
 npm run build
 ```
 
-GitHub CI 的 rule-pack、backend、frontend 以及 Vercel Preview 均须成功。
+GitHub CI 的 rule-pack、backend、frontend、WFS PostgreSQL migration smoke 以及 Vercel Preview
+均须成功。
 
 ## 10. 上线后核对
 
