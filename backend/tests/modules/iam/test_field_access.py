@@ -51,5 +51,6 @@ def test_user_fields_are_independently_granted() -> None:
 
 def test_super_admin_wildcard_preserves_all_fields() -> None:
     principal = Principal(user_id="1", permissions=frozenset({"*"}))
+    user = _user()
 
-    assert filter_user_reads(principal, [_user()]) == [_user()]
+    assert filter_user_reads(principal, [user]) == [user]
