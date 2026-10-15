@@ -33,7 +33,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    void restoreCurrentUser();
+    const timer = window.setTimeout(() => {
+      void restoreCurrentUser();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [restoreCurrentUser]);
 
   useEffect(() => subscribeAuthSession((event) => {
