@@ -92,3 +92,86 @@ jobs:
           uv run ruff check .
           uv run pytest
           uv run python -c "import app.main"
+
+  wfs-migration-smoke:
+    name: WFS PostgreSQL migration smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: wfs_ci
+          POSTGRES_USER: wfs_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wfs_ci -d wfs_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: dev
+      DATABASE_URL: postgresql+psycopg://wfs_ci:local_ci_only@127.0.0.1:5432/wfs_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Upgrade isolated PostgreSQL from base to WFS 0036
+        working-directory: backend
+        run: |
+          uv sync
+          # Synthetic pre-0036 schema only: later RBAC migrations are tested by
+          # the normal Alembic chain checks and are out of scope for this smoke.
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+          from app.core.config import get_database_url
+
+          engine = create_engine(get_database_url())
+          with engine.begin() as conn:
+              statements = [
+                  "create table alembic_version (version_num varchar(32) primary key)",
+                  "insert into alembic_version (version_num) values "
+                  "('20261014_0035_add_auth_rbac')",
+                  "create table app_roles (id uuid primary key, "
+                  "role_key varchar(64) not null unique)",
+                  "create table app_permissions (permission_key varchar(128) primary key, "
+                  "name varchar(64) not null, group_key varchar(64) not null, "
+                  "description varchar(255))",
+                  "create table app_role_permissions (role_id uuid not null "
+                  "references app_roles(id), permission_key varchar(128) not null "
+                  "references app_permissions(permission_key), "
+                  "created_at timestamptz not null, "
+                  "primary key (role_id, permission_key))",
+                  "insert into app_roles (id, role_key) values "
+                  "('11111111-1111-4111-8111-111111111111', 'admin'), "
+                  "('22222222-2222-4222-8222-222222222222', 'operations'), "
+                  "('44444444-4444-4444-8444-444444444444', 'warehouse')",
+                  "create table ops_wfs_fee_anomaly_cases (id uuid primary key)",
+              ]
+              for statement in statements:
+                  conn.execute(text(statement))
+          PY
+          uv run alembic upgrade 20261015_0036_wfs_cases
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+          from app.core.config import get_database_url
+
+          with create_engine(get_database_url()).connect() as conn:
+              head = conn.execute(
+                  text("select version_num from alembic_version")
+              ).scalar_one()
+              assert head == "20261015_0036_wfs_cases"
+              assert conn.execute(
+                  text("select to_regclass('public.ops_wfs_fee_anomaly_cases')")
+              ).scalar_one() is not None
+              assert conn.execute(
+                  text(
+                      "select to_regclass("
+                      "'public.ops_wfs_fee_anomaly_cases_legacy_shape_backup')"
+                  )
+              ).scalar_one() is not None
+          PY
+          PYTHONPATH=. uv run python scripts/ci_wfs_case_smoke.py

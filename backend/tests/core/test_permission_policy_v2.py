@@ -42,6 +42,34 @@ def test_page_action_permissions_are_specific_to_page() -> None:
     )
 
 
+def test_wfs_case_actions_are_bound_to_their_page_actions() -> None:
+    case_id = "00000000-0000-0000-0000-000000000001"
+    assert (
+        permission_for_request(
+            "POST",
+            f"/api/warehouse/wfs-fee-cases/{case_id}/follow",
+            "warehouse:wfs-fee-alert:write",
+        )
+        == "action:warehouse:wfs-fee-alert:follow"
+    )
+    assert (
+        permission_for_request(
+            "POST",
+            f"/api/warehouse/wfs-fee-cases/{case_id}/archive-review",
+            "warehouse:wfs-fee-alert:review",
+        )
+        == "action:warehouse:wfs-fee-alert:archive-review"
+    )
+    assert (
+        permission_for_request(
+            "POST",
+            "/api/warehouse/wfs-fee-cases/sync-legacy-execute",
+            "warehouse:wfs-fee-alert:sync",
+        )
+        == "action:warehouse:wfs-fee-alert:sync-legacy"
+    )
+
+
 def test_require_permission_uses_request_specific_permission() -> None:
     principal = Principal(
         user_id="synthetic-user",

@@ -1,7 +1,7 @@
 """restrict default RBAC data scopes to the administrator role
 
-Revision ID: 20261015_0038_restrict_default_data_scopes
-Revises: 20261015_0037_retire_legacy_rbac_permissions
+Revision ID: 20261015_0039_restrict_default_data_scopes
+Revises: 20261015_0038_retire_legacy_rbac_permissions
 Create Date: 2026-10-15
 """
 
@@ -13,8 +13,8 @@ from sqlalchemy import text
 
 from alembic import op
 
-revision: str = "20261015_0038_restrict_default_data_scopes"
-down_revision: str | Sequence[str] | None = "20261015_0037_retire_legacy_rbac_permissions"
+revision: str = "20261015_0039_restrict_default_data_scopes"
+down_revision: str | Sequence[str] | None = "20261015_0038_retire_legacy_rbac_permissions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -36,18 +36,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.get_bind().execute(
-        text(
-            """
-            insert into app_role_data_scopes (
-                role_id,
-                scope_type,
-                scope_value,
-                created_at
-            )
-            select id, 'source_account', '*', now()
-            from app_roles
-            on conflict do nothing
-            """
-        )
-    )
+    """Do not silently broaden data access during a partial rollback."""

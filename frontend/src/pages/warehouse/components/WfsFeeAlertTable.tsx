@@ -43,6 +43,8 @@ const statusColor: Record<WfsFeeAlertRow["status"], string> = {
   未开Case: "warning",
   已开Case: "processing",
   跟进中: "blue",
+  待归档审核: "warning",
+  已归档: "default",
   已追回: "success",
   驳回: "error",
   已关闭: "default",
@@ -229,7 +231,7 @@ const createColumns = (
     fixed: "right",
     render: (_, row) => (
       <Space size={4}>
-        <Button type="link" onClick={() => onOpenFollow(row)}>编辑</Button>
+        <Button type="link" disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑</Button>
         <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
       </Space>
     ),

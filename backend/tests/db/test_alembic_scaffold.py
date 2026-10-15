@@ -16,6 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
+EXPECTED_HEAD_REVISION = "20261015_0040_wfs_rbac_actions"
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +45,27 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == ["20261015_0037_retire_legacy_rbac_permissions"]
+    assert script.get_heads() == [EXPECTED_HEAD_REVISION]
+    assert (
+        script.get_revision("20261015_0036_wfs_cases").down_revision
+        == "20261014_0035_add_auth_rbac"
+    )
+    assert (
+        script.get_revision("20261015_0037_rbac_v2").down_revision
+        == "20261015_0036_wfs_cases"
+    )
+    assert (
+        script.get_revision("20261015_0038_retire_legacy_rbac_permissions").down_revision
+        == "20261015_0037_rbac_v2"
+    )
+    assert (
+        script.get_revision("20261015_0039_restrict_default_data_scopes").down_revision
+        == "20261015_0038_retire_legacy_rbac_permissions"
+    )
+    assert (
+        script.get_revision("20261015_0040_wfs_rbac_actions").down_revision
+        == "20261015_0039_restrict_default_data_scopes"
+    )
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -73,8 +94,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261010_0033_add_wfs_low_price_surcharge.py",
         "20261013_0034_listing_wfs_first_stock.py",
         "20261014_0035_add_auth_rbac.py",
-        "20261015_0036_rbac_v2.py",
-        "20261015_0037_retire_legacy_rbac_permissions.py",
+        "20261015_0036_wfs_cases.py",
+        "20261015_0037_rbac_v2.py",
+        "20261015_0038_retire_legacy_rbac_permissions.py",
+        "20261015_0039_restrict_default_data_scopes.py",
+        "20261015_0040_wfs_rbac_actions.py",
     } <= revisions
 
     revision = (
@@ -118,3 +142,35 @@ def test_production_migration_requires_exact_migration_gate(
     captured = capsys.readouterr()
     assert SYNTHETIC_DATABASE_URL not in captured.out
     assert SYNTHETIC_DATABASE_URL not in captured.err
+
+
+@pytest.mark.parametrize("migration_auth_value", ["true", "TRUE", "True"])
+def test_production_migration_accepts_explicit_migration_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    migration_auth_value: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("DATABASE_URL", SYNTHETIC_DATABASE_URL)
+    monkeypatch.setenv("PRODUCTION_MIGRATIONS_AUTHORIZED", migration_auth_value)
+
+    configured = run_offline_env(monkeypatch)
+
+    assert configured["url"].render_as_string(hide_password=False) == SYNTHETIC_DATABASE_URL
+
+
+@pytest.mark.parametrize(
+    ("app_env", "url_variable"),
+    [("dev", "DATABASE_URL"), ("staging", "DATABASE_URL"), ("test", "TEST_DATABASE_URL")],
+)
+def test_nonproduction_migration_behavior_is_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+    app_env: str,
+    url_variable: str,
+) -> None:
+    monkeypatch.setenv("APP_ENV", app_env)
+    monkeypatch.setenv(url_variable, SYNTHETIC_DATABASE_URL)
+    monkeypatch.delenv("PRODUCTION_MIGRATIONS_AUTHORIZED", raising=False)
+
+    configured = run_offline_env(monkeypatch)
+
+    assert configured["url"].render_as_string(hide_password=False) == SYNTHETIC_DATABASE_URL

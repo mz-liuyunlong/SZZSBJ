@@ -42,7 +42,9 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
-        None, "/api/product-management/", "page:products:product-management:view"
+        None,
+        "/api/product-management/",
+        "page:products:product-management:view",
     ),
     RequestPermissionRule(
         "GET",
@@ -51,7 +53,10 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
-        "GET", "/api/listings/walmart/export", "action:products:listing-management:export", True
+        "GET",
+        "/api/listings/walmart/export",
+        "action:products:listing-management:export",
+        True,
     ),
     RequestPermissionRule(
         "POST",
@@ -60,51 +65,114 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
-        "POST", "/api/listings/tags", "action:products:listing-management:manage-tags", True
+        "POST",
+        "/api/listings/tags",
+        "action:products:listing-management:manage-tags",
+        True,
     ),
     RequestPermissionRule(
-        "PATCH", "/api/listings/tags/", "action:products:listing-management:manage-tags"
+        "PATCH",
+        "/api/listings/tags/",
+        "action:products:listing-management:manage-tags",
     ),
     RequestPermissionRule(
-        "DELETE", "/api/listings/tags/", "action:products:listing-management:manage-tags"
+        "DELETE",
+        "/api/listings/tags/",
+        "action:products:listing-management:manage-tags",
     ),
     RequestPermissionRule(
-        "POST", "/api/listings/walmart/", "action:products:listing-management:archive"
+        "POST",
+        "/api/listings/walmart/",
+        "action:products:listing-management:archive",
     ),
     RequestPermissionRule(
-        "PUT", "/api/listings/walmart/", "action:products:listing-management:edit-analysis-link"
+        "PUT",
+        "/api/listings/walmart/",
+        "action:products:listing-management:edit-analysis-link",
     ),
     RequestPermissionRule(None, "/api/listings/", "page:products:listing-management:view"),
     RequestPermissionRule(
-        "GET", "/api/sales/daily-sales/export", "action:sales:daily-sales:export", True
+        "GET",
+        "/api/sales/daily-sales/export",
+        "action:sales:daily-sales:export",
+        True,
     ),
     RequestPermissionRule(None, "/api/sales/daily-sales", "page:sales:daily-sales:view"),
     RequestPermissionRule(
-        "GET", "/api/sales/order-profit/export", "action:sales:order-profit:export", True
+        "GET",
+        "/api/sales/order-profit/export",
+        "action:sales:order-profit:export",
+        True,
     ),
     RequestPermissionRule(None, "/api/sales/order-profit", "page:sales:order-profit:view"),
     RequestPermissionRule(
-        None, "/api/data-pages/filter-options", "page:sales:daily-sales:view", True
+        None,
+        "/api/data-pages/filter-options",
+        "page:sales:daily-sales:view",
+        True,
     ),
     RequestPermissionRule(
-        None, "/api/after-sales/refunds", "page:aftersales:refund-management:view"
+        None,
+        "/api/after-sales/refunds",
+        "page:aftersales:refund-management:view",
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/warehouse/wfs-fee-cases/sync-legacy-preview",
+        "action:warehouse:wfs-fee-alert:sync-legacy",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/warehouse/wfs-fee-cases/sync-legacy-execute",
+        "action:warehouse:wfs-fee-alert:sync-legacy",
+        True,
+    ),
+    RequestPermissionRule(
+        "GET",
+        "/api/warehouse/wfs-fee-cases/legacy-compare",
+        "action:warehouse:wfs-fee-alert:sync-legacy",
+        True,
+    ),
+    RequestPermissionRule(
+        "PUT",
+        "/api/warehouse/wfs-fee-alerts/",
+        "action:warehouse:wfs-fee-alert:follow",
     ),
     RequestPermissionRule(None, "/api/warehouse/wfs", "page:warehouse:wfs-fee-alert:view"),
     RequestPermissionRule(None, "/api/pmc/purchase", "page:pmc:purchase-board:view"),
     RequestPermissionRule(
-        "POST", "/api/operations/plans/import", "action:operations:plan:import", True
+        "POST",
+        "/api/operations/plans/import",
+        "action:operations:plan:import",
+        True,
     ),
-    RequestPermissionRule("POST", "/api/operations/plans", "action:operations:plan:create", True),
-    RequestPermissionRule("PATCH", "/api/operations/plans/", "action:operations:plan:edit"),
+    RequestPermissionRule(
+        "POST",
+        "/api/operations/plans",
+        "action:operations:plan:create",
+        True,
+    ),
+    RequestPermissionRule(
+        "PATCH",
+        "/api/operations/plans/",
+        "action:operations:plan:edit",
+    ),
     RequestPermissionRule(None, "/api/operations/plans", "page:operations:plan:view"),
     RequestPermissionRule(
-        "PATCH", "/api/integrations/sync-configs/", "action:data-center:task-center:configure"
+        "PATCH",
+        "/api/integrations/sync-configs/",
+        "action:data-center:task-center:configure",
     ),
     RequestPermissionRule(
-        "POST", "/api/integrations/sync-configs/", "action:data-center:task-center:execute"
+        "POST",
+        "/api/integrations/sync-configs/",
+        "action:data-center:task-center:execute",
     ),
     RequestPermissionRule(
-        "POST", "/api/integrations/sync-runs/", "action:data-center:task-center:execute"
+        "POST",
+        "/api/integrations/sync-runs/",
+        "action:data-center:task-center:execute",
     ),
     RequestPermissionRule(None, "/api/integrations/", "page:data-center:task-center:view"),
     RequestPermissionRule(
@@ -114,15 +182,32 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
-        "POST", "/api/business-rules/store-commissions", "action:settings:fee-rules:edit", True
+        "POST",
+        "/api/business-rules/store-commissions",
+        "action:settings:fee-rules:edit",
+        True,
     ),
-    RequestPermissionRule("PATCH", "/api/business-rules/", "action:settings:fee-rules:edit"),
+    RequestPermissionRule(
+        "PATCH",
+        "/api/business-rules/",
+        "action:settings:fee-rules:edit",
+    ),
     RequestPermissionRule(None, "/api/business-rules/", "page:settings:fee-rules:view"),
 )
 
 
 def permission_for_request(method: str, path: str, declared_permission: str) -> str:
     normalized_method = method.upper()
+    if normalized_method == "POST" and path.startswith("/api/warehouse/wfs-fee-cases/"):
+        if path.endswith("/follow"):
+            return "action:warehouse:wfs-fee-alert:follow"
+        if path.endswith("/archive-request"):
+            return "action:warehouse:wfs-fee-alert:archive-request"
+        if path.endswith("/archive-review"):
+            return "action:warehouse:wfs-fee-alert:archive-review"
+        if path.endswith("/mark-recovered"):
+            return "action:warehouse:wfs-fee-alert:mark-recovered"
+
     for rule in _RULES:
         if rule.matches(normalized_method, path):
             if (

@@ -1,7 +1,7 @@
 """add RBAC v2 catalog, scopes, audit, and optimistic locking
 
-Revision ID: 20261015_0036_rbac_v2
-Revises: 20261014_0035_add_auth_rbac
+Revision ID: 20261015_0037_rbac_v2
+Revises: 20261015_0036_wfs_cases
 Create Date: 2026-10-15
 """
 
@@ -19,8 +19,8 @@ from app.modules.iam.permission_catalog_v2 import (
     PERMISSION_DEFINITIONS,
 )
 
-revision: str = "20261015_0036_rbac_v2"
-down_revision: str | Sequence[str] | None = "20261014_0035_add_auth_rbac"
+revision: str = "20261015_0037_rbac_v2"
+down_revision: str | Sequence[str] | None = "20261015_0036_wfs_cases"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -281,6 +281,7 @@ def upgrade() -> None:
         insert into app_role_data_scopes (role_id, scope_type, scope_value, created_at)
         select id, 'source_account', '*', now()
         from app_roles
+        where role_key = 'admin'
         on conflict do nothing
         """
     )

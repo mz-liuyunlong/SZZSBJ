@@ -1,10 +1,9 @@
-import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography } from "antd";
+import { Button, DatePicker, Form, Input, Modal, Space, Typography } from "antd";
 import dayjs from "dayjs";
 import { useEffect } from "react";
 import {
   formatWfsMoney,
   getPendingWfsAmount,
-  type WfsFeeAlertCaseStatus,
   type WfsFeeAlertCurrency,
   type WfsFeeAlertFollowFormValues,
   type WfsFeeAlertRow,
@@ -18,21 +17,12 @@ interface WfsFeeAlertFollowModalProps {
 }
 
 interface FollowFormValues {
-  status: WfsFeeAlertCaseStatus;
   caseNo?: string;
   recoveredAmount?: number;
   nextFollowAt?: dayjs.Dayjs;
   latestFollow?: string;
 }
 
-const statusOptions: { label: WfsFeeAlertCaseStatus; value: WfsFeeAlertCaseStatus }[] = [
-  { label: "未开Case", value: "未开Case" },
-  { label: "已开Case", value: "已开Case" },
-  { label: "跟进中", value: "跟进中" },
-  { label: "已追回", value: "已追回" },
-  { label: "驳回", value: "驳回" },
-  { label: "已关闭", value: "已关闭" },
-];
 
 function WfsFeeAlertFollowModal({
   row,
@@ -46,9 +36,7 @@ function WfsFeeAlertFollowModal({
     if (!row) return;
 
     form.setFieldsValue({
-      status: row.status,
       caseNo: row.caseNo,
-      recoveredAmount: row.recoveredAmount,
       nextFollowAt: row.nextFollowAt && row.nextFollowAt !== "-" ? dayjs(row.nextFollowAt) : undefined,
       latestFollow: row.latestFollow,
     });
@@ -88,35 +76,20 @@ function WfsFeeAlertFollowModal({
         layout="vertical"
         onFinish={(values) => {
           onSubmit({
-            status: values.status,
+            status: row.status,
             caseNo: values.caseNo?.trim() ?? "",
-            recoveredAmount: values.recoveredAmount ?? 0,
+            recoveredAmount: row.recoveredAmount,
             nextFollowAt: values.nextFollowAt?.format("YYYY-MM-DD") ?? "-",
             latestFollow: values.latestFollow?.trim() ?? "",
           });
         }}
       >
         <div className="wfs-fee-alert-follow-modal__grid">
-          <Form.Item
-            label="Case状态"
-            name="status"
-            rules={[{ required: true, message: "请选择Case状态" }]}
-          >
-            <Select options={statusOptions} />
-          </Form.Item>
 
           <Form.Item label="Case编号" name="caseNo">
             <Input placeholder="例如 CS-20260913-001" />
           </Form.Item>
 
-          <Form.Item label="已追回金额" name="recoveredAmount">
-            <InputNumber
-              min={0}
-              precision={2}
-              addonBefore={currency === "CNY" ? "¥" : "$"}
-              style={{ width: "100%" }}
-            />
-          </Form.Item>
 
           <Form.Item label="下次跟进时间" name="nextFollowAt">
             <DatePicker style={{ width: "100%" }} />
