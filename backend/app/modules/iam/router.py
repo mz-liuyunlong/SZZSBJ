@@ -13,6 +13,12 @@ from app.core.permissions import (
     require_super_admin,
 )
 from app.db.session import get_db_session
+from app.modules.iam.field_access import (
+    USER_EMAIL_PERMISSION,
+    USER_PHONE_PERMISSION,
+    filter_user_read,
+    filter_user_reads,
+)
 from app.modules.iam.rbac_schemas import RbacRoleCreateRequest, RbacRoleUpdateRequest
 from app.modules.iam.rbac_service import AuditContext, RbacService
 from app.modules.iam.schemas import (
@@ -51,6 +57,26 @@ def _audit_context(request: Request) -> AuditContext:
     )
 
 
+def _assert_user_field_write_allowed(
+    principal: Principal,
+    *,
+    phone: str | None,
+    email: str | None,
+) -> None:
+    denied: list[str] = []
+    if phone is not None and not has_permission(principal, USER_PHONE_PERMISSION):
+        denied.append(USER_PHONE_PERMISSION)
+    if email is not None and not has_permission(principal, USER_EMAIL_PERMISSION):
+        denied.append(USER_EMAIL_PERMISSION)
+    if denied:
+        raise ApiError(
+            code=ErrorCode.FORBIDDEN,
+            status_code=403,
+            message="没有修改受保护用户字段的权限",
+            details={"required_permissions": denied},
+        )
+
+
 @router.post("/api/auth/login", response_model=SuccessEnvelope[LoginResponse, None])
 def login(
     request: Request,
@@ -84,7 +110,7 @@ def logout(
 @router.get("/api/settings/users", response_model=SuccessEnvelope[list[UserRead], None])
 def list_users(
     request: Request,
-    _: Annotated[
+    principal: Annotated[
         Principal,
         Depends(
             require_any_permission(
@@ -95,7 +121,8 @@ def list_users(
     ],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[list[UserRead], None]:
-    return success_response(request, data=IamService(session).list_users(), meta=None)
+    users = filter_user_reads(principal, IamService(session).list_users())
+    return success_response(request, data=users, meta=None)
 
 
 @router.get(
@@ -109,8 +136,9 @@ def search_feishu_users(
         Principal,
         Depends(
             require_any_permission(
-                "page:settings:user-management:view",
-                "settings:users:read",
+                "action:settings:user-management:create",
+                "action:settings:user-management:edit",
+                "settings:users:write",
             )
         ),
     ],
@@ -138,13 +166,19 @@ def create_user(
     ],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
+    _assert_user_field_write_allowed(
+        principal,
+        phone=payload.phone,
+        email=payload.email,
+    )
+    created = RbacService(session).create_user(
+        actor=principal,
+        payload=payload,
+        audit=_audit_context(request),
+    )
     return success_response(
         request,
-        data=RbacService(session).create_user(
-            actor=principal,
-            payload=payload,
-            audit=_audit_context(request),
-        ),
+        data=filter_user_read(principal, created),
         meta=None,
     )
 
@@ -171,14 +205,20 @@ def update_user(
         or has_permission(principal, "settings:users:write")
     ):
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    _assert_user_field_write_allowed(
+        principal,
+        phone=payload.phone,
+        email=payload.email,
+    )
+    updated = RbacService(session).update_user(
+        actor=principal,
+        user_id=user_id,
+        payload=payload,
+        audit=_audit_context(request),
+    )
     return success_response(
         request,
-        data=RbacService(session).update_user(
-            actor=principal,
-            user_id=user_id,
-            payload=payload,
-            audit=_audit_context(request),
-        ),
+        data=filter_user_read(principal, updated),
         meta=None,
     )
 
@@ -202,14 +242,15 @@ def reset_password(
     ],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
+    updated = RbacService(session).reset_user_password(
+        actor=principal,
+        user_id=user_id,
+        new_password=payload.new_password,
+        audit=_audit_context(request),
+    )
     return success_response(
         request,
-        data=RbacService(session).reset_user_password(
-            actor=principal,
-            user_id=user_id,
-            new_password=payload.new_password,
-            audit=_audit_context(request),
-        ),
+        data=filter_user_read(principal, updated),
         meta=None,
     )
 
@@ -221,13 +262,14 @@ def delete_user(
     principal: Annotated[Principal, Depends(require_super_admin)],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
+    deleted = RbacService(session).hard_delete_user(
+        actor=principal,
+        user_id=user_id,
+        audit=_audit_context(request),
+    )
     return success_response(
         request,
-        data=RbacService(session).hard_delete_user(
-            actor=principal,
-            user_id=user_id,
-            audit=_audit_context(request),
-        ),
+        data=filter_user_read(principal, deleted),
         meta=None,
     )
 
