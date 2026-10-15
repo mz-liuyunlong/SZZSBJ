@@ -326,6 +326,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
             <>
               <UserManagementToolbar
                 filters={filters}
+                roleOptions={roleOptions}
                 onChange={updateFilters}
                 onReset={resetFilters}
               />
