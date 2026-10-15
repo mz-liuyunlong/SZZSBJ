@@ -230,6 +230,10 @@ class WfsFeeLegacySyncResult(StrictSchema):
     legacy_total: int
     matched_identities: int
     unmatched_identities: int
+    ambiguous_identities: int
+    duplicate_identities: int
+    invalid_values: int
+    protected_cases: int
     existing_cases: int
     will_insert: int
     will_update: int
