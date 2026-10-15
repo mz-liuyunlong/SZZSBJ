@@ -50,10 +50,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         script.get_revision("20261015_0036_wfs_cases").down_revision
         == "20261014_0035_add_auth_rbac"
     )
-    assert (
-        script.get_revision("20261015_0037_rbac_v2").down_revision
-        == "20261015_0036_wfs_cases"
-    )
+    assert script.get_revision("20261015_0037_rbac_v2").down_revision == "20261015_0036_wfs_cases"
     assert (
         script.get_revision("20261015_0038_retire_legacy_rbac_permissions").down_revision
         == "20261015_0037_rbac_v2"
