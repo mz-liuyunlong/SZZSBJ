@@ -94,10 +94,7 @@ def test_high_risk_routes_require_distinct_permissions() -> None:
 
 def test_migration_registers_action_permissions() -> None:
     migration = (
-        Path(__file__).resolve().parents[3]
-        / "alembic"
-        / "versions"
-        / "20261015_0036_wfs_cases.py"
+        Path(__file__).resolve().parents[3] / "alembic" / "versions" / "20261015_0036_wfs_cases.py"
     ).read_text()
     for suffix in ("write", "review", "recover", "sync"):
         assert f"warehouse:wfs-fee-alert:{suffix}" in migration
