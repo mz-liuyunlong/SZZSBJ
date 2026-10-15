@@ -12,10 +12,11 @@ import {
 } from "@/layouts/useTabWorkspace";
 import AppRoutes from "@/router/routes";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
+import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
 
 vi.mock("@/pages/auth/LoginPage", () => ({
-  default: ({ onLogin }: { onLogin: () => void }) => (
-    <button type="button" onClick={onLogin}>
+  default: ({ onLogin }: { onLogin: (user: AuthUser) => void }) => (
+    <button type="button" onClick={() => onLogin(DEFAULT_AUTH_USER)}>
       模拟登录
     </button>
   ),
@@ -152,11 +153,21 @@ function LocationProbe() {
 
 function RoutesHarness({ initialLoggedIn }: { initialLoggedIn: boolean }) {
   const [mockLoggedIn, setMockLoggedIn] = useState(initialLoggedIn);
+  const [currentUser, setCurrentUser] = useState<AuthUser | undefined>(
+    initialLoggedIn ? DEFAULT_AUTH_USER : undefined,
+  );
   return (
     <AppRoutes
       mockLoggedIn={mockLoggedIn}
-      onLogin={() => setMockLoggedIn(true)}
-      onLogout={() => setMockLoggedIn(false)}
+      currentUser={currentUser}
+      onLogin={(user) => {
+        setCurrentUser(user);
+        setMockLoggedIn(true);
+      }}
+      onLogout={() => {
+        setCurrentUser(undefined);
+        setMockLoggedIn(false);
+      }}
     />
   );
 }
@@ -203,30 +214,30 @@ describe("AppRoutes", () => {
   });
 
   it("keeps mock auth in memory while restoring the path-only workspace after login", async () => {
-    const restoredPath = "/data-center/documentation";
-    sessionStorage.setItem(
-      TAB_WORKSPACE_STORAGE_KEY,
-      JSON.stringify({
-        version: TAB_WORKSPACE_VERSION,
-        openPaths: [DEFAULT_BUSINESS_PATH, restoredPath],
-        activePath: restoredPath,
-      }),
-    );
-    renderRoutes(restoredPath);
+  const restoredPath = "/sales/daily-sales";
+  sessionStorage.setItem(
+    TAB_WORKSPACE_STORAGE_KEY,
+    JSON.stringify({
+      version: TAB_WORKSPACE_VERSION,
+      openPaths: [DEFAULT_BUSINESS_PATH, restoredPath],
+      activePath: restoredPath,
+    }),
+  );
+  renderRoutes(restoredPath);
 
-    expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
-    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+  expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
+  expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
 
-    fireEvent.click(screen.getByRole("button", { name: "模拟登录" }));
-    await waitFor(() => {
-      expect(screen.getByLabelText("当前路径")).toHaveTextContent(restoredPath);
-    });
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      "文档",
-    );
+  fireEvent.click(screen.getByRole("button", { name: "模拟登录" }));
+  await waitFor(() => {
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent(restoredPath);
   });
+  expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+    "每日销售",
+  );
+});
 
-  it("redirects unauthenticated business visits to login", async () => {
+it("redirects unauthenticated business visits to login", async () => {
     renderRoutes("/finance/ad-bill");
 
     expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
@@ -243,25 +254,29 @@ describe("AppRoutes", () => {
     expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
   });
 
-  it("renders the default and hidden business routes when mock logged in", async () => {
-    const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
-    expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      "Listing管理",
-    );
-    expect(screen.getByText("products_listing_management")).toBeVisible();
+  it("renders the default route and rejects hidden business routes", async () => {
+  const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
+  expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+    "Listing管理",
+  );
+  expect(screen.getByText("products_listing_management")).toBeVisible();
 
-    unmount();
-    renderRoutes("/data-center/documentation", true);
-    expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      "文档",
+  unmount();
+  renderRoutes("/data-center/documentation", true);
+  await waitFor(() => {
+    expect(screen.getByLabelText("当前路径")).toHaveTextContent(
+      "/dashboard/today-sales",
     );
-    expect(screen.getByLabelText("页面状态：hidden")).toHaveTextContent("hidden");
-    expect(screen.getByLabelText("当前路径")).toHaveTextContent("/data-center/documentation");
   });
+  expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+    "今日销售",
+  );
+  expect(screen.queryByLabelText("页面状态：hidden")).not.toBeInTheDocument();
+});
 
-  it("uses the approved product page shells for their resolved navigation pages", () => {
+it("uses the approved product page shells for their resolved navigation pages", () => {
     const { unmount } = renderRoutes("/products/management", true);
 
     expect(screen.getByRole("region", { name: "产品管理页面壳" })).toBeVisible();

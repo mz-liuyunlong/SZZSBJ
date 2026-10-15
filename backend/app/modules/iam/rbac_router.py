@@ -215,11 +215,7 @@ def update_role_data_scopes(
     payload: RoleDataScopeUpdateRequest,
     principal: Annotated[
         Principal,
-        Depends(
-            require_permission(
-                "action:settings:role-management:configure-data-scope"
-            )
-        ),
+        Depends(require_permission("action:settings:role-management:configure-data-scope")),
     ],
     session: db_session,
 ) -> SuccessEnvelope[RoleDataScopeRead, None]:

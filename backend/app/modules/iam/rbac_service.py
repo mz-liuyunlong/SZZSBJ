@@ -58,20 +58,16 @@ class RbacService:
 
     def permission_catalog(self) -> PermissionCatalogRead:
         rows = self.repository.list_permission_catalog_rows()
-        page_rows = {
-            str(row["page_key"]): row
-            for row in rows
-            if row["permission_type"] == "page"
-        }
+        page_rows = {str(row["page_key"]): row for row in rows if row["permission_type"] == "page"}
         child_rows: dict[str, dict[str, list[dict[str, Any]]]] = {}
         for row in rows:
             permission_type = str(row["permission_type"])
             if permission_type not in {"action", "field"}:
                 continue
             page_key = str(row["page_key"])
-            child_rows.setdefault(page_key, {"action": [], "field": []})[
-                permission_type
-            ].append(dict(row))
+            child_rows.setdefault(page_key, {"action": [], "field": []})[permission_type].append(
+                dict(row)
+            )
 
         modules: dict[str, list[PermissionPageRead]] = {}
         module_sort: dict[str, int] = {}

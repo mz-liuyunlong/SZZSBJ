@@ -392,9 +392,7 @@ PERMISSION_KEYS = frozenset(item.permission_key for item in PERMISSION_DEFINITIO
 LEGACY_PERMISSION_MAPPINGS: dict[str, tuple[str, ...]] = {
     "products:read": (page_permission_key("products_product_management"),),
     "sales:daily-sales:read": (page_permission_key("sales_daily_sales"),),
-    "aftersales:refund-management:read": (
-        page_permission_key("aftersales_refund_management"),
-    ),
+    "aftersales:refund-management:read": (page_permission_key("aftersales_refund_management"),),
     "warehouse:wfs-fee-alert:read": (page_permission_key("warehouse_wfs_fee_alert"),),
     "pmc:purchase:read": (page_permission_key("pmc_purchase_board"),),
     "operations:plan:read": (page_permission_key("operations_plan"),),
@@ -404,17 +402,11 @@ LEGACY_PERMISSION_MAPPINGS: dict[str, tuple[str, ...]] = {
         action_permission_key("operations_plan", "import"),
     ),
     "integrations:read": (page_permission_key("data_center_task_center"),),
-    "integrations:update": (
-        action_permission_key("data_center_task_center", "configure"),
-    ),
-    "integrations:execute": (
-        action_permission_key("data_center_task_center", "execute"),
-    ),
+    "integrations:update": (action_permission_key("data_center_task_center", "configure"),),
+    "integrations:execute": (action_permission_key("data_center_task_center", "execute"),),
     "business-rules:read": (page_permission_key("settings_fee_rules"),),
     "business-rules:write": (action_permission_key("settings_fee_rules", "edit"),),
-    "business-rules:execute": (
-        action_permission_key("settings_fee_rules", "recalculate"),
-    ),
+    "business-rules:execute": (action_permission_key("settings_fee_rules", "recalculate"),),
     "settings:users:read": (page_permission_key("settings_user_management"),),
     "settings:users:write": (
         action_permission_key("settings_user_management", "create"),
