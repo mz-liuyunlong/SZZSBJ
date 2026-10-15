@@ -178,27 +178,37 @@ class WfsFeeAlertMeta(StrictSchema):
 
 class WfsFeeCaseFollowWrite(StrictSchema):
     case_nos: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = ""
-    latest_follow_note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+    latest_follow_note: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
+    ]
     next_follow_at: date | None = None
-    walmart_response_summary: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+    walmart_response_summary: Annotated[
+        str, StringConstraints(strip_whitespace=True, max_length=4000)
+    ] = ""
     evidence_summary: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
 
 
 class WfsFeeArchiveRequestWrite(StrictSchema):
     archive_reason_type: Nonblank
-    archive_reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
+    archive_reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)
+    ]
     archive_evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
 
 
 class WfsFeeArchiveReviewWrite(StrictSchema):
     decision: ArchiveDecision
-    archive_review_note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+    archive_review_note: Annotated[
+        str, StringConstraints(strip_whitespace=True, max_length=4000)
+    ] = ""
 
 
 class WfsFeeRecoveredWrite(StrictSchema):
     recovered_amount: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
     claim_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
-    latest_follow_note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+    latest_follow_note: Annotated[
+        str, StringConstraints(strip_whitespace=True, max_length=4000)
+    ] = ""
 
 
 class WfsFeeCaseWrite(StrictSchema):
