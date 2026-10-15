@@ -1,9 +1,14 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { clearServerState } from "@/api/queryClient";
 import AppErrorBoundary from "@/components/errors/AppErrorBoundary";
 import AppFeedbackProvider from "@/shared/feedback/AppFeedbackProvider";
+import { clearTabWorkspaceStorage } from "@/layouts/useTabWorkspace";
 import { fetchCurrentUser, logoutCurrentUser } from "@/pages/auth/authApi";
-import { clearAuthToken, readAuthToken } from "@/pages/auth/authSession";
+import {
+  clearAuthToken,
+  readAuthToken,
+  subscribeAuthSession,
+} from "@/pages/auth/authSession";
 import type { AuthUser } from "@/pages/auth/authTypes";
 import AppRoutes from "@/router/routes";
 import "@/styles/globalOverlay.css";
@@ -14,23 +19,33 @@ function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser>();
   const [bootstrapping, setBootstrapping] = useState(() => Boolean(readAuthToken()));
 
-  useEffect(() => {
-    if (!readAuthToken()) return;
+  const restoreCurrentUser = useCallback(async () => {
+    if (!readAuthToken()) {
+      setCurrentUser(undefined);
+      setBootstrapping(false);
+      return;
+    }
 
-    let cancelled = false;
-
-    void fetchCurrentUser()
-      .then((user) => {
-        if (!cancelled) setCurrentUser(user);
-      })
-      .finally(() => {
-        if (!cancelled) setBootstrapping(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    setBootstrapping(true);
+    const user = await fetchCurrentUser();
+    setCurrentUser(user);
+    setBootstrapping(false);
   }, []);
+
+  useEffect(() => {
+    void restoreCurrentUser();
+  }, [restoreCurrentUser]);
+
+  useEffect(() => subscribeAuthSession((event) => {
+    clearServerState();
+    clearTabWorkspaceStorage();
+    if (event === "logged-out") {
+      setCurrentUser(undefined);
+      setBootstrapping(false);
+      return;
+    }
+    void restoreCurrentUser();
+  }), [restoreCurrentUser]);
 
   const clearLogoutSessionStorage = () => {
     try {

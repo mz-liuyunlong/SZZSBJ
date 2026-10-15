@@ -36,7 +36,6 @@ import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
 import { isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
 
-
 interface AppRoutesProps {
   mockLoggedIn: boolean;
   currentUser?: AuthUser;
@@ -97,13 +96,25 @@ function LoginRoute({
         onLogin={(user) => {
           const { activePath } = readTabWorkspace();
           const shouldOpenOnboarding = shouldShowOnboardingAfterLogin();
+          const resolution = resolveRoute(activePath);
+          const canRestore = resolution.kind === "allowed" &&
+            isMockPageAccessibleForRole(
+              user.role,
+              resolution.route.page,
+              user.permissions,
+            );
 
           onLogin(user);
           clearShowOnboardingAfterLogin();
 
-          navigate(shouldOpenOnboarding ? "/help/onboarding" : activePath, {
-            replace: true,
-          });
+          navigate(
+            shouldOpenOnboarding
+              ? "/help/onboarding"
+              : canRestore
+                ? activePath
+                : firstAccessibleBusinessPath(user),
+            { replace: true },
+          );
         }}
       />
     </AuthRoute>
@@ -236,6 +247,5 @@ function AppRoutes({ mockLoggedIn, currentUser, onLogin, onLogout }: AppRoutesPr
     </Routes>
   );
 }
-
 
 export default AppRoutes;

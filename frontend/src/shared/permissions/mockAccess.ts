@@ -1,30 +1,28 @@
-import type { NavigationPage } from "@/config/navigation";
+import { navigation, type NavigationPage } from "@/config/navigation";
 import type { MockUserRole } from "@/mocks/auth";
 
-const PAGE_PERMISSION_OVERRIDES: Partial<Record<string, string>> = {
-  products_product_management: "products:read",
-  products_listing_management: "products:read",
-  sales_daily_sales: "sales:daily-sales:read",
-  sales_order_profit: "sales:daily-sales:read",
-  aftersales_refund_management: "aftersales:refund-management:read",
-  operations_log: "operations:plan:read",
-  operations_plan: "operations:plan:read",
-  warehouse_wfs_fee_alert: "warehouse:wfs-fee-alert:read",
-  pmc_purchase_board: "pmc:purchase:read",
-  data_center_data_import: "integrations:read",
-  data_center_api_docs: "integrations:read",
-  data_center_task_center: "integrations:read",
-  settings_user_management: "settings:users:read",
-  settings_role_management: "settings:roles:read",
-  settings_fee_rules: "business-rules:read",
+const pagePermissionKey = (groupKey: string, pageKey: string) => {
+  const localKey = pageKey.startsWith(`${groupKey}_`)
+    ? pageKey.slice(groupKey.length + 1)
+    : pageKey;
+  return `page:${groupKey.replaceAll("_", "-")}:${localKey.replaceAll("_", "-")}:view`;
 };
+
+const PAGE_PERMISSION_BY_KEY = new Map(
+  navigation.flatMap((group) =>
+    group.children.map((page) => [
+      page.key,
+      pagePermissionKey(group.key, page.key),
+    ] as const),
+  ),
+);
 
 export function isMockImplementedPage(page: NavigationPage) {
   return page.status !== "hidden" && page.status !== "disabled";
 }
 
 export function getPagePermissionKey(page: NavigationPage) {
-  return PAGE_PERMISSION_OVERRIDES[page.key] ?? page.permissionKey;
+  return PAGE_PERMISSION_BY_KEY.get(page.key) ?? page.permissionKey;
 }
 
 export function hasPermission(
@@ -37,22 +35,19 @@ export function hasPermission(
 }
 
 export function isMockPageVisibleForRole(
-  role: MockUserRole,
+  _role: MockUserRole,
   page: NavigationPage,
   permissions?: readonly string[],
 ) {
   if (page.status === "hidden" || page.status === "disabled") return false;
-  if (role === "admin" || hasPermission(permissions, "*")) return true;
   return isMockImplementedPage(page) && hasPermission(permissions, getPagePermissionKey(page));
 }
 
 export function isMockPageAccessibleForRole(
-  role: MockUserRole,
+  _role: MockUserRole,
   page: NavigationPage,
   permissions?: readonly string[],
 ) {
-  if (page.status === "disabled") return false;
-  if (role === "admin" || hasPermission(permissions, "*")) return true;
-  if (page.status === "hidden") return false;
+  if (page.status === "disabled" || page.status === "hidden") return false;
   return isMockImplementedPage(page) && hasPermission(permissions, getPagePermissionKey(page));
 }
