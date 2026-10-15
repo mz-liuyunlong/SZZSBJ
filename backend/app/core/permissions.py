@@ -24,9 +24,13 @@ def require_permission(permission_key: str) -> Callable[..., Principal]:
 
     def dependency(
         principal: Annotated[Principal, Depends(require_principal)],
-        request: Request,
+        request: Request = None,
     ) -> Principal:
-        required_key = permission_for_request(request.method, request.url.path, permission_key)
+        required_key = (
+            permission_for_request(request.method, request.url.path, permission_key)
+            if request is not None
+            else permission_key
+        )
         if has_permission(principal, required_key):
             return principal
         # Temporary compatibility for the preview principal and rolling deployment.
