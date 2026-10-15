@@ -17,13 +17,14 @@ Applies to PR #218. This is an approval-gated operational runbook, **not** permi
 
 ## Non-negotiable release gates
 
-1. **No merge until deployment ownership is clear.** The repository includes
-   `frontend/vercel.json` and a Vercel deployment linked to GitHub. Confirm
-   the actual Vercel production branch / auto-deploy behavior with an account
-   authorized to inspect project settings. If merging main auto-publishes the
-   new frontend, prevent premature publication by an authorized release
-   owner or defer merging until backend and migration rollout are prepared.
-   No unauthorized Vercel settings change.
+1. **Production frontend automatically deploys on main** (confirmed by owner).
+   WFS Case is a new page, and the owner accepts that it may be visible before
+   the formal backend and table are ready. No frontend feature flag or
+   legacy-API fallback is required; the page calls the formal Case endpoints.
+   If the backend or table is not ready, the WFS Case page may temporarily
+   fail to load or show an API error. This is an explicitly accepted UI
+   availability risk, **not** approval to migrate or write production data.
+   Validate that existing unrelated pages remain unaffected.
 2. Recheck production Alembic revision via a read-only `alembic_version` query;
    it must still be the PR's parent `20261014_0035_add_auth_rbac`.
 3. Recheck that the old `ops_wfs_fee_anomaly_cases` is **empty** and the
@@ -55,8 +56,10 @@ Applies to PR #218. This is an approval-gated operational runbook, **not** permi
    the same immutable source snapshot. Track any source changes separately.
 6. Re-import once to verify no duplicates and no changed manual notes;
    exercise least-privilege denial and two-person archival review.
-7. Publish/enable the frontend only when the new backend and formal table
-   are ready. Verify list HTTP 200, old and new Case statuses,
+7. The frontend may auto-publish when main merges, without an additional
+   feature toggle. The WFS Case page is considered provisionally unavailable
+   until the separately authorized backend, migration and historic import
+   are ready. After readiness, verify HTTP 200, old and new Case statuses,
    historical dates, pagination, write permissions and error handling.
 8. Keep `legacy_mirror.event_wfs_fee_case` available for comparison.
    Do not stop its refresh or delete it as part of this PR.
