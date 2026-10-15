@@ -24,6 +24,41 @@ def _execute(statement: str) -> None:
 
 
 def upgrade() -> None:
+    for permission_key, name, description in (
+        ("warehouse:wfs-fee-alert:write", "WFS Case 跟进", "编辑 Case 跟进与归档申请"),
+        ("warehouse:wfs-fee-alert:review", "WFS Case 审核", "审核 WFS Case 归档"),
+        ("warehouse:wfs-fee-alert:recover", "WFS Case 追回确认", "确认追回金额"),
+        ("warehouse:wfs-fee-alert:sync", "WFS Case 历史同步", "预检和同步历史 Case"),
+    ):
+        op.get_bind().execute(
+            text(
+                """
+                insert into app_permissions
+                  (permission_key, name, group_key, description)
+                values (:key, :name, '仓库', :description)
+                on conflict (permission_key) do nothing
+                """
+            ),
+            {"key": permission_key, "name": name, "description": description},
+        )
+    _execute(
+        """
+        insert into app_role_permissions (role_id, permission_key, created_at)
+        select r.id, p.permission_key, now()
+        from app_roles r
+        cross join app_permissions p
+        where (r.role_key = 'admin'
+            and p.permission_key in (
+                'warehouse:wfs-fee-alert:write',
+                'warehouse:wfs-fee-alert:review',
+                'warehouse:wfs-fee-alert:recover',
+                'warehouse:wfs-fee-alert:sync'
+            ))
+           or (r.role_key in ('warehouse', 'operations')
+            and p.permission_key = 'warehouse:wfs-fee-alert:write')
+        on conflict do nothing
+        """
+    )
     _execute(
         """
         do $$
