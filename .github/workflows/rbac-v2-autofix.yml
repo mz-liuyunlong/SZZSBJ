@@ -1,0 +1,222 @@
+name: RBAC v2 one-time autofix
+
+on:
+  push:
+    branches:
+      - feat/iam-rbac-v2-complete
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: ${{ !contains(github.event.head_commit.message, '[rbac-autofix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/iam-rbac-v2-complete
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Patch permission-aware frontend tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          routes = Path("frontend/src/router/routes.test.tsx")
+          text = routes.read_text()
+
+          text = text.replace(
+              'import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";\n',
+              'import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";\n'
+              'import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";\n',
+              1,
+          )
+          text = text.replace(
+              '''vi.mock("@/pages/auth/LoginPage", () => ({
+            default: ({ onLogin }: { onLogin: () => void }) => (
+              <button type="button" onClick={onLogin}>
+                模拟登录
+              </button>
+            ),
+          }));''',
+              '''vi.mock("@/pages/auth/LoginPage", () => ({
+            default: ({ onLogin }: { onLogin: (user: AuthUser) => void }) => (
+              <button type="button" onClick={() => onLogin(DEFAULT_AUTH_USER)}>
+                模拟登录
+              </button>
+            ),
+          }));''',
+              1,
+          )
+          old_harness = '''function RoutesHarness({ initialLoggedIn }: { initialLoggedIn: boolean }) {
+            const [mockLoggedIn, setMockLoggedIn] = useState(initialLoggedIn);
+            return (
+              <AppRoutes
+                mockLoggedIn={mockLoggedIn}
+                onLogin={() => setMockLoggedIn(true)}
+                onLogout={() => setMockLoggedIn(false)}
+              />
+            );
+          }'''
+          new_harness = '''function RoutesHarness({ initialLoggedIn }: { initialLoggedIn: boolean }) {
+            const [mockLoggedIn, setMockLoggedIn] = useState(initialLoggedIn);
+            const [currentUser, setCurrentUser] = useState<AuthUser | undefined>(
+              initialLoggedIn ? DEFAULT_AUTH_USER : undefined,
+            );
+            return (
+              <AppRoutes
+                mockLoggedIn={mockLoggedIn}
+                currentUser={currentUser}
+                onLogin={(user) => {
+                  setCurrentUser(user);
+                  setMockLoggedIn(true);
+                }}
+                onLogout={() => {
+                  setCurrentUser(undefined);
+                  setMockLoggedIn(false);
+                }}
+              />
+            );
+          }'''
+          if old_harness not in text:
+              raise SystemExit("RoutesHarness block not found")
+          text = text.replace(old_harness, new_harness, 1)
+          text = text.replace(
+              'const restoredPath = "/data-center/documentation";',
+              'const restoredPath = "/sales/daily-sales";',
+              1,
+          )
+          text = text.replace(
+              '''expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "文档",
+            );''',
+              '''expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "每日销售",
+            );''',
+              1,
+          )
+          old_hidden = '''  it("renders the default and hidden business routes when mock logged in", async () => {
+            const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
+            expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "Listing管理",
+            );
+            expect(screen.getByText("products_listing_management")).toBeVisible();
+
+            unmount();
+            renderRoutes("/data-center/documentation", true);
+            expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "文档",
+            );
+            expect(screen.getByLabelText("页面状态：hidden")).toHaveTextContent("hidden");
+            expect(screen.getByLabelText("当前路径")).toHaveTextContent("/data-center/documentation");
+          });'''
+          new_hidden = '''  it("renders the default route and rejects hidden business routes", async () => {
+            const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
+            expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "Listing管理",
+            );
+            expect(screen.getByText("products_listing_management")).toBeVisible();
+
+            unmount();
+            renderRoutes("/data-center/documentation", true);
+            await waitFor(() => {
+              expect(screen.getByLabelText("当前路径")).toHaveTextContent(
+                "/dashboard/today-sales",
+              );
+            });
+            expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              "今日销售",
+            );
+            expect(screen.queryByLabelText("页面状态：hidden")).not.toBeInTheDocument();
+          });'''
+          if old_hidden not in text:
+              raise SystemExit("hidden route test block not found")
+          routes.write_text(text.replace(old_hidden, new_hidden, 1))
+
+          layout = Path("frontend/src/layouts/MainLayout.test.tsx")
+          text = layout.read_text()
+          old_tail = '''    fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
+            fireEvent.click(await screen.findByRole("menuitem", { name: personalCenter.title }));
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              personalCenter.title,
+            );
+            expect(within(breadcrumb).getByText(settingsGroup.title)).toBeVisible();
+            expect(within(content).getByText("个人中心内容区")).toBeVisible();
+
+            fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
+            fireEvent.click(await screen.findByRole("menuitem", { name: documentation.title }));
+            expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
+              documentation.title,
+            );
+            expect(within(breadcrumb).getByText(dataCenterGroup.title)).toBeVisible();
+            expect(within(content).getByText("文档内容区")).toBeVisible();
+            expect(window.location.hash).toBe(`#${documentation.path}`);'''
+          new_tail = '''    fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
+            expect(await screen.findByRole("menuitem", { name: "退出" })).toBeVisible();
+            expect(
+              screen.queryByRole("menuitem", { name: personalCenter.title }),
+            ).not.toBeInTheDocument();
+            expect(
+              screen.queryByRole("menuitem", { name: documentation.title }),
+            ).not.toBeInTheDocument();
+            expect(window.location.hash).toBe(`#${aiAssistant.path}`);'''
+          if old_tail not in text:
+              raise SystemExit("MainLayout hidden topbar test block not found")
+          layout.write_text(text.replace(old_tail, new_tail, 1))
+          PY
+
+      - name: Format backend RBAC files
+        working-directory: backend
+        run: |
+          uv sync
+          uv run ruff format \
+            app/core/permission_policy_v2.py \
+            app/modules/iam/permission_catalog_v2.py \
+            app/modules/iam/rbac_router.py \
+            app/modules/iam/rbac_service.py \
+            tests/core/test_permission_policy_v2.py
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run pytest
+          uv run python -c "import app.main"
+
+      - name: Verify frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint --if-present
+          npm run test --if-present -- --run
+          npm run build --if-present
+
+      - name: Commit autofix
+        run: |
+          if git diff --quiet; then
+            echo "No autofix changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend frontend
+          git commit -m "fix(ci): format RBAC and align permission-aware tests [rbac-autofix]"
+          git push origin HEAD:feat/iam-rbac-v2-complete
