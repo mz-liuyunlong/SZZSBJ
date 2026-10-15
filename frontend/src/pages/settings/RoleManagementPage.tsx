@@ -181,15 +181,28 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
 
   useEffect(() => {
     if (!activeRole) return;
-    if (
+
+    const shouldLoadDataScopes =
       activeTab === "dataScopes"
-      && dataScopesByRole[activeRole.id] === undefined
-    ) {
-      void refreshDataScopes(activeRole);
-    }
-    if (activeTab === "audit" && canViewAudit && auditEvents.length === 0) {
-      void refreshAuditEvents();
-    }
+      && dataScopesByRole[activeRole.id] === undefined;
+    const shouldLoadAudit =
+      activeTab === "audit"
+      && canViewAudit
+      && auditEvents.length === 0;
+
+    if (!shouldLoadDataScopes && !shouldLoadAudit) return;
+
+    const role = activeRole;
+    const timer = window.setTimeout(() => {
+      if (shouldLoadDataScopes) {
+        void refreshDataScopes(role);
+      }
+      if (shouldLoadAudit) {
+        void refreshAuditEvents();
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [
     activeRole,
     activeTab,
