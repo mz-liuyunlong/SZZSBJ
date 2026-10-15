@@ -8,9 +8,17 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.product_management.field_access import (
+    LOGISTICS_COST_PERMISSION,
+    PURCHASE_COST_PERMISSION,
+    filter_detail_data,
+    filter_export_request,
+    filter_list_data,
+    filter_pricing_breakdown,
+)
 from app.modules.product_management.schemas import (
     ExportRequest,
     PricingBreakdownRead,
@@ -50,6 +58,14 @@ ERRORS: dict[int | str, dict[str, Any]] = {
 product_scope_dependency = Depends(require_product_scope)
 
 
+def _cost_field_access(principal: Principal) -> tuple[bool, bool]:
+    legacy_access = has_permission(principal, "products:cost:read")
+    return (
+        legacy_access or has_permission(principal, PURCHASE_COST_PERMISSION),
+        legacy_access or has_permission(principal, LOGISTICS_COST_PERMISSION),
+    )
+
+
 def _meta(
     *objects: str,
     list_freshness_at: datetime | None = None,
@@ -87,10 +103,18 @@ def list_product_management_skus(
     principal: read_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[ProductManagementListData, ProductManagementReadMeta]:
-    data, total, list_freshness, latest_observed = ProductManagementService(session).list_skus(
+    can_view_purchase_cost, can_view_logistics_cost = _cost_field_access(principal)
+    raw_data, total, list_freshness, latest_observed = ProductManagementService(
+        session
+    ).list_skus(
         query,
         account_refs,
-        include_costs="products:cost:read" in principal.permissions,
+        include_costs=can_view_purchase_cost or can_view_logistics_cost,
+    )
+    data = filter_list_data(
+        raw_data,
+        can_view_purchase_cost=can_view_purchase_cost,
+        can_view_logistics_cost=can_view_logistics_cost,
     )
     return success_response(
         request,
@@ -204,24 +228,30 @@ def export_product_management_skus_readonly(
         issue_code=query_params.get("issue_code") or None,
     )
 
-    include_costs = "products:cost:read" in principal.permissions
-    payload = ExportRequest(
-        query=query,
-        max_rows=max_rows,
-        columns=[value.strip() for value in (columns or "").split(",") if value.strip()],
+    can_view_purchase_cost, can_view_logistics_cost = _cost_field_access(principal)
+    payload = filter_export_request(
+        ExportRequest(
+            query=query,
+            max_rows=max_rows,
+            columns=[value.strip() for value in (columns or "").split(",") if value.strip()],
+        ),
+        can_view_purchase_cost=can_view_purchase_cost,
+        can_view_logistics_cost=can_view_logistics_cost,
     )
+    include_costs = can_view_purchase_cost or can_view_logistics_cost
     csv_text, filename = ProductManagementService(session).export_csv(
         payload,
         account_refs,
         include_costs=include_costs,
     )
     audit_logger.info(
-        "product_export_created actor_ref=%s request_id=%s "
-        "row_limit=%s include_costs=%s method=get",
+        "product_export_created actor_ref=%s request_id=%s row_limit=%s "
+        "purchase_cost=%s logistics_cost=%s method=get",
         principal.user_id,
         get_request_id(request),
         max_rows,
-        include_costs,
+        can_view_purchase_cost,
+        can_view_logistics_cost,
     )
     return Response(
         content=csv_text.encode("utf-8-sig"),
@@ -245,18 +275,26 @@ def export_product_management_skus(
     principal: read_principal,
     account_refs: source_scope,
 ) -> Response:
-    include_costs = "products:cost:read" in principal.permissions
-    csv_text, filename = ProductManagementService(session).export_csv(
+    can_view_purchase_cost, can_view_logistics_cost = _cost_field_access(principal)
+    filtered_payload = filter_export_request(
         payload,
+        can_view_purchase_cost=can_view_purchase_cost,
+        can_view_logistics_cost=can_view_logistics_cost,
+    )
+    include_costs = can_view_purchase_cost or can_view_logistics_cost
+    csv_text, filename = ProductManagementService(session).export_csv(
+        filtered_payload,
         account_refs,
         include_costs=include_costs,
     )
     audit_logger.info(
-        "product_export_created actor_ref=%s request_id=%s row_limit=%s include_costs=%s",
+        "product_export_created actor_ref=%s request_id=%s row_limit=%s "
+        "purchase_cost=%s logistics_cost=%s",
         principal.user_id,
         get_request_id(request),
         payload.max_rows,
-        include_costs,
+        can_view_purchase_cost,
+        can_view_logistics_cost,
     )
     return Response(
         content=csv_text.encode("utf-8-sig"),
@@ -313,16 +351,26 @@ def get_product_management_sku(
     principal: read_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[ProductManagementDetailData, ProductManagementReadMeta]:
-    include_costs = "products:cost:read" in principal.permissions
-    data = ProductManagementService(session).get_sku(
-        sku_id, account_refs, include_costs=include_costs
+    can_view_purchase_cost, can_view_logistics_cost = _cost_field_access(principal)
+    raw_data = ProductManagementService(session).get_sku(
+        sku_id,
+        account_refs,
+        include_costs=can_view_purchase_cost or can_view_logistics_cost,
     )
-    if include_costs:
+    data = filter_detail_data(
+        raw_data,
+        can_view_purchase_cost=can_view_purchase_cost,
+        can_view_logistics_cost=can_view_logistics_cost,
+    )
+    if can_view_purchase_cost or can_view_logistics_cost:
         audit_logger.info(
-            "product_management_cost_accessed actor_ref=%s request_id=%s sku_id=%s",
+            "product_management_cost_accessed actor_ref=%s request_id=%s sku_id=%s "
+            "purchase_cost=%s logistics_cost=%s",
             principal.user_id,
             get_request_id(request),
             sku_id,
+            can_view_purchase_cost,
+            can_view_logistics_cost,
         )
     return success_response(
         request,
@@ -351,16 +399,26 @@ def get_product_management_pricing_breakdown(
     principal: read_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[PricingBreakdownRead, ProductManagementReadMeta]:
-    include_costs = "products:cost:read" in principal.permissions
-    data = ProductManagementService(session).pricing_breakdown(
-        sku_id, account_refs, include_costs=include_costs
+    can_view_purchase_cost, can_view_logistics_cost = _cost_field_access(principal)
+    raw_data = ProductManagementService(session).pricing_breakdown(
+        sku_id,
+        account_refs,
+        include_costs=can_view_purchase_cost or can_view_logistics_cost,
     )
-    if include_costs:
+    data = filter_pricing_breakdown(
+        raw_data,
+        can_view_purchase_cost=can_view_purchase_cost,
+        can_view_logistics_cost=can_view_logistics_cost,
+    )
+    if can_view_purchase_cost or can_view_logistics_cost:
         audit_logger.info(
-            "product_management_pricing_breakdown_accessed actor_ref=%s request_id=%s sku_id=%s",
+            "product_management_pricing_breakdown_accessed actor_ref=%s "
+            "request_id=%s sku_id=%s purchase_cost=%s logistics_cost=%s",
             principal.user_id,
             get_request_id(request),
             sku_id,
+            can_view_purchase_cost,
+            can_view_logistics_cost,
         )
     return success_response(
         request,
