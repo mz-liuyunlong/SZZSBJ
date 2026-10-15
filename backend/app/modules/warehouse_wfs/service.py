@@ -111,7 +111,9 @@ class WfsFeeAlertService:
             end_date=query.end_date,
             store_id=query.store_id,
             owner_ref=query.owner_ref,
-            status=CASE_LABEL_TO_STATUS.get(str(query.status), query.status) if query.status else None,
+            status=CASE_LABEL_TO_STATUS.get(str(query.status), query.status)
+            if query.status
+            else None,
             keyword=query.keyword,
             page=query.page,
             page_size=query.page_size,
