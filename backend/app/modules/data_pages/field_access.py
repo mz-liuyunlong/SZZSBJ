@@ -60,11 +60,7 @@ def filter_order_profit_list_data(
                 "order_profit_currency_code": None,
             }
         )
-    summary = (
-        data.summary.model_copy(update=summary_updates)
-        if summary_updates
-        else data.summary
-    )
+    summary = data.summary.model_copy(update=summary_updates) if summary_updates else data.summary
     return data.model_copy(update={"items": items, "summary": summary})
 
 
