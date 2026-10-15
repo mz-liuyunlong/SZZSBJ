@@ -8,6 +8,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.warehouse_wfs.legacy_identity import (
+    LEGACY_IDENTITY_CTE,
+    LEGACY_IDENTITY_PREFLIGHT_SQL,
+)
 from app.modules.warehouse_wfs.schemas import (
     WfsFeeAlertListData,
     WfsFeeAlertQuery,
@@ -391,6 +395,10 @@ class WfsFeeAlertService:
         summary = self._legacy_sync_summary()
         if not execute:
             return summary
+        if (summary.unmatched_identities or summary.ambiguous_identities
+            or summary.duplicate_identities or summary.invalid_values
+            or summary.protected_cases):
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         result = self.session.execute(text(self._legacy_upsert_sql()))
         self.session.commit()
         return WfsFeeLegacySyncResult(
@@ -589,55 +597,49 @@ class WfsFeeAlertService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
     def _legacy_sync_summary(self) -> WfsFeeLegacySyncResult:
-        row = (
-            self.session.execute(
-                text(
-                    """
-                    with legacy as (
-                      select * from legacy_mirror.event_wfs_fee_case where platform = 'walmart'
-                    ), enriched as (
-                      select l.id
-                      from legacy l
-                      join lateral (
-                        select m.source_account_ref
-                        from mart_daily_sales_item_day m
-                        where m.store_id = l.store_id
-                          and m.item_id = l.item_id
-                          and trim(m.msku) = trim(l.msku)
-                        order by m.business_date_la desc
-                        limit 1
-                      ) m on true
-                    ), existing as (
-                      select legacy_case_id from ops_wfs_fee_anomaly_cases
-                      where source_kind = 'legacy_mirror'
-                    ), status_counts as (
-                      select jsonb_object_agg(status, cases) data
-                      from (
-                        select status, count(*) cases from legacy group by status
-                      ) s
-                    )
-                    select
-                      (select count(*) from legacy) legacy_total,
-                      (select count(*) from enriched) matched_identities,
-                      (select count(*) from legacy) - (select count(*) from enriched)
-                        unmatched_identities,
-                      (select count(*) from existing) existing_cases,
-                      (select count(*) from enriched e left join existing x
-                        on x.legacy_case_id=e.id where x.legacy_case_id is null) will_insert,
-                      (select count(*) from enriched e join existing x
-                        on x.legacy_case_id=e.id) will_update,
-                      coalesce((select data from status_counts), '{}'::jsonb) status_breakdown
-                    """
-                )
+        row = self.session.execute(
+            text(
+                LEGACY_IDENTITY_PREFLIGHT_SQL
+                + """,
+                (select count(*) from ops_wfs_fee_anomaly_cases
+                 where source_kind = 'legacy_mirror' and is_deleted = false)
+                   existing_cases,
+                (select count(*) from enriched e
+                 left join ops_wfs_fee_anomaly_cases c
+                   on c.source_account_ref=e.source_account_ref
+                  and c.store_id=e.store_id and c.item_id=e.item_id
+                  and c.msku=e.normalized_msku
+                 where c.id is null) will_insert,
+                (select count(*) from enriched e
+                 join ops_wfs_fee_anomaly_cases c
+                   on c.source_account_ref=e.source_account_ref
+                  and c.store_id=e.store_id and c.item_id=e.item_id
+                  and c.msku=e.normalized_msku
+                 where c.source_kind='legacy_mirror'
+                   and c.updated_by='legacy_mirror'
+                   and c.legacy_case_id=e.id
+                   and c.is_deleted=false) will_update,
+                (select count(*) from enriched e
+                 join ops_wfs_fee_anomaly_cases c
+                   on c.source_account_ref=e.source_account_ref
+                  and c.store_id=e.store_id and c.item_id=e.item_id
+                  and c.msku=e.normalized_msku
+                 where not (c.source_kind='legacy_mirror'
+                   and c.updated_by='legacy_mirror'
+                   and c.legacy_case_id=e.id
+                   and c.is_deleted=false)) protected_cases
+                """
             )
-            .mappings()
-            .one()
-        )
+        ).mappings().one()
         return WfsFeeLegacySyncResult(
             execute=False,
             legacy_total=int(row["legacy_total"]),
             matched_identities=int(row["matched_identities"]),
             unmatched_identities=int(row["unmatched_identities"]),
+            ambiguous_identities=int(row["ambiguous_identities"]),
+            duplicate_identities=int(row["duplicate_identities"]),
+            invalid_values=int(row["invalid_values"]),
+            protected_cases=int(row["protected_cases"]),
             existing_cases=int(row["existing_cases"]),
             will_insert=int(row["will_insert"]),
             will_update=int(row["will_update"]),
@@ -647,37 +649,7 @@ class WfsFeeAlertService:
 
     def _legacy_upsert_sql(self) -> str:
         id_expr = stable_legacy_uuid_expr("l")
-        return f"""
-        with legacy as (
-          select
-            l.*,
-            md5(concat_ws('|',
-              l.id::text, l.status, l.manual_fee::text, l.actual_fee::text,
-              l.total_units::text, l.est_recover::text, coalesce(l.case_nos,''),
-              coalesce(l.follow_log,''), coalesce(l.reason,''), coalesce(l.remark,''),
-              coalesce(l.claim_amount::text,''), coalesce(l.recovered_amount::text,''),
-              coalesce(l.updated_at::text,'')
-            )) sync_hash_value
-          from legacy_mirror.event_wfs_fee_case l
-          where l.platform = 'walmart'
-        ), enriched as (
-          select
-            l.*,
-            m.source_account_ref,
-            m.owner_ref,
-            m.local_sku,
-            coalesce(m.local_name, m.title) product_name
-          from legacy l
-          join lateral (
-            select m.source_account_ref, m.owner_ref, m.local_sku, m.local_name, m.title
-            from mart_daily_sales_item_day m
-            where m.store_id = l.store_id
-              and m.item_id = l.item_id
-              and trim(m.msku) = trim(l.msku)
-            order by m.business_date_la desc
-            limit 1
-          ) m on true
-        )
+        return LEGACY_IDENTITY_CTE + f"""
         insert into ops_wfs_fee_anomaly_cases (
           id, source_kind, source_case_ref, legacy_case_id, legacy_status,
           legacy_updated_at, last_mirrored_at, sync_hash, platform, source_account_ref,
@@ -809,7 +781,11 @@ class WfsFeeAlertService:
           updated_by = excluded.updated_by,
           updated_at = excluded.updated_at,
           is_deleted = false
+        where ops_wfs_fee_anomaly_cases.source_kind = 'legacy_mirror'
+          and ops_wfs_fee_anomaly_cases.updated_by = 'legacy_mirror'
+          and ops_wfs_fee_anomaly_cases.legacy_case_id = excluded.legacy_case_id
         """
+
 
     def _case_select_sql(self) -> str:
         return """
