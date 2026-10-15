@@ -1,10 +1,14 @@
-/** Edits page-specific page, action, and field permissions from the backend catalog. */
+/** Edits page-specific page, action, field, and data permissions from backend data. */
 import { Checkbox, Empty, Tabs, Tag, Typography } from "antd";
 import type { RolePermissionCatalog } from "@/pages/settings/roleManagementApi";
+import RoleAuditPanel from "@/pages/settings/components/RoleAuditPanel";
+import RoleDataScopeEditor from "@/pages/settings/components/RoleDataScopeEditor";
 import {
   permissionTabs,
   type PermissionGroup,
   type PermissionTabKey,
+  type RoleAuditEvent,
+  type RoleDataScopeEntry,
   type RoleManagementRow,
   type RolePermissionState,
 } from "@/pages/settings/roleManagementTypes";
@@ -14,20 +18,30 @@ interface RolePermissionEditorProps {
   activeTab: PermissionTabKey;
   permissions: RolePermissionState;
   permissionCatalog: RolePermissionCatalog;
+  dataScopes: RoleDataScopeEntry[];
+  auditEvents: RoleAuditEvent[];
+  dataScopeLoading: boolean;
+  auditLoading: boolean;
+  canConfigurePermissions: boolean;
+  canConfigureDataScope: boolean;
+  canViewAudit: boolean;
   onTabChange: (tab: PermissionTabKey) => void;
   onChange: (permissions: RolePermissionState) => void;
+  onDataScopeChange: (items: RoleDataScopeEntry[]) => void;
 }
 
 function PermissionGroupSection({
   group,
   values,
   permissionCatalog,
+  disabled,
   onGroupChange,
   onItemChange,
 }: {
   group: PermissionGroup;
   values: Record<string, boolean>;
   permissionCatalog: RolePermissionCatalog;
+  disabled: boolean;
   onGroupChange: (checked: boolean) => void;
   onItemChange: (item: string, checked: boolean) => void;
 }) {
@@ -42,6 +56,7 @@ function PermissionGroupSection({
         <Checkbox
           checked={allChecked}
           indeterminate={partialChecked}
+          disabled={disabled}
           onChange={(event) => onGroupChange(event.target.checked)}
         >
           全选
@@ -56,6 +71,7 @@ function PermissionGroupSection({
           >
             <Checkbox
               checked={values[item] === true}
+              disabled={disabled}
               onChange={(event) => onItemChange(item, event.target.checked)}
             />
             <span>{permissionCatalog.permissionLabels[item] ?? item}</span>
@@ -74,9 +90,21 @@ function RolePermissionEditor({
   activeTab,
   permissions,
   permissionCatalog,
+  dataScopes,
+  auditEvents,
+  dataScopeLoading,
+  auditLoading,
+  canConfigurePermissions,
+  canConfigureDataScope,
+  canViewAudit,
   onTabChange,
   onChange,
+  onDataScopeChange,
 }: RolePermissionEditorProps) {
+  const visibleTabs = permissionTabs.filter((item) => (
+    item.key !== "audit" || canViewAudit
+  ));
+
   const renderBooleanGroups = (
     groups: PermissionGroup[],
     keyName: keyof RolePermissionState,
@@ -91,6 +119,7 @@ function RolePermissionEditor({
             group={group}
             values={permissions[keyName]}
             permissionCatalog={permissionCatalog}
+            disabled={!canConfigurePermissions}
             onGroupChange={(checked) => {
               const nextValues = { ...permissions[keyName] };
               group.items.forEach((item) => {
@@ -120,7 +149,7 @@ function RolePermissionEditor({
       <Tabs
         className="role-management__permission-tabs"
         activeKey={activeTab}
-        items={permissionTabs.map((item) => ({ key: item.key, label: item.label }))}
+        items={visibleTabs.map((item) => ({ key: item.key, label: item.label }))}
         onChange={(key) => onTabChange(key as PermissionTabKey)}
       />
       {activeTab === "pages" &&
@@ -129,6 +158,17 @@ function RolePermissionEditor({
         renderBooleanGroups(permissionCatalog.actionPermissionGroups, "actionPermissions")}
       {activeTab === "fields" &&
         renderBooleanGroups(permissionCatalog.fieldPermissionGroups, "fieldPermissions")}
+      {activeTab === "dataScopes" && (
+        <RoleDataScopeEditor
+          items={dataScopes}
+          loading={dataScopeLoading}
+          disabled={!canConfigureDataScope}
+          onChange={onDataScopeChange}
+        />
+      )}
+      {activeTab === "audit" && canViewAudit && (
+        <RoleAuditPanel events={auditEvents} loading={auditLoading} />
+      )}
     </section>
   );
 }
