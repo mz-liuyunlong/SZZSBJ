@@ -15,7 +15,10 @@ from app.modules.warehouse_wfs.legacy_identity import (
     LEGACY_IDENTITY_CTE,
     LEGACY_IDENTITY_PREFLIGHT_SQL,
 )
-from app.modules.warehouse_wfs.schemas import WfsFeeCaseWrite
+from app.modules.warehouse_wfs.schemas import (
+    WfsFeeArchiveReviewWrite,
+    WfsFeeCaseWrite,
+)
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
 
@@ -96,3 +99,26 @@ def test_migration_registers_action_permissions() -> None:
     ).read_text()
     for suffix in ("write", "review", "recover", "sync"):
         assert f"warehouse:wfs-fee-alert:{suffix}" in migration
+
+
+def test_archive_review_is_two_person_and_rejects_stale_transition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.rowcount = 0
+    service = WfsFeeAlertService(session)
+    monkeypatch.setattr(service, "_assert_case_visible", lambda *_args: None)
+
+    with pytest.raises(ApiError) as raised:
+        service.review_archive(
+            UUID("00000000-0000-0000-0000-000000000001"),
+            WfsFeeArchiveReviewWrite(decision="approved"),
+            frozenset({"account-1"}),
+            "reviewer-1",
+        )
+
+    assert raised.value.status_code == 409
+    statement = str(session.execute.call_args.args[0])
+    assert "archive_requested_by is distinct from :actor" in statement
+    session.rollback.assert_called_once()
+    session.commit.assert_not_called()
