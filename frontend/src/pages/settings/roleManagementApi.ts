@@ -1,6 +1,8 @@
 import { backendRequest } from "@/api/backendApi";
 import type {
   PermissionGroup,
+  RoleAuditEvent,
+  RoleDataScopeEntry,
   RoleFormValues,
   RoleManagementRow,
   RolePermissionState,
@@ -49,6 +51,28 @@ interface BackendPermissionModule {
 interface BackendPermissionCatalog {
   version: string;
   modules: BackendPermissionModule[];
+}
+
+interface BackendDataScopeEntry {
+  scope_type: RoleDataScopeEntry["scopeType"];
+  scope_value: string;
+}
+
+interface BackendRoleDataScope {
+  role_key: string;
+  items: BackendDataScopeEntry[];
+}
+
+interface BackendAuditEvent {
+  id: string;
+  actor_user_id: number | null;
+  event_type: string;
+  target_type: string;
+  target_key: string;
+  request_id: string | null;
+  request_ip: string | null;
+  user_agent: string | null;
+  created_at: string;
 }
 
 export interface RolePermissionCatalog {
@@ -217,6 +241,17 @@ export function stateToPermissionKeys(
     .sort();
 }
 
+export function normalizeRoleDataScopes(items: RoleDataScopeEntry[]): RoleDataScopeEntry[] {
+  const seen = new Set<string>();
+  return items.flatMap((item) => {
+    const scopeValue = item.scopeValue.trim();
+    const identity = `${item.scopeType}:${scopeValue}`;
+    if (!scopeValue || seen.has(identity)) return [];
+    seen.add(identity);
+    return [{ scopeType: item.scopeType, scopeValue }];
+  });
+}
+
 export async function loadRoleManagementData(): Promise<{
   roles: RoleManagementRow[];
   permissionCatalog: RolePermissionCatalog;
@@ -263,4 +298,54 @@ export async function saveRolePermissions(
   );
 
   return toRow(response.data);
+}
+
+export async function loadRoleDataScopes(roleKey: string): Promise<RoleDataScopeEntry[]> {
+  const response = await backendRequest<BackendRoleDataScope>(
+    `/api/settings/rbac/roles/${roleKey}/data-scopes`,
+  );
+  return response.data.items.map((item) => ({
+    scopeType: item.scope_type,
+    scopeValue: item.scope_value,
+  }));
+}
+
+export async function saveRoleDataScopes(
+  roleKey: string,
+  items: RoleDataScopeEntry[],
+): Promise<RoleDataScopeEntry[]> {
+  const normalizedItems = normalizeRoleDataScopes(items);
+  const response = await backendRequest<BackendRoleDataScope>(
+    `/api/settings/rbac/roles/${roleKey}/data-scopes`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        items: normalizedItems.map((item) => ({
+          scope_type: item.scopeType,
+          scope_value: item.scopeValue,
+        })),
+      }),
+    },
+  );
+  return response.data.items.map((item) => ({
+    scopeType: item.scope_type,
+    scopeValue: item.scope_value,
+  }));
+}
+
+export async function loadRoleAuditEvents(limit = 100): Promise<RoleAuditEvent[]> {
+  const response = await backendRequest<BackendAuditEvent[]>(
+    `/api/settings/rbac/audit-events?limit=${limit}`,
+  );
+  return response.data.map((item) => ({
+    id: item.id,
+    actorUserId: item.actor_user_id ?? undefined,
+    eventType: item.event_type,
+    targetType: item.target_type,
+    targetKey: item.target_key,
+    requestId: item.request_id ?? undefined,
+    requestIp: item.request_ip ?? undefined,
+    userAgent: item.user_agent ?? undefined,
+    createdAt: item.created_at,
+  }));
 }
