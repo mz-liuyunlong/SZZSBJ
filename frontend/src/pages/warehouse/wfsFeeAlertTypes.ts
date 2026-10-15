@@ -106,8 +106,8 @@ export const wfsFeeAlertColumnFields: WfsFeeAlertColumnField[] = [
 export const fixedWfsFeeAlertColumnKeys = ["image", "sku"];
 
 export const createWfsFeeAlertInitialFilters = (): WfsFeeAlertFilters => ({
-  datePreset: "last30",
-  dateRange: createWfsFeeAlertDateRange("last30"),
+  datePreset: "custom",
+  dateRange: ["", ""],
   currency: "USD",
   stores: [],
   owners: [],
@@ -134,8 +134,8 @@ export const filterWfsFeeAlertRows = (
 
   return rows.filter((row) => {
     const target = String(row[filters.searchField]).toLocaleLowerCase();
-    return row.discoveredAt >= startDate
-      && row.discoveredAt <= endDate
+    return (!startDate || row.discoveredAt >= startDate)
+      && (!endDate || row.discoveredAt <= endDate)
       && (filters.stores.length === 0 || filters.stores.includes(row.store))
       && (filters.owners.length === 0 || filters.owners.includes(row.owner))
       && (filters.statuses.length === 0 || filters.statuses.includes(row.status))

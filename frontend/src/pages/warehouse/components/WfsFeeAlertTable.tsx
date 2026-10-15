@@ -231,7 +231,7 @@ const createColumns = (
     fixed: "right",
     render: (_, row) => (
       <Space size={4}>
-        <Button type="link" onClick={() => onOpenFollow(row)}>编辑</Button>
+        <Button type="link" disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑</Button>
         <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
       </Space>
     ),

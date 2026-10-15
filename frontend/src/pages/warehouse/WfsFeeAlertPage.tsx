@@ -128,20 +128,13 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
     }
   };
 
-  const handleBatchOpenCase = () => {
-    if (!selectedRowKeys.length) {
-      void messageApi.info("请先选择需要开Case的异常SKU");
-      return;
-    }
-    const first = rows.find((row) => selectedRowKeys.includes(row.id));
-    if (first) setFollowRow(first);
-  };
-  const handleBatchFollow = handleBatchOpenCase;
+  const handleBatchOpenCase = () => { void messageApi.info("批量开Case暂未接入，请单条编辑"); };
+  const handleBatchFollow = () => { void messageApi.info("批量跟进暂未接入，请单条编辑"); };
 
   const handleSaveFollow = async (values: WfsFeeAlertFollowFormValues) => {
     if (!followRow) return;
     try {
-      await updateWfsFeeAlertCase(followRow.id, values, followRow.overFee);
+      await updateWfsFeeAlertCase(followRow.id, values);
       setFollowRow(undefined);
       await reloadRows();
       void messageApi.success("WFS异常跟进已保存");
@@ -151,6 +144,10 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   };
 
   const openFollowModal = (row: WfsFeeAlertRow) => {
+    if (row.status !== "未开Case" && row.status !== "跟进中") {
+      void messageApi.warning("当前 Case 状态不能编辑跟进");
+      return;
+    }
     setDetailRow(undefined);
     setFollowRow(row);
   };

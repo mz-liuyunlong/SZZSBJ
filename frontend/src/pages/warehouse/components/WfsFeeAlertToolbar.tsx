@@ -27,13 +27,13 @@ const statusOptions: { label: WfsFeeAlertCaseStatus; value: WfsFeeAlertCaseStatu
   { label: "未开Case", value: "未开Case" },
   { label: "已开Case", value: "已开Case" },
   { label: "跟进中", value: "跟进中" },
+  { label: "待归档审核", value: "待归档审核" },
+  { label: "已归档", value: "已归档" },
   { label: "已追回", value: "已追回" },
-  { label: "驳回", value: "驳回" },
-  { label: "已关闭", value: "已关闭" },
 ];
 
 
-const referenceDate = dayjs("2026-09-13");
+const referenceDate = dayjs();
 
 const rangePickerPresets: { label: string; value: [Dayjs, Dayjs] }[] = [
   { label: "今天", value: [referenceDate, referenceDate] },
@@ -86,13 +86,18 @@ function WfsFeeAlertToolbar({
       <DatePicker.RangePicker
         aria-label="日期范围"
         className="wfs-fee-alert__date-range"
-        allowClear={false}
+        allowClear
         format="YYYY-MM-DD"
           disabledDate={disableFutureDate}
         presets={rangePickerPresets}
-        value={[dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]}
+        value={filters.dateRange[0] && filters.dateRange[1]
+          ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
+          : null}
         onChange={(dates) => {
-          if (!dates?.[0] || !dates?.[1]) return;
+          if (!dates?.[0] || !dates?.[1]) {
+            onChange({ ...filters, datePreset: "custom", dateRange: ["", ""] });
+            return;
+          }
           onChange({
             ...filters,
             datePreset: "custom",

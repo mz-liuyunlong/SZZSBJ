@@ -169,21 +169,15 @@ export async function fetchWfsFeeAlerts(
 export async function updateWfsFeeAlertCase(
   id: string,
   values: WfsFeeAlertFollowFormValues,
-  claimAmount: number,
 ): Promise<void> {
   await backendRequest<{ updated: boolean }, null>(
-    `/api/warehouse/wfs-fee-alerts/${encodeURIComponent(id)}/case`,
+    `/api/warehouse/wfs-fee-cases/${encodeURIComponent(id)}/follow`,
     {
-      method: "PUT",
+      method: "POST",
       body: JSON.stringify({
-        status: values.status,
-        case_no: values.caseNo,
-        reason: "",
-        priority: "中",
-        claim_amount: claimAmount,
-        recovered_amount: values.recoveredAmount,
+        case_nos: values.caseNo,
+        latest_follow_note: values.latestFollow,
         next_follow_at: values.nextFollowAt === "-" ? null : values.nextFollowAt,
-        latest_follow: values.latestFollow,
       }),
     },
   );

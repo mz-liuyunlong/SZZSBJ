@@ -30,8 +30,7 @@ function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow }: WfsFee
       onCancel={onClose}
       footer={(
         <Space>
-          <Button onClick={() => onOpenFollow(row)}>开Case</Button>
-          <Button onClick={() => onOpenFollow(row)}>编辑跟进</Button>
+          <Button disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑跟进</Button>
           <Button type="primary" onClick={onClose}>关闭</Button>
         </Space>
       )}
