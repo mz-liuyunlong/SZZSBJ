@@ -33,6 +33,8 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!readAuthToken()) return;
+
     const timer = window.setTimeout(() => {
       void restoreCurrentUser();
     }, 0);
