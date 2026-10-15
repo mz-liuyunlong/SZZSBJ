@@ -32,6 +32,9 @@ db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 read_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:read"))]
 write_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:write"))]
+review_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:review"))]
+recover_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:recover"))]
+sync_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:sync"))]
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
     403: {"model": ErrorEnvelope},
@@ -88,7 +91,7 @@ def list_wfs_fee_alerts(
 def preview_sync_legacy_wfs_fee_cases(
     request: Request,
     session: db_session,
-    _: write_principal,
+    _: sync_principal,
 ) -> SuccessEnvelope[WfsFeeLegacySyncResult, None]:
     result = WfsFeeAlertService(session).sync_legacy_cases(execute=False)
     return success_response(request, data=result, meta=None)
@@ -102,7 +105,7 @@ def preview_sync_legacy_wfs_fee_cases(
 def execute_sync_legacy_wfs_fee_cases(
     request: Request,
     session: db_session,
-    _: write_principal,
+    _: sync_principal,
 ) -> SuccessEnvelope[WfsFeeLegacySyncResult, None]:
     result = WfsFeeAlertService(session).sync_legacy_cases(execute=True)
     return success_response(request, data=result, meta=None)
@@ -116,7 +119,7 @@ def execute_sync_legacy_wfs_fee_cases(
 def compare_legacy_wfs_fee_cases(
     request: Request,
     session: db_session,
-    _: write_principal,
+    _: sync_principal,
 ) -> SuccessEnvelope[WfsFeeLegacyCompareResult, None]:
     result = WfsFeeAlertService(session).compare_legacy_cases()
     return success_response(request, data=result, meta=None)
@@ -199,7 +202,7 @@ def review_wfs_fee_case_archive(
     case_id: UUID,
     payload: WfsFeeArchiveReviewWrite,
     session: db_session,
-    principal: write_principal,
+    principal: review_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
     WfsFeeAlertService(session).review_archive(case_id, payload, account_refs, principal.user_id)
@@ -216,7 +219,7 @@ def mark_wfs_fee_case_recovered(
     case_id: UUID,
     payload: WfsFeeRecoveredWrite,
     session: db_session,
-    principal: write_principal,
+    principal: recover_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
     WfsFeeAlertService(session).mark_recovered(case_id, payload, account_refs, principal.user_id)
