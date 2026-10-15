@@ -154,7 +154,7 @@ class WfsFeeAlertService:
     ) -> None:
         self._assert_case_visible(case_id, account_refs)
         now = utc_now()
-        self.session.execute(
+        result = self.session.execute(
             text(
                 """
                 update ops_wfs_fee_anomaly_cases set
@@ -178,6 +178,7 @@ class WfsFeeAlertService:
                   updated_by = :actor,
                   updated_at = :now
                 where id = :case_id
+                  and status in ('pending_confirm','following')
                 """
             ),
             {
@@ -191,6 +192,9 @@ class WfsFeeAlertService:
                 "now": now,
             },
         )
+        if result.rowcount != 1:
+            self.session.rollback()
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         self.session.commit()
 
     def update_case(
@@ -209,7 +213,7 @@ class WfsFeeAlertService:
         priority = PRIORITY_LABEL_TO_VALUE[payload.priority]
         latest_note = payload.latest_follow or payload.reason or payload.status
         now = utc_now()
-        self.session.execute(
+        result = self.session.execute(
             text(
                 """
                 update ops_wfs_fee_anomaly_cases set
@@ -230,6 +234,7 @@ class WfsFeeAlertService:
                   updated_by = :actor,
                   updated_at = :now
                 where id = :case_id
+                  and status in ('pending_confirm','following')
                 """
             ),
             {
@@ -246,6 +251,9 @@ class WfsFeeAlertService:
                 "now": now,
             },
         )
+        if result.rowcount != 1:
+            self.session.rollback()
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         self.session.commit()
 
     def request_archive(
