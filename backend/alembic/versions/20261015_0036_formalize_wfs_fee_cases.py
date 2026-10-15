@@ -142,7 +142,8 @@ def upgrade() -> None:
             constraint ck_wfs_case_actual_unit_fee_nonnegative check (actual_unit_fee >= 0),
             constraint ck_wfs_case_unit_fee_diff_nonnegative check (unit_fee_diff >= 0),
             constraint ck_wfs_case_affected_units_nonnegative check (affected_units >= 0),
-            constraint ck_wfs_case_estimated_recover_nonnegative check (estimated_recover_amount >= 0),
+            constraint ck_wfs_case_estimated_recover_nonnegative
+              check (estimated_recover_amount >= 0),
             constraint ck_wfs_case_recovered_nonnegative check (recovered_amount >= 0),
             constraint ck_wfs_case_identity_not_blank check (
               trim(source_account_ref) <> ''
