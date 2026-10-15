@@ -1,5 +1,5 @@
-/** Edits page and action permissions from the backend permission catalog. */
-import { Alert, Checkbox, Empty, Tabs, Typography } from "antd";
+/** Edits page-specific page, action, and field permissions from the backend catalog. */
+import { Checkbox, Empty, Tabs, Tag, Typography } from "antd";
 import type { RolePermissionCatalog } from "@/pages/settings/roleManagementApi";
 import {
   permissionTabs,
@@ -59,6 +59,9 @@ function PermissionGroupSection({
               onChange={(event) => onItemChange(item, event.target.checked)}
             />
             <span>{permissionCatalog.permissionLabels[item] ?? item}</span>
+            {permissionCatalog.highRiskPermissions.has(item) && (
+              <Tag color="red">高危</Tag>
+            )}
           </label>
         ))}
       </div>
@@ -76,7 +79,7 @@ function RolePermissionEditor({
 }: RolePermissionEditorProps) {
   const renderBooleanGroups = (
     groups: PermissionGroup[],
-    keyName: "pagePermissions" | "actionPermissions",
+    keyName: keyof RolePermissionState,
   ) => (
     <div className="role-management__permission-scroll">
       {groups.length === 0 ? (
@@ -112,7 +115,7 @@ function RolePermissionEditor({
           <Typography.Title level={5}>{role.name}</Typography.Title>
           <Typography.Text type="secondary">{role.description}</Typography.Text>
         </div>
-        <Typography.Text type="secondary">权限区域内部滚动</Typography.Text>
+        <Typography.Text type="secondary">版本 {role.version}</Typography.Text>
       </div>
       <Tabs
         className="role-management__permission-tabs"
@@ -124,16 +127,8 @@ function RolePermissionEditor({
         renderBooleanGroups(permissionCatalog.pagePermissionGroups, "pagePermissions")}
       {activeTab === "actions" &&
         renderBooleanGroups(permissionCatalog.actionPermissionGroups, "actionPermissions")}
-      {activeTab === "fields" && (
-        <div className="role-management__permission-scroll">
-          <Alert
-            type="info"
-            showIcon
-            message="字段权限后端未接入"
-            description="当前版本不再展示前端假字段权限，避免保存后误以为字段级控制已生效。后续需要新增字段权限表、字段权限接口和页面字段级渲染控制后再开放。"
-          />
-        </div>
-      )}
+      {activeTab === "fields" &&
+        renderBooleanGroups(permissionCatalog.fieldPermissionGroups, "fieldPermissions")}
     </section>
   );
 }
