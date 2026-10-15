@@ -97,7 +97,7 @@ def test_migration_registers_action_permissions() -> None:
         Path(__file__).resolve().parents[3]
         / "alembic"
         / "versions"
-        / "20261015_0036_formalize_wfs_fee_cases.py"
+        / "20261015_0036_wfs_cases.py"
     ).read_text()
     for suffix in ("write", "review", "recover", "sync"):
         assert f"warehouse:wfs-fee-alert:{suffix}" in migration

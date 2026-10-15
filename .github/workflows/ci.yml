@@ -132,7 +132,7 @@ jobs:
           engine = create_engine(get_database_url())
           with engine.begin() as conn:
               statements = [
-                  "create table alembic_version (version_num varchar(128) primary key)",
+                  "create table alembic_version (version_num varchar(32) primary key)",
                   "insert into alembic_version (version_num) values "
                   "('20261014_0035_add_auth_rbac')",
                   "create table app_roles (id uuid primary key, "
@@ -163,7 +163,7 @@ jobs:
               head = conn.execute(
                   text("select version_num from alembic_version")
               ).scalar_one()
-              assert head == "20261015_0036_formalize_wfs_fee_cases"
+              assert head == "20261015_0036_wfs_cases"
               assert conn.execute(
                   text("select to_regclass('public.ops_wfs_fee_anomaly_cases')")
               ).scalar_one() is not None

@@ -1,6 +1,6 @@
 """formalize WFS fee anomaly cases
 
-Revision ID: 20261015_0036_formalize_wfs_fee_cases
+Revision ID: 20261015_0036_wfs_cases
 Revises: 20261014_0035_add_auth_rbac
 Create Date: 2026-10-15
 """
@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from alembic import op
 
-revision: str = "20261015_0036_formalize_wfs_fee_cases"
+revision: str = "20261015_0036_wfs_cases"
 down_revision: str | Sequence[str] | None = "20261014_0035_add_auth_rbac"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
