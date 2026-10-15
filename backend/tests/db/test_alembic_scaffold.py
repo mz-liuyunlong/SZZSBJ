@@ -44,7 +44,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == ["20261013_0034_listing_wfs_first_stock"]
+    assert script.get_heads() == ["20261015_0036_formalize_wfs_fee_cases"]
+    assert (
+        script.get_revision("20261015_0036_formalize_wfs_fee_cases").down_revision
+        == "20261014_0035_add_auth_rbac"
+    )
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
