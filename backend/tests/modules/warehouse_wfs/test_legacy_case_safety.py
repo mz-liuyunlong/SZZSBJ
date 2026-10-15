@@ -67,14 +67,20 @@ def test_high_risk_routes_require_distinct_permissions() -> None:
     assert client.post("/api/warehouse/wfs-fee-cases/sync-legacy-execute").status_code == 403
     assert client.post("/api/warehouse/wfs-fee-cases/sync-legacy-preview").status_code == 403
     assert client.get("/api/warehouse/wfs-fee-cases/legacy-compare").status_code == 403
-    assert client.post(
-        f"/api/warehouse/wfs-fee-cases/{case_id}/archive-review",
-        json={"decision": "approved"},
-    ).status_code == 403
-    assert client.post(
-        f"/api/warehouse/wfs-fee-cases/{case_id}/mark-recovered",
-        json={"recovered_amount": "1.00"},
-    ).status_code == 403
+    assert (
+        client.post(
+            f"/api/warehouse/wfs-fee-cases/{case_id}/archive-review",
+            json={"decision": "approved"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/api/warehouse/wfs-fee-cases/{case_id}/mark-recovered",
+            json={"recovered_amount": "1.00"},
+        ).status_code
+        == 403
+    )
 
 
 def test_migration_registers_action_permissions() -> None:
