@@ -204,7 +204,7 @@ class WfsFeeAlertService:
 
         self._assert_case_visible(case_id, account_refs)
         status = CASE_LABEL_TO_STATUS[payload.status]
-        if status not in ('pending_confirm', 'following'):
+        if status not in ("pending_confirm", "following"):
             raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=422)
         priority = PRIORITY_LABEL_TO_VALUE[payload.priority]
         latest_note = payload.latest_follow or payload.reason or payload.status
@@ -389,9 +389,13 @@ class WfsFeeAlertService:
         summary = self._legacy_sync_summary()
         if not execute:
             return summary
-        if (summary.unmatched_identities or summary.ambiguous_identities
-            or summary.duplicate_identities or summary.invalid_values
-            or summary.protected_cases):
+        if (
+            summary.unmatched_identities
+            or summary.ambiguous_identities
+            or summary.duplicate_identities
+            or summary.invalid_values
+            or summary.protected_cases
+        ):
             raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         result = self.session.execute(text(self._legacy_upsert_sql()))
         self.session.commit()
@@ -591,10 +595,11 @@ class WfsFeeAlertService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
     def _legacy_sync_summary(self) -> WfsFeeLegacySyncResult:
-        row = self.session.execute(
-            text(
-                LEGACY_IDENTITY_PREFLIGHT_SQL
-                + """,
+        row = (
+            self.session.execute(
+                text(
+                    LEGACY_IDENTITY_PREFLIGHT_SQL
+                    + """,
                 (select count(*) from ops_wfs_fee_anomaly_cases
                  where source_kind = 'legacy_mirror' and is_deleted = false)
                    existing_cases,
@@ -623,8 +628,11 @@ class WfsFeeAlertService:
                    and c.legacy_case_id=e.id
                    and c.is_deleted=false)) protected_cases
                 """
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         return WfsFeeLegacySyncResult(
             execute=False,
             legacy_total=int(row["legacy_total"]),
@@ -643,7 +651,9 @@ class WfsFeeAlertService:
 
     def _legacy_upsert_sql(self) -> str:
         id_expr = stable_legacy_uuid_expr("l")
-        return LEGACY_IDENTITY_CTE + f"""
+        return (
+            LEGACY_IDENTITY_CTE
+            + f"""
         insert into ops_wfs_fee_anomaly_cases (
           id, source_kind, source_case_ref, legacy_case_id, legacy_status,
           legacy_updated_at, last_mirrored_at, sync_hash, platform, source_account_ref,
@@ -779,6 +789,7 @@ class WfsFeeAlertService:
           and ops_wfs_fee_anomaly_cases.updated_by = 'legacy_mirror'
           and ops_wfs_fee_anomaly_cases.legacy_case_id = excluded.legacy_case_id
         """
+        )
 
 
     def _case_select_sql(self) -> str:
