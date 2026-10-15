@@ -17,6 +17,7 @@ from app.modules.warehouse_wfs.legacy_identity import (
 )
 from app.modules.warehouse_wfs.schemas import (
     WfsFeeArchiveReviewWrite,
+    WfsFeeCaseFollowWrite,
     WfsFeeCaseWrite,
 )
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
@@ -120,5 +121,26 @@ def test_archive_review_is_two_person_and_rejects_stale_transition(
     assert raised.value.status_code == 409
     statement = str(session.execute.call_args.args[0])
     assert "archive_requested_by is distinct from :actor" in statement
+    session.rollback.assert_called_once()
+    session.commit.assert_not_called()
+
+
+def test_follow_does_not_reopen_closed_case(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.rowcount = 0
+    service = WfsFeeAlertService(session)
+    monkeypatch.setattr(service, "_assert_case_visible", lambda *_args: None)
+
+    with pytest.raises(ApiError) as raised:
+        service.save_follow(
+            UUID("00000000-0000-0000-0000-000000000001"),
+            WfsFeeCaseFollowWrite(latest_follow_note="Case update"),
+            frozenset({"account-1"}),
+            "operator-1",
+        )
+
+    assert raised.value.status_code == 409
+    statement = str(session.execute.call_args.args[0])
+    assert "status in ('pending_confirm','following')" in statement
     session.rollback.assert_called_once()
     session.commit.assert_not_called()
