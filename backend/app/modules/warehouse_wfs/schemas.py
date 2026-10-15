@@ -251,3 +251,12 @@ class WfsFeeLegacyCompareResult(StrictSchema):
     manual_fee_diff: int
     affected_units_diff: int
     estimated_recover_diff: int
+    recovered_amount_diff: int
+    case_nos_diff: int
+    claim_amount_diff: int
+    status_diff: int
+    protected_cases: int
+    legacy_estimated_total: Decimal
+    formal_estimated_total: Decimal
+    legacy_recovered_total: Decimal
+    formal_recovered_total: Decimal

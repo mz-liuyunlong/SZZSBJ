@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -143,4 +144,39 @@ def test_follow_does_not_reopen_closed_case(monkeypatch: pytest.MonkeyPatch) -> 
     statement = str(session.execute.call_args.args[0])
     assert "status in ('pending_confirm','following')" in statement
     session.rollback.assert_called_once()
+    session.commit.assert_not_called()
+
+def test_strict_compare_checks_recovery_and_case_status() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.mappings.return_value.one.return_value = {
+        "compared": 0, "matched": 0, "only_in_legacy": 0, "only_in_formal": 0,
+        "actual_fee_diff": 0, "manual_fee_diff": 0, "affected_units_diff": 0,
+        "estimated_recover_diff": 0, "recovered_amount_diff": 0,
+        "case_nos_diff": 0, "claim_amount_diff": 0, "status_diff": 0,
+        "protected_cases": 0, "legacy_estimated_total": Decimal("0"),
+        "formal_estimated_total": Decimal("0"), "legacy_recovered_total": Decimal("0"),
+        "formal_recovered_total": Decimal("0"),
+    }
+    WfsFeeAlertService(session).compare_legacy_cases()
+    sql = str(session.execute.call_args.args[0])
+    assert "l_recovered is not distinct from f_recovered" in sql
+    assert "expected_status is not distinct from status" in sql
+    assert "l_case_nos is not distinct from f_case_nos" in sql
+    assert "abs(l_est - f_est)" not in sql
+
+
+def test_production_sync_execution_requires_separate_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import AppEnvironment
+
+    settings = MagicMock()
+    settings.app_env = AppEnvironment.PRODUCTION
+    monkeypatch.setattr("app.modules.warehouse_wfs.service.get_settings", lambda: settings)
+    monkeypatch.delenv("WFS_CASE_SYNC_AUTHORIZED", raising=False)
+    session = MagicMock(spec=Session)
+    with pytest.raises(ApiError) as raised:
+        WfsFeeAlertService(session).sync_legacy_cases(execute=True)
+    assert raised.value.status_code == 403
+    session.execute.assert_not_called()
     session.commit.assert_not_called()

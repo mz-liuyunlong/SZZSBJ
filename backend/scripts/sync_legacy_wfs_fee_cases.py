@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 
+from sqlalchemy import text
+
 from app.db.session import get_session_factory
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
@@ -23,6 +25,8 @@ def main() -> None:
     args = parse_args()
     Session = get_session_factory()
     with Session() as session:
+        if not args.execute:
+            session.execute(text("SET TRANSACTION READ ONLY"))
         result = WfsFeeAlertService(session).sync_legacy_cases(execute=args.execute)
         print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 

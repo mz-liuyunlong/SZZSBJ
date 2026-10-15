@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
@@ -8,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.core.config import AppEnvironment, get_settings
 from app.modules.warehouse_wfs.legacy_identity import (
     LEGACY_IDENTITY_CTE,
     LEGACY_IDENTITY_PREFLIGHT_SQL,
@@ -341,6 +343,7 @@ class WfsFeeAlertService:
                 where id = :case_id
                   and status = 'archive_pending'
                   and archive_review_status = 'pending'
+                  and archive_requested_by is not null
                   and archive_requested_by is distinct from :actor
                 """
             ),
@@ -366,7 +369,7 @@ class WfsFeeAlertService:
     ) -> None:
         self._assert_case_visible(case_id, account_refs)
         now = utc_now()
-        self.session.execute(
+        result = self.session.execute(
             text(
                 """
                 update ops_wfs_fee_anomaly_cases set
@@ -386,7 +389,7 @@ class WfsFeeAlertService:
                   status_changed_by = :actor,
                   updated_by = :actor,
                   updated_at = :now
-                where id = :case_id
+                where id = :case_id and status <> 'recovered'
                 """
             ),
             {
@@ -398,9 +401,19 @@ class WfsFeeAlertService:
                 "now": now,
             },
         )
+        if result.rowcount != 1:
+            self.session.rollback()
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
         self.session.commit()
 
     def sync_legacy_cases(self, *, execute: bool) -> WfsFeeLegacySyncResult:
+        # A production write requires separate authorization in addition to RBAC.
+        if (
+            execute
+            and get_settings().app_env is AppEnvironment.PRODUCTION
+            and os.getenv("WFS_CASE_SYNC_AUTHORIZED", "").casefold() != "true"
+        ):
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         summary = self._legacy_sync_summary()
         if not execute:
             return summary
@@ -431,7 +444,17 @@ class WfsFeeAlertService:
                         manual_fee,
                         actual_fee,
                         total_units affected_units,
-                        est_recover estimated_recover_amount
+                        est_recover estimated_recover_amount,
+                        coalesce(recovered_amount, 0) recovered_amount,
+                        nullif(trim(case_nos), '') case_nos,
+                        claim_amount,
+                        case status
+                          when 'waiting' then 'pending_confirm'
+                          when 'following' then 'following'
+                          when 'approving' then 'archive_pending'
+                          when 'closed' then 'archived'
+                          when 'done' then 'recovered'
+                        end expected_status
                       from legacy_mirror.event_wfs_fee_case
                       where platform = 'walmart'
                     ), formal as (
@@ -440,7 +463,9 @@ class WfsFeeAlertService:
                         manual_unit_fee,
                         actual_unit_fee,
                         affected_units,
-                        estimated_recover_amount
+                        estimated_recover_amount,
+                        recovered_amount, nullif(trim(case_nos), '') case_nos,
+                        claim_amount, status, updated_by
                       from ops_wfs_fee_anomaly_cases
                       where source_kind = 'legacy_mirror' and is_deleted = false
                     ), paired as (
@@ -454,7 +479,16 @@ class WfsFeeAlertService:
                         l.affected_units l_units,
                         f.affected_units f_units,
                         l.estimated_recover_amount l_est,
-                        f.estimated_recover_amount f_est
+                        f.estimated_recover_amount f_est,
+                        l.recovered_amount l_recovered,
+                        f.recovered_amount f_recovered,
+                        l.case_nos l_case_nos,
+                        f.case_nos f_case_nos,
+                        l.claim_amount l_claim,
+                        f.claim_amount f_claim,
+                        l.expected_status,
+                        f.status,
+                        f.updated_by
                       from legacy l
                       full join formal f on f.legacy_case_id = l.legacy_case_id
                     )
@@ -462,27 +496,62 @@ class WfsFeeAlertService:
                       count(*) filter (where l_id is not null and f_id is not null) compared,
                       count(*) filter (
                         where l_id is not null and f_id is not null
-                          and abs(actual_fee - actual_unit_fee) <= 0.01
-                          and abs(manual_fee - manual_unit_fee) <= 0.01
-                          and l_units = f_units
-                          and abs(l_est - f_est) <= 1
+                          and actual_fee is not distinct from actual_unit_fee
+                          and manual_fee is not distinct from manual_unit_fee
+                          and l_units is not distinct from f_units
+                          and l_est is not distinct from f_est
+                          and l_recovered is not distinct from f_recovered
+                          and l_case_nos is not distinct from f_case_nos
+                          and l_claim is not distinct from f_claim
+                          and expected_status is not distinct from status
                       ) matched,
                       count(*) filter (where l_id is not null and f_id is null) only_in_legacy,
                       count(*) filter (where l_id is null and f_id is not null) only_in_formal,
                       count(*) filter (
                         where l_id is not null and f_id is not null
-                          and abs(actual_fee - actual_unit_fee) > 0.01
+                          and actual_fee is distinct from actual_unit_fee
                       ) actual_fee_diff,
                       count(*) filter (
                         where l_id is not null and f_id is not null
-                          and abs(manual_fee - manual_unit_fee) > 0.01
+                          and manual_fee is distinct from manual_unit_fee
                       ) manual_fee_diff,
                       count(*) filter (
-                        where l_id is not null and f_id is not null and l_units <> f_units
+                        where l_id is not null and f_id is not null
+                          and l_units is distinct from f_units
                       ) affected_units_diff,
                       count(*) filter (
-                        where l_id is not null and f_id is not null and abs(l_est - f_est) > 1
-                      ) estimated_recover_diff
+                        where l_id is not null and f_id is not null
+                          and l_est is distinct from f_est
+                      ) estimated_recover_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and l_recovered is distinct from f_recovered
+                      ) recovered_amount_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and l_case_nos is distinct from f_case_nos
+                      ) case_nos_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and l_claim is distinct from f_claim
+                      ) claim_amount_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and expected_status is distinct from status
+                      ) status_diff,
+                      count(*) filter (
+                        where l_id is not null and f_id is not null
+                          and updated_by is distinct from 'legacy_mirror'
+                      ) protected_cases,
+                      (select coalesce(sum(est_recover),0) from legacy_mirror.event_wfs_fee_case
+                        where platform='walmart') legacy_estimated_total,
+                      (select coalesce(sum(estimated_recover_amount),0) from formal)
+                        formal_estimated_total,
+                      (select coalesce(sum(recovered_amount),0)
+                         from legacy_mirror.event_wfs_fee_case where platform='walmart')
+                        legacy_recovered_total,
+                      (select coalesce(sum(recovered_amount),0) from formal)
+                        formal_recovered_total
                     from paired
                     """
                 )
