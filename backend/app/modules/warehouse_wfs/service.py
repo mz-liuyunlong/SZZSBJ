@@ -792,7 +792,6 @@ class WfsFeeAlertService:
         """
         )
 
-
     def _case_select_sql(self) -> str:
         return """
         select
