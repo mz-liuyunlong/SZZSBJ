@@ -14,6 +14,8 @@ interface UserFormModalProps {
   editingUser?: UserManagementRow;
   roleOptions: UserRoleOption[];
   canAssignRoles: boolean;
+  canViewPhone: boolean;
+  canViewEmail: boolean;
   onCancel: () => void;
   onSubmit: (values: UserFormValues) => void;
 }
@@ -39,6 +41,8 @@ function UserFormModal({
   editingUser,
   roleOptions,
   canAssignRoles,
+  canViewPhone,
+  canViewEmail,
   onCancel,
   onSubmit,
 }: UserFormModalProps) {
@@ -141,7 +145,11 @@ function UserFormModal({
         }
       }}
       onCancel={onCancel}
-      onOk={() => void form.validateFields().then(onSubmit)}
+      onOk={() => void form.validateFields().then((values) => onSubmit({
+        ...values,
+        phone: canViewPhone ? values.phone : undefined,
+        email: canViewEmail ? values.email : undefined,
+      }))}
     >
       <Form form={form} layout="vertical" requiredMark>
         <Form.Item
@@ -200,10 +208,20 @@ function UserFormModal({
           </Form.Item>
         )}
 
-        <div className="user-management-modal__grid">
-          <Form.Item name="phone" label="手机号"><Input placeholder="请输入手机号" /></Form.Item>
-          <Form.Item name="email" label="邮箱"><Input placeholder="请输入邮箱" /></Form.Item>
-        </div>
+        {(canViewPhone || canViewEmail) && (
+          <div className="user-management-modal__grid">
+            {canViewPhone && (
+              <Form.Item name="phone" label="手机号">
+                <Input placeholder="请输入手机号" />
+              </Form.Item>
+            )}
+            {canViewEmail && (
+              <Form.Item name="email" label="邮箱">
+                <Input placeholder="请输入邮箱" />
+              </Form.Item>
+            )}
+          </div>
+        )}
 
         <Form.Item
           name="status"
