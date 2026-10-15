@@ -32,8 +32,12 @@ db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 read_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:read"))]
 write_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:write"))]
-review_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:review"))]
-recover_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:recover"))]
+review_principal = Annotated[
+    Principal, Depends(require_permission("warehouse:wfs-fee-alert:review"))
+]
+recover_principal = Annotated[
+    Principal, Depends(require_permission("warehouse:wfs-fee-alert:recover"))
+]
 sync_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:sync"))]
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
