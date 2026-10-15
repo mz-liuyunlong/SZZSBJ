@@ -65,11 +65,17 @@ def _item() -> WfsFeeAlertRead:
     )
 
 
-def test_wfs_fee_alert_routes_are_registered() -> None:
+def test_wfs_fee_case_routes_are_registered_without_profit_mutation_endpoint() -> None:
     paths = create_app().openapi()["paths"]
     assert "/api/warehouse/wfs-fee-alerts" in paths
-    assert "/api/warehouse/wfs-fee-actuals" in paths
-    assert "/api/warehouse/wfs-fee-alerts/{mart_id}/case" in paths
+    assert "/api/warehouse/wfs-fee-cases" in paths
+    assert "/api/warehouse/wfs-fee-cases/{case_id}" in paths
+    assert "/api/warehouse/wfs-fee-cases/{case_id}/follow" in paths
+    assert "/api/warehouse/wfs-fee-cases/{case_id}/archive-request" in paths
+    assert "/api/warehouse/wfs-fee-cases/{case_id}/archive-review" in paths
+    assert "/api/warehouse/wfs-fee-cases/{case_id}/mark-recovered" in paths
+    assert "/api/warehouse/wfs-fee-alerts/{case_id}/case" in paths
+    assert "/api/warehouse/wfs-fee-actuals" not in paths
 
 
 def test_wfs_fee_alert_read_requires_permission(monkeypatch: Any) -> None:
@@ -95,13 +101,13 @@ def test_wfs_case_write_uses_write_permission(monkeypatch: Any) -> None:
 
     def update_case(
         self: WfsFeeAlertService,
-        mart_id: UUID,
+        case_id: UUID,
         payload: WfsFeeCaseWrite,
         account_refs: frozenset[str],
         actor_ref: str,
     ) -> None:
         captured.update(
-            mart_id=mart_id,
+            case_id=case_id,
             payload=payload,
             account_refs=account_refs,
             actor_ref=actor_ref,
