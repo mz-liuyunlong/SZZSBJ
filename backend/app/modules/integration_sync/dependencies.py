@@ -23,7 +23,6 @@ def get_source_account_scope_provider() -> SourceAccountScopeProvider | None:
     refs = settings.product_management_preview_source_account_ref_set
     if not refs:
         return None
-
     preview_auth_configured = settings.product_management_preview_auth_configured
 
     def configured_scope(principal: Principal) -> frozenset[str]:
@@ -48,24 +47,22 @@ def require_source_account_scope(
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
 
     configured_refs = provider(principal)
-    if principal.user_id == PREVIEW_PRINCIPAL_ID:
-        allowed = configured_refs
-    elif "*" in principal.permissions:
+    if principal.user_id == PREVIEW_PRINCIPAL_ID or "*" in principal.permissions:
         allowed = configured_refs
     else:
         try:
-            configured_values = RbacRepository(session).resolve_user_data_scope(
+            scoped_values = RbacRepository(session).resolve_user_data_scope(
                 user_id=int(principal.user_id),
                 scope_type="source_account",
             )
         except (TypeError, ValueError):
-            configured_values = set()
-        if "*" in configured_values:
+            scoped_values = set()
+        if "*" in scoped_values:
             allowed = configured_refs
-        elif configured_values:
-            allowed = frozenset(configured_values).intersection(configured_refs)
+        elif scoped_values:
+            allowed = frozenset(scoped_values).intersection(configured_refs)
         else:
-            allowed = configured_refs
+            allowed = frozenset()
 
     if not allowed or any(not value or value != value.strip() for value in allowed):
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
