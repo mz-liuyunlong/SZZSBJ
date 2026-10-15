@@ -146,15 +146,26 @@ def test_follow_does_not_reopen_closed_case(monkeypatch: pytest.MonkeyPatch) -> 
     session.rollback.assert_called_once()
     session.commit.assert_not_called()
 
+
 def test_strict_compare_checks_recovery_and_case_status() -> None:
     session = MagicMock(spec=Session)
     session.execute.return_value.mappings.return_value.one.return_value = {
-        "compared": 0, "matched": 0, "only_in_legacy": 0, "only_in_formal": 0,
-        "actual_fee_diff": 0, "manual_fee_diff": 0, "affected_units_diff": 0,
-        "estimated_recover_diff": 0, "recovered_amount_diff": 0,
-        "case_nos_diff": 0, "claim_amount_diff": 0, "status_diff": 0,
-        "protected_cases": 0, "legacy_estimated_total": Decimal("0"),
-        "formal_estimated_total": Decimal("0"), "legacy_recovered_total": Decimal("0"),
+        "compared": 0,
+        "matched": 0,
+        "only_in_legacy": 0,
+        "only_in_formal": 0,
+        "actual_fee_diff": 0,
+        "manual_fee_diff": 0,
+        "affected_units_diff": 0,
+        "estimated_recover_diff": 0,
+        "recovered_amount_diff": 0,
+        "case_nos_diff": 0,
+        "claim_amount_diff": 0,
+        "status_diff": 0,
+        "protected_cases": 0,
+        "legacy_estimated_total": Decimal("0"),
+        "formal_estimated_total": Decimal("0"),
+        "legacy_recovered_total": Decimal("0"),
         "formal_recovered_total": Decimal("0"),
     }
     WfsFeeAlertService(session).compare_legacy_cases()
