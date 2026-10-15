@@ -85,6 +85,7 @@ select
     trim(store_id) = '' or trim(item_id) = '' or normalized_msku = ''
     or manual_fee < 0 or actual_fee < 0 or total_units < 0
     or est_recover < 0 or coalesce(recovered_amount, 0) < 0
+    or status not in ('waiting', 'following', 'approving', 'closed', 'done')
   ) invalid_values,
   coalesce((select jsonb_object_agg(status, amount) from (
     select status, count(*) amount from legacy group by status
