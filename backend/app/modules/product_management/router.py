@@ -104,9 +104,7 @@ def list_product_management_skus(
     account_refs: source_scope,
 ) -> SuccessEnvelope[ProductManagementListData, ProductManagementReadMeta]:
     can_view_purchase_cost, can_view_logistics_cost = _cost_field_access(principal)
-    raw_data, total, list_freshness, latest_observed = ProductManagementService(
-        session
-    ).list_skus(
+    raw_data, total, list_freshness, latest_observed = ProductManagementService(session).list_skus(
         query,
         account_refs,
         include_costs=can_view_purchase_cost or can_view_logistics_cost,
