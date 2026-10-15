@@ -24,23 +24,21 @@ def _execute(statement: str) -> None:
 
 
 def upgrade() -> None:
-    _execute(
-        """
-        do $
-        begin
-          if to_regclass('public.ops_wfs_fee_anomaly_cases_legacy_shape_backup')
-             is not null then
-            raise exception 'WFS migration blocked: backup table exists';
-          end if;
-          if to_regclass('public.ops_wfs_fee_anomaly_cases') is null then
-            raise exception 'WFS migration blocked: old Case table missing';
-          end if;
-          if exists (select 1 from public.ops_wfs_fee_anomaly_cases limit 1) then
-            raise exception 'WFS migration blocked: old Case table is not empty';
-          end if;
-        end $;
-        """
+    conn = op.get_bind()
+    backup_exists = conn.scalar(
+        text("select to_regclass('public.ops_wfs_fee_anomaly_cases_legacy_shape_backup')")
     )
+    if backup_exists is not None:
+        raise RuntimeError("WFS migration blocked: backup table exists")
+    old_exists = conn.scalar(text("select to_regclass('public.ops_wfs_fee_anomaly_cases')"))
+    if old_exists is None:
+        raise RuntimeError("WFS migration blocked: old Case table missing")
+    old_has_rows = conn.scalar(
+        text("select exists (select 1 from public.ops_wfs_fee_anomaly_cases limit 1)")
+    )
+    if old_has_rows:
+        raise RuntimeError("WFS migration blocked: old Case table is not empty")
+
     for permission_key, name, description in (
         ("warehouse:wfs-fee-alert:write", "WFS Case 跟进", "编辑 Case 跟进与归档申请"),
         ("warehouse:wfs-fee-alert:review", "WFS Case 审核", "审核 WFS Case 归档"),
@@ -244,18 +242,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    _execute(
-        """
-        do $
-        begin
-          if to_regclass('public.ops_wfs_fee_anomaly_cases') is not null
-             and exists (select 1 from public.ops_wfs_fee_anomaly_cases limit 1)
-          then
-            raise exception 'WFS downgrade blocked: formal Case table contains data';
-          end if;
-        end $;
-        """
-    )
+    conn = op.get_bind()
+    formal_exists = conn.scalar(text("select to_regclass('public.ops_wfs_fee_anomaly_cases')"))
+    if formal_exists is not None:
+        has_rows = conn.scalar(
+            text("select exists (select 1 from public.ops_wfs_fee_anomaly_cases limit 1)")
+        )
+        if has_rows:
+            raise RuntimeError("WFS downgrade blocked: formal Case table contains data")
     _execute("drop table if exists public.ops_wfs_fee_anomaly_cases")
     _execute(
         """
