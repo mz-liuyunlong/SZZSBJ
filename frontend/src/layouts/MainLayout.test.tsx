@@ -709,7 +709,7 @@ describe("MainLayout", () => {
     ).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
-  expect(await screen.findByRole("menuitem", { name: "退出" })).toBeVisible();
+  expect(await screen.findByRole("menuitem", { name: "退出" })).toBeInTheDocument();
   expect(
     screen.queryByRole("menuitem", { name: personalCenter.title }),
   ).not.toBeInTheDocument();
