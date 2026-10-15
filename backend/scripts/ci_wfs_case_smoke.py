@@ -112,12 +112,15 @@ def main() -> None:
         session.commit()
         assert service.sync_legacy_cases(execute=False).protected_cases == 1
         service.sync_legacy_cases(execute=True)
-        assert session.scalar(
-            text(
-                "select latest_follow_note from ops_wfs_fee_anomaly_cases "
-                "where legacy_case_id=1"
+        assert (
+            session.scalar(
+                text(
+                    "select latest_follow_note from ops_wfs_fee_anomaly_cases "
+                    "where legacy_case_id=1"
+                )
             )
-        ) == "Manual saved"
+            == "Manual saved"
+        )
 
         session.execute(
             text(
