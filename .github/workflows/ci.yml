@@ -100,19 +100,19 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: szzsbj_ci
-          POSTGRES_USER: szzsbj_ci
+          POSTGRES_DB: wfs_ci
+          POSTGRES_USER: wfs_ci
           POSTGRES_PASSWORD: local_ci_only
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U szzsbj_ci -d szzsbj_ci"
+          --health-cmd "pg_isready -U wfs_ci -d wfs_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
       APP_ENV: dev
-      DATABASE_URL: postgresql+psycopg://szzsbj_ci:local_ci_only@127.0.0.1:5432/szzsbj_ci
+      DATABASE_URL: postgresql+psycopg://wfs_ci:local_ci_only@127.0.0.1:5432/wfs_ci
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
