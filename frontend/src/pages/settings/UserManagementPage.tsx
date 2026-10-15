@@ -372,6 +372,8 @@ function UserManagementPage({ page }: UserManagementPageProps) {
         editingUser={editingUser}
         roleOptions={roleOptions}
         canAssignRoles={canAssignRole}
+        canViewPhone={canViewPhone}
+        canViewEmail={canViewEmail}
         onCancel={() => {
           setFormOpen(false);
           setEditingUser(undefined);
