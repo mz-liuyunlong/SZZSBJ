@@ -9,6 +9,7 @@ from app.core.api import SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_any_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.iam.field_access import filter_user_read
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
     PermissionCatalogRead,
@@ -176,14 +177,15 @@ def update_user_roles(
     ],
     session: db_session,
 ) -> SuccessEnvelope[UserRead, None]:
+    updated = RbacService(session).assign_user_roles(
+        actor=principal,
+        user_id=user_id,
+        payload=payload,
+        audit=_audit_context(request),
+    )
     return success_response(
         request,
-        data=RbacService(session).assign_user_roles(
-            actor=principal,
-            user_id=user_id,
-            payload=payload,
-            audit=_audit_context(request),
-        ),
+        data=filter_user_read(principal, updated),
         meta=None,
     )
 
