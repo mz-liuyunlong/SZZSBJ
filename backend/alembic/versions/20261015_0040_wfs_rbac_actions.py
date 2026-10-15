@@ -66,15 +66,9 @@ LEGACY_ACTION_MAPPINGS = {
         "action:warehouse:wfs-fee-alert:follow",
         "action:warehouse:wfs-fee-alert:archive-request",
     ),
-    "warehouse:wfs-fee-alert:review": (
-        "action:warehouse:wfs-fee-alert:archive-review",
-    ),
-    "warehouse:wfs-fee-alert:recover": (
-        "action:warehouse:wfs-fee-alert:mark-recovered",
-    ),
-    "warehouse:wfs-fee-alert:sync": (
-        "action:warehouse:wfs-fee-alert:sync-legacy",
-    ),
+    "warehouse:wfs-fee-alert:review": ("action:warehouse:wfs-fee-alert:archive-review",),
+    "warehouse:wfs-fee-alert:recover": ("action:warehouse:wfs-fee-alert:mark-recovered",),
+    "warehouse:wfs-fee-alert:sync": ("action:warehouse:wfs-fee-alert:sync-legacy",),
 }
 
 
