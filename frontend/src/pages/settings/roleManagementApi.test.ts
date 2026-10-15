@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildRolePermissionCatalog } from "@/pages/settings/roleManagementApi";
+import {
+  buildRolePermissionCatalog,
+  normalizeRoleDataScopes,
+} from "@/pages/settings/roleManagementApi";
 
 describe("buildRolePermissionCatalog", () => {
   it("keeps actions and fields under their owning page", () => {
@@ -57,5 +60,19 @@ describe("buildRolePermissionCatalog", () => {
     expect(catalog.highRiskPermissions.has(
       "action:settings:user-management:assign-role",
     )).toBe(true);
+  });
+});
+
+describe("normalizeRoleDataScopes", () => {
+  it("trims values, removes blanks, and deduplicates exact ranges", () => {
+    expect(normalizeRoleDataScopes([
+      { scopeType: "source_account", scopeValue: " account-a " },
+      { scopeType: "source_account", scopeValue: "account-a" },
+      { scopeType: "store", scopeValue: "" },
+      { scopeType: "store", scopeValue: "store-1" },
+    ])).toEqual([
+      { scopeType: "source_account", scopeValue: "account-a" },
+      { scopeType: "store", scopeValue: "store-1" },
+    ]);
   });
 });
