@@ -1,5 +1,5 @@
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
-import { Button, Card, Segmented, Space, Spin, Typography, message } from "antd";
+import { Button, Card, Segmented, Space, Spin, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { SettingOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -29,7 +29,7 @@ const defaultWidths: Record<string, number> = {
  applicant_id: 135, submitted_at: 173, status: 120, action: 94,
 };
 const statusTone: Record<string, "success" | "warning" | "danger" | "default"> = {
- submitted: "warning", approved: "success", rejected: "danger",
+ submitted: "warning", approved: "success", rejected: "error",
  info_required: "warning", withdrawn: "default", legacy_unverified: "warning",
 };
 export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }) {
@@ -70,7 +70,7 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
    amount: { key:"amount", render:(_,r) => r.amount === null ? "—" : formatMoney(r.amount,{currency:r.currency_code || "USD"}) },
    applicant_id: { key:"applicant_id", dataIndex:"applicant_id" },
    submitted_at: { key:"submitted_at", render:(_,r) => r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN") : "—" },
-   status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
+   status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status] === "danger" ? "error" : statusTone[r.status]}/> },
    action: { key:"action", render:(_,r) => <Button size="small" onClick={() => setSelected(r)}>查看详情</Button> },
   };
   return columnKeys.map((key) => {
@@ -117,7 +117,7 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
       typeOptions={[{label:"关键词",value:"keyword"}]} typeValue={draftSearch.searchField}
       inputAriaLabel="搜索审批事项" inputPlaceholder="审批事项、原因"
       inputValue={draftSearch.keyword} onCommit={({ keyword }) => change({keyword})}/>
-     <ResetButton onClick={() => {setFilters(defaultFilters);setDraftSearch({searchField:"keyword",keyword:""});}}> </ResetButton>
+     <ResetButton onClick={() => {setFilters(defaultFilters);setDraftSearch({searchField:"keyword",keyword:""});}} />
     </div>
    </Card>
    <ReportTableShell label="审批任务列表" className="approval-workspace__table">
@@ -126,7 +126,7 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
       search={false} options={false} toolBarRender={false} bordered size="small"
       scroll={{x:"max-content",y:"100%"}} pagination={{
        current:filters.page,pageSize:filters.page_size,total:count,
-       showSizeChanger:true,pageSizeOptions:[20,50,100,200],
+       showSizeChanger:true,pageSizeOptions:["20","50","100","200"],
        onChange:(p,s)=>change({page:p,page_size:s}),
       }}/>
     }
