@@ -28,13 +28,15 @@ def test_snapshot_excludes_account_scope_and_preserves_full_log():
         "source_account_ref": "not-exposed-in-snapshot",
         "msku": "private-product",
         "follow_log": "10-01 第1次跟进：提交资料\n10-04 第2次跟进：平台回复",
-        "pending_recover_amount": 200,
+        "estimated_recover_amount": Decimal("200.00"),
+        "recovered_amount": Decimal("0.00"),
         "status": "following",
         "archive_reason": "private",
     }
     snapshot = make_snapshot(case)
     assert snapshot["follow_log"].count("\n") == 1
     assert snapshot["status"] == "following"
+    assert snapshot["pending_recover_amount"] == "200.00"
     assert "source_account_ref" not in snapshot
     assert "archive_reason" not in snapshot
     assert signature(snapshot) == signature(dict(reversed(list(snapshot.items()))))
