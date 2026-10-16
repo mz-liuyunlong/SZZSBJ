@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
-from typing import Any, Callable, Iterable, Mapping, cast
+from typing import Any, Callable, Iterable, Iterator, Mapping, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -25,7 +25,11 @@ from app.core.config import AppEnvironment, Settings, get_settings
 from app.db.session import get_session_factory
 from app.integrations.lingxing.query_sign import build_query_auth_params
 from app.integrations.lingxing.security import canonical_json, redact_json
-from app.integrations.lingxing.token_manager import LingxingTokenClient, LingxingTokenManager
+from app.integrations.lingxing.token_manager import (
+    LingxingTokenError,
+    LingxingTokenManager,
+    get_shared_lingxing_token_manager,
+)
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 from app.modules.integration_sync.catalog import IntegrationCatalogService
 from app.modules.integration_sync.data_pages_catalog import DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY
@@ -288,6 +292,8 @@ class DataPagesRealHttpClient:
                         f"DATA_PAGES_RESPONSE_TOO_LARGE:{spec.interface_key}"
                     )
                 payload = cast(JsonValue, response.json())
+            except LingxingTokenError as error:
+                raise DataPagesRealSyncError(f"DATA_PAGES_{error.category}") from None
             except (httpx.TimeoutException, httpx.TransportError, ValueError) as exc:
                 if attempt >= 6:
                     raise DataPagesRealSyncError(
@@ -367,18 +373,16 @@ def parse_args() -> argparse.Namespace:
 
 
 @contextmanager
-def data_pages_client() -> Iterable[DataPagesRealHttpClient]:
+def data_pages_client() -> Iterator[DataPagesRealHttpClient]:
     settings = get_settings()
     if not settings.data_pages_real_sync_authorized:
         raise DataPagesRealSyncError("DATA_PAGES_REAL_SYNC_NOT_AUTHORIZED")
-    token_client = LingxingTokenClient(settings)
-    token_manager = LingxingTokenManager(token_client, settings)
+    token_manager = get_shared_lingxing_token_manager(settings)
     client = DataPagesRealHttpClient(settings, token_manager)
     try:
         yield client
     finally:
         client.close()
-        token_client.close()
 
 
 def data_pages_response_succeeded(

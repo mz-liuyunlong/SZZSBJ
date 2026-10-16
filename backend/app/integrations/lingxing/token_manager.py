@@ -1,6 +1,8 @@
+import atexit
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from os import getpid
 from threading import Lock
 from time import sleep
 from typing import Any
@@ -311,3 +313,45 @@ class LingxingTokenManager:
         if value.tzinfo is None:
             raise LingxingTokenError("TOKEN_CLOCK_INVALID")
         return value.astimezone(UTC)
+
+
+@dataclass(repr=False)
+class _ProcessTokenRuntime:
+    pid: int
+    settings: Settings
+    client: LingxingTokenClient
+    manager: LingxingTokenManager
+
+
+_runtime_lock = Lock()
+_runtime: _ProcessTokenRuntime | None = None
+
+
+def get_shared_lingxing_token_manager(settings: Settings) -> LingxingTokenManager:
+    """Reuse one in-memory Token Manager inside each worker process."""
+
+    global _runtime
+    pid = getpid()
+    with _runtime_lock:
+        current = _runtime
+        if current is not None and current.pid == pid and current.settings is settings:
+            return current.manager
+        if current is not None:
+            current.client.close()
+        client = LingxingTokenClient(settings)
+        manager = LingxingTokenManager(client, settings)
+        _runtime = _ProcessTokenRuntime(pid, settings, client, manager)
+        return manager
+
+
+def close_shared_lingxing_token_runtime() -> None:
+    """Close the process-local Token HTTP client without exposing cached credentials."""
+
+    global _runtime
+    with _runtime_lock:
+        current, _runtime = _runtime, None
+    if current is not None:
+        current.client.close()
+
+
+atexit.register(close_shared_lingxing_token_runtime)
