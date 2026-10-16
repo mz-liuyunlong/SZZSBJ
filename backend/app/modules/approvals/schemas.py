@@ -78,6 +78,7 @@ class ApprovalDetail(ApprovalItem):
     snapshot: dict[str, Any]
     current_case: dict[str, Any] | None
     data_changed: bool
+    can_supplement: bool = False
     events: list[ApprovalEventRead]
 
 
