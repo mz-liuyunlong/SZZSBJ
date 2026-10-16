@@ -115,7 +115,7 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
      <CommittedSearch typeAriaLabel="搜索类型"
       typeOptions={[{label:"关键词",value:"keyword"}]} typeValue={draftSearch.searchField}
       inputAriaLabel="搜索审批事项" inputPlaceholder="审批事项、原因"
-      inputValue={draftSearch.keyword} onCommit={({ keyword }) => change({keyword})}/>
+      inputValue={draftSearch.keyword} onCommit={({ keyword }) => {setDraftSearch({ searchField:"keyword", keyword });change({keyword});}}/>
      <ResetButton onClick={() => {setFilters(defaultFilters);setDraftSearch({searchField:"keyword",keyword:""});}} />
     </div>
    </Card>
