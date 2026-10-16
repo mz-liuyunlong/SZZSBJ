@@ -265,20 +265,16 @@ def test_default_productlist_client_suppresses_signed_httpx_access_logs(
         app_env=AppEnvironment.LOCAL,
         productlist_real_sync_authorized=True,
     )
-    token_client = MagicMock()
     token_manager = MagicMock()
     readonly_client = MagicMock()
+    shared_manager = MagicMock(return_value=token_manager)
     monkeypatch.setattr(
         "app.modules.integration_sync.handlers.lingxing_product_list_sync.get_settings",
         lambda: settings,
     )
     monkeypatch.setattr(
-        "app.modules.integration_sync.handlers.lingxing_product_list_sync.LingxingTokenClient",
-        lambda current_settings: token_client,
-    )
-    monkeypatch.setattr(
-        "app.modules.integration_sync.handlers.lingxing_product_list_sync.LingxingTokenManager",
-        lambda current_client, current_settings: token_manager,
+        "app.modules.integration_sync.handlers.lingxing_product_list_sync.get_shared_lingxing_token_manager",
+        shared_manager,
     )
     monkeypatch.setattr(
         "app.modules.integration_sync.handlers.lingxing_product_list_sync.LingxingReadonlyClient",
@@ -296,7 +292,7 @@ def test_default_productlist_client_suppresses_signed_httpx_access_logs(
         httpx_logger.setLevel(original_level)
 
     readonly_client.close.assert_called_once_with()
-    token_client.close.assert_called_once_with()
+    shared_manager.assert_called_once_with(settings)
 
 
 def test_handler_rejects_unauthorized_default_client_before_marking_run_running(

@@ -123,8 +123,8 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          # Synthetic pre-0036 schema only: later RBAC migrations are tested by
-          # the normal Alembic chain checks and are out of scope for this smoke.
+          # Synthetic pre-0036 schema only: earlier migrations are out of scope
+          # and some have revisions longer than Alembic's default varchar(32).
           uv run python - <<'PY'
           from sqlalchemy import create_engine, text
           from app.core.config import get_database_url
@@ -175,3 +175,13 @@ jobs:
               ).scalar_one() is not None
           PY
           PYTHONPATH=. uv run python scripts/ci_wfs_case_smoke.py
+          # Follow-up migration stays independently verifiable in the same isolated DB.
+          uv run alembic upgrade 20261016_0037_approval_workbench
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+          from app.core.config import get_database_url
+          with create_engine(get_database_url()).connect() as conn:
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261016_0037_approval_workbench"
+              for table in ("app_approval_requests", "app_approval_events"):
+                  assert conn.scalar(text("select to_regclass(:name)"), {"name": table}) is not None
+          PY

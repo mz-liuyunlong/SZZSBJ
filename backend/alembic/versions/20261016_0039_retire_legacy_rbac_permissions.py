@@ -1,8 +1,8 @@
 """retire legacy RBAC grants after v2 migration
 
-Revision ID: 20261015_0038_retire_legacy_rbac_permissions
-Revises: 20261015_0037_rbac_v2
-Create Date: 2026-10-15
+Revision ID: 20261016_0039_retire_legacy_rbac_permissions
+Revises: 20261016_0038_rbac_v2
+Create Date: 2026-10-16
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from sqlalchemy import text
 from alembic import op
 from app.modules.iam.permission_catalog_v2 import LEGACY_PERMISSION_MAPPINGS
 
-revision: str = "20261015_0038_retire_legacy_rbac_permissions"
-down_revision: str | Sequence[str] | None = "20261015_0037_rbac_v2"
+revision: str = "20261016_0039_retire_legacy_rbac_permissions"
+down_revision: str | Sequence[str] | None = "20261016_0038_rbac_v2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -1,8 +1,8 @@
 """restrict default RBAC data scopes to the administrator role
 
-Revision ID: 20261015_0039_restrict_default_data_scopes
-Revises: 20261015_0038_retire_legacy_rbac_permissions
-Create Date: 2026-10-15
+Revision ID: 20261016_0040_restrict_default_data_scopes
+Revises: 20261016_0039_retire_legacy_rbac_permissions
+Create Date: 2026-10-16
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from sqlalchemy import text
 
 from alembic import op
 
-revision: str = "20261015_0039_restrict_default_data_scopes"
-down_revision: str | Sequence[str] | None = "20261015_0038_retire_legacy_rbac_permissions"
+revision: str = "20261016_0040_restrict_default_data_scopes"
+down_revision: str | Sequence[str] | None = "20261016_0039_retire_legacy_rbac_permissions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

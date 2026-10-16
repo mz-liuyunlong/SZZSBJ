@@ -1,8 +1,8 @@
 """map formal WFS Case permissions into page-specific RBAC actions
 
-Revision ID: 20261015_0040_wfs_rbac_actions
-Revises: 20261015_0039_restrict_default_data_scopes
-Create Date: 2026-10-15
+Revision ID: 20261016_0041_wfs_rbac_actions
+Revises: 20261016_0040_restrict_default_data_scopes
+Create Date: 2026-10-16
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from sqlalchemy import text
 
 from alembic import op
 
-revision: str = "20261015_0040_wfs_rbac_actions"
-down_revision: str | Sequence[str] | None = "20261015_0039_restrict_default_data_scopes"
+revision: str = "20261016_0041_wfs_rbac_actions"
+down_revision: str | Sequence[str] | None = "20261016_0040_restrict_default_data_scopes"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

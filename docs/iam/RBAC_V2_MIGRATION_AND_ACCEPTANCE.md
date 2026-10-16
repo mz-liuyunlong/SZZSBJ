@@ -22,25 +22,26 @@ RBAC v2 将权限拆成四个相互独立的边界：
 ```text
 20261014_0035_add_auth_rbac
   -> 20261015_0036_wfs_cases
+  -> 20261016_0037_approval_workbench
 ```
 
-RBAC v2 迁移严格接在已合入的 `20261015_0036_wfs_cases` 后，不改写、重命名或复用
+RBAC v2 迁移严格接在已合入的 `20261016_0037_approval_workbench` 后，不改写、重命名或复用
 其他分支已经提交的 revision ID：
 
-1. `20261015_0037_rbac_v2`
+1. `20261016_0038_rbac_v2`
    - 扩展权限元数据；
    - 增加角色版本；
    - 增加角色/用户数据范围；
    - 增加 IAM 审计事件；
    - 写入页面、功能、字段权限目录；
    - 将旧权限映射到新权限。
-2. `20261015_0038_retire_legacy_rbac_permissions`
+2. `20261016_0039_retire_legacy_rbac_permissions`
    - 删除角色上的旧权限关联；
    - 将旧权限标记为停用。
-3. `20261015_0039_restrict_default_data_scopes`
+3. `20261016_0040_restrict_default_data_scopes`
    - 删除非管理员角色的默认全量数据范围；
    - 未显式配置数据范围的普通角色按拒绝访问处理。
-4. `20261015_0040_wfs_rbac_actions`
+4. `20261016_0041_wfs_rbac_actions`
    - 将已合入的 WFS Case 功能权限映射为页面专属 action 权限；
    - 保留 WFS 正式 Case 流程的权限边界；
    - 停用对应旧 WFS action 权限关联。
@@ -92,12 +93,12 @@ uv run alembic current
 
 ## 4. 回滚演练
 
-RBAC v2 的回滚边界是已合入的 WFS 基线 `20261015_0036_wfs_cases`，不得回退或覆盖
-该迁移：
+RBAC v2 的回滚边界是已合入的审批工作台基线 `20261016_0037_approval_workbench`，不得回退或覆盖
+该迁移及其之前的 WFS `20261015_0036_wfs_cases`：
 
 ```bash
 cd backend
-uv run alembic downgrade 20261015_0036_wfs_cases
+uv run alembic downgrade 20261016_0037_approval_workbench
 ```
 
 回滚后核对：
@@ -106,7 +107,7 @@ uv run alembic downgrade 20261015_0036_wfs_cases
 - 旧权限恢复为启用；
 - 旧角色权限关联已恢复；
 - `app_roles.version` 和权限元数据列已移除；
-- `20261015_0036_wfs_cases` 及其正式 WFS Case 表结构仍然保留。
+- `20261015_0036_wfs_cases` 与 `20261016_0037_approval_workbench` 及其正式表结构均保留。
 
 回滚会移除 v2 期间新增的审计与数据范围记录，生产环境执行前必须有可恢复备份。
 

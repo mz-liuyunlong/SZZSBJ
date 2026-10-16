@@ -11,6 +11,7 @@ interface WfsFeeAlertDetailModalProps {
   currency: WfsFeeAlertCurrency;
   onClose: () => void;
   onOpenFollow: (row: WfsFeeAlertRow) => void;
+  onOpenAbandon: (row: WfsFeeAlertRow) => void;
 }
 
 const priorityColors = {
@@ -19,7 +20,7 @@ const priorityColors = {
   低: "default",
 };
 
-function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow }: WfsFeeAlertDetailModalProps) {
+function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow, onOpenAbandon }: WfsFeeAlertDetailModalProps) {
   if (!row) return null;
 
   return (
@@ -31,7 +32,8 @@ function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow }: WfsFee
       footer={(
         <Space>
           <Button disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑跟进</Button>
-          <Button type="primary" onClick={onClose}>关闭</Button>
+          <Button danger disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenAbandon(row)}>申请放弃跟进</Button>
+           <Button type="primary" onClick={onClose}>关闭</Button>
         </Space>
       )}
       destroyOnHidden
@@ -72,7 +74,7 @@ function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow }: WfsFee
             items={[
               { color: "blue", children: `发现异常：${row.discoveredAt}，原因：${row.reason}` },
               { color: row.caseNo ? "green" : "orange", children: row.caseNo ? `已开Case：${row.caseNo}` : "暂未开Case，需运营补充证据" },
-              { color: "gray", children: row.latestFollow },
+              ...((row.followLog ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean).reverse().map((value, index) => ({ color: index === 0 ? "blue" : "gray", children: value }))),
             ]}
           />
         </div>

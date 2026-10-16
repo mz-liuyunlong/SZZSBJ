@@ -22,7 +22,7 @@ from app.integrations.lingxing.client import (
     LingxingReadonlyClient,
 )
 from app.integrations.lingxing.security import canonical_json, redact_json
-from app.integrations.lingxing.token_manager import LingxingTokenClient, LingxingTokenManager
+from app.integrations.lingxing.token_manager import get_shared_lingxing_token_manager
 from app.modules.integration_sync.models import (
     ApiRawBlob,
     ApiRawRequestRef,
@@ -97,8 +97,7 @@ def product_list_client() -> Iterator[LingxingReadonlyClient]:
     # httpx INFO access logs include the signed query string. Keep provider
     # authentication material out of local and production task logs.
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    token_client = LingxingTokenClient(settings)
-    token_manager = LingxingTokenManager(token_client, settings)
+    token_manager = get_shared_lingxing_token_manager(settings)
     client = LingxingReadonlyClient(
         settings,
         token_provider=token_manager,
@@ -108,7 +107,6 @@ def product_list_client() -> Iterator[LingxingReadonlyClient]:
         yield client
     finally:
         client.close()
-        token_client.close()
 
 
 def _require_productlist_runtime(settings: Settings) -> None:

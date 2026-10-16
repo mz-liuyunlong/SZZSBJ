@@ -1,8 +1,8 @@
 """add RBAC v2 catalog, scopes, audit, and optimistic locking
 
-Revision ID: 20261015_0037_rbac_v2
-Revises: 20261015_0036_wfs_cases
-Create Date: 2026-10-15
+Revision ID: 20261016_0038_rbac_v2
+Revises: 20261016_0037_approval_workbench
+Create Date: 2026-10-16
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from app.modules.iam.permission_catalog_v2 import (
     PERMISSION_DEFINITIONS,
 )
 
-revision: str = "20261015_0037_rbac_v2"
-down_revision: str | Sequence[str] | None = "20261015_0036_wfs_cases"
+revision: str = "20261016_0038_rbac_v2"
+down_revision: str | Sequence[str] | None = "20261016_0037_approval_workbench"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

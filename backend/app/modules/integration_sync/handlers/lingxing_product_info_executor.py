@@ -19,7 +19,7 @@ from app.integrations.lingxing.client import (
 )
 from app.integrations.lingxing.openapi import LingxingOpenApiClient, LingxingOpenApiError
 from app.integrations.lingxing.security import canonical_json, redact_json
-from app.integrations.lingxing.token_manager import LingxingTokenClient, LingxingTokenManager
+from app.integrations.lingxing.token_manager import get_shared_lingxing_token_manager
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     ordered_id_hash,
@@ -96,8 +96,7 @@ def product_info_client() -> Iterator[LingxingReadonlyClient]:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     if settings.app_env is not AppEnvironment.PRODUCTION:
         raise ProductInfoOneTimeRunError("PRODUCT_INFO_SERVER_ENVIRONMENT_REQUIRED")
-    token_client = LingxingTokenClient(settings)
-    token_manager = LingxingTokenManager(token_client, settings)
+    token_manager = get_shared_lingxing_token_manager(settings)
     client = LingxingReadonlyClient(
         settings,
         token_provider=token_manager,
@@ -107,7 +106,6 @@ def product_info_client() -> Iterator[LingxingReadonlyClient]:
         yield client
     finally:
         client.close()
-        token_client.close()
 
 
 class LingxingProductInfoExecutor:
