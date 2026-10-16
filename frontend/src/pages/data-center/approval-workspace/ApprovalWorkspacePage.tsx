@@ -28,7 +28,7 @@ const defaultWidths: Record<string, number> = {
  title: 280, approval_type: 138, risk_level: 110, amount: 128,
  applicant_id: 135, submitted_at: 173, status: 120, action: 94,
 };
-const statusTone: Record<string, "success" | "warning" | "danger" | "default"> = {
+const statusTone: Record<string, "success" | "warning" | "error" | "default"> = {
  submitted: "warning", approved: "success", rejected: "error",
  info_required: "warning", withdrawn: "default", legacy_unverified: "warning",
 };
@@ -69,7 +69,7 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
    amount: { key:"amount", render:(_,r) => r.amount === null ? "—" : formatMoney(r.amount,{currency:r.currency_code || "USD"}) },
    applicant_id: { key:"applicant_id", dataIndex:"applicant_id" },
    submitted_at: { key:"submitted_at", render:(_,r) => r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN") : "—" },
-   status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status] === "danger" ? "error" : statusTone[r.status]}/> },
+   status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
    action: { key:"action", render:(_,r) => <Button size="small" onClick={() => setSelected(r)}>查看详情</Button> },
   };
   return columnKeys.map((key) => {
