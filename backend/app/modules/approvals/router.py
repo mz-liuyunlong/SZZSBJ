@@ -53,7 +53,9 @@ def list_approvals(
 
 
 @router.get("/summary", response_model=SuccessEnvelope[ApprovalSummary, None])
-def summary(request: Request, session: db_session, principal: view_principal, accounts: account_scope):
+def summary(
+    request: Request, session: db_session, principal: view_principal, accounts: account_scope
+):
     may_review = "warehouse:wfs-fee-alert:review" in principal.permissions
     data = ApprovalService(session).summary(accounts, principal.user_id, may_review)
     return success_response(request, data=data, meta=None)
