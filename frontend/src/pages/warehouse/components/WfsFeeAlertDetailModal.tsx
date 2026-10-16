@@ -72,7 +72,7 @@ function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow }: WfsFee
             items={[
               { color: "blue", children: `发现异常：${row.discoveredAt}，原因：${row.reason}` },
               { color: row.caseNo ? "green" : "orange", children: row.caseNo ? `已开Case：${row.caseNo}` : "暂未开Case，需运营补充证据" },
-              { color: "gray", children: row.latestFollow },
+              ...((row.followLog ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean).reverse().map((value, index) => ({ color: index === 0 ? "blue" : "gray", children: value }))),
             ]}
           />
         </div>
