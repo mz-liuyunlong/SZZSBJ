@@ -26,7 +26,7 @@ export interface WfsSnapshot {
  evidence_summary?: string;
 }
 export interface ApprovalDetail extends ApprovalItem {
- snapshot: WfsSnapshot; current_case: WfsSnapshot | null;
+ snapshot: WfsSnapshot; evidence: string | null; current_case: WfsSnapshot | null;
  data_changed: boolean; can_supplement: boolean; events: ApprovalEvent[];
 }
 export interface ApprovalFilters {
