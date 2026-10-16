@@ -258,6 +258,7 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
         currency={filters.currency}
         onClose={() => setDetailRow(undefined)}
         onOpenFollow={openFollowModal}
+        onOpenAbandon={(row) => { setDetailRow(undefined); setAbandonRow(row); }}
       />
       <WfsAbandonRequestModal
         row={abandonRow}
