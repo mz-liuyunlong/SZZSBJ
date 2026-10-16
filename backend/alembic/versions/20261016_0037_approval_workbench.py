@@ -9,8 +9,10 @@ No existing WFS records are changed or backfilled by this migration.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from alembic import op
+
 from sqlalchemy import text
+
+from alembic import op
 
 revision: str = "20261016_0037_approval_workbench"
 down_revision: str | Sequence[str] | None = "20261015_0036_wfs_cases"
