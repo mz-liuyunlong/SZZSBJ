@@ -60,7 +60,7 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
      <Button type="primary" onClick={() => { setDecision("approved"); setNote(""); }}>审批通过</Button>
     </>}
    </Space> : null}>
-   {loading && <Spin />}
+   {(loading || (!!selected && !shown)) && <Spin />}
    {shown && <>
     <Alert showIcon type="info" message={"审批状态：" + statusNames[shown.status]}
       description={"审批ID：" + shown.id + " · 申请人：" + (shown.applicant_id || "未知")} />
