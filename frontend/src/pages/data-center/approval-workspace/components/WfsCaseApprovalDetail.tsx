@@ -27,7 +27,7 @@ export function WfsCaseApprovalDetail({ detail }: { detail: ApprovalDetail }) {
   ["平台回复", item.walmart_response_summary], ["证据摘要", item.evidence_summary],
  ];
  return <div className="approval-workspace__detail">
-  {detail.data_changed && <Alert showIcon type="warning" title="业务数据发生变化" description="申请提交后关键信息发生变化，服务端禁止直接审批。" />}
+  {detail.data_changed && <Alert showIcon type="warning" message="业务数据发生变化" description="申请提交后关键信息发生变化，服务端禁止直接审批。" />}
   <div className="approval-workspace__money">
    <div><span>预计追回</span><strong>{money(item.estimated_recover_amount, item.currency_code)}</strong></div>
    <div><span>申请时待追回</span><strong>{money(item.pending_recover_amount, item.currency_code)}</strong></div>
