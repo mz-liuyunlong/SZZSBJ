@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
@@ -26,6 +27,13 @@ from app.modules.approvals.schemas import (
 
 def blocked(status: int = 409) -> None:
     raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=status)
+
+
+def calculate_pending_recovery(case: dict) -> Decimal:
+    """Derived amount: 0036 stores estimated and recovered, not a pending column."""
+    estimate = Decimal(str(case["estimated_recover_amount"]))
+    recovered = Decimal(str(case["recovered_amount"]))
+    return max(estimate - recovered, Decimal("0.00"))
 
 
 def make_snapshot(case: dict) -> dict:
@@ -62,6 +70,9 @@ def make_snapshot(case: dict) -> dict:
         "last_follow_at",
     )
     result = {key: case.get(key) for key in fields}
+    # WFS Case 0036 exposes pending recovery as a SELECT expression only.
+    # Always derive it from persisted columns before making an immutable snapshot.
+    result["pending_recover_amount"] = calculate_pending_recovery(case)
     return json.loads(json.dumps(result, ensure_ascii=False, default=str))
 
 
@@ -142,10 +153,13 @@ class ApprovalService:
         snapshot = make_snapshot(case)
         snapshot_hash = signature(snapshot)
         approval_id = str(uuid4())
+        pending_amount = calculate_pending_recovery(case)
         risk = (
             "high"
-            if case["pending_recover_amount"] >= 500
-            else ("medium" if case["pending_recover_amount"] >= 100 else "low")
+            if pending_amount >= Decimal("500")
+            else "medium"
+            if pending_amount >= Decimal("100")
+            else "low"
         )
         self.session.execute(
             text("""
