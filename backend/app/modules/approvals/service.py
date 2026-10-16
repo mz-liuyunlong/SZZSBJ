@@ -300,7 +300,9 @@ class ApprovalService:
             items=[self._as_item(dict(r), actor, may_review) for r in rows]
         ), int(total)
 
-    def summary(self, account_refs: frozenset[str]) -> ApprovalSummary:
+    def summary(
+        self, account_refs: frozenset[str], actor: str, may_review: bool
+    ) -> ApprovalSummary:
         row = (
             self.session.execute(
                 text("""
@@ -310,8 +312,9 @@ class ApprovalService:
               count(*) filter (where status='info_required') info_required,
               count(*) filter (where status='approved') approved
             from app_approval_requests where source_account_ref=any(:accounts)
+              and (:may_review or applicant_id=:actor)
         """),
-                {"accounts": list(account_refs)},
+                {"accounts": list(account_refs), "actor": actor, "may_review": may_review},
             )
             .mappings()
             .one()
