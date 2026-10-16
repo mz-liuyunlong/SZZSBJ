@@ -1,8 +1,8 @@
 import { backendRequest } from "@/api/backendApi";
-import { navigation } from "@/config/navigation";
-import { getPagePermissionKey } from "@/shared/permissions/mockAccess";
 import type {
   PermissionGroup,
+  RoleAuditEvent,
+  RoleDataScopeEntry,
   RoleFormValues,
   RoleManagementRow,
   RolePermissionState,
@@ -16,27 +16,81 @@ interface BackendRole {
   is_system: boolean;
   user_count: number;
   permission_keys: string[];
+  version: number;
 }
 
-interface BackendPermission {
+interface BackendPermissionItem {
   permission_key: string;
   name: string;
-  group_key: string;
   description: string | null;
+  permission_type: "page" | "action" | "field";
+  module_key: string;
+  page_key: string;
+  action_key: string | null;
+  field_key: string | null;
+  risk_level: "normal" | "high";
+  sort_order: number;
+}
+
+interface BackendPermissionPage {
+  page_key: string;
+  name: string;
+  permission_key: string;
+  sort_order: number;
+  actions: BackendPermissionItem[];
+  fields: BackendPermissionItem[];
+}
+
+interface BackendPermissionModule {
+  module_key: string;
+  name: string;
+  sort_order: number;
+  pages: BackendPermissionPage[];
+}
+
+interface BackendPermissionCatalog {
+  version: string;
+  modules: BackendPermissionModule[];
+}
+
+interface BackendDataScopeEntry {
+  scope_type: RoleDataScopeEntry["scopeType"];
+  scope_value: string;
+}
+
+interface BackendRoleDataScope {
+  role_key: string;
+  items: BackendDataScopeEntry[];
+}
+
+interface BackendAuditEvent {
+  id: string;
+  actor_user_id: number | null;
+  event_type: string;
+  target_type: string;
+  target_key: string;
+  request_id: string | null;
+  request_ip: string | null;
+  user_agent: string | null;
+  created_at: string;
 }
 
 export interface RolePermissionCatalog {
   pagePermissionGroups: PermissionGroup[];
   actionPermissionGroups: PermissionGroup[];
+  fieldPermissionGroups: PermissionGroup[];
   permissionLabels: Record<string, string>;
   permissionDescriptions: Record<string, string>;
+  highRiskPermissions: ReadonlySet<string>;
 }
 
 export const emptyRolePermissionCatalog: RolePermissionCatalog = {
   pagePermissionGroups: [],
   actionPermissionGroups: [],
+  fieldPermissionGroups: [],
   permissionLabels: {},
   permissionDescriptions: {},
+  highRiskPermissions: new Set<string>(),
 };
 
 function makeRoleKey(name: string): string {
@@ -58,6 +112,7 @@ function toRow(role: BackendRole): RoleManagementRow {
     preset: role.is_system,
     userCount: role.user_count,
     permissionKeys: role.permission_keys,
+    version: role.version,
   };
 }
 
@@ -71,80 +126,73 @@ function catalogPermissionKeys(catalog: RolePermissionCatalog) {
   return new Set([
     ...catalog.pagePermissionGroups.flatMap((group) => group.items),
     ...catalog.actionPermissionGroups.flatMap((group) => group.items),
+    ...catalog.fieldPermissionGroups.flatMap((group) => group.items),
   ]);
 }
 
-function buildRolePermissionCatalog(
-  backendPermissions: BackendPermission[],
+export function buildRolePermissionCatalog(
+  backendCatalog: BackendPermissionCatalog,
 ): RolePermissionCatalog {
-  const backendPermissionKeys = new Set(
-    backendPermissions.map((permission) => permission.permission_key),
-  );
   const permissionLabels: Record<string, string> = {};
   const permissionDescriptions: Record<string, string> = {};
+  const highRiskPermissions = new Set<string>();
+  const pagePermissionGroups: PermissionGroup[] = [];
+  const actionPermissionGroups: PermissionGroup[] = [];
+  const fieldPermissionGroups: PermissionGroup[] = [];
 
-  backendPermissions.forEach((permission) => {
-    permissionLabels[permission.permission_key] = permission.name;
-    if (permission.description) {
-      permissionDescriptions[permission.permission_key] = permission.description;
+  backendCatalog.modules.forEach((module) => {
+    const pageItems: string[] = [];
+
+    module.pages.forEach((page) => {
+      pageItems.push(page.permission_key);
+      permissionLabels[page.permission_key] = page.name;
+      permissionDescriptions[page.permission_key] = `允许进入并查看「${page.name}」页面`;
+
+      if (page.actions.length > 0) {
+        const items = page.actions.map((action) => {
+          permissionLabels[action.permission_key] = action.name;
+          permissionDescriptions[action.permission_key] =
+            action.description || `${page.name}：${action.name}`;
+          if (action.risk_level === "high") {
+            highRiskPermissions.add(action.permission_key);
+          }
+          return action.permission_key;
+        });
+        actionPermissionGroups.push({
+          title: `${module.name} / ${page.name}`,
+          items,
+        });
+      }
+
+      if (page.fields.length > 0) {
+        const items = page.fields.map((field) => {
+          permissionLabels[field.permission_key] = field.name;
+          permissionDescriptions[field.permission_key] =
+            field.description || `${page.name}字段：${field.name}`;
+          if (field.risk_level === "high") {
+            highRiskPermissions.add(field.permission_key);
+          }
+          return field.permission_key;
+        });
+        fieldPermissionGroups.push({
+          title: `${module.name} / ${page.name}`,
+          items,
+        });
+      }
+    });
+
+    if (pageItems.length > 0) {
+      pagePermissionGroups.push({ title: module.name, items: pageItems });
     }
   });
-
-  const navigationPermissionKeys = new Set<string>();
-  const pageLabelsByPermissionKey = new Map<string, string[]>();
-
-  const pagePermissionGroups = navigation
-    .map((group) => {
-      const items: string[] = [];
-      const groupPermissionKeys = new Set<string>();
-
-      group.children.forEach((page) => {
-        if (page.status === "hidden" || page.status === "disabled") return;
-
-        const permissionKey = getPagePermissionKey(page);
-        if (!backendPermissionKeys.has(permissionKey)) return;
-
-        navigationPermissionKeys.add(permissionKey);
-
-        if (!groupPermissionKeys.has(permissionKey)) {
-          groupPermissionKeys.add(permissionKey);
-          items.push(permissionKey);
-        }
-
-        const labels = pageLabelsByPermissionKey.get(permissionKey) ?? [];
-        if (!labels.includes(page.title)) labels.push(page.title);
-        pageLabelsByPermissionKey.set(permissionKey, labels);
-      });
-
-      return { title: group.title, items };
-    })
-    .filter((group) => group.items.length > 0);
-
-  pageLabelsByPermissionKey.forEach((labels, permissionKey) => {
-    permissionLabels[permissionKey] = labels.join(" / ");
-  });
-
-  const actionGroupsByTitle = new Map<string, string[]>();
-
-  backendPermissions.forEach((permission) => {
-    const permissionKey = permission.permission_key;
-    if (navigationPermissionKeys.has(permissionKey)) return;
-
-    const title = permission.group_key || "功能权限";
-    const items = actionGroupsByTitle.get(title) ?? [];
-    if (!items.includes(permissionKey)) items.push(permissionKey);
-    actionGroupsByTitle.set(title, items);
-  });
-
-  const actionPermissionGroups = Array.from(actionGroupsByTitle.entries()).map(
-    ([title, items]) => ({ title, items }),
-  );
 
   return {
     pagePermissionGroups,
     actionPermissionGroups,
+    fieldPermissionGroups,
     permissionLabels,
     permissionDescriptions,
+    highRiskPermissions,
   };
 }
 
@@ -154,7 +202,7 @@ export function createDefaultRolePermissions(
   return {
     pagePermissions: createBooleanState(catalog.pagePermissionGroups),
     actionPermissions: createBooleanState(catalog.actionPermissionGroups),
-    fieldPermissions: {},
+    fieldPermissions: createBooleanState(catalog.fieldPermissionGroups),
   };
 }
 
@@ -171,61 +219,56 @@ export function permissionKeysToState(
   Object.keys(state.actionPermissions).forEach((permissionKey) => {
     state.actionPermissions[permissionKey] = keySet.has(permissionKey);
   });
+  Object.keys(state.fieldPermissions).forEach((permissionKey) => {
+    state.fieldPermissions[permissionKey] = keySet.has(permissionKey);
+  });
 
   return state;
 }
 
 export function stateToPermissionKeys(
   state: RolePermissionState,
-  existingPermissionKeys: string[],
   catalog: RolePermissionCatalog,
 ): string[] {
   const catalogKeys = catalogPermissionKeys(catalog);
-  const next = new Set(
-    existingPermissionKeys.filter((permissionKey) => !catalogKeys.has(permissionKey)),
-  );
+  return [
+    ...Object.entries(state.pagePermissions),
+    ...Object.entries(state.actionPermissions),
+    ...Object.entries(state.fieldPermissions),
+  ]
+    .filter(([permissionKey, enabled]) => enabled && catalogKeys.has(permissionKey))
+    .map(([permissionKey]) => permissionKey)
+    .sort();
+}
 
-  catalog.pagePermissionGroups.forEach((group) => {
-    group.items.forEach((permissionKey) => {
-      if (state.pagePermissions[permissionKey] === true) {
-        next.add(permissionKey);
-      }
-    });
+export function normalizeRoleDataScopes(items: RoleDataScopeEntry[]): RoleDataScopeEntry[] {
+  const seen = new Set<string>();
+  return items.flatMap((item) => {
+    const scopeValue = item.scopeValue.trim();
+    const identity = `${item.scopeType}:${scopeValue}`;
+    if (!scopeValue || seen.has(identity)) return [];
+    seen.add(identity);
+    return [{ scopeType: item.scopeType, scopeValue }];
   });
-
-  catalog.actionPermissionGroups.forEach((group) => {
-    group.items.forEach((permissionKey) => {
-      if (state.actionPermissions[permissionKey] === true) {
-        next.add(permissionKey);
-      }
-    });
-  });
-
-  return Array.from(next).sort();
 }
 
 export async function loadRoleManagementData(): Promise<{
   roles: RoleManagementRow[];
   permissionCatalog: RolePermissionCatalog;
 }> {
-  const [rolesResponse, permissionsResponse] = await Promise.all([
-    backendRequest<BackendRole[]>("/api/settings/roles"),
-    backendRequest<BackendPermission[]>("/api/settings/permissions"),
+  const [rolesResponse, catalogResponse] = await Promise.all([
+    backendRequest<BackendRole[]>("/api/settings/rbac/roles"),
+    backendRequest<BackendPermissionCatalog>("/api/settings/rbac/catalog"),
   ]);
 
   return {
     roles: rolesResponse.data.map(toRow),
-    permissionCatalog: buildRolePermissionCatalog(permissionsResponse.data),
+    permissionCatalog: buildRolePermissionCatalog(catalogResponse.data),
   };
 }
 
-export async function listRoles(): Promise<RoleManagementRow[]> {
-  const data = await loadRoleManagementData();
-  return data.roles;
-}
-
 export async function createRole(values: RoleFormValues): Promise<RoleManagementRow> {
-  const response = await backendRequest<BackendRole>("/api/settings/roles", {
+  const response = await backendRequest<BackendRole>("/api/settings/rbac/roles", {
     method: "POST",
     body: JSON.stringify({
       role_key: makeRoleKey(values.name),
@@ -243,12 +286,66 @@ export async function saveRolePermissions(
   permissions: RolePermissionState,
   catalog: RolePermissionCatalog,
 ): Promise<RoleManagementRow> {
-  const response = await backendRequest<BackendRole>(`/api/settings/roles/${role.roleKey}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      permission_keys: stateToPermissionKeys(permissions, role.permissionKeys, catalog),
-    }),
-  });
+  const response = await backendRequest<BackendRole>(
+    `/api/settings/rbac/roles/${role.roleKey}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        permission_keys: stateToPermissionKeys(permissions, catalog),
+        expected_version: role.version,
+      }),
+    },
+  );
 
   return toRow(response.data);
+}
+
+export async function loadRoleDataScopes(roleKey: string): Promise<RoleDataScopeEntry[]> {
+  const response = await backendRequest<BackendRoleDataScope>(
+    `/api/settings/rbac/roles/${roleKey}/data-scopes`,
+  );
+  return response.data.items.map((item) => ({
+    scopeType: item.scope_type,
+    scopeValue: item.scope_value,
+  }));
+}
+
+export async function saveRoleDataScopes(
+  roleKey: string,
+  items: RoleDataScopeEntry[],
+): Promise<RoleDataScopeEntry[]> {
+  const normalizedItems = normalizeRoleDataScopes(items);
+  const response = await backendRequest<BackendRoleDataScope>(
+    `/api/settings/rbac/roles/${roleKey}/data-scopes`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        items: normalizedItems.map((item) => ({
+          scope_type: item.scopeType,
+          scope_value: item.scopeValue,
+        })),
+      }),
+    },
+  );
+  return response.data.items.map((item) => ({
+    scopeType: item.scope_type,
+    scopeValue: item.scope_value,
+  }));
+}
+
+export async function loadRoleAuditEvents(limit = 100): Promise<RoleAuditEvent[]> {
+  const response = await backendRequest<BackendAuditEvent[]>(
+    `/api/settings/rbac/audit-events?limit=${limit}`,
+  );
+  return response.data.map((item) => ({
+    id: item.id,
+    actorUserId: item.actor_user_id ?? undefined,
+    eventType: item.event_type,
+    targetType: item.target_type,
+    targetKey: item.target_key,
+    requestId: item.request_id ?? undefined,
+    requestIp: item.request_ip ?? undefined,
+    userAgent: item.user_agent ?? undefined,
+    createdAt: item.created_at,
+  }));
 }

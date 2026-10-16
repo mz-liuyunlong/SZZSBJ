@@ -1,6 +1,6 @@
-/** Dense no-API user table with fixed footer and resizable columns. */
+/** Dense user table with permission-aware fields and operations. */
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Empty, Space, Tag } from "antd";
+import { Button, Empty, Space, Tag, Typography } from "antd";
 import type { Key } from "react";
 import ReportTableShell, {
   ReportTableSelectionBar,
@@ -10,7 +10,6 @@ import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle
 import {
   userManagementColumnFields,
   type UserManagementRow,
-  type UserRoleName,
   type UserStatus,
 } from "@/pages/settings/userManagementTypes";
 
@@ -20,8 +19,15 @@ interface UserManagementTableProps {
   currentPage: number;
   pageSize: number;
   selectedRowKeys: Key[];
-  canHardDelete: boolean;
   currentUserId?: string;
+  currentUserIsSuperAdmin: boolean;
+  canViewPhone: boolean;
+  canViewEmail: boolean;
+  canEdit: boolean;
+  canAssignRole: boolean;
+  canResetPassword: boolean;
+  canEnableDisable: boolean;
+  canHardDelete: boolean;
   onColumnWidthChange: (key: string, width: number) => void;
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
@@ -39,25 +45,34 @@ const statusColors: Record<UserStatus, string> = {
   停用: "default",
 };
 
-const roleColors: Record<UserRoleName, string> = {
-  AI助手: "blue",
-  运营: "processing",
-  采购: "cyan",
-  仓库管理: "geekblue",
-  财务管理: "purple",
-  管理员: "volcano",
-};
-
 const compareText = (left: string, right: string) => left.localeCompare(right, "zh-CN");
 
+function roleColor(role: string) {
+  if (role === "超级管理员") return "red";
+  if (role === "管理员") return "volcano";
+  if (role === "运营") return "processing";
+  if (role === "采购") return "cyan";
+  if (role === "仓库") return "geekblue";
+  if (role === "财务") return "purple";
+  return "default";
+}
+
 function createColumns(
-  canHardDelete: boolean,
-  currentUserId: string | undefined,
-  onEdit: (row: UserManagementRow) => void,
-  onSetRole: (row: UserManagementRow) => void,
-  onResetPassword: (row: UserManagementRow) => void,
-  onToggleStatus: (row: UserManagementRow) => void,
-  onDelete: (row: UserManagementRow) => void,
+  options: Pick<
+    UserManagementTableProps,
+    | "currentUserId"
+    | "currentUserIsSuperAdmin"
+    | "canEdit"
+    | "canAssignRole"
+    | "canResetPassword"
+    | "canEnableDisable"
+    | "canHardDelete"
+    | "onEdit"
+    | "onSetRole"
+    | "onResetPassword"
+    | "onToggleStatus"
+    | "onDelete"
+  >,
 ): ProColumns<UserManagementRow>[] {
   return [
     {
@@ -87,7 +102,9 @@ function createColumns(
       key: "roles",
       render: (_, row) => (
         <Space size={4} wrap>
-          {row.roles.map((role) => <Tag key={role} color={roleColors[role]}>{role}</Tag>)}
+          {row.roles.map((role) => (
+            <Tag key={role} color={roleColor(role)}>{role}</Tag>
+          ))}
         </Space>
       ),
     },
@@ -108,64 +125,102 @@ function createColumns(
       key: "operation",
       fixed: "right",
       render: (_, row) => {
-        const showHardDelete =
-          canHardDelete && row.id !== currentUserId && !row.isSuperAdmin;
+        const isSelf = row.id === options.currentUserId;
+        const protectedSuperAdmin = row.isSuperAdmin && !options.currentUserIsSuperAdmin;
+        const actions = [
+          options.canEdit ? (
+            <Button
+              key="edit"
+              type="link"
+              disabled={protectedSuperAdmin}
+              onClick={() => options.onEdit(row)}
+            >编辑</Button>
+          ) : null,
+          options.canAssignRole ? (
+            <Button
+              key="role"
+              type="link"
+              disabled={protectedSuperAdmin || row.isSuperAdmin}
+              onClick={() => options.onSetRole(row)}
+            >设置角色</Button>
+          ) : null,
+          options.canResetPassword ? (
+            <Button
+              key="password"
+              type="link"
+              disabled={protectedSuperAdmin}
+              onClick={() => options.onResetPassword(row)}
+            >重置密码</Button>
+          ) : null,
+          options.canEnableDisable ? (
+            <Button
+              key="status"
+              type="link"
+              disabled={isSelf || row.isSuperAdmin}
+              onClick={() => options.onToggleStatus(row)}
+            >{row.status === "启用" ? "停用" : "启用"}</Button>
+          ) : null,
+          options.canHardDelete && !isSelf && !row.isSuperAdmin ? (
+            <Button
+              key="delete"
+              type="link"
+              danger
+              onClick={() => options.onDelete(row)}
+            >删除</Button>
+          ) : null,
+        ].filter(Boolean);
 
-        return (
-          <Space size={0} className="user-management__row-actions">
-            <Button type="link" onClick={() => onEdit(row)}>编辑</Button>
-            <Button type="link" onClick={() => onSetRole(row)}>设置角色</Button>
-            <Button type="link" onClick={() => onResetPassword(row)}>重置密码</Button>
-            <Button type="link" onClick={() => onToggleStatus(row)}>{row.status === "启用" ? "停用" : "启用"}</Button>
-            {showHardDelete && (
-              <Button type="link" danger onClick={() => onDelete(row)}>删除</Button>
-            )}
-          </Space>
+        return actions.length > 0 ? (
+          <Space size={0} className="user-management__row-actions">{actions}</Space>
+        ) : (
+          <Typography.Text type="secondary">-</Typography.Text>
         );
       },
     },
   ];
 }
 
-function UserManagementTable({
-  rows,
-  columnWidths,
-  currentPage,
-  pageSize,
-  selectedRowKeys,
-  canHardDelete,
-  currentUserId,
-  onColumnWidthChange,
-  onCurrentPageChange,
-  onPageSizeChange,
-  onSelectionChange,
-  onEdit,
-  onSetRole,
-  onResetPassword,
-  onToggleStatus,
-  onDelete,
-  onBulkDisable,
-}: UserManagementTableProps) {
-  const columnMap = new Map(createColumns(
-    canHardDelete,
+function UserManagementTable(props: UserManagementTableProps) {
+  const {
+    rows,
+    columnWidths,
+    currentPage,
+    pageSize,
+    selectedRowKeys,
     currentUserId,
-    onEdit,
-    onSetRole,
-    onResetPassword,
-    onToggleStatus,
-    onDelete,
-  ).map((column) => [String(column.key), column]));
+    canViewPhone,
+    canViewEmail,
+    canEnableDisable,
+    onColumnWidthChange,
+    onCurrentPageChange,
+    onPageSizeChange,
+    onSelectionChange,
+    onBulkDisable,
+  } = props;
 
-  const columns = userManagementColumnFields.flatMap((field) => {
+  const visibleFields = userManagementColumnFields.filter((field) => (
+    (field.key !== "phone" || canViewPhone)
+    && (field.key !== "email" || canViewEmail)
+  ));
+  const columnMap = new Map(
+    createColumns(props).map((column) => [String(column.key), column]),
+  );
+
+  const columns = visibleFields.flatMap((field) => {
     const column = columnMap.get(field.key);
     if (!column) return [];
     const width = columnWidths[field.key] ?? (Number(column.width) || 120);
-    const minWidth = Math.max(field.key === "operation" ? 240 : 88, field.title.length * 14 + 32);
+    const minWidth = Math.max(
+      field.key === "operation" ? 240 : 88,
+      field.title.length * 14 + 32,
+    );
     return [{
       ...column,
       align: "left" as const,
       width,
-      onHeaderCell: () => ({ className: "report-table-resizable-header-cell user-management__resizable-header-cell" }),
+      onHeaderCell: () => ({
+        className: "report-table-resizable-header-cell user-management__resizable-header-cell",
+      }),
       title: (
         <ResizableColumnTitle
           label={field.title}
@@ -185,7 +240,14 @@ function UserManagementTable({
         columns={columns}
         dataSource={rows}
         rowKey="id"
-        rowSelection={{ fixed: true, selectedRowKeys, onChange: onSelectionChange }}
+        rowSelection={canEnableDisable ? {
+          fixed: true,
+          selectedRowKeys,
+          onChange: onSelectionChange,
+          getCheckboxProps: (row) => ({
+            disabled: row.id === currentUserId || row.isSuperAdmin,
+          }),
+        } : false}
         search={false}
         options={false}
         toolBarRender={false}
@@ -205,7 +267,7 @@ function UserManagementTable({
             if (nextPageSize !== pageSize) onPageSizeChange(nextPageSize);
           },
         }}
-        footer={() => (
+        footer={canEnableDisable ? () => (
           <ReportTableSelectionBar
             selectedCount={selectedRowKeys.length}
             actions={[{
@@ -215,8 +277,12 @@ function UserManagementTable({
               onClick: onBulkDisable,
             }]}
           />
-        )}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无匹配用户" /> }}
+        ) : undefined}
+        locale={{
+          emptyText: (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无匹配用户" />
+          ),
+        }}
       />
     </ReportTableShell>
   );

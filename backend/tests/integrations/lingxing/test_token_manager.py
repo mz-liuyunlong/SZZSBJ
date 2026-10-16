@@ -112,6 +112,90 @@ def test_cached_access_token_is_reused_before_refresh_window() -> None:
     assert calls == 1
 
 
+def test_transport_retry_rebuilds_http_client_before_second_attempt() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ReadTimeout("synthetic timeout", request=request)
+        return _success()
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    initial_http_client = client._client
+    manager = LingxingTokenManager(client, settings, sleeper=lambda _: None)
+    try:
+        token = manager.get_access_token()
+    finally:
+        client.close()
+
+    assert token.get_secret_value() == "access-token-fixture-1"
+    assert calls == 2
+    assert client._client is not initial_http_client
+
+
+def test_retryable_proactive_refresh_failure_uses_unexpired_cached_token() -> None:
+    current_time = [NOW]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _success(expires_in=1_000)
+        raise httpx.ReadTimeout("synthetic timeout", request=request)
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    manager = LingxingTokenManager(
+        client,
+        settings,
+        clock=lambda: current_time[0],
+        sleeper=lambda _: None,
+    )
+    try:
+        first = manager.get_access_token()
+        current_time[0] = NOW + timedelta(seconds=500)
+        fallback = manager.get_access_token()
+    finally:
+        client.close()
+
+    assert fallback.get_secret_value() == first.get_secret_value()
+    assert calls == 3
+
+
+def test_retryable_refresh_failure_rejects_expired_cached_token() -> None:
+    current_time = [NOW]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _success(expires_in=1_000)
+        raise httpx.ReadTimeout("synthetic timeout", request=request)
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    manager = LingxingTokenManager(
+        client,
+        settings,
+        clock=lambda: current_time[0],
+        sleeper=lambda _: None,
+    )
+    try:
+        manager.get_access_token()
+        current_time[0] = NOW + timedelta(seconds=1_000)
+        with pytest.raises(LingxingTokenError, match="TOKEN_TRANSPORT_ERROR"):
+            manager.get_access_token()
+    finally:
+        client.close()
+
+    assert calls == 3
+
+
 @pytest.mark.parametrize("provider_code", [200, "200"])
 def test_get_token_uses_exact_multipart_fields_and_parses_string_ttl(
     provider_code: int | str,

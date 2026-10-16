@@ -1,4 +1,4 @@
-import { Checkbox, Modal, Typography } from "antd";
+import { Checkbox, Empty, Modal, Typography } from "antd";
 import { useState } from "react";
 import {
   type UserManagementRow,
@@ -20,7 +20,8 @@ function UserRoleModal({ user, roleOptions, onCancel, onSubmit }: UserRoleModalP
   }>();
   const roles = roleOverride && roleOverride.userId === user?.id
     ? roleOverride.roles
-    : user?.roles ?? [];
+    : user?.roles.filter((role) => role !== "超级管理员") ?? [];
+  const assignableRoles = roleOptions.filter((role) => role.assignable);
 
   const cancel = () => {
     setRoleOverride(undefined);
@@ -45,16 +46,25 @@ function UserRoleModal({ user, roleOptions, onCancel, onSubmit }: UserRoleModalP
     >
       <div className="user-role-modal__target">
         <Typography.Text strong>{user ? `${user.username} / ${user.realName}` : "-"}</Typography.Text>
-        <Typography.Text type="secondary">为该用户勾选一个或多个角色。</Typography.Text>
+        <Typography.Text type="secondary">只显示当前账号有权分配的真实角色。</Typography.Text>
       </div>
-      <Checkbox.Group
-        className="user-role-modal__checks"
-        value={roles}
-        options={roleOptions.map((role) => ({ value: role.name, label: role.name }))}
-        onChange={(values) => {
-          if (user) setRoleOverride({ userId: user.id, roles: values as UserRoleName[] });
-        }}
-      />
+      {assignableRoles.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可分配角色" />
+      ) : (
+        <Checkbox.Group
+          className="user-role-modal__checks"
+          value={roles}
+          options={assignableRoles.map((role) => ({
+            value: role.name,
+            label: role.name,
+          }))}
+          onChange={(values) => {
+            if (user) {
+              setRoleOverride({ userId: user.id, roles: values as UserRoleName[] });
+            }
+          }}
+        />
+      )}
     </Modal>
   );
 }

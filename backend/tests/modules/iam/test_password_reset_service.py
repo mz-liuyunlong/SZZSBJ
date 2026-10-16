@@ -6,7 +6,7 @@ import pytest
 
 from app.core.api import ApiError
 from app.modules.iam import password_reset_service as service
-from app.modules.iam.feishu_service import FeishuPasswordMessage
+from app.modules.iam.feishu_service import FeishuDeliveryError, FeishuPasswordMessage
 
 
 class FakeMappingResult:
@@ -69,6 +69,12 @@ class FakeFeishuService:
 
     def send_password_setup_message(self, message: FeishuPasswordMessage) -> None:
         self.messages.append(message)
+
+
+class FailingFeishuService:
+    def send_password_setup_message(self, message: FeishuPasswordMessage) -> None:
+        del message
+        raise FeishuDeliveryError("synthetic delivery failure")
 
 
 def test_request_password_reset_is_uniform_when_no_unique_active_user() -> None:
@@ -137,6 +143,72 @@ def test_request_password_reset_creates_one_time_token_and_sends_feishu_message(
     )
     assert feishu.messages[0].expires_at == insert_params["expires_at"]
     assert feishu.messages[0].expires_at > datetime.now(UTC)
+
+
+def test_request_password_reset_supports_username_and_feishu_user_id_fallback() -> None:
+    session = FakeSession(
+        lookup_rows=[
+            {
+                "id": 1002,
+                "username": "operator",
+                "display_name": "运营",
+                "feishu_name": None,
+                "feishu_open_id": None,
+                "feishu_user_id": "user_test",
+                "is_active": 1,
+            }
+        ],
+    )
+    feishu = FakeFeishuService()
+
+    message = service.request_password_reset(
+        session,
+        real_name="operator",
+        setup_base_url="https://system.example.com/#/password/setup",
+        context=service.PasswordResetContext(),
+        feishu_service=feishu,
+    )
+
+    lookup_sql = next(sql for sql, _ in session.executed if ":real_name" in sql)
+    insert_params = next(
+        params for sql, params in session.executed if "insert into iam_password_reset_tokens" in sql
+    )
+
+    assert message == service.PUBLIC_RESET_MESSAGE
+    assert "feishu_user_id is not null" in lookup_sql
+    assert "username = :real_name" in lookup_sql
+    assert insert_params is not None
+    assert insert_params["delivery_target"] == "user_test"
+    assert len(feishu.messages) == 1
+    assert feishu.messages[0].recipient_open_id is None
+    assert feishu.messages[0].recipient_user_id == "user_test"
+
+
+def test_request_password_reset_keeps_uniform_response_when_feishu_delivery_fails() -> None:
+    session = FakeSession(
+        lookup_rows=[
+            {
+                "id": 1003,
+                "username": "operator",
+                "display_name": "运营",
+                "feishu_name": "运营",
+                "feishu_open_id": "ou_failure",
+                "feishu_user_id": None,
+                "is_active": 1,
+            }
+        ],
+    )
+
+    message = service.request_password_reset(
+        session,
+        real_name="运营",
+        setup_base_url="https://system.example.com/#/password/setup",
+        context=service.PasswordResetContext(),
+        feishu_service=FailingFeishuService(),
+    )
+
+    assert message == service.PUBLIC_RESET_MESSAGE
+    assert session.commits == 1
 
 
 def test_confirm_password_reset_sets_hash_and_consumes_token() -> None:

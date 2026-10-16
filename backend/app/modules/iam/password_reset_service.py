@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.modules.iam.feishu_service import (
+    FeishuDeliveryError,
     FeishuEmployeeOnboardingMessage,
     FeishuPasswordMessage,
     FeishuService,
@@ -27,6 +29,8 @@ PUBLIC_RESET_MESSAGE = "如果姓名匹配到在职员工，系统会通过飞�
 PASSWORD_RESET_PURPOSE = "password_reset"
 EMPLOYEE_ONBOARDING_PURPOSE = "employee_onboarding"
 LEGACY_PASSWORD_SETUP_PURPOSE = "password_setup"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,10 +86,14 @@ def _find_unique_active_user_by_real_name(
                     is_active
                 from {IAM_USER_TABLE}
                 where is_active = 1
-                  and feishu_open_id is not null
+                  and (
+                    feishu_open_id is not null
+                    or feishu_user_id is not null
+                  )
                   and (
                     display_name = :real_name
                     or feishu_name = :real_name
+                    or username = :real_name
                   )
                 """
             ),
@@ -194,14 +202,14 @@ def request_password_reset(
 
     expires_at = _now() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES)
     user_id = int(user["id"])
-    recipient_open_id = str(user["feishu_open_id"])
-    recipient_user_id = user.get("feishu_user_id")
+    recipient_open_id = str(user["feishu_open_id"]) if user.get("feishu_open_id") else None
+    recipient_user_id = str(user["feishu_user_id"]) if user.get("feishu_user_id") else None
 
     token = _insert_password_setup_token(
         session,
         user_id=user_id,
         purpose=PASSWORD_RESET_PURPOSE,
-        delivery_target=recipient_open_id,
+        delivery_target=recipient_open_id or recipient_user_id,
         expires_at=expires_at,
         context=context,
     )
@@ -209,16 +217,27 @@ def request_password_reset(
 
     setup_url = build_password_setup_url(setup_base_url, token)
     service = feishu_service or FeishuService.from_settings()
-    service.send_password_setup_message(
-        FeishuPasswordMessage(
-            recipient_open_id=recipient_open_id,
-            recipient_user_id=str(recipient_user_id) if recipient_user_id else None,
-            real_name=str(user.get("feishu_name") or user.get("display_name") or real_name),
-            setup_url=setup_url,
-            expires_at=expires_at,
-            purpose=PASSWORD_RESET_PURPOSE,
+    try:
+        delivery_result = service.send_password_setup_message(
+            FeishuPasswordMessage(
+                recipient_open_id=recipient_open_id,
+                recipient_user_id=recipient_user_id,
+                real_name=str(user.get("feishu_name") or user.get("display_name") or real_name),
+                setup_url=setup_url,
+                expires_at=expires_at,
+                purpose=PASSWORD_RESET_PURPOSE,
+            )
         )
-    )
+        if delivery_result is not None and not delivery_result.sent:
+            logger.warning(
+                "Password reset Feishu delivery was not sent.",
+                extra={"user_id": user_id, "reason": delivery_result.reason},
+            )
+    except FeishuDeliveryError as exc:
+        logger.warning(
+            "Password reset Feishu delivery failed.",
+            extra={"user_id": user_id, "reason": str(exc)[:200]},
+        )
 
     return PUBLIC_RESET_MESSAGE
 

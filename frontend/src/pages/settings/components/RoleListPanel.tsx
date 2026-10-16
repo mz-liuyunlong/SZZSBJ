@@ -6,6 +6,7 @@ interface RoleListPanelProps {
   roles: RoleManagementRow[];
   activeRoleId: string;
   keyword: string;
+  canAdd?: boolean;
   onKeywordChange: (keyword: string) => void;
   onSelect: (roleId: string) => void;
   onAdd: () => void;
@@ -15,6 +16,7 @@ function RoleListPanel({
   roles,
   activeRoleId,
   keyword,
+  canAdd = true,
   onKeywordChange,
   onSelect,
   onAdd,
@@ -25,7 +27,9 @@ function RoleListPanel({
     <section className="role-management__role-panel" aria-label="角色列表">
       <div className="role-management__role-head">
         <Typography.Text strong>角色</Typography.Text>
-        <Button size="small" aria-label="增加角色" onClick={onAdd}>+</Button>
+        {canAdd && (
+          <Button size="small" aria-label="增加角色" onClick={onAdd}>+</Button>
+        )}
       </div>
       <div className="role-management__role-search">
         <Input

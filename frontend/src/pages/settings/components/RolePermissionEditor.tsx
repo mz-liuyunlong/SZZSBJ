@@ -1,10 +1,14 @@
-/** Edits page and action permissions from the backend permission catalog. */
-import { Alert, Checkbox, Empty, Tabs, Typography } from "antd";
+/** Edits page-specific page, action, field, and data permissions from backend data. */
+import { Checkbox, Empty, Tabs, Tag, Typography } from "antd";
 import type { RolePermissionCatalog } from "@/pages/settings/roleManagementApi";
+import RoleAuditPanel from "@/pages/settings/components/RoleAuditPanel";
+import RoleDataScopeEditor from "@/pages/settings/components/RoleDataScopeEditor";
 import {
   permissionTabs,
   type PermissionGroup,
   type PermissionTabKey,
+  type RoleAuditEvent,
+  type RoleDataScopeEntry,
   type RoleManagementRow,
   type RolePermissionState,
 } from "@/pages/settings/roleManagementTypes";
@@ -14,20 +18,30 @@ interface RolePermissionEditorProps {
   activeTab: PermissionTabKey;
   permissions: RolePermissionState;
   permissionCatalog: RolePermissionCatalog;
+  dataScopes: RoleDataScopeEntry[];
+  auditEvents: RoleAuditEvent[];
+  dataScopeLoading: boolean;
+  auditLoading: boolean;
+  canConfigurePermissions: boolean;
+  canConfigureDataScope: boolean;
+  canViewAudit: boolean;
   onTabChange: (tab: PermissionTabKey) => void;
   onChange: (permissions: RolePermissionState) => void;
+  onDataScopeChange: (items: RoleDataScopeEntry[]) => void;
 }
 
 function PermissionGroupSection({
   group,
   values,
   permissionCatalog,
+  disabled,
   onGroupChange,
   onItemChange,
 }: {
   group: PermissionGroup;
   values: Record<string, boolean>;
   permissionCatalog: RolePermissionCatalog;
+  disabled: boolean;
   onGroupChange: (checked: boolean) => void;
   onItemChange: (item: string, checked: boolean) => void;
 }) {
@@ -42,6 +56,7 @@ function PermissionGroupSection({
         <Checkbox
           checked={allChecked}
           indeterminate={partialChecked}
+          disabled={disabled}
           onChange={(event) => onGroupChange(event.target.checked)}
         >
           全选
@@ -56,9 +71,13 @@ function PermissionGroupSection({
           >
             <Checkbox
               checked={values[item] === true}
+              disabled={disabled}
               onChange={(event) => onItemChange(item, event.target.checked)}
             />
             <span>{permissionCatalog.permissionLabels[item] ?? item}</span>
+            {permissionCatalog.highRiskPermissions.has(item) && (
+              <Tag color="red">高危</Tag>
+            )}
           </label>
         ))}
       </div>
@@ -71,12 +90,24 @@ function RolePermissionEditor({
   activeTab,
   permissions,
   permissionCatalog,
+  dataScopes,
+  auditEvents,
+  dataScopeLoading,
+  auditLoading,
+  canConfigurePermissions,
+  canConfigureDataScope,
+  canViewAudit,
   onTabChange,
   onChange,
+  onDataScopeChange,
 }: RolePermissionEditorProps) {
+  const visibleTabs = permissionTabs.filter((item) => (
+    item.key !== "audit" || canViewAudit
+  ));
+
   const renderBooleanGroups = (
     groups: PermissionGroup[],
-    keyName: "pagePermissions" | "actionPermissions",
+    keyName: keyof RolePermissionState,
   ) => (
     <div className="role-management__permission-scroll">
       {groups.length === 0 ? (
@@ -88,6 +119,7 @@ function RolePermissionEditor({
             group={group}
             values={permissions[keyName]}
             permissionCatalog={permissionCatalog}
+            disabled={!canConfigurePermissions}
             onGroupChange={(checked) => {
               const nextValues = { ...permissions[keyName] };
               group.items.forEach((item) => {
@@ -112,27 +144,30 @@ function RolePermissionEditor({
           <Typography.Title level={5}>{role.name}</Typography.Title>
           <Typography.Text type="secondary">{role.description}</Typography.Text>
         </div>
-        <Typography.Text type="secondary">权限区域内部滚动</Typography.Text>
+        <Typography.Text type="secondary">版本 {role.version}</Typography.Text>
       </div>
       <Tabs
         className="role-management__permission-tabs"
         activeKey={activeTab}
-        items={permissionTabs.map((item) => ({ key: item.key, label: item.label }))}
+        items={visibleTabs.map((item) => ({ key: item.key, label: item.label }))}
         onChange={(key) => onTabChange(key as PermissionTabKey)}
       />
       {activeTab === "pages" &&
         renderBooleanGroups(permissionCatalog.pagePermissionGroups, "pagePermissions")}
       {activeTab === "actions" &&
         renderBooleanGroups(permissionCatalog.actionPermissionGroups, "actionPermissions")}
-      {activeTab === "fields" && (
-        <div className="role-management__permission-scroll">
-          <Alert
-            type="info"
-            showIcon
-            message="字段权限后端未接入"
-            description="当前版本不再展示前端假字段权限，避免保存后误以为字段级控制已生效。后续需要新增字段权限表、字段权限接口和页面字段级渲染控制后再开放。"
-          />
-        </div>
+      {activeTab === "fields" &&
+        renderBooleanGroups(permissionCatalog.fieldPermissionGroups, "fieldPermissions")}
+      {activeTab === "dataScopes" && (
+        <RoleDataScopeEditor
+          items={dataScopes}
+          loading={dataScopeLoading}
+          disabled={!canConfigureDataScope}
+          onChange={onDataScopeChange}
+        />
+      )}
+      {activeTab === "audit" && canViewAudit && (
+        <RoleAuditPanel events={auditEvents} loading={auditLoading} />
       )}
     </section>
   );
