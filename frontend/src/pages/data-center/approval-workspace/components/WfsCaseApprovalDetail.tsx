@@ -36,6 +36,8 @@ export function WfsCaseApprovalDetail({ detail }: { detail: ApprovalDetail }) {
   </div>
   <Typography.Title level={5}>运营放弃原因</Typography.Title>
   <Typography.Paragraph>{detail.reason}</Typography.Paragraph>
+  <Typography.Title level={5}>申请提交的证据</Typography.Title>
+  <Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.evidence || "暂无补充证据"}</Typography.Paragraph>
   <Typography.Title level={5}>审批业务依据（提交时快照）</Typography.Title>
   <Descriptions bordered size="small" column={2}>
    {fields.map(([label, value]) => <Descriptions.Item key={String(label)} label={String(label)}>{field(value)}</Descriptions.Item>)}
