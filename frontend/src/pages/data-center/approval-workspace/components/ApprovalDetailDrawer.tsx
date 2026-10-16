@@ -15,10 +15,8 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
  const [evidence, setEvidence] = useState("");
  const [messageApi, holder] = message.useMessage();
  useEffect(() => {
-  if (!selected) { setDetail(undefined); return; }
+  if (!selected) return;
   let live = true;
-  setLoading(true);
-  setDetail(undefined);
   void fetchApprovalDetail(selected.id).then((value) => {
    if (live) setDetail(value);
   }).catch(() => { if (live) void messageApi.error("无法加载审批详情"); })
@@ -28,16 +26,16 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
 
  const save = async () => {
   if (!detail || !decision || saving) return;
-  if ((decision !== "approved" || detail.status === "info_required") && note.trim().length < 5) {
+  if ((decision !== "approved" || shown.status === "info_required") && note.trim().length < 5) {
    void messageApi.warning("请填写不少于5个字的意见");
    return;
   }
   setSaving(true);
   try {
-   if (detail.status === "info_required") {
-    await supplementApproval(detail.id, detail.version, note, evidence);
+   if (shown.status === "info_required") {
+    await supplementApproval(shown.id, shown.version, note, evidence);
    } else {
-    await decideApproval(detail.id, detail.version, decision, note);
+    await decideApproval(shown.id, shown.version, decision, note);
    }
    setDecision(undefined); setNote(""); setEvidence("");
    onClose(); onUpdated();
@@ -46,29 +44,30 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
    void messageApi.error("操作失败，请检查审批状态、权限与业务数据变化");
   } finally { setSaving(false); }
  };
- const mayApprove = detail?.can_review && !detail.data_changed && detail.status === "submitted";
+ const shown = detail?.id === selected?.id ? detail : undefined;
+ const mayApprove = shown?.can_review && !shown.data_changed && shown.status === "submitted";
  return <>
   {holder}
   <Drawer title={selected?.title || "审批详情"} open={!!selected} width={1020}
    destroyOnHidden onClose={onClose}
-   footer={detail ? <Space style={{ display: "flex", justifyContent: "flex-end" }}>
+   footer={shown ? <Space style={{ display: "flex", justifyContent: "flex-end" }}>
     <Button onClick={onClose}>关闭</Button>
-    {detail.can_supplement &&
+    {shown.can_supplement &&
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>补充资料后重新提交</Button>}
-    {mayApprove && detail.approval_type === "wfs_case_abandon" && <>
+    {mayApprove && shown.approval_type === "wfs_case_abandon" && <>
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>要求补资料</Button>
      <Button danger onClick={() => { setDecision("rejected"); setNote(""); }}>驳回申请</Button>
      <Button type="primary" onClick={() => { setDecision("approved"); setNote(""); }}>审批通过</Button>
     </>}
    </Space> : null}>
    {loading && <Spin />}
-   {detail && <>
-    <Alert showIcon type="info" title={"审批状态：" + statusNames[detail.status]}
-      description={"审批ID：" + detail.id + " · 申请人：" + (detail.applicant_id || "未知")} />
-    {detail.approval_type === "wfs_case_abandon" ? <WfsCaseApprovalDetail detail={detail}/> :
+   {shown && <>
+    <Alert showIcon type="info" title={"审批状态：" + statusNames[shown.status]}
+      description={"审批ID：" + shown.id + " · 申请人：" + (shown.applicant_id || "未知")} />
+    {shown.approval_type === "wfs_case_abandon" ? <WfsCaseApprovalDetail detail={shown}/> :
      <Alert showIcon type="warning" title="未知业务类型，禁止盲审" />}
     <Typography.Title level={5}>审批事件</Typography.Title>
-    <Timeline items={detail.events.map((e) => ({
+    <Timeline items={shown.events.map((e) => ({
      children: <div><b>{e.event_type}</b> · {e.actor_id} · {e.created_at}
       {e.note && <Typography.Paragraph>{e.note}</Typography.Paragraph>}</div>,
     }))} />
