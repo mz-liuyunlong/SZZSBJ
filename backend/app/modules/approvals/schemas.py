@@ -32,6 +32,7 @@ class ApprovalQuery(StrictSchema):
 
 class ApprovalItem(StrictSchema):
     id: str
+    version: int
     approval_type: str
     business_ref: str
     title: str
