@@ -18,9 +18,9 @@ from app.modules.approvals.schemas import (
     ApprovalItem,
     ApprovalListData,
     ApprovalQuery,
+    ApprovalSubmitResult,
     ApprovalSummary,
     ApprovalSupplementWrite,
-    ApprovalSubmitResult,
 )
 
 
@@ -421,7 +421,8 @@ class ApprovalService:
                   archive_reviewed_by=:actor, archive_reviewed_at=:now,
                   archive_review_note=nullif(:note,''),
                   archived_at=case when :case_status='archived' then :now else archived_at end,
-                  last_reopened_at=case when :case_status='following' then :now else last_reopened_at end,
+                  last_reopened_at=case when :case_status='following'
+                      then :now else last_reopened_at end,
                   reopen_count=reopen_count+case when :case_status='following' then 1 else 0 end,
                   status_changed_at=:now, status_changed_by=:actor,
                   updated_by=:actor, updated_at=:now
