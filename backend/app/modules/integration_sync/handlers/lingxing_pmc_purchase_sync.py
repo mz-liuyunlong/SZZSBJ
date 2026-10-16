@@ -38,7 +38,7 @@ from app.integrations.lingxing.pmc_purchase_contracts import (
     validate_pmc_purchase_window,
 )
 from app.integrations.lingxing.security import canonical_json, redact_json
-from app.integrations.lingxing.token_manager import LingxingTokenClient, LingxingTokenManager
+from app.integrations.lingxing.token_manager import get_shared_lingxing_token_manager
 from app.modules.integration_sync.models import (
     ApiRawBlob,
     ApiRawRequestRef,
@@ -158,8 +158,7 @@ def pmc_purchase_client() -> Iterator[LingxingReadonlyClient]:
     settings = get_settings()
     if settings.app_env is not AppEnvironment.PRODUCTION:
         raise PmcPurchaseSyncError("SYNC_PURCHASE_SERVER_ENVIRONMENT_REQUIRED")
-    token_client = LingxingTokenClient(settings)
-    token_manager = LingxingTokenManager(token_client, settings)
+    token_manager = get_shared_lingxing_token_manager(settings)
     client = LingxingReadonlyClient(
         settings,
         token_provider=token_manager,
@@ -169,7 +168,6 @@ def pmc_purchase_client() -> Iterator[LingxingReadonlyClient]:
         yield client
     finally:
         client.close()
-        token_client.close()
 
 
 class LingxingPmcPurchaseSyncHandler:

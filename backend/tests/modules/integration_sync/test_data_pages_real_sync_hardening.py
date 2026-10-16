@@ -1,13 +1,19 @@
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import MagicMock
 
+import httpx
 import pytest
+from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
+from app.integrations.lingxing.token_manager import LingxingTokenError
 from app.modules.integration_sync import data_pages_real_sync
 from app.modules.integration_sync.data_pages_real_sync import (
     SP_CAMPAIGN_TYPES,
+    DataPagesRealHttpClient,
     DataPagesRealSyncError,
     DataPagesRealSyncRunner,
     ProviderResponse,
@@ -16,6 +22,9 @@ from app.modules.integration_sync.data_pages_real_sync import (
     _resolve_ad_identity,
     _scalar_candidates,
 )
+from app.modules.integration_sync.execution import _safe_error_code
+
+SYNTHETIC_DATABASE_URL = "postgresql+psycopg://synthetic@db.invalid/synthetic"
 
 
 class _SequenceClient:
@@ -200,6 +209,122 @@ def test_data_pages_client_requires_explicit_runtime_authorization(
     with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_REAL_SYNC_NOT_AUTHORIZED"):
         with data_pages_real_sync.data_pages_client():
             pass
+
+
+def test_data_pages_client_reuses_process_token_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = SimpleNamespace(data_pages_real_sync_authorized=True)
+    token_manager = MagicMock()
+    shared_manager = MagicMock(return_value=token_manager)
+    client = MagicMock()
+    client_factory = MagicMock(return_value=client)
+    monkeypatch.setattr(data_pages_real_sync, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        data_pages_real_sync,
+        "get_shared_lingxing_token_manager",
+        shared_manager,
+    )
+    monkeypatch.setattr(data_pages_real_sync, "DataPagesRealHttpClient", client_factory)
+
+    with data_pages_real_sync.data_pages_client() as value:
+        assert value is client
+
+    shared_manager.assert_called_once_with(settings)
+    client_factory.assert_called_once_with(settings, token_manager)
+    client.close.assert_called_once_with()
+
+
+def test_data_pages_token_transport_error_is_safe_and_skips_business_transport() -> None:
+    settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+            "LINGXING_BASE_URL": "https://provider.invalid",
+            "LINGXING_APP_ID": "synthetic-app-id",
+        }
+    )
+    token_manager = MagicMock()
+    token_manager.get_access_token.side_effect = LingxingTokenError(
+        "TOKEN_TRANSPORT_ERROR",
+        retryable=True,
+    )
+    transport_calls = 0
+
+    def transport(_: httpx.Request) -> httpx.Response:
+        nonlocal transport_calls
+        transport_calls += 1
+        return httpx.Response(200, json={"code": 0, "data": []})
+
+    client = DataPagesRealHttpClient(
+        settings,
+        token_manager,
+        transport=httpx.MockTransport(transport),
+    )
+    try:
+        with pytest.raises(
+            DataPagesRealSyncError,
+            match="DATA_PAGES_TOKEN_TRANSPORT_ERROR",
+        ) as error:
+            client.post(
+                "sale_stat_page_list",
+                {},
+                page_no=1,
+                page_size=1,
+                label="synthetic",
+            )
+    finally:
+        client.close()
+
+    assert transport_calls == 0
+    assert _safe_error_code(error.value) == "DATA_PAGES_TOKEN_TRANSPORT_ERROR"
+
+
+def test_data_pages_auth_recovery_error_keeps_safe_token_category() -> None:
+    settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+            "LINGXING_BASE_URL": "https://provider.invalid",
+            "LINGXING_APP_ID": "synthetic-app-id",
+        }
+    )
+    token_manager = MagicMock()
+    token_manager.get_access_token.return_value = SecretStr("synthetic-access-token")
+    token_manager.recover_from_access_error.side_effect = LingxingTokenError(
+        "TOKEN_TRANSPORT_ERROR",
+        retryable=True,
+    )
+    transport_calls = 0
+
+    def transport(_: httpx.Request) -> httpx.Response:
+        nonlocal transport_calls
+        transport_calls += 1
+        return httpx.Response(200, json={"code": 2001003, "data": []})
+
+    client = DataPagesRealHttpClient(
+        settings,
+        token_manager,
+        transport=httpx.MockTransport(transport),
+    )
+    try:
+        with pytest.raises(
+            DataPagesRealSyncError,
+            match="DATA_PAGES_TOKEN_TRANSPORT_ERROR",
+        ) as error:
+            client.post(
+                "sale_stat_page_list",
+                {},
+                page_no=1,
+                page_size=1,
+                label="synthetic",
+            )
+    finally:
+        client.close()
+
+    assert transport_calls == 1
+    token_manager.recover_from_access_error.assert_called_once_with(2001003)
+    assert _safe_error_code(error.value) == "DATA_PAGES_TOKEN_TRANSPORT_ERROR"
 
 
 def test_sp_campaign_types_include_manual_auto_sba_and_video() -> None:

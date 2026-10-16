@@ -38,7 +38,7 @@ function WfsFeeAlertFollowModal({
     form.setFieldsValue({
       caseNo: row.caseNo,
       nextFollowAt: row.nextFollowAt && row.nextFollowAt !== "-" ? dayjs(row.nextFollowAt) : undefined,
-      latestFollow: row.latestFollow,
+      latestFollow: "",
     });
   }, [form, row]);
 

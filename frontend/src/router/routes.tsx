@@ -24,6 +24,7 @@ import AdsCampaignsPage from "@/pages/ads/campaigns/AdsCampaignsPage";
 import OperationLogPage from "@/pages/operations/OperationLogPage";
 import OperationPlanPage from "@/pages/operations/OperationPlanPage";
 import SyncTaskPage from "@/pages/data-center/SyncTaskPage";
+import ApprovalWorkspacePage from "@/pages/data-center/approval-workspace/ApprovalWorkspacePage";
 import ApiDocsPage from "@/pages/data-center/ApiDocsPage";
 import DataImportPage from "@/pages/data-center/DataImportPage";
 import WfsFeeAlertPage from "@/pages/warehouse/WfsFeeAlertPage";
@@ -176,6 +177,8 @@ function BusinessRoute({
           <WfsFeeAlertPage page={page} />
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
+        ) : page.key === "data_center_approval_workspace" ? (
+          <ApprovalWorkspacePage page={page} />
         ) : page.key === "data_center_data_import" ? (
           <DataImportPage page={page} />
         ) : page.key === "data_center_api_docs" ? (

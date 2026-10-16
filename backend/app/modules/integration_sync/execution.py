@@ -13,6 +13,7 @@ from app.modules.integration_sync.data_pages_mart_invariants import (
     DataPagesMartInvariantError,
 )
 from app.modules.integration_sync.data_pages_real_sync import (
+    DataPagesRealSyncError,
     DataPagesRealSyncSummary,
     data_pages_client,
 )
@@ -216,7 +217,7 @@ class SyncRunExecutionService:
                     run=run,
                     plan=plan,
                 )
-        except ProductInfoOneTimeRunError as error:
+        except (DataPagesRealSyncError, ProductInfoOneTimeRunError) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)
             if recovered is not None and recovered.status == "running":

@@ -6,6 +6,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+import app.integrations.lingxing.token_manager as token_manager_module
 from app.core.config import Settings
 from app.integrations.lingxing.token_manager import (
     GET_TOKEN_PATH,
@@ -13,6 +14,8 @@ from app.integrations.lingxing.token_manager import (
     LingxingTokenClient,
     LingxingTokenError,
     LingxingTokenManager,
+    close_shared_lingxing_token_runtime,
+    get_shared_lingxing_token_manager,
 )
 
 SYNTHETIC_DATABASE_URL = "postgresql+psycopg://synthetic@db.invalid/synthetic"
@@ -56,6 +59,141 @@ def _multipart_body(request: httpx.Request) -> str:
     content_type = request.headers["content-type"]
     assert content_type.startswith("multipart/form-data; boundary=")
     return request.content.decode()
+
+
+def test_process_runtime_reuses_one_token_manager_and_closes_its_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clients: list[object] = []
+    closed_clients: list[object] = []
+
+    class FakeTokenClient:
+        def __init__(self, settings: Settings) -> None:
+            self.settings = settings
+            self.closed = False
+            clients.append(self)
+
+        def close(self) -> None:
+            self.closed = True
+            closed_clients.append(self)
+
+    settings = _settings()
+    close_shared_lingxing_token_runtime()
+    monkeypatch.setattr(token_manager_module, "LingxingTokenClient", FakeTokenClient)
+    try:
+        first = get_shared_lingxing_token_manager(settings)
+        second = get_shared_lingxing_token_manager(settings)
+    finally:
+        close_shared_lingxing_token_runtime()
+
+    assert first is second
+    assert len(clients) == 1
+    assert closed_clients == clients
+
+
+def test_cached_access_token_is_reused_before_refresh_window() -> None:
+    calls = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _success(expires_in=3_600)
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    manager = LingxingTokenManager(client, settings, clock=lambda: NOW)
+    try:
+        first = manager.get_access_token()
+        second = manager.get_access_token()
+    finally:
+        client.close()
+
+    assert first.get_secret_value() == second.get_secret_value()
+    assert calls == 1
+
+
+def test_transport_retry_rebuilds_http_client_before_second_attempt() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ReadTimeout("synthetic timeout", request=request)
+        return _success()
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    initial_http_client = client._client
+    manager = LingxingTokenManager(client, settings, sleeper=lambda _: None)
+    try:
+        token = manager.get_access_token()
+    finally:
+        client.close()
+
+    assert token.get_secret_value() == "access-token-fixture-1"
+    assert calls == 2
+    assert client._client is not initial_http_client
+
+
+def test_retryable_proactive_refresh_failure_uses_unexpired_cached_token() -> None:
+    current_time = [NOW]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _success(expires_in=1_000)
+        raise httpx.ReadTimeout("synthetic timeout", request=request)
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    manager = LingxingTokenManager(
+        client,
+        settings,
+        clock=lambda: current_time[0],
+        sleeper=lambda _: None,
+    )
+    try:
+        first = manager.get_access_token()
+        current_time[0] = NOW + timedelta(seconds=500)
+        fallback = manager.get_access_token()
+    finally:
+        client.close()
+
+    assert fallback.get_secret_value() == first.get_secret_value()
+    assert calls == 3
+
+
+def test_retryable_refresh_failure_rejects_expired_cached_token() -> None:
+    current_time = [NOW]
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _success(expires_in=1_000)
+        raise httpx.ReadTimeout("synthetic timeout", request=request)
+
+    settings = _settings()
+    client = LingxingTokenClient(settings, transport=httpx.MockTransport(handler))
+    manager = LingxingTokenManager(
+        client,
+        settings,
+        clock=lambda: current_time[0],
+        sleeper=lambda _: None,
+    )
+    try:
+        manager.get_access_token()
+        current_time[0] = NOW + timedelta(seconds=1_000)
+        with pytest.raises(LingxingTokenError, match="TOKEN_TRANSPORT_ERROR"):
+            manager.get_access_token()
+    finally:
+        client.close()
+
+    assert calls == 3
 
 
 @pytest.mark.parametrize("provider_code", [200, "200"])
