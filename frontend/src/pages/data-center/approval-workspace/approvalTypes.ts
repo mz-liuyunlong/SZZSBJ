@@ -27,7 +27,7 @@ export interface WfsSnapshot {
 }
 export interface ApprovalDetail extends ApprovalItem {
  snapshot: WfsSnapshot; current_case: WfsSnapshot | null;
- data_changed: boolean; events: ApprovalEvent[];
+ data_changed: boolean; can_supplement: boolean; events: ApprovalEvent[];
 }
 export interface ApprovalFilters {
  tab: ApprovalTab; view: ApprovalView; approval_type?: string;
