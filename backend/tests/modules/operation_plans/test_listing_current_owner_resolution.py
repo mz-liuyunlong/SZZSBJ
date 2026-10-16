@@ -1,4 +1,5 @@
 """Regression tests for Listing Management's authoritative SKU owner attribution."""
+
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -47,13 +48,21 @@ def test_plan_import_auto_resolves_owner_without_owner_file_column() -> None:
     repository, session = _repository()
     repository.table_exists = lambda _: True  # type: ignore[method-assign]
     repository.table_columns = lambda _: {  # type: ignore[method-assign]
-        "platform_code", "source_account_ref", "store_id", "store_name",
-        "item_id", "local_sku", "msku", "local_name",
+        "platform_code",
+        "source_account_ref",
+        "store_id",
+        "store_name",
+        "item_id",
+        "local_sku",
+        "msku",
+        "local_name",
     }
     session.execute.return_value.mappings.return_value = MagicMock()
     session.execute.return_value.mappings.return_value.first.return_value = {
-        "item_id": "synthetic-item", "owner_ref": "synthetic-owner",
-        "owner_name": "synthetic-name", "platform_code": "walmart",
+        "item_id": "synthetic-item",
+        "owner_ref": "synthetic-owner",
+        "owner_name": "synthetic-name",
+        "platform_code": "walmart",
     }
 
     row = repository.resolve_listing_by_item_id(
@@ -94,12 +103,8 @@ def test_plan_list_filter_and_row_share_live_listing_owner() -> None:
 
 def test_dashboard_and_owner_options_share_current_listing_owner() -> None:
     repository, session = _repository()
-    repository.owner_summary(
-        period_id=uuid4(), account_refs=frozenset({"synthetic-account"})
-    )
-    repository.list_options(
-        period_id=uuid4(), account_refs=frozenset({"synthetic-account"})
-    )
+    repository.owner_summary(period_id=uuid4(), account_refs=frozenset({"synthetic-account"}))
+    repository.list_options(period_id=uuid4(), account_refs=frozenset({"synthetic-account"}))
     sqls = [sql for sql in _statements(session) if "listing_item_owners as (" in sql]
     assert len(sqls) == 2
     for sql in sqls:
