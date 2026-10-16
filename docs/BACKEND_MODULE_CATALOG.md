@@ -200,5 +200,5 @@
 | Security | 飞书 provider body/message/cause 和未净化 exception text 不进入日志、异常或公共响应；不记录 Token、重置链接或 RAW |
 | Frontend alignment | Approval、WFS、User/Role Management 按 canonical action 控制按钮；用户资料、启停、角色与 scope 独立授权 |
 | Evidence | `docs/iam/RBAC_V2_POST_0041_AUDIT.md` 及 `docs/operations/RBAC_V2_*`；最终 test/CI/PR 信息在发布验收文档更新 |
-| PR | TBD |
+| PR | `#226`；open，未合并 |
 | Not in scope | 生产数据库/服务器、生产 migration/deploy/restart、真实角色自动扩权、`source_account='*'` 自动授予、外部 API/Token、旧系统修改、store/owner/sku/product 通用过滤实现 |

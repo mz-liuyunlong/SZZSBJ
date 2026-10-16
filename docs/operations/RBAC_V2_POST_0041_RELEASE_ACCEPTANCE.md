@@ -8,13 +8,13 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 |---|---|
 | Branch | `fix/rbac-post-0041-end-to-end-hardening` |
 | Base commit | `7a8eab793c4edf9e419b3ae846e2b47dddf51587` |
-| Fix commit | `TBD` |
-| Pull request | `TBD` |
-| CI | `TBD` |
+| Fix commit | `990b79c89250e4d18045a1dd06b0bd9d002f12bc` |
+| Pull request | `#226` |
+| CI | PASS；PR #226 共 6 项检查通过 |
 | New migration | `20261017_0042_approval_rbac_backfill` |
 | Production migration/deploy/restart | Not performed; separate Owner authorization required |
 
-提交 PR 后必须用真实 commit、PR 和 CI 结果替换 `TBD`，不得把本地通过写成 CI 通过。
+以上 commit、PR 和 CI 均为 GitHub 实际结果，不以本地验证冒充 CI。
 
 ## 2. 交付内容
 
@@ -43,9 +43,9 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 | Frontend build | PASS；保留既有大 chunk warning |
 | Alembic heads | PASS；单一 `20261017_0042_approval_rbac_backfill` |
 | Isolated PostgreSQL 0041→0042 | PASS；权限差异、幂等和 forward-only 阻断已验证 |
-| Secret/RAW/scope scan | Pending final repository scan |
-| Rule pack | Pending final repository scan |
-| GitHub CI | TBD |
+| Secret/RAW/scope scan | PASS |
+| Rule pack | PASS |
+| GitHub CI | PASS；Vercel、Vercel Preview Comments、WFS PostgreSQL migration smoke、backend、frontend、rule-pack-check 共 6 项 |
 
 ## 4. 生产执行前授权
 
