@@ -194,8 +194,11 @@ def request_wfs_fee_case_archive(
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
     ApprovalService(session).submit_wfs(
-        case_id, reason_type=payload.archive_reason_type, reason=payload.archive_reason,
-        evidence=payload.archive_evidence, account_refs=account_refs,
+        case_id,
+        reason_type=payload.archive_reason_type,
+        reason=payload.archive_reason,
+        evidence=payload.archive_evidence,
+        account_refs=account_refs,
         actor=principal.user_id,
     )
     return success_response(request, data={"updated": True}, meta=None)
@@ -214,7 +217,9 @@ def review_wfs_fee_case_archive(
     principal: review_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
-    raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)  # Use versioned /api/approvals/{id}/decision
+    raise ApiError(
+        code=ErrorCode.INVALID_REQUEST, status_code=409
+    )  # Use versioned /api/approvals/{id}/decision
     return success_response(request, data={"updated": True}, meta=None)
 
 
