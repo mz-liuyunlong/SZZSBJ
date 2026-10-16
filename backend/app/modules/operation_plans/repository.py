@@ -314,11 +314,10 @@ class OperationPlanRepository:
                 "name",
             ]
         )
-        owner_ref_expr = text_agg(["owner_ref", "owner_uid"])
-        owner_name_expr = text_agg(["owner_name", "owner_name_snapshot"])
 
         statement = text(
             f"""
+            with {self._listing_owner_cte_sql(item_filter=True)}
             select
                 coalesce({text_agg(["platform_code"])}, 'walmart') as platform_code,
                 '__item_level__'::text as source_account_ref,
@@ -331,8 +330,8 @@ class OperationPlanRepository:
                 {text_agg(["sku", "local_sku"])} as sku,
                 '__ITEM_LEVEL__'::text as msku,
                 {product_name_expr} as product_name,
-                {owner_ref_expr} as owner_ref,
-                {owner_name_expr} as owner_name,
+                (select owner_ref from listing_item_owners where item_id = :item_id) as owner_ref,
+                (select owner_name from listing_item_owners where item_id = :item_id) as owner_name,
                 {store_count_expr}::int as store_count,
                 {count_distinct(["msku"])}::int as msku_count,
                 {count_distinct(["sku", "local_sku"])}::int as sku_count
@@ -748,6 +747,85 @@ class OperationPlanRepository:
             )
         """
 
+    def _listing_owner_cte_sql(self, *, item_filter: bool = False) -> str:
+        """Resolve Item ID owners from the same current SKU data as Listing Management.
+
+        Listing Management matches ProductInfo by source_account_ref + local_sku
+        and displays ProductInfo.owner_name with listing.owner_ref as a fallback.
+        Do not rely on imported plan snapshots or historical daily-sales owner
+        fields for current attribution. Ignore unresolved Listing rows when
+        an Item ID has exactly one known owner, but never select arbitrarily
+        between multiple distinct SKU owners.
+        """
+        item_scope_sql = (
+            "and trim(l.item_id::text) = :item_id"
+            if item_filter
+            else """
+                  and exists (
+                      select 1 from ops_operation_product_plans p
+                      where p.period_id = :period_id
+                        and trim(p.item_id::text) = trim(l.item_id::text)
+                  )
+            """
+        )
+        return f"""
+            listing_owner_lookup as (
+                select
+                    source_account_ref,
+                    lingxing_sku_code,
+                    max(nullif(btrim(owner_uid), '')) as owner_uid,
+                    max(nullif(btrim(owner_name), '')) as owner_name,
+                    count(distinct coalesce(
+                        nullif(btrim(owner_uid), ''),
+                        nullif(btrim(owner_name), '')
+                    )) as owner_count
+                from dwd_lingxing_sku_product_info_current
+                where lingxing_sku_code is not null
+                  and source_account_ref in :account_refs
+                group by source_account_ref, lingxing_sku_code
+            ),
+            listing_owner_candidates as (
+                select
+                    trim(l.item_id::text) as item_id,
+                    coalesce(
+                        ol.owner_uid, ol.owner_name, nullif(btrim(l.owner_ref), '')
+                    ) as owner_ref,
+                    coalesce(
+                        ol.owner_name, nullif(btrim(l.owner_ref), ''), ol.owner_uid
+                    ) as owner_name,
+                    coalesce(ol.owner_count > 1, false) as owner_ambiguous
+                from mart_listing_management_current l
+                left join listing_owner_lookup ol
+                  on ol.source_account_ref = l.source_account_ref
+                 and ol.lingxing_sku_code = l.local_sku
+                where l.source_account_ref in :account_refs
+                  and trim(l.item_id::text) <> ''
+                  {item_scope_sql}
+            ),
+            listing_item_owners as (
+                select
+                    item_id,
+                    case
+                        when bool_or(owner_ambiguous)
+                          or count(distinct owner_ref) > 1
+                            then 'owner_conflict'
+                        when count(owner_ref) = 0
+                            then 'unassigned'
+                        else coalesce(max(owner_ref), 'unassigned')
+                    end as owner_ref,
+                    case
+                        when bool_or(owner_ambiguous)
+                          or count(distinct owner_ref) > 1
+                            then '负责人冲突'
+                        when count(owner_ref) = 0
+                            then '未分配'
+                        else coalesce(max(owner_name), max(owner_ref), '未分配')
+                    end as owner_name
+                from listing_owner_candidates
+                group by item_id
+            )
+        """
+
     def list_products(
         self,
         *,
@@ -839,14 +917,7 @@ class OperationPlanRepository:
         else:
             order_sql = default_order_sql
 
-        owner_expr = (
-            "coalesce("
-            "nullif(p.owner_ref, ''), "
-            "nullif(p.owner_name_snapshot, ''), "
-            "nullif(a.actual_owner_ref, ''), "
-            "''"
-            ")"
-        )
+        owner_expr = "coalesce(li.owner_ref, 'unassigned')"
 
         if query.owner_ref:
             clauses.append(f"{owner_expr} = :owner_ref")
@@ -927,6 +998,7 @@ class OperationPlanRepository:
         where_sql = " and ".join(clauses)
 
         inventory_cte_sql = self._inventory_cte_sql()
+        listing_owner_cte_sql = self._listing_owner_cte_sql()
 
         actuals_cte = f"""
             with period_bounds as (
@@ -944,6 +1016,7 @@ class OperationPlanRepository:
                 where p0.id = :period_id
             ),
             {inventory_cte_sql},
+            {listing_owner_cte_sql},
             actuals as (
                 select
                     p.id as plan_id,
@@ -1098,6 +1171,8 @@ class OperationPlanRepository:
             left join inventory_actuals inv
               on trim(inv.item_id::text) = trim(p.item_id::text)
             left join computed_status cs on cs.plan_id = p.id
+            left join listing_item_owners li
+              on li.item_id = trim(p.item_id::text)
         """
         where_clause = f"where {where_sql}"
 
@@ -1188,16 +1263,8 @@ class OperationPlanRepository:
                     a.actual_local_name,
                     a.actual_title
                 ) as resolved_product_name,
-                coalesce(
-                    nullif(p.owner_ref, ''),
-                    nullif(p.owner_name_snapshot, ''),
-                    nullif(a.actual_owner_ref, '')
-                ) as resolved_owner_ref,
-                coalesce(
-                    nullif(p.owner_name_snapshot, ''),
-                    nullif(p.owner_ref, ''),
-                    nullif(a.actual_owner_ref, '')
-                ) as resolved_owner_name,
+                coalesce(li.owner_ref, 'unassigned') as resolved_owner_ref,
+                coalesce(li.owner_name, '未分配') as resolved_owner_name,
                 coalesce(la.last_sales_amount, 0)::numeric as last_sales_amount,
                 coalesce(la.last_gross_profit_amount, 0)::numeric
                     as last_gross_profit_amount,
@@ -1403,6 +1470,7 @@ class OperationPlanRepository:
 
     def owner_summary(self, *, period_id: UUID, account_refs: frozenset[str]) -> list[RowMapping]:
         inventory_cte_sql = self._inventory_cte_sql()
+        listing_owner_cte_sql = self._listing_owner_cte_sql()
 
         statement = text(
             f"""
@@ -1421,6 +1489,7 @@ class OperationPlanRepository:
                 where p0.id = :period_id
             ),
             {inventory_cte_sql},
+            {listing_owner_cte_sql},
             plan_actuals as (
                 select
                     p.id as plan_id,
@@ -1492,18 +1561,8 @@ class OperationPlanRepository:
             computed as (
                 select
                     p.id,
-                    coalesce(
-                        nullif(p.owner_ref, ''),
-                        nullif(p.owner_name_snapshot, ''),
-                        nullif(a.actual_owner_ref, ''),
-                        'unassigned'
-                    ) as owner_ref,
-                    coalesce(
-                        nullif(p.owner_name_snapshot, ''),
-                        nullif(p.owner_ref, ''),
-                        nullif(a.actual_owner_ref, ''),
-                        '未分配'
-                    ) as owner_name,
+                    coalesce(li.owner_ref, 'unassigned') as owner_ref,
+                    coalesce(li.owner_name, '未分配') as owner_name,
                     coalesce(p.target_sales_amount, 0) as target_sales_amount,
                     coalesce(p.target_gross_profit_amount, 0) as target_gross_profit_amount,
                     coalesce(a.sales_actual_amount, 0) as sales_actual_amount,
@@ -1560,6 +1619,8 @@ class OperationPlanRepository:
                     end as computed_stock_status
                 from ops_operation_product_plans p
                 left join plan_actuals a on a.plan_id = p.id
+                left join listing_item_owners li
+                  on li.item_id = trim(p.item_id::text)
                 left join plan_forecast f on f.plan_id = p.id
                 left join inventory_actuals inv
                   on trim(inv.item_id::text) = trim(p.item_id::text)
@@ -1567,7 +1628,7 @@ class OperationPlanRepository:
             )
             select
                 owner_ref,
-                owner_name,
+                max(owner_name) as owner_name,
                 count(*)::int as product_count,
                 coalesce(sum(target_sales_amount), 0) as sales_target_amount,
                 coalesce(sum(sales_actual_amount), 0) as sales_actual_amount,
@@ -1581,7 +1642,7 @@ class OperationPlanRepository:
                 count(*) filter (where computed_stock_status = 'risk')::int
                     as stock_risk_count
             from computed
-            group by owner_ref, owner_name
+            group by owner_ref
 
             order by
                 coalesce(sum(gross_profit_actual_amount), 0) desc,
@@ -1606,6 +1667,7 @@ class OperationPlanRepository:
         self, *, period_id: UUID, account_refs: frozenset[str]
     ) -> dict[str, list[RowMapping]]:
         inventory_cte_sql = self._inventory_cte_sql()
+        listing_owner_cte_sql = self._listing_owner_cte_sql()
         params = {"period_id": period_id, "account_refs": tuple(sorted(account_refs))}
 
         statement = text(
@@ -1625,6 +1687,7 @@ class OperationPlanRepository:
                 where p0.id = :period_id
             ),
             {inventory_cte_sql},
+            {listing_owner_cte_sql},
             plan_actuals as (
                 select
                     p.id as plan_id,
@@ -1695,18 +1758,8 @@ class OperationPlanRepository:
             computed as (
                 select
                     p.id,
-                    coalesce(
-                        nullif(p.owner_ref, ''),
-                        nullif(p.owner_name_snapshot, ''),
-                        nullif(a.actual_owner_ref, ''),
-                        'unassigned'
-                    ) as owner_value,
-                    coalesce(
-                        nullif(p.owner_name_snapshot, ''),
-                        nullif(p.owner_ref, ''),
-                        nullif(a.actual_owner_ref, ''),
-                        '未分配'
-                    ) as owner_label,
+                    coalesce(li.owner_ref, 'unassigned') as owner_value,
+                    coalesce(li.owner_name, '未分配') as owner_label,
                     p.operation_status,
                     case
                         when p.operation_status = 'clearance'
@@ -1752,14 +1805,16 @@ class OperationPlanRepository:
                     end as stock_status
                 from ops_operation_product_plans p
                 left join plan_actuals a on a.plan_id = p.id
+                left join listing_item_owners li
+                  on li.item_id = trim(p.item_id::text)
                 left join forecast f on f.plan_id = p.id
                 left join inventory_actuals inv
                   on trim(inv.item_id::text) = trim(p.item_id::text)
                 where p.period_id = :period_id
             )
-            select 'owner' as kind, owner_value as value, owner_label as label, count(*)::int as count
+            select 'owner' as kind, owner_value as value, max(owner_label) as label, count(*)::int as count
             from computed
-            group by owner_value, owner_label
+            group by owner_value
 
             union all
 
