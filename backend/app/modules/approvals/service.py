@@ -350,6 +350,7 @@ class ApprovalService:
         return ApprovalDetail(
             **item.model_dump(),
             snapshot=saved,
+            evidence=record["evidence"],
             current_case=current,
             data_changed=changed,
             can_supplement=(
