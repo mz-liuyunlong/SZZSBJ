@@ -32,7 +32,7 @@ def make_snapshot(case: dict) -> dict:
         "case_nos", "first_alert_at", "case_opened_at", "status",
         "follow_log", "latest_follow_note", "log_updated_at", "reason",
         "remark", "walmart_response_summary", "evidence_summary",
-        "last_follow_at", "archive_reason", "archive_reason_type",
+        "last_follow_at", 
     )
     result = {key: case.get(key) for key in fields}
     return json.loads(json.dumps(result, ensure_ascii=False, default=str))
@@ -141,7 +141,7 @@ class ApprovalService:
     def _as_item(self, r: dict, actor: str, may_review: bool) -> ApprovalItem:
         snapshot = r["snapshot"] if isinstance(r["snapshot"], dict) else {}
         return ApprovalItem(
-            id=str(r["id"]), approval_type=r["approval_type"],
+            id=str(r["id"]), version=r["version"], approval_type=r["approval_type"],
             business_ref=r["business_ref"], title=r["title"],
             source_account_ref=r["source_account_ref"],
             applicant_id=r["applicant_id"], status=r["status"],
@@ -218,7 +218,7 @@ class ApprovalService:
         # itself a stale change. Compare meaningful fields excluding status.
         changed = any(
             current.get(k) != saved.get(k)
-            for k in saved if k not in ("status",)
+            for k in saved if k not in ("status", "archive_reason", "archive_reason_type")
         )
         return ApprovalDetail(**item.model_dump(),
             snapshot=saved, current_case=current, data_changed=changed,
@@ -242,7 +242,7 @@ class ApprovalService:
             blocked()
         snapshot = r["snapshot"]
         current = make_snapshot(case)
-        if any(current.get(k) != snapshot.get(k) for k in snapshot if k != "status"):
+        if any(current.get(k) != snapshot.get(k) for k in snapshot if k not in ("status", "archive_reason", "archive_reason_type")):
             blocked()
         if payload.decision == "info_required":
             new_status = "info_required"
