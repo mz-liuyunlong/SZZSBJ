@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -276,6 +277,53 @@ def test_data_pages_token_transport_error_is_safe_and_skips_business_transport()
         client.close()
 
     assert transport_calls == 0
+    assert _safe_error_code(error.value) == "DATA_PAGES_TOKEN_TRANSPORT_ERROR"
+
+
+def test_data_pages_auth_recovery_error_keeps_safe_token_category() -> None:
+    settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "TEST_DATABASE_URL": SYNTHETIC_DATABASE_URL,
+            "LINGXING_BASE_URL": "https://provider.invalid",
+            "LINGXING_APP_ID": "synthetic-app-id",
+        }
+    )
+    token_manager = MagicMock()
+    token_manager.get_access_token.return_value = SecretStr("synthetic-access-token")
+    token_manager.recover_from_access_error.side_effect = LingxingTokenError(
+        "TOKEN_TRANSPORT_ERROR",
+        retryable=True,
+    )
+    transport_calls = 0
+
+    def transport(_: httpx.Request) -> httpx.Response:
+        nonlocal transport_calls
+        transport_calls += 1
+        return httpx.Response(200, json={"code": 2001003, "data": []})
+
+    client = DataPagesRealHttpClient(
+        settings,
+        token_manager,
+        transport=httpx.MockTransport(transport),
+    )
+    try:
+        with pytest.raises(
+            DataPagesRealSyncError,
+            match="DATA_PAGES_TOKEN_TRANSPORT_ERROR",
+        ) as error:
+            client.post(
+                "sale_stat_page_list",
+                {},
+                page_no=1,
+                page_size=1,
+                label="synthetic",
+            )
+    finally:
+        client.close()
+
+    assert transport_calls == 1
+    token_manager.recover_from_access_error.assert_called_once_with(2001003)
     assert _safe_error_code(error.value) == "DATA_PAGES_TOKEN_TRANSPORT_ERROR"
 
 

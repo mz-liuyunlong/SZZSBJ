@@ -85,7 +85,7 @@ class Settings(BaseSettings):
         validation_alias="LINGXING_TOKEN_REFRESH_SHORT_TTL_RATIO",
     )
     lingxing_token_request_timeout_ms: int = Field(
-        default=5_000,
+        default=10_000,
         ge=100,
         validation_alias="LINGXING_TOKEN_REQUEST_TIMEOUT_MS",
     )
