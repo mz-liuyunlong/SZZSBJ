@@ -162,12 +162,12 @@ class ApprovalService:
         where = ["a.source_account_ref=any(:accounts)", status_clause]
         params: dict = {"accounts": list(account_refs), "actor": actor,
                         "limit": query.page_size, "offset": (query.page - 1) * query.page_size}
-        if query.view == "created":
+        if not may_review:
             where.append("a.applicant_id=:actor")
-        elif query.view == "mine" and not may_review:
+        elif query.view == "created":
             where.append("a.applicant_id=:actor")
         elif query.view == "mine":
-            where.append("(a.applicant_id=:actor or a.applicant_id<>:actor)")
+            where.append("a.applicant_id<>:actor")
         if query.approval_type:
             where.append("a.approval_type=:kind")
             params["kind"] = query.approval_type
@@ -205,6 +205,8 @@ class ApprovalService:
     def detail(self, approval_id: UUID, account_refs: frozenset[str],
                actor: str, may_review: bool) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
+        if not may_review and record["applicant_id"] != actor:
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         item = self._as_item(record, actor, may_review)
         events = self.session.execute(text("""
             select event_type, actor_id, note, created_at
@@ -222,6 +224,7 @@ class ApprovalService:
         )
         return ApprovalDetail(**item.model_dump(),
             snapshot=saved, current_case=current, data_changed=changed,
+            can_supplement=(record["status"] == "info_required" and record["applicant_id"] == actor),
             events=[ApprovalEventRead(**dict(e)) for e in events])
 
     def decide(self, approval_id: UUID, payload: ApprovalDecisionWrite,
