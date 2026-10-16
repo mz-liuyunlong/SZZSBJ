@@ -844,7 +844,7 @@ class OperationPlanRepository:
             "nullif(p.owner_ref, ''), "
             "nullif(p.owner_name_snapshot, ''), "
             "nullif(a.actual_owner_ref, ''), "
-            "''"
+            "'unassigned'"
             ")"
         )
 
