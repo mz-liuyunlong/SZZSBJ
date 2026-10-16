@@ -389,7 +389,7 @@ class WfsFeeAlertService:
                   status_changed_by = :actor,
                   updated_by = :actor,
                   updated_at = :now
-                where id = :case_id and status <> 'recovered'
+                where id = :case_id and status = 'following'
                 """
             ),
             {
