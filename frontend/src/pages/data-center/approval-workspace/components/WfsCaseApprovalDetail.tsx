@@ -1,10 +1,8 @@
 import { Alert, Descriptions, Divider, Tag, Timeline, Typography } from "antd";
 import type { ApprovalDetail } from "../approvalTypes";
+import { parseFollowLog } from "../followLog";
 import { formatMoney } from "@/shared/formatters/money";
 
-export function parseFollowLog(log: string | null | undefined): string[] {
- return (log ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-}
 const field = (value: unknown) => value == null || value === "" ? "—" : String(value);
 const money = (value: unknown, currency: unknown) => formatMoney(value, { currency: String(currency || "USD") });
 
