@@ -1,4 +1,5 @@
 """Approval contract and authorization boundaries (no production database)."""
+
 from unittest.mock import MagicMock
 from uuid import UUID
 import pytest
@@ -46,18 +47,25 @@ def test_preview_principal_cannot_call_any_approval_routes():
     case = "00000000-0000-0000-0000-000000000001"
     assert client.get("/api/approvals").status_code == 403
     assert client.get("/api/approvals/summary").status_code == 403
-    assert client.post(
-        "/api/approvals/" + case + "/decision",
-        json={"decision": "approved", "expected_version": 1},
-    ).status_code == 403
-    assert client.post(
-        "/api/approvals/" + case + "/supplement",
-        json={"note": "please update", "expected_version": 1},
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/approvals/" + case + "/decision",
+            json={"decision": "approved", "expected_version": 1},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            "/api/approvals/" + case + "/supplement",
+            json={"note": "please update", "expected_version": 1},
+        ).status_code
+        == 403
+    )
 
 
 def test_review_payload_requires_optimistic_version():
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         ApprovalDecisionWrite(decision="approved")
 
