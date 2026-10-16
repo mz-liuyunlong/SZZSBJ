@@ -53,7 +53,7 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
    destroyOnHidden onClose={onClose}
    footer={detail ? <Space style={{ display: "flex", justifyContent: "flex-end" }}>
     <Button onClick={onClose}>关闭</Button>
-    {detail.status === "info_required" && detail.applicant_id !== null &&
+    {detail.can_supplement &&
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>补充资料后重新提交</Button>}
     {mayApprove && detail.approval_type === "wfs_case_abandon" && <>
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>要求补资料</Button>
