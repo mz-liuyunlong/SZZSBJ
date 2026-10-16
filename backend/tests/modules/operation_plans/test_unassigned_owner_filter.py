@@ -31,6 +31,8 @@ def test_unassigned_owner_filter_matches_dashboard_sentinel() -> None:
     sql = str(count_calls[0].args[0])
     params = count_calls[0].args[1]
 
-    assert "nullif(a.actual_owner_ref, ''), 'unassigned')" in sql
+    assert "coalesce(li.owner_ref, 'unassigned') = :owner_ref" in sql
+    assert "listing_owner_lookup as (" in sql
+    assert "left join listing_item_owners li" in sql
     assert "= :owner_ref" in sql
     assert params["owner_ref"] == "unassigned"
