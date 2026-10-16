@@ -753,8 +753,9 @@ class OperationPlanRepository:
         Listing Management matches ProductInfo by source_account_ref + local_sku
         and displays ProductInfo.owner_name with listing.owner_ref as a fallback.
         Do not rely on imported plan snapshots or historical daily-sales owner
-        fields for current attribution. Never select one of several distinct
-        SKU owners arbitrarily.
+        fields for current attribution. Ignore unresolved Listing rows when
+        an Item ID has exactly one known owner, but never select arbitrarily
+        between multiple distinct SKU owners.
         """
         item_scope_sql = (
             "and trim(l.item_id::text) = :item_id"
@@ -808,7 +809,7 @@ class OperationPlanRepository:
                         when bool_or(owner_ambiguous)
                           or count(distinct owner_ref) > 1
                             then 'owner_conflict'
-                        when count(owner_ref) <> count(*)
+                        when count(owner_ref) = 0
                             then 'unassigned'
                         else coalesce(max(owner_ref), 'unassigned')
                     end as owner_ref,
@@ -816,7 +817,7 @@ class OperationPlanRepository:
                         when bool_or(owner_ambiguous)
                           or count(distinct owner_ref) > 1
                             then '负责人冲突'
-                        when count(owner_ref) <> count(*)
+                        when count(owner_ref) = 0
                             then '未分配'
                         else coalesce(max(owner_name), max(owner_ref), '未分配')
                     end as owner_name

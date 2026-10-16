@@ -39,10 +39,26 @@ def test_conflicting_or_incomplete_sku_owners_are_not_arbitrarily_assigned() -> 
     assert "ol.owner_count > 1" in sql
     assert "then 'owner_conflict'" in sql
     assert "then '负责人冲突'" in sql
-    assert "count(owner_ref) <> count(*)" in sql
+    assert sql.count("when count(owner_ref) = 0") == 2
+    assert "count(owner_ref) <> count(*)" not in sql
     # MAX is only used when exactly one distinct owner ref remains.
     assert "else coalesce(max(owner_ref), 'unassigned')" in sql
 
+
+
+def test_single_known_owner_survives_other_listing_rows_without_owner() -> None:
+    repository, _ = _repository()
+    sql = repository._listing_owner_cte_sql()
+
+    # A blank Listing SKU must not remove the sole owner of the same Item ID.
+    # This guards the 59 previously unresolved item-level plans, including
+    # 31 previously assigned plans that became unassigned in the first fix.
+    assert sql.count("when count(owner_ref) = 0") == 2
+    assert "count(owner_ref) <> count(*)" not in sql
+    assert "when bool_or(owner_ambiguous)" in sql
+    assert "or count(distinct owner_ref) > 1" in sql
+    assert "else coalesce(max(owner_ref), 'unassigned')" in sql
+    assert "else coalesce(max(owner_name), max(owner_ref), '未分配')" in sql
 
 def test_plan_import_auto_resolves_owner_without_owner_file_column() -> None:
     repository, session = _repository()
