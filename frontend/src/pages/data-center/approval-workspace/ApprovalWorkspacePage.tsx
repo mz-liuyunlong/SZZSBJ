@@ -49,7 +49,6 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
   setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 })), []);
  useEffect(() => {
   let active = true;
-  setLoading(true);
   void Promise.all([fetchApprovals(filters), fetchApprovalSummary()])
    .then(([list, stats]) => {
     if (!active) return;
