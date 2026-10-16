@@ -78,8 +78,10 @@ def test_wfs_fee_case_routes_are_registered_without_profit_mutation_endpoint() -
     assert "/api/warehouse/wfs-fee-actuals" not in paths
 
 
-def test_wfs_fee_alert_read_requires_permission(monkeypatch: Any) -> None:
-    denied = TestClient(_app("products:read")).get("/api/warehouse/wfs-fee-alerts")
+def test_wfs_fee_alert_read_requires_page_permission(monkeypatch: Any) -> None:
+    denied = TestClient(_app("page:products:product-management:view")).get(
+        "/api/warehouse/wfs-fee-alerts"
+    )
     assert denied.status_code == 403
 
     def list_alerts(
@@ -91,12 +93,14 @@ def test_wfs_fee_alert_read_requires_permission(monkeypatch: Any) -> None:
         return WfsFeeAlertListData(items=[_item()]), 1
 
     monkeypatch.setattr(WfsFeeAlertService, "list_alerts", list_alerts)
-    response = TestClient(_app("warehouse:wfs-fee-alert:read")).get("/api/warehouse/wfs-fee-alerts")
+    response = TestClient(_app("page:warehouse:wfs-fee-alert:view")).get(
+        "/api/warehouse/wfs-fee-alerts"
+    )
     assert response.status_code == 200
     assert response.json()["data"]["items"][0]["variance_amount"] == "3"
 
 
-def test_wfs_case_write_uses_write_permission(monkeypatch: Any) -> None:
+def test_wfs_case_write_uses_page_specific_follow_permission(monkeypatch: Any) -> None:
     captured: dict[str, object] = {}
 
     def update_case(
@@ -114,7 +118,7 @@ def test_wfs_case_write_uses_write_permission(monkeypatch: Any) -> None:
         )
 
     monkeypatch.setattr(WfsFeeAlertService, "update_case", update_case)
-    response = TestClient(_app("warehouse:wfs-fee-alert:write")).put(
+    response = TestClient(_app("action:warehouse:wfs-fee-alert:follow")).put(
         "/api/warehouse/wfs-fee-alerts/00000000-0000-0000-0000-000000000001/case",
         json={
             "status": "跟进中",

@@ -35,17 +35,19 @@ interface LoginPageProps {
 const isFrontendTestMode = () => import.meta.env.MODE === "test";
 
 function toTestAuthUser(user: MockAuthUser): AuthUser {
+  const isSuperAdmin = user.role === "admin";
   return {
-    id: user.username === "admin" ? 1 : 2,
+    id: isSuperAdmin ? 1 : 2,
     username: user.username,
-    role: user.role,
+    role: isSuperAdmin ? "admin" : "user",
     displayName: user.displayName,
     account: user.account,
     avatarSrc: user.avatarSrc,
     online: user.online,
     roleKeys: [user.role],
-    roles: [user.role === "admin" ? "管理员" : "普通用户"],
-    permissions: user.role === "admin" ? ["*"] : [],
+    roles: [isSuperAdmin ? "超级管理员" : "普通用户"],
+    permissions: isSuperAdmin ? ["*"] : [],
+    isSuperAdmin,
   };
 }
 

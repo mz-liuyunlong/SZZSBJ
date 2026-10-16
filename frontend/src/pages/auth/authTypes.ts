@@ -30,6 +30,7 @@ export interface AuthUser {
   roleKeys: string[];
   roles: string[];
   permissions: string[];
+  isSuperAdmin: boolean;
 }
 
 export const DEFAULT_AUTH_USER: AuthUser = {
@@ -41,24 +42,28 @@ export const DEFAULT_AUTH_USER: AuthUser = {
   avatarSrc: "/default-avatar.png",
   online: true,
   roleKeys: ["admin"],
-  roles: ["管理员"],
+  roles: ["超级管理员"],
   permissions: ["*"],
+  isSuperAdmin: true,
 };
 
 export function toAuthUser(user: BackendUser | BackendCurrentUser): AuthUser {
   const permissions = "permissions" in user ? user.permissions : [];
-  const isAdmin = user.is_super_admin || user.role_keys.includes("admin");
+  const isSuperAdmin = user.is_super_admin || permissions.includes("*");
 
   return {
     id: user.id,
     username: user.username,
-    role: isAdmin ? "admin" : "user",
+    role: isSuperAdmin ? "admin" : "user",
     displayName: user.display_name || user.username,
     account: user.email || user.username,
     avatarSrc: "/default-avatar.png",
     online: true,
     roleKeys: user.role_keys,
-    roles: user.role_names,
+    roles: isSuperAdmin
+      ? ["超级管理员", ...user.role_names.filter((name) => name !== "管理员")]
+      : user.role_names,
     permissions,
+    isSuperAdmin,
   };
 }

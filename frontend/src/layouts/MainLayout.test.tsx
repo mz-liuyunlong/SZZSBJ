@@ -709,20 +709,13 @@ describe("MainLayout", () => {
     ).not.toBeInTheDocument();
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: personalCenter.title }));
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      personalCenter.title,
-    );
-    expect(within(breadcrumb).getByText(settingsGroup.title)).toBeVisible();
-    expect(within(content).getByText("个人中心内容区")).toBeVisible();
-
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "用户菜单" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: documentation.title }));
-    expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      documentation.title,
-    );
-    expect(within(breadcrumb).getByText(dataCenterGroup.title)).toBeVisible();
-    expect(within(content).getByText("文档内容区")).toBeVisible();
-    expect(window.location.hash).toBe(`#${documentation.path}`);
-  }, 30_000);
+  expect(await screen.findByRole("menuitem", { name: "退出" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("menuitem", { name: personalCenter.title }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("menuitem", { name: documentation.title }),
+  ).not.toBeInTheDocument();
+  expect(window.location.hash).toBe(`#${aiAssistant.path}`);
+}, 30_000);
 });

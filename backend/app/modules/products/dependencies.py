@@ -13,27 +13,25 @@ type ProductScopeProvider = Callable[[Principal, str], bool]
 
 
 def get_product_scope_provider() -> ProductScopeProvider | None:
-    """Return the temporary Product Management preview scope or fail closed."""
+    """Return product access for preview and real authenticated principals."""
     try:
         settings = get_settings()
     except SettingsError:
         return None
-    if (
-        not settings.product_management_preview_auth_configured
-        or not settings.product_management_preview_source_account_ref_set
-    ):
-        return None
 
-    def preview_scope(principal: Principal, resource: str) -> bool:
+    refs = settings.product_management_preview_source_account_ref_set
+    if not refs:
+        return None
+    preview_auth_configured = settings.product_management_preview_auth_configured
+
+    def configured_scope(principal: Principal, resource: str) -> bool:
         if resource != PRODUCT_SCOPE_RESOURCE:
             return False
         if principal.user_id == PREVIEW_PRINCIPAL_ID:
-            return True
-        if principal.permissions:
-            return True
-        return False
+            return preview_auth_configured
+        return bool(principal.permissions)
 
-    return preview_scope
+    return configured_scope
 
 
 def require_product_scope(

@@ -345,6 +345,7 @@ function TopbarActions({
             aria-label="用户菜单"
             aria-expanded={userMenuOpen}
             aria-haspopup="menu"
+            onMouseEnter={() => changeUserMenuOpen(true)}
             onFocus={() => changeUserMenuOpen(true)}
             onBlur={closeUserMenuOnBlur}
           >

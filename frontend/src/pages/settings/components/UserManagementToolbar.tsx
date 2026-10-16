@@ -2,20 +2,26 @@
 import { Button, Input, Select } from "antd";
 import ResetButton from "@/components/report-table/ResetButton";
 import {
-  userRoleOptions,
   userStatusOptions,
   type UserManagementFilters,
   type UserRoleName,
+  type UserRoleOption,
   type UserStatus,
 } from "@/pages/settings/userManagementTypes";
 
 interface UserManagementToolbarProps {
   filters: UserManagementFilters;
+  roleOptions: readonly UserRoleOption[];
   onChange: (filters: UserManagementFilters) => void;
   onReset: () => void;
 }
 
-function UserManagementToolbar({ filters, onChange, onReset }: UserManagementToolbarProps) {
+function UserManagementToolbar({
+  filters,
+  roleOptions,
+  onChange,
+  onReset,
+}: UserManagementToolbarProps) {
   const update = <Key extends keyof UserManagementFilters>(
     key: Key,
     value: UserManagementFilters[Key],
@@ -40,7 +46,7 @@ function UserManagementToolbar({ filters, onChange, onReset }: UserManagementToo
         aria-label="角色筛选"
         placeholder="全部角色"
         value={filters.role}
-        options={userRoleOptions.map((value) => ({ value, label: value }))}
+        options={roleOptions.map(({ name }) => ({ value: name, label: name }))}
         onChange={(value) => update("role", value as UserRoleName | undefined)}
       />
       <Input
@@ -52,7 +58,9 @@ function UserManagementToolbar({ filters, onChange, onReset }: UserManagementToo
         onChange={(event) => update("keyword", event.target.value)}
         onPressEnter={() => onChange(filters)}
       />
-      <Button type="primary" ghost onClick={() => onChange(filters)}>搜索</Button>
+      <Button type="primary" ghost onClick={() => onChange(filters)}>
+        搜索
+      </Button>
       <ResetButton onClick={onReset} />
     </div>
   );

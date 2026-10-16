@@ -8,6 +8,9 @@ export interface MockAuthUser {
   account: string;
   avatarSrc: string;
   online: boolean;
+  /** Tests must exercise the same permission-key boundary as real authenticated users. */
+  permissions?: readonly string[];
+  isSuperAdmin?: boolean;
 }
 
 export const MOCK_USERNAME = "user";
@@ -22,6 +25,8 @@ export const MOCK_USERS: MockAuthUser[] = [
     account: "admin@example.local",
     avatarSrc: "/default-avatar.png",
     online: true,
+    permissions: ["*"],
+    isSuperAdmin: true,
   },
   {
     username: "user",
@@ -30,6 +35,8 @@ export const MOCK_USERS: MockAuthUser[] = [
     account: "user@example.local",
     avatarSrc: "/default-avatar.png",
     online: true,
+    permissions: [],
+    isSuperAdmin: false,
   },
 ];
 
