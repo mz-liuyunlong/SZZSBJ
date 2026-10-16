@@ -143,7 +143,8 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     caseOpenedAt: dateValue(item.case_opened_at ?? item.first_alert_at),
     nextFollowAt: item.next_follow_at ?? "-",
     level: priorityLabelMap[item.priority],
-    latestFollow: item.latest_follow_note ?? item.follow_log ?? "",
+    followLog: item.follow_log ?? "",
+    latestFollow: (item.follow_log ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? item.latest_follow_note ?? "",
   };
 };
 

@@ -32,6 +32,7 @@ export interface WfsFeeAlertRow {
   nextFollowAt: string;
   level: WfsFeeAlertPriority;
   latestFollow: string;
+  followLog?: string;
 }
 
 export interface WfsFeeAlertFilters {
