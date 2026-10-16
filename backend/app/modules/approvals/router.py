@@ -1,6 +1,7 @@
 """Uniform approval workbench routes with WFS business permissions."""
 
 from __future__ import annotations
+
 from typing import Annotated
 from uuid import UUID
 
