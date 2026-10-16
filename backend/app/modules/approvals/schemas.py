@@ -75,6 +75,7 @@ class ApprovalEventRead(StrictSchema):
 
 
 class ApprovalDetail(ApprovalItem):
+    evidence: str | None = None
     snapshot: dict[str, Any]
     current_case: dict[str, Any] | None
     data_changed: bool
