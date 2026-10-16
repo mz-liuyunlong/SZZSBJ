@@ -16,6 +16,7 @@ import {
 import type { NavigationPage } from "@/config/navigation";
 import WfsFeeAlertDetailModal from "@/pages/warehouse/components/WfsFeeAlertDetailModal";
 import WfsFeeAlertFollowModal from "@/pages/warehouse/components/WfsFeeAlertFollowModal";
+import WfsAbandonRequestModal from "@/pages/warehouse/components/WfsAbandonRequestModal";
 import WfsFeeAlertSummaryCards from "@/pages/warehouse/components/WfsFeeAlertSummaryCards";
 import WfsFeeAlertTable from "@/pages/warehouse/components/WfsFeeAlertTable";
 import WfsFeeAlertToolbar from "@/pages/warehouse/components/WfsFeeAlertToolbar";
@@ -68,6 +69,7 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<WfsFeeAlertRow>();
   const [followRow, setFollowRow] = useState<WfsFeeAlertRow>();
+  const [abandonRow, setAbandonRow] = useState<WfsFeeAlertRow>();
   const [rows, setRows] = useState<WfsFeeAlertRow[]>([]);
 
   const reloadRows = async () => {
@@ -256,6 +258,11 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
         currency={filters.currency}
         onClose={() => setDetailRow(undefined)}
         onOpenFollow={openFollowModal}
+      />
+      <WfsAbandonRequestModal
+        row={abandonRow}
+        onClose={() => setAbandonRow(undefined)}
+        onSuccess={() => void reloadRows()}
       />
       <WfsFeeAlertFollowModal
         row={followRow}
