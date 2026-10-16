@@ -1,5 +1,6 @@
 """Approval contract and authorization boundaries (no production database)."""
 
+from decimal import Decimal
 from unittest.mock import MagicMock
 from uuid import UUID
 
@@ -12,7 +13,7 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.approvals.schemas import ApprovalDecisionWrite, ApprovalQuery
-from app.modules.approvals.service import ApprovalService, make_snapshot, signature
+from app.modules.approvals.service import ApprovalService, calculate_pending_recovery, make_snapshot, signature
 from app.modules.integration_sync.dependencies import get_source_account_scope_provider
 
 
@@ -99,3 +100,17 @@ def test_decision_refuses_user_without_review_permission():
             may_review=False,
         )
     assert exc.value.status_code == 403
+
+
+def test_wfs_pending_recovery_is_derived_from_0036_persisted_columns():
+    case = {
+        "estimated_recover_amount": Decimal("100.10"),
+        "recovered_amount": Decimal("20.15"),
+        "status": "following",
+    }
+    assert calculate_pending_recovery(case) == Decimal("79.95")
+    assert make_snapshot(case)["pending_recover_amount"] == "79.95"
+    assert calculate_pending_recovery({
+        "estimated_recover_amount": Decimal("20"),
+        "recovered_amount": Decimal("25"),
+    }) == Decimal("0.00")
