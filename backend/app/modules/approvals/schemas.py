@@ -1,4 +1,5 @@
 """Public schemas for the common approval workbench."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -10,8 +11,7 @@ ApprovalTab = Literal["pending", "approved", "rejected"]
 ApprovalView = Literal["mine", "created", "all"]
 ApprovalDecision = Literal["approved", "rejected", "info_required"]
 ApprovalStatus = Literal[
-    "submitted", "info_required", "approved", "rejected",
-    "withdrawn", "legacy_unverified"
+    "submitted", "info_required", "approved", "rejected", "withdrawn", "legacy_unverified"
 ]
 ApprovalRisk = Literal["low", "medium", "high"]
 
