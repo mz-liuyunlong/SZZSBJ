@@ -114,14 +114,25 @@ class LingxingTokenClient:
         *,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        if settings.lingxing_base_url is None:
+        base_url = settings.lingxing_base_url
+        if base_url is None:
             raise LingxingTokenError("TOKEN_CONFIGURATION_ERROR")
         self._settings = settings
-        self._client = httpx.Client(
-            base_url=settings.lingxing_base_url,
-            timeout=settings.lingxing_token_request_timeout_ms / 1_000,
-            transport=transport,
+        self._base_url = base_url
+        self._transport = transport
+        self._client = self._new_client()
+
+    def _new_client(self) -> httpx.Client:
+        return httpx.Client(
+            base_url=self._base_url,
+            timeout=self._settings.lingxing_token_request_timeout_ms / 1_000,
+            transport=self._transport,
         )
+
+    def _reset_client(self) -> None:
+        previous = self._client
+        self._client = self._new_client()
+        previous.close()
 
     def close(self) -> None:
         self._client.close()
@@ -161,6 +172,9 @@ class LingxingTokenClient:
         try:
             response = self._client.post(path, files=fields)
         except httpx.HTTPError:
+            # A token request is infrequent; discard a potentially stale pool before the
+            # manager spends its bounded retry on the same broken connection state.
+            self._reset_client()
             raise LingxingTokenError("TOKEN_TRANSPORT_ERROR", retryable=True) from None
         if len(response.content) > self._settings.lingxing_max_response_bytes:
             raise LingxingTokenError("TOKEN_RESPONSE_TOO_LARGE")
@@ -222,7 +236,15 @@ class LingxingTokenManager:
             current = self._snapshot
             if current is not None and self._now() < current.refresh_after:
                 return current.access_token
-            return self._renew_locked(use_refresh=current is not None).access_token
+            try:
+                return self._renew_locked(use_refresh=current is not None).access_token
+            except LingxingTokenError as error:
+                # A proactive refresh outage must not discard an access token that is still
+                # within its provider TTL. Explicit 2001003 recovery uses refresh_access_token
+                # and therefore never takes this fallback.
+                if current is not None and error.retryable and self._now() < current.expires_at:
+                    return current.access_token
+                raise
 
     def refresh_access_token(self) -> SecretStr:
         observed = self._snapshot

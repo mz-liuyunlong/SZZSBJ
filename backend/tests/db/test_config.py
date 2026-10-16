@@ -96,7 +96,7 @@ def test_lingxing_settings_default_to_dry_run_and_deny_dangerous_actions() -> No
     assert settings.lingxing_enable_token_requests is False
     assert settings.lingxing_token_refresh_safety_seconds == 600
     assert settings.lingxing_token_refresh_short_ttl_ratio == 0.2
-    assert settings.lingxing_token_request_timeout_ms == 5_000
+    assert settings.lingxing_token_request_timeout_ms == 10_000
     assert settings.lingxing_token_max_attempts == 2
     assert settings.lingxing_enable_real_calls is False
     assert settings.lingxing_enable_batch_product_info_requests is False
