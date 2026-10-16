@@ -816,7 +816,7 @@ class WfsFeeAlertService:
           case when status='closed' then coalesce(approved_at, updated_at) else null end,
           nullif(case_nos, ''),
           follow_log,
-          nullif(split_part(coalesce(follow_log,''), E'\n', 1), ''),
+          nullif(reverse(split_part(reverse(coalesce(follow_log,'')), E'\n', 1)), ''),
           log_updated_at,
           nullif(decided_by, ''),
           case when status in ('approving','closed') then updated_at else null end,
