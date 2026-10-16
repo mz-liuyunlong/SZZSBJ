@@ -44,7 +44,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == ["20261015_0036_wfs_cases"]
+    assert script.get_heads() == ["20261016_0037_approval_workbench"]
     assert (
         script.get_revision("20261015_0036_wfs_cases").down_revision
         == "20261014_0035_add_auth_rbac"
