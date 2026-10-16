@@ -304,7 +304,10 @@ class DataPagesRealHttpClient:
 
             provider_code = _provider_code(payload)
             if provider_code == 2001003 and not recovered_auth:
-                self._token_manager.recover_from_access_error(provider_code)
+                try:
+                    self._token_manager.recover_from_access_error(provider_code)
+                except LingxingTokenError as error:
+                    raise DataPagesRealSyncError(f"DATA_PAGES_{error.category}") from None
                 recovered_auth = True
                 continue
             if provider_code == 3001008 and attempt < 6:
