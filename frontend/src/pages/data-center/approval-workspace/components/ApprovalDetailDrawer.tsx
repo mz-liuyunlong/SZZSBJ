@@ -22,10 +22,10 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
   }).catch(() => { if (live) void messageApi.error("无法加载审批详情"); })
    .finally(() => { if (live) setLoading(false); });
   return () => { live = false; };
- }, [selected?.id, messageApi]);
+ }, [selected, messageApi]);
 
  const save = async () => {
-  if (!detail || !decision || saving) return;
+  if (!shown || !decision || saving) return;
   if ((decision !== "approved" || shown.status === "info_required") && note.trim().length < 5) {
    void messageApi.warning("请填写不少于5个字的意见");
    return;
@@ -62,10 +62,10 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
    </Space> : null}>
    {loading && <Spin />}
    {shown && <>
-    <Alert showIcon type="info" title={"审批状态：" + statusNames[shown.status]}
+    <Alert showIcon type="info" message={"审批状态：" + statusNames[shown.status]}
       description={"审批ID：" + shown.id + " · 申请人：" + (shown.applicant_id || "未知")} />
     {shown.approval_type === "wfs_case_abandon" ? <WfsCaseApprovalDetail detail={shown}/> :
-     <Alert showIcon type="warning" title="未知业务类型，禁止盲审" />}
+     <Alert showIcon type="warning" message="未知业务类型，禁止盲审" />}
     <Typography.Title level={5}>审批事件</Typography.Title>
     <Timeline items={shown.events.map((e) => ({
      children: <div><b>{e.event_type}</b> · {e.actor_id} · {e.created_at}
