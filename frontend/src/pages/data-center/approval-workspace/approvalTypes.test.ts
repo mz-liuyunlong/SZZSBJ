@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFollowLog } from "./components/WfsCaseApprovalDetail";
+import { parseFollowLog } from "./followLog";
 import { approvalColumnFields, statusNames } from "./approvalTypes";
 
 describe("approval workbench", () => {
