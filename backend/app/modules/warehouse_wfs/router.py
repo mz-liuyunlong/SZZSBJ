@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
+from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
@@ -26,6 +26,7 @@ from app.modules.warehouse_wfs.schemas import (
     WfsFeeRecoveredWrite,
 )
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
+from app.modules.approvals.service import ApprovalService
 
 router = APIRouter(tags=["WFS-FEE-CASE"])
 db_session = Annotated[Session, Depends(get_db_session)]
@@ -192,7 +193,11 @@ def request_wfs_fee_case_archive(
     principal: write_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
-    WfsFeeAlertService(session).request_archive(case_id, payload, account_refs, principal.user_id)
+    ApprovalService(session).submit_wfs(
+        case_id, reason_type=payload.archive_reason_type, reason=payload.archive_reason,
+        evidence=payload.archive_evidence, account_refs=account_refs,
+        actor=principal.user_id,
+    )
     return success_response(request, data={"updated": True}, meta=None)
 
 
@@ -209,7 +214,7 @@ def review_wfs_fee_case_archive(
     principal: review_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
-    WfsFeeAlertService(session).review_archive(case_id, payload, account_refs, principal.user_id)
+    raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)  # Use versioned /api/approvals/{id}/decision
     return success_response(request, data={"updated": True}, meta=None)
 
 
