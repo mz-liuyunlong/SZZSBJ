@@ -45,7 +45,6 @@ def test_conflicting_or_incomplete_sku_owners_are_not_arbitrarily_assigned() -> 
     assert "else coalesce(max(owner_ref), 'unassigned')" in sql
 
 
-
 def test_single_known_owner_survives_other_listing_rows_without_owner() -> None:
     repository, _ = _repository()
     sql = repository._listing_owner_cte_sql()
@@ -59,6 +58,7 @@ def test_single_known_owner_survives_other_listing_rows_without_owner() -> None:
     assert "or count(distinct owner_ref) > 1" in sql
     assert "else coalesce(max(owner_ref), 'unassigned')" in sql
     assert "else coalesce(max(owner_name), max(owner_ref), '未分配')" in sql
+
 
 def test_plan_import_auto_resolves_owner_without_owner_file_column() -> None:
     repository, session = _repository()
