@@ -13,7 +13,12 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.approvals.schemas import ApprovalDecisionWrite, ApprovalQuery
-from app.modules.approvals.service import ApprovalService, calculate_pending_recovery, make_snapshot, signature
+from app.modules.approvals.service import (
+    ApprovalService,
+    calculate_pending_recovery,
+    make_snapshot,
+    signature,
+)
 from app.modules.integration_sync.dependencies import get_source_account_scope_provider
 
 
@@ -110,7 +115,9 @@ def test_wfs_pending_recovery_is_derived_from_0036_persisted_columns():
     }
     assert calculate_pending_recovery(case) == Decimal("79.95")
     assert make_snapshot(case)["pending_recover_amount"] == "79.95"
-    assert calculate_pending_recovery({
-        "estimated_recover_amount": Decimal("20"),
-        "recovered_amount": Decimal("25"),
-    }) == Decimal("0.00")
+    assert calculate_pending_recovery(
+        {
+            "estimated_recover_amount": Decimal("20"),
+            "recovered_amount": Decimal("25"),
+        }
+    ) == Decimal("0.00")
