@@ -12,6 +12,7 @@ from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
     DataScopeEntryRead,
+    EffectiveDataScopeEntryRead,
     PermissionCatalogRead,
     PermissionItemRead,
     PermissionModuleRead,
@@ -21,6 +22,8 @@ from app.modules.iam.rbac_schemas import (
     RbacRoleUpdateRequest,
     RoleDataScopeRead,
     RoleDataScopeUpdateRequest,
+    UserDataScopeRead,
+    UserDataScopeUpdateRequest,
     UserRoleOptionRead,
     UserRolesUpdateRequest,
 )
@@ -386,6 +389,7 @@ class RbacService:
             for item in payload.items
             if item.scope_value.strip()
         )
+        self._assert_actor_can_grant_scopes(actor, scopes)
         self.repository.set_role_data_scopes(role_key=role_key, scopes=scopes)
         after = RoleDataScopeRead(
             role_key=role_key,
@@ -399,6 +403,90 @@ class RbacService:
             event_type="role.data-scopes.updated",
             target_type="role",
             target_key=role_key,
+            before=before.model_dump(mode="json"),
+            after=after.model_dump(mode="json"),
+            context=audit,
+        )
+        self.session.commit()
+        return after
+
+    def user_data_scopes(
+        self,
+        user_id: int,
+        *,
+        actor: Principal | None = None,
+    ) -> UserDataScopeRead:
+        target = self.repository.get_user(user_id)
+        if target is None:
+            raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+        if actor is not None:
+            self._assert_can_manage_target(actor, target, allow_self=True)
+        user_rows = self.repository.get_user_data_scopes(user_id)
+        role_rows = self.repository.get_user_role_data_scopes(user_id)
+        items = [
+            DataScopeEntryRead(
+                scope_type=row["scope_type"],
+                scope_value=str(row["scope_value"]),
+            )
+            for row in user_rows
+        ]
+        role_items = [
+            DataScopeEntryRead(
+                scope_type=row["scope_type"],
+                scope_value=str(row["scope_value"]),
+            )
+            for row in role_rows
+        ]
+        user_types = {item.scope_type for item in items}
+        effective_items = [
+            EffectiveDataScopeEntryRead(
+                scope_type=item.scope_type,
+                scope_value=item.scope_value,
+                source="user",
+            )
+            for item in items
+        ] + [
+            EffectiveDataScopeEntryRead(
+                scope_type=item.scope_type,
+                scope_value=item.scope_value,
+                source="role",
+            )
+            for item in role_items
+            if item.scope_type not in user_types
+        ]
+        return UserDataScopeRead(
+            user_id=user_id,
+            items=items,
+            role_items=role_items,
+            effective_items=effective_items,
+        )
+
+    def update_user_data_scopes(
+        self,
+        *,
+        actor: Principal,
+        user_id: int,
+        payload: UserDataScopeUpdateRequest,
+        audit: AuditContext,
+    ) -> UserDataScopeRead:
+        target = self.repository.get_user(user_id)
+        if target is None:
+            raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+        self._assert_can_manage_target(actor, target, allow_self=False)
+        before = self.user_data_scopes(user_id)
+        scopes = tuple(
+            (item.scope_type, item.scope_value.strip())
+            for item in payload.items
+            if item.scope_value.strip()
+        )
+        self._assert_actor_can_grant_scopes(actor, scopes)
+        self.repository.set_user_data_scopes(user_id=user_id, scopes=scopes)
+        after = self.user_data_scopes(user_id)
+        self._audit(
+            actor=actor,
+            event_type="user.data-scopes.updated",
+            target_type="user",
+            target_key=str(user_id),
             before=before.model_dump(mode="json"),
             after=after.model_dump(mode="json"),
             context=audit,
@@ -518,6 +606,50 @@ class RbacService:
                 message="不能分配权限高于当前账号的角色",
                 details={"missing_permission_keys": missing},
             )
+
+    def _assert_actor_can_grant_scopes(
+        self,
+        actor: Principal,
+        scopes: tuple[tuple[str, str], ...],
+    ) -> None:
+        requested_source_accounts = {
+            scope_value
+            for scope_type, scope_value in scopes
+            if scope_type == "source_account" and scope_value != "*"
+        }
+        if requested_source_accounts:
+            configured_source_accounts = self.repository.list_configured_source_account_refs()
+            invalid_source_accounts = sorted(requested_source_accounts - configured_source_accounts)
+            if invalid_source_accounts:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    status_code=422,
+                    message="包含未在同步治理配置中登记的数据源账号",
+                    details={"invalid_source_account_refs": invalid_source_accounts},
+                )
+        if self._is_super_admin(actor):
+            return
+        if any(scope_value == "*" for _scope_type, scope_value in scopes):
+            raise ApiError(
+                code=ErrorCode.FORBIDDEN,
+                status_code=403,
+                message="只有超级管理员可以授予全部数据范围",
+            )
+        try:
+            actor_id = int(actor.user_id)
+        except ValueError as exc:
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403) from exc
+        for scope_type, scope_value in scopes:
+            actor_values = self.repository.resolve_user_data_scope(
+                user_id=actor_id,
+                scope_type=scope_type,
+            )
+            if "*" not in actor_values and scope_value not in actor_values:
+                raise ApiError(
+                    code=ErrorCode.FORBIDDEN,
+                    status_code=403,
+                    message="不能授予超出当前账号的数据范围",
+                )
 
     def _assert_can_manage_target(
         self,

@@ -31,15 +31,30 @@ from app.modules.warehouse_wfs.service import WfsFeeAlertService
 router = APIRouter(tags=["WFS-FEE-CASE"])
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
-read_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:read"))]
-write_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:write"))]
+read_principal = Annotated[
+    Principal,
+    Depends(require_permission("page:warehouse:wfs-fee-alert:view")),
+]
+follow_principal = Annotated[
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:follow")),
+]
+archive_request_principal = Annotated[
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:archive-request")),
+]
 review_principal = Annotated[
-    Principal, Depends(require_permission("warehouse:wfs-fee-alert:review"))
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:archive-review")),
 ]
 recover_principal = Annotated[
-    Principal, Depends(require_permission("warehouse:wfs-fee-alert:recover"))
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:mark-recovered")),
 ]
-sync_principal = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:sync"))]
+sync_principal = Annotated[
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:sync-legacy")),
+]
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
     403: {"model": ErrorEnvelope},
@@ -156,7 +171,7 @@ def update_wfs_case_compat(
     case_id: UUID,
     payload: WfsFeeCaseWrite,
     session: db_session,
-    principal: write_principal,
+    principal: follow_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
     WfsFeeAlertService(session).update_case(case_id, payload, account_refs, principal.user_id)
@@ -173,7 +188,7 @@ def save_wfs_fee_case_follow(
     case_id: UUID,
     payload: WfsFeeCaseFollowWrite,
     session: db_session,
-    principal: write_principal,
+    principal: follow_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
     WfsFeeAlertService(session).save_follow(case_id, payload, account_refs, principal.user_id)
@@ -190,7 +205,7 @@ def request_wfs_fee_case_archive(
     case_id: UUID,
     payload: WfsFeeArchiveRequestWrite,
     session: db_session,
-    principal: write_principal,
+    principal: archive_request_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], None]:
     ApprovalService(session).submit_wfs(

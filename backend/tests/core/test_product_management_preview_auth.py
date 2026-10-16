@@ -384,7 +384,7 @@ def test_preview_product_scope_allows_preview_and_authenticated_principals(
     assert provider(authenticated, "other_resource") is False
 
 
-def test_preview_source_account_scope_parses_and_allows_authenticated_principals(
+def test_preview_source_account_scope_parses_and_isolated_from_real_principals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     empty = Settings.model_validate(
@@ -414,8 +414,29 @@ def test_preview_source_account_scope_parses_and_allows_authenticated_principals
     unauthenticated = Principal(user_id="synthetic-user")
 
     assert provider(preview) == frozenset({"acct-a", "acct-b"})
-    assert provider(authenticated) == frozenset({"acct-a", "acct-b"})
+    assert provider(authenticated) == frozenset()
     assert provider(unauthenticated) == frozenset()
+
+
+def test_real_product_scope_does_not_require_preview_account_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("TEST_DATABASE_URL", SYNTHETIC_DATABASE_URL)
+    get_settings.cache_clear()
+
+    provider = get_product_scope_provider()
+
+    assert provider is not None
+    assert (
+        provider(
+            Principal(
+                user_id="41", permissions=frozenset({"page:products:product-management:view"})
+            ),
+            "product_management",
+        )
+        is True
+    )
 
 
 def test_missing_source_account_scope_denies_all_preview_routes(

@@ -12,6 +12,8 @@ interface WfsFeeAlertDetailModalProps {
   onClose: () => void;
   onOpenFollow: (row: WfsFeeAlertRow) => void;
   onOpenAbandon: (row: WfsFeeAlertRow) => void;
+  canFollow: boolean;
+  canArchiveRequest: boolean;
 }
 
 const priorityColors = {
@@ -20,7 +22,15 @@ const priorityColors = {
   低: "default",
 };
 
-function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow, onOpenAbandon }: WfsFeeAlertDetailModalProps) {
+function WfsFeeAlertDetailModal({
+  row,
+  currency,
+  onClose,
+  onOpenFollow,
+  onOpenAbandon,
+  canFollow,
+  canArchiveRequest,
+}: WfsFeeAlertDetailModalProps) {
   if (!row) return null;
 
   return (
@@ -31,8 +41,8 @@ function WfsFeeAlertDetailModal({ row, currency, onClose, onOpenFollow, onOpenAb
       onCancel={onClose}
       footer={(
         <Space>
-          <Button disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑跟进</Button>
-          <Button danger disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenAbandon(row)}>申请放弃跟进</Button>
+          {canFollow && <Button disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑跟进</Button>}
+          {canArchiveRequest && <Button danger disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenAbandon(row)}>申请放弃跟进</Button>}
            <Button type="primary" onClick={onClose}>关闭</Button>
         </Space>
       )}

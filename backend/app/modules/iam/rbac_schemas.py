@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 PermissionType = Literal["page", "action", "field"]
 RiskLevel = Literal["normal", "high"]
@@ -86,13 +86,39 @@ class DataScopeEntryRead(BaseModel):
     scope_value: str
 
 
+class DataScopeEntryWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scope_type: ScopeType
+    scope_value: str = Field(min_length=1, max_length=128)
+
+
 class RoleDataScopeRead(BaseModel):
     role_key: str
     items: list[DataScopeEntryRead] = Field(default_factory=list)
 
 
 class RoleDataScopeUpdateRequest(BaseModel):
-    items: list[DataScopeEntryRead]
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[DataScopeEntryWrite] = Field(max_length=500)
+
+
+class EffectiveDataScopeEntryRead(DataScopeEntryRead):
+    source: Literal["user", "role"]
+
+
+class UserDataScopeRead(BaseModel):
+    user_id: int
+    items: list[DataScopeEntryRead] = Field(default_factory=list)
+    role_items: list[DataScopeEntryRead] = Field(default_factory=list)
+    effective_items: list[EffectiveDataScopeEntryRead] = Field(default_factory=list)
+
+
+class UserDataScopeUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[DataScopeEntryWrite] = Field(max_length=500)
 
 
 class AuditEventRead(BaseModel):

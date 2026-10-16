@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261016_0041_wfs_rbac_actions"
+EXPECTED_HEAD_REVISION = "20261017_0042_approval_rbac_backfill"
 
 
 @pytest.fixture(autouse=True)
@@ -70,6 +70,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         script.get_revision("20261016_0041_wfs_rbac_actions").down_revision
         == "20261016_0040_restrict_default_data_scopes"
     )
+    assert (
+        script.get_revision("20261017_0042_approval_rbac_backfill").down_revision
+        == "20261016_0041_wfs_rbac_actions"
+    )
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -104,6 +108,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261016_0039_retire_legacy_rbac_permissions.py",
         "20261016_0040_restrict_default_data_scopes.py",
         "20261016_0041_wfs_rbac_actions.py",
+        "20261017_0042_approval_rbac_backfill.py",
     } <= revisions
 
     revision = (

@@ -82,7 +82,7 @@ def _allowed_app(*permissions: str) -> FastAPI:
     application = create_app()
     principal = Principal(
         user_id="synthetic-user",
-        permissions=frozenset(permissions) if permissions else ALL_PERMISSIONS,
+        permissions=frozenset(permissions) if permissions else frozenset({"*"}),
     )
     application.dependency_overrides[get_optional_principal] = lambda: principal
     application.dependency_overrides[get_product_scope_provider] = lambda: (

@@ -45,6 +45,12 @@ RBAC v2 迁移严格接在已合入的 `20261016_0037_approval_workbench` 后，
    - 将已合入的 WFS Case 功能权限映射为页面专属 action 权限；
    - 保留 WFS 正式 Case 流程的权限边界；
    - 停用对应旧 WFS action 权限关联。
+5. `20261017_0042_approval_rbac_backfill`
+   - 为已持有旧 `approvals:workbench:read` 的角色幂等回填 canonical Approval Workspace 页面权限；
+   - 暂时保留旧 read grant，支持滚动部署；
+   - 不把旧审批 review 转为 WFS 高风险 review；
+   - 不新增角色/用户数据范围，不修改 0037—0041 历史 migration；
+   - forward-only，生产恢复依赖事务回滚或执行前 snapshot，不提供 destructive downgrade。
 
 合并前必须再次同步最新 `main` 并执行 `alembic heads`。若并行分支新增迁移造成多 head，
 只新增 Alembic merge revision，不修改任何已合入或他人分支的历史 migration。
@@ -93,6 +99,15 @@ uv run alembic current
 
 ## 4. 回滚演练
 
+### 4.1 当前 0042 边界
+
+`20261017_0042_approval_rbac_backfill` 是 forward-only。其 `downgrade()` 会明确阻断，避免删除已经由
+新应用进程使用的 canonical grant。生产不得从 0042 直接 downgrade 到 0041，也不得手工修改
+`alembic_version`。执行前必须有可恢复 snapshot；已提交后的恢复方案见
+`docs/operations/RBAC_V2_0042_PRODUCTION_MIGRATION_PLAN.md`。
+
+### 4.2 历史 RBAC v2 演练边界
+
 RBAC v2 的回滚边界是已合入的审批工作台基线 `20261016_0037_approval_workbench`，不得回退或覆盖
 该迁移及其之前的 WFS `20261015_0036_wfs_cases`：
 
@@ -109,7 +124,7 @@ uv run alembic downgrade 20261016_0037_approval_workbench
 - `app_roles.version` 和权限元数据列已移除；
 - `20261015_0036_wfs_cases` 与 `20261016_0037_approval_workbench` 及其正式表结构均保留。
 
-回滚会移除 v2 期间新增的审计与数据范围记录，生产环境执行前必须有可恢复备份。
+该历史演练会移除 v2 期间新增的审计与数据范围记录，只可在隔离测试库使用；生产 0042 发布不采用此路径。
 
 ## 5. 权限验收矩阵
 

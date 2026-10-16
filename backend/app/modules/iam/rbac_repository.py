@@ -358,6 +358,65 @@ class RbacRepository:
                 },
             )
 
+    def get_user_data_scopes(self, user_id: int) -> list[Mapping[str, Any]]:
+        return list(
+            self.session.execute(
+                text(
+                    """
+                    select scope_type, scope_value
+                    from app_user_data_scopes
+                    where user_id = :user_id
+                    order by scope_type, scope_value
+                    """
+                ),
+                {"user_id": user_id},
+            ).mappings()
+        )
+
+    def get_user_role_data_scopes(self, user_id: int) -> list[Mapping[str, Any]]:
+        return list(
+            self.session.execute(
+                text(
+                    """
+                    select distinct s.scope_type, s.scope_value
+                    from app_user_roles ur
+                    join app_role_data_scopes s on s.role_id = ur.role_id
+                    where ur.user_id = :user_id
+                    order by s.scope_type, s.scope_value
+                    """
+                ),
+                {"user_id": user_id},
+            ).mappings()
+        )
+
+    def set_user_data_scopes(
+        self,
+        *,
+        user_id: int,
+        scopes: Iterable[tuple[str, str]],
+    ) -> None:
+        self.session.execute(
+            text("delete from app_user_data_scopes where user_id = :user_id"),
+            {"user_id": user_id},
+        )
+        for scope_type, scope_value in dict.fromkeys(scopes):
+            self.session.execute(
+                text(
+                    """
+                    insert into app_user_data_scopes (
+                        user_id, scope_type, scope_value, created_at
+                    )
+                    values (:user_id, :scope_type, :scope_value, :now)
+                    """
+                ),
+                {
+                    "user_id": user_id,
+                    "scope_type": scope_type,
+                    "scope_value": scope_value,
+                    "now": now_utc(),
+                },
+            )
+
     def resolve_user_data_scope(self, *, user_id: int, scope_type: str) -> set[str]:
         user_values = {
             str(item)
@@ -388,6 +447,19 @@ class RbacRepository:
             {"user_id": user_id, "scope_type": scope_type},
         ).scalars()
         return {str(item) for item in role_values}
+
+    def list_configured_source_account_refs(self) -> set[str]:
+        """Return source-account values registered by sync governance."""
+        values = self.session.execute(
+            text(
+                """
+                select distinct source_account_ref
+                from gov_integration_sync_configs
+                where source_account_ref <> ''
+                """
+            )
+        ).scalars()
+        return {str(item).strip() for item in values if str(item).strip()}
 
     def append_audit_event(
         self,

@@ -9,6 +9,7 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal, require_principal
 from app.core.config import SettingsError, get_settings
 from app.db.session import get_db_session
 from app.modules.iam.rbac_repository import RbacRepository
+from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 type SourceAccountScopeProvider = Callable[[Principal], frozenset[str]]
 
@@ -26,11 +27,9 @@ def get_source_account_scope_provider() -> SourceAccountScopeProvider | None:
     preview_auth_configured = settings.product_management_preview_auth_configured
 
     def configured_scope(principal: Principal) -> frozenset[str]:
-        if principal.user_id == PREVIEW_PRINCIPAL_ID:
-            return refs if preview_auth_configured else frozenset()
-        if principal.permissions:
-            return refs
-        return frozenset()
+        if principal.user_id != PREVIEW_PRINCIPAL_ID:
+            return frozenset()
+        return refs if preview_auth_configured else frozenset()
 
     return configured_scope
 
@@ -43,13 +42,16 @@ def require_source_account_scope(
     ],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> frozenset[str]:
-    if provider is None:
-        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-
-    configured_refs = provider(principal)
-    if principal.user_id == PREVIEW_PRINCIPAL_ID or "*" in principal.permissions:
+    configured_refs = provider(principal) if provider is not None else frozenset()
+    if principal.user_id == PREVIEW_PRINCIPAL_ID:
         allowed = configured_refs
     else:
+        # Real principals use the persisted governance registry as the account universe.
+        # Explicit dependency overrides may still supply a synthetic universe in tests.
+        configured_refs = (
+            configured_refs
+            or IntegrationSyncRepository(session).list_configured_source_account_refs()
+        )
         try:
             user_id = int(principal.user_id)
         except (TypeError, ValueError):
@@ -57,16 +59,19 @@ def require_source_account_scope(
             # compatibility callers do not have persisted IAM scope rows.
             allowed = configured_refs if principal.permissions else frozenset()
         else:
-            scoped_values = RbacRepository(session).resolve_user_data_scope(
-                user_id=user_id,
-                scope_type="source_account",
-            )
-            if "*" in scoped_values:
+            if "*" in principal.permissions:
                 allowed = configured_refs
-            elif scoped_values:
-                allowed = frozenset(scoped_values).intersection(configured_refs)
             else:
-                allowed = frozenset()
+                scoped_values = RbacRepository(session).resolve_user_data_scope(
+                    user_id=user_id,
+                    scope_type="source_account",
+                )
+                if "*" in scoped_values:
+                    allowed = configured_refs
+                elif scoped_values:
+                    allowed = frozenset(scoped_values).intersection(configured_refs)
+                else:
+                    allowed = frozenset()
 
     if not allowed or any(not value or value != value.strip() for value in allowed):
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
