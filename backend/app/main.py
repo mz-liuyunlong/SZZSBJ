@@ -9,6 +9,7 @@ from app.core.api import SuccessEnvelope, install_api_foundation, success_respon
 from app.core.auth import enforce_protected_by_default
 from app.db.session import dispose_engine
 from app.modules.after_sales.router import router as after_sales_router
+from app.modules.approvals.router import router as approvals_router
 from app.modules.business_rules.router import router as business_rules_router
 from app.modules.data_pages.router import router as data_pages_router
 from app.modules.iam.password_reset_router import router as password_reset_router
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     )
     install_api_foundation(application)
     application.include_router(after_sales_router)
+    application.include_router(approvals_router)
     application.include_router(business_rules_router)
     application.include_router(data_pages_router)
     application.include_router(iam_router)
