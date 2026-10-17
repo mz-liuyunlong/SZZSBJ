@@ -44,6 +44,11 @@ class GenericApprovalService:
             date, sep, sku = source_ref.partition("|")
             if not sep or not date or not sku:
                 blocked(422)
+            from datetime import date as date_type
+            try:
+                date_type.fromisoformat(date)
+            except ValueError:
+                blocked(422)
             row = (
                 self.session.execute(
                     text("""
@@ -186,6 +191,8 @@ class GenericApprovalService:
             {"approval_id": str(approval_id), "actor": actor},
         ).first()
         if already:
+            blocked()
+        if decision == "info_required" and int(prev) > 0:
             blocked()
         step = int(prev) + 1
         required_steps = int(snapshot["approval_policy"]["required_steps"])
