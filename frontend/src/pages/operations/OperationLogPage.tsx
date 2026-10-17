@@ -170,7 +170,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
       return;
     }
 
-    const updatedRows = rows.map((row) => {
+    const updatedRows: OperationLogRow[] = rows.map((row) => {
       if (!values.productIds.includes(row.id)) return row;
 
       const nextLogText = values.logText.trim();
