@@ -174,10 +174,16 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             item_rows = row.get("item_info") if isinstance(row.get("item_info"), list) else [row]
             if not order_id:
                 continue
+            purchase_date = _order_purchase_date_la(row.get("global_purchase_time"))
+            if purchase_date != self.business_date:
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_PURCHASE_DATE_MISMATCH")
             for ordinal, item in enumerate(item_rows):
                 if not isinstance(item, dict):
                     continue
-                line_hash = _stable_hash({"order": order_id, "line": item, "ordinal": ordinal})
+                line_id = _field(item, "order_item_no", "global_item_no", "id")
+                if not line_id:
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_LINE_IDENTITY_MISSING")
+                line_hash = _stable_hash({"order": order_id, "line_id": line_id})
                 self.session.execute(
                     text(
                         "insert into fact_walmart_order_items "
