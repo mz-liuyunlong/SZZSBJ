@@ -14,6 +14,9 @@ export async function fetchApprovals(filters: ApprovalFilters) {
 export async function fetchApprovalSummary(): Promise<ApprovalSummary> {
  return (await backendRequest<ApprovalSummary, null>("/api/approvals/summary")).data;
 }
+export async function fetchLegacyApprovalDetail(caseId: string): Promise<ApprovalDetail> {
+ return (await backendRequest<ApprovalDetail, null>("/api/approvals/legacy/" + encodeURIComponent(caseId))).data;
+}
 export async function fetchApprovalDetail(id: ApprovalItem["id"]): Promise<ApprovalDetail> {
  return (await backendRequest<ApprovalDetail, null>("/api/approvals/" + encodeURIComponent(id))).data;
 }
