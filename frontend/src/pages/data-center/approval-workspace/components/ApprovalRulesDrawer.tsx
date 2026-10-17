@@ -5,7 +5,6 @@ import { fetchApprovalRules, updateApprovalRule, type ApprovalRule } from "../ap
 interface Props { open: boolean; onClose(): void }
 export default function ApprovalRulesDrawer({ open, onClose }: Props) {
  const [data, setData] = useState<ApprovalRule[]>([]);
- const [loading, setLoading] = useState(false);
  const [saving, setSaving] = useState<string>();
  const [api, holder] = message.useMessage();
  useEffect(() => {
@@ -38,7 +37,7 @@ export default function ApprovalRulesDrawer({ open, onClose }: Props) {
    <Alert type="info" showIcon style={{marginBottom:16}} message="配置影响未来申请"
     description="每一份新申请保存提交时规则快照；WFS 放弃跟进始终禁止批量审批。任何规则调整都由服务端保留版本和审计。" />
    <Table<ApprovalRule> size="small" rowKey="approval_type" pagination={false}
-    dataSource={data} loading={loading} columns={[
+    dataSource={data} columns={[
      {title:"业务类型",dataIndex:"title",width:160},
      {title:"审批级数",width:130,render:(_,r) =>
       <InputNumber min={1} max={5} style={{width:90}} value={r.required_steps}
