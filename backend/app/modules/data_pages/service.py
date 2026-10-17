@@ -218,13 +218,15 @@ class DailySalesService:
                                 row.item_id,
                             )
                         ),
-                        log_summaries.get((
-                            row.business_date_la,
-                            row.source_account_ref,
-                            row.store_id,
-                            row.item_id,
-                            row.msku or "",
-                        )),
+                        log_summaries.get(
+                            (
+                                row.business_date_la,
+                                row.source_account_ref,
+                                row.store_id,
+                                row.item_id,
+                                row.msku or "",
+                            )
+                        ),
                     )
                     for row in rows
                 ],

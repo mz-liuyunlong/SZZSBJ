@@ -2,6 +2,7 @@
 
 This script never executes DDL/DML or prints sensitive record payloads.
 """
+
 from __future__ import annotations
 
 from sqlalchemy import create_engine, text
@@ -22,7 +23,9 @@ def main() -> None:
     with engine.connect() as connection:
         connection.execute(text("set transaction read only"))
         for name in names:
-            present = connection.scalar(text("select to_regclass(:name) is not null"), {"name": name})
+            present = connection.scalar(
+                text("select to_regclass(:name) is not null"), {"name": name}
+            )
             print(f"{name}: {'exists' if present else 'missing'}")
         if connection.scalar(text("select to_regclass('public.alembic_version') is not null")):
             version = connection.scalar(text("select version_num from alembic_version"))

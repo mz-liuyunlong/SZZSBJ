@@ -3,6 +3,7 @@
 This read-only enrichment never recalculates revenue, refunds or LPDS profit.
 It skips missing formal tables while deployment/migration is staged.
 """
+
 from __future__ import annotations
 
 import json
@@ -86,7 +87,4 @@ def load_daily_sales_log_summaries(
         {"keys": keys},
     ).mappings()
 
-    return {
-        (r["day"], r["account"], r["store"], r["item"], r["msku"]): dict(r)
-        for r in result
-    }
+    return {(r["day"], r["account"], r["store"], r["item"], r["msku"]): dict(r) for r in result}
