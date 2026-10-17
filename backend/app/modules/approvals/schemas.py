@@ -124,7 +124,11 @@ class BulkDecisionWrite(StrictSchema):
 
 class GenericApprovalWrite(StrictSchema):
     approval_type: Literal["purchase_exception", "finance_exception", "access_change"]
-    source_ref: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
-    source_account_ref: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    source_ref: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)
+    ]
+    source_account_ref: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)
+    ]
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
     evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
