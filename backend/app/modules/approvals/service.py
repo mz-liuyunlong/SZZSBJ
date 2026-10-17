@@ -632,6 +632,8 @@ class ApprovalService:
         ).first()
         if repeated:
             blocked()
+        if payload.decision == "info_required" and int(current_step) > 0:
+            blocked()
         required_steps = int(snapshot.get("approval_policy", {}).get("required_steps", 1))
         final_step = int(current_step) + 1 >= required_steps
         if payload.decision == "approved":
@@ -743,9 +745,17 @@ class ApprovalService:
             or r["applicant_id"] != actor
         ):
             blocked()
-        case = self._case(r["business_ref"], account_refs, lock=True)
-        if case["status"] != "archive_pending":
-            blocked()
+        if r["approval_type"] == "wfs_case_abandon":
+            case = self._case(r["business_ref"], account_refs, lock=True)
+            if case["status"] != "archive_pending":
+                blocked()
+        else:
+            from app.modules.approvals.generic import GenericApprovalService
+            actual = GenericApprovalService(self.session)._source(
+                r["approval_type"], r["business_ref"], r["source_account_ref"],
+            )
+            if signature(actual) != signature(r["snapshot"]["source"]):
+                blocked()
         now = datetime.now(UTC)
         self.session.execute(
             text("""
