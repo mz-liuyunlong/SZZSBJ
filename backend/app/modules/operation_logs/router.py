@@ -14,11 +14,13 @@ from app.core.auth import Principal
 from app.core.permissions import require_any_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.operation_logs.access import LogAccess, require_log_access, require_owned_identity
 from app.modules.operation_logs.service import read_detail, save_batch, save_link
 
 router = APIRouter(prefix="/api/operations/logs", tags=["Operation Logs"])
 db_dep = Annotated[Session, Depends(get_db_session)]
 scope_dep = Annotated[frozenset[str], Depends(require_source_account_scope)]
+access_dep = Annotated[LogAccess, Depends(require_log_access)]
 read_dep = Annotated[
     Principal,
     Depends(require_any_permission("page:operations:log:view", "page:sales:daily-sales:view")),
@@ -72,8 +74,10 @@ def get_logs(
     session: db_dep,
     _: read_dep,
     accounts: scope_dep,
+    access: access_dep,
     msku: str = "",
 ) -> SuccessEnvelope[dict[str, Any], Any]:
+    require_owned_identity(session, access, account=account, store=store, item=item, msku=msku, day=day)
     data = read_detail(
         session, accounts=accounts, account=account, day=day, store=store, item=item, msku=msku
     )
@@ -87,19 +91,21 @@ def write_logs(
     session: db_dep,
     principal: write_dep,
     accounts: scope_dep,
+    access: access_dep,
 ) -> SuccessEnvelope[dict[str, Any], Any]:
     values = save_batch(
         session,
         accounts=accounts,
         rows=[r.model_dump() for r in payload.rows],
         actor=principal.user_id,
+        access=access,
     )
     return success_response(request, data={"revisions": values}, meta=None)
 
 
 @router.put("/links", response_model=SuccessEnvelope[dict[str, bool], Any], responses=errors)
 def write_links(
-    request: Request, payload: LinkWrite, session: db_dep, principal: write_dep, accounts: scope_dep
+    request: Request, payload: LinkWrite, session: db_dep, principal: write_dep, accounts: scope_dep, access: access_dep
 ) -> SuccessEnvelope[dict[str, bool], Any]:
     save_link(
         session,
@@ -110,5 +116,6 @@ def write_links(
         url=payload.url,
         note=payload.note,
         actor=principal.user_id,
+        access=access,
     )
     return success_response(request, data={"saved": True}, meta=None)

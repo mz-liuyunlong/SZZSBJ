@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
+from app.modules.operation_logs.access import LogAccess, require_log_access
 from app.core.permissions import require_any_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
@@ -19,6 +20,7 @@ from app.modules.integration_sync.dependencies import require_source_account_sco
 router = APIRouter(prefix="/api/operations/logs", tags=["Operation Logs"])
 db_dep = Annotated[Session, Depends(get_db_session)]
 scope_dep = Annotated[frozenset[str], Depends(require_source_account_scope)]
+access_dep = Annotated[LogAccess, Depends(require_log_access)]
 read_dep = Annotated[
     Principal,
     Depends(require_any_permission("page:operations:log:view", "page:sales:daily-sales:view")),
@@ -36,6 +38,7 @@ def get_rows(
     session: db_dep,
     _: read_dep,
     accounts: scope_dep,
+    access: access_dep,
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> SuccessEnvelope[dict[str, Any], Any]:
@@ -46,7 +49,8 @@ def get_rows(
         raise ApiError(code="OPERATION_LOG_DATE_RANGE_INVALID", status_code=422)
     if not accounts:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    base = dict(accounts=list(accounts), start=start, end=end)
+    base = dict(accounts=list(access.accounts.intersection(accounts)), start=start, end=end,
+                is_admin=access.is_admin, owner_labels=list(access.owner_labels), user_id=access.user_id)
     result = (
         session.execute(
             text("""
@@ -62,6 +66,14 @@ def get_rows(
                 cast(:start as date), cast(:end as date), interval '1 day'
             ) as d(day)
             where l.source_account_ref = any(:accounts)
+              and (:is_admin or l.owner_ref = any(:owner_labels)
+                   or exists (
+                     select 1 from ops_manual_operation_logs own
+                     where own.source_account_ref = l.source_account_ref
+                       and own.store_id = l.store_id and own.item_id = l.item_id
+                       and own.msku = coalesce(l.msku, '')
+                       and own.log_date = d.day::date and own.owner_user_id = :user_id
+                   ))
             order by d.day desc, l.store_id, l.item_id
             limit 5001
         )
@@ -186,6 +198,21 @@ def get_rows(
               and listed.store_id = h.store_id and listed.item_id = h.item_id
               and coalesce(listed.msku, '') = h.msku
         )
+          and (:is_admin
+               or exists (
+                 select 1 from mart_daily_sales_item_day d
+                 where d.source_account_ref = h.source_account_ref
+                   and d.store_id = h.store_id and d.item_id = h.item_id
+                   and coalesce(d.msku, '') = h.msku and d.business_date_la = h.day
+                   and d.owner_ref = any(:owner_labels)
+               )
+               or exists (
+                 select 1 from ops_manual_operation_logs own
+                 where own.source_account_ref = h.source_account_ref
+                   and own.store_id = h.store_id and own.item_id = h.item_id
+                   and own.msku = h.msku and own.log_date = h.day
+                   and own.owner_user_id = :user_id
+               ))
         order by h.day desc, h.store_id, h.item_id
         limit 5001
     """),
@@ -205,6 +232,29 @@ def get_rows(
         from ops_system_operation_events e
         where e.source_account_ref = any(:accounts)
           and e.event_date between :start and :end
+          and (:is_admin
+               or exists (
+                 select 1 from mart_listing_management_current l
+                 where l.source_account_ref = e.source_account_ref
+                   and l.store_id = e.store_id and l.item_id = e.item_id
+                   and coalesce(l.msku, '') = e.msku
+                   and l.owner_ref = any(:owner_labels)
+               )
+               or exists (
+                 select 1 from mart_daily_sales_item_day d
+                 where d.source_account_ref = e.source_account_ref
+                   and d.store_id = e.store_id and d.item_id = e.item_id
+                   and coalesce(d.msku, '') = e.msku
+                   and d.business_date_la = e.event_date
+                   and d.owner_ref = any(:owner_labels)
+               )
+               or exists (
+                 select 1 from ops_manual_operation_logs own
+                 where own.source_account_ref = e.source_account_ref
+                   and own.store_id = e.store_id and own.item_id = e.item_id
+                   and own.msku = e.msku and own.log_date = e.event_date
+                   and own.owner_user_id = :user_id
+               ))
         order by e.event_date desc, e.legacy_id
         limit 20001
     """),

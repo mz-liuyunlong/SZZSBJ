@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.operation_logs.access import LogAccess, require_owned_identity
 
 WRITE_PERMISSION = "action:operations:log:edit"
 WORK_TYPES = frozenset(
@@ -351,6 +352,7 @@ def _save_one(
     actor: str,
     work_types: list[str] | None = None,
     observe_days: int | None = None,
+    access: LogAccess | None = None,
 ) -> int:
     _identity(
         session,
@@ -361,6 +363,23 @@ def _save_one(
         msku=msku,
         day=day,
     )
+    if access is not None:
+        require_owned_identity(
+            session, access, account=account, store=store, item=item, msku=msku,
+            day=day, allow_own_history=True,
+        )
+    if access is not None and not access.is_admin:
+        existing_owner = session.scalar(
+            text("""
+            select owner_user_id from ops_manual_operation_logs
+            where source_kind = 'manual' and source_account_ref = :account
+              and log_date = :day and store_id = :store and item_id = :item
+              and msku = :msku
+            """),
+            _log_key(account=account, day=day, store=store, item=item, msku=msku),
+        )
+        if existing_owner is not None and int(existing_owner) != access.user_id:
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
         raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
     if work_types is not None and (
@@ -380,16 +399,17 @@ def _save_one(
         "actor": actor,
         "work_types": dumps(work_types or ([work_type] if work_type else [])),
         "observe_days": observe_days,
+        "owner_user_id": access.user_id if access is not None else None,
     }
     if revision == 0:
         statement = """
             insert into ops_manual_operation_logs
                 (source_kind, source_account_ref, log_date, store_id, item_id,
                  msku, log_content, work_type, work_types_json,
-                 observe_days, status, actor_ref, revision)
+                 observe_days, status, actor_ref, owner_user_id, revision)
             values ('manual', :account, :day, :store, :item, :msku,
                     :content, :work_type, cast(:work_types as jsonb),
-                    :observe_days, :status, :actor, 1)
+                    :observe_days, :status, :actor, :owner_user_id, 1)
             on conflict (source_account_ref, log_date, store_id, item_id, msku)
             where source_kind = 'manual' do nothing
             returning revision
@@ -401,6 +421,7 @@ def _save_one(
                 work_types_json = cast(:work_types as jsonb),
                 observe_days = :observe_days,
                 status = :status, actor_ref = :actor,
+                owner_user_id = coalesce(owner_user_id, :owner_user_id),
                 revision = revision + 1, updated_at = now()
             where source_kind = 'manual' and source_account_ref = :account
               and log_date = :day and store_id = :store and item_id = :item
@@ -419,6 +440,7 @@ def save_batch(
     accounts: frozenset[str],
     rows: list[dict[str, Any]],
     actor: str,
+    access: LogAccess | None = None,
 ) -> list[int]:
     """All-or-nothing batch; no partial saves on stale revision or scope failure."""
     if not 1 <= len(rows) <= MAX_BATCH:
@@ -427,7 +449,7 @@ def save_batch(
     if len(set(identities)) != len(identities):
         raise ApiError(code="OPERATION_LOG_DUPLICATE_ROW", status_code=422)
     try:
-        revisions = [_save_one(session, accounts=accounts, actor=actor, **row) for row in rows]
+        revisions = [_save_one(session, accounts=accounts, actor=actor, access=access, **row) for row in rows]
         session.commit()
         return revisions
     except Exception:
@@ -448,8 +470,14 @@ def save_link(
     url: str,
     note: str,
     actor: str,
+    access: LogAccess | None = None,
 ) -> None:
     _identity(session, accounts=accounts, account=account, store=store, item=item, msku=msku)
+    if access is not None:
+        require_owned_identity(
+            session, access, account=account, store=store, item=item, msku=msku,
+            day=date.today(), allow_own_history=False,
+        )
     if entry_type not in {"keyword", "ad"}:
         raise ApiError(code="OPERATION_LOG_INVALID_LINK", status_code=422)
     try:

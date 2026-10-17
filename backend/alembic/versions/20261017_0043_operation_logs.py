@@ -65,6 +65,7 @@ def upgrade() -> None:
         sa.Column("observe_days", sa.SmallInteger()),
         sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
         sa.Column("actor_ref", sa.String(128)),
+        sa.Column("owner_user_id", sa.Integer()),
         sa.Column("revision", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("source_updated_at", sa.DateTime()),
         sa.Column(
@@ -82,6 +83,7 @@ def upgrade() -> None:
             name="ck_ops_manual_origin",
         ),
     )
+    op.create_index("ix_ops_manual_owner", "ops_manual_operation_logs", ["owner_user_id", "log_date"])
     op.create_index(
         "ix_ops_manual_log_lookup",
         "ops_manual_operation_logs",

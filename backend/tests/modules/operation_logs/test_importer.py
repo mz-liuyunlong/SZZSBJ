@@ -241,3 +241,64 @@ def test_app_registers_operation_log_endpoints() -> None:
     assert "/api/operations/logs/manual/batch" in routes
     assert "/api/operations/logs/links" in routes
     assert "/api/operations/logs/rows" in routes
+
+
+def test_operation_log_access_refuses_cross_account() -> None:
+    from app.modules.operation_logs.access import LogAccess, require_owned_identity
+
+    access = LogAccess(
+        user_id=2,
+        accounts=frozenset({"account-a"}),
+        is_admin=False,
+        owner_labels=("owner-a",),
+        display_name="owner-a",
+    )
+    session = MagicMock()
+    with pytest.raises(ApiError) as error:
+        require_owned_identity(
+            session, access, account="account-b", store="store",
+            item="item", msku="", day=date(2026, 10, 17),
+        )
+    assert error.value.status_code == 403
+    session.scalar.assert_not_called()
+
+
+def test_operation_log_access_checks_product_owner() -> None:
+    from app.modules.operation_logs.access import LogAccess, require_owned_identity
+
+    access = LogAccess(
+        user_id=2,
+        accounts=frozenset({"account-a"}),
+        is_admin=False,
+        owner_labels=("owner-a",),
+        display_name="owner-a",
+    )
+    session = MagicMock()
+    session.scalar.return_value = False
+    with pytest.raises(ApiError) as error:
+        require_owned_identity(
+            session, access, account="account-a", store="store",
+            item="item", msku="", day=date(2026, 10, 17),
+        )
+    assert error.value.status_code == 403
+    sql = str(session.scalar.call_args.args[0])
+    assert "owner_ref = any(:labels)" in sql
+    assert "owner_user_id = :user_id" in sql
+
+
+def test_operation_log_super_admin_bypasses_owner_match() -> None:
+    from app.modules.operation_logs.access import LogAccess, require_owned_identity
+
+    access = LogAccess(
+        user_id=1,
+        accounts=frozenset({"account-a"}),
+        is_admin=True,
+        owner_labels=(),
+        display_name="admin",
+    )
+    session = MagicMock()
+    require_owned_identity(
+        session, access, account="account-a", store="store",
+        item="item", msku="", day=date(2026, 10, 17),
+    )
+    session.scalar.assert_not_called()

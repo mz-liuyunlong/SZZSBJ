@@ -92,3 +92,10 @@ uv run python scripts/sync_legacy_operation_logs.py --batch-size 250
    隔离 PostgreSQL WFS smoke 和新增 0043 migration smoke 全部通过。
 
 此 PR 不执行任何生产迁移、回填、定时任务启用或部署。
+
+
+## 日志按登录用户隔离（PR #227 补充）
+
+管理员身份基于 app_users.is_super_admin 或数据库 app_roles 的 admin 授权；普通用户登录后以 app_users 的 ID 进行新日志归属校验。非管理员只能查看其实际负责商品以及由其建立的日志记录；即使持有店铺 source_account 数据权限也不能读取其他运营的日志。商品负责人字符串必须唯一匹配 app_users.username / display_name / feishu_name，发生重名、无负责人或历史孤立记录时拒绝推测，仅管理员可见。服务端逐项拦截详情、列表、写入、链接入口；预览令牌不可访问正式日志数据。
+
+人工新增日志 owner_user_id 是后端从 Token 派生而非前端指定；已有日志归属其他用户时拒绝修改。历史 legacy 记录保持原始内容且 owner_user_id 为空，不依据导入时间冒名绑定。正式数据库权限验收必须包括两名用户具有相同店铺权限但互不能读取/编辑日志的用例。
