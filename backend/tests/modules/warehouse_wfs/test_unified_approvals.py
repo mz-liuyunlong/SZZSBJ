@@ -271,3 +271,54 @@ def test_non_reviewer_cannot_view_legacy_queue(monkeypatch: pytest.MonkeyPatch) 
     assert response.status_code == 403
     response = client.get("/api/approvals/legacy/00000000-0000-0000-0000-000000000001")
     assert response.status_code == 403
+
+
+def test_generic_approval_disallows_self_review() -> None:
+    from app.modules.approvals.generic import GenericApprovalService
+
+    session = MagicMock(spec=Session)
+    approval_id = UUID("00000000-0000-0000-0000-000000000123")
+    service = GenericApprovalService(session)
+    service.approvals._record = lambda *_args, **_kwargs: {
+        "id": approval_id,
+        "approval_type": "purchase_exception",
+        "business_ref": "source-order",
+        "source_account_ref": "account-1",
+        "status": "submitted",
+        "version": 1,
+        "applicant_id": "same-operator",
+    }
+    with pytest.raises(ApiError):
+        service.decide(
+            approval_id, frozenset({"account-1"}), "same-operator",
+            "approved", "", 1,
+        )
+    session.commit.assert_not_called()
+
+
+def test_generic_bulk_does_not_approve_non_allowlisted_type() -> None:
+    from app.modules.approvals.generic import GenericApprovalService
+
+    session = MagicMock(spec=Session)
+    rule = MagicMock()
+    rule.mappings.return_value.first.return_value = {
+        "required_steps": 1, "allows_bulk": True,
+    }
+    session.execute.return_value = rule
+    service = GenericApprovalService(session)
+    approval_id = UUID("00000000-0000-0000-0000-000000000123")
+    service.approvals._record = lambda *_args, **_kwargs: {
+        "id": approval_id,
+        "approval_type": "wfs_case_abandon",
+        "business_ref": str(approval_id),
+        "source_account_ref": "account-1",
+        "risk_level": "high",
+        "status": "submitted",
+        "version": 1,
+        "applicant_id": "applicant",
+        "snapshot": {"approval_policy": {"required_steps": 1}},
+    }
+    with pytest.raises(ApiError):
+        service.approve_bulk([approval_id], {str(approval_id): 1},
+                             frozenset({"account-1"}), "reviewer", "not safe for bulk")
+    session.commit.assert_not_called()
