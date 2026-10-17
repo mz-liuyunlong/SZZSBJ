@@ -613,3 +613,12 @@ def test_scheduler_tick_recovers_queued_runs_and_defers_remaining_after_dispatch
     task_module.scheduler_tick.run()
 
     assert attempted == [new_run]
+
+
+def test_order_pagination_must_not_silently_accept_short_page_below_provider_total() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncRunner
+
+    source = inspect.getsource(DataPagesRealSyncRunner._fetch_offset_all)
+    assert 'parser_key == "order_v2_list"' in source
+    assert "len(rows) < total" in source
+    assert "DATA_PAGES_ORDER_PAGINATION_INCOMPLETE" in source
