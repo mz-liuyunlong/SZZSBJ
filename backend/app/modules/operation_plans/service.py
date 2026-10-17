@@ -411,6 +411,7 @@ class OperationPlanService:
                     period_id=period_id,
                     platform_code=platform_code,
                     item_id=item_id,
+                    account_refs=account_refs,
                 )
 
                 if existing_plan is not None and conflict_policy == "skip_existing":
@@ -428,27 +429,30 @@ class OperationPlanService:
                         account_refs=account_refs,
                     )
                     if not updated:
-                        raise ValueError("商品计划不存在或无权访问")
-                    self.repository.insert_event(
-                        event_id=uuid4(),
-                        plan_id=plan_id,
-                        event_type="import_update",
-                        before_data=dict(existing_plan),
-                        after_data={
-                            "item_id": item_id,
-                            "target_sales_amount": str(sales_amount),
-                            "target_gross_profit_amount": str(profit_amount),
-                            "remark": parsed.remark or None,
-                        },
-                        reason=parsed.remark or "导入覆盖已有计划",
-                        actor_ref=actor_ref,
-                        request_id=request_id,
-                    )
-                    import_status = "updated"
-                    suggestion = "已有商品ID计划已按导入文件覆盖目标金额。"
+                        plan_id = None
+                        errors.append("商品计划不存在或无权访问")
+                        error_code = "DATA_SCOPE_DENIED"
+                    else:
+                        self.repository.insert_event(
+                            event_id=uuid4(),
+                            plan_id=plan_id,
+                            event_type="import_update",
+                            before_data=dict(existing_plan),
+                            after_data={
+                                "item_id": item_id,
+                                "target_sales_amount": str(sales_amount),
+                                "target_gross_profit_amount": str(profit_amount),
+                                "remark": parsed.remark or None,
+                            },
+                            reason=parsed.remark or "导入覆盖已有计划",
+                            actor_ref=actor_ref,
+                            request_id=request_id,
+                        )
+                        import_status = "updated"
+                        suggestion = "已有商品ID计划已按导入文件覆盖目标金额。"
                 else:
                     plan_id = uuid4()
-                    self.repository.insert_plan(
+                    inserted = self.repository.insert_plan(
                         plan_id=plan_id,
                         period_id=period_id,
                         listing=listing,
@@ -457,25 +461,31 @@ class OperationPlanService:
                         remark=parsed.remark or None,
                         import_batch_id=batch_id,
                         actor_ref=actor_ref,
+                        account_refs=account_refs,
                     )
-                    self.repository.insert_event(
-                        event_id=uuid4(),
-                        plan_id=plan_id,
-                        event_type="import_create",
-                        before_data=None,
-                        after_data={
-                            "item_id": item_id,
-                            "target_sales_amount": str(sales_amount),
-                            "target_gross_profit_amount": str(profit_amount),
-                            "store_count": str(listing.get("store_count") or 0),
-                            "msku_count": str(listing.get("msku_count") or 0),
-                        },
-                        reason=parsed.remark or "导入创建商品ID计划",
-                        actor_ref=actor_ref,
-                        request_id=request_id,
-                    )
-                    import_status = "success"
-                    suggestion = "已成功导入；同商品ID下多店铺/MSKU已按商品ID合并。"
+                    if not inserted:
+                        plan_id = None
+                        errors.append("商品计划不存在或无权访问")
+                        error_code = "DATA_SCOPE_DENIED"
+                    else:
+                        self.repository.insert_event(
+                            event_id=uuid4(),
+                            plan_id=plan_id,
+                            event_type="import_create",
+                            before_data=None,
+                            after_data={
+                                "item_id": item_id,
+                                "target_sales_amount": str(sales_amount),
+                                "target_gross_profit_amount": str(profit_amount),
+                                "store_count": str(listing.get("store_count") or 0),
+                                "msku_count": str(listing.get("msku_count") or 0),
+                            },
+                            reason=parsed.remark or "导入创建商品ID计划",
+                            actor_ref=actor_ref,
+                            request_id=request_id,
+                        )
+                        import_status = "success"
+                        suggestion = "已成功导入；同商品ID下多店铺/MSKU已按商品ID合并。"
 
         if errors:
             error_message = "；".join(errors)

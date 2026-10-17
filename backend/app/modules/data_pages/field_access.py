@@ -12,8 +12,64 @@ from app.modules.data_pages.schemas import (
 ORDER_PROFIT_GROSS_PROFIT_PERMISSION = "field:sales:order-profit:gross-profit"
 ORDER_PROFIT_MARGIN_PERMISSION = "field:sales:order-profit:profit-margin"
 
-_GROSS_PROFIT_EXPORT_COLUMNS = {"order_profit", "avg_profit_per_order"}
+_GROSS_PROFIT_EXPORT_COLUMNS = {
+    "refund_amount",
+    "total_ad_spend",
+    "ad_ratio",
+    "ad_spend",
+    "sem_ad_spend",
+    "wfs_fee_total",
+    "wfs_low_price_surcharge",
+    "wfs_fee_unit",
+    "commission",
+    "purchase_cost_total",
+    "purchase_unit_cny",
+    "first_leg_cost_total",
+    "first_leg_unit_cny",
+    "storage_fee_total",
+    "storage_unit",
+    "total_cost",
+    "order_profit",
+    "avg_profit_per_order",
+}
 _MARGIN_EXPORT_COLUMNS = {"gross_margin", "roi"}
+
+_PROFIT_FORMULA_ITEM_FIELDS = {
+    "refund_amount": None,
+    "refund_loss_amount": None,
+    "ad_spend_amount": None,
+    "sem_ad_spend_amount": None,
+    "total_ad_spend_amount": None,
+    "ad_ratio": None,
+    "wfs_fee_unit_amount": None,
+    "wfs_fee_total_amount": None,
+    "wfs_low_price_surcharge_amount": None,
+    "purchase_cost_unit_cny": None,
+    "purchase_cost_total_usd": None,
+    "first_leg_cost_unit_cny": None,
+    "first_leg_cost_total_usd": None,
+    "storage_fee_unit_amount": None,
+    "storage_fee_total_amount": None,
+    "commission_fee_amount": None,
+    "total_cost_amount": None,
+}
+
+_DAILY_SALES_PROFIT_FORMULA_FIELDS = {
+    **_PROFIT_FORMULA_ITEM_FIELDS,
+    "wfs_fee_expected_unit_amount": None,
+    "wfs_fee_expected_total_amount": None,
+    "wfs_fee_actual_total_amount": None,
+    "wfs_fee_variance_amount": None,
+    "wfs_fee_variance_rate": None,
+    "purchase_cost_estimated_total_usd": None,
+    "purchase_cost_actual_total_usd": None,
+    "first_leg_cost_estimated_total_usd": None,
+    "first_leg_cost_actual_total_usd": None,
+    "storage_fee_estimated_total_amount": None,
+    "storage_fee_actual_total_amount": None,
+    "exchange_rate": None,
+    "commission_rate": None,
+}
 
 
 def filter_order_profit_export_columns(
@@ -27,7 +83,7 @@ def filter_order_profit_export_columns(
     selected = requested or list(available_columns)
     if not can_view_gross_profit:
         selected = [key for key in selected if key not in _GROSS_PROFIT_EXPORT_COLUMNS]
-    if not can_view_profit_margin:
+    if not (can_view_gross_profit and can_view_profit_margin):
         selected = [key for key in selected if key not in _MARGIN_EXPORT_COLUMNS]
     if not selected:
         selected = [
@@ -52,12 +108,13 @@ def filter_daily_sales_list_data(
         if not can_view_gross_profit:
             updates.update(
                 {
+                    **_DAILY_SALES_PROFIT_FORMULA_FIELDS,
                     "gross_profit_amount": None,
                     "gross_profit_currency_code": None,
                     "average_profit_per_order": None,
                 }
             )
-        if not can_view_profit_margin:
+        if not (can_view_gross_profit and can_view_profit_margin):
             updates.update({"gross_margin": None, "roi": None})
         items.append(item.model_copy(update=updates) if updates else item)
 
@@ -85,12 +142,13 @@ def filter_order_profit_list_data(
         if not can_view_gross_profit:
             updates.update(
                 {
+                    **_PROFIT_FORMULA_ITEM_FIELDS,
                     "gross_profit_amount": None,
                     "gross_profit_currency_code": None,
                     "average_profit_per_order": None,
                 }
             )
-        if not can_view_profit_margin:
+        if not (can_view_gross_profit and can_view_profit_margin):
             updates.update({"gross_margin": None, "roi": None})
         items.append(item.model_copy(update=updates) if updates else item)
 
@@ -122,7 +180,7 @@ def filter_order_profit_trend_data(
                     "order_profit_currency_code": None,
                 }
             )
-        if not can_view_profit_margin:
+        if not (can_view_gross_profit and can_view_profit_margin):
             updates["profit_margin"] = None
         items.append(item.model_copy(update=updates) if updates else item)
     return data.model_copy(update={"items": items})

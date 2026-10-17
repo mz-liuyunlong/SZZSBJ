@@ -38,12 +38,12 @@ export interface DailySalesRow {
   refundAmount: number | null;
   refundLossAmount: number | null;
   returnRate30Days: number;
-  adSpend: number;
-  semAdSpend: number;
-  totalAdSpend: number;
-  adRatio: number;
+  adSpend: number | null;
+  semAdSpend: number | null;
+  totalAdSpend: number | null;
+  adRatio: number | null;
   wfsDeliveryFee: number | null;
-  wfsLowPriceSurcharge?: number;
+  wfsLowPriceSurcharge?: number | null;
   wfsDeliveryUnitPrice: number | null;
   wfsExpectedFee?: number;
   wfsActualFee?: number | null;
@@ -62,7 +62,7 @@ export interface DailySalesRow {
   orderProfit: number | null;
   profitMargin: number | null;
   roi: number | null;
-  exchangeRate?: number;
+  exchangeRate?: number | null;
   fxSource?: string;
   commissionSource?: string;
   purchaseCostSource?: string;

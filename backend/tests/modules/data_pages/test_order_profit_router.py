@@ -160,11 +160,29 @@ def test_order_profit_fields_are_redacted_without_canonical_field_permissions(
     )
 
     row = body["data"]["items"][0]
-    assert row["gross_profit_amount"] is None
-    assert row["gross_profit_currency_code"] is None
-    assert row["average_profit_per_order"] is None
-    assert row["gross_margin"] is None
-    assert row["roi"] is None
+    restricted_fields = {
+        "refund_amount",
+        "ad_spend_amount",
+        "sem_ad_spend_amount",
+        "total_ad_spend_amount",
+        "ad_ratio",
+        "wfs_fee_unit_amount",
+        "wfs_fee_total_amount",
+        "commission_fee_amount",
+        "purchase_cost_unit_cny",
+        "purchase_cost_total_usd",
+        "first_leg_cost_unit_cny",
+        "first_leg_cost_total_usd",
+        "storage_fee_unit_amount",
+        "storage_fee_total_amount",
+        "gross_profit_amount",
+        "gross_profit_currency_code",
+        "total_cost_amount",
+        "average_profit_per_order",
+        "gross_margin",
+        "roi",
+    }
+    assert all(row[field] is None for field in restricted_fields)
     assert body["data"]["summary"]["order_profit_amount"] is None
 
 
@@ -202,7 +220,13 @@ def test_order_profit_trend_and_export_apply_field_permissions(monkeypatch: Any)
 
     response = client.get(
         "/api/sales/order-profit/export",
-        params={"columns": "order_profit,avg_profit_per_order,gross_margin,roi"},
+        params={
+            "columns": (
+                "refund_amount,total_ad_spend,ad_spend,sem_ad_spend,wfs_fee_total,"
+                "commission,purchase_cost_total,first_leg_cost_total,storage_fee_total,"
+                "total_cost,order_profit,avg_profit_per_order,gross_margin,roi"
+            )
+        },
     )
     assert response.status_code == 200
     assert captured["columns"] == "product_id"

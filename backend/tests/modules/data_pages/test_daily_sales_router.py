@@ -196,9 +196,62 @@ def test_daily_sales_profit_fields_are_redacted_without_order_profit_field_permi
     )
 
     row = body["data"]["items"][0]
-    assert row["gross_profit_amount"] is None
-    assert row["gross_profit_currency_code"] is None
-    assert row["average_profit_per_order"] is None
-    assert row["gross_margin"] is None
-    assert row["roi"] is None
+    restricted_fields = {
+        "refund_amount",
+        "ad_spend_amount",
+        "sem_ad_spend_amount",
+        "total_ad_spend_amount",
+        "ad_ratio",
+        "wfs_fee_unit_amount",
+        "wfs_fee_total_amount",
+        "commission_fee_amount",
+        "purchase_cost_unit_cny",
+        "purchase_cost_total_usd",
+        "first_leg_cost_unit_cny",
+        "first_leg_cost_total_usd",
+        "storage_fee_unit_amount",
+        "storage_fee_total_amount",
+        "gross_profit_amount",
+        "gross_profit_currency_code",
+        "total_cost_amount",
+        "average_profit_per_order",
+        "gross_margin",
+        "roi",
+    }
+    assert all(row[field] is None for field in restricted_fields)
     assert body["data"]["summary"]["order_profit_amount"] is None
+
+
+def test_daily_sales_export_removes_profit_and_reconstruction_columns(
+    monkeypatch: Any,
+) -> None:
+    captured: list[str | None] = []
+
+    def export_csv(_service: Any, **kwargs: Any) -> tuple[str, str]:
+        captured.append(kwargs["columns"])
+        return "商品ID\n", "safe.csv"
+
+    monkeypatch.setattr("app.modules.data_pages.router.export_daily_sales_csv", export_csv)
+    client = TestClient(
+        _app(
+            "page:sales:daily-sales:view",
+            "action:sales:daily-sales:export",
+        )
+    )
+    sensitive = (
+        "sales_amount,refund_amount,total_ad_spend,ad_spend,sem_ad_spend,"
+        "wfs_fee_total,commission,purchase_cost_total,first_leg_cost_total,"
+        "storage_fee_total,total_cost,order_profit,avg_profit_per_order,"
+        "gross_margin,roi"
+    )
+
+    assert (
+        client.get("/api/sales/daily-sales/export", params={"columns": sensitive}).status_code
+        == 200
+    )
+    assert captured[0] == "sales_amount"
+
+    assert client.get("/api/sales/daily-sales/export").status_code == 200
+    assert captured[1] is not None
+    allowed_columns = {"sales_amount"}
+    assert not (set(sensitive.split(",")) - allowed_columns) & set(captured[1].split(","))
