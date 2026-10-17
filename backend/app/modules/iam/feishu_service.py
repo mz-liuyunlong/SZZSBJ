@@ -63,7 +63,19 @@ class FeishuDeliveryResult:
 
 
 class FeishuDeliveryError(RuntimeError):
-    """Raised when Feishu rejects or fails a message delivery request."""
+    """Safe Feishu failure that never carries provider bodies, messages, or credentials."""
+
+    def __init__(
+        self,
+        reason_code: str,
+        *,
+        http_status: int | None = None,
+        provider_code: int | None = None,
+    ) -> None:
+        self.reason_code = reason_code
+        self.http_status = http_status
+        self.provider_code = provider_code
+        super().__init__(f"feishu_delivery_failed:{reason_code}")
 
 
 class FeishuService:
@@ -206,11 +218,11 @@ class FeishuService:
                 return "open_id", recipient_user_id
             return "user_id", recipient_user_id
 
-        raise FeishuDeliveryError("Feishu recipient is missing")
+        raise FeishuDeliveryError("recipient_missing")
 
     def _fetch_tenant_access_token(self) -> str:
         if not self.app_id or not self.app_secret:
-            raise FeishuDeliveryError("Feishu app credentials are missing")
+            raise FeishuDeliveryError("credentials_missing")
 
         response = self._post_json(
             f"{self.base_url}/open-apis/auth/v3/tenant_access_token/internal",
@@ -225,7 +237,7 @@ class FeishuService:
 
         token = response.get("tenant_access_token")
         if not isinstance(token, str) or not token:
-            raise FeishuDeliveryError("Feishu tenant access token is missing")
+            raise FeishuDeliveryError("token_missing")
 
         return token
 
@@ -342,19 +354,19 @@ class FeishuService:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            response_body = exc.read().decode("utf-8", errors="replace")
-            raise FeishuDeliveryError(
-                f"Feishu HTTP error status={exc.code} body={response_body[:500]}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise FeishuDeliveryError(f"Feishu network error: {exc.reason}") from exc
-        except json.JSONDecodeError as exc:
-            raise FeishuDeliveryError("Feishu response is not valid JSON") from exc
+            # Provider bodies may contain credentials or personal data; never read or chain them.
+            raise FeishuDeliveryError("http_error", http_status=exc.code) from None
+        except urllib.error.URLError:
+            raise FeishuDeliveryError("network_error") from None
+        except json.JSONDecodeError:
+            raise FeishuDeliveryError("invalid_json") from None
 
     def _ensure_success(self, response: dict[str, Any], *, action: str) -> None:
         code = response.get("code")
         if code == 0:
             return
 
-        msg = response.get("msg")
-        raise FeishuDeliveryError(f"Feishu failed to {action}: code={code} msg={msg}")
+        del action
+        # Provider msg is deliberately discarded because it is untrusted and may contain secrets.
+        provider_code = code if isinstance(code, int) and not isinstance(code, bool) else None
+        raise FeishuDeliveryError("provider_rejected", provider_code=provider_code)

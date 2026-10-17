@@ -21,6 +21,18 @@ PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
 _PREVIEW_PERMISSIONS: Final = frozenset(
     {
+        # Read-only page grants are explicit because canonical request-policy
+        # checks never fall back to the broader legacy keys below.
+        "page:products:product-management:view",
+        "page:products:listing-management:view",
+        "page:sales:daily-sales:view",
+        "page:sales:order-profit:view",
+        "page:aftersales:refund-management:view",
+        "page:warehouse:wfs-fee-alert:view",
+        "page:settings:fee-rules:view",
+        "page:pmc:purchase-board:view",
+        "page:operations:plan:view",
+        "page:data-center:task-center:view",
         "products:read",
         "products:pricing_rules:read",
         "products:cost:read",

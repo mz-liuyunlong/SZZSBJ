@@ -236,7 +236,12 @@ def request_password_reset(
     except FeishuDeliveryError as exc:
         logger.warning(
             "Password reset Feishu delivery failed.",
-            extra={"user_id": user_id, "reason": str(exc)[:200]},
+            extra={
+                "user_id": user_id,
+                "reason_code": exc.reason_code,
+                "http_status": exc.http_status,
+                "provider_code": exc.provider_code,
+            },
         )
 
     return PUBLIC_RESET_MESSAGE

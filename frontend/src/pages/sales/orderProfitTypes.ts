@@ -84,16 +84,16 @@ export interface OrderProfitRow {
   refundLossAmount: number | null;
   returnRate30Days: number | null;
 
-  adSpend: number;
-  semAdSpend: number;
-  totalAdSpend: number;
+  adSpend: number | null;
+  semAdSpend: number | null;
+  totalAdSpend: number | null;
   adRatio: number | null;
 
   wfsDeliveryFee: number | null;
-  wfsLowPriceSurcharge?: number;
+  wfsLowPriceSurcharge?: number | null;
   wfsDeliveryUnitPrice: number | null;
 
-  commission: number;
+  commission: number | null;
 
   purchaseCost: number | null;
   purchaseUnitPriceCny: number | null;

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.registry import PMC_PURCHASE_API_REGISTRY
 from app.modules.pmc_purchase.schemas import (
     BoardListData,
@@ -30,7 +30,7 @@ from app.modules.pmc_purchase.schemas import (
 )
 from app.modules.pmc_purchase.service import PmcPurchaseReadService
 
-READ = "pmc:purchase:read"
+READ = "page:pmc:purchase-board:view"
 NOW = datetime(2026, 9, 23, 3, 0, tzinfo=UTC)
 ROUTES = [entry.route_path for entry in PMC_PURCHASE_API_REGISTRY.values()]
 
@@ -41,11 +41,9 @@ def _app(*permissions: str, scoped: bool = True) -> FastAPI:
         user_id="synthetic-user", permissions=frozenset(permissions)
     )
     if scoped:
-        application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-            lambda _principal: frozenset({"synthetic-account"})
+        application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+            {"synthetic-account"}
         )
-    else:
-        application.dependency_overrides[get_source_account_scope_provider] = lambda: None
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application
 

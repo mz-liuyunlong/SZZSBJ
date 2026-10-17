@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.operation_plans.schemas import (
@@ -216,9 +216,18 @@ async def import_plans(
 def failed_export(
     batch_id: UUID,
     session: db_session,
-    _: read_principal,
+    principal: read_principal,
+    account_refs: source_scope,
 ) -> Response:
-    content = OperationPlanService(session).failed_export(batch_id)
+    try:
+        content = OperationPlanService(session).failed_export(
+            batch_id,
+            actor_ref=principal.user_id,
+            account_refs=account_refs,
+            is_super_admin=has_permission(principal, "*"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(
         content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -239,6 +248,7 @@ def update_targets(
     payload: OperationPlanTargetUpdateRequest,
     session: db_session,
     principal: write_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[OperationPlanProductRow, Any]:
     try:
         data = OperationPlanService(session).update_targets(
@@ -246,6 +256,7 @@ def update_targets(
             payload=payload,
             actor_ref=principal.user_id,
             request_id=get_request_id(request),
+            account_refs=account_refs,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -265,6 +276,7 @@ def clearance(
     payload: OperationPlanClearanceRequest,
     session: db_session,
     principal: write_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[OperationPlanProductRow, Any]:
     try:
         data = OperationPlanService(session).clearance(
@@ -272,6 +284,7 @@ def clearance(
             payload=payload,
             actor_ref=principal.user_id,
             request_id=get_request_id(request),
+            account_refs=account_refs,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -290,6 +303,10 @@ def events(
     plan_id: UUID,
     session: db_session,
     _: read_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[OperationPlanEventListData, Any]:
-    data = OperationPlanService(session).events(plan_id)
+    try:
+        data = OperationPlanService(session).events(plan_id, account_refs)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return success_response(request, data=data, meta=None)

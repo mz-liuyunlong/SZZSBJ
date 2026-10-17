@@ -18,6 +18,8 @@ from app.modules.iam.rbac_schemas import (
     RbacRoleUpdateRequest,
     RoleDataScopeRead,
     RoleDataScopeUpdateRequest,
+    UserDataScopeRead,
+    UserDataScopeUpdateRequest,
     UserRoleOptionRead,
     UserRolesUpdateRequest,
 )
@@ -226,6 +228,54 @@ def update_role_data_scopes(
         data=RbacService(session).update_role_data_scopes(
             actor=principal,
             role_key=role_key,
+            payload=payload,
+            audit=_audit_context(request),
+        ),
+        meta=None,
+    )
+
+
+user_data_scope_principal = Annotated[
+    Principal,
+    Depends(require_permission("action:settings:user-management:configure-data-scope")),
+]
+
+
+@router.get(
+    "/api/settings/rbac/users/{user_id}/data-scopes",
+    response_model=SuccessEnvelope[UserDataScopeRead, None],
+)
+def get_user_data_scopes(
+    request: Request,
+    user_id: int,
+    _: user_read_principal,
+    principal: user_data_scope_principal,
+    session: db_session,
+) -> SuccessEnvelope[UserDataScopeRead, None]:
+    return success_response(
+        request,
+        data=RbacService(session).user_data_scopes(user_id, actor=principal),
+        meta=None,
+    )
+
+
+@router.put(
+    "/api/settings/rbac/users/{user_id}/data-scopes",
+    response_model=SuccessEnvelope[UserDataScopeRead, None],
+)
+def update_user_data_scopes(
+    request: Request,
+    user_id: int,
+    payload: UserDataScopeUpdateRequest,
+    _: user_read_principal,
+    principal: user_data_scope_principal,
+    session: db_session,
+) -> SuccessEnvelope[UserDataScopeRead, None]:
+    return success_response(
+        request,
+        data=RbacService(session).update_user_data_scopes(
+            actor=principal,
+            user_id=user_id,
             payload=payload,
             audit=_audit_context(request),
         ),

@@ -375,7 +375,9 @@ class IamService:
                 "Feishu offboarding notice failed after local account deactivation.",
                 extra={
                     "user_id": user.get("id"),
-                    "reason": str(exc)[:200],
+                    "reason_code": exc.reason_code,
+                    "http_status": exc.http_status,
+                    "provider_code": exc.provider_code,
                 },
             )
 

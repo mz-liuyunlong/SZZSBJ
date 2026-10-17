@@ -33,9 +33,6 @@ def require_permission(permission_key: str) -> Callable[..., Principal]:
         )
         if has_permission(principal, required_key):
             return principal
-        # Temporary compatibility for the preview principal and rolling deployment.
-        if required_key != permission_key and has_permission(principal, permission_key):
-            return principal
         raise ApiError(
             code=ErrorCode.FORBIDDEN,
             status_code=403,

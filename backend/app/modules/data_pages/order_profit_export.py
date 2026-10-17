@@ -58,8 +58,6 @@ ORDER_PROFIT_EXPORT_COLUMNS: dict[str, str] = {
     "cost_status": "成本状态",
 }
 
-DEFAULT_EXPORT_COLUMNS = list(ORDER_PROFIT_EXPORT_COLUMNS.keys())
-
 
 def _csv_values(value: str | None) -> list[str]:
     if value is None:
@@ -432,12 +430,10 @@ def _cost_status_label(rows: Sequence[DailySalesItemDayMart]) -> str:
 
 
 def _selected_columns(columns: str | None) -> list[str]:
-    if not columns:
-        return DEFAULT_EXPORT_COLUMNS
-
-    values = [item.strip() for item in columns.split(",") if item.strip()]
-    selected = [value for value in values if value in ORDER_PROFIT_EXPORT_COLUMNS]
-    return selected or DEFAULT_EXPORT_COLUMNS
+    values = [item.strip() for item in (columns or "").split(",") if item.strip()]
+    if not values or any(value not in ORDER_PROFIT_EXPORT_COLUMNS for value in values):
+        return []
+    return values
 
 
 def export_order_profit_csv(

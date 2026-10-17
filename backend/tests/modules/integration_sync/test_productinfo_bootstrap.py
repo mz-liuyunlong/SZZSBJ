@@ -19,7 +19,7 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.model_registry import register_productlist_sync_models
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     LingxingBatchGetProductInfoSyncHandler,
 )
@@ -369,13 +369,13 @@ def test_bootstrap_product_is_visible_through_real_product_management_route(
     application = create_app()
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
-        permissions=frozenset({"products:read"}),
+        permissions=frozenset({"page:products:product-management:view"}),
     )
     application.dependency_overrides[get_product_scope_provider] = lambda: (
         lambda _principal, _resource: True
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({source_account_ref})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {source_account_ref}
     )
     application.dependency_overrides[get_db_session] = lambda: product_management_db_session
 
@@ -397,13 +397,13 @@ def test_synced_identity_is_visible_without_product_bootstrap(
     application = create_app()
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
-        permissions=frozenset({"products:read"}),
+        permissions=frozenset({"page:products:product-management:view"}),
     )
     application.dependency_overrides[get_product_scope_provider] = lambda: (
         lambda _principal, _resource: True
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({source_account_ref})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {source_account_ref}
     )
     application.dependency_overrides[get_db_session] = lambda: product_management_db_session
 
@@ -469,13 +469,13 @@ def test_product_management_detail_returns_current_picture_list_images_in_order(
     application = create_app()
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
-        permissions=frozenset({"products:read"}),
+        permissions=frozenset({"page:products:product-management:view"}),
     )
     application.dependency_overrides[get_product_scope_provider] = lambda: (
         lambda _principal, _resource: True
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({source_account_ref})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {source_account_ref}
     )
     application.dependency_overrides[get_db_session] = lambda: product_management_db_session
     client = TestClient(application)
@@ -520,13 +520,13 @@ def test_summary_counts_pricing_with_complete_inputs_even_without_images(
     application = create_app()
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user",
-        permissions=frozenset({"products:read"}),
+        permissions=frozenset({"page:products:product-management:view"}),
     )
     application.dependency_overrides[get_product_scope_provider] = lambda: (
         lambda _principal, _resource: True
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({source_account_ref})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {source_account_ref}
     )
     application.dependency_overrides[get_db_session] = lambda: product_management_db_session
 

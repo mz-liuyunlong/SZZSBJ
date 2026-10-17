@@ -251,10 +251,20 @@ MODULES: tuple[ModuleDefinition, ...] = (
 )
 
 ACTIONS: tuple[ActionDefinition, ...] = (
+    ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
+    ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
+    ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),
     ActionDefinition("products_product_management", "export", "导出产品", 10),
     ActionDefinition("products_product_management", "edit_grade", "修改产品等级", 20),
     ActionDefinition("products_product_management", "recalculate_pricing", "重算定价", 30, "high"),
     ActionDefinition("products_product_management", "save_table_view", "保存表格视图", 40),
+    ActionDefinition(
+        "products_product_management",
+        "update-pricing-rules",
+        "维护定价规则",
+        50,
+        "high",
+    ),
     ActionDefinition("products_listing_management", "export", "导出Listing", 10),
     ActionDefinition("products_listing_management", "manage_tags", "管理标签", 20),
     ActionDefinition("products_listing_management", "archive", "归档Listing", 30, "high"),
@@ -265,6 +275,7 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),
     ActionDefinition("operations_plan", "edit", "编辑运营计划", 20),
     ActionDefinition("operations_plan", "import", "导入运营计划", 30),
+    ActionDefinition("pmc_purchase_board", "override", "维护采购周期覆盖", 10, "high"),
     ActionDefinition("data_center_task_center", "configure", "维护同步配置", 10),
     ActionDefinition("data_center_task_center", "execute", "执行同步任务", 20, "high"),
     ActionDefinition("settings_fee_rules", "edit", "维护费用规则", 10),
@@ -275,6 +286,13 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("settings_user_management", "reset_password", "重置密码", 40, "high"),
     ActionDefinition("settings_user_management", "enable_disable", "停用或启用用户", 50, "high"),
     ActionDefinition("settings_user_management", "delete", "永久删除用户", 60, "high"),
+    ActionDefinition(
+        "settings_user_management",
+        "configure_data_scope",
+        "配置用户数据权限",
+        70,
+        "high",
+    ),
     ActionDefinition("settings_role_management", "create", "新增角色", 10),
     ActionDefinition("settings_role_management", "edit", "编辑角色", 20),
     ActionDefinition(

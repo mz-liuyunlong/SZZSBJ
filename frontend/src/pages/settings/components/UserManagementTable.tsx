@@ -28,12 +28,14 @@ interface UserManagementTableProps {
   canResetPassword: boolean;
   canEnableDisable: boolean;
   canHardDelete: boolean;
+  canConfigureDataScope: boolean;
   onColumnWidthChange: (key: string, width: number) => void;
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
   onEdit: (row: UserManagementRow) => void;
   onSetRole: (row: UserManagementRow) => void;
+  onSetDataScope: (row: UserManagementRow) => void;
   onResetPassword: (row: UserManagementRow) => void;
   onToggleStatus: (row: UserManagementRow) => void;
   onDelete: (row: UserManagementRow) => void;
@@ -67,8 +69,10 @@ function createColumns(
     | "canResetPassword"
     | "canEnableDisable"
     | "canHardDelete"
+    | "canConfigureDataScope"
     | "onEdit"
     | "onSetRole"
+    | "onSetDataScope"
     | "onResetPassword"
     | "onToggleStatus"
     | "onDelete"
@@ -143,6 +147,14 @@ function createColumns(
               disabled={protectedSuperAdmin || row.isSuperAdmin}
               onClick={() => options.onSetRole(row)}
             >设置角色</Button>
+          ) : null,
+          options.canConfigureDataScope ? (
+            <Button
+              key="data-scope"
+              type="link"
+              disabled={isSelf || protectedSuperAdmin || row.isSuperAdmin}
+              onClick={() => options.onSetDataScope(row)}
+            >数据范围</Button>
           ) : null,
           options.canResetPassword ? (
             <Button

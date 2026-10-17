@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
@@ -29,8 +29,18 @@ from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 router = APIRouter(prefix="/api/approvals", tags=["Approval Workbench"])
 db_session = Annotated[Session, Depends(get_db_session)]
 account_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
-view_principal = Annotated[Principal, Depends(require_permission("approvals:workbench:read"))]
-wfs_writer = Annotated[Principal, Depends(require_permission("warehouse:wfs-fee-alert:write"))]
+view_principal = Annotated[
+    Principal,
+    Depends(require_permission("page:data-center:approval-workspace:view")),
+]
+archive_request_principal = Annotated[
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:archive-request")),
+]
+archive_review_principal = Annotated[
+    Principal,
+    Depends(require_permission("action:warehouse:wfs-fee-alert:archive-review")),
+]
 
 
 @router.get("", response_model=SuccessEnvelope[ApprovalListData, ApprovalMeta])
@@ -41,7 +51,7 @@ def list_approvals(
     principal: view_principal,
     accounts: account_scope,
 ):
-    approved = "warehouse:wfs-fee-alert:review" in principal.permissions
+    approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data, total = ApprovalService(session).list_requests(
         query, accounts, principal.user_id, approved
     )
@@ -56,7 +66,7 @@ def list_approvals(
 def summary(
     request: Request, session: db_session, principal: view_principal, accounts: account_scope
 ):
-    may_review = "warehouse:wfs-fee-alert:review" in principal.permissions
+    may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(accounts, principal.user_id, may_review)
     return success_response(request, data=data, meta=None)
 
@@ -69,7 +79,7 @@ def get_approval(
     principal: view_principal,
     accounts: account_scope,
 ):
-    may_review = "warehouse:wfs-fee-alert:review" in principal.permissions
+    may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).detail(approval_id, accounts, principal.user_id, may_review)
     return success_response(request, data=data, meta=None)
 
@@ -80,7 +90,7 @@ def submit_wfs(
     case_id: UUID,
     payload: WfsFeeArchiveRequestWrite,
     session: db_session,
-    principal: wfs_writer,
+    principal: archive_request_principal,
     accounts: account_scope,
 ):
     result = ApprovalService(session).submit_wfs(
@@ -100,10 +110,10 @@ def decide(
     approval_id: UUID,
     payload: ApprovalDecisionWrite,
     session: db_session,
-    principal: view_principal,
+    principal: archive_review_principal,
     accounts: account_scope,
 ):
-    may_review = "warehouse:wfs-fee-alert:review" in principal.permissions
+    may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     ApprovalService(session).decide(approval_id, payload, accounts, principal.user_id, may_review)
     return success_response(request, data={"updated": True}, meta=None)
 
@@ -114,7 +124,7 @@ def supplement(
     approval_id: UUID,
     payload: ApprovalSupplementWrite,
     session: db_session,
-    principal: view_principal,
+    principal: archive_request_principal,
     accounts: account_scope,
 ):
     ApprovalService(session).supplement(approval_id, payload, accounts, principal.user_id)

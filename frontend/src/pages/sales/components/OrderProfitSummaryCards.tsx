@@ -69,8 +69,9 @@ const toServerTotals = (
 ): SummaryTotals => {
   const salesAmount = summary.salesAmount * currencyRate(summary.salesCurrency, currency);
   const refundAmount = summary.refundAmount * currencyRate(summary.refundCurrency, currency);
-  const orderProfit = summary.orderProfitAmount
-    * currencyRate(summary.orderProfitCurrency, currency);
+  const orderProfit = summary.orderProfitAmount == null
+    ? null
+    : summary.orderProfitAmount * currencyRate(summary.orderProfitCurrency, currency);
   const adSpend = summary.adSpendAmount * currencyRate(summary.adSpendCurrency, currency);
   const semAdSpend = summary.semAdSpendAmount * currencyRate(summary.adSpendCurrency, currency);
   const totalAdSpend = summary.totalAdSpendAmount * currencyRate(summary.adSpendCurrency, currency);
@@ -79,7 +80,7 @@ const toServerTotals = (
     salesVolume: summary.salesQuantity,
     salesAmount,
     orderProfit,
-    profitRate: salesAmount ? orderProfit / salesAmount * 100 : null,
+    profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
     adSpend,
     semAdSpend,
     totalAdSpend,
@@ -103,7 +104,15 @@ const toFallbackTotals = (
   const orderProfit = incompleteProfit
     ? null
     : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate;
-  const adSpend = rows.reduce((total, row) => total + row.adSpend, 0) * rate;
+  const adSpend = rows.some((row) => row.adSpend == null)
+    ? null
+    : rows.reduce((total, row) => total + (row.adSpend ?? 0), 0) * rate;
+  const semAdSpend = rows.some((row) => row.semAdSpend == null)
+    ? null
+    : rows.reduce((total, row) => total + (row.semAdSpend ?? 0), 0) * rate;
+  const totalAdSpend = rows.some((row) => row.totalAdSpend == null)
+    ? null
+    : rows.reduce((total, row) => total + (row.totalAdSpend ?? 0), 0) * rate;
 
   return {
     salesVolume,
@@ -111,10 +120,10 @@ const toFallbackTotals = (
     orderProfit,
     profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
     adSpend,
-    semAdSpend: rows.reduce((total, row) => total + row.semAdSpend, 0) * rate,
-    totalAdSpend: rows.reduce((total, row) => total + row.totalAdSpend, 0) * rate,
-    adRatio: salesAmount
-      ? rows.reduce((total, row) => total + row.totalAdSpend, 0) / (salesAmount / rate) * 100
+    semAdSpend,
+    totalAdSpend,
+    adRatio: salesAmount && totalAdSpend != null
+      ? totalAdSpend / salesAmount * 100
       : null,
     refundQuantity,
     refundAmount,

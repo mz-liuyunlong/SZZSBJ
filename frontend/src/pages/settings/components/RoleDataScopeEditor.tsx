@@ -18,6 +18,7 @@ interface RoleDataScopeEditorProps {
   items: RoleDataScopeEntry[];
   loading: boolean;
   disabled: boolean;
+  subjectLabel?: string;
   onChange: (items: RoleDataScopeEntry[]) => void;
 }
 
@@ -25,6 +26,7 @@ function RoleDataScopeEditor({
   items,
   loading,
   disabled,
+  subjectLabel = "角色",
   onChange,
 }: RoleDataScopeEditorProps) {
   const updateItem = (index: number, next: Partial<RoleDataScopeEntry>) => {
@@ -47,14 +49,14 @@ function RoleDataScopeEditor({
         type="info"
         showIcon
         message="数据权限与页面、功能权限相互独立"
-        description="每行代表一个可访问范围；同类型多值按并集处理。值为 * 表示该类型全部范围。未配置任何范围时，真实业务数据接口将拒绝访问。"
+        description="每行代表一个可访问范围；同类型多值按并集处理。值为 * 表示该类型全部范围。当前业务接口严格执行数据源账号范围；其他维度仅登记，接入服务端过滤前不得视为已生效隔离。"
       />
       <Spin spinning={loading}>
         <div className="role-management__data-scope-toolbar">
           <div>
-            <Typography.Text strong>角色数据范围</Typography.Text>
+            <Typography.Text strong>{subjectLabel}数据范围</Typography.Text>
             <Typography.Text type="secondary">
-              后端会在 source_account、店铺、负责人、SKU 和产品维度执行校验。
+              未配置有效数据源账号范围时，受保护业务接口将拒绝访问。
             </Typography.Text>
           </div>
           <Button
@@ -69,7 +71,7 @@ function RoleDataScopeEditor({
         {items.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="当前角色没有数据范围"
+            description={`当前${subjectLabel}没有单独配置的数据范围`}
           />
         ) : (
           <div className="role-management__data-scope-list">

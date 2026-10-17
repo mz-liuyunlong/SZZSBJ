@@ -18,6 +18,7 @@ import ApprovalDetailDrawer from "./components/ApprovalDetailDrawer";
 import type { ApprovalFilters, ApprovalItem, ApprovalSummary, ApprovalRisk, ApprovalTab, ApprovalView } from "./approvalTypes";
 import { approvalColumnFields, riskNames, statusNames } from "./approvalTypes";
 import type { NavigationPage } from "@/config/navigation";
+import { hasPermission } from "@/shared/permissions/mockAccess";
 import "./ApprovalWorkspacePage.css";
 
 const defaultFilters: ApprovalFilters = {
@@ -32,7 +33,10 @@ const statusTone: Record<string, "success" | "warning" | "error" | "default"> = 
  submitted: "warning", approved: "success", rejected: "error",
  info_required: "warning", withdrawn: "default", legacy_unverified: "warning",
 };
-export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }) {
+export default function ApprovalWorkspacePage({ page, permissions }: {
+ page: NavigationPage;
+ permissions: readonly string[];
+}) {
  const [messageApi, holder] = message.useMessage();
  const [filters, setFilters] = useState<ApprovalFilters>(defaultFilters);
  const [rows, setRows] = useState<ApprovalItem[]>([]);
@@ -135,6 +139,12 @@ export default function ApprovalWorkspacePage({ page }: { page: NavigationPage }
    groups={[{title:"审批列表字段",fields:approvalColumnFields}]} fixedKeys={["title"]}
    appliedKeys={columnKeys} defaultKeys={defaultKeys} onApply={setColumnKeys}
    onClose={() => setColumnsOpen(false)} onSaveTemplate={() => void messageApi.info("列模板暂未接入")}/>
-  <ApprovalDetailDrawer selected={selected} onClose={() => setSelected(undefined)} onUpdated={reload}/>
+  <ApprovalDetailDrawer
+   selected={selected}
+   canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
+   canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
+   onClose={() => setSelected(undefined)}
+   onUpdated={reload}
+  />
  </PageShell>;
 }

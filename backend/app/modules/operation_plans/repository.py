@@ -50,6 +50,40 @@ class OperationPlanRepository:
         ).scalars()
         return {str(row) for row in rows}
 
+    @staticmethod
+    def _authorized_item_scope_predicate(item_expression: str) -> str:
+        """Require the caller to own every current Listing relation for an item.
+
+        Operation plans are item-level objects. Filtering Listing rows before this
+        check would incorrectly turn a mixed-account item into a single-account
+        item, so the predicate always evaluates the complete current relationship.
+        Missing, blank, or unknown account associations fail closed.
+        """
+
+        return f"""
+            exists (
+                select 1
+                from {LISTING_TABLE} scope_listing
+                where trim(scope_listing.item_id::text) = {item_expression}
+                  and nullif(trim(scope_listing.source_account_ref::text), '')
+                        in :account_refs
+            )
+            and not exists (
+                select 1
+                from {LISTING_TABLE} scope_listing
+                where trim(scope_listing.item_id::text) = {item_expression}
+                  and (
+                    nullif(trim(scope_listing.source_account_ref::text), '') is null
+                    or nullif(trim(scope_listing.source_account_ref::text), '')
+                        not in :account_refs
+                  )
+            )
+        """
+
+    @classmethod
+    def _authorized_plan_scope_predicate(cls, alias: str = "p") -> str:
+        return cls._authorized_item_scope_predicate(f"trim({alias}.item_id::text)")
+
     def get_or_create_period(
         self,
         *,
@@ -130,6 +164,7 @@ class OperationPlanRepository:
         file_sha256: str,
         file_size: int,
         conflict_policy: str,
+        source_account_refs: frozenset[str],
         actor_ref: str,
     ) -> None:
         self.session.execute(
@@ -137,10 +172,11 @@ class OperationPlanRepository:
                 """
                 insert into ops_operation_plan_import_batches (
                     id, period_id, file_name, file_sha256, file_size,
-                    status, conflict_policy, created_by
+                    status, conflict_policy, source_account_refs_json, created_by
                 ) values (
                     :id, :period_id, :file_name, :file_sha256, :file_size,
-                    'processing', :conflict_policy, :actor_ref
+                    'processing', :conflict_policy, cast(:source_account_refs_json as jsonb),
+                    :actor_ref
                 )
                 """
             ),
@@ -151,6 +187,7 @@ class OperationPlanRepository:
                 "file_sha256": file_sha256,
                 "file_size": file_size,
                 "conflict_policy": conflict_policy,
+                "source_account_refs_json": _json_dumps(sorted(source_account_refs)),
                 "actor_ref": actor_ref,
             },
         )
@@ -270,7 +307,7 @@ class OperationPlanRepository:
             return None
 
         columns = self.table_columns(LISTING_TABLE)
-        if "item_id" not in columns:
+        if not {"item_id", "source_account_ref"}.issubset(columns) or not account_refs:
             return None
 
         def text_agg(candidates: Iterable[str]) -> str:
@@ -293,14 +330,10 @@ class OperationPlanRepository:
                 target = f"coalesce({', '.join(expressions)})"
             return f"count(distinct {target})"
 
-        source_account_clause = ""
-        params: dict[str, Any] = {"item_id": item_id}
-
-        if "source_account_ref" in columns:
-            if not account_refs:
-                return None
-            source_account_clause = "and source_account_ref in :account_refs"
-            params["account_refs"] = tuple(sorted(account_refs))
+        params: dict[str, Any] = {
+            "item_id": item_id,
+            "account_refs": tuple(sorted(account_refs)),
+        }
 
         store_count_expr = count_distinct(["store_id", "source_account_ref"])
         product_name_expr = text_agg(
@@ -337,13 +370,10 @@ class OperationPlanRepository:
                 {count_distinct(["sku", "local_sku"])}::int as sku_count
             from {LISTING_TABLE}
             where trim(item_id::text) = :item_id
-              {source_account_clause}
             group by trim(item_id::text)
+            having {self._authorized_item_scope_predicate("trim(cast(:item_id as text))")}
             """
-        )
-
-        if source_account_clause:
-            statement = statement.bindparams(bindparam("account_refs", expanding=True))
+        ).bindparams(bindparam("account_refs", expanding=True))
 
         row = self.session.execute(statement, params).mappings().first()
         if row is None:
@@ -361,22 +391,26 @@ class OperationPlanRepository:
         period_id: UUID,
         platform_code: str,
         item_id: str,
+        account_refs: frozenset[str],
     ) -> RowMapping | None:
+        statement = text(
+            f"""
+                select p.*
+                from ops_operation_product_plans p
+                where p.period_id = :period_id
+                  and p.platform_code = :platform_code
+                  and p.item_id = :item_id
+                  and {self._authorized_plan_scope_predicate()}
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
         return (
             self.session.execute(
-                text(
-                    """
-                select *
-                from ops_operation_product_plans
-                where period_id = :period_id
-                  and platform_code = :platform_code
-                  and item_id = :item_id
-                """
-                ),
+                statement,
                 {
                     "period_id": period_id,
                     "platform_code": platform_code,
                     "item_id": item_id,
+                    "account_refs": tuple(sorted(account_refs)),
                 },
             )
             .mappings()
@@ -394,10 +428,10 @@ class OperationPlanRepository:
         remark: str | None,
         import_batch_id: UUID | None,
         actor_ref: str,
-    ) -> None:
-        self.session.execute(
-            text(
-                """
+        account_refs: frozenset[str],
+    ) -> bool:
+        statement = text(
+            f"""
                 insert into ops_operation_product_plans (
                     id, period_id, platform_code, source_account_ref, store_id,
                     store_name_snapshot, item_id, sku, msku, product_name_snapshot,
@@ -405,26 +439,29 @@ class OperationPlanRepository:
                     target_gross_profit_amount, currency_code, operation_status,
                     plan_status, stock_status, remark, source_type, import_batch_id,
                     adjusted, created_by, updated_by
-                ) values (
+                ) select
                     :id, :period_id, :platform_code, :source_account_ref, :store_id,
-                    :store_name_snapshot, :item_id, :sku, :msku, :product_name_snapshot,
+                    :store_name_snapshot, cast(:item_id as text), :sku, :msku,
+                    :product_name_snapshot,
                     :owner_ref, :owner_name_snapshot, :target_sales_amount,
                     :target_gross_profit_amount, 'USD', 'normal', 'normal', 'normal',
                     :remark, 'import', :import_batch_id, false, :actor_ref, :actor_ref
-                )
+                where {self._authorized_item_scope_predicate("trim(cast(:item_id as text))")}
+                returning id
                 """
-            ),
-            self._plan_params(
-                plan_id=plan_id,
-                period_id=period_id,
-                listing=listing,
-                target_sales_amount=target_sales_amount,
-                target_gross_profit_amount=target_gross_profit_amount,
-                remark=remark,
-                import_batch_id=import_batch_id,
-                actor_ref=actor_ref,
-            ),
+        ).bindparams(bindparam("account_refs", expanding=True))
+        params = self._plan_params(
+            plan_id=plan_id,
+            period_id=period_id,
+            listing=listing,
+            target_sales_amount=target_sales_amount,
+            target_gross_profit_amount=target_gross_profit_amount,
+            remark=remark,
+            import_batch_id=import_batch_id,
+            actor_ref=actor_ref,
         )
+        params["account_refs"] = tuple(sorted(account_refs))
+        return self.session.execute(statement, params).scalar_one_or_none() is not None
 
     def update_plan_targets(
         self,
@@ -434,11 +471,11 @@ class OperationPlanRepository:
         target_gross_profit_amount: Decimal,
         remark: str | None,
         actor_ref: str,
-    ) -> None:
-        self.session.execute(
-            text(
-                """
-                update ops_operation_product_plans
+        account_refs: frozenset[str],
+    ) -> bool:
+        statement = text(
+            f"""
+                update ops_operation_product_plans p
                 set target_sales_amount = :target_sales_amount,
                     target_gross_profit_amount = :target_gross_profit_amount,
                     remark = coalesce(:remark, remark),
@@ -446,32 +483,56 @@ class OperationPlanRepository:
                     plan_status = case when operation_status = 'clearance' then 'clearance' else 'normal' end,
                     updated_by = :actor_ref,
                     updated_at = now()
-                where id = :plan_id
-                """
-            ),
-            {
-                "plan_id": plan_id,
-                "target_sales_amount": target_sales_amount,
-                "target_gross_profit_amount": target_gross_profit_amount,
-                "remark": remark,
-                "actor_ref": actor_ref,
-            },
+                where p.id = :plan_id
+                  and {self._authorized_plan_scope_predicate()}
+                returning p.id
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return (
+            self.session.execute(
+                statement,
+                {
+                    "plan_id": plan_id,
+                    "target_sales_amount": target_sales_amount,
+                    "target_gross_profit_amount": target_gross_profit_amount,
+                    "remark": remark,
+                    "actor_ref": actor_ref,
+                    "account_refs": tuple(sorted(account_refs)),
+                },
+            ).scalar_one_or_none()
+            is not None
         )
 
-    def mark_plan_clearance(self, *, plan_id: UUID, actor_ref: str) -> None:
-        self.session.execute(
-            text(
-                """
-                update ops_operation_product_plans
+    def mark_plan_clearance(
+        self,
+        *,
+        plan_id: UUID,
+        actor_ref: str,
+        account_refs: frozenset[str],
+    ) -> bool:
+        statement = text(
+            f"""
+                update ops_operation_product_plans p
                 set operation_status = 'clearance',
                     plan_status = 'clearance',
                     adjusted = true,
                     updated_by = :actor_ref,
                     updated_at = now()
-                where id = :plan_id
-                """
-            ),
-            {"plan_id": plan_id, "actor_ref": actor_ref},
+                where p.id = :plan_id
+                  and {self._authorized_plan_scope_predicate()}
+                returning p.id
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return (
+            self.session.execute(
+                statement,
+                {
+                    "plan_id": plan_id,
+                    "actor_ref": actor_ref,
+                    "account_refs": tuple(sorted(account_refs)),
+                },
+            ).scalar_one_or_none()
+            is not None
         )
 
     def _plan_params(
@@ -616,11 +677,23 @@ class OperationPlanRepository:
             },
         )
 
-    def get_plan(self, plan_id: UUID) -> RowMapping | None:
+    def get_plan(
+        self,
+        plan_id: UUID,
+        account_refs: frozenset[str],
+    ) -> RowMapping | None:
+        statement = text(
+            f"""
+            select p.*
+            from ops_operation_product_plans p
+            where p.id = :plan_id
+              and {self._authorized_plan_scope_predicate()}
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
         return (
             self.session.execute(
-                text("select * from ops_operation_product_plans where id = :plan_id"),
-                {"plan_id": plan_id},
+                statement,
+                {"plan_id": plan_id, "account_refs": tuple(sorted(account_refs))},
             )
             .mappings()
             .first()
@@ -833,7 +906,10 @@ class OperationPlanRepository:
         query: OperationPlanProductQuery,
         account_refs: frozenset[str],
     ) -> tuple[list[RowMapping], int]:
-        clauses = ["p.period_id = :period_id"]
+        clauses = [
+            "p.period_id = :period_id",
+            self._authorized_plan_scope_predicate(),
+        ]
         params: dict[str, Any] = {
             "period_id": period_id,
             "account_refs": tuple(sorted(account_refs)),
@@ -1062,6 +1138,7 @@ class OperationPlanRepository:
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
                 group by p.id
             ),
             last_actuals as (
@@ -1079,6 +1156,7 @@ class OperationPlanRepository:
                  )
                  and d.business_date_la < b.period_start_date
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
                 group by p.id
 
             ),
@@ -1161,6 +1239,7 @@ class OperationPlanRepository:
                 from ops_operation_product_plans p
                 left join actuals a on a.plan_id = p.id
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
             )
         """
 
@@ -1299,7 +1378,7 @@ class OperationPlanRepository:
 
     def summary(self, *, period_id: UUID, account_refs: frozenset[str]) -> RowMapping:
         statement = text(
-            """
+            f"""
             with period_bounds as (
                 select
                     period_start_date,
@@ -1354,6 +1433,7 @@ class OperationPlanRepository:
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
                 group by p.id
             ),
             plan_forecast as (
@@ -1457,6 +1537,7 @@ class OperationPlanRepository:
             cross join period_bounds b
             left join plan_forecast a on a.plan_id = p.id
             where p.period_id = :period_id
+              and {self._authorized_plan_scope_predicate()}
             """
         ).bindparams(bindparam("account_refs", expanding=True))
         return (
@@ -1520,6 +1601,7 @@ class OperationPlanRepository:
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
                 group by p.id
             ),
             plan_forecast as (
@@ -1625,6 +1707,7 @@ class OperationPlanRepository:
                 left join inventory_actuals inv
                   on trim(inv.item_id::text) = trim(p.item_id::text)
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
             )
             select
                 owner_ref,
@@ -1717,6 +1800,7 @@ class OperationPlanRepository:
                  and d.business_date_la >= b.period_start_date
                  and d.business_date_la <= b.period_end_date
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
                 group by p.id
             ),
             forecast as (
@@ -1811,6 +1895,7 @@ class OperationPlanRepository:
                 left join inventory_actuals inv
                   on trim(inv.item_id::text) = trim(p.item_id::text)
                 where p.period_id = :period_id
+                  and {self._authorized_plan_scope_predicate()}
             )
             select 'owner' as kind, owner_value as value, max(owner_label) as label, count(*)::int as count
             from computed
@@ -1846,19 +1931,62 @@ class OperationPlanRepository:
             "stock_status_counts": [row for row in rows if row["kind"] == "stock_status"],
         }
 
-    def list_events(self, plan_id: UUID) -> list[RowMapping]:
+    def list_events(
+        self,
+        plan_id: UUID,
+        account_refs: frozenset[str],
+    ) -> list[RowMapping]:
+        statement = text(
+            f"""
+            select e.id, e.event_type, e.after_data, e.reason, e.actor_ref, e.created_at
+            from ops_operation_plan_events e
+            join ops_operation_product_plans p on p.id = e.product_plan_id
+            where e.product_plan_id = :plan_id
+              and {self._authorized_plan_scope_predicate()}
+            order by e.created_at desc
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
         return list(
             self.session.execute(
-                text(
-                    """
-                select id, event_type, after_data, reason, actor_ref, created_at
-                from ops_operation_plan_events
-                where product_plan_id = :plan_id
-                order by created_at desc
-                """
-                ),
-                {"plan_id": plan_id},
+                statement,
+                {"plan_id": plan_id, "account_refs": tuple(sorted(account_refs))},
             ).mappings()
+        )
+
+    def can_access_import_batch(
+        self,
+        *,
+        batch_id: UUID,
+        actor_ref: str,
+        account_refs: frozenset[str],
+        is_super_admin: bool,
+    ) -> bool:
+        statement = text(
+            """
+            select exists (
+                select 1
+                from ops_operation_plan_import_batches b
+                where b.id = :batch_id
+                  and (:is_super_admin or b.created_by = :actor_ref)
+                  and jsonb_array_length(b.source_account_refs_json) > 0
+                  and not exists (
+                    select 1
+                    from jsonb_array_elements_text(b.source_account_refs_json) account(value)
+                    where account.value not in :account_refs
+                  )
+            )
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return bool(
+            self.session.scalar(
+                statement,
+                {
+                    "batch_id": batch_id,
+                    "actor_ref": actor_ref,
+                    "is_super_admin": is_super_admin,
+                    "account_refs": tuple(sorted(account_refs)),
+                },
+            )
         )
 
     def list_failed_import_rows(self, batch_id: UUID) -> list[RowMapping]:
