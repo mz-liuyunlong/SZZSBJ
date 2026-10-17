@@ -306,7 +306,8 @@ def read_detail(
     manuals = (
         session.execute(
             text("""
-        select legacy_id, source_kind, log_content, work_type, work_types_json, observe_days, status, revision
+        select legacy_id, source_kind, log_content, work_type,
+               work_types_json, observe_days, status, revision
         from ops_manual_operation_logs
         where source_account_ref = :account and log_date = :day
           and store_id = :store and item_id = :item and msku = :msku
