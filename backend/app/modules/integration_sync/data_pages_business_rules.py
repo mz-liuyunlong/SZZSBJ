@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -23,6 +24,7 @@ from app.modules.integration_sync.data_pages_real_sync import (
     _field,
     _nested_first,
     _now,
+    _order_purchase_date_la,
     _row_count,
     _safe_scope,
     _timestamps,
@@ -32,16 +34,16 @@ from app.modules.integration_sync.data_pages_real_sync import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-FIXED_UTC_MINUS_7 = timezone(timedelta(hours=-7), name="UTC-07:00")
+LA_TZ = ZoneInfo("America/Los_Angeles")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
-SAMPLE_RULE_VERSION = "zero-total-provider-status-strict-triple-v3"
+SAMPLE_RULE_VERSION = "zero-total-or-full-item-discount-strict-triple-v4"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
 
 
 def _sample_window_china(day: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(day, time(0, 0, 0), tzinfo=FIXED_UTC_MINUS_7)
-    end = datetime.combine(day, time(23, 59, 59), tzinfo=FIXED_UTC_MINUS_7)
+    start = datetime.combine(day, time(0, 0, 0), tzinfo=LA_TZ)
+    end = datetime.combine(day, time(23, 59, 59), tzinfo=LA_TZ)
     return start.astimezone(CHINA_TZ), end.astimezone(CHINA_TZ)
 
 
@@ -203,8 +205,6 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         count = 0
         for row in rows:
             order_total = _decimal(_nested_first(row, "transaction_info", "order_total_amount"))
-            if order_total != Decimal("0"):
-                continue
             cancel_time_raw = _field(row, "cancel_time") or _nested_text(
                 row,
                 "platform_info",
@@ -223,16 +223,28 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             currency_code = _field(row, "amount_currency") or "USD"
             item_rows = row.get("item_info") if isinstance(row.get("item_info"), list) else []
 
+            purchase_date = _order_purchase_date_la(row.get("global_purchase_time"))
+            if purchase_date != self.business_date:
+                raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_PURCHASE_DATE_MISMATCH")
             for item in item_rows:
                 if not isinstance(item, dict):
                     continue
-                platform_order_no = _field(item, "platform_order_no") or _field(
-                    row,
-                    "platform_order_no",
+                item_price = _decimal(item.get("item_price_amount"))
+                discount = _decimal(item.get("discount_amount"))
+                full_discount = (
+                    item_price is not None
+                    and item_price > 0
+                    and discount is not None
+                    and abs(discount) >= item_price - Decimal("0.01")
                 )
-                source_order_line_id = _field(item, "id", "global_item_no", "order_item_no")
-                if not platform_order_no or not source_order_line_id:
+                if not (order_total == Decimal("0") or full_discount):
                     continue
+                platform_order_no = _field(item, "platform_order_no") or _field(
+                    row, "platform_order_no", "reference_no", "referenceNo"
+                )
+                source_order_line_id = _field(item, "order_item_no", "global_item_no", "id")
+                if not platform_order_no or not source_order_line_id:
+                    raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_IDENTITY_MISSING")
                 self.session.execute(
                     text(
                         "insert into fact_walmart_sample_order_items "
@@ -242,7 +254,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "unit_price_currency_code,order_total_amount,order_total_currency_code,"
                         "cancel_time_raw,is_cancelled,is_valid_sample,sample_rule_version,"
                         "synced_at,created_at,updated_at) values "
-                        "(:id,:business_date_utc_minus_7,'UTC-07:00',:source_account_ref,"
+                        "(:id,:business_date_utc_minus_7,'America/Los_Angeles',:source_account_ref,"
                         ":source_order_id,:platform_order_no,:store_id,:store_name,:platform_code,"
                         ":source_order_line_id,:item_id,:msku,:local_sku,:quantity,:unit_price_amount,"
                         ":unit_price_currency_code,:order_total_amount,:order_total_currency_code,"
@@ -276,7 +288,11 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "msku": _field(item, "msku"),
                         "local_sku": _field(item, "local_sku", "sku"),
                         "quantity": _decimal(item.get("quantity")),
-                        "unit_price_amount": _decimal(item.get("unit_price_amount")),
+                        "unit_price_amount": (
+                            _decimal(item.get("unit_price_amount"))
+                            if _decimal(item.get("unit_price_amount")) is not None
+                            else item_price
+                        ),
                         "unit_price_currency_code": (
                             _field(item, "unit_price_currency_code", "currency") or currency_code
                         ),
@@ -284,10 +300,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "order_total_currency_code": currency_code,
                         "cancel_time_raw": cancel_time_raw,
                         "is_cancelled": is_cancelled,
-                        "is_valid_sample": _is_valid_sample(
-                            order_total,
-                            cancel_time_raw,
-                            order_status_raw,
+                        "is_valid_sample": (
+                            (order_total == Decimal("0") or full_discount)
+                            and not is_cancelled
                         ),
                         "sample_rule_version": SAMPLE_RULE_VERSION,
                         **_timestamps(),
