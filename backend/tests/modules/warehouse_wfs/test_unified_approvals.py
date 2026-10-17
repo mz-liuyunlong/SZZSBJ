@@ -269,7 +269,5 @@ def test_non_reviewer_cannot_view_legacy_queue(monkeypatch: pytest.MonkeyPatch) 
     client = _approval_client(monkeypatch, {"page:data-center:approval-workspace:view"})
     response = client.get("/api/approvals?tab=legacy")
     assert response.status_code == 403
-    response = client.get(
-        "/api/approvals/legacy/00000000-0000-0000-0000-000000000001"
-    )
+    response = client.get("/api/approvals/legacy/00000000-0000-0000-0000-000000000001")
     assert response.status_code == 403
