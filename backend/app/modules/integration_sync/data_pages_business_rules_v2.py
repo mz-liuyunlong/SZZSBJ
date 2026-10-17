@@ -13,6 +13,8 @@ from app.modules.integration_sync.data_pages_business_rules import (
     DataPagesRealSyncRunner as BusinessRulesRunner,
 )
 from app.modules.integration_sync.data_pages_real_sync import (
+    DataPagesRealSyncError,
+    _order_purchase_date_la,
     _decimal,
     _field,
     _nested_first,
@@ -174,10 +176,18 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             item_rows = row.get("item_info") if isinstance(row.get("item_info"), list) else [row]
             if not order_id:
                 continue
+            purchase_date = _order_purchase_date_la(row.get("global_purchase_time"))
+            if purchase_date != self.business_date:
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_PURCHASE_DATE_MISMATCH")
             for ordinal, item in enumerate(item_rows):
                 if not isinstance(item, dict):
                     continue
-                line_hash = _stable_hash({"order": order_id, "line": item, "ordinal": ordinal})
+                line_id = _field(item, "order_item_no", "global_item_no", "id")
+                if not line_id:
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_LINE_IDENTITY_MISSING")
+                line_hash = _stable_hash(
+                    {"store": _field(row, "store_id"), "order": order_id, "line_id": line_id}
+                )
                 self.session.execute(
                     text(
                         "insert into fact_walmart_order_items "
@@ -198,6 +208,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "platform_order_no=excluded.platform_order_no,reference_no=excluded.reference_no,"
                         "item_id=coalesce(excluded.item_id,fact_walmart_order_items.item_id),"
                         "msku=excluded.msku,local_sku=excluded.local_sku,quantity=excluded.quantity,"
+                        "source_purchase_at_raw=excluded.source_purchase_at_raw,"
+                        "business_date_la=excluded.business_date_la,"
+                        "order_status_raw=excluded.order_status_raw,"
+                        "order_sub_status_raw=excluded.order_sub_status_raw,"
+                        "discount_amount=excluded.discount_amount,"
                         "sales_revenue_amount=excluded.sales_revenue_amount,order_total_amount=excluded.order_total_amount,"
                         "updated_at=excluded.updated_at"
                     ),
@@ -206,9 +221,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "source_account_ref": self.source_account_ref,
                         "store_id": _field(row, "store_id"),
                         "source_order_id": order_id,
-                        "source_order_line_id": _field(
-                            item, "global_item_no", "order_item_no", "id"
-                        ),
+                        "source_order_line_id": line_id,
                         "platform_order_no": _field(item, "platform_order_no")
                         or _field(row, "platform_order_no"),
                         "reference_no": _field(row, "reference_no", "referenceNo"),

@@ -202,3 +202,12 @@ def test_daily_sales_profit_formula_returns_refunded_commission() -> None:
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
     assert DAILY_SALES_V2_VERSION.endswith("+refund-v3-lpds")
     assert len(DAILY_SALES_V2_VERSION) <= 64
+
+
+def test_order_writer_uses_one_provider_line_identity_for_hash_and_persisted_id() -> None:
+    """Prevent a mismatch when both provider line-number fields exist."""
+    source = inspect.getsource(DataPagesRealSyncRunner._write_orders)
+    assert 'line_id = _field(item, "order_item_no", "global_item_no", "id")' in source
+    assert '"source_order_line_id": line_id' in source
+    assert '"line_id": line_id' in source
+    assert '"store": _field(row, "store_id")' in source

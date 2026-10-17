@@ -470,6 +470,12 @@ class SyncRunExecutionService:
             runner.summary.order_rows = runner._write_orders(orders)
             heartbeat()
             runner.summary.order_unresolved_rows = runner._resolve_order_items()
+            heartbeat()
+            runner.summary.sample_rows = runner._write_sample_orders(orders)
+            heartbeat()
+            runner.summary.sample_unresolved_rows = runner._resolve_sample_items()
+            if runner.summary.sample_unresolved_rows:
+                raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_IDENTITY_UNRESOLVED")
 
         elif interface_key == "walmartReturnOrderList":
             refunds = runner._fetch_return_all()
