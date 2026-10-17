@@ -364,7 +364,7 @@ def test_sample_writer_rejects_missing_order_line_identity() -> None:
         "store_id": "store-a",
         "status": 9,
         "transaction_info": [{"order_total_amount": "0"}],
-        "item_info": [{"msku": "MSKU-1", "quantity": 1}],
+        "item_info": [{"msku": "MSKU-1", "quantity": 1, "item_price_amount": "24.99"}],
     }
     import pytest
 
