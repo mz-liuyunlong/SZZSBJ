@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -255,3 +256,23 @@ def test_daily_sales_export_removes_profit_and_reconstruction_columns(
     assert captured[1] is not None
     allowed_columns = {"sales_amount"}
     assert not (set(sensitive.split(",")) - allowed_columns) & set(captured[1].split(","))
+
+
+@pytest.mark.parametrize("columns", ["unknown_column", "sales_amount,unknown_column", " , "])
+def test_daily_sales_export_rejects_invalid_column_selection(
+    monkeypatch: Any,
+    columns: str,
+) -> None:
+    export_csv = MagicMock(return_value=("统计日期\n", "safe.csv"))
+    monkeypatch.setattr("app.modules.data_pages.router.export_daily_sales_csv", export_csv)
+
+    response = TestClient(
+        _app(
+            "page:sales:daily-sales:view",
+            "action:sales:daily-sales:export",
+        )
+    ).get("/api/sales/daily-sales/export", params={"columns": columns})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    export_csv.assert_not_called()

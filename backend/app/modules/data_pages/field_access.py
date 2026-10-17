@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.core.api import ApiError, ErrorCode
 from app.modules.data_pages.schemas import (
     DailySalesListData,
     OrderProfitListData,
@@ -79,18 +80,17 @@ def filter_order_profit_export_columns(
     can_view_profit_margin: bool,
     available_columns: tuple[str, ...],
 ) -> str:
-    requested = [item.strip() for item in (columns or "").split(",") if item.strip()]
-    selected = requested or list(available_columns)
+    available = set(available_columns)
+    if columns is None:
+        selected = list(available_columns)
+    else:
+        selected = [item.strip() for item in columns.split(",") if item.strip()]
+        if not selected or any(key not in available for key in selected):
+            raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
     if not can_view_gross_profit:
         selected = [key for key in selected if key not in _GROSS_PROFIT_EXPORT_COLUMNS]
     if not (can_view_gross_profit and can_view_profit_margin):
         selected = [key for key in selected if key not in _MARGIN_EXPORT_COLUMNS]
-    if not selected:
-        selected = [
-            key
-            for key in available_columns
-            if key not in _GROSS_PROFIT_EXPORT_COLUMNS | _MARGIN_EXPORT_COLUMNS
-        ][:1]
     return ",".join(selected)
 
 

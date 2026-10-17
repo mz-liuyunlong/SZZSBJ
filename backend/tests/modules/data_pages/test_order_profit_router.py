@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -229,4 +230,24 @@ def test_order_profit_trend_and_export_apply_field_permissions(monkeypatch: Any)
         },
     )
     assert response.status_code == 200
-    assert captured["columns"] == "product_id"
+    assert captured["columns"] == ""
+
+
+@pytest.mark.parametrize("columns", ["unknown_column", "sales_amount,unknown_column", " , "])
+def test_order_profit_export_rejects_invalid_column_selection(
+    monkeypatch: Any,
+    columns: str,
+) -> None:
+    export_csv = MagicMock(return_value=("统计日期\n", "safe.csv"))
+    monkeypatch.setattr("app.modules.data_pages.router.export_order_profit_csv", export_csv)
+
+    response = TestClient(
+        _app(
+            "page:sales:order-profit:view",
+            "action:sales:order-profit:export",
+        )
+    ).get("/api/sales/order-profit/export", params={"columns": columns})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    export_csv.assert_not_called()

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.core.api import ApiError
 from app.modules.data_pages import daily_sales_export, order_profit_export
 from app.modules.data_pages.field_access import filter_order_profit_export_columns
 
@@ -58,10 +59,12 @@ class _DailyRepository:
         return {}
 
 
+@pytest.mark.parametrize("dimension", ["item_id", "sku", "msku"])
 @pytest.mark.parametrize("requested", [None, "sales_amount,total_cost,order_profit,roi"])
 def test_daily_sales_real_csv_excludes_profit_reconstruction_columns(
     monkeypatch: pytest.MonkeyPatch,
     requested: str | None,
+    dimension: daily_sales_export.DailySalesExportDimension,
 ) -> None:
     row = _financial_row()
     monkeypatch.setattr(
@@ -75,12 +78,12 @@ def test_daily_sales_real_csv_excludes_profit_reconstruction_columns(
         can_view_profit_margin=False,
         available_columns=tuple(daily_sales_export.DAILY_SALES_EXPORT_COLUMNS),
     )
-    csv_content, _ = daily_sales_export.export_daily_sales_csv(
+    csv_content, filename = daily_sales_export.export_daily_sales_csv(
         SimpleNamespace(repository=_DailyRepository()),  # type: ignore[arg-type]
         query=SimpleNamespace(start_date=date(2026, 10, 17), end_date=date(2026, 10, 17)),
         account_refs=frozenset({"synthetic-account"}),
         period="day",
-        dimension="item_id",
+        dimension=dimension,
         columns=columns,
     )
 
@@ -102,12 +105,15 @@ def test_daily_sales_real_csv_excludes_profit_reconstruction_columns(
         "ROI",
     } & set(records[0])
     assert "100" in records[1]
+    assert f"-{dimension}-" in filename
 
 
+@pytest.mark.parametrize("dimension", ["item_id", "sku", "msku"])
 @pytest.mark.parametrize("requested", [None, "sales_amount,total_cost,order_profit,roi"])
 def test_order_profit_real_csv_excludes_profit_reconstruction_columns(
     monkeypatch: pytest.MonkeyPatch,
     requested: str | None,
+    dimension: order_profit_export.OrderProfitExportDimension,
 ) -> None:
     row = _financial_row()
     monkeypatch.setattr(
@@ -126,7 +132,7 @@ def test_order_profit_real_csv_excludes_profit_reconstruction_columns(
         can_view_profit_margin=False,
         available_columns=tuple(order_profit_export.ORDER_PROFIT_EXPORT_COLUMNS),
     )
-    csv_content, _ = order_profit_export.export_order_profit_csv(
+    csv_content, filename = order_profit_export.export_order_profit_csv(
         SimpleNamespace(),  # type: ignore[arg-type]
         query=SimpleNamespace(
             start_date=date(2026, 10, 17),
@@ -135,7 +141,7 @@ def test_order_profit_real_csv_excludes_profit_reconstruction_columns(
         ),
         account_refs=frozenset({"synthetic-account"}),
         period="day",
-        dimension="item_id",
+        dimension=dimension,
         columns=columns,
     )
 
@@ -157,6 +163,7 @@ def test_order_profit_real_csv_excludes_profit_reconstruction_columns(
         "ROI",
     } & set(records[0])
     assert "100" in records[1]
+    assert f"-{dimension}-" in filename
 
 
 def test_empty_default_csv_keeps_only_safe_headers(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -185,3 +192,143 @@ def test_empty_default_csv_keeps_only_safe_headers(monkeypatch: pytest.MonkeyPat
     assert "总成本" not in records[0]
     assert "订单利润" not in records[0]
     assert "ROI" not in records[0]
+
+
+@pytest.mark.parametrize(
+    ("available_columns", "requested"),
+    [
+        (tuple(daily_sales_export.DAILY_SALES_EXPORT_COLUMNS), "unknown_column"),
+        (tuple(daily_sales_export.DAILY_SALES_EXPORT_COLUMNS), "sales_amount,unknown_column"),
+        (tuple(daily_sales_export.DAILY_SALES_EXPORT_COLUMNS), " , "),
+        (tuple(order_profit_export.ORDER_PROFIT_EXPORT_COLUMNS), "unknown_column"),
+        (tuple(order_profit_export.ORDER_PROFIT_EXPORT_COLUMNS), "sales_amount,unknown_column"),
+        (tuple(order_profit_export.ORDER_PROFIT_EXPORT_COLUMNS), " , "),
+    ],
+)
+def test_export_filter_rejects_unknown_mixed_and_empty_columns(
+    available_columns: tuple[str, ...],
+    requested: str,
+) -> None:
+    with pytest.raises(ApiError) as error:
+        filter_order_profit_export_columns(
+            requested,
+            can_view_gross_profit=False,
+            can_view_profit_margin=False,
+            available_columns=available_columns,
+        )
+
+    assert error.value.status_code == 422
+    assert error.value.code == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize("columns", [None, "", "unknown_column", "sales_amount,unknown_column"])
+def test_daily_sales_exporter_invalid_columns_fail_closed_without_default_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    columns: str | None,
+) -> None:
+    monkeypatch.setattr(
+        daily_sales_export,
+        "_filtered_daily_sales_rows",
+        lambda _service, **_kwargs: [_financial_row()],
+    )
+
+    csv_content, _ = daily_sales_export.export_daily_sales_csv(
+        SimpleNamespace(repository=_DailyRepository()),  # type: ignore[arg-type]
+        query=SimpleNamespace(start_date=None, end_date=None),
+        account_refs=frozenset({"synthetic-account"}),
+        period="day",
+        dimension="item_id",
+        columns=columns,
+    )
+
+    assert list(csv.reader(StringIO(csv_content))) == [
+        ["统计日期"],
+        ["2026-10-17"],
+    ]
+
+
+@pytest.mark.parametrize("columns", [None, "", "unknown_column", "sales_amount,unknown_column"])
+def test_order_profit_exporter_invalid_columns_fail_closed_without_default_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    columns: str | None,
+) -> None:
+    monkeypatch.setattr(
+        order_profit_export,
+        "_filtered_daily_sales_rows",
+        lambda _service, **_kwargs: [_financial_row()],
+    )
+    monkeypatch.setattr(
+        order_profit_export,
+        "_current_wfs_inventory_by_item",
+        lambda _service, _rows, _store_id: {},
+    )
+
+    csv_content, _ = order_profit_export.export_order_profit_csv(
+        SimpleNamespace(),  # type: ignore[arg-type]
+        query=SimpleNamespace(start_date=None, end_date=None, store_id=None),
+        account_refs=frozenset({"synthetic-account"}),
+        period="day",
+        dimension="item_id",
+        columns=columns,
+    )
+
+    assert list(csv.reader(StringIO(csv_content))) == [
+        ["统计日期"],
+        ["2026-10-17"],
+    ]
+
+
+@pytest.mark.parametrize("export_kind", ["daily_sales", "order_profit"])
+def test_explicit_sensitive_only_real_csv_stays_empty(
+    monkeypatch: pytest.MonkeyPatch,
+    export_kind: str,
+) -> None:
+    is_daily_sales = export_kind == "daily_sales"
+    export_module = daily_sales_export if is_daily_sales else order_profit_export
+    available_columns = tuple(
+        daily_sales_export.DAILY_SALES_EXPORT_COLUMNS
+        if is_daily_sales
+        else order_profit_export.ORDER_PROFIT_EXPORT_COLUMNS
+    )
+    columns = filter_order_profit_export_columns(
+        "refund_amount,total_ad_spend,wfs_fee_total,purchase_cost_total,order_profit,roi",
+        can_view_gross_profit=False,
+        can_view_profit_margin=False,
+        available_columns=available_columns,
+    )
+    assert columns == ""
+
+    monkeypatch.setattr(
+        export_module,
+        "_filtered_daily_sales_rows",
+        lambda _service, **_kwargs: [_financial_row()],
+    )
+    query = SimpleNamespace(start_date=None, end_date=None, store_id=None)
+    if is_daily_sales:
+        csv_content, _ = daily_sales_export.export_daily_sales_csv(
+            SimpleNamespace(repository=_DailyRepository()),  # type: ignore[arg-type]
+            query=query,
+            account_refs=frozenset({"synthetic-account"}),
+            period="day",
+            dimension="item_id",
+            columns=columns,
+        )
+    else:
+        monkeypatch.setattr(
+            order_profit_export,
+            "_current_wfs_inventory_by_item",
+            lambda _service, _rows, _store_id: {},
+        )
+        csv_content, _ = order_profit_export.export_order_profit_csv(
+            SimpleNamespace(),  # type: ignore[arg-type]
+            query=query,
+            account_refs=frozenset({"synthetic-account"}),
+            period="day",
+            dimension="item_id",
+            columns=columns,
+        )
+
+    assert list(csv.reader(StringIO(csv_content))) == [
+        ["统计日期"],
+        ["2026-10-17"],
+    ]
