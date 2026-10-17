@@ -112,8 +112,9 @@ Scope: 采购段第一期；不含采购变更、退货、委外、加工、尾�
 | 顺序 | 来源 | 标记 | 说明 |
 |---|---|---|---|
 | 0 | 系统自动创建的采购计划（后续补货板块经 createPurchasePlan 写入，remark 由系统写 `ITEMID:<11位>` 并记录 `sid`） | `from_system_plan` | 本期不产生；预留标记与来源字段（`plan_origin`：`system` / `manual`，`replenishment_ref`） |
-| 1 | 计划 `remark` 解析 `ITEMID:\s*(\d{11})` | `from_plan_remark` | 规范：采购员提计划时在"产品备注"固定写 `ITEMID:19051502014`；一个计划一个 ItemID |
-| 2 | 国内仓打包单回填 | `from_packing_slip` | 见 5.3；打包单一单一 ItemID + 一 GTIN，可对到 采购单 × SKU × 店铺批次；采购看板只读消费打包单结果 |
+| 1 | 计划 `remark`，没有再看 `plan_remark`。先认 `ITEMID:` 后的 11 位数字；没有前缀时认备注中单独的 11 位数字。14 位编码不认 | `from_plan_remark` | 采购员备注可以写 `ITEMID:19051502014`，也可以只写 `19051502014`；一个计划一个 ItemID。页面标签为「采购备注」 |
+| 2 | Listing 管理已同步的商品 ID。按采购明细的店铺 + 本地 SKU 对 `dim_walmart_listings.local_sku`，且该组合只有一个 `item_id` | `from_listing` | 没有采购备注时使用。同一列在 ItemID 下展示该 Listing 的 MSKU。多个不同商品 ID 时不猜测 |
+| 3 | 国内仓打包单回填 | `from_packing_slip` | 见 5.3；备注和 Listing 都没有时才使用。采购看板只读消费打包单结果 |
 | — | 未归属 / 待打包回填 | `unresolved` / `pending_packing_slip` | 打包单表就绪前或尚未打包：展示"待打包回填"，进"待处理"列表；财务不取。不得猜测、不得按历史发货比例分摊 |
 
 **采购看板不提供 ItemID 人工指定入口**（负责人 2026-09-21 决定）：不建 `manual_purchase_item_itemid_override` 表，不建 ItemID 人工指定 API。国内仓"手工添加打包单"属打包单模块的兜底能力，不等同于采购看板 override。DWS 需保留来源字段、来源单号/打包单号、匹配时间、匹配状态；未匹配的行保持 `unresolved` / `pending_packing_slip`，不进入财务可用口径。
@@ -200,5 +201,6 @@ Scope: 采购段第一期；不含采购变更、退货、委外、加工、尾�
 | v1 | 2026-09-16 | 首版，依据 decisions.md 2026-09-15/16 与 probe_20260915 |
 | v2 | 2026-09-17 | 时间只取日期、整数天；<2 天自动剔除 + 人工剔除；人工基准算法；S4 部分到货；S2 含采购单待下单；交期不稳定（≥5 样本、极差 ≥3）；负责人唯一来源；ItemID 跳转规则；看板列/筛选/卡片定稿；店铺 ID 结论修正 |
 | v4 | 2026-09-22 | §5.1/§5.3 ItemID 归属：`from_shipment` 改为 `from_packing_slip`（国内仓打包单回填），新增 `pending_packing_slip`；采购看板不做 ItemID 人工指定（负责人 2026-09-21 决定，PR #144）；§7 同步维度改为更新时间（D-PP-2026-09-21-time-dimension）与 DWD 去重口径；§8 权限说明同步 |
+| v4.1 | 2026-10-17 | §5.1 在采购备注之后、打包单之前增加 `from_listing`：店铺 + 本地 SKU 唯一对应 Listing 商品 ID；同列展示 MSKU |
 | v3.1 | 2026-09-21 | §4.2 人工基准挤出口径明确：基准 + 4 张新样本占满窗口 5，第 5 张新样本挤出基准；无新单时直接用基准值（负责人 + Rocky 统一，代码 PR #141） |
 | v3 | 2026-09-17 | 新增 5.6 WFS 发货方式校验（Listing 管理新增字段 0/1/2，非 WFS 打标 `wfs_not_ready`）；ItemID 来源预留 `from_system_plan` 与 `plan_origin`；第 10 节补财务发货后计成本、WFS API 结论 |

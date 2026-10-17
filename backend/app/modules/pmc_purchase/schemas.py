@@ -24,6 +24,7 @@ type SearchType = Literal["sku", "item_id", "gtin", "msku", "order_sn"]
 type ItemIdSourceFilter = Literal[
     "from_system_plan",
     "from_plan_remark",
+    "from_listing",
     "from_packing_slip",
     "pending_packing_slip",
     "unresolved",
@@ -36,6 +37,15 @@ type BoardSort = Literal[
     "amount_desc",
 ]
 type OverdueKind = Literal["purchase", "arrival"]
+type SummaryCardFilter = Literal[
+    "awaiting_arrival",
+    "arrival_overdue",
+    "purchase_overdue",
+    "average_cycle",
+    "month_amount",
+    "unstable_sku",
+    "itemid_pending",
+]
 
 
 class StrictSchema(BaseModel):
@@ -53,7 +63,7 @@ class BoardFilterQuery(StrictSchema):
     status: list[StatusFilter] = Field(default_factory=list, max_length=7)
     search_type: SearchType | None = None
     search_values: list[str] = Field(default_factory=list, max_length=200)
-    item_id_source: list[ItemIdSourceFilter] = Field(default_factory=list, max_length=5)
+    item_id_source: list[ItemIdSourceFilter] = Field(default_factory=list, max_length=6)
     order_date_from: date | None = None
     order_date_to: date | None = None
     qty_min: int | None = Field(default=None, ge=0)
@@ -95,6 +105,8 @@ class BoardListQuery(BoardFilterQuery):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=200)
     sort: BoardSort = "order_date_desc"
+    # Card drill-down. Omitted from the summary endpoint so card numbers stay put.
+    summary_filter: SummaryCardFilter | None = None
 
 
 class SkuCycleQuery(StrictSchema):
@@ -216,8 +228,12 @@ class BoardSummaryData(StrictSchema):
     purchase_overdue_orders: int = Field(description="采购单待下单（S2）逾期数")
     purchase_overdue_plans: int = Field(description="计划待采购（status=2 未转单）逾期数")
     average_purchase_cycle_days_90d: Money | None = Field(
-        description="近 90 天到仓采购单 purchase_cycle_days 平均"
+        description="近 90 天到仓采购单 purchase_cycle_days 平均，一单一值"
     )
+    median_purchase_cycle_days_90d: Money | None = Field(
+        description="同一批采购单交期的中位数"
+    )
+    purchase_cycle_sample_orders_90d: int = Field(description="参与平均/中位数的采购单数")
     month_purchase_amount: list[MoneyByCurrency] = Field(
         description="本月下单 amount_allocated 合计，按币种"
     )

@@ -133,6 +133,8 @@ const summary: PurchaseBoardSummary = {
   purchaseOverdueOrders: 2,
   purchaseOverduePlans: 4,
   averagePurchaseCycleDays90d: 11.5,
+  medianPurchaseCycleDays90d: 9,
+  purchaseCycleSampleOrders90d: 18,
   monthPurchaseAmount: [{ currencyCode: "CNY", amount: 1234 }],
   unstableSkuCount: 1,
   itemidPendingLines: 7,
@@ -142,10 +144,11 @@ const summary: PurchaseBoardSummary = {
   meta: { freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: null },
 };
 
-const lastListFilters = () => {
-  const calls = vi.mocked(listPurchaseBoard).mock.calls;
-  return calls[calls.length - 1]?.[0] as PurchaseBoardFilters;
-};
+const lastListCall = () => vi.mocked(listPurchaseBoard).mock.calls.at(-1);
+
+const lastListFilters = () => lastListCall()?.[0] as PurchaseBoardFilters;
+
+const lastListSummaryFilter = () => lastListCall()?.[4];
 
 const renderPage = async () => {
   if (!page) throw new Error("pmc purchase board navigation metadata is required");
@@ -265,12 +268,37 @@ describe("PurchaseBoardPage", () => {
     expect(screen.getByRole("button", { name: "待采购超时：6" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "本月采购金额：¥1,234" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "平均采购交期：11.5 天" })).toBeInTheDocument();
+    expect(screen.getByText("中位数 9.0 天 · 18 单")).toBeInTheDocument();
+    expect(screen.getByText("平")).toBeInTheDocument();
+
+    const headers = within(screen.getByTestId("pro-table")).getAllByRole("columnheader").map((cell) => cell.textContent);
+    expect(headers).toEqual([
+      "采购单号",
+      "SKU / 产品",
+      "店铺",
+      "ItemID 归属",
+      "GTIN",
+      "负责人",
+      "下单日期",
+      "采购量",
+      "收货进度",
+      "到仓日期",
+      "采购交期",
+      "实际采购交期",
+      "审批周期",
+      "状态",
+      "逾期",
+      "金额",
+      "操作",
+    ]);
 
     const tableRow = screen.getByTestId("board-row");
     const link = within(tableRow).getByRole("link", { name: /19051502014/ });
     expect(link).toHaveAttribute("href", "https://www.walmart.com/ip/19051502014");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(within(tableRow).getByText("采购备注")).toBeInTheDocument();
+    expect(within(tableRow).getByText("MSKU-A")).toBeInTheDocument();
     expect(within(tableRow).getByText("已下单未到货")).toBeInTheDocument();
     expect(within(tableRow).getByText("逾期 10 天")).toBeInTheDocument();
     expect(within(tableRow).getByText("已剔除")).toBeInTheDocument();
@@ -279,23 +307,30 @@ describe("PurchaseBoardPage", () => {
     expect(within(tableRow).getByText("不稳定")).toBeInTheDocument();
   });
 
-  it("maps card clicks to committed filters and toggles them off again", async () => {
+  it("requests the list with the clicked card and leaves the summary numbers alone", async () => {
     await renderPage();
+    const summaryCalls = vi.mocked(getPurchaseBoardSummary).mock.calls.length;
 
     fireEvent.click(await screen.findByRole("button", { name: "待到货采购单：3" }));
-    await waitFor(() => expect(lastListFilters().statuses).toEqual(["s3", "s4"]));
-    expect(lastListFilters().ownerUids).toEqual([]);
-
-    fireEvent.click(screen.getByRole("button", { name: "ItemID 待处理：7" }));
-    await waitFor(() => expect(lastListFilters().itemIdSources).toEqual(["pending_packing_slip", "unresolved"]));
+    await waitFor(() => expect(lastListSummaryFilter()).toBe("awaiting_arrival"));
     expect(lastListFilters().statuses).toEqual([]);
+    expect(vi.mocked(getPurchaseBoardSummary).mock.calls.length).toBe(summaryCalls);
 
-    // Clicking the active card again resets the filters; the initial query is served from cache,
-    // so assert the pressed state rather than a new request.
+    fireEvent.click(screen.getByRole("button", { name: "平均采购交期：11.5 天" }));
+    await waitFor(() => expect(lastListSummaryFilter()).toBe("average_cycle"));
+
+    fireEvent.click(screen.getByRole("button", { name: "交期不稳定 SKU：1" }));
+    await waitFor(() => expect(lastListSummaryFilter()).toBe("unstable_sku"));
+
     const card = screen.getByRole("button", { name: "ItemID 待处理：7" });
-    expect(card).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(card);
+    await waitFor(() => expect(card).toHaveAttribute("aria-pressed", "true"));
+    expect(lastListSummaryFilter()).toBe("itemid_pending");
+
     fireEvent.click(card);
     await waitFor(() => expect(card).toHaveAttribute("aria-pressed", "false"));
+    expect(lastListSummaryFilter()).toBeUndefined();
+    expect(vi.mocked(getPurchaseBoardSummary).mock.calls.length).toBe(summaryCalls);
   });
 
   it("keeps paging server-side and caps the page size at the backend limit", async () => {

@@ -52,8 +52,16 @@ Query: `page` (≥1), `page_size` (1–200), `sort` (`order_date_desc` default |
 `status[]` (`s2` 待下单 | `s3` 已下单未到货 | `s4` 部分到货 | `overdue` 任一逾期 | `s9` 已到货 |
 `s0` 作废 | `unattributed` 未归属店铺), `search_type` (`sku|item_id|gtin|msku|order_sn`) +
 `search_values[]` (batch; comma / whitespace separated values are split),
-`item_id_source[]`, `order_date_from/to`, `qty_min/max` (on `quantity_allocated`),
-`price_min/max` (on `unit_price`), `wfs_not_ready`, `today_followup` (overdue or due today).
+`item_id_source[]` (`from_system_plan` | `from_plan_remark` | `from_listing` |
+`from_packing_slip` | `pending_packing_slip` | `unresolved`), `order_date_from/to`,
+`qty_min/max` (on `quantity_allocated`),
+`price_min/max` (on `unit_price`), `wfs_not_ready`, `today_followup` (overdue or due today),
+`summary_filter` (`awaiting_arrival` S3/S4 | `arrival_overdue` S3/S4 且逾期 | `purchase_overdue`
+S2 且逾期 | `average_cycle` 近 90 天已到货且有采购交期 | `month_amount` 本月有分配金额 |
+`unstable_sku` 交期不稳定 | `itemid_pending` 无 ItemID 且非作废). This parameter is list-only:
+`/board/summary` rejects it, so card numbers do not change when a card is selected.
+The list total counts detail rows; order cards on the summary count distinct order numbers.
+未转单计划 are not board rows — `purchase_overdue` lists the overdue S2 orders only.
 Unknown parameters and inconsistent ranges are `422 VALIDATION_ERROR`.
 
 Row fields: `purchase_order_sn, order_item_id, plan_sn, plan_sns[], order_status,
@@ -76,6 +84,7 @@ Same filters as the list (no paging). Returns `awaiting_arrival_orders` (S3+S4, 
 orders), `arrival_overdue_orders`, `purchase_overdue_orders` (S2 orders), `purchase_overdue_plans`
 (plans status = 2 not yet ordered, past `s2_pending_days`; store filter applies),
 `average_purchase_cycle_days_90d` (orders arrived in the last 90 days, one value per order),
+`median_purchase_cycle_days_90d` and `purchase_cycle_sample_orders_90d` (same orders),
 `month_purchase_amount[]` (`amount_allocated` of lines ordered this month, per currency, no
 FX), `unstable_sku_count`, `itemid_pending_lines`, `wfs_not_ready_lines`,
 `unattributed_store_lines`, `as_of`.

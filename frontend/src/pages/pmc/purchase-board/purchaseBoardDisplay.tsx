@@ -22,10 +22,20 @@ export const stageLabels: Record<PurchaseStageCode, { label: string; color: stri
 
 export const itemIdSourceLabels: Record<PurchaseBoardItemIdSource, string> = {
   from_system_plan: "系统计划",
-  from_plan_remark: "计划备注",
+  from_plan_remark: "采购备注",
+  from_listing: "按货件",
   from_packing_slip: "打包单",
   pending_packing_slip: "待打包单",
   unresolved: "待处理",
+};
+
+export const itemIdSourceColors: Record<PurchaseBoardItemIdSource, string> = {
+  from_system_plan: "blue",
+  from_plan_remark: "cyan",
+  from_listing: "green",
+  from_packing_slip: "purple",
+  pending_packing_slip: "gold",
+  unresolved: "red",
 };
 
 export const skuCycleSourceLabels: Record<SkuCycleSource, string> = {

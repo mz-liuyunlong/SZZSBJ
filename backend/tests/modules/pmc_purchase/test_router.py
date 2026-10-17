@@ -197,6 +197,8 @@ def test_summary_detail_cycles_and_pending_plans_delegate_to_service(monkeypatch
         purchase_overdue_orders=0,
         purchase_overdue_plans=2,
         average_purchase_cycle_days_90d=Decimal("11.5000"),
+        median_purchase_cycle_days_90d=Decimal("9.0000"),
+        purchase_cycle_sample_orders_90d=18,
         month_purchase_amount=[],
         unstable_sku_count=1,
         itemid_pending_lines=4,

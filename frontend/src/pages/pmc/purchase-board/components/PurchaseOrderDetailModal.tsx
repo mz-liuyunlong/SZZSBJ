@@ -126,7 +126,7 @@ function PurchaseOrderDetailModal({
       {detail && (
         <div className="purchase-board__detail">
           <Descriptions size="small" column={4} bordered>
-            <Descriptions.Item label="状态" span={2}><StageCell stage={detail.stage} /></Descriptions.Item>
+            <Descriptions.Item label="状态" span={2}><StageCell stage={detail.stage} showOverdue /></Descriptions.Item>
             <Descriptions.Item label="下单日期">{detail.orderDate ?? EMPTY}</Descriptions.Item>
             <Descriptions.Item label="创建日期">{detail.orderCreateDate ?? EMPTY}</Descriptions.Item>
             <Descriptions.Item label="收货进度">

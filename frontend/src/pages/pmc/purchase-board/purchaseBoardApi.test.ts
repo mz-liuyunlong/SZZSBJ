@@ -105,6 +105,18 @@ describe("purchaseBoardApi query building", () => {
     expect(query.get("page")).toBe("2");
     expect(query.get("page_size")).toBe("100");
     expect(query.get("sort")).toBe("amount_desc");
+    expect(query.has("summary_filter")).toBe(false);
+  });
+
+  it("sends a card drill-down only on the list query", () => {
+    const query = buildPurchaseBoardListQuery(
+      createInitialPurchaseBoardFilters(),
+      1,
+      50,
+      "order_date_desc",
+      "itemid_pending",
+    );
+    expect(query.get("summary_filter")).toBe("itemid_pending");
   });
 
   it("omits search_type when there is nothing to search and never sends unknown keys", () => {
@@ -156,6 +168,8 @@ describe("purchaseBoardApi mapping", () => {
       purchase_overdue_orders: 0,
       purchase_overdue_plans: 2,
       average_purchase_cycle_days_90d: "11.5000",
+      median_purchase_cycle_days_90d: "9.0000",
+      purchase_cycle_sample_orders_90d: 18,
       month_purchase_amount: [{ currency_code: "CNY", amount: "1234.5000" }],
       unstable_sku_count: 1,
       itemid_pending_lines: 4,
@@ -166,6 +180,8 @@ describe("purchaseBoardApi mapping", () => {
     const summary = await getPurchaseBoardSummary({ ...createInitialPurchaseBoardFilters(), statuses: ["s2"] });
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/pmc/purchase/board/summary?status=s2");
     expect(summary.averagePurchaseCycleDays90d).toBe(11.5);
+    expect(summary.medianPurchaseCycleDays90d).toBe(9);
+    expect(summary.purchaseCycleSampleOrders90d).toBe(18);
     expect(summary.monthPurchaseAmount).toEqual([{ currencyCode: "CNY", amount: 1234.5 }]);
     expect(summary.purchaseOverduePlans).toBe(2);
     expect(summary.asOf).toBe("2026-09-24");

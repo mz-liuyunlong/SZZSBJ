@@ -104,6 +104,7 @@ def session() -> Iterator[Session]:
                 store_id=STORE,
                 item_id="19051502014",
                 msku="MSKU-A",
+                local_sku="SKU-A",
                 gtin="00012345678905",
                 fulfillment_type="0",
                 synced_at=NOW,
@@ -429,14 +430,14 @@ def test_stages_purchase_overdue_vs_arrival_overdue_and_unattributed_store(
     assert overdue["PO-A"].detail_json["overdue_kind"] == "purchase"
     assert overdue["PO-B"].detail_json["overdue_kind"] == "arrival"
     assert overdue["PO-C"].detail_json["overdue_kind"] == "arrival"
-    # line without any plan: ItemID waits for the packing slip (no manual source)
-    assert (a.item_id, a.item_id_source, a.item_id_match_status) == (
-        None,
-        "pending_packing_slip",
-        "pending",
+    # line without a plan remark takes the single Listing item id for this store + SKU
+    assert (a.item_id, a.item_id_source, a.item_id_match_status, a.msku) == (
+        "19051502014",
+        "from_listing",
+        "matched",
+        "MSKU-A",
     )
-    itemid_pending = {p.order_sn for p in _pending(session)["itemid_pending"]}
-    assert itemid_pending == {"PO-A"}  # void PO-E is not listed
+    assert "itemid_pending" not in _pending(session)
 
 
 def test_sku_cycle_samples_manual_overrides_and_threshold_feed_stage(session: Session) -> None:
@@ -564,9 +565,68 @@ def test_baseline_override_and_refresh_is_idempotent(session: Session) -> None:
     assert session.scalar(select(func.count()).select_from(ManualPurchaseCycleOverride)) == 1
 
 
-def test_packing_slip_source_is_used_when_available(session: Session) -> None:
+def test_listing_item_id_is_used_when_plan_remark_is_missing(session: Session) -> None:
+    _order(session, "PO1")
+    _line(session, "PO1", "L1", plan_sn=None, plan_key="", plan_found=False, remark_item_id=None)
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO1", "L1", "")]
+    assert (row.item_id, row.item_id_source, row.msku, row.gtin) == (
+        "19051502014",
+        "from_listing",
+        "MSKU-A",
+        "00012345678905",
+    )
+    assert row.item_id_match_status == "matched"
+    assert "itemid_pending" not in _pending(session)
+
+
+def test_listing_item_id_is_not_guessed_when_store_sku_has_several(session: Session) -> None:
+    session.add(
+        WalmartListingDimension(
+            id=uuid4(),
+            source_account_ref=ACCOUNT,
+            store_id=STORE,
+            item_id="20425456045",
+            msku="MSKU-B",
+            local_sku="SKU-A",
+            gtin="00012345678912",
+            fulfillment_type="1",
+            synced_at=NOW,
+        )
+    )
     _order(session, "PO1")
     _line(session, "PO1", "L1", plan_sn=None, plan_key="", plan_found=False)
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO1", "L1", "")]
+    assert (row.item_id, row.item_id_source) == (None, "pending_packing_slip")
+
+
+def test_plan_remark_wins_over_listing_item_id(session: Session) -> None:
+    _plan(session, "P1", remark_item_id="33333333333", remark="ITEMID:33333333333")
+    _order(session, "PO1")
+    _line(session, "PO1", "L1")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO1", "L1", "P1")]
+    assert (row.item_id, row.item_id_source) == ("33333333333", "from_plan_remark")
+
+
+def test_packing_slip_source_is_used_when_available(session: Session) -> None:
+    _order(session, "PO1")
+    _line(
+        session,
+        "PO1",
+        "L1",
+        plan_sn=None,
+        plan_key="",
+        plan_found=False,
+        sku="SKU-NO-LISTING",
+    )
     session.commit()
 
     class Slips:

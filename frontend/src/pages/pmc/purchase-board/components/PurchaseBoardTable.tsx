@@ -7,6 +7,7 @@ import { CopyableTextCell, MoneyCell } from "@/components/report-table/cells";
 import EmptyState from "@/shared/states/EmptyState";
 import {
   ItemIdCell,
+  OverdueCell,
   SkuCycleBriefCell,
   StageCell,
 } from "@/pages/pmc/purchase-board/components/PurchaseBoardCells";
@@ -25,21 +26,22 @@ import {
 
 const minColumnWidths: Record<string, number> = {
   purchaseOrderSn: 150,
-  stage: 180,
+  sku: 160,
   store: 120,
-  sku: 130,
-  productName: 180,
+  itemId: 200,
   gtin: 130,
-  itemId: 150,
   owner: 90,
-  progress: 110,
   orderDate: 104,
+  quantity: 80,
+  progress: 120,
   arrivalDate: 104,
   purchaseCycleDays: 104,
-  approvalCycleDays: 90,
   skuCycle: 150,
-  unitPrice: 96,
+  approvalCycleDays: 90,
+  stage: 120,
+  overdue: 110,
   amountAllocated: 104,
+  unitPrice: 96,
   planSn: 130,
   actions: 72,
 };
@@ -94,12 +96,21 @@ function PurchaseBoardTable({
         <CopyableTextCell text={row.purchaseOrderSn} label="采购单号" link onOpen={() => onOpenDetail(row)} />
       ),
     },
-    stage: {
-      key: "stage",
-      title: title("stage", fieldTitle.stage),
-      width: width("stage"),
+    sku: {
+      key: "sku",
+      title: title("sku", fieldTitle.sku),
+      width: width("sku"),
       onHeaderCell: headerCell,
-      render: (_, row) => <StageCell stage={row.stage} wfsNotReady={row.itemId.wfsNotReady} />,
+      render: (_, row) => (
+        <span className="purchase-board__sku-cell">
+          {row.sku ? <CopyableTextCell text={row.sku} label="SKU" /> : EMPTY}
+          {row.productName ? (
+            <Typography.Text type="secondary" ellipsis={{ tooltip: row.productName }}>
+              {row.productName}
+            </Typography.Text>
+          ) : null}
+        </span>
+      ),
     },
     store: {
       key: "store",
@@ -112,21 +123,6 @@ function PurchaseBoardTable({
           ? (row.store.name ?? row.store.id ?? EMPTY)
           : <Typography.Text type="warning">未归属店铺</Typography.Text>
       ),
-    },
-    sku: {
-      key: "sku",
-      title: title("sku", fieldTitle.sku),
-      width: width("sku"),
-      onHeaderCell: headerCell,
-      render: (_, row) => (row.sku ? <CopyableTextCell text={row.sku} label="SKU" /> : EMPTY),
-    },
-    productName: {
-      key: "productName",
-      title: title("productName", fieldTitle.productName),
-      width: width("productName"),
-      ellipsis: true,
-      onHeaderCell: headerCell,
-      render: (_, row) => row.productName ?? EMPTY,
     },
     gtin: {
       key: "gtin",
@@ -148,6 +144,14 @@ function PurchaseBoardTable({
       width: width("owner"),
       onHeaderCell: headerCell,
       render: (_, row) => row.owner.name ?? EMPTY,
+    },
+    quantity: {
+      key: "quantity",
+      title: title("quantity", fieldTitle.quantity),
+      width: width("quantity"),
+      align: "right",
+      onHeaderCell: headerCell,
+      render: (_, row) => <span className="report-table-metric">{row.quantityAllocated.toLocaleString()}</span>,
     },
     progress: {
       key: "progress",
@@ -206,6 +210,20 @@ function PurchaseBoardTable({
       align: "right",
       onHeaderCell: headerCell,
       render: (_, row) => <MoneyCell value={row.unitPrice} currency={currencySign(row.currencyCode)} />,
+    },
+    stage: {
+      key: "stage",
+      title: title("stage", fieldTitle.stage),
+      width: width("stage"),
+      onHeaderCell: headerCell,
+      render: (_, row) => <StageCell stage={row.stage} wfsNotReady={row.itemId.wfsNotReady} />,
+    },
+    overdue: {
+      key: "overdue",
+      title: title("overdue", fieldTitle.overdue),
+      width: width("overdue"),
+      onHeaderCell: headerCell,
+      render: (_, row) => <OverdueCell stage={row.stage} />,
     },
     amountAllocated: {
       key: "amountAllocated",

@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from app.modules.pmc_purchase.calculations import (
+    median_days,
     ArrivalResult,
     CycleSample,
     ManualBaseline,
@@ -30,6 +31,13 @@ from app.modules.pmc_purchase.calculations import (
 
 T = PurchaseThresholds()
 TODAY = date(2026, 9, 21)
+
+
+def test_median_days_uses_the_middle_of_the_sorted_sample() -> None:
+    assert median_days([]) is None
+    assert median_days([10]) == Decimal("10.0000")
+    assert median_days([9, 12, 10]) == Decimal("10.0000")
+    assert median_days([8, 10]) == Decimal("9.0000")
 
 
 def _d(text: str) -> date:
@@ -91,9 +99,12 @@ def test_days_between_same_day_is_zero_and_missing_is_none() -> None:
         ("ITEMID:19051502014", "19051502014"),
         ("补货 ITEMID: 19051502014 急", "19051502014"),
         ("itemid:19051502014", "19051502014"),
+        ("20400862776", "20400862776"),
+        ("20024473476 在途", "20024473476"),
+        ("ITEMID:11111111111 22222222222", "11111111111"),
         ("ITEMID:1905150201", None),  # ten digits
         ("ITEMID:190515020145", None),  # twelve digits
-        ("ITEM ID 19051502014", None),
+        ("HK2614 00465000461303", None),  # 14-digit code, not an ItemID
         ("", None),
         (None, None),
     ],
@@ -116,10 +127,16 @@ def test_resolve_item_id_priority_system_plan_over_remark_over_packing_slip() ->
     )
     assert (
         resolve_item_id(
-            plan_remark_item_id="33333333333", packing_slip_item_id="44444444444"
+            plan_remark_item_id="33333333333",
+            listing_item_id="55555555555",
+            packing_slip_item_id="44444444444",
         ).source
         == "from_plan_remark"
     )
+    listing = resolve_item_id(
+        listing_item_id=" 55555555555 ", packing_slip_item_id="44444444444"
+    )
+    assert (listing.source, listing.item_id) == ("from_listing", "55555555555")
     slip = resolve_item_id(packing_slip_item_id=" 44444444444 ")
     assert (slip.source, slip.item_id) == ("from_packing_slip", "44444444444")
     pending = resolve_item_id(plan_remark_item_id="", packing_slip_pending=True)
@@ -141,6 +158,7 @@ def test_resolve_item_id_has_no_manual_parameter() -> None:
     ("source", "fulfillment_type", "expected"),
     [
         ("from_plan_remark", "1", False),
+        ("from_listing", "0", True),
         ("from_packing_slip", "0", True),
         ("from_system_plan", "2", True),
         ("from_packing_slip", 2, True),

@@ -81,9 +81,19 @@ const formatMonthAmount = (summary?: PurchaseBoardSummary) => {
     .join(" / ");
 };
 
-const formatDays = (value: number | null | undefined) => (
-  value === null || value === undefined ? "—" : `${value.toFixed(1)} 天`
+const formatOneDecimal = (value: number | null | undefined) => (
+  value === null || value === undefined ? "—" : value.toFixed(1)
 );
+
+const formatCycleSubtitle = (summary?: PurchaseBoardSummary) => {
+  const samples = summary?.purchaseCycleSampleOrders90d ?? 0;
+  if (!summary || summary.medianPurchaseCycleDays90d === null) return `中位数 — · ${samples} 单`;
+  return `中位数 ${summary.medianPurchaseCycleDays90d.toFixed(1)} 天 · ${samples} 单`;
+};
+
+function AverageMark() {
+  return <span className="management-stat-card__mark">平</span>;
+}
 
 function buildPurchaseBoardCards(
   summary?: PurchaseBoardSummary,
@@ -119,10 +129,12 @@ function buildPurchaseBoardCards(
     {
       key: "average_cycle",
       title: "平均采购交期",
-      subtitle: "近 90 天到货采购单，按单取值",
-      value: formatDays(summary?.averagePurchaseCycleDays90d),
+      subtitle: formatCycleSubtitle(summary),
+      value: summary ? formatOneDecimal(summary.averagePurchaseCycleDays90d) : "—",
+      unit: "天",
+      layout: "leading",
       tone: "normal",
-      icon: <ClockIcon />,
+      icon: <AverageMark />,
     },
     {
       key: "month_amount",

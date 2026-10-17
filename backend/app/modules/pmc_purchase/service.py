@@ -15,6 +15,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.pmc_purchase.calculations import AVERAGE_CYCLE_WINDOW_DAYS, median_days
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchasePlan,
     DwsPurchaseBoard,
@@ -47,7 +48,6 @@ from app.modules.pmc_purchase.schemas import (
 
 FOUR_PLACES = Decimal("0.0001")
 DEFAULT_S2_PENDING_DAYS = 7
-AVERAGE_CYCLE_WINDOW_DAYS = 90
 
 
 class PmcPurchaseReadService:
@@ -85,13 +85,15 @@ class PmcPurchaseReadService:
                 and r.arrival_date >= window_start
             ):
                 cycles.setdefault(r.order_sn, r.purchase_cycle_days)
+        cycle_values = list(cycles.values())
         average = (
-            (Decimal(sum(cycles.values())) / Decimal(len(cycles))).quantize(
+            (Decimal(sum(cycle_values)) / Decimal(len(cycle_values))).quantize(
                 FOUR_PLACES, rounding=ROUND_HALF_UP
             )
-            if cycles
+            if cycle_values
             else None
         )
+        median = median_days(cycle_values)
 
         month_start = self.today.replace(day=1)
         by_currency: dict[str | None, Decimal] = defaultdict(lambda: Decimal(0))
@@ -109,6 +111,8 @@ class PmcPurchaseReadService:
             purchase_overdue_orders=len(purchase_overdue),
             purchase_overdue_plans=len(pending_plans[0]),
             average_purchase_cycle_days_90d=average,
+            median_purchase_cycle_days_90d=median,
+            purchase_cycle_sample_orders_90d=len(cycle_values),
             month_purchase_amount=[
                 MoneyByCurrency(currency_code=code, amount=amount)
                 for code, amount in sorted(by_currency.items(), key=lambda kv: kv[0] or "")
