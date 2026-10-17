@@ -70,3 +70,19 @@ export async function markApprovalNotificationRead(id: string): Promise<boolean>
     { method: "POST", body: "{}" },
   )).data.updated;
 }
+
+
+export async function approveLowRiskBatch(
+ items: {id:string;version:number}[], note:string,
+): Promise<number> {
+ const result = await backendRequest<{approved:number},null>(
+  "/api/approvals/workflow/bulk-approve", {
+   method:"POST", body:JSON.stringify({
+    approval_ids:items.map(item=>item.id),
+    expected_versions:Object.fromEntries(items.map(item=>[item.id,item.version])),
+    note,
+   }),
+  },
+ );
+ return result.data.approved;
+}
