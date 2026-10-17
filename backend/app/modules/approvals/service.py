@@ -506,7 +506,7 @@ class ApprovalService:
         changed = any(
             current.get(k) != saved.get(k)
             for k in saved
-            if k not in ("status", "archive_reason", "archive_reason_type")
+            if k not in ("status", "archive_reason", "archive_reason_type", "approval_policy")
         )
         return ApprovalDetail(
             **item.model_dump(),
