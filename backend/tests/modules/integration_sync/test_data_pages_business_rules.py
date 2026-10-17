@@ -111,7 +111,9 @@ def test_sample_writer_keeps_required_business_fields() -> None:
         [
             {
                 "global_order_no": "global-1",
-                "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+                "global_purchase_time": str(
+                    int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
+                ),
                 "store_id": "store-a",
                 "store_name": "Store A",
                 "amount_currency": "USD",
@@ -316,22 +318,28 @@ def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> No
     session = _CaptureSession()
     runner = _runner(session)
     written = runner._write_sample_orders(
-        [{
-            "global_order_no": "global-2",
-            "reference_no": "reference-2",
-            "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
-            "store_id": "store-a",
-            "status": 9,
-            "transaction_info": [{"order_total_amount": "10.00"}],
-            "item_info": [{
-                "order_item_no": "line-2",
-                "msku": "MSKU-1",
-                "item_id": "item-1",
-                "quantity": "2",
-                "item_price_amount": "24.99",
-                "discount_amount": "24.99",
-            }],
-        }]
+        [
+            {
+                "global_order_no": "global-2",
+                "reference_no": "reference-2",
+                "global_purchase_time": str(
+                    int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
+                ),
+                "store_id": "store-a",
+                "status": 9,
+                "transaction_info": [{"order_total_amount": "10.00"}],
+                "item_info": [
+                    {
+                        "order_item_no": "line-2",
+                        "msku": "MSKU-1",
+                        "item_id": "item-1",
+                        "quantity": "2",
+                        "item_price_amount": "24.99",
+                        "discount_amount": "24.99",
+                    }
+                ],
+            }
+        ]
     )
     assert written == 1
     params = session.calls[1][1]
@@ -350,7 +358,9 @@ def test_sample_writer_rejects_missing_order_line_identity() -> None:
     row = {
         "global_order_no": "global-3",
         "reference_no": "reference-3",
-        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+        "global_purchase_time": str(
+                    int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
+                ),
         "store_id": "store-a",
         "status": 9,
         "transaction_info": [{"order_total_amount": "0"}],
