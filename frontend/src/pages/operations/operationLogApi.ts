@@ -10,7 +10,9 @@ export async function saveOperationLogRows(rows: OperationLogRow[], revisions: R
     body: JSON.stringify({rows: rows.map((row) => ({
       account: row.sourceAccountRef, day: row.date, store: row.storeId,
       item: row.productId, msku: row.msku ?? "",
-      content: row.manualLog, work_type: row.workType, status,
+      content: row.manualLog, work_type: row.workType,
+      work_types: row.workTypes ?? [row.workType], observe_days: row.observeDays ?? null,
+      status,
       revision: revisions[row.id] ?? 0,
     }))}),
   });

@@ -68,6 +68,8 @@ def get_rows(
         select i.*, coalesce(m.log_content, '') as manual_content,
                coalesce(m.revision, 0) as revision,
                coalesce(m.work_type, '其他') as work_type,
+               coalesce(m.work_types_json, '[]'::jsonb) as work_types_json,
+               m.observe_days as observe_days,
                coalesce(m.status, 'draft') as edit_status,
                (select count(*) from ops_system_operation_events e
                 where e.source_account_ref = i.source_account_ref
@@ -95,7 +97,7 @@ def get_rows(
                   and k.entry_type = 'ad') as ad_url
         from identities i
         left join lateral (
-            select log_content, revision, work_type, status
+            select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = i.source_account_ref
               and m.log_date = i.log_date
@@ -133,6 +135,8 @@ def get_rows(
                coalesce(m.log_content, '') as manual_content,
                coalesce(m.revision, 0) as revision,
                coalesce(m.work_type, '其他') as work_type,
+               coalesce(m.work_types_json, '[]'::jsonb) as work_types_json,
+               m.observe_days as observe_days,
                coalesce(m.status, 'draft') as edit_status,
                (select count(*) from ops_system_operation_events e
                 where e.source_account_ref = h.source_account_ref
@@ -168,7 +172,7 @@ def get_rows(
             limit 1
         ) l on true
         left join lateral (
-            select log_content, revision, work_type, status
+            select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = h.source_account_ref
               and m.log_date = h.day and m.store_id = h.store_id
@@ -256,6 +260,8 @@ def get_rows(
                 "store": r["store_name"] or r["store_id"],
                 "owner": r["owner"],
                 "workType": r["work_type"],
+                "workTypes": list(r["work_types_json"] or []),
+                "observeDays": r["observe_days"],
                 "conversionRate": None,
                 "salePrice": float(r["price"]) if r["price"] is not None else None,
                 "keywordEntryStatus": "ok" if r["keyword_link"] else "missing",

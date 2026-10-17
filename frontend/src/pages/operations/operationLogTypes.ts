@@ -49,6 +49,8 @@ export interface OperationLogRow {
   store: string;
   owner: string;
   workType: OperationLogWorkType;
+  workTypes?: OperationLogWorkType[];
+  observeDays?: number | null;
   conversionRate: number | null;
   adRatio?: number;
   salePrice: number | null;

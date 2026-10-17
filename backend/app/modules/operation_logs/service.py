@@ -7,6 +7,7 @@ The only written tables have an ops_ prefix in the *new* PostgreSQL database.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from json import dumps
 from typing import Any
 
 from sqlalchemy import text
@@ -305,7 +306,7 @@ def read_detail(
     manuals = (
         session.execute(
             text("""
-        select legacy_id, source_kind, log_content, work_type, status, revision
+        select legacy_id, source_kind, log_content, work_type, work_types_json, observe_days, status, revision
         from ops_manual_operation_logs
         where source_account_ref = :account and log_date = :day
           and store_id = :store and item_id = :item and msku = :msku
@@ -323,6 +324,8 @@ def read_detail(
         "system_highlight": any(e["highlight"] for e in events),
         "operation_log": str(current["log_content"]) if current else "",
         "work_type": str(current["work_type"]) if current else "其他",
+        "work_types": list(current["work_types_json"] or []) if current else [],
+        "observe_days": current["observe_days"] if current else None,
         "status": str(current["status"]) if current else "draft",
         "revision": int(current["revision"])
         if current and current["source_kind"] == "manual"
@@ -345,6 +348,8 @@ def _save_one(
     status: str,
     revision: int,
     actor: str,
+    work_types: list[str] | None = None,
+    observe_days: int | None = None,
 ) -> int:
     _identity(
         session,
@@ -357,6 +362,10 @@ def _save_one(
     )
     if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
         raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
+    if work_types is not None and (len(work_types) > 6 or any(v not in WORK_TYPES for v in work_types)):
+        raise ApiError(code="OPERATION_LOG_INVALID_WORK_TYPES", status_code=422)
+    if observe_days not in (None, 3, 7, 14):
+        raise ApiError(code="OPERATION_LOG_INVALID_OBSERVE_DAYS", status_code=422)
     if status == "submitted" and not content.strip():
         raise ApiError(code="OPERATION_LOG_CONTENT_REQUIRED", status_code=422)
     params = {
@@ -366,14 +375,18 @@ def _save_one(
         "status": status,
         "revision": revision,
         "actor": actor,
+        "work_types": dumps(work_types or ([work_type] if work_type else [])),
+        "observe_days": observe_days,
     }
     if revision == 0:
         statement = """
             insert into ops_manual_operation_logs
                 (source_kind, source_account_ref, log_date, store_id, item_id,
-                 msku, log_content, work_type, status, actor_ref, revision)
+                 msku, log_content, work_type, work_types_json,
+                 observe_days, status, actor_ref, revision)
             values ('manual', :account, :day, :store, :item, :msku,
-                    :content, :work_type, :status, :actor, 1)
+                    :content, :work_type, cast(:work_types as jsonb),
+                    :observe_days, :status, :actor, 1)
             on conflict (source_account_ref, log_date, store_id, item_id, msku)
             where source_kind = 'manual' do nothing
             returning revision
@@ -382,6 +395,8 @@ def _save_one(
         statement = """
             update ops_manual_operation_logs
             set log_content = :content, work_type = :work_type,
+                work_types_json = cast(:work_types as jsonb),
+                observe_days = :observe_days,
                 status = :status, actor_ref = :actor,
                 revision = revision + 1, updated_at = now()
             where source_kind = 'manual' and source_account_ref = :account

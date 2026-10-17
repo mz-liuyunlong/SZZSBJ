@@ -44,6 +44,8 @@ class Identity(BaseModel):
 class WriteRow(Identity):
     content: str = Field(max_length=10000)
     work_type: str = Field(default="其他", max_length=32)
+    work_types: list[str] = Field(default_factory=list, max_length=6)
+    observe_days: int | None = Field(default=None, ge=1, le=365)
     status: str = Field(default="draft", pattern="^(draft|submitted)$")
     revision: int = Field(ge=0)
 

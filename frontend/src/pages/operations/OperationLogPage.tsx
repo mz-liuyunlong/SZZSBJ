@@ -186,6 +186,8 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         ...row,
         manualLog,
         workType: values.workTypes[0] ?? row.workType,
+        workTypes: values.workTypes.length ? values.workTypes : (row.workTypes ?? [row.workType]),
+        observeDays: values.observeDays === "不需要观察" ? null : Number(values.observeDays.match(/\d+/)?.[0] ?? 3),
         status: "草稿",
       };
     });
