@@ -294,66 +294,101 @@ class ApprovalService:
             )
             params["risk"] = query.risk_level
         condition = " and ".join(where)
-        total = int(self.session.execute(text(
-            f"select count(*) from ops_wfs_fee_anomaly_cases c where {condition}"
-        ), params).scalar_one())
-        rows = self.session.execute(text(f"""
+        total = int(
+            self.session.execute(
+                text(f"select count(*) from ops_wfs_fee_anomaly_cases c where {condition}"),
+                params,
+            ).scalar_one()
+        )
+        rows = (
+            self.session.execute(
+                text(f"""
             select c.* from ops_wfs_fee_anomaly_cases c where {condition}
             order by c.archive_requested_at desc nulls last, c.id
             limit :limit offset :offset
-        """), params).mappings().all()
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
         items = []
         for record in rows:
             case = dict(record)
             pending = calculate_pending_recovery(case)
             risk = "high" if pending >= 500 else "medium" if pending >= 100 else "low"
-            items.append(ApprovalItem(
-                id=str(case["id"]), version=1, approval_type="wfs_case_abandon",
-                business_ref=str(case["id"]), title="WFS 历史待核验 · 放弃跟进",
-                source_account_ref=case["source_account_ref"], applicant_id=None,
-                status="legacy_unverified", risk_level=risk, amount=str(pending),
-                currency_code=case["currency_code"],
-                submitted_at=None, reviewed_at=None, reviewed_by=None,
-                reason=case.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
-                can_review=False, requires_verification=True,
-            ))
+            items.append(
+                ApprovalItem(
+                    id=str(case["id"]),
+                    version=1,
+                    approval_type="wfs_case_abandon",
+                    business_ref=str(case["id"]),
+                    title="WFS 历史待核验 · 放弃跟进",
+                    source_account_ref=case["source_account_ref"],
+                    applicant_id=None,
+                    status="legacy_unverified",
+                    risk_level=risk,
+                    amount=str(pending),
+                    currency_code=case["currency_code"],
+                    submitted_at=None,
+                    reviewed_at=None,
+                    reviewed_by=None,
+                    reason=case.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
+                    can_review=False,
+                    requires_verification=True,
+                )
+            )
         return ApprovalListData(items=items), total
 
-    def legacy_detail(
-        self, case_id: UUID, account_refs: frozenset[str]
-    ) -> ApprovalDetail:
+    def legacy_detail(self, case_id: UUID, account_refs: frozenset[str]) -> ApprovalDetail:
         """Read-only display; do not fabricate approvals, applicants, or events."""
         record = self._case(str(case_id), account_refs)
         if record["status"] != "archive_pending" or record["archive_review_status"] != "pending":
             blocked()
-        linked = self.session.execute(text("""
+        linked = self.session.execute(
+            text("""
             select 1 from app_approval_requests where approval_type='wfs_case_abandon'
               and business_ref=:case_id limit 1
-        """), {"case_id": str(case_id)}).first()
+        """),
+            {"case_id": str(case_id)},
+        ).first()
         if linked:
             blocked()
         pending = calculate_pending_recovery(record)
         risk = "high" if pending >= 500 else "medium" if pending >= 100 else "low"
         item = ApprovalItem(
-            id=str(case_id), version=1, approval_type="wfs_case_abandon",
-            business_ref=str(case_id), title="WFS 历史待核验 · 放弃跟进",
-            source_account_ref=record["source_account_ref"], applicant_id=None,
-            status="legacy_unverified", risk_level=risk, amount=str(pending),
-            currency_code=record["currency_code"], submitted_at=None,
-            reviewed_at=None, reviewed_by=None,
+            id=str(case_id),
+            version=1,
+            approval_type="wfs_case_abandon",
+            business_ref=str(case_id),
+            title="WFS 历史待核验 · 放弃跟进",
+            source_account_ref=record["source_account_ref"],
+            applicant_id=None,
+            status="legacy_unverified",
+            risk_level=risk,
+            amount=str(pending),
+            currency_code=record["currency_code"],
+            submitted_at=None,
+            reviewed_at=None,
+            reviewed_by=None,
             reason=record.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
-            can_review=False, requires_verification=True,
+            can_review=False,
+            requires_verification=True,
         )
         return ApprovalDetail(
-            **item.model_dump(), snapshot=make_snapshot(record),
-            evidence=record.get("archive_evidence"), current_case=make_snapshot(record),
-            data_changed=False, can_supplement=False, events=[],
+            **item.model_dump(),
+            snapshot=make_snapshot(record),
+            evidence=record.get("archive_evidence"),
+            current_case=make_snapshot(record),
+            data_changed=False,
+            can_supplement=False,
+            events=[],
         )
 
     def list_requests(
         self, query: ApprovalQuery, account_refs: frozenset[str], actor: str, may_review: bool
     ) -> tuple[ApprovalListData, int]:
-        if query.tab == 'legacy':
+        if query.tab == "legacy":
             return self.legacy_unverified(query, account_refs)
         status_clause = (
             "a.status in ('submitted','info_required')"
@@ -424,13 +459,16 @@ class ApprovalService:
             .mappings()
             .one()
         )
-        legacy = self.session.execute(text("""
+        legacy = self.session.execute(
+            text("""
             select count(*) from ops_wfs_fee_anomaly_cases c
             where c.source_account_ref=any(:accounts) and c.is_deleted=false
               and c.status='archive_pending' and c.archive_review_status='pending'
               and not exists (select 1 from app_approval_requests a
                where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
-        """), {"accounts": list(account_refs)}).scalar_one()
+        """),
+            {"accounts": list(account_refs)},
+        ).scalar_one()
         return ApprovalSummary(**dict(row), legacy_unverified=int(legacy))
 
     def detail(
