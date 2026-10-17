@@ -498,6 +498,21 @@ class ApprovalService:
             .mappings()
             .all()
         )
+        if record["approval_type"] in (
+            "purchase_exception", "finance_exception", "access_change"
+        ):
+            return ApprovalDetail(
+                **item.model_dump(),
+                snapshot=record["snapshot"],
+                evidence=record["evidence"],
+                current_case=None,
+                data_changed=False,
+                can_supplement=(
+                    record["status"] == "info_required"
+                    and record["applicant_id"] == actor
+                ),
+                events=[ApprovalEventRead(**dict(e)) for e in events],
+            )
         case = self._case(record["business_ref"], account_refs)
         current = make_snapshot(case)
         saved = record["snapshot"]
