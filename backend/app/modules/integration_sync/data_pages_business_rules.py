@@ -301,8 +301,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "cancel_time_raw": cancel_time_raw,
                         "is_cancelled": is_cancelled,
                         "is_valid_sample": (
-                            (order_total == Decimal("0") or full_discount)
-                            and not is_cancelled
+                            (order_total == Decimal("0") or full_discount) and not is_cancelled
                         ),
                         "sample_rule_version": SAMPLE_RULE_VERSION,
                         **_timestamps(),
