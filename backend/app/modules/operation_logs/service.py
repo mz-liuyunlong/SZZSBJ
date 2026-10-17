@@ -278,8 +278,13 @@ def read_detail(
     msku: str,
 ) -> dict[str, Any]:
     _identity(
-        session, accounts=accounts, account=account, store=store,
-        item=item, msku=msku, require_existing=False,
+        session,
+        accounts=accounts,
+        account=account,
+        store=store,
+        item=item,
+        msku=msku,
+        require_existing=False,
     )
     key = _log_key(account=account, day=day, store=store, item=item, msku=msku)
     events = (
@@ -342,8 +347,13 @@ def _save_one(
     actor: str,
 ) -> int:
     _identity(
-        session, accounts=accounts, account=account, store=store,
-        item=item, msku=msku, day=day,
+        session,
+        accounts=accounts,
+        account=account,
+        store=store,
+        item=item,
+        msku=msku,
+        day=day,
     )
     if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
         raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
