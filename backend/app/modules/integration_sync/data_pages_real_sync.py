@@ -572,6 +572,15 @@ class DataPagesRealSyncRunner:
                         self._listing_capture_by_identity[identity] = response.pulled_at
             rows.extend(current)
             total = _total_of(response.response_json)
+            if (
+                parser_key == "order_v2_list"
+                and total is not None
+                and len(rows) < total
+                and (not current or len(current) < size)
+            ):
+                # A short/empty page cannot prove completion when the provider
+                # explicitly reports more order rows. Never silently omit orders.
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_PAGINATION_INCOMPLETE")
             if not current or len(current) < size or (total and len(rows) >= total):
                 return rows
             offset += size
