@@ -157,3 +157,36 @@ Repository 已执行隔离；未建立可信归属的写路径继续 fail closed
 字段权限仍遵循 fail closed：若调用者只有 margin/ROI 权限但没有 gross-profit 权限，系统不会同时返回销售额和
 可用于反推 gross profit 的 margin/ROI。是否允许把利润率作为完全独立权限，需要 Owner 另行批准数据披露口径；
 本 PR 不通过前端隐藏或返回 `0` 规避这一边界。
+
+## 9. CSV 列白名单 P0 补充复核
+
+安全修复 commit：`46e8244`。Daily Sales 与 Order Profit 的导出列选择现在遵循同一顺序：
+
+1. `columns` 未提供时，从该 exporter 的正式白名单生成默认选择；
+2. `columns` 已提供时，先严格验证全部列名；未知列、已知与未知混合、空白集合统一返回
+   `422 / VALIDATION_ERROR`，且不调用 exporter；
+3. 白名单通过后才应用字段权限；若显式选择全部被权限过滤，保留空选择，不替换成默认列；
+4. 两个 exporter 自身对 `None`、空集合、未知列和混合未知列再次 fail closed，只输出统计日期列，
+   不依赖 Router 才能避免默认全集回退。
+
+真实 CSV 回归覆盖 default、unknown、mixed、empty、显式敏感列，以及 `item_id`、`sku`、`msku`
+三种导出维度的 header、内容和文件名。
+
+### 9.1 利润公式输入字段：角色与显示影响矩阵
+
+以下“角色”仅表示可能的业务职责，不是代码硬编码角色名。当前只有 canonical
+`field:sales:order-profit:gross-profit` 与 `field:sales:order-profit:profit-margin` 两个字段权限；
+本轮不新增 grant、不拆权限、不放宽输出。
+
+| 字段组 | 当前受保护字段 | 当前权限 | 可能受影响职责 | 当前页面/CSV 影响 | 推断风险 | Owner 待决定策略 |
+|---|---|---|---|---|---|---|
+| 退款金额 | refund amount / refund loss；退款数量仍可见 | gross-profit | 售后、运营、财务 | 无 gross-profit 时金额隐藏 | 与销售、佣金及其他成本组合可推利润 | 是否新增 refund-amount 字段权限，并定义与利润字段的组合规则 |
+| 广告费用 | SP、SEM、总广告费、广告占比 | gross-profit | 广告、运营、财务 | 无 gross-profit 时广告金额/占比隐藏 | 销售减各成本可推利润 | 是否新增 ad-spend 字段权限；广告占比是否随金额授权 |
+| WFS 费用 | 总费、单价、低价附加费及 Daily 差异字段 | gross-profit | 仓库、运营、财务 | 无 gross-profit 时 WFS 费用隐藏 | 是利润公式输入 | 是否新增 fulfillment-cost 字段权限，并保持总成本/利润隔离 |
+| 佣金 | 佣金金额、佣金率 | gross-profit | 运营、财务 | 无 gross-profit 时隐藏 | 是利润与退款净额公式输入 | 是否新增 commission 字段权限 |
+| 采购/头程/仓储 | 单价、总额、estimated/actual | gross-profit | 采购、物流、财务 | 无 gross-profit 时成本隐藏 | 是利润与 ROI 分母 | 是否按 purchase / first-leg / storage 拆分字段权限 |
+| 总成本/利润 | total cost、order profit、平均利润 | gross-profit | 财务、管理 | 无权限时隐藏 | 任意一项与销售可推另一项 | 继续保持同一高敏权限，或另行批准更细口径 |
+| 利润率/ROI | gross margin、ROI | gross-profit + profit-margin | 管理、财务 | 仅有 margin 权限仍隐藏 | 销售额与利润率可反推利润；ROI 还暴露成本关系 | 是否允许独立 margin/ROI；若允许必须定义同时可见字段集合 |
+
+在 Owner 作出上述字段授权策略前，保持当前捆绑隐藏是安全但偏保守的行为，不应通过 exporter 默认回退、
+前端补零或仅隐藏表头来放宽。

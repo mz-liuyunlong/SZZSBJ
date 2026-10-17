@@ -10,6 +10,7 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 | Base commit | `7a8eab793c4edf9e419b3ae846e2b47dddf51587` |
 | Prior fix commit | `990b79c89250e4d18045a1dd06b0bd9d002f12bc` |
 | Round-three security fix commit | `20795f2` |
+| CSV allowlist security fix commit | `46e8244` |
 | Pull request | `#226` |
 | CI | 既有 HEAD 6 项通过；本轮补充修复必须推送后以最终 HEAD 重新全绿为准 |
 | New migration | `20261017_0042_rbac_backfill`（27 字符；文件尚未在共享环境执行） |
@@ -31,6 +32,7 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 - 运营计划 list/summary/owner/options/detail/event/update/clearance/import/failed-export 的统一 source-account 对象级校验及 TOCTOU-safe 写入；
 - 角色分配同时约束角色权限、高风险权限、组合角色数据范围和 `*`；
 - Daily Sales / Order Profit 的 list/summary/trend/detail/CSV 直接利润及公式输入字段脱敏，前端保留受限 `null`；
+- Daily Sales / Order Profit 导出列先做严格白名单验证再做字段过滤；exporter 自身不再把空/未知选择回退为默认全集；
 - SKU 采购成本 canonical field permission、Listing mixed-ID batch fail-closed、WFS legacy sync 真实超管边界；
 - 通用 legacy declared-permission fallback 已移除，非数字真实 principal 不再继承治理账号全集；
 - 权限矩阵、迁移方案、角色授权修复方案和回归测试。
@@ -42,7 +44,7 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 | 检查 | 结果 |
 |---|---|
 | Backend Ruff format/check | PASS；392 files，lint clean |
-| Backend pytest | PASS；隔离 PostgreSQL 环境除配置隔离文件外 `1107 passed`；干净环境配置隔离文件 `11 passed`；合计 `1118 passed` |
+| Backend pytest | PASS；隔离 PostgreSQL 环境除配置隔离文件外 `1137 passed`；干净环境配置隔离文件 `11 passed`；合计 `1148 passed` |
 | Backend mypy | BLOCKED BY BASELINE；标准命令因 duplicate module 退出；诊断模式 `398 errors in 58 files`，未伪报通过 |
 | Frontend ESLint | PASS |
 | Frontend tests | PASS；36 files / 149 tests |
@@ -52,7 +54,7 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 | Isolated PostgreSQL 0041→0042 | PASS；模拟生产 `varchar(32)`；grant 49→52，仅 3 条审批 canonical；重复 upgrade 不变；forward-only 阻断后仍为 0042 |
 | Secret/RAW/scope scan | PASS |
 | Rule pack | PASS |
-| GitHub CI | 推送本轮最终 HEAD 后必须重新全绿；不得用此前 HEAD 的 6 项通过代替最终结果 |
+| GitHub CI | 推送本轮补充提交后的最终 HEAD 必须重新全绿；不得用 `00aec35` 或更早 HEAD 的结果代替 |
 
 ## 4. 生产执行前授权
 
@@ -131,11 +133,18 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 | failed export | 创建者、保存账号集合与当前范围共同校验 | PASS |
 | Daily Sales JSON / CSV | 直接利润和可反推公式输入字段均受限 | PASS |
 | Order Profit JSON / CSV | list/summary/trend/detail/default/explicit export 均受限 | PASS |
+| Daily/Order CSV unknown / mixed / empty | Router 返回 422；exporter 防御性输出不含业务列，不回退默认全集 | PASS |
+| Daily/Order CSV explicit sensitive only | 权限过滤后保持空选择；实际 CSV 仅统计日期列 | PASS |
+| Daily/Order CSV dimensions | `item_id` / `sku` / `msku` 的真实 header、内容与文件名回归 | PASS |
 | 利润推断防护 | sales 与 margin/ROI 不在缺 gross-profit 权限时形成反推通道 | PASS（fail closed） |
 | 角色分配 | permission/high-risk/role scope/`*` 同时受 grant boundary 约束 | PASS |
 | WFS / Approval | page/action/object/state/version/source-account 分离 | PASS |
 | 0042 isolated PostgreSQL | fresh chain 与 0041→0042 演练，单一 head | PASS |
-| Backend full suite | 1118 passed（按配置隔离要求分两条命令） | PASS |
+| Backend full suite | 1148 passed（按配置隔离要求分两条命令） | PASS |
 | Frontend full suite | 36 files / 149 tests；lint/build 通过 | PASS |
 | GitHub CI latest HEAD | 推送文档 commit 后核对 | PENDING |
 | Production migration / deploy / restart / role mutation | 本 PR 未执行、未授权 | NOT PERFORMED |
+
+退款、广告、WFS、佣金、采购、头程和仓储字段目前仍随 gross-profit 权限隐藏。该策略能阻断利润反推，
+但会限制售后、广告、仓库、采购等职责独立查看本领域金额。详细影响矩阵见审计文档 9.1；拆分字段权限、
+角色 grant 或 margin 独立披露均为 `NEED_OWNER_DECISION`，本补丁未擅自变更。
