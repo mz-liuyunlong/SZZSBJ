@@ -3,6 +3,7 @@
 Only identifiers are stored. Permissions and source-account scope are checked
 again when opening actual approval details.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,8 +22,9 @@ def publish_due_approval_reminders(*, limit: int = 200) -> int:
         raise ValueError("approval reminder batch limit invalid")
     with get_session_factory()() as session:
         # Registration of account scope is already checked at application time.
-        rows = session.execute(
-            text("""
+        rows = (
+            session.execute(
+                text("""
             select a.id::text approval_id,a.approval_type,a.applicant_id,
                    a.source_account_ref,a.version,
                    a.submitted_at + make_interval(hours=>r.due_hours) due_at
@@ -31,8 +33,11 @@ def publish_due_approval_reminders(*, limit: int = 200) -> int:
             where a.status='submitted'
             order by a.submitted_at,a.id limit :limit
         """),
-            {"limit": limit},
-        ).mappings().all()
+                {"limit": limit},
+            )
+            .mappings()
+            .all()
+        )
         inserted = 0
         from datetime import UTC, datetime
 
@@ -41,8 +46,9 @@ def publish_due_approval_reminders(*, limit: int = 200) -> int:
             # WFS uses canonical archive review permission; generic
             # purchase/finance/access requests remain super-admin only.
             required = "action:warehouse:wfs-fee-alert:archive-review"
-            reviewers = session.execute(
-                text("""
+            reviewers = (
+                session.execute(
+                    text("""
                 select distinct u.id::text reviewer
                 from app_users u
                 left join app_user_roles ur on ur.user_id=u.id
@@ -79,14 +85,17 @@ def publish_due_approval_reminders(*, limit: int = 200) -> int:
                       and sd.reviewer_id=u.id::text
                   )
             """),
-                {
-                    "kind": item["approval_type"],
-                    "applicant": item["applicant_id"],
-                    "account": item["source_account_ref"],
-                    "required": required,
-                    "approval_id": item["approval_id"],
-                },
-            ).scalars().all()
+                    {
+                        "kind": item["approval_type"],
+                        "applicant": item["applicant_id"],
+                        "account": item["source_account_ref"],
+                        "required": required,
+                        "approval_id": item["approval_id"],
+                    },
+                )
+                .scalars()
+                .all()
+            )
             overdue = item["due_at"] <= now
             key = ("overdue:" if overdue else "pending:") + str(item["version"])
             for reviewer in reviewers:
