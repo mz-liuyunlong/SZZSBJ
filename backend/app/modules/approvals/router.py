@@ -62,7 +62,10 @@ def list_approvals(
 
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     data, total = ApprovalService(session).list_requests(
-        query, accounts, principal.user_id, approved,
+        query,
+        accounts,
+        principal.user_id,
+        approved,
         is_admin="*" in principal.permissions,
     )
     return success_response(
@@ -175,8 +178,11 @@ def mark_approval_notification_read(
 
 @router.post("/workflow/requests", response_model=SuccessEnvelope[dict[str, str], None])
 def submit_generic_approval(
-    request: Request, payload: GenericApprovalWrite, session: db_session,
-    principal: view_principal, accounts: account_scope,
+    request: Request,
+    payload: GenericApprovalWrite,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
 ):
     # High-impact general requests require explicit super-admin authority.
     # Purchase requests may also be initiated by a PMC override authorized user.
@@ -189,8 +195,13 @@ def submit_generic_approval(
 
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     approval_id = GenericApprovalService(session).submit(
-        payload.approval_type, payload.source_ref, payload.source_account_ref,
-        accounts, principal.user_id, payload.reason, payload.evidence,
+        payload.approval_type,
+        payload.source_ref,
+        payload.source_account_ref,
+        accounts,
+        principal.user_id,
+        payload.reason,
+        payload.evidence,
     )
     return success_response(request, data={"approval_id": approval_id}, meta=None)
 
@@ -205,7 +216,10 @@ def get_approval(
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).detail(
-        approval_id, accounts, principal.user_id, may_review,
+        approval_id,
+        accounts,
+        principal.user_id,
+        may_review,
         is_admin="*" in principal.permissions,
     )
     return success_response(request, data=data, meta=None)
@@ -248,8 +262,12 @@ def decide(
 
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         GenericApprovalService(session).decide(
-            approval_id, accounts, principal.user_id,
-            payload.decision, payload.note, payload.expected_version,
+            approval_id,
+            accounts,
+            principal.user_id,
+            payload.decision,
+            payload.note,
+            payload.expected_version,
         )
     else:
         ApprovalService(session).decide(
