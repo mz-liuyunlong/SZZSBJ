@@ -423,6 +423,8 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     runner._write_sales.return_value = 0
     runner._write_orders.return_value = 1
     runner._resolve_order_items.return_value = 0
+    runner._write_sample_orders.return_value = 1
+    runner._resolve_sample_items.return_value = 0
     runner._refresh_daily_sales_mart.return_value = 1
     runner._refresh_order_profit_mart.return_value = 1
 
@@ -439,6 +441,8 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     ]
     runner._fetch_return_all.assert_not_called()
     runner._fetch_ads_all.assert_not_called()
+    runner._write_sample_orders.assert_called_once_with([{"order_id": "order-1"}])
+    runner._resolve_sample_items.assert_called_once_with()
     runner._refresh_daily_sales_mart.assert_called_once_with()
     runner._refresh_order_profit_mart.assert_called_once_with()
 
