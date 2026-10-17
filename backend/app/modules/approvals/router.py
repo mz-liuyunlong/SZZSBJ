@@ -15,6 +15,7 @@ from app.db.session import get_db_session
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
     GenericApprovalWrite,
+    BulkDecisionWrite,
     LegacyReattestationWrite,
     ApprovalRuleWrite,
     ApprovalDetail,
@@ -204,6 +205,22 @@ def submit_generic_approval(
         payload.evidence,
     )
     return success_response(request, data={"approval_id": approval_id}, meta=None)
+
+
+@router.post("/workflow/bulk-approve", response_model=SuccessEnvelope[dict[str, int], None])
+def approve_bulk(
+    request: Request, payload: BulkDecisionWrite, session: db_session,
+    principal: view_principal, accounts: account_scope,
+):
+    if "*" not in principal.permissions:
+        from app.core.api import ApiError, ErrorCode
+
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    ids = [UUID(x) for x in payload.approval_ids]
+    count = GenericApprovalService(session).approve_bulk(
+        ids, payload.expected_versions, accounts, principal.user_id, payload.note,
+    )
+    return success_response(request, data={"approved": count}, meta=None)
 
 
 @router.get("/{approval_id}", response_model=SuccessEnvelope[ApprovalDetail, None])
