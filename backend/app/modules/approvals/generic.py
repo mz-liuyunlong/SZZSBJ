@@ -3,6 +3,7 @@
 Adapters validate immutable source identifiers in PostgreSQL and do not issue
 writes to purchase, profit or IAM tables.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,29 +27,50 @@ class GenericApprovalService:
 
     def _source(self, kind: str, source_ref: str, account: str) -> dict:
         if kind == "purchase_exception":
-            row = self.session.execute(text("""
+            row = (
+                self.session.execute(
+                    text("""
                 select order_sn, status, amount_total, purchase_currency, source_account_ref
                 from dwd_purchase_order where order_sn=:ref and source_account_ref=:account
-            """), {"ref": source_ref, "account": account}).mappings().first()
+            """),
+                    {"ref": source_ref, "account": account},
+                )
+                .mappings()
+                .first()
+            )
         elif kind == "finance_exception":
             # Source record identity uses date + SKU; business-day fact is immutable
             # for this request, but financial execution is NEVER done here.
             date, sep, sku = source_ref.partition("|")
             if not sep or not date or not sku:
                 blocked(422)
-            row = self.session.execute(text("""
+            row = (
+                self.session.execute(
+                    text("""
                 select business_date_la, local_sku, source_account_ref
                 from mart_order_profit_sku_day
                 where business_date_la=cast(:date as date)
                   and local_sku=:sku and source_account_ref=:account
-            """), {"date": date, "sku": sku, "account": account}).mappings().first()
+            """),
+                    {"date": date, "sku": sku, "account": account},
+                )
+                .mappings()
+                .first()
+            )
         elif kind == "access_change":
             if not source_ref.isdecimal():
                 blocked(422)
-            row = self.session.execute(text("""
+            row = (
+                self.session.execute(
+                    text("""
                 select id, username, is_active from app_users
                 where id=:id
-            """), {"id": int(source_ref)}).mappings().first()
+            """),
+                    {"id": int(source_ref)},
+                )
+                .mappings()
+                .first()
+            )
         else:
             blocked(422)
         if not row:
@@ -56,17 +78,30 @@ class GenericApprovalService:
         return json.loads(json.dumps(dict(row), ensure_ascii=False, default=str))
 
     def submit(
-        self, kind: str, source_ref: str, account: str, accounts: frozenset[str],
-        actor: str, reason: str, evidence: str,
+        self,
+        kind: str,
+        source_ref: str,
+        account: str,
+        accounts: frozenset[str],
+        actor: str,
+        reason: str,
+        evidence: str,
     ) -> str:
         if kind not in BUSINESS_TYPES or account not in accounts:
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         if len(reason.strip()) < 5 or len(source_ref) > 128:
             blocked(422)
-        rule = self.session.execute(text("""
+        rule = (
+            self.session.execute(
+                text("""
             select required_steps,min_reason_length from app_approval_rules
             where approval_type=:kind and is_active=true
-        """), {"kind": kind}).mappings().first()
+        """),
+                {"kind": kind},
+            )
+            .mappings()
+            .first()
+        )
         if not rule or len(reason.strip()) < rule["min_reason_length"]:
             blocked(422)
         source = self._source(kind, source_ref, account)
@@ -74,33 +109,54 @@ class GenericApprovalService:
         snapshot = {"source": source, "approval_policy": policy, "execution_pending": True}
         now = datetime.now(UTC)
         approval_id = str(uuid4())
-        self.session.execute(text("""
+        self.session.execute(
+            text("""
             insert into app_approval_requests
               (id,approval_type,business_ref,source_account_ref,applicant_id,
                title,reason,evidence,status,risk_level,snapshot,snapshot_hash,
                submitted_at,updated_at)
             values (:id,:kind,:ref,:account,:actor,:title,:reason,:evidence,
                     'submitted','high',cast(:snapshot as jsonb),:hash,:now,:now)
-        """), {
-            "id": approval_id, "kind": kind, "ref": source_ref,
-            "account": account, "actor": actor,
-            "title": {
-                "purchase_exception": "采购异常处理申请",
-                "finance_exception": "财务例外处理申请",
-                "access_change": "权限变更申请",
-            }[kind], "reason": reason.strip(), "evidence": evidence.strip(),
-            "snapshot": json.dumps(snapshot, ensure_ascii=False),
-            "hash": signature(snapshot), "now": now,
-        })
-        self.approvals._event(approval_id, "submitted", actor, reason.strip(), {
-            "execution_pending": True, "source_hash": signature(source),
-        })
+        """),
+            {
+                "id": approval_id,
+                "kind": kind,
+                "ref": source_ref,
+                "account": account,
+                "actor": actor,
+                "title": {
+                    "purchase_exception": "采购异常处理申请",
+                    "finance_exception": "财务例外处理申请",
+                    "access_change": "权限变更申请",
+                }[kind],
+                "reason": reason.strip(),
+                "evidence": evidence.strip(),
+                "snapshot": json.dumps(snapshot, ensure_ascii=False),
+                "hash": signature(snapshot),
+                "now": now,
+            },
+        )
+        self.approvals._event(
+            approval_id,
+            "submitted",
+            actor,
+            reason.strip(),
+            {
+                "execution_pending": True,
+                "source_hash": signature(source),
+            },
+        )
         self.session.commit()
         return approval_id
 
     def decide(
-        self, approval_id: UUID, accounts: frozenset[str], actor: str,
-        decision: str, note: str, expected_version: int,
+        self,
+        approval_id: UUID,
+        accounts: frozenset[str],
+        actor: str,
+        decision: str,
+        note: str,
+        expected_version: int,
     ) -> None:
         if decision not in ("approved", "rejected", "info_required"):
             blocked(422)
@@ -115,48 +171,69 @@ class GenericApprovalService:
         actual = self._source(row["approval_type"], row["business_ref"], row["source_account_ref"])
         if signature(snapshot["source"]) != signature(actual):
             blocked()
-        prev = self.session.execute(text("""
+        prev = self.session.execute(
+            text("""
             select count(*) from app_approval_step_decisions
             where approval_id=:approval_id and decision='approved'
-        """), {"approval_id": str(approval_id)}).scalar_one()
-        already = self.session.execute(text("""
+        """),
+            {"approval_id": str(approval_id)},
+        ).scalar_one()
+        already = self.session.execute(
+            text("""
             select 1 from app_approval_step_decisions
             where approval_id=:approval_id and reviewer_id=:actor
-        """), {"approval_id": str(approval_id), "actor": actor}).first()
+        """),
+            {"approval_id": str(approval_id), "actor": actor},
+        ).first()
         if already:
             blocked()
         step = int(prev) + 1
         required_steps = int(snapshot["approval_policy"]["required_steps"])
         if decision == "approved":
-            self.session.execute(text("""
+            self.session.execute(
+                text("""
                 insert into app_approval_step_decisions
                   (id,approval_id,step_number,reviewer_id,decision,note)
                 values (:id,:approval_id,:step,:actor,'approved',:note)
-            """), {
-                "id": str(uuid4()), "approval_id": str(approval_id),
-                "step": step, "actor": actor, "note": note.strip(),
-            })
+            """),
+                {
+                    "id": str(uuid4()),
+                    "approval_id": str(approval_id),
+                    "step": step,
+                    "actor": actor,
+                    "note": note.strip(),
+                },
+            )
         completed = decision != "approved" or step >= required_steps
         status = decision if completed else "submitted"
-        updated = self.session.execute(text("""
+        updated = self.session.execute(
+            text("""
             update app_approval_requests
             set status=:status,reviewed_by=:actor,reviewed_at=:reviewed_at,
                 review_note=:note,updated_at=now(),version=version+1
             where id=:id and version=:expected_version and status='submitted'
-        """), {
-            "id": str(approval_id), "status": status,
-            "actor": actor if completed else None,
-            "reviewed_at": datetime.now(UTC) if completed else None,
-            "note": note.strip() if completed else None,
-            "expected_version": expected_version,
-        })
+        """),
+            {
+                "id": str(approval_id),
+                "status": status,
+                "actor": actor if completed else None,
+                "reviewed_at": datetime.now(UTC) if completed else None,
+                "note": note.strip() if completed else None,
+                "expected_version": expected_version,
+            },
+        )
         if updated.rowcount != 1:
             blocked()
-        self.approvals._event(str(approval_id),
-                              decision if completed else "step_approved",
-                              actor, note.strip(), {
-                                  "step": step, "required_steps": required_steps,
-                                  "executed": False,
-                              })
+        self.approvals._event(
+            str(approval_id),
+            decision if completed else "step_approved",
+            actor,
+            note.strip(),
+            {
+                "step": step,
+                "required_steps": required_steps,
+                "executed": False,
+            },
+        )
         self.approvals._notify_applicant(str(approval_id), decision)
         self.session.commit()
