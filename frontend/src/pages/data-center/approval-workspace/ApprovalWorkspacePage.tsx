@@ -123,7 +123,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
      <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
       options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/>
      <ReportFacetSelect ariaLabel="审批类型" placeholder="审批类型"
-      value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"},{label:"采购异常",value:"purchase_exception"},{label:"财务例外",value:"finance_exception"},{label:"权限变更",value:"access_change"}]}
+      value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"},{label:"采购异常",value:"purchase_exception"},{label:"财务例外",value:"finance_exception"},{label:"权限变更",value:"access_change"},{label:"运营事项确认",value:"operations_plan_ack"}]}
       onChange={(value) => change({approval_type: typeof value === "string" ? value : undefined})}/>
      <ReportFacetSelect ariaLabel="风险等级" placeholder="风险等级"
       value={filters.risk_level} options={[{label:"高风险",value:"high"},{label:"中风险",value:"medium"},{label:"低风险",value:"low"}]}
