@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session
 from app.core.api import ApiError, ErrorCode
 from app.modules.approvals.service import ApprovalService, blocked, signature
 
-BUSINESS_TYPES = frozenset({"purchase_exception", "finance_exception", "access_change", "operations_plan_ack"})
+BUSINESS_TYPES = frozenset(
+    {"purchase_exception", "finance_exception", "access_change", "operations_plan_ack"}
+)
 
 
 class GenericApprovalService:
@@ -45,6 +47,7 @@ class GenericApprovalService:
             if not sep or not date or not sku:
                 blocked(422)
             from datetime import date as date_type
+
             try:
                 date_type.fromisoformat(date)
             except ValueError:
@@ -67,15 +70,19 @@ class GenericApprovalService:
                 UUID(source_ref)
             except ValueError:
                 blocked(422)
-            row = self.session.execute(
-                text("""
+            row = (
+                self.session.execute(
+                    text("""
                 select id::text as id,source_account_ref,plan_status,operation_status,
                        stock_status,owner_ref,target_sales_amount,target_gross_profit_amount
                 from ops_operation_product_plans
                 where id=:ref and source_account_ref=:account
             """),
-                {"ref": source_ref, "account": account},
-            ).mappings().first()
+                    {"ref": source_ref, "account": account},
+                )
+                .mappings()
+                .first()
+            )
         elif kind == "access_change":
             if not source_ref.isdecimal():
                 blocked(422)
@@ -147,7 +154,7 @@ class GenericApprovalService:
                     "purchase_exception": "采购异常处理申请",
                     "finance_exception": "财务例外处理申请",
                     "access_change": "权限变更申请",
-                "operations_plan_ack": "运营计划事项确认",
+                    "operations_plan_ack": "运营计划事项确认",
                 }[kind],
                 "reason": reason.strip(),
                 "evidence": evidence.strip(),
@@ -260,22 +267,29 @@ class GenericApprovalService:
         self.approvals._notify_applicant(str(approval_id), decision)
         self.session.commit()
 
-
     def approve_bulk(
-        self, ids: list[UUID], expected_versions: dict[str, int],
-        accounts: frozenset[str], actor: str, note: str,
+        self,
+        ids: list[UUID],
+        expected_versions: dict[str, int],
+        accounts: frozenset[str],
+        actor: str,
+        note: str,
     ) -> int:
         """Single transaction; all cases validated under locks before any update."""
         if not 1 <= len(ids) <= 20 or len(set(ids)) != len(ids) or len(note.strip()) < 5:
             blocked(422)
         if set(expected_versions) != {str(i) for i in ids}:
             blocked(422)
-        rule = self.session.execute(
-            text("""
+        rule = (
+            self.session.execute(
+                text("""
             select required_steps,allows_bulk from app_approval_rules
             where approval_type='operations_plan_ack' and is_active=true
         """)
-        ).mappings().first()
+            )
+            .mappings()
+            .first()
+        )
         if not rule or not rule["allows_bulk"] or int(rule["required_steps"]) != 1:
             blocked()
         rows = [self.approvals._record(i, accounts, lock=True) for i in sorted(ids)]
@@ -335,7 +349,10 @@ class GenericApprovalService:
             if changed.rowcount != 1:
                 blocked()
             self.approvals._event(
-                approval_id, "approved", actor, note.strip(),
+                approval_id,
+                "approved",
+                actor,
+                note.strip(),
                 {"batch": True, "executed": False},
             )
             self.approvals._notify_applicant(approval_id, "approved")
