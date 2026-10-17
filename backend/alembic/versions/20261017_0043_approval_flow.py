@@ -44,6 +44,18 @@ def upgrade() -> None:
     )
     bind.execute(
         text("""
+        create table app_approval_rule_events (
+          id uuid primary key,
+          approval_type varchar(80) not null,
+          actor_id varchar(128) not null,
+          before_policy jsonb not null,
+          after_policy jsonb not null,
+          created_at timestamptz not null default now()
+        )
+    """)
+    )
+    bind.execute(
+        text("""
         create table app_approval_attestations (
           id uuid primary key,
           case_id uuid not null references ops_wfs_fee_anomaly_cases(id)
@@ -117,10 +129,12 @@ def downgrade() -> None:
         "app_approval_attestations",
         "app_approval_step_decisions",
         "app_approval_notifications",
+        "app_approval_rule_events",
     ):
         if bind.scalar(text(f"select count(*) from {table}")):
             raise RuntimeError("Approval audit data exists: downgrade forbidden")
     bind.execute(text("drop table app_approval_notifications"))
     bind.execute(text("drop table app_approval_step_decisions"))
     bind.execute(text("drop table app_approval_attestations"))
+    bind.execute(text("drop table app_approval_rule_events"))
     bind.execute(text("drop table app_approval_rules"))
