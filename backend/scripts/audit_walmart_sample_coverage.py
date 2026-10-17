@@ -135,10 +135,14 @@ def main() -> None:
         with conn.begin():
             conn.execute(text("SET TRANSACTION READ ONLY"))
             conn.execute(text("SET LOCAL statement_timeout = '15000ms'"))
-            data = conn.execute(
-                sql,
-                {"start": args.start, "end": args.end, "account": args.account},
-            ).mappings().all()
+            data = (
+                conn.execute(
+                    sql,
+                    {"start": args.start, "end": args.end, "account": args.account},
+                )
+                .mappings()
+                .all()
+            )
             rows = [dict(row) for row in data]
     print(json.dumps(_report(rows, args.limit), ensure_ascii=False, indent=2))
 
