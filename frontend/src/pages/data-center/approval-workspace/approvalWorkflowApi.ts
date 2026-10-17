@@ -17,7 +17,7 @@ export interface ApprovalNotification {
   status: "read" | "unread";
   created_at: string;
 }
-export type GenericApprovalType = "purchase_exception" | "finance_exception" | "access_change";
+export type GenericApprovalType = "purchase_exception" | "finance_exception" | "access_change" | "operations_plan_ack";
 
 export async function reattestLegacyWfs(
   caseId: string, reasonType: string, reason: string, evidence: string,
