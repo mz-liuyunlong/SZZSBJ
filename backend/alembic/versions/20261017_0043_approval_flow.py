@@ -118,7 +118,8 @@ def upgrade() -> None:
           (gen_random_uuid(),'wfs_case_abandon','WFS 放弃跟进',1,48,false),
           (gen_random_uuid(),'purchase_exception','采购异常审批',2,48,false),
           (gen_random_uuid(),'finance_exception','财务例外审批',2,24,false),
-          (gen_random_uuid(),'access_change','权限变更审批',2,24,false)
+          (gen_random_uuid(),'access_change','权限变更审批',2,24,false),
+          (gen_random_uuid(),'operations_plan_ack','运营计划事项确认',1,72,true)
     """)
     )
 
