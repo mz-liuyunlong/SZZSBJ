@@ -56,7 +56,12 @@ def upgrade() -> None:
         sa.Column("msku", sa.String(128), nullable=False),
         sa.Column("log_content", sa.Text(), nullable=False),
         sa.Column("work_type", sa.String(32), nullable=False, server_default="其他"),
-        sa.Column("work_types_json", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
+        sa.Column(
+            "work_types_json",
+            postgresql.JSONB(),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
         sa.Column("observe_days", sa.SmallInteger()),
         sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
         sa.Column("actor_ref", sa.String(128)),

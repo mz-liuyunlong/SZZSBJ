@@ -362,7 +362,9 @@ def _save_one(
     )
     if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
         raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
-    if work_types is not None and (len(work_types) > 6 or any(v not in WORK_TYPES for v in work_types)):
+    if work_types is not None and (
+        len(work_types) > 6 or any(v not in WORK_TYPES for v in work_types)
+    ):
         raise ApiError(code="OPERATION_LOG_INVALID_WORK_TYPES", status_code=422)
     if observe_days not in (None, 3, 7, 14):
         raise ApiError(code="OPERATION_LOG_INVALID_OBSERVE_DAYS", status_code=422)
