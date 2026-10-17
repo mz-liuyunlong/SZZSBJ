@@ -10,6 +10,7 @@ import {
 interface OperationLogBatchModalProps {
   open: boolean;
   rows: OperationLogRow[];
+  onBuildSystemText: (rowIds: string[]) => string;
   onClose: () => void;
   onApply: (values: OperationLogBatchWriteValues) => void;
 }
@@ -26,6 +27,7 @@ const templates = [
 function OperationLogBatchModal({
   open,
   rows,
+  onBuildSystemText,
   onClose,
   onApply,
 }: OperationLogBatchModalProps) {
@@ -87,7 +89,7 @@ function OperationLogBatchModal({
           </span>
           <Space>
             <Button onClick={onClose}>取消</Button>
-            <Button onClick={() => setLogText(rows.slice(0, 5).map((row) => `${row.productId}：系统记录已带入，继续观察。`).join("\n"))}>
+            <Button onClick={() => setLogText(onBuildSystemText(selectedProductIds))}>
               带入系统记录
             </Button>
             <Button

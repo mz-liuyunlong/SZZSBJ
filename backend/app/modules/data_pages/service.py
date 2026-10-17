@@ -18,8 +18,6 @@ from app.modules.data_pages.repository import (
     ListingTagRepository,
     OrderProfitRepository,
 )
-from app.modules.operation_logs.daily_sales import load_daily_sales_log_summaries
-
 from app.modules.data_pages.schemas import (
     DailySalesItemRead,
     DailySalesListData,
@@ -49,6 +47,7 @@ from app.modules.data_pages.schemas import (
     OrderProfitTrendData,
     OrderProfitTrendPointRead,
 )
+from app.modules.operation_logs.daily_sales import load_daily_sales_log_summaries
 
 
 def _decimal(value: object, default: Decimal = Decimal("0")) -> Decimal:

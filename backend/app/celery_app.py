@@ -13,6 +13,7 @@ APP_ENV_ENV = "APP_ENV"
 
 MEDIA_QUEUE = "media"
 INTEGRATION_QUEUE = "integration"
+OPERATION_LOG_QUEUE = "operation-logs"
 
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
@@ -22,7 +23,7 @@ TASK_IMPORTS = (
 
 TASK_ROUTES = {
     "media_assets.*": {"queue": MEDIA_QUEUE, "routing_key": MEDIA_QUEUE},
-    "operation_logs.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "operation_logs.*": {"queue": OPERATION_LOG_QUEUE, "routing_key": OPERATION_LOG_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -70,6 +71,7 @@ def create_celery_app(
         task_queues=(
             Queue(MEDIA_QUEUE, exchange, routing_key=MEDIA_QUEUE),
             Queue(INTEGRATION_QUEUE, exchange, routing_key=INTEGRATION_QUEUE),
+            Queue(OPERATION_LOG_QUEUE, exchange, routing_key=OPERATION_LOG_QUEUE),
         ),
         task_routes=TASK_ROUTES,
         task_default_queue=INTEGRATION_QUEUE,

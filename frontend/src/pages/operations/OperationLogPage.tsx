@@ -127,6 +127,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   };
   const fillBySystem = () => {
     setRows((currentRows) => currentRows.map((row) => {
+      if (row.manualLog.trim()) return row;
       const records = systemRecords.filter((record) => record.productId === row.productId && record.date === row.date && record.storeId === row.storeId && record.sourceAccountRef === row.sourceAccountRef && record.msku === row.msku);
       return {
         ...row,
@@ -285,6 +286,10 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         <OperationLogBatchModal
           open={batchModalOpen}
           rows={filteredRows}
+          onBuildSystemText={(ids) => filteredRows.filter((row) => ids.includes(row.id)).map((row) => {
+            const matching = systemRecords.filter((record) => record.sourceAccountRef === row.sourceAccountRef && record.storeId === row.storeId && record.productId === row.productId && record.msku === row.msku && record.date === row.date);
+            return matching.length ? `${row.date} ${row.productId}: ${createSystemDraft(matching)}` : "";
+          }).filter(Boolean).join("\n")}
           onClose={() => setBatchModalOpen(false)}
           onApply={applyBatchWrite}
         />

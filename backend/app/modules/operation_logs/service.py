@@ -224,16 +224,40 @@ def _identity(
     store: str,
     item: str,
     msku: str,
+    day: date | None = None,
+    require_existing: bool = True,
 ) -> None:
+    """Enforce the caller's account scope; allow archived historic log reads.
+
+    Writes require a matching current listing, historic daily-sales item, or
+    previously imported event/log, not an arbitrary invented product identity.
+    """
     if account not in accounts:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    if not require_existing:
+        return
     found = session.scalar(
         text("""
-        select 1 from mart_listing_management_current
-        where source_account_ref = :account and store_id = :store
-          and item_id = :item and coalesce(msku, '') = :msku limit 1
+        select 1 from (
+            select 1 from mart_listing_management_current
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and coalesce(msku, '') = :msku
+            union all
+            select 1 from mart_daily_sales_item_day
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and coalesce(msku, '') = :msku
+              and business_date_la = :day
+            union all
+            select 1 from ops_system_operation_events
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and msku = :msku and event_date = :day
+            union all
+            select 1 from ops_manual_operation_logs
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and msku = :msku and log_date = :day
+        ) known_item limit 1
     """),
-        {"account": account, "store": store, "item": item, "msku": msku},
+        {"account": account, "store": store, "item": item, "msku": msku, "day": day},
     )
     if not found:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
@@ -253,7 +277,10 @@ def read_detail(
     item: str,
     msku: str,
 ) -> dict[str, Any]:
-    _identity(session, accounts=accounts, account=account, store=store, item=item, msku=msku)
+    _identity(
+        session, accounts=accounts, account=account, store=store,
+        item=item, msku=msku, require_existing=False,
+    )
     key = _log_key(account=account, day=day, store=store, item=item, msku=msku)
     events = (
         session.execute(
@@ -314,7 +341,10 @@ def _save_one(
     revision: int,
     actor: str,
 ) -> int:
-    _identity(session, accounts=accounts, account=account, store=store, item=item, msku=msku)
+    _identity(
+        session, accounts=accounts, account=account, store=store,
+        item=item, msku=msku, day=day,
+    )
     if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
         raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
     if status == "submitted" and not content.strip():
