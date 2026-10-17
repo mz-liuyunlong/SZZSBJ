@@ -18,6 +18,7 @@ import ApprovalDetailDrawer from "./components/ApprovalDetailDrawer";
 import ApprovalRequestModal from "./components/ApprovalRequestModal";
 import ApprovalRulesDrawer from "./components/ApprovalRulesDrawer";
 import ApprovalNotificationsDrawer from "./components/ApprovalNotificationsDrawer";
+import BulkApprovalModal from "./components/BulkApprovalModal";
 import type { ApprovalFilters, ApprovalItem, ApprovalSummary, ApprovalRisk, ApprovalTab, ApprovalView } from "./approvalTypes";
 import { approvalColumnFields, riskNames, statusNames } from "./approvalTypes";
 import type { NavigationPage } from "@/config/navigation";
@@ -51,6 +52,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [reloadToken, setReloadToken] = useState(0);
  const [columnsOpen, setColumnsOpen] = useState(false);
  const [requestOpen, setRequestOpen] = useState(false);
+ const [selectedBulkKeys, setSelectedBulkKeys] = useState<React.Key[]>([]);
+ const [bulkRows, setBulkRows] = useState<ApprovalItem[]>([]);
  const [rulesOpen, setRulesOpen] = useState(false);
  const [notificationsOpen, setNotificationsOpen] = useState(false);
  const [columnKeys, setColumnKeys] = useState(defaultKeys);
@@ -100,7 +103,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <div className="approval-workspace">
    <div className="approval-workspace__heading">
     <div><h3>审批工作台</h3><p>统一处理业务审批 · 所有审批结论均留痕</p></div>
-    <Space><Button type="primary" onClick={() => setRequestOpen(true)}>发起审批</Button>
+    <Space>{permissions.includes("*") && selectedBulkKeys.length>0 && <Button type="primary" onClick={() => {
+      setBulkRows(rows.filter(row => selectedBulkKeys.includes(row.id)));
+     }}>批量审批（{selectedBulkKeys.length}）</Button>}
+     <Button type="primary" onClick={() => setRequestOpen(true)}>发起审批</Button>
      {hasPermission(permissions, "action:settings:role-management:configure-permissions") && <Button onClick={() => setRulesOpen(true)}>审批规则</Button>}
      <Button onClick={() => setNotificationsOpen(true)}>审批提醒</Button>
      <Button icon={<ReloadOutlined/>} onClick={reload}>刷新</Button>
@@ -138,6 +144,12 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    <ReportTableShell label="审批任务列表" className="approval-workspace__table">
     {loading ? <Spin /> : loadError ? <EmptyState compact title="审批数据加载失败" description="请检查接口、权限或网络状态，点击刷新重试"/> : count === 0 ? <EmptyState compact title="暂无审批事项" description="当前筛选条件下没有审批任务"/> :
      <ProTable<ApprovalItem> rowKey="id" columns={columns} dataSource={rows}
+      rowSelection={permissions.includes("*") ? {
+       selectedRowKeys:selectedBulkKeys,
+       onChange:(keys)=>setSelectedBulkKeys(keys),
+       getCheckboxProps:(row)=>({ disabled: filters.tab!=="pending" ||
+        row.approval_type!=="operations_plan_ack" || row.risk_level!=="low" || !row.can_review }),
+      } : undefined}
       search={false} options={false} toolBarRender={false} bordered size="small"
       scroll={{x:"max-content",y:"100%"}} pagination={{
        current:filters.page,pageSize:filters.page_size,total:count,
@@ -147,6 +159,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     }
    </ReportTableShell>
   </div>
+  <BulkApprovalModal rows={bulkRows} onCancel={() => setBulkRows([])}
+   onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
   <ApprovalRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} onUpdated={reload}/>
   <ApprovalRulesDrawer open={rulesOpen} onClose={() => setRulesOpen(false)}/>
   <ApprovalNotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRefresh={reload}/>
