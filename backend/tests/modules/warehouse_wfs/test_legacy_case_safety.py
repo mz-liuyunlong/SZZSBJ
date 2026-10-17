@@ -20,6 +20,8 @@ from app.modules.warehouse_wfs.schemas import (
     WfsFeeArchiveReviewWrite,
     WfsFeeCaseFollowWrite,
     WfsFeeCaseWrite,
+    WfsFeeLegacyCompareResult,
+    WfsFeeLegacySyncResult,
 )
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
@@ -90,6 +92,78 @@ def test_high_risk_routes_require_distinct_permissions() -> None:
         ).status_code
         == 403
     )
+
+    canonical_sync_only = create_app()
+    canonical_sync_only.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id="synthetic-user",
+        permissions=frozenset({"action:warehouse:wfs-fee-alert:sync-legacy"}),
+    )
+    canonical_sync_only.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
+    sync_client = TestClient(canonical_sync_only)
+    assert sync_client.post("/api/warehouse/wfs-fee-cases/sync-legacy-preview").status_code == 403
+    assert sync_client.post("/api/warehouse/wfs-fee-cases/sync-legacy-execute").status_code == 403
+    assert sync_client.get("/api/warehouse/wfs-fee-cases/legacy-compare").status_code == 403
+
+
+def test_legacy_sync_routes_allow_only_global_super_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sync_result = WfsFeeLegacySyncResult(
+        execute=False,
+        legacy_total=0,
+        matched_identities=0,
+        unmatched_identities=0,
+        ambiguous_identities=0,
+        duplicate_identities=0,
+        invalid_values=0,
+        protected_cases=0,
+        case_ref_conflicts=0,
+        existing_cases=0,
+        will_insert=0,
+        will_update=0,
+        inserted_or_updated=0,
+        status_breakdown={},
+    )
+    compare_result = WfsFeeLegacyCompareResult(
+        compared=0,
+        matched=0,
+        only_in_legacy=0,
+        only_in_formal=0,
+        actual_fee_diff=0,
+        manual_fee_diff=0,
+        affected_units_diff=0,
+        estimated_recover_diff=0,
+        recovered_amount_diff=0,
+        case_nos_diff=0,
+        claim_amount_diff=0,
+        status_diff=0,
+        protected_cases=0,
+        legacy_estimated_total=Decimal("0"),
+        formal_estimated_total=Decimal("0"),
+        legacy_recovered_total=Decimal("0"),
+        formal_recovered_total=Decimal("0"),
+    )
+    monkeypatch.setattr(
+        WfsFeeAlertService,
+        "sync_legacy_cases",
+        lambda _self, *, execute: sync_result.model_copy(update={"execute": execute}),
+    )
+    monkeypatch.setattr(
+        WfsFeeAlertService,
+        "compare_legacy_cases",
+        lambda _self: compare_result,
+    )
+    app = create_app()
+    app.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id="super-admin",
+        permissions=frozenset({"*"}),
+    )
+    app.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
+    client = TestClient(app)
+
+    assert client.post("/api/warehouse/wfs-fee-cases/sync-legacy-preview").status_code == 200
+    assert client.post("/api/warehouse/wfs-fee-cases/sync-legacy-execute").status_code == 200
+    assert client.get("/api/warehouse/wfs-fee-cases/legacy-compare").status_code == 200
 
 
 def test_migration_registers_action_permissions() -> None:

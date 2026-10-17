@@ -55,9 +55,10 @@ def require_source_account_scope(
         try:
             user_id = int(principal.user_id)
         except (TypeError, ValueError):
-            # Synthetic principals used by isolated API tests and temporary
-            # compatibility callers do not have persisted IAM scope rows.
-            allowed = configured_refs if principal.permissions else frozenset()
+            # Only the dedicated preview principal may use configured in-memory
+            # scope. Every other principal must resolve to a persisted IAM user;
+            # otherwise a forged non-numeric id could inherit the full registry.
+            allowed = frozenset()
         else:
             if "*" in principal.permissions:
                 allowed = configured_refs

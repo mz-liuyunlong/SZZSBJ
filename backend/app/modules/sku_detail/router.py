@@ -29,6 +29,8 @@ from app.modules.sku_detail.service import SkuDetailService
 
 router = APIRouter(prefix="/api/products/skus", tags=["Lingxing SKU Detail"])
 
+PURCHASE_COST_PERMISSION = "field:products:product-management:purchase-cost"
+
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 products_principal = Annotated[Principal, Depends(require_permission("products:read"))]
@@ -115,9 +117,9 @@ def get_sku_detail(
     data = SkuDetailService(session).get_detail(
         sku_id,
         account_refs,
-        include_costs=has_permission(principal, "products:cost:read"),
+        include_costs=has_permission(principal, PURCHASE_COST_PERMISSION),
     )
-    if has_permission(principal, "products:cost:read"):
+    if has_permission(principal, PURCHASE_COST_PERMISSION):
         audit_logger.info(
             "sku_cost_accessed actor_ref=%s request_id=%s sku_id=%s access_type=detail",
             principal.user_id,
@@ -238,7 +240,7 @@ def get_sku_cost_history(
     sku_id: UUID,
     query: Annotated[SkuPageQuery, Query()],
     session: db_session,
-    principal: Annotated[Principal, Depends(require_permission("products:cost:read"))],
+    principal: Annotated[Principal, Depends(require_permission(PURCHASE_COST_PERMISSION))],
     account_refs: source_scope,
 ) -> SuccessEnvelope[SkuCostHistoryData, SkuReadMeta]:
     data, total = SkuDetailService(session).cost_history(sku_id, query, account_refs)

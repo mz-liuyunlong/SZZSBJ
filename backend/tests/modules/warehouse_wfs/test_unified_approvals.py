@@ -24,7 +24,7 @@ from app.modules.approvals.service import (
     make_snapshot,
     signature,
 )
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 
 
 def test_snapshot_excludes_account_scope_and_preserves_full_log() -> None:
@@ -53,9 +53,7 @@ def test_preview_principal_cannot_call_any_approval_routes() -> None:
         user_id="preview-operator",
         permissions=frozenset({"warehouse:wfs-fee-alert:write"}),
     )
-    app.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"account-1"})
-    )
+    app.dependency_overrides[require_source_account_scope] = lambda: frozenset({"account-1"})
     app.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     client = TestClient(app)
     case = "00000000-0000-0000-0000-000000000001"
@@ -83,9 +81,7 @@ def _approval_client(monkeypatch: pytest.MonkeyPatch, permissions: set[str]) -> 
         user_id="synthetic-user",
         permissions=frozenset(permissions),
     )
-    app.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"account-1"})
-    )
+    app.dependency_overrides[require_source_account_scope] = lambda: frozenset({"account-1"})
     app.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     monkeypatch.setattr(
         ApprovalService,

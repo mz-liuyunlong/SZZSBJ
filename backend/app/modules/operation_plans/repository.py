@@ -130,6 +130,7 @@ class OperationPlanRepository:
         file_sha256: str,
         file_size: int,
         conflict_policy: str,
+        source_account_refs: frozenset[str],
         actor_ref: str,
     ) -> None:
         self.session.execute(
@@ -137,10 +138,11 @@ class OperationPlanRepository:
                 """
                 insert into ops_operation_plan_import_batches (
                     id, period_id, file_name, file_sha256, file_size,
-                    status, conflict_policy, created_by
+                    status, conflict_policy, source_account_refs_json, created_by
                 ) values (
                     :id, :period_id, :file_name, :file_sha256, :file_size,
-                    'processing', :conflict_policy, :actor_ref
+                    'processing', :conflict_policy, cast(:source_account_refs_json as jsonb),
+                    :actor_ref
                 )
                 """
             ),
@@ -151,6 +153,7 @@ class OperationPlanRepository:
                 "file_sha256": file_sha256,
                 "file_size": file_size,
                 "conflict_policy": conflict_policy,
+                "source_account_refs_json": _json_dumps(sorted(source_account_refs)),
                 "actor_ref": actor_ref,
             },
         )
@@ -434,11 +437,11 @@ class OperationPlanRepository:
         target_gross_profit_amount: Decimal,
         remark: str | None,
         actor_ref: str,
-    ) -> None:
-        self.session.execute(
-            text(
-                """
-                update ops_operation_product_plans
+        account_refs: frozenset[str],
+    ) -> bool:
+        statement = text(
+            """
+                update ops_operation_product_plans p
                 set target_sales_amount = :target_sales_amount,
                     target_gross_profit_amount = :target_gross_profit_amount,
                     remark = coalesce(:remark, remark),
@@ -446,32 +449,74 @@ class OperationPlanRepository:
                     plan_status = case when operation_status = 'clearance' then 'clearance' else 'normal' end,
                     updated_by = :actor_ref,
                     updated_at = now()
-                where id = :plan_id
-                """
-            ),
-            {
-                "plan_id": plan_id,
-                "target_sales_amount": target_sales_amount,
-                "target_gross_profit_amount": target_gross_profit_amount,
-                "remark": remark,
-                "actor_ref": actor_ref,
-            },
+                where p.id = :plan_id
+                  and exists (
+                    select 1 from mart_listing_management_current l
+                    where trim(l.item_id::text) = trim(p.item_id::text)
+                      and l.source_account_ref in :account_refs
+                  )
+                  and not exists (
+                    select 1 from mart_listing_management_current l
+                    where trim(l.item_id::text) = trim(p.item_id::text)
+                      and l.source_account_ref not in :account_refs
+                  )
+                returning p.id
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return (
+            self.session.execute(
+                statement,
+                {
+                    "plan_id": plan_id,
+                    "target_sales_amount": target_sales_amount,
+                    "target_gross_profit_amount": target_gross_profit_amount,
+                    "remark": remark,
+                    "actor_ref": actor_ref,
+                    "account_refs": tuple(sorted(account_refs)),
+                },
+            ).scalar_one_or_none()
+            is not None
         )
 
-    def mark_plan_clearance(self, *, plan_id: UUID, actor_ref: str) -> None:
-        self.session.execute(
-            text(
-                """
-                update ops_operation_product_plans
+    def mark_plan_clearance(
+        self,
+        *,
+        plan_id: UUID,
+        actor_ref: str,
+        account_refs: frozenset[str],
+    ) -> bool:
+        statement = text(
+            """
+                update ops_operation_product_plans p
                 set operation_status = 'clearance',
                     plan_status = 'clearance',
                     adjusted = true,
                     updated_by = :actor_ref,
                     updated_at = now()
-                where id = :plan_id
-                """
-            ),
-            {"plan_id": plan_id, "actor_ref": actor_ref},
+                where p.id = :plan_id
+                  and exists (
+                    select 1 from mart_listing_management_current l
+                    where trim(l.item_id::text) = trim(p.item_id::text)
+                      and l.source_account_ref in :account_refs
+                  )
+                  and not exists (
+                    select 1 from mart_listing_management_current l
+                    where trim(l.item_id::text) = trim(p.item_id::text)
+                      and l.source_account_ref not in :account_refs
+                  )
+                returning p.id
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return (
+            self.session.execute(
+                statement,
+                {
+                    "plan_id": plan_id,
+                    "actor_ref": actor_ref,
+                    "account_refs": tuple(sorted(account_refs)),
+                },
+            ).scalar_one_or_none()
+            is not None
         )
 
     def _plan_params(
@@ -616,11 +661,32 @@ class OperationPlanRepository:
             },
         )
 
-    def get_plan(self, plan_id: UUID) -> RowMapping | None:
+    def get_plan(
+        self,
+        plan_id: UUID,
+        account_refs: frozenset[str],
+    ) -> RowMapping | None:
+        statement = text(
+            """
+            select p.*
+            from ops_operation_product_plans p
+            where p.id = :plan_id
+              and exists (
+                select 1 from mart_listing_management_current l
+                where trim(l.item_id::text) = trim(p.item_id::text)
+                  and l.source_account_ref in :account_refs
+              )
+              and not exists (
+                select 1 from mart_listing_management_current l
+                where trim(l.item_id::text) = trim(p.item_id::text)
+                  and l.source_account_ref not in :account_refs
+              )
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
         return (
             self.session.execute(
-                text("select * from ops_operation_product_plans where id = :plan_id"),
-                {"plan_id": plan_id},
+                statement,
+                {"plan_id": plan_id, "account_refs": tuple(sorted(account_refs))},
             )
             .mappings()
             .first()
@@ -1846,19 +1912,71 @@ class OperationPlanRepository:
             "stock_status_counts": [row for row in rows if row["kind"] == "stock_status"],
         }
 
-    def list_events(self, plan_id: UUID) -> list[RowMapping]:
+    def list_events(
+        self,
+        plan_id: UUID,
+        account_refs: frozenset[str],
+    ) -> list[RowMapping]:
+        statement = text(
+            """
+            select e.id, e.event_type, e.after_data, e.reason, e.actor_ref, e.created_at
+            from ops_operation_plan_events e
+            join ops_operation_product_plans p on p.id = e.product_plan_id
+            where e.product_plan_id = :plan_id
+              and exists (
+                select 1 from mart_listing_management_current l
+                where trim(l.item_id::text) = trim(p.item_id::text)
+                  and l.source_account_ref in :account_refs
+              )
+              and not exists (
+                select 1 from mart_listing_management_current l
+                where trim(l.item_id::text) = trim(p.item_id::text)
+                  and l.source_account_ref not in :account_refs
+              )
+            order by e.created_at desc
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
         return list(
             self.session.execute(
-                text(
-                    """
-                select id, event_type, after_data, reason, actor_ref, created_at
-                from ops_operation_plan_events
-                where product_plan_id = :plan_id
-                order by created_at desc
-                """
-                ),
-                {"plan_id": plan_id},
+                statement,
+                {"plan_id": plan_id, "account_refs": tuple(sorted(account_refs))},
             ).mappings()
+        )
+
+    def can_access_import_batch(
+        self,
+        *,
+        batch_id: UUID,
+        actor_ref: str,
+        account_refs: frozenset[str],
+        is_super_admin: bool,
+    ) -> bool:
+        statement = text(
+            """
+            select exists (
+                select 1
+                from ops_operation_plan_import_batches b
+                where b.id = :batch_id
+                  and (:is_super_admin or b.created_by = :actor_ref)
+                  and jsonb_array_length(b.source_account_refs_json) > 0
+                  and not exists (
+                    select 1
+                    from jsonb_array_elements_text(b.source_account_refs_json) account(value)
+                    where account.value not in :account_refs
+                  )
+            )
+            """
+        ).bindparams(bindparam("account_refs", expanding=True))
+        return bool(
+            self.session.scalar(
+                statement,
+                {
+                    "batch_id": batch_id,
+                    "actor_ref": actor_ref,
+                    "is_super_admin": is_super_admin,
+                    "account_refs": tuple(sorted(account_refs)),
+                },
+            )
         )
 
     def list_failed_import_rows(self, batch_id: UUID) -> list[RowMapping]:

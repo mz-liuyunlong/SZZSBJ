@@ -17,9 +17,15 @@ from app.modules.data_pages.schemas import (
     DailySalesTrendPointRead,
 )
 from app.modules.data_pages.service import DailySalesService
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 
-ALL_PERMISSIONS = frozenset({"sales:daily-sales:read"})
+ALL_PERMISSIONS = frozenset(
+    {
+        "page:sales:daily-sales:view",
+        "field:sales:order-profit:gross-profit",
+        "field:sales:order-profit:profit-margin",
+    }
+)
 NOW = datetime(2026, 9, 17, 8, 0, tzinfo=UTC)
 
 
@@ -29,8 +35,8 @@ def _app(*permissions: str) -> FastAPI:
         user_id="synthetic-user",
         permissions=frozenset(permissions) if permissions else ALL_PERMISSIONS,
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"synthetic-account"})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application
@@ -173,3 +179,26 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
         "fact_walmart_refund_items",
     ]
     assert body["meta"]["total"] == 1
+
+
+def test_daily_sales_profit_fields_are_redacted_without_order_profit_field_permissions(
+    monkeypatch: Any,
+) -> None:
+    item = _daily_sales_item().model_copy(update={"average_profit_per_order": Decimal("6.815")})
+    monkeypatch.setattr(
+        DailySalesService,
+        "list_daily_sales",
+        lambda _self, _query, _accounts: (DailySalesListData(items=[item]), 1, NOW),
+    )
+
+    body = _assert_envelope(
+        TestClient(_app("page:sales:daily-sales:view")).get("/api/sales/daily-sales")
+    )
+
+    row = body["data"]["items"][0]
+    assert row["gross_profit_amount"] is None
+    assert row["gross_profit_currency_code"] is None
+    assert row["average_profit_per_order"] is None
+    assert row["gross_margin"] is None
+    assert row["roi"] is None
+    assert body["data"]["summary"]["order_profit_amount"] is None

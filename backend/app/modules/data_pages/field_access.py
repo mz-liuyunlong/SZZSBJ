@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.modules.data_pages.schemas import (
+    DailySalesListData,
     OrderProfitListData,
     OrderProfitSummaryRead,
     OrderProfitTrendData,
@@ -28,7 +29,48 @@ def filter_order_profit_export_columns(
         selected = [key for key in selected if key not in _GROSS_PROFIT_EXPORT_COLUMNS]
     if not can_view_profit_margin:
         selected = [key for key in selected if key not in _MARGIN_EXPORT_COLUMNS]
+    if not selected:
+        selected = [
+            key
+            for key in available_columns
+            if key not in _GROSS_PROFIT_EXPORT_COLUMNS | _MARGIN_EXPORT_COLUMNS
+        ][:1]
     return ",".join(selected)
+
+
+def filter_daily_sales_list_data(
+    data: DailySalesListData,
+    *,
+    can_view_gross_profit: bool,
+    can_view_profit_margin: bool,
+) -> DailySalesListData:
+    """Redact profit-derived values exposed through the Daily Sales page."""
+
+    items = []
+    for item in data.items:
+        updates: dict[str, object] = {}
+        if not can_view_gross_profit:
+            updates.update(
+                {
+                    "gross_profit_amount": None,
+                    "gross_profit_currency_code": None,
+                    "average_profit_per_order": None,
+                }
+            )
+        if not can_view_profit_margin:
+            updates.update({"gross_margin": None, "roi": None})
+        items.append(item.model_copy(update=updates) if updates else item)
+
+    summary_updates: dict[str, object] = {}
+    if not can_view_gross_profit:
+        summary_updates.update(
+            {
+                "order_profit_amount": None,
+                "order_profit_currency_code": None,
+            }
+        )
+    summary = data.summary.model_copy(update=summary_updates) if summary_updates else data.summary
+    return data.model_copy(update={"items": items, "summary": summary})
 
 
 def filter_order_profit_list_data(

@@ -23,6 +23,12 @@ ComingSoon、mock-only 或纯前端页面伪报为后端已完成。
 6. 真实用户的数据源账号宇宙来自 `gov_integration_sync_configs`，不再依赖 preview-only 环境变量。
 7. 用户级数据范围可在用户管理页面查看、修改、审计；未登记的 source account 会被后端拒绝。
 8. 飞书异常不再携带 provider body、provider message、原始 exception text 或异常 cause。
+9. 运营计划按 UUID 的读取、事件、目标修改、清货和失败明细导出已在 Repository 内执行
+   `source_account` 对象校验；写入使用同一条 `UPDATE ... WHERE ... RETURNING` 防止 TOCTOU。
+10. 角色分配同时校验功能权限、高风险权限和角色携带的数据范围；组合角色、`*`、用户级 override
+    均不能让普通管理员间接扩权。
+11. Order Profit 与 Daily Sales 的列表、汇总、趋势和 CSV 均在后端输出边界执行利润金额/利润率字段过滤。
+12. 非数字且非 preview 的 principal 不再继承已配置账号全集；运行时 fail closed。
 
 ## 2. 页面 → API → 权限矩阵
 
@@ -34,8 +40,8 @@ ComingSoon、mock-only 或纯前端页面伪报为后端已完成。
 | 每日销售 / API connected | `/api/sales/daily-sales**`, `/api/data-pages/filter-options` | `page:sales:daily-sales:view` | export；受限成本字段按后端字段规则 | `source_account` | 动态角色授权 | data pages router | 正确授权 |
 | 订单利润 / API connected | `/api/sales/order-profit**` | `page:sales:order-profit:view` | export；利润敏感字段按后端字段规则 | `source_account` | 动态角色授权 | data pages router | 与每日销售分离 |
 | 退款管理 / API connected | `/api/after-sales/refunds/**` | `page:aftersales:refund-management:view` | 当前只读 | `source_account` | 动态角色授权 | after-sales router | 正确授权 |
-| 运营计划 / API connected | `/api/operations/plans/**` | `page:operations:plan:view` | create、edit、import | `source_account` | 动态角色授权 | permission policy/router | clearance 与 target update 均按 edit，不由 view 放行 |
-| WFS 费用异常 / API connected | `/api/warehouse/wfs-fee-alerts/**`, `/api/warehouse/wfs-fee-cases/**` | `page:warehouse:wfs-fee-alert:view` | follow、archive-request、archive-review、mark-recovered、sync-legacy | `source_account` | 动态角色授权 | unified approvals、WFS router/frontend | 已修复；高危动作未自动扩权 |
+| 运营计划 / API connected | `/api/operations/plans/**` | `page:operations:plan:view` | create、edit、import | `source_account` + item-level object check；多账号 item 整体拒绝 | 动态角色授权 | permission policy/router + PostgreSQL object-scope tests | clearance/target update 使用原子 scoped UPDATE；events 受父计划约束；failed-export 受批次创建者和保存的账号集合约束 |
+| WFS 费用异常 / API connected | `/api/warehouse/wfs-fee-alerts/**`, `/api/warehouse/wfs-fee-cases/**` | `page:warehouse:wfs-fee-alert:view` | follow、archive-request、archive-review、mark-recovered；legacy sync 仅真实超级管理员 | `source_account` | 动态角色授权；跨账号 legacy sync 不等同普通 action | unified approvals、WFS router/frontend | 高危动作未自动扩权；生产执行环境开关仍保留 |
 | PMC 采购看板 / API connected | `/api/pmc/purchase/**` | `page:pmc:purchase-board:view` | override | `source_account` | 动态角色授权 | permission policy/PMC tests | override POST 不再被 page prefix 吞掉 |
 | 审批工作台 / API connected | `/api/approvals/**` | `page:data-center:approval-workspace:view` | WFS archive-request / archive-review | `source_account` + applicant/reviewer + state/version | 动态角色授权 | unified approval tests | 已修复；view 不能补材料或审核 |
 | 任务中心 / API connected | `/api/integrations/**` | `page:data-center:task-center:view` | configure、execute | `source_account` | 动态角色授权 | integration tests | 读取、配置、执行分离 |
@@ -70,6 +76,26 @@ ComingSoon、mock-only 或纯前端页面伪报为后端已完成。
 | IAM/RBAC | users/roles/permission catalog/audit/user-role-options/user data scopes/role data scopes 的 GET/POST/PATCH/PUT/DELETE | page + exact action + field + grant boundary + audit |
 | Media | signed image asset GET | signed asset boundary |
 
+### 3.1 Route → Service → Repository 数据边界复核
+
+| Route family | Service / Repository 执行点 | 对象 / 数据范围结论 | 导出 / 字段结论 |
+|---|---|---|---|
+| Product Management / SKU Detail | `ProductManagementService/Repository`、`SkuDetailService/Repository` | `source_account`；SKU 主路径为内部 UUID | purchase/logistics cost 使用 canonical field key；列表、详情、cost history 与 CSV 分开校验 |
+| Listing | `ListingManagementService/Repository`、`ListingTagRepository` | 列表/对象按账号；batch-set 必须全部 ID 都在范围内，否则整体 403 | export 复用账号范围；tag 维护必须 `manage-tags`，不是 page view |
+| Daily Sales / Order Profit | `DailySalesService`、`OrderProfitService` 及 repository | 查询和 export 使用同一账号范围 | list/summary/trend/CSV 都在 response/export 边界过滤 gross-profit 与 profit-margin 派生值 |
+| After-sales | `AfterSalesService/Repository` | `source_account` | 当前只读，无独立导出写路径 |
+| Operation Plan | `OperationPlanService/Repository` | item 的全部当前 Listing 账号必须属于调用者；events 继承父计划；batch export 校验创建者、保存范围和当前范围 | failed-export 不按 UUID 裸读；无权与不存在统一隐藏为 404 |
+| WFS / Approval | `WfsFeeAlertService/Repository`、`ApprovalService/Repository` | source account + parent object + state/version；legacy sync 仅真实超管 | request/review 分离；无 page-only 写入 |
+| PMC | `PmcPurchaseReadService/Repository`、override service | `source_account` | override 为独立高风险 action |
+| Integration | sync services/repositories | governance account universe 与用户有效范围取交集 | config/execute 与 page view 分离；RAW 内容不由本次接口扩权 |
+| IAM/RBAC | `RbacService/RbacRepository` | 目标用户保护；角色权限、high-risk、role scopes 与 actor effective scopes 一次判定 | phone/email 仍为独立字段权限；审计不记录 secret |
+| Business rules | business-rule service/repository | 规则自身 scope 与 exact action | deactivate/edit/recalculate 分离 |
+| Product Core | product service/repository | 尚无可信 ownership；当前真实超级管理员 gate，普通主体 fail closed | 不宣称 source-account/store/product 隔离已完成 |
+| Auth / Media | IAM service；signed media boundary | 既有身份和签名边界 | 不扩大 public allowlist |
+
+上述矩阵覆盖 OpenAPI 的 109 个 path / 125 个 method 操作。`store/owner/sku/product` 的登记能力不等于
+Repository 已执行隔离；未建立可信归属的写路径继续 fail closed。
+
 ## 4. 数据范围真实执行状态
 
 | 维度 | 当前执行状态 | 结论 |
@@ -88,12 +114,16 @@ ComingSoon、mock-only 或纯前端页面伪报为后端已完成。
 
 - 必要的滚动兼容：0042 暂留 `approvals:workbench:read`，并仅将已有 grant 复制到 canonical page key。
 - 受控兼容：部分旧 route 声明仍由 `permission_for_request()` 映射到 canonical page/action/field；静态测试固定允许清单。
+- runtime 不再接受 declared legacy permission 作为 canonical policy 的通用 fallback；仅有旧 page/read/write key
+  不能调用新 action。模块级成本兼容仅限既有 Product Management 读路径，结束条件是生产角色完成 canonical
+  字段授权并经过真实账号 smoke，届时另开任务移除。
 - 不可作为长期后门：WFS 旧 action 不再用于 runtime；审批旧 review 不映射到 WFS 高危审核。
 - 待独立治理：`/api/v1/products` 的 legacy CRUD keys。在 ownership/data-scope PRP 完成前维持 superadmin-only。
 
 ## 6. 生产案例分类
 
-已知用户 ID 41 的 403 需要分开处理：
+历史材料中的用户 ID 41 尚未通过本地证据证明就是刘云龙；发布前必须由获授权的生产只读诊断确认身份。
+该 403 需要分开处理：
 
 - 代码缺陷：Approval/WFS key 断链、preview-only account universe、method prefix 吞动作；本 PR 已修复。
 - 配置缺失：用户及其角色没有 `source_account`；系统应继续返回 `DATA_SCOPE_DENIED`。
@@ -102,9 +132,10 @@ ComingSoon、mock-only 或纯前端页面伪报为后端已完成。
 
 ## 7. 未关闭风险
 
-1. `mypy app tests` 的仓库基线存在 namespace 冲突；最终诊断模式
-   `mypy --explicit-package-bases app tests` 报告 `399 errors in 59 files`，属于既有大规模类型基线，本 PR 不伪报通过。
-2. 从空库重放历史 migration 会因旧 revision 长于 Alembic 默认 `varchar(32)` 失败；0042 的 0041→0042 演练已在加宽版本表的隔离库完成，但空库重建问题应单独治理。
+1. `mypy app tests` 的仓库基线仍先因 duplicate module 退出；使用
+   `--explicit-package-bases` 后仍有既有跨模块类型债务，本 PR 不伪报通过。
+2. 本 PR 已将未执行的 0042 revision 缩短为 `20261017_0042_rbac_backfill`，并让新建 PostgreSQL
+   version table 使用 `varchar(128)`；fresh chain 与模拟生产 `varchar(32)` 的 0041→0042 均已通过。
 3. 管理 UI 目前手工输入范围；`source_account` 有后端权威值校验，但尚无脱敏候选列表 API。
 4. `store/owner/sku/product` 尚未成为通用 repository filter；不得依赖 UI 登记声称隔离已完成。
 5. 合并不等于生产事故关闭；仍需单独批准 migration、部署、重启和真实角色只读 smoke。

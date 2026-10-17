@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import (
     WfsFeeAlertListData,
     WfsFeeAlertRead,
@@ -25,8 +25,8 @@ def _app(*permissions: str):
         user_id="synthetic-user",
         permissions=frozenset(permissions),
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"synthetic-account"})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application

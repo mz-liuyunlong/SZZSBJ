@@ -1,6 +1,6 @@
-"""Backfill Approval Workspace page access without broadening WFS review or data scope.
+"""Backfill RBAC grants and persist operation-plan import batch account scope.
 
-Revision ID: 20261017_0042_approval_rbac_backfill
+Revision ID: 20261017_0042_rbac_backfill
 Revises: 20261016_0041_wfs_rbac_actions
 Create Date: 2026-10-17
 """
@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from sqlalchemy import text
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "20261017_0042_approval_rbac_backfill"
+revision: str = "20261017_0042_rbac_backfill"
 down_revision: str | Sequence[str] | None = "20261016_0041_wfs_rbac_actions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -60,6 +62,21 @@ NEW_ACTIONS = (
     ),
 )
 
+NEW_FIELDS = (
+    (
+        "field:sales:order-profit:gross-profit",
+        "查看订单利润金额",
+        "gross_profit",
+        10,
+    ),
+    (
+        "field:sales:order-profit:profit-margin",
+        "查看订单利润率与 ROI",
+        "profit_margin",
+        20,
+    ),
+)
+
 LEGACY_EQUIVALENT_GRANTS = {
     LEGACY_APPROVAL_VIEW: (APPROVAL_PAGE_VIEW,),
     "products:read": ("page:products:product-management:view",),
@@ -75,6 +92,16 @@ LEGACY_EQUIVALENT_GRANTS = {
 
 def upgrade() -> None:
     bind = op.get_bind()
+
+    op.add_column(
+        "ops_operation_plan_import_batches",
+        sa.Column(
+            "source_account_refs_json",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+        ),
+    )
 
     # User-level scope editing is deliberately high risk and receives no automatic role grant.
     bind.execute(
@@ -172,6 +199,44 @@ def upgrade() -> None:
                 "page_key": page_key,
                 "action_key": action_key,
                 "risk_level": risk_level,
+                "sort_order": sort_order,
+            },
+        )
+
+    for permission_key, name, field_key, sort_order in NEW_FIELDS:
+        bind.execute(
+            text(
+                """
+                insert into app_permissions (
+                    permission_key, name, group_key, description, permission_type,
+                    module_key, page_key, action_key, field_key, risk_level,
+                    sort_order, is_active, created_at, updated_at
+                )
+                values (
+                    :permission_key, :name, 'sales', :description, 'field',
+                    'sales', 'sales_order_profit', null, :field_key, 'high',
+                    :sort_order, true, now(), now()
+                )
+                on conflict (permission_key) do update set
+                    name = excluded.name,
+                    group_key = excluded.group_key,
+                    description = excluded.description,
+                    permission_type = excluded.permission_type,
+                    module_key = excluded.module_key,
+                    page_key = excluded.page_key,
+                    action_key = excluded.action_key,
+                    field_key = excluded.field_key,
+                    risk_level = excluded.risk_level,
+                    sort_order = excluded.sort_order,
+                    is_active = true,
+                    updated_at = now()
+                """
+            ),
+            {
+                "permission_key": permission_key,
+                "name": name,
+                "description": f"sales_order_profit：{name}",
+                "field_key": field_key,
                 "sort_order": sort_order,
             },
         )

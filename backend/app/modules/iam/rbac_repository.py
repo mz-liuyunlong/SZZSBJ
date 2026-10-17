@@ -165,6 +165,23 @@ class RbacRepository:
         ).scalars()
         return {str(item) for item in rows}
 
+    def data_scopes_for_roles(self, role_keys: Iterable[str]) -> set[tuple[str, str]]:
+        values = tuple(dict.fromkeys(role_keys))
+        if not values:
+            return set()
+        rows = self.session.execute(
+            text(
+                """
+                select distinct s.scope_type, s.scope_value
+                from app_roles r
+                join app_role_data_scopes s on s.role_id = r.id
+                where r.role_key = any(:role_keys)
+                """
+            ),
+            {"role_keys": list(values)},
+        ).all()
+        return {(str(scope_type), str(scope_value)) for scope_type, scope_value in rows}
+
     def existing_permission_keys(self, permission_keys: Iterable[str]) -> set[str]:
         values = tuple(dict.fromkeys(permission_keys))
         if not values:

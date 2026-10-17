@@ -166,7 +166,7 @@ class DailySalesSummaryRead(StrictSchema):
     order_count: Money = Decimal("0")
     sales_amount: Money = Decimal("0")
     sales_currency_code: str | None = "USD"
-    order_profit_amount: Money = Decimal("0")
+    order_profit_amount: Money | None = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
     sem_ad_spend_amount: Money = Decimal("0")
@@ -266,7 +266,7 @@ class OrderProfitSummaryRead(StrictSchema):
     refund_amount: Money = Decimal("0")
     refund_loss_amount: Money = Decimal("0")
     refund_currency_code: str | None = "USD"
-    order_profit_amount: Money = Decimal("0")
+    order_profit_amount: Money | None = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
     sem_ad_spend_amount: Money = Decimal("0")
@@ -285,7 +285,7 @@ class OrderProfitTrendPointRead(StrictSchema):
     refund_amount: Money = Decimal("0")
     refund_loss_amount: Money = Decimal("0")
     refund_currency_code: str | None = "USD"
-    order_profit_amount: Money = Decimal("0")
+    order_profit_amount: Money | None = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     profit_margin: Ratio | None = None
     ad_spend_amount: Money = Decimal("0")

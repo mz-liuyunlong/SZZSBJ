@@ -193,7 +193,7 @@
 | Branch / base | `fix/rbac-post-0041-end-to-end-hardening` / `7a8eab793c4edf9e419b3ae846e2b47dddf51587` |
 | Purpose | 对齐 navigation、page/action/field/data-scope、FastAPI route、对象状态校验和角色/用户授权；修复 Approval/WFS 断链、通配符判断、数据源账号范围及飞书异常泄漏 |
 | Backend scope | `app/core/permission_policy_v2.py`, `app/core/data_scope.py`, IAM/RBAC、Approval、WFS、Product/SKU、Integration scope dependencies，以及 scoped tests |
-| Migration | `20261017_0042_approval_rbac_backfill`；接在 0041 后；只回填已有旧审批 read grant；旧 key 暂留；不自动增加 WFS review 或 data scope；forward-only |
+| Migration | `20261017_0042_rbac_backfill`；接在 0041 后；回填已有旧审批 read grant并增加运营计划导入批次账号范围证据列；旧 key 暂留；不自动增加 WFS review、利润字段 grant 或 data scope；forward-only |
 | New protected APIs | `GET/PUT /api/settings/rbac/users/{user_id}/data-scopes`；需要用户管理 page + `action:settings:user-management:configure-data-scope` |
 | Data scope | 只有 `source_account` 已由通用业务 dependency 执行；合法值来自 governance config；用户级同类型覆盖角色级；空集 fail closed；store/owner/sku/product 仍是 registry-only |
 | Product Core boundary | 缺少可信 ownership 模型，`/api/v1/products/**` 在独立 PRP 前仅真实 `is_super_admin` 可用；角色名 `admin` 不构成超管 |

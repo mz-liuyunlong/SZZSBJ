@@ -19,6 +19,7 @@ from app.modules.iam.rbac_service import AuditContext, RbacService
 def _service() -> tuple[RbacService, MagicMock]:
     service = RbacService(MagicMock(spec=Session))
     repository = MagicMock()
+    repository.high_risk_permission_keys.return_value = set()
     service.repository = repository
     return service, repository
 
@@ -154,3 +155,88 @@ def test_user_scope_api_requires_page_and_action(monkeypatch: pytest.MonkeyPatch
     )
     response = TestClient(app).get("/api/settings/rbac/users/41/data-scopes")
     assert response.status_code == 200
+
+
+def test_role_assignment_rejects_scope_outside_actor_even_with_target_override() -> None:
+    service, repository = _service()
+    repository.permissions_for_roles.return_value = {"page:synthetic:view"}
+    repository.data_scopes_for_roles.return_value = {("source_account", "account-b")}
+    repository.resolve_user_data_scope.return_value = {"account-a"}
+    actor = Principal(user_id="7", permissions=frozenset({"page:synthetic:view"}))
+
+    with pytest.raises(ApiError) as exc:
+        service._assert_actor_can_assign_roles(actor, ("scoped-role",))
+
+    assert exc.value.status_code == 403
+
+
+def test_role_assignment_checks_combined_and_wildcard_scopes() -> None:
+    service, repository = _service()
+    repository.permissions_for_roles.return_value = {"page:synthetic:view"}
+    repository.resolve_user_data_scope.return_value = {"account-a"}
+    actor = Principal(user_id="7", permissions=frozenset({"page:synthetic:view"}))
+
+    repository.data_scopes_for_roles.return_value = {
+        ("source_account", "account-a"),
+        ("source_account", "account-b"),
+    }
+    with pytest.raises(ApiError):
+        service._assert_actor_can_assign_roles(actor, ("role-a", "role-b"))
+
+    repository.data_scopes_for_roles.return_value = {("source_account", "*")}
+    with pytest.raises(ApiError):
+        service._assert_actor_can_assign_roles(actor, ("wildcard-role",))
+
+
+def test_non_super_admin_cannot_assign_role_with_high_risk_permission() -> None:
+    service, repository = _service()
+    repository.permissions_for_roles.return_value = {"action:synthetic:high-risk"}
+    repository.high_risk_permission_keys.return_value = {"action:synthetic:high-risk"}
+    actor = Principal(
+        user_id="7",
+        permissions=frozenset({"action:synthetic:high-risk"}),
+    )
+
+    with pytest.raises(ApiError) as exc:
+        service._assert_actor_can_assign_roles(actor, ("high-risk-role",))
+
+    assert exc.value.status_code == 403
+
+
+def test_role_options_include_data_scope_assignability() -> None:
+    service, repository = _service()
+    repository.list_role_options.return_value = [
+        {
+            "role_key": "account-a-role",
+            "name": "Account A",
+            "description": None,
+            "is_system": False,
+        },
+        {
+            "role_key": "account-b-role",
+            "name": "Account B",
+            "description": None,
+            "is_system": False,
+        },
+    ]
+    repository.permissions_for_roles.return_value = {"page:synthetic:view"}
+    repository.data_scopes_for_roles.side_effect = [
+        {("source_account", "account-a")},
+        {("source_account", "account-b")},
+    ]
+    repository.resolve_user_data_scope.return_value = {"account-a"}
+
+    result = service.user_role_options(
+        Principal(user_id="7", permissions=frozenset({"page:synthetic:view"}))
+    )
+
+    assert [item.assignable for item in result] == [True, False]
+
+
+def test_super_admin_can_assign_role_with_wildcard_scope() -> None:
+    service, repository = _service()
+    service._assert_actor_can_assign_roles(
+        Principal(user_id="1", permissions=frozenset({"*"})),
+        ("admin",),
+    )
+    repository.permissions_for_roles.assert_not_called()

@@ -210,6 +210,16 @@ def test_correct_preview_token_creates_only_the_approved_principal(
         user_id=PREVIEW_PRINCIPAL_ID,
         permissions=frozenset(
             {
+                "page:products:product-management:view",
+                "page:products:listing-management:view",
+                "page:sales:daily-sales:view",
+                "page:sales:order-profit:view",
+                "page:aftersales:refund-management:view",
+                "page:warehouse:wfs-fee-alert:view",
+                "page:settings:fee-rules:view",
+                "page:pmc:purchase-board:view",
+                "page:operations:plan:view",
+                "page:data-center:task-center:view",
                 "products:read",
                 "products:pricing_rules:read",
                 "products:cost:read",

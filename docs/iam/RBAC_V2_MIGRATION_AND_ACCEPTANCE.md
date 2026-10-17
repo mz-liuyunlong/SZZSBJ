@@ -45,7 +45,7 @@ RBAC v2 迁移严格接在已合入的 `20261016_0037_approval_workbench` 后，
    - 将已合入的 WFS Case 功能权限映射为页面专属 action 权限；
    - 保留 WFS 正式 Case 流程的权限边界；
    - 停用对应旧 WFS action 权限关联。
-5. `20261017_0042_approval_rbac_backfill`
+5. `20261017_0042_rbac_backfill`
    - 为已持有旧 `approvals:workbench:read` 的角色幂等回填 canonical Approval Workspace 页面权限；
    - 暂时保留旧 read grant，支持滚动部署；
    - 不把旧审批 review 转为 WFS 高风险 review；
@@ -101,7 +101,7 @@ uv run alembic current
 
 ### 4.1 当前 0042 边界
 
-`20261017_0042_approval_rbac_backfill` 是 forward-only。其 `downgrade()` 会明确阻断，避免删除已经由
+`20261017_0042_rbac_backfill` 是 forward-only。其 `downgrade()` 会明确阻断，避免删除已经由
 新应用进程使用的 canonical grant。生产不得从 0042 直接 downgrade 到 0041，也不得手工修改
 `alembic_version`。执行前必须有可恢复 snapshot；已提交后的恢复方案见
 `docs/operations/RBAC_V2_0042_PRODUCTION_MIGRATION_PLAN.md`。

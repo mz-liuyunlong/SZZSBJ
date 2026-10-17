@@ -189,14 +189,13 @@ class RbacService:
         return after
 
     def user_role_options(self, actor: Principal) -> list[UserRoleOptionRead]:
-        actor_permissions = self._actor_permissions(actor)
         is_super_admin = self._is_super_admin(actor)
         result: list[UserRoleOptionRead] = []
         for row in self.repository.list_role_options():
             role_key = str(row["role_key"])
-            role_permissions = self.repository.role_permission_keys(role_key)
-            assignable = is_super_admin or (
-                role_key != "admin" and role_permissions.issubset(actor_permissions)
+            assignable = is_super_admin or self._role_assignment_is_within_actor_scope(
+                actor,
+                (role_key,),
             )
             result.append(
                 UserRoleOptionRead(
@@ -591,21 +590,49 @@ class RbacService:
     ) -> None:
         if self._is_super_admin(actor):
             return
+        if not self._role_assignment_is_within_actor_scope(actor, role_keys):
+            raise ApiError(
+                code=ErrorCode.FORBIDDEN,
+                status_code=403,
+                message="不能分配权限或数据范围高于当前账号的角色",
+                details={"role_keys": sorted(role_keys)},
+            )
+
+    def _role_assignment_is_within_actor_scope(
+        self,
+        actor: Principal,
+        role_keys: tuple[str, ...],
+    ) -> bool:
+        """Prevent permission and latent role-scope escalation in one decision."""
+
+        if self._is_super_admin(actor):
+            return True
         if "admin" in role_keys:
-            raise ApiError(
-                code=ErrorCode.FORBIDDEN,
-                status_code=403,
-                message="只有超级管理员可以分配管理员角色",
-            )
+            return False
         requested_permissions = self.repository.permissions_for_roles(role_keys)
-        missing = sorted(requested_permissions - self._actor_permissions(actor))
-        if missing:
-            raise ApiError(
-                code=ErrorCode.FORBIDDEN,
-                status_code=403,
-                message="不能分配权限高于当前账号的角色",
-                details={"missing_permission_keys": missing},
+        if not requested_permissions.issubset(self._actor_permissions(actor)):
+            return False
+        if self.repository.high_risk_permission_keys(requested_permissions):
+            return False
+        try:
+            actor_id = int(actor.user_id)
+        except (TypeError, ValueError):
+            return False
+
+        requested_scopes = self.repository.data_scopes_for_roles(role_keys)
+        if any(scope_value == "*" for _scope_type, scope_value in requested_scopes):
+            return False
+        by_type: dict[str, set[str]] = {}
+        for scope_type, scope_value in requested_scopes:
+            by_type.setdefault(scope_type, set()).add(scope_value)
+        for scope_type, requested_values in by_type.items():
+            actor_values = self.repository.resolve_user_data_scope(
+                user_id=actor_id,
+                scope_type=scope_type,
             )
+            if "*" not in actor_values and not requested_values.issubset(actor_values):
+                return False
+        return True
 
     def _assert_actor_can_grant_scopes(
         self,

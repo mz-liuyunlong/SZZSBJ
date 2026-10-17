@@ -1634,19 +1634,22 @@ class ListingTagRepository:
         tag_values: list[str],
         mode: str,
     ) -> tuple[int, int]:
+        requested_listing_ids = {self._uuid(value) for value in listing_ids}
         listings = self.session.execute(
             select(
                 ListingManagementCurrentMart.id,
                 ListingManagementCurrentMart.source_account_ref,
                 ListingManagementCurrentMart.item_id,
             ).where(
-                ListingManagementCurrentMart.id.in_([self._uuid(value) for value in listing_ids]),
+                ListingManagementCurrentMart.id.in_(requested_listing_ids),
                 ListingManagementCurrentMart.source_account_ref.in_(account_refs),
             )
         ).all()
 
-        if not listings:
-            return 0, 0
+        # Batch writes are all-or-nothing. Silently updating the authorized
+        # subset would disclose object existence and hide cross-account input.
+        if {listing.id for listing in listings} != requested_listing_ids:
+            raise PermissionError("Listing 不存在或无权访问")
 
         tags = self._resolve_tags(tag_ids=tag_ids, tag_values=tag_values)
         if not tags:

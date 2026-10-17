@@ -10,8 +10,8 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 | Base commit | `7a8eab793c4edf9e419b3ae846e2b47dddf51587` |
 | Fix commit | `990b79c89250e4d18045a1dd06b0bd9d002f12bc` |
 | Pull request | `#226` |
-| CI | PASS；PR #226 共 6 项检查通过 |
-| New migration | `20261017_0042_approval_rbac_backfill` |
+| CI | 既有 HEAD 6 项通过；本轮补充修复必须推送后以最终 HEAD 重新全绿为准 |
+| New migration | `20261017_0042_rbac_backfill`（27 字符；文件尚未在共享环境执行） |
 | Production migration/deploy/restart | Not performed; separate Owner authorization required |
 
 以上 commit、PR 和 CI 均为 GitHub 实际结果，不以本地验证冒充 CI。
@@ -27,6 +27,11 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 - Product Core 在 ownership PRP 前的 real-superadmin-only fail-closed gate；
 - 飞书和密码恢复日志脱敏；
 - 前端 Approval、WFS、用户/角色管理的按钮与后端权限一致；
+- 运营计划 plan/event/update/clearance/failed-export 的 source-account 对象级校验及 TOCTOU-safe update；
+- 角色分配同时约束角色权限、高风险权限、组合角色数据范围和 `*`；
+- Daily Sales / Order Profit 的 list/summary/trend/CSV 后端字段脱敏；
+- SKU 采购成本 canonical field permission、Listing mixed-ID batch fail-closed、WFS legacy sync 真实超管边界；
+- 通用 legacy declared-permission fallback 已移除，非数字真实 principal 不再继承治理账号全集；
 - 权限矩阵、迁移方案、角色授权修复方案和回归测试。
 
 完整文件清单以 PR diff 为准。本 PR 不包含生产配置、生产数据、secret、RAW artifact 或旧系统修改。
@@ -35,14 +40,15 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 
 | 检查 | 结果 |
 |---|---|
-| Backend Ruff format/check | PASS；390 files formatted，lint clean |
-| Backend pytest | PASS；`1091 passed, 3 skipped` |
-| Backend mypy | BLOCKED BY BASELINE；标准命令因 duplicate module 退出；诊断模式 `399 errors in 59 files`，未伪报通过 |
+| Backend Ruff format/check | PASS；391 files，lint clean |
+| Backend pytest | PASS；默认环境 `1105 passed, 5 skipped`；5 个隔离 PostgreSQL 用例在定向数据库套件中均已实际执行，定向套件 `52 passed` |
+| Backend mypy | BLOCKED BY BASELINE；标准命令因 duplicate module 退出；诊断模式 `398 errors in 58 files`，未伪报通过 |
 | Frontend ESLint | PASS |
-| Frontend tests | PASS；`35 files / 147 tests` |
+| Frontend tests | PASS；35 files / 147 tests |
 | Frontend build | PASS；保留既有大 chunk warning |
-| Alembic heads | PASS；单一 `20261017_0042_approval_rbac_backfill` |
-| Isolated PostgreSQL 0041→0042 | PASS；权限差异、幂等和 forward-only 阻断已验证 |
+| Alembic heads | PASS；单一 `20261017_0042_rbac_backfill` |
+| Isolated PostgreSQL fresh chain | PASS；自动创建 `varchar(128)` version table，完整链到 0042 |
+| Isolated PostgreSQL 0041→0042 | PASS；模拟生产 `varchar(32)`；grant 49→52，仅 3 条审批 canonical；重复 upgrade 不变；forward-only 阻断后仍为 0042 |
 | Secret/RAW/scope scan | PASS |
 | Rule pack | PASS |
 | GitHub CI | PASS；Vercel、Vercel Preview Comments、WFS PostgreSQL migration smoke、backend、frontend、rule-pack-check 共 6 项 |
@@ -77,8 +83,11 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 - 导航、直接 URL、页面初始化 API 和操作按钮结果一致；
 - page view 不赋予 POST/PATCH/DELETE 或审核能力；
 - WFS request/review 分离，对象、状态、版本和 source account 同时校验；
+- WFS legacy preview/execute/compare 只有真实超级管理员可调用，且生产环境执行 gate 保持；
+- 运营计划账号 A 不能通过 B/mixed/未知 UUID 读取事件、修改目标、清货或导出批次失败记录；撤权后新请求立即拒绝；
+- Order Profit / Daily Sales 未授权利润金额、平均利润、margin/ROI 不出现在 API/CSV；
 - 用户管理 page、profile edit、enable-disable、assign-role、scope 配置分离；
-- 普通 admin 不能获得或下放超出自身的权限/范围；
+- 普通 admin 不能获得或下放超出自身的权限/范围、高风险 permission 或 `*`；
 - 用户级范围来源可见、刷新后保持且留下 audit event；
 - 授权账号 A 可访问，账号 B 拒绝；空 scope fail closed；
 - 飞书失败和密码恢复响应不泄漏 provider body、Token、链接或身份存在性；
@@ -101,7 +110,7 @@ Status: `ready_for_review`（未合并、未部署、未执行生产迁移）
 ## 8. 尚未关闭的风险
 
 - 仓库 mypy 基线和 test namespace 冲突未在本 PR 扩大修复；
-- 历史空库重放的 Alembic version 列宽问题需单独任务；
+- 旧运营计划导入批次没有历史账号集合，failed-export 会按设计 fail closed；如业务必须恢复旧文件，需单独 Owner 决策和可审计迁移，不得绕过；
 - `store/owner/sku/product` 仍是 registry-only；
 - Product Core ownership/data scope 需独立 PRP；
 - 数据范围 UI 仍为手工输入，缺少脱敏候选选择器。

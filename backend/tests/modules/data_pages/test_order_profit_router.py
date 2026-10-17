@@ -10,11 +10,22 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.data_pages.schemas import OrderProfitItemRead, OrderProfitListData
+from app.modules.data_pages.schemas import (
+    OrderProfitItemRead,
+    OrderProfitListData,
+    OrderProfitTrendData,
+    OrderProfitTrendPointRead,
+)
 from app.modules.data_pages.service import OrderProfitService
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 
-ALL_PERMISSIONS = frozenset({"sales:daily-sales:read"})
+ALL_PERMISSIONS = frozenset(
+    {
+        "page:sales:order-profit:view",
+        "field:sales:order-profit:gross-profit",
+        "field:sales:order-profit:profit-margin",
+    }
+)
 NOW = datetime(2026, 9, 17, 8, 0, tzinfo=UTC)
 
 
@@ -24,8 +35,8 @@ def _app(*permissions: str) -> FastAPI:
         user_id="synthetic-user",
         permissions=frozenset(permissions) if permissions else ALL_PERMISSIONS,
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"synthetic-account"})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application
@@ -132,3 +143,66 @@ def test_order_profit_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
     assert body["data"]["items"][0]["refund_loss_amount"] == "0.00"
     assert body["meta"]["source_objects"] == ["mart_order_profit_sku_day"]
     assert body["meta"]["total"] == 1
+
+
+def test_order_profit_fields_are_redacted_without_canonical_field_permissions(
+    monkeypatch: Any,
+) -> None:
+    item = _order_profit_item().model_copy(update={"average_profit_per_order": Decimal("6.815")})
+    monkeypatch.setattr(
+        OrderProfitService,
+        "list_order_profit",
+        lambda _self, **_kwargs: (OrderProfitListData(items=[item]), 1, NOW),
+    )
+
+    body = _assert_envelope(
+        TestClient(_app("page:sales:order-profit:view")).get("/api/sales/order-profit")
+    )
+
+    row = body["data"]["items"][0]
+    assert row["gross_profit_amount"] is None
+    assert row["gross_profit_currency_code"] is None
+    assert row["average_profit_per_order"] is None
+    assert row["gross_margin"] is None
+    assert row["roi"] is None
+    assert body["data"]["summary"]["order_profit_amount"] is None
+
+
+def test_order_profit_trend_and_export_apply_field_permissions(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        OrderProfitService,
+        "order_profit_trend",
+        lambda _self, **_kwargs: OrderProfitTrendData(
+            items=[
+                OrderProfitTrendPointRead(
+                    date=date(2026, 9, 16),
+                    order_profit_amount=Decimal("10"),
+                    order_profit_currency_code="USD",
+                    profit_margin=Decimal("0.25"),
+                )
+            ]
+        ),
+    )
+    captured: dict[str, str | None] = {}
+
+    def export_csv(_service: Any, **kwargs: Any) -> tuple[str, str]:
+        captured["columns"] = kwargs["columns"]
+        return "商品ID\n", "safe.csv"
+
+    monkeypatch.setattr("app.modules.data_pages.router.export_order_profit_csv", export_csv)
+    application = _app(
+        "page:sales:order-profit:view",
+        "action:sales:order-profit:export",
+    )
+    client = TestClient(application)
+
+    trend = _assert_envelope(client.get("/api/sales/order-profit/trend"))
+    assert trend["data"]["items"][0]["order_profit_amount"] is None
+    assert trend["data"]["items"][0]["profit_margin"] is None
+
+    response = client.get(
+        "/api/sales/order-profit/export",
+        params={"columns": "order_profit,avg_profit_per_order,gross_margin,roi"},
+    )
+    assert response.status_code == 200
+    assert captured["columns"] == "product_id"

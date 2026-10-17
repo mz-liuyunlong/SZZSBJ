@@ -23,6 +23,9 @@ Status: `ready_for_review`（不包含生产授权写入）
 - 空范围、未知账号或已撤销账号 fail closed。
 - `store`、`owner`、`sku`、`product` 当前只能登记和显示来源，尚未被所有 repository 统一消费；不得宣称已完成隔离。
 - Product Core 缺少可信 ownership 模型，当前 CRUD 临时只允许真实 `is_super_admin`，不是依据角色名称。
+- 普通管理员分配角色时，后端会同时检查角色组合的功能权限、高风险权限及每一种 role data scope；
+  目标用户已有 user-level override 不会成为绕过 actor 授权边界的依据。
+- 含 `*`、超出 actor effective scope、admin 或任何 high-risk permission 的角色只能由真实超级管理员分配。
 
 ## 3. 发布前 Owner 必须确认的清单
 
@@ -61,7 +64,28 @@ Owner 应以业务归属为依据逐一确认，不得让工程师猜测：
 
 如果 Owner 尚未确认账号归属，`DATA_SCOPE_DENIED` 是正确的安全结果，不得绕过。
 
-## 6. 角色 smoke 矩阵
+## 6. 刘云龙专用 403 验收矩阵
+
+当前仓库没有获授权的生产身份/角色读取证据，不能确认历史用户 ID 41 即刘云龙。以下“当前”列必须由
+运维在发布窗口通过脱敏、只读诊断填写；在身份映射确认前不得执行任何授权写入。
+
+| 业务页面 | 当前页面权限 | API 权限 | 数据范围 | 预期结果 | 是否需 Owner 授权 |
+|---|---|---|---|---|---|
+| 产品管理 | 待只读确认 `page:products:product-management:view` | export/recalculate/rule/cost 等逐项确认 | 具体 `source_account` 待确认 | 仅已批准页面/动作及账号返回 200；其余 403 | 是 |
+| Listing 管理 | 待确认 `page:products:listing-management:view` | manage-tags/archive/restore/export/link 独立 | 具体账号待确认 | page-only 只读；范围外 ID 与 mixed batch 拒绝 | 是 |
+| 每日销售 | 待确认 `page:sales:daily-sales:view` | export 与利润字段独立 | 具体账号待确认 | 未授字段不得从 list/summary/CSV 泄漏 | 是 |
+| 订单利润 | 待确认 `page:sales:order-profit:view` | export、gross-profit、profit-margin 独立 | 具体账号待确认 | 仅获批利润字段可见；范围外拒绝 | 是 |
+| 运营计划 | 待确认 `page:operations:plan:view` | create/edit/import 独立 | 具体账号 + item 对象归属 | A 可访问 A；B、mixed、未知 UUID 隐藏为 404 | 是 |
+| 退款管理 | 待确认 `page:aftersales:refund-management:view` | 当前只读 | 具体账号待确认 | 仅批准账号返回数据 | 是 |
+| WFS 费用异常 | 待确认 `page:warehouse:wfs-fee-alert:view` | follow/request/review/recover 分离；legacy sync 仅超管 | 具体账号待确认 | 普通运营不能执行全局同步或审核 | 是 |
+| 审批工作台 | 待确认 `page:data-center:approval-workspace:view` | request/review 分离 | 具体账号 + 对象/状态/version | view-only 不得提交或审核 | 是 |
+| 用户管理 | 待确认 `page:settings:user-management:view` | create/edit/assign-role/scope 等分离 | 管理对象边界；业务 scope 不直接适用 | 普通 admin 不得分配 high-risk、`*` 或超出自身 scope 的角色 | 是 |
+
+所需只读证据：真实用户 ID、启用状态、角色列表、有效 permission keys、用户级/角色级 `source_account`
+及 governance 已登记账号全集。不得输出 Token、手机号、邮箱或业务字段值。完成代码发布和真实账号 smoke 前，
+不能写“刘云龙 403 已解决”。
+
+## 7. 角色 smoke 矩阵
 
 | 角色类型 | 必测结果 |
 |---|---|
@@ -73,7 +97,7 @@ Owner 应以业务归属为依据逐一确认，不得让工程师猜测：
 | page-only user | 可打开页面/初始化；无 action 时写操作拒绝 |
 | no-scope user | 业务接口 `DATA_SCOPE_DENIED`，不返回其他账号数据 |
 
-## 7. 停止条件
+## 8. 停止条件
 
 - UI 提供的账号不在 governance config；
 - 保存后范围来源或有效值与批准清单不一致；
