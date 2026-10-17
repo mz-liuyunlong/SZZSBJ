@@ -81,7 +81,7 @@ class DailySalesItemRead(StrictSchema):
     id: str
     business_date_la: date
     business_timezone: str
-    source_account_ref: str
+    source_account_ref: str = ""
     store_id: str
     store_name: str | None
     owner_ref: str | None
