@@ -46,3 +46,9 @@ def test_matching_persisted_samples_are_not_exported_as_findings() -> None:
     assert report["status_counts"] == {"MATCHES_PERSISTED_SAMPLE_FACT": 1}
     assert report["sample_findings"] == []
     assert report["truncated"] is False
+
+
+def test_sample_quantities_with_different_decimal_scales_match() -> None:
+    report = _report([_row(captured=1, fact_qty="1.0000", mart_qty="1.00")], limit=50)
+    assert report["status_counts"] == {"MATCHES_PERSISTED_SAMPLE_FACT": 1}
+    assert report["sample_findings"] == []
