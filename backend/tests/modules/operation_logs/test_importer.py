@@ -236,7 +236,7 @@ def test_celery_sync_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_app_registers_operation_log_endpoints() -> None:
     from app.main import create_app
 
-    routes = {route.path for route in create_app().routes if hasattr(route, 'path')}
+    routes = {route.path for route in create_app().routes if hasattr(route, "path")}
     assert "/api/operations/logs" in routes
     assert "/api/operations/logs/manual/batch" in routes
     assert "/api/operations/logs/links" in routes
