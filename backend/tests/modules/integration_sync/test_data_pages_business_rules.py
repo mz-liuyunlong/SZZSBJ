@@ -111,7 +111,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
         [
             {
                 "global_order_no": "global-1",
-                "global_purchase_time": str(int(datetime(2026, 9, 1, 12, tzinfo=CHINA_TZ).timestamp())),
+                "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
                 "store_id": "store-a",
                 "store_name": "Store A",
                 "amount_currency": "USD",
