@@ -504,7 +504,7 @@ class ApprovalService:
         """),
             {"accounts": list(account_refs)},
         ).scalar_one()
-        return ApprovalSummary(**dict(row), legacy_unverified=int(legacy))
+        return ApprovalSummary(**dict(row), legacy_unverified=int(legacy) if may_review else 0)
 
     def detail(
         self, approval_id: UUID, account_refs: frozenset[str], actor: str,
