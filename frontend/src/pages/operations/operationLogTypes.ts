@@ -23,6 +23,10 @@ export type OperationLogWorkType =
 export interface OperationLogSystemRecord {
   id: string;
   time: string;
+  date: string;
+  sourceAccountRef: string;
+  storeId: string;
+  msku: string;
   productId: string;
   owner: string;
   type: string;
@@ -36,17 +40,24 @@ export interface OperationLogSystemRecord {
 export interface OperationLogRow {
   id: string;
   date: string;
+  sourceAccountRef: string;
+  storeId: string;
+  msku: string;
   productId: string;
   sku: string;
   productName: string;
   store: string;
   owner: string;
   workType: OperationLogWorkType;
-  conversionRate: number;
+  workTypes?: OperationLogWorkType[];
+  observeDays?: number | null;
+  conversionRate: number | null;
   adRatio?: number;
-  salePrice: number;
+  salePrice: number | null;
   keywordEntryStatus: "ok" | "missing";
+  keywordUrl?: string | null;
   adEntryStatus: "ok" | "missing";
+  adUrl?: string | null;
   systemLogCount: number;
   manualLog: string;
   status: OperationLogStatus;
@@ -84,13 +95,15 @@ export interface OperationLogBatchWriteValues {
   logText: string;
 }
 
-export const OPERATION_LOG_REFERENCE_DATE = "2026-09-13";
+export const OPERATION_LOG_REFERENCE_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date());
 
 const formatIsoDate = (date: Date) => date.toISOString().slice(0, 10);
 
 const shiftIsoDate = (dateText: string, offsetDays: number) => {
-  const date = new Date(`${dateText}T00:00:00`);
-  date.setDate(date.getDate() + offsetDays);
+  const date = new Date(`${dateText}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
   return formatIsoDate(date);
 };
 
@@ -104,10 +117,16 @@ export const createOperationLogDateRange = (preset: OperationLogDatePreset): [st
   }
   if (preset === "last7") return [shiftIsoDate(endDate, -6), endDate];
   if (preset === "last30") return [shiftIsoDate(endDate, -29), endDate];
-  if (preset === "thisMonth") return ["2026-09-01", "2026-09-30"];
-  if (preset === "lastMonth") return ["2026-08-01", "2026-08-31"];
-  if (preset === "thisYear") return ["2026-01-01", "2026-12-31"];
-  if (preset === "lastYear") return ["2025-01-01", "2025-12-31"];
+  if (preset === "thisMonth") return [endDate.slice(0, 7) + "-01", endDate];
+  if (preset === "lastMonth") {
+    const prev = shiftIsoDate(endDate.slice(0, 7) + "-01", -1);
+    return [prev.slice(0, 7) + "-01", prev];
+  }
+  if (preset === "thisYear") return [endDate.slice(0, 4) + "-01-01", endDate];
+  if (preset === "lastYear") {
+    const year = Number(endDate.slice(0, 4)) - 1;
+    return [year + "-01-01", year + "-12-31"];
+  }
 
   return [endDate, endDate];
 };
@@ -206,6 +225,6 @@ export const createSystemDraft = (records: OperationLogSystemRecord[]) => {
   if (records.length === 0) return "系统未抓到调整记录，待人工确认。";
 
   return records
-    .map((record) => `${record.time} ${record.type}：${record.object} ${record.before} → ${record.after}，调整人：${record.owner}`)
+    .map((record) => `${record.date} ${record.type}：${record.object}，${record.detail}（系统检测，不代表真实操作时间或操作人）`)
     .join("；");
 };

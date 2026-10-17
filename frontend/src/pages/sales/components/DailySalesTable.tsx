@@ -51,6 +51,7 @@ interface DailySalesTableProps {
   onBulkExport: () => void;
   onCopy: (text: string) => void;
   onOpenDetail: (row: DailySalesRow) => void;
+  onOpenLog?: (row: DailySalesRow, kind: "system" | "manual") => void;
 }
 
 const statusColors: Record<DailySalesCostStatus, string> = {
@@ -62,10 +63,10 @@ const statusColors: Record<DailySalesCostStatus, string> = {
 
 const dailySalesFxRate = (row: DailySalesRow) => row.exchangeRate ?? MOCK_USD_TO_CNY_RATE;
 
-function LogCell({ text }: { text: string }) {
+function LogCell({ text, onClick, highlight = false }: { text: string; onClick?: () => void; highlight?: boolean }) {
   return (
     <Tooltip title={text}>
-      <span className="daily-sales__log-cell">{text}</span>
+      <Button type="link" onClick={onClick} disabled={!onClick} style={{ padding: 0, color: highlight ? "#cf1322" : undefined }}>{text || "—"}</Button>
     </Tooltip>
   );
 }
@@ -302,6 +303,7 @@ function createColumns(
   onCopy: (text: string) => void,
   onOpenDetail: (row: DailySalesRow) => void,
   currency: DailySalesCurrency,
+  onOpenLog?: (row: DailySalesRow, kind: "system" | "manual") => void,
 ): ProColumns<DailySalesRow>[] {
   return [
     { title: "图片", key: "image", width: 72, fixed: "left", render: () => <ImageCell label="每日销售商品图片占位" /> },
@@ -382,8 +384,8 @@ render: (_, row) => (
     { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
     { title: "ROI", key: "roi", width: 88, render: roiRatio("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
-    { title: "系统运营日志", key: "systemOperationLog", width: 180, render: (_, row) => <LogCell text={row.systemOperationLog} /> },
-    { title: "运营日志", key: "operationLog", width: 180, render: (_, row) => <LogCell text={row.operationLog} /> },
+    { title: "系统运营日志", key: "systemOperationLog", width: 180, render: (_, row) => <LogCell text={row.systemOperationLog} highlight={row.systemLogHighlight} onClick={onOpenLog ? () => onOpenLog(row, "system") : undefined} /> },
+    { title: "运营日志", key: "operationLog", width: 180, render: (_, row) => <LogCell text={row.operationLog} onClick={onOpenLog ? () => onOpenLog(row, "manual") : undefined} /> },
     {
       title: "操作",
       key: "actions",
@@ -412,12 +414,13 @@ function DailySalesTable({
   onBulkExport,
   onCopy,
   onOpenDetail,
+  onOpenLog,
 }: DailySalesTableProps) {
   const compactIdentityColumnWidths: Record<string, number> = {
     mskuProductId: 188,
     skuProductName: 188,
   };
-  const columnMap = new Map(createColumns(onCopy, onOpenDetail, currency).map((column) => [String(column.key), column]));
+  const columnMap = new Map(createColumns(onCopy, onOpenDetail, currency, onOpenLog).map((column) => [String(column.key), column]));
   const columns = appliedColumnKeys.flatMap((key) => {
     const column = columnMap.get(key);
     if (!column) return [];

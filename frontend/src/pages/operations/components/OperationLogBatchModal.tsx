@@ -10,6 +10,7 @@ import {
 interface OperationLogBatchModalProps {
   open: boolean;
   rows: OperationLogRow[];
+  onBuildSystemText: (rowIds: string[]) => string;
   onClose: () => void;
   onApply: (values: OperationLogBatchWriteValues) => void;
 }
@@ -26,6 +27,7 @@ const templates = [
 function OperationLogBatchModal({
   open,
   rows,
+  onBuildSystemText,
   onClose,
   onApply,
 }: OperationLogBatchModalProps) {
@@ -50,15 +52,15 @@ function OperationLogBatchModal({
     ].some((value) => value.toLocaleLowerCase().includes(normalized)));
   }, [keyword, rows]);
 
-  const allVisibleSelected = filteredRows.length > 0 && filteredRows.every((row) => selectedProductIds.includes(row.productId));
+  const allVisibleSelected = filteredRows.length > 0 && filteredRows.every((row) => selectedProductIds.includes(row.id));
 
   const toggleVisible = (checked: boolean) => {
     if (checked) {
-      setSelectedProductIds((current) => Array.from(new Set([...current, ...filteredRows.map((row) => row.productId)])));
+      setSelectedProductIds((current) => Array.from(new Set([...current, ...filteredRows.map((row) => row.id)])));
       return;
     }
 
-    setSelectedProductIds((current) => current.filter((productId) => !filteredRows.some((row) => row.productId === productId)));
+    setSelectedProductIds((current) => current.filter((productId) => !filteredRows.some((row) => row.id === productId)));
   };
 
   const applyTemplate = (template: (typeof templates)[number]) => {
@@ -87,7 +89,7 @@ function OperationLogBatchModal({
           </span>
           <Space>
             <Button onClick={onClose}>取消</Button>
-            <Button onClick={() => setLogText(rows.slice(0, 5).map((row) => `${row.productId}：系统记录已带入，继续观察。`).join("\n"))}>
+            <Button onClick={() => setLogText(onBuildSystemText(selectedProductIds))}>
               带入系统记录
             </Button>
             <Button
@@ -123,9 +125,9 @@ function OperationLogBatchModal({
               onChange={(event) => setKeyword(event.target.value)}
             />
             <Space wrap>
-              <Button onClick={() => setSelectedProductIds(filteredRows.map((row) => row.productId))}>选当前列表</Button>
-              <Button onClick={() => setSelectedProductIds(rows.filter((row) => !row.manualLog.trim()).map((row) => row.productId))}>选空白日志</Button>
-              <Button onClick={() => setSelectedProductIds(rows.filter((row) => row.systemLogCount > 0).map((row) => row.productId))}>选有系统日志</Button>
+              <Button onClick={() => setSelectedProductIds(filteredRows.map((row) => row.id))}>选当前列表</Button>
+              <Button onClick={() => setSelectedProductIds(rows.filter((row) => !row.manualLog.trim()).map((row) => row.id))}>选空白日志</Button>
+              <Button onClick={() => setSelectedProductIds(rows.filter((row) => row.systemLogCount > 0).map((row) => row.id))}>选有系统日志</Button>
               <Button onClick={() => setSelectedProductIds([])}>清空</Button>
             </Space>
           </div>
@@ -138,17 +140,17 @@ function OperationLogBatchModal({
           <div className="operation-log-batch-modal__list">
             {filteredRows.map((row) => (
               <label
-                className={`operation-log-batch-modal__row${selectedProductIds.includes(row.productId) ? " operation-log-batch-modal__row--active" : ""}`}
-                key={row.productId}
+                className={`operation-log-batch-modal__row${selectedProductIds.includes(row.id) ? " operation-log-batch-modal__row--active" : ""}`}
+                key={row.id}
               >
                 <Checkbox
-                  checked={selectedProductIds.includes(row.productId)}
+                  checked={selectedProductIds.includes(row.id)}
                   onChange={(event) => {
                     if (event.target.checked) {
-                      setSelectedProductIds((current) => [...current, row.productId]);
+                      setSelectedProductIds((current) => [...current, row.id]);
                       return;
                     }
-                    setSelectedProductIds((current) => current.filter((productId) => productId !== row.productId));
+                    setSelectedProductIds((current) => current.filter((productId) => productId !== row.id));
                   }}
                 />
                 <span>
