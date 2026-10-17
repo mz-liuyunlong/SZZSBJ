@@ -18,6 +18,8 @@ from app.modules.data_pages.repository import (
     ListingTagRepository,
     OrderProfitRepository,
 )
+from app.modules.operation_logs.daily_sales import load_daily_sales_log_summaries
+
 from app.modules.data_pages.schemas import (
     DailySalesItemRead,
     DailySalesListData,
@@ -162,6 +164,7 @@ class DailySalesService:
             page_size=query.page_size,
         )
         inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
+        log_summaries = load_daily_sales_log_summaries(self.repository.session, rows)
 
         (
             sales_qty,
@@ -215,6 +218,13 @@ class DailySalesService:
                                 row.item_id,
                             )
                         ),
+                        log_summaries.get((
+                            row.business_date_la,
+                            row.source_account_ref,
+                            row.store_id,
+                            row.item_id,
+                            row.msku or "",
+                        )),
                     )
                     for row in rows
                 ],
@@ -286,11 +296,14 @@ class DailySalesService:
         self,
         row: DailySalesItemDayMart,
         wfs_available_quantity: object | None,
+        log_summary: dict[str, object] | None = None,
     ) -> DailySalesItemRead:
+        log_summary = log_summary or {}
         return DailySalesItemRead(
             id=str(row.id),
             business_date_la=row.business_date_la,
             business_timezone=row.business_timezone,
+            source_account_ref=row.source_account_ref,
             store_id=row.store_id,
             store_name=row.store_name,
             owner_ref=row.owner_ref,
@@ -379,6 +392,11 @@ class DailySalesService:
             sales_7d_trend=_trend_points(row.sales_7d_trend_json),
             calc_version=row.calc_version,
             calculated_at=row.calculated_at,
+            system_operation_log=str(log_summary.get("system_operation_log") or ""),
+            system_highlight=bool(log_summary.get("system_highlight")),
+            operation_log=str(log_summary.get("operation_log") or ""),
+            operation_log_revision=int(log_summary.get("revision") or 0),
+            operation_log_status=str(log_summary.get("status") or "draft"),
         )
 
 

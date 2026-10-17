@@ -14,6 +14,7 @@ interface BackendDailySalesItem {
   id: string;
   business_date_la: string;
   store_id: string;
+  source_account_ref: string;
   store_name: string | null;
   owner_ref: string | null;
   item_id: string;
@@ -73,6 +74,11 @@ interface BackendDailySalesItem {
   missing_cost_codes: string[];
   calculation_warnings: string[];
   sales_7d_trend: BackendTrendPoint[];
+  system_operation_log?: string;
+  system_highlight?: boolean;
+  operation_log?: string;
+  operation_log_revision?: number;
+  operation_log_status?: string;
 }
 
 interface BackendDailySalesSummary {
@@ -183,6 +189,8 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     id: item.id,
     date: item.business_date_la,
     store: item.store_name ?? item.store_id,
+    storeId: item.store_id,
+    sourceAccountRef: item.source_account_ref,
     owner: item.owner_ref ?? "未分配",
     sevenDayDates: item.sales_7d_trend.map((point) => point.date),
     sevenDaySales: item.sales_7d_trend.map((point) => numberValue(point.sales_qty)),
@@ -240,8 +248,9 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     storageFeeSource: item.storage_fee_source ?? "product_management",
     calculationWarnings: item.calculation_warnings,
     costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
-    systemOperationLog: "系统运营日志待接入",
-    operationLog: "运营日志待接入",
+    systemOperationLog: item.system_operation_log ?? "",
+    systemLogHighlight: Boolean(item.system_highlight),
+    operationLog: item.operation_log ?? "",
   };
 };
 

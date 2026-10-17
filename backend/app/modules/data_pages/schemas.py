@@ -81,6 +81,7 @@ class DailySalesItemRead(StrictSchema):
     id: str
     business_date_la: date
     business_timezone: str
+    source_account_ref: str
     store_id: str
     store_name: str | None
     owner_ref: str | None
@@ -159,6 +160,11 @@ class DailySalesItemRead(StrictSchema):
     sales_7d_trend: list[DailySalesTrendPointRead]
     calc_version: str
     calculated_at: datetime
+    system_operation_log: str = ""
+    system_highlight: bool = False
+    operation_log: str = ""
+    operation_log_revision: int = 0
+    operation_log_status: str = "draft"
 
 
 class DailySalesSummaryRead(StrictSchema):
