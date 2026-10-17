@@ -66,7 +66,7 @@ def load_daily_sales_log_summaries(
             coalesce(man.status, 'draft') as status
         from selected s
         left join lateral (
-            select string_agg(e.log_content, E'\n' order by e.legacy_id) as event_text,
+            select string_agg(e.log_content, chr(10) order by e.legacy_id) as event_text,
                    bool_or(e.highlight) as highlight
             from ops_system_operation_events e
             where e.source_account_ref = s.account and e.event_date = s.day
