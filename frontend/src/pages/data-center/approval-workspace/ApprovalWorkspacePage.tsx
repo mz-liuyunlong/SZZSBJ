@@ -15,6 +15,9 @@ import EmptyState from "@/shared/states/EmptyState";
 import { formatMoney } from "@/shared/formatters/money";
 import { fetchApprovalSummary, fetchApprovals } from "./approvalApi";
 import ApprovalDetailDrawer from "./components/ApprovalDetailDrawer";
+import ApprovalRequestModal from "./components/ApprovalRequestModal";
+import ApprovalRulesDrawer from "./components/ApprovalRulesDrawer";
+import ApprovalNotificationsDrawer from "./components/ApprovalNotificationsDrawer";
 import type { ApprovalFilters, ApprovalItem, ApprovalSummary, ApprovalRisk, ApprovalTab, ApprovalView } from "./approvalTypes";
 import { approvalColumnFields, riskNames, statusNames } from "./approvalTypes";
 import type { NavigationPage } from "@/config/navigation";
@@ -47,6 +50,9 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [selected, setSelected] = useState<ApprovalItem>();
  const [reloadToken, setReloadToken] = useState(0);
  const [columnsOpen, setColumnsOpen] = useState(false);
+ const [requestOpen, setRequestOpen] = useState(false);
+ const [rulesOpen, setRulesOpen] = useState(false);
+ const [notificationsOpen, setNotificationsOpen] = useState(false);
  const [columnKeys, setColumnKeys] = useState(defaultKeys);
  const [widths, setWidths] = useState(defaultWidths);
  const [draftSearch, setDraftSearch] = useState({ searchField:"keyword", keyword:"" });
@@ -87,13 +93,17 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  }, [columnKeys, widths]);
  const tabs: { label: string; value: ApprovalTab }[] = [
   {label:"待审批",value:"pending"},{label:"已审批",value:"approved"},{label:"驳回记录",value:"rejected"},
+  ...(hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review") ? [{label:"历史待核验 ("+summary.legacy_unverified+")",value:"legacy" as ApprovalTab}] : []),
  ];
  return <PageShell page={page}>
   {holder}
   <div className="approval-workspace">
    <div className="approval-workspace__heading">
     <div><h3>审批工作台</h3><p>统一处理业务审批 · 所有审批结论均留痕</p></div>
-    <Space><Button icon={<ReloadOutlined/>} onClick={reload}>刷新</Button>
+    <Space><Button type="primary" onClick={() => setRequestOpen(true)}>发起审批</Button>
+     {hasPermission(permissions, "action:settings:role-management:configure-permissions") && <Button onClick={() => setRulesOpen(true)}>审批规则</Button>}
+     <Button onClick={() => setNotificationsOpen(true)}>审批提醒</Button>
+     <Button icon={<ReloadOutlined/>} onClick={reload}>刷新</Button>
      <Button icon={<SettingOutlined/>} onClick={() => setColumnsOpen(true)}>列配置</Button></Space>
    </div>
    <div className="approval-workspace__metrics">
@@ -113,7 +123,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
      <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
       options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/>
      <ReportFacetSelect ariaLabel="审批类型" placeholder="审批类型"
-      value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"}]}
+      value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"},{label:"采购异常",value:"purchase_exception"},{label:"财务例外",value:"finance_exception"},{label:"权限变更",value:"access_change"}]}
       onChange={(value) => change({approval_type: typeof value === "string" ? value : undefined})}/>
      <ReportFacetSelect ariaLabel="风险等级" placeholder="风险等级"
       value={filters.risk_level} options={[{label:"高风险",value:"high"},{label:"中风险",value:"medium"},{label:"低风险",value:"low"}]}
@@ -137,6 +147,9 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     }
    </ReportTableShell>
   </div>
+  <ApprovalRequestModal open={requestOpen} onClose={() => setRequestOpen(false)} onUpdated={reload}/>
+  <ApprovalRulesDrawer open={rulesOpen} onClose={() => setRulesOpen(false)}/>
+  <ApprovalNotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} onRefresh={reload}/>
   <RuntimeColumnConfigDrawer open={columnsOpen}
    groups={[{title:"审批列表字段",fields:approvalColumnFields}]} fixedKeys={["title"]}
    appliedKeys={columnKeys} defaultKeys={defaultKeys} onApply={setColumnKeys}
@@ -144,6 +157,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <ApprovalDetailDrawer
    selected={selected}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
+   canAdmin={permissions.includes("*")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
    onClose={() => setSelected(undefined)}
    onUpdated={reload}
