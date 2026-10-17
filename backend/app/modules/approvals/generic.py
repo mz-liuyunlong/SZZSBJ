@@ -158,4 +158,5 @@ class GenericApprovalService:
                                   "step": step, "required_steps": required_steps,
                                   "executed": False,
                               })
+        self.approvals._notify_applicant(str(approval_id), decision)
         self.session.commit()
