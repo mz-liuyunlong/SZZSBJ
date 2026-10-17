@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261017_0042_rbac_backfill"
+EXPECTED_HEAD_REVISION = "20261017_0043_approval_flow"
 
 
 @pytest.fixture(autouse=True)
