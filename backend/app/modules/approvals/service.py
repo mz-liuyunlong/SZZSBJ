@@ -169,10 +169,16 @@ class ApprovalService:
             blocked()
 
         now = datetime.now(UTC)
-        rule_row = self.session.execute(text("""
+        rule_row = (
+            self.session.execute(
+                text("""
             select required_steps from app_approval_rules
             where approval_type='wfs_case_abandon' and is_active=true
-        """)).mappings().first()
+        """)
+            )
+            .mappings()
+            .first()
+        )
         if rule_row is None:
             blocked()
         required_steps = int(rule_row["required_steps"])
@@ -413,8 +419,12 @@ class ApprovalService:
         )
 
     def list_requests(
-        self, query: ApprovalQuery, account_refs: frozenset[str], actor: str,
-        may_review: bool, is_admin: bool = False,
+        self,
+        query: ApprovalQuery,
+        account_refs: frozenset[str],
+        actor: str,
+        may_review: bool,
+        is_admin: bool = False,
     ) -> tuple[ApprovalListData, int]:
         if query.tab == "legacy":
             return self.legacy_unverified(query, account_refs)
@@ -426,7 +436,8 @@ class ApprovalService:
             else "a.status='rejected'"
         )
         where = [
-            "a.source_account_ref=any(:accounts)", status_clause,
+            "a.source_account_ref=any(:accounts)",
+            status_clause,
             "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
         ]
         params: dict = {
@@ -473,7 +484,10 @@ class ApprovalService:
         ), int(total)
 
     def summary(
-        self, account_refs: frozenset[str], actor: str, may_review: bool,
+        self,
+        account_refs: frozenset[str],
+        actor: str,
+        may_review: bool,
         is_admin: bool = False,
     ) -> ApprovalSummary:
         row = (
@@ -488,8 +502,12 @@ class ApprovalService:
               and (:may_review or applicant_id=:actor)
               and (approval_type='wfs_case_abandon' or applicant_id=:actor or :is_admin)
         """),
-                {"accounts": list(account_refs), "actor": actor, "may_review": may_review,
-                 "is_admin": is_admin},
+                {
+                    "accounts": list(account_refs),
+                    "actor": actor,
+                    "may_review": may_review,
+                    "is_admin": is_admin,
+                },
             )
             .mappings()
             .one()
@@ -507,13 +525,18 @@ class ApprovalService:
         return ApprovalSummary(**dict(row), legacy_unverified=int(legacy) if may_review else 0)
 
     def detail(
-        self, approval_id: UUID, account_refs: frozenset[str], actor: str,
-        may_review: bool, is_admin: bool = False,
+        self,
+        approval_id: UUID,
+        account_refs: frozenset[str],
+        actor: str,
+        may_review: bool,
+        is_admin: bool = False,
     ) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
         if (not may_review and record["applicant_id"] != actor) or (
             record["approval_type"] != "wfs_case_abandon"
-            and not is_admin and record["applicant_id"] != actor
+            and not is_admin
+            and record["applicant_id"] != actor
         ):
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         item = self._as_item(record, actor, may_review)
@@ -529,9 +552,7 @@ class ApprovalService:
             .mappings()
             .all()
         )
-        if record["approval_type"] in (
-            "purchase_exception", "finance_exception", "access_change"
-        ):
+        if record["approval_type"] in ("purchase_exception", "finance_exception", "access_change"):
             return ApprovalDetail(
                 **item.model_dump(),
                 snapshot=record["snapshot"],
@@ -539,8 +560,7 @@ class ApprovalService:
                 current_case=None,
                 data_changed=False,
                 can_supplement=(
-                    record["status"] == "info_required"
-                    and record["applicant_id"] == actor
+                    record["status"] == "info_required" and record["applicant_id"] == actor
                 ),
                 events=[ApprovalEventRead(**dict(e)) for e in events],
             )
@@ -596,39 +616,60 @@ class ApprovalService:
             if k not in ("status", "archive_reason", "archive_reason_type")
         ):
             blocked()
-        current_step = self.session.execute(text("""
+        current_step = self.session.execute(
+            text("""
             select count(*) from app_approval_step_decisions
             where approval_id=:id and decision='approved'
-        """), {"id": str(approval_id)}).scalar_one()
-        repeated = self.session.execute(text("""
+        """),
+            {"id": str(approval_id)},
+        ).scalar_one()
+        repeated = self.session.execute(
+            text("""
             select 1 from app_approval_step_decisions
             where approval_id=:id and reviewer_id=:actor
-        """), {"id": str(approval_id), "actor": actor}).first()
+        """),
+            {"id": str(approval_id), "actor": actor},
+        ).first()
         if repeated:
             blocked()
         required_steps = int(snapshot.get("approval_policy", {}).get("required_steps", 1))
         final_step = int(current_step) + 1 >= required_steps
         if payload.decision == "approved":
-            self.session.execute(text("""
+            self.session.execute(
+                text("""
                 insert into app_approval_step_decisions
                     (id,approval_id,step_number,reviewer_id,decision,note)
                 values (:id,:approval_id,:step,:actor,'approved',:note)
-            """), {
-                "id": str(uuid4()), "approval_id": str(approval_id),
-                "step": int(current_step) + 1, "actor": actor,
-                "note": payload.note or None,
-            })
+            """),
+                {
+                    "id": str(uuid4()),
+                    "approval_id": str(approval_id),
+                    "step": int(current_step) + 1,
+                    "actor": actor,
+                    "note": payload.note or None,
+                },
+            )
         if payload.decision == "approved" and not final_step:
-            advanced = self.session.execute(text("""
+            advanced = self.session.execute(
+                text("""
                 update app_approval_requests set
                     version=version+1,updated_at=now()
                 where id=:id and status='submitted' and version=:version
-            """), {"id": str(approval_id), "version": payload.expected_version})
+            """),
+                {"id": str(approval_id), "version": payload.expected_version},
+            )
             if advanced.rowcount != 1:
                 blocked()
-            self._event(str(approval_id), "step_approved", actor, payload.note, {
-                "step": int(current_step) + 1, "required_steps": required_steps,
-            })
+            self._event(
+                str(approval_id),
+                "step_approved",
+                actor,
+                payload.note,
+                {
+                    "step": int(current_step) + 1,
+                    "required_steps": required_steps,
+                },
+            )
             self.session.commit()
             return
         if payload.decision == "info_required":
