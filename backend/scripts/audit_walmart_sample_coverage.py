@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -43,11 +44,13 @@ def _report(rows: list[dict[str, Any]], limit: int) -> dict[str, object]:
     findings: list[dict[str, object]] = []
     for row in rows:
         captured = int(row["sample_captured"])
-        valid_qty = str(row["sample_qty"])
-        mart_qty = str(row["mart_sample_qty"])
+        valid_amount = Decimal(str(row["sample_qty"]))
+        mart_amount = Decimal(str(row["mart_sample_qty"]))
+        valid_qty = str(valid_amount)
+        mart_qty = str(mart_amount)
         if captured == 0:
             state = "SAMPLE_NOT_OBSERVED_UNKNOWN_NOT_ZERO"
-        elif valid_qty != mart_qty:
+        elif valid_amount != mart_amount:
             state = "SAMPLE_FACT_MART_MISMATCH"
         else:
             state = "MATCHES_PERSISTED_SAMPLE_FACT"
