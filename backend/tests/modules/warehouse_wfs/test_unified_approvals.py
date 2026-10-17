@@ -290,8 +290,12 @@ def test_generic_approval_disallows_self_review() -> None:
     }
     with pytest.raises(ApiError):
         service.decide(
-            approval_id, frozenset({"account-1"}), "same-operator",
-            "approved", "", 1,
+            approval_id,
+            frozenset({"account-1"}),
+            "same-operator",
+            "approved",
+            "",
+            1,
         )
     session.commit.assert_not_called()
 
@@ -302,7 +306,8 @@ def test_generic_bulk_does_not_approve_non_allowlisted_type() -> None:
     session = MagicMock(spec=Session)
     rule = MagicMock()
     rule.mappings.return_value.first.return_value = {
-        "required_steps": 1, "allows_bulk": True,
+        "required_steps": 1,
+        "allows_bulk": True,
     }
     session.execute.return_value = rule
     service = GenericApprovalService(session)
@@ -319,6 +324,11 @@ def test_generic_bulk_does_not_approve_non_allowlisted_type() -> None:
         "snapshot": {"approval_policy": {"required_steps": 1}},
     }
     with pytest.raises(ApiError):
-        service.approve_bulk([approval_id], {str(approval_id): 1},
-                             frozenset({"account-1"}), "reviewer", "not safe for bulk")
+        service.approve_bulk(
+            [approval_id],
+            {str(approval_id): 1},
+            frozenset({"account-1"}),
+            "reviewer",
+            "not safe for bulk",
+        )
     session.commit.assert_not_called()
