@@ -29,6 +29,10 @@ ComingSoon、mock-only 或纯前端页面伪报为后端已完成。
     均不能让普通管理员间接扩权。
 11. Order Profit 与 Daily Sales 的列表、汇总、趋势和 CSV 均在后端输出边界执行利润金额/利润率字段过滤。
 12. 非数字且非 preview 的 principal 不再继承已配置账号全集；运行时 fail closed。
+13. 运营计划列表、汇总、负责人、选项、详情、事件、修改和导入统一使用同一条 item 对象范围谓词：
+    item 的全部当前 Listing 必须都有非空、已授权的 `source_account_ref`；mixed、空值、未知关系均 fail closed。
+14. Daily Sales / Order Profit 同时阻断利润直接字段和可反推利润的成本、退款、广告、WFS、佣金等公式输入；
+    前端保留 `null` 为受限值，不再把受限值转换成 `0`。
 
 ## 2. 页面 → API → 权限矩阵
 
@@ -139,3 +143,17 @@ Repository 已执行隔离；未建立可信归属的写路径继续 fail closed
 3. 管理 UI 目前手工输入范围；`source_account` 有后端权威值校验，但尚无脱敏候选列表 API。
 4. `store/owner/sku/product` 尚未成为通用 repository filter；不得依赖 UI 登记声称隔离已完成。
 5. 合并不等于生产事故关闭；仍需单独批准 migration、部署、重启和真实角色只读 smoke。
+
+## 8. 第三轮 P0 复核记录
+
+安全修复 commit：`20795f2`。该 commit 只修改应用代码与测试，没有新增 migration、数据库对象或生产执行逻辑。
+
+| P0 | 修复证据 | 回归边界 | 结论 |
+|---|---|---|---|
+| 运营计划 aggregate/object leakage | `OperationPlanRepository` 的 list/summary/owner/options/detail/events/update/import 复用同一 item-scope SQL predicate；insert 使用 scoped `INSERT ... SELECT` | A、B、mixed、未知/空账号、撤销关系、分页、筛选、排序、导入 create/skip/overwrite 均由隔离 PostgreSQL 测试覆盖 | 已修复 |
+| 导入预过滤与既有计划 ID 泄漏 | 不再先按可见 Listing 预过滤后误判；existing-plan 查询和 insert/update 均携带完整对象范围 | 无权对象按行返回 `DATA_SCOPE_DENIED`，不返回 plan ID；失败写入不产生 event | 已修复 |
+| 利润推断泄漏 | JSON list/summary/trend/detail 与实际 CSV 生成统一移除直接利润和公式输入字段 | default/explicit export、空结果 CSV、前端 mapper/cards/charts/modal 的 `null` 语义均有测试 | 已修复 |
+
+字段权限仍遵循 fail closed：若调用者只有 margin/ROI 权限但没有 gross-profit 权限，系统不会同时返回销售额和
+可用于反推 gross profit 的 margin/ROI。是否允许把利润率作为完全独立权限，需要 Owner 另行批准数据披露口径；
+本 PR 不通过前端隐藏或返回 `0` 规避这一边界。
