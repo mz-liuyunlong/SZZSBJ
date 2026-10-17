@@ -124,6 +124,25 @@ class ApprovalService:
             },
         )
 
+    def _notify_applicant(self, approval_id: str, event_type: str) -> None:
+        """Durable in-app inbox; never sends business data through external channels."""
+        self.session.execute(
+            text("""
+            insert into app_approval_notifications
+              (id,approval_id,event_key,recipient_id)
+            select :id,id,:event_key,applicant_id
+            from app_approval_requests
+            where id=:approval_id
+              and applicant_id is not null
+            on conflict do nothing
+        """),
+            {
+                "id": str(uuid4()),
+                "approval_id": approval_id,
+                "event_key": event_type + ":" + str(uuid4()),
+            },
+        )
+
     def submit_wfs(
         self,
         case_id: UUID,
@@ -150,7 +169,21 @@ class ApprovalService:
             blocked()
 
         now = datetime.now(UTC)
+        rule_row = (
+            self.session.execute(
+                text("""
+            select required_steps from app_approval_rules
+            where approval_type='wfs_case_abandon' and is_active=true
+        """)
+            )
+            .mappings()
+            .first()
+        )
+        if rule_row is None:
+            blocked()
+        required_steps = int(rule_row["required_steps"])
         snapshot = make_snapshot(case)
+        snapshot["approval_policy"] = {"required_steps": required_steps}
         snapshot_hash = signature(snapshot)
         approval_id = str(uuid4())
         pending_amount = calculate_pending_recovery(case)
@@ -261,9 +294,140 @@ class ApprovalService:
             can_review=(may_review and r["status"] == "submitted" and r["applicant_id"] != actor),
         )
 
-    def list_requests(
-        self, query: ApprovalQuery, account_refs: frozenset[str], actor: str, may_review: bool
+    def legacy_unverified(
+        self, query: ApprovalQuery, account_refs: frozenset[str]
     ) -> tuple[ApprovalListData, int]:
+        """Read-only legacy cases: no identity inference and no approval authorization."""
+        params: dict = {
+            "accounts": list(account_refs),
+            "limit": query.page_size,
+            "offset": (query.page - 1) * query.page_size,
+        }
+        where = [
+            "c.source_account_ref=any(:accounts)",
+            "c.is_deleted=false",
+            "c.status='archive_pending'",
+            "c.archive_review_status='pending'",
+            "not exists (select 1 from app_approval_requests a where "
+            "a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)",
+        ]
+        if query.approval_type and query.approval_type != "wfs_case_abandon":
+            return ApprovalListData(items=[]), 0
+        if query.keyword:
+            where.append(
+                "(c.store_name_snapshot ilike :keyword or c.case_nos ilike :keyword "
+                "or c.owner_name_snapshot ilike :keyword or c.item_id ilike :keyword)"
+            )
+            params["keyword"] = f"%{query.keyword.strip()}%"
+        if query.risk_level:
+            where.append(
+                "(case when greatest(c.estimated_recover_amount-c.recovered_amount,0)>=500 "
+                "then 'high' when greatest(c.estimated_recover_amount-c.recovered_amount,0)>=100 "
+                "then 'medium' else 'low' end)=:risk"
+            )
+            params["risk"] = query.risk_level
+        condition = " and ".join(where)
+        total = int(
+            self.session.execute(
+                text(f"select count(*) from ops_wfs_fee_anomaly_cases c where {condition}"),
+                params,
+            ).scalar_one()
+        )
+        rows = (
+            self.session.execute(
+                text(f"""
+            select c.* from ops_wfs_fee_anomaly_cases c where {condition}
+            order by c.archive_requested_at desc nulls last, c.id
+            limit :limit offset :offset
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        items = []
+        for record in rows:
+            case = dict(record)
+            pending = calculate_pending_recovery(case)
+            risk = "high" if pending >= 500 else "medium" if pending >= 100 else "low"
+            items.append(
+                ApprovalItem(
+                    id=str(case["id"]),
+                    version=1,
+                    approval_type="wfs_case_abandon",
+                    business_ref=str(case["id"]),
+                    title="WFS 历史待核验 · 放弃跟进",
+                    source_account_ref=case["source_account_ref"],
+                    applicant_id=None,
+                    status="legacy_unverified",
+                    risk_level=risk,
+                    amount=str(pending),
+                    currency_code=case["currency_code"],
+                    submitted_at=None,
+                    reviewed_at=None,
+                    reviewed_by=None,
+                    reason=case.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
+                    can_review=False,
+                    requires_verification=True,
+                )
+            )
+        return ApprovalListData(items=items), total
+
+    def legacy_detail(self, case_id: UUID, account_refs: frozenset[str]) -> ApprovalDetail:
+        """Read-only display; do not fabricate approvals, applicants, or events."""
+        record = self._case(str(case_id), account_refs)
+        if record["status"] != "archive_pending" or record["archive_review_status"] != "pending":
+            blocked()
+        linked = self.session.execute(
+            text("""
+            select 1 from app_approval_requests where approval_type='wfs_case_abandon'
+              and business_ref=:case_id limit 1
+        """),
+            {"case_id": str(case_id)},
+        ).first()
+        if linked:
+            blocked()
+        pending = calculate_pending_recovery(record)
+        risk = "high" if pending >= 500 else "medium" if pending >= 100 else "low"
+        item = ApprovalItem(
+            id=str(case_id),
+            version=1,
+            approval_type="wfs_case_abandon",
+            business_ref=str(case_id),
+            title="WFS 历史待核验 · 放弃跟进",
+            source_account_ref=record["source_account_ref"],
+            applicant_id=None,
+            status="legacy_unverified",
+            risk_level=risk,
+            amount=str(pending),
+            currency_code=record["currency_code"],
+            submitted_at=None,
+            reviewed_at=None,
+            reviewed_by=None,
+            reason=record.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
+            can_review=False,
+            requires_verification=True,
+        )
+        return ApprovalDetail(
+            **item.model_dump(),
+            snapshot=make_snapshot(record),
+            evidence=record.get("archive_evidence"),
+            current_case=make_snapshot(record),
+            data_changed=False,
+            can_supplement=False,
+            events=[],
+        )
+
+    def list_requests(
+        self,
+        query: ApprovalQuery,
+        account_refs: frozenset[str],
+        actor: str,
+        may_review: bool,
+        is_admin: bool = False,
+    ) -> tuple[ApprovalListData, int]:
+        if query.tab == "legacy":
+            return self.legacy_unverified(query, account_refs)
         status_clause = (
             "a.status in ('submitted','info_required')"
             if query.tab == "pending"
@@ -271,10 +435,15 @@ class ApprovalService:
             if query.tab == "approved"
             else "a.status='rejected'"
         )
-        where = ["a.source_account_ref=any(:accounts)", status_clause]
+        where = [
+            "a.source_account_ref=any(:accounts)",
+            status_clause,
+            "(a.approval_type='wfs_case_abandon' or a.applicant_id=:actor or :is_admin)",
+        ]
         params: dict = {
             "accounts": list(account_refs),
             "actor": actor,
+            "is_admin": is_admin,
             "limit": query.page_size,
             "offset": (query.page - 1) * query.page_size,
         }
@@ -315,7 +484,11 @@ class ApprovalService:
         ), int(total)
 
     def summary(
-        self, account_refs: frozenset[str], actor: str, may_review: bool
+        self,
+        account_refs: frozenset[str],
+        actor: str,
+        may_review: bool,
+        is_admin: bool = False,
     ) -> ApprovalSummary:
         row = (
             self.session.execute(
@@ -327,19 +500,44 @@ class ApprovalService:
               count(*) filter (where status='approved') approved
             from app_approval_requests where source_account_ref=any(:accounts)
               and (:may_review or applicant_id=:actor)
+              and (approval_type='wfs_case_abandon' or applicant_id=:actor or :is_admin)
         """),
-                {"accounts": list(account_refs), "actor": actor, "may_review": may_review},
+                {
+                    "accounts": list(account_refs),
+                    "actor": actor,
+                    "may_review": may_review,
+                    "is_admin": is_admin,
+                },
             )
             .mappings()
             .one()
         )
-        return ApprovalSummary(**dict(row))
+        legacy = self.session.execute(
+            text("""
+            select count(*) from ops_wfs_fee_anomaly_cases c
+            where c.source_account_ref=any(:accounts) and c.is_deleted=false
+              and c.status='archive_pending' and c.archive_review_status='pending'
+              and not exists (select 1 from app_approval_requests a
+               where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
+        """),
+            {"accounts": list(account_refs)},
+        ).scalar_one()
+        return ApprovalSummary(**dict(row), legacy_unverified=int(legacy) if may_review else 0)
 
     def detail(
-        self, approval_id: UUID, account_refs: frozenset[str], actor: str, may_review: bool
+        self,
+        approval_id: UUID,
+        account_refs: frozenset[str],
+        actor: str,
+        may_review: bool,
+        is_admin: bool = False,
     ) -> ApprovalDetail:
         record = self._record(approval_id, account_refs)
-        if not may_review and record["applicant_id"] != actor:
+        if (not may_review and record["applicant_id"] != actor) or (
+            record["approval_type"] != "wfs_case_abandon"
+            and not is_admin
+            and record["applicant_id"] != actor
+        ):
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
         item = self._as_item(record, actor, may_review)
         events = (
@@ -354,6 +552,18 @@ class ApprovalService:
             .mappings()
             .all()
         )
+        if record["approval_type"] in ("purchase_exception", "finance_exception", "access_change"):
+            return ApprovalDetail(
+                **item.model_dump(),
+                snapshot=record["snapshot"],
+                evidence=record["evidence"],
+                current_case=None,
+                data_changed=False,
+                can_supplement=(
+                    record["status"] == "info_required" and record["applicant_id"] == actor
+                ),
+                events=[ApprovalEventRead(**dict(e)) for e in events],
+            )
         case = self._case(record["business_ref"], account_refs)
         current = make_snapshot(case)
         saved = record["snapshot"]
@@ -362,7 +572,7 @@ class ApprovalService:
         changed = any(
             current.get(k) != saved.get(k)
             for k in saved
-            if k not in ("status", "archive_reason", "archive_reason_type")
+            if k not in ("status", "archive_reason", "archive_reason_type", "approval_policy")
         )
         return ApprovalDetail(
             **item.model_dump(),
@@ -406,6 +616,64 @@ class ApprovalService:
             if k not in ("status", "archive_reason", "archive_reason_type")
         ):
             blocked()
+        current_step = self.session.execute(
+            text("""
+            select count(*) from app_approval_step_decisions
+            where approval_id=:id and decision='approved'
+        """),
+            {"id": str(approval_id)},
+        ).scalar_one()
+        repeated = self.session.execute(
+            text("""
+            select 1 from app_approval_step_decisions
+            where approval_id=:id and reviewer_id=:actor
+        """),
+            {"id": str(approval_id), "actor": actor},
+        ).first()
+        if repeated:
+            blocked()
+        if payload.decision == "info_required" and int(current_step) > 0:
+            blocked()
+        required_steps = int(snapshot.get("approval_policy", {}).get("required_steps", 1))
+        final_step = int(current_step) + 1 >= required_steps
+        if payload.decision == "approved":
+            self.session.execute(
+                text("""
+                insert into app_approval_step_decisions
+                    (id,approval_id,step_number,reviewer_id,decision,note)
+                values (:id,:approval_id,:step,:actor,'approved',:note)
+            """),
+                {
+                    "id": str(uuid4()),
+                    "approval_id": str(approval_id),
+                    "step": int(current_step) + 1,
+                    "actor": actor,
+                    "note": payload.note or None,
+                },
+            )
+        if payload.decision == "approved" and not final_step:
+            advanced = self.session.execute(
+                text("""
+                update app_approval_requests set
+                    version=version+1,updated_at=now()
+                where id=:id and status='submitted' and version=:version
+            """),
+                {"id": str(approval_id), "version": payload.expected_version},
+            )
+            if advanced.rowcount != 1:
+                blocked()
+            self._event(
+                str(approval_id),
+                "step_approved",
+                actor,
+                payload.note,
+                {
+                    "step": int(current_step) + 1,
+                    "required_steps": required_steps,
+                },
+            )
+            self.session.commit()
+            return
         if payload.decision == "info_required":
             new_status = "info_required"
         elif payload.decision == "approved":
@@ -460,6 +728,7 @@ class ApprovalService:
             if updated.rowcount != 1:
                 blocked()
         self._event(str(approval_id), payload.decision, actor, payload.note)
+        self._notify_applicant(str(approval_id), payload.decision)
         self.session.commit()
 
     def supplement(
@@ -476,9 +745,20 @@ class ApprovalService:
             or r["applicant_id"] != actor
         ):
             blocked()
-        case = self._case(r["business_ref"], account_refs, lock=True)
-        if case["status"] != "archive_pending":
-            blocked()
+        if r["approval_type"] == "wfs_case_abandon":
+            case = self._case(r["business_ref"], account_refs, lock=True)
+            if case["status"] != "archive_pending":
+                blocked()
+        else:
+            from app.modules.approvals.generic import GenericApprovalService
+
+            actual = GenericApprovalService(self.session)._source(
+                r["approval_type"],
+                r["business_ref"],
+                r["source_account_ref"],
+            )
+            if signature(actual) != signature(r["snapshot"]["source"]):
+                blocked()
         now = datetime.now(UTC)
         self.session.execute(
             text("""
@@ -496,4 +776,5 @@ class ApprovalService:
             },
         )
         self._event(str(approval_id), "resubmitted", actor, payload.note)
+        self._notify_applicant(str(approval_id), "resubmitted")
         self.session.commit()

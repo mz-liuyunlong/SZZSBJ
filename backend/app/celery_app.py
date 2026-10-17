@@ -16,10 +16,12 @@ INTEGRATION_QUEUE = "integration"
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
+    "app.modules.approvals.tasks",
 )
 
 TASK_ROUTES = {
     "media_assets.*": {"queue": MEDIA_QUEUE, "routing_key": MEDIA_QUEUE},
+    "approvals.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -81,6 +83,10 @@ def create_celery_app(
         timezone="UTC",
         enable_utc=True,
         beat_schedule={
+            "approval-reminder-scheduler": {
+                "task": "approvals.reminder_tick",
+                "schedule": 3600.0,
+            },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
                 "schedule": 60.0,
