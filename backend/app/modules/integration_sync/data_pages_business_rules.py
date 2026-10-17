@@ -239,6 +239,14 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 )
                 if not (order_total == Decimal("0") or full_discount):
                     continue
+                quantity = _decimal(item.get("quantity"))
+                if quantity is None or quantity <= 0:
+                    raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_QUANTITY_INVALID")
+                unit_price = _decimal(item.get("unit_price_amount"))
+                if unit_price is None:
+                    if item_price is None or quantity != Decimal("1"):
+                        raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_UNIT_PRICE_AMBIGUOUS")
+                    unit_price = item_price
                 platform_order_no = _field(item, "platform_order_no") or _field(
                     row, "platform_order_no", "reference_no", "referenceNo"
                 )
@@ -287,12 +295,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "item_id": _field(item, "item_id", "platform_product_id"),
                         "msku": _field(item, "msku"),
                         "local_sku": _field(item, "local_sku", "sku"),
-                        "quantity": _decimal(item.get("quantity")),
-                        "unit_price_amount": (
-                            _decimal(item.get("unit_price_amount"))
-                            if _decimal(item.get("unit_price_amount")) is not None
-                            else item_price
-                        ),
+                        "quantity": quantity,
+                        "unit_price_amount": unit_price,
                         "unit_price_currency_code": (
                             _field(item, "unit_price_currency_code", "currency") or currency_code
                         ),
