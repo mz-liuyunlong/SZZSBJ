@@ -12,22 +12,22 @@ from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
+from app.modules.approvals.generic import GenericApprovalService
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
-    GenericApprovalWrite,
-    BulkDecisionWrite,
-    LegacyReattestationWrite,
-    ApprovalRuleWrite,
     ApprovalDetail,
     ApprovalListData,
     ApprovalMeta,
     ApprovalQuery,
+    ApprovalRuleWrite,
     ApprovalSubmitResult,
     ApprovalSummary,
     ApprovalSupplementWrite,
+    BulkDecisionWrite,
+    GenericApprovalWrite,
+    LegacyReattestationWrite,
 )
 from app.modules.approvals.service import ApprovalService
-from app.modules.approvals.generic import GenericApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
