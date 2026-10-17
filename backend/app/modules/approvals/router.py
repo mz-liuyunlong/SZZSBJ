@@ -97,12 +97,20 @@ def legacy_detail(
 
 @router.post("/legacy/{case_id}/reattest", response_model=SuccessEnvelope[dict[str, str], None])
 def reattest_legacy(
-    request: Request, case_id: UUID, payload: LegacyReattestationWrite,
-    session: db_session, principal: archive_request_principal, accounts: account_scope,
+    request: Request,
+    case_id: UUID,
+    payload: LegacyReattestationWrite,
+    session: db_session,
+    principal: archive_request_principal,
+    accounts: account_scope,
 ):
     approval_id = ApprovalWorkflow(session).reattest_wfs(
-        case_id, accounts, principal.user_id,
-        payload.reason_type, payload.reason, payload.evidence,
+        case_id,
+        accounts,
+        principal.user_id,
+        payload.reason_type,
+        payload.reason,
+        payload.evidence,
     )
     return success_response(request, data={"approval_id": approval_id}, meta=None)
 
@@ -112,17 +120,26 @@ def approval_rules(request: Request, session: db_session, _: view_principal):
     return success_response(request, data=ApprovalWorkflow(session).available_rules(), meta=None)
 
 
-@router.put("/workflow/rules/{approval_type}", response_model=SuccessEnvelope[dict[str, bool], None])
+@router.put(
+    "/workflow/rules/{approval_type}", response_model=SuccessEnvelope[dict[str, bool], None]
+)
 def update_approval_rule(
-    request: Request, approval_type: str, payload: ApprovalRuleWrite,
+    request: Request,
+    approval_type: str,
+    payload: ApprovalRuleWrite,
     session: db_session,
-    principal: Annotated[Principal, Depends(require_permission(
-        "action:settings:role-management:configure-permissions"
-    ))],
+    principal: Annotated[
+        Principal,
+        Depends(require_permission("action:settings:role-management:configure-permissions")),
+    ],
 ):
     ApprovalWorkflow(session).update_rule(
-        approval_type, principal.user_id, payload.expected_version,
-        payload.required_steps, payload.due_hours, payload.allows_bulk,
+        approval_type,
+        principal.user_id,
+        payload.expected_version,
+        payload.required_steps,
+        payload.due_hours,
+        payload.allows_bulk,
     )
     return success_response(request, data={"updated": True}, meta=None)
 
@@ -134,15 +151,20 @@ def approval_notifications(request: Request, session: db_session, principal: vie
     )
 
 
-@router.post("/workflow/notifications/{notification_id}/read",
-             response_model=SuccessEnvelope[dict[str, bool], None])
+@router.post(
+    "/workflow/notifications/{notification_id}/read",
+    response_model=SuccessEnvelope[dict[str, bool], None],
+)
 def mark_approval_notification_read(
-    request: Request, notification_id: UUID, session: db_session, principal: view_principal,
+    request: Request,
+    notification_id: UUID,
+    session: db_session,
+    principal: view_principal,
 ):
     return success_response(
-        request, data={"updated": ApprovalWorkflow(session).mark_read(
-            notification_id, principal.user_id
-        )}, meta=None
+        request,
+        data={"updated": ApprovalWorkflow(session).mark_read(notification_id, principal.user_id)},
+        meta=None,
     )
 
 
