@@ -145,13 +145,17 @@ class ApprovalWorkflow:
     ) -> None:
         if kind == "wfs_case_abandon" and allows_bulk:
             conflict()
-        previous = self.session.execute(
-            text("""
+        previous = (
+            self.session.execute(
+                text("""
             select required_steps,due_hours,allows_bulk,version
             from app_approval_rules where approval_type=:kind for update
         """),
-            {"kind": kind},
-        ).mappings().first()
+                {"kind": kind},
+            )
+            .mappings()
+            .first()
+        )
         if previous is None or int(previous["version"]) != expected_version:
             conflict()
         result = self.session.execute(
@@ -184,12 +188,14 @@ class ApprovalWorkflow:
                 "kind": kind,
                 "actor": actor,
                 "before": json.dumps(dict(previous)),
-                "after": json.dumps({
-                    "required_steps": steps,
-                    "due_hours": due_hours,
-                    "allows_bulk": allows_bulk,
-                    "version": expected_version + 1,
-                }),
+                "after": json.dumps(
+                    {
+                        "required_steps": steps,
+                        "due_hours": due_hours,
+                        "allows_bulk": allows_bulk,
+                        "version": expected_version + 1,
+                    }
+                ),
             },
         )
         self.session.commit()
