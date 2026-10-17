@@ -366,6 +366,7 @@ def test_sample_writer_rejects_missing_order_line_identity() -> None:
         "item_info": [{"msku": "MSKU-1", "quantity": 1}],
     }
     import pytest
+
     with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_SAMPLE_IDENTITY_MISSING"):
         runner._write_sample_orders([row])
 
