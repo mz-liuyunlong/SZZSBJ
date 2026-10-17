@@ -185,7 +185,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 line_id = _field(item, "order_item_no", "global_item_no", "id")
                 if not line_id:
                     raise DataPagesRealSyncError("DATA_PAGES_ORDER_LINE_IDENTITY_MISSING")
-                line_hash = _stable_hash({"order": order_id, "line_id": line_id})
+                line_hash = _stable_hash({"store": _field(row, "store_id"), "order": order_id, "line_id": line_id})
                 self.session.execute(
                     text(
                         "insert into fact_walmart_order_items "
@@ -219,9 +219,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "source_account_ref": self.source_account_ref,
                         "store_id": _field(row, "store_id"),
                         "source_order_id": order_id,
-                        "source_order_line_id": _field(
-                            item, "global_item_no", "order_item_no", "id"
-                        ),
+                        "source_order_line_id": line_id,
                         "platform_order_no": _field(item, "platform_order_no")
                         or _field(row, "platform_order_no"),
                         "reference_no": _field(row, "reference_no", "referenceNo"),
