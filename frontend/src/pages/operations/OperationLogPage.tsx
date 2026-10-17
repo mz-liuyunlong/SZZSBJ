@@ -1,6 +1,8 @@
 import { FileTextOutlined, RobotOutlined } from "@ant-design/icons";
 import { Button, Card, Input, message, Modal, Space, Typography } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useState, type Key } from "react";
+import { fetchOperationLogRows, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
+import type { OperationLogSystemRecord } from "@/pages/operations/operationLogTypes";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -14,13 +16,7 @@ import OperationLogBatchModal from "@/pages/operations/components/OperationLogBa
 import OperationLogLinkEditorModal from "@/pages/operations/components/OperationLogLinkEditorModal";
 import OperationLogTable from "@/pages/operations/components/OperationLogTable";
 import OperationLogToolbar from "@/pages/operations/components/OperationLogToolbar";
-import {
-  operationLogOwners,
-  operationLogRows,
-  operationLogStores,
-  operationLogWorkTypeValues,
-  operationSystemRecords,
-} from "@/pages/operations/operationLogMockData";
+import { operationLogWorkTypes } from "@/pages/operations/operationLogTypes";
 import {
   createOperationLogInitialFilters,
   createSystemDraft,
@@ -48,8 +44,28 @@ interface OperationLogPageProps {
 
 function OperationLogPage({ page }: OperationLogPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const [rows, setRows] = useState(operationLogRows);
+  const [rows, setRows] = useState<OperationLogRow[]>([]);
+  const [revisions, setRevisions] = useState<Record<string, number>>({});
+  const [systemRecords, setSystemRecords] = useState<OperationLogSystemRecord[]>([]);
+
   const [filters, setFilters] = useState<OperationLogFilters>(createOperationLogInitialFilters);
+  useEffect(() => {
+    let active = true;
+    void fetchOperationLogRows(filters.dateRange[0], filters.dateRange[1])
+      .then((data) => {
+        if (!active) return;
+        setRows(data.rows);
+        setRevisions(data.revisions);
+        setSystemRecords(data.systemRecords);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRows([]);
+        setSystemRecords([]);
+        void messageApi.error("运营日志读取失败，未加载模拟数据");
+      });
+    return () => { active = false; };
+  }, [filters.dateRange[0], filters.dateRange[1], messageApi]);
   const [batchSearchOpen, setBatchSearchOpen] = useState(false);
   const [batchSearchText, setBatchSearchText] = useState("");
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -82,15 +98,36 @@ function OperationLogPage({ page }: OperationLogPageProps) {
     resetPageAndSelection();
   };
 
-  const updateRow = (productId: string, patch: Partial<OperationLogRow>) => {
+  const updateRow = (rowId: string, patch: Partial<OperationLogRow>) => {
     setRows((currentRows) => currentRows.map((row) => (
-      row.productId === productId ? { ...row, ...patch } : row
+      row.id === rowId ? { ...row, ...patch } : row
     )));
   };
 
+  const persistRows = async (targets: OperationLogRow[], status: "draft" | "submitted") => {
+    if (!targets.length) return;
+    let completed = 0;
+    try {
+      for (let index = 0; index < targets.length; index += 200) {
+        const chunk = targets.slice(index, index + 200);
+        const next = await saveOperationLogRows(chunk, revisions, status);
+        setRevisions((old) => ({ ...old, ...next }));
+        const ids = new Set(chunk.map((row) => row.id));
+        setRows((all) => all.map((row) => ids.has(row.id) ? {
+          ...row, status: status === "submitted" ? "已保存" : "草稿",
+        } : row));
+        completed += chunk.length;
+      }
+      void messageApi.success(`已写入新系统 ${completed} 条运营日志`);
+    } catch {
+      void messageApi.error(
+        `批量保存中断：已完成 ${completed} 条，剩余未确认。请刷新后核对再重试`,
+      );
+    }
+  };
   const fillBySystem = () => {
     setRows((currentRows) => currentRows.map((row) => {
-      const records = operationSystemRecords.filter((record) => record.productId === row.productId);
+      const records = systemRecords.filter((record) => record.productId === row.productId && record.date === row.date && record.storeId === row.storeId && record.sourceAccountRef === row.sourceAccountRef && record.msku === row.msku);
       return {
         ...row,
         manualLog: createSystemDraft(records),
@@ -133,8 +170,8 @@ function OperationLogPage({ page }: OperationLogPageProps) {
       return;
     }
 
-    setRows((currentRows) => currentRows.map((row) => {
-      if (!values.productIds.includes(row.productId)) return row;
+    const updatedRows = rows.map((row) => {
+      if (!values.productIds.includes(row.id)) return row;
 
       const nextLogText = values.logText.trim();
       let manualLog = row.manualLog;
@@ -150,18 +187,20 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         workType: values.workTypes[0] ?? row.workType,
         status: "草稿",
       };
-    }));
-
+    });
+    setRows(updatedRows);
     setBatchModalOpen(false);
-    void messageApi.success(`已批量写入 ${values.productIds.length} 个商品ID`);
+    void persistRows(updatedRows.filter((row) => values.productIds.includes(row.id)), "draft");
   };
 
-  const saveEntry = (
+  const saveEntry = async (
     row: OperationLogRow,
     entryType: "keyword" | "ad",
     values: OperationLogLinkFormValues,
   ) => {
-    updateRow(row.productId, {
+    try { await saveOperationLink(row, entryType, values); }
+    catch { void messageApi.error("链接保存失败"); return; }
+    updateRow(row.id, {
       keywordEntryStatus: entryType === "keyword" ? "ok" : row.keywordEntryStatus,
       adEntryStatus: entryType === "ad" ? "ok" : row.adEntryStatus,
     });
@@ -193,9 +232,9 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         <Card size="small" className="operation-log__toolbar-card">
           <OperationLogToolbar
             filters={filters}
-            owners={operationLogOwners}
-            stores={operationLogStores}
-            workTypes={operationLogWorkTypeValues}
+            owners={Array.from(new Set(rows.map((row) => row.owner).filter(Boolean)))}
+            stores={Array.from(new Set(rows.map((row) => row.store).filter(Boolean)))}
+            workTypes={operationLogWorkTypes}
             onChange={updateFilters}
             onReset={resetFilters}
             onOpenBatchSearch={() => setBatchSearchOpen(true)}
@@ -206,7 +245,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
 
         <OperationLogTable
           rows={filteredRows}
-          systemRecords={operationSystemRecords}
+          systemRecords={systemRecords}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}
           currentPage={currentPage}
@@ -225,13 +264,10 @@ function OperationLogPage({ page }: OperationLogPageProps) {
           onCopy={(text) => void navigator.clipboard?.writeText(text)}
           onOpenProduct={(row) => void messageApi.info(`打开 ${row.productId} 诊断 / 写日志抽屉待接入`)}
           onOpenEntryEditor={(row, entryType) => setLinkEditor({ row, entryType })}
-          onManualLogChange={(productId, manualLog) => updateRow(productId, { manualLog, status: "草稿" })}
-          onSaveRow={(row) => {
-            updateRow(row.productId, { status: "已保存" });
-            void messageApi.success(`${row.productId} 日志已保存`);
-          }}
-          onBulkSaveDraft={() => void messageApi.success("已保存草稿")}
-          onSubmitAll={() => void messageApi.success("已提交今日运营日志")}
+          onManualLogChange={(rowId, manualLog) => updateRow(rowId, { manualLog, status: "草稿" })}
+          onSaveRow={(row) => void persistRows([row], "draft")}
+          onBulkSaveDraft={() => void persistRows(filteredRows, "draft")}
+          onSubmitAll={() => void persistRows(filteredRows, "submitted")}
           tableActions={headerActions}
         />
 

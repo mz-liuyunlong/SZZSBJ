@@ -17,6 +17,8 @@ from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
 from app.modules.integration_sync.router import router as integration_sync_router
 from app.modules.media_assets.router import router as media_assets_router
+from app.modules.operation_logs.router import router as operation_logs_router
+from app.modules.operation_logs.rows_router import router as operation_logs_rows_router
 from app.modules.operation_plans.router import router as operation_plans_router
 from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
@@ -54,6 +56,8 @@ def create_app() -> FastAPI:
     application.include_router(integration_sync_router)
     application.include_router(password_reset_router)
     application.include_router(media_assets_router)
+    application.include_router(operation_logs_rows_router)
+    application.include_router(operation_logs_router)
     application.include_router(operation_plans_router)
     application.include_router(pmc_purchase_router)
     application.include_router(product_management_router)

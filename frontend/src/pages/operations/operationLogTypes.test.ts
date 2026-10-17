@@ -14,7 +14,7 @@ describe("operation log helpers", () => {
   it("defaults to today and product ID search", () => {
     const filters = createOperationLogInitialFilters();
 
-    expect(filters.dateRange).toEqual(["2026-09-13", "2026-09-13"]);
+    expect(filters.dateRange).toEqual(createOperationLogDateRange("today"));
     expect(filters.searchField).toBe("productId");
   });
 
@@ -24,7 +24,7 @@ describe("operation log helpers", () => {
 
     const result = filterOperationLogRows(operationLogRows, {
       ...createOperationLogInitialFilters(),
-      dateRange: createOperationLogDateRange("last30"),
+      dateRange: ["2026-09-01", "2026-09-30"],
       keyword: rowWithSystem?.productId.slice(0, 8) ?? "",
       systemLog: "has",
     });
@@ -37,7 +37,7 @@ describe("operation log helpers", () => {
     const rowWithSystem = operationLogRows.find((row) => row.systemLogCount > 0);
     const records = operationSystemRecords.filter((record) => record.productId === rowWithSystem?.productId);
 
-    expect(createSystemDraft(records)).toContain("调整人");
+    expect(createSystemDraft(records)).toContain("系统检测");
     expect(createSystemDraft([])).toBe("系统未抓到调整记录，待人工确认。");
   });
 });

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 from kombu import Exchange, Queue
 
 APP_NAME = "szzsbj"
@@ -16,10 +17,12 @@ INTEGRATION_QUEUE = "integration"
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
+    "app.modules.operation_logs.tasks",
 )
 
 TASK_ROUTES = {
     "media_assets.*": {"queue": MEDIA_QUEUE, "routing_key": MEDIA_QUEUE},
+    "operation_logs.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -81,6 +84,14 @@ def create_celery_app(
         timezone="UTC",
         enable_utc=True,
         beat_schedule={
+            "operation-logs-mirror-incremental": {
+                "task": "operation_logs.mirror_incremental",
+                "schedule": 600.0,
+            },
+            "operation-logs-mirror-reconcile": {
+                "task": "operation_logs.mirror_reconcile",
+                "schedule": crontab(hour=3, minute=0),
+            },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
                 "schedule": 60.0,

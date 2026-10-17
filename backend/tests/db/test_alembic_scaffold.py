@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261017_0042_rbac_backfill"
+EXPECTED_HEAD_REVISION = "20261017_0043_operation_logs"
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +74,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         script.get_revision(EXPECTED_HEAD_REVISION).down_revision
         == "20261016_0041_wfs_rbac_actions"
     )
+    assert script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261017_0042_rbac_backfill"
     assert len(EXPECTED_HEAD_REVISION) <= 32
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
