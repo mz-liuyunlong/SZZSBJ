@@ -278,6 +278,7 @@ def read_detail(
     store: str,
     item: str,
     msku: str,
+    access: LogAccess | None = None,
 ) -> dict[str, Any]:
     _identity(
         session,
@@ -289,6 +290,8 @@ def read_detail(
         require_existing=False,
     )
     key = _log_key(account=account, day=day, store=store, item=item, msku=msku)
+    key["is_admin"] = access.is_admin if access is not None else True
+    key["user_id"] = access.user_id if access is not None else -1
     events = (
         session.execute(
             text("""
@@ -312,6 +315,7 @@ def read_detail(
         from ops_manual_operation_logs
         where source_account_ref = :account and log_date = :day
           and store_id = :store and item_id = :item and msku = :msku
+          and (:is_admin or owner_user_id = :user_id or source_kind = 'legacy')
         order by (source_kind = 'manual') desc, id desc
     """),
             key,
