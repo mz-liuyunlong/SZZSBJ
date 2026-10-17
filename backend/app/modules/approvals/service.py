@@ -424,7 +424,14 @@ class ApprovalService:
             .mappings()
             .one()
         )
-        return ApprovalSummary(**dict(row))
+        legacy = self.session.execute(text("""
+            select count(*) from ops_wfs_fee_anomaly_cases c
+            where c.source_account_ref=any(:accounts) and c.is_deleted=false
+              and c.status='archive_pending' and c.archive_review_status='pending'
+              and not exists (select 1 from app_approval_requests a
+               where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
+        """), {"accounts": list(account_refs)}).scalar_one()
+        return ApprovalSummary(**dict(row), legacy_unverified=int(legacy))
 
     def detail(
         self, approval_id: UUID, account_refs: frozenset[str], actor: str, may_review: bool
