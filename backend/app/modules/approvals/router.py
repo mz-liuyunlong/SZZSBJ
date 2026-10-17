@@ -62,7 +62,8 @@ def list_approvals(
 
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     data, total = ApprovalService(session).list_requests(
-        query, accounts, principal.user_id, approved
+        query, accounts, principal.user_id, approved,
+        is_admin="*" in principal.permissions,
     )
     return success_response(
         request,
@@ -76,7 +77,9 @@ def summary(
     request: Request, session: db_session, principal: view_principal, accounts: account_scope
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
-    data = ApprovalService(session).summary(accounts, principal.user_id, may_review)
+    data = ApprovalService(session).summary(
+        accounts, principal.user_id, may_review, is_admin="*" in principal.permissions
+    )
     return success_response(request, data=data, meta=None)
 
 
@@ -201,7 +204,10 @@ def get_approval(
     accounts: account_scope,
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
-    data = ApprovalService(session).detail(approval_id, accounts, principal.user_id, may_review)
+    data = ApprovalService(session).detail(
+        approval_id, accounts, principal.user_id, may_review,
+        is_admin="*" in principal.permissions,
+    )
     return success_response(request, data=data, meta=None)
 
 
