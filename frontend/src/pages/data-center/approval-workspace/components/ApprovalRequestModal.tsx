@@ -39,13 +39,14 @@ export default function ApprovalRequestModal({ open, onClose, onUpdated }: Props
       { label:"采购异常处理",value:"purchase_exception" },
       { label:"财务例外处理",value:"finance_exception" },
       { label:"用户权限变更",value:"access_change" },
+      { label:"运营计划事项确认（低风险）",value:"operations_plan_ack" },
      ]} />
     </Form.Item>
     <Form.Item label="数据源账号标识" name="account" rules={[{ required:true }]}>
      <Input maxLength={128} placeholder="输入本人已授权的数据源账号标识" />
     </Form.Item>
     <Form.Item label={type === "purchase_exception" ? "采购订单号" :
-     type === "finance_exception" ? "业务日期|SKU" : "目标用户 ID"} name="source"
+     type === "finance_exception" ? "业务日期|SKU" : type === "operations_plan_ack" ? "运营产品计划 ID" : "目标用户 ID"} name="source"
      rules={[{ required:true }]}>
      <Input maxLength={128} placeholder={type === "finance_exception" ? "YYYY-MM-DD|SKU" : "输入真实业务对象标识"} />
     </Form.Item>
