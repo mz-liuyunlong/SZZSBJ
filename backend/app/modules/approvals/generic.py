@@ -259,3 +259,85 @@ class GenericApprovalService:
         )
         self.approvals._notify_applicant(str(approval_id), decision)
         self.session.commit()
+
+
+    def approve_bulk(
+        self, ids: list[UUID], expected_versions: dict[str, int],
+        accounts: frozenset[str], actor: str, note: str,
+    ) -> int:
+        """Single transaction; all cases validated under locks before any update."""
+        if not 1 <= len(ids) <= 20 or len(set(ids)) != len(ids) or len(note.strip()) < 5:
+            blocked(422)
+        if set(expected_versions) != {str(i) for i in ids}:
+            blocked(422)
+        rule = self.session.execute(
+            text("""
+            select required_steps,allows_bulk from app_approval_rules
+            where approval_type='operations_plan_ack' and is_active=true
+        """)
+        ).mappings().first()
+        if not rule or not rule["allows_bulk"] or int(rule["required_steps"]) != 1:
+            blocked()
+        rows = [self.approvals._record(i, accounts, lock=True) for i in sorted(ids)]
+        for row in rows:
+            if (
+                row["approval_type"] != "operations_plan_ack"
+                or row["status"] != "submitted"
+                or row["risk_level"] != "low"
+                or row["applicant_id"] == actor
+                or row["version"] != expected_versions[str(row["id"])]
+                or row["snapshot"]["approval_policy"].get("required_steps") != 1
+            ):
+                blocked()
+            previous = self.session.execute(
+                text("""
+                select 1 from app_approval_step_decisions
+                where approval_id=:id
+            """),
+                {"id": str(row["id"])},
+            ).first()
+            if previous:
+                blocked()
+            current = self._source(
+                row["approval_type"], row["business_ref"], row["source_account_ref"]
+            )
+            if signature(current) != signature(row["snapshot"]["source"]):
+                blocked()
+        for row in rows:
+            approval_id = str(row["id"])
+            self.session.execute(
+                text("""
+                insert into app_approval_step_decisions
+                  (id,approval_id,step_number,reviewer_id,decision,note)
+                values (:id,:approval_id,1,:actor,'approved',:note)
+            """),
+                {
+                    "id": str(uuid4()),
+                    "approval_id": approval_id,
+                    "actor": actor,
+                    "note": note.strip(),
+                },
+            )
+            changed = self.session.execute(
+                text("""
+                update app_approval_requests set
+                  status='approved',reviewed_by=:actor,reviewed_at=now(),
+                  review_note=:note,version=version+1,updated_at=now()
+                where id=:id and version=:expected and status='submitted'
+            """),
+                {
+                    "id": approval_id,
+                    "actor": actor,
+                    "note": note.strip(),
+                    "expected": expected_versions[approval_id],
+                },
+            )
+            if changed.rowcount != 1:
+                blocked()
+            self.approvals._event(
+                approval_id, "approved", actor, note.strip(),
+                {"batch": True, "executed": False},
+            )
+            self.approvals._notify_applicant(approval_id, "approved")
+        self.session.commit()
+        return len(rows)
