@@ -1,11 +1,14 @@
 """Scoped operation log and batch editing API."""
 
 from __future__ import annotations
+
 from datetime import date
 from typing import Annotated, Any
-from fastapi import APIRouter, Depends, Query, Request
+
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
 from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_any_permission, require_permission

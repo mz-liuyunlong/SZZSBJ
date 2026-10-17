@@ -1,6 +1,7 @@
 """Current listing-based operation log grid, backed only by formal new-system logs."""
 
 from __future__ import annotations
+
 from datetime import date, datetime
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo

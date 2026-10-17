@@ -1,7 +1,9 @@
 """Disabled-by-default follow-up sync from the existing new-DB mirror."""
 
 from __future__ import annotations
+
 import os
+
 from app.celery_app import celery_app
 from app.db.session import get_session_factory
 from app.modules.operation_logs.service import import_history
