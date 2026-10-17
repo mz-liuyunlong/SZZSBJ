@@ -209,8 +209,11 @@ def submit_generic_approval(
 
 @router.post("/workflow/bulk-approve", response_model=SuccessEnvelope[dict[str, int], None])
 def approve_bulk(
-    request: Request, payload: BulkDecisionWrite, session: db_session,
-    principal: view_principal, accounts: account_scope,
+    request: Request,
+    payload: BulkDecisionWrite,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
 ):
     if "*" not in principal.permissions:
         from app.core.api import ApiError, ErrorCode
@@ -218,7 +221,11 @@ def approve_bulk(
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     ids = [UUID(x) for x in payload.approval_ids]
     count = GenericApprovalService(session).approve_bulk(
-        ids, payload.expected_versions, accounts, principal.user_id, payload.note,
+        ids,
+        payload.expected_versions,
+        accounts,
+        principal.user_id,
+        payload.note,
     )
     return success_response(request, data={"approved": count}, meta=None)
 
