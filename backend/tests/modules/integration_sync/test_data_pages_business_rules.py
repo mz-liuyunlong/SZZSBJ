@@ -314,6 +314,7 @@ def test_refund_writer_ignores_non_completed_refunds() -> None:
     assert written == 0
     assert len(session.calls) == 1
 
+
 def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> None:
     session = _CaptureSession()
     runner = _runner(session)
