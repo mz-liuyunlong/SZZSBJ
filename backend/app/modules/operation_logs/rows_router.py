@@ -79,12 +79,20 @@ def get_rows(
                     and k.store_id = i.store_id and k.item_id = i.item_id
                     and k.entry_type = 'keyword'
                ) as keyword_link,
+               (select k.entry_url from ops_operation_log_links k
+                where k.source_account_ref = i.source_account_ref
+                  and k.store_id = i.store_id and k.item_id = i.item_id
+                  and k.entry_type = 'keyword') as keyword_url,
                exists (
                   select 1 from ops_operation_log_links k
                   where k.source_account_ref = i.source_account_ref
                     and k.store_id = i.store_id and k.item_id = i.item_id
                     and k.entry_type = 'ad'
-               ) as ad_link
+               ) as ad_link,
+               (select k.entry_url from ops_operation_log_links k
+                where k.source_account_ref = i.source_account_ref
+                  and k.store_id = i.store_id and k.item_id = i.item_id
+                  and k.entry_type = 'ad') as ad_url
         from identities i
         left join lateral (
             select log_content, revision, work_type, status
@@ -136,12 +144,20 @@ def get_rows(
                    and k.store_id = h.store_id and k.item_id = h.item_id
                    and k.entry_type = 'keyword'
                ) as keyword_link,
+               (select k.entry_url from ops_operation_log_links k
+                where k.source_account_ref = h.source_account_ref
+                  and k.store_id = h.store_id and k.item_id = h.item_id
+                  and k.entry_type = 'keyword') as keyword_url,
                exists (
                  select 1 from ops_operation_log_links k
                  where k.source_account_ref = h.source_account_ref
                    and k.store_id = h.store_id and k.item_id = h.item_id
                    and k.entry_type = 'ad'
-               ) as ad_link
+               ) as ad_link,
+               (select k.entry_url from ops_operation_log_links k
+                where k.source_account_ref = h.source_account_ref
+                  and k.store_id = h.store_id and k.item_id = h.item_id
+                  and k.entry_type = 'ad') as ad_url
         from historic_keys h
         left join lateral (
             select store_name, local_sku, title, owner_ref, sale_price_amount
@@ -243,7 +259,9 @@ def get_rows(
                 "conversionRate": None,
                 "salePrice": float(r["price"]) if r["price"] is not None else None,
                 "keywordEntryStatus": "ok" if r["keyword_link"] else "missing",
+                "keywordUrl": r["keyword_url"],
                 "adEntryStatus": "ok" if r["ad_link"] else "missing",
+                "adUrl": r["ad_url"],
                 "systemLogCount": int(r["system_count"]),
                 "manualLog": r["manual_content"],
                 "status": (

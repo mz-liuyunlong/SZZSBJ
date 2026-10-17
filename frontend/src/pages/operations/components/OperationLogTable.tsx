@@ -137,12 +137,20 @@ function OperationLogTable({
               <ShortcutButton
                 label="词"
                 missing={keywordMissing}
-                onClick={() => onOpenEntryEditor(row, "keyword")}
+                onClick={() => {
+                  const url = row.keywordUrl;
+                  if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer");
+                  else onOpenEntryEditor(row, "keyword");
+                }}
               />
               <ShortcutButton
                 label="广"
                 missing={adMissing}
-                onClick={() => onOpenEntryEditor(row, "ad")}
+                onClick={() => {
+                  const url = row.adUrl;
+                  if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer");
+                  else onOpenEntryEditor(row, "ad");
+                }}
               />
             </div>
           </div>

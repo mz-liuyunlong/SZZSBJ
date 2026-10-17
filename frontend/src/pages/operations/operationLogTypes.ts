@@ -53,7 +53,9 @@ export interface OperationLogRow {
   adRatio?: number;
   salePrice: number | null;
   keywordEntryStatus: "ok" | "missing";
+  keywordUrl?: string | null;
   adEntryStatus: "ok" | "missing";
+  adUrl?: string | null;
   systemLogCount: number;
   manualLog: string;
   status: OperationLogStatus;
