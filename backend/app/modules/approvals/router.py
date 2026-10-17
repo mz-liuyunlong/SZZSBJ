@@ -14,6 +14,7 @@ from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
+    GenericApprovalWrite,
     LegacyReattestationWrite,
     ApprovalRuleWrite,
     ApprovalDetail,
@@ -25,6 +26,7 @@ from app.modules.approvals.schemas import (
     ApprovalSupplementWrite,
 )
 from app.modules.approvals.service import ApprovalService
+from app.modules.approvals.generic import GenericApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
@@ -168,6 +170,28 @@ def mark_approval_notification_read(
     )
 
 
+@router.post("/workflow/requests", response_model=SuccessEnvelope[dict[str, str], None])
+def submit_generic_approval(
+    request: Request, payload: GenericApprovalWrite, session: db_session,
+    principal: view_principal, accounts: account_scope,
+):
+    # High-impact general requests require explicit super-admin authority.
+    # Purchase requests may also be initiated by a PMC override authorized user.
+    allowed = "*" in principal.permissions or (
+        payload.approval_type == "purchase_exception"
+        and has_permission(principal, "action:pmc:purchase-board:override")
+    )
+    if not allowed:
+        from app.core.api import ApiError, ErrorCode
+
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    approval_id = GenericApprovalService(session).submit(
+        payload.approval_type, payload.source_ref, payload.source_account_ref,
+        accounts, principal.user_id, payload.reason, payload.evidence,
+    )
+    return success_response(request, data={"approval_id": approval_id}, meta=None)
+
+
 @router.get("/{approval_id}", response_model=SuccessEnvelope[ApprovalDetail, None])
 def get_approval(
     request: Request,
@@ -211,7 +235,20 @@ def decide(
     accounts: account_scope,
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
-    ApprovalService(session).decide(approval_id, payload, accounts, principal.user_id, may_review)
+    record = ApprovalService(session)._record(approval_id, accounts)
+    if record["approval_type"] != "wfs_case_abandon":
+        if "*" not in principal.permissions:
+            from app.core.api import ApiError, ErrorCode
+
+            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+        GenericApprovalService(session).decide(
+            approval_id, accounts, principal.user_id,
+            payload.decision, payload.note, payload.expected_version,
+        )
+    else:
+        ApprovalService(session).decide(
+            approval_id, payload, accounts, principal.user_id, may_review
+        )
     return success_response(request, data={"updated": True}, meta=None)
 
 
