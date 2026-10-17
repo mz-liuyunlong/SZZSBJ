@@ -99,3 +99,22 @@ class ApprovalSupplementWrite(StrictSchema):
 class ApprovalSubmitResult(StrictSchema):
     approval_id: str
     created: bool
+
+
+class LegacyReattestationWrite(StrictSchema):
+    reason_type: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
+    evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+
+
+class ApprovalRuleWrite(StrictSchema):
+    expected_version: int = Field(ge=1)
+    required_steps: int = Field(ge=1, le=5)
+    due_hours: int = Field(ge=1, le=8760)
+    allows_bulk: bool = False
+
+
+class BulkDecisionWrite(StrictSchema):
+    approval_ids: list[str] = Field(min_length=1, max_length=20)
+    expected_versions: dict[str, int]
+    note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
