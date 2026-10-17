@@ -52,6 +52,10 @@ def list_approvals(
     accounts: account_scope,
 ):
     approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
+    if query.tab == "legacy" and not approved:
+        from app.core.api import ApiError, ErrorCode
+
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     data, total = ApprovalService(session).list_requests(
         query, accounts, principal.user_id, approved
     )
@@ -69,6 +73,23 @@ def summary(
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(accounts, principal.user_id, may_review)
     return success_response(request, data=data, meta=None)
+
+
+@router.get("/legacy/{case_id}", response_model=SuccessEnvelope[ApprovalDetail, None])
+def legacy_detail(
+    request: Request,
+    case_id: UUID,
+    session: db_session,
+    principal: view_principal,
+    accounts: account_scope,
+):
+    if not has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review"):
+        from app.core.api import ApiError, ErrorCode
+
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    return success_response(
+        request, data=ApprovalService(session).legacy_detail(case_id, accounts), meta=None
+    )
 
 
 @router.get("/{approval_id}", response_model=SuccessEnvelope[ApprovalDetail, None])
