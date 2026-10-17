@@ -5,6 +5,7 @@ Revises: 20261017_0042_rbac_backfill
 
 No historical cases or approval decisions are inserted by migration.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -21,7 +22,8 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    bind.execute(text("""
+    bind.execute(
+        text("""
         create table app_approval_rules (
           id uuid primary key,
           approval_type varchar(80) not null unique,
@@ -38,8 +40,10 @@ def upgrade() -> None:
           updated_by varchar(128),
           updated_at timestamptz not null default now()
         )
-    """))
-    bind.execute(text("""
+    """)
+    )
+    bind.execute(
+        text("""
         create table app_approval_attestations (
           id uuid primary key,
           case_id uuid not null references ops_wfs_fee_anomaly_cases(id)
@@ -54,8 +58,10 @@ def upgrade() -> None:
           submitted_at timestamptz not null default now(),
           unique(case_id)
         )
-    """))
-    bind.execute(text("""
+    """)
+    )
+    bind.execute(
+        text("""
         create table app_approval_step_decisions (
           id uuid primary key,
           approval_id uuid not null references app_approval_requests(id)
@@ -68,8 +74,10 @@ def upgrade() -> None:
           decided_at timestamptz not null default now(),
           unique(approval_id,step_number)
         )
-    """))
-    bind.execute(text("""
+    """)
+    )
+    bind.execute(
+        text("""
         create table app_approval_notifications (
           id uuid primary key,
           approval_id uuid not null references app_approval_requests(id)
@@ -82,12 +90,16 @@ def upgrade() -> None:
           read_at timestamptz,
           unique(approval_id,event_key,recipient_id)
         )
-    """))
-    bind.execute(text("""
+    """)
+    )
+    bind.execute(
+        text("""
         create index ix_approval_notifications_unread
         on app_approval_notifications (recipient_id,status,created_at desc)
-    """))
-    bind.execute(text("""
+    """)
+    )
+    bind.execute(
+        text("""
         insert into app_approval_rules
           (id,approval_type,title,required_steps,due_hours,allows_bulk)
         values
@@ -95,13 +107,17 @@ def upgrade() -> None:
           (gen_random_uuid(),'purchase_exception','采购异常审批',2,48,false),
           (gen_random_uuid(),'finance_exception','财务例外审批',2,24,false),
           (gen_random_uuid(),'access_change','权限变更审批',2,24,false)
-    """))
+    """)
+    )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    for table in ("app_approval_attestations", "app_approval_step_decisions",
-                  "app_approval_notifications"):
+    for table in (
+        "app_approval_attestations",
+        "app_approval_step_decisions",
+        "app_approval_notifications",
+    ):
         if bind.scalar(text(f"select count(*) from {table}")):
             raise RuntimeError("Approval audit data exists: downgrade forbidden")
     bind.execute(text("drop table app_approval_notifications"))
