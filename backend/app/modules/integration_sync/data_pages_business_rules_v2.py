@@ -206,6 +206,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "platform_order_no=excluded.platform_order_no,reference_no=excluded.reference_no,"
                         "item_id=coalesce(excluded.item_id,fact_walmart_order_items.item_id),"
                         "msku=excluded.msku,local_sku=excluded.local_sku,quantity=excluded.quantity,"
+                        "source_purchase_at_raw=excluded.source_purchase_at_raw,"
+                        "business_date_la=excluded.business_date_la,"
+                        "order_status_raw=excluded.order_status_raw,"
+                        "order_sub_status_raw=excluded.order_sub_status_raw,"
+                        "discount_amount=excluded.discount_amount,"
                         "sales_revenue_amount=excluded.sales_revenue_amount,order_total_amount=excluded.order_total_amount,"
                         "updated_at=excluded.updated_at"
                     ),
