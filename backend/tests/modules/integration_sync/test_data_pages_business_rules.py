@@ -67,7 +67,7 @@ def test_sample_order_window_converts_fixed_utc_minus_7_to_china_time() -> None:
     assert end_at.utcoffset() == timedelta(hours=8)
 
 
-def test_sample_order_request_uses_special_window_without_changing_generic_order_body() -> None:
+def test_sample_order_and_generic_order_share_la_business_day_window() -> None:
     runner = _runner()
 
     sample_body = runner._sample_order_body(offset=0, size=100)
@@ -83,11 +83,11 @@ def test_sample_order_request_uses_special_window_without_changing_generic_order
     )
     assert (
         datetime.fromtimestamp(generic_body["start_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        == "2026-09-01 00:00:00"
+        == "2026-09-01 15:00:00"
     )
     assert (
         datetime.fromtimestamp(generic_body["end_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        == "2026-09-01 23:59:59"
+        == "2026-09-02 14:59:59"
     )
 
 
@@ -111,6 +111,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
         [
             {
                 "global_order_no": "global-1",
+                "global_purchase_time": str(int(datetime(2026, 9, 1, 12, tzinfo=CHINA_TZ).timestamp())),
                 "store_id": "store-a",
                 "store_name": "Store A",
                 "amount_currency": "USD",
@@ -146,7 +147,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["cancel_time_raw"] == "0"
     assert params["is_cancelled"] is False
     assert params["is_valid_sample"] is True
-    assert params["sample_rule_version"] == "zero-total-provider-status-strict-triple-v3"
+    assert params["sample_rule_version"] == "zero-total-or-full-item-discount-strict-triple-v4"
 
 
 def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement() -> None:
@@ -310,3 +311,60 @@ def test_refund_writer_ignores_non_completed_refunds() -> None:
 
     assert written == 0
     assert len(session.calls) == 1
+
+def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+    written = runner._write_sample_orders(
+        [{
+            "global_order_no": "global-2",
+            "reference_no": "reference-2",
+            "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+            "store_id": "store-a",
+            "status": 9,
+            "transaction_info": [{"order_total_amount": "10.00"}],
+            "item_info": [{
+                "order_item_no": "line-2",
+                "msku": "MSKU-1",
+                "item_id": "item-1",
+                "quantity": "2",
+                "item_price_amount": "24.99",
+                "discount_amount": "24.99",
+            }],
+        }]
+    )
+    assert written == 1
+    params = session.calls[1][1]
+    assert params is not None
+    assert params["platform_order_no"] == "reference-2"
+    assert params["source_order_line_id"] == "line-2"
+    assert params["unit_price_amount"] == Decimal("24.99")
+    assert params["is_valid_sample"] is True
+
+
+def test_sample_writer_rejects_missing_order_line_identity() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
+
+    session = _CaptureSession()
+    runner = _runner(session)
+    row = {
+        "global_order_no": "global-3",
+        "reference_no": "reference-3",
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "status": 9,
+        "transaction_info": [{"order_total_amount": "0"}],
+        "item_info": [{"msku": "MSKU-1", "quantity": 1}],
+    }
+    import pytest
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_SAMPLE_IDENTITY_MISSING"):
+        runner._write_sample_orders([row])
+
+
+def test_sample_order_window_handles_dst_switch() -> None:
+    winter_start, winter_end = _sample_window_china(date(2026, 12, 1))
+    assert winter_start.strftime("%Y-%m-%d %H:%M:%S") == "2026-12-01 16:00:00"
+    assert winter_end.strftime("%Y-%m-%d %H:%M:%S") == "2026-12-02 15:59:59"
+    runner = _runner()
+    runner.business_date = date(2026, 12, 1)
+    assert runner._order_body(0, 20)["start_time"] == runner._sample_order_body(0, 20)["start_time"]
