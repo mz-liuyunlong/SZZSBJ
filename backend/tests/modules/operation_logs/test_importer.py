@@ -12,20 +12,28 @@ from app.modules.operation_logs import service
 def test_account_mapping_rejects_ambiguous_stores_and_items() -> None:
     session = MagicMock()
     session.execute.side_effect = [
-        MagicMock(all=lambda: [
-            ("store-a", "account-1"), ("store-a", "account-2"),
-            ("store-b", "account-3"),
-        ]),
-        MagicMock(all=lambda: [
-            ("store-a", "item-1", "account-1"),
-            ("store-a", "item-2", "account-1"),
-            ("store-a", "item-2", "account-2"),
-        ]),
+        MagicMock(
+            all=lambda: [
+                ("store-a", "account-1"),
+                ("store-a", "account-2"),
+                ("store-b", "account-3"),
+            ]
+        ),
+        MagicMock(
+            all=lambda: [
+                ("store-a", "item-1", "account-1"),
+                ("store-a", "item-2", "account-1"),
+                ("store-a", "item-2", "account-2"),
+            ]
+        ),
     ]
     stores, items = service.account_mapping(session)
     assert stores == {"store-b": "account-3"}
     assert items == {("store-a", "item-1"): "account-1"}
-    assert service._account((stores, items), {"store_id": "store-a", "item_id": "item-1"}) == "account-1"
+    assert (
+        service._account((stores, items), {"store_id": "store-a", "item_id": "item-1"})
+        == "account-1"
+    )
     assert service._account((stores, items), {"store_id": "store-a", "item_id": "item-2"}) is None
 
 
@@ -48,16 +56,24 @@ def test_event_import_uses_stable_legacy_id() -> None:
     session = MagicMock()
     session.execute.return_value.rowcount = 1
     row = {
-        "id": 100, "store_id": "store", "item_id": "item",
+        "id": 100,
+        "store_id": "store",
+        "item_id": "item",
         "event_date": date(2026, 10, 16),
-        "msku": "sku", "action_type": "bid_changed",
-        "object_name": "keyword", "log_content": "bid change",
-        "highlight": 1, "verify_status": "",
+        "msku": "sku",
+        "action_type": "bid_changed",
+        "object_name": "keyword",
+        "log_content": "bid change",
+        "highlight": 1,
+        "verify_status": "",
         "updated_at": datetime(2026, 10, 17),
         "detected_at": datetime(2026, 10, 17),
     }
     affected = service._import_batch(
-        session, kind="system", rows=[row], mapping=({"store": "account"}, {}),
+        session,
+        kind="system",
+        rows=[row],
+        mapping=({"store": "account"}, {}),
     )
     assert affected == 1
     sql = str(session.execute.call_args.args[0])
@@ -70,26 +86,41 @@ def test_legacy_manual_import_never_overwrites_body() -> None:
     session = MagicMock()
     session.execute.return_value.rowcount = 1
     row = {
-        "id": 200, "store_id": "store", "item_id": "item",
-        "log_date": date(2026, 10, 16), "msku": "sku",
-        "log_content": "old record", "updated_at": datetime(2026, 10, 17),
+        "id": 200,
+        "store_id": "store",
+        "item_id": "item",
+        "log_date": date(2026, 10, 16),
+        "msku": "sku",
+        "log_content": "old record",
+        "updated_at": datetime(2026, 10, 17),
     }
     service._import_batch(
-        session, kind="manual", rows=[row], mapping=({"store": "account"}, {}),
+        session,
+        kind="manual",
+        rows=[row],
+        mapping=({"store": "account"}, {}),
     )
     sql = str(session.execute.call_args.args[0]).lower()
     assert "on conflict (legacy_id)" in sql
     assert "set" in sql
     assert "log_content = excluded.log_content" not in sql
-    assert "update set source_account_ref" in sql or "source_account_ref = excluded.source_account_ref" in sql
+    assert (
+        "update set source_account_ref" in sql
+        or "source_account_ref = excluded.source_account_ref" in sql
+    )
 
 
 def test_scope_rejects_cross_account_before_db_lookup() -> None:
     session = MagicMock()
     with pytest.raises(ApiError) as err:
         service.read_detail(
-            session, accounts=frozenset({"allow"}), account="deny",
-            day=date(2026, 10, 16), store="store", item="item", msku="sku",
+            session,
+            accounts=frozenset({"allow"}),
+            account="deny",
+            day=date(2026, 10, 16),
+            store="store",
+            item="item",
+            msku="sku",
         )
     assert err.value.status_code == 403
     session.execute.assert_not_called()
@@ -98,14 +129,20 @@ def test_scope_rejects_cross_account_before_db_lookup() -> None:
 def test_batch_write_duplicate_identity_is_refused() -> None:
     session = MagicMock()
     row = {
-        "account": "account", "day": date(2026, 10, 16),
-        "store": "store", "item": "item", "msku": "",
-        "content": "Log", "work_type": "广告调整",
-        "status": "draft", "revision": 0,
+        "account": "account",
+        "day": date(2026, 10, 16),
+        "store": "store",
+        "item": "item",
+        "msku": "",
+        "content": "Log",
+        "work_type": "广告调整",
+        "status": "draft",
+        "revision": 0,
     }
     with pytest.raises(ApiError) as err:
-        service.save_batch(session, accounts=frozenset({"account"}),
-                           rows=[row, row], actor="operator")
+        service.save_batch(
+            session, accounts=frozenset({"account"}), rows=[row, row], actor="operator"
+        )
     assert err.value.status_code == 422
     session.commit.assert_not_called()
 
@@ -113,17 +150,28 @@ def test_batch_write_duplicate_identity_is_refused() -> None:
 def test_batch_write_rollback_on_stale_revision() -> None:
     session = MagicMock()
     row = {
-        "account": "account", "day": date(2026, 10, 16),
-        "store": "store", "item": "item", "msku": "",
-        "content": "Log", "work_type": "广告调整",
-        "status": "submitted", "revision": 0,
+        "account": "account",
+        "day": date(2026, 10, 16),
+        "store": "store",
+        "item": "item",
+        "msku": "",
+        "content": "Log",
+        "work_type": "广告调整",
+        "status": "submitted",
+        "revision": 0,
     }
-    with patch.object(service, "_save_one", side_effect=ApiError(
-        code="OPERATION_LOG_EDIT_CONFLICT", status_code=409,
-    )):
+    with patch.object(
+        service,
+        "_save_one",
+        side_effect=ApiError(
+            code="OPERATION_LOG_EDIT_CONFLICT",
+            status_code=409,
+        ),
+    ):
         with pytest.raises(ApiError):
-            service.save_batch(session, accounts=frozenset({"account"}),
-                               rows=[row], actor="operator")
+            service.save_batch(
+                session, accounts=frozenset({"account"}), rows=[row], actor="operator"
+            )
     session.rollback.assert_called_once()
     session.commit.assert_not_called()
 
@@ -131,14 +179,22 @@ def test_batch_write_rollback_on_stale_revision() -> None:
 def test_batch_success_commits_once() -> None:
     session = MagicMock()
     row = {
-        "account": "account", "day": date(2026, 10, 16),
-        "store": "store", "item": "item", "msku": "",
-        "content": "Log", "work_type": "其他",
-        "status": "draft", "revision": 0,
+        "account": "account",
+        "day": date(2026, 10, 16),
+        "store": "store",
+        "item": "item",
+        "msku": "",
+        "content": "Log",
+        "work_type": "其他",
+        "status": "draft",
+        "revision": 0,
     }
     with patch.object(service, "_save_one", return_value=1):
         revisions = service.save_batch(
-            session, accounts=frozenset({"account"}), rows=[row], actor="operator",
+            session,
+            accounts=frozenset({"account"}),
+            rows=[row],
+            actor="operator",
         )
     assert revisions == [1]
     session.commit.assert_called_once()
@@ -149,16 +205,25 @@ def test_empty_submitted_note_is_rejected() -> None:
     with patch.object(service, "_identity"):
         with pytest.raises(ApiError) as err:
             service._save_one(
-                session, accounts=frozenset({"account"}),
-                account="account", day=date(2026, 10, 16), store="store",
-                item="item", msku="", content="  ", work_type="其他",
-                status="submitted", revision=0, actor="operator",
+                session,
+                accounts=frozenset({"account"}),
+                account="account",
+                day=date(2026, 10, 16),
+                store="store",
+                item="item",
+                msku="",
+                content="  ",
+                work_type="其他",
+                status="submitted",
+                revision=0,
+                actor="operator",
             )
     assert err.value.status_code == 422
 
 
 def test_celery_sync_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.modules.operation_logs.tasks import _active
+
     for key in (
         "OPERATION_LOG_MIRROR_SYNC_ENABLED",
         "OPERATION_LOG_HISTORICAL_IMPORT_VERIFIED",
@@ -170,6 +235,7 @@ def test_celery_sync_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_app_registers_operation_log_endpoints() -> None:
     from app.main import create_app
+
     routes = {route.path for route in create_app().routes}
     assert "/api/operations/logs" in routes
     assert "/api/operations/logs/manual/batch" in routes

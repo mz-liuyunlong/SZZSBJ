@@ -3,6 +3,7 @@
 Revision ID: 20261017_0043_operation_logs
 Revises: 20261017_0042_rbac_backfill
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -32,11 +33,13 @@ def upgrade() -> None:
         sa.Column("verify_status", sa.String(24), nullable=False),
         sa.Column("source_updated_at", sa.DateTime(), nullable=False),
         sa.Column("detected_at", sa.DateTime(), nullable=False),
-        sa.Column("imported_at", sa.DateTime(timezone=True),
-                  server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "imported_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
     )
     op.create_index(
-        "ix_ops_system_event_lookup", "ops_system_operation_events",
+        "ix_ops_system_event_lookup",
+        "ops_system_operation_events",
         ["source_account_ref", "event_date", "store_id", "item_id", "msku"],
     )
     op.create_table(
@@ -55,14 +58,14 @@ def upgrade() -> None:
         sa.Column("actor_ref", sa.String(128)),
         sa.Column("revision", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("source_updated_at", sa.DateTime()),
-        sa.Column("created_at", sa.DateTime(timezone=True),
-                  server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True),
-                  server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("source_kind in ('legacy', 'manual')",
-                           name="ck_ops_manual_source_kind"),
-        sa.CheckConstraint("status in ('draft', 'submitted')",
-                           name="ck_ops_manual_status"),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.CheckConstraint("source_kind in ('legacy', 'manual')", name="ck_ops_manual_source_kind"),
+        sa.CheckConstraint("status in ('draft', 'submitted')", name="ck_ops_manual_status"),
         sa.CheckConstraint(
             "(source_kind = 'legacy' and legacy_id is not null) or "
             "(source_kind = 'manual' and legacy_id is null "
@@ -71,13 +74,16 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_ops_manual_log_lookup", "ops_manual_operation_logs",
+        "ix_ops_manual_log_lookup",
+        "ops_manual_operation_logs",
         ["source_account_ref", "log_date", "store_id", "item_id", "msku"],
     )
     op.create_index(
-        "uq_ops_manual_new_identity", "ops_manual_operation_logs",
+        "uq_ops_manual_new_identity",
+        "ops_manual_operation_logs",
         ["source_account_ref", "log_date", "store_id", "item_id", "msku"],
-        unique=True, postgresql_where=sa.text("source_kind = 'manual'"),
+        unique=True,
+        postgresql_where=sa.text("source_kind = 'manual'"),
     )
     op.create_table(
         "ops_operation_log_links",
@@ -90,12 +96,15 @@ def upgrade() -> None:
         sa.Column("entry_url", sa.Text(), nullable=False),
         sa.Column("note", sa.Text(), nullable=False, server_default=""),
         sa.Column("actor_ref", sa.String(128), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True),
-                  server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("entry_type in ('keyword', 'ad')",
-                           name="ck_ops_link_entry_type"),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.CheckConstraint("entry_type in ('keyword', 'ad')", name="ck_ops_link_entry_type"),
         sa.UniqueConstraint(
-            "source_account_ref", "store_id", "item_id", "entry_type",
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            "entry_type",
             name="uq_ops_link_identity",
         ),
     )

@@ -1,4 +1,5 @@
 """Current listing-based operation log grid, backed only by formal new-system logs."""
+
 from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Any
@@ -15,19 +16,25 @@ from app.modules.integration_sync.dependencies import require_source_account_sco
 router = APIRouter(prefix="/api/operations/logs", tags=["Operation Logs"])
 db_dep = Annotated[Session, Depends(get_db_session)]
 scope_dep = Annotated[frozenset[str], Depends(require_source_account_scope)]
-read_dep = Annotated[Principal, Depends(require_any_permission(
-    "page:operations:log:view", "page:sales:daily-sales:view"
-))]
+read_dep = Annotated[
+    Principal,
+    Depends(require_any_permission("page:operations:log:view", "page:sales:daily-sales:view")),
+]
 errors: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorEnvelope}, 403: {"model": ErrorEnvelope},
+    401: {"model": ErrorEnvelope},
+    403: {"model": ErrorEnvelope},
     422: {"model": ErrorEnvelope},
 }
 
-@router.get("/rows", response_model=SuccessEnvelope[dict[str, Any], Any],
-            responses=errors)
+
+@router.get("/rows", response_model=SuccessEnvelope[dict[str, Any], Any], responses=errors)
 def get_rows(
-    request: Request, session: db_dep, _: read_dep, accounts: scope_dep,
-    start_date: date | None = None, end_date: date | None = None,
+    request: Request,
+    session: db_dep,
+    _: read_dep,
+    accounts: scope_dep,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> SuccessEnvelope[dict[str, Any], Any]:
     today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
     start = start_date or today
@@ -37,7 +44,9 @@ def get_rows(
     if not accounts:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     base = dict(accounts=list(accounts), start=start, end=end)
-    result = session.execute(text("""
+    result = (
+        session.execute(
+            text("""
         with identities as (
             select l.source_account_ref, l.store_id, l.store_name, l.item_id,
                    coalesce(l.msku, '') as msku,
@@ -84,10 +93,17 @@ def get_rows(
             order by (m.source_kind = 'manual') desc, m.id desc
             limit 1
         ) m on true
-    """), base).mappings().all()
+    """),
+            base,
+        )
+        .mappings()
+        .all()
+    )
     if len(result) > 5000:
         raise ApiError(code="OPERATION_LOG_RESULT_TOO_LARGE", status_code=422)
-    event_rows = session.execute(text("""
+    event_rows = (
+        session.execute(
+            text("""
         select e.legacy_id, e.source_account_ref, e.event_date, e.store_id,
                e.item_id, e.msku, e.action_type, e.object_name, e.log_content
         from ops_system_operation_events e
@@ -95,37 +111,76 @@ def get_rows(
           and e.event_date between :start and :end
         order by e.event_date desc, e.legacy_id
         limit 20001
-    """), base).mappings().all()
+    """),
+            base,
+        )
+        .mappings()
+        .all()
+    )
     if len(event_rows) > 20000:
         raise ApiError(code="OPERATION_LOG_EVENTS_TOO_LARGE", status_code=422)
-    system_records = [{
-        "id": str(e["legacy_id"]), "time": e["event_date"].isoformat(),
-        "sourceAccountRef": e["source_account_ref"], "date": e["event_date"].isoformat(),
-        "storeId": e["store_id"], "productId": e["item_id"], "msku": e["msku"],
-        "owner": "未确认", "type": e["action_type"],
-        "object": e["object_name"], "before": "", "after": "",
-        "source": "领星", "detail": e["log_content"],
-    } for e in event_rows]
+    system_records = [
+        {
+            "id": str(e["legacy_id"]),
+            "time": e["event_date"].isoformat(),
+            "sourceAccountRef": e["source_account_ref"],
+            "date": e["event_date"].isoformat(),
+            "storeId": e["store_id"],
+            "productId": e["item_id"],
+            "msku": e["msku"],
+            "owner": "未确认",
+            "type": e["action_type"],
+            "object": e["object_name"],
+            "before": "",
+            "after": "",
+            "source": "领星",
+            "detail": e["log_content"],
+        }
+        for e in event_rows
+    ]
     rows: list[dict[str, Any]] = []
     revisions: dict[str, int] = {}
     for r in result:
-        row_id = "|".join((r["log_date"].isoformat(), r["source_account_ref"],
-                           r["store_id"], r["item_id"], r["msku"]))
+        row_id = "|".join(
+            (
+                r["log_date"].isoformat(),
+                r["source_account_ref"],
+                r["store_id"],
+                r["item_id"],
+                r["msku"],
+            )
+        )
         revisions[row_id] = int(r["revision"])
-        rows.append({
-            "id": row_id, "date": r["log_date"].isoformat(),
-            "sourceAccountRef": r["source_account_ref"], "storeId": r["store_id"],
-            "msku": r["msku"], "productId": r["item_id"], "sku": r["sku"],
-            "productName": r["title"], "store": r["store_name"] or r["store_id"],
-            "owner": r["owner"], "workType": r["work_type"],
-            "conversionRate": None,
-            "salePrice": float(r["price"]) if r["price"] is not None else None,
-            "keywordEntryStatus": "ok" if r["keyword_link"] else "missing",
-            "adEntryStatus": "ok" if r["ad_link"] else "missing",
-            "systemLogCount": int(r["system_count"]),
-            "manualLog": r["manual_content"],
-            "status": ("已保存" if r["edit_status"] == "submitted" else
-                       "草稿" if r["manual_content"] else "缺记录"),
-        })
-    return success_response(request, data={"rows": rows, "revisions": revisions, "systemRecords": system_records},
-                            meta=None)
+        rows.append(
+            {
+                "id": row_id,
+                "date": r["log_date"].isoformat(),
+                "sourceAccountRef": r["source_account_ref"],
+                "storeId": r["store_id"],
+                "msku": r["msku"],
+                "productId": r["item_id"],
+                "sku": r["sku"],
+                "productName": r["title"],
+                "store": r["store_name"] or r["store_id"],
+                "owner": r["owner"],
+                "workType": r["work_type"],
+                "conversionRate": None,
+                "salePrice": float(r["price"]) if r["price"] is not None else None,
+                "keywordEntryStatus": "ok" if r["keyword_link"] else "missing",
+                "adEntryStatus": "ok" if r["ad_link"] else "missing",
+                "systemLogCount": int(r["system_count"]),
+                "manualLog": r["manual_content"],
+                "status": (
+                    "已保存"
+                    if r["edit_status"] == "submitted"
+                    else "草稿"
+                    if r["manual_content"]
+                    else "缺记录"
+                ),
+            }
+        )
+    return success_response(
+        request,
+        data={"rows": rows, "revisions": revisions, "systemRecords": system_records},
+        meta=None,
+    )
