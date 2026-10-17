@@ -113,8 +113,8 @@ def _import_batch(
                     :store, :item, :msku, :content, :updated)
             on conflict (legacy_id) do update set
                 source_account_ref = excluded.source_account_ref
-            where ops_manual_operation_logs.source_account_ref
-                is distinct from excluded.source_account_ref
+            where ops_manual_operation_logs.source_account_ref is null
+              and excluded.source_account_ref is not null
         """), data)
     return int(result.rowcount or 0)
 
