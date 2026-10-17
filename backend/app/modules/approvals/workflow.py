@@ -145,6 +145,15 @@ class ApprovalWorkflow:
     ) -> None:
         if kind == "wfs_case_abandon" and allows_bulk:
             conflict()
+        previous = self.session.execute(
+            text("""
+            select required_steps,due_hours,allows_bulk,version
+            from app_approval_rules where approval_type=:kind for update
+        """),
+            {"kind": kind},
+        ).mappings().first()
+        if previous is None or int(previous["version"]) != expected_version:
+            conflict()
         result = self.session.execute(
             text("""
             update app_approval_rules set
@@ -164,6 +173,25 @@ class ApprovalWorkflow:
         )
         if result.rowcount != 1:
             conflict()
+        self.session.execute(
+            text("""
+            insert into app_approval_rule_events
+              (id,approval_type,actor_id,before_policy,after_policy)
+            values (:id,:kind,:actor,cast(:before as jsonb),cast(:after as jsonb))
+        """),
+            {
+                "id": str(uuid4()),
+                "kind": kind,
+                "actor": actor,
+                "before": json.dumps(dict(previous)),
+                "after": json.dumps({
+                    "required_steps": steps,
+                    "due_hours": due_hours,
+                    "allows_bulk": allows_bulk,
+                    "version": expected_version + 1,
+                }),
+            },
+        )
         self.session.commit()
 
     def inbox(self, actor: str) -> list[dict]:
