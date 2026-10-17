@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.api import ApiError, ErrorCode
 from app.modules.approvals.service import ApprovalService, blocked, signature
 
-BUSINESS_TYPES = frozenset({"purchase_exception", "finance_exception", "access_change"})
+BUSINESS_TYPES = frozenset({"purchase_exception", "finance_exception", "access_change", "operations_plan_ack"})
 
 
 class GenericApprovalService:
@@ -62,6 +62,20 @@ class GenericApprovalService:
                 .mappings()
                 .first()
             )
+        elif kind == "operations_plan_ack":
+            try:
+                UUID(source_ref)
+            except ValueError:
+                blocked(422)
+            row = self.session.execute(
+                text("""
+                select id::text as id,source_account_ref,plan_status,operation_status,
+                       stock_status,owner_ref,target_sales_amount,target_gross_profit_amount
+                from ops_operation_product_plans
+                where id=:ref and source_account_ref=:account
+            """),
+                {"ref": source_ref, "account": account},
+            ).mappings().first()
         elif kind == "access_change":
             if not source_ref.isdecimal():
                 blocked(422)
@@ -121,7 +135,7 @@ class GenericApprovalService:
                title,reason,evidence,status,risk_level,snapshot,snapshot_hash,
                submitted_at,updated_at)
             values (:id,:kind,:ref,:account,:actor,:title,:reason,:evidence,
-                    'submitted','high',cast(:snapshot as jsonb),:hash,:now,:now)
+                    'submitted',:risk,cast(:snapshot as jsonb),:hash,:now,:now)
         """),
             {
                 "id": approval_id,
@@ -133,6 +147,7 @@ class GenericApprovalService:
                     "purchase_exception": "采购异常处理申请",
                     "finance_exception": "财务例外处理申请",
                     "access_change": "权限变更申请",
+                "operations_plan_ack": "运营计划事项确认",
                 }[kind],
                 "reason": reason.strip(),
                 "evidence": evidence.strip(),
