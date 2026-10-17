@@ -358,9 +358,7 @@ def test_sample_writer_rejects_missing_order_line_identity() -> None:
     row = {
         "global_order_no": "global-3",
         "reference_no": "reference-3",
-        "global_purchase_time": str(
-                    int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
-                ),
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
         "store_id": "store-a",
         "status": 9,
         "transaction_info": [{"order_total_amount": "0"}],
