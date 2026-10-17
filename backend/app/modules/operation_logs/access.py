@@ -62,7 +62,7 @@ def resolve_log_access(
     if user is None:
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
-    is_admin = "*" in principal.permissions or int(user["is_super_admin"] or 0) == 1
+    is_admin = int(user["is_super_admin"] or 0) == 1
     if not is_admin:
         is_admin = bool(
             session.scalar(
