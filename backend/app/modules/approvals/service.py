@@ -751,8 +751,11 @@ class ApprovalService:
                 blocked()
         else:
             from app.modules.approvals.generic import GenericApprovalService
+
             actual = GenericApprovalService(self.session)._source(
-                r["approval_type"], r["business_ref"], r["source_account_ref"],
+                r["approval_type"],
+                r["business_ref"],
+                r["source_account_ref"],
             )
             if signature(actual) != signature(r["snapshot"]["source"]):
                 blocked()
