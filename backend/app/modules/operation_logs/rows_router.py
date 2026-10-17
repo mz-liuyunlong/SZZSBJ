@@ -102,6 +102,79 @@ def get_rows(
         .mappings()
         .all()
     )
+    archived = (
+        session.execute(
+            text("""
+        with historic_keys as (
+            select source_account_ref, log_date as day, store_id, item_id, msku
+            from ops_manual_operation_logs
+            where source_account_ref = any(:accounts)
+              and log_date between :start and :end
+            union
+            select source_account_ref, event_date as day, store_id, item_id, msku
+            from ops_system_operation_events
+            where source_account_ref = any(:accounts)
+              and event_date between :start and :end
+        )
+        select h.source_account_ref, h.store_id,
+               coalesce(l.store_name, h.store_id) as store_name,
+               h.item_id, h.msku, coalesce(l.local_sku, '') as sku,
+               coalesce(l.title, '') as title,
+               coalesce(l.owner_ref, '') as owner,
+               l.sale_price_amount as price, h.day as log_date,
+               coalesce(m.log_content, '') as manual_content,
+               coalesce(m.revision, 0) as revision,
+               coalesce(m.work_type, '其他') as work_type,
+               coalesce(m.status, 'draft') as edit_status,
+               (select count(*) from ops_system_operation_events e
+                where e.source_account_ref = h.source_account_ref
+                  and e.event_date = h.day and e.store_id = h.store_id
+                  and e.item_id = h.item_id and e.msku = h.msku) as system_count,
+               exists (
+                 select 1 from ops_operation_log_links k
+                 where k.source_account_ref = h.source_account_ref
+                   and k.store_id = h.store_id and k.item_id = h.item_id
+                   and k.entry_type = 'keyword'
+               ) as keyword_link,
+               exists (
+                 select 1 from ops_operation_log_links k
+                 where k.source_account_ref = h.source_account_ref
+                   and k.store_id = h.store_id and k.item_id = h.item_id
+                   and k.entry_type = 'ad'
+               ) as ad_link
+        from historic_keys h
+        left join lateral (
+            select store_name, local_sku, title, owner_ref, sale_price_amount
+            from mart_listing_management_current l
+            where l.source_account_ref = h.source_account_ref
+              and l.store_id = h.store_id and l.item_id = h.item_id
+              and coalesce(l.msku, '') = h.msku
+            limit 1
+        ) l on true
+        left join lateral (
+            select log_content, revision, work_type, status
+            from ops_manual_operation_logs m
+            where m.source_account_ref = h.source_account_ref
+              and m.log_date = h.day and m.store_id = h.store_id
+              and m.item_id = h.item_id and m.msku = h.msku
+            order by (m.source_kind = 'manual') desc, m.id desc
+            limit 1
+        ) m on true
+        where not exists (
+            select 1 from mart_listing_management_current listed
+            where listed.source_account_ref = h.source_account_ref
+              and listed.store_id = h.store_id and listed.item_id = h.item_id
+              and coalesce(listed.msku, '') = h.msku
+        )
+        order by h.day desc, h.store_id, h.item_id
+        limit 5001
+    """),
+            base,
+        )
+        .mappings()
+        .all()
+    )
+    result = list(result) + list(archived)
     if len(result) > 5000:
         raise ApiError(code="OPERATION_LOG_RESULT_TOO_LARGE", status_code=422)
     event_rows = (
