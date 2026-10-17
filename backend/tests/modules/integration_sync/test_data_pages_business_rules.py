@@ -336,6 +336,7 @@ def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> No
                         "item_id": "item-1",
                         "quantity": "2",
                         "item_price_amount": "24.99",
+                        "unit_price_amount": "12.495",
                         "discount_amount": "24.99",
                     }
                 ],
@@ -347,7 +348,7 @@ def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> No
     assert params is not None
     assert params["platform_order_no"] == "reference-2"
     assert params["source_order_line_id"] == "line-2"
-    assert params["unit_price_amount"] == Decimal("24.99")
+    assert params["unit_price_amount"] == Decimal("12.495")
     assert params["is_valid_sample"] is True
 
 
@@ -378,3 +379,28 @@ def test_sample_order_window_handles_dst_switch() -> None:
     runner = _runner()
     runner.business_date = date(2026, 12, 1)
     assert runner._order_body(0, 20)["start_time"] == runner._sample_order_body(0, 20)["start_time"]
+
+
+def test_sample_writer_rejects_ambiguous_multiple_unit_prices() -> None:
+    import pytest
+
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
+
+    row = {
+        "global_order_no": "global-multi",
+        "reference_no": "reference-multi",
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "status": 9,
+        "transaction_info": [{"order_total_amount": "0"}],
+        "item_info": [
+            {
+                "order_item_no": "line-multi",
+                "quantity": "2",
+                "item_price_amount": "24.99",
+                "discount_amount": "24.99",
+            }
+        ],
+    }
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_SAMPLE_UNIT_PRICE_AMBIGUOUS"):
+        _runner(_CaptureSession())._write_sample_orders([row])
