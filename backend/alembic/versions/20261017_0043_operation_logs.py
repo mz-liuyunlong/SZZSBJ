@@ -83,7 +83,9 @@ def upgrade() -> None:
             name="ck_ops_manual_origin",
         ),
     )
-    op.create_index("ix_ops_manual_owner", "ops_manual_operation_logs", ["owner_user_id", "log_date"])
+    op.create_index(
+        "ix_ops_manual_owner", "ops_manual_operation_logs", ["owner_user_id", "log_date"]
+    )
     op.create_index(
         "ix_ops_manual_log_lookup",
         "ops_manual_operation_logs",

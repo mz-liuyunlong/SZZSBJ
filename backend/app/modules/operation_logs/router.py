@@ -77,7 +77,9 @@ def get_logs(
     access: access_dep,
     msku: str = "",
 ) -> SuccessEnvelope[dict[str, Any], Any]:
-    require_owned_identity(session, access, account=account, store=store, item=item, msku=msku, day=day)
+    require_owned_identity(
+        session, access, account=account, store=store, item=item, msku=msku, day=day
+    )
     data = read_detail(
         session, accounts=accounts, account=account, day=day, store=store, item=item, msku=msku
     )
@@ -105,7 +107,12 @@ def write_logs(
 
 @router.put("/links", response_model=SuccessEnvelope[dict[str, bool], Any], responses=errors)
 def write_links(
-    request: Request, payload: LinkWrite, session: db_dep, principal: write_dep, accounts: scope_dep, access: access_dep
+    request: Request,
+    payload: LinkWrite,
+    session: db_dep,
+    principal: write_dep,
+    accounts: scope_dep,
+    access: access_dep,
 ) -> SuccessEnvelope[dict[str, bool], Any]:
     save_link(
         session,

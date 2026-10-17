@@ -49,8 +49,14 @@ def get_rows(
         raise ApiError(code="OPERATION_LOG_DATE_RANGE_INVALID", status_code=422)
     if not accounts:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
-    base = dict(accounts=list(access.accounts.intersection(accounts)), start=start, end=end,
-                is_admin=access.is_admin, owner_labels=list(access.owner_labels), user_id=access.user_id)
+    base = dict(
+        accounts=list(access.accounts.intersection(accounts)),
+        start=start,
+        end=end,
+        is_admin=access.is_admin,
+        owner_labels=list(access.owner_labels),
+        user_id=access.user_id,
+    )
     result = (
         session.execute(
             text("""

@@ -3,6 +3,7 @@
 Preview principals are never operators. Product ownership resolves through
 active IAM identities and rejects ambiguous display-name collisions.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -85,14 +86,13 @@ def resolve_log_access(
         scoped = RbacRepository(session).resolve_user_data_scope(
             user_id=user_id, scope_type="source_account"
         )
-        accounts = frozenset(
-            configured if "*" in scoped else configured.intersection(scoped)
-        )
+        accounts = frozenset(configured if "*" in scoped else configured.intersection(scoped))
     if not accounts:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
 
     labels = {
-        str(user[k]).strip() for k in ("username", "display_name", "feishu_name")
+        str(user[k]).strip()
+        for k in ("username", "display_name", "feishu_name")
         if user.get(k) is not None and str(user[k]).strip()
     }
     unique_labels = []
@@ -165,9 +165,14 @@ def require_owned_identity(
         )
         """),
         {
-            "account": account, "store": store, "item": item, "msku": msku,
-            "day": day, "labels": list(access.owner_labels),
-            "user_id": access.user_id, "allow_history": allow_own_history,
+            "account": account,
+            "store": store,
+            "item": item,
+            "msku": msku,
+            "day": day,
+            "labels": list(access.owner_labels),
+            "user_id": access.user_id,
+            "allow_history": allow_own_history,
         },
     )
     if not permitted:

@@ -365,8 +365,14 @@ def _save_one(
     )
     if access is not None:
         require_owned_identity(
-            session, access, account=account, store=store, item=item, msku=msku,
-            day=day, allow_own_history=True,
+            session,
+            access,
+            account=account,
+            store=store,
+            item=item,
+            msku=msku,
+            day=day,
+            allow_own_history=True,
         )
     if access is not None and not access.is_admin:
         existing_owner = session.scalar(
@@ -449,7 +455,9 @@ def save_batch(
     if len(set(identities)) != len(identities):
         raise ApiError(code="OPERATION_LOG_DUPLICATE_ROW", status_code=422)
     try:
-        revisions = [_save_one(session, accounts=accounts, actor=actor, access=access, **row) for row in rows]
+        revisions = [
+            _save_one(session, accounts=accounts, actor=actor, access=access, **row) for row in rows
+        ]
         session.commit()
         return revisions
     except Exception:
@@ -475,8 +483,14 @@ def save_link(
     _identity(session, accounts=accounts, account=account, store=store, item=item, msku=msku)
     if access is not None:
         require_owned_identity(
-            session, access, account=account, store=store, item=item, msku=msku,
-            day=date.today(), allow_own_history=False,
+            session,
+            access,
+            account=account,
+            store=store,
+            item=item,
+            msku=msku,
+            day=date.today(),
+            allow_own_history=False,
         )
     if entry_type not in {"keyword", "ad"}:
         raise ApiError(code="OPERATION_LOG_INVALID_LINK", status_code=422)

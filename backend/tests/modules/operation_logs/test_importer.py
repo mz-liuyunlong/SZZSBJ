@@ -256,8 +256,13 @@ def test_operation_log_access_refuses_cross_account() -> None:
     session = MagicMock()
     with pytest.raises(ApiError) as error:
         require_owned_identity(
-            session, access, account="account-b", store="store",
-            item="item", msku="", day=date(2026, 10, 17),
+            session,
+            access,
+            account="account-b",
+            store="store",
+            item="item",
+            msku="",
+            day=date(2026, 10, 17),
         )
     assert error.value.status_code == 403
     session.scalar.assert_not_called()
@@ -277,8 +282,13 @@ def test_operation_log_access_checks_product_owner() -> None:
     session.scalar.return_value = False
     with pytest.raises(ApiError) as error:
         require_owned_identity(
-            session, access, account="account-a", store="store",
-            item="item", msku="", day=date(2026, 10, 17),
+            session,
+            access,
+            account="account-a",
+            store="store",
+            item="item",
+            msku="",
+            day=date(2026, 10, 17),
         )
     assert error.value.status_code == 403
     sql = str(session.scalar.call_args.args[0])
@@ -298,7 +308,12 @@ def test_operation_log_super_admin_bypasses_owner_match() -> None:
     )
     session = MagicMock()
     require_owned_identity(
-        session, access, account="account-a", store="store",
-        item="item", msku="", day=date(2026, 10, 17),
+        session,
+        access,
+        account="account-a",
+        store="store",
+        item="item",
+        msku="",
+        day=date(2026, 10, 17),
     )
     session.scalar.assert_not_called()
