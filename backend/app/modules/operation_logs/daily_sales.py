@@ -91,8 +91,12 @@ def load_daily_sales_log_summaries(
             limit 1
         ) man on true
         """),
-        {"keys": keys, "is_admin": access.is_admin,
-         "owner_labels": list(access.owner_labels), "user_id": access.user_id},
+        {
+            "keys": keys,
+            "is_admin": access.is_admin,
+            "owner_labels": list(access.owner_labels),
+            "user_id": access.user_id,
+        },
     ).mappings()
 
     return {(r["day"], r["account"], r["store"], r["item"], r["msku"]): dict(r) for r in result}

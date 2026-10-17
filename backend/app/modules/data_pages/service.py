@@ -168,7 +168,8 @@ class DailySalesService:
         inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
         access = (
             resolve_log_access(self.repository.session, principal, restricted_accounts=account_refs)
-            if principal is not None and principal.user_id.isdecimal() else None
+            if principal is not None and principal.user_id.isdecimal()
+            else None
         )
         log_summaries = load_daily_sales_log_summaries(self.repository.session, rows, access=access)
 

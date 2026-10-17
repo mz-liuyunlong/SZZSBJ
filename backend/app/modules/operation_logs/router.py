@@ -81,7 +81,13 @@ def get_logs(
         session, access, account=account, store=store, item=item, msku=msku, day=day
     )
     data = read_detail(
-        session, accounts=accounts, account=account, day=day, store=store, item=item, msku=msku,
+        session,
+        accounts=accounts,
+        account=account,
+        day=day,
+        store=store,
+        item=item,
+        msku=msku,
         access=access,
     )
     return success_response(request, data=data, meta=None)
