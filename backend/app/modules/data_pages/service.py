@@ -7,6 +7,7 @@ from io import StringIO
 
 from sqlalchemy.orm import Session
 
+from app.core.auth import Principal
 from app.modules.data_pages.models import (
     DailySalesItemDayMart,
     ListingManagementCurrentMart,
@@ -47,6 +48,7 @@ from app.modules.data_pages.schemas import (
     OrderProfitTrendData,
     OrderProfitTrendPointRead,
 )
+from app.modules.operation_logs.access import resolve_log_access
 from app.modules.operation_logs.daily_sales import load_daily_sales_log_summaries
 
 
@@ -148,6 +150,7 @@ class DailySalesService:
         self,
         query: DailySalesQuery,
         account_refs: frozenset[str],
+        principal: Principal | None = None,
     ) -> tuple[DailySalesListData, int, object | None]:
         rows, total, latest_calculated_at = self.repository.list_daily_sales(
             account_refs=account_refs,
@@ -163,7 +166,11 @@ class DailySalesService:
             page_size=query.page_size,
         )
         inventory_snapshots = self.repository.daily_sales_inventory_snapshot_map(rows)
-        log_summaries = load_daily_sales_log_summaries(self.repository.session, rows)
+        access = (
+            resolve_log_access(self.repository.session, principal, restricted_accounts=account_refs)
+            if principal is not None and principal.user_id.isdecimal() else None
+        )
+        log_summaries = load_daily_sales_log_summaries(self.repository.session, rows, access=access)
 
         (
             sales_qty,

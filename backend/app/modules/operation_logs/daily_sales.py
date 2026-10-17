@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.modules.operation_logs.access import LogAccess
+
 if TYPE_CHECKING:
     from app.modules.data_pages.models import DailySalesItemDayMart
 
@@ -23,8 +25,9 @@ DailyKey = tuple[date, str, str, str, str]
 def load_daily_sales_log_summaries(
     session: Session,
     rows: Sequence[DailySalesItemDayMart],
+    access: LogAccess | None = None,
 ) -> dict[DailyKey, dict[str, object]]:
-    if not rows:
+    if not rows or access is None:
         return {}
 
     present = session.execute(
@@ -45,6 +48,7 @@ def load_daily_sales_log_summaries(
                 "store": row.store_id,
                 "item": row.item_id,
                 "msku": row.msku or "",
+                "owner": row.owner_ref or "",
             }
             for row in rows
         ],
@@ -54,9 +58,9 @@ def load_daily_sales_log_summaries(
     result = session.execute(
         text("""
         with selected as (
-            select x.day::date as day, x.account, x.store, x.item, x.msku
+            select x.day::date as day, x.account, x.store, x.item, x.msku, x.owner
             from jsonb_to_recordset(cast(:keys as jsonb))
-                as x(day text, account text, store text, item text, msku text)
+                as x(day text, account text, store text, item text, msku text, owner text)
         )
         select
             s.day, s.account, s.store, s.item, s.msku,
@@ -73,6 +77,7 @@ def load_daily_sales_log_summaries(
             where e.source_account_ref = s.account and e.event_date = s.day
               and e.store_id = s.store and e.item_id = s.item
               and e.msku = s.msku
+              and (:is_admin or s.owner = any(:owner_labels))
         ) ev on true
         left join lateral (
             select m.log_content, m.revision, m.status
@@ -80,11 +85,14 @@ def load_daily_sales_log_summaries(
             where m.source_account_ref = s.account and m.log_date = s.day
               and m.store_id = s.store and m.item_id = s.item
               and m.msku = s.msku
+              and (:is_admin or m.owner_user_id = :user_id
+                   or (m.source_kind = 'legacy' and s.owner = any(:owner_labels)))
             order by (m.source_kind = 'manual') desc, m.id desc
             limit 1
         ) man on true
         """),
-        {"keys": keys},
+        {"keys": keys, "is_admin": access.is_admin,
+         "owner_labels": list(access.owner_labels), "user_id": access.user_id},
     ).mappings()
 
     return {(r["day"], r["account"], r["store"], r["item"], r["msku"]): dict(r) for r in result}
