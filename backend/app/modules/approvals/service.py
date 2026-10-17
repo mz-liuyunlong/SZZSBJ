@@ -124,6 +124,25 @@ class ApprovalService:
             },
         )
 
+    def _notify_applicant(self, approval_id: str, event_type: str) -> None:
+        """Durable in-app inbox; never sends business data through external channels."""
+        self.session.execute(
+            text("""
+            insert into app_approval_notifications
+              (id,approval_id,event_key,recipient_id)
+            select :id,id,:event_key,applicant_id
+            from app_approval_requests
+            where id=:approval_id
+              and applicant_id is not null
+            on conflict do nothing
+        """),
+            {
+                "id": str(uuid4()),
+                "approval_id": approval_id,
+                "event_key": event_type + ":" + str(uuid4()),
+            },
+        )
+
     def submit_wfs(
         self,
         case_id: UUID,
@@ -654,6 +673,7 @@ class ApprovalService:
             if updated.rowcount != 1:
                 blocked()
         self._event(str(approval_id), payload.decision, actor, payload.note)
+        self._notify_applicant(str(approval_id), payload.decision)
         self.session.commit()
 
     def supplement(
@@ -690,4 +710,5 @@ class ApprovalService:
             },
         )
         self._event(str(approval_id), "resubmitted", actor, payload.note)
+        self._notify_applicant(str(approval_id), "resubmitted")
         self.session.commit()
