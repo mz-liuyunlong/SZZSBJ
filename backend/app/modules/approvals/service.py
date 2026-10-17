@@ -150,7 +150,15 @@ class ApprovalService:
             blocked()
 
         now = datetime.now(UTC)
+        rule_row = self.session.execute(text("""
+            select required_steps from app_approval_rules
+            where approval_type='wfs_case_abandon' and is_active=true
+        """)).mappings().first()
+        if rule_row is None:
+            blocked()
+        required_steps = int(rule_row["required_steps"])
         snapshot = make_snapshot(case)
+        snapshot["approval_policy"] = {"required_steps": required_steps}
         snapshot_hash = signature(snapshot)
         approval_id = str(uuid4())
         pending_amount = calculate_pending_recovery(case)
@@ -542,6 +550,41 @@ class ApprovalService:
             if k not in ("status", "archive_reason", "archive_reason_type")
         ):
             blocked()
+        current_step = self.session.execute(text("""
+            select count(*) from app_approval_step_decisions
+            where approval_id=:id and decision='approved'
+        """), {"id": str(approval_id)}).scalar_one()
+        repeated = self.session.execute(text("""
+            select 1 from app_approval_step_decisions
+            where approval_id=:id and reviewer_id=:actor
+        """), {"id": str(approval_id), "actor": actor}).first()
+        if repeated:
+            blocked()
+        required_steps = int(snapshot.get("approval_policy", {}).get("required_steps", 1))
+        final_step = int(current_step) + 1 >= required_steps
+        if payload.decision == "approved":
+            self.session.execute(text("""
+                insert into app_approval_step_decisions
+                    (id,approval_id,step_number,reviewer_id,decision,note)
+                values (:id,:approval_id,:step,:actor,'approved',:note)
+            """), {
+                "id": str(uuid4()), "approval_id": str(approval_id),
+                "step": int(current_step) + 1, "actor": actor,
+                "note": payload.note or None,
+            })
+        if payload.decision == "approved" and not final_step:
+            advanced = self.session.execute(text("""
+                update app_approval_requests set
+                    version=version+1,updated_at=now()
+                where id=:id and status='submitted' and version=:version
+            """), {"id": str(approval_id), "version": payload.expected_version})
+            if advanced.rowcount != 1:
+                blocked()
+            self._event(str(approval_id), "step_approved", actor, payload.note, {
+                "step": int(current_step) + 1, "required_steps": required_steps,
+            })
+            self.session.commit()
+            return
         if payload.decision == "info_required":
             new_status = "info_required"
         elif payload.decision == "approved":
