@@ -14,6 +14,8 @@ from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.approvals.schemas import (
     ApprovalDecisionWrite,
+    LegacyReattestationWrite,
+    ApprovalRuleWrite,
     ApprovalDetail,
     ApprovalListData,
     ApprovalMeta,
@@ -23,6 +25,7 @@ from app.modules.approvals.schemas import (
     ApprovalSupplementWrite,
 )
 from app.modules.approvals.service import ApprovalService
+from app.modules.approvals.workflow import ApprovalWorkflow
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.warehouse_wfs.schemas import WfsFeeArchiveRequestWrite
 
@@ -89,6 +92,57 @@ def legacy_detail(
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     return success_response(
         request, data=ApprovalService(session).legacy_detail(case_id, accounts), meta=None
+    )
+
+
+@router.post("/legacy/{case_id}/reattest", response_model=SuccessEnvelope[dict[str, str], None])
+def reattest_legacy(
+    request: Request, case_id: UUID, payload: LegacyReattestationWrite,
+    session: db_session, principal: archive_request_principal, accounts: account_scope,
+):
+    approval_id = ApprovalWorkflow(session).reattest_wfs(
+        case_id, accounts, principal.user_id,
+        payload.reason_type, payload.reason, payload.evidence,
+    )
+    return success_response(request, data={"approval_id": approval_id}, meta=None)
+
+
+@router.get("/workflow/rules", response_model=SuccessEnvelope[list[dict], None])
+def approval_rules(request: Request, session: db_session, _: view_principal):
+    return success_response(request, data=ApprovalWorkflow(session).available_rules(), meta=None)
+
+
+@router.put("/workflow/rules/{approval_type}", response_model=SuccessEnvelope[dict[str, bool], None])
+def update_approval_rule(
+    request: Request, approval_type: str, payload: ApprovalRuleWrite,
+    session: db_session,
+    principal: Annotated[Principal, Depends(require_permission(
+        "action:settings:role-management:configure-permissions"
+    ))],
+):
+    ApprovalWorkflow(session).update_rule(
+        approval_type, principal.user_id, payload.expected_version,
+        payload.required_steps, payload.due_hours, payload.allows_bulk,
+    )
+    return success_response(request, data={"updated": True}, meta=None)
+
+
+@router.get("/workflow/notifications", response_model=SuccessEnvelope[list[dict], None])
+def approval_notifications(request: Request, session: db_session, principal: view_principal):
+    return success_response(
+        request, data=ApprovalWorkflow(session).inbox(principal.user_id), meta=None
+    )
+
+
+@router.post("/workflow/notifications/{notification_id}/read",
+             response_model=SuccessEnvelope[dict[str, bool], None])
+def mark_approval_notification_read(
+    request: Request, notification_id: UUID, session: db_session, principal: view_principal,
+):
+    return success_response(
+        request, data={"updated": ApprovalWorkflow(session).mark_read(
+            notification_id, principal.user_id
+        )}, meta=None
     )
 
 
