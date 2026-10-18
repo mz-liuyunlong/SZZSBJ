@@ -3,6 +3,7 @@
 Runs only in the disposable opslog_ci GitHub Actions service, never against an
 application database. All synthetic writes are covered by an outer rollback.
 """
+
 from __future__ import annotations
 
 import os
