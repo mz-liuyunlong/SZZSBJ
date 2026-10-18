@@ -378,10 +378,6 @@ def test_sample_order_window_handles_dst_switch() -> None:
 
 
 def test_sample_writer_quarantines_ambiguous_multiple_unit_prices() -> None:
-    import pytest
-
-    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
-
     row = {
         "global_order_no": "global-multi",
         "reference_no": "reference-multi",
