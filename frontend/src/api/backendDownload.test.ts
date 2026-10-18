@@ -142,6 +142,37 @@ describe("backendDownload", () => {
     });
   });
 
+  it.each([
+    [
+      new Response("proxy unauthorized", {
+        status: 401,
+        headers: { "Content-Type": "text/plain" },
+      }),
+      "NON_JSON_RESPONSE",
+    ],
+    [
+      new Response(JSON.stringify({ error: "proxy" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+      "INVALID_API_ENVELOPE",
+    ],
+  ])("keeps the session for an untrusted download 401", async (response, code) => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "preserved-session");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    let failure: unknown;
+    try {
+      await backendDownload("/api/protected/export", "fallback.csv");
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({ status: 401, code });
+    expect(backendDownloadErrorMessage(failure)).toBe("认证服务响应异常，请稍后重试");
+    expect(localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe("preserved-session");
+  });
+
   it("rejects an HTML success page instead of downloading it", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
       "<!doctype html><title>proxy error</title>",
@@ -215,6 +246,26 @@ describe("backendDownload", () => {
 
   it.each([
     [new BackendRequestError(401, "UNAUTHORIZED"), "登录状态已失效，请重新登录"],
+    [
+      new BackendRequestError(
+        401,
+        "NON_JSON_RESPONSE",
+        undefined,
+        "authentication",
+        "non_json",
+      ),
+      "认证服务响应异常，请稍后重试",
+    ],
+    [
+      new BackendRequestError(
+        401,
+        "INVALID_API_ENVELOPE",
+        undefined,
+        "authentication",
+        "invalid_envelope",
+      ),
+      "认证服务响应异常，请稍后重试",
+    ],
     [new BackendRequestError(403, "FORBIDDEN"), "当前账号缺少导出权限"],
     [new BackendRequestError(403, "DATA_SCOPE_DENIED"), "当前账号没有可导出的数据范围"],
     [new BackendRequestError(422, "INVALID_REQUEST"), "导出参数或字段无效"],

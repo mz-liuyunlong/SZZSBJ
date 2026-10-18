@@ -226,7 +226,14 @@ export async function backendDownload(
 
 export function backendDownloadErrorMessage(error: unknown): string {
   if (!(error instanceof BackendRequestError)) return "导出失败，请稍后重试";
-  if (error.status === 401) return "登录状态已失效，请重新登录";
+  if (
+    error.status === 401
+    && error.code === "UNAUTHORIZED"
+    && error.responseFormat === "json"
+  ) {
+    return "登录状态已失效，请重新登录";
+  }
+  if (error.status === 401) return "认证服务响应异常，请稍后重试";
   if (error.code === "DATA_SCOPE_DENIED") return "当前账号没有可导出的数据范围";
   if (error.status === 403) return "当前账号缺少导出权限";
   if (error.status === 422) return "导出参数或字段无效";
