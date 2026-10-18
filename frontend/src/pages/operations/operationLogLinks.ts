@@ -3,7 +3,7 @@ export function resolveOperationLogLink(raw: string | null | undefined): string 
   const value = raw?.trim() ?? "";
   if (!value || [...value].some((character) => {
     const code = character.charCodeAt(0);
-    return code < 32 || code === 127 || character === "\\\\";
+    return code < 32 || code === 127 || character === "\\";
   })) return null;
   if (value.startsWith("/") && !value.startsWith("//")) return value;
   try {
