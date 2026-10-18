@@ -19,7 +19,6 @@ from app.modules.approvals.schemas import ApprovalQuery
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
 
-
 CASE_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
