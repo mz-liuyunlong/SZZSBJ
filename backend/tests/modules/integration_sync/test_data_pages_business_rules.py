@@ -148,8 +148,8 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     assert params["platform_code"] == "10008"
     assert params["cancel_time_raw"] == "0"
     assert params["is_cancelled"] is False
-    assert params["is_valid_sample"] is True
-    assert params["sample_rule_version"] == "zero-total-or-full-item-discount-strict-triple-v4"
+    assert params["is_valid_sample"] is False
+    assert params["sample_rule_version"] == "candidate-unverified-v5"
 
 
 def test_sample_item_resolution_requires_unique_listing_and_salestat_agreement() -> None:
@@ -315,7 +315,7 @@ def test_refund_writer_ignores_non_completed_refunds() -> None:
     assert len(session.calls) == 1
 
 
-def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> None:
+def test_sample_writer_preserves_full_item_discount_as_unverified_candidate() -> None:
     session = _CaptureSession()
     runner = _runner(session)
     written = runner._write_sample_orders(
@@ -349,7 +349,7 @@ def test_sample_writer_accepts_full_item_discount_and_reference_fallback() -> No
     assert params["platform_order_no"] == "reference-2"
     assert params["source_order_line_id"] == "line-2"
     assert params["unit_price_amount"] == Decimal("12.495")
-    assert params["is_valid_sample"] is True
+    assert params["is_valid_sample"] is False
 
 
 def test_sample_writer_rejects_missing_order_line_identity() -> None:
