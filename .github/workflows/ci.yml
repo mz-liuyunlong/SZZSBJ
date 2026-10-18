@@ -216,6 +216,6 @@ jobs:
         working-directory: backend
         run: |
           uv sync
-          uv run python scripts/ci_approval_migration_smoke.py bootstrap
+          PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py bootstrap
           uv run alembic upgrade 20261018_0044_approval_scope
-          uv run python scripts/ci_approval_migration_smoke.py verify
+          PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py verify

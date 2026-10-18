@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
 from app.core.auth import Principal, require_principal
-from app.core.permissions import has_permission, require_permission
+from app.core.permissions import has_any_permission, has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.approvals.generic import GenericApprovalService
 from app.modules.approvals.schemas import (
@@ -311,8 +311,18 @@ def supplement(
 ):
     from app.core.api import ApiError, ErrorCode
 
-    # Preserve WFS archive-request permissions, while allowing the original
-    # authorized non-admin PMC applicant to supplement a purchase approval.
+    # Reject callers with no supplement-capable permission *before* reading
+    # approval data. The record-specific check below further narrows access.
+    if not has_any_permission(
+        principal,
+        (
+            "action:warehouse:wfs-fee-alert:archive-request",
+            "action:pmc:purchase-board:override",
+        ),
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+
+    # WFS and purchase requests have different business permissions.
     record = ApprovalService(session)._record(approval_id, accounts)
     if record["approval_type"] == "wfs_case_abandon":
         allowed = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-request")
