@@ -293,9 +293,11 @@ def read_detail(
     key["is_admin"] = access.is_admin if access is not None else True
     key["user_id"] = access.user_id if access is not None else -1
     key["owns_product"] = (
-        is_current_assignee(session, access, account=account, store=store,
-                            item=item, msku=msku, day=day)
-        if access is not None else True
+        is_current_assignee(
+            session, access, account=account, store=store, item=item, msku=msku, day=day
+        )
+        if access is not None
+        else True
     )
     events = (
         session.execute(

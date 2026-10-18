@@ -81,7 +81,7 @@ def load_daily_sales_log_summaries(
                   select 1 from mart_daily_sales_item_day d
                   where d.source_account_ref = s.account and d.store_id = s.store
                     and d.item_id = s.item and coalesce(d.msku, '') = s.msku
-                    and d.business_date_la = s.day and {owns_sku_sql('d')}
+                    and d.business_date_la = s.day and {owns_sku_sql("d")}
               ))
         ) ev on true
         left join lateral (
@@ -95,7 +95,7 @@ def load_daily_sales_log_summaries(
                       select 1 from mart_daily_sales_item_day d
                       where d.source_account_ref = s.account and d.store_id = s.store
                         and d.item_id = s.item and coalesce(d.msku, '') = s.msku
-                        and d.business_date_la = s.day and {owns_sku_sql('d')}
+                        and d.business_date_la = s.day and {owns_sku_sql("d")}
                    )))
             order by (m.source_kind = 'manual') desc, m.id desc
             limit 1

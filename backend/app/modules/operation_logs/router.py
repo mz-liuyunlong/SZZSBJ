@@ -135,6 +135,7 @@ def write_links(
     )
     return success_response(request, data={"saved": True}, meta=None)
 
+
 class OwnerMappingWrite(BaseModel):
     source_account_ref: str = Field(min_length=1, max_length=128)
     owner_uid: str = Field(min_length=1, max_length=128)
@@ -146,13 +147,19 @@ def _admin_only(access: LogAccess) -> None:
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
 
-@router.get("/owner-mappings", response_model=SuccessEnvelope[list[dict[str, Any]], Any], responses=errors)
+@router.get(
+    "/owner-mappings", response_model=SuccessEnvelope[list[dict[str, Any]], Any], responses=errors
+)
 def list_owner_mappings(
-    request: Request, session: db_dep, _: read_dep, access: access_dep,
+    request: Request,
+    session: db_dep,
+    _: read_dep,
+    access: access_dep,
 ) -> SuccessEnvelope[list[dict[str, Any]], Any]:
     _admin_only(access)
-    records = session.execute(
-        text("""
+    records = (
+        session.execute(
+            text("""
             select m.source_account_ref, m.owner_uid, m.app_user_id,
                    u.username, u.display_name
             from ops_lingxing_owner_user_mappings m
@@ -160,15 +167,23 @@ def list_owner_mappings(
             where m.source_account_ref = any(:accounts)
             order by m.source_account_ref, m.owner_uid
         """),
-        {"accounts": list(access.accounts)},
-    ).mappings().all()
+            {"accounts": list(access.accounts)},
+        )
+        .mappings()
+        .all()
+    )
     return success_response(request, data=[dict(r) for r in records], meta=None)
 
 
-@router.put("/owner-mappings", response_model=SuccessEnvelope[dict[str, bool], Any], responses=errors)
+@router.put(
+    "/owner-mappings", response_model=SuccessEnvelope[dict[str, bool], Any], responses=errors
+)
 def put_owner_mapping(
-    request: Request, payload: OwnerMappingWrite, session: db_dep,
-    _: write_dep, access: access_dep,
+    request: Request,
+    payload: OwnerMappingWrite,
+    session: db_dep,
+    _: write_dep,
+    access: access_dep,
 ) -> SuccessEnvelope[dict[str, bool], Any]:
     _admin_only(access)
     access.require_account(payload.source_account_ref)
@@ -179,8 +194,10 @@ def put_owner_mapping(
     if not user_exists:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
     params = {
-        "account": payload.source_account_ref, "owner_uid": payload.owner_uid.strip(),
-        "uid": payload.app_user_id, "actor": access.user_id,
+        "account": payload.source_account_ref,
+        "owner_uid": payload.owner_uid.strip(),
+        "uid": payload.app_user_id,
+        "actor": access.user_id,
     }
     if not params["owner_uid"]:
         raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
@@ -190,7 +207,8 @@ def put_owner_mapping(
                 select app_user_id from ops_lingxing_owner_user_mappings
                 where source_account_ref = :account and owner_uid = :owner_uid
                 for update
-            """), params
+            """),
+            params,
         )
         session.execute(
             text("""
@@ -201,7 +219,8 @@ def put_owner_mapping(
                 do update set app_user_id = excluded.app_user_id,
                               updated_by_user_id = excluded.updated_by_user_id,
                               updated_at = now()
-            """), params,
+            """),
+            params,
         )
         if old != payload.app_user_id:
             session.execute(
@@ -211,8 +230,7 @@ def put_owner_mapping(
                        after_user_id, actor_user_id, action)
                     values (:account, :owner_uid, :before, :uid, :actor, :action)
                 """),
-                {**params, "before": old,
-                 "action": "reassign" if old is not None else "assign"},
+                {**params, "before": old, "action": "reassign" if old is not None else "assign"},
             )
         session.commit()
     except Exception:
@@ -221,15 +239,24 @@ def put_owner_mapping(
     return success_response(request, data={"saved": True}, meta=None)
 
 
-@router.delete("/owner-mappings/{owner_uid}", response_model=SuccessEnvelope[dict[str, bool], Any], responses=errors)
+@router.delete(
+    "/owner-mappings/{owner_uid}",
+    response_model=SuccessEnvelope[dict[str, bool], Any],
+    responses=errors,
+)
 def delete_owner_mapping(
-    request: Request, owner_uid: str, source_account_ref: str,
-    session: db_dep, _: write_dep, access: access_dep,
+    request: Request,
+    owner_uid: str,
+    source_account_ref: str,
+    session: db_dep,
+    _: write_dep,
+    access: access_dep,
 ) -> SuccessEnvelope[dict[str, bool], Any]:
     _admin_only(access)
     access.require_account(source_account_ref)
     params = {
-        "account": source_account_ref, "owner_uid": owner_uid,
+        "account": source_account_ref,
+        "owner_uid": owner_uid,
         "actor": access.user_id,
     }
     try:
@@ -238,7 +265,8 @@ def delete_owner_mapping(
                 delete from ops_lingxing_owner_user_mappings
                 where source_account_ref = :account and owner_uid = :owner_uid
                 returning app_user_id
-            """), params,
+            """),
+            params,
         )
         if old is not None:
             session.execute(
@@ -247,7 +275,8 @@ def delete_owner_mapping(
                       (source_account_ref, owner_uid, before_user_id,
                        after_user_id, actor_user_id, action)
                     values (:account, :owner_uid, :before, null, :actor, 'revoke')
-                """), {**params, "before": old},
+                """),
+                {**params, "before": old},
             )
         session.commit()
     except Exception:

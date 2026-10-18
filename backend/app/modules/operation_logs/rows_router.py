@@ -71,7 +71,7 @@ def get_rows(
                 cast(:start as date), cast(:end as date), interval '1 day'
             ) as d(day)
             where l.source_account_ref = any(:accounts)
-              and (:is_admin or {owns_sku_sql('l')}
+              and (:is_admin or {owns_sku_sql("l")}
                    or exists (
                      select 1 from ops_manual_operation_logs own
                      where own.source_account_ref = l.source_account_ref
@@ -211,7 +211,7 @@ def get_rows(
                  where d.source_account_ref = h.source_account_ref
                    and d.store_id = h.store_id and d.item_id = h.item_id
                    and coalesce(d.msku, '') = h.msku and d.business_date_la = h.day
-                   and {owns_sku_sql('d')}
+                   and {owns_sku_sql("d")}
                )
                or exists (
                  select 1 from ops_manual_operation_logs own
@@ -245,7 +245,7 @@ def get_rows(
                  where l.source_account_ref = e.source_account_ref
                    and l.store_id = e.store_id and l.item_id = e.item_id
                    and coalesce(l.msku, '') = e.msku
-                   and {owns_sku_sql('l')}
+                   and {owns_sku_sql("l")}
                )
                or exists (
                  select 1 from mart_daily_sales_item_day d
@@ -253,7 +253,7 @@ def get_rows(
                    and d.store_id = e.store_id and d.item_id = e.item_id
                    and coalesce(d.msku, '') = e.msku
                    and d.business_date_la = e.event_date
-                   and {owns_sku_sql('d')}
+                   and {owns_sku_sql("d")}
                )
                or exists (
                  select 1 from ops_manual_operation_logs own

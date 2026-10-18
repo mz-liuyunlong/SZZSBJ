@@ -3,6 +3,7 @@
 The only business-owner link is an explicit account-scoped Lingxing UID mapping
 to app_users.id. Human names and mutable usernames are display-only.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -66,12 +67,12 @@ def product_owner_sql() -> str:
         select 1 from mart_listing_management_current l
         where l.source_account_ref = :account and l.store_id = :store
           and l.item_id = :item and coalesce(l.msku, '') = :msku
-          and {owns_sku_sql('l')}
+          and {owns_sku_sql("l")}
         union all
         select 1 from mart_daily_sales_item_day d
         where d.source_account_ref = :account and d.store_id = :store
           and d.item_id = :item and coalesce(d.msku, '') = :msku
-          and d.business_date_la = :day and {owns_sku_sql('d')}
+          and d.business_date_la = :day and {owns_sku_sql("d")}
     )"""
 
 
@@ -87,27 +88,33 @@ def resolve_log_access(
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403) from None
     if principal.user_id == PREVIEW_PRINCIPAL_ID or user_id <= 0:
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-    user = session.execute(
-        text("""
+    user = (
+        session.execute(
+            text("""
             select id, username, display_name, is_super_admin
             from app_users where id = :user_id and is_active = 1
         """),
-        {"user_id": user_id},
-    ).mappings().one_or_none()
+            {"user_id": user_id},
+        )
+        .mappings()
+        .one_or_none()
+    )
     if user is None:
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     is_admin = int(user["is_super_admin"] or 0) == 1
     if not is_admin:
-        is_admin = bool(session.scalar(
-            text("""
+        is_admin = bool(
+            session.scalar(
+                text("""
                 select exists (
                     select 1 from app_user_roles ur
                     join app_roles r on r.id = ur.role_id
                     where ur.user_id = :user_id and r.role_key = 'admin'
                 )
             """),
-            {"user_id": user_id},
-        ))
+                {"user_id": user_id},
+            )
+        )
     configured = IntegrationSyncRepository(session).list_configured_source_account_refs()
     if restricted_accounts is not None:
         configured = configured.intersection(restricted_accounts)
@@ -151,14 +158,19 @@ def is_current_assignee(
     access.require_account(account)
     if access.is_admin:
         return True
-    return bool(session.scalar(
-        text("select " + product_owner_sql()),
-        {
-            "user_id": access.user_id,
-            "account": account, "store": store,
-            "item": item, "msku": msku, "day": day,
-        },
-    ))
+    return bool(
+        session.scalar(
+            text("select " + product_owner_sql()),
+            {
+                "user_id": access.user_id,
+                "account": account,
+                "store": store,
+                "item": item,
+                "msku": msku,
+                "day": day,
+            },
+        )
+    )
 
 
 def require_owned_identity(
@@ -188,8 +200,12 @@ def require_owned_identity(
                 )
             """),
             {
-                "user_id": access.user_id, "account": account,
-                "day": day, "store": store, "item": item, "msku": msku,
+                "user_id": access.user_id,
+                "account": account,
+                "day": day,
+                "store": store,
+                "item": item,
+                "msku": msku,
             },
         )
         if own:

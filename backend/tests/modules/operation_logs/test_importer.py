@@ -315,6 +315,7 @@ def test_operation_log_super_admin_bypasses_owner_match() -> None:
     )
     session.scalar.assert_not_called()
 
+
 def test_owner_uid_mapping_has_no_fallback_to_display_names() -> None:
     from app.modules.operation_logs.access import owns_sku_sql
 
@@ -330,14 +331,18 @@ def test_unknown_ownership_is_denied() -> None:
     from app.modules.operation_logs.access import LogAccess, require_owned_identity
 
     access = LogAccess(
-        user_id=9, accounts=frozenset({"account-a"}),
-        is_admin=False, display_name="demo"
+        user_id=9, accounts=frozenset({"account-a"}), is_admin=False, display_name="demo"
     )
     session = MagicMock()
     session.scalar.return_value = False
     with pytest.raises(ApiError) as err:
         require_owned_identity(
-            session, access, account="account-a", store="s",
-            item="x", msku="m", day=date(2026, 10, 17),
+            session,
+            access,
+            account="account-a",
+            store="s",
+            item="x",
+            msku="m",
+            day=date(2026, 10, 17),
         )
     assert err.value.status_code == 403

@@ -65,7 +65,9 @@ def upgrade() -> None:
         sa.Column("observe_days", sa.SmallInteger()),
         sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
         sa.Column("actor_ref", sa.String(128)),
-        sa.Column("created_by_user_id", sa.Integer(), sa.ForeignKey("app_users.id", ondelete="RESTRICT")),
+        sa.Column(
+            "created_by_user_id", sa.Integer(), sa.ForeignKey("app_users.id", ondelete="RESTRICT")
+        ),
         sa.Column("revision", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("source_updated_at", sa.DateTime()),
         sa.Column(
@@ -112,9 +114,15 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("updated_by_user_id", sa.Integer(), sa.ForeignKey("app_users.id")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.UniqueConstraint("source_account_ref", "owner_uid", name="uq_ops_lingxing_owner_mapping"),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.UniqueConstraint(
+            "source_account_ref", "owner_uid", name="uq_ops_lingxing_owner_mapping"
+        ),
         sa.CheckConstraint("length(btrim(owner_uid)) > 0", name="ck_ops_owner_uid_nonempty"),
     )
     op.create_index(
@@ -131,8 +139,12 @@ def upgrade() -> None:
         sa.Column("after_user_id", sa.Integer()),
         sa.Column("actor_user_id", sa.Integer(), nullable=False),
         sa.Column("action", sa.String(16), nullable=False),
-        sa.Column("occurred_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("action in ('assign', 'reassign', 'revoke')", name="ck_ops_owner_mapping_action"),
+        sa.Column(
+            "occurred_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.CheckConstraint(
+            "action in ('assign', 'reassign', 'revoke')", name="ck_ops_owner_mapping_action"
+        ),
     )
     op.create_table(
         "ops_operation_log_links",
