@@ -69,9 +69,9 @@ def _is_sample_cancelled(
     cancel_time_raw: object | None,
 ) -> bool:
     status = str(order_status_raw).strip() if order_status_raw is not None else ""
-    if status:
-        return status == "7"
-    return _has_cancel_time(cancel_time_raw)
+    # A nonzero cancellation time must not be ignored merely because a
+    # non-cancelled provider status is also present.
+    return status.lower() in {"7", "cancelled", "canceled"} or _has_cancel_time(cancel_time_raw)
 
 
 def _is_valid_sample(
