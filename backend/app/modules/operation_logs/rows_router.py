@@ -91,7 +91,8 @@ def get_rows(
                (select count(*) from ops_manual_operation_logs other
                 where other.source_account_ref = i.source_account_ref
                   and other.log_date = i.log_date and other.store_id = i.store_id
-                  and other.item_id = i.item_id and other.msku = i.msku) as manual_count,
+                  and other.item_id = i.item_id and other.msku = i.msku
+                  and (:is_admin or other.created_by_user_id = :user_id)) as manual_count,
                (select count(*) from ops_system_operation_events e
                 where e.source_account_ref = i.source_account_ref
                   and e.event_date = i.log_date and e.store_id = i.store_id
@@ -164,7 +165,8 @@ def get_rows(
                (select count(*) from ops_manual_operation_logs other
                 where other.source_account_ref = h.source_account_ref
                   and other.log_date = h.day and other.store_id = h.store_id
-                  and other.item_id = h.item_id and other.msku = h.msku) as manual_count,
+                  and other.item_id = h.item_id and other.msku = h.msku
+                  and (:is_admin or other.created_by_user_id = :user_id)) as manual_count,
                (select count(*) from ops_system_operation_events e
                 where e.source_account_ref = h.source_account_ref
                   and e.event_date = h.day and e.store_id = h.store_id
