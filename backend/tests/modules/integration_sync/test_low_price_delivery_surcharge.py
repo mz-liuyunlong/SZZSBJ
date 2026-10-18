@@ -35,5 +35,6 @@ def test_low_price_delivery_surcharge_must_be_calculated_per_business_day() -> N
 
 
 def test_daily_sales_calc_version_keeps_room_for_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+refund-v3-lpds")
+    assert "+refund-v3-lpds" in DAILY_SALES_V2_VERSION
+    assert DAILY_SALES_V2_VERSION.endswith("+sampleguard-v5")
     assert len(DAILY_SALES_V2_VERSION) <= 64
