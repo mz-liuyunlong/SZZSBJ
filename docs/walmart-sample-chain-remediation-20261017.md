@@ -54,3 +54,11 @@ ROLLBACK;
 ```
 
 **注意：此 SQL 显示数据缺口，并不能独立证明真实送样总量。** 不要在生产直接执行插入、更改 `is_sample_order` 或调用回填脚本。
+
+## 2026-10-18: candidate-only finance safety gate
+
+- Zero-total and full-discount order lines are **unverified candidates**, not proof of a Walmart sample. The sync records these candidates with `sample_rule_version=candidate-unverified-v5` and `is_valid_sample=false`.
+- Daily Sales / Order Profit now recognize confirmed samples only with both `is_valid_sample=true` and `sample_rule_version=provider-verified-sample-v5`. **No automatic verification/approval path exists in this PR.** Consequently an ordinary scheduled sync will not automatically reduce sales for potential samples.
+- A nonzero cancellation timestamp overrides a non-cancel status; malformed candidate identity/quantity/ambiguous unit price does not abort the entire multi-store order sync. Candidate anomalies are counted, with raw provider capture retained for audit.
+- A verified sample amount or quantity exceeding SaleStat fails the MART refresh instead of silently clamping the attributed sales to zero.
+- This is a provisional anti-misclassification safeguard, not a validated business rule for determining the actual number of samples. YC00512's 5 versus SaleStat 9 and the original price semantics remain **unresolved**. Keep the PR Draft. Any promotion to verified status, deployment, backfill, or production data modification requires separate approval.
