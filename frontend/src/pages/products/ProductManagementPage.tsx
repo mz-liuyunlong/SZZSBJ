@@ -18,6 +18,7 @@ import ProductManagementSummaryCards from "@/pages/products/components/ProductMa
 import ProductManagementTable from "@/pages/products/components/ProductManagementTable";
 import ProductManagementToolbar from "@/pages/products/components/ProductManagementToolbar";
 import { requestProductManagementExport } from "@/pages/products/productManagementApi";
+import { backendDownloadErrorMessage } from "@/api/backendApi";
 import {
   useProductManagementDetailQuery,
   useProductManagementListQuery,
@@ -346,9 +347,7 @@ function ProductManagementPage({
       setExportModalOpen(false);
       void messageApi.success("产品管理导出已开始下载");
     } catch (reason: unknown) {
-      void messageApi.error(
-        reason instanceof Error ? reason.message : "PRODUCT_MANAGEMENT_EXPORT_FAILED",
-      );
+      void messageApi.error(backendDownloadErrorMessage(reason));
     } finally {
       setIsExporting(false);
     }
