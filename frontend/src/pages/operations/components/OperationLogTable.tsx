@@ -1,5 +1,6 @@
 import { Button, Empty, Input, Popover, Space, Tag } from "antd";
 import type { Key, ReactNode } from "react";
+import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import {
   operationLogColumnFields,
   type OperationLogRow,
@@ -140,8 +141,8 @@ function OperationLogTable({
                 label="词"
                 missing={keywordMissing}
                 onClick={() => {
-                  const url = row.keywordUrl;
-                  if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer");
+                  const url = resolveOperationLogLink(row.keywordUrl);
+                  if (url) window.open(url, "_blank", "noopener,noreferrer");
                   else onOpenEntryEditor(row, "keyword");
                 }}
               />
@@ -149,8 +150,8 @@ function OperationLogTable({
                 label="广"
                 missing={adMissing}
                 onClick={() => {
-                  const url = row.adUrl;
-                  if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer");
+                  const url = resolveOperationLogLink(row.adUrl);
+                  if (url) window.open(url, "_blank", "noopener,noreferrer");
                   else onOpenEntryEditor(row, "ad");
                 }}
               />
