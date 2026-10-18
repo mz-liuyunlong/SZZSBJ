@@ -99,7 +99,7 @@ def test_sample_rule_uses_provider_status_and_normalized_cancel_time() -> None:
     assert _is_valid_sample(Decimal("0"), "0.0", "9") is True
     assert _is_valid_sample(Decimal("0"), 0, 7) is False
     assert _is_valid_sample(Decimal("0"), "2026-09-01 10:00:00", None) is False
-    assert _is_valid_sample(Decimal("0"), "2026-09-01 10:00:00", 9) is True
+    assert _is_valid_sample(Decimal("0"), "2026-09-01 10:00:00", 9) is False
     assert _is_valid_sample(Decimal("1"), None, 9) is False
 
 
