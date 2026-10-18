@@ -352,7 +352,7 @@ def test_sample_writer_preserves_full_item_discount_as_unverified_candidate() ->
     assert params["is_valid_sample"] is False
 
 
-def test_sample_writer_rejects_missing_order_line_identity() -> None:
+def test_sample_writer_quarantines_missing_order_line_identity() -> None:
     from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
 
     session = _CaptureSession()
@@ -366,10 +366,8 @@ def test_sample_writer_rejects_missing_order_line_identity() -> None:
         "transaction_info": [{"order_total_amount": "0"}],
         "item_info": [{"msku": "MSKU-1", "quantity": 1, "item_price_amount": "24.99"}],
     }
-    import pytest
-
-    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_SAMPLE_IDENTITY_MISSING"):
-        runner._write_sample_orders([row])
+    assert runner._write_sample_orders([row]) == 0
+    assert runner.summary.sample_unresolved_rows == 1
 
 
 def test_sample_order_window_handles_dst_switch() -> None:
@@ -381,7 +379,7 @@ def test_sample_order_window_handles_dst_switch() -> None:
     assert runner._order_body(0, 20)["start_time"] == runner._sample_order_body(0, 20)["start_time"]
 
 
-def test_sample_writer_rejects_ambiguous_multiple_unit_prices() -> None:
+def test_sample_writer_quarantines_ambiguous_multiple_unit_prices() -> None:
     import pytest
 
     from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
@@ -402,5 +400,9 @@ def test_sample_writer_rejects_ambiguous_multiple_unit_prices() -> None:
             }
         ],
     }
-    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_SAMPLE_UNIT_PRICE_AMBIGUOUS"):
-        _runner(_CaptureSession())._write_sample_orders([row])
+    session = _CaptureSession()
+    runner = _runner(session)
+    assert runner._write_sample_orders([row]) == 1
+    assert runner.summary.sample_unresolved_rows == 1
+    assert session.calls[1][1]["unit_price_amount"] is None
+    assert session.calls[1][1]["is_valid_sample"] is False
