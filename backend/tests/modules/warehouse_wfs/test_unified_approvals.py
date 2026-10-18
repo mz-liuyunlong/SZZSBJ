@@ -277,7 +277,10 @@ def test_legacy_summary_does_not_query_protected_totals_for_non_reviewer() -> No
     session = MagicMock(spec=Session)
     result = MagicMock()
     result.mappings.return_value.one.return_value = {
-        "pending": 0, "high_risk": 0, "info_required": 0, "approved": 0
+        "pending": 0,
+        "high_risk": 0,
+        "info_required": 0,
+        "approved": 0,
     }
     session.execute.return_value = result
     summary = ApprovalService(session).summary(
@@ -291,7 +294,10 @@ def test_legacy_summary_counts_only_visible_legacy_records_for_reviewer() -> Non
     session = MagicMock(spec=Session)
     primary = MagicMock()
     primary.mappings.return_value.one.return_value = {
-        "pending": 0, "high_risk": 0, "info_required": 0, "approved": 0
+        "pending": 0,
+        "high_risk": 0,
+        "info_required": 0,
+        "approved": 0,
     }
     secondary = MagicMock()
     secondary.scalar_one.return_value = 8
