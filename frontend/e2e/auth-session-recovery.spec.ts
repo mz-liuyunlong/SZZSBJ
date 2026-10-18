@@ -22,7 +22,7 @@ test("keeps the session and blocks protected content while auth service is unava
     localStorage.setItem("szzsbj_auth_token", "synthetic-e2e-session");
   });
 
-  await page.goto("http://127.0.0.1:4173/#/products/listing-management");
+  await page.goto("/#/products/listing-management");
 
   await expect(page.getByText("暂时无法验证登录状态")).toBeVisible();
   await expect(page.getByRole("main", { name: "内容区" })).toHaveCount(0);
