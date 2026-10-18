@@ -59,9 +59,16 @@ def pg_session() -> Iterator[Session]:
             transaction = conn.begin_nested()
             try:
                 for ddl in (
-                    "create temporary table mart_listing_management_current (source_account_ref text, store_id text, store_name text, item_id text, msku text, local_sku text, title text, owner_ref text, sale_price_amount numeric) on commit preserve rows",
-                    "create temporary table mart_daily_sales_item_day (source_account_ref text, store_id text, item_id text, msku text, local_sku text, business_date_la date) on commit preserve rows",
-                    "create temporary table dwd_lingxing_sku_product_info_current (source_account_ref text, lingxing_sku_code text, owner_uid text) on commit preserve rows",
+                    "create temporary table mart_listing_management_current "
+                    "(source_account_ref text, store_id text, store_name text, item_id text, "
+                    "msku text, local_sku text, title text, owner_ref text, sale_price_amount "
+                    "numeric) on commit preserve rows",
+                    "create temporary table mart_daily_sales_item_day (source_account_ref "
+                    "text, store_id text, item_id text, msku text, local_sku text, "
+                    "business_date_la date) on commit preserve rows",
+                    "create temporary table dwd_lingxing_sku_product_info_current "
+                    "(source_account_ref text, lingxing_sku_code text, owner_uid text) on "
+                    "commit preserve rows",
                 ):
                     conn.execute(text(ddl))
                 conn.execute(
@@ -73,14 +80,16 @@ def pg_session() -> Iterator[Session]:
                 )
                 conn.execute(
                     text(
-                        "insert into ops_lingxing_owner_user_mappings (source_account_ref, owner_uid, app_user_id) "
+                        "insert into ops_lingxing_owner_user_mappings (source_account_ref, "
+                        "owner_uid, app_user_id) "
                         "values (:account, 'uid-a', :a), (:account, 'uid-b', :b)"
                     ),
                     {"account": ACCOUNT, "a": A_ID, "b": B_ID},
                 )
                 conn.execute(
                     text(
-                        "insert into dwd_lingxing_sku_product_info_current (source_account_ref, lingxing_sku_code, owner_uid) "
+                        "insert into dwd_lingxing_sku_product_info_current (source_account_ref, "
+                        "lingxing_sku_code, owner_uid) "
                         "values (:account, 'sku-a', 'uid-a'), (:account, 'sku-b', 'uid-b')"
                     ),
                     {"account": ACCOUNT},
@@ -88,8 +97,10 @@ def pg_session() -> Iterator[Session]:
                 conn.execute(
                     text(
                         "insert into mart_listing_management_current "
-                        "(source_account_ref, store_id, store_name, item_id, msku, local_sku, title, owner_ref, sale_price_amount) "
-                        "values (:account, :store, 'Store', 'item-a', 'msku-a', 'sku-a', 'A', 'A', 10), "
+                        "(source_account_ref, store_id, store_name, item_id, msku, local_sku, "
+                        "title, owner_ref, sale_price_amount) "
+                        "values (:account, :store, 'Store', 'item-a', 'msku-a', 'sku-a', 'A', "
+                        "'A', 10), "
                         "(:account, :store, 'Store', 'item-b', 'msku-b', 'sku-b', 'B', 'B', 20)"
                     ),
                     {"account": ACCOUNT, "store": STORE},
@@ -97,7 +108,8 @@ def pg_session() -> Iterator[Session]:
                 conn.execute(
                     text(
                         "insert into mart_daily_sales_item_day "
-                        "(source_account_ref, store_id, item_id, msku, local_sku, business_date_la) "
+                        "(source_account_ref, store_id, item_id, msku, local_sku, "
+                        "business_date_la) "
                         "values (:account, :store, 'item-a', 'msku-a', 'sku-a', :day), "
                         "(:account, :store, 'item-b', 'msku-b', 'sku-b', :day)"
                     ),
