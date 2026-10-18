@@ -413,7 +413,7 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     session = MagicMock(spec=Session)
     service = SyncRunExecutionService(session)
     runner = MagicMock()
-    runner.summary = SimpleNamespace(sample_unresolved_rows=0)
+    runner.summary = SimpleNamespace(sample_unresolved_rows=0, order_unresolved_rows=0)
     runner._fetch_offset_all.side_effect = [
         [{"store_id": "store-1"}],
         [{"order_id": "order-1"}],
