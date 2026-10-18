@@ -289,7 +289,7 @@ def test_operation_log_access_checks_product_owner() -> None:
             day=date(2026, 10, 17),
         )
     assert error.value.status_code == 403
-    sql = str(session.scalar.call_args.args[0])
+    sql = str(session.scalar.call_args_list[0].args[0])
     assert "ops_lingxing_owner_user_mappings" in sql
     assert "map.app_user_id = :user_id" in sql
 
