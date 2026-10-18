@@ -93,6 +93,42 @@ jobs:
           uv run pytest
           uv run python -c "import app.main"
 
+  iam-auth-postgresql:
+    name: IAM auth PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: iam_ci
+          POSTGRES_USER: iam_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U iam_ci -d iam_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://iam_ci:local_ci_only@127.0.0.1:5432/iam_ci
+      IAM_AUTH_PERFORMANCE_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated database and verify IAM auth semantics
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -s \
+            tests/modules/iam/test_auth_query_performance.py \
+            tests/modules/iam/test_auth_postgresql_integration.py
+
   wfs-migration-smoke:
     name: WFS PostgreSQL migration smoke
     runs-on: ubuntu-latest
