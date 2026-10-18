@@ -353,8 +353,6 @@ def test_sample_writer_preserves_full_item_discount_as_unverified_candidate() ->
 
 
 def test_sample_writer_quarantines_missing_order_line_identity() -> None:
-    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
-
     session = _CaptureSession()
     runner = _runner(session)
     row = {
