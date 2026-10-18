@@ -1,3 +1,4 @@
+import logging
 import secrets
 from dataclasses import dataclass
 from typing import Annotated, Final
@@ -5,7 +6,7 @@ from typing import Annotated, Final
 from fastapi import Depends, Request
 from pydantic import SecretStr
 
-from app.core.api import ApiError, ErrorCode
+from app.core.api import ApiError, ErrorCode, get_request_id
 from app.core.config import SettingsError, get_settings
 
 PUBLIC_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset({"/health"})
@@ -94,6 +95,7 @@ _PREVIEW_WRITE_PATH_PREFIXES: Final[frozenset[str]] = frozenset(
     }
 )
 _PREVIEW_WRITE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PATCH", "PUT", "DELETE"})
+_LOGGER = logging.getLogger(__name__)
 
 
 def _constant_time_ascii_equals(provided: str, expected: SecretStr) -> bool:
@@ -123,12 +125,21 @@ def get_optional_principal(request: Request) -> Principal | None:
     if authorization and authorization.startswith("Bearer "):
         access_token = authorization.removeprefix("Bearer ").strip()
         if access_token:
-            try:
-                from app.modules.iam.service import resolve_principal_from_token
+            from app.modules.iam.service import resolve_principal_from_token
 
+            # Invalid or expired credentials return None from the resolver. Database and
+            # infrastructure failures must propagate to the safe 5xx handler instead of
+            # being misclassified as an anonymous 401 response.
+            try:
                 token_principal = resolve_principal_from_token(access_token)
-            except Exception:
-                token_principal = None
+            except Exception as exc:
+                _LOGGER.error(
+                    "auth_resolution_failed request_id=%s stage=resolve_principal "
+                    "exception_type=%s",
+                    get_request_id(request),
+                    type(exc).__name__,
+                )
+                raise
             if token_principal is not None:
                 return token_principal
 

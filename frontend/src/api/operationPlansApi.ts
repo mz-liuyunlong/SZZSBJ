@@ -1,4 +1,4 @@
-import { BackendRequestError, backendRequest, type BackendEnvelope } from "@/api/backendApi";
+import { backendDownload, backendRequest } from "@/api/backendApi";
 
 export type OperationPlanPeriodType = "month" | "quarter";
 export type OperationStatus = "normal" | "new_product" | "clearance";
@@ -242,7 +242,7 @@ export async function importOperationPlans(args: {
   const params = new URLSearchParams();
   appendCommonParams(params, args.periodType, args.periodKey);
   params.set("conflict_policy", args.conflictPolicy);
-  const envelope = await rawEnvelopeRequest<OperationPlanImportData>(buildUrl("/import", params), {
+  const envelope = await backendRequest<OperationPlanImportData>(buildUrl("/import", params), {
     method: "POST",
     body: args.file,
     headers: {
@@ -256,49 +256,12 @@ export async function importOperationPlans(args: {
 export async function downloadOperationPlanTemplate(periodType: OperationPlanPeriodType, periodKey: string) {
   const params = new URLSearchParams();
   appendCommonParams(params, periodType, periodKey);
-  await downloadFile(buildUrl("/template", params), "运营计划导入模板.xlsx");
+  await backendDownload(buildUrl("/template", params), "运营计划导入模板.xlsx");
 }
 
 export async function downloadOperationPlanFailedRows(batchId: string) {
-  await downloadFile(`${apiBase}/import-batches/${batchId}/failed-export`, "运营计划导入失败明细.xlsx");
-}
-
-async function rawEnvelopeRequest<T>(path: string, init?: RequestInit): Promise<BackendEnvelope<T>> {
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...init,
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-      ...init?.headers,
-    },
-  });
-  const body = await response.json() as BackendEnvelope<T>;
-  if (!response.ok || !body.success) {
-    const errorCode = body.error?.code ?? "BACKEND_REQUEST_FAILED";
-    throw new BackendRequestError(response.status, errorCode, body.request_id);
-  }
-  return body;
-}
-
-async function downloadFile(path: string, filename: string) {
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-    },
-  });
-  if (!response.ok) {
-    throw new BackendRequestError(response.status, "DOWNLOAD_FAILED");
-  }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  await backendDownload(
+    `${apiBase}/import-batches/${batchId}/failed-export`,
+    "运营计划导入失败明细.xlsx",
+  );
 }

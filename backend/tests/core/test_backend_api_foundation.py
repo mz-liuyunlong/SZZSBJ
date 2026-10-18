@@ -210,6 +210,47 @@ def test_unknown_exception_is_hidden_and_safely_logged(caplog: pytest.LogCapture
     application.dependency_overrides.clear()
 
 
+def test_auth_resolution_failure_is_500_not_401_and_logs_safe_stage(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.iam import service as iam_service
+
+    def fail_resolution(_: str) -> Principal | None:
+        raise RuntimeError("sensitive database connection detail")
+
+    monkeypatch.setattr(iam_service, "resolve_principal_from_token", fail_resolution)
+    with caplog.at_level(logging.ERROR):
+        response = TestClient(create_app(), raise_server_exceptions=False).get(
+            "/api/auth/me",
+            headers={"Authorization": "Bearer synthetic-token-value"},
+        )
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == ErrorCode.INTERNAL_ERROR
+    assert "synthetic-token-value" not in response.text
+    assert "sensitive database connection detail" not in response.text
+    assert "sensitive database connection detail" not in caplog.text
+    assert "stage=resolve_principal" in caplog.text
+    assert "exception_type=RuntimeError" in caplog.text
+    _assert_request_id(response)
+
+
+def test_invalid_session_remains_401(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.modules.iam import service as iam_service
+
+    monkeypatch.setattr(iam_service, "resolve_principal_from_token", lambda _: None)
+    response = TestClient(create_app()).get(
+        "/api/auth/me",
+        headers={"Authorization": "Bearer synthetic-invalid-session"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == ErrorCode.UNAUTHORIZED
+    assert "synthetic-invalid-session" not in response.text
+    _assert_request_id(response)
+
+
 def test_same_principal_can_have_different_resource_scopes() -> None:
     principal = _principal(VIEW_PERMISSION, OTHER_PERMISSION)
     scopes = {

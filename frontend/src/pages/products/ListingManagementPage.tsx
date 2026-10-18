@@ -46,6 +46,7 @@ import {
   type ListingManagementFilterOptions,
   type ListingManagementSummary,
 } from "@/pages/products/listingManagementApi";
+import { backendDownloadErrorMessage } from "@/api/backendApi";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -686,9 +687,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       closeLoading();
       setExportModalOpen(false);
       void messageApi.success("Listing 导出已开始下载");
-    } catch {
+    } catch (reason: unknown) {
       closeLoading();
-      void messageApi.error("Listing 导出失败，请稍后重试");
+      void messageApi.error(backendDownloadErrorMessage(reason));
     } finally {
       setIsExporting(false);
     }
