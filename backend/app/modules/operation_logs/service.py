@@ -107,13 +107,32 @@ def _import_batch(
                 verify_status = excluded.verify_status,
                 source_updated_at = excluded.source_updated_at,
                 detected_at = excluded.detected_at
-            where (
-                ops_system_operation_events.source_updated_at is distinct from
-                excluded.source_updated_at
-                or ops_system_operation_events.source_account_ref is distinct from
-                excluded.source_account_ref
-                or ops_system_operation_events.log_content is distinct from
-                excluded.log_content
+            where row(
+                ops_system_operation_events.source_account_ref,
+                ops_system_operation_events.event_date,
+                ops_system_operation_events.store_id,
+                ops_system_operation_events.item_id,
+                ops_system_operation_events.msku,
+                ops_system_operation_events.action_type,
+                ops_system_operation_events.object_name,
+                ops_system_operation_events.log_content,
+                ops_system_operation_events.highlight,
+                ops_system_operation_events.verify_status,
+                ops_system_operation_events.source_updated_at,
+                ops_system_operation_events.detected_at
+            ) is distinct from row(
+                excluded.source_account_ref,
+                excluded.event_date,
+                excluded.store_id,
+                excluded.item_id,
+                excluded.msku,
+                excluded.action_type,
+                excluded.object_name,
+                excluded.log_content,
+                excluded.highlight,
+                excluded.verify_status,
+                excluded.source_updated_at,
+                excluded.detected_at
             )
         """),
             data,
