@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import {
   createOperationLogDateRange,
   createOperationLogInitialFilters,
@@ -11,6 +12,20 @@ import {
 } from "@/pages/operations/operationLogMockData";
 
 describe("operation log helpers", () => {
+  it("opens safe internal routes and external HTTPS destinations", () => {
+    expect(resolveOperationLogLink("/ads/keyword-library")).toBe("/ads/keyword-library");
+    expect(resolveOperationLogLink("https://example.com/ads")).toBe("https://example.com/ads");
+    expect(resolveOperationLogLink("  /ads/search-terms  ")).toBe("/ads/search-terms");
+  });
+
+  it.each([
+    "", "relative/path", "//evil.example/path", "javascript:alert(1)",
+    "data:text/html,bad", "https://user:pass@example.com/",
+    "https://example.com/\\nnext",
+  ])("rejects unsafe shortcut URL: %s", (url) => {
+    expect(resolveOperationLogLink(url)).toBeNull();
+  });
+
   it("defaults to today and product ID search", () => {
     const filters = createOperationLogInitialFilters();
 
