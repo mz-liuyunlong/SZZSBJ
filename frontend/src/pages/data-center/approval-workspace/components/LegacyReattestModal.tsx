@@ -41,7 +41,7 @@ export default function LegacyReattestModal({ caseId, onClose, onSuccess }: Prop
     <Form.Item name="reason" label="本次申请的完整原因" rules={[
      { required:true }, { min:5, message:"至少填写5个字" },
     ]}><Input.TextArea rows={4} maxLength={4000} showCount /></Form.Item>
-    <Form.Item name="evidence" label="证明材料与 Walmart 回复摘要">
+    <Form.Item name="evidence" label="证明材料与 Walmart 回复摘要（必填）" rules={[{ required:true }, { min:5 }]}>
      <Input.TextArea rows={3} maxLength={4000} showCount />
     </Form.Item>
    </Form>

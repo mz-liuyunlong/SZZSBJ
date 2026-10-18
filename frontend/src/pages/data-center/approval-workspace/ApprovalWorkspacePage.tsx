@@ -59,8 +59,11 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [columnKeys, setColumnKeys] = useState(defaultKeys);
  const [widths, setWidths] = useState(defaultWidths);
  const [draftSearch, setDraftSearch] = useState({ searchField:"keyword", keyword:"" });
- const change = useCallback((patch: Partial<ApprovalFilters>) =>
-  setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 })), []);
+ const change = useCallback((patch: Partial<ApprovalFilters>) => {
+  setSelectedBulkKeys([]);
+  setLoading(true);
+  setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
+ }, []);
  useEffect(() => {
   let active = true;
   void Promise.all([fetchApprovals(filters), fetchApprovalSummary()])
@@ -75,7 +78,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    }).finally(() => { if (active) setLoading(false); });
   return () => { active = false; };
  }, [filters, reloadToken, messageApi]);
- const reload = () => setReloadToken((current) => current + 1);
+ const reload = () => { setLoading(true); setReloadToken((current) => current + 1); };
  const columns = useMemo((): ProColumns<ApprovalItem>[] => {
   const map: Record<string, ProColumns<ApprovalItem>> = {
    title: { key:"title", dataIndex:"title", fixed:"left", render:(_,row) => <Button type="link" onClick={() => setSelected(row)}>{row.title}</Button> },
@@ -103,10 +106,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <div className="approval-workspace">
    <div className="approval-workspace__heading">
     <div><h3>审批工作台</h3><p>统一处理业务审批 · 所有审批结论均留痕</p></div>
-    <Space>{permissions.includes("*") && selectedBulkKeys.length>0 && <Button type="primary" onClick={() => {
+    <Space>{hasPermission(permissions, "*") && selectedBulkKeys.length>0 && <Button type="primary" onClick={() => {
       setBulkRows(rows.filter(row => selectedBulkKeys.includes(row.id)));
      }}>批量审批（{selectedBulkKeys.length}）</Button>}
-     <Button type="primary" onClick={() => setRequestOpen(true)}>发起审批</Button>
+     {(hasPermission(permissions, "*") || hasPermission(permissions, "action:pmc:purchase-board:override")) && <Button type="primary" onClick={() => setRequestOpen(true)}>发起审批</Button>}
      {hasPermission(permissions, "action:settings:role-management:configure-permissions") && <Button onClick={() => setRulesOpen(true)}>审批规则</Button>}
      <Button onClick={() => setNotificationsOpen(true)}>审批提醒</Button>
      <Button icon={<ReloadOutlined/>} onClick={reload}>刷新</Button>
@@ -126,8 +129,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    <Card className="approval-workspace__toolbar-card" size="small">
     <Segmented options={tabs} value={filters.tab} onChange={(value) => change({tab:value as ApprovalTab})}/>
     <div className="approval-workspace__controls">
-     <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
-      options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/>
+     {filters.tab !== "legacy" && <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
+      options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/>}
      <ReportFacetSelect ariaLabel="审批类型" placeholder="审批类型"
       value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"},{label:"采购异常",value:"purchase_exception"},{label:"财务例外",value:"finance_exception"},{label:"权限变更",value:"access_change"},{label:"运营事项确认",value:"operations_plan_ack"}]}
       onChange={(value) => change({approval_type: typeof value === "string" ? value : undefined})}/>
@@ -138,13 +141,13 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
       typeOptions={[{label:"关键词",value:"keyword"}]} typeValue={draftSearch.searchField}
       inputAriaLabel="搜索审批事项" inputPlaceholder="审批事项、原因"
       inputValue={draftSearch.keyword} onCommit={({ keyword }) => {setDraftSearch({ searchField:"keyword", keyword });change({keyword});}}/>
-     <ResetButton onClick={() => {setFilters(defaultFilters);setDraftSearch({searchField:"keyword",keyword:""});}} />
+     <ResetButton onClick={() => {setSelectedBulkKeys([]);setLoading(true);setFilters(defaultFilters);setDraftSearch({searchField:"keyword",keyword:""});}} />
     </div>
    </Card>
    <ReportTableShell label="审批任务列表" className="approval-workspace__table">
     {loading ? <Spin /> : loadError ? <EmptyState compact title="审批数据加载失败" description="请检查接口、权限或网络状态，点击刷新重试"/> : count === 0 ? <EmptyState compact title="暂无审批事项" description="当前筛选条件下没有审批任务"/> :
      <ProTable<ApprovalItem> rowKey="id" columns={columns} dataSource={rows}
-      rowSelection={permissions.includes("*") ? {
+      rowSelection={hasPermission(permissions, "*") ? {
        selectedRowKeys:selectedBulkKeys,
        onChange:(keys)=>setSelectedBulkKeys(keys),
        getCheckboxProps:(row)=>({ disabled: filters.tab!=="pending" ||
@@ -171,7 +174,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <ApprovalDetailDrawer
    selected={selected}
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
-   canAdmin={permissions.includes("*")}
+   canAdmin={hasPermission(permissions, "*")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
    onClose={() => setSelected(undefined)}
    onUpdated={reload}

@@ -18,6 +18,7 @@ interface Props {
 export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, canSupplement, onClose, onUpdated }: Props) {
  const [detail, setDetail] = useState<ApprovalDetail>();
  const [loading, setLoading] = useState(false);
+ const [failedDetailId, setFailedDetailId] = useState<string>();
  const [saving, setSaving] = useState(false);
  const [decision, setDecision] = useState<Decision>();
  const [reattestCase, setReattestCase] = useState<string>();
@@ -28,8 +29,8 @@ export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, ca
   if (!selected) return;
   let live = true;
   void (selected.status === "legacy_unverified" ? fetchLegacyApprovalDetail(selected.id) : fetchApprovalDetail(selected.id)).then((value) => {
-   if (live) setDetail(value);
-  }).catch(() => { if (live) void messageApi.error("无法加载审批详情"); })
+   if (live) { setDetail(value); setFailedDetailId(undefined); }
+  }).catch(() => { if (live) { setFailedDetailId(selected.id); void messageApi.error("无法加载审批详情"); } })
    .finally(() => { if (live) setLoading(false); });
   return () => { live = false; };
  }, [selected, messageApi]);
@@ -71,14 +72,15 @@ export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, ca
      <Button type="primary" onClick={() => { setDecision("approved"); setNote(""); }}>审批通过</Button>
     </>}
    </Space> : null}>
-   {(loading || (!!selected && !shown)) && <Spin />}
+   {failedDetailId === selected?.id && <Alert type="error" showIcon message="审批详情加载失败" description="请关闭后重新打开或刷新列表重试" />}
+   {(loading || (!!selected && !shown && failedDetailId !== selected.id)) && <Spin />}
    {shown && <>
     <Alert showIcon type="info" message={"审批状态：" + statusNames[shown.status]}
-      description={"审批ID：" + shown.id + " · 申请人：" + (shown.applicant_id || "未知")} />
+      description={shown.requires_verification ? "历史 Case ID：" + shown.business_ref + " · 原始申请人身份待核验" : "审批ID：" + shown.id + " · 申请人：" + (shown.applicant_id || "未知")} />
     {shown.requires_verification && <Alert type="warning" showIcon message="历史待核验 · 禁止直接审批" description="历史申请理由与证据未完整保留；申请人身份及时间来源尚未核验。本记录仅供核查，不是正式审批单。" />}
     {shown.approval_type === "wfs_case_abandon" ? <WfsCaseApprovalDetail detail={shown}/> :
       <GenericApprovalDetail detail={shown} />}
-    <Typography.Title level={5}>审批事件</Typography.Title>
+    <Typography.Title level={5}>{shown.requires_verification ? "历史审批事件（未形成正式记录）" : "审批事件"}</Typography.Title>
     <Timeline items={shown.events.map((e) => ({
      children: <div><b>{e.event_type}</b> · {e.actor_id} · {e.created_at}
       {e.note && <Typography.Paragraph>{e.note}</Typography.Paragraph>}</div>,
