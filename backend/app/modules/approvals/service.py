@@ -306,6 +306,7 @@ class ApprovalService:
         where = [
             "c.source_account_ref=any(:accounts)",
             "c.is_deleted=false",
+            "c.source_kind='legacy_mirror'",
             "c.status='archive_pending'",
             "c.archive_review_status='pending'",
             "not exists (select 1 from app_approval_requests a where "
@@ -376,7 +377,11 @@ class ApprovalService:
     def legacy_detail(self, case_id: UUID, account_refs: frozenset[str]) -> ApprovalDetail:
         """Read-only display; do not fabricate approvals, applicants, or events."""
         record = self._case(str(case_id), account_refs)
-        if record["status"] != "archive_pending" or record["archive_review_status"] != "pending":
+        if (
+            record["source_kind"] != "legacy_mirror"
+            or record["status"] != "archive_pending"
+            or record["archive_review_status"] != "pending"
+        ):
             blocked()
         linked = self.session.execute(
             text("""
@@ -408,11 +413,16 @@ class ApprovalService:
             can_review=False,
             requires_verification=True,
         )
+        legacy_case_view = make_snapshot(record)
+        recorded_at = record.get("archive_requested_at")
+        legacy_case_view["legacy_recorded_at"] = (
+            recorded_at.isoformat() if recorded_at is not None else None
+        )
         return ApprovalDetail(
             **item.model_dump(),
-            snapshot=make_snapshot(record),
+            snapshot=legacy_case_view,
             evidence=record.get("archive_evidence"),
-            current_case=make_snapshot(record),
+            current_case=legacy_case_view,
             data_changed=False,
             can_supplement=False,
             events=[],
@@ -512,17 +522,23 @@ class ApprovalService:
             .mappings()
             .one()
         )
-        legacy = self.session.execute(
-            text("""
-            select count(*) from ops_wfs_fee_anomaly_cases c
-            where c.source_account_ref=any(:accounts) and c.is_deleted=false
-              and c.status='archive_pending' and c.archive_review_status='pending'
-              and not exists (select 1 from app_approval_requests a
-               where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
-        """),
-            {"accounts": list(account_refs)},
-        ).scalar_one()
-        return ApprovalSummary(**dict(row), legacy_unverified=int(legacy) if may_review else 0)
+        legacy = 0
+        if may_review:
+            legacy = int(
+                self.session.execute(
+                    text("""
+                    select count(*) from ops_wfs_fee_anomaly_cases c
+                    where c.source_account_ref=any(:accounts) and c.is_deleted=false
+                      and c.source_kind='legacy_mirror'
+                      and c.status='archive_pending'
+                      and c.archive_review_status='pending'
+                      and not exists (select 1 from app_approval_requests a
+                       where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
+                """),
+                    {"accounts": list(account_refs)},
+                ).scalar_one()
+            )
+        return ApprovalSummary(**dict(row), legacy_unverified=legacy)
 
     def detail(
         self,
@@ -552,7 +568,12 @@ class ApprovalService:
             .mappings()
             .all()
         )
-        if record["approval_type"] in ("purchase_exception", "finance_exception", "access_change"):
+        if record["approval_type"] in (
+            "purchase_exception",
+            "finance_exception",
+            "access_change",
+            "operations_plan_ack",
+        ):
             return ApprovalDetail(
                 **item.model_dump(),
                 snapshot=record["snapshot"],
@@ -613,7 +634,7 @@ class ApprovalService:
         if any(
             current.get(k) != snapshot.get(k)
             for k in snapshot
-            if k not in ("status", "archive_reason", "archive_reason_type")
+            if k not in ("status", "archive_reason", "archive_reason_type", "approval_policy")
         ):
             blocked()
         current_step = self.session.execute(
@@ -699,6 +720,17 @@ class ApprovalService:
         if changed.rowcount != 1:
             blocked()
         if payload.decision != "info_required":
+            # An unverified historical actor cannot replace the new applicant identity.
+            fresh_attestation = bool(
+                self.session.execute(
+                    text("""
+                    select 1 from app_approval_attestations
+                    where approval_id=:approval_id and submitted_by=:applicant
+                    limit 1
+                """),
+                    {"approval_id": str(approval_id), "applicant": r["applicant_id"]},
+                ).first()
+            )
             case_status = "archived" if payload.decision == "approved" else "following"
             updated = self.session.execute(
                 text("""
@@ -714,7 +746,7 @@ class ApprovalService:
                   updated_by=:actor, updated_at=:now
                 where id=:id and status='archive_pending'
                   and archive_review_status='pending'
-                  and archive_requested_by is distinct from :actor
+                  and (:fresh_attestation or archive_requested_by is distinct from :actor)
             """),
                 {
                     "case_status": case_status,
@@ -723,6 +755,7 @@ class ApprovalService:
                     "note": payload.note,
                     "now": now,
                     "id": r["business_ref"],
+                    "fresh_attestation": fresh_attestation,
                 },
             )
             if updated.rowcount != 1:

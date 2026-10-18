@@ -8,13 +8,19 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
-from app.modules.approvals.service import ApprovalService, make_snapshot, signature
+from app.modules.approvals.service import (
+    ApprovalService,
+    calculate_pending_recovery,
+    make_snapshot,
+    signature,
+)
 
 
 def conflict() -> None:
@@ -36,10 +42,14 @@ class ApprovalWorkflow:
         evidence: str,
     ) -> str:
         """Creates fresh request without changing imported case or legacy timestamp."""
-        if len(reason.strip()) < 5 or not reason_type.strip():
+        if len(reason.strip()) < 5 or len(evidence.strip()) < 5 or not reason_type.strip():
             raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
         case = self.legacy._case(str(case_id), accounts, lock=True)
-        if case["status"] != "archive_pending" or case["archive_review_status"] != "pending":
+        if (
+            case["source_kind"] != "legacy_mirror"
+            or case["status"] != "archive_pending"
+            or case["archive_review_status"] != "pending"
+        ):
             conflict()
         linked = self.session.execute(
             text("""
@@ -54,9 +64,28 @@ class ApprovalWorkflow:
 
         now = datetime.now(UTC)
         approval_id = str(uuid4())
+        rule = (
+            self.session.execute(
+                text("""
+                select required_steps from app_approval_rules
+                where approval_type='wfs_case_abandon' and is_active=true
+            """)
+            )
+            .mappings()
+            .first()
+        )
+        if rule is None:
+            conflict()
         snapshot = make_snapshot(case)
-        amount = snapshot["pending_recover_amount"]
-        risk = "high" if float(amount) >= 500 else "medium" if float(amount) >= 100 else "low"
+        snapshot["approval_policy"] = {"required_steps": int(rule["required_steps"])}
+        amount = calculate_pending_recovery(case)
+        risk = (
+            "high"
+            if amount >= Decimal("500")
+            else "medium"
+            if amount >= Decimal("100")
+            else "low"
+        )
         self.session.execute(
             text("""
             insert into app_approval_requests
