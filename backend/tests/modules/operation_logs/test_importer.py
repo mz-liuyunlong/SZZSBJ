@@ -347,6 +347,7 @@ def test_unknown_ownership_is_denied() -> None:
         )
     assert err.value.status_code == 403
 
+
 def test_manual_log_detail_is_separate_from_current_editor() -> None:
     from app.modules.operation_logs.access import LogAccess
     from app.modules.operation_logs.service import read_detail
