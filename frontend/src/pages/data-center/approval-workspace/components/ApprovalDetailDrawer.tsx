@@ -12,10 +12,11 @@ interface Props {
  canReview: boolean;
  canAdmin: boolean;
  canSupplement: boolean;
+ canPurchaseSupplement: boolean;
  onClose(): void;
  onUpdated(): void;
 }
-export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, canSupplement, onClose, onUpdated }: Props) {
+export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, canSupplement, canPurchaseSupplement, onClose, onUpdated }: Props) {
  const [detail, setDetail] = useState<ApprovalDetail>();
  const [loading, setLoading] = useState(false);
  const [failedDetailId, setFailedDetailId] = useState<string>();
@@ -57,6 +58,9 @@ export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, ca
  };
  const shown = detail?.id === selected?.id ? detail : undefined;
  const mayApprove = !shown?.requires_verification && (shown?.approval_type === "wfs_case_abandon" ? canReview : canAdmin) && shown?.can_review && !shown.data_changed && shown.status === "submitted";
+ const maySupplement = shown?.can_supplement && (shown.approval_type === "wfs_case_abandon"
+  ? canSupplement
+  : canAdmin || (shown.approval_type === "purchase_exception" && canPurchaseSupplement));
  return <>
   {holder}
   <Drawer title={selected?.title || "审批详情"} open={!!selected} width={1020}
@@ -64,7 +68,7 @@ export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, ca
    footer={shown ? <Space style={{ display: "flex", justifyContent: "flex-end" }}>
     <Button onClick={onClose}>关闭</Button>
     {canSupplement && shown.requires_verification && <Button type="primary" onClick={() => setReattestCase(shown.business_ref)}>补充核验并提交</Button>}
-    {canSupplement && shown.can_supplement &&
+    {maySupplement &&
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>补充资料后重新提交</Button>}
     {mayApprove && <>
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>要求补资料</Button>

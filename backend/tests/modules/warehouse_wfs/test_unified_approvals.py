@@ -337,3 +337,59 @@ def test_generic_bulk_does_not_approve_non_allowlisted_type() -> None:
             "not safe for bulk",
         )
     session.commit.assert_not_called()
+
+
+
+def test_purchase_exception_applicant_can_supplement_with_pmc_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ApprovalService,
+        "_record",
+        lambda *_args, **_kwargs: {"approval_type": "purchase_exception"},
+    )
+    monkeypatch.setattr(
+        ApprovalService,
+        "supplement",
+        lambda _self, _id, _payload, _accounts, actor: calls.append(actor),
+    )
+    client = _approval_client(
+        monkeypatch,
+        {
+            "page:data-center:approval-workspace:view",
+            "action:pmc:purchase-board:override",
+        },
+    )
+    response = client.post(
+        "/api/approvals/00000000-0000-0000-0000-000000000123/supplement",
+        json={"note": "revised evidence", "evidence": "additional details", "expected_version": 1},
+    )
+    assert response.status_code == 200
+    assert calls == ["synthetic-user"]
+
+
+def test_page_view_only_cannot_supplement_purchase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ApprovalService,
+        "_record",
+        lambda *_args, **_kwargs: {"approval_type": "purchase_exception"},
+    )
+    monkeypatch.setattr(
+        ApprovalService,
+        "supplement",
+        lambda _self, *_args: calls.append("unexpected"),
+    )
+    client = _approval_client(
+        monkeypatch,
+        {"page:data-center:approval-workspace:view"},
+    )
+    response = client.post(
+        "/api/approvals/00000000-0000-0000-0000-000000000123/supplement",
+        json={"note": "revised evidence", "evidence": "additional details", "expected_version": 1},
+    )
+    assert response.status_code == 403
+    assert calls == []

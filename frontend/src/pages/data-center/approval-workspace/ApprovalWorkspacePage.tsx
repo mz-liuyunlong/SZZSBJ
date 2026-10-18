@@ -176,6 +176,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    canReview={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review")}
    canAdmin={hasPermission(permissions, "*")}
    canSupplement={hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-request")}
+   canPurchaseSupplement={hasPermission(permissions, "action:pmc:purchase-board:override")}
    onClose={() => setSelected(undefined)}
    onUpdated={reload}
   />

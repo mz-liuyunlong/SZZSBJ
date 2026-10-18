@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, success_response
-from app.core.auth import Principal
+from app.core.auth import Principal, require_principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.approvals.generic import GenericApprovalService
@@ -306,8 +306,22 @@ def supplement(
     approval_id: UUID,
     payload: ApprovalSupplementWrite,
     session: db_session,
-    principal: archive_request_principal,
+    principal: Annotated[Principal, Depends(require_principal)],
     accounts: account_scope,
 ):
+    from app.core.api import ApiError, ErrorCode
+
+    # Preserve WFS archive-request permissions, while allowing the original
+    # authorized non-admin PMC applicant to supplement a purchase approval.
+    record = ApprovalService(session)._record(approval_id, accounts)
+    if record["approval_type"] == "wfs_case_abandon":
+        allowed = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-request")
+    else:
+        allowed = has_permission(principal, "*") or (
+            record["approval_type"] == "purchase_exception"
+            and has_permission(principal, "action:pmc:purchase-board:override")
+        )
+    if not allowed:
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     ApprovalService(session).supplement(approval_id, payload, accounts, principal.user_id)
     return success_response(request, data={"updated": True}, meta=None)
