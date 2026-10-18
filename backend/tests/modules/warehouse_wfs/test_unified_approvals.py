@@ -339,7 +339,6 @@ def test_generic_bulk_does_not_approve_non_allowlisted_type() -> None:
     session.commit.assert_not_called()
 
 
-
 def test_purchase_exception_applicant_can_supplement_with_pmc_permission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
