@@ -106,7 +106,9 @@ class LegacyReattestationWrite(StrictSchema):
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)
     ]
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
-    evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
+    evidence: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)
+    ]
 
 
 class ApprovalRuleWrite(StrictSchema):

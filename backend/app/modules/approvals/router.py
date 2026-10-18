@@ -67,7 +67,7 @@ def list_approvals(
         accounts,
         principal.user_id,
         approved,
-        is_admin="*" in principal.permissions,
+        is_admin=has_permission(principal, "*"),
     )
     return success_response(
         request,
@@ -82,7 +82,7 @@ def summary(
 ):
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     data = ApprovalService(session).summary(
-        accounts, principal.user_id, may_review, is_admin="*" in principal.permissions
+        accounts, principal.user_id, may_review, is_admin=has_permission(principal, "*")
     )
     return success_response(request, data=data, meta=None)
 
@@ -187,7 +187,7 @@ def submit_generic_approval(
 ):
     # High-impact general requests require explicit super-admin authority.
     # Purchase requests may also be initiated by a PMC override authorized user.
-    allowed = "*" in principal.permissions or (
+    allowed = has_permission(principal, "*") or (
         payload.approval_type == "purchase_exception"
         and has_permission(principal, "action:pmc:purchase-board:override")
     )
@@ -215,7 +215,7 @@ def approve_bulk(
     principal: view_principal,
     accounts: account_scope,
 ):
-    if "*" not in principal.permissions:
+    if not has_permission(principal, "*"):
         from app.core.api import ApiError, ErrorCode
 
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
@@ -244,7 +244,7 @@ def get_approval(
         accounts,
         principal.user_id,
         may_review,
-        is_admin="*" in principal.permissions,
+        is_admin=has_permission(principal, "*"),
     )
     return success_response(request, data=data, meta=None)
 
@@ -281,7 +281,7 @@ def decide(
     may_review = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
     record = ApprovalService(session)._record(approval_id, accounts)
     if record["approval_type"] != "wfs_case_abandon":
-        if "*" not in principal.permissions:
+        if not has_permission(principal, "*"):
             from app.core.api import ApiError, ErrorCode
 
             raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)

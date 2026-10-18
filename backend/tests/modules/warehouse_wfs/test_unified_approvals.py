@@ -168,6 +168,11 @@ def test_super_admin_wildcard_can_use_archive_review_action(
         reviewed.append(bool(kwargs.get("may_review") or _args[-1]))
 
     monkeypatch.setattr(ApprovalService, "decide", decide)
+    monkeypatch.setattr(
+        ApprovalService,
+        "_record",
+        lambda *_args, **_kwargs: {"approval_type": "wfs_case_abandon"},
+    )
     client = _approval_client(monkeypatch, {"*"})
 
     response = client.post(

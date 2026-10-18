@@ -157,6 +157,7 @@ class GenericApprovalService:
                 }[kind],
                 "reason": reason.strip(),
                 "evidence": evidence.strip(),
+                "risk": "low" if kind == "operations_plan_ack" else "high",
                 "snapshot": json.dumps(snapshot, ensure_ascii=False),
                 "hash": signature(snapshot),
                 "now": now,
