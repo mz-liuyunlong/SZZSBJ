@@ -273,6 +273,7 @@ class ApprovalService:
         where = [
             "c.source_account_ref=any(:accounts)",
             "c.is_deleted=false",
+            "c.source_kind='legacy_mirror'",
             "c.status='archive_pending'",
             "c.archive_review_status='pending'",
             "not exists (select 1 from app_approval_requests a where "
@@ -343,7 +344,11 @@ class ApprovalService:
     def legacy_detail(self, case_id: UUID, account_refs: frozenset[str]) -> ApprovalDetail:
         """Read-only display; do not fabricate approvals, applicants, or events."""
         record = self._case(str(case_id), account_refs)
-        if record["status"] != "archive_pending" or record["archive_review_status"] != "pending":
+        if (
+            record["source_kind"] != "legacy_mirror"
+            or record["status"] != "archive_pending"
+            or record["archive_review_status"] != "pending"
+        ):
             blocked()
         linked = self.session.execute(
             text("""
@@ -375,11 +380,17 @@ class ApprovalService:
             can_review=False,
             requires_verification=True,
         )
+        # This is a current read of a legacy Case, never a historical approval snapshot.
+        legacy_case_view = make_snapshot(record)
+        recorded_at = record.get("archive_requested_at")
+        legacy_case_view["legacy_recorded_at"] = (
+            recorded_at.isoformat() if recorded_at is not None else None
+        )
         return ApprovalDetail(
             **item.model_dump(),
-            snapshot=make_snapshot(record),
+            snapshot=legacy_case_view,
             evidence=record.get("archive_evidence"),
-            current_case=make_snapshot(record),
+            current_case=legacy_case_view,
             data_changed=False,
             can_supplement=False,
             events=[],
@@ -459,17 +470,23 @@ class ApprovalService:
             .mappings()
             .one()
         )
-        legacy = self.session.execute(
-            text("""
-            select count(*) from ops_wfs_fee_anomaly_cases c
-            where c.source_account_ref=any(:accounts) and c.is_deleted=false
-              and c.status='archive_pending' and c.archive_review_status='pending'
-              and not exists (select 1 from app_approval_requests a
-               where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
-        """),
-            {"accounts": list(account_refs)},
-        ).scalar_one()
-        return ApprovalSummary(**dict(row), legacy_unverified=int(legacy))
+        legacy_count = 0
+        if may_review:
+            # Do not reveal protected review-queue totals to page-only users.
+            legacy_count = int(
+                self.session.execute(
+                    text("""
+                    select count(*) from ops_wfs_fee_anomaly_cases c
+                    where c.source_account_ref=any(:accounts) and c.is_deleted=false
+                      and c.source_kind='legacy_mirror'
+                      and c.status='archive_pending' and c.archive_review_status='pending'
+                      and not exists (select 1 from app_approval_requests a
+                       where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
+                    """),
+                    {"accounts": list(account_refs)},
+                ).scalar_one()
+            )
+        return ApprovalSummary(**dict(row), legacy_unverified=legacy_count)
 
     def detail(
         self, approval_id: UUID, account_refs: frozenset[str], actor: str, may_review: bool
