@@ -200,7 +200,7 @@ def test_daily_sales_profit_formula_returns_refunded_commission() -> None:
 
 
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+refund-v3-lpds")
+    assert DAILY_SALES_V2_VERSION.endswith("+sampleguard-v5")
     assert len(DAILY_SALES_V2_VERSION) <= 64
 
 
@@ -211,3 +211,9 @@ def test_order_writer_uses_one_provider_line_identity_for_hash_and_persisted_id(
     assert '"source_order_line_id": line_id' in source
     assert '"line_id": line_id' in source
     assert '"store": _field(row, "store_id")' in source
+
+
+def test_sample_mart_only_accepts_verified_sample_version() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+    assert "sample_rule_version=:verified_sample_rule_version" in source
+    assert "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT" in source
