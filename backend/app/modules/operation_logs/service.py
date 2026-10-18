@@ -322,7 +322,8 @@ def read_detail(
         from ops_manual_operation_logs
         where source_account_ref = :account and log_date = :day
           and store_id = :store and item_id = :item and msku = :msku
-          and (:is_admin or created_by_user_id = :user_id or (source_kind = 'legacy' and :owns_product))
+          and (:is_admin or created_by_user_id = :user_id
+               or (source_kind = 'legacy' and :owns_product))
         order by (source_kind = 'manual') desc, id desc
     """),
             key,

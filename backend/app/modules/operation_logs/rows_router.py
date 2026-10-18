@@ -117,7 +117,7 @@ def get_rows(
             select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = i.source_account_ref
-              and (:is_admin or m.created_by_user_id = :user_id or (m.source_kind = 'legacy' and :is_admin))
+              and (:is_admin or m.created_by_user_id = :user_id )
               and m.log_date = i.log_date
               and m.store_id = i.store_id and m.item_id = i.item_id
               and m.msku = i.msku
@@ -193,7 +193,7 @@ def get_rows(
             select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = h.source_account_ref
-              and (:is_admin or m.created_by_user_id = :user_id or (m.source_kind = 'legacy' and :is_admin))
+              and (:is_admin or m.created_by_user_id = :user_id )
               and m.log_date = h.day and m.store_id = h.store_id
               and m.item_id = h.item_id and m.msku = h.msku
             order by (m.source_kind = 'manual') desc, m.id desc
