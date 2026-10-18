@@ -20,6 +20,7 @@ export type PurchaseBoardSearchType = "sku" | "item_id" | "gtin" | "msku" | "ord
 export type PurchaseBoardItemIdSource =
   | "from_system_plan"
   | "from_plan_remark"
+  | "from_listing"
   | "from_packing_slip"
   | "pending_packing_slip"
   | "unresolved";
@@ -357,6 +358,7 @@ export const purchaseBoardItemIdSourceOptions: {
 }[] = [
   { value: "from_system_plan", label: "已归属（系统计划）" },
   { value: "from_plan_remark", label: "已归属（计划备注）" },
+  { value: "from_listing", label: "已归属（Listing）" },
   { value: "from_packing_slip", label: "已归属（打包单）" },
   { value: "pending_packing_slip", label: "待打包单" },
   { value: "unresolved", label: "待处理" },

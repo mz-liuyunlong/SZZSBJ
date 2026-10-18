@@ -23,6 +23,7 @@ export const stageLabels: Record<PurchaseStageCode, { label: string; color: stri
 export const itemIdSourceLabels: Record<PurchaseBoardItemIdSource, string> = {
   from_system_plan: "系统计划",
   from_plan_remark: "计划备注",
+  from_listing: "Listing",
   from_packing_slip: "打包单",
   pending_packing_slip: "待打包单",
   unresolved: "待处理",

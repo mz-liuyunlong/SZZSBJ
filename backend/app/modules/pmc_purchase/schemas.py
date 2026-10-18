@@ -24,6 +24,7 @@ type SearchType = Literal["sku", "item_id", "gtin", "msku", "order_sn"]
 type ItemIdSourceFilter = Literal[
     "from_system_plan",
     "from_plan_remark",
+    "from_listing",
     "from_packing_slip",
     "pending_packing_slip",
     "unresolved",
@@ -53,7 +54,7 @@ class BoardFilterQuery(StrictSchema):
     status: list[StatusFilter] = Field(default_factory=list, max_length=7)
     search_type: SearchType | None = None
     search_values: list[str] = Field(default_factory=list, max_length=200)
-    item_id_source: list[ItemIdSourceFilter] = Field(default_factory=list, max_length=5)
+    item_id_source: list[ItemIdSourceFilter] = Field(default_factory=list, max_length=6)
     order_date_from: date | None = None
     order_date_to: date | None = None
     qty_min: int | None = Field(default=None, ge=0)

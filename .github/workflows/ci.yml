@@ -129,6 +129,41 @@ jobs:
             tests/modules/iam/test_auth_query_performance.py \
             tests/modules/iam/test_auth_postgresql_integration.py
 
+  pmc-0043-postgresql-14:
+    name: PMC 0043 PostgreSQL 14 compatibility
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: pmc_0043_test
+          POSTGRES_USER: pmc_0043_test
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pmc_0043_test -d pmc_0043_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://pmc_0043_test:local_ci_only@127.0.0.1:5432/pmc_0043_test
+      PMC_0043_POSTGRESQL_TESTS: "1"
+      PMC_0043_EXPECTED_POSTGRES_MAJOR: "14"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Verify 0042 to 0043 compatibility on PostgreSQL 14
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade 20261017_0042_rbac_backfill
+          uv run pytest -q -s tests/modules/pmc_purchase/test_0043_postgresql_integration.py
+
   wfs-migration-smoke:
     name: WFS PostgreSQL migration smoke
     runs-on: ubuntu-latest
