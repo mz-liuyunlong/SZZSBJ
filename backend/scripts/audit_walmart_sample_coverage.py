@@ -46,12 +46,21 @@ def _report(rows: list[dict[str, Any]], limit: int) -> dict[str, object]:
         captured = int(row["sample_captured"])
         valid_amount = Decimal(str(row["sample_qty"]))
         mart_amount = Decimal(str(row["mart_sample_qty"]))
+        unverified = int(row.get("unverified_sample_lines") or 0)
+        unresolved = int(row.get("unresolved_sample_lines") or 0)
+        cancelled = int(row.get("cancelled_sample_lines") or 0)
         valid_qty = str(valid_amount)
         mart_qty = str(mart_amount)
-        if captured == 0:
-            state = "SAMPLE_NOT_OBSERVED_UNKNOWN_NOT_ZERO"
-        elif valid_amount != mart_amount:
+        if valid_amount != mart_amount:
             state = "SAMPLE_FACT_MART_MISMATCH"
+        elif unresolved:
+            state = "UNRESOLVED_SAMPLE_IDENTITY"
+        elif unverified:
+            state = "UNVERIFIED_SAMPLE_CANDIDATES"
+        elif cancelled:
+            state = "CANCELLED_SAMPLE_CANDIDATES"
+        elif captured == 0:
+            state = "SAMPLE_NOT_OBSERVED_UNKNOWN_NOT_ZERO"
         else:
             state = "MATCHES_PERSISTED_SAMPLE_FACT"
         states[state] = states.get(state, 0) + 1
@@ -68,6 +77,9 @@ def _report(rows: list[dict[str, Any]], limit: int) -> dict[str, object]:
                     "status": state,
                     "gross_qty": str(row["gross_qty"]),
                     "captured_sample_lines": captured,
+                    "unverified_sample_lines": unverified,
+                    "unresolved_sample_lines": unresolved,
+                    "cancelled_sample_lines": cancelled,
                     "valid_sample_qty": valid_qty,
                     "mart_sample_qty": mart_qty,
                 }
@@ -105,15 +117,23 @@ def main() -> None:
         ),
         samples as (
             select business_date_utc_minus_7 day_us, source_account_ref,
-                   store_id, item_id, trim(msku) msku,
+                   store_id, item_id, nullif(trim(msku),'') msku,
                    count(*) sample_captured,
                    sum(coalesce(quantity,0)) filter
-                       (where is_valid_sample=true) sample_qty
+                       (where is_valid_sample=true
+                        and sample_rule_version='provider-verified-sample-v5'
+                        and is_cancelled=false) sample_qty,
+                   count(*) filter
+                       (where is_cancelled=false and not (is_valid_sample=true
+                        and sample_rule_version='provider-verified-sample-v5'))
+                       unverified_sample_lines,
+                   count(*) filter (where is_cancelled=true) cancelled_sample_lines,
+                   count(*) filter
+                       (where store_id is null or item_id is null
+                        or nullif(trim(msku),'') is null) unresolved_sample_lines
             from public.fact_walmart_sample_order_items
             where business_date_utc_minus_7 between :start and :end
               and (:account is null or source_account_ref=:account)
-              and store_id is not null and item_id is not null
-              and nullif(trim(msku),'') is not null
             group by 1,2,3,4,5
         )
         select coalesce(s.day_us,f.day_us) day_us,
@@ -123,6 +143,9 @@ def main() -> None:
                coalesce(s.msku,f.msku) msku,
                coalesce(s.gross_qty,0) gross_qty,
                coalesce(f.sample_captured,0) sample_captured,
+               coalesce(f.unverified_sample_lines,0) unverified_sample_lines,
+               coalesce(f.unresolved_sample_lines,0) unresolved_sample_lines,
+               coalesce(f.cancelled_sample_lines,0) cancelled_sample_lines,
                coalesce(f.sample_qty,0) sample_qty,
                coalesce(s.mart_sample_qty,0) mart_sample_qty
         from sales s full join samples f

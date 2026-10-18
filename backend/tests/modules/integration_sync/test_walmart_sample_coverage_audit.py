@@ -40,6 +40,39 @@ def test_sample_mart_mismatch_is_flagged() -> None:
     assert report["sample_findings"][0]["mart_sample_qty"] == "0"
 
 
+def test_unverified_candidate_zero_is_not_a_successful_reconciliation() -> None:
+    row = _row(captured=3, fact_qty="0", mart_qty="0")
+    row["unverified_sample_lines"] = 3
+    report = _report([row], limit=50)
+    assert report["status_counts"] == {"UNVERIFIED_SAMPLE_CANDIDATES": 1}
+    assert report["sample_findings"][0]["unverified_sample_lines"] == 3
+
+
+def test_unresolved_identity_is_never_hidden() -> None:
+    row = _row(captured=1, fact_qty="0", mart_qty="0")
+    row["store_id"] = None
+    row["item_id"] = None
+    row["msku"] = None
+    row["unresolved_sample_lines"] = 1
+    row["unverified_sample_lines"] = 1
+    report = _report([row], limit=50)
+    assert report["status_counts"] == {"UNRESOLVED_SAMPLE_IDENTITY": 1}
+
+
+def test_cancelled_candidate_is_not_validated() -> None:
+    row = _row(captured=1, fact_qty="0", mart_qty="0")
+    row["cancelled_sample_lines"] = 1
+    report = _report([row], limit=50)
+    assert report["status_counts"] == {"CANCELLED_SAMPLE_CANDIDATES": 1}
+
+
+def test_mismatch_takes_priority_over_pending_candidates() -> None:
+    row = _row(captured=2, fact_qty="2", mart_qty="1")
+    row["unverified_sample_lines"] = 1
+    report = _report([row], limit=50)
+    assert report["status_counts"] == {"SAMPLE_FACT_MART_MISMATCH": 1}
+
+
 def test_matching_persisted_samples_are_not_exported_as_findings() -> None:
     report = _report([_row(captured=2, fact_qty="2", mart_qty="2")], limit=50)
 

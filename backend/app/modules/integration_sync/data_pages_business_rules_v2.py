@@ -147,6 +147,25 @@ def _cost_loss_total(
     return sum(components, Decimal("0"))
 
 
+def _potential_sample_candidate(
+    row: Mapping[str, Any], item: Mapping[str, Any] | None = None
+) -> bool:
+    """Only identify lines eligible for quarantine, never verify samples."""
+    order_total = _money_decimal(_nested_first(row, "transaction_info", "order_total_amount"))
+    if order_total == Decimal("0"):
+        return True
+    if item is None:
+        return False
+    item_price = _money_decimal(item.get("item_price_amount"))
+    discount = _money_decimal(item.get("discount_amount"))
+    return (
+        item_price is not None
+        and item_price > 0
+        and discount is not None
+        and abs(discount) >= item_price - Decimal("0.01")
+    )
+
+
 class DataPagesRealSyncRunner(BusinessRulesRunner):
     """#113 runner: one Daily Sales truth with Product Management cost semantics."""
 
@@ -177,15 +196,34 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             order_id = _field(row, "global_order_no", "order_id", "platform_order_no")
             item_rows = row.get("item_info") if isinstance(row.get("item_info"), list) else [row]
             if not order_id:
-                continue
+                if _potential_sample_candidate(row):
+                    self.summary.order_unresolved_rows += 1
+                    continue
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_IDENTITY_MISSING")
+            if not _field(row, "store_id"):
+                if _potential_sample_candidate(row):
+                    self.summary.order_unresolved_rows += 1
+                    continue
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_STORE_ID_MISSING")
+            if not item_rows:
+                if _potential_sample_candidate(row):
+                    self.summary.order_unresolved_rows += 1
+                    continue
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_ITEMS_MISSING")
             purchase_date = _order_purchase_date_la(row.get("global_purchase_time"))
             if purchase_date != self.business_date:
                 raise DataPagesRealSyncError("DATA_PAGES_ORDER_PURCHASE_DATE_MISMATCH")
             for ordinal, item in enumerate(item_rows):
                 if not isinstance(item, dict):
-                    continue
+                    if _potential_sample_candidate(row):
+                        self.summary.order_unresolved_rows += 1
+                        continue
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_ITEM_INVALID")
                 line_id = _field(item, "order_item_no", "global_item_no", "id")
                 if not line_id:
+                    if _potential_sample_candidate(row, item):
+                        self.summary.order_unresolved_rows += 1
+                        continue
                     raise DataPagesRealSyncError("DATA_PAGES_ORDER_LINE_IDENTITY_MISSING")
                 line_hash = _stable_hash(
                     {"store": _field(row, "store_id"), "order": order_id, "line_id": line_id}

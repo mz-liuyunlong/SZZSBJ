@@ -12,6 +12,7 @@ from sqlalchemy import text
 from app.core.config import AppEnvironment, get_settings
 from app.db.session import get_session_factory
 from app.modules.integration_sync.catalog import IntegrationCatalogService
+from app.modules.integration_sync.data_pages_mart_invariants import DataPagesMartInvariantError
 from app.modules.integration_sync.data_pages_real_sync import (
     AUTHORIZED_ENV,
     RUNNER_VERSION,
@@ -194,14 +195,36 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         }
 
     def _write_sample_orders(self, rows: Iterable[dict[str, Any]]) -> int:
-        """Replace one UTC-7 sample-day snapshot before strict triple validation."""
+        """Refresh unverified candidates while protecting provider-confirmed facts."""
 
+        refresh_started_at = _now()
+        # A provider replay must never delete an independently verified sample.
         self.session.execute(
             text(
                 "delete from fact_walmart_sample_order_items "
-                "where source_account_ref=:account and business_date_utc_minus_7=:day"
+                "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                "and not (is_valid_sample=true and sample_rule_version=:verified_rule)"
             ),
-            {"account": self.source_account_ref, "day": self.business_date},
+            {
+                "account": self.source_account_ref,
+                "day": self.business_date,
+                "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+            },
+        )
+        # An approval survives only an identical non-cancelled provider replay.
+        verified_unchanged = (
+            "fact_walmart_sample_order_items.is_valid_sample=true "
+            "and fact_walmart_sample_order_items.sample_rule_version=:verified_rule "
+            "and excluded.is_cancelled=false "
+            "and fact_walmart_sample_order_items.store_id is not distinct from excluded.store_id "
+            "and fact_walmart_sample_order_items.source_order_id is not distinct from excluded.source_order_id "
+            "and fact_walmart_sample_order_items.business_date_utc_minus_7 is not distinct from excluded.business_date_utc_minus_7 "
+            "and (excluded.item_id is null or "
+            "fact_walmart_sample_order_items.item_id is not distinct from excluded.item_id) "
+            "and fact_walmart_sample_order_items.msku is not distinct from excluded.msku "
+            "and fact_walmart_sample_order_items.quantity is not distinct from excluded.quantity "
+            "and fact_walmart_sample_order_items.unit_price_amount is not distinct from excluded.unit_price_amount "
+            "and fact_walmart_sample_order_items.order_total_amount is not distinct from excluded.order_total_amount"
         )
         count = 0
         for row in rows:
@@ -227,6 +250,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             purchase_date = _order_purchase_date_la(row.get("global_purchase_time"))
             if purchase_date != self.business_date:
                 raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_PURCHASE_DATE_MISMATCH")
+            if not item_rows:
+                self.summary.sample_unresolved_rows += 1
+                continue
             for item in item_rows:
                 if not isinstance(item, dict):
                     continue
@@ -279,15 +305,24 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "on conflict (source_account_ref,platform_order_no,source_order_line_id) "
                         "do update set business_date_utc_minus_7=excluded.business_date_utc_minus_7,"
                         "store_id=excluded.store_id,store_name=excluded.store_name,"
-                        "platform_code=excluded.platform_code,item_id=excluded.item_id,msku=excluded.msku,"
+                        "platform_code=excluded.platform_code,"
+                        "item_id=case when "
+                        "fact_walmart_sample_order_items.store_id is not distinct from excluded.store_id "
+                        "and fact_walmart_sample_order_items.msku is not distinct from excluded.msku "
+                        "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id) "
+                        "else excluded.item_id end,msku=excluded.msku,"
                         "local_sku=excluded.local_sku,quantity=excluded.quantity,"
                         "unit_price_amount=excluded.unit_price_amount,"
                         "unit_price_currency_code=excluded.unit_price_currency_code,"
                         "order_total_amount=excluded.order_total_amount,"
                         "order_total_currency_code=excluded.order_total_currency_code,"
                         "cancel_time_raw=excluded.cancel_time_raw,is_cancelled=excluded.is_cancelled,"
-                        "is_valid_sample=excluded.is_valid_sample,"
-                        "sample_rule_version=excluded.sample_rule_version,"
+                        f"is_valid_sample=case when {verified_unchanged} then true else false end,"
+                        f"sample_rule_version=case when {verified_unchanged} "
+                        "then :verified_rule when "
+                        "fact_walmart_sample_order_items.is_valid_sample=true "
+                        "and fact_walmart_sample_order_items.sample_rule_version=:verified_rule "
+                        "then :changed_rule else excluded.sample_rule_version end,"
                         "synced_at=excluded.synced_at,updated_at=excluded.updated_at"
                     ),
                     {
@@ -316,10 +351,52 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         # authenticated evidence of a Walmart sample order.
                         "is_valid_sample": False,
                         "sample_rule_version": SAMPLE_RULE_VERSION,
+                        "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                        "changed_rule": "provider-verified-changed-v5",
                         **_timestamps(),
                     },
                 )
                 count += 1
+        # Changed or missing previously verified lines must stop MART refresh.
+        # Without platform verification evidence, do not silently reclassify as paid sales.
+        changed = int(
+            self.session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and sample_rule_version=:changed_rule"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "day": self.business_date,
+                    "changed_rule": "provider-verified-changed-v5",
+                },
+            ).scalar_one()
+        )
+        if changed:
+            raise DataPagesMartInvariantError(
+                "DATA_PAGES_VERIFIED_SAMPLE_CHANGED", business_date=self.business_date
+            )
+        unseen = int(
+            self.session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and is_valid_sample=true and sample_rule_version=:verified_rule "
+                    "and synced_at < :started_at"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "day": self.business_date,
+                    "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                    "started_at": refresh_started_at,
+                },
+            ).scalar_one()
+        )
+        if unseen:
+            raise DataPagesMartInvariantError(
+                "DATA_PAGES_VERIFIED_SAMPLE_NOT_OBSERVED", business_date=self.business_date
+            )
         return count
 
     def _resolve_sample_items(self) -> int:
@@ -342,7 +419,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "and l.store_id=s.store_id and trim(l.msku)=trim(s.msku) "
                 "where s.source_account_ref=:account "
                 "and s.business_date_utc_minus_7=:day "
-                "and s.is_valid_sample=true and s.item_id is null "
+                "and s.item_id is null "
                 "and s.store_id is not null and s.msku is not null and trim(s.msku)<>'' "
                 "and l.item_id is not null "
                 "group by s.id"
@@ -356,7 +433,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 "and f.allocation_status='direct' "
                 "where s.source_account_ref=:account "
                 "and s.business_date_utc_minus_7=:day "
-                "and s.is_valid_sample=true and s.item_id is null "
+                "and s.item_id is null "
                 "and s.store_id is not null and s.msku is not null and trim(s.msku)<>'' "
                 "and f.item_id is not null "
                 "group by s.id"
@@ -373,12 +450,12 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             {"account": self.source_account_ref, "day": self.business_date},
         )
 
-        return int(
+        unresolved_candidates = int(
             self.session.execute(
                 text(
                     "select count(*) from fact_walmart_sample_order_items s "
                     "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
-                    "and s.is_valid_sample=true and ("
+                    "and ("
                     "s.store_id is null or s.item_id is null or s.msku is null or trim(s.msku)='' or "
                     "not exists (select 1 from dim_walmart_listings l "
                     "where l.source_account_ref=s.source_account_ref "
@@ -394,6 +471,41 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 {"account": self.source_account_ref, "day": self.business_date},
             ).scalar_one()
         )
+        # Unverified candidates remain outside financial totals, but approved
+        # sample rows lacking identity, cost basis, or matching sales must block.
+        invalid_verified = int(
+            self.session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items s "
+                    "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
+                    "and s.is_valid_sample=true and s.sample_rule_version=:verified_rule "
+                    "and (s.is_cancelled=true or s.quantity is null or s.quantity<=0 "
+                    "or s.unit_price_amount is null "
+                    "or s.store_id is null or s.item_id is null "
+                    "or s.msku is null or trim(s.msku)='' "
+                    "or not exists (select 1 from dim_walmart_listings l "
+                    "where l.source_account_ref=s.source_account_ref "
+                    "and l.store_id=s.store_id and l.item_id=s.item_id "
+                    "and trim(l.msku)=trim(s.msku)) "
+                    "or not exists (select 1 from fact_walmart_sales_item_daily f "
+                    "where f.source_account_ref=s.source_account_ref "
+                    "and f.business_date_la=s.business_date_utc_minus_7 "
+                    "and f.store_id=s.store_id and f.item_id=s.item_id "
+                    "and trim(f.msku)=trim(s.msku) and f.allocation_status='direct'))"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "day": self.business_date,
+                    "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                },
+            ).scalar_one()
+        )
+        if invalid_verified:
+            raise DataPagesMartInvariantError(
+                "DATA_PAGES_VERIFIED_SAMPLE_IDENTITY_UNRESOLVED",
+                business_date=self.business_date,
+            )
+        return unresolved_candidates
 
     def _refund_business_date(
         self,
