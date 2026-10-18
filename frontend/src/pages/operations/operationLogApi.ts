@@ -28,3 +28,22 @@ export async function saveOperationLink(row: OperationLogRow, entryType: "keywor
     }),
   });
 }
+
+export interface ManualEntryDetail {
+  id: string;
+  sourceKind: string;
+  createdByUserId: number | null;
+  authorName: string;
+  content: string;
+  workType: string;
+  status: string;
+  updatedAt: string | null;
+}
+export async function fetchOperationLogDetail(row: OperationLogRow): Promise<{manual_entries: ManualEntryDetail[]}> {
+  const query = new URLSearchParams({
+    account: row.sourceAccountRef, day: row.date, store: row.storeId,
+    item: row.productId, msku: row.msku,
+  });
+  const result = await backendRequest<{manual_entries: ManualEntryDetail[]}>(`/api/operations/logs?${query}`);
+  return result.data;
+}

@@ -88,6 +88,10 @@ def get_rows(
                coalesce(m.work_types_json, '[]'::jsonb) as work_types_json,
                m.observe_days as observe_days,
                coalesce(m.status, 'draft') as edit_status,
+               (select count(*) from ops_manual_operation_logs other
+                where other.source_account_ref = i.source_account_ref
+                  and other.log_date = i.log_date and other.store_id = i.store_id
+                  and other.item_id = i.item_id and other.msku = i.msku) as manual_count,
                (select count(*) from ops_system_operation_events e
                 where e.source_account_ref = i.source_account_ref
                   and e.event_date = i.log_date and e.store_id = i.store_id
@@ -117,7 +121,8 @@ def get_rows(
             select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = i.source_account_ref
-              and (:is_admin or m.created_by_user_id = :user_id )
+              and m.created_by_user_id = :user_id
+              and m.source_kind = 'manual'
               and m.log_date = i.log_date
               and m.store_id = i.store_id and m.item_id = i.item_id
               and m.msku = i.msku
@@ -156,6 +161,10 @@ def get_rows(
                coalesce(m.work_types_json, '[]'::jsonb) as work_types_json,
                m.observe_days as observe_days,
                coalesce(m.status, 'draft') as edit_status,
+               (select count(*) from ops_manual_operation_logs other
+                where other.source_account_ref = h.source_account_ref
+                  and other.log_date = h.day and other.store_id = h.store_id
+                  and other.item_id = h.item_id and other.msku = h.msku) as manual_count,
                (select count(*) from ops_system_operation_events e
                 where e.source_account_ref = h.source_account_ref
                   and e.event_date = h.day and e.store_id = h.store_id
@@ -193,7 +202,8 @@ def get_rows(
             select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = h.source_account_ref
-              and (:is_admin or m.created_by_user_id = :user_id )
+              and m.created_by_user_id = :user_id
+              and m.source_kind = 'manual'
               and m.log_date = h.day and m.store_id = h.store_id
               and m.item_id = h.item_id and m.msku = h.msku
             order by (m.source_kind = 'manual') desc, m.id desc
@@ -327,6 +337,7 @@ def get_rows(
                 "adUrl": r["ad_url"],
                 "systemLogCount": int(r["system_count"]),
                 "manualLog": r["manual_content"],
+                "manualEntryCount": int(r["manual_count"]),
                 "status": (
                     "已保存"
                     if r["edit_status"] == "submitted"

@@ -317,21 +317,50 @@ def read_detail(
     manuals = (
         session.execute(
             text("""
-        select legacy_id, source_kind, log_content, work_type,
-               work_types_json, observe_days, status, revision
-        from ops_manual_operation_logs
-        where source_account_ref = :account and log_date = :day
-          and store_id = :store and item_id = :item and msku = :msku
-          and (:is_admin or created_by_user_id = :user_id
-               or (source_kind = 'legacy' and :owns_product))
-        order by (source_kind = 'manual') desc, id desc
+        select m.id, m.legacy_id, m.source_kind, m.created_by_user_id,
+               coalesce(nullif(u.display_name, ''), u.username, '历史导入') as author_name,
+               m.log_content, m.work_type, m.work_types_json, m.observe_days,
+               m.status, m.revision, m.updated_at
+        from ops_manual_operation_logs m
+        left join app_users u on u.id = m.created_by_user_id
+        where m.source_account_ref = :account and m.log_date = :day
+          and m.store_id = :store and m.item_id = :item and m.msku = :msku
+          and (:is_admin or m.created_by_user_id = :user_id
+               or (m.source_kind = 'legacy' and :owns_product))
+        order by (m.source_kind = 'manual') desc, m.id desc
     """),
             key,
         )
         .mappings()
         .all()
     )
-    current = next(iter(manuals), None)
+    # Editing always loads only the logged-in user's record. The administrator
+    # can inspect every other author's entry, but cannot accidentally overwrite
+    # somebody else's text by saving the product-level form.
+    current = next(
+        (
+            m for m in manuals
+            if m["source_kind"] == "manual"
+            and m["created_by_user_id"] == key["user_id"]
+        ),
+        None,
+    )
+    entries = [
+        {
+            "id": str(m["id"]),
+            "sourceKind": m["source_kind"],
+            "createdByUserId": m["created_by_user_id"],
+            "authorName": m["author_name"],
+            "content": m["log_content"],
+            "workType": m["work_type"],
+            "workTypes": list(m["work_types_json"] or []),
+            "observeDays": m["observe_days"],
+            "status": m["status"],
+            "revision": int(m["revision"]),
+            "updatedAt": m["updated_at"].isoformat() if m["updated_at"] else None,
+        }
+        for m in manuals
+    ]
     return {
         "system_events": [dict(r) for r in events],
         "system_operation_log": "\n".join(str(e["log_content"]) for e in events),
@@ -341,10 +370,11 @@ def read_detail(
         "work_types": list(current["work_types_json"] or []) if current else [],
         "observe_days": current["observe_days"] if current else None,
         "status": str(current["status"]) if current else "draft",
-        "revision": int(current["revision"])
-        if current and current["source_kind"] == "manual"
-        else 0,
-        "legacy_history": [dict(m) for m in manuals if m["source_kind"] == "legacy"],
+        "revision": int(current["revision"]) if current else 0,
+        "manual_entries": entries,
+        "legacy_history": [
+            dict(m) for m in manuals if m["source_kind"] == "legacy"
+        ],
     }
 
 

@@ -60,6 +60,7 @@ export interface OperationLogRow {
   adUrl?: string | null;
   systemLogCount: number;
   manualLog: string;
+  manualEntryCount?: number;
   status: OperationLogStatus;
 }
 

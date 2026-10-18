@@ -1,7 +1,7 @@
 import { FileTextOutlined, RobotOutlined } from "@ant-design/icons";
 import { Button, Card, Input, message, Modal, Space, Typography } from "antd";
 import { useEffect, useMemo, useState, type Key } from "react";
-import { fetchOperationLogRows, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
+import { fetchOperationLogRows, fetchOperationLogDetail, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
 import type { OperationLogSystemRecord } from "@/pages/operations/operationLogTypes";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
@@ -47,6 +47,8 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   const [rows, setRows] = useState<OperationLogRow[]>([]);
   const [revisions, setRevisions] = useState<Record<string, number>>({});
   const [systemRecords, setSystemRecords] = useState<OperationLogSystemRecord[]>([]);
+  const [detailEntries, setDetailEntries] = useState<import("./operationLogApi").ManualEntryDetail[]>([]);
+  const [detailRow, setDetailRow] = useState<OperationLogRow | null>(null);
 
   const [filters, setFilters] = useState<OperationLogFilters>(createOperationLogInitialFilters);
   useEffect(() => {
@@ -269,6 +271,12 @@ function OperationLogPage({ page }: OperationLogPageProps) {
           onOpenEntryEditor={(row, entryType) => setLinkEditor({ row, entryType })}
           onManualLogChange={(rowId, manualLog) => updateRow(rowId, { manualLog, status: "草稿" })}
           onSaveRow={(row) => void persistRows([row], "draft")}
+          onViewEntries={(row) => {
+            setDetailRow(row);
+            setDetailEntries([]);
+            void fetchOperationLogDetail(row).then((data) => setDetailEntries(data.manual_entries))
+              .catch(() => void messageApi.error("日志详情读取失败"));
+          }}
           onBulkSaveDraft={() => void persistRows(filteredRows, "draft")}
           onSubmitAll={() => void persistRows(filteredRows, "submitted")}
           tableActions={headerActions}
@@ -296,6 +304,15 @@ function OperationLogPage({ page }: OperationLogPageProps) {
           onApply={applyBatchWrite}
         />
 
+        <Modal open={detailRow !== null} title={`全部人工日志 · ${detailRow?.productId ?? ""}`} footer={null} onCancel={() => setDetailRow(null)}>
+          {detailEntries.length ? detailEntries.map((entry) => (
+            <Card key={entry.id} size="small" style={{ marginBottom: 8 }}>
+              <Typography.Text strong>{entry.authorName}</Typography.Text>
+              <Typography.Text type="secondary"> · {entry.sourceKind === "legacy" ? "历史导入" : "人工日志"} · {entry.updatedAt ?? ""}</Typography.Text>
+              <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{entry.content}</Typography.Paragraph>
+            </Card>
+          )) : <Typography.Text type="secondary">暂无历史人工日志</Typography.Text>}
+        </Modal>
         <OperationLogLinkEditorModal
           row={linkEditor?.row}
           entryType={linkEditor?.entryType}

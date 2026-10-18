@@ -24,6 +24,7 @@ interface OperationLogTableProps {
   onOpenEntryEditor: (row: OperationLogRow, type: "keyword" | "ad") => void;
   onManualLogChange: (rowId: string, value: string) => void;
   onSaveRow: (row: OperationLogRow) => void;
+  onViewEntries: (row: OperationLogRow) => void;
   onBulkSaveDraft: () => void;
   onSubmitAll: () => void;
   tableActions?: ReactNode;
@@ -92,6 +93,7 @@ function OperationLogTable({
   onOpenEntryEditor,
   onManualLogChange,
   onSaveRow,
+  onViewEntries,
   onBulkSaveDraft,
   onSubmitAll,
   tableActions,
@@ -239,7 +241,7 @@ function OperationLogTable({
       key: "actions",
       title: "操作",
       width: 86,
-      render: (row) => <Button onClick={() => onSaveRow(row)}>保存</Button>,
+      render: (row) => <Space size={4}><Button onClick={() => onSaveRow(row)}>保存</Button><Button type="link" onClick={() => onViewEntries(row)}>查看全部{row.manualEntryCount ? ` (${row.manualEntryCount})` : ""}</Button></Space>,
     },
   ];
 
