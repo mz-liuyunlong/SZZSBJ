@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
-from app.modules.operation_logs.access import LogAccess, require_owned_identity
+from app.modules.operation_logs.access import LogAccess, is_current_assignee, require_owned_identity
 
 WRITE_PERMISSION = "action:operations:log:edit"
 WORK_TYPES = frozenset(
@@ -292,6 +292,11 @@ def read_detail(
     key = _log_key(account=account, day=day, store=store, item=item, msku=msku)
     key["is_admin"] = access.is_admin if access is not None else True
     key["user_id"] = access.user_id if access is not None else -1
+    key["owns_product"] = (
+        is_current_assignee(session, access, account=account, store=store,
+                            item=item, msku=msku, day=day)
+        if access is not None else True
+    )
     events = (
         session.execute(
             text("""
@@ -315,7 +320,7 @@ def read_detail(
         from ops_manual_operation_logs
         where source_account_ref = :account and log_date = :day
           and store_id = :store and item_id = :item and msku = :msku
-          and (:is_admin or owner_user_id = :user_id or source_kind = 'legacy')
+          and (:is_admin or created_by_user_id = :user_id or (source_kind = 'legacy' and :owns_product))
         order by (source_kind = 'manual') desc, id desc
     """),
             key,
@@ -378,18 +383,6 @@ def _save_one(
             day=day,
             allow_own_history=True,
         )
-    if access is not None and not access.is_admin:
-        existing_owner = session.scalar(
-            text("""
-            select owner_user_id from ops_manual_operation_logs
-            where source_kind = 'manual' and source_account_ref = :account
-              and log_date = :day and store_id = :store and item_id = :item
-              and msku = :msku
-            """),
-            _log_key(account=account, day=day, store=store, item=item, msku=msku),
-        )
-        if existing_owner is not None and int(existing_owner) != access.user_id:
-            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
         raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
     if work_types is not None and (
@@ -409,18 +402,18 @@ def _save_one(
         "actor": actor,
         "work_types": dumps(work_types or ([work_type] if work_type else [])),
         "observe_days": observe_days,
-        "owner_user_id": access.user_id if access is not None else None,
+        "created_by_user_id": access.user_id if access is not None else None,
     }
     if revision == 0:
         statement = """
             insert into ops_manual_operation_logs
                 (source_kind, source_account_ref, log_date, store_id, item_id,
                  msku, log_content, work_type, work_types_json,
-                 observe_days, status, actor_ref, owner_user_id, revision)
+                 observe_days, status, actor_ref, created_by_user_id, revision)
             values ('manual', :account, :day, :store, :item, :msku,
                     :content, :work_type, cast(:work_types as jsonb),
-                    :observe_days, :status, :actor, :owner_user_id, 1)
-            on conflict (source_account_ref, log_date, store_id, item_id, msku)
+                    :observe_days, :status, :actor, :created_by_user_id, 1)
+            on conflict (source_account_ref, log_date, store_id, item_id, msku, created_by_user_id)
             where source_kind = 'manual' do nothing
             returning revision
         """
@@ -431,11 +424,11 @@ def _save_one(
                 work_types_json = cast(:work_types as jsonb),
                 observe_days = :observe_days,
                 status = :status, actor_ref = :actor,
-                owner_user_id = coalesce(owner_user_id, :owner_user_id),
                 revision = revision + 1, updated_at = now()
             where source_kind = 'manual' and source_account_ref = :account
               and log_date = :day and store_id = :store and item_id = :item
-              and msku = :msku and revision = :revision
+              and msku = :msku and created_by_user_id = :created_by_user_id
+              and revision = :revision
             returning revision
         """
     result = session.scalar(text(statement), params)

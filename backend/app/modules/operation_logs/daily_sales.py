@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.modules.operation_logs.access import LogAccess
+from app.modules.operation_logs.access import LogAccess, owns_sku_sql
 
 if TYPE_CHECKING:
     from app.modules.data_pages.models import DailySalesItemDayMart
@@ -56,7 +56,7 @@ def load_daily_sales_log_summaries(
     )
 
     result = session.execute(
-        text("""
+        text(f"""
         with selected as (
             select x.day::date as day, x.account, x.store, x.item, x.msku, x.owner
             from jsonb_to_recordset(cast(:keys as jsonb))
@@ -77,7 +77,12 @@ def load_daily_sales_log_summaries(
             where e.source_account_ref = s.account and e.event_date = s.day
               and e.store_id = s.store and e.item_id = s.item
               and e.msku = s.msku
-              and (:is_admin or s.owner = any(:owner_labels))
+              and (:is_admin or exists (
+                  select 1 from mart_daily_sales_item_day d
+                  where d.source_account_ref = s.account and d.store_id = s.store
+                    and d.item_id = s.item and coalesce(d.msku, '') = s.msku
+                    and d.business_date_la = s.day and {owns_sku_sql('d')}
+              ))
         ) ev on true
         left join lateral (
             select m.log_content, m.revision, m.status
@@ -85,8 +90,13 @@ def load_daily_sales_log_summaries(
             where m.source_account_ref = s.account and m.log_date = s.day
               and m.store_id = s.store and m.item_id = s.item
               and m.msku = s.msku
-              and (:is_admin or m.owner_user_id = :user_id
-                   or (m.source_kind = 'legacy' and s.owner = any(:owner_labels)))
+              and (:is_admin or m.created_by_user_id = :user_id
+                   or (m.source_kind = 'legacy' and exists (
+                      select 1 from mart_daily_sales_item_day d
+                      where d.source_account_ref = s.account and d.store_id = s.store
+                        and d.item_id = s.item and coalesce(d.msku, '') = s.msku
+                        and d.business_date_la = s.day and {owns_sku_sql('d')}
+                   )))
             order by (m.source_kind = 'manual') desc, m.id desc
             limit 1
         ) man on true
@@ -94,7 +104,6 @@ def load_daily_sales_log_summaries(
         {
             "keys": keys,
             "is_admin": access.is_admin,
-            "owner_labels": list(access.owner_labels),
             "user_id": access.user_id,
         },
     ).mappings()

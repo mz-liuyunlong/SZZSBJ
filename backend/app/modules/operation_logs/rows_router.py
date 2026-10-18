@@ -15,7 +15,7 @@ from app.core.auth import Principal
 from app.core.permissions import require_any_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
-from app.modules.operation_logs.access import LogAccess, require_log_access
+from app.modules.operation_logs.access import LogAccess, owns_sku_sql, require_log_access
 
 router = APIRouter(prefix="/api/operations/logs", tags=["Operation Logs"])
 db_dep = Annotated[Session, Depends(get_db_session)]
@@ -54,12 +54,11 @@ def get_rows(
         start=start,
         end=end,
         is_admin=access.is_admin,
-        owner_labels=list(access.owner_labels),
         user_id=access.user_id,
     )
     result = (
         session.execute(
-            text("""
+            text(f"""
         with identities as (
             select l.source_account_ref, l.store_id, l.store_name, l.item_id,
                    coalesce(l.msku, '') as msku,
@@ -72,13 +71,13 @@ def get_rows(
                 cast(:start as date), cast(:end as date), interval '1 day'
             ) as d(day)
             where l.source_account_ref = any(:accounts)
-              and (:is_admin or l.owner_ref = any(:owner_labels)
+              and (:is_admin or {owns_sku_sql('l')}
                    or exists (
                      select 1 from ops_manual_operation_logs own
                      where own.source_account_ref = l.source_account_ref
                        and own.store_id = l.store_id and own.item_id = l.item_id
                        and own.msku = coalesce(l.msku, '')
-                       and own.log_date = d.day::date and own.owner_user_id = :user_id
+                       and own.log_date = d.day::date and own.created_by_user_id = :user_id
                    ))
             order by d.day desc, l.store_id, l.item_id
             limit 5001
@@ -118,7 +117,7 @@ def get_rows(
             select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = i.source_account_ref
-              and (:is_admin or m.owner_user_id = :user_id or m.source_kind = 'legacy')
+              and (:is_admin or m.created_by_user_id = :user_id or (m.source_kind = 'legacy' and :is_admin))
               and m.log_date = i.log_date
               and m.store_id = i.store_id and m.item_id = i.item_id
               and m.msku = i.msku
@@ -133,7 +132,7 @@ def get_rows(
     )
     archived = (
         session.execute(
-            text("""
+            text(f"""
         with historic_keys as (
             select source_account_ref, log_date as day, store_id, item_id, msku
             from ops_manual_operation_logs
@@ -194,7 +193,7 @@ def get_rows(
             select log_content, revision, work_type, work_types_json, observe_days, status
             from ops_manual_operation_logs m
             where m.source_account_ref = h.source_account_ref
-              and (:is_admin or m.owner_user_id = :user_id or m.source_kind = 'legacy')
+              and (:is_admin or m.created_by_user_id = :user_id or (m.source_kind = 'legacy' and :is_admin))
               and m.log_date = h.day and m.store_id = h.store_id
               and m.item_id = h.item_id and m.msku = h.msku
             order by (m.source_kind = 'manual') desc, m.id desc
@@ -212,14 +211,14 @@ def get_rows(
                  where d.source_account_ref = h.source_account_ref
                    and d.store_id = h.store_id and d.item_id = h.item_id
                    and coalesce(d.msku, '') = h.msku and d.business_date_la = h.day
-                   and d.owner_ref = any(:owner_labels)
+                   and {owns_sku_sql('d')}
                )
                or exists (
                  select 1 from ops_manual_operation_logs own
                  where own.source_account_ref = h.source_account_ref
                    and own.store_id = h.store_id and own.item_id = h.item_id
                    and own.msku = h.msku and own.log_date = h.day
-                   and own.owner_user_id = :user_id
+                   and own.created_by_user_id = :user_id
                ))
         order by h.day desc, h.store_id, h.item_id
         limit 5001
@@ -234,7 +233,7 @@ def get_rows(
         raise ApiError(code="OPERATION_LOG_RESULT_TOO_LARGE", status_code=422)
     event_rows = (
         session.execute(
-            text("""
+            text(f"""
         select e.legacy_id, e.source_account_ref, e.event_date, e.store_id,
                e.item_id, e.msku, e.action_type, e.object_name, e.log_content
         from ops_system_operation_events e
@@ -246,7 +245,7 @@ def get_rows(
                  where l.source_account_ref = e.source_account_ref
                    and l.store_id = e.store_id and l.item_id = e.item_id
                    and coalesce(l.msku, '') = e.msku
-                   and l.owner_ref = any(:owner_labels)
+                   and {owns_sku_sql('l')}
                )
                or exists (
                  select 1 from mart_daily_sales_item_day d
@@ -254,14 +253,14 @@ def get_rows(
                    and d.store_id = e.store_id and d.item_id = e.item_id
                    and coalesce(d.msku, '') = e.msku
                    and d.business_date_la = e.event_date
-                   and d.owner_ref = any(:owner_labels)
+                   and {owns_sku_sql('d')}
                )
                or exists (
                  select 1 from ops_manual_operation_logs own
                  where own.source_account_ref = e.source_account_ref
                    and own.store_id = e.store_id and own.item_id = e.item_id
                    and own.msku = e.msku and own.log_date = e.event_date
-                   and own.owner_user_id = :user_id
+                   and own.created_by_user_id = :user_id
                ))
         order by e.event_date desc, e.legacy_id
         limit 20001

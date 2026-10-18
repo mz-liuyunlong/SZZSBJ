@@ -250,7 +250,6 @@ def test_operation_log_access_refuses_cross_account() -> None:
         user_id=2,
         accounts=frozenset({"account-a"}),
         is_admin=False,
-        owner_labels=("owner-a",),
         display_name="owner-a",
     )
     session = MagicMock()
@@ -275,7 +274,6 @@ def test_operation_log_access_checks_product_owner() -> None:
         user_id=2,
         accounts=frozenset({"account-a"}),
         is_admin=False,
-        owner_labels=("owner-a",),
         display_name="owner-a",
     )
     session = MagicMock()
@@ -292,8 +290,8 @@ def test_operation_log_access_checks_product_owner() -> None:
         )
     assert error.value.status_code == 403
     sql = str(session.scalar.call_args.args[0])
-    assert "owner_ref = any(:labels)" in sql
-    assert "owner_user_id = :user_id" in sql
+    assert "ops_lingxing_owner_user_mappings" in sql
+    assert "map.app_user_id = :user_id" in sql
 
 
 def test_operation_log_super_admin_bypasses_owner_match() -> None:
@@ -303,7 +301,6 @@ def test_operation_log_super_admin_bypasses_owner_match() -> None:
         user_id=1,
         accounts=frozenset({"account-a"}),
         is_admin=True,
-        owner_labels=(),
         display_name="admin",
     )
     session = MagicMock()
@@ -317,3 +314,30 @@ def test_operation_log_super_admin_bypasses_owner_match() -> None:
         day=date(2026, 10, 17),
     )
     session.scalar.assert_not_called()
+
+def test_owner_uid_mapping_has_no_fallback_to_display_names() -> None:
+    from app.modules.operation_logs.access import owns_sku_sql
+
+    sql = owns_sku_sql("l")
+    assert "pi.owner_uid" in sql
+    assert "map.app_user_id = :user_id" in sql
+    assert "ops_lingxing_owner_user_mappings" in sql
+    assert "display_name" not in sql and "feishu_name" not in sql
+    assert "owner_ref" not in sql
+
+
+def test_unknown_ownership_is_denied() -> None:
+    from app.modules.operation_logs.access import LogAccess, require_owned_identity
+
+    access = LogAccess(
+        user_id=9, accounts=frozenset({"account-a"}),
+        is_admin=False, display_name="demo"
+    )
+    session = MagicMock()
+    session.scalar.return_value = False
+    with pytest.raises(ApiError) as err:
+        require_owned_identity(
+            session, access, account="account-a", store="s",
+            item="x", msku="m", day=date(2026, 10, 17),
+        )
+    assert err.value.status_code == 403

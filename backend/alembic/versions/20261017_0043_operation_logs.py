@@ -65,7 +65,7 @@ def upgrade() -> None:
         sa.Column("observe_days", sa.SmallInteger()),
         sa.Column("status", sa.String(16), nullable=False, server_default="draft"),
         sa.Column("actor_ref", sa.String(128)),
-        sa.Column("owner_user_id", sa.Integer()),
+        sa.Column("created_by_user_id", sa.Integer(), sa.ForeignKey("app_users.id", ondelete="RESTRICT")),
         sa.Column("revision", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("source_updated_at", sa.DateTime()),
         sa.Column(
@@ -79,12 +79,12 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "(source_kind = 'legacy' and legacy_id is not null) or "
             "(source_kind = 'manual' and legacy_id is null "
-            "and source_account_ref is not null)",
+            "and source_account_ref is not null and created_by_user_id is not null)",
             name="ck_ops_manual_origin",
         ),
     )
     op.create_index(
-        "ix_ops_manual_owner", "ops_manual_operation_logs", ["owner_user_id", "log_date"]
+        "ix_ops_manual_creator", "ops_manual_operation_logs", ["created_by_user_id", "log_date"]
     )
     op.create_index(
         "ix_ops_manual_log_lookup",
@@ -94,9 +94,45 @@ def upgrade() -> None:
     op.create_index(
         "uq_ops_manual_new_identity",
         "ops_manual_operation_logs",
-        ["source_account_ref", "log_date", "store_id", "item_id", "msku"],
+        ["source_account_ref", "log_date", "store_id", "item_id", "msku", "created_by_user_id"],
         unique=True,
         postgresql_where=sa.text("source_kind = 'manual'"),
+    )
+    # Mapping is scoped by source account: external Lingxing UID is not a local user ID.
+    # There is deliberately no automatic name-based mapping or seed.
+    op.create_table(
+        "ops_lingxing_owner_user_mappings",
+        sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
+        sa.Column("source_account_ref", sa.String(128), nullable=False),
+        sa.Column("owner_uid", sa.String(128), nullable=False),
+        sa.Column(
+            "app_user_id",
+            sa.Integer(),
+            sa.ForeignKey("app_users.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
+        sa.Column("updated_by_user_id", sa.Integer(), sa.ForeignKey("app_users.id")),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.UniqueConstraint("source_account_ref", "owner_uid", name="uq_ops_lingxing_owner_mapping"),
+        sa.CheckConstraint("length(btrim(owner_uid)) > 0", name="ck_ops_owner_uid_nonempty"),
+    )
+    op.create_index(
+        "ix_ops_owner_mapping_user",
+        "ops_lingxing_owner_user_mappings",
+        ["app_user_id", "source_account_ref"],
+    )
+    op.create_table(
+        "ops_lingxing_owner_mapping_audit",
+        sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
+        sa.Column("source_account_ref", sa.String(128), nullable=False),
+        sa.Column("owner_uid", sa.String(128), nullable=False),
+        sa.Column("before_user_id", sa.Integer()),
+        sa.Column("after_user_id", sa.Integer()),
+        sa.Column("actor_user_id", sa.Integer(), nullable=False),
+        sa.Column("action", sa.String(16), nullable=False),
+        sa.Column("occurred_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.CheckConstraint("action in ('assign', 'reassign', 'revoke')", name="ck_ops_owner_mapping_action"),
     )
     op.create_table(
         "ops_operation_log_links",

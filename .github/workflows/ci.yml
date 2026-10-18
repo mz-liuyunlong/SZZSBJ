@@ -225,6 +225,7 @@ jobs:
               for ddl in (
                   "create table alembic_version (version_num varchar(32) primary key)",
                   "insert into alembic_version values ('20261017_0042_rbac_backfill')",
+                  "create table app_users (id integer primary key, username varchar(64), is_active integer)",
                   "create table app_roles (id uuid primary key, role_key varchar(64) unique)",
                   "create table app_permissions (permission_key varchar(128) primary key, name varchar(64) not null, group_key varchar(64) not null, description text, permission_type varchar(16), module_key varchar(64), page_key varchar(128), action_key varchar(64), field_key varchar(64), risk_level varchar(16), sort_order integer, is_active boolean, created_at timestamptz, updated_at timestamptz)",
                   "create table app_role_permissions (role_id uuid not null references app_roles(id), permission_key varchar(128) not null references app_permissions(permission_key), created_at timestamptz not null, primary key (role_id, permission_key))",
@@ -243,9 +244,11 @@ jobs:
                   "ops_system_operation_events",
                   "ops_manual_operation_logs",
                   "ops_operation_log_links",
+                  "ops_lingxing_owner_user_mappings",
+                  "ops_lingxing_owner_mapping_audit",
               ):
                   assert conn.scalar(text("select to_regclass(:name)"), {"name": name}) is not None
               assert conn.scalar(text("select count(*) from app_permissions where permission_key = 'action:operations:log:edit'")) == 1
-              assert conn.scalar(text("select count(*) from information_schema.columns where table_name='ops_manual_operation_logs' and column_name='owner_user_id'")) == 1
+              assert conn.scalar(text("select count(*) from information_schema.columns where table_name='ops_manual_operation_logs' and column_name='created_by_user_id'")) == 1
               assert conn.scalar(text("select count(*) from app_role_permissions where permission_key = 'action:operations:log:edit'")) == 2
           PY
