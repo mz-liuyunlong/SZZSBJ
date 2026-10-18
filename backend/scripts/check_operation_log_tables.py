@@ -44,7 +44,9 @@ def main() -> None:
             connection.scalar(text("select to_regclass(:name) is not null"), {"name": name})
             for name in required
         ):
-            counts = connection.execute(text("""
+            counts = (
+                connection.execute(
+                    text("""
                 with variants as (
                     select source_account_ref, lingxing_sku_code,
                            count(distinct nullif(btrim(owner_uid), '')) as uid_variants
@@ -73,7 +75,11 @@ def main() -> None:
                 left join ops_lingxing_owner_user_mappings m
                   on m.source_account_ref = o.source_account_ref and m.owner_uid = o.uid
                 left join app_users u on u.id = m.app_user_id
-            """)).mappings().one()
+            """)
+                )
+                .mappings()
+                .one()
+            )
             for key, value in counts.items():
                 print("owner_mapping_" + key + ":", int(value or 0))
         else:
