@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from app.modules.integration_sync.data_pages_business_rules import (
     BUSINESS_RULE_RUNNER_VERSION,
+    VERIFIED_SAMPLE_RULE_VERSION,
     DataPagesRealSyncRunner as BusinessRulesRunner,
 )
 from app.modules.integration_sync.data_pages_real_sync import (
@@ -23,6 +24,7 @@ from app.modules.integration_sync.data_pages_real_sync import (
     _stable_hash,
     _timestamps,
 )
+from app.modules.integration_sync.data_pages_mart_invariants import DataPagesMartInvariantError
 from app.modules.product_management.daily_sales_costs import (
     DailySalesCostResolution,
     load_daily_sales_costs,
@@ -31,7 +33,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-v3-lpds"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-v3-lpds+sampleguard-v5"
 LOW_PRICE_DELIVERY_THRESHOLD = Decimal("10")
 LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT = Decimal("1")
 
@@ -363,7 +365,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "sum(coalesce(s.unit_price_amount,0)*coalesce(s.quantity,0)) sample_amount "
                 "from fact_walmart_sample_order_items s "
                 "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
-                "and s.is_valid_sample=true and s.store_id is not null and s.item_id is not null "
+                "and s.is_valid_sample=true and s.sample_rule_version=:verified_sample_rule_version and s.store_id is not null and s.item_id is not null "
                 "and s.msku is not null and trim(s.msku)<>'' and exists ("
                 "select 1 from dim_walmart_listings l where l.source_account_ref=s.source_account_ref "
                 "and l.store_id=s.store_id and l.item_id=s.item_id and trim(l.msku)=trim(s.msku)) "
@@ -467,6 +469,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "account": self.source_account_ref,
                 "day": self.business_date,
                 "runner": DAILY_SALES_V2_VERSION,
+                "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                 "default_commission_rate": DEFAULT_STORE_COMMISSION_RATE,
                 "now": now,
             },
@@ -534,6 +537,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(quantity,0)) sample_qty "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
+                        "and sample_rule_version=:verified_sample_rule_version "
                         "and business_date_utc_minus_7 between :start_day and :end_day "
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
@@ -547,6 +551,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_7d_start,
                         "end_day": history_7d_end,
+                        "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
@@ -580,6 +585,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(quantity,0)) sample_qty "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
+                        "and sample_rule_version=:verified_sample_rule_version "
                         "and business_date_utc_minus_7 between :start_day and :end_day "
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
@@ -593,6 +599,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_30d_start,
                         "end_day": self.business_date,
+                        "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
@@ -618,6 +625,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_30d_start,
                         "end_day": self.business_date,
+                        "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
@@ -705,6 +713,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 warnings.append("sample_qty_exceeds_gross_sales_qty")
             if sample_amount > gross_sales:
                 warnings.append("sample_amount_exceeds_gross_sales_amount")
+            if sample_qty > gross_qty or sample_amount > gross_sales:
+                raise DataPagesMartInvariantError(
+                    "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT",
+                    business_date=self.business_date,
+                )
             paid_sales = max(gross_sales - sample_amount, Decimal("0"))
             if refund_amount is None:
                 missing.append("refund_amount_missing")
