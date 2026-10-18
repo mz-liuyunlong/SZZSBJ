@@ -36,7 +36,8 @@ from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
 LA_TZ = ZoneInfo("America/Los_Angeles")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
-SAMPLE_RULE_VERSION = "zero-total-or-full-item-discount-strict-triple-v4"
+SAMPLE_RULE_VERSION = "candidate-unverified-v5"
+VERIFIED_SAMPLE_RULE_VERSION = "provider-verified-sample-v5"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
 
@@ -304,9 +305,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "order_total_currency_code": currency_code,
                         "cancel_time_raw": cancel_time_raw,
                         "is_cancelled": is_cancelled,
-                        "is_valid_sample": (
-                            (order_total == Decimal("0") or full_discount) and not is_cancelled
-                        ),
+                        # A monetary discount/zero-total is only a candidate, not
+                        # authenticated evidence of a Walmart sample order.
+                        "is_valid_sample": False,
                         "sample_rule_version": SAMPLE_RULE_VERSION,
                         **_timestamps(),
                     },
