@@ -339,9 +339,9 @@ def read_detail(
     # somebody else's text by saving the product-level form.
     current = next(
         (
-            m for m in manuals
-            if m["source_kind"] == "manual"
-            and m["created_by_user_id"] == key["user_id"]
+            m
+            for m in manuals
+            if m["source_kind"] == "manual" and m["created_by_user_id"] == key["user_id"]
         ),
         None,
     )
@@ -372,9 +372,7 @@ def read_detail(
         "status": str(current["status"]) if current else "draft",
         "revision": int(current["revision"]) if current else 0,
         "manual_entries": entries,
-        "legacy_history": [
-            dict(m) for m in manuals if m["source_kind"] == "legacy"
-        ],
+        "legacy_history": [dict(m) for m in manuals if m["source_kind"] == "legacy"],
     }
 
 

@@ -348,25 +348,35 @@ def test_unknown_ownership_is_denied() -> None:
     assert err.value.status_code == 403
 
 def test_manual_log_detail_is_separate_from_current_editor() -> None:
-    from app.modules.operation_logs.service import read_detail
     from app.modules.operation_logs.access import LogAccess
+    from app.modules.operation_logs.service import read_detail
 
-    access = LogAccess(
-        user_id=7, accounts=frozenset({"acc"}), is_admin=True, display_name="admin"
-    )
+    access = LogAccess(user_id=7, accounts=frozenset({"acc"}), is_admin=True, display_name="admin")
     current = {
-        "id": 2, "legacy_id": None, "source_kind": "manual",
-        "created_by_user_id": 8, "author_name": "另一位运营",
-        "log_content": "他人的文字", "work_type": "其他",
-        "work_types_json": [], "observe_days": None,
-        "status": "submitted", "revision": 1, "updated_at": None,
+        "id": 2,
+        "legacy_id": None,
+        "source_kind": "manual",
+        "created_by_user_id": 8,
+        "author_name": "另一位运营",
+        "log_content": "他人的文字",
+        "work_type": "其他",
+        "work_types_json": [],
+        "observe_days": None,
+        "status": "submitted",
+        "revision": 1,
+        "updated_at": None,
     }
     session = MagicMock()
     session.execute.return_value.mappings.return_value.all.side_effect = [[], [current]]
     data = read_detail(
-        session, accounts=frozenset({"acc"}), account="acc",
-        day=date(2026, 10, 17), store="store", item="item",
-        msku="msku", access=access,
+        session,
+        accounts=frozenset({"acc"}),
+        account="acc",
+        day=date(2026, 10, 17),
+        store="store",
+        item="item",
+        msku="msku",
+        access=access,
     )
     assert data["operation_log"] == ""
     assert data["revision"] == 0
