@@ -87,6 +87,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  }, [columnKeys, widths]);
  const tabs: { label: string; value: ApprovalTab }[] = [
   {label:"待审批",value:"pending"},{label:"已审批",value:"approved"},{label:"驳回记录",value:"rejected"},
+  ...(hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review") ? [{label:`历史待核验 (${summary.legacy_unverified})`,value:"legacy" as ApprovalTab}] : []),
  ];
  return <PageShell page={page}>
   {holder}
@@ -110,8 +111,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    <Card className="approval-workspace__toolbar-card" size="small">
     <Segmented options={tabs} value={filters.tab} onChange={(value) => change({tab:value as ApprovalTab})}/>
     <div className="approval-workspace__controls">
-     <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
-      options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/>
+     {filters.tab !== "legacy" && <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
+      options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/> }
      <ReportFacetSelect ariaLabel="审批类型" placeholder="审批类型"
       value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"}]}
       onChange={(value) => change({approval_type: typeof value === "string" ? value : undefined})}/>
