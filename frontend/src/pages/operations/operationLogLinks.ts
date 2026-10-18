@@ -1,7 +1,10 @@
 /** Resolve safe saved operation-log destinations without allowing executable schemes. */
 export function resolveOperationLogLink(raw: string | null | undefined): string | null {
   const value = raw?.trim() ?? "";
-  if (!value || /[\u0000-\u001f\u007f\\]/.test(value)) return null;
+  if (!value || [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127 || character === "\\\\";
+  })) return null;
   if (value.startsWith("/") && !value.startsWith("//")) return value;
   try {
     const url = new URL(value);
