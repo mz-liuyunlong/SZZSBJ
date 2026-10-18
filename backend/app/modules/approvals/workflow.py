@@ -80,11 +80,7 @@ class ApprovalWorkflow:
         snapshot["approval_policy"] = {"required_steps": int(rule["required_steps"])}
         amount = calculate_pending_recovery(case)
         risk = (
-            "high"
-            if amount >= Decimal("500")
-            else "medium"
-            if amount >= Decimal("100")
-            else "low"
+            "high" if amount >= Decimal("500") else "medium" if amount >= Decimal("100") else "low"
         )
         self.session.execute(
             text("""
