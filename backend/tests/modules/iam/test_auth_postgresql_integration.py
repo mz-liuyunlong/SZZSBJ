@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import Engine, create_engine, event, text
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
@@ -29,6 +29,9 @@ _ROLE_IDS = (
 )
 _PERMISSIONS = ("pr232:alpha", "pr232:beta")
 _PASSWORD = "synthetic-password"
+_IAM_TEST_DATABASE = "iam_auth_test"
+_IAM_TEST_USERNAME = "iam_auth_test"
+_IAM_TEST_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _TOKENS = {
     "no_role": "synthetic-pr232-no-role",
     "single": "synthetic-pr232-single",
@@ -40,17 +43,158 @@ _TOKENS = {
 }
 
 
+def _database_target(url: URL) -> tuple[str | None, int, str | None]:
+    return (url.host, url.port or 5432, url.database)
+
+
+def _validate_isolated_database_url(
+    url: URL,
+    *,
+    application_url: URL | None = None,
+) -> URL:
+    if (
+        url.host not in _IAM_TEST_HOSTS
+        or url.database != _IAM_TEST_DATABASE
+        or url.username != _IAM_TEST_USERNAME
+        or url.query
+    ):
+        raise SettingsError("IAM PostgreSQL tests require the dedicated local test database")
+    if application_url is not None and _database_target(url) == _database_target(application_url):
+        raise SettingsError("IAM PostgreSQL tests cannot use the application database target")
+    return url
+
+
 def _test_database_url() -> URL:
     if os.environ.get("IAM_AUTH_PERFORMANCE_DB_TESTS") != "1":
         pytest.skip("real IAM PostgreSQL tests require explicit opt-in")
     try:
         settings = Settings()  # type: ignore[call-arg]
         url = get_test_database_url(settings)
+        application_value = os.environ.get("DATABASE_URL")
+        application_url = make_url(application_value) if application_value else None
     except (SettingsError, ValidationError):
-        pytest.skip("isolated PostgreSQL test database is not configured")
-    if url.database == "szzsbj_app":
-        pytest.fail("refusing to run IAM integration tests against the application database")
-    return url
+        pytest.fail(
+            "IAM PostgreSQL test database configuration is unsafe or incomplete", pytrace=False
+        )
+    try:
+        return _validate_isolated_database_url(url, application_url=application_url)
+    except SettingsError as exc:
+        pytest.fail(str(exc), pytrace=False)
+
+
+def _verify_connected_database_identity(engine: Engine) -> None:
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("select current_database(), current_user, coalesce(host(inet_server_addr()), '')")
+        ).one()
+    if row[0] != _IAM_TEST_DATABASE or row[1] != _IAM_TEST_USERNAME:
+        pytest.fail(
+            "IAM PostgreSQL tests connected to an unexpected database identity", pytrace=False
+        )
+    if os.environ.get("CI") != "true" and row[2] not in {"127.0.0.1", "::1"}:
+        pytest.fail(
+            "IAM PostgreSQL tests require a directly local PostgreSQL server", pytrace=False
+        )
+
+
+def test_isolated_database_guard_accepts_dedicated_local_target() -> None:
+    url = URL.create(
+        "postgresql+psycopg",
+        username=_IAM_TEST_USERNAME,
+        password="credential-marker",
+        host="127.0.0.1",
+        database=_IAM_TEST_DATABASE,
+    )
+
+    assert _validate_isolated_database_url(url) is url
+
+
+def test_test_database_url_requires_explicit_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("IAM_AUTH_PERFORMANCE_DB_TESTS", raising=False)
+
+    with pytest.raises(pytest.skip.Exception, match="explicit opt-in"):
+        _test_database_url()
+
+
+def test_test_database_url_fails_closed_before_connecting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = "credential-marker"
+    monkeypatch.setenv("IAM_AUTH_PERFORMANCE_DB_TESTS", "1")
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv(
+        "TEST_DATABASE_URL",
+        f"postgresql+psycopg://{_IAM_TEST_USERNAME}:{marker}@database.internal/{_IAM_TEST_DATABASE}",
+    )
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    with pytest.raises(pytest.fail.Exception, match="dedicated local test database") as error:
+        _test_database_url()
+
+    assert marker not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        URL.create(
+            "postgresql+psycopg",
+            username=_IAM_TEST_USERNAME,
+            password="credential-marker",
+            host="database.internal",
+            database=_IAM_TEST_DATABASE,
+        ),
+        URL.create(
+            "postgresql+psycopg",
+            username="application_user",
+            password="credential-marker",
+            host="127.0.0.1",
+            database=_IAM_TEST_DATABASE,
+        ),
+        URL.create(
+            "postgresql+psycopg",
+            username=_IAM_TEST_USERNAME,
+            password="credential-marker",
+            host="127.0.0.1",
+            database="szzsbj_app",
+        ),
+        URL.create(
+            "postgresql+psycopg",
+            username=_IAM_TEST_USERNAME,
+            password="credential-marker",
+            host="127.0.0.1",
+            database=_IAM_TEST_DATABASE,
+            query={"host": "database.internal"},
+        ),
+    ],
+)
+def test_isolated_database_guard_rejects_unsafe_targets_without_leaking_url(url: URL) -> None:
+    with pytest.raises(SettingsError, match="dedicated local test database") as error:
+        _validate_isolated_database_url(url)
+
+    assert "credential-marker" not in str(error.value)
+
+
+def test_isolated_database_guard_rejects_application_database_target() -> None:
+    test_url = URL.create(
+        "postgresql+psycopg",
+        username=_IAM_TEST_USERNAME,
+        password="test-credential-marker",
+        host="localhost",
+        database=_IAM_TEST_DATABASE,
+    )
+    application_url = URL.create(
+        "postgresql+psycopg",
+        username="application_user",
+        password="application-credential-marker",
+        host="localhost",
+        database=_IAM_TEST_DATABASE,
+    )
+
+    with pytest.raises(SettingsError, match="application database target") as error:
+        _validate_isolated_database_url(test_url, application_url=application_url)
+
+    assert "credential-marker" not in str(error.value)
 
 
 def _cleanup(engine: Engine) -> None:
@@ -76,6 +220,9 @@ def postgres_engine() -> Iterator[Engine]:
         poolclass=NullPool,
         hide_parameters=True,
     )
+    # Verify the server-side identity before cleanup or fixture inserts. This rejects
+    # accidental SSH-forwarded application targets even when they appear as localhost.
+    _verify_connected_database_identity(engine)
     _cleanup(engine)
     now = datetime.now(UTC)
     with engine.begin() as connection:

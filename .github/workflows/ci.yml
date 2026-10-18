@@ -100,19 +100,19 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: iam_ci
-          POSTGRES_USER: iam_ci
+          POSTGRES_DB: iam_auth_test
+          POSTGRES_USER: iam_auth_test
           POSTGRES_PASSWORD: local_ci_only
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U iam_ci -d iam_ci"
+          --health-cmd "pg_isready -U iam_auth_test -d iam_auth_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
       APP_ENV: test
-      TEST_DATABASE_URL: postgresql+psycopg://iam_ci:local_ci_only@127.0.0.1:5432/iam_ci
+      TEST_DATABASE_URL: postgresql+psycopg://iam_auth_test:local_ci_only@127.0.0.1:5432/iam_auth_test
       IAM_AUTH_PERFORMANCE_DB_TESTS: "1"
     steps:
       - uses: actions/checkout@v4
