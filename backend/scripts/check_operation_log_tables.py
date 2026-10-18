@@ -45,13 +45,19 @@ def main() -> None:
             for name in required
         ):
             counts = connection.execute(text("""
-                with owners as (
+                with variants as (
+                    select source_account_ref, lingxing_sku_code,
+                           count(distinct nullif(btrim(owner_uid), '')) as uid_variants
+                    from dwd_lingxing_sku_product_info_current
+                    where lingxing_sku_code is not null
+                    group by source_account_ref, lingxing_sku_code
+                ), owners as (
                     select p.source_account_ref, nullif(btrim(p.owner_uid), '') as uid,
-                           count(distinct p.owner_uid) over (
-                             partition by p.source_account_ref, p.lingxing_sku_code
-                           ) as uid_variants
+                           v.uid_variants
                     from dwd_lingxing_sku_product_info_current p
-                    where p.lingxing_sku_code is not null
+                    join variants v
+                      on v.source_account_ref = p.source_account_ref
+                     and v.lingxing_sku_code = p.lingxing_sku_code
                 )
                 select
                     count(*) filter (where o.uid is null) as missing_uid,
