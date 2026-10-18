@@ -65,6 +65,28 @@ const renderApp = () =>
   );
 
 describe("App", () => {
+  it("keeps a token and shows a retry state when session restore has a gateway failure", async () => {
+    localStorage.setItem("szzsbj_auth_token", "synthetic-session-token");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      data: null,
+      error: { code: "INTERNAL_ERROR" },
+      meta: null,
+      request_id: "synthetic-request",
+    }), { status: 503, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderApp();
+
+    expect(await screen.findByText("暂时无法验证登录状态")).toBeVisible();
+    expect(localStorage.getItem("szzsbj_auth_token")).toBe("synthetic-session-token");
+    expect(screen.queryByRole("main", { name: "内容区" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /重\s*试/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(localStorage.getItem("szzsbj_auth_token")).toBe("synthetic-session-token");
+  });
+
   it("routes a memory-only mock login to the default business page", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

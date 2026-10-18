@@ -1,4 +1,4 @@
-import { BackendRequestError, backendRequest } from "@/api/backendApi";
+import { backendDownload, backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import { formatDate } from "@/shared/formatters";
 import type {
@@ -542,7 +542,6 @@ export async function requestProductManagementExport(
   columns?: string[],
 ) {
   const query = listQuery(filters, 1, 100);
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
   const selectedColumns = (columns ?? []).map((column) => column.trim()).filter(Boolean);
 
   query.set("max_rows", "5000");
@@ -550,31 +549,10 @@ export async function requestProductManagementExport(
     query.set("columns", selectedColumns.join(","));
   }
 
-  const response = await fetch(`/api/product-management/skus/export?${query.toString()}`, {
-    method: "GET",
-    credentials: "same-origin",
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new BackendRequestError(response.status, "PRODUCT_MANAGEMENT_EXPORT_FAILED");
-  }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") ?? "";
-  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
-  const filename = filenameMatch?.[1] ?? "product-management-export.csv";
-
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  await backendDownload(
+    `/api/product-management/skus/export?${query.toString()}`,
+    "product-management-export.csv",
+  );
 }
 
 
