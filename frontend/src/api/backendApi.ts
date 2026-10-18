@@ -158,6 +158,20 @@ function downloadFilename(response: Response, fallbackFilename: string): string 
   }
 }
 
+function acceptsDownloadContentType(response: Response, filename: string): boolean {
+  const contentType = (response.headers.get("content-type") ?? "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  if (filename.toLowerCase().endsWith(".csv")) {
+    return contentType === "text/csv" || contentType === "application/csv";
+  }
+  if (filename.toLowerCase().endsWith(".xlsx")) {
+    return contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  return contentType === "application/octet-stream";
+}
+
 export async function backendRequest<T, M = Record<string, unknown>>(
   path: string,
   init?: RequestInit,
@@ -182,6 +196,15 @@ export async function backendDownload(
     if (!response.ok) {
       await parseBackendEnvelope(response);
       throw new BackendRequestError(response.status, "BACKEND_DOWNLOAD_FAILED");
+    }
+    if (!acceptsDownloadContentType(response, fallbackFilename)) {
+      throw new BackendRequestError(
+        response.status,
+        "UNEXPECTED_DOWNLOAD_CONTENT_TYPE",
+        response.headers.get("X-Request-ID") ?? undefined,
+        "invalid_response",
+        "non_json",
+      );
     }
 
     const blob = await response.blob();

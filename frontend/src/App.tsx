@@ -10,7 +10,8 @@ import {
   sessionRestoreErrorMessage,
 } from "@/pages/auth/authApi";
 import {
-  clearAuthToken,
+  clearAuthTokenIfCurrent,
+  isCurrentAuthSessionEvent,
   readAuthToken,
   subscribeAuthSession,
 } from "@/pages/auth/authSession";
@@ -78,9 +79,10 @@ function App() {
   }, [restoreCurrentUser]);
 
   useEffect(() => subscribeAuthSession((event) => {
+    if (!isCurrentAuthSessionEvent(event)) return;
     clearServerState();
     clearTabWorkspaceStorage();
-    if (event === "logged-out") {
+    if (event.type === "logged-out") {
       restoreGenerationRef.current += 1;
       setCurrentUser(undefined);
       setRestoreError(undefined);
@@ -99,13 +101,16 @@ function App() {
   };
 
   const logout = async () => {
+    const logoutToken = readAuthToken();
     restoreGenerationRef.current += 1;
     setCurrentUser(undefined);
     setRestoreError(undefined);
     clearLogoutSessionStorage();
     queueMicrotask(clearLogoutSessionStorage);
 
-    const logoutPromise = logoutCurrentUser().catch(() => clearAuthToken());
+    const logoutPromise = logoutCurrentUser(logoutToken).catch(() => {
+      if (logoutToken) clearAuthTokenIfCurrent(logoutToken);
+    });
 
     window.setTimeout(() => {
       clearServerState();

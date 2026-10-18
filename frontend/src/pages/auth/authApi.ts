@@ -1,6 +1,5 @@
 import { BackendRequestError, backendRequest } from "@/api/backendApi";
 import {
-  clearAuthToken,
   clearAuthTokenIfCurrent,
   readAuthToken,
   writeAuthToken,
@@ -56,13 +55,17 @@ export async function fetchCurrentUser(): Promise<AuthUser | undefined> {
 
 export function isAuthenticationFailure(error: unknown): boolean {
   return error instanceof BackendRequestError
-    && (error.status === 401 || error.code === "UNAUTHORIZED");
+    && error.status === 401
+    && error.code === "UNAUTHORIZED"
+    && error.responseFormat === "json";
 }
 
 export function loginErrorMessage(error: unknown): string {
   if (!(error instanceof BackendRequestError)) return "登录失败，请稍后重试";
-  if (error.status === 401) return "账号或密码错误";
-  if (error.status === 403) return "账号已停用，请联系管理员";
+  if (isAuthenticationFailure(error)) return "账号或密码错误";
+  if (error.status === 403 && error.code === "FORBIDDEN" && error.responseFormat === "json") {
+    return "账号已停用，请联系管理员";
+  }
   if (error.kind === "timeout") return "请求超时，请重试";
   if (error.kind === "network") return "网络连接失败，请检查网络";
   if (error.kind === "gateway" || error.kind === "server") {
@@ -84,13 +87,13 @@ export function sessionRestoreErrorMessage(error: unknown): string {
   return "认证服务连接异常，已保留本地登录状态。请稍后重试。";
 }
 
-export async function logoutCurrentUser(): Promise<void> {
-  if (!readAuthToken()) return;
+export async function logoutCurrentUser(expectedToken = readAuthToken()): Promise<void> {
+  if (!expectedToken) return;
 
   try {
     await backendRequest<{ revoked: boolean }>("/api/auth/logout", { method: "POST" });
   } finally {
-    clearAuthToken();
+    clearAuthTokenIfCurrent(expectedToken);
   }
 }
 

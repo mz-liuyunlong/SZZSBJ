@@ -59,8 +59,14 @@ describe("protected exports", () => {
     const authToken = "synthetic-operation-session-that-must-not-be-logged";
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);
     const fetch = vi.fn()
-      .mockResolvedValueOnce(new Response("template", { status: 200 }))
-      .mockResolvedValueOnce(new Response("failed-rows", { status: 200 }))
+      .mockResolvedValueOnce(new Response("template", {
+        status: 200,
+        headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      }))
+      .mockResolvedValueOnce(new Response("failed-rows", {
+        status: 200,
+        headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         success: true,
         data: { batch_id: "synthetic-batch" },

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AUTH_TOKEN_STORAGE_KEY,
   clearAuthTokenIfCurrent,
+  isCurrentAuthSessionEvent,
   subscribeAuthSession,
 } from "@/pages/auth/authSession";
 
@@ -33,11 +34,32 @@ describe("auth session synchronization", () => {
     }));
     window.dispatchEvent(new StorageEvent("storage", {
       key: AUTH_TOKEN_STORAGE_KEY,
+      oldValue: "other-tab-token",
       newValue: null,
     }));
 
-    expect(listener).toHaveBeenNthCalledWith(1, "token-changed");
-    expect(listener).toHaveBeenNthCalledWith(2, "logged-out");
+    expect(listener).toHaveBeenNthCalledWith(1, {
+      type: "token-changed",
+      token: "other-tab-token",
+    });
+    expect(listener).toHaveBeenNthCalledWith(2, {
+      type: "logged-out",
+      token: "other-tab-token",
+    });
     unsubscribe();
+  });
+
+  it("ignores stale and duplicate events while accepting the matching logout", () => {
+    localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, "new-token");
+
+    expect(isCurrentAuthSessionEvent({ type: "logged-out", token: "old-token" })).toBe(false);
+    expect(isCurrentAuthSessionEvent({ type: "token-changed", token: "old-token" })).toBe(false);
+    expect(isCurrentAuthSessionEvent({ type: "token-changed", token: "new-token" })).toBe(true);
+    expect(isCurrentAuthSessionEvent({ type: "token-changed", token: "new-token" })).toBe(false);
+
+    localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    expect(isCurrentAuthSessionEvent({ type: "logged-out", token: "old-token" })).toBe(false);
+    expect(isCurrentAuthSessionEvent({ type: "logged-out", token: "new-token" })).toBe(true);
+    expect(isCurrentAuthSessionEvent({ type: "logged-out", token: "new-token" })).toBe(false);
   });
 });

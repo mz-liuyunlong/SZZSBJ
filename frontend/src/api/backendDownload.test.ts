@@ -142,6 +142,41 @@ describe("backendDownload", () => {
     });
   });
 
+  it("rejects an HTML success page instead of downloading it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      "<!doctype html><title>proxy error</title>",
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html",
+          "X-Request-ID": "synthetic-html-request",
+        },
+      },
+    )));
+
+    await expect(backendDownload("/api/protected/export", "fallback.csv")).rejects.toMatchObject({
+      status: 200,
+      code: "UNEXPECTED_DOWNLOAD_CONTENT_TYPE",
+      kind: "invalid_response",
+      requestId: "synthetic-html-request",
+    });
+  });
+
+  it("accepts a real XLSX response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("xlsx", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    })));
+    const download = installDownloadDom();
+
+    await backendDownload("/api/protected/template", "template.xlsx");
+
+    expect(download.downloadedFilename()).toBe("template.xlsx");
+    expect(download.revokeObjectURL).toHaveBeenCalledOnce();
+  });
+
   it("classifies network failures without inventing an authorization error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network detail")));
 

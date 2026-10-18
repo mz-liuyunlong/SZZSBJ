@@ -58,9 +58,23 @@ describe("LoginPage", () => {
     expect(loginErrorMessage(new BackendRequestError(401, "UNAUTHORIZED"))).toBe(
       "账号或密码错误",
     );
+    expect(loginErrorMessage(new BackendRequestError(
+      401,
+      "NON_JSON_RESPONSE",
+      undefined,
+      "authentication",
+      "non_json",
+    ))).toBe("登录失败，请稍后重试");
     expect(loginErrorMessage(new BackendRequestError(403, "FORBIDDEN"))).toBe(
       "账号已停用，请联系管理员",
     );
+    expect(loginErrorMessage(new BackendRequestError(
+      403,
+      "NON_JSON_RESPONSE",
+      undefined,
+      "authorization",
+      "non_json",
+    ))).toBe("登录失败，请稍后重试");
     expect(loginErrorMessage(new BackendRequestError(502, "BAD_GATEWAY"))).toBe(
       "系统连接暂时异常，请稍后重试",
     );
