@@ -36,6 +36,12 @@ export function clearAuthToken(): void {
   }
 }
 
+export function clearAuthTokenIfCurrent(expectedToken: string): boolean {
+  if (readAuthToken() !== expectedToken) return false;
+  clearAuthToken();
+  return true;
+}
+
 export function subscribeAuthSession(
   listener: (event: AuthSessionEvent) => void,
 ): () => void {
