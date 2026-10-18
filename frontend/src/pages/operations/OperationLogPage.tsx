@@ -3,6 +3,7 @@ import { Button, Card, Input, message, Modal, Space, Typography } from "antd";
 import { useEffect, useMemo, useState, type Key } from "react";
 import { fetchOperationLogRows, fetchOperationLogDetail, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
 import type { OperationLogSystemRecord } from "@/pages/operations/operationLogTypes";
+import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -203,11 +204,18 @@ function OperationLogPage({ page }: OperationLogPageProps) {
     entryType: "keyword" | "ad",
     values: OperationLogLinkFormValues,
   ) => {
-    try { await saveOperationLink(row, entryType, values); }
+    const safeUrl = resolveOperationLogLink(values.entryUrl);
+    if (!safeUrl) {
+      void messageApi.error("请填写有效的站内路径或 HTTP(S) 地址");
+      return;
+    }
+    try { await saveOperationLink(row, entryType, { ...values, entryUrl: safeUrl }); }
     catch { void messageApi.error("链接保存失败"); return; }
     updateRow(row.id, {
       keywordEntryStatus: entryType === "keyword" ? "ok" : row.keywordEntryStatus,
+      keywordUrl: entryType === "keyword" ? safeUrl : row.keywordUrl,
       adEntryStatus: entryType === "ad" ? "ok" : row.adEntryStatus,
+      adUrl: entryType === "ad" ? safeUrl : row.adUrl,
     });
     setLinkEditor(undefined);
     void messageApi.success(`${row.productId} 的${entryType === "keyword" ? "关键词" : "广告"}入口已保存并启用：${values.entryName}`);
