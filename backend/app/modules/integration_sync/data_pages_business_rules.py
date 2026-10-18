@@ -242,18 +242,25 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     continue
                 quantity = _decimal(item.get("quantity"))
                 if quantity is None or quantity <= 0:
-                    raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_QUANTITY_INVALID")
+                    self.summary.sample_unresolved_rows += 1
+                    continue
                 unit_price = _decimal(item.get("unit_price_amount"))
                 if unit_price is None:
-                    if item_price is None or quantity != Decimal("1"):
-                        raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_UNIT_PRICE_AMBIGUOUS")
-                    unit_price = item_price
+                    if item_price is not None and quantity == Decimal("1"):
+                        unit_price = item_price
+                    else:
+                        # Keep a nullable-price candidate; never infer a unit
+                        # price from an unverified multi-unit row amount.
+                        self.summary.sample_unresolved_rows += 1
                 platform_order_no = _field(item, "platform_order_no") or _field(
                     row, "platform_order_no", "reference_no", "referenceNo"
                 )
                 source_order_line_id = _field(item, "order_item_no", "global_item_no", "id")
                 if not platform_order_no or not source_order_line_id:
-                    raise DataPagesRealSyncError("DATA_PAGES_SAMPLE_IDENTITY_MISSING")
+                    # Raw provider capture remains available for review.
+                    # A single malformed candidate cannot block all stores.
+                    self.summary.sample_unresolved_rows += 1
+                    continue
                 self.session.execute(
                     text(
                         "insert into fact_walmart_sample_order_items "
