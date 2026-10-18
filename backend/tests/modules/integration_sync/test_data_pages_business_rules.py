@@ -190,12 +190,14 @@ def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> N
 
 def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
     class ChangedSession(_CaptureSession):
-        def execute(
-            self, statement: object, params: dict[str, Any] | None = None
-        ) -> _ScalarResult:
+        def execute(self, statement: object, params: dict[str, Any] | None = None) -> _ScalarResult:
             statement_text = str(statement)
             self.calls.append((statement_text, params))
-            if "select count(*)" in statement_text and "sample_rule_version=:changed_rule" in statement_text:
+            if (
+                "select count(*)" in statement_text
+                and "sample_rule_version=:changed_rule" in statement_text
+            ):
+
                 class OneResult:
                     def scalar_one(self) -> int:
                         return 1
@@ -206,36 +208,49 @@ def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
     row = {
         "global_order_no": "synthetic-order",
         "reference_no": "synthetic-ref",
-        "global_purchase_time": str(
-            int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
-        ),
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
         "store_id": "store-a",
         "transaction_info": [{"order_total_amount": "0"}],
-        "item_info": [{
-            "order_item_no": "line-1",
-            "quantity": "1",
-            "unit_price_amount": "10.00",
-        }],
+        "item_info": [
+            {
+                "order_item_no": "line-1",
+                "quantity": "1",
+                "unit_price_amount": "10.00",
+            }
+        ],
     }
     session = ChangedSession()
     runner = _runner(session)
     with pytest.raises(DataPagesMartInvariantError, match="DATA_PAGES_VERIFIED_SAMPLE_CHANGED"):
         runner._write_sample_orders([row])
-    assert "and not (is_valid_sample=true and sample_rule_version=:verified_rule)" in session.calls[0][0]
+    assert (
+        "and not (is_valid_sample=true and sample_rule_version=:verified_rule)"
+        in session.calls[0][0]
+    )
     assert "then :changed_rule else excluded.sample_rule_version end" in session.calls[1][0]
-    assert "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)" in session.calls[1][0]
+    assert (
+        "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)"
+        in session.calls[1][0]
+    )
 
 
 def test_sample_empty_items_counted_as_unresolved() -> None:
     session = _CaptureSession()
     runner = _runner(session)
-    assert runner._write_sample_orders([{
-        "global_purchase_time": str(
-            int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
-        ),
-        "transaction_info": [{"order_total_amount": "0"}],
-        "item_info": [],
-    }]) == 0
+    assert (
+        runner._write_sample_orders(
+            [
+                {
+                    "global_purchase_time": str(
+                        int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())
+                    ),
+                    "transaction_info": [{"order_total_amount": "0"}],
+                    "item_info": [],
+                }
+            ]
+        )
+        == 0
+    )
     assert runner.summary.sample_unresolved_rows == 1
 
 
