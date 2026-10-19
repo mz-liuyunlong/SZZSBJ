@@ -309,7 +309,7 @@ def test_order_conflict_snapshot_detects_mutable_fields_not_identity() -> None:
         "quantity": Decimal("1.0000"),
         "sales_revenue_amount": Decimal("0"),
         "order_status_raw": "created",
-        "item_id": "item-a",
+        "provider_item_id": "item-a",
     }
     observed = {
         **prior,
@@ -323,6 +323,21 @@ def test_order_conflict_snapshot_detects_mutable_fields_not_identity() -> None:
         "order_status_raw",
         "sales_revenue_amount",
     ]
+
+
+def test_order_snapshot_ignores_listing_resolved_item_id() -> None:
+    prior = {
+        "provider_item_id": None,
+        "item_id": "listing-item-a",
+        "item_id_resolution_source": "listing_local_sku_unique",
+    }
+    observed = {
+        "provider_item_id": None,
+        "item_id": None,
+        "item_id_resolution_source": None,
+    }
+
+    assert _changed_order_fields(prior, observed) == []
 
 
 def test_sample_mart_accepts_historical_v3_and_current_v5_only() -> None:

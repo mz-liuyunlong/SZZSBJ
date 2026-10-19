@@ -72,6 +72,8 @@ def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:
         "source_line_hash",
         "canonical_identity_hash",
         "is_identity_current",
+        "provider_item_id",
+        "item_id_resolution_source",
         "source_purchase_timezone",
         "purchase_at_utc",
         "business_date_la",
@@ -80,6 +82,7 @@ def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:
     assert {
         "ck_fact_walmart_order_items_canonical_identity_hash_sha256",
         "ck_fact_walmart_order_items_canonical_identity_current_complete",
+        "ck_fact_walmart_order_items_current_item_lineage",
     } <= _check_constraint_names("fact_walmart_order_items")
 
     order_conflicts = Base.metadata.tables["audit_walmart_order_item_conflicts"].c

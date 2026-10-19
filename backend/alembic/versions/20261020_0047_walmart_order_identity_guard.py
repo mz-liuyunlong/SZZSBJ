@@ -26,6 +26,14 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "fact_walmart_order_items",
+        sa.Column("provider_item_id", sa.String(128), nullable=True),
+    )
+    op.add_column(
+        "fact_walmart_order_items",
+        sa.Column("item_id_resolution_source", sa.String(64), nullable=True),
+    )
+    op.add_column(
+        "fact_walmart_order_items",
         sa.Column("canonical_identity_hash", sa.String(64), nullable=True),
     )
     op.add_column(
@@ -52,6 +60,18 @@ def upgrade() -> None:
         "nullif(btrim(source_order_id), '') IS NOT NULL AND "
         "nullif(btrim(source_order_line_id), '') IS NOT NULL)",
     )
+    op.create_check_constraint(
+        "ck_fact_walmart_order_items_current_item_lineage",
+        "fact_walmart_order_items",
+        "is_identity_current = false OR ("
+        "(item_id IS NULL AND provider_item_id IS NULL AND "
+        "item_id_resolution_source IS NULL) OR ("
+        "nullif(btrim(item_id), '') IS NOT NULL AND (("
+        "nullif(btrim(provider_item_id), '') IS NOT NULL AND "
+        "item_id = provider_item_id AND item_id_resolution_source = 'provider') OR ("
+        "provider_item_id IS NULL AND item_id_resolution_source IN ("
+        "'listing_local_sku_unique', 'listing_local_sku_msku_unique')))))",
+    )
     op.create_index(
         "uq_fact_walmart_order_items_current_identity",
         "fact_walmart_order_items",
@@ -68,8 +88,8 @@ def upgrade() -> None:
         sa.Column("store_id", sa.String(128), nullable=False),
         sa.Column("source_order_id", sa.String(128), nullable=False),
         sa.Column("source_order_line_id", sa.String(128), nullable=False),
-        sa.Column("prior_fact_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("canonical_fact_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("prior_fact_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("canonical_fact_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("prior_snapshot_hash", sa.String(64), nullable=False),
         sa.Column("observed_snapshot_hash", sa.String(64), nullable=False),
         sa.Column("differing_fields_json", postgresql.JSONB(), nullable=False),
@@ -105,19 +125,19 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["prior_fact_id"],
             ["fact_walmart_order_items.id"],
-            ondelete="SET NULL",
+            ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
             ["canonical_fact_id"],
             ["fact_walmart_order_items.id"],
-            ondelete="SET NULL",
+            ondelete="RESTRICT",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "canonical_identity_hash",
-            "prior_snapshot_hash",
-            "observed_snapshot_hash",
-            name="uq_audit_walmart_order_item_conflicts_canonical_identity_hash",
+            "prior_fact_id",
+            "canonical_fact_id",
+            name="uq_audit_walmart_order_item_conflicts_transition",
         ),
     )
     op.create_index(
@@ -128,6 +148,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Schema rollback is lossless only before 0047 identity/audit evidence exists.
+    # A data-level rollback requires a separate DBA-approved archive/restore plan.
+    op.execute(
+        sa.text(
+            "DO $$ BEGIN "
+            "IF EXISTS (SELECT 1 FROM fact_walmart_order_items "
+            "WHERE is_identity_current = true) "
+            "OR EXISTS (SELECT 1 FROM audit_walmart_order_item_conflicts) THEN "
+            "RAISE EXCEPTION '0047 downgrade blocked: canonical identity or audit data exists'; "
+            "END IF; END $$"
+        )
+    )
     op.drop_index(
         "ix_audit_walmart_order_item_conflicts_identity_observed",
         table_name="audit_walmart_order_item_conflicts",
@@ -136,6 +168,11 @@ def downgrade() -> None:
     op.drop_index(
         "uq_fact_walmart_order_items_current_identity",
         table_name="fact_walmart_order_items",
+    )
+    op.drop_constraint(
+        "ck_fact_walmart_order_items_current_item_lineage",
+        "fact_walmart_order_items",
+        type_="check",
     )
     op.drop_constraint(
         "ck_fact_walmart_order_items_canonical_identity_current_complete",
@@ -149,3 +186,5 @@ def downgrade() -> None:
     )
     op.drop_column("fact_walmart_order_items", "is_identity_current")
     op.drop_column("fact_walmart_order_items", "canonical_identity_hash")
+    op.drop_column("fact_walmart_order_items", "item_id_resolution_source")
+    op.drop_column("fact_walmart_order_items", "provider_item_id")

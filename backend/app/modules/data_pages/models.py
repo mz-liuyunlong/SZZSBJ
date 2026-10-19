@@ -373,6 +373,17 @@ class WalmartOrderItemFact(Base):
             "nullif(btrim(source_order_line_id), '') IS NOT NULL)",
             name="ck_fact_walmart_order_items_canonical_identity_current_complete",
         ),
+        CheckConstraint(
+            "is_identity_current = false OR ("
+            "(item_id IS NULL AND provider_item_id IS NULL AND "
+            "item_id_resolution_source IS NULL) OR ("
+            "nullif(btrim(item_id), '') IS NOT NULL AND (("
+            "nullif(btrim(provider_item_id), '') IS NOT NULL AND "
+            "item_id = provider_item_id AND item_id_resolution_source = 'provider') OR ("
+            "provider_item_id IS NULL AND item_id_resolution_source IN ("
+            "'listing_local_sku_unique', 'listing_local_sku_msku_unique')))))",
+            name="ck_fact_walmart_order_items_current_item_lineage",
+        ),
         CheckConstraint("quantity IS NULL OR quantity >= 0", name="quantity_nonnegative"),
         CheckConstraint("sales_revenue_amount IS NULL OR sales_revenue_amount >= 0", name="sales"),
         CheckConstraint(
@@ -399,7 +410,9 @@ class WalmartOrderItemFact(Base):
         Boolean, default=False, server_default=text("false"), nullable=False
     )
     source_line_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider_item_id: Mapped[str | None] = mapped_column(String(128))
     item_id: Mapped[str | None] = mapped_column(String(128))
+    item_id_resolution_source: Mapped[str | None] = mapped_column(String(64))
     msku: Mapped[str | None] = mapped_column(Text)
     local_sku: Mapped[str | None] = mapped_column(Text)
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
@@ -447,8 +460,9 @@ class WalmartOrderItemConflictAudit(Base):
     __table_args__ = (
         UniqueConstraint(
             "canonical_identity_hash",
-            "prior_snapshot_hash",
-            "observed_snapshot_hash",
+            "prior_fact_id",
+            "canonical_fact_id",
+            name="uq_audit_walmart_order_item_conflicts_transition",
         ),
         CheckConstraint(
             "char_length(canonical_identity_hash) = 64",
@@ -479,11 +493,11 @@ class WalmartOrderItemConflictAudit(Base):
     store_id: Mapped[str] = mapped_column(String(128), nullable=False)
     source_order_id: Mapped[str] = mapped_column(String(128), nullable=False)
     source_order_line_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    prior_fact_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("fact_walmart_order_items.id", ondelete="SET NULL")
+    prior_fact_id: Mapped[UUID] = mapped_column(
+        ForeignKey("fact_walmart_order_items.id", ondelete="RESTRICT"), nullable=False
     )
-    canonical_fact_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("fact_walmart_order_items.id", ondelete="SET NULL")
+    canonical_fact_id: Mapped[UUID] = mapped_column(
+        ForeignKey("fact_walmart_order_items.id", ondelete="RESTRICT"), nullable=False
     )
     prior_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     observed_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)

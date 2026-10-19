@@ -47,12 +47,16 @@ def test_order_identity_migration_is_additive_and_does_not_rewrite_history() -> 
     sql = _render_upgrade_sql()
     assert "ADD COLUMN canonical_identity_hash VARCHAR(64)" in sql
     assert "ADD COLUMN is_identity_current BOOLEAN DEFAULT false NOT NULL" in sql
+    assert "ADD COLUMN provider_item_id VARCHAR(128)" in sql
+    assert "ADD COLUMN item_id_resolution_source VARCHAR(64)" in sql
     assert "CREATE UNIQUE INDEX uq_fact_walmart_order_items_current_identity" in sql
     assert "WHERE is_identity_current = true" in sql
     assert "canonical_identity_hash ~ '^[0-9a-f]{64}$'" in sql
     assert "is_identity_current = false OR (canonical_identity_hash IS NOT NULL" in sql
     assert "nullif(btrim(store_id), '') IS NOT NULL" in sql
+    assert "ck_fact_walmart_order_items_current_item_lineage" in sql
     assert "CREATE TABLE audit_walmart_order_item_conflicts" in sql
+    assert "CONSTRAINT uq_audit_walmart_order_item_conflicts_transition" in sql
     assert "DELETE FROM fact_walmart_order_items" not in sql.upper()
     assert "UPDATE fact_walmart_order_items" not in sql.upper()
     assert "DROP TABLE" not in sql.upper()
@@ -73,9 +77,12 @@ def test_order_identity_metadata_has_one_partial_current_index() -> None:
 
 def test_order_identity_downgrade_removes_only_0047_objects() -> None:
     sql = _render_downgrade_sql()
+    assert "0047 downgrade blocked: canonical identity or audit data exists" in sql
     assert "DROP TABLE audit_walmart_order_item_conflicts" in sql
     assert "DROP COLUMN is_identity_current" in sql
     assert "DROP COLUMN canonical_identity_hash" in sql
+    assert "DROP COLUMN item_id_resolution_source" in sql
+    assert "DROP COLUMN provider_item_id" in sql
     assert "DROP TABLE fact_walmart_order_items" not in sql
 
 
@@ -83,6 +90,8 @@ def test_conflict_audit_stores_hashes_and_field_names_not_payload_snapshots() ->
     columns = Base.metadata.tables["audit_walmart_order_item_conflicts"].c
     assert "prior_fact_id" in columns
     assert "canonical_fact_id" in columns
+    assert columns["prior_fact_id"].nullable is False
+    assert columns["canonical_fact_id"].nullable is False
     assert "prior_snapshot_hash" in columns
     assert "observed_snapshot_hash" in columns
     assert "differing_fields_json" in columns

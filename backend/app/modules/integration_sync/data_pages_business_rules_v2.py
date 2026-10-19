@@ -39,7 +39,7 @@ LOW_PRICE_DELIVERY_THRESHOLD = Decimal("10")
 LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT = Decimal("1")
 
 ORDER_SNAPSHOT_FIELDS = (
-    "item_id",
+    "provider_item_id",
     "msku",
     "local_sku",
     "quantity",
@@ -54,6 +54,10 @@ ORDER_SNAPSHOT_FIELDS = (
     "order_total_currency_code",
     "discount_amount",
     "discount_currency_code",
+)
+
+LISTING_ITEM_ID_RESOLUTION_SOURCES = frozenset(
+    {"listing_local_sku_unique", "listing_local_sku_msku_unique"}
 )
 
 
@@ -292,6 +296,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     line_id,
                 )
                 fact_id = str(uuid4())
+                provider_item_id = _field(item, "item_id", "platform_product_id")
                 values: dict[str, object] = {
                     "id": fact_id,
                     "source_account_ref": self.source_account_ref,
@@ -309,7 +314,14 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     ),
                     "canonical_identity_hash": identity_hash,
                     "source_line_ordinal": ordinal,
-                    "item_id": _field(item, "item_id", "platform_product_id"),
+                    # Keep provider evidence separate from the effective Item ID.
+                    # Listing resolution may fill item_id later, but it must never
+                    # make a provider NULL look like a provider-side change.
+                    "provider_item_id": provider_item_id,
+                    "item_id": provider_item_id,
+                    "item_id_resolution_source": (
+                        "provider" if provider_item_id is not None else None
+                    ),
                     "msku": _field(item, "msku"),
                     "local_sku": _field(item, "local_sku", "sku"),
                     "quantity": _decimal(item.get("quantity")),
@@ -338,7 +350,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     self.session.execute(
                         text(
                             "select id,source_line_hash,canonical_identity_hash,is_identity_current,"
-                            "item_id,msku,local_sku,"
+                            "provider_item_id,item_id,item_id_resolution_source,msku,local_sku,"
                             "quantity,source_purchase_at_raw,business_date_la,order_status_raw,"
                             "order_sub_status_raw,flow_node_raw,sales_revenue_amount,"
                             "sales_revenue_currency_code,order_total_amount,"
@@ -359,6 +371,13 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     raise DataPagesRealSyncError("DATA_PAGES_ORDER_CURRENT_IDENTITY_CONFLICT")
 
                 current = current_rows[0] if current_rows else None
+                if (
+                    current is not None
+                    and current["item_id_resolution_source"] in LISTING_ITEM_ID_RESOLUTION_SOURCES
+                    and provider_item_id is not None
+                    and current["item_id"] != provider_item_id
+                ):
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_ITEM_ID_RESOLUTION_CONFLICT")
                 if current is not None and not _changed_order_fields(dict(current), values):
                     # A successful identical observation advances freshness,
                     # not the business-update timestamp.
@@ -389,14 +408,16 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "insert into fact_walmart_order_items "
                         "(id,source_account_ref,store_id,source_order_id,source_order_line_id,"
                         "platform_order_no,reference_no,source_line_hash,canonical_identity_hash,"
-                        "is_identity_current,source_line_ordinal,item_id,msku,local_sku,"
+                        "is_identity_current,source_line_ordinal,provider_item_id,item_id,"
+                        "item_id_resolution_source,msku,local_sku,"
                         "quantity,source_purchase_at_raw,business_date_la,order_status_raw,order_sub_status_raw,"
                         "flow_node_raw,sales_revenue_amount,sales_revenue_currency_code,order_total_amount,"
                         "order_total_currency_code,discount_amount,discount_currency_code,is_sample_order,"
                         "synced_at,created_at,updated_at) values "
                         "(:id,:source_account_ref,:store_id,:source_order_id,:source_order_line_id,"
                         ":platform_order_no,:reference_no,:source_line_hash,:canonical_identity_hash,true,"
-                        ":source_line_ordinal,:item_id,:msku,"
+                        ":source_line_ordinal,:provider_item_id,:item_id,"
+                        ":item_id_resolution_source,:msku,"
                         ":local_sku,:quantity,:source_purchase_at_raw,:business_date_la,:order_status_raw,"
                         ":order_sub_status_raw,:flow_node_raw,:sales_revenue_amount,:sales_revenue_currency_code,"
                         ":order_total_amount,:order_total_currency_code,:discount_amount,:discount_currency_code,"
@@ -406,14 +427,12 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 )
 
                 observed_snapshot_hash = _stable_hash(_order_snapshot(values))
-                seen_prior_hashes: set[str] = set()
                 for prior in prior_rows:
                     prior_values = dict(prior)
                     prior_snapshot_hash = _stable_hash(_order_snapshot(prior_values))
                     changed_fields = _changed_order_fields(prior_values, values)
-                    if not changed_fields or prior_snapshot_hash in seen_prior_hashes:
+                    if not changed_fields:
                         continue
-                    seen_prior_hashes.add(prior_snapshot_hash)
                     self.session.execute(
                         text(
                             "insert into audit_walmart_order_item_conflicts "
@@ -425,8 +444,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                             ":source_order_id,:source_order_line_id,:prior_fact_id,:canonical_fact_id,"
                             ":prior_snapshot_hash,:observed_snapshot_hash,"
                             "cast(:differing_fields_json as jsonb),'observed',:updated_at,:created_at) "
-                            "on conflict (canonical_identity_hash,prior_snapshot_hash,"
-                            "observed_snapshot_hash) do nothing"
+                            "on conflict (canonical_identity_hash,prior_fact_id,"
+                            "canonical_fact_id) do nothing"
                         ),
                         {
                             **values,
@@ -461,8 +480,12 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "from fact_walmart_order_items o where o.source_account_ref=:account "
                 "and o.business_date_la=:day and o.is_identity_current=true and o.item_id is null), "
                 "resolved as (select id,case when sku_count=1 then sku_item "
-                "when sku_count>1 and exact_count=1 then exact_item else null end item_id "
-                "from candidates) update fact_walmart_order_items o set item_id=r.item_id,updated_at=:now "
+                "when sku_count>1 and exact_count=1 then exact_item else null end item_id,"
+                "case when sku_count=1 then 'listing_local_sku_unique' "
+                "when sku_count>1 and exact_count=1 then 'listing_local_sku_msku_unique' "
+                "else null end resolution_source from candidates) "
+                "update fact_walmart_order_items o set item_id=r.item_id,"
+                "item_id_resolution_source=r.resolution_source,updated_at=:now "
                 "from resolved r where o.id=r.id and r.item_id is not null"
             ),
             {"account": self.source_account_ref, "day": self.business_date, "now": now},

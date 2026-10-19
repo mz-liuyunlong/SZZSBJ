@@ -164,6 +164,8 @@ jobs:
           uv run alembic upgrade 20261020_0047_walmart_order_identity_guard
           uv run pytest -q -s \
             tests/modules/integration_sync/test_walmart_order_identity_postgresql.py
+          uv run pytest -q -s \
+            tests/modules/integration_sync/test_walmart_order_identity_downgrade_postgresql.py
           uv run alembic downgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, inspect, text
@@ -176,6 +178,8 @@ jobs:
           columns = {column["name"] for column in inspect(engine).get_columns("fact_walmart_order_items")}
           assert "canonical_identity_hash" not in columns
           assert "is_identity_current" not in columns
+          assert "provider_item_id" not in columns
+          assert "item_id_resolution_source" not in columns
           engine.dispose()
           PY
 

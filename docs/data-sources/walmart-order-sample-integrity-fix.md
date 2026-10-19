@@ -27,7 +27,9 @@ source_account_ref + store_id + source_order_id + source_order_line_id
 - 一个身份最多有一行 `is_identity_current=true`。历史物理版本保留为证据，不自动删除。
 - 历史物理行不再作为可写锚点。首次再次观察历史身份时，应用新增一行独立 canonical current；例如 12 个 legacy 版本、5 个身份首次采用后为 12 个不可变 legacy + 5 个 current。
 - 相同来源快照重放只更新 current 的 `synced_at`，不改变业务字段、`updated_at` 或物理行数。来源业务快照发生变化时，旧 current 仅撤销 current 标记并完整保留业务值，随后新增一行 current；因此只在真实版本变化时增加一个物理版本。
-- `audit_walmart_order_item_conflicts` 使用 `prior_fact_id → canonical_fact_id` 关联两个完整物理版本，并保存 prior/observed Hash 与差异字段名；完整前像由不可变事实行保存，不复制 RAW payload，也不自动裁决业务值。
+- Provider 原始 Item ID 保存在 `provider_item_id`；`item_id` 是供下游读取的有效身份。Provider 缺失时，只有唯一 Listing 匹配才可补全，并通过 `item_id_resolution_source` 记录 `local_sku` 或 `local_sku + msku` 匹配依据。补全值不伪装成 Provider 证据，也不参与 Provider 快照差异判断。
+- Provider 后续返回与 Listing 补全相同的 Item ID 时，建立一条有来源证据的新版本；返回不同 Item ID 时以 `DATA_PAGES_ORDER_ITEM_ID_RESOLUTION_CONFLICT` 阻断。匹配不唯一时保持 unresolved，禁止任意选择。
+- `audit_walmart_order_item_conflicts` 使用物理 `prior_fact_id → canonical_fact_id` 作为版本转换身份，并保存 canonical identity、prior/observed Hash 与差异字段名。同型 A→B 转换发生在不同物理版本时分别保留，同一个物理转换重试保持幂等；完整前像由不可变事实行保存，不复制 RAW payload。
 - 身份补全只处理规范 current 行。退款匹配优先读取 current 行；迁移后尚未再次观察的身份仅在物理历史行唯一时允许兼容读取，存在多个旧 Hash 版本则继续 fail closed，禁止任意挑选。
 
 ## Migration 边界
@@ -36,11 +38,14 @@ source_account_ref + store_id + source_order_id + source_order_line_id
 
 - `canonical_identity_hash`；
 - `is_identity_current`；
+- `provider_item_id` 与 `item_id_resolution_source`；
 - current identity 完整性 CHECK（非空且非空字符串的账号、店铺、订单、订单行及小写 64 位 SHA-256）；
 - current identity partial unique index；
 - 无业务值的冲突审计表。
 
 Migration 不执行 `UPDATE`、`DELETE`、历史回填、版本合并或送样确认。旧行初始均为 non-current，只有后续已批准的提供商观察才可逐身份采用一行。生产执行前必须先完成冲突预检、可恢复备份和隔离恢复演练；本 PR 不授权执行 migration。
+
+0047 downgrade 仅是空证据状态下的 schema 回退：只要存在 current 行或转换审计，PostgreSQL migration 会在任何 DROP 前 fail-closed。数据级回退必须另行取得 DBA/Owner 授权，先归档并验证可恢复备份；普通 `alembic downgrade` 不是无损生产回退方案。
 
 ## v3 / v5 送样兼容
 
@@ -83,7 +88,7 @@ uv run python -m scripts.audit_walmart_order_identity_conflicts \
 5. 在同一获批变更窗口内，由 DBA 单独执行 0047，再切换已校验代码；确认 API 与 Worker 正常后才能恢复 Beat。切换过程不自动同步、不重算、不回填。
 6. 后续每个业务日期的真实采集、送样核验、MART 重算和历史数据修复均需独立授权；任一对账不一致立即停止。
 
-禁止把 migration 成功理解为历史去重完成；禁止自动删除旧行、自动确认送样或将 v3 批量改写为 v5。失败回退优先停止新写入并恢复应用版本；涉及审计表或历史数据的 schema/data 回退必须由 DBA 基于已验证备份另行审批。
+禁止把 migration 成功理解为历史去重完成；禁止自动删除旧行、自动确认送样或将 v3 批量改写为 v5。失败时优先停止新写入并修复前进；已有 current/审计数据后，0047 downgrade 会被门禁拒绝。任何 schema/data 回退必须由 DBA 基于已验证归档与恢复演练另行审批。
 
 时间语义：`synced_at` 是最近一次成功观察该来源事实的 UTC-aware 时间；`updated_at` 是该物理版本业务快照的建立时间。相同重放只推进 `synced_at`；真实业务变化创建新 current，失败事务不会推进任何时间。
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from collections import Counter
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
@@ -148,6 +149,54 @@ def _provider_row(*, store_id: str = "store-a", changed: bool = False) -> dict[s
             for index in range(5)
         ],
     }
+
+
+def _single_line_provider_row(
+    *,
+    order_id: str = "order-a",
+    line_id: str = "line-0",
+    item_id: str | None = "item-0",
+    amount: str = "0",
+    store_id: str = "store-a",
+) -> dict[str, object]:
+    row = _provider_row(store_id=store_id)
+    row["global_order_no"] = order_id
+    item = dict(cast(list[dict[str, object]], row["item_info"])[0])
+    item["order_item_no"] = line_id
+    item["sales_revenue_amount"] = amount
+    if item_id is None:
+        item.pop("item_id", None)
+    else:
+        item["item_id"] = item_id
+    row["item_info"] = [item]
+    row["transaction_info"] = [{"order_total_amount": amount}]
+    return row
+
+
+def _insert_listing(
+    session: Session,
+    *,
+    item_id: str,
+    msku: str = "msku-0",
+    local_sku: str = "sku-0",
+) -> None:
+    now = datetime(2026, 10, 20, tzinfo=UTC)
+    session.execute(
+        text(
+            "insert into dim_walmart_listings "
+            "(id,source_account_ref,platform_code,store_id,item_id,msku,local_sku,"
+            "synced_at,created_at,updated_at) values "
+            "(:id,:account,'walmart','store-a',:item_id,:msku,:local_sku,:now,:now,:now)"
+        ),
+        {
+            "id": str(uuid4()),
+            "account": _ACCOUNT,
+            "item_id": item_id,
+            "msku": msku,
+            "local_sku": local_sku,
+            "now": now,
+        },
+    )
 
 
 def _insert_identity_row(
@@ -512,6 +561,7 @@ def test_order_identity_current_constraints_and_metadata_match(engine: Engine) -
     }
     assert "ck_fact_walmart_order_items_canonical_identity_hash_sha256" in check_names
     assert "ck_fact_walmart_order_items_canonical_identity_current_complete" in check_names
+    assert "ck_fact_walmart_order_items_current_item_lineage" in check_names
     current_index = next(
         row
         for row in inspector.get_indexes("fact_walmart_order_items")
@@ -521,10 +571,277 @@ def test_order_identity_current_constraints_and_metadata_match(engine: Engine) -
     assert current_index["column_names"] == ["canonical_identity_hash"]
 
 
+def test_listing_item_resolution_is_idempotent_across_three_provider_null_replays(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observations = [datetime(2026, 10, 20, hour, tzinfo=UTC) for hour in range(1, 5)]
+    row = _single_line_provider_row(item_id=None)
+    with Session(engine) as session:
+        _insert_listing(session, item_id="listing-item-0")
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        monkeypatch.setattr(data_pages_real_sync, "_now", lambda: observations[0])
+        assert runner._write_orders([row]) == 1
+        assert runner._resolve_order_items() == 0
+        session.commit()
+
+        first = session.execute(
+            text(
+                "select id,provider_item_id,item_id,item_id_resolution_source,"
+                "created_at,updated_at from fact_walmart_order_items "
+                "where source_account_ref=:account and is_identity_current=true"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
+        assert first[1:4] == (None, "listing-item-0", "listing_local_sku_unique")
+
+        for observed_at in observations[1:]:
+            monkeypatch.setattr(data_pages_real_sync, "_now", lambda value=observed_at: value)
+            assert runner._write_orders([row]) == 1
+            assert runner._resolve_order_items() == 0
+            session.commit()
+
+        rows = session.execute(
+            text(
+                "select id,provider_item_id,item_id,item_id_resolution_source,"
+                "created_at,updated_at,synced_at from fact_walmart_order_items "
+                "where source_account_ref=:account order by created_at,id"
+            ),
+            {"account": _ACCOUNT},
+        ).all()
+        assert len(rows) == 1
+        assert rows[0][:6] == (*first[:4], first.created_at, first.updated_at)
+        assert rows[0].synced_at == observations[-1]
+        assert (
+            session.scalar(
+                text(
+                    "select count(*) from audit_walmart_order_item_conflicts "
+                    "where source_account_ref=:account"
+                ),
+                {"account": _ACCOUNT},
+            )
+            == 0
+        )
+
+        provider_confirmed = _single_line_provider_row(item_id="listing-item-0")
+        assert runner._write_orders([provider_confirmed]) == 1
+        session.commit()
+        counts = session.execute(
+            text(
+                "select count(*),count(*) filter (where is_identity_current=true) "
+                "from fact_walmart_order_items where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
+        assert counts == (2, 1)
+        confirmed = session.execute(
+            text(
+                "select provider_item_id,item_id,item_id_resolution_source "
+                "from fact_walmart_order_items where source_account_ref=:account "
+                "and is_identity_current=true"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
+        assert confirmed == ("listing-item-0", "listing-item-0", "provider")
+        assert (
+            session.scalar(
+                text(
+                    "select count(*) from audit_walmart_order_item_conflicts "
+                    "where source_account_ref=:account"
+                ),
+                {"account": _ACCOUNT},
+            )
+            == 1
+        )
+
+
+def test_provider_item_conflict_with_listing_resolution_fails_closed(engine: Engine) -> None:
+    missing = _single_line_provider_row(item_id=None)
+    with Session(engine) as session:
+        _insert_listing(session, item_id="listing-item-0")
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        assert runner._write_orders([missing]) == 1
+        assert runner._resolve_order_items() == 0
+        session.commit()
+
+        with pytest.raises(
+            data_pages_real_sync.DataPagesRealSyncError,
+            match="DATA_PAGES_ORDER_ITEM_ID_RESOLUTION_CONFLICT",
+        ):
+            runner._write_orders([_single_line_provider_row(item_id="provider-item-other")])
+        session.rollback()
+
+        row = session.execute(
+            text(
+                "select count(*) over (),provider_item_id,item_id,item_id_resolution_source "
+                "from fact_walmart_order_items where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
+        assert row == (1, None, "listing-item-0", "listing_local_sku_unique")
+        assert (
+            session.scalar(
+                text(
+                    "select count(*) from audit_walmart_order_item_conflicts "
+                    "where source_account_ref=:account"
+                ),
+                {"account": _ACCOUNT},
+            )
+            == 0
+        )
+
+
+def test_ambiguous_listing_item_resolution_remains_unresolved(engine: Engine) -> None:
+    with Session(engine) as session:
+        _insert_listing(session, item_id="listing-item-a")
+        _insert_listing(session, item_id="listing-item-b")
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        assert runner._write_orders([_single_line_provider_row(item_id=None)]) == 1
+        assert runner._resolve_order_items() == 1
+        session.commit()
+        assert session.execute(
+            text(
+                "select provider_item_id,item_id,item_id_resolution_source "
+                "from fact_walmart_order_items where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one() == (None, None, None)
+
+
+def test_repeated_snapshot_transitions_keep_distinct_audit_events(engine: Engine) -> None:
+    with Session(engine) as session:
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        for amount in ("10", "12", "10", "12"):
+            assert runner._write_orders([_single_line_provider_row(amount=amount)]) == 1
+            session.commit()
+
+        counts = session.execute(
+            text(
+                "select count(*),count(*) filter (where is_identity_current=true),"
+                "count(distinct canonical_identity_hash) "
+                "from fact_walmart_order_items where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
+        assert counts == (4, 1, 1)
+        transitions = session.execute(
+            text(
+                "select prior_fact_id,canonical_fact_id,prior_snapshot_hash,"
+                "observed_snapshot_hash from audit_walmart_order_item_conflicts "
+                "where source_account_ref=:account order by observed_at,id"
+            ),
+            {"account": _ACCOUNT},
+        ).all()
+        assert len(transitions) == 3
+        assert len({(row.prior_fact_id, row.canonical_fact_id) for row in transitions}) == 3
+        hash_pair_counts = Counter(
+            (row.prior_snapshot_hash, row.observed_snapshot_hash) for row in transitions
+        )
+        assert sorted(hash_pair_counts.values()) == [1, 2]
+
+        assert runner._write_orders([_single_line_provider_row(amount="12")]) == 1
+        session.commit()
+        assert (
+            session.scalar(
+                text(
+                    "select count(*) from audit_walmart_order_item_conflicts "
+                    "where source_account_ref=:account"
+                ),
+                {"account": _ACCOUNT},
+            )
+            == 3
+        )
+
+        assert runner._write_orders([_single_line_provider_row(amount="14")]) == 1
+        session.rollback()
+        assert session.execute(
+            text(
+                "select count(*),count(*) filter (where is_identity_current=true) "
+                "from fact_walmart_order_items where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one() == (4, 1)
+        assert (
+            session.scalar(
+                text(
+                    "select count(*) from audit_walmart_order_item_conflicts "
+                    "where source_account_ref=:account"
+                ),
+                {"account": _ACCOUNT},
+            )
+            == 3
+        )
+
+
+def test_same_snapshot_change_across_identities_does_not_cross_deduplicate(
+    engine: Engine,
+) -> None:
+    with Session(engine) as session:
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        for amount in ("10", "12"):
+            rows = [
+                _single_line_provider_row(order_id="order-a", line_id="line-a", amount=amount),
+                _single_line_provider_row(order_id="order-b", line_id="line-b", amount=amount),
+            ]
+            assert runner._write_orders(rows) == 2
+            session.commit()
+        assert session.execute(
+            text(
+                "select count(*),count(distinct canonical_identity_hash) "
+                "from audit_walmart_order_item_conflicts "
+                "where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one() == (2, 2)
+
+
 def test_concurrent_order_replay_creates_one_current_identity(engine: Engine) -> None:
     barrier = Barrier(2)
-    row = _provider_row()
-    row["item_info"] = cast(list[dict[str, object]], row["item_info"])[:1]
+    row = _single_line_provider_row(item_id=None)
+
+    with Session(engine) as session:
+        _insert_listing(session, item_id="listing-item-0")
+        session.commit()
 
     def write_once() -> None:
         with Session(engine) as session:
@@ -547,6 +864,17 @@ def test_concurrent_order_replay_creates_one_current_identity(engine: Engine) ->
             future.result(timeout=10)
 
     with Session(engine) as session:
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        assert runner._resolve_order_items() == 0
+        session.commit()
         counts = session.execute(
             text(
                 "select count(*),count(*) filter (where is_identity_current=true) "
@@ -554,7 +882,16 @@ def test_concurrent_order_replay_creates_one_current_identity(engine: Engine) ->
             ),
             {"account": _ACCOUNT},
         ).one()
+        lineage = session.execute(
+            text(
+                "select provider_item_id,item_id,item_id_resolution_source "
+                "from fact_walmart_order_items where source_account_ref=:account "
+                "and is_identity_current=true"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
     assert counts == (1, 1)
+    assert lineage == (None, "listing-item-0", "listing_local_sku_unique")
 
 
 def test_verified_v3_v5_samples_reject_evidence_changes_without_mart_loss(
