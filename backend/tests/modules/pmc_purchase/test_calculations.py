@@ -8,7 +8,6 @@ from decimal import Decimal
 import pytest
 
 from app.modules.pmc_purchase.calculations import (
-    median_days,
     ArrivalResult,
     CycleSample,
     ManualBaseline,
@@ -22,6 +21,7 @@ from app.modules.pmc_purchase.calculations import (
     compute_sku_cycle,
     cycle_threshold_days,
     days_between,
+    median_days,
     normalize_store_id,
     parse_itemid_remark,
     parse_provider_date,
@@ -133,9 +133,7 @@ def test_resolve_item_id_priority_system_plan_over_remark_over_packing_slip() ->
         ).source
         == "from_plan_remark"
     )
-    listing = resolve_item_id(
-        listing_item_id=" 55555555555 ", packing_slip_item_id="44444444444"
-    )
+    listing = resolve_item_id(listing_item_id=" 55555555555 ", packing_slip_item_id="44444444444")
     assert (listing.source, listing.item_id) == ("from_listing", "55555555555")
     slip = resolve_item_id(packing_slip_item_id=" 44444444444 ")
     assert (slip.source, slip.item_id) == ("from_packing_slip", "44444444444")
