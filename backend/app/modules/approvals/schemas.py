@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-ApprovalTab = Literal["pending", "approved", "rejected"]
+ApprovalTab = Literal["pending", "approved", "rejected", "legacy"]
 ApprovalView = Literal["mine", "created", "all"]
 ApprovalDecision = Literal["approved", "rejected", "info_required"]
 ApprovalStatus = Literal[
@@ -65,6 +65,7 @@ class ApprovalSummary(StrictSchema):
     high_risk: int
     info_required: int
     approved: int
+    legacy_unverified: int = 0
 
 
 class ApprovalEventRead(StrictSchema):

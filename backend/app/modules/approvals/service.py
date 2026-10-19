@@ -261,9 +261,146 @@ class ApprovalService:
             can_review=(may_review and r["status"] == "submitted" and r["applicant_id"] != actor),
         )
 
+    def legacy_unverified(
+        self, query: ApprovalQuery, account_refs: frozenset[str]
+    ) -> tuple[ApprovalListData, int]:
+        """Read-only legacy cases: no identity inference and no approval authorization."""
+        params: dict = {
+            "accounts": list(account_refs),
+            "limit": query.page_size,
+            "offset": (query.page - 1) * query.page_size,
+        }
+        where = [
+            "c.source_account_ref=any(:accounts)",
+            "c.is_deleted=false",
+            "c.source_kind='legacy_mirror'",
+            "c.status='archive_pending'",
+            "c.archive_review_status='pending'",
+            "not exists (select 1 from app_approval_requests a where "
+            "a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)",
+        ]
+        if query.approval_type and query.approval_type != "wfs_case_abandon":
+            return ApprovalListData(items=[]), 0
+        if query.keyword:
+            where.append(
+                "(c.store_name_snapshot ilike :keyword or c.case_nos ilike :keyword "
+                "or c.owner_name_snapshot ilike :keyword or c.item_id ilike :keyword)"
+            )
+            params["keyword"] = f"%{query.keyword.strip()}%"
+        if query.risk_level:
+            where.append(
+                "(case when greatest(c.estimated_recover_amount-c.recovered_amount,0)>=500 "
+                "then 'high' when greatest(c.estimated_recover_amount-c.recovered_amount,0)>=100 "
+                "then 'medium' else 'low' end)=:risk"
+            )
+            params["risk"] = query.risk_level
+        condition = " and ".join(where)
+        total = int(
+            self.session.execute(
+                text(f"select count(*) from ops_wfs_fee_anomaly_cases c where {condition}"),
+                params,
+            ).scalar_one()
+        )
+        rows = (
+            self.session.execute(
+                text(f"""
+            select c.* from ops_wfs_fee_anomaly_cases c where {condition}
+            order by c.archive_requested_at desc nulls last, c.id
+            limit :limit offset :offset
+        """),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        items = []
+        for record in rows:
+            case = dict(record)
+            pending = calculate_pending_recovery(case)
+            risk = "high" if pending >= 500 else "medium" if pending >= 100 else "low"
+            items.append(
+                ApprovalItem(
+                    id=str(case["id"]),
+                    version=1,
+                    approval_type="wfs_case_abandon",
+                    business_ref=str(case["id"]),
+                    title="WFS 历史待核验 · 放弃跟进",
+                    source_account_ref=case["source_account_ref"],
+                    applicant_id=None,
+                    status="legacy_unverified",
+                    risk_level=risk,
+                    amount=str(pending),
+                    currency_code=case["currency_code"],
+                    submitted_at=None,
+                    reviewed_at=None,
+                    reviewed_by=None,
+                    reason=case.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
+                    can_review=False,
+                    requires_verification=True,
+                )
+            )
+        return ApprovalListData(items=items), total
+
+    def legacy_detail(self, case_id: UUID, account_refs: frozenset[str]) -> ApprovalDetail:
+        """Read-only display; do not fabricate approvals, applicants, or events."""
+        record = self._case(str(case_id), account_refs)
+        if (
+            record["source_kind"] != "legacy_mirror"
+            or record["status"] != "archive_pending"
+            or record["archive_review_status"] != "pending"
+        ):
+            blocked()
+        linked = self.session.execute(
+            text("""
+            select 1 from app_approval_requests where approval_type='wfs_case_abandon'
+              and business_ref=:case_id limit 1
+        """),
+            {"case_id": str(case_id)},
+        ).first()
+        if linked:
+            blocked()
+        pending = calculate_pending_recovery(record)
+        risk = "high" if pending >= 500 else "medium" if pending >= 100 else "low"
+        item = ApprovalItem(
+            id=str(case_id),
+            version=1,
+            approval_type="wfs_case_abandon",
+            business_ref=str(case_id),
+            title="WFS 历史待核验 · 放弃跟进",
+            source_account_ref=record["source_account_ref"],
+            applicant_id=None,
+            status="legacy_unverified",
+            risk_level=risk,
+            amount=str(pending),
+            currency_code=record["currency_code"],
+            submitted_at=None,
+            reviewed_at=None,
+            reviewed_by=None,
+            reason=record.get("archive_reason") or "历史记录缺少正式申请理由，需人工核验",
+            can_review=False,
+            requires_verification=True,
+        )
+        # This is a current read of a legacy Case, never a historical approval snapshot.
+        legacy_case_view = make_snapshot(record)
+        recorded_at = record.get("archive_requested_at")
+        legacy_case_view["legacy_recorded_at"] = (
+            recorded_at.isoformat() if recorded_at is not None else None
+        )
+        return ApprovalDetail(
+            **item.model_dump(),
+            snapshot=legacy_case_view,
+            evidence=record.get("archive_evidence"),
+            current_case=legacy_case_view,
+            data_changed=False,
+            can_supplement=False,
+            events=[],
+        )
+
     def list_requests(
         self, query: ApprovalQuery, account_refs: frozenset[str], actor: str, may_review: bool
     ) -> tuple[ApprovalListData, int]:
+        if query.tab == "legacy":
+            return self.legacy_unverified(query, account_refs)
         status_clause = (
             "a.status in ('submitted','info_required')"
             if query.tab == "pending"
@@ -333,7 +470,23 @@ class ApprovalService:
             .mappings()
             .one()
         )
-        return ApprovalSummary(**dict(row))
+        legacy_count = 0
+        if may_review:
+            # Do not reveal protected review-queue totals to page-only users.
+            legacy_count = int(
+                self.session.execute(
+                    text("""
+                    select count(*) from ops_wfs_fee_anomaly_cases c
+                    where c.source_account_ref=any(:accounts) and c.is_deleted=false
+                      and c.source_kind='legacy_mirror'
+                      and c.status='archive_pending' and c.archive_review_status='pending'
+                      and not exists (select 1 from app_approval_requests a
+                       where a.approval_type='wfs_case_abandon' and a.business_ref=c.id::text)
+                    """),
+                    {"accounts": list(account_refs)},
+                ).scalar_one()
+            )
+        return ApprovalSummary(**dict(row), legacy_unverified=legacy_count)
 
     def detail(
         self, approval_id: UUID, account_refs: frozenset[str], actor: str, may_review: bool

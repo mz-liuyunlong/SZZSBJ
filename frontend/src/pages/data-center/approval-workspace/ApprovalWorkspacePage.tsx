@@ -41,8 +41,9 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const [filters, setFilters] = useState<ApprovalFilters>(defaultFilters);
  const [rows, setRows] = useState<ApprovalItem[]>([]);
  const [count, setCount] = useState(0);
- const [summary, setSummary] = useState<ApprovalSummary>({ pending:0, high_risk:0, info_required:0, approved:0 });
+ const [summary, setSummary] = useState<ApprovalSummary>({ pending:0, high_risk:0, info_required:0, approved:0, legacy_unverified:0 });
  const [loading, setLoading] = useState(true);
+ const [loadError, setLoadError] = useState(false);
  const [selected, setSelected] = useState<ApprovalItem>();
  const [reloadToken, setReloadToken] = useState(0);
  const [columnsOpen, setColumnsOpen] = useState(false);
@@ -56,11 +57,12 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   void Promise.all([fetchApprovals(filters), fetchApprovalSummary()])
    .then(([list, stats]) => {
     if (!active) return;
+    setLoadError(false);
     setRows(list.data.items);
     setCount(list.meta.total);
     setSummary(stats);
    }).catch(() => {
-    if (active) { setRows([]); setCount(0); void messageApi.error("审批数据加载失败"); }
+    if (active) { setLoadError(true); setRows([]); setCount(0); void messageApi.error("审批数据加载失败"); }
    }).finally(() => { if (active) setLoading(false); });
   return () => { active = false; };
  }, [filters, reloadToken, messageApi]);
@@ -68,7 +70,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const columns = useMemo((): ProColumns<ApprovalItem>[] => {
   const map: Record<string, ProColumns<ApprovalItem>> = {
    title: { key:"title", dataIndex:"title", fixed:"left", render:(_,row) => <Button type="link" onClick={() => setSelected(row)}>{row.title}</Button> },
-   approval_type: { key:"approval_type", dataIndex:"approval_type", render:(_,r) => r.approval_type === "wfs_case_abandon" ? "WFS 费用异常" : r.approval_type },
+   approval_type: { key:"approval_type", dataIndex:"approval_type", render:(_,r) => r.status === "legacy_unverified" ? "WFS · 历史待核验" : r.approval_type === "wfs_case_abandon" ? "WFS 费用异常" : r.approval_type },
    risk_level: { key:"risk_level", render:(_,r) => <StatusTag label={riskNames[r.risk_level]} color={r.risk_level === "high" ? "red" : r.risk_level === "medium" ? "orange" : "default"}/> },
    amount: { key:"amount", render:(_,r) => r.amount === null ? "—" : formatMoney(r.amount,{currency:r.currency_code || "USD"}) },
    applicant_id: { key:"applicant_id", dataIndex:"applicant_id" },
@@ -85,6 +87,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  }, [columnKeys, widths]);
  const tabs: { label: string; value: ApprovalTab }[] = [
   {label:"待审批",value:"pending"},{label:"已审批",value:"approved"},{label:"驳回记录",value:"rejected"},
+  ...(hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review") ? [{label:`历史待核验 (${summary.legacy_unverified})`,value:"legacy" as ApprovalTab}] : []),
  ];
  return <PageShell page={page}>
   {holder}
@@ -108,8 +111,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    <Card className="approval-workspace__toolbar-card" size="small">
     <Segmented options={tabs} value={filters.tab} onChange={(value) => change({tab:value as ApprovalTab})}/>
     <div className="approval-workspace__controls">
-     <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
-      options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/>
+     {filters.tab !== "legacy" && <Segmented size="small" value={filters.view} onChange={(value) => change({view:value as ApprovalView})}
+      options={[{label:"待我审批",value:"mine"},{label:"我发起的",value:"created"},{label:"全部可见",value:"all"}]}/> }
      <ReportFacetSelect ariaLabel="审批类型" placeholder="审批类型"
       value={filters.approval_type} options={[{label:"WFS 费用异常",value:"wfs_case_abandon"}]}
       onChange={(value) => change({approval_type: typeof value === "string" ? value : undefined})}/>
@@ -124,7 +127,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
     </div>
    </Card>
    <ReportTableShell label="审批任务列表" className="approval-workspace__table">
-    {loading ? <Spin /> : count === 0 ? <EmptyState compact title="暂无审批事项" description="当前筛选条件下没有审批任务"/> :
+    {loading ? <Spin /> : loadError ? <EmptyState compact title="审批数据加载失败" description="请检查接口、权限或网络状态，点击刷新重试"/> : count === 0 ? <EmptyState compact title="暂无审批事项" description="当前筛选条件下没有审批任务"/> :
      <ProTable<ApprovalItem> rowKey="id" columns={columns} dataSource={rows}
       search={false} options={false} toolBarRender={false} bordered size="small"
       scroll={{x:"max-content",y:"100%"}} pagination={{
