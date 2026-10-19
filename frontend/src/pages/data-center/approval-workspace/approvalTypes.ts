@@ -1,4 +1,4 @@
-export type ApprovalTab = "pending" | "approved" | "rejected";
+export type ApprovalTab = "pending" | "approved" | "rejected" | "legacy";
 export type ApprovalView = "mine" | "created" | "all";
 export type ApprovalRisk = "low" | "medium" | "high";
 export type ApprovalStatus = "submitted" | "info_required" | "approved" | "rejected" | "withdrawn" | "legacy_unverified";
@@ -13,7 +13,7 @@ export interface ApprovalItem {
 }
 export interface ApprovalListData { items: ApprovalItem[] }
 export interface ApprovalMeta { page: number; page_size: number; total: number }
-export interface ApprovalSummary { pending: number; high_risk: number; info_required: number; approved: number }
+export interface ApprovalSummary { pending: number; high_risk: number; info_required: number; approved: number; legacy_unverified: number }
 export interface ApprovalEvent { event_type: string; actor_id: string; note: string | null; created_at: string }
 export interface WfsSnapshot {
  [key: string]: unknown;

@@ -18,11 +18,13 @@ OPERATION_LOG_QUEUE = "operation-logs"
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
+    "app.modules.approvals.tasks",
     "app.modules.operation_logs.tasks",
 )
 
 TASK_ROUTES = {
     "media_assets.*": {"queue": MEDIA_QUEUE, "routing_key": MEDIA_QUEUE},
+    "approvals.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "operation_logs.*": {"queue": OPERATION_LOG_QUEUE, "routing_key": OPERATION_LOG_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
@@ -86,6 +88,10 @@ def create_celery_app(
         timezone="UTC",
         enable_utc=True,
         beat_schedule={
+            "approval-reminder-scheduler": {
+                "task": "approvals.reminder_tick",
+                "schedule": 3600.0,
+            },
             "operation-logs-mirror-incremental": {
                 "task": "operation_logs.mirror_incremental",
                 "schedule": 600.0,

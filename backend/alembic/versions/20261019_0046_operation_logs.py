@@ -1,7 +1,7 @@
 """Formal operation logs with isolated immutable legacy history.
 
-Revision ID: 20261017_0043_operation_logs
-Revises: 20261017_0042_rbac_backfill
+Revision ID: 20261019_0046_operation_logs
+Revises: 20261019_0045_approval_scope
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "20261017_0043_operation_logs"
-down_revision: str | Sequence[str] | None = "20261017_0042_rbac_backfill"
+revision: str = "20261019_0046_operation_logs"
+down_revision: str | Sequence[str] | None = "20261019_0045_approval_scope"
 branch_labels = None
 depends_on = None
 

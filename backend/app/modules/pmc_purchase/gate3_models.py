@@ -50,7 +50,7 @@ RATIO = Numeric(18, 6)
 ITEM_ID = String(32)
 
 ITEM_ID_SOURCES = (
-    "'from_system_plan', 'from_plan_remark', 'from_packing_slip', "
+    "'from_system_plan', 'from_plan_remark', 'from_listing', 'from_packing_slip', "
     "'pending_packing_slip', 'unresolved'"
 )
 STAGE_CODES = "'S1', 'S2', 'S3', 'S4', 'S9', 'S0', 'UNKNOWN'"
