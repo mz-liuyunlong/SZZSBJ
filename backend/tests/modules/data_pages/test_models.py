@@ -11,6 +11,7 @@ EXPECTED_TABLES = {
     "ref_store_commission_rule_versions",
     "fact_walmart_sales_item_daily",
     "fact_walmart_order_items",
+    "audit_walmart_order_item_conflicts",
     "fact_walmart_refund_items",
     "fact_walmart_ad_item_sp_daily",
     "mart_daily_sales_item_day",
@@ -69,11 +70,23 @@ def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:
     orders = Base.metadata.tables["fact_walmart_order_items"].c
     assert {
         "source_line_hash",
+        "canonical_identity_hash",
+        "is_identity_current",
         "source_purchase_timezone",
         "purchase_at_utc",
         "business_date_la",
         "is_sample_order",
     } <= set(orders.keys())
+
+    order_conflicts = Base.metadata.tables["audit_walmart_order_item_conflicts"].c
+    assert {
+        "canonical_identity_hash",
+        "canonical_fact_id",
+        "prior_snapshot_hash",
+        "observed_snapshot_hash",
+        "differing_fields_json",
+        "resolution_status",
+    } <= set(order_conflicts.keys())
 
     refunds = Base.metadata.tables["fact_walmart_refund_items"].c
     assert {

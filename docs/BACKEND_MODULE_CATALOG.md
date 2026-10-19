@@ -158,6 +158,25 @@
 | Current branch evidence | Four revisions through `20260912_0006`, 20 approved tables in one metadata, 17 protected routes, synthetic parser/calculation/importer/batch tests; final merge status and PR remain TBD |
 | Not in scope | Frontend/admin-frontend, old-system, real Lingxing/Token/ProductList/batchGetProductInfo calls, production DB/migration, live Redis/Celery, archive transport/deletion, ADS implementation, external provider handlers beyond the reusable contract, deployment, or Git publishing |
 
+## Walmart Order / Sample Integrity Guard
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Walmart Order / Sample Integrity Guard |
+| Module key | `walmart-order-sample-integrity-v1` |
+| Status | `approved`；当前分支实现准备复审，合并前不得标记 `implemented` |
+| Main role | Backend Engineer；branch `codex/fix-walmart-sample-order-dedup` |
+| Purpose | 阻止可变订单字段生成新业务身份，保留历史冲突证据，兼容已确认 v3/v5 送样事实，并让 Daily Sales 区分确认零、未知和待核验 |
+| Canonical identity | `source_account_ref + store_id + source_order_id + source_order_line_id`；跨账号/店铺隔离，金额、数量、商品、状态、折扣不参与身份 |
+| Storage | Existing `fact_walmart_order_items` gains nullable canonical hash/current marker；new audit table stores only snapshot hashes and differing field names；legacy rows are never deleted automatically |
+| Sample rules | Valid historical `zero-total-provider-status-strict-triple-v3` and valid current `provider-verified-sample-v5` are preserved；candidate v5 remains unverified；unknown valid rule fails closed |
+| Downstream boundary | Identity resolution uses current rows；refund matching prefers current and permits a unique pre-adoption legacy row only, while duplicate legacy versions fail closed；MART counts distinct verified orders and unique verified line quantities；missing/pending evidence is explicit |
+| Migration | `20261020_0047_walmart_order_identity_guard` is additive and contains no data rewrite；production execution requires separate DBA/Owner authorization after read-only conflict preview and recoverable backup |
+| Tests | Synthetic unit/migration/UI tests plus opt-in isolated PostgreSQL convergence test for 5 identities/12 legacy versions/repeated sync, refund pre/post-adoption behavior, v3 replay and v3-to-MART preservation |
+| Evidence | `docs/data-sources/walmart-order-sample-integrity-fix.md` |
+| PR | TBD |
+| Not in scope | Production database/migration/sync/backfill/MART rebuild, provider or Token request, sample auto-approval, historical deletion/update, scheduler/service change, old-system, deployment or merge |
+
 ## Product Detail Sync + Product Management BFF / Pricing V1
 
 | 项目 | 内容 |

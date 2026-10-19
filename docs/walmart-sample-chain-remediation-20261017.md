@@ -62,3 +62,11 @@ ROLLBACK;
 - A nonzero cancellation timestamp overrides a non-cancel status; malformed candidate identity/quantity/ambiguous unit price does not abort the entire multi-store order sync. Candidate anomalies are counted, with raw provider capture retained for audit.
 - A verified sample amount or quantity exceeding SaleStat fails the MART refresh instead of silently clamping the attributed sales to zero.
 - This is a provisional anti-misclassification safeguard, not a validated business rule for determining the actual number of samples. YC00512's 5 versus SaleStat 9 and the original price semantics remain **unresolved**. Keep the PR Draft. Any promotion to verified status, deployment, backfill, or production data modification requires separate approval.
+
+## 2026-10-20: order identity and v3/v5 compatibility follow-up
+
+- Canonical order-line identity is now proposed as `source_account_ref + store_id + source_order_id + source_order_line_id`; mutable quantity, amount, item, status and discount values are audited snapshot differences, not new identities.
+- Legacy Hash versions are retained. The implementation marks one observed row current and provides a read-only hashed conflict preview; it never deletes or automatically merges production history.
+- Historical valid v3 facts and current valid v5 facts are both eligible for MART aggregation. Identical replay preserves the existing rule version; unknown valid rules or changed verified evidence stop the transaction.
+- Missing capture evidence and pending verification are explicit Daily Sales warnings and frontend states, not confirmed zero.
+- Full design, production gates and rollback limitations are recorded in `docs/data-sources/walmart-order-sample-integrity-fix.md`. This branch remains unmerged and does not authorize migration, provider calls, backfill, MART rebuild or production data repair.

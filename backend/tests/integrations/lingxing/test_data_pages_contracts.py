@@ -319,8 +319,13 @@ def test_parser_specs_keep_order_and_refund_lineage_explicit() -> None:
     order_spec = DATA_PAGES_PARSER_SPECS["order_v2_list"]
     refund_spec = DATA_PAGES_PARSER_SPECS["walmart_return_order_list"]
 
-    assert ("source_account_ref", "global_order_no", "source_line_hash") in (
-        order_spec.unique_key_candidates
+    assert order_spec.unique_key_candidates == (
+        (
+            "source_account_ref",
+            "store_id",
+            "global_order_no",
+            "source_order_line_id",
+        ),
     )
     assert ("source_account_ref", "return_order_id", "source_line_hash") in (
         refund_spec.unique_key_candidates

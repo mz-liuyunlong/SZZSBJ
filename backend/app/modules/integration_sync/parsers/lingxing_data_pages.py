@@ -130,10 +130,12 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
         record_path="data.list[].item_info[]",
         target_table="fact_walmart_order_items",
         unique_key_candidates=(
-            ("source_account_ref", "global_order_no", "global_item_no"),
-            ("source_account_ref", "global_order_no", "order_item_no"),
-            ("source_account_ref", "global_order_no", "item_info_id"),
-            ("source_account_ref", "global_order_no", "source_line_hash"),
+            (
+                "source_account_ref",
+                "store_id",
+                "global_order_no",
+                "source_order_line_id",
+            ),
         ),
         fields=(
             ParserFieldSpec("global_order_no", "data.list[].global_order_no", required=True),
@@ -141,7 +143,7 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             ParserFieldSpec("raw_status", "data.list[].status"),
             ParserFieldSpec("raw_status_sub", "data.list[].status_sub"),
             ParserFieldSpec("flow_node", "data.list[].flow_node"),
-            ParserFieldSpec("store_id", "data.list[].store_id"),
+            ParserFieldSpec("store_id", "data.list[].store_id", required=True),
             ParserFieldSpec("amount_currency_code", "data.list[].amount_currency"),
             ParserFieldSpec(
                 "order_total_amount", "data.list[].transaction_info[].order_total_amount"
@@ -149,6 +151,11 @@ DATA_PAGES_PARSER_SPECS: dict[DataPagesParserKey, DataPagesParserSpec] = {
             ParserFieldSpec("global_item_no", "data.list[].item_info[].global_item_no"),
             ParserFieldSpec("order_item_no", "data.list[].item_info[].order_item_no"),
             ParserFieldSpec("item_info_id", "data.list[].item_info[].id"),
+            ParserFieldSpec(
+                "source_order_line_id",
+                "data.list[].item_info[].order_item_no|global_item_no|id",
+                required=True,
+            ),
             ParserFieldSpec("quantity", "data.list[].item_info[].quantity"),
             ParserFieldSpec("msku", "data.list[].item_info[].msku"),
             ParserFieldSpec("local_sku", "data.list[].item_info[].local_sku"),

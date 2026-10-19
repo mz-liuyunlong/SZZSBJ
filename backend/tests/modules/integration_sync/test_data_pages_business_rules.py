@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_business_rules import (
     CHINA_TZ,
+    HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
     DataPagesRealSyncRunner,
     _is_valid_sample,
     _refund_amounts,
     _sample_window_china,
 )
 from app.modules.integration_sync.data_pages_mart_invariants import DataPagesMartInvariantError
+from app.modules.integration_sync.data_pages_real_sync import _order_purchase_date_la
 
 
 class _ScalarResult:
@@ -93,6 +95,31 @@ def test_sample_order_and_generic_order_share_la_business_day_window() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("business_day", "inclusive_seconds"),
+    [
+        (date(2026, 10, 1), 86_399),
+        (date(2026, 10, 17), 86_399),
+        (date(2026, 11, 1), 89_999),
+    ],
+)
+def test_order_windows_cover_la_business_dates_and_dst(
+    business_day: date,
+    inclusive_seconds: int,
+) -> None:
+    runner = _runner()
+    runner.business_date = business_day
+
+    sample_body = runner._sample_order_body(offset=0, size=3)
+    generic_body = runner._order_body(offset=0, size=3)
+
+    assert sample_body["start_time"] == generic_body["start_time"]
+    assert sample_body["end_time"] == generic_body["end_time"]
+    assert sample_body["end_time"] - sample_body["start_time"] == inclusive_seconds
+    assert _order_purchase_date_la(sample_body["start_time"]) == business_day
+    assert _order_purchase_date_la(sample_body["end_time"]) == business_day
+
+
 def test_sample_rule_uses_provider_status_and_normalized_cancel_time() -> None:
     assert _is_valid_sample(Decimal("0"), 0, 9) is True
     assert _is_valid_sample(Decimal("0"), "0", "9") is True
@@ -137,7 +164,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     )
 
     assert written == 1
-    params = session.calls[1][1]
+    params = session.calls[2][1]
     assert params is not None
     assert params["platform_order_no"] == "platform-1"
     assert params["source_order_line_id"] == "line-1"
@@ -185,7 +212,7 @@ def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> N
     assert runner._resolve_sample_items() == 0
     assert "and s.item_id is null" in session.calls[0][0]
     assert "and s.is_valid_sample=true and s.item_id is null" not in session.calls[0][0]
-    assert "sample_rule_version=:verified_rule" in session.calls[2][0]
+    assert "sample_rule_version in (:historical_rule,:verified_rule)" in session.calls[2][0]
 
 
 def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
@@ -223,15 +250,67 @@ def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
     runner = _runner(session)
     with pytest.raises(DataPagesMartInvariantError, match="DATA_PAGES_VERIFIED_SAMPLE_CHANGED"):
         runner._write_sample_orders([row])
-    assert (
-        "and not (is_valid_sample=true and sample_rule_version=:verified_rule)"
-        in session.calls[0][0]
-    )
-    assert "then :changed_rule else excluded.sample_rule_version end" in session.calls[1][0]
+    assert "and is_valid_sample=false" in session.calls[1][0]
+    assert "then :changed_rule else excluded.sample_rule_version end" in session.calls[2][0]
     assert (
         "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)"
-        in session.calls[1][0]
+        in session.calls[2][0]
     )
+
+
+def test_historical_v3_sample_rule_is_preserved_by_identical_replay() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+    row = {
+        "global_order_no": "synthetic-order",
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "transaction_info": [{"order_total_amount": "0"}],
+        "item_info": [
+            {
+                "order_item_no": "line-1",
+                "platform_order_no": "platform-1",
+                "quantity": "1",
+                "unit_price_amount": "10.00",
+            }
+        ],
+    }
+
+    assert runner._write_sample_orders([row]) == 1
+
+    upsert_sql = session.calls[2][0]
+    params = session.calls[2][1]
+    assert params is not None
+    assert params["historical_rule"] == HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION
+    assert "sample_rule_version in (:historical_rule,:verified_rule)" in upsert_sql
+    assert "then fact_walmart_sample_order_items.sample_rule_version" in upsert_sql
+    assert "and is_valid_sample=false" in session.calls[1][0]
+
+
+def test_unknown_verified_sample_rule_blocks_before_candidate_cleanup() -> None:
+    class UnsupportedSession(_CaptureSession):
+        def execute(self, statement: object, params: dict[str, Any] | None = None) -> _ScalarResult:
+            statement_text = str(statement)
+            self.calls.append((statement_text, params))
+            if "sample_rule_version not in" in statement_text:
+
+                class OneResult:
+                    def scalar_one(self) -> int:
+                        return 1
+
+                return OneResult()  # type: ignore[return-value]
+            return _ScalarResult()
+
+    session = UnsupportedSession()
+    runner = _runner(session)
+    with pytest.raises(
+        DataPagesMartInvariantError,
+        match="DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED",
+    ):
+        runner._write_sample_orders([])
+
+    assert len(session.calls) == 1
+    assert not any("delete from fact_walmart_sample_order_items" in sql for sql, _ in session.calls)
 
 
 def test_sample_empty_items_counted_as_unresolved() -> None:
@@ -421,7 +500,7 @@ def test_sample_writer_preserves_full_item_discount_as_unverified_candidate() ->
         ]
     )
     assert written == 1
-    params = session.calls[1][1]
+    params = session.calls[2][1]
     assert params is not None
     assert params["platform_order_no"] == "reference-2"
     assert params["source_order_line_id"] == "line-2"
@@ -475,5 +554,5 @@ def test_sample_writer_quarantines_ambiguous_multiple_unit_prices() -> None:
     runner = _runner(session)
     assert runner._write_sample_orders([row]) == 1
     assert runner.summary.sample_unresolved_rows == 1
-    assert session.calls[1][1]["unit_price_amount"] is None
-    assert session.calls[1][1]["is_valid_sample"] is False
+    assert session.calls[2][1]["unit_price_amount"] is None
+    assert session.calls[2][1]["is_valid_sample"] is False

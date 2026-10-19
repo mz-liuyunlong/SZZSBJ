@@ -38,6 +38,7 @@ from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 LA_TZ = ZoneInfo("America/Los_Angeles")
 CHINA_TZ = timezone(timedelta(hours=8), name="Asia/Shanghai")
 SAMPLE_RULE_VERSION = "candidate-unverified-v5"
+HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION = "zero-total-provider-status-strict-triple-v3"
 VERIFIED_SAMPLE_RULE_VERSION = "provider-verified-sample-v5"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
@@ -198,23 +199,45 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         """Refresh unverified candidates while protecting provider-confirmed facts."""
 
         refresh_started_at = _now()
-        # A provider replay must never delete an independently verified sample.
+        unsupported_verified = int(
+            self.session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and is_valid_sample=true and sample_rule_version not in "
+                    "(:historical_rule,:verified_rule)"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "day": self.business_date,
+                    "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                    "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                },
+            ).scalar_one()
+        )
+        if unsupported_verified:
+            raise DataPagesMartInvariantError(
+                "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED",
+                business_date=self.business_date,
+            )
+        # Refresh candidates only. All verified history stays immutable unless
+        # an identical provider replay proves that the same line still exists.
         self.session.execute(
             text(
                 "delete from fact_walmart_sample_order_items "
                 "where source_account_ref=:account and business_date_utc_minus_7=:day "
-                "and not (is_valid_sample=true and sample_rule_version=:verified_rule)"
+                "and is_valid_sample=false"
             ),
             {
                 "account": self.source_account_ref,
                 "day": self.business_date,
-                "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
             },
         )
         # An approval survives only an identical non-cancelled provider replay.
         verified_unchanged = (
             "fact_walmart_sample_order_items.is_valid_sample=true "
-            "and fact_walmart_sample_order_items.sample_rule_version=:verified_rule "
+            "and fact_walmart_sample_order_items.sample_rule_version in "
+            "(:historical_rule,:verified_rule) "
             "and excluded.is_cancelled=false "
             "and fact_walmart_sample_order_items.store_id is not distinct from excluded.store_id "
             "and fact_walmart_sample_order_items.source_order_id is not distinct from excluded.source_order_id "
@@ -319,9 +342,10 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "cancel_time_raw=excluded.cancel_time_raw,is_cancelled=excluded.is_cancelled,"
                         f"is_valid_sample=case when {verified_unchanged} then true else false end,"
                         f"sample_rule_version=case when {verified_unchanged} "
-                        "then :verified_rule when "
+                        "then fact_walmart_sample_order_items.sample_rule_version when "
                         "fact_walmart_sample_order_items.is_valid_sample=true "
-                        "and fact_walmart_sample_order_items.sample_rule_version=:verified_rule "
+                        "and fact_walmart_sample_order_items.sample_rule_version in "
+                        "(:historical_rule,:verified_rule) "
                         "then :changed_rule else excluded.sample_rule_version end,"
                         "synced_at=excluded.synced_at,updated_at=excluded.updated_at"
                     ),
@@ -351,6 +375,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         # authenticated evidence of a Walmart sample order.
                         "is_valid_sample": False,
                         "sample_rule_version": SAMPLE_RULE_VERSION,
+                        "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                         "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                         "changed_rule": "provider-verified-changed-v5",
                         **_timestamps(),
@@ -382,12 +407,14 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 text(
                     "select count(*) from fact_walmart_sample_order_items "
                     "where source_account_ref=:account and business_date_utc_minus_7=:day "
-                    "and is_valid_sample=true and sample_rule_version=:verified_rule "
+                    "and is_valid_sample=true and sample_rule_version in "
+                    "(:historical_rule,:verified_rule) "
                     "and synced_at < :started_at"
                 ),
                 {
                     "account": self.source_account_ref,
                     "day": self.business_date,
+                    "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                     "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                     "started_at": refresh_started_at,
                 },
@@ -478,7 +505,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 text(
                     "select count(*) from fact_walmart_sample_order_items s "
                     "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
-                    "and s.is_valid_sample=true and s.sample_rule_version=:verified_rule "
+                    "and s.is_valid_sample=true and s.sample_rule_version in "
+                    "(:historical_rule,:verified_rule) "
                     "and (s.is_cancelled=true or s.quantity is null or s.quantity<=0 "
                     "or s.unit_price_amount is null "
                     "or s.store_id is null or s.item_id is null "
@@ -496,6 +524,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 {
                     "account": self.source_account_ref,
                     "day": self.business_date,
+                    "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                     "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                 },
             ).scalar_one()

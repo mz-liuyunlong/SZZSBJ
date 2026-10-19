@@ -89,6 +89,36 @@ function RoiCell({ value }: { value: number | null | undefined }) {
   return <span className="report-table-metric">{formatRoiRatio(value)}</span>;
 }
 
+const sampleEvidenceState = (row: DailySalesRow) => {
+  const warnings = new Set(row.calculationWarnings ?? []);
+  if (warnings.has("sample_verification_pending")) return "pending";
+  if (warnings.has("sample_data_not_observed")) return "unknown";
+  return "verified";
+};
+
+export function DailySalesSampleQuantityCell({ row }: { row: DailySalesRow }) {
+  const state = sampleEvidenceState(row);
+  if (state === "pending") {
+    return (
+      <Tooltip title="已采集潜在送样订单，等待平台证据核验">
+        <span className="report-table-metric">待核验</span>
+      </Tooltip>
+    );
+  }
+  if (state === "unknown") {
+    return (
+      <Tooltip title="缺少该业务日商品维度的送样采集证据，不能确认送样量为 0">
+        <span className="report-table-metric">未知</span>
+      </Tooltip>
+    );
+  }
+  return (
+    <span className="report-table-metric">
+      {(row.sampleQuantity ?? 0).toLocaleString("zh-CN")}
+    </span>
+  );
+}
+
 const roiRatio = (key: keyof DailySalesRow) =>
   (_: unknown, row: DailySalesRow) => {
     const value = row[key];
@@ -246,6 +276,16 @@ function TotalCell({
     );
   }
 
+  if (columnKey === "sampleQuantity") {
+    const states = rows.map(sampleEvidenceState);
+    if (states.includes("pending")) {
+      return <span className="report-table-metric">待核验</span>;
+    }
+    if (states.includes("unknown")) {
+      return <span className="report-table-metric">未知</span>;
+    }
+  }
+
   if (totalIntegerKeys.has(columnKey)) {
     return <span className="report-table-metric">{sum(rows, columnKey as keyof DailySalesRow).toLocaleString("zh-CN")}</span>;
   }
@@ -349,7 +389,7 @@ render: (_, row) => (
     { title: "订单量", dataIndex: "orderCount", key: "orderCount", width: 88 },
     { title: "销售额", key: "salesAmount", width: 112, render: renderUsdSourceMoney<DailySalesRow>("salesAmount", currency, dailySalesFxRate) },
     { title: "平均售价", key: "averagePrice", width: 112, render: renderUsdSourceMoney<DailySalesRow>("averagePrice", currency, dailySalesFxRate) },
-    { title: "送样量", dataIndex: "sampleQuantity", key: "sampleQuantity", width: 88 },
+    { title: "送样量", key: "sampleQuantity", width: 88, render: (_, row) => <DailySalesSampleQuantityCell row={row} /> },
     { title: "送样金额", key: "sampleExcludedAmount", width: 112, render: renderCostMatchedUsdMoney("sampleExcludedAmount", "sampleQuantity", currency) },
     { title: "退货量", dataIndex: "returnCount", key: "returnCount", width: 88 },
     { title: "退款金额", key: "refundLossAmount", width: 104, render: renderCostMatchedUsdMoney("refundLossAmount", "returnCount", currency) },
