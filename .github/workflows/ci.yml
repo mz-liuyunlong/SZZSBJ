@@ -360,7 +360,7 @@ jobs:
           from app.core.config import get_database_url
 
           with create_engine(get_database_url()).connect() as conn:
-              assert conn.scalar(text("select version_num from alembic_version")) == "20261019_0046_operation_logs"
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261020_0047_walmart_order_identity_guard"
               for name in (
                   "ops_system_operation_events",
                   "ops_manual_operation_logs",
