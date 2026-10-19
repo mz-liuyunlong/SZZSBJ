@@ -135,6 +135,7 @@ def test_daily_sales_route_returns_envelope_and_meta(monkeypatch: Any) -> None:
         self: DailySalesService,
         query: Any,
         account_refs: frozenset[str],
+        principal: Any = None,
     ) -> tuple[DailySalesListData, int, datetime]:
         captured["query"] = query
         captured["account_refs"] = account_refs
@@ -189,7 +190,7 @@ def test_daily_sales_profit_fields_are_redacted_without_order_profit_field_permi
     monkeypatch.setattr(
         DailySalesService,
         "list_daily_sales",
-        lambda _self, _query, _accounts: (DailySalesListData(items=[item]), 1, NOW),
+        lambda _self, _query, _accounts, principal=None: (DailySalesListData(items=[item]), 1, NOW),
     )
 
     body = _assert_envelope(

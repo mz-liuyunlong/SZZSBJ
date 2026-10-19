@@ -7,6 +7,7 @@ tables: one current receipt line, and its current inventory-batch links.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import Final
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -27,6 +28,15 @@ from app.db.base import Base
 
 PROVIDER_ID = String(64)
 PROVIDER_TIME = String(32)
+
+PMC_DOMESTIC_ODS_TABLES: Final[frozenset[str]] = frozenset(
+    {
+        "ods_lingxing_domestic_warehouses",
+        "ods_lingxing_domestic_inventory",
+        "ods_lingxing_domestic_batches",
+        "ods_lingxing_domestic_inventory_events",
+    }
+)
 
 
 def utc_now() -> datetime:

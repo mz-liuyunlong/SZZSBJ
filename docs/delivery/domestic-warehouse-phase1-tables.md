@@ -1,6 +1,8 @@
 # 国内仓首期 6 张表
 
-日期：2026-10-19。状态：字段已确认，供本地核对。本文不代替 Alembic 迁移，不授权在生产库执行。
+日期：2026-10-19。状态：字段已确认，供本地核对。
+
+**Alembic（`dev` / 待合并）：** 四张 ODS 由 `20261019_0047_domestic_warehouse_ods`（ORM + adopt，**不用** `IF NOT EXISTS` 忽略结构差异）；DWD 两表与页面权限由 `20261019_0048_domestic_warehouse_dwd_and_permission`。权威 ODS DDL：`domestic-warehouse-ods-tables.sql`。本文与 `.sql` 仍供字段对照，不授权在生产手工执行。
 
 可执行脚本：`docs/delivery/domestic-warehouse-phase1-tables.sql`。
 

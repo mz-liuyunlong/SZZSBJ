@@ -13,6 +13,9 @@ export interface DailySalesRow {
   id: string;
   date: string;
   store: string;
+  storeId?: string;
+  sourceAccountRef?: string;
+  systemLogHighlight?: boolean;
   owner: string;
   sevenDayDates: string[];
   sevenDaySales: number[];

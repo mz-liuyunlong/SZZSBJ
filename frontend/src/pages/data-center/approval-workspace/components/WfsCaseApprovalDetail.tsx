@@ -10,6 +10,7 @@ export function WfsCaseApprovalDetail({ detail }: { detail: ApprovalDetail }) {
  const item = detail.snapshot;
  const lines = parseFollowLog(item.follow_log);
  const current = detail.current_case || item;
+ const legacy = detail.requires_verification;
  const fields = [
   ["店铺", item.store_name_snapshot || item.store_id],
   ["运营负责人", item.owner_name_snapshot],
@@ -22,23 +23,24 @@ export function WfsCaseApprovalDetail({ detail }: { detail: ApprovalDetail }) {
   ["预计追回", money(item.estimated_recover_amount, item.currency_code)],
   ["已追回", money(item.recovered_amount, item.currency_code)],
   ["索赔金额", money(item.claim_amount, item.currency_code)],
-  ["申请时待追回", money(item.pending_recover_amount, item.currency_code)],
-  ["Case编号", item.case_nos], ["提交前状态", item.status],
+  [legacy ? "当前待追回" : "申请时待追回", money(item.pending_recover_amount, item.currency_code)],
+  ["Case编号", item.case_nos], [legacy ? "当前 Case 状态" : "提交前状态", item.status],
   ["平台回复", item.walmart_response_summary], ["证据摘要", item.evidence_summary],
  ];
  return <div className="approval-workspace__detail">
   {detail.data_changed && <Alert showIcon type="warning" message="业务数据发生变化" description="申请提交后关键信息发生变化，服务端禁止直接审批。" />}
   <div className="approval-workspace__money">
    <div><span>预计追回</span><strong>{money(item.estimated_recover_amount, item.currency_code)}</strong></div>
-   <div><span>申请时待追回</span><strong>{money(item.pending_recover_amount, item.currency_code)}</strong></div>
+   <div><span>{legacy ? "当前待追回" : "申请时待追回"}</span><strong>{money(item.pending_recover_amount, item.currency_code)}</strong></div>
    <div><span>已追回</span><strong>{money(item.recovered_amount, item.currency_code)}</strong></div>
    <div><span>运营跟进</span><strong>{lines.length} 次</strong></div>
   </div>
-  <Typography.Title level={5}>运营放弃原因</Typography.Title>
+  <Typography.Title level={5}>{legacy ? "历史申请原因（待核验）" : "运营放弃原因"}</Typography.Title>
   <Typography.Paragraph>{detail.reason}</Typography.Paragraph>
-  <Typography.Title level={5}>申请提交的证据</Typography.Title>
+  <Typography.Title level={5}>{legacy ? "历史证据（待核验）" : "申请提交的证据"}</Typography.Title>
   <Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.evidence || "暂无补充证据"}</Typography.Paragraph>
-  <Typography.Title level={5}>审批业务依据（提交时快照）</Typography.Title>
+  {legacy && <Alert showIcon type="warning" message="历史记录来源说明" description={<>本页展示当前保存的历史 Case 资料，并非原始审批提交快照。历史操作时间（来源字段，待核验）：{field(item.legacy_recorded_at)}。原始申请人、申请时间与放弃理由需要人工核验。</>} />}
+  <Typography.Title level={5}>{legacy ? "历史 Case 现存资料（非审批快照）" : "审批业务依据（提交时快照）"}</Typography.Title>
   <Descriptions bordered size="small" column={2}>
    {fields.map(([label, value]) => <Descriptions.Item key={String(label)} label={String(label)}>{field(value)}</Descriptions.Item>)}
   </Descriptions>

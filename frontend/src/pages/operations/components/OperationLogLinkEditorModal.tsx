@@ -1,5 +1,6 @@
 import { Button, Form, Input, Modal } from "antd";
 import { useEffect } from "react";
+import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import {
   type OperationLogLinkFormValues,
   type OperationLogRow,
@@ -29,7 +30,7 @@ function OperationLogLinkEditorModal({
     form.setFieldsValue({
       entryType,
       entryName: `${entryName} - ${row.productId}`,
-      entryUrl: `/${entryType === "keyword" ? "keywords" : "ads"}/${row.productId}`,
+      entryUrl: (entryType === "keyword" ? row.keywordUrl : row.adUrl) ?? "",
       note: "",
     });
   }, [entryType, form, row]);
@@ -63,7 +64,19 @@ function OperationLogLinkEditorModal({
         <Form.Item label="页面名称" name="entryName" rules={[{ required: true, message: "请填写页面名称" }]}>
           <Input />
         </Form.Item>
-        <Form.Item label="页面地址" name="entryUrl" rules={[{ required: true, message: "请填写页面地址" }]}>
+        <Form.Item
+          label="页面地址"
+          name="entryUrl"
+          rules={[
+            { required: true, message: "请填写页面地址" },
+            {
+              validator: async (_, value: string) => {
+                if (!value || resolveOperationLogLink(value)) return;
+                throw new Error("请输入站内 / 路径或 HTTP(S) 地址");
+              },
+            },
+          ]}
+        >
           <Input placeholder="可填写系统内部路由或外部后台地址" />
         </Form.Item>
         <Form.Item label="备注" name="note">

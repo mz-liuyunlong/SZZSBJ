@@ -481,7 +481,13 @@ class SyncRunExecutionService:
             heartbeat()
             runner.summary.order_rows = runner._write_orders(orders)
             heartbeat()
-            runner.summary.order_unresolved_rows = runner._resolve_order_items()
+            runner.summary.order_unresolved_rows += runner._resolve_order_items()
+            heartbeat()
+            runner.summary.sample_rows = runner._write_sample_orders(orders)
+            heartbeat()
+            runner.summary.sample_unresolved_rows += runner._resolve_sample_items()
+            # Unconfirmed sample candidates never fail the entire multi-store
+            # sales sync. They remain excluded from financial aggregation.
 
         elif interface_key == "walmartReturnOrderList":
             refunds = runner._fetch_return_all()

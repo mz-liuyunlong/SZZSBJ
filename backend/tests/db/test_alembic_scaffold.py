@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261019_0044_domestic_warehouse_phase1"
+EXPECTED_HEAD_REVISION = "20261019_0048_domestic_warehouse_dwd_and_permission"
 
 
 @pytest.fixture(autouse=True)
@@ -79,8 +79,24 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261017_0042_rbac_backfill"
     )
     assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
+        script.get_revision("20261019_0044_approval_flow").down_revision
         == "20261017_0043_purchase_board_listing_item_source"
+    )
+    assert (
+        script.get_revision("20261019_0045_approval_scope").down_revision
+        == "20261019_0044_approval_flow"
+    )
+    assert (
+        script.get_revision("20261019_0046_operation_logs").down_revision
+        == "20261019_0045_approval_scope"
+    )
+    assert (
+        script.get_revision("20261019_0047_domestic_warehouse_ods").down_revision
+        == "20261019_0046_operation_logs"
+    )
+    assert (
+        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
+        == "20261019_0047_domestic_warehouse_ods"
     )
     assert len(EXPECTED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
@@ -119,7 +135,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261016_0041_wfs_rbac_actions.py",
         "20261017_0042_approval_rbac_backfill.py",
         "20261017_0043_purchase_board_listing_item_source.py",
-        "20261019_0044_domestic_warehouse_phase1.py",
+        "20261019_0044_approval_flow.py",
+        "20261019_0045_approval_scope.py",
+        "20261019_0046_operation_logs.py",
+        "20261019_0047_domestic_warehouse_ods.py",
+        "20261019_0048_domestic_warehouse_dwd_and_permission.py",
     } <= revisions
 
     rbac_revision = (

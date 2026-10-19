@@ -5,7 +5,7 @@ import {
   EyeOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Tooltip, Typography, message } from "antd";
+import { Button, Card, Modal, Tooltip, Typography, message } from "antd";
 import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
@@ -93,6 +93,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
+  const [logDialog, setLogDialog] = useState<{ row: DailySalesRow; kind: "system" | "manual" } | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
   const dateRangeStart = filters.dateRange?.[0];
@@ -414,6 +415,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
           onBulkExport={() => setExportModalOpen(true)}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={openDailySalesAnalysis}
+          onOpenLog={(row, kind) => setLogDialog({ row, kind })}
           />
 
       </div>
@@ -433,6 +435,12 @@ function DailySalesPage({ page }: DailySalesPageProps) {
         filters={filters}
         onClose={() => setExportModalOpen(false)}
       />
+      <Modal title={logDialog?.kind === "system" ? "系统运营日志" : "运营日志"} open={logDialog !== null} onCancel={() => setLogDialog(null)} footer={null}>
+        <Typography.Paragraph type="secondary">{logDialog?.row.date} · {logDialog?.row.store} · {logDialog?.row.productId} · {logDialog?.row.msku}</Typography.Paragraph>
+        <Typography.Paragraph style={{ whiteSpace: "pre-wrap", color: logDialog?.kind === "system" && logDialog.row.systemLogHighlight ? "#cf1322" : undefined }}>
+          {(logDialog?.kind === "system" ? logDialog.row.systemOperationLog : logDialog?.row.operationLog) || "暂无记录"}
+        </Typography.Paragraph>
+      </Modal>
       <ListingAnalysisModal
         open={analysisSource !== null}
         source={analysisSource ?? undefined}

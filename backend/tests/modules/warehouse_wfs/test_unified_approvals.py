@@ -168,6 +168,11 @@ def test_super_admin_wildcard_can_use_archive_review_action(
         reviewed.append(bool(kwargs.get("may_review") or _args[-1]))
 
     monkeypatch.setattr(ApprovalService, "decide", decide)
+    monkeypatch.setattr(
+        ApprovalService,
+        "_record",
+        lambda *_args, **_kwargs: {"approval_type": "wfs_case_abandon"},
+    )
     client = _approval_client(monkeypatch, {"*"})
 
     response = client.post(
@@ -230,3 +235,198 @@ def test_wfs_pending_recovery_is_derived_from_0036_persisted_columns() -> None:
             "recovered_amount": Decimal("25"),
         }
     ) == Decimal("0.00")
+
+
+def test_unverified_legacy_case_is_read_only_and_does_not_create_approval() -> None:
+    from app.modules.approvals.schemas import ApprovalQuery
+
+    session = MagicMock(spec=Session)
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 1
+    rows_result = MagicMock()
+    rows_result.mappings.return_value.all.return_value = [
+        {
+            "id": UUID("00000000-0000-0000-0000-000000000001"),
+            "source_account_ref": "account-1",
+            "estimated_recover_amount": Decimal("130.00"),
+            "recovered_amount": Decimal("0.00"),
+            "currency_code": "USD",
+            "archive_reason": None,
+            "status": "archive_pending",
+        }
+    ]
+    session.execute.side_effect = [count_result, rows_result]
+    data, total = ApprovalService(session).legacy_unverified(
+        ApprovalQuery(tab="legacy"), frozenset({"account-1"})
+    )
+    assert total == 1
+    assert data.items[0].status == "legacy_unverified"
+    assert data.items[0].requires_verification is True
+    assert data.items[0].can_review is False
+    assert data.items[0].applicant_id is None
+    assert data.items[0].submitted_at is None
+    assert all("insert into" not in str(c.args[0]).lower() for c in session.execute.call_args_list)
+    assert all("update " not in str(c.args[0]).lower() for c in session.execute.call_args_list)
+    session.commit.assert_not_called()
+
+
+def test_non_reviewer_cannot_view_legacy_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _approval_client(monkeypatch, {"page:data-center:approval-workspace:view"})
+    response = client.get("/api/approvals?tab=legacy")
+    assert response.status_code == 403
+    response = client.get("/api/approvals/legacy/00000000-0000-0000-0000-000000000001")
+    assert response.status_code == 403
+
+
+def test_generic_approval_disallows_self_review() -> None:
+    from app.modules.approvals.generic import GenericApprovalService
+
+    session = MagicMock(spec=Session)
+    approval_id = UUID("00000000-0000-0000-0000-000000000123")
+    service = GenericApprovalService(session)
+    service.approvals._record = lambda *_args, **_kwargs: {
+        "id": approval_id,
+        "approval_type": "purchase_exception",
+        "business_ref": "source-order",
+        "source_account_ref": "account-1",
+        "status": "submitted",
+        "version": 1,
+        "applicant_id": "same-operator",
+    }
+    with pytest.raises(ApiError):
+        service.decide(
+            approval_id,
+            frozenset({"account-1"}),
+            "same-operator",
+            "approved",
+            "",
+            1,
+        )
+    session.commit.assert_not_called()
+
+
+def test_generic_bulk_does_not_approve_non_allowlisted_type() -> None:
+    from app.modules.approvals.generic import GenericApprovalService
+
+    session = MagicMock(spec=Session)
+    rule = MagicMock()
+    rule.mappings.return_value.first.return_value = {
+        "required_steps": 1,
+        "allows_bulk": True,
+    }
+    session.execute.return_value = rule
+    service = GenericApprovalService(session)
+    approval_id = UUID("00000000-0000-0000-0000-000000000123")
+    service.approvals._record = lambda *_args, **_kwargs: {
+        "id": approval_id,
+        "approval_type": "wfs_case_abandon",
+        "business_ref": str(approval_id),
+        "source_account_ref": "account-1",
+        "risk_level": "high",
+        "status": "submitted",
+        "version": 1,
+        "applicant_id": "applicant",
+        "snapshot": {"approval_policy": {"required_steps": 1}},
+    }
+    with pytest.raises(ApiError):
+        service.approve_bulk(
+            [approval_id],
+            {str(approval_id): 1},
+            frozenset({"account-1"}),
+            "reviewer",
+            "not safe for bulk",
+        )
+    session.commit.assert_not_called()
+
+
+def test_purchase_exception_applicant_can_supplement_with_pmc_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ApprovalService,
+        "_record",
+        lambda *_args, **_kwargs: {"approval_type": "purchase_exception"},
+    )
+    monkeypatch.setattr(
+        ApprovalService,
+        "supplement",
+        lambda _self, _id, _payload, _accounts, actor: calls.append(actor),
+    )
+    client = _approval_client(
+        monkeypatch,
+        {
+            "page:data-center:approval-workspace:view",
+            "action:pmc:purchase-board:override",
+        },
+    )
+    response = client.post(
+        "/api/approvals/00000000-0000-0000-0000-000000000123/supplement",
+        json={"note": "revised evidence", "evidence": "additional details", "expected_version": 1},
+    )
+    assert response.status_code == 200
+    assert calls == ["synthetic-user"]
+
+
+def test_page_view_only_cannot_supplement_purchase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        ApprovalService,
+        "_record",
+        lambda *_args, **_kwargs: {"approval_type": "purchase_exception"},
+    )
+    monkeypatch.setattr(
+        ApprovalService,
+        "supplement",
+        lambda _self, *_args: calls.append("unexpected"),
+    )
+    client = _approval_client(
+        monkeypatch,
+        {"page:data-center:approval-workspace:view"},
+    )
+    response = client.post(
+        "/api/approvals/00000000-0000-0000-0000-000000000123/supplement",
+        json={"note": "revised evidence", "evidence": "additional details", "expected_version": 1},
+    )
+    assert response.status_code == 403
+    assert calls == []
+
+
+def test_legacy_summary_does_not_query_protected_totals_for_non_reviewer() -> None:
+    session = MagicMock(spec=Session)
+    result = MagicMock()
+    result.mappings.return_value.one.return_value = {
+        "pending": 0,
+        "high_risk": 0,
+        "info_required": 0,
+        "approved": 0,
+    }
+    session.execute.return_value = result
+    summary = ApprovalService(session).summary(
+        frozenset({"account-1"}), actor="operator-1", may_review=False
+    )
+    assert summary.legacy_unverified == 0
+    assert session.execute.call_count == 1
+
+
+def test_legacy_summary_counts_only_visible_legacy_records_for_reviewer() -> None:
+    session = MagicMock(spec=Session)
+    primary = MagicMock()
+    primary.mappings.return_value.one.return_value = {
+        "pending": 0,
+        "high_risk": 0,
+        "info_required": 0,
+        "approved": 0,
+    }
+    secondary = MagicMock()
+    secondary.scalar_one.return_value = 8
+    session.execute.side_effect = [primary, secondary]
+    summary = ApprovalService(session).summary(
+        frozenset({"account-1"}), actor="reviewer-1", may_review=True
+    )
+    assert summary.legacy_unverified == 8
+    sql = str(session.execute.call_args_list[1].args[0])
+    assert "source_kind='legacy_mirror'" in sql
+    assert "source_account_ref=any(:accounts)" in sql

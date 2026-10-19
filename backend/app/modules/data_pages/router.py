@@ -242,6 +242,7 @@ def list_daily_sales(
     data, total, latest_calculated_at = DailySalesService(session).list_daily_sales(
         query,
         account_refs,
+        principal=principal,
     )
     data = filter_daily_sales_list_data(
         data,
