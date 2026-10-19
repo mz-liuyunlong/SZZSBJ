@@ -291,8 +291,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     order_id,
                     line_id,
                 )
+                fact_id = str(uuid4())
                 values: dict[str, object] = {
-                    "id": str(uuid4()),
+                    "id": fact_id,
                     "source_account_ref": self.source_account_ref,
                     "store_id": store_id,
                     "source_order_id": order_id,
@@ -300,7 +301,12 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "platform_order_no": _field(item, "platform_order_no")
                     or _field(row, "platform_order_no"),
                     "reference_no": _field(row, "reference_no", "referenceNo"),
-                    "source_line_hash": identity_hash,
+                    # source_line_hash identifies this immutable physical
+                    # observation; canonical_identity_hash identifies the
+                    # provider line across every physical version.
+                    "source_line_hash": _stable_hash(
+                        {"canonical_identity_hash": identity_hash, "fact_id": fact_id}
+                    ),
                     "canonical_identity_hash": identity_hash,
                     "source_line_ordinal": ordinal,
                     "item_id": _field(item, "item_id", "platform_product_id"),
@@ -331,107 +337,106 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 existing = (
                     self.session.execute(
                         text(
-                            "select id,source_line_hash,is_identity_current,item_id,msku,local_sku,"
+                            "select id,source_line_hash,canonical_identity_hash,is_identity_current,"
+                            "item_id,msku,local_sku,"
                             "quantity,source_purchase_at_raw,business_date_la,order_status_raw,"
                             "order_sub_status_raw,flow_node_raw,sales_revenue_amount,"
                             "sales_revenue_currency_code,order_total_amount,"
-                            "order_total_currency_code,discount_amount,discount_currency_code "
+                            "order_total_currency_code,discount_amount,discount_currency_code,"
+                            "synced_at,created_at,updated_at "
                             "from fact_walmart_order_items where source_account_ref=:source_account_ref "
                             "and store_id=:store_id and source_order_id=:source_order_id "
                             "and source_order_line_id=:source_order_line_id "
-                            "order by (source_line_hash=:source_line_hash) desc,is_identity_current desc,"
-                            "created_at asc,id asc for update"
+                            "order by is_identity_current desc,created_at asc,id asc for update"
                         ),
                         values,
                     )
                     .mappings()
                     .all()
                 )
-                if existing:
-                    anchor_id = str(existing[0]["id"])
-                    observed_snapshot = _order_snapshot(values)
-                    observed_snapshot_hash = _stable_hash(observed_snapshot)
-                    seen_prior_hashes: set[str] = set()
-                    for prior in existing:
-                        prior_snapshot = _order_snapshot(prior)
-                        prior_snapshot_hash = _stable_hash(prior_snapshot)
-                        changed_fields = _changed_order_fields(prior, values)
-                        if not changed_fields or prior_snapshot_hash in seen_prior_hashes:
-                            continue
-                        seen_prior_hashes.add(prior_snapshot_hash)
-                        self.session.execute(
-                            text(
-                                "insert into audit_walmart_order_item_conflicts "
-                                "(id,canonical_identity_hash,source_account_ref,store_id,"
-                                "source_order_id,source_order_line_id,canonical_fact_id,"
-                                "prior_snapshot_hash,observed_snapshot_hash,differing_fields_json,"
-                                "resolution_status,observed_at,created_at) values "
-                                "(:audit_id,:canonical_identity_hash,:source_account_ref,:store_id,"
-                                ":source_order_id,:source_order_line_id,:canonical_fact_id,"
-                                ":prior_snapshot_hash,:observed_snapshot_hash,"
-                                "cast(:differing_fields_json as jsonb),'observed',:updated_at,:created_at) "
-                                "on conflict (canonical_identity_hash,prior_snapshot_hash,"
-                                "observed_snapshot_hash) do nothing"
-                            ),
-                            {
-                                **values,
-                                "audit_id": str(uuid4()),
-                                "canonical_fact_id": anchor_id,
-                                "prior_snapshot_hash": prior_snapshot_hash,
-                                "observed_snapshot_hash": observed_snapshot_hash,
-                                "differing_fields_json": _json(changed_fields),
-                            },
-                        )
+                current_rows = [row for row in existing if bool(row["is_identity_current"])]
+                if len(current_rows) > 1:
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_CURRENT_IDENTITY_CONFLICT")
+
+                current = current_rows[0] if current_rows else None
+                if current is not None and not _changed_order_fields(dict(current), values):
+                    # A successful identical observation advances freshness,
+                    # not the business-update timestamp.
+                    self.session.execute(
+                        text(
+                            "update fact_walmart_order_items set synced_at=:synced_at "
+                            "where id=cast(:current_id as uuid)"
+                        ),
+                        {"synced_at": values["synced_at"], "current_id": str(current["id"])},
+                    )
+                    count += 1
+                    continue
+
+                prior_rows = [current] if current is not None else existing
+                if current is not None:
+                    # Business columns stay untouched: the former current row
+                    # becomes the immutable prior physical version.
                     self.session.execute(
                         text(
                             "update fact_walmart_order_items set is_identity_current=false "
-                            "where source_account_ref=:source_account_ref and store_id=:store_id "
-                            "and source_order_id=:source_order_id "
-                            "and source_order_line_id=:source_order_line_id and id<>cast(:anchor_id as uuid)"
+                            "where id=cast(:current_id as uuid)"
                         ),
-                        {**values, "anchor_id": anchor_id},
+                        {"current_id": str(current["id"])},
                     )
+
+                self.session.execute(
+                    text(
+                        "insert into fact_walmart_order_items "
+                        "(id,source_account_ref,store_id,source_order_id,source_order_line_id,"
+                        "platform_order_no,reference_no,source_line_hash,canonical_identity_hash,"
+                        "is_identity_current,source_line_ordinal,item_id,msku,local_sku,"
+                        "quantity,source_purchase_at_raw,business_date_la,order_status_raw,order_sub_status_raw,"
+                        "flow_node_raw,sales_revenue_amount,sales_revenue_currency_code,order_total_amount,"
+                        "order_total_currency_code,discount_amount,discount_currency_code,is_sample_order,"
+                        "synced_at,created_at,updated_at) values "
+                        "(:id,:source_account_ref,:store_id,:source_order_id,:source_order_line_id,"
+                        ":platform_order_no,:reference_no,:source_line_hash,:canonical_identity_hash,true,"
+                        ":source_line_ordinal,:item_id,:msku,"
+                        ":local_sku,:quantity,:source_purchase_at_raw,:business_date_la,:order_status_raw,"
+                        ":order_sub_status_raw,:flow_node_raw,:sales_revenue_amount,:sales_revenue_currency_code,"
+                        ":order_total_amount,:order_total_currency_code,:discount_amount,:discount_currency_code,"
+                        ":is_sample_order,:synced_at,:created_at,:updated_at)"
+                    ),
+                    values,
+                )
+
+                observed_snapshot_hash = _stable_hash(_order_snapshot(values))
+                seen_prior_hashes: set[str] = set()
+                for prior in prior_rows:
+                    prior_values = dict(prior)
+                    prior_snapshot_hash = _stable_hash(_order_snapshot(prior_values))
+                    changed_fields = _changed_order_fields(prior_values, values)
+                    if not changed_fields or prior_snapshot_hash in seen_prior_hashes:
+                        continue
+                    seen_prior_hashes.add(prior_snapshot_hash)
                     self.session.execute(
                         text(
-                            "update fact_walmart_order_items set "
-                            "platform_order_no=:platform_order_no,reference_no=:reference_no,"
-                            "source_line_hash=:source_line_hash,"
-                            "canonical_identity_hash=:canonical_identity_hash,"
-                            "is_identity_current=true,source_line_ordinal=:source_line_ordinal,"
-                            "item_id=coalesce(:item_id,item_id),msku=:msku,local_sku=:local_sku,"
-                            "quantity=:quantity,source_purchase_at_raw=:source_purchase_at_raw,"
-                            "business_date_la=:business_date_la,order_status_raw=:order_status_raw,"
-                            "order_sub_status_raw=:order_sub_status_raw,flow_node_raw=:flow_node_raw,"
-                            "sales_revenue_amount=:sales_revenue_amount,"
-                            "sales_revenue_currency_code=:sales_revenue_currency_code,"
-                            "order_total_amount=:order_total_amount,"
-                            "order_total_currency_code=:order_total_currency_code,"
-                            "discount_amount=:discount_amount,"
-                            "discount_currency_code=:discount_currency_code,updated_at=:updated_at "
-                            "where id=cast(:anchor_id as uuid)"
+                            "insert into audit_walmart_order_item_conflicts "
+                            "(id,canonical_identity_hash,source_account_ref,store_id,"
+                            "source_order_id,source_order_line_id,prior_fact_id,canonical_fact_id,"
+                            "prior_snapshot_hash,observed_snapshot_hash,differing_fields_json,"
+                            "resolution_status,observed_at,created_at) values "
+                            "(:audit_id,:canonical_identity_hash,:source_account_ref,:store_id,"
+                            ":source_order_id,:source_order_line_id,:prior_fact_id,:canonical_fact_id,"
+                            ":prior_snapshot_hash,:observed_snapshot_hash,"
+                            "cast(:differing_fields_json as jsonb),'observed',:updated_at,:created_at) "
+                            "on conflict (canonical_identity_hash,prior_snapshot_hash,"
+                            "observed_snapshot_hash) do nothing"
                         ),
-                        {**values, "anchor_id": anchor_id},
-                    )
-                else:
-                    self.session.execute(
-                        text(
-                            "insert into fact_walmart_order_items "
-                            "(id,source_account_ref,store_id,source_order_id,source_order_line_id,"
-                            "platform_order_no,reference_no,source_line_hash,canonical_identity_hash,"
-                            "is_identity_current,source_line_ordinal,item_id,msku,local_sku,"
-                            "quantity,source_purchase_at_raw,business_date_la,order_status_raw,order_sub_status_raw,"
-                            "flow_node_raw,sales_revenue_amount,sales_revenue_currency_code,order_total_amount,"
-                            "order_total_currency_code,discount_amount,discount_currency_code,is_sample_order,"
-                            "synced_at,created_at,updated_at) values "
-                            "(:id,:source_account_ref,:store_id,:source_order_id,:source_order_line_id,"
-                            ":platform_order_no,:reference_no,:source_line_hash,:canonical_identity_hash,true,"
-                            ":source_line_ordinal,:item_id,:msku,"
-                            ":local_sku,:quantity,:source_purchase_at_raw,:business_date_la,:order_status_raw,"
-                            ":order_sub_status_raw,:flow_node_raw,:sales_revenue_amount,:sales_revenue_currency_code,"
-                            ":order_total_amount,:order_total_currency_code,:discount_amount,:discount_currency_code,"
-                            ":is_sample_order,:synced_at,:created_at,:updated_at)"
-                        ),
-                        values,
+                        {
+                            **values,
+                            "audit_id": str(uuid4()),
+                            "prior_fact_id": str(prior["id"]),
+                            "canonical_fact_id": values["id"],
+                            "prior_snapshot_hash": prior_snapshot_hash,
+                            "observed_snapshot_hash": observed_snapshot_hash,
+                            "differing_fields_json": _json(changed_fields),
+                        },
                     )
                 count += 1
         return count

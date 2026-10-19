@@ -40,7 +40,17 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_fact_walmart_order_items_canonical_identity_hash_sha256",
         "fact_walmart_order_items",
-        "canonical_identity_hash IS NULL OR char_length(canonical_identity_hash) = 64",
+        "canonical_identity_hash IS NULL OR canonical_identity_hash ~ '^[0-9a-f]{64}$'",
+    )
+    op.create_check_constraint(
+        "ck_fact_walmart_order_items_canonical_identity_current_complete",
+        "fact_walmart_order_items",
+        "is_identity_current = false OR ("
+        "canonical_identity_hash IS NOT NULL AND "
+        "nullif(btrim(source_account_ref), '') IS NOT NULL AND "
+        "nullif(btrim(store_id), '') IS NOT NULL AND "
+        "nullif(btrim(source_order_id), '') IS NOT NULL AND "
+        "nullif(btrim(source_order_line_id), '') IS NOT NULL)",
     )
     op.create_index(
         "uq_fact_walmart_order_items_current_identity",
@@ -58,6 +68,7 @@ def upgrade() -> None:
         sa.Column("store_id", sa.String(128), nullable=False),
         sa.Column("source_order_id", sa.String(128), nullable=False),
         sa.Column("source_order_line_id", sa.String(128), nullable=False),
+        sa.Column("prior_fact_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("canonical_fact_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("prior_snapshot_hash", sa.String(64), nullable=False),
         sa.Column("observed_snapshot_hash", sa.String(64), nullable=False),
@@ -92,6 +103,11 @@ def upgrade() -> None:
             name="ck_walmart_order_conflict_status",
         ),
         sa.ForeignKeyConstraint(
+            ["prior_fact_id"],
+            ["fact_walmart_order_items.id"],
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
             ["canonical_fact_id"],
             ["fact_walmart_order_items.id"],
             ondelete="SET NULL",
@@ -120,6 +136,11 @@ def downgrade() -> None:
     op.drop_index(
         "uq_fact_walmart_order_items_current_identity",
         table_name="fact_walmart_order_items",
+    )
+    op.drop_constraint(
+        "ck_fact_walmart_order_items_canonical_identity_current_complete",
+        "fact_walmart_order_items",
+        type_="check",
     )
     op.drop_constraint(
         "ck_fact_walmart_order_items_canonical_identity_hash_sha256",

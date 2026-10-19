@@ -281,8 +281,9 @@ def test_order_writer_uses_one_provider_line_identity_for_hash_and_persisted_id(
     assert '"source_order_line_id": line_id' in source
     assert '"store_id": store_id' in source
     assert "pg_advisory_xact_lock" in source
-    assert "is_identity_current=true" in source
-    assert "order by (source_line_hash=:source_line_hash) desc" in source
+    assert ":source_line_hash,:canonical_identity_hash,true" in source
+    assert "order by is_identity_current desc" in source
+    assert "set synced_at=:synced_at" in source
 
 
 def test_order_downstream_resolution_and_refund_matching_prefer_current_rows() -> None:

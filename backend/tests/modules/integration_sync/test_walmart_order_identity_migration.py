@@ -18,7 +18,7 @@ REVISION = "20261020_0047_walmart_order_identity_guard"
 PREVIOUS = "20261019_0046_operation_logs"
 
 
-@pytest.fixture(autouse=True)  # type: ignore[untyped-decorator]
+@pytest.fixture(autouse=True)
 def _settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("TEST_DATABASE_URL", "postgresql+psycopg://synthetic@db.invalid/synthetic")
@@ -35,12 +35,23 @@ def _render_upgrade_sql() -> str:
     return buffer.getvalue()
 
 
+def _render_downgrade_sql() -> str:
+    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    buffer = io.StringIO()
+    config.output_buffer = buffer
+    command.downgrade(config, f"{REVISION}:{PREVIOUS}", sql=True)
+    return buffer.getvalue()
+
+
 def test_order_identity_migration_is_additive_and_does_not_rewrite_history() -> None:
     sql = _render_upgrade_sql()
     assert "ADD COLUMN canonical_identity_hash VARCHAR(64)" in sql
     assert "ADD COLUMN is_identity_current BOOLEAN DEFAULT false NOT NULL" in sql
     assert "CREATE UNIQUE INDEX uq_fact_walmart_order_items_current_identity" in sql
     assert "WHERE is_identity_current = true" in sql
+    assert "canonical_identity_hash ~ '^[0-9a-f]{64}$'" in sql
+    assert "is_identity_current = false OR (canonical_identity_hash IS NOT NULL" in sql
+    assert "nullif(btrim(store_id), '') IS NOT NULL" in sql
     assert "CREATE TABLE audit_walmart_order_item_conflicts" in sql
     assert "DELETE FROM fact_walmart_order_items" not in sql.upper()
     assert "UPDATE fact_walmart_order_items" not in sql.upper()
@@ -49,8 +60,8 @@ def test_order_identity_migration_is_additive_and_does_not_rewrite_history() -> 
 
 def test_order_identity_metadata_has_one_partial_current_index() -> None:
     table = Base.metadata.tables["fact_walmart_order_items"]
-    indexes = {
-        index.name: index
+    indexes: dict[str, Index] = {
+        str(index.name): index
         for index in table.indexes
         if isinstance(index, Index) and index.name is not None
     }
@@ -60,8 +71,18 @@ def test_order_identity_metadata_has_one_partial_current_index() -> None:
     assert str(current.dialect_options["postgresql"]["where"]) == "is_identity_current = true"
 
 
+def test_order_identity_downgrade_removes_only_0047_objects() -> None:
+    sql = _render_downgrade_sql()
+    assert "DROP TABLE audit_walmart_order_item_conflicts" in sql
+    assert "DROP COLUMN is_identity_current" in sql
+    assert "DROP COLUMN canonical_identity_hash" in sql
+    assert "DROP TABLE fact_walmart_order_items" not in sql
+
+
 def test_conflict_audit_stores_hashes_and_field_names_not_payload_snapshots() -> None:
     columns = Base.metadata.tables["audit_walmart_order_item_conflicts"].c
+    assert "prior_fact_id" in columns
+    assert "canonical_fact_id" in columns
     assert "prior_snapshot_hash" in columns
     assert "observed_snapshot_hash" in columns
     assert "differing_fields_json" in columns

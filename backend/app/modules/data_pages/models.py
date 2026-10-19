@@ -361,8 +361,17 @@ class WalmartOrderItemFact(Base):
         UniqueConstraint("source_account_ref", "source_order_id", "source_line_hash"),
         CheckConstraint("char_length(source_line_hash) = 64", name="source_line_hash_sha256"),
         CheckConstraint(
-            "canonical_identity_hash IS NULL OR char_length(canonical_identity_hash) = 64",
-            name="canonical_identity_hash_sha256",
+            "canonical_identity_hash IS NULL OR canonical_identity_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_fact_walmart_order_items_canonical_identity_hash_sha256",
+        ),
+        CheckConstraint(
+            "is_identity_current = false OR ("
+            "canonical_identity_hash IS NOT NULL AND "
+            "nullif(btrim(source_account_ref), '') IS NOT NULL AND "
+            "nullif(btrim(store_id), '') IS NOT NULL AND "
+            "nullif(btrim(source_order_id), '') IS NOT NULL AND "
+            "nullif(btrim(source_order_line_id), '') IS NOT NULL)",
+            name="ck_fact_walmart_order_items_canonical_identity_current_complete",
         ),
         CheckConstraint("quantity IS NULL OR quantity >= 0", name="quantity_nonnegative"),
         CheckConstraint("sales_revenue_amount IS NULL OR sales_revenue_amount >= 0", name="sales"),
@@ -470,6 +479,9 @@ class WalmartOrderItemConflictAudit(Base):
     store_id: Mapped[str] = mapped_column(String(128), nullable=False)
     source_order_id: Mapped[str] = mapped_column(String(128), nullable=False)
     source_order_line_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    prior_fact_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("fact_walmart_order_items.id", ondelete="SET NULL")
+    )
     canonical_fact_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("fact_walmart_order_items.id", ondelete="SET NULL")
     )

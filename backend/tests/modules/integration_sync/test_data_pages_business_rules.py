@@ -21,6 +21,12 @@ class _ScalarResult:
     def scalar_one(self) -> int:
         return 0
 
+    def mappings(self) -> "_ScalarResult":
+        return self
+
+    def first(self) -> None:
+        return None
+
 
 class _MappingResult:
     def __init__(self) -> None:
@@ -60,6 +66,16 @@ def _runner(session: object | None = None) -> DataPagesRealSyncRunner:
     )
     runner.store_ids = ("store-a",)
     return runner
+
+
+def _sample_upsert_params(session: _CaptureSession) -> dict[str, Any]:
+    params = next(
+        params
+        for sql, params in session.calls
+        if "insert into fact_walmart_sample_order_items" in sql and "on conflict" in sql
+    )
+    assert params is not None
+    return params
 
 
 def test_sample_order_window_converts_fixed_utc_minus_7_to_china_time() -> None:
@@ -164,8 +180,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     )
 
     assert written == 1
-    params = session.calls[2][1]
-    assert params is not None
+    params = _sample_upsert_params(session)
     assert params["platform_order_no"] == "platform-1"
     assert params["source_order_line_id"] == "line-1"
     assert params["store_name"] == "Store A"
@@ -250,11 +265,13 @@ def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
     runner = _runner(session)
     with pytest.raises(DataPagesMartInvariantError, match="DATA_PAGES_VERIFIED_SAMPLE_CHANGED"):
         runner._write_sample_orders([row])
-    assert "and is_valid_sample=false" in session.calls[1][0]
-    assert "then :changed_rule else excluded.sample_rule_version end" in session.calls[2][0]
-    assert (
-        "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)"
-        in session.calls[2][0]
+    sql_calls = [sql for sql, _ in session.calls]
+    assert any("and is_valid_sample=false" in sql for sql in sql_calls)
+    assert any(
+        "then :changed_rule else excluded.sample_rule_version end" in sql for sql in sql_calls
+    )
+    assert "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)" in next(
+        sql for sql in sql_calls if "on conflict" in sql
     )
 
 
@@ -278,13 +295,14 @@ def test_historical_v3_sample_rule_is_preserved_by_identical_replay() -> None:
 
     assert runner._write_sample_orders([row]) == 1
 
-    upsert_sql = session.calls[2][0]
-    params = session.calls[2][1]
+    upsert_sql, params = next(
+        (sql, params) for sql, params in session.calls if "on conflict" in sql
+    )
     assert params is not None
     assert params["historical_rule"] == HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION
     assert "sample_rule_version in (:historical_rule,:verified_rule)" in upsert_sql
     assert "then fact_walmart_sample_order_items.sample_rule_version" in upsert_sql
-    assert "and is_valid_sample=false" in session.calls[1][0]
+    assert any("and is_valid_sample=false" in sql for sql, _ in session.calls)
 
 
 def test_unknown_verified_sample_rule_blocks_before_candidate_cleanup() -> None:
@@ -500,8 +518,7 @@ def test_sample_writer_preserves_full_item_discount_as_unverified_candidate() ->
         ]
     )
     assert written == 1
-    params = session.calls[2][1]
-    assert params is not None
+    params = _sample_upsert_params(session)
     assert params["platform_order_no"] == "reference-2"
     assert params["source_order_line_id"] == "line-2"
     assert params["unit_price_amount"] == Decimal("12.495")
@@ -554,5 +571,6 @@ def test_sample_writer_quarantines_ambiguous_multiple_unit_prices() -> None:
     runner = _runner(session)
     assert runner._write_sample_orders([row]) == 1
     assert runner.summary.sample_unresolved_rows == 1
-    assert session.calls[2][1]["unit_price_amount"] is None
-    assert session.calls[2][1]["is_valid_sample"] is False
+    params = _sample_upsert_params(session)
+    assert params["unit_price_amount"] is None
+    assert params["is_valid_sample"] is False

@@ -43,6 +43,54 @@ VERIFIED_SAMPLE_RULE_VERSION = "provider-verified-sample-v5"
 REFUND_RULE_VERSION = "provider-completed-origin-date-v2"
 BUSINESS_RULE_RUNNER_VERSION = f"{RUNNER_VERSION}+business-rules-1"
 
+VERIFIED_SAMPLE_EVIDENCE_FIELDS = (
+    "business_date_utc_minus_7",
+    "source_order_id",
+    "platform_order_no",
+    "store_id",
+    "platform_code",
+    "source_order_line_id",
+    "item_id",
+    "msku",
+    "local_sku",
+    "quantity",
+    "unit_price_amount",
+    "unit_price_currency_code",
+    "order_total_amount",
+    "order_total_currency_code",
+    "cancel_time_raw",
+    "is_cancelled",
+)
+VERIFIED_SAMPLE_REQUIRED_FIELDS = frozenset(
+    {
+        "source_order_id",
+        "platform_order_no",
+        "store_id",
+        "platform_code",
+        "source_order_line_id",
+        "item_id",
+        "msku",
+        "local_sku",
+        "quantity",
+        "unit_price_amount",
+        "unit_price_currency_code",
+        "order_total_amount",
+        "order_total_currency_code",
+    }
+)
+
+
+def _sample_evidence_missing(values: Mapping[str, object]) -> bool:
+    return any(
+        values.get(field) is None
+        or (isinstance(values.get(field), str) and not str(values[field]).strip())
+        for field in VERIFIED_SAMPLE_REQUIRED_FIELDS
+    )
+
+
+def _sample_evidence_changed(prior: Mapping[str, object], observed: Mapping[str, object]) -> bool:
+    return any(prior.get(field) != observed.get(field) for field in VERIFIED_SAMPLE_EVIDENCE_FIELDS)
+
 
 def _sample_window_china(day: date) -> tuple[datetime, datetime]:
     start = datetime.combine(day, time(0, 0, 0), tzinfo=LA_TZ)
@@ -242,12 +290,17 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             "and fact_walmart_sample_order_items.store_id is not distinct from excluded.store_id "
             "and fact_walmart_sample_order_items.source_order_id is not distinct from excluded.source_order_id "
             "and fact_walmart_sample_order_items.business_date_utc_minus_7 is not distinct from excluded.business_date_utc_minus_7 "
-            "and (excluded.item_id is null or "
-            "fact_walmart_sample_order_items.item_id is not distinct from excluded.item_id) "
+            "and fact_walmart_sample_order_items.platform_code is not distinct from excluded.platform_code "
+            "and fact_walmart_sample_order_items.source_order_line_id is not distinct from excluded.source_order_line_id "
+            "and fact_walmart_sample_order_items.item_id is not distinct from excluded.item_id "
             "and fact_walmart_sample_order_items.msku is not distinct from excluded.msku "
+            "and fact_walmart_sample_order_items.local_sku is not distinct from excluded.local_sku "
             "and fact_walmart_sample_order_items.quantity is not distinct from excluded.quantity "
             "and fact_walmart_sample_order_items.unit_price_amount is not distinct from excluded.unit_price_amount "
-            "and fact_walmart_sample_order_items.order_total_amount is not distinct from excluded.order_total_amount"
+            "and fact_walmart_sample_order_items.unit_price_currency_code is not distinct from excluded.unit_price_currency_code "
+            "and fact_walmart_sample_order_items.order_total_amount is not distinct from excluded.order_total_amount "
+            "and fact_walmart_sample_order_items.order_total_currency_code is not distinct from excluded.order_total_currency_code "
+            "and fact_walmart_sample_order_items.cancel_time_raw is not distinct from excluded.cancel_time_raw"
         )
         count = 0
         for row in rows:
@@ -310,6 +363,71 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     # A single malformed candidate cannot block all stores.
                     self.summary.sample_unresolved_rows += 1
                     continue
+                values: dict[str, object] = {
+                    "id": str(uuid4()),
+                    "business_date_utc_minus_7": self.business_date,
+                    "source_account_ref": self.source_account_ref,
+                    "source_order_id": source_order_id,
+                    "platform_order_no": platform_order_no,
+                    "store_id": store_id,
+                    "store_name": store_name,
+                    "platform_code": platform_code,
+                    "source_order_line_id": source_order_line_id,
+                    "item_id": _field(item, "item_id", "platform_product_id"),
+                    "msku": _field(item, "msku"),
+                    "local_sku": _field(item, "local_sku", "sku"),
+                    "quantity": quantity,
+                    "unit_price_amount": unit_price,
+                    "unit_price_currency_code": (
+                        _field(item, "unit_price_currency_code", "currency") or currency_code
+                    ),
+                    "order_total_amount": order_total,
+                    "order_total_currency_code": currency_code,
+                    "cancel_time_raw": cancel_time_raw,
+                    "is_cancelled": is_cancelled,
+                    "is_valid_sample": False,
+                    "sample_rule_version": SAMPLE_RULE_VERSION,
+                    "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                    "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
+                    "changed_rule": "provider-verified-changed-v5",
+                    **_timestamps(),
+                }
+                self.session.execute(
+                    text("select pg_advisory_xact_lock(hashtextextended(:identity,0))"),
+                    {
+                        "identity": repr(
+                            (self.source_account_ref, platform_order_no, source_order_line_id)
+                        )
+                    },
+                )
+                verified = (
+                    self.session.execute(
+                        text(
+                            "select business_date_utc_minus_7,source_order_id,platform_order_no,"
+                            "store_id,platform_code,source_order_line_id,item_id,msku,local_sku,"
+                            "quantity,unit_price_amount,unit_price_currency_code,order_total_amount,"
+                            "order_total_currency_code,cancel_time_raw,is_cancelled "
+                            "from fact_walmart_sample_order_items "
+                            "where source_account_ref=:source_account_ref "
+                            "and platform_order_no=:platform_order_no "
+                            "and source_order_line_id=:source_order_line_id "
+                            "and is_valid_sample=true for update"
+                        ),
+                        values,
+                    )
+                    .mappings()
+                    .first()
+                )
+                if verified is not None and (
+                    _sample_evidence_missing(values)
+                    or bool(values["is_cancelled"])
+                    or _sample_evidence_changed(dict(verified), values)
+                ):
+                    raise DataPagesMartInvariantError(
+                        "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
+                        business_date=self.business_date,
+                    )
+
                 self.session.execute(
                     text(
                         "insert into fact_walmart_sample_order_items "
@@ -349,37 +467,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "then :changed_rule else excluded.sample_rule_version end,"
                         "synced_at=excluded.synced_at,updated_at=excluded.updated_at"
                     ),
-                    {
-                        "id": str(uuid4()),
-                        "business_date_utc_minus_7": self.business_date,
-                        "source_account_ref": self.source_account_ref,
-                        "source_order_id": source_order_id,
-                        "platform_order_no": platform_order_no,
-                        "store_id": store_id,
-                        "store_name": store_name,
-                        "platform_code": platform_code,
-                        "source_order_line_id": source_order_line_id,
-                        "item_id": _field(item, "item_id", "platform_product_id"),
-                        "msku": _field(item, "msku"),
-                        "local_sku": _field(item, "local_sku", "sku"),
-                        "quantity": quantity,
-                        "unit_price_amount": unit_price,
-                        "unit_price_currency_code": (
-                            _field(item, "unit_price_currency_code", "currency") or currency_code
-                        ),
-                        "order_total_amount": order_total,
-                        "order_total_currency_code": currency_code,
-                        "cancel_time_raw": cancel_time_raw,
-                        "is_cancelled": is_cancelled,
-                        # A monetary discount/zero-total is only a candidate, not
-                        # authenticated evidence of a Walmart sample order.
-                        "is_valid_sample": False,
-                        "sample_rule_version": SAMPLE_RULE_VERSION,
-                        "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
-                        "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
-                        "changed_rule": "provider-verified-changed-v5",
-                        **_timestamps(),
-                    },
+                    values,
                 )
                 count += 1
         # Changed or missing previously verified lines must stop MART refresh.

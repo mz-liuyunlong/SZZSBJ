@@ -25,8 +25,9 @@ source_account_ref + store_id + source_order_id + source_order_line_id
 - `source_order_line_id` 必须来自提供商订单商品行标识；缺失时失败或将潜在送样候选隔离，禁止以 SKU、金额或 ordinal 推断。
 - 数量、金额、商品身份、状态、折扣和取消信息只属于可变快照，不参与身份 Hash。
 - 一个身份最多有一行 `is_identity_current=true`。历史物理版本保留为证据，不自动删除。
-- 首次再次观察历史身份时，应用按“已有稳定 Hash 优先，其次已有 current 标记，最后最早历史行”的确定性顺序采用锚点；新的提供商观察更新该锚点，不增加物理行。
-- 所有快照差异仅把 prior/observed Hash 和差异字段名写入 `audit_walmart_order_item_conflicts`；不保存第二份原始 payload，也不自动裁决历史业务值。
+- 历史物理行不再作为可写锚点。首次再次观察历史身份时，应用新增一行独立 canonical current；例如 12 个 legacy 版本、5 个身份首次采用后为 12 个不可变 legacy + 5 个 current。
+- 相同来源快照重放只更新 current 的 `synced_at`，不改变业务字段、`updated_at` 或物理行数。来源业务快照发生变化时，旧 current 仅撤销 current 标记并完整保留业务值，随后新增一行 current；因此只在真实版本变化时增加一个物理版本。
+- `audit_walmart_order_item_conflicts` 使用 `prior_fact_id → canonical_fact_id` 关联两个完整物理版本，并保存 prior/observed Hash 与差异字段名；完整前像由不可变事实行保存，不复制 RAW payload，也不自动裁决业务值。
 - 身份补全只处理规范 current 行。退款匹配优先读取 current 行；迁移后尚未再次观察的身份仅在物理历史行唯一时允许兼容读取，存在多个旧 Hash 版本则继续 fail closed，禁止任意挑选。
 
 ## Migration 边界
@@ -35,6 +36,7 @@ source_account_ref + store_id + source_order_id + source_order_line_id
 
 - `canonical_identity_hash`；
 - `is_identity_current`；
+- current identity 完整性 CHECK（非空且非空字符串的账号、店铺、订单、订单行及小写 64 位 SHA-256）；
 - current identity partial unique index；
 - 无业务值的冲突审计表。
 
@@ -44,6 +46,7 @@ Migration 不执行 `UPDATE`、`DELETE`、历史回填、版本合并或送样�
 
 - 历史已确认规则 `zero-total-provider-status-strict-triple-v3` 与当前平台证据规则 `provider-verified-sample-v5` 都可进入 MART。
 - 相同、未取消的提供商重放保留原规则版本；v3 不会被自动升级为 v5。
+- 已核验重放在写入前锁定并完整比对业务日期、订单/店铺/平台/订单行、Item ID、MSKU、local SKU、数量、单价及币种、订单金额及币种、取消信息。缺少关键证据或任何实质变化均返回 `DATA_PAGES_VERIFIED_SAMPLE_CHANGED`，事务回滚且既有事实/MART 不变。
 - 未核验的零元/全额折扣记录继续写为 `candidate-unverified-v5`，不能自动成为正式送样。
 - 已核验事实发生身份、数量、金额、商品或取消状态变化时，单日事务失败；禁止静默降级、覆盖或归零。
 - 出现未登记的已核验规则版本时，采集提交和 MART 发布均以 `DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED` 停止。
@@ -81,6 +84,8 @@ uv run python -m scripts.audit_walmart_order_identity_conflicts \
 6. 后续每个业务日期的真实采集、送样核验、MART 重算和历史数据修复均需独立授权；任一对账不一致立即停止。
 
 禁止把 migration 成功理解为历史去重完成；禁止自动删除旧行、自动确认送样或将 v3 批量改写为 v5。失败回退优先停止新写入并恢复应用版本；涉及审计表或历史数据的 schema/data 回退必须由 DBA 基于已验证备份另行审批。
+
+时间语义：`synced_at` 是最近一次成功观察该来源事实的 UTC-aware 时间；`updated_at` 是该物理版本业务快照的建立时间。相同重放只推进 `synced_at`；真实业务变化创建新 current，失败事务不会推进任何时间。
 
 ## Explicitly Not Implemented
 

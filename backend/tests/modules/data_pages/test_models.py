@@ -34,7 +34,7 @@ def _unique_column_sets(table_name: str) -> set[tuple[str, ...]]:
 def _check_constraint_names(table_name: str) -> set[str]:
     table = Base.metadata.tables[table_name]
     return {
-        constraint.name or ""
+        str(constraint.name) if constraint.name is not None else ""
         for constraint in table.constraints
         if isinstance(constraint, CheckConstraint)
     }
@@ -77,10 +77,15 @@ def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:
         "business_date_la",
         "is_sample_order",
     } <= set(orders.keys())
+    assert {
+        "ck_fact_walmart_order_items_canonical_identity_hash_sha256",
+        "ck_fact_walmart_order_items_canonical_identity_current_complete",
+    } <= _check_constraint_names("fact_walmart_order_items")
 
     order_conflicts = Base.metadata.tables["audit_walmart_order_item_conflicts"].c
     assert {
         "canonical_identity_hash",
+        "prior_fact_id",
         "canonical_fact_id",
         "prior_snapshot_hash",
         "observed_snapshot_hash",
