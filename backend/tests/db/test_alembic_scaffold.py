@@ -83,7 +83,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261017_0043_purchase_board_listing_item_source"
     )
     assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261019_0044_approval_flow"
+        script.get_revision("20261019_0045_approval_scope").down_revision == "20261019_0044_approval_flow"
     )
     assert (
         script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261019_0045_approval_scope"
