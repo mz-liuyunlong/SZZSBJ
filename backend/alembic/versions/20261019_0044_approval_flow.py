@@ -1,7 +1,7 @@
 """Approval rules, attestations and notification outbox.
 
-Revision ID: 20261017_0043_approval_flow
-Revises: 20261017_0042_rbac_backfill
+Revision ID: 20261019_0044_approval_flow
+Revises: 20261017_0043_purchase_board_listing_item_source
 
 No historical cases or approval decisions are inserted by migration.
 """
@@ -14,8 +14,8 @@ from sqlalchemy import text
 
 from alembic import op
 
-revision: str = "20261017_0043_approval_flow"
-down_revision: str | Sequence[str] | None = "20261017_0042_rbac_backfill"
+revision: str = "20261019_0044_approval_flow"
+down_revision: str | Sequence[str] | None = "20261017_0043_purchase_board_listing_item_source"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -93,6 +93,77 @@ jobs:
           uv run pytest
           uv run python -c "import app.main"
 
+  iam-auth-postgresql:
+    name: IAM auth PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: iam_auth_test
+          POSTGRES_USER: iam_auth_test
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U iam_auth_test -d iam_auth_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://iam_auth_test:local_ci_only@127.0.0.1:5432/iam_auth_test
+      IAM_AUTH_PERFORMANCE_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated database and verify IAM auth semantics
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -s \
+            tests/modules/iam/test_auth_query_performance.py \
+            tests/modules/iam/test_auth_postgresql_integration.py
+
+  pmc-0043-postgresql-14:
+    name: PMC 0043 PostgreSQL 14 compatibility
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: pmc_0043_test
+          POSTGRES_USER: pmc_0043_test
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pmc_0043_test -d pmc_0043_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://pmc_0043_test:local_ci_only@127.0.0.1:5432/pmc_0043_test
+      PMC_0043_POSTGRESQL_TESTS: "1"
+      PMC_0043_EXPECTED_POSTGRES_MAJOR: "14"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Verify 0042 to 0043 compatibility on PostgreSQL 14
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade 20261017_0042_rbac_backfill
+          uv run pytest -q -s tests/modules/pmc_purchase/test_0043_postgresql_integration.py
+
   wfs-migration-smoke:
     name: WFS PostgreSQL migration smoke
     runs-on: ubuntu-latest
@@ -185,9 +256,8 @@ jobs:
               for table in ("app_approval_requests", "app_approval_events"):
                   assert conn.scalar(text("select to_regclass(:name)"), {"name": table}) is not None
           PY
-
   approval-migration-smoke:
-    name: Approval 0043-0044 PostgreSQL migration smoke
+    name: Approval 0044-0045 PostgreSQL migration smoke
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -212,10 +282,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Validate approval 0043 and 0044 on isolated PostgreSQL
+      - name: Validate approval 0044 and 0045 on isolated PostgreSQL
         working-directory: backend
         run: |
           uv sync
           PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py bootstrap
-          uv run alembic upgrade 20261018_0044_approval_scope
+          uv run alembic upgrade 20261019_0045_approval_scope
           PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py verify

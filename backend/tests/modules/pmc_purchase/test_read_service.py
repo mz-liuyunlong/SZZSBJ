@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
+from app.modules.pmc_purchase.gate3_models import DwsPurchaseBoard
 from app.modules.pmc_purchase.refresh import PmcPurchaseDwsRefresher
 from app.modules.pmc_purchase.schemas import (
     BoardFilterQuery,
@@ -151,6 +152,24 @@ def test_order_detail_and_missing(seeded: Session) -> None:
     with pytest.raises(ApiError) as excinfo:
         svc.order_detail("PO1", frozenset({"other"}))
     assert excinfo.value.status_code == 404
+
+
+def test_from_listing_rows_support_list_detail_paging_and_filtering(seeded: Session) -> None:
+    rows = seeded.query(DwsPurchaseBoard).order_by(DwsPurchaseBoard.order_sn).all()
+    assert len(rows) == 4
+    for row in rows:
+        row.item_id_source = "from_listing"
+    seeded.commit()
+
+    svc = PmcPurchaseReadService(seeded, today=TODAY)
+    query = BoardListQuery(item_id_source=["from_listing"], page=2, page_size=2)
+    data, total, *_ = svc.list_board(query, SCOPE)
+    assert total == 4
+    assert len(data.items) == 2
+    assert {item.item_id.source for item in data.items} == {"from_listing"}
+
+    detail, *_ = svc.order_detail("PO1", SCOPE)
+    assert detail.lines[0].item_id.source == "from_listing"
 
 
 def test_sku_cycles_with_missing(seeded: Session) -> None:

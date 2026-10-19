@@ -1,7 +1,7 @@
 """Add source account to active approval uniqueness.
 
-Revision ID: 20261018_0044_approval_scope
-Revises: 20261017_0043_approval_flow
+Revision ID: 20261019_0045_approval_scope
+Revises: 20261019_0044_approval_flow
 
 No historical approval rows are modified or backfilled.
 """
@@ -14,8 +14,8 @@ from sqlalchemy import text
 
 from alembic import op
 
-revision: str = "20261018_0044_approval_scope"
-down_revision: str | Sequence[str] | None = "20261017_0043_approval_flow"
+revision: str = "20261019_0045_approval_scope"
+down_revision: str | Sequence[str] | None = "20261019_0044_approval_flow"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

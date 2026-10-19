@@ -1,11 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { Alert, Button } from "antd";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { clearServerState } from "@/api/queryClient";
 import AppErrorBoundary from "@/components/errors/AppErrorBoundary";
 import AppFeedbackProvider from "@/shared/feedback/AppFeedbackProvider";
 import { clearTabWorkspaceStorage } from "@/layouts/useTabWorkspace";
-import { fetchCurrentUser, logoutCurrentUser } from "@/pages/auth/authApi";
 import {
-  clearAuthToken,
+  fetchCurrentUser,
+  logoutCurrentUser,
+  sessionRestoreErrorMessage,
+} from "@/pages/auth/authApi";
+import {
+  clearAuthTokenIfCurrent,
+  isCurrentAuthSessionEvent,
   readAuthToken,
   subscribeAuthSession,
 } from "@/pages/auth/authSession";
@@ -18,18 +24,49 @@ import "@/styles/developedPagesOrderProfitSkin.css";
 function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser>();
   const [bootstrapping, setBootstrapping] = useState(() => Boolean(readAuthToken()));
+  const [restoreError, setRestoreError] = useState<string>();
+  const restoreGenerationRef = useRef(0);
+  const restoreRequestRef = useRef<{
+    token: string;
+    promise: ReturnType<typeof fetchCurrentUser>;
+  } | undefined>(undefined);
 
   const restoreCurrentUser = useCallback(async () => {
-    if (!readAuthToken()) {
+    const token = readAuthToken();
+    const generation = ++restoreGenerationRef.current;
+    if (!token) {
       setCurrentUser(undefined);
+      setRestoreError(undefined);
       setBootstrapping(false);
       return;
     }
 
     setBootstrapping(true);
-    const user = await fetchCurrentUser();
-    setCurrentUser(user);
-    setBootstrapping(false);
+    setRestoreError(undefined);
+    const existingRequest = restoreRequestRef.current;
+    const promise = existingRequest?.token === token
+      ? existingRequest.promise
+      : fetchCurrentUser();
+    restoreRequestRef.current = { token, promise };
+
+    try {
+      const user = await promise;
+      if (generation !== restoreGenerationRef.current) return;
+      if (readAuthToken() !== token) {
+        if (!readAuthToken()) setCurrentUser(undefined);
+        return;
+      }
+      setCurrentUser(user);
+    } catch (error) {
+      if (generation !== restoreGenerationRef.current || readAuthToken() !== token) return;
+      setCurrentUser(undefined);
+      setRestoreError(sessionRestoreErrorMessage(error));
+    } finally {
+      if (restoreRequestRef.current?.promise === promise) {
+        restoreRequestRef.current = undefined;
+      }
+      if (generation === restoreGenerationRef.current) setBootstrapping(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -42,10 +79,13 @@ function App() {
   }, [restoreCurrentUser]);
 
   useEffect(() => subscribeAuthSession((event) => {
+    if (!isCurrentAuthSessionEvent(event)) return;
     clearServerState();
     clearTabWorkspaceStorage();
-    if (event === "logged-out") {
+    if (event.type === "logged-out") {
+      restoreGenerationRef.current += 1;
       setCurrentUser(undefined);
+      setRestoreError(undefined);
       setBootstrapping(false);
       return;
     }
@@ -61,11 +101,16 @@ function App() {
   };
 
   const logout = async () => {
+    const logoutToken = readAuthToken();
+    restoreGenerationRef.current += 1;
     setCurrentUser(undefined);
+    setRestoreError(undefined);
     clearLogoutSessionStorage();
     queueMicrotask(clearLogoutSessionStorage);
 
-    const logoutPromise = logoutCurrentUser().catch(() => clearAuthToken());
+    const logoutPromise = logoutCurrentUser(logoutToken).catch(() => {
+      if (logoutToken) clearAuthTokenIfCurrent(logoutToken);
+    });
 
     window.setTimeout(() => {
       clearServerState();
@@ -82,13 +127,35 @@ function App() {
     );
   }
 
+  if (restoreError && readAuthToken()) {
+    return (
+      <div style={{ maxWidth: 520, margin: "96px auto", padding: 24 }}>
+        <Alert
+          type="warning"
+          showIcon
+          message="暂时无法验证登录状态"
+          description={restoreError}
+          action={(
+            <Button onClick={() => void restoreCurrentUser()}>
+              重试
+            </Button>
+          )}
+        />
+      </div>
+    );
+  }
+
   return (
     <AppErrorBoundary>
       <AppFeedbackProvider>
         <AppRoutes
           mockLoggedIn={Boolean(currentUser)}
           currentUser={currentUser}
-          onLogin={setCurrentUser}
+          onLogin={(user) => {
+            restoreGenerationRef.current += 1;
+            setRestoreError(undefined);
+            setCurrentUser(user);
+          }}
           onLogout={logout}
         />
       </AppFeedbackProvider>

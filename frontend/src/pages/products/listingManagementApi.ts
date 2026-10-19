@@ -1,4 +1,4 @@
-import { BackendRequestError, backendRequest } from "@/api/backendApi";
+import { backendDownload, backendRequest } from "@/api/backendApi";
 import { getCachedResource, preloadCachedResource, stableCacheKey } from "@/shared/preload/resourceCache";
 import type { ReportFilterOption } from "@/shared/report-filters";
 import type { ListingManagementRow } from "@/pages/products/listingManagementData";
@@ -344,31 +344,10 @@ export async function exportListingManagementRows(
     search.set("columns", columns.join(","));
   }
 
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
-  const response = await fetch(`/api/listings/walmart/export?${search.toString()}`, {
-    credentials: "same-origin",
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new BackendRequestError(response.status, "LISTING_EXPORT_FAILED");
-  }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") ?? "";
-  const filenameMatch = /filename="?([^";]+)"?/i.exec(disposition);
-  const filename = filenameMatch?.[1] ?? "listing-management-export.csv";
-
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
+  await backendDownload(
+    `/api/listings/walmart/export?${search.toString()}`,
+    "listing-management-export.csv",
+  );
 }
 
 async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingManagementFilterOptions> {

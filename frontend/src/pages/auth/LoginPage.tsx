@@ -10,7 +10,7 @@ import {
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { loginWithPassword } from "@/pages/auth/authApi";
+import { loginErrorMessage, loginWithPassword } from "@/pages/auth/authApi";
 import type { AuthUser } from "@/pages/auth/authTypes";
 import {
   authenticateMockLogin,
@@ -85,11 +85,11 @@ function LoginPage({ onLogin }: LoginPageProps) {
       }
 
       onLogin(user);
-    } catch {
+    } catch (error) {
       setLoginError(
         isFrontendTestMode()
           ? "账号或密码错误"
-          : "账号或密码错误，或该账号已停用",
+          : loginErrorMessage(error),
       );
     } finally {
       setSubmitting(false);

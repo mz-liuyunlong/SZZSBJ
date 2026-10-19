@@ -1,4 +1,4 @@
-"""Isolated PostgreSQL smoke test for approval migrations 0043 and 0044.
+"""Isolated PostgreSQL smoke test for approval migrations 0044 and 0045.
 
 The strict local-only guard must remain in place. This script is never
 authorized to modify a production database or run non-CI migrations.
@@ -40,9 +40,16 @@ def bootstrap() -> None:
     with engine.begin() as conn:
         assert conn.scalar(text("select to_regclass('public.alembic_version')")) is None
         for statement in (
-            "create table alembic_version (version_num varchar(32) primary key)",
+            "create table alembic_version (version_num varchar(128) primary key)",
             "insert into alembic_version values ('20261017_0042_rbac_backfill')",
             "create table ops_wfs_fee_anomaly_cases (id uuid primary key)",
+            (
+                "create table dws_purchase_board ("
+                "item_id_source varchar(32) not null,"
+                "constraint ck_dws_purchase_board_item_id_source "
+                "check (item_id_source in ('from_system_plan', 'from_plan_remark',"
+                "'from_packing_slip', 'pending_packing_slip', 'unresolved')))"
+            ),
             (
                 "create table app_approval_requests ("
                 "id uuid primary key, approval_type varchar(80) not null,"
@@ -64,7 +71,7 @@ def verify() -> None:
     with engine.begin() as conn:
         assert (
             conn.scalar(text("select version_num from alembic_version"))
-            == "20261018_0044_approval_scope"
+            == "20261019_0045_approval_scope"
         )
         for table in (
             "app_approval_rules",
@@ -75,6 +82,16 @@ def verify() -> None:
         ):
             assert conn.scalar(text("select to_regclass(:table)"), {"table": table}) is not None
         assert conn.scalar(text("select count(*) from app_approval_rules")) == 5
+        constraint = conn.scalar(
+            text("""
+                select pg_get_constraintdef(oid) from pg_constraint
+                where conname='ck_dws_purchase_board_item_id_source'
+            """)
+        )
+        assert constraint is not None and "from_listing" in constraint
+        conn.execute(
+            text("insert into dws_purchase_board (item_id_source) values ('from_listing')")
+        )
         index_definition = conn.scalar(
             text("""
                 select indexdef from pg_indexes

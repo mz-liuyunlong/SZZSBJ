@@ -1,4 +1,4 @@
-import { backendRequest } from "@/api/backendApi";
+import { backendDownload, backendRequest } from "@/api/backendApi";
 import { normalizeReportFilterOptions } from "@/shared/report-filters";
 import type { SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import type {
@@ -411,34 +411,10 @@ export async function downloadOrderProfitExportCsv(
 
   appendOrderProfitFilters(search, params);
 
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
-  const response = await fetch(`/api/sales/order-profit/export?${search.toString()}`, {
-    credentials: "same-origin",
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`ORDER_PROFIT_EXPORT_FAILED_${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") ?? "";
-  const filenameMatch = /filename="?([^"]+)"?/i.exec(disposition);
-  const filename = filenameMatch?.[1] ?? `order-profit-${params.period}.csv`;
-  const url = URL.createObjectURL(blob);
-
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  await backendDownload(
+    `/api/sales/order-profit/export?${search.toString()}`,
+    `order-profit-${params.period}.csv`,
+  );
 }
 
 

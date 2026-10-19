@@ -50,6 +50,9 @@ type StageCode = Literal["S1", "S2", "S3", "S4", "S9", "S0", "UNKNOWN"]
 type ItemIdSource = Literal[
     "from_system_plan",
     "from_plan_remark",
+    # Read compatibility for production rows created by the separately-owned
+    # Listing attribution flow. This module does not create that attribution.
+    "from_listing",
     "from_packing_slip",
     "pending_packing_slip",
     "unresolved",
