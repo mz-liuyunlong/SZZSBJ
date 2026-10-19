@@ -167,9 +167,9 @@ jobs:
           uv run alembic downgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, inspect, text
-          from app.core.config import get_test_database_url
+          from app.core.config import Settings, get_test_database_url
 
-          engine = create_engine(get_test_database_url())
+          engine = create_engine(get_test_database_url(Settings()))
           with engine.connect() as connection:
               assert connection.scalar(text("select version_num from alembic_version")) == "20261019_0046_operation_logs"
               assert connection.scalar(text("select to_regclass('audit_walmart_order_item_conflicts')")) is None
