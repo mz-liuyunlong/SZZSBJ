@@ -319,7 +319,7 @@ jobs:
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run alembic upgrade head
+          uv run alembic upgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, text
           from app.core.config import get_database_url
