@@ -40,6 +40,7 @@ def median_days(values: Sequence[int]) -> Decimal | None:
         raw = (Decimal(ordered[mid - 1]) + Decimal(ordered[mid])) / Decimal(2)
     return raw.quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
 
+
 # §5.1 row 1: an ItemID in the plan remark is eleven digits.
 # Prefixed ``ITEMID:19051502014`` wins; a bare eleven-digit token is also accepted.
 # Longer numbers such as a 14-digit GTIN are not an ItemID.

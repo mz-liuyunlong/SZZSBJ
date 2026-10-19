@@ -230,9 +230,7 @@ class BoardSummaryData(StrictSchema):
     average_purchase_cycle_days_90d: Money | None = Field(
         description="近 90 天到仓采购单 purchase_cycle_days 平均，一单一值"
     )
-    median_purchase_cycle_days_90d: Money | None = Field(
-        description="同一批采购单交期的中位数"
-    )
+    median_purchase_cycle_days_90d: Money | None = Field(description="同一批采购单交期的中位数")
     purchase_cycle_sample_orders_90d: int = Field(description="参与平均/中位数的采购单数")
     month_purchase_amount: list[MoneyByCurrency] = Field(
         description="本月下单 amount_allocated 合计，按币种"
