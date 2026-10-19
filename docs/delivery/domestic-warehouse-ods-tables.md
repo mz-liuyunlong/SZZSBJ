@@ -6,7 +6,7 @@
 
 | 项目 | 说明 |
 |------|------|
-| 创建方式 | 2026-10 在 Navicat 对 `szzsbj_app` 执行手工 SQL（源自国内仓首期核对脚本，**仅含 ODS 四表部分**），**未**写入 `alembic_version` |
+| 创建方式 | 2026-10 在 Navicat 对目标应用数据库执行手工 SQL（源自国内仓首期核对脚本，**仅含 ODS 四表部分**），**未**写入 `alembic_version` |
 | Git `main`（本 PR 前） | 无这四张表的 Alembic 迁移与 ORM |
 | 生产 `alembic_version` | 已为 `20261019_0046_operation_logs`；四表存在但版本链未记录 ODS |
 | 当前数据 | 以生产库 `select count(*)` 为准；手工建表后**默认空表**，是否已有同步行取决于是否跑过 Gate 2 domestic 任务（见 `origin/dev` 上的 handler，**尚未合并 `main`**） |
