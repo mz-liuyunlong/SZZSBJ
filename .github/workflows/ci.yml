@@ -256,3 +256,36 @@ jobs:
               for table in ("app_approval_requests", "app_approval_events"):
                   assert conn.scalar(text("select to_regclass(:name)"), {"name": table}) is not None
           PY
+  approval-migration-smoke:
+    name: Approval 0044-0045 PostgreSQL migration smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: approval_ci
+          POSTGRES_USER: approval_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U approval_ci -d approval_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: dev
+      DATABASE_URL: postgresql+psycopg://approval_ci:local_ci_only@127.0.0.1:5432/approval_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Validate approval 0044 and 0045 on isolated PostgreSQL
+        working-directory: backend
+        run: |
+          uv sync
+          PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py bootstrap
+          uv run alembic upgrade 20261019_0045_approval_scope
+          PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py verify
