@@ -29,7 +29,9 @@ interface OperationLogToolbarProps {
   onDownload: () => void;
 }
 
-const referenceDate = dayjs("2026-09-13");
+const referenceDate = dayjs(new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date()));
 
 const rangePickerPresets: { label: string; value: [Dayjs, Dayjs] }[] = [
   { label: "今天", value: [referenceDate, referenceDate] },

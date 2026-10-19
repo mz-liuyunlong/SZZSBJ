@@ -289,3 +289,57 @@ jobs:
           PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py bootstrap
           uv run alembic upgrade 20261019_0045_approval_scope
           PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py verify
+  operation-logs-migration-smoke:
+    name: Operation logs 0043 PostgreSQL migration smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: opslog_ci
+          POSTGRES_USER: opslog_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opslog_ci -d opslog_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: dev
+      DATABASE_URL: postgresql+psycopg://opslog_ci:local_ci_only@127.0.0.1:5432/opslog_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated PostgreSQL through unified operation-logs head
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+          from app.core.config import get_database_url
+
+          with create_engine(get_database_url()).connect() as conn:
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261019_0046_operation_logs"
+              for name in (
+                  "ops_system_operation_events",
+                  "ops_manual_operation_logs",
+                  "ops_operation_log_links",
+                  "ops_lingxing_owner_user_mappings",
+                  "ops_lingxing_owner_mapping_audit",
+              ):
+                  assert conn.scalar(text("select to_regclass(:name)"), {"name": name}) is not None
+              assert conn.scalar(text("select count(*) from app_permissions where permission_key = 'action:operations:log:edit'")) == 1
+          PY
+      - name: Test real PostgreSQL operation-log owner isolation and event reconciliation
+        working-directory: backend
+        env:
+          CI: "true"
+          OPERATION_LOG_POSTGRES_TESTS: "1"
+        run: |
+          uv run pytest -q tests/modules/operation_logs/test_postgresql_integration.py
