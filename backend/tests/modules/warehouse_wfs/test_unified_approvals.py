@@ -392,3 +392,41 @@ def test_page_view_only_cannot_supplement_purchase(
     )
     assert response.status_code == 403
     assert calls == []
+
+
+def test_legacy_summary_does_not_query_protected_totals_for_non_reviewer() -> None:
+    session = MagicMock(spec=Session)
+    result = MagicMock()
+    result.mappings.return_value.one.return_value = {
+        "pending": 0,
+        "high_risk": 0,
+        "info_required": 0,
+        "approved": 0,
+    }
+    session.execute.return_value = result
+    summary = ApprovalService(session).summary(
+        frozenset({"account-1"}), actor="operator-1", may_review=False
+    )
+    assert summary.legacy_unverified == 0
+    assert session.execute.call_count == 1
+
+
+def test_legacy_summary_counts_only_visible_legacy_records_for_reviewer() -> None:
+    session = MagicMock(spec=Session)
+    primary = MagicMock()
+    primary.mappings.return_value.one.return_value = {
+        "pending": 0,
+        "high_risk": 0,
+        "info_required": 0,
+        "approved": 0,
+    }
+    secondary = MagicMock()
+    secondary.scalar_one.return_value = 8
+    session.execute.side_effect = [primary, secondary]
+    summary = ApprovalService(session).summary(
+        frozenset({"account-1"}), actor="reviewer-1", may_review=True
+    )
+    assert summary.legacy_unverified == 8
+    sql = str(session.execute.call_args_list[1].args[0])
+    assert "source_kind='legacy_mirror'" in sql
+    assert "source_account_ref=any(:accounts)" in sql

@@ -39,7 +39,7 @@ export function WfsCaseApprovalDetail({ detail }: { detail: ApprovalDetail }) {
   <Typography.Paragraph>{detail.reason}</Typography.Paragraph>
   <Typography.Title level={5}>{legacy ? "历史证据（待核验）" : "申请提交的证据"}</Typography.Title>
   <Typography.Paragraph style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.evidence || "暂无补充证据"}</Typography.Paragraph>
-  {legacy && <Alert showIcon type="warning" message="历史记录来源说明" description={<>这是当前保存的历史 Case 资料，不是旧审批提交快照。原始时间（未核验）：{field(item.legacy_recorded_at)}；申请人及原始理由尚待核验。</>} />}
+  {legacy && <Alert showIcon type="warning" message="历史记录来源说明" description={<>本页展示当前保存的历史 Case 资料，并非原始审批提交快照。历史操作时间（来源字段，待核验）：{field(item.legacy_recorded_at)}。原始申请人、申请时间与放弃理由需要人工核验。</>} />}
   <Typography.Title level={5}>{legacy ? "历史 Case 现存资料（非审批快照）" : "审批业务依据（提交时快照）"}</Typography.Title>
   <Descriptions bordered size="small" column={2}>
    {fields.map(([label, value]) => <Descriptions.Item key={String(label)} label={String(label)}>{field(value)}</Descriptions.Item>)}

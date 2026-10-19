@@ -99,7 +99,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  }, [columnKeys, widths]);
  const tabs: { label: string; value: ApprovalTab }[] = [
   {label:"待审批",value:"pending"},{label:"已审批",value:"approved"},{label:"驳回记录",value:"rejected"},
-  ...(hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review") ? [{label:"历史待核验 ("+summary.legacy_unverified+")",value:"legacy" as ApprovalTab}] : []),
+  ...(hasPermission(permissions, "action:warehouse:wfs-fee-alert:archive-review") ? [{label:`历史待核验 (${summary.legacy_unverified})`,value:"legacy" as ApprovalTab}] : []),
  ];
  return <PageShell page={page}>
   {holder}
