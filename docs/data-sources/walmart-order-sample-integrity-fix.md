@@ -24,6 +24,7 @@ source_account_ref + store_id + source_order_id + source_order_line_id
 - `store_id` 防止不同店铺复用订单号/行号时误合并。
 - `source_order_line_id` 必须来自提供商订单商品行标识；缺失时失败或将潜在送样候选隔离，禁止以 SKU、金额或 ordinal 推断。
 - 数量、金额、商品身份、状态、折扣和取消信息只属于可变快照，不参与身份 Hash。
+- 仓库离线契约把 `platform_order_no`、`reference_no` 列为 Order V2 响应字段，但接口仍标记为 `UNVERIFIED`，parser 也未将两者设为必填；现有证据没有证明它们始终存在或永不变化。因此二者不参与规范身份，而是纳入可审计快照：首次缺失、后续补齐或变化会建立新物理版本并记录差异，旧版本原值不被覆盖。
 - 一个身份最多有一行 `is_identity_current=true`。历史物理版本保留为证据，不自动删除。
 - 历史物理行不再作为可写锚点。首次再次观察历史身份时，应用新增一行独立 canonical current；例如 12 个 legacy 版本、5 个身份首次采用后为 12 个不可变 legacy + 5 个 current。
 - 相同来源快照重放只更新 current 的 `synced_at`，不改变业务字段、`updated_at` 或物理行数。来源业务快照发生变化时，旧 current 仅撤销 current 标记并完整保留业务值，随后新增一行 current；因此只在真实版本变化时增加一个物理版本。

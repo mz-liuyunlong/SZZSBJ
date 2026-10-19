@@ -39,6 +39,8 @@ LOW_PRICE_DELIVERY_THRESHOLD = Decimal("10")
 LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT = Decimal("1")
 
 ORDER_SNAPSHOT_FIELDS = (
+    "platform_order_no",
+    "reference_no",
     "provider_item_id",
     "msku",
     "local_sku",
@@ -350,7 +352,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     self.session.execute(
                         text(
                             "select id,source_line_hash,canonical_identity_hash,is_identity_current,"
-                            "provider_item_id,item_id,item_id_resolution_source,msku,local_sku,"
+                            "platform_order_no,reference_no,provider_item_id,item_id,"
+                            "item_id_resolution_source,msku,local_sku,"
                             "quantity,source_purchase_at_raw,business_date_la,order_status_raw,"
                             "order_sub_status_raw,flow_node_raw,sales_revenue_amount,"
                             "sales_revenue_currency_code,order_total_amount,"

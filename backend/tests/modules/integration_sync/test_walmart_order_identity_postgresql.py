@@ -805,6 +805,117 @@ def test_repeated_snapshot_transitions_keep_distinct_audit_events(engine: Engine
         )
 
 
+def test_late_order_numbers_are_versioned_and_enable_refund_matching(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_observation = datetime(2026, 10, 20, 1, tzinfo=UTC)
+    completed_observation = datetime(2026, 10, 20, 2, tzinfo=UTC)
+    replay_observation = datetime(2026, 10, 20, 3, tzinfo=UTC)
+    initial = _single_line_provider_row(
+        order_id="order-number-fill",
+        line_id="line-number-fill",
+    )
+    completed = dict(initial)
+    completed["reference_no"] = "reference-filled"
+    completed_items = [dict(item) for item in cast(list[dict[str, object]], initial["item_info"])]
+    completed_items[0]["platform_order_no"] = "platform-filled"
+    completed["item_info"] = completed_items
+
+    with Session(engine) as session:
+        runner = DataPagesRealSyncRunner(
+            session=session,
+            client=None,
+            source_account_ref=_ACCOUNT,
+            business_date=date(2026, 10, 16),
+            page_size=20,
+            campaign_type="SP",
+            max_advertisers=1,
+        )
+        monkeypatch.setattr(data_pages_real_sync, "_now", lambda: first_observation)
+        assert runner._write_orders([initial]) == 1
+        session.commit()
+
+        monkeypatch.setattr(data_pages_real_sync, "_now", lambda: completed_observation)
+        assert runner._write_orders([completed]) == 1
+        session.commit()
+
+        versions = session.execute(
+            text(
+                "select id,platform_order_no,reference_no,is_identity_current,"
+                "created_at,updated_at,synced_at from fact_walmart_order_items "
+                "where source_account_ref=:account order by created_at,id"
+            ),
+            {"account": _ACCOUNT},
+        ).all()
+        assert len(versions) == 2
+        assert versions[0][1:4] == (None, None, False)
+        assert versions[0][4:] == (
+            first_observation,
+            first_observation,
+            first_observation,
+        )
+        assert versions[1][1:4] == ("platform-filled", "reference-filled", True)
+
+        transition = session.execute(
+            text(
+                "select prior_fact_id,canonical_fact_id,differing_fields_json "
+                "from audit_walmart_order_item_conflicts "
+                "where source_account_ref=:account"
+            ),
+            {"account": _ACCOUNT},
+        ).one()
+        assert transition.prior_fact_id == versions[0].id
+        assert transition.canonical_fact_id == versions[1].id
+        assert transition.differing_fields_json == ["platform_order_no", "reference_no"]
+
+        for refund in (
+            {
+                "purchase_order_id": "platform-filled",
+                "store_id": "store-a",
+                "item_id": "item-0",
+                "msku": "msku-0",
+            },
+            {
+                "customer_order_id": "reference-filled",
+                "store_id": "store-a",
+                "item_id": "item-0",
+                "msku": "msku-0",
+            },
+        ):
+            matched = runner._match_refund_order_line(refund)
+            assert matched is not None
+            assert matched["id"] == versions[1].id
+            assert matched["source_order_line_id"] == "line-number-fill"
+
+        monkeypatch.setattr(data_pages_real_sync, "_now", lambda: replay_observation)
+        assert runner._write_orders([completed]) == 1
+        session.commit()
+
+        replayed = session.execute(
+            text(
+                "select id,platform_order_no,reference_no,is_identity_current,"
+                "created_at,updated_at,synced_at from fact_walmart_order_items "
+                "where source_account_ref=:account order by created_at,id"
+            ),
+            {"account": _ACCOUNT},
+        ).all()
+        assert len(replayed) == 2
+        assert replayed[0] == versions[0]
+        assert replayed[1][:6] == versions[1][:6]
+        assert replayed[1].synced_at == replay_observation
+        assert (
+            session.scalar(
+                text(
+                    "select count(*) from audit_walmart_order_item_conflicts "
+                    "where source_account_ref=:account"
+                ),
+                {"account": _ACCOUNT},
+            )
+            == 1
+        )
+
+
 def test_same_snapshot_change_across_identities_does_not_cross_deduplicate(
     engine: Engine,
 ) -> None:
