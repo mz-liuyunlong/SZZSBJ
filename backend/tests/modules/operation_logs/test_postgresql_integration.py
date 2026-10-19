@@ -74,9 +74,10 @@ def pg_session() -> Iterator[Session]:
                 conn.execute(
                     text(
                         "insert into app_users "
-                        "(id, username, display_name, password_hash, is_active) values "
-                        "(:a, 'synthetic_a', 'A', 'ci-nonlogin-test-only', 1), "
-                        "(:b, 'synthetic_b', 'B', 'ci-nonlogin-test-only', 1)"
+                        "(id, username, display_name, password_hash, is_active, "
+                        "created_at, updated_at) values "
+                        "(:a, 'synthetic_a', 'A', 'ci-nonlogin-test-only', 1, now(), now()), "
+                        "(:b, 'synthetic_b', 'B', 'ci-nonlogin-test-only', 1, now(), now())"
                     ),
                     {"a": A_ID, "b": B_ID},
                 )
