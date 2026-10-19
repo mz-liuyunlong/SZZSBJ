@@ -173,6 +173,8 @@ class DataPagesRealSyncSummary:
     sales_unallocated_rows: int = 0
     order_rows: int = 0
     order_unresolved_rows: int = 0
+    sample_rows: int = 0
+    sample_unresolved_rows: int = 0
     refund_rows: int = 0
     refund_unresolved_rows: int = 0
     return_permission_403: bool = False
@@ -201,6 +203,8 @@ class DataPagesRealSyncSummary:
             f"sales_unallocated_rows={self.sales_unallocated_rows}",
             f"order_rows={self.order_rows}",
             f"order_unresolved_rows={self.order_unresolved_rows}",
+            f"sample_rows={self.sample_rows}",
+            f"sample_unresolved_rows={self.sample_unresolved_rows}",
             f"refund_rows={self.refund_rows}",
             f"refund_unresolved_rows={self.refund_unresolved_rows}",
             f"return_permission_403={str(self.return_permission_403).lower()}",
@@ -568,6 +572,15 @@ class DataPagesRealSyncRunner:
                         self._listing_capture_by_identity[identity] = response.pulled_at
             rows.extend(current)
             total = _total_of(response.response_json)
+            if (
+                parser_key == "order_v2_list"
+                and total is not None
+                and len(rows) < total
+                and (not current or len(current) < size)
+            ):
+                # A short/empty page cannot prove completion when the provider
+                # explicitly reports more order rows. Never silently omit orders.
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_PAGINATION_INCOMPLETE")
             if not current or len(current) < size or (total and len(rows) >= total):
                 return rows
             offset += size
@@ -724,8 +737,8 @@ class DataPagesRealSyncRunner:
     def _order_body(self, offset: int, size: int) -> dict[str, Any]:
         return {
             "date_type": "global_purchase_time",
-            "start_time": _china_epoch(self.business_date, end=False),
-            "end_time": _china_epoch(self.business_date, end=True),
+            "start_time": _la_day_epoch(self.business_date, end=False),
+            "end_time": _la_day_epoch(self.business_date, end=True),
             "offset": offset,
             "length": size,
             "platform_code": [WALMART_PLATFORM_CODE_INT],
@@ -1969,6 +1982,25 @@ def _normalize_name(value: object) -> str:
 def _china_epoch(day: date, *, end: bool) -> int:
     clock = time(23, 59, 59) if end else time(0, 0, 0)
     return int(datetime.combine(day, clock, tzinfo=CHINA_TZ).timestamp())
+
+
+def _la_day_epoch(day: date, *, end: bool) -> int:
+    """Inclusive provider epoch bounds for a real Los Angeles business day (DST-aware)."""
+    clock = time(23, 59, 59) if end else time(0, 0, 0)
+    return int(datetime.combine(day, clock, tzinfo=LA_TZ).timestamp())
+
+
+def _order_purchase_date_la(value: object) -> date | None:
+    """Derive the authoritative business date from provider purchase-time seconds/millis."""
+    epoch = _decimal(value)
+    if epoch is None or epoch <= 0:
+        return None
+    if epoch >= Decimal("100000000000"):
+        epoch /= Decimal("1000")
+    try:
+        return datetime.fromtimestamp(float(epoch), tz=UTC).astimezone(LA_TZ).date()
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def _now() -> datetime:
