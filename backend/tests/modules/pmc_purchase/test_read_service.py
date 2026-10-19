@@ -157,6 +157,31 @@ def test_summary_cards(seeded: Session) -> None:
     assert data.unstable_sku_count == 0
 
 
+def test_unstable_sku_count_follows_page_filters_and_dedupes_sku(seeded: Session) -> None:
+    for row in seeded.query(DwsPurchaseBoard).all():
+        row.sku_cycle_unstable = row.order_sn in {"PO1", "PO2", "PO3", "PO4"}
+    seeded.commit()
+    svc = PmcPurchaseReadService(seeded, today=TODAY)
+
+    everything, *_ = svc.summary(BoardFilterQuery(), SCOPE)
+    # PO1, PO3, and PO4 are the same account + SKU-A. PO2 is SKU-B.
+    assert everything.unstable_sku_count == 2
+
+    store_only, *_ = svc.summary(BoardFilterQuery(store_id=[STORE]), SCOPE)
+    # PO4 has no store, so SKU-A remains through PO1 and PO3, plus SKU-B.
+    assert store_only.unstable_sku_count == 2
+
+    owner_only, *_ = svc.summary(BoardFilterQuery(owner_uid=["u-1"]), SCOPE)
+    assert owner_only.unstable_sku_count == 1
+
+    listed, total, *_ = svc.list_board(
+        BoardListQuery(owner_uid=["u-1"], summary_filter="unstable_sku"), SCOPE
+    )
+    assert {item.sku for item in listed.items} == {"SKU-A"}
+    assert {item.purchase_order_sn for item in listed.items} == {"PO1", "PO3", "PO4"}
+    assert total == 3
+
+
 def test_order_detail_and_missing(seeded: Session) -> None:
     svc = PmcPurchaseReadService(seeded, today=TODAY)
     detail, _f, _r = svc.order_detail("PO1", SCOPE)
