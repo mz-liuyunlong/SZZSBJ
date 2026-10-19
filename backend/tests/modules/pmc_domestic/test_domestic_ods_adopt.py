@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from app.core.config import Settings, SettingsError, get_test_database_url
 from app.db.domestic_ods_adopt import (

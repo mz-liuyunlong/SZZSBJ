@@ -66,6 +66,6 @@ def test_migration_revision_chain_points_at_operation_logs() -> None:
         BACKEND_ROOT / "alembic" / "versions" / "20261019_0047_domestic_warehouse_ods.py"
     ).read_text(encoding="utf-8")
     assert f'revision: str = "{REVISION}"' in revision_file
-    assert f'down_revision' in revision_file and PREVIOUS in revision_file
+    assert "down_revision" in revision_file and PREVIOUS in revision_file
     assert "adopt_domestic_ods_tables" in revision_file
     assert domestic_models.LingxingDomesticWarehouseOds.__tablename__ in PMC_DOMESTIC_ODS_TABLES

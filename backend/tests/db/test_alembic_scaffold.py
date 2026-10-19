@@ -91,8 +91,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261019_0045_approval_scope"
     )
     assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
-        == "20261019_0046_operation_logs"
+        script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261019_0046_operation_logs"
     )
     assert len(EXPECTED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}

@@ -23,7 +23,6 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     import app.modules.pmc_domestic.models  # noqa: F401  # Register ORM metadata.
-
     from app.db.domestic_ods_adopt import adopt_domestic_ods_tables
 
     adopt_domestic_ods_tables(op.get_bind())
