@@ -266,6 +266,15 @@ export const navigation: NavigationGroup[] = [
         // Backend permission key (docs/api/pmc-purchase-api.md); the frontend does not enforce it.
         permissionKey: 'pmc:purchase:read',
       }),
+      page('pmc', 'domestic_warehouse_board', '国内仓看板', '/pmc/domestic-warehouse-board', {
+        readOnly: true,
+      }),
+      page('pmc', 'wfs', 'WFS', '/pmc/wfs', {
+        readOnly: true,
+      }),
+      page('pmc', 'logistics', '物流', '/pmc/logistics', {
+        readOnly: true,
+      }),
     ],
   },
   {
