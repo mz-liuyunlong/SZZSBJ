@@ -13,6 +13,12 @@ from app.integrations.lingxing.data_pages_contracts import (
     data_pages_probe_page_size_limit,
     normalize_data_pages_body,
 )
+from app.integrations.lingxing.pmc_domestic_contracts import (
+    PMC_DOMESTIC_ENDPOINT_SPECS,
+    PmcDomesticContractError,
+    build_pmc_domestic_page_body,
+    get_pmc_domestic_spec,
+)
 from app.integrations.lingxing.pmc_purchase_contracts import (
     PMC_PURCHASE_ENDPOINT_SPECS,
     PMC_PURCHASE_MAX_PAGE_SIZE,
@@ -37,6 +43,10 @@ type LingxingEndpoint = Literal[
     "/erp/sc/routing/data/local_inventory/getPurchasePlans",
     "/erp/sc/routing/data/local_inventory/purchaseOrderList",
     "/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList",
+    "/erp/sc/data/local_inventory/warehouse",
+    "/erp/sc/routing/data/local_inventory/inventoryDetails",
+    "/erp/sc/routing/data/local_inventory/getBatchDetailList",
+    "/erp/sc/routing/data/local_inventory/getBatchStatementList",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
@@ -281,6 +291,21 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
             auth_strategy="query_sign",
         )
         for spec in PMC_PURCHASE_ENDPOINT_SPECS.values()
+    },
+    **{
+        spec.api_path: LingxingEndpointContract(
+            method="POST",
+            outbound_enabled=True,
+            allow_query_parameters=False,
+            require_json_body=True,
+            allowed_body_fields=spec.allowed_body_fields,
+            required_body_fields=spec.required_body_fields,
+            store_field=None,
+            page_size_field="length",
+            offset_field="offset",
+            auth_strategy="query_sign",
+        )
+        for spec in PMC_DOMESTIC_ENDPOINT_SPECS.values()
     },
 }
 
@@ -574,6 +599,60 @@ class LingxingReadonlyClient:
             page,
             contract,
             page_size_limit=PMC_PURCHASE_MAX_PAGE_SIZE,
+            first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract, max_attempts=1)
+
+    def fetch_pmc_domestic_page(
+        self,
+        *,
+        api_path: str,
+        offset: int,
+        length: int,
+        page_no: int,
+        start_date: date | None,
+        end_date: date | None,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing source account scope is invalid")
+        _required_integer(page_no, minimum=1)
+        try:
+            spec = get_pmc_domestic_spec(api_path)
+            body = build_pmc_domestic_page_body(
+                api_path,
+                offset=offset,
+                length=length,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except PmcDomesticContractError as exc:
+            raise LingxingClientError(str(exc)) from exc
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=length,
+            params=None,
+            body=body,
+        )
+        capture = LingxingCaptureRequest(
+            api_path=spec.api_path,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=spec.object_type,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=spec.max_page_size,
             first_page_only=False,
         )
         return self._fetch_page(capture, page, contract, max_attempts=1)

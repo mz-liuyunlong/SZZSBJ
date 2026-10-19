@@ -29,6 +29,7 @@ import ApiDocsPage from "@/pages/data-center/ApiDocsPage";
 import DataImportPage from "@/pages/data-center/DataImportPage";
 import WfsFeeAlertPage from "@/pages/warehouse/WfsFeeAlertPage";
 import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
+import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWarehousePage";
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
@@ -188,6 +189,8 @@ function BusinessRoute({
           <WfsFeeAlertPage page={page} permissions={activeUser.permissions} />
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
+        ) : page.key === "pmc_domestic_warehouse_board" ? (
+          <DomesticWarehousePage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "data_center_approval_workspace" ? (
           <ApprovalWorkspacePage page={page} permissions={activeUser.permissions} />
         ) : page.key === "data_center_data_import" ? (

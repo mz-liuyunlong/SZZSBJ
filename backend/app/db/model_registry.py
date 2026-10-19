@@ -3,6 +3,7 @@ def register_productlist_sync_models() -> None:
     import app.modules.integration_sync.models  # noqa: F401
     import app.modules.media_assets.models  # noqa: F401
     import app.modules.operation_plans.models  # noqa: F401
+    import app.modules.pmc_domestic.models  # noqa: F401
     import app.modules.pmc_purchase.gate3_models  # noqa: F401
     import app.modules.pmc_purchase.models  # noqa: F401
     import app.modules.product_management.models  # noqa: F401

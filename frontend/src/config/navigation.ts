@@ -267,6 +267,11 @@ export const navigation: NavigationGroup[] = [
         permissionKey: 'pmc:purchase:read',
       }),
       page('pmc', 'domestic_warehouse_board', '国内仓看板', '/pmc/domestic-warehouse-board', {
+        status: 'testing',
+        source: 'new_postgres',
+        migrationMode: 'native',
+        sourceTables: ['dwd_domestic_receipt_batch', 'dwd_domestic_receipt_batch_link', 'dim_lingxing_stores', 'dwd_lingxing_sku_identity_index', 'dwd_lingxing_sku_product_info_current'],
+        permissionKey: 'pmc:domestic-batch:read',
         readOnly: true,
       }),
       page('pmc', 'wfs', 'WFS', '/pmc/wfs', {

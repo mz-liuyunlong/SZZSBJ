@@ -7,21 +7,17 @@ import ComingSoonPage from "@/pages/ComingSoonPage";
 import { resolveRoute } from "@/router/routeResolver";
 
 const placeholders = [
-  {
-    key: "pmc_domestic_warehouse_board",
-    title: "国内仓看板",
-    path: "/pmc/domestic-warehouse-board",
-  },
   { key: "pmc_wfs", title: "WFS", path: "/pmc/wfs" },
   { key: "pmc_logistics", title: "物流", path: "/pmc/logistics" },
 ] as const;
 
 describe("PMC placeholder pages", () => {
-  it("keeps the three pages beside the purchase board", () => {
+  it("keeps planned WFS and logistics beside the two board pages", () => {
     const pmc = navigation.find((group) => group.key === "pmc");
 
     expect(pmc?.children.map((page) => page.key)).toEqual([
       "pmc_purchase_board",
+      "pmc_domestic_warehouse_board",
       ...placeholders.map((page) => page.key),
     ]);
     for (const item of placeholders) {

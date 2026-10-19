@@ -3,6 +3,13 @@ import { apiDocModules } from "@/pages/data-center/apiDocsMockData";
 import { filterApiDocs, flattenApiDocs, getApiCount } from "@/pages/data-center/apiDocsTypes";
 
 describe("apiDocsTypes", () => {
+  it("exposes domestic options and owner filters with the real response envelope", () => {
+    const apis = flattenApiDocs(filterApiDocs(apiDocModules, "/api/pmc/domestic"));
+    const options = apis.find((api) => api.path.endsWith("filter-options"));
+    expect(options?.responseExample).toHaveProperty("success", true);
+    expect(options?.authScope).toContain("pmc:domestic-batch:read");
+    expect(apis.filter((api) => api.queryParams.some((param) => param.name === "owner_uid"))).toHaveLength(2);
+  });
   it("flattens the API documentation matrix", () => {
     const apis = flattenApiDocs(apiDocModules);
 
