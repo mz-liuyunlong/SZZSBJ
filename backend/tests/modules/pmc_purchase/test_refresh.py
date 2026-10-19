@@ -616,6 +616,36 @@ def test_plan_remark_wins_over_listing_item_id(session: Session) -> None:
     assert (row.item_id, row.item_id_source) == ("33333333333", "from_plan_remark")
 
 
+def test_resolved_item_id_does_not_borrow_a_different_listing(session: Session) -> None:
+    """Remark ItemID A must not take MSKU, GTIN, or fulfillment from store+SKU listing B."""
+
+    _plan(session, "P1", remark_item_id="33333333333", remark="ITEMID:33333333333")
+    _order(session, "PO1")
+    _line(session, "PO1", "L1")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO1", "L1", "P1")]
+    assert (row.item_id, row.item_id_source) == ("33333333333", "from_plan_remark")
+    assert (row.msku, row.gtin, row.fulfillment_type, row.wfs_not_ready) == (None, None, None, None)
+
+
+def test_resolved_item_id_uses_the_listing_with_the_same_item_id(session: Session) -> None:
+    _plan(session, "P1")
+    _order(session, "PO1")
+    _line(session, "PO1", "L1")
+    session.commit()
+
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO1", "L1", "P1")]
+    assert (row.item_id, row.msku, row.gtin, row.fulfillment_type) == (
+        "19051502014",
+        "MSKU-A",
+        "00012345678905",
+        "0",
+    )
+
+
 def test_packing_slip_source_is_used_when_available(session: Session) -> None:
     _order(session, "PO1")
     _line(

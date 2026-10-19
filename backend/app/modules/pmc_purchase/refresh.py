@@ -758,10 +758,18 @@ class PmcPurchaseDwsRefresher:
         item_id: str | None,
         listings: _ListingIndex,
     ) -> _Listing | None:
-        if line.store_id and item_id:
-            found = listings.by_item.get((line.store_id, item_id))
-            if found is not None:
-                return found
+        """Listing attributes that belong to this row's ItemID.
+
+        A resolved ItemID accepts only the listing stored for that same store and
+        item. Using the store+SKU listing here would copy MSKU, GTIN, and fulfillment
+        from a different item. That fallback stays available only while the row has
+        no ItemID yet.
+        """
+
+        if item_id:
+            if not line.store_id:
+                return None
+            return listings.by_item.get((line.store_id, item_id))
         sku = (line.sku or "").strip()
         if line.store_id and sku:
             return listings.by_store_sku.get((line.store_id, sku))

@@ -117,7 +117,9 @@ class PmcPurchaseReadService:
                 MoneyByCurrency(currency_code=code, amount=amount)
                 for code, amount in sorted(by_currency.items(), key=lambda kv: kv[0] or "")
             ],
-            unstable_sku_count=self.repository.unstable_sku_count(accounts),
+            unstable_sku_count=len(
+                {(r.source_account_ref, r.sku) for r in rows if r.sku_cycle_unstable and r.sku}
+            ),
             itemid_pending_lines=sum(1 for r in rows if r.item_id is None and r.stage_code != "S0"),
             wfs_not_ready_lines=sum(1 for r in rows if r.wfs_not_ready is True),
             unattributed_store_lines=sum(1 for r in rows if not r.store_attributed),

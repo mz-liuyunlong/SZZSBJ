@@ -235,7 +235,7 @@ class BoardSummaryData(StrictSchema):
     month_purchase_amount: list[MoneyByCurrency] = Field(
         description="本月下单 amount_allocated 合计，按币种"
     )
-    unstable_sku_count: int
+    unstable_sku_count: int = Field(description="当前筛选下交期不稳定的 SKU 数，按账号 + SKU 去重")
     itemid_pending_lines: int
     wfs_not_ready_lines: int
     unattributed_store_lines: int

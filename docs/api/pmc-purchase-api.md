@@ -86,7 +86,8 @@ orders), `arrival_overdue_orders`, `purchase_overdue_orders` (S2 orders), `purch
 `average_purchase_cycle_days_90d` (orders arrived in the last 90 days, one value per order),
 `median_purchase_cycle_days_90d` and `purchase_cycle_sample_orders_90d` (same orders),
 `month_purchase_amount[]` (`amount_allocated` of lines ordered this month, per currency, no
-FX), `unstable_sku_count`, `itemid_pending_lines`, `wfs_not_ready_lines`,
+FX), `unstable_sku_count` (distinct account + SKU among rows matching the same filters;
+multiple lines of one SKU count once), `itemid_pending_lines`, `wfs_not_ready_lines`,
 `unattributed_store_lines`, `as_of`.
 
 ### `GET /api/pmc/purchase/orders/{order_sn}` — detail (PRP §7.3)

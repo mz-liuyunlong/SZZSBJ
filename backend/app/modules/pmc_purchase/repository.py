@@ -218,19 +218,6 @@ class PmcPurchaseReadRepository:
             )
         )
 
-    def unstable_sku_count(self, accounts: frozenset[str]) -> int:
-        return int(
-            self.session.scalar(
-                select(func.count())
-                .select_from(DwsPurchaseSkuCycle)
-                .where(
-                    DwsPurchaseSkuCycle.source_account_ref.in_(sorted(accounts)),
-                    DwsPurchaseSkuCycle.unstable.is_(True),
-                )
-            )
-            or 0
-        )
-
     # -- pending plans (status = 2, not yet on any purchase-order line) --
 
     def _pending_plan_select(
