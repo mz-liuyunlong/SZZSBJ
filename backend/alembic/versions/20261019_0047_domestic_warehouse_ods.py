@@ -3,10 +3,11 @@
 Revision ID: 20261019_0047_domestic_warehouse_ods
 Revises: 20261019_0046_operation_logs
 
-Production may already contain these tables from
-``docs/delivery/domestic-warehouse-ods-tables.sql``. This revision verifies shape
-against ORM metadata or creates the tables on empty databases. It never truncates
-or replaces existing rows.
+Production already contains these tables from
+``docs/delivery/domestic-warehouse-ods-tables.sql``. This revision creates them
+only when none of the four exist. If any exist, all four must exist and match
+the ORM, including lengths, keys, foreign keys, checks and indexes. A missing
+table is an error. Existing rows are never changed.
 """
 
 from __future__ import annotations

@@ -57,13 +57,63 @@ def test_adopt_creates_then_revalidates_without_error(isolated_postgresql_connec
 
 
 def test_adopt_rejects_column_drift(isolated_postgresql_connection) -> None:
-    ddl = SQL_PATH.read_text(encoding="utf-8")
-    isolated_postgresql_connection.execute(text(ddl))
+    isolated_postgresql_connection.execute(text(SQL_PATH.read_text(encoding="utf-8")))
     isolated_postgresql_connection.execute(
         text("alter table ods_lingxing_domestic_warehouses add column drift_probe integer")
     )
     with pytest.raises(DomesticOdsSchemaMismatchError, match="column set mismatch"):
         adopt_domestic_ods_tables(isolated_postgresql_connection)
+
+
+def test_adopt_rejects_varchar_length_drift(isolated_postgresql_connection) -> None:
+    isolated_postgresql_connection.execute(text(SQL_PATH.read_text(encoding="utf-8")))
+    isolated_postgresql_connection.execute(
+        text(
+            "alter table ods_lingxing_domestic_warehouses "
+            "alter column source_warehouse_id type varchar(32)"
+        )
+    )
+    with pytest.raises(DomesticOdsSchemaMismatchError, match="type expected"):
+        adopt_domestic_ods_tables(isolated_postgresql_connection)
+
+
+def test_adopt_rejects_missing_unique_constraint(isolated_postgresql_connection) -> None:
+    isolated_postgresql_connection.execute(text(SQL_PATH.read_text(encoding="utf-8")))
+    constraint_name = isolated_postgresql_connection.execute(
+        text(
+            """
+            select conname
+            from pg_constraint
+            where conrelid = 'ods_lingxing_domestic_inventory'::regclass
+              and contype = 'u'
+            """
+        )
+    ).scalar_one()
+    isolated_postgresql_connection.execute(
+        text(f'alter table ods_lingxing_domestic_inventory drop constraint "{constraint_name}"')
+    )
+    with pytest.raises(DomesticOdsSchemaMismatchError, match="unique constraints"):
+        adopt_domestic_ods_tables(isolated_postgresql_connection)
+
+
+def test_adopt_rejects_missing_index(isolated_postgresql_connection) -> None:
+    isolated_postgresql_connection.execute(text(SQL_PATH.read_text(encoding="utf-8")))
+    isolated_postgresql_connection.execute(text("drop index ix_ods_domestic_inventory_wh_sku"))
+    with pytest.raises(DomesticOdsSchemaMismatchError, match="indexes expected"):
+        adopt_domestic_ods_tables(isolated_postgresql_connection)
+
+
+def test_adopt_refuses_to_create_a_missing_table(isolated_postgresql_connection) -> None:
+    isolated_postgresql_connection.execute(text(SQL_PATH.read_text(encoding="utf-8")))
+    isolated_postgresql_connection.execute(
+        text("drop table ods_lingxing_domestic_inventory_events")
+    )
+    with pytest.raises(DomesticOdsSchemaMismatchError, match="partially present"):
+        adopt_domestic_ods_tables(isolated_postgresql_connection)
+    still_missing = isolated_postgresql_connection.execute(
+        text("select to_regclass('public.ods_lingxing_domestic_inventory_events')")
+    ).scalar_one()
+    assert still_missing is None
 
 
 def test_hand_sql_then_adopt_matches_orm(isolated_postgresql_connection) -> None:
