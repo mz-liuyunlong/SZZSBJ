@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261019_0046_operation_logs"
+EXPECTED_HEAD_REVISION = "20261019_0047_domestic_warehouse_ods"
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +87,12 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261019_0044_approval_flow"
     )
     assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261019_0045_approval_scope"
+        script.get_revision("20261019_0046_operation_logs").down_revision
+        == "20261019_0045_approval_scope"
+    )
+    assert (
+        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
+        == "20261019_0046_operation_logs"
     )
     assert len(EXPECTED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
@@ -129,11 +134,12 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261019_0044_approval_flow.py",
         "20261019_0045_approval_scope.py",
         "20261019_0046_operation_logs.py",
+        "20261019_0047_domestic_warehouse_ods.py",
     } <= revisions
 
     rbac_revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20261017_0042_approval_rbac_backfill.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert 'revision: str = "20261017_0042_rbac_backfill"' in rbac_revision
     assert '"source_account_refs_json"' in rbac_revision
     assert '"field:sales:order-profit:gross-profit"' in rbac_revision
@@ -141,14 +147,14 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
 
     revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20260910_0002_add_raw_lingxing_api.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert revision.count('name=op.f("ck_raw_lingxing_api_api_path")') == 1
     assert '"ix_raw_lingxing_api_raw_hash"' in revision
     assert '"ix_raw_lingxing_api_object_type"' not in revision
 
     legacy_revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20261006_0029_legacy_selected_mirror_tables.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "create schema if not exists legacy_mirror" in legacy_revision
     assert "legacy_mirror.biz_product_operation_log" in legacy_revision
     assert "legacy_mirror.event_wfs_fee_case" in legacy_revision
