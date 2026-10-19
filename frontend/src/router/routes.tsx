@@ -185,11 +185,11 @@ function BusinessRoute({
         ) : page.key === "operations_plan" ? (
           <OperationPlanPage page={page} />
         ) : page.key === "warehouse_wfs_fee_alert" ? (
-          <WfsFeeAlertPage page={page} />
+          <WfsFeeAlertPage page={page} permissions={activeUser.permissions} />
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "data_center_approval_workspace" ? (
-          <ApprovalWorkspacePage page={page} />
+          <ApprovalWorkspacePage page={page} permissions={activeUser.permissions} />
         ) : page.key === "data_center_data_import" ? (
           <DataImportPage page={page} />
         ) : page.key === "data_center_api_docs" ? (

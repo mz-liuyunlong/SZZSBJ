@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
-from app.modules.products.dependencies import require_product_scope
+from app.modules.products.dependencies import require_global_product_core_scope
 from app.modules.products.schemas import (
     ProductCreate,
     ProductListData,
@@ -32,7 +32,7 @@ listings_read = require_permission("product_listings:read")
 listings_create = require_permission("product_listings:create")
 listings_update = require_permission("product_listings:update")
 
-scope_dependency = Depends(require_product_scope)
+scope_dependency = Depends(require_global_product_core_scope)
 db_session = Annotated[Session, Depends(get_db_session)]
 
 READ_ERRORS: dict[int | str, dict[str, Any]] = {

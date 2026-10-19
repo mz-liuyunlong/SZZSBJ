@@ -42,12 +42,16 @@ function DailySalesCharts({ rows, currency }: DailySalesChartsProps) {
     const orderProfit = profitIncomplete
       ? null
       : dateRows.reduce((sum, row) => sum + (row.orderProfit ?? 0), 0);
-    const totalAdSpend = dateRows.reduce((sum, row) => sum + row.totalAdSpend, 0);
+    const totalAdSpend = dateRows.some((row) => row.totalAdSpend == null)
+      ? null
+      : dateRows.reduce((sum, row) => sum + (row.totalAdSpend ?? 0), 0);
     if (metric === "orderProfit") return orderProfit == null ? null : orderProfit * rate;
     if (metric === "profitMargin") {
       return salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null;
     }
-    if (metric === "adRatio") return salesAmount ? totalAdSpend / salesAmount * 100 : null;
+    if (metric === "adRatio") {
+      return salesAmount && totalAdSpend != null ? totalAdSpend / salesAmount * 100 : null;
+    }
     const value = dateRows.reduce((sum, row) => sum + Number(row[metric] ?? 0), 0);
     return amountMetrics.includes(metric) ? value * rate : value;
   });

@@ -5,6 +5,7 @@ from typing import Never, Self
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
+from app.core.permissions import has_permission
 
 
 class StoreScopeKind(StrEnum):
@@ -62,7 +63,7 @@ def resolve_store_scope(
         _deny_scope()
     if not permission_key or permission_key != permission_key.strip():
         _deny_scope()
-    if permission_key not in principal.permissions:
+    if not has_permission(principal, permission_key):
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     if requested_store_id is not None and (
         not requested_store_id or requested_store_id != requested_store_id.strip()

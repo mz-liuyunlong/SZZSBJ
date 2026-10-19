@@ -1,11 +1,12 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   test: {
+    exclude: [...configDefaults.exclude, 'e2e/**'],
     testTimeout: 15_000,
     hookTimeout: 15_000,
   },

@@ -8,6 +8,7 @@ import {
   type OrderProfitExportDimension,
   type OrderProfitExportPeriod,
 } from "@/pages/sales/orderProfitApi";
+import { backendDownloadErrorMessage } from "@/api/backendApi";
 
 dayjs.locale("zh-cn");
 
@@ -313,8 +314,8 @@ function OrderProfitExportModal({ open, filters, onClose }: OrderProfitExportMod
     try {
       await exportRequest;
       void messageApi.success("导出成功");
-    } catch {
-      void messageApi.error("导出失败，请稍后重试");
+    } catch (reason: unknown) {
+      void messageApi.error(backendDownloadErrorMessage(reason));
     } finally {
       setExporting(false);
     }

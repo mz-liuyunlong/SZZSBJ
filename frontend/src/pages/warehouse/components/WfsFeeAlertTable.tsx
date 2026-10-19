@@ -31,6 +31,7 @@ interface WfsFeeAlertTableProps {
   onCopy: (text: string) => void;
   onOpenDetail: (row: WfsFeeAlertRow) => void;
   onOpenFollow: (row: WfsFeeAlertRow) => void;
+  canFollow: boolean;
 }
 
 const priorityColor: Record<WfsFeeAlertPriority, string> = {
@@ -66,6 +67,7 @@ const createColumns = (
   onCopy: (text: string) => void,
   onOpenDetail: (row: WfsFeeAlertRow) => void,
   onOpenFollow: (row: WfsFeeAlertRow) => void,
+  canFollow: boolean,
 ): ProColumns<WfsFeeAlertRow>[] => [
   {
     title: "图片",
@@ -231,7 +233,7 @@ const createColumns = (
     fixed: "right",
     render: (_, row) => (
       <Space size={4}>
-        <Button type="link" disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑</Button>
+        {canFollow && <Button type="link" disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑</Button>}
         <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
       </Space>
     ),
@@ -286,8 +288,9 @@ function WfsFeeAlertTable({
   onCopy,
   onOpenDetail,
   onOpenFollow,
+  canFollow,
 }: WfsFeeAlertTableProps) {
-  const columnMap = new Map(createColumns(currency, onCopy, onOpenDetail, onOpenFollow).map((column) => [String(column.key), column]));
+  const columnMap = new Map(createColumns(currency, onCopy, onOpenDetail, onOpenFollow, canFollow).map((column) => [String(column.key), column]));
   const columns = appliedColumnKeys.flatMap((key) => {
     const column = columnMap.get(key);
     if (!column) return [];

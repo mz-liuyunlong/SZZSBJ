@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import UUID
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -10,15 +13,17 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.data_pages.repository import ListingManagementRepository
+from app.modules.data_pages.repository import ListingManagementRepository, ListingTagRepository
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
     ListingManagementListData,
+    ListingTagBatchSetData,
+    ListingTagRead,
 )
 from app.modules.data_pages.service import ListingManagementService
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 
-ALL_PERMISSIONS = frozenset({"products:read"})
+ALL_PERMISSIONS = frozenset({"page:products:listing-management:view"})
 NOW = datetime(2026, 9, 17, 8, 0, tzinfo=UTC)
 
 
@@ -28,8 +33,8 @@ def _app(*permissions: str) -> FastAPI:
         user_id="synthetic-user",
         permissions=frozenset(permissions) if permissions else ALL_PERMISSIONS,
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"synthetic-account"})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application
@@ -173,3 +178,81 @@ def test_listing_management_route_returns_envelope_and_meta(monkeypatch: Any) ->
         "dim_walmart_listings",
     ]
     assert body["meta"]["total"] == 1
+
+
+def test_listing_view_permission_cannot_modify_global_tags(monkeypatch: Any) -> None:
+    create_call = MagicMock(return_value=ListingTagRead(id="tag-1", name="Synthetic", color="blue"))
+    monkeypatch.setattr(ListingManagementService, "create_tag", create_call)
+
+    denied = TestClient(_app("page:products:listing-management:view")).post(
+        "/api/listings/tags",
+        json={"name": "Synthetic", "color": "blue"},
+    )
+    assert denied.status_code == 403
+    create_call.assert_not_called()
+
+    allowed = TestClient(_app("action:products:listing-management:manage-tags")).post(
+        "/api/listings/tags",
+        json={"name": "Synthetic", "color": "blue"},
+    )
+    assert allowed.status_code == 200
+    create_call.assert_called_once()
+
+
+def test_listing_tag_batch_scope_failure_is_all_or_nothing(monkeypatch: Any) -> None:
+    batch_call = MagicMock(side_effect=PermissionError("hidden"))
+    monkeypatch.setattr(ListingManagementService, "batch_set_tags", batch_call)
+    response = TestClient(_app("action:products:listing-management:manage-tags")).post(
+        "/api/listings/tags/batch-set",
+        json={
+            "listing_ids": ["00000000-0000-0000-0000-000000000001"],
+            "tag_values": ["Synthetic"],
+            "mode": "append",
+        },
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "DATA_SCOPE_DENIED"
+
+    monkeypatch.setattr(
+        ListingManagementService,
+        "batch_set_tags",
+        lambda _self, **_kwargs: ListingTagBatchSetData(
+            updated_listings=1,
+            tag_count=1,
+            mode="append",
+        ),
+    )
+    allowed = TestClient(_app("action:products:listing-management:manage-tags")).post(
+        "/api/listings/tags/batch-set",
+        json={
+            "listing_ids": ["00000000-0000-0000-0000-000000000001"],
+            "tag_values": ["Synthetic"],
+            "mode": "append",
+        },
+    )
+    assert allowed.status_code == 200
+
+
+def test_listing_tag_repository_rejects_mixed_scope_before_any_write() -> None:
+    session = MagicMock(spec=Session)
+    authorized_id = "00000000-0000-0000-0000-000000000001"
+    unauthorized_id = "00000000-0000-0000-0000-000000000002"
+    session.execute.return_value.all.return_value = [
+        SimpleNamespace(
+            id=UUID(authorized_id),
+            source_account_ref="synthetic-account",
+            item_id="item-1",
+        )
+    ]
+
+    with pytest.raises(PermissionError):
+        ListingTagRepository(session).batch_set_tags(
+            account_refs=frozenset({"synthetic-account"}),
+            listing_ids=[authorized_id, unauthorized_id],
+            tag_ids=[],
+            tag_values=["Synthetic"],
+            mode="append",
+        )
+
+    session.add.assert_not_called()
+    session.commit.assert_not_called()

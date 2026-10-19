@@ -1,4 +1,4 @@
-import { backendRequest } from "@/api/backendApi";
+import { backendDownload, backendRequest } from "@/api/backendApi";
 import { normalizeReportFilterOptions } from "@/shared/report-filters";
 import type { SalesFilterOptions } from "@/pages/sales/salesFilterOptionsApi";
 import type {
@@ -38,7 +38,7 @@ interface BackendOrderProfitItem {
   wfs_fee_unit_amount: string | null;
   commission_fee_amount: string | null;
   wfs_fee_total_amount: string | null;
-  wfs_low_price_surcharge_amount: string;
+  wfs_low_price_surcharge_amount: string | null;
   purchase_cost_unit_cny: string | null;
   purchase_cost_total_usd: string | null;
   first_leg_cost_unit_cny: string | null;
@@ -66,7 +66,7 @@ interface BackendOrderProfitSummary {
   refund_amount: string;
   refund_loss_amount: string;
   refund_currency_code: string | null;
-  order_profit_amount: string;
+  order_profit_amount: string | null;
   order_profit_currency_code: string | null;
   ad_spend_amount: string;
   sem_ad_spend_amount: string;
@@ -90,7 +90,7 @@ interface BackendOrderProfitTrendPoint {
   refund_amount: string;
   refund_loss_amount: string;
   refund_currency_code: string | null;
-  order_profit_amount: string;
+  order_profit_amount: string | null;
   order_profit_currency_code: string | null;
   profit_margin: string | null;
   ad_spend_amount: string;
@@ -122,7 +122,7 @@ export interface OrderProfitServerSummary {
   refundAmount: number;
   refundLossAmount: number;
   refundCurrency: OrderProfitCurrency;
-  orderProfitAmount: number;
+  orderProfitAmount: number | null;
   orderProfitCurrency: OrderProfitCurrency;
   adSpendAmount: number;
   semAdSpendAmount: number;
@@ -147,7 +147,7 @@ export interface OrderProfitTrendPoint {
   refundQuantity: number;
   refundLossAmount: number;
   refundCurrency: OrderProfitCurrency;
-  orderProfit: number;
+  orderProfit: number | null;
   orderProfitCurrency: OrderProfitCurrency;
   profitMargin: number | null;
   adSpend: number;
@@ -242,9 +242,9 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
   const salesVolume = numberValue(item.sales_qty);
   const salesAmount = numberValue(item.sales_amount);
   const refundAmount = nullableNumberValue(item.refund_amount);
-  const adSpend = numberValue(item.ad_spend_amount);
-  const semAdSpend = numberValue(item.sem_ad_spend_amount);
-  const totalAdSpend = numberValue(item.total_ad_spend_amount);
+  const adSpend = nullableNumberValue(item.ad_spend_amount);
+  const semAdSpend = nullableNumberValue(item.sem_ad_spend_amount);
+  const totalAdSpend = nullableNumberValue(item.total_ad_spend_amount);
   const displayStores = storeNames.length > 0 ? storeNames : storeIds;
   const displayMskus = mskus.length > 0 ? mskus : itemIds;
 
@@ -278,13 +278,13 @@ const toOrderProfitRow = (item: BackendOrderProfitItem): OrderProfitRow => {
     adSpend,
     semAdSpend,
     totalAdSpend,
-    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
+    adRatio: item.ad_ratio == null ? null : numberValue(item.ad_ratio) * 100,
 
     wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
-    wfsLowPriceSurcharge: numberValue(item.wfs_low_price_surcharge_amount),
+    wfsLowPriceSurcharge: nullableNumberValue(item.wfs_low_price_surcharge_amount),
     wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
 
-    commission: numberValue(item.commission_fee_amount),
+    commission: nullableNumberValue(item.commission_fee_amount),
 
     purchaseCost: nullableNumberValue(item.purchase_cost_total_usd),
     purchaseUnitPriceCny: nullableNumberValue(item.purchase_cost_unit_cny),
@@ -321,7 +321,7 @@ const toOrderProfitServerSummary = (
     refundAmount: numberValue(summary.refund_amount),
     refundLossAmount: numberValue(summary.refund_amount),
     refundCurrency: currencyLabel(summary.refund_currency_code),
-    orderProfitAmount: numberValue(summary.order_profit_amount),
+    orderProfitAmount: nullableNumberValue(summary.order_profit_amount),
     orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
     adSpendAmount: numberValue(summary.ad_spend_amount),
     semAdSpendAmount: numberValue(summary.sem_ad_spend_amount),
@@ -350,7 +350,7 @@ const toOrderProfitTrendPoint = (
     refundAmount,
     refundLossAmount: refundAmount,
     refundCurrency: currencyLabel(item.refund_currency_code),
-    orderProfit: numberValue(item.order_profit_amount),
+    orderProfit: nullableNumberValue(item.order_profit_amount),
     orderProfitCurrency: currencyLabel(item.order_profit_currency_code),
     profitMargin: nullableNumberValue(item.profit_margin),
     adSpend: numberValue(item.ad_spend_amount),
@@ -411,34 +411,10 @@ export async function downloadOrderProfitExportCsv(
 
   appendOrderProfitFilters(search, params);
 
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
-  const response = await fetch(`/api/sales/order-profit/export?${search.toString()}`, {
-    credentials: "same-origin",
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`ORDER_PROFIT_EXPORT_FAILED_${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") ?? "";
-  const filenameMatch = /filename="?([^"]+)"?/i.exec(disposition);
-  const filename = filenameMatch?.[1] ?? `order-profit-${params.period}.csv`;
-  const url = URL.createObjectURL(blob);
-
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  await backendDownload(
+    `/api/sales/order-profit/export?${search.toString()}`,
+    `order-profit-${params.period}.csv`,
+  );
 }
 
 

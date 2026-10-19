@@ -68,8 +68,9 @@ const toServerTotals = (
   currency: DailySalesCurrency,
 ): SummaryTotals => {
   const salesAmount = summary.salesAmount * currencyRate(summary.salesCurrency, currency);
-  const orderProfit = summary.orderProfitAmount
-    * currencyRate(summary.orderProfitCurrency, currency);
+  const orderProfit = summary.orderProfitAmount == null
+    ? null
+    : summary.orderProfitAmount * currencyRate(summary.orderProfitCurrency, currency);
   const totalAdSpend = summary.totalAdSpendAmount
     * currencyRate(summary.adSpendCurrency, currency);
   const refundAmount = summary.refundEventAmount
@@ -79,7 +80,7 @@ const toServerTotals = (
     salesVolume: summary.salesQuantity,
     salesAmount,
     orderProfit,
-    profitRate: salesAmount ? orderProfit / salesAmount * 100 : null,
+    profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
     totalAdSpend,
     adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
     refundQuantity: summary.refundEventQuantity,
@@ -105,7 +106,9 @@ const toFallbackTotals = (
   const orderProfit = incompleteProfit
     ? null
     : rows.reduce((total, row) => total + (row.orderProfit ?? 0), 0) * rate;
-  const totalAdSpend = rows.reduce((total, row) => total + row.totalAdSpend, 0) * rate;
+  const totalAdSpend = rows.some((row) => row.totalAdSpend == null)
+    ? null
+    : rows.reduce((total, row) => total + (row.totalAdSpend ?? 0), 0) * rate;
   const refundAmount = refundSummary == null ? null : refundSummary.amount * refundRate;
 
   return {
@@ -114,7 +117,7 @@ const toFallbackTotals = (
     orderProfit,
     profitRate: salesAmount && orderProfit != null ? orderProfit / salesAmount * 100 : null,
     totalAdSpend,
-    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : null,
+    adRatio: salesAmount && totalAdSpend != null ? totalAdSpend / salesAmount * 100 : null,
     refundQuantity: refundSummary?.quantity ?? null,
     refundAmount,
   };

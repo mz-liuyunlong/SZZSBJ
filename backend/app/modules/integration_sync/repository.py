@@ -43,6 +43,13 @@ class IntegrationSyncRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
+    def list_configured_source_account_refs(self) -> frozenset[str]:
+        """Return the governed account universe; RBAC decides the caller's subset."""
+        values = self.session.scalars(
+            select(IntegrationSyncConfig.source_account_ref).distinct()
+        ).all()
+        return frozenset(value for raw_value in values if (value := str(raw_value).strip()))
+
     def list_interfaces(
         self, *, provider: str | None, enabled: bool | None, page: int, page_size: int
     ) -> tuple[list[IntegrationInterface], int]:

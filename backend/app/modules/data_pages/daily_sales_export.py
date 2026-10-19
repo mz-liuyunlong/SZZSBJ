@@ -60,8 +60,6 @@ DAILY_SALES_EXPORT_COLUMNS: dict[str, str] = {
     "cost_status": "成本状态",
 }
 
-DEFAULT_EXPORT_COLUMNS = list(DAILY_SALES_EXPORT_COLUMNS.keys())
-
 
 def _coerce_decimal(value: object, default: Decimal = ZERO) -> Decimal:
     if value is None:
@@ -419,12 +417,10 @@ def _row_value_map(
 
 
 def _selected_columns(columns: str | None) -> list[str]:
-    if not columns:
-        return DEFAULT_EXPORT_COLUMNS
-
-    values = [item.strip() for item in columns.split(",") if item.strip()]
-    selected = [value for value in values if value in DAILY_SALES_EXPORT_COLUMNS]
-    return selected or DEFAULT_EXPORT_COLUMNS
+    values = [item.strip() for item in (columns or "").split(",") if item.strip()]
+    if not values or any(value not in DAILY_SALES_EXPORT_COLUMNS for value in values):
+        return []
+    return values
 
 
 def export_daily_sales_csv(

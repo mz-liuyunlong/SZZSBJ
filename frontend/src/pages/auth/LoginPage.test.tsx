@@ -4,6 +4,8 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { BackendRequestError } from "@/api/backendApi";
+import { loginErrorMessage } from "@/pages/auth/authApi";
 import LoginPage, { REMEMBERED_USERNAME_KEY } from "@/pages/auth/LoginPage";
 
 beforeAll(() => {
@@ -52,6 +54,44 @@ const submitCredentials = (username: string, password: string) => {
 };
 
 describe("LoginPage", () => {
+  it("keeps credential and service failures distinct", () => {
+    expect(loginErrorMessage(new BackendRequestError(401, "UNAUTHORIZED"))).toBe(
+      "账号或密码错误",
+    );
+    expect(loginErrorMessage(new BackendRequestError(
+      401,
+      "NON_JSON_RESPONSE",
+      undefined,
+      "authentication",
+      "non_json",
+    ))).toBe("登录失败，请稍后重试");
+    expect(loginErrorMessage(new BackendRequestError(403, "FORBIDDEN"))).toBe(
+      "账号已停用，请联系管理员",
+    );
+    expect(loginErrorMessage(new BackendRequestError(
+      403,
+      "NON_JSON_RESPONSE",
+      undefined,
+      "authorization",
+      "non_json",
+    ))).toBe("登录失败，请稍后重试");
+    expect(loginErrorMessage(new BackendRequestError(502, "BAD_GATEWAY"))).toBe(
+      "系统连接暂时异常，请稍后重试",
+    );
+    expect(loginErrorMessage(new BackendRequestError(
+      0,
+      "REQUEST_TIMEOUT",
+      undefined,
+      "timeout",
+    ))).toBe("请求超时，请重试");
+    expect(loginErrorMessage(new BackendRequestError(
+      0,
+      "NETWORK_ERROR",
+      undefined,
+      "network",
+    ))).toBe("网络连接失败，请检查网络");
+  });
+
   it("shows the login form without logging in automatically", () => {
     const onLogin = vi.fn();
     renderLogin(onLogin);

@@ -200,9 +200,20 @@ def update_user(
     ],
     session: Annotated[Session, Depends(get_db_session)],
 ) -> SuccessEnvelope[UserRead, None]:
+    update_fields = payload.model_fields_set
+    has_legacy_write = has_permission(principal, "settings:users:write")
+    if "is_active" in update_fields and not (
+        has_legacy_write
+        or has_permission(principal, "action:settings:user-management:enable-disable")
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    editable_fields = update_fields - {"is_active", "role_keys"}
+    if editable_fields and not (
+        has_legacy_write or has_permission(principal, "action:settings:user-management:edit")
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     if payload.role_keys is not None and not (
-        has_permission(principal, "action:settings:user-management:assign-role")
-        or has_permission(principal, "settings:users:write")
+        has_permission(principal, "action:settings:user-management:assign-role") or has_legacy_write
     ):
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     _assert_user_field_write_allowed(

@@ -6,7 +6,11 @@ import {
   listPurchaseBoard,
   normalizeSearchValues,
 } from "@/pages/pmc/purchase-board/purchaseBoardApi";
-import { createInitialPurchaseBoardFilters } from "@/pages/pmc/purchase-board/purchaseBoardTypes";
+import { itemIdSourceLabels } from "@/pages/pmc/purchase-board/purchaseBoardDisplay";
+import {
+  createInitialPurchaseBoardFilters,
+  purchaseBoardItemIdSourceOptions,
+} from "@/pages/pmc/purchase-board/purchaseBoardTypes";
 
 const envelope = (data: unknown, meta: Record<string, unknown> = {}) => ({
   ok: true,
@@ -127,6 +131,19 @@ describe("purchaseBoardApi query building", () => {
   it("normalises comma / whitespace separated values and drops duplicates", () => {
     expect(normalizeSearchValues(["a,b", "b c", "", "  "])).toEqual(["a", "b", "c"]);
   });
+
+  it("shows and sends the production-compatible from_listing source", () => {
+    const query = buildPurchaseBoardListQuery({
+      ...createInitialPurchaseBoardFilters(),
+      itemIdSources: ["from_listing"],
+    }, 1, 50);
+    expect(query.getAll("item_id_source")).toEqual(["from_listing"]);
+    expect(purchaseBoardItemIdSourceOptions).toContainEqual({
+      value: "from_listing",
+      label: "已归属（按货件）",
+    });
+    expect(itemIdSourceLabels.from_listing).toBe("按货件");
+  });
 });
 
 describe("purchaseBoardApi mapping", () => {
@@ -143,7 +160,7 @@ describe("purchaseBoardApi mapping", () => {
 
   it("maps board rows, decimal strings and envelope meta", async () => {
     fetchMock.mockResolvedValue(envelope(
-      { items: [backendRow], total: 1 },
+      { items: [{ ...backendRow, item_id: { ...backendRow.item_id, source: "from_listing" } }], total: 1 },
       { source: "new_system_postgresql", source_objects: ["dws_purchase_board"], freshness_at: "2026-09-23T03:00:00Z", rule_version: 1, total: 1 },
     ));
     const result = await listPurchaseBoard(createInitialPurchaseBoardFilters(), 1, 50);
@@ -154,6 +171,7 @@ describe("purchaseBoardApi mapping", () => {
     expect(row.id).toBe("PO1::L1::P1");
     expect(row.stage.overdueKind).toBe("arrival");
     expect(row.itemId.itemId).toBe("19051502014");
+    expect(row.itemId.source).toBe("from_listing");
     expect(row.skuCycle).toEqual({ valueDays: 12, source: "samples", sampleCount: 5, unstable: true });
     expect(row.unitPrice).toBe(5);
     expect(row.amountAllocated).toBe(500);

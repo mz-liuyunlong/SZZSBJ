@@ -18,6 +18,22 @@ def test_product_and_listing_pages_have_distinct_permissions() -> None:
         permission_for_request("GET", "/api/listings/walmart", "products:read")
         == "page:products:listing-management:view"
     )
+    assert (
+        permission_for_request("GET", "/api/products/skus", "products:read")
+        == "page:products:product-management:view"
+    )
+
+
+def test_product_detail_actions_use_canonical_permissions() -> None:
+    product_id = "00000000-0000-0000-0000-000000000001"
+    assert (
+        permission_for_request(
+            "GET",
+            f"/api/products/skus/{product_id}/raw-lineage",
+            "products:raw_lineage:read",
+        )
+        == "action:products:product-management:view-raw-lineage"
+    )
 
 
 def test_daily_sales_and_order_profit_have_distinct_permissions() -> None:
@@ -39,6 +55,22 @@ def test_page_action_permissions_are_specific_to_page() -> None:
     assert (
         permission_for_request("GET", "/api/product-management/skus/export", "products:read")
         == "action:products:product-management:export"
+    )
+    assert (
+        permission_for_request(
+            "PUT",
+            "/api/product-management/pricing-rules",
+            "products:pricing_rules:update",
+        )
+        == "action:products:product-management:update-pricing-rules"
+    )
+    assert (
+        permission_for_request(
+            "POST",
+            "/api/business-rules/store-commissions/deactivate",
+            "business-rules:write",
+        )
+        == "action:settings:fee-rules:edit"
     )
 
 
@@ -67,6 +99,49 @@ def test_wfs_case_actions_are_bound_to_their_page_actions() -> None:
             "warehouse:wfs-fee-alert:sync",
         )
         == "action:warehouse:wfs-fee-alert:sync-legacy"
+    )
+
+
+def test_method_specific_writes_are_not_reduced_to_page_view() -> None:
+    assert (
+        permission_for_request(
+            "POST",
+            "/api/pmc/purchase/sku-cycles/SKU-1/overrides",
+            "pmc:purchase:override",
+        )
+        == "action:pmc:purchase-board:override"
+    )
+    assert (
+        permission_for_request(
+            "POST",
+            "/api/operations/plans/products/00000000-0000-0000-0000-000000000001/clearance",
+            "operations:plan:write",
+        )
+        == "action:operations:plan:edit"
+    )
+
+
+def test_approval_routes_separate_page_request_and_review_permissions() -> None:
+    approval_id = "00000000-0000-0000-0000-000000000001"
+    assert (
+        permission_for_request("GET", "/api/approvals", "approvals:workbench:read")
+        == "page:data-center:approval-workspace:view"
+    )
+    assert (
+        permission_for_request(
+            "POST",
+            f"/api/approvals/{approval_id}/decision",
+            "page:data-center:approval-workspace:view",
+        )
+        == "action:warehouse:wfs-fee-alert:archive-review"
+    )
+    assert (
+        permission_for_request(
+            "POST",
+            f"/api/approvals/{approval_id}/supplement",
+            "page:data-center:approval-workspace:view",
+        )
+        == "action:warehouse:wfs-fee-alert:archive-request"
     )
 
 

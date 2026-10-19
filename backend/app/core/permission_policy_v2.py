@@ -19,6 +19,17 @@ class RequestPermissionRule:
 _RULES: tuple[RequestPermissionRule, ...] = (
     RequestPermissionRule(
         "GET",
+        "/api/products/skus",
+        "page:products:product-management:view",
+        True,
+    ),
+    RequestPermissionRule(
+        "GET",
+        "/api/products/skus/",
+        "page:products:product-management:view",
+    ),
+    RequestPermissionRule(
+        "GET",
         "/api/product-management/skus/export",
         "action:products:product-management:export",
         True,
@@ -33,6 +44,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "POST",
         "/api/product-management/skus/recalculate-pricing",
         "action:products:product-management:recalculate-pricing",
+        True,
+    ),
+    RequestPermissionRule(
+        "PUT",
+        "/api/product-management/pricing-rules",
+        "action:products:product-management:update-pricing-rules",
         True,
     ),
     RequestPermissionRule(
@@ -140,7 +157,17 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "action:warehouse:wfs-fee-alert:follow",
     ),
     RequestPermissionRule(None, "/api/warehouse/wfs", "page:warehouse:wfs-fee-alert:view"),
+    RequestPermissionRule(
+        "POST",
+        "/api/pmc/purchase/sku-cycles/",
+        "action:pmc:purchase-board:override",
+    ),
     RequestPermissionRule(None, "/api/pmc/purchase", "page:pmc:purchase-board:view"),
+    RequestPermissionRule(
+        "POST",
+        "/api/operations/plans/products/",
+        "action:operations:plan:edit",
+    ),
     RequestPermissionRule(
         "POST",
         "/api/operations/plans/import",
@@ -183,6 +210,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
     ),
     RequestPermissionRule(
         "POST",
+        "/api/business-rules/store-commissions/deactivate",
+        "action:settings:fee-rules:edit",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
         "/api/business-rules/store-commissions",
         "action:settings:fee-rules:edit",
         True,
@@ -198,6 +231,28 @@ _RULES: tuple[RequestPermissionRule, ...] = (
 
 def permission_for_request(method: str, path: str, declared_permission: str) -> str:
     normalized_method = method.upper()
+    if normalized_method == "GET" and path.startswith("/api/products/skus/"):
+        suffix_permissions = {
+            "/cost-history": "field:products:product-management:purchase-cost",
+            "/sync-history": "action:products:product-management:view-sync-history",
+            "/raw-lineage": "action:products:product-management:view-raw-lineage",
+            "/operation-logs": "action:products:product-management:view-operation-logs",
+        }
+        for suffix, permission_key in suffix_permissions.items():
+            if path.endswith(suffix):
+                return permission_key
+    if path == "/api/approvals" or path == "/api/approvals/summary":
+        return "page:data-center:approval-workspace:view"
+    if path.startswith("/api/approvals/"):
+        if normalized_method == "POST" and path.endswith("/decision"):
+            return "action:warehouse:wfs-fee-alert:archive-review"
+        if normalized_method == "POST" and path.endswith("/supplement"):
+            return "action:warehouse:wfs-fee-alert:archive-request"
+        if normalized_method == "POST" and "/wfs-cases/" in path:
+            return "action:warehouse:wfs-fee-alert:archive-request"
+        if normalized_method == "GET":
+            return "page:data-center:approval-workspace:view"
+
     if normalized_method == "POST" and path.startswith("/api/warehouse/wfs-fee-cases/"):
         if path.endswith("/follow"):
             return "action:warehouse:wfs-fee-alert:follow"

@@ -14,13 +14,14 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.registry import PMC_PURCHASE_API_REGISTRY
 from app.modules.pmc_purchase.schemas import (
     BoardListData,
     BoardRowRead,
     BoardSummaryData,
     ItemIdRef,
+    ItemIdSourceFilter,
     OwnerRef,
     PendingPlanListData,
     SkuCycleBrief,
@@ -30,7 +31,7 @@ from app.modules.pmc_purchase.schemas import (
 )
 from app.modules.pmc_purchase.service import PmcPurchaseReadService
 
-READ = "pmc:purchase:read"
+READ = "page:pmc:purchase-board:view"
 NOW = datetime(2026, 9, 23, 3, 0, tzinfo=UTC)
 ROUTES = [entry.route_path for entry in PMC_PURCHASE_API_REGISTRY.values()]
 
@@ -41,11 +42,9 @@ def _app(*permissions: str, scoped: bool = True) -> FastAPI:
         user_id="synthetic-user", permissions=frozenset(permissions)
     )
     if scoped:
-        application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-            lambda _principal: frozenset({"synthetic-account"})
+        application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+            {"synthetic-account"}
         )
-    else:
-        application.dependency_overrides[get_source_account_scope_provider] = lambda: None
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application
 
@@ -58,7 +57,7 @@ def _envelope(response: Any, status: int = 200) -> dict[str, Any]:
     return body
 
 
-def _row() -> BoardRowRead:
+def _row(item_id_source: ItemIdSourceFilter = "from_plan_remark") -> BoardRowRead:
     return BoardRowRead(
         purchase_order_sn="PO1",
         order_item_id="L1",
@@ -80,7 +79,7 @@ def _row() -> BoardRowRead:
         product_name="Widget",
         item_id=ItemIdRef(
             item_id="19051502014",
-            source="from_plan_remark",
+            source=item_id_source,
             source_ref="P1",
             matched_at=NOW,
             match_status="matched",
@@ -148,7 +147,15 @@ def test_board_list_returns_envelope_meta_and_validates_params(monkeypatch: Any)
         assert accounts == frozenset({"synthetic-account"})
         assert query.normalized_search_values() == ["SKU-A", "SKU-B"]
         assert query.status == ["s3", "overdue"]
-        return BoardListData(items=[_row()], total=1), 1, NOW, 1
+        assert query.item_id_source == [
+            "from_system_plan",
+            "from_plan_remark",
+            "from_listing",
+            "from_packing_slip",
+            "pending_packing_slip",
+            "unresolved",
+        ]
+        return BoardListData(items=[_row("from_listing")], total=1), 1, NOW, 1
 
     monkeypatch.setattr(PmcPurchaseReadService, "list_board", fake_list)
     client = TestClient(_app(READ))
@@ -159,6 +166,14 @@ def test_board_list_returns_envelope_meta_and_validates_params(monkeypatch: Any)
                 "search_type": "sku",
                 "search_values": ["SKU-A, SKU-B", "SKU-A"],
                 "status": ["s3", "overdue"],
+                "item_id_source": [
+                    "from_system_plan",
+                    "from_plan_remark",
+                    "from_listing",
+                    "from_packing_slip",
+                    "pending_packing_slip",
+                    "unresolved",
+                ],
                 "page_size": 50,
             },
         )
@@ -167,7 +182,7 @@ def test_board_list_returns_envelope_meta_and_validates_params(monkeypatch: Any)
     assert item["purchase_order_sn"] == "PO1"
     assert item["stage"]["overdue_kind"] == "arrival"
     assert item["amount_allocated"] == "500.0000"  # money as string
-    assert item["item_id"]["source"] == "from_plan_remark"
+    assert item["item_id"]["source"] == "from_listing"
     assert body["meta"] == {
         "source": "new_system_postgresql",
         "source_objects": ["dws_purchase_board"],

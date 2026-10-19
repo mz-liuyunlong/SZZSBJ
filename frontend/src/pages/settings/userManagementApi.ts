@@ -7,6 +7,8 @@ import {
   type UserRoleName,
   type UserRoleOption,
 } from "@/pages/settings/userManagementTypes";
+import type { RoleDataScopeEntry } from "@/pages/settings/roleManagementTypes";
+import type { EffectiveUserDataScopeEntry } from "@/pages/settings/components/UserDataScopeModal";
 
 interface BackendUser {
   id: number;
@@ -52,6 +54,43 @@ interface BackendRoleOption {
   description: string | null;
   is_system: boolean;
   assignable: boolean;
+}
+
+interface BackendDataScopeEntry {
+  scope_type: RoleDataScopeEntry["scopeType"];
+  scope_value: string;
+}
+
+interface BackendEffectiveDataScopeEntry extends BackendDataScopeEntry {
+  source: "user" | "role";
+}
+
+interface BackendUserDataScope {
+  user_id: number;
+  items: BackendDataScopeEntry[];
+  role_items: BackendDataScopeEntry[];
+  effective_items: BackendEffectiveDataScopeEntry[];
+}
+
+export interface UserDataScopeState {
+  items: RoleDataScopeEntry[];
+  roleItems: RoleDataScopeEntry[];
+  effectiveItems: EffectiveUserDataScopeEntry[];
+}
+
+function toScopeEntry(item: BackendDataScopeEntry): RoleDataScopeEntry {
+  return { scopeType: item.scope_type, scopeValue: item.scope_value };
+}
+
+function toUserDataScopeState(data: BackendUserDataScope): UserDataScopeState {
+  return {
+    items: data.items.map(toScopeEntry),
+    roleItems: data.role_items.map(toScopeEntry),
+    effectiveItems: data.effective_items.map((item) => ({
+      ...toScopeEntry(item),
+      source: item.source,
+    })),
+  };
 }
 
 function optionalString(value: string | undefined): string | undefined {
@@ -204,7 +243,6 @@ export async function updateUser(
       feishu_department_ids: values.feishuDepartmentIds?.length
         ? values.feishuDepartmentIds
         : undefined,
-      is_active: values.status === "启用",
     }),
   });
 }
@@ -240,4 +278,26 @@ export async function deleteUserPermanently(userId: string): Promise<void> {
   await backendRequest<BackendUser>(`/api/settings/users/${userId}`, {
     method: "DELETE",
   });
+}
+
+export async function loadUserDataScopes(userId: string): Promise<UserDataScopeState> {
+  const response = await backendRequest<BackendUserDataScope>(
+    `/api/settings/rbac/users/${userId}/data-scopes`,
+  );
+  return toUserDataScopeState(response.data);
+}
+
+export async function saveUserDataScopes(
+  userId: string,
+  items: RoleDataScopeEntry[],
+): Promise<UserDataScopeState> {
+  const normalized = items.flatMap((item) => {
+    const scopeValue = item.scopeValue.trim();
+    return scopeValue ? [{ scope_type: item.scopeType, scope_value: scopeValue }] : [];
+  });
+  const response = await backendRequest<BackendUserDataScope>(
+    `/api/settings/rbac/users/${userId}/data-scopes`,
+    { method: "PUT", body: JSON.stringify({ items: normalized }) },
+  );
+  return toUserDataScopeState(response.data);
 }

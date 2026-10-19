@@ -5,8 +5,14 @@ import { decideApproval, fetchApprovalDetail, supplementApproval } from "../appr
 import { statusNames } from "../approvalTypes";
 import { WfsCaseApprovalDetail } from "./WfsCaseApprovalDetail";
 
-interface Props { selected?: ApprovalItem; onClose(): void; onUpdated(): void }
-export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: Props) {
+interface Props {
+ selected?: ApprovalItem;
+ canReview: boolean;
+ canSupplement: boolean;
+ onClose(): void;
+ onUpdated(): void;
+}
+export default function ApprovalDetailDrawer({ selected, canReview, canSupplement, onClose, onUpdated }: Props) {
  const [detail, setDetail] = useState<ApprovalDetail>();
  const [loading, setLoading] = useState(false);
  const [saving, setSaving] = useState(false);
@@ -45,14 +51,14 @@ export default function ApprovalDetailDrawer({ selected, onClose, onUpdated }: P
   } finally { setSaving(false); }
  };
  const shown = detail?.id === selected?.id ? detail : undefined;
- const mayApprove = shown?.can_review && !shown.data_changed && shown.status === "submitted";
+ const mayApprove = canReview && shown?.can_review && !shown.data_changed && shown.status === "submitted";
  return <>
   {holder}
   <Drawer title={selected?.title || "审批详情"} open={!!selected} width={1020}
    destroyOnHidden onClose={onClose}
    footer={shown ? <Space style={{ display: "flex", justifyContent: "flex-end" }}>
     <Button onClick={onClose}>关闭</Button>
-    {shown.can_supplement &&
+    {canSupplement && shown.can_supplement &&
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>补充资料后重新提交</Button>}
     {mayApprove && shown.approval_type === "wfs_case_abandon" && <>
      <Button onClick={() => { setDecision("info_required"); setNote(""); }}>要求补资料</Button>

@@ -10,6 +10,9 @@ import type { NavigationPage } from "@/config/navigation";
 import { fetchCurrentUser } from "@/pages/auth/authApi";
 import type { AuthUser } from "@/pages/auth/authTypes";
 import UserFormModal from "@/pages/settings/components/UserFormModal";
+import UserDataScopeModal, {
+  type EffectiveUserDataScopeEntry,
+} from "@/pages/settings/components/UserDataScopeModal";
 import UserManagementTable from "@/pages/settings/components/UserManagementTable";
 import UserManagementToolbar from "@/pages/settings/components/UserManagementToolbar";
 import UserRoleModal from "@/pages/settings/components/UserRoleModal";
@@ -17,7 +20,9 @@ import {
   createUser,
   deleteUserPermanently,
   loadUserManagementData,
+  loadUserDataScopes,
   resetUserPassword,
+  saveUserDataScopes,
   updateUser,
   updateUserRoles,
   updateUserStatus,
@@ -30,6 +35,7 @@ import {
   type UserRoleName,
   type UserRoleOption,
 } from "@/pages/settings/userManagementTypes";
+import type { RoleDataScopeEntry } from "@/pages/settings/roleManagementTypes";
 import { hasPermission } from "@/shared/permissions/mockAccess";
 import "@/pages/settings/UserManagementPage.css";
 
@@ -59,6 +65,11 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserManagementRow>();
   const [roleUser, setRoleUser] = useState<UserManagementRow>();
+  const [dataScopeUser, setDataScopeUser] = useState<UserManagementRow>();
+  const [dataScopeItems, setDataScopeItems] = useState<RoleDataScopeEntry[]>([]);
+  const [effectiveDataScopeItems, setEffectiveDataScopeItems] = useState<EffectiveUserDataScopeEntry[]>([]);
+  const [dataScopeLoading, setDataScopeLoading] = useState(false);
+  const [dataScopeSaving, setDataScopeSaving] = useState(false);
 
   const canCreate = permitted(
     currentUser,
@@ -94,6 +105,10 @@ function UserManagementPage({ page }: UserManagementPageProps) {
     "field:settings:user-management:email",
   );
   const canHardDelete = Boolean(currentUser?.isSuperAdmin);
+  const canConfigureDataScope = permitted(
+    currentUser,
+    "action:settings:user-management:configure-data-scope",
+  );
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -178,6 +193,9 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       if (editingUser) {
         if (!canEdit || isProtectedTarget(editingUser)) return;
         await updateUser(editingUser.id, values);
+        if (canEnableDisable && editingUser.status !== values.status) {
+          await updateUserStatus(editingUser.id, values.status === "启用");
+        }
         if (canAssignRole && !editingUser.isSuperAdmin) {
           await updateUserRoles(editingUser.id, values.roles, roleOptions);
         }
@@ -209,6 +227,53 @@ function UserManagementPage({ page }: UserManagementPageProps) {
     } catch {
       void messageApi.error("角色更新失败");
     }
+  };
+
+  const openDataScopeModal = async (user: UserManagementRow) => {
+    if (!canConfigureDataScope || user.isSuperAdmin || user.id === currentUserId) return;
+    setDataScopeUser(user);
+    setDataScopeLoading(true);
+    try {
+      const state = await loadUserDataScopes(user.id);
+      setDataScopeItems(state.items);
+      setEffectiveDataScopeItems(state.effectiveItems);
+    } catch {
+      setDataScopeUser(undefined);
+      void messageApi.error("用户数据范围加载失败");
+    } finally {
+      setDataScopeLoading(false);
+    }
+  };
+
+  const persistDataScopes = async () => {
+    if (!dataScopeUser || !canConfigureDataScope) return;
+    setDataScopeSaving(true);
+    try {
+      const state = await saveUserDataScopes(dataScopeUser.id, dataScopeItems);
+      setDataScopeItems(state.items);
+      setEffectiveDataScopeItems(state.effectiveItems);
+      setDataScopeUser(undefined);
+      void messageApi.success("用户数据范围已更新");
+    } catch {
+      void messageApi.error("保存失败；不能授予超出当前账号的数据范围");
+    } finally {
+      setDataScopeSaving(false);
+    }
+  };
+
+  const saveDataScopes = () => {
+    if (dataScopeItems.some((item) => item.scopeValue.trim() === "*")) {
+      Modal.confirm({
+        title: "确认授予全部数据范围？",
+        content: "用户级通配符会覆盖同类型角色范围；后端仅允许超级管理员保存。",
+        okText: "确认保存",
+        cancelText: "取消",
+        okButtonProps: { danger: true },
+        onOk: persistDataScopes,
+      });
+      return;
+    }
+    void persistDataScopes();
   };
 
   const confirmAction = (title: string, content: string, onOk: () => Promise<void>) => {
@@ -345,6 +410,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
                 canResetPassword={canResetPassword}
                 canEnableDisable={canEnableDisable}
                 canHardDelete={canHardDelete}
+                canConfigureDataScope={canConfigureDataScope}
                 onColumnWidthChange={(key, width) => setColumnWidths((current) => ({
                   ...current,
                   [key]: width,
@@ -357,6 +423,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
                 onSelectionChange={setSelectedRowKeys}
                 onEdit={openEditModal}
                 onSetRole={setRoleUser}
+                onSetDataScope={(user) => void openDataScopeModal(user)}
                 onResetPassword={resetPassword}
                 onToggleStatus={toggleStatus}
                 onDelete={deleteUser}
@@ -372,6 +439,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
         editingUser={editingUser}
         roleOptions={roleOptions}
         canAssignRoles={canAssignRole}
+        canEnableDisable={canEnableDisable}
         canViewPhone={canViewPhone}
         canViewEmail={canViewEmail}
         onCancel={() => {
@@ -385,6 +453,16 @@ function UserManagementPage({ page }: UserManagementPageProps) {
         roleOptions={roleOptions}
         onCancel={() => setRoleUser(undefined)}
         onSubmit={(userId, roles) => void saveRoles(userId, roles)}
+      />
+      <UserDataScopeModal
+        user={dataScopeUser}
+        items={dataScopeItems}
+        effectiveItems={effectiveDataScopeItems}
+        loading={dataScopeLoading}
+        saving={dataScopeSaving}
+        onChange={setDataScopeItems}
+        onCancel={() => setDataScopeUser(undefined)}
+        onSubmit={saveDataScopes}
       />
     </PageShell>
   );
