@@ -157,7 +157,9 @@ class IamService:
         user_id = int(principal.user_id)
         row = self._user_row_or_404(user_id)
         user = to_user_read(row)
-        permissions = sorted(self.repository.user_permission_keys(user_id))
+        # The principal is resolved from the database for this request. Reuse that
+        # snapshot instead of repeating the user and permission queries in /auth/me.
+        permissions = sorted(principal.permissions)
         return CurrentUserRead(**user.model_dump(), permissions=permissions)
 
     def logout(self, access_token: str) -> None:
@@ -375,7 +377,9 @@ class IamService:
                 "Feishu offboarding notice failed after local account deactivation.",
                 extra={
                     "user_id": user.get("id"),
-                    "reason": str(exc)[:200],
+                    "reason_code": exc.reason_code,
+                    "http_status": exc.http_status,
+                    "provider_code": exc.provider_code,
                 },
             )
 
@@ -399,10 +403,9 @@ class IamService:
         )
 
     def _user_row_or_404(self, user_id: int) -> Mapping[str, Any]:
-        rows = self.repository.list_users()
-        for row in rows:
-            if int(row["id"]) == user_id:
-                return row
+        row = self.repository.get_user_read_by_id(user_id)
+        if row is not None:
+            return row
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
     def _role_or_404(self, role_key: str) -> RoleRead:
@@ -417,11 +420,11 @@ def resolve_principal_from_token(access_token: str) -> Principal | None:
     session = session_factory()
     try:
         repository = IamRepository(session)
-        session_user = repository.get_session_user(token_hash(access_token))
-        if session_user is None:
+        session_principal = repository.get_session_principal(token_hash(access_token))
+        if session_principal is None:
             return None
-        user_id = int(session_user["id"])
-        permissions = repository.user_permission_keys(user_id)
-        return Principal(user_id=str(user_id), permissions=frozenset(permissions))
+        user_id = int(session_principal["id"])
+        permissions = frozenset(str(key) for key in session_principal["permission_keys"])
+        return Principal(user_id=str(user_id), permissions=permissions)
     finally:
         session.close()

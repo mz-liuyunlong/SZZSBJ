@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.products.dependencies import require_product_scope
@@ -28,6 +28,8 @@ from app.modules.sku_detail.schemas import (
 from app.modules.sku_detail.service import SkuDetailService
 
 router = APIRouter(prefix="/api/products/skus", tags=["Lingxing SKU Detail"])
+
+PURCHASE_COST_PERMISSION = "field:products:product-management:purchase-cost"
 
 db_session = Annotated[Session, Depends(get_db_session)]
 source_scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
@@ -115,9 +117,9 @@ def get_sku_detail(
     data = SkuDetailService(session).get_detail(
         sku_id,
         account_refs,
-        include_costs="products:cost:read" in principal.permissions,
+        include_costs=has_permission(principal, PURCHASE_COST_PERMISSION),
     )
-    if "products:cost:read" in principal.permissions:
+    if has_permission(principal, PURCHASE_COST_PERMISSION):
         audit_logger.info(
             "sku_cost_accessed actor_ref=%s request_id=%s sku_id=%s access_type=detail",
             principal.user_id,
@@ -238,7 +240,7 @@ def get_sku_cost_history(
     sku_id: UUID,
     query: Annotated[SkuPageQuery, Query()],
     session: db_session,
-    principal: Annotated[Principal, Depends(require_permission("products:cost:read"))],
+    principal: Annotated[Principal, Depends(require_permission(PURCHASE_COST_PERMISSION))],
     account_refs: source_scope,
 ) -> SuccessEnvelope[SkuCostHistoryData, SkuReadMeta]:
     data, total = SkuDetailService(session).cost_history(sku_id, query, account_refs)

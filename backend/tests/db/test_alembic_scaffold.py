@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261016_0041_wfs_rbac_actions"
+EXPECTED_HEAD_REVISION = "20261019_0046_operation_logs"
 
 
 @pytest.fixture(autouse=True)
@@ -70,6 +70,26 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         script.get_revision("20261016_0041_wfs_rbac_actions").down_revision
         == "20261016_0040_restrict_default_data_scopes"
     )
+    assert (
+        script.get_revision("20261017_0042_rbac_backfill").down_revision
+        == "20261016_0041_wfs_rbac_actions"
+    )
+    assert (
+        script.get_revision("20261017_0043_purchase_board_listing_item_source").down_revision
+        == "20261017_0042_rbac_backfill"
+    )
+    assert (
+        script.get_revision("20261019_0044_approval_flow").down_revision
+        == "20261017_0043_purchase_board_listing_item_source"
+    )
+    assert (
+        script.get_revision("20261019_0045_approval_scope").down_revision
+        == "20261019_0044_approval_flow"
+    )
+    assert (
+        script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261019_0045_approval_scope"
+    )
+    assert len(EXPECTED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -104,7 +124,20 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261016_0039_retire_legacy_rbac_permissions.py",
         "20261016_0040_restrict_default_data_scopes.py",
         "20261016_0041_wfs_rbac_actions.py",
+        "20261017_0042_approval_rbac_backfill.py",
+        "20261017_0043_purchase_board_listing_item_source.py",
+        "20261019_0044_approval_flow.py",
+        "20261019_0045_approval_scope.py",
+        "20261019_0046_operation_logs.py",
     } <= revisions
+
+    rbac_revision = (
+        BACKEND_ROOT / "alembic" / "versions" / "20261017_0042_approval_rbac_backfill.py"
+    ).read_text()
+    assert 'revision: str = "20261017_0042_rbac_backfill"' in rbac_revision
+    assert '"source_account_refs_json"' in rbac_revision
+    assert '"field:sales:order-profit:gross-profit"' in rbac_revision
+    assert '"field:sales:order-profit:profit-margin"' in rbac_revision
 
     revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20260910_0002_add_raw_lingxing_api.py"

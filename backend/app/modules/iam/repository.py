@@ -116,6 +116,51 @@ class IamRepository:
             ).mappings()
         )
 
+    def get_user_read_by_id(self, user_id: int) -> Mapping[str, Any] | None:
+        """Return one user with role display data without loading the user directory."""
+        return (
+            self.session.execute(
+                text(
+                    """
+                    select
+                        u.id,
+                        u.username,
+                        u.display_name,
+                        u.phone,
+                        u.email,
+                        u.feishu_name,
+                        u.feishu_open_id,
+                        u.feishu_user_id,
+                        u.feishu_union_id,
+                        u.feishu_employee_id,
+                        u.feishu_department_ids,
+                        u.feishu_last_synced_at,
+                        u.is_active,
+                        u.is_super_admin,
+                        u.created_at,
+                        u.updated_at,
+                        u.last_login_at,
+                        coalesce(
+                            array_remove(array_agg(r.role_key order by r.name), null),
+                            '{}'::varchar[]
+                        ) as role_keys,
+                        coalesce(
+                            array_remove(array_agg(r.name order by r.name), null),
+                            '{}'::varchar[]
+                        ) as role_names
+                    from app_users u
+                    left join app_user_roles ur on ur.user_id = u.id
+                    left join app_roles r on r.id = ur.role_id
+                    where u.id = :user_id
+                    group by u.id
+                    """
+                ),
+                {"user_id": user_id},
+            )
+            .mappings()
+            .one_or_none()
+        )
+
     def list_roles(self) -> list[Mapping[str, Any]]:
         return list(
             self.session.execute(
@@ -158,29 +203,6 @@ class IamRepository:
             ).mappings()
         )
 
-    def user_permission_keys(self, user_id: int) -> set[str]:
-        user = self.get_user_by_id(user_id)
-        if user is None or int(user["is_active"]) != 1:
-            return set()
-        if int(user.get("is_super_admin") or 0) == 1:
-            return {"*"}
-        rows = (
-            self.session.execute(
-                text(
-                    """
-                select distinct rp.permission_key
-                from app_user_roles ur
-                join app_role_permissions rp on rp.role_id = ur.role_id
-                where ur.user_id = :user_id
-                """
-                ),
-                {"user_id": user_id},
-            )
-            .scalars()
-            .all()
-        )
-        return {str(row) for row in rows}
-
     def create_session(self, *, user_id: int, token_hash: str, expires_at: datetime) -> None:
         self.session.execute(
             text(
@@ -201,18 +223,33 @@ class IamRepository:
             },
         )
 
-    def get_session_user(self, token_hash: str) -> Mapping[str, Any] | None:
+    def get_session_principal(self, token_hash: str) -> Mapping[str, Any] | None:
+        """Resolve one active session and its current permissions in one database round trip."""
         return (
             self.session.execute(
                 text(
                     """
-                select u.id
+                select
+                    u.id,
+                    case
+                        when u.is_super_admin = 1 then array['*']::varchar[]
+                        else coalesce(
+                            array_remove(
+                                array_agg(distinct rp.permission_key order by rp.permission_key),
+                                null
+                            ),
+                            '{}'::varchar[]
+                        )
+                    end as permission_keys
                 from app_sessions s
                 join app_users u on u.id = s.user_id
+                left join app_user_roles ur on ur.user_id = u.id
+                left join app_role_permissions rp on rp.role_id = ur.role_id
                 where s.token_hash = :token_hash
                   and s.revoked_at is null
                   and s.expires_at > now()
                   and u.is_active = 1
+                group by u.id, u.is_super_admin
                 """
                 ),
                 {"token_hash": token_hash},

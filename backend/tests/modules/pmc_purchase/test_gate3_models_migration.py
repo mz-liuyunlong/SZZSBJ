@@ -23,6 +23,8 @@ from app.modules.pmc_purchase.calculations import PurchaseThresholds
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
 REVISION = "20260922_0017"
 PREVIOUS = "20260921_0013_business_rule_operation_logs"
+COMPAT_REVISION = "20261017_0043_purchase_board_listing_item_source"
+COMPAT_PREVIOUS = "20261017_0042_rbac_backfill"
 EXPECTED_TABLES = {
     "dwd_purchase_plan",
     "dwd_purchase_order",
@@ -72,6 +74,14 @@ def _render_upgrade_sql() -> str:
     return buffer.getvalue()
 
 
+def _render_0043_upgrade_sql() -> str:
+    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    buffer = io.StringIO()
+    config.output_buffer = buffer
+    command.upgrade(config, f"{COMPAT_PREVIOUS}:{COMPAT_REVISION}", sql=True)
+    return buffer.getvalue()
+
+
 def _parse_create_tables(sql: str) -> dict[str, set[str]]:
     tables: dict[str, set[str]] = {}
     for match in re.finditer(r"CREATE TABLE (\w+) \((.*?)\n\);", sql, re.S):
@@ -98,6 +108,12 @@ def test_metadata_declares_exactly_the_eight_gate3_tables() -> None:
         assert DWD_SOURCE_COLUMNS <= set(Base.metadata.tables[table].columns.keys()), table
     for table in ("dws_purchase_board", "dws_purchase_sku_cycle", "dws_purchase_pending"):
         assert DWS_CALC_COLUMNS <= set(Base.metadata.tables[table].columns.keys()), table
+    source_constraint = next(
+        constraint
+        for constraint in Base.metadata.tables["dws_purchase_board"].constraints
+        if constraint.name == "item_id_source"
+    )
+    assert "'from_listing'" in str(source_constraint.sqltext)
 
 
 def test_migration_matches_orm_metadata() -> None:
@@ -117,6 +133,19 @@ def test_migration_matches_orm_metadata() -> None:
     upgrade_body = sql.split("-- Running upgrade")[-1]
     assert "DROP TABLE" not in upgrade_body.upper()
     assert "ALTER TABLE" not in upgrade_body.upper()
+
+
+def test_0043_only_reconciles_the_existing_item_source_constraint() -> None:
+    sql = _render_0043_upgrade_sql()
+    assert sql.count("ALTER TABLE dws_purchase_board DROP CONSTRAINT") == 1
+    assert sql.count("ALTER TABLE dws_purchase_board ADD CONSTRAINT") == 1
+    assert "ck_dws_purchase_board_item_id_source" in sql
+    assert "'from_listing'" in sql
+    assert "CREATE TABLE" not in sql
+    assert "CREATE INDEX" not in sql
+    assert "INSERT INTO" not in sql
+    assert "DELETE FROM" not in sql
+    assert sql.count("UPDATE alembic_version") == 1
 
 
 def test_migration_keys_and_seed_follow_convention() -> None:

@@ -1,0 +1,571 @@
+"""Copy immutable legacy history into formal logs, and store new edits locally.
+
+Source tables are always read-only; this module never connects to old MySQL.
+The only written tables have an ops_ prefix in the *new* PostgreSQL database.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime, timedelta
+from json import dumps
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.core.api import ApiError, ErrorCode
+from app.modules.operation_logs.access import LogAccess, is_current_assignee, require_owned_identity
+
+WRITE_PERMISSION = "action:operations:log:edit"
+WORK_TYPES = frozenset(
+    {"广告调整", "Listing优化", "销售价调整", "无需调整", "系统日志核对", "其他"}
+)
+MAX_BATCH = 200
+
+
+def account_mapping(session: Session) -> tuple[dict[str, str], dict[tuple[str, str], str]]:
+    """Ambiguous store or store/item ownership maps to NULL, never guesses."""
+    store_rows = session.execute(
+        text("""
+        select store_id, source_account_ref
+        from dim_lingxing_stores
+        where platform_code_raw = '10008'
+    """)
+    ).all()
+    item_rows = session.execute(
+        text("""
+        select store_id, item_id, source_account_ref
+        from mart_listing_management_current
+    """)
+    ).all()
+
+    def unique(rows: Any) -> dict[Any, str]:
+        found: dict[Any, set[str]] = {}
+        for *keys, account in rows:
+            key = keys[0] if len(keys) == 1 else tuple(keys)
+            found.setdefault(key, set()).add(str(account))
+        return {key: next(iter(v)) for key, v in found.items() if len(v) == 1}
+
+    return unique(store_rows), unique(item_rows)
+
+
+def _account(
+    mapping: tuple[dict[str, str], dict[tuple[str, str], str]],
+    row: dict[str, Any],
+) -> str | None:
+    stores, items = mapping
+    return items.get((str(row["store_id"]), str(row["item_id"]))) or stores.get(
+        str(row["store_id"])
+    )
+
+
+def _import_batch(
+    session: Session,
+    *,
+    kind: str,
+    rows: list[dict[str, Any]],
+    mapping: tuple[dict[str, str], dict[tuple[str, str], str]],
+) -> int:
+    if kind == "system":
+        data = [
+            {
+                "id": r["id"],
+                "account": _account(mapping, r),
+                "day": r["event_date"],
+                "store": r["store_id"],
+                "item": r["item_id"],
+                "msku": r["msku"],
+                "action": r["action_type"],
+                "object": r["object_name"],
+                "content": r["log_content"],
+                "highlight": bool(r["highlight"]),
+                "verify": r["verify_status"],
+                "updated": r["updated_at"],
+                "detected": r["detected_at"],
+            }
+            for r in rows
+        ]
+        result = session.execute(
+            text("""
+            insert into ops_system_operation_events
+                (legacy_id, source_account_ref, event_date, store_id, item_id, msku,
+                 action_type, object_name, log_content, highlight, verify_status,
+                 source_updated_at, detected_at)
+            values (:id, :account, :day, :store, :item, :msku,
+                    :action, :object, :content, :highlight, :verify,
+                    :updated, :detected)
+            on conflict (legacy_id) do update set
+                source_account_ref = excluded.source_account_ref,
+                event_date = excluded.event_date,
+                store_id = excluded.store_id,
+                item_id = excluded.item_id,
+                msku = excluded.msku,
+                action_type = excluded.action_type,
+                object_name = excluded.object_name,
+                log_content = excluded.log_content,
+                highlight = excluded.highlight,
+                verify_status = excluded.verify_status,
+                source_updated_at = excluded.source_updated_at,
+                detected_at = excluded.detected_at
+            where row(
+                ops_system_operation_events.source_account_ref,
+                ops_system_operation_events.event_date,
+                ops_system_operation_events.store_id,
+                ops_system_operation_events.item_id,
+                ops_system_operation_events.msku,
+                ops_system_operation_events.action_type,
+                ops_system_operation_events.object_name,
+                ops_system_operation_events.log_content,
+                ops_system_operation_events.highlight,
+                ops_system_operation_events.verify_status,
+                ops_system_operation_events.source_updated_at,
+                ops_system_operation_events.detected_at
+            ) is distinct from row(
+                excluded.source_account_ref,
+                excluded.event_date,
+                excluded.store_id,
+                excluded.item_id,
+                excluded.msku,
+                excluded.action_type,
+                excluded.object_name,
+                excluded.log_content,
+                excluded.highlight,
+                excluded.verify_status,
+                excluded.source_updated_at,
+                excluded.detected_at
+            )
+        """),
+            data,
+        )
+    else:
+        data = [
+            {
+                "id": r["id"],
+                "account": _account(mapping, r),
+                "day": r["log_date"],
+                "store": r["store_id"],
+                "item": r["item_id"],
+                "msku": r["msku"],
+                "content": r["log_content"] or "",
+                "updated": r["updated_at"],
+            }
+            for r in rows
+        ]
+        result = session.execute(
+            text("""
+            insert into ops_manual_operation_logs
+                (legacy_id, source_kind, source_account_ref, log_date,
+                 store_id, item_id, msku, log_content, source_updated_at)
+            values (:id, 'legacy', :account, :day,
+                    :store, :item, :msku, :content, :updated)
+            on conflict (legacy_id) do update set
+                source_account_ref = excluded.source_account_ref
+            where ops_manual_operation_logs.source_account_ref is null
+              and excluded.source_account_ref is not null
+        """),
+            data,
+        )
+    return int(result.rowcount or 0)
+
+
+def import_history(
+    session: Session,
+    *,
+    commit: bool = False,
+    batch_size: int = 250,
+    include_manual: bool = True,
+    incremental: bool = False,
+) -> dict[str, int]:
+    """A dry-run by default. Full run includes both source types.
+
+    Ten-minute sync reads new IDs + a seven-day correction window.
+    Daily reconciliation re-reads the whole event mirror for late corrections.
+    """
+    if not 1 <= batch_size <= 1000:
+        raise ValueError("batch_size must be between 1 and 1000")
+    sources = [
+        ("system", "legacy_mirror.event_ops_action_log"),
+    ]
+    if include_manual and not incremental:
+        sources.append(("manual", "legacy_mirror.biz_product_operation_log"))
+    mapping = account_mapping(session)
+    max_id = 0
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=7)
+    if incremental:
+        try:
+            max_id = int(
+                session.scalar(
+                    text("select coalesce(max(legacy_id), 0) from ops_system_operation_events")
+                )
+                or 0
+            )
+        except Exception:
+            session.rollback()
+            raise RuntimeError("Formal event table is missing; deploy migration first") from None
+
+    results = {"system_scanned": 0, "manual_scanned": 0, "unresolved": 0, "affected": 0}
+    for kind, source in sources:
+        last_id = 0
+        while True:
+            condition = " and (id > :max_id or updated_at >= :since)" if incremental else ""
+            rows = (
+                session.execute(
+                    text(
+                        f"select * from {source} where id > :last"
+                        f"{condition} order by id limit :limit"
+                    ),
+                    {"last": last_id, "max_id": max_id, "since": since, "limit": batch_size},
+                )
+                .mappings()
+                .all()
+            )
+            if not rows:
+                break
+            data = [dict(r) for r in rows]
+            results[f"{kind}_scanned"] += len(data)
+            results["unresolved"] += sum(_account(mapping, r) is None for r in data)
+            if commit:
+                try:
+                    results["affected"] += _import_batch(
+                        session, kind=kind, rows=data, mapping=mapping
+                    )
+                    session.commit()
+                except Exception:
+                    session.rollback()
+                    raise
+            last_id = int(data[-1]["id"])
+    return results
+
+
+def _identity(
+    session: Session,
+    *,
+    accounts: frozenset[str],
+    account: str,
+    store: str,
+    item: str,
+    msku: str,
+    day: date | None = None,
+    require_existing: bool = True,
+) -> None:
+    """Enforce the caller's account scope; allow archived historic log reads.
+
+    Writes require a matching current listing, historic daily-sales item, or
+    previously imported event/log, not an arbitrary invented product identity.
+    """
+    if account not in accounts:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    if not require_existing:
+        return
+    found = session.scalar(
+        text("""
+        select 1 from (
+            select 1 from mart_listing_management_current
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and coalesce(msku, '') = :msku
+            union all
+            select 1 from mart_daily_sales_item_day
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and coalesce(msku, '') = :msku
+              and business_date_la = :day
+            union all
+            select 1 from ops_system_operation_events
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and msku = :msku and event_date = :day
+            union all
+            select 1 from ops_manual_operation_logs
+            where source_account_ref = :account and store_id = :store
+              and item_id = :item and msku = :msku and log_date = :day
+        ) known_item limit 1
+    """),
+        {"account": account, "store": store, "item": item, "msku": msku, "day": day},
+    )
+    if not found:
+        raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+
+
+def _log_key(*, account: str, day: date, store: str, item: str, msku: str) -> dict[str, object]:
+    return {"account": account, "day": day, "store": store, "item": item, "msku": msku}
+
+
+def read_detail(
+    session: Session,
+    *,
+    accounts: frozenset[str],
+    account: str,
+    day: date,
+    store: str,
+    item: str,
+    msku: str,
+    access: LogAccess | None = None,
+) -> dict[str, Any]:
+    _identity(
+        session,
+        accounts=accounts,
+        account=account,
+        store=store,
+        item=item,
+        msku=msku,
+        require_existing=False,
+    )
+    key = _log_key(account=account, day=day, store=store, item=item, msku=msku)
+    key["is_admin"] = access.is_admin if access is not None else True
+    key["user_id"] = access.user_id if access is not None else -1
+    key["owns_product"] = (
+        is_current_assignee(
+            session, access, account=account, store=store, item=item, msku=msku, day=day
+        )
+        if access is not None
+        else True
+    )
+    events = (
+        session.execute(
+            text("""
+        select legacy_id, action_type, object_name, log_content,
+               highlight, verify_status, detected_at
+        from ops_system_operation_events
+        where source_account_ref = :account and event_date = :day
+          and store_id = :store and item_id = :item and msku = :msku
+        order by legacy_id
+    """),
+            key,
+        )
+        .mappings()
+        .all()
+    )
+    manuals = (
+        session.execute(
+            text("""
+        select m.id, m.legacy_id, m.source_kind, m.created_by_user_id,
+               coalesce(nullif(u.display_name, ''), u.username, '历史导入') as author_name,
+               m.log_content, m.work_type, m.work_types_json, m.observe_days,
+               m.status, m.revision, m.updated_at
+        from ops_manual_operation_logs m
+        left join app_users u on u.id = m.created_by_user_id
+        where m.source_account_ref = :account and m.log_date = :day
+          and m.store_id = :store and m.item_id = :item and m.msku = :msku
+          and (:is_admin or m.created_by_user_id = :user_id
+               or (m.source_kind = 'legacy' and :owns_product))
+        order by (m.source_kind = 'manual') desc, m.id desc
+    """),
+            key,
+        )
+        .mappings()
+        .all()
+    )
+    # Editing always loads only the logged-in user's record. The administrator
+    # can inspect every other author's entry, but cannot accidentally overwrite
+    # somebody else's text by saving the product-level form.
+    current = next(
+        (
+            m
+            for m in manuals
+            if m["source_kind"] == "manual" and m["created_by_user_id"] == key["user_id"]
+        ),
+        None,
+    )
+    entries = [
+        {
+            "id": str(m["id"]),
+            "sourceKind": m["source_kind"],
+            "createdByUserId": m["created_by_user_id"],
+            "authorName": m["author_name"],
+            "content": m["log_content"],
+            "workType": m["work_type"],
+            "workTypes": list(m["work_types_json"] or []),
+            "observeDays": m["observe_days"],
+            "status": m["status"],
+            "revision": int(m["revision"]),
+            "updatedAt": m["updated_at"].isoformat() if m["updated_at"] else None,
+        }
+        for m in manuals
+    ]
+    return {
+        "system_events": [dict(r) for r in events],
+        "system_operation_log": "\n".join(str(e["log_content"]) for e in events),
+        "system_highlight": any(e["highlight"] for e in events),
+        "operation_log": str(current["log_content"]) if current else "",
+        "work_type": str(current["work_type"]) if current else "其他",
+        "work_types": list(current["work_types_json"] or []) if current else [],
+        "observe_days": current["observe_days"] if current else None,
+        "status": str(current["status"]) if current else "draft",
+        "revision": int(current["revision"]) if current else 0,
+        "manual_entries": entries,
+        "legacy_history": [dict(m) for m in manuals if m["source_kind"] == "legacy"],
+    }
+
+
+def _save_one(
+    session: Session,
+    *,
+    accounts: frozenset[str],
+    account: str,
+    day: date,
+    store: str,
+    item: str,
+    msku: str,
+    content: str,
+    work_type: str,
+    status: str,
+    revision: int,
+    actor: str,
+    work_types: list[str] | None = None,
+    observe_days: int | None = None,
+    access: LogAccess | None = None,
+) -> int:
+    _identity(
+        session,
+        accounts=accounts,
+        account=account,
+        store=store,
+        item=item,
+        msku=msku,
+        day=day,
+    )
+    if access is not None:
+        require_owned_identity(
+            session,
+            access,
+            account=account,
+            store=store,
+            item=item,
+            msku=msku,
+            day=day,
+            allow_own_history=True,
+        )
+    if work_type not in WORK_TYPES or status not in {"draft", "submitted"}:
+        raise ApiError(code="OPERATION_LOG_INVALID_VALUES", status_code=422)
+    if work_types is not None and (
+        len(work_types) > 6 or any(v not in WORK_TYPES for v in work_types)
+    ):
+        raise ApiError(code="OPERATION_LOG_INVALID_WORK_TYPES", status_code=422)
+    if observe_days not in (None, 3, 7, 14):
+        raise ApiError(code="OPERATION_LOG_INVALID_OBSERVE_DAYS", status_code=422)
+    if status == "submitted" and not content.strip():
+        raise ApiError(code="OPERATION_LOG_CONTENT_REQUIRED", status_code=422)
+    params = {
+        **_log_key(account=account, day=day, store=store, item=item, msku=msku),
+        "content": content,
+        "work_type": work_type,
+        "status": status,
+        "revision": revision,
+        "actor": actor,
+        "work_types": dumps(work_types or ([work_type] if work_type else [])),
+        "observe_days": observe_days,
+        "created_by_user_id": access.user_id if access is not None else None,
+    }
+    if revision == 0:
+        statement = """
+            insert into ops_manual_operation_logs
+                (source_kind, source_account_ref, log_date, store_id, item_id,
+                 msku, log_content, work_type, work_types_json,
+                 observe_days, status, actor_ref, created_by_user_id, revision)
+            values ('manual', :account, :day, :store, :item, :msku,
+                    :content, :work_type, cast(:work_types as jsonb),
+                    :observe_days, :status, :actor, :created_by_user_id, 1)
+            on conflict (source_account_ref, log_date, store_id, item_id, msku, created_by_user_id)
+            where source_kind = 'manual' do nothing
+            returning revision
+        """
+    else:
+        statement = """
+            update ops_manual_operation_logs
+            set log_content = :content, work_type = :work_type,
+                work_types_json = cast(:work_types as jsonb),
+                observe_days = :observe_days,
+                status = :status, actor_ref = :actor,
+                revision = revision + 1, updated_at = now()
+            where source_kind = 'manual' and source_account_ref = :account
+              and log_date = :day and store_id = :store and item_id = :item
+              and msku = :msku and created_by_user_id = :created_by_user_id
+              and revision = :revision
+            returning revision
+        """
+    result = session.scalar(text(statement), params)
+    if result is None:
+        raise ApiError(code="OPERATION_LOG_EDIT_CONFLICT", status_code=409)
+    return int(result)
+
+
+def save_batch(
+    session: Session,
+    *,
+    accounts: frozenset[str],
+    rows: list[dict[str, Any]],
+    actor: str,
+    access: LogAccess | None = None,
+) -> list[int]:
+    """All-or-nothing batch; no partial saves on stale revision or scope failure."""
+    if not 1 <= len(rows) <= MAX_BATCH:
+        raise ApiError(code="OPERATION_LOG_BATCH_SIZE", status_code=422)
+    identities = [(r["account"], r["day"], r["store"], r["item"], r["msku"]) for r in rows]
+    if len(set(identities)) != len(identities):
+        raise ApiError(code="OPERATION_LOG_DUPLICATE_ROW", status_code=422)
+    try:
+        revisions = [
+            _save_one(session, accounts=accounts, actor=actor, access=access, **row) for row in rows
+        ]
+        session.commit()
+        return revisions
+    except Exception:
+        session.rollback()
+        raise
+
+
+def save_link(
+    session: Session,
+    *,
+    accounts: frozenset[str],
+    account: str,
+    store: str,
+    item: str,
+    msku: str,
+    entry_type: str,
+    name: str,
+    url: str,
+    note: str,
+    actor: str,
+    access: LogAccess | None = None,
+) -> None:
+    _identity(session, accounts=accounts, account=account, store=store, item=item, msku=msku)
+    if access is not None:
+        require_owned_identity(
+            session,
+            access,
+            account=account,
+            store=store,
+            item=item,
+            msku=msku,
+            day=date.today(),
+            allow_own_history=False,
+        )
+    if entry_type not in {"keyword", "ad"}:
+        raise ApiError(code="OPERATION_LOG_INVALID_LINK", status_code=422)
+    try:
+        session.execute(
+            text("""
+            insert into ops_operation_log_links
+                (source_account_ref, store_id, item_id, entry_type,
+                 entry_name, entry_url, note, actor_ref)
+            values (:account, :store, :item, :entry_type, :name, :url, :note, :actor)
+            on conflict (source_account_ref, store_id, item_id, entry_type)
+            do update set entry_name = excluded.entry_name,
+                          entry_url = excluded.entry_url,
+                          note = excluded.note, actor_ref = excluded.actor_ref,
+                          updated_at = now()
+        """),
+            {
+                "account": account,
+                "store": store,
+                "item": item,
+                "entry_type": entry_type,
+                "name": name,
+                "url": url,
+                "note": note,
+                "actor": actor,
+            },
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise

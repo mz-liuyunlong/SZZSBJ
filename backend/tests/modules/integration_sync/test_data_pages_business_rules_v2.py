@@ -1,5 +1,11 @@
 import inspect
+from datetime import date, datetime
 from decimal import Decimal
+from typing import cast
+from zoneinfo import ZoneInfo
+
+import pytest
+from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_business_rules_v2 import (
     DAILY_SALES_V2_VERSION,
@@ -10,6 +16,66 @@ from app.modules.integration_sync.data_pages_business_rules_v2 import (
     _net_commission_after_refund,
 )
 from app.modules.product_management.daily_sales_costs import DailySalesCostResolution
+
+
+def _integrity_runner() -> DataPagesRealSyncRunner:
+    return DataPagesRealSyncRunner(
+        session=cast(Session, object()),
+        client=None,
+        source_account_ref="synthetic",
+        business_date=date(2026, 10, 16),
+        page_size=20,
+        campaign_type="SP",
+        max_advertisers=1,
+    )
+
+
+def _synthetic_order(total: str, items: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "global_order_no": "order-synthetic",
+        "global_purchase_time": str(
+            int(datetime(2026, 10, 16, 12, tzinfo=ZoneInfo("America/Los_Angeles")).timestamp())
+        ),
+        "store_id": "store-synthetic",
+        "transaction_info": [{"order_total_amount": total}],
+        "item_info": items,
+    }
+
+
+def test_paid_order_missing_line_id_is_failed_not_dropped() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
+
+    row = _synthetic_order("12", [{"quantity": "1"}])
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_ORDER_LINE_IDENTITY_MISSING"):
+        _integrity_runner()._write_orders([row])
+
+
+def test_zero_total_order_missing_line_id_is_quarantined() -> None:
+    runner = _integrity_runner()
+    assert runner._write_orders([_synthetic_order("0", [{"quantity": "1"}])]) == 0
+    assert runner.summary.order_unresolved_rows == 1
+
+
+def test_paid_order_missing_store_is_failed() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
+
+    row = _synthetic_order("12", [{"order_item_no": "one"}])
+    row.pop("store_id")
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_ORDER_STORE_ID_MISSING"):
+        _integrity_runner()._write_orders([row])
+
+
+def test_paid_order_missing_item_list_is_failed() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncError
+
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_ORDER_ITEMS_MISSING"):
+        _integrity_runner()._write_orders([_synthetic_order("12", [])])
+
+
+def test_zero_total_order_missing_items_is_counted() -> None:
+    runner = _integrity_runner()
+    assert runner._write_orders([_synthetic_order("0", [])]) == 0
+    assert runner.summary.order_unresolved_rows == 1
 
 
 def test_money_decimal_accepts_currency_formatted_zero() -> None:
@@ -200,5 +266,20 @@ def test_daily_sales_profit_formula_returns_refunded_commission() -> None:
 
 
 def test_daily_sales_calc_version_fits_persisted_varchar_64() -> None:
-    assert DAILY_SALES_V2_VERSION.endswith("+refund-v3-lpds")
+    assert DAILY_SALES_V2_VERSION.endswith("+sampleguard-v5")
     assert len(DAILY_SALES_V2_VERSION) <= 64
+
+
+def test_order_writer_uses_one_provider_line_identity_for_hash_and_persisted_id() -> None:
+    """Prevent a mismatch when both provider line-number fields exist."""
+    source = inspect.getsource(DataPagesRealSyncRunner._write_orders)
+    assert 'line_id = _field(item, "order_item_no", "global_item_no", "id")' in source
+    assert '"source_order_line_id": line_id' in source
+    assert '"line_id": line_id' in source
+    assert '"store": _field(row, "store_id")' in source
+
+
+def test_sample_mart_only_accepts_verified_sample_version() -> None:
+    source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
+    assert "sample_rule_version=:verified_sample_rule_version" in source
+    assert "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT" in source

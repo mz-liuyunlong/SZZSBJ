@@ -1,5 +1,6 @@
 import { Button, Empty, Input, Popover, Space, Tag } from "antd";
 import type { Key, ReactNode } from "react";
+import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import {
   operationLogColumnFields,
   type OperationLogRow,
@@ -22,8 +23,9 @@ interface OperationLogTableProps {
   onCopy: (text: string) => void;
   onOpenProduct: (row: OperationLogRow) => void;
   onOpenEntryEditor: (row: OperationLogRow, type: "keyword" | "ad") => void;
-  onManualLogChange: (productId: string, value: string) => void;
+  onManualLogChange: (rowId: string, value: string) => void;
   onSaveRow: (row: OperationLogRow) => void;
+  onViewEntries: (row: OperationLogRow) => void;
   onBulkSaveDraft: () => void;
   onSubmitAll: () => void;
   tableActions?: ReactNode;
@@ -51,11 +53,11 @@ const systemLogPopover = (records: OperationLogSystemRecord[]) => (
     ) : records.map((record) => (
       <div className="operation-log__system-card" key={record.id}>
         <div>
-          <Tag color="blue">{record.time}</Tag>
+          <Tag color="blue">检测日 {record.time}</Tag>
           <strong>{record.type}</strong>
-          <span>{record.owner} · {record.source}</span>
+          <span>来源：{record.source} · 操作人未确认</span>
         </div>
-        <p>{record.object}：{record.before} → {record.after}</p>
+        <p>{record.detail}</p>
         <small>{record.detail}</small>
       </div>
     ))}
@@ -92,6 +94,7 @@ function OperationLogTable({
   onOpenEntryEditor,
   onManualLogChange,
   onSaveRow,
+  onViewEntries,
   onBulkSaveDraft,
   onSubmitAll,
   tableActions,
@@ -137,12 +140,20 @@ function OperationLogTable({
               <ShortcutButton
                 label="词"
                 missing={keywordMissing}
-                onClick={() => onOpenEntryEditor(row, "keyword")}
+                onClick={() => {
+                  const url = resolveOperationLogLink(row.keywordUrl);
+                  if (url) window.open(url, "_blank", "noopener,noreferrer");
+                  else onOpenEntryEditor(row, "keyword");
+                }}
               />
               <ShortcutButton
                 label="广"
                 missing={adMissing}
-                onClick={() => onOpenEntryEditor(row, "ad")}
+                onClick={() => {
+                  const url = resolveOperationLogLink(row.adUrl);
+                  if (url) window.open(url, "_blank", "noopener,noreferrer");
+                  else onOpenEntryEditor(row, "ad");
+                }}
               />
             </div>
           </div>
@@ -177,7 +188,7 @@ function OperationLogTable({
       key: "conversionRate",
       title: "转化率",
       width: 86,
-      render: (row) => `${row.conversionRate.toFixed(1)}%`,
+      render: (row) => row.conversionRate === null ? "—" : `${row.conversionRate.toFixed(1)}%`,
     },
     {
       key: "adRatio",
@@ -189,14 +200,14 @@ function OperationLogTable({
       key: "salePrice",
       title: "销售价",
       width: 92,
-      render: (row) => `$${row.salePrice.toFixed(2)}`,
+      render: (row) => row.salePrice === null ? "—" : `${row.salePrice.toFixed(2)}`,
     },
     {
       key: "systemLogs",
       title: "系统日志",
       width: 104,
       render: (row) => {
-        const records = systemRecords.filter((record) => record.productId === row.productId);
+        const records = systemRecords.filter((record) => record.productId === row.productId && record.storeId === row.storeId && record.sourceAccountRef === row.sourceAccountRef && record.date === row.date && record.msku === row.msku);
         return (
           <Popover content={systemLogPopover(records)} title={`${row.productId} 系统日志`} trigger="hover">
             <Tag className="operation-log__system-tag" color={records.length ? "green" : "red"}>
@@ -217,7 +228,7 @@ function OperationLogTable({
           value={row.manualLog}
           rows={2}
           autoSize={{ minRows: 2, maxRows: 3 }}
-          onChange={(event) => onManualLogChange(row.productId, event.target.value)}
+          onChange={(event) => onManualLogChange(row.id, event.target.value)}
         />
       ),
     },
@@ -231,7 +242,7 @@ function OperationLogTable({
       key: "actions",
       title: "操作",
       width: 86,
-      render: (row) => <Button onClick={() => onSaveRow(row)}>保存</Button>,
+      render: (row) => <Space size={4}><Button onClick={() => onSaveRow(row)}>保存</Button><Button type="link" onClick={() => onViewEntries(row)}>查看全部{row.manualEntryCount ? ` (${row.manualEntryCount})` : ""}</Button></Space>,
     },
   ];
 

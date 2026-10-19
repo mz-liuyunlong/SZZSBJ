@@ -141,6 +141,7 @@ def test_resolve_item_id_has_no_manual_parameter() -> None:
     ("source", "fulfillment_type", "expected"),
     [
         ("from_plan_remark", "1", False),
+        ("from_listing", "0", True),
         ("from_packing_slip", "0", True),
         ("from_system_plan", "2", True),
         ("from_packing_slip", 2, True),

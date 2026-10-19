@@ -276,6 +276,7 @@ class OperationPlanService:
             file_sha256=hashlib.sha256(file_bytes).hexdigest(),
             file_size=len(file_bytes),
             conflict_policy=conflict_policy,
+            source_account_refs=account_refs,
             actor_ref=actor_ref,
         )
 
@@ -410,6 +411,7 @@ class OperationPlanService:
                     period_id=period_id,
                     platform_code=platform_code,
                     item_id=item_id,
+                    account_refs=account_refs,
                 )
 
                 if existing_plan is not None and conflict_policy == "skip_existing":
@@ -418,33 +420,39 @@ class OperationPlanService:
                     suggestion = "该商品ID本周期已有计划，已按跳过已有计划处理；如需更新请重新选择覆盖已有计划导入。"
                 elif existing_plan is not None:
                     plan_id = UUID(str(existing_plan["id"]))
-                    self.repository.update_plan_targets(
+                    updated = self.repository.update_plan_targets(
                         plan_id=plan_id,
                         target_sales_amount=sales_amount or Decimal("0"),
                         target_gross_profit_amount=profit_amount or Decimal("0"),
                         remark=parsed.remark or None,
                         actor_ref=actor_ref,
+                        account_refs=account_refs,
                     )
-                    self.repository.insert_event(
-                        event_id=uuid4(),
-                        plan_id=plan_id,
-                        event_type="import_update",
-                        before_data=dict(existing_plan),
-                        after_data={
-                            "item_id": item_id,
-                            "target_sales_amount": str(sales_amount),
-                            "target_gross_profit_amount": str(profit_amount),
-                            "remark": parsed.remark or None,
-                        },
-                        reason=parsed.remark or "导入覆盖已有计划",
-                        actor_ref=actor_ref,
-                        request_id=request_id,
-                    )
-                    import_status = "updated"
-                    suggestion = "已有商品ID计划已按导入文件覆盖目标金额。"
+                    if not updated:
+                        plan_id = None
+                        errors.append("商品计划不存在或无权访问")
+                        error_code = "DATA_SCOPE_DENIED"
+                    else:
+                        self.repository.insert_event(
+                            event_id=uuid4(),
+                            plan_id=plan_id,
+                            event_type="import_update",
+                            before_data=dict(existing_plan),
+                            after_data={
+                                "item_id": item_id,
+                                "target_sales_amount": str(sales_amount),
+                                "target_gross_profit_amount": str(profit_amount),
+                                "remark": parsed.remark or None,
+                            },
+                            reason=parsed.remark or "导入覆盖已有计划",
+                            actor_ref=actor_ref,
+                            request_id=request_id,
+                        )
+                        import_status = "updated"
+                        suggestion = "已有商品ID计划已按导入文件覆盖目标金额。"
                 else:
                     plan_id = uuid4()
-                    self.repository.insert_plan(
+                    inserted = self.repository.insert_plan(
                         plan_id=plan_id,
                         period_id=period_id,
                         listing=listing,
@@ -453,25 +461,31 @@ class OperationPlanService:
                         remark=parsed.remark or None,
                         import_batch_id=batch_id,
                         actor_ref=actor_ref,
+                        account_refs=account_refs,
                     )
-                    self.repository.insert_event(
-                        event_id=uuid4(),
-                        plan_id=plan_id,
-                        event_type="import_create",
-                        before_data=None,
-                        after_data={
-                            "item_id": item_id,
-                            "target_sales_amount": str(sales_amount),
-                            "target_gross_profit_amount": str(profit_amount),
-                            "store_count": str(listing.get("store_count") or 0),
-                            "msku_count": str(listing.get("msku_count") or 0),
-                        },
-                        reason=parsed.remark or "导入创建商品ID计划",
-                        actor_ref=actor_ref,
-                        request_id=request_id,
-                    )
-                    import_status = "success"
-                    suggestion = "已成功导入；同商品ID下多店铺/MSKU已按商品ID合并。"
+                    if not inserted:
+                        plan_id = None
+                        errors.append("商品计划不存在或无权访问")
+                        error_code = "DATA_SCOPE_DENIED"
+                    else:
+                        self.repository.insert_event(
+                            event_id=uuid4(),
+                            plan_id=plan_id,
+                            event_type="import_create",
+                            before_data=None,
+                            after_data={
+                                "item_id": item_id,
+                                "target_sales_amount": str(sales_amount),
+                                "target_gross_profit_amount": str(profit_amount),
+                                "store_count": str(listing.get("store_count") or 0),
+                                "msku_count": str(listing.get("msku_count") or 0),
+                            },
+                            reason=parsed.remark or "导入创建商品ID计划",
+                            actor_ref=actor_ref,
+                            request_id=request_id,
+                        )
+                        import_status = "success"
+                        suggestion = "已成功导入；同商品ID下多店铺/MSKU已按商品ID合并。"
 
         if errors:
             error_message = "；".join(errors)
@@ -523,17 +537,22 @@ class OperationPlanService:
         payload: OperationPlanTargetUpdateRequest,
         actor_ref: str,
         request_id: str | None,
+        account_refs: frozenset[str],
     ) -> OperationPlanProductRow:
-        before = self.repository.get_plan(plan_id)
+        before = self.repository.get_plan(plan_id, account_refs)
         if before is None:
-            raise ValueError("商品计划不存在")
-        self.repository.update_plan_targets(
+            raise ValueError("商品计划不存在或无权访问")
+        updated = self.repository.update_plan_targets(
             plan_id=plan_id,
             target_sales_amount=payload.sales_target_amount,
             target_gross_profit_amount=payload.gross_profit_target_amount,
             remark=payload.reason,
             actor_ref=actor_ref,
+            account_refs=account_refs,
         )
+        if not updated:
+            self.session.rollback()
+            raise ValueError("商品计划不存在或无权访问")
         self.repository.insert_event(
             event_id=uuid4(),
             plan_id=plan_id,
@@ -548,7 +567,7 @@ class OperationPlanService:
             request_id=request_id,
         )
         self.session.commit()
-        row = self.repository.get_plan(plan_id)
+        row = self.repository.get_plan(plan_id, account_refs)
         if row is None:
             raise ValueError("商品计划不存在")
         return self._product_row(row)
@@ -560,11 +579,19 @@ class OperationPlanService:
         payload: OperationPlanClearanceRequest,
         actor_ref: str,
         request_id: str | None,
+        account_refs: frozenset[str],
     ) -> OperationPlanProductRow:
-        before = self.repository.get_plan(plan_id)
+        before = self.repository.get_plan(plan_id, account_refs)
         if before is None:
-            raise ValueError("商品计划不存在")
-        self.repository.mark_plan_clearance(plan_id=plan_id, actor_ref=actor_ref)
+            raise ValueError("商品计划不存在或无权访问")
+        updated = self.repository.mark_plan_clearance(
+            plan_id=plan_id,
+            actor_ref=actor_ref,
+            account_refs=account_refs,
+        )
+        if not updated:
+            self.session.rollback()
+            raise ValueError("商品计划不存在或无权访问")
         self.repository.insert_event(
             event_id=uuid4(),
             plan_id=plan_id,
@@ -576,12 +603,18 @@ class OperationPlanService:
             request_id=request_id,
         )
         self.session.commit()
-        row = self.repository.get_plan(plan_id)
+        row = self.repository.get_plan(plan_id, account_refs)
         if row is None:
             raise ValueError("商品计划不存在")
         return self._product_row(row)
 
-    def events(self, plan_id: UUID) -> OperationPlanEventListData:
+    def events(
+        self,
+        plan_id: UUID,
+        account_refs: frozenset[str],
+    ) -> OperationPlanEventListData:
+        if self.repository.get_plan(plan_id, account_refs) is None:
+            raise ValueError("商品计划不存在或无权访问")
         event_labels = {
             "import_create": "导入创建",
             "import_update": "导入更新",
@@ -589,7 +622,7 @@ class OperationPlanService:
             "clearance": "转为清货",
         }
         items: list[OperationPlanEventRow] = []
-        for row in self.repository.list_events(plan_id):
+        for row in self.repository.list_events(plan_id, account_refs):
             after_data = row.get("after_data") or {}
             items.append(
                 OperationPlanEventRow(
@@ -607,7 +640,21 @@ class OperationPlanService:
             )
         return OperationPlanEventListData(items=items)
 
-    def failed_export(self, batch_id: UUID) -> bytes:
+    def failed_export(
+        self,
+        batch_id: UUID,
+        *,
+        actor_ref: str,
+        account_refs: frozenset[str],
+        is_super_admin: bool,
+    ) -> bytes:
+        if not self.repository.can_access_import_batch(
+            batch_id=batch_id,
+            actor_ref=actor_ref,
+            account_refs=account_refs,
+            is_super_admin=is_super_admin,
+        ):
+            raise ValueError("导入批次不存在或无权访问")
         rows = []
         for row in self.repository.list_failed_import_rows(batch_id):
             rows.append(

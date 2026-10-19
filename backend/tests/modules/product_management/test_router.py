@@ -12,7 +12,7 @@ from app.core.api import ApiError
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.product_management.models import ProductPricingRecalculationRun
 from app.modules.product_management.repository import ProductManagementRepository
 from app.modules.product_management.schemas import (
@@ -38,13 +38,13 @@ SKU_ID = UUID("00000000-0000-0000-0000-000000000001")
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 ALL_PERMISSIONS = frozenset(
     {
-        "products:read",
-        "products:cost:read",
-        "products:export",
-        "products:pricing_rules:read",
-        "products:pricing_rules:update",
-        "products:pricing:recalculate",
-        "products:table_views:update",
+        "page:products:product-management:view",
+        "field:products:product-management:purchase-cost",
+        "field:products:product-management:logistics-cost",
+        "action:products:product-management:export",
+        "action:products:product-management:update-pricing-rules",
+        "action:products:product-management:recalculate-pricing",
+        "action:products:product-management:save-table-view",
     }
 )
 
@@ -58,8 +58,8 @@ def _app(*permissions: str) -> FastAPI:
     application.dependency_overrides[get_product_scope_provider] = lambda: (
         lambda _principal, _resource: True
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"synthetic-account"})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application

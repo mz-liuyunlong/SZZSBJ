@@ -8,6 +8,7 @@ import {
   type DailySalesExportDimension,
   type DailySalesExportPeriod,
 } from "@/pages/sales/dailySalesApi";
+import { backendDownloadErrorMessage } from "@/api/backendApi";
 
 dayjs.locale("zh-cn");
 
@@ -319,8 +320,8 @@ function DailySalesExportModal({ open, filters, onClose }: DailySalesExportModal
     try {
       await exportRequest;
       void messageApi.success("导出成功");
-    } catch {
-      void messageApi.error("导出失败，请稍后重试");
+    } catch (reason: unknown) {
+      void messageApi.error(backendDownloadErrorMessage(reason));
     } finally {
       setExporting(false);
     }

@@ -90,6 +90,9 @@ class OperationPlanImportBatch(Base):
     updated_plan_count: Mapped[int] = mapped_column(default=0, server_default="0")
     skipped_count: Mapped[int] = mapped_column(default=0, server_default="0")
     conflict_policy: Mapped[str] = mapped_column(String(32), default="skip_existing")
+    source_account_refs_json: Mapped[list[str]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

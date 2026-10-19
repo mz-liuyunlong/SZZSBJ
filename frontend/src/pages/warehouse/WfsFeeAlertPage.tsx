@@ -14,6 +14,7 @@ import {
   normalizeReportTablePageSize,
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
+import { hasPermission } from "@/shared/permissions/mockAccess";
 import WfsFeeAlertDetailModal from "@/pages/warehouse/components/WfsFeeAlertDetailModal";
 import WfsFeeAlertFollowModal from "@/pages/warehouse/components/WfsFeeAlertFollowModal";
 import WfsAbandonRequestModal from "@/pages/warehouse/components/WfsAbandonRequestModal";
@@ -37,6 +38,7 @@ import "@/pages/warehouse/WfsFeeAlertPage.css";
 
 interface WfsFeeAlertPageProps {
   page: NavigationPage;
+  permissions: readonly string[];
 }
 
 const EXPORT_PENDING = "WFS费用异常导出接口待接入";
@@ -56,7 +58,7 @@ const defaultColumnWidths: Record<string, number> = Object.fromEntries(wfsFeeAle
           : 112,
 ]));
 const columnGroups = [{ title: "WFS费用异常字段", fields: wfsFeeAlertColumnFields }];
-function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
+function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [filters, setFilters] = useState<WfsFeeAlertFilters>(createWfsFeeAlertInitialFilters);
   const [toolbarResetKey, setToolbarResetKey] = useState(0);
@@ -71,6 +73,11 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   const [followRow, setFollowRow] = useState<WfsFeeAlertRow>();
   const [abandonRow, setAbandonRow] = useState<WfsFeeAlertRow>();
   const [rows, setRows] = useState<WfsFeeAlertRow[]>([]);
+  const canFollow = hasPermission(permissions, "action:warehouse:wfs-fee-alert:follow");
+  const canArchiveRequest = hasPermission(
+    permissions,
+    "action:warehouse:wfs-fee-alert:archive-request",
+  );
 
   const reloadRows = async () => {
     try {
@@ -146,6 +153,7 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
   };
 
   const openFollowModal = (row: WfsFeeAlertRow) => {
+    if (!canFollow) return;
     if (row.status !== "未开Case" && row.status !== "跟进中") {
       void messageApi.warning("当前 Case 状态不能编辑跟进");
       return;
@@ -240,6 +248,7 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
           onCopy={(text) => void copyText(text)}
           onOpenDetail={setDetailRow}
           onOpenFollow={openFollowModal}
+          canFollow={canFollow}
         />
       </div>
 
@@ -258,10 +267,12 @@ function WfsFeeAlertPage({ page }: WfsFeeAlertPageProps) {
         currency={filters.currency}
         onClose={() => setDetailRow(undefined)}
         onOpenFollow={openFollowModal}
+        canFollow={canFollow}
+        canArchiveRequest={canArchiveRequest}
         onOpenAbandon={(row) => { setDetailRow(undefined); setAbandonRow(row); }}
       />
       <WfsAbandonRequestModal
-        row={abandonRow}
+        row={canArchiveRequest ? abandonRow : undefined}
         onClose={() => setAbandonRow(undefined)}
         onSuccess={() => void reloadRows()}
       />

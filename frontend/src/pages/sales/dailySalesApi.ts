@@ -1,4 +1,4 @@
-import { backendRequest } from "@/api/backendApi";
+import { backendDownload, backendRequest } from "@/api/backendApi";
 import type {
   DailySalesCurrency,
   DailySalesRefundSummary,
@@ -14,6 +14,7 @@ interface BackendDailySalesItem {
   id: string;
   business_date_la: string;
   store_id: string;
+  source_account_ref: string;
   store_name: string | null;
   owner_ref: string | null;
   item_id: string;
@@ -45,7 +46,7 @@ interface BackendDailySalesItem {
   wfs_available_quantity: string | null;
   wfs_fee_unit_amount: string | null;
   wfs_fee_total_amount: string | null;
-  wfs_low_price_surcharge_amount: string;
+  wfs_low_price_surcharge_amount: string | null;
   wfs_fee_expected_unit_amount: string | null;
   wfs_fee_expected_total_amount: string | null;
   wfs_fee_actual_total_amount: string | null;
@@ -73,6 +74,11 @@ interface BackendDailySalesItem {
   missing_cost_codes: string[];
   calculation_warnings: string[];
   sales_7d_trend: BackendTrendPoint[];
+  system_operation_log?: string;
+  system_highlight?: boolean;
+  operation_log?: string;
+  operation_log_revision?: number;
+  operation_log_status?: string;
 }
 
 interface BackendDailySalesSummary {
@@ -80,7 +86,7 @@ interface BackendDailySalesSummary {
   order_count: string;
   sales_amount: string;
   sales_currency_code: string | null;
-  order_profit_amount: string;
+  order_profit_amount: string | null;
   order_profit_currency_code: string | null;
   ad_spend_amount: string;
   sem_ad_spend_amount: string;
@@ -112,7 +118,7 @@ export interface DailySalesServerSummary {
   orderCount: number;
   salesAmount: number;
   salesCurrency: DailySalesCurrency;
-  orderProfitAmount: number;
+  orderProfitAmount: number | null;
   orderProfitCurrency: DailySalesCurrency;
   adSpendAmount: number;
   semAdSpendAmount: number;
@@ -175,14 +181,16 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
   const salesVolume = numberValue(item.sales_qty);
   const salesAmount = numberValue(item.sales_amount);
   const refundAmount = nullableNumberValue(item.refund_amount);
-  const adSpend = numberValue(item.ad_spend_amount);
-  const semAdSpend = numberValue(item.sem_ad_spend_amount);
-  const totalAdSpend = numberValue(item.total_ad_spend_amount);
+  const adSpend = nullableNumberValue(item.ad_spend_amount);
+  const semAdSpend = nullableNumberValue(item.sem_ad_spend_amount);
+  const totalAdSpend = nullableNumberValue(item.total_ad_spend_amount);
 
   return {
     id: item.id,
     date: item.business_date_la,
     store: item.store_name ?? item.store_id,
+    storeId: item.store_id,
+    sourceAccountRef: item.source_account_ref,
     owner: item.owner_ref ?? "未分配",
     sevenDayDates: item.sales_7d_trend.map((point) => point.date),
     sevenDaySales: item.sales_7d_trend.map((point) => numberValue(point.sales_qty)),
@@ -211,9 +219,9 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     adSpend,
     semAdSpend,
     totalAdSpend,
-    adRatio: salesAmount ? totalAdSpend / salesAmount * 100 : 0,
+    adRatio: item.ad_ratio == null ? null : numberValue(item.ad_ratio) * 100,
     wfsDeliveryFee: nullableNumberValue(item.wfs_fee_total_amount),
-    wfsLowPriceSurcharge: numberValue(item.wfs_low_price_surcharge_amount),
+    wfsLowPriceSurcharge: nullableNumberValue(item.wfs_low_price_surcharge_amount),
     wfsDeliveryUnitPrice: nullableNumberValue(item.wfs_fee_unit_amount),
     wfsExpectedFee: numberValue(item.wfs_fee_expected_total_amount),
     wfsActualFee: item.wfs_fee_actual_total_amount == null ? null : numberValue(item.wfs_fee_actual_total_amount),
@@ -232,7 +240,7 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     orderProfit: nullableNumberValue(item.gross_profit_amount),
     profitMargin: item.gross_margin == null ? null : numberValue(item.gross_margin) * 100,
     roi: item.roi == null ? null : numberValue(item.roi) * 100,
-    exchangeRate: numberValue(item.exchange_rate),
+    exchangeRate: nullableNumberValue(item.exchange_rate),
     fxSource: item.fx_source ?? "daily-sales-default-fx-6.6",
     commissionSource: item.commission_source ?? "default_15_percent",
     purchaseCostSource: item.purchase_cost_source ?? "product_management",
@@ -240,8 +248,9 @@ const toDailySalesRow = (item: BackendDailySalesItem): DailySalesRow => {
     storageFeeSource: item.storage_fee_source ?? "product_management",
     calculationWarnings: item.calculation_warnings,
     costStatus: costStatusLabel(item.cost_status, item.missing_cost_codes),
-    systemOperationLog: "系统运营日志待接入",
-    operationLog: "运营日志待接入",
+    systemOperationLog: item.system_operation_log ?? "",
+    systemLogHighlight: Boolean(item.system_highlight),
+    operationLog: item.operation_log ?? "",
   };
 };
 
@@ -255,7 +264,7 @@ const toDailySalesServerSummary = (
     orderCount: numberValue(summary.order_count),
     salesAmount: numberValue(summary.sales_amount),
     salesCurrency: currencyLabel(summary.sales_currency_code),
-    orderProfitAmount: numberValue(summary.order_profit_amount),
+    orderProfitAmount: nullableNumberValue(summary.order_profit_amount),
     orderProfitCurrency: currencyLabel(summary.order_profit_currency_code),
     adSpendAmount: numberValue(summary.ad_spend_amount),
     semAdSpendAmount: numberValue(summary.sem_ad_spend_amount),
@@ -369,34 +378,10 @@ export async function downloadDailySalesExportCsv(
 
   appendDailySalesFilters(search, params);
 
-  const previewToken = import.meta.env.VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN;
-  const response = await fetch(`/api/sales/daily-sales/export?${search.toString()}`, {
-    credentials: "same-origin",
-    headers: {
-      ...(previewToken ? { "X-Product-Management-Preview-Token": previewToken } : {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`DAILY_SALES_EXPORT_FAILED_${response.status}`);
-  }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") ?? "";
-  const filenameMatch = /filename="?([^"]+)"?/i.exec(disposition);
-  const filename = filenameMatch?.[1] ?? `daily-sales-${params.period}.csv`;
-  const url = URL.createObjectURL(blob);
-
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  await backendDownload(
+    `/api/sales/daily-sales/export?${search.toString()}`,
+    `daily-sales-${params.period}.csv`,
+  );
 }
 
 

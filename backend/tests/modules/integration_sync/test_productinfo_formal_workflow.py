@@ -413,7 +413,7 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     session = MagicMock(spec=Session)
     service = SyncRunExecutionService(session)
     runner = MagicMock()
-    runner.summary = SimpleNamespace()
+    runner.summary = SimpleNamespace(sample_unresolved_rows=0, order_unresolved_rows=0)
     runner._fetch_offset_all.side_effect = [
         [{"store_id": "store-1"}],
         [{"order_id": "order-1"}],
@@ -423,6 +423,8 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     runner._write_sales.return_value = 0
     runner._write_orders.return_value = 1
     runner._resolve_order_items.return_value = 0
+    runner._write_sample_orders.return_value = 1
+    runner._resolve_sample_items.return_value = 0
     runner._refresh_daily_sales_mart.return_value = 1
     runner._refresh_order_profit_mart.return_value = 1
 
@@ -439,6 +441,8 @@ def test_daily_sales_execution_does_not_run_refund_or_ad_fetches() -> None:
     ]
     runner._fetch_return_all.assert_not_called()
     runner._fetch_ads_all.assert_not_called()
+    runner._write_sample_orders.assert_called_once_with([{"order_id": "order-1"}])
+    runner._resolve_sample_items.assert_called_once_with()
     runner._refresh_daily_sales_mart.assert_called_once_with()
     runner._refresh_order_profit_mart.assert_called_once_with()
 
@@ -609,3 +613,12 @@ def test_scheduler_tick_recovers_queued_runs_and_defers_remaining_after_dispatch
     task_module.scheduler_tick.run()
 
     assert attempted == [new_run]
+
+
+def test_order_pagination_must_not_silently_accept_short_page_below_provider_total() -> None:
+    from app.modules.integration_sync.data_pages_real_sync import DataPagesRealSyncRunner
+
+    source = inspect.getsource(DataPagesRealSyncRunner._fetch_offset_all)
+    assert 'parser_key == "order_v2_list"' in source
+    assert "len(rows) < total" in source
+    assert "DATA_PAGES_ORDER_PAGINATION_INCOMPLETE" in source

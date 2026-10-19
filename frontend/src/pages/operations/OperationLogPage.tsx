@@ -1,6 +1,9 @@
 import { FileTextOutlined, RobotOutlined } from "@ant-design/icons";
 import { Button, Card, Input, message, Modal, Space, Typography } from "antd";
-import { useMemo, useState, type Key } from "react";
+import { useEffect, useMemo, useState, type Key } from "react";
+import { fetchOperationLogRows, fetchOperationLogDetail, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
+import type { OperationLogSystemRecord } from "@/pages/operations/operationLogTypes";
+import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import PageShell from "@/components/page/PageShell";
 import RuntimeColumnConfigDrawer, {
   type RuntimeColumnGroup,
@@ -14,13 +17,7 @@ import OperationLogBatchModal from "@/pages/operations/components/OperationLogBa
 import OperationLogLinkEditorModal from "@/pages/operations/components/OperationLogLinkEditorModal";
 import OperationLogTable from "@/pages/operations/components/OperationLogTable";
 import OperationLogToolbar from "@/pages/operations/components/OperationLogToolbar";
-import {
-  operationLogOwners,
-  operationLogRows,
-  operationLogStores,
-  operationLogWorkTypeValues,
-  operationSystemRecords,
-} from "@/pages/operations/operationLogMockData";
+import { operationLogWorkTypes } from "@/pages/operations/operationLogTypes";
 import {
   createOperationLogInitialFilters,
   createSystemDraft,
@@ -48,8 +45,30 @@ interface OperationLogPageProps {
 
 function OperationLogPage({ page }: OperationLogPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
-  const [rows, setRows] = useState(operationLogRows);
+  const [rows, setRows] = useState<OperationLogRow[]>([]);
+  const [revisions, setRevisions] = useState<Record<string, number>>({});
+  const [systemRecords, setSystemRecords] = useState<OperationLogSystemRecord[]>([]);
+  const [detailEntries, setDetailEntries] = useState<import("./operationLogApi").ManualEntryDetail[]>([]);
+  const [detailRow, setDetailRow] = useState<OperationLogRow | null>(null);
+
   const [filters, setFilters] = useState<OperationLogFilters>(createOperationLogInitialFilters);
+  useEffect(() => {
+    let active = true;
+    void fetchOperationLogRows(filters.dateRange[0], filters.dateRange[1])
+      .then((data) => {
+        if (!active) return;
+        setRows(data.rows);
+        setRevisions(data.revisions);
+        setSystemRecords(data.systemRecords);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRows([]);
+        setSystemRecords([]);
+        void messageApi.error("运营日志读取失败，未加载模拟数据");
+      });
+    return () => { active = false; };
+  }, [filters.dateRange[0], filters.dateRange[1], messageApi]);
   const [batchSearchOpen, setBatchSearchOpen] = useState(false);
   const [batchSearchText, setBatchSearchText] = useState("");
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -82,15 +101,37 @@ function OperationLogPage({ page }: OperationLogPageProps) {
     resetPageAndSelection();
   };
 
-  const updateRow = (productId: string, patch: Partial<OperationLogRow>) => {
+  const updateRow = (rowId: string, patch: Partial<OperationLogRow>) => {
     setRows((currentRows) => currentRows.map((row) => (
-      row.productId === productId ? { ...row, ...patch } : row
+      row.id === rowId ? { ...row, ...patch } : row
     )));
   };
 
+  const persistRows = async (targets: OperationLogRow[], status: "draft" | "submitted") => {
+    if (!targets.length) return;
+    let completed = 0;
+    try {
+      for (let index = 0; index < targets.length; index += 200) {
+        const chunk = targets.slice(index, index + 200);
+        const next = await saveOperationLogRows(chunk, revisions, status);
+        setRevisions((old) => ({ ...old, ...next }));
+        const ids = new Set(chunk.map((row) => row.id));
+        setRows((all) => all.map((row) => ids.has(row.id) ? {
+          ...row, status: status === "submitted" ? "已保存" : "草稿",
+        } : row));
+        completed += chunk.length;
+      }
+      void messageApi.success(`已写入新系统 ${completed} 条运营日志`);
+    } catch {
+      void messageApi.error(
+        `批量保存中断：已完成 ${completed} 条，剩余未确认。请刷新后核对再重试`,
+      );
+    }
+  };
   const fillBySystem = () => {
     setRows((currentRows) => currentRows.map((row) => {
-      const records = operationSystemRecords.filter((record) => record.productId === row.productId);
+      if (row.manualLog.trim()) return row;
+      const records = systemRecords.filter((record) => record.productId === row.productId && record.date === row.date && record.storeId === row.storeId && record.sourceAccountRef === row.sourceAccountRef && record.msku === row.msku);
       return {
         ...row,
         manualLog: createSystemDraft(records),
@@ -133,8 +174,8 @@ function OperationLogPage({ page }: OperationLogPageProps) {
       return;
     }
 
-    setRows((currentRows) => currentRows.map((row) => {
-      if (!values.productIds.includes(row.productId)) return row;
+    const updatedRows: OperationLogRow[] = rows.map((row) => {
+      if (!values.productIds.includes(row.id)) return row;
 
       const nextLogText = values.logText.trim();
       let manualLog = row.manualLog;
@@ -148,22 +189,33 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         ...row,
         manualLog,
         workType: values.workTypes[0] ?? row.workType,
+        workTypes: values.workTypes.length ? values.workTypes : (row.workTypes ?? [row.workType]),
+        observeDays: values.observeDays === "不需要观察" ? null : Number(values.observeDays.match(/\d+/)?.[0] ?? 3),
         status: "草稿",
       };
-    }));
-
+    });
+    setRows(updatedRows);
     setBatchModalOpen(false);
-    void messageApi.success(`已批量写入 ${values.productIds.length} 个商品ID`);
+    void persistRows(updatedRows.filter((row) => values.productIds.includes(row.id)), "draft");
   };
 
-  const saveEntry = (
+  const saveEntry = async (
     row: OperationLogRow,
     entryType: "keyword" | "ad",
     values: OperationLogLinkFormValues,
   ) => {
-    updateRow(row.productId, {
+    const safeUrl = resolveOperationLogLink(values.entryUrl);
+    if (!safeUrl) {
+      void messageApi.error("请填写有效的站内路径或 HTTP(S) 地址");
+      return;
+    }
+    try { await saveOperationLink(row, entryType, { ...values, entryUrl: safeUrl }); }
+    catch { void messageApi.error("链接保存失败"); return; }
+    updateRow(row.id, {
       keywordEntryStatus: entryType === "keyword" ? "ok" : row.keywordEntryStatus,
+      keywordUrl: entryType === "keyword" ? safeUrl : row.keywordUrl,
       adEntryStatus: entryType === "ad" ? "ok" : row.adEntryStatus,
+      adUrl: entryType === "ad" ? safeUrl : row.adUrl,
     });
     setLinkEditor(undefined);
     void messageApi.success(`${row.productId} 的${entryType === "keyword" ? "关键词" : "广告"}入口已保存并启用：${values.entryName}`);
@@ -193,9 +245,9 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         <Card size="small" className="operation-log__toolbar-card">
           <OperationLogToolbar
             filters={filters}
-            owners={operationLogOwners}
-            stores={operationLogStores}
-            workTypes={operationLogWorkTypeValues}
+            owners={Array.from(new Set(rows.map((row) => row.owner).filter(Boolean)))}
+            stores={Array.from(new Set(rows.map((row) => row.store).filter(Boolean)))}
+            workTypes={operationLogWorkTypes}
             onChange={updateFilters}
             onReset={resetFilters}
             onOpenBatchSearch={() => setBatchSearchOpen(true)}
@@ -206,7 +258,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
 
         <OperationLogTable
           rows={filteredRows}
-          systemRecords={operationSystemRecords}
+          systemRecords={systemRecords}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}
           currentPage={currentPage}
@@ -225,13 +277,16 @@ function OperationLogPage({ page }: OperationLogPageProps) {
           onCopy={(text) => void navigator.clipboard?.writeText(text)}
           onOpenProduct={(row) => void messageApi.info(`打开 ${row.productId} 诊断 / 写日志抽屉待接入`)}
           onOpenEntryEditor={(row, entryType) => setLinkEditor({ row, entryType })}
-          onManualLogChange={(productId, manualLog) => updateRow(productId, { manualLog, status: "草稿" })}
-          onSaveRow={(row) => {
-            updateRow(row.productId, { status: "已保存" });
-            void messageApi.success(`${row.productId} 日志已保存`);
+          onManualLogChange={(rowId, manualLog) => updateRow(rowId, { manualLog, status: "草稿" })}
+          onSaveRow={(row) => void persistRows([row], "draft")}
+          onViewEntries={(row) => {
+            setDetailRow(row);
+            setDetailEntries([]);
+            void fetchOperationLogDetail(row).then((data) => setDetailEntries(data.manual_entries))
+              .catch(() => void messageApi.error("日志详情读取失败"));
           }}
-          onBulkSaveDraft={() => void messageApi.success("已保存草稿")}
-          onSubmitAll={() => void messageApi.success("已提交今日运营日志")}
+          onBulkSaveDraft={() => void persistRows(filteredRows, "draft")}
+          onSubmitAll={() => void persistRows(filteredRows, "submitted")}
           tableActions={headerActions}
         />
 
@@ -249,10 +304,23 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         <OperationLogBatchModal
           open={batchModalOpen}
           rows={filteredRows}
+          onBuildSystemText={(ids) => filteredRows.filter((row) => ids.includes(row.id)).map((row) => {
+            const matching = systemRecords.filter((record) => record.sourceAccountRef === row.sourceAccountRef && record.storeId === row.storeId && record.productId === row.productId && record.msku === row.msku && record.date === row.date);
+            return matching.length ? `${row.date} ${row.productId}: ${createSystemDraft(matching)}` : "";
+          }).filter(Boolean).join("\n")}
           onClose={() => setBatchModalOpen(false)}
           onApply={applyBatchWrite}
         />
 
+        <Modal open={detailRow !== null} title={`全部人工日志 · ${detailRow?.productId ?? ""}`} footer={null} onCancel={() => setDetailRow(null)}>
+          {detailEntries.length ? detailEntries.map((entry) => (
+            <Card key={entry.id} size="small" style={{ marginBottom: 8 }}>
+              <Typography.Text strong>{entry.authorName}</Typography.Text>
+              <Typography.Text type="secondary"> · {entry.sourceKind === "legacy" ? "历史导入" : "人工日志"} · {entry.updatedAt ?? ""}</Typography.Text>
+              <Typography.Paragraph style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{entry.content}</Typography.Paragraph>
+            </Card>
+          )) : <Typography.Text type="secondary">暂无历史人工日志</Typography.Text>}
+        </Modal>
         <OperationLogLinkEditorModal
           row={linkEditor?.row}
           entryType={linkEditor?.entryType}

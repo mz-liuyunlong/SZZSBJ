@@ -1,5 +1,5 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Typography, message } from "antd";
+import { Alert, Button, Modal, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackendRequestError } from "@/api/backendApi";
 import PageShell from "@/components/page/PageShell";
@@ -290,6 +290,24 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
     }
   };
 
+  const confirmAndSaveCurrentTab = () => {
+    if (
+      activeTab === "dataScopes"
+      && activeDataScopes.some((item) => item.scopeValue.trim() === "*")
+    ) {
+      Modal.confirm({
+        title: "确认授予全部数据范围？",
+        content: "通配符会扩大该角色在对应维度的访问范围；后端仅允许具备现有全量范围的管理员保存。",
+        okText: "确认保存",
+        cancelText: "取消",
+        okButtonProps: { danger: true },
+        onOk: saveCurrentTab,
+      });
+      return;
+    }
+    void saveCurrentTab();
+  };
+
   const restoreCurrentTab = () => {
     if (!activeRole) return;
     if (activeTab === "dataScopes") {
@@ -380,7 +398,7 @@ function RoleManagementPage({ page }: RoleManagementPageProps) {
                     <Button
                       type="primary"
                       disabled={!currentTabEditable}
-                      onClick={() => void saveCurrentTab()}
+                      onClick={confirmAndSaveCurrentTab}
                     >
                       {activeTab === "dataScopes" ? "保存数据权限" : "保存权限"}
                     </Button>

@@ -46,10 +46,11 @@ function OrderProfitCharts({ points, currency, endDate }: OrderProfitChartsProps
     const point = pointMap.get(dateKey);
     if (!point) return 0;
 
-    if (metric === "profitMargin") return point.profitMargin ?? 0;
-    if (metric === "adRatio") return point.adRatio ?? 0;
+    if (metric === "profitMargin") return point.profitMargin;
+    if (metric === "adRatio") return point.adRatio;
 
     const value = point[metric];
+    if (value == null) return null;
     return amountMetrics.includes(metric) ? value * rate : value;
   });
 

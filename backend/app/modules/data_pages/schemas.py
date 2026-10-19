@@ -81,6 +81,7 @@ class DailySalesItemRead(StrictSchema):
     id: str
     business_date_la: date
     business_timezone: str
+    source_account_ref: str = ""
     store_id: str
     store_name: str | None
     owner_ref: str | None
@@ -109,14 +110,14 @@ class DailySalesItemRead(StrictSchema):
     refund_currency_code: str | None
     return_rate_30d: Ratio | None
     ad_spend_amount: Money | None
-    sem_ad_spend_amount: Money = Decimal("0")
-    total_ad_spend_amount: Money = Decimal("0")
+    sem_ad_spend_amount: Money | None = Decimal("0")
+    total_ad_spend_amount: Money | None = Decimal("0")
     ad_spend_currency_code: str | None
     ad_ratio: Ratio | None
     wfs_available_quantity: Money | None
     wfs_fee_unit_amount: Money | None
     wfs_fee_total_amount: Money | None
-    wfs_low_price_surcharge_amount: Money = Decimal("0")
+    wfs_low_price_surcharge_amount: Money | None = Decimal("0")
     wfs_fee_currency_code: str | None
     wfs_fee_expected_unit_amount: Money | None = None
     wfs_fee_expected_total_amount: Money | None = None
@@ -159,6 +160,11 @@ class DailySalesItemRead(StrictSchema):
     sales_7d_trend: list[DailySalesTrendPointRead]
     calc_version: str
     calculated_at: datetime
+    system_operation_log: str = ""
+    system_highlight: bool = False
+    operation_log: str = ""
+    operation_log_revision: int = 0
+    operation_log_status: str = "draft"
 
 
 class DailySalesSummaryRead(StrictSchema):
@@ -166,7 +172,7 @@ class DailySalesSummaryRead(StrictSchema):
     order_count: Money = Decimal("0")
     sales_amount: Money = Decimal("0")
     sales_currency_code: str | None = "USD"
-    order_profit_amount: Money = Decimal("0")
+    order_profit_amount: Money | None = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
     sem_ad_spend_amount: Money = Decimal("0")
@@ -175,7 +181,7 @@ class DailySalesSummaryRead(StrictSchema):
     wfs_available_quantity: Money | None = None
     refund_event_qty: Money = Decimal("0")
     refund_event_amount: Money = Decimal("0")
-    refund_loss_amount: Money = Decimal("0")
+    refund_loss_amount: Money | None = Decimal("0")
     refund_event_currency_code: str | None = "USD"
 
 
@@ -228,17 +234,17 @@ class OrderProfitItemRead(StrictSchema):
     sample_amount: Money | None = None
     return_qty: Money = Decimal("0")
     refund_amount: Money | None
-    refund_loss_amount: Money = Decimal("0")
+    refund_loss_amount: Money | None = Decimal("0")
     return_rate_30d: Ratio | None = None
     ad_spend_amount: Money | None
-    sem_ad_spend_amount: Money = Decimal("0")
-    total_ad_spend_amount: Money = Decimal("0")
+    sem_ad_spend_amount: Money | None = Decimal("0")
+    total_ad_spend_amount: Money | None = Decimal("0")
     ad_ratio: Ratio | None = None
     wfs_available_quantity: Money | None = None
     wfs_fee_unit_amount: Money | None = None
     commission_fee_amount: Money | None
     wfs_fee_total_amount: Money | None
-    wfs_low_price_surcharge_amount: Money = Decimal("0")
+    wfs_low_price_surcharge_amount: Money | None = Decimal("0")
     purchase_cost_unit_cny: Money | None = None
     purchase_cost_total_usd: Money | None
     first_leg_cost_unit_cny: Money | None = None
@@ -266,7 +272,7 @@ class OrderProfitSummaryRead(StrictSchema):
     refund_amount: Money = Decimal("0")
     refund_loss_amount: Money = Decimal("0")
     refund_currency_code: str | None = "USD"
-    order_profit_amount: Money = Decimal("0")
+    order_profit_amount: Money | None = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     ad_spend_amount: Money = Decimal("0")
     sem_ad_spend_amount: Money = Decimal("0")
@@ -285,7 +291,7 @@ class OrderProfitTrendPointRead(StrictSchema):
     refund_amount: Money = Decimal("0")
     refund_loss_amount: Money = Decimal("0")
     refund_currency_code: str | None = "USD"
-    order_profit_amount: Money = Decimal("0")
+    order_profit_amount: Money | None = Decimal("0")
     order_profit_currency_code: str | None = "USD"
     profit_margin: Ratio | None = None
     ad_spend_amount: Money = Decimal("0")

@@ -10,9 +10,12 @@ from sqlalchemy import text
 
 from app.modules.integration_sync.data_pages_business_rules import (
     BUSINESS_RULE_RUNNER_VERSION,
+    VERIFIED_SAMPLE_RULE_VERSION,
     DataPagesRealSyncRunner as BusinessRulesRunner,
 )
 from app.modules.integration_sync.data_pages_real_sync import (
+    DataPagesRealSyncError,
+    _order_purchase_date_la,
     _decimal,
     _field,
     _nested_first,
@@ -21,6 +24,7 @@ from app.modules.integration_sync.data_pages_real_sync import (
     _stable_hash,
     _timestamps,
 )
+from app.modules.integration_sync.data_pages_mart_invariants import DataPagesMartInvariantError
 from app.modules.product_management.daily_sales_costs import (
     DailySalesCostResolution,
     load_daily_sales_costs,
@@ -29,7 +33,7 @@ from app.modules.product_management.daily_sales_costs import (
 
 from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 
-DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-v3-lpds"
+DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-v3-lpds+sampleguard-v5"
 LOW_PRICE_DELIVERY_THRESHOLD = Decimal("10")
 LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT = Decimal("1")
 
@@ -143,6 +147,25 @@ def _cost_loss_total(
     return sum(components, Decimal("0"))
 
 
+def _potential_sample_candidate(
+    row: Mapping[str, Any], item: Mapping[str, Any] | None = None
+) -> bool:
+    """Only identify lines eligible for quarantine, never verify samples."""
+    order_total = _money_decimal(_nested_first(row, "transaction_info", "order_total_amount"))
+    if order_total == Decimal("0"):
+        return True
+    if item is None:
+        return False
+    item_price = _money_decimal(item.get("item_price_amount"))
+    discount = _money_decimal(item.get("discount_amount"))
+    return (
+        item_price is not None
+        and item_price > 0
+        and discount is not None
+        and abs(discount) >= item_price - Decimal("0.01")
+    )
+
+
 class DataPagesRealSyncRunner(BusinessRulesRunner):
     """#113 runner: one Daily Sales truth with Product Management cost semantics."""
 
@@ -173,11 +196,38 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             order_id = _field(row, "global_order_no", "order_id", "platform_order_no")
             item_rows = row.get("item_info") if isinstance(row.get("item_info"), list) else [row]
             if not order_id:
-                continue
+                if _potential_sample_candidate(row):
+                    self.summary.order_unresolved_rows += 1
+                    continue
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_IDENTITY_MISSING")
+            if not _field(row, "store_id"):
+                if _potential_sample_candidate(row):
+                    self.summary.order_unresolved_rows += 1
+                    continue
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_STORE_ID_MISSING")
+            if not item_rows:
+                if _potential_sample_candidate(row):
+                    self.summary.order_unresolved_rows += 1
+                    continue
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_ITEMS_MISSING")
+            purchase_date = _order_purchase_date_la(row.get("global_purchase_time"))
+            if purchase_date != self.business_date:
+                raise DataPagesRealSyncError("DATA_PAGES_ORDER_PURCHASE_DATE_MISMATCH")
             for ordinal, item in enumerate(item_rows):
                 if not isinstance(item, dict):
-                    continue
-                line_hash = _stable_hash({"order": order_id, "line": item, "ordinal": ordinal})
+                    if _potential_sample_candidate(row):
+                        self.summary.order_unresolved_rows += 1
+                        continue
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_ITEM_INVALID")
+                line_id = _field(item, "order_item_no", "global_item_no", "id")
+                if not line_id:
+                    if _potential_sample_candidate(row, item):
+                        self.summary.order_unresolved_rows += 1
+                        continue
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_LINE_IDENTITY_MISSING")
+                line_hash = _stable_hash(
+                    {"store": _field(row, "store_id"), "order": order_id, "line_id": line_id}
+                )
                 self.session.execute(
                     text(
                         "insert into fact_walmart_order_items "
@@ -198,6 +248,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "platform_order_no=excluded.platform_order_no,reference_no=excluded.reference_no,"
                         "item_id=coalesce(excluded.item_id,fact_walmart_order_items.item_id),"
                         "msku=excluded.msku,local_sku=excluded.local_sku,quantity=excluded.quantity,"
+                        "source_purchase_at_raw=excluded.source_purchase_at_raw,"
+                        "business_date_la=excluded.business_date_la,"
+                        "order_status_raw=excluded.order_status_raw,"
+                        "order_sub_status_raw=excluded.order_sub_status_raw,"
+                        "discount_amount=excluded.discount_amount,"
                         "sales_revenue_amount=excluded.sales_revenue_amount,order_total_amount=excluded.order_total_amount,"
                         "updated_at=excluded.updated_at"
                     ),
@@ -206,9 +261,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "source_account_ref": self.source_account_ref,
                         "store_id": _field(row, "store_id"),
                         "source_order_id": order_id,
-                        "source_order_line_id": _field(
-                            item, "global_item_no", "order_item_no", "id"
-                        ),
+                        "source_order_line_id": line_id,
                         "platform_order_no": _field(item, "platform_order_no")
                         or _field(row, "platform_order_no"),
                         "reference_no": _field(row, "reference_no", "referenceNo"),
@@ -350,7 +403,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "sum(coalesce(s.unit_price_amount,0)*coalesce(s.quantity,0)) sample_amount "
                 "from fact_walmart_sample_order_items s "
                 "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
-                "and s.is_valid_sample=true and s.store_id is not null and s.item_id is not null "
+                "and s.is_valid_sample=true and s.sample_rule_version=:verified_sample_rule_version and s.store_id is not null and s.item_id is not null "
                 "and s.msku is not null and trim(s.msku)<>'' and exists ("
                 "select 1 from dim_walmart_listings l where l.source_account_ref=s.source_account_ref "
                 "and l.store_id=s.store_id and l.item_id=s.item_id and trim(l.msku)=trim(s.msku)) "
@@ -454,6 +507,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "account": self.source_account_ref,
                 "day": self.business_date,
                 "runner": DAILY_SALES_V2_VERSION,
+                "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                 "default_commission_rate": DEFAULT_STORE_COMMISSION_RATE,
                 "now": now,
             },
@@ -521,6 +575,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(quantity,0)) sample_qty "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
+                        "and sample_rule_version=:verified_sample_rule_version "
                         "and business_date_utc_minus_7 between :start_day and :end_day "
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
@@ -534,6 +589,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_7d_start,
                         "end_day": history_7d_end,
+                        "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
@@ -567,6 +623,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(quantity,0)) sample_qty "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
+                        "and sample_rule_version=:verified_sample_rule_version "
                         "and business_date_utc_minus_7 between :start_day and :end_day "
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
@@ -580,6 +637,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_30d_start,
                         "end_day": self.business_date,
+                        "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
@@ -605,6 +663,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_30d_start,
                         "end_day": self.business_date,
+                        "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
@@ -692,6 +751,11 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 warnings.append("sample_qty_exceeds_gross_sales_qty")
             if sample_amount > gross_sales:
                 warnings.append("sample_amount_exceeds_gross_sales_amount")
+            if sample_qty > gross_qty or sample_amount > gross_sales:
+                raise DataPagesMartInvariantError(
+                    "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT",
+                    business_date=self.business_date,
+                )
             paid_sales = max(gross_sales - sample_amount, Decimal("0"))
             if refund_amount is None:
                 missing.append("refund_amount_missing")

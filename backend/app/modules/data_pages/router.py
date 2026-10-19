@@ -4,12 +4,26 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
+from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
-from app.modules.data_pages.daily_sales_export import export_daily_sales_csv
-from app.modules.data_pages.order_profit_export import export_order_profit_csv
+from app.modules.data_pages.daily_sales_export import (
+    DAILY_SALES_EXPORT_COLUMNS,
+    export_daily_sales_csv,
+)
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+    ORDER_PROFIT_MARGIN_PERMISSION,
+    filter_daily_sales_list_data,
+    filter_order_profit_export_columns,
+    filter_order_profit_list_data,
+    filter_order_profit_trend_data,
+)
+from app.modules.data_pages.order_profit_export import (
+    ORDER_PROFIT_EXPORT_COLUMNS,
+    export_order_profit_csv,
+)
 from app.modules.data_pages.registry import (
     DATA_PAGE_API_REGISTRY,
     registry_source_objects,
@@ -183,12 +197,18 @@ def get_order_profit_filter_options(
 def export_daily_sales(
     query: Annotated[DailySalesQuery, Depends()],
     session: db_session,
-    _: daily_sales_principal,
+    principal: daily_sales_principal,
     account_refs: source_scope,
     period: Annotated[Literal["day", "month"], Query()] = "day",
     dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "item_id",
     columns: Annotated[str | None, Query()] = None,
 ) -> Response:
+    columns = filter_order_profit_export_columns(
+        columns,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+        available_columns=tuple(DAILY_SALES_EXPORT_COLUMNS),
+    )
     csv_text, filename = export_daily_sales_csv(
         DailySalesService(session),
         query=query,
@@ -216,12 +236,18 @@ def list_daily_sales(
     request: Request,
     query: Annotated[DailySalesQuery, Query()],
     session: db_session,
-    _: daily_sales_principal,
+    principal: daily_sales_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[DailySalesListData, DailySalesReadMeta]:
     data, total, latest_calculated_at = DailySalesService(session).list_daily_sales(
         query,
         account_refs,
+        principal=principal,
+    )
+    data = filter_daily_sales_list_data(
+        data,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
     )
     return success_response(
         request,
@@ -246,12 +272,17 @@ def list_order_profit(
     request: Request,
     query: Annotated[OrderProfitQuery, Query()],
     session: db_session,
-    _: order_profit_principal,
+    principal: order_profit_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[OrderProfitListData, OrderProfitReadMeta]:
     data, total, latest_calculated_at = OrderProfitService(session).list_order_profit(
         query=query,
         account_refs=account_refs,
+    )
+    data = filter_order_profit_list_data(
+        data,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
     )
     return success_response(
         request,
@@ -275,12 +306,18 @@ def list_order_profit(
 def export_order_profit(
     query: Annotated[OrderProfitQuery, Depends()],
     session: db_session,
-    _: order_profit_principal,
+    principal: order_profit_principal,
     account_refs: source_scope,
     period: Annotated[Literal["day", "month"], Query()] = "day",
     dimension: Annotated[Literal["item_id", "sku", "msku"], Query()] = "item_id",
     columns: Annotated[str | None, Query()] = None,
 ) -> Response:
+    columns = filter_order_profit_export_columns(
+        columns,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+        available_columns=tuple(ORDER_PROFIT_EXPORT_COLUMNS),
+    )
     csv_text, filename = export_order_profit_csv(
         OrderProfitService(session),
         query=query,
@@ -308,15 +345,21 @@ def order_profit_trend(
     request: Request,
     query: Annotated[OrderProfitQuery, Query()],
     session: db_session,
-    _: order_profit_principal,
+    principal: order_profit_principal,
     account_refs: source_scope,
 ) -> SuccessEnvelope[OrderProfitTrendData, Any]:
+    data = OrderProfitService(session).order_profit_trend(
+        query=query,
+        account_refs=account_refs,
+    )
+    data = filter_order_profit_trend_data(
+        data,
+        can_view_gross_profit=has_permission(principal, ORDER_PROFIT_GROSS_PROFIT_PERMISSION),
+        can_view_profit_margin=has_permission(principal, ORDER_PROFIT_MARGIN_PERMISSION),
+    )
     return success_response(
         request,
-        data=OrderProfitService(session).order_profit_trend(
-            query=query,
-            account_refs=account_refs,
-        ),
+        data=data,
         meta=None,
     )
 
@@ -439,6 +482,8 @@ def batch_set_listing_tags(
             payload=payload,
             account_refs=account_refs,
         )
+    except PermissionError as exc:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return success_response(request, data=data, meta=None)

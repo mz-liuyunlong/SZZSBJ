@@ -17,7 +17,7 @@ from app.core.api import ApiError
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.integration_sync.dependencies import get_source_account_scope_provider
+from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchaseOrder,
     DwsPurchaseBoard,
@@ -239,8 +239,8 @@ def _app(*permissions: str) -> Any:
     application.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-user", permissions=frozenset(permissions)
     )
-    application.dependency_overrides[get_source_account_scope_provider] = lambda: (
-        lambda _principal: frozenset({"synthetic-account"})
+    application.dependency_overrides[require_source_account_scope] = lambda: frozenset(
+        {"synthetic-account"}
     )
     application.dependency_overrides[get_db_session] = lambda: MagicMock(spec=Session)
     return application
@@ -260,7 +260,7 @@ def test_override_routes_openapi_and_permissions(monkeypatch: Any) -> None:
         "reason": "x",
     }
     # read permission alone cannot write
-    response = TestClient(_app("pmc:purchase:read")).post(PATH, json=body)
+    response = TestClient(_app("page:pmc:purchase-board:view")).post(PATH, json=body)
     assert response.status_code == 403 and response.json()["error"]["code"] == "FORBIDDEN"
     # the preview principal (auth.py) never carries the override permission
     from app.core.auth import _PREVIEW_PERMISSIONS
@@ -299,7 +299,7 @@ def test_override_routes_openapi_and_permissions(monkeypatch: Any) -> None:
         )
 
     monkeypatch.setattr(PmcPurchaseOverrideService, "apply", fake_apply)
-    response = TestClient(_app("pmc:purchase:override")).post(
+    response = TestClient(_app("action:pmc:purchase-board:override")).post(
         PATH, json=body, headers={"X-Request-ID": "req-123"}
     )
     assert response.status_code == 201
@@ -314,7 +314,7 @@ def test_override_routes_openapi_and_permissions(monkeypatch: Any) -> None:
         "dws_purchase_sku_cycle",
     ]
     # invalid body shape → 422 envelope
-    response = TestClient(_app("pmc:purchase:override")).post(
+    response = TestClient(_app("action:pmc:purchase-board:override")).post(
         PATH, json={"source_account_ref": "synthetic-account", "kind": "exclude", "reason": "x"}
     )
     assert response.status_code == 422 and response.json()["error"]["code"] == "VALIDATION_ERROR"

@@ -14,6 +14,7 @@ interface UserFormModalProps {
   editingUser?: UserManagementRow;
   roleOptions: UserRoleOption[];
   canAssignRoles: boolean;
+  canEnableDisable: boolean;
   canViewPhone: boolean;
   canViewEmail: boolean;
   onCancel: () => void;
@@ -41,6 +42,7 @@ function UserFormModal({
   editingUser,
   roleOptions,
   canAssignRoles,
+  canEnableDisable,
   canViewPhone,
   canViewEmail,
   onCancel,
@@ -228,7 +230,10 @@ function UserFormModal({
           label="状态"
           rules={[{ required: true, message: "请选择状态" }]}
         >
-          <Select options={userStatusOptions.map((value) => ({ value, label: value }))} />
+          <Select
+            disabled={!editingUser || !canEnableDisable}
+            options={userStatusOptions.map((value) => ({ value, label: value }))}
+          />
         </Form.Item>
 
         {canAssignRoles && (
