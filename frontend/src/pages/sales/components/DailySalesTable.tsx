@@ -65,8 +65,31 @@ const dailySalesFxRate = (row: DailySalesRow) => row.exchangeRate ?? MOCK_USD_TO
 
 function LogCell({ text, onClick, highlight = false }: { text: string; onClick?: () => void; highlight?: boolean }) {
   return (
-    <Tooltip title={text}>
-      <Button type="link" onClick={onClick} disabled={!onClick} style={{ padding: 0, color: highlight ? "#cf1322" : undefined }}>{text || "—"}</Button>
+    <Tooltip
+      title={text}
+      styles={{
+        root: { maxWidth: "min(400px, calc(100vw - 32px))" },
+        body: {
+          width: 360,
+          maxWidth: "100%",
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
+          lineHeight: 1.6,
+        },
+      }}
+    >
+      <span className="daily-sales__log-cell">
+        <Button
+          type="link"
+          onClick={onClick}
+          disabled={!onClick}
+          className="daily-sales__log-button"
+          style={{ color: highlight ? "#cf1322" : undefined }}
+        >
+          {text || "—"}
+        </Button>
+      </span>
     </Tooltip>
   );
 }
@@ -424,8 +447,8 @@ render: (_, row) => (
     { title: "利润率", key: "profitMargin", width: 96, render: percent("profitMargin") },
     { title: "ROI", key: "roi", width: 88, render: roiRatio("roi") },
     { title: "成本状态", key: "costStatus", width: 112, render: (_, row) => <StatusTagCell label={row.costStatus} color={statusColors[row.costStatus]} /> },
-    { title: "系统运营日志", key: "systemOperationLog", width: 180, render: (_, row) => <LogCell text={row.systemOperationLog} highlight={row.systemLogHighlight} onClick={onOpenLog ? () => onOpenLog(row, "system") : undefined} /> },
-    { title: "运营日志", key: "operationLog", width: 180, render: (_, row) => <LogCell text={row.operationLog} onClick={onOpenLog ? () => onOpenLog(row, "manual") : undefined} /> },
+    { title: "系统运营日志", className: "daily-sales-log-column", key: "systemOperationLog", width: 180, render: (_, row) => <LogCell text={row.systemOperationLog} highlight={row.systemLogHighlight} onClick={onOpenLog ? () => onOpenLog(row, "system") : undefined} /> },
+    { title: "运营日志", className: "daily-sales-log-column", key: "operationLog", width: 180, render: (_, row) => <LogCell text={row.operationLog} onClick={onOpenLog ? () => onOpenLog(row, "manual") : undefined} /> },
     {
       title: "操作",
       key: "actions",

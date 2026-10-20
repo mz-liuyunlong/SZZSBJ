@@ -19,7 +19,6 @@ interface WfsFeeAlertToolbarProps {
   onChange: (filters: WfsFeeAlertFilters) => void;
   onReset: () => void;
   onBatchOpenCase: () => void;
-  onBatchFollow: () => void;
 }
 
 
@@ -78,7 +77,6 @@ function WfsFeeAlertToolbar({
   onChange,
   onReset,
   onBatchOpenCase,
-  onBatchFollow,
 }: WfsFeeAlertToolbarProps) {
 
   return (
@@ -182,7 +180,6 @@ function WfsFeeAlertToolbar({
       <Button className="report-table-reset-button" onClick={onReset}>重置</Button>
       {actions}
       <Button onClick={onBatchOpenCase}>批量开Case</Button>
-      <Button onClick={onBatchFollow}>批量跟进</Button>
       <span className="wfs-fee-alert__toolbar-spacer" aria-hidden="true" />
       <span className="wfs-fee-alert__toolbar-icon-actions">
         {trailingActions}

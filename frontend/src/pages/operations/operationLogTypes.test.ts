@@ -53,6 +53,6 @@ describe("operation log helpers", () => {
     const records = operationSystemRecords.filter((record) => record.productId === rowWithSystem?.productId);
 
     expect(createSystemDraft(records)).toContain("系统检测");
-    expect(createSystemDraft([])).toBe("系统未抓到调整记录，待人工确认。");
+    expect(createSystemDraft([])).toBe("");
   });
 });

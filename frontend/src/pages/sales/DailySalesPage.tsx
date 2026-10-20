@@ -95,6 +95,38 @@ function DailySalesPage({ page }: DailySalesPageProps) {
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
   const [logDialog, setLogDialog] = useState<{ row: DailySalesRow; kind: "system" | "manual" } | null>(null);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+
+  // DAILY_SALES_OPERATION_LOG_REFRESH_20261021
+  // The workspace caches inactive pages. Refresh the authorized
+  // Daily Sales API when this page becomes active again.
+  const [logRefreshVersion, setLogRefreshVersion] = useState(0);
+
+  useEffect(() => {
+    const panel = dailySalesPageRootRef.current?.closest(
+      ".main-layout__page-panel"
+    );
+
+    if (!panel) return;
+
+    let wasHidden = panel.hasAttribute("hidden");
+
+    const observer = new MutationObserver(() => {
+      const isHidden = panel.hasAttribute("hidden");
+
+      if (wasHidden && !isHidden) {
+        setLogRefreshVersion((value) => value + 1);
+      }
+
+      wasHidden = isHidden;
+    });
+
+    observer.observe(panel, {
+      attributes: true,
+      attributeFilter: ["hidden"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
   const [filterOptions, setFilterOptions] = useState<SalesFilterOptions>(emptySalesFilterOptions);
   const dateRangeStart = filters.dateRange?.[0];
   const dateRangeEnd = filters.dateRange?.[1];
@@ -155,6 +187,7 @@ function DailySalesPage({ page }: DailySalesPageProps) {
     filters.searchField,
     filters.stores,
     pageSize,
+    logRefreshVersion,
   ]);
 
   useEffect(() => {

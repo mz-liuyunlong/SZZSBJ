@@ -16,7 +16,6 @@ import {
 import type { NavigationPage } from "@/config/navigation";
 import { hasPermission } from "@/shared/permissions/mockAccess";
 import WfsFeeAlertDetailModal from "@/pages/warehouse/components/WfsFeeAlertDetailModal";
-import WfsFeeAlertFollowModal from "@/pages/warehouse/components/WfsFeeAlertFollowModal";
 import WfsAbandonRequestModal from "@/pages/warehouse/components/WfsAbandonRequestModal";
 import WfsFeeAlertSummaryCards from "@/pages/warehouse/components/WfsFeeAlertSummaryCards";
 import WfsFeeAlertTable from "@/pages/warehouse/components/WfsFeeAlertTable";
@@ -49,13 +48,17 @@ const defaultColumnWidths: Record<string, number> = Object.fromEntries(wfsFeeAle
   field.key,
   field.key === "image"
     ? 72
-    : field.key === "sku"
-      ? 154
-      : field.key === "latestFollow"
-        ? 220
-        : field.key === "actions"
-          ? 132
-          : 112,
+    : field.key === "productIdName"
+      ? 240
+      : field.key === "skuMsku"
+      ? 190
+      : field.key === "store"
+        ? 148
+        : field.key === "latestFollow"
+          ? 220
+          : field.key === "actions"
+            ? 132
+            : 112,
 ]));
 const columnGroups = [{ title: "WFS费用异常字段", fields: wfsFeeAlertColumnFields }];
 function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
@@ -70,9 +73,12 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [detailRow, setDetailRow] = useState<WfsFeeAlertRow>();
-  const [followRow, setFollowRow] = useState<WfsFeeAlertRow>();
   const [abandonRow, setAbandonRow] = useState<WfsFeeAlertRow>();
   const [rows, setRows] = useState<WfsFeeAlertRow[]>([]);
+  const [settledRangeKey, setSettledRangeKey] = useState<string | null>(null);
+  const [rangeStart, rangeEnd] = filters.dateRange;
+  const requestedRangeKey = JSON.stringify([rangeStart, rangeEnd]);
+  const loading = settledRangeKey !== requestedRangeKey;
   const canFollow = hasPermission(permissions, "action:warehouse:wfs-fee-alert:follow");
   const canArchiveRequest = hasPermission(
     permissions,
@@ -91,20 +97,29 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void fetchWfsFeeAlerts(filters.dateRange[0], filters.dateRange[1])
+
+    void fetchWfsFeeAlerts(rangeStart, rangeEnd)
       .then((nextRows) => {
-        if (!cancelled) setRows(nextRows);
+        if (!cancelled) {
+          setRows(nextRows);
+        }
       })
       .catch(() => {
         if (!cancelled) {
           setRows([]);
           void messageApi.error("WFS费用异常数据加载失败");
         }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSettledRangeKey(requestedRangeKey);
+        }
       });
+
     return () => {
       cancelled = true;
     };
-  }, [filters.dateRange, messageApi]);
+  }, [rangeStart, rangeEnd, requestedRangeKey, messageApi]);
 
   const stores = useMemo(() => [...new Set(rows.map((row) => row.store))], [rows]);
   const owners = useMemo(() => [...new Set(rows.map((row) => row.owner))], [rows]);
@@ -138,28 +153,33 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   };
 
   const handleBatchOpenCase = () => { void messageApi.info("批量开Case暂未接入，请单条编辑"); };
-  const handleBatchFollow = () => { void messageApi.info("批量跟进暂未接入，请单条编辑"); };
 
-  const handleSaveFollow = async (values: WfsFeeAlertFollowFormValues) => {
-    if (!followRow) return;
+  const handleSaveFollow = async (
+    values: WfsFeeAlertFollowFormValues,
+  ): Promise<void> => {
+    if (!detailRow || !canFollow) {
+      throw new Error("当前无跟进权限或未选择记录");
+    }
+
+    const caseId = detailRow.id;
     try {
-      await updateWfsFeeAlertCase(followRow.id, values);
-      setFollowRow(undefined);
-      await reloadRows();
-      void messageApi.success("WFS异常跟进已保存");
+      await updateWfsFeeAlertCase(caseId, values);
     } catch {
-      void messageApi.error("WFS异常跟进保存失败");
+      void messageApi.error("WFS跟进保存失败");
+      throw new Error("WFS跟进保存失败");
     }
-  };
 
-  const openFollowModal = (row: WfsFeeAlertRow) => {
-    if (!canFollow) return;
-    if (row.status !== "未开Case" && row.status !== "跟进中") {
-      void messageApi.warning("当前 Case 状态不能编辑跟进");
-      return;
+    void messageApi.success("跟进已保存，历史记录不可删除");
+    try {
+      const nextRows = await fetchWfsFeeAlerts(
+        filters.dateRange[0],
+        filters.dateRange[1],
+      );
+      setRows(nextRows);
+      setDetailRow(nextRows.find((row) => row.id === caseId));
+    } catch {
+      void messageApi.warning("保存成功，但刷新失败，请重新打开详情");
     }
-    setDetailRow(undefined);
-    setFollowRow(row);
   };
 
   const headerActions = (
@@ -222,13 +242,13 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
             onChange={updateFilters}
             onReset={resetFilters}
             onBatchOpenCase={handleBatchOpenCase}
-            onBatchFollow={handleBatchFollow}
           />
         </Card>
 
         {statisticsVisible && <WfsFeeAlertSummaryCards rows={filteredRows} currency={filters.currency} />}
 
         <WfsFeeAlertTable
+          loading={loading}
           rows={filteredRows}
           currency={filters.currency}
           appliedColumnKeys={appliedColumnKeys}
@@ -244,11 +264,8 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
           }}
           onSelectionChange={setSelectedRowKeys}
           onBulkOpenCase={handleBatchOpenCase}
-          onBulkFollow={handleBatchFollow}
           onCopy={(text) => void copyText(text)}
           onOpenDetail={setDetailRow}
-          onOpenFollow={openFollowModal}
-          canFollow={canFollow}
         />
       </div>
 
@@ -266,7 +283,7 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
         row={detailRow}
         currency={filters.currency}
         onClose={() => setDetailRow(undefined)}
-        onOpenFollow={openFollowModal}
+        onSubmit={handleSaveFollow}
         canFollow={canFollow}
         canArchiveRequest={canArchiveRequest}
         onOpenAbandon={(row) => { setDetailRow(undefined); setAbandonRow(row); }}
@@ -275,12 +292,6 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
         row={canArchiveRequest ? abandonRow : undefined}
         onClose={() => setAbandonRow(undefined)}
         onSuccess={() => void reloadRows()}
-      />
-      <WfsFeeAlertFollowModal
-        row={followRow}
-        currency={filters.currency}
-        onClose={() => setFollowRow(undefined)}
-        onSubmit={handleSaveFollow}
       />
     </PageShell>
   );

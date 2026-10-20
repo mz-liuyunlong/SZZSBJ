@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-ApprovalTab = Literal["pending", "approved", "rejected", "legacy"]
+ApprovalTab = Literal["pending", "approved", "rejected"]
 ApprovalView = Literal["mine", "created", "all"]
 ApprovalDecision = Literal["approved", "rejected", "info_required"]
 ApprovalStatus = Literal[
@@ -48,6 +48,10 @@ class ApprovalItem(StrictSchema):
     reason: str
     can_review: bool = False
     requires_verification: bool = False
+    case_review: bool = False
+    case_opened_at: datetime | None = None
+    follow_count: int | None = None
+    follow_log: str | None = None
 
 
 class ApprovalListData(StrictSchema):
@@ -88,6 +92,7 @@ class ApprovalDecisionWrite(StrictSchema):
     decision: ApprovalDecision
     note: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""
     expected_version: int = Field(ge=1)
+    acknowledge_missing_applicant: bool = False
 
 
 class ApprovalSupplementWrite(StrictSchema):
@@ -111,28 +116,7 @@ class LegacyReattestationWrite(StrictSchema):
     ]
 
 
-class ApprovalRuleWrite(StrictSchema):
-    expected_version: int = Field(ge=1)
-    required_steps: int = Field(ge=1, le=5)
-    due_hours: int = Field(ge=1, le=8760)
-    allows_bulk: bool = False
-
-
 class BulkDecisionWrite(StrictSchema):
     approval_ids: list[str] = Field(min_length=1, max_length=20)
     expected_versions: dict[str, int]
     note: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
-
-
-class GenericApprovalWrite(StrictSchema):
-    approval_type: Literal[
-        "purchase_exception", "finance_exception", "access_change", "operations_plan_ack"
-    ]
-    source_ref: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)
-    ]
-    source_account_ref: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)
-    ]
-    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5, max_length=4000)]
-    evidence: Annotated[str, StringConstraints(strip_whitespace=True, max_length=4000)] = ""

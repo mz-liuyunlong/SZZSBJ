@@ -1,9 +1,42 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import OperationLogTable from "@/pages/operations/components/OperationLogTable";
 import { operationLogRows } from "@/pages/operations/operationLogMockData";
 import type { OperationLogRow } from "@/pages/operations/operationLogTypes";
+
+
+// Ant Design ProTable requires matchMedia; jsdom does not implement it.
+const originalMatchMedia = window.matchMedia;
+
+beforeAll(() => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+});
+
+afterAll(() => {
+  if (originalMatchMedia) {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: originalMatchMedia,
+    });
+  } else {
+    Reflect.deleteProperty(window, "matchMedia");
+  }
+});
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -31,30 +64,55 @@ function props(row: OperationLogRow) {
   };
 }
 
-describe("operation log shortcut clicks", () => {
-  it("opens an internal route when its saved URL updates the row", () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    const original: OperationLogRow = {
-      ...operationLogRows[0]!, keywordEntryStatus: "missing", keywordUrl: null,
+describe("operation log table columns", () => {
+  const createInputs = () => {
+    const row: OperationLogRow = {
+      ...operationLogRows[0]!,
+      profit7d: 12.5,
+      wfsAvailableInventory: 18,
     };
-    const initial = props(original);
-    const { rerender } = render(<OperationLogTable {...initial} />);
-    fireEvent.click(screen.getByTitle("词页面缺失，点击补录"));
-    expect(initial.onOpenEntryEditor).toHaveBeenCalledWith(original, "keyword");
-    rerender(<OperationLogTable {...props({
-      ...original, keywordEntryStatus: "ok", keywordUrl: "/ads/keyword-library",
-    })} />);
-    fireEvent.click(screen.getByTitle("打开词页面"));
-    expect(open).toHaveBeenCalledWith("/ads/keyword-library", "_blank", "noopener,noreferrer");
+
+    return {
+      ...props(row),
+      appliedColumnKeys: [
+        "productIdShortcut",
+        "skuMsku",
+        "owner",
+        "profit7d",
+        "wfsAvailableInventory",
+        "conversionRate",
+        "adRatio",
+        "salePrice",
+      ],
+    };
+  };
+
+  it("renders the unified identity columns and owner", () => {
+    render(<OperationLogTable {...createInputs()} />);
+
+    expect(screen.getAllByText("商品ID/品名").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SKU/MSKU").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("负责人").length).toBeGreaterThan(0);
+
+    expect(screen.queryByText("运营")).toBeNull();
+    expect(screen.queryByText("转化率")).toBeNull();
+    expect(screen.queryByText("广告占比")).toBeNull();
+    expect(screen.queryByText("销售价")).toBeNull();
   });
 
-  it("opens external HTTPS ads URLs", () => {
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    const row: OperationLogRow = { ...operationLogRows[0]!, adEntryStatus: "ok", adUrl: "https://example.com/ads" };
-    const inputs = props(row);
-    render(<OperationLogTable {...inputs} />);
-    fireEvent.click(screen.getByTitle("打开广页面"));
-    expect(open).toHaveBeenCalledWith("https://example.com/ads", "_blank", "noopener,noreferrer");
-    expect(inputs.onOpenEntryEditor).not.toHaveBeenCalled();
+  it("shows profit and WFS inventory without shortcuts", () => {
+    render(<OperationLogTable {...createInputs()} />);
+
+    expect(screen.getAllByText("近7天利润").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("WFS可售库存").length).toBeGreaterThan(0);
+    expect(screen.getByText("$12.50")).toBeTruthy();
+    expect(screen.getByText("18")).toBeTruthy();
+
+    expect(
+      screen.queryByTitle("词页面缺失，点击补录")
+    ).toBeNull();
+    expect(
+      screen.queryByTitle("打开广页面")
+    ).toBeNull();
   });
 });

@@ -255,6 +255,7 @@ class RbacService:
         self._assert_actor_can_assign_roles(actor, role_keys)
         normalized = payload.model_copy(update={"role_keys": list(role_keys)})
         created = self.iam_service.create_user(normalized)
+
         self._audit(
             actor=actor,
             event_type="user.created",

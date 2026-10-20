@@ -2832,3 +2832,58 @@
   overflow: hidden !important;
 }
 /* compact-identity-columns-end */
+
+
+/* Shared product identity: consistent left alignment */
+.report-table-shell .report-table-product-identity-stack.ant-space {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
+.report-table-shell
+.report-table-product-identity-stack
+> .ant-space-item {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  text-align: left !important;
+}
+
+.report-table-shell
+.report-table-product-identity-stack
+.report-table-product-id-cell {
+  display: block !important;
+  width: 100%;
+  min-width: 0;
+  text-align: left !important;
+}
+
+.report-table-shell
+.report-table-product-identity-stack
+.report-table-copyable {
+  display: inline-flex !important;
+  max-width: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.report-table-shell
+.report-table-product-identity-stack
+.report-table-copyable__link,
+.report-table-shell
+.report-table-product-identity-stack
+.report-table-copyable__text {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  text-align: left !important;
+}

@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -262,3 +263,36 @@ def test_production_sync_execution_requires_separate_authorization(
     assert raised.value.status_code == 403
     session.execute.assert_not_called()
     session.commit.assert_not_called()
+
+
+def test_follow_schedule_is_server_owned_and_seven_days(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.rowcount = 1
+    service = WfsFeeAlertService(session)
+    monkeypatch.setattr(service, "_assert_case_visible", lambda *_args: None)
+
+    service.save_follow(
+        UUID("00000000-0000-0000-0000-000000000001"),
+        WfsFeeCaseFollowWrite(
+            latest_follow_note="Synthetic follow-up",
+            next_follow_at=date(2030, 1, 1),
+        ),
+        frozenset({"account-1"}),
+        "operator-1",
+    )
+
+    statement = str(session.execute.call_args.args[0])
+    parameters = session.execute.call_args.args[1]
+
+    assert "next_follow_at = (" in statement
+    assert "TIME ZONE 'Asia/Shanghai'" in statement
+    assert "::date + 7" in statement
+    assert "next_follow_at" not in parameters
+
+    projection = service._case_select_sql()
+    assert "last_follow_at" in projection
+    assert "log_updated_at" in projection
+    assert "::date + 7" in projection
+    session.commit.assert_called_once()

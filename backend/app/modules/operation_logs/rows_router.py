@@ -16,6 +16,7 @@ from app.core.permissions import require_any_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.operation_logs.access import LogAccess, owns_sku_sql, require_log_access
+from app.modules.operation_logs.paged_router import router as paged_router
 
 router = APIRouter(prefix="/api/operations/logs", tags=["Operation Logs"])
 db_dep = Annotated[Session, Depends(get_db_session)]
@@ -354,3 +355,6 @@ def get_rows(
         data={"rows": rows, "revisions": revisions, "systemRecords": system_records},
         meta=None,
     )
+
+
+router.include_router(paged_router)

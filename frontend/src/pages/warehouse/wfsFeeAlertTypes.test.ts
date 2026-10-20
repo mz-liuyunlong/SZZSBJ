@@ -5,9 +5,23 @@ import {
   filterWfsFeeAlertRows,
   getPendingWfsAmount,
   getWfsFeeAlertSummary,
+  wfsFeeAlertColumnFields,
+  fixedWfsFeeAlertColumnKeys,
 } from "@/pages/warehouse/wfsFeeAlertTypes";
 
 describe("wfsFeeAlertTypes", () => {
+  it("combines SKU and MSKU into one fixed table column", () => {
+    const keys = wfsFeeAlertColumnFields.map((field) => field.key);
+    expect(keys.slice(0, 3)).toEqual([
+      "image",
+      "productIdName",
+      "skuMsku",
+    ]);
+    expect(keys).not.toContain("sku");
+    expect(keys).not.toContain("msku");
+    expect(fixedWfsFeeAlertColumnKeys).toEqual(["image", "productIdName", "skuMsku"]);
+  });
+
   it("calculates WFS overcharge summary with fixed no-API rows", () => {
     const summary = getWfsFeeAlertSummary(wfsFeeAlertRows);
 

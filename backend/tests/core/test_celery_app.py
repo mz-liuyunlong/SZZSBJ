@@ -36,6 +36,9 @@ def test_celery_app_declares_only_expected_queues() -> None:
     assert celery.conf.task_create_missing_queues is False
     assert celery.conf.task_default_queue == INTEGRATION_QUEUE
     assert celery.conf.broker_url == "memory://"
+    assert "app.modules.approvals.tasks" not in TASK_IMPORTS
+    assert "approvals.*" not in TASK_ROUTES
+    assert "approval-reminder-scheduler" not in celery.conf.beat_schedule
     assert celery.conf.beat_schedule["integration-sync-scheduler"] == {
         "task": "integration_sync.scheduler_tick",
         "schedule": 60.0,

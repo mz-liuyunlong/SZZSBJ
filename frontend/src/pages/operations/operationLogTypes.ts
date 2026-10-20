@@ -60,6 +60,10 @@ export interface OperationLogRow {
   adUrl?: string | null;
   systemLogCount: number;
   manualLog: string;
+  profit7d?: number | null;
+  wfsAvailableInventory?: number | null;
+  legacyManualLog?: string;
+  legacyManualCount?: number;
   manualEntryCount?: number;
   status: OperationLogStatus;
 }
@@ -155,33 +159,31 @@ export const operationLogWorkTypes: OperationLogWorkType[] = [
 export const operationLogColumnFields: OperationLogColumnField[] = [
   { key: "index", title: "#" },
   { key: "date", title: "日期" },
-  { key: "productIdShortcut", title: "商品ID / 快捷入口" },
-  { key: "productName", title: "商品名称" },
+  { key: "productIdShortcut", title: "商品ID/品名" },
+  { key: "skuMsku", title: "SKU/MSKU" },
   { key: "store", title: "店铺" },
-  { key: "owner", title: "运营" },
+  { key: "owner", title: "负责人" },
   { key: "workType", title: "工作类型" },
-  { key: "conversionRate", title: "转化率" },
-  { key: "adRatio", title: "广告占比" },
-  { key: "salePrice", title: "销售价" },
+  { key: "profit7d", title: "近7天利润" },
+  { key: "wfsAvailableInventory", title: "WFS可售库存" },
   { key: "systemLogs", title: "系统日志" },
   { key: "manualLog", title: "运营日志，可直接填写" },
   { key: "status", title: "状态" },
   { key: "actions", title: "操作" },
 ];
 
-export const fixedOperationLogColumnKeys = ["index", "date", "productIdShortcut"];
+export const fixedOperationLogColumnKeys = ["index", "date", "productIdShortcut", "skuMsku"];
 
 export const defaultOperationLogColumnWidths: Record<string, number> = {
   index: 54,
   date: 116,
-  productIdShortcut: 246,
-  productName: 180,
+  productIdShortcut: 188,
+  skuMsku: 188,
   store: 108,
   owner: 96,
   workType: 128,
-  conversionRate: 96,
-  adRatio: 96,
-  salePrice: 98,
+  profit7d: 120,
+  wfsAvailableInventory: 130,
   systemLogs: 110,
   manualLog: 360,
   status: 104,
@@ -223,7 +225,7 @@ export const filterOperationLogRows = (
 };
 
 export const createSystemDraft = (records: OperationLogSystemRecord[]) => {
-  if (records.length === 0) return "系统未抓到调整记录，待人工确认。";
+  if (records.length === 0) return "";
 
   return records
     .map((record) => `${record.date} ${record.type}：${record.object}，${record.detail}（系统检测，不代表真实操作时间或操作人）`)

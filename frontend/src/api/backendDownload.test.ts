@@ -88,6 +88,7 @@ describe("backendDownload", () => {
   });
 
   it("does not invent an identity when no session or preview token exists", async () => {
+    vi.stubEnv("VITE_PRODUCT_MANAGEMENT_PREVIEW_TOKEN", "");
     const fetch = vi.fn().mockResolvedValue(new Response(successEnvelope("UNAUTHORIZED"), {
       status: 401,
       headers: { "Content-Type": "application/json" },

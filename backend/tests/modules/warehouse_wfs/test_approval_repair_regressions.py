@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
-from app.modules.approvals.generic import GenericApprovalService
+from app.main import create_app
 from app.modules.approvals.schemas import ApprovalQuery
 from app.modules.approvals.service import ApprovalService
 from app.modules.approvals.workflow import ApprovalWorkflow
@@ -23,42 +23,18 @@ CASE_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 @pytest.mark.parametrize(
-    ("kind", "expected_risk"),
+    ("method", "path"),
     [
-        ("purchase_exception", "high"),
-        ("finance_exception", "high"),
-        ("access_change", "high"),
-        ("operations_plan_ack", "low"),
+        ("get", "/api/approvals/workflow/rules"),
+        ("put", "/api/approvals/workflow/rules/{approval_type}"),
+        ("get", "/api/approvals/workflow/notifications"),
+        ("post", "/api/approvals/workflow/notifications/{notification_id}/read"),
+        ("post", "/api/approvals/workflow/requests"),
     ],
 )
-def test_generic_submission_binds_risk(kind: str, expected_risk: str) -> None:
-    session = MagicMock(spec=Session)
-    session.execute.return_value.mappings.return_value.first.return_value = {
-        "required_steps": 2,
-        "min_reason_length": 5,
-    }
-    service = GenericApprovalService(session)
-    service._source = lambda *_args: {"source": "synthetic"}  # type: ignore[method-assign]
-    service.approvals._event = MagicMock()
-
-    result = service.submit(
-        kind,
-        "source-1",
-        "account-1",
-        frozenset({"account-1"}),
-        "applicant-1",
-        "real justification",
-        "synthetic evidence",
-    )
-    assert UUID(result)
-    inserts = [
-        call
-        for call in session.execute.call_args_list
-        if "insert into app_approval_requests" in str(call.args[0])
-    ]
-    assert len(inserts) == 1
-    assert inserts[0].args[1]["risk"] == expected_risk
-    session.commit.assert_called_once()
+def test_obsolete_approval_actions_have_no_api_route(method: str, path: str) -> None:
+    paths = create_app().openapi()["paths"]
+    assert method not in paths.get(path, {})
 
 
 def test_legacy_list_requires_legacy_mirror() -> None:
@@ -66,7 +42,7 @@ def test_legacy_list_requires_legacy_mirror() -> None:
     session.execute.return_value.scalar_one.return_value = 0
     session.execute.return_value.mappings.return_value.all.return_value = []
     response, total = ApprovalService(session).legacy_unverified(
-        ApprovalQuery(tab="legacy"),
+        ApprovalQuery(tab="pending"),
         frozenset({"account-1"}),
     )
     assert total == 0

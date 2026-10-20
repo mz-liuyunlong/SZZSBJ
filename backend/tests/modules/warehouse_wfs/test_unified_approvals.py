@@ -257,7 +257,7 @@ def test_unverified_legacy_case_is_read_only_and_does_not_create_approval() -> N
     ]
     session.execute.side_effect = [count_result, rows_result]
     data, total = ApprovalService(session).legacy_unverified(
-        ApprovalQuery(tab="legacy"), frozenset({"account-1"})
+        ApprovalQuery(tab="pending"), frozenset({"account-1"})
     )
     assert total == 1
     assert data.items[0].status == "legacy_unverified"
@@ -270,10 +270,86 @@ def test_unverified_legacy_case_is_read_only_and_does_not_create_approval() -> N
     session.commit.assert_not_called()
 
 
-def test_non_reviewer_cannot_view_legacy_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pending_combines_formal_and_read_only_legacy_in_one_page() -> None:
+    session = MagicMock(spec=Session)
+    count = MagicMock()
+    count.scalar_one.return_value = 2
+    rowset = MagicMock()
+    rowset.mappings.return_value.all.return_value = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "version": 1,
+            "approval_type": "wfs_case_abandon",
+            "business_ref": "00000000-0000-0000-0000-000000000001",
+            "title": "WFS 费用异常 · 放弃跟进",
+            "source_account_ref": "account-1",
+            "applicant_id": None,
+            "status": "submitted",
+            "risk_level": "high",
+            "amount": "829.43",
+            "currency_code": "USD",
+            "submitted_at": None,
+            "reviewed_at": None,
+            "reviewed_by": None,
+            "reason": "历史申请人未核验",
+            "can_review": True,
+            "requires_verification": False,
+            "case_review": True,
+        }
+    ]
+    session.execute.side_effect = [count, rowset]
+    data, total = ApprovalService(session).list_requests(
+        ApprovalQuery(tab="pending", view="mine", page=2, page_size=1),
+        frozenset({"account-1"}),
+        actor="reviewer-1",
+        may_review=True,
+    )
+    assert total == 2
+    assert len(data.items) == 1
+    assert data.items[0].status == "submitted"
+    assert data.items[0].requires_verification is False
+    assert data.items[0].can_review is True
+    assert data.items[0].case_review is True
+    assert data.items[0].applicant_id is None
+    assert data.items[0].submitted_at is None
+    sqls = [str(call.args[0]).lower() for call in session.execute.call_args_list]
+    assert all("union all" in sql for sql in sqls)
+    assert all("source_account_ref=any(:accounts)" in sql for sql in sqls)
+    assert all("source_kind='legacy_mirror'" in sql for sql in sqls)
+    assert all("a.applicant_id<>:actor" in sql for sql in sqls)
+    assert all("not exists" in sql for sql in sqls)
+    assert "order by case risk_level" in sqls[1]
+    assert "limit :limit offset :offset" in sqls[1]
+    assert session.execute.call_args_list[1].args[1]["limit"] == 1
+    assert session.execute.call_args_list[1].args[1]["offset"] == 1
+    session.commit.assert_not_called()
+
+
+def test_pending_created_and_nonreviewer_exclude_legacy() -> None:
+    for may_review, view in ((True, "created"), (False, "mine")):
+        session = MagicMock(spec=Session)
+        session.execute.return_value.scalar_one.return_value = 0
+        session.execute.return_value.mappings.return_value.all.return_value = []
+        result, total = ApprovalService(session).list_requests(
+            ApprovalQuery(tab="pending", view=view),
+            frozenset({"account-1"}),
+            actor="operator-1",
+            may_review=may_review,
+        )
+        assert total == 0
+        assert result.items == []
+        assert all(
+            "union all" not in str(call.args[0]).lower() for call in session.execute.call_args_list
+        )
+        session.commit.assert_not_called()
+
+
+def test_legacy_tab_is_removed_and_detail_remains_protected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _approval_client(monkeypatch, {"page:data-center:approval-workspace:view"})
     response = client.get("/api/approvals?tab=legacy")
-    assert response.status_code == 403
+    assert response.status_code == 422
     response = client.get("/api/approvals/legacy/00000000-0000-0000-0000-000000000001")
     assert response.status_code == 403
 
@@ -421,12 +497,82 @@ def test_legacy_summary_counts_only_visible_legacy_records_for_reviewer() -> Non
         "approved": 0,
     }
     secondary = MagicMock()
-    secondary.scalar_one.return_value = 8
+    secondary.mappings.return_value.one.return_value = {"total": 8, "high_risk": 2}
     session.execute.side_effect = [primary, secondary]
     summary = ApprovalService(session).summary(
         frozenset({"account-1"}), actor="reviewer-1", may_review=True
     )
     assert summary.legacy_unverified == 8
+    assert summary.pending == 8
+    assert summary.high_risk == 2
     sql = str(session.execute.call_args_list[1].args[0])
     assert "source_kind='legacy_mirror'" in sql
     assert "source_account_ref=any(:accounts)" in sql
+
+
+def test_current_wfs_mine_excludes_own_pending_case() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.scalar_one.return_value = 0
+    session.execute.return_value.mappings.return_value.all.return_value = []
+
+    ApprovalService(session).list_requests(
+        ApprovalQuery(tab="pending", view="mine"),
+        frozenset({"account-1"}),
+        "reviewer-1",
+        may_review=True,
+    )
+    sql = str(session.execute.call_args_list[0].args[0])
+    assert "c.archive_requested_by is distinct from :actor" in sql
+
+
+def test_current_wfs_case_review_requires_review_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _approval_client(monkeypatch, {"page:data-center:approval-workspace:view"})
+    res = client.post(
+        "/api/approvals/wfs-cases/00000000-0000-0000-0000-000000000001/decision",
+        json={"decision": "approved", "expected_version": 1},
+    )
+    assert res.status_code == 403
+
+
+def test_current_wfs_case_review_uses_authenticated_actor(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        ApprovalService,
+        "review_pending_case",
+        lambda _self, case_id, payload, accounts, actor: calls.append((str(case_id), actor)),
+    )
+    client = _approval_client(monkeypatch, {"action:warehouse:wfs-fee-alert:archive-review"})
+    res = client.post(
+        "/api/approvals/wfs-cases/00000000-0000-0000-0000-000000000001/decision",
+        json={"decision": "approved", "expected_version": 1},
+    )
+    assert res.status_code == 200
+    assert calls == [("00000000-0000-0000-0000-000000000001", "synthetic-user")]
+
+
+def test_current_wfs_case_refuses_self_review() -> None:
+    from datetime import UTC, datetime
+
+    frozen_now = datetime.now(UTC)
+    service = ApprovalService(MagicMock(spec=Session))
+    service._case = lambda *_a, **_kw: {
+        "source_kind": "legacy_mirror",
+        "status": "archive_pending",
+        "archive_review_status": "pending",
+        "updated_at": frozen_now,
+        "archive_requested_by": "reviewer-1",
+    }
+    service.session.execute.return_value.first.return_value = None
+    case = service._case("test", frozenset({"account-1"}))
+    version = service._case_version(case)
+    with pytest.raises(ApiError) as exc:
+        service.review_pending_case(
+            UUID("00000000-0000-0000-0000-000000000001"),
+            ApprovalDecisionWrite(decision="approved", expected_version=version),
+            frozenset({"account-1"}),
+            "reviewer-1",
+        )
+    assert exc.value.status_code == 403
+    service.session.commit.assert_not_called()

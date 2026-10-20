@@ -30,6 +30,7 @@ interface BackendWfsFeeCase {
   currency_code: string;
   manual_unit_fee: NumericLike;
   actual_unit_fee: NumericLike;
+  product_management_unit_wfs_fee?: NumericLike;
   unit_fee_diff: NumericLike;
   fee_source: string;
   fee_source_ref: string | null;
@@ -131,6 +132,10 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     units: affectedUnits,
     chargedFee: actualUnitFee * affectedUnits,
     standardFee: manualUnitFee * affectedUnits,
+    productUnitWfsFee:
+      item.product_management_unit_wfs_fee == null
+        ? null
+        : numberValue(item.product_management_unit_wfs_fee),
     unitCharged: actualUnitFee,
     unitStandard: manualUnitFee,
     overFee: estimatedRecoverAmount,
@@ -144,6 +149,9 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     nextFollowAt: item.next_follow_at ?? "-",
     level: priorityLabelMap[item.priority],
     followLog: item.follow_log ?? "",
+    followCount: item.follow_count,
+    lastFollowBy: item.last_follow_by,
+    lastFollowAt: item.last_follow_at,
     latestFollow: (item.follow_log ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? item.latest_follow_note ?? "",
   };
 };
@@ -178,7 +186,6 @@ export async function updateWfsFeeAlertCase(
       body: JSON.stringify({
         case_nos: values.caseNo,
         latest_follow_note: values.latestFollow,
-        next_follow_at: values.nextFollowAt === "-" ? null : values.nextFollowAt,
       }),
     },
   );

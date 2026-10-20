@@ -19,12 +19,10 @@ from app.modules.approvals.schemas import (
     ApprovalListData,
     ApprovalMeta,
     ApprovalQuery,
-    ApprovalRuleWrite,
     ApprovalSubmitResult,
     ApprovalSummary,
     ApprovalSupplementWrite,
     BulkDecisionWrite,
-    GenericApprovalWrite,
     LegacyReattestationWrite,
 )
 from app.modules.approvals.service import ApprovalService
@@ -58,10 +56,6 @@ def list_approvals(
     accounts: account_scope,
 ):
     approved = has_permission(principal, "action:warehouse:wfs-fee-alert:archive-review")
-    if query.tab == "legacy" and not approved:
-        from app.core.api import ApiError, ErrorCode
-
-        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     data, total = ApprovalService(session).list_requests(
         query,
         accounts,
@@ -87,6 +81,7 @@ def summary(
     return success_response(request, data=data, meta=None)
 
 
+@router.get("/wfs-cases/{case_id}/detail", response_model=SuccessEnvelope[ApprovalDetail, None])
 @router.get("/legacy/{case_id}", response_model=SuccessEnvelope[ApprovalDetail, None])
 def legacy_detail(
     request: Request,
@@ -100,7 +95,9 @@ def legacy_detail(
 
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     return success_response(
-        request, data=ApprovalService(session).legacy_detail(case_id, accounts), meta=None
+        request,
+        data=ApprovalService(session).legacy_detail(case_id, accounts, principal.user_id),
+        meta=None,
     )
 
 
@@ -118,89 +115,6 @@ def reattest_legacy(
         accounts,
         principal.user_id,
         payload.reason_type,
-        payload.reason,
-        payload.evidence,
-    )
-    return success_response(request, data={"approval_id": approval_id}, meta=None)
-
-
-@router.get("/workflow/rules", response_model=SuccessEnvelope[list[dict], None])
-def approval_rules(request: Request, session: db_session, _: view_principal):
-    return success_response(request, data=ApprovalWorkflow(session).available_rules(), meta=None)
-
-
-@router.put(
-    "/workflow/rules/{approval_type}", response_model=SuccessEnvelope[dict[str, bool], None]
-)
-def update_approval_rule(
-    request: Request,
-    approval_type: str,
-    payload: ApprovalRuleWrite,
-    session: db_session,
-    principal: Annotated[
-        Principal,
-        Depends(require_permission("action:settings:role-management:configure-permissions")),
-    ],
-):
-    ApprovalWorkflow(session).update_rule(
-        approval_type,
-        principal.user_id,
-        payload.expected_version,
-        payload.required_steps,
-        payload.due_hours,
-        payload.allows_bulk,
-    )
-    return success_response(request, data={"updated": True}, meta=None)
-
-
-@router.get("/workflow/notifications", response_model=SuccessEnvelope[list[dict], None])
-def approval_notifications(request: Request, session: db_session, principal: view_principal):
-    return success_response(
-        request, data=ApprovalWorkflow(session).inbox(principal.user_id), meta=None
-    )
-
-
-@router.post(
-    "/workflow/notifications/{notification_id}/read",
-    response_model=SuccessEnvelope[dict[str, bool], None],
-)
-def mark_approval_notification_read(
-    request: Request,
-    notification_id: UUID,
-    session: db_session,
-    principal: view_principal,
-):
-    return success_response(
-        request,
-        data={"updated": ApprovalWorkflow(session).mark_read(notification_id, principal.user_id)},
-        meta=None,
-    )
-
-
-@router.post("/workflow/requests", response_model=SuccessEnvelope[dict[str, str], None])
-def submit_generic_approval(
-    request: Request,
-    payload: GenericApprovalWrite,
-    session: db_session,
-    principal: view_principal,
-    accounts: account_scope,
-):
-    # High-impact general requests require explicit super-admin authority.
-    # Purchase requests may also be initiated by a PMC override authorized user.
-    allowed = has_permission(principal, "*") or (
-        payload.approval_type == "purchase_exception"
-        and has_permission(principal, "action:pmc:purchase-board:override")
-    )
-    if not allowed:
-        from app.core.api import ApiError, ErrorCode
-
-        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-    approval_id = GenericApprovalService(session).submit(
-        payload.approval_type,
-        payload.source_ref,
-        payload.source_account_ref,
-        accounts,
-        principal.user_id,
         payload.reason,
         payload.evidence,
     )
@@ -247,6 +161,22 @@ def get_approval(
         is_admin=has_permission(principal, "*"),
     )
     return success_response(request, data=data, meta=None)
+
+
+@router.post(
+    "/wfs-cases/{case_id}/decision",
+    response_model=SuccessEnvelope[dict[str, bool], None],
+)
+def review_current_wfs_case(
+    request: Request,
+    case_id: UUID,
+    payload: ApprovalDecisionWrite,
+    session: db_session,
+    principal: archive_review_principal,
+    accounts: account_scope,
+):
+    ApprovalService(session).review_pending_case(case_id, payload, accounts, principal.user_id)
+    return success_response(request, data={"updated": True}, meta=None)
 
 
 @router.post("/wfs-cases/{case_id}", response_model=SuccessEnvelope[ApprovalSubmitResult, None])
