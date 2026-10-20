@@ -1,13 +1,14 @@
 """Owner-authorized one-time run for one or all domestic warehouse Lingxing feeds.
 
-Set ``PMC_DOMESTIC_INTERFACE_KEY`` to one catalog key, or ``all`` to run the four
-ODS interfaces sequentially (warehouse, inventory, batch detail, batch statement).
+Set ``PMC_DOMESTIC_INTERFACE_KEY`` to one catalog key, or ``all`` to run the five
+ODS interfaces sequentially, including the separately modeled warehouse statement feed.
 
 Environment (none printed):
   PMC_DOMESTIC_ONE_TIME_RUN_AUTHORIZED=true
   PMC_DOMESTIC_SOURCE_ACCOUNT_REF
   PMC_DOMESTIC_INTERFACE_KEY          domesticWarehouseList | … | all
-  PMC_DOMESTIC_WINDOW_START / _END    required for batch statement only (YYYY-MM-DD)
+  PMC_DOMESTIC_WAREHOUSE_ID           optional W1/W3-only warehouse scope
+  PMC_DOMESTIC_WINDOW_START / _END    bounded statement window (YYYY-MM-DD)
   PMC_DOMESTIC_ONE_TIME_RUN_IDEMPOTENCY_KEY   optional prefix; each interface gets a suffix
   PMC_DOMESTIC_ONE_TIME_RUN_REASON    optional
 """
@@ -86,9 +87,10 @@ class PmcDomesticOneTimeRunResult:
 
 
 class PmcDomesticOneTimeRunner:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, warehouse_id: str | None = None) -> None:
         register_productlist_sync_models()
         self.session = session
+        self.warehouse_id = warehouse_id
         self.repository = IntegrationSyncRepository(session)
 
     def execute(
@@ -101,6 +103,13 @@ class PmcDomesticOneTimeRunner:
         idempotency_key: str,
         reason: str,
     ) -> PmcDomesticOneTimeRunResult:
+        if self.warehouse_id is not None and (
+            not self.warehouse_id.strip()
+            or self.warehouse_id != self.warehouse_id.strip()
+            or len(self.warehouse_id) > 64
+            or spec.interface_key not in {"domesticBatchDetailList", "domesticWarehouseStatement"}
+        ):
+            raise PmcDomesticOneTimeRunError("PMC_DOMESTIC_WAREHOUSE_SCOPE_INVALID")
         if spec.requires_date_window and (window_start is None or window_end is None):
             raise PmcDomesticOneTimeRunError("PMC_DOMESTIC_ONE_TIME_RUN_WINDOW_REQUIRED")
         interface = self.repository.get_interface_by_key(PROVIDER, spec.interface_key)
@@ -160,7 +169,9 @@ class PmcDomesticOneTimeRunner:
             self.session.rollback()
             raise PmcDomesticOneTimeRunError("PMC_DOMESTIC_ONE_TIME_RUN_CONFLICT") from None
 
-        execution = PMC_DOMESTIC_HANDLERS[spec.interface_key](self.session).execute(run, interface)
+        execution = PMC_DOMESTIC_HANDLERS[spec.interface_key](
+            self.session, warehouse_id=self.warehouse_id
+        ).execute(run, interface)
         return PmcDomesticOneTimeRunResult(
             run_id=run.id,
             interface_key=spec.interface_key,
@@ -195,7 +206,9 @@ def main() -> int:
     exit_code = 0
     try:
         with get_session_factory()() as session:
-            runner = PmcDomesticOneTimeRunner(session)
+            runner = PmcDomesticOneTimeRunner(
+                session, warehouse_id=os.getenv("PMC_DOMESTIC_WAREHOUSE_ID")
+            )
             for spec in specs:
                 key = f"{idempotency_prefix}:{spec.interface_key}:{uuid4()}"
                 result = runner.execute(

@@ -11,11 +11,14 @@ from pydantic import JsonValue
 WAREHOUSE_LIST_ENDPOINT: Final = "/erp/sc/data/local_inventory/warehouse"
 INVENTORY_DETAILS_ENDPOINT: Final = "/erp/sc/routing/data/local_inventory/inventoryDetails"
 BATCH_DETAIL_LIST_ENDPOINT: Final = "/erp/sc/routing/data/local_inventory/getBatchDetailList"
-BATCH_STATEMENT_LIST_ENDPOINT: Final = (
-    "/erp/sc/routing/data/local_inventory/getBatchStatementList"
+BATCH_STATEMENT_LIST_ENDPOINT: Final = "/erp/sc/routing/data/local_inventory/getBatchStatementList"
+
+WAREHOUSE_STATEMENT_ENDPOINT: Final = (
+    "/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement"
 )
 
 type PmcDomesticEndpoint = Literal[
+    "/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
     "/erp/sc/data/local_inventory/warehouse",
     "/erp/sc/routing/data/local_inventory/inventoryDetails",
     "/erp/sc/routing/data/local_inventory/getBatchDetailList",
@@ -24,6 +27,7 @@ type PmcDomesticEndpoint = Literal[
 
 PMC_DOMESTIC_ENDPOINTS: frozenset[str] = frozenset(
     {
+        WAREHOUSE_STATEMENT_ENDPOINT,
         WAREHOUSE_LIST_ENDPOINT,
         INVENTORY_DETAILS_ENDPOINT,
         BATCH_DETAIL_LIST_ENDPOINT,
@@ -122,6 +126,19 @@ PMC_DOMESTIC_ENDPOINT_SPECS: dict[str, PmcDomesticEndpointSpec] = {
         returns_total=True,
         requires_date_window=True,
     ),
+    WAREHOUSE_STATEMENT_ENDPOINT: PmcDomesticEndpointSpec(
+        interface_key="domesticWarehouseStatement",
+        registry_interface_id="LX-F0CE5B7F589B",
+        api_path=WAREHOUSE_STATEMENT_ENDPOINT,
+        object_type="pmc_domestic_warehouse_statement",
+        allowed_body_fields=frozenset(
+            {"offset", "length", "wids", "start_date", "end_date", "types", "sub_types"}
+        ),
+        required_body_fields=frozenset({"offset", "length", "start_date", "end_date"}),
+        max_page_size=200,
+        returns_total=True,
+        requires_date_window=True,
+    ),
 }
 
 
@@ -161,7 +178,8 @@ def build_pmc_domestic_page_body(
     if spec.requires_date_window and start_date is not None and end_date is not None:
         body["start_date"] = start_date.strftime(PMC_DOMESTIC_DATE_FORMAT)
         body["end_date"] = end_date.strftime(PMC_DOMESTIC_DATE_FORMAT)
-        body.setdefault("time_filter_field", "operate_time")
+        if api_path == BATCH_STATEMENT_LIST_ENDPOINT:
+            body.setdefault("time_filter_field", "operate_time")
     if extra is not None:
         if not isinstance(extra, dict):
             raise PmcDomesticContractError("PMC domestic extra filters must be an object")

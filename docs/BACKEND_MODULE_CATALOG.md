@@ -202,3 +202,13 @@
 | Evidence | `docs/iam/RBAC_V2_POST_0041_AUDIT.md` 及 `docs/operations/RBAC_V2_*`；最终 test/CI/PR 信息在发布验收文档更新 |
 | PR | `#226`；open，未合并 |
 | Not in scope | 生产数据库/服务器、生产 migration/deploy/restart、真实角色自动扩权、`source_account='*'` 自动授予、外部 API/Token、旧系统修改、store/owner/sku/product 通用过滤实现 |
+
+
+## PMC Domestic Inbound Board M1
+
+Module：既有pmc_domestic的独立入库模型（非收货行），inbound_router/schemas/service/repository/builder/publisher/models；文件采集器inbound_collector，复用Lingxing只读client与Token Manager。新增三个表由0049迁移管理；原收货接口不改。CSV无数据库依赖；发布CLI只读成功ODS并事务切换版本；Celery复用integration_sync已登记handler，不启用定时。状态：本地实现待真实数据验收；API/SOP/runbook与registry见同模块文档。
+
+
+## 2026-10-20 国内仓打包单审批本地M1
+
+来源决策READY_FOR_PRP及负责人本轮授权；四表OPS发号/订单/分配+EVT事件，0050接本地0049，保留已有迁移及业务资料。候选来自当前入库MART×符合条件Listing；builder v2把既有ODS良品/锁定证明规范化到MART payload，本地重新发布保留旧版，当前1454行。GET不查ODS、不调用外部。8个API见pmc-domestic-packing-approval-api.md；POST独立动作权限，可信账号隔离、幂等/并发库存/统一北京日发号/不可变事件。前端真实列表、审批弹窗、筛选/重试/分页及历史审计已接通。所有写入仅本地验证is_test=true，生产写保护；原采购与IAM保留，未自动授权角色。AD/manual/OWS/装箱/六态为后续切片。验证与逐表记录：docs/delivery/pmc-domestic-packing-approval-verification.md。继续dev，未新建分支/提交/推送/部署。

@@ -30,6 +30,7 @@ from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_q
 from app.integrations.lingxing.security import redact_json
 
 type LingxingEndpoint = Literal[
+    "/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
     "/basicOpen/multiplatform/walmart/list",
     "/basicOpen/platformStatisticsV2/saleStat/pageList",
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo",
@@ -629,6 +630,7 @@ class LingxingReadonlyClient:
                 length=length,
                 start_date=start_date,
                 end_date=end_date,
+                extra={"show_zero_stock": 1} if api_path.endswith("/getBatchDetailList") else None,
             )
         except PmcDomesticContractError as exc:
             raise LingxingClientError(str(exc)) from exc
@@ -656,6 +658,61 @@ class LingxingReadonlyClient:
             first_page_only=False,
         )
         return self._fetch_page(capture, page, contract, max_attempts=1)
+
+    def fetch_inbound_page(
+        self,
+        *,
+        api_path: str,
+        body: dict[str, JsonValue],
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """File-only caller still uses the shared allowlist, query signing and real-call gate."""
+        from app.integrations.lingxing.pmc_domestic_contracts import (
+            BATCH_DETAIL_LIST_ENDPOINT,
+            WAREHOUSE_STATEMENT_ENDPOINT,
+        )
+
+        if not self._settings.lingxing_enable_real_calls or api_path not in {
+            BATCH_DETAIL_LIST_ENDPOINT,
+            WAREHOUSE_STATEMENT_ENDPOINT,
+        }:
+            raise LingxingClientError("Inbound collection is not authorized")
+        if (
+            not source_account_ref.strip()
+            or not isinstance(body.get("wids"), str)
+            or not body["wids"].strip()
+        ):
+            raise LingxingClientError("Inbound source scope is missing")
+        spec = get_pmc_domestic_spec(api_path)
+        page = LingxingPageRequest.model_construct(
+            page_no=1, page_size=body.get("length"), params=None, body=body
+        )
+        capture = LingxingCaptureRequest(
+            api_path=spec.api_path,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=spec.object_type,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture, page, contract, page_size_limit=spec.max_page_size, first_page_only=False
+        )
+        if api_path == WAREHOUSE_STATEMENT_ENDPOINT:
+            try:
+                start = date.fromisoformat(str(body["start_date"]))
+                end = date.fromisoformat(str(body["end_date"]))
+                if not 0 < (end - start).days <= 30:
+                    raise ValueError
+            except (ValueError, KeyError):
+                raise LingxingClientError("Inbound date window invalid") from None
+        elif body.get("show_zero_stock") != 1:
+            raise LingxingClientError("Inbound batch snapshot must include zero stock")
+        return self._fetch_page(capture, page, contract)
 
     def fetch_batch_product_info(
         self,

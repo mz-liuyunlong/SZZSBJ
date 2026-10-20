@@ -1,7 +1,6 @@
 import os
 from logging.config import fileConfig
 
-from alembic.ddl.postgresql import PostgresqlImpl
 from sqlalchemy import Column, MetaData, PrimaryKeyConstraint, String, Table, create_engine, pool
 from sqlalchemy.engine import URL, Connection
 
@@ -9,13 +8,16 @@ import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metada
 import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
+import app.modules.pmc_domestic.inbound_models  # noqa: F401
 import app.modules.pmc_domestic.models  # noqa: F401  # Register domestic warehouse tables.
+import app.modules.pmc_domestic.packing_models  # noqa: F401
 import app.modules.pmc_purchase.gate3_models  # noqa: F401  # Register PMC purchase Gate 3.
 import app.modules.pmc_purchase.models  # noqa: F401  # Register PMC purchase ODS.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.
 import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS projections.
 from alembic import context
+from alembic.ddl.postgresql import PostgresqlImpl
 from app.core.config import AppEnvironment, SettingsError, get_database_url, get_settings
 from app.db.base import Base
 

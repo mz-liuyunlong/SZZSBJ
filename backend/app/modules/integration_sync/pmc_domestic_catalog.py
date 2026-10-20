@@ -89,9 +89,21 @@ PMC_DOMESTIC_SYNC_INTERFACE_SPECS: Final[tuple[PmcDomesticSyncInterfaceSpec, ...
         default_max_pages=5000,
         returns_total=True,
         requires_date_window=True,
-        notes=(
-            "Bounded operate_time window on the run; default time_filter_field=operate_time.",
-        ),
+        notes=("Bounded operate_time window on the run; default time_filter_field=operate_time.",),
+    ),
+    PmcDomesticSyncInterfaceSpec(
+        interface_key="domesticWarehouseStatement",
+        registry_interface_id="LX-F0CE5B7F589B",
+        display_name="Lingxing Domestic Warehouse Statement",
+        endpoint_path="/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
+        request_kind="offset_page",
+        handler_key=f"{PMC_DOMESTIC_HANDLER_PREFIX}warehouse_statement.v1",
+        target_tables=("ods_lingxing_domestic_warehouse_statements",),
+        retention_policy_key=f"{PMC_DOMESTIC_POLICY_PREFIX}warehouse-statement-v1",
+        default_page_size=200,
+        default_max_pages=1000,
+        returns_total=True,
+        requires_date_window=True,
     ),
 )
 

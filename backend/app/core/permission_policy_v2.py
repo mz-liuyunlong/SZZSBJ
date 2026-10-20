@@ -264,6 +264,13 @@ def permission_for_request(method: str, path: str, declared_permission: str) -> 
         if path.endswith("/mark-recovered"):
             return "action:warehouse:wfs-fee-alert:mark-recovered"
 
+    if normalized_method == "POST" and path.startswith(
+        "/api/pmc/domestic/packing-approval/pending/"
+    ):
+        if path.endswith("/approve"):
+            return "action:pmc:domestic-warehouse-board:packing-approve"
+        if path.endswith("/reject"):
+            return "action:pmc:domestic-warehouse-board:packing-reject"
     for rule in _RULES:
         if rule.matches(normalized_method, path):
             if (

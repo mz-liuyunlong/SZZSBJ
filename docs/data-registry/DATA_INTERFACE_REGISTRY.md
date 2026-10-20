@@ -166,3 +166,45 @@ automatic schedule, legacy MySQL/`raw_lingxing_api` write, frontend change or RA
 - [ ] 权限、data scope、敏感性和 freshness 已说明。
 - [ ] 只记录 `secret_ref`，没有秘密值。
 - [ ] 同一 PR 同步更新受影响的 Page/Task/Module catalog。
+
+
+## 国内仓入库批次 M1（2026-10-20，本地实现待真实验收）
+
+| ID | 类型 | 来源/目标 | 权限/边界 | 状态 |
+|---|---|---|---|---|
+| ext-domestic-warehouse-statement | External | LX-F0CE5B7F589B wareHouseCenterStatement → RAW/独立ODS | 领星只读、显式账号/仓库/窗口、默认关闭 | implemented_local |
+| ext-domestic-inbound-batch | External | LX-1181D4F827FB getBatchDetailList → 既有RAW/批次ODS | 包含零库存，账号/仓库隔离 | implemented_local |
+| storage-domestic-warehouse-statements | Storage | ods_lingxing_domestic_warehouse_statements | RAW引用、来源run，append-only | applied_production_20261020; source_runs_published |
+| storage-domestic-inbound-board | Read model | mart_domestic_inbound_batch_board + gov_domestic_board_publications | 有版本的IB×SKU×归属；不改收货DWD | applied_production_20261020; source_runs_published |
+| export-domestic-inbound-csv | Export | 上述两来源 → CSV/脱敏JSONL/manifest | 不连接数据库，未执行真实采集 | implemented_local |
+| api-domestic-inbound-board | API | GET /api/pmc/domestic/inbound-batches（列表/summary/detail/trace） | pmc:domestic-batch:read，经页面权限策略与source-account scope；只读mart | implemented_local; not_deployed |
+| frontend-domestic-inbound-board | Frontend dependency | inbound-batches列表/summary/trace + 用户主动选择的预览CSV/manifest | API按来源权限；文件只在浏览器内存校验，不上传/写库 | implemented_testing; pending_real_data_acceptance |
+
+Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源决策：docs/data-sources/decisions/pmc-domestic-inbound-board-decision.md。实现本次不含Git上传/部署；真实任务结果另行验收。密钥只通过安全运行配置，不写入registry。
+
+
+2026-10-20国内仓执行结果：0049已应用；惠州仓16168批次1528/30天流水1264成功，当前入库mart1441行，版本化保留两版。时区负责人确认Asia/Shanghai；CSV同源、哈希和汇总已核对。DOMESTIC同步开关已关闭；公共gov_parse_jobs只用于DWD，本模块ODS使用已有run/work-item与DataLineage，不改其结构。前端接新API，当前开发后端需重启加载路由；未部署生产服务。精确证据见PRPs/pmc-domestic-inbound-production-execution.md。
+
+## 2026-10-20 入库批次选项增量（本地实现）
+
+| 接口/消费 | 来源及用途 | 边界 |
+|---|---|---|
+| GET /api/pmc/domestic/inbound-batches/filter-options | 当前入库 MART/GOV 的完整可见范围；DIM店铺名称、DWD SKU当前负责人 | pmc:domestic-batch:read + 页面策略 + 账号范围；warehouse_id；业务状态只返回禁用能力 |
+| 入库 list/summary owner_uid | DWD identity + product_info_current，account+SKU唯一active身份，EXISTS | 当前负责人语义；不查询收货DWD，不复制行/数量 |
+| 批次页三个下拉 | backendRequest + React Query用户范围/仓库key + ReportFacetSelect/AntD Select | loading/empty/error+retry；packing不请求；不写DB/不调领星 |
+
+决策：pmc-domestic-inbound-filter-options-decision.md；PRP：pmc-domestic-inbound-filter-options.md。无新增表/字段/迁移、无生产变更。状态建设方案为候选，不表示实施。
+
+## 2026-10-20 国内仓最新本地数据发布
+
+当前开发环境已明确为local 127.0.0.1:55432/szzsbj_dev，0049已就绪。重新只读拉取领星惠州16168近30天W3（1296）及当前完整W1（1541），通过RAW/ODS审计后发布1个版本，MART1454行。所列是本地数量，不替代上午生产审计。真实来源新鲜度17:43北京时间。GET入库list/summary/options/detail/trace读取本地当前版本；原收货/batches保持不变。没有生产DB连接/修改、无migration/env/权限变化；本地必要治理配置默认关闭，无定时。路由真实本地DB合成鉴权联调200，运行服务匿名401，本地IAM用户/会话为0，未验证浏览器登录。详细证据见PRPs/pmc-domestic-inbound-local-execution.md。
+
+
+## 2026-10-20 采购看板本地数据已导入
+
+负责人授权全量采购看板依赖复制到local 127.0.0.1:55432/szzsbj_dev/public。源生产只读，未重新采集领星；采购来源最新观察时间10-17 18:00:43，不能把10-20本地重算时间视为采集时间。27张非空来源表及完整FK父记录、每条相关记录最新血缘已导入，人工覆盖源为0。核心结果：DWD计划1119/采购单784/明细867，DWS看板867/周期652/重算后待处理711；店铺9、Listing3223、SKU当前资料1435、产品1301。接口只读真实本地DB合成鉴权联调200：看板867、待采购计划196、负责人17；店铺/负责人筛选和带收货详情通过，匿名401，真人浏览器登录态未代替验证。原国内仓1454/用户29保留，所有本地同步/定时/外呼关闭。没有改schema/env/认证/生产或部署。执行与逐表清单：PRPs/pmc-purchase-local-data-execution.md；Navicat：docs/delivery/local-purchase-import-verification.sql，7查询已实跑。仍dev、未提交推送。
+
+
+## 2026-10-20 国内仓打包单审批本地M1
+
+来源决策READY_FOR_PRP及负责人本轮授权；四表OPS发号/订单/分配+EVT事件，0050接本地0049，保留已有迁移及业务资料。候选来自当前入库MART×符合条件Listing；builder v2把既有ODS良品/锁定证明规范化到MART payload，本地重新发布保留旧版，当前1454行。GET不查ODS、不调用外部。8个API见pmc-domestic-packing-approval-api.md；POST独立动作权限，可信账号隔离、幂等/并发库存/统一北京日发号/不可变事件。前端真实列表、审批弹窗、筛选/重试/分页及历史审计已接通。所有写入仅本地验证is_test=true，生产写保护；原采购与IAM保留，未自动授权角色。AD/manual/OWS/装箱/六态为后续切片。验证与逐表记录：docs/delivery/pmc-domestic-packing-approval-verification.md。继续dev，未新建分支/提交/推送/部署。

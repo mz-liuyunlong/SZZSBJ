@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
+from time import sleep
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -20,6 +21,7 @@ from app.db.model_registry import register_productlist_sync_models
 from app.integrations.lingxing.client import LingxingRawEnvelope, LingxingReadonlyClient
 from app.integrations.lingxing.pmc_domestic_contracts import (
     PmcDomesticContractError,
+    build_pmc_domestic_page_body,
     pmc_domestic_provider_code,
     pmc_domestic_response_items,
     pmc_domestic_response_succeeded,
@@ -35,7 +37,6 @@ from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
     IntegrationSyncRun,
     IntegrationSyncRunWorkItem,
-    ParseJob,
     RawRetentionPolicy,
     utc_now,
 )
@@ -51,6 +52,7 @@ from app.modules.integration_sync.pmc_domestic_catalog import (
     PmcDomesticSyncInterfaceSpec,
 )
 from app.modules.integration_sync.repository import IntegrationSyncRepository
+from app.modules.pmc_domestic.inbound_models import DomesticWarehouseStatement
 from app.modules.pmc_domestic.models import (
     LingxingDomesticBatchOds,
     LingxingDomesticInventoryEventOds,
@@ -61,7 +63,8 @@ from app.modules.pmc_domestic.models import (
 logger = logging.getLogger("app.integration_sync.pmc_domestic")
 
 DomesticOdsRow = (
-    LingxingDomesticWarehouseOds
+    DomesticWarehouseStatement
+    | LingxingDomesticWarehouseOds
     | LingxingDomesticInventoryOds
     | LingxingDomesticBatchOds
     | LingxingDomesticInventoryEventOds
@@ -70,6 +73,7 @@ DomesticOdsRow = (
 DEFAULT_MAX_PAGES = 1000
 
 ODS_MODELS: dict[str, tuple[type[DomesticOdsRow], str]] = {
+    "domesticWarehouseStatement": (DomesticWarehouseStatement, "statement_id"),
     "domesticWarehouseList": (LingxingDomesticWarehouseOds, "source_warehouse_id"),
     "domesticInventoryDetails": (LingxingDomesticInventoryOds, "source_warehouse_id"),
     "domesticBatchDetailList": (LingxingDomesticBatchOds, "batch_no"),
@@ -78,6 +82,16 @@ ODS_MODELS: dict[str, tuple[type[DomesticOdsRow], str]] = {
 
 
 class PmcDomesticPageClient(Protocol):
+    def fetch_inbound_page(
+        self,
+        *,
+        api_path: str,
+        body: dict[str, JsonValue],
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope: ...
+
     def fetch_pmc_domestic_page(
         self,
         *,
@@ -127,13 +141,30 @@ class LingxingPmcDomesticSyncHandler:
     spec: PmcDomesticSyncInterfaceSpec
     handler_key: str
 
-    def __init__(self, session: Session, *, client: PmcDomesticPageClient | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        client: PmcDomesticPageClient | None = None,
+        warehouse_id: str | None = None,
+    ) -> None:
         register_productlist_sync_models()
         self.session = session
         self.repository = IntegrationSyncRepository(session)
         self._client = client
+        if warehouse_id is not None and (
+            not warehouse_id.strip()
+            or warehouse_id != warehouse_id.strip()
+            or len(warehouse_id) > 64
+            or self.spec.interface_key
+            not in {"domesticBatchDetailList", "domesticWarehouseStatement"}
+        ):
+            raise PmcDomesticSyncError("SYNC_DOMESTIC_WAREHOUSE_SCOPE_INVALID")
+        self._warehouse_id = warehouse_id
 
-    def execute(self, run: IntegrationSyncRun, interface: IntegrationInterface) -> PmcDomesticSyncResult:
+    def execute(
+        self, run: IntegrationSyncRun, interface: IntegrationInterface
+    ) -> PmcDomesticSyncResult:
         try:
             config, policy, window = self._preflight(run, interface)
         except PmcDomesticSyncError as error:
@@ -208,17 +239,40 @@ class LingxingPmcDomesticSyncHandler:
                 work = self._start_work_item(run, page_no, offset, page_size, window)
                 current_work_id = work.id
                 try:
-                    envelope = client.fetch_pmc_domestic_page(
-                        api_path=self.spec.endpoint_path,
-                        offset=offset,
-                        length=page_size,
-                        page_no=page_no,
-                        start_date=window[0],
-                        end_date=window[1],
-                        source_account_ref=run.source_account_ref,
-                        run_id=str(run.id),
-                        work_item_id=str(work.id),
-                    )
+                    if self._warehouse_id is not None:
+                        # Governed scoped jobs share the provider single-request rate budget.
+                        sleep(1.25)
+                        extras: dict[str, JsonValue] = {"wids": self._warehouse_id}
+                        if self.spec.interface_key == "domesticBatchDetailList":
+                            extras["show_zero_stock"] = 1
+                        body = build_pmc_domestic_page_body(
+                            self.spec.endpoint_path,
+                            offset=offset,
+                            length=page_size,
+                            start_date=window[0],
+                            end_date=window[1],
+                            extra=extras,
+                        )
+                        assert isinstance(body, dict)
+                        envelope = client.fetch_inbound_page(
+                            api_path=self.spec.endpoint_path,
+                            body=body,
+                            source_account_ref=run.source_account_ref,
+                            run_id=str(run.id),
+                            work_item_id=str(work.id),
+                        )
+                    else:
+                        envelope = client.fetch_pmc_domestic_page(
+                            api_path=self.spec.endpoint_path,
+                            offset=offset,
+                            length=page_size,
+                            page_no=page_no,
+                            start_date=window[0],
+                            end_date=window[1],
+                            source_account_ref=run.source_account_ref,
+                            run_id=str(run.id),
+                            work_item_id=str(work.id),
+                        )
                 except Exception:
                     return self._fail_run(run, work, "SYNC_DOMESTIC_TRANSPORT_FAILED")
                 if envelope.response_json is not None:
@@ -238,20 +292,39 @@ class LingxingPmcDomesticSyncHandler:
                         expected_total = parsed.provider_total
                     elif parsed.provider_total != expected_total:
                         return self._fail_run(run, work, "SYNC_DOMESTIC_TOTAL_CHANGED")
+                if self._warehouse_id is not None and parsed.provider_total is None:
+                    return self._fail_run(run, work, "SYNC_DOMESTIC_TOTAL_REQUIRED")
                 projected = offset + parsed.response_count
+                if (
+                    self._warehouse_id is not None
+                    and expected_total is not None
+                    and parsed.response_count < page_size
+                    and projected < expected_total
+                ):
+                    return self._fail_run(run, work, "SYNC_DOMESTIC_INCOMPLETE_PAGE")
                 if expected_total is not None and projected > expected_total:
                     return self._fail_run(run, work, "SYNC_DOMESTIC_TOTAL_MISMATCH")
                 try:
-                    written, dup = self._publish_page(run, work, envelope.pulled_at, parsed, seen_keys)
+                    written, dup = self._publish_page(
+                        run, work, envelope.pulled_at, parsed, seen_keys
+                    )
                 except PmcDomesticSyncError as error:
                     self.session.rollback()
                     return self._recover_and_fail(run_id, current_work_id, str(error))
                 except Exception:
                     self.session.rollback()
-                    return self._recover_and_fail(run_id, current_work_id, "SYNC_DOMESTIC_PUBLISH_FAILED")
+                    return self._recover_and_fail(
+                        run_id, current_work_id, "SYNC_DOMESTIC_PUBLISH_FAILED"
+                    )
                 written_total += written
                 duplicates += dup
                 offset = projected
+                if (
+                    parsed.response_count == 0
+                    and expected_total is not None
+                    and offset < expected_total
+                ):
+                    return self._fail_run(run, work, "SYNC_DOMESTIC_INCOMPLETE_PAGE")
                 if parsed.response_count == 0:
                     return self._succeed(run, written_total, duplicates)
                 if expected_total is not None and offset >= expected_total:
@@ -272,6 +345,10 @@ class LingxingPmcDomesticSyncHandler:
         window: tuple[date | None, date | None],
     ) -> IntegrationSyncRunWorkItem:
         params: dict[str, object] = {"offset": offset, "length": length}
+        if self._warehouse_id is not None:
+            params["wids"] = self._warehouse_id
+        if self.spec.interface_key == "domesticBatchDetailList":
+            params["show_zero_stock"] = 1
         if window[0] is not None and window[1] is not None:
             params["start_date"] = window[0].isoformat()
             params["end_date"] = window[1].isoformat()
@@ -348,29 +425,30 @@ class LingxingPmcDomesticSyncHandler:
         parsed: DomesticPageParse,
         seen_keys: set[str],
     ) -> tuple[int, int]:
+        # Reject a provider ignoring wids before any structured rows can be committed.
+        if self._warehouse_id is not None and any(
+            header.columns.get("source_warehouse_id") != self._warehouse_id
+            for header in parsed.headers
+        ):
+            raise PmcDomesticSyncError("SYNC_DOMESTIC_WAREHOUSE_MISMATCH")
         raw_ref = self.repository.get_raw_request_ref_for_work_item(work.id)
         if raw_ref is None:
             raise PmcDomesticSyncError("SYNC_DOMESTIC_RAW_REF_MISSING")
         model, key_field = ODS_MODELS[self.spec.interface_key]
-        parse_job = ParseJob(
-            id=uuid4(),
-            run_id=run.id,
-            raw_request_ref_id=raw_ref.id,
-            parser_key=PARSER_KEYS[self.spec.endpoint_path],
-            parser_version=PARSER_VERSION,
-            target_layer="ODS",
-            status="running",
-            records_seen=parsed.response_count,
-            records_written=0,
-            records_rejected=0,
-            started_at=utc_now(),
-        )
+        # gov_parse_jobs is reserved for DWD by its existing database contract.
+        # ODS keeps parse/version evidence on lineage and counts on run/work-item;
+        # do not mislabel ODS as DWD or widen a shared table for this module.
         rows: list[object] = []
         lineage: list[DataLineage] = []
         written = 0
         duplicates = 0
         for ordinal, header in enumerate(parsed.headers):
             if header.business_key in seen_keys:
+                if self.spec.interface_key in {
+                    "domesticWarehouseStatement",
+                    "domesticBatchDetailList",
+                }:
+                    raise PmcDomesticSyncError("SYNC_DOMESTIC_DUPLICATE_IDENTITY")
                 duplicates += 1
                 continue
             seen_keys.add(header.business_key)
@@ -389,7 +467,7 @@ class LingxingPmcDomesticSyncHandler:
                 DataLineage(
                     id=uuid4(),
                     run_id=run.id,
-                    parse_job_id=parse_job.id,
+                    parse_job_id=None,
                     raw_request_ref_id=raw_ref.id,
                     raw_blob_id=raw_ref.raw_blob_id,
                     source_path=header.source_path,
@@ -400,11 +478,6 @@ class LingxingPmcDomesticSyncHandler:
                     transform_version=PARSER_VERSION,
                 )
             )
-        parse_job.records_written = written
-        parse_job.records_rejected = duplicates
-        parse_job.status = "succeeded"
-        parse_job.finished_at = utc_now()
-        self.repository.add_parse_job(parse_job)
         self.repository.add_ods_records(rows)
         self.repository.add_lineage(lineage)
         work.status = "succeeded"
@@ -493,9 +566,15 @@ class LingxingDomesticBatchStatementListSyncHandler(LingxingPmcDomesticSyncHandl
     handler_key = spec.handler_key
 
 
+class LingxingDomesticWarehouseStatementSyncHandler(LingxingPmcDomesticSyncHandler):
+    spec = PMC_DOMESTIC_SPECS_BY_INTERFACE_KEY["domesticWarehouseStatement"]
+    handler_key = spec.handler_key
+
+
 PMC_DOMESTIC_HANDLERS: dict[str, type[LingxingPmcDomesticSyncHandler]] = {
     handler.spec.interface_key: handler
     for handler in (
+        LingxingDomesticWarehouseStatementSyncHandler,
         LingxingDomesticWarehouseListSyncHandler,
         LingxingDomesticInventoryDetailsSyncHandler,
         LingxingDomesticBatchDetailListSyncHandler,

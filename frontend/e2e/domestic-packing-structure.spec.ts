@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 test.use({ channel: process.env.PLAYWRIGHT_CHANNEL });
 
 const envelope = (data: unknown) => JSON.stringify({
-  success: true, data, error: null, meta: { freshness_at: null }, request_id: "packing-structure-test",
+  success: true, data, error: null, meta: { freshness_at: null, data_status: "ready", publication_ids: [], coverage_start: null, coverage_end: null }, request_id: "packing-structure-test",
 });
 
 test.beforeEach(async ({ page }) => {
@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
       ? { id: 15, username: "packing-structure-test", display_name: "页面结构验收", is_super_admin: false,
         role_keys: [], role_names: [], permissions: ["page:pmc:domestic-warehouse-board:view", "pmc:domestic-batch:read"] }
       : path.endsWith("/filter-options") ? { stores: [], owners: [] }
-      : path.endsWith("/batches/summary")
+      : path.endsWith("/inbound-batches/summary")
         ? { receipt_batch_count: 0, received_qty: 0, warehouse_count: 0, matched_batch_count: 0,
           unresolved_batch_count: 0, missing_arrival_date_count: 0, as_of: "2026-10-19" }
         : { items: [], total: 0 };
@@ -78,8 +78,8 @@ test("keeps UI filter and pagination state, resets filters, and preserves the ba
   await expect(page.locator(".domestic-packing__toolbar .ant-select-selection-item").filter({ hasText: "待打包" })).toBeVisible();
   await page.getByRole("tab", { name: "批次看板", exact: true }).click();
   await expect(page.getByRole("search", { name: "国内仓看板筛选" })).toBeVisible();
-  await expect(page.getByText("暂无收货批次", { exact: true })).toBeVisible();
+  await expect(page.getByText("暂无入库批次", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "打包单（仓库）", exact: true }).click();
   await expect(page.locator(".ant-pagination-options-size-changer")).toContainText("100");
-  expect(requests.every((request) => request.method === "GET" && /\/(batches(\/summary)?|filter-options)$/.test(request.path))).toBe(true);
+  expect(requests.every((request) => request.method === "GET" && /\/(inbound-batches(\/(summary|filter-options))?)$/.test(request.path))).toBe(true);
 });

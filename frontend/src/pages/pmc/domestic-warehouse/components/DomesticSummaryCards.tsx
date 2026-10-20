@@ -1,28 +1,21 @@
-/** No averages, stock or outbound figures are inferred from a single page of receipts. */
 import ManagementStatCards, { type ManagementStatCardItem } from "@/components/report-table/ManagementStatCards";
-import type { DomesticSummary, MappingStatus } from "../domesticWarehouseTypes";
+import type { DomesticSummary, InventoryStatus } from "../domesticWarehouseTypes";
 
-interface Props { summary?: DomesticSummary; active?: MappingStatus; onUnresolved: () => void }
-export default function DomesticSummaryCards({ summary, active, onUnresolved }: Props) {
-  const unavailable = (key: string, title: string, mark: string, unit: string): ManagementStatCardItem => ({
-    key, title, value: "—", subtitle: "数据待接入", icon: <span className="management-stat-card__mark">{mark}</span>,
-    tone: "normal", layout: "leading", unit,
-  });
-  const cards: ManagementStatCardItem[] = [
-    { key: "receipts", title: "收货批次", value: summary?.receipt_batch_count ?? "—",
-      subtitle: summary ? `实收 ${summary.received_qty.toLocaleString()} 件 · ${summary.warehouse_count} 个仓库` : "按收货单明细统计，非库存余额",
-      tone: "normal", unit: "条", layout: "leading", icon: <span className="management-stat-card__mark">收</span> },
-    unavailable("average", "平均在仓天数", "平", "天"),
-    unavailable("todo", "待打包", "待", "张"),
-    unavailable("packed", "已打包待发", "包", "张"),
-    { ...unavailable("overdue", "超时未发", "超", "张"), tone: "danger" },
-    unavailable("shipped", "近 7 天发出", "近", "件"),
-    unavailable("cycle", "平均出仓周期", "平", "天"),
-    { key: "unresolved", title: "库存批次待关联", value: summary?.unresolved_batch_count ?? "—",
-      subtitle: summary ? `已关联 ${summary.matched_batch_count} 条 · 收货日期缺失 ${summary.missing_arrival_date_count} 条` : "待核对收货与库存的对应关系",
-      tone: "warning", unit: "条", layout: "leading", icon: <span className="management-stat-card__mark">!</span> },
-  ];
+export default function DomesticSummaryCards({ summary, active, onUnknown }: { summary?: DomesticSummary; active?: InventoryStatus; onUnknown: () => void }) {
+  const values = [
+    ["orders", "入库单数", summary?.inbound_order_count, "按账号、仓库和入库单去重", "单"],
+    ["rows", "展示行数", summary?.board_row_count, "入库单 × SKU × 店铺", "行"],
+    ["sku", "SKU 数", summary?.sku_count, "当前筛选范围去重", "个"],
+    ["quantity", "已知入库总量", summary?.total_inbound_qty, "IB×SKU 去重，非店铺分摊量", "件"],
+    ["balance", "已知批次余额", summary?.balance_qty, "仅累加已知值，零不等于已发货", "件"],
+    ["unknown", "余额未知行", summary?.unknown_inventory_row_count, "点击筛选 / 再次点击取消", "行"],
+    ["unknownQty", "入库量未知", summary?.unknown_inbound_qty_count, "缺少完整入库数量证据的 IB×SKU", "组"],
+    ["dates", "到仓日期未知", summary?.missing_arrival_date_count, "缺少日期或源时区尚未核实", "行"],
+  ] as const;
+  const cards: ManagementStatCardItem[] = values.map(([key, title, value, subtitle, unit]) => ({
+    key, title, value: value ?? "—", subtitle, unit, tone: key === "unknown" ? "warning" : "normal",
+    layout: "leading", icon: <span className="management-stat-card__mark">{title[0]}</span>,
+  }));
   return <ManagementStatCards ariaLabel="国内仓统计" className="domestic-board__summary" cards={cards}
-    activeKey={active === "unresolved" ? "unresolved" : ""}
-    onCardClick={(key) => { if (key === "unresolved") onUnresolved(); }} />;
+    activeKey={active === "unknown" ? "unknown" : ""} onCardClick={(key) => { if (key === "unknown") onUnknown(); }} />;
 }

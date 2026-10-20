@@ -254,6 +254,8 @@ MODULES: tuple[ModuleDefinition, ...] = (
 )
 
 ACTIONS: tuple[ActionDefinition, ...] = (
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
     ActionDefinition("products_product_management", "view-raw-lineage", "查看数据血缘", 9, "high"),
     ActionDefinition("products_product_management", "view-operation-logs", "查看操作日志", 10),

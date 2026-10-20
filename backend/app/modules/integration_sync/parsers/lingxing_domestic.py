@@ -13,12 +13,14 @@ from app.integrations.lingxing.pmc_domestic_contracts import (
     BATCH_STATEMENT_LIST_ENDPOINT,
     INVENTORY_DETAILS_ENDPOINT,
     WAREHOUSE_LIST_ENDPOINT,
+    WAREHOUSE_STATEMENT_ENDPOINT,
     pmc_domestic_response_items,
     pmc_domestic_response_total,
 )
 
 PARSER_VERSION: Final = "lingxing.domestic.v1"
 PARSER_KEYS: Final[dict[str, str]] = {
+    WAREHOUSE_STATEMENT_ENDPOINT: "lingxing.pmc_domestic.warehouse_statement.v1",
     WAREHOUSE_LIST_ENDPOINT: "lingxing.pmc_domestic.warehouse_list.v1",
     INVENTORY_DETAILS_ENDPOINT: "lingxing.pmc_domestic.inventory_details.v1",
     BATCH_DETAIL_LIST_ENDPOINT: "lingxing.pmc_domestic.batch_detail_list.v1",
@@ -61,6 +63,48 @@ def parse_domestic_page(api_path: str, payload: JsonValue) -> DomesticPageParse:
             parsed.append(_parse_inventory(raw, path))
         elif api_path == BATCH_DETAIL_LIST_ENDPOINT:
             parsed.append(_parse_batch(raw, path))
+        elif api_path == WAREHOUSE_STATEMENT_ENDPOINT:
+            from app.modules.pmc_domestic.inbound_builder import (
+                InboundDataError,
+                quantity,
+                source_id,
+            )
+
+            try:
+                columns = {
+                    k: source_id(raw.get(k))
+                    for k in (
+                        "order_sn",
+                        "ref_order_sn",
+                        "sku",
+                        "product_id",
+                        "sub_type",
+                        "opt_time",
+                    )
+                }
+                columns.update(
+                    {
+                        k: quantity(raw.get(k))
+                        for k in (
+                            "product_total",
+                            "product_qc_num",
+                            "product_good_num",
+                            "product_bad_num",
+                        )
+                    }
+                )
+                columns.update(
+                    statement_id=source_id(raw.get("statement_id"), required=True),
+                    source_warehouse_id=source_id(raw.get("wid"), required=True),
+                    payload_json=raw,
+                )
+                parsed.append(
+                    ParsedDomesticRow(
+                        business_key=columns["statement_id"], source_path=path, columns=columns
+                    )
+                )
+            except InboundDataError:
+                raise DomesticParseError("SYNC_DOMESTIC_STATEMENT_INVALID") from None
         elif api_path == BATCH_STATEMENT_LIST_ENDPOINT:
             parsed.append(_parse_event(raw, path, ordinal))
         else:
