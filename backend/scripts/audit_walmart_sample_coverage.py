@@ -49,6 +49,8 @@ def _report(rows: list[dict[str, Any]], limit: int) -> dict[str, object]:
         unverified = int(row.get("unverified_sample_lines") or 0)
         unresolved = int(row.get("unresolved_sample_lines") or 0)
         cancelled = int(row.get("cancelled_sample_lines") or 0)
+        historical_verified = int(row.get("historical_verified_lines") or 0)
+        current_verified = int(row.get("current_verified_lines") or 0)
         valid_qty = str(valid_amount)
         mart_qty = str(mart_amount)
         if valid_amount != mart_amount:
@@ -80,6 +82,8 @@ def _report(rows: list[dict[str, Any]], limit: int) -> dict[str, object]:
                     "unverified_sample_lines": unverified,
                     "unresolved_sample_lines": unresolved,
                     "cancelled_sample_lines": cancelled,
+                    "historical_verified_lines": historical_verified,
+                    "current_verified_lines": current_verified,
                     "valid_sample_qty": valid_qty,
                     "mart_sample_qty": mart_qty,
                 }
@@ -121,11 +125,25 @@ def main() -> None:
                    count(*) sample_captured,
                    sum(coalesce(quantity,0)) filter
                        (where is_valid_sample=true
-                        and sample_rule_version='provider-verified-sample-v5'
+                        and sample_rule_version in (
+                            'zero-total-provider-status-strict-triple-v3',
+                            'provider-verified-sample-v5'
+                        )
                         and is_cancelled=false) sample_qty,
                    count(*) filter
+                       (where is_valid_sample=true
+                        and sample_rule_version='zero-total-provider-status-strict-triple-v3'
+                        and is_cancelled=false) historical_verified_lines,
+                   count(*) filter
+                       (where is_valid_sample=true
+                        and sample_rule_version='provider-verified-sample-v5'
+                        and is_cancelled=false) current_verified_lines,
+                   count(*) filter
                        (where is_cancelled=false and not (is_valid_sample=true
-                        and sample_rule_version='provider-verified-sample-v5'))
+                        and sample_rule_version in (
+                            'zero-total-provider-status-strict-triple-v3',
+                            'provider-verified-sample-v5'
+                        )))
                        unverified_sample_lines,
                    count(*) filter (where is_cancelled=true) cancelled_sample_lines,
                    count(*) filter
@@ -146,6 +164,8 @@ def main() -> None:
                coalesce(f.unverified_sample_lines,0) unverified_sample_lines,
                coalesce(f.unresolved_sample_lines,0) unresolved_sample_lines,
                coalesce(f.cancelled_sample_lines,0) cancelled_sample_lines,
+               coalesce(f.historical_verified_lines,0) historical_verified_lines,
+               coalesce(f.current_verified_lines,0) current_verified_lines,
                coalesce(f.sample_qty,0) sample_qty,
                coalesce(s.mart_sample_qty,0) mart_sample_qty
         from sales s full join samples f

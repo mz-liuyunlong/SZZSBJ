@@ -11,6 +11,7 @@ EXPECTED_TABLES = {
     "ref_store_commission_rule_versions",
     "fact_walmart_sales_item_daily",
     "fact_walmart_order_items",
+    "audit_walmart_order_item_conflicts",
     "fact_walmart_refund_items",
     "fact_walmart_ad_item_sp_daily",
     "mart_daily_sales_item_day",
@@ -33,7 +34,7 @@ def _unique_column_sets(table_name: str) -> set[tuple[str, ...]]:
 def _check_constraint_names(table_name: str) -> set[str]:
     table = Base.metadata.tables[table_name]
     return {
-        constraint.name or ""
+        str(constraint.name) if constraint.name is not None else ""
         for constraint in table.constraints
         if isinstance(constraint, CheckConstraint)
     }
@@ -69,11 +70,31 @@ def test_data_pages_facts_preserve_lineage_and_business_dates() -> None:
     orders = Base.metadata.tables["fact_walmart_order_items"].c
     assert {
         "source_line_hash",
+        "canonical_identity_hash",
+        "is_identity_current",
+        "provider_item_id",
+        "item_id_resolution_source",
         "source_purchase_timezone",
         "purchase_at_utc",
         "business_date_la",
         "is_sample_order",
     } <= set(orders.keys())
+    assert {
+        "ck_fact_walmart_order_items_canonical_identity_hash_sha256",
+        "ck_fact_walmart_order_items_canonical_identity_current_complete",
+        "ck_fact_walmart_order_items_current_item_lineage",
+    } <= _check_constraint_names("fact_walmart_order_items")
+
+    order_conflicts = Base.metadata.tables["audit_walmart_order_item_conflicts"].c
+    assert {
+        "canonical_identity_hash",
+        "prior_fact_id",
+        "canonical_fact_id",
+        "prior_snapshot_hash",
+        "observed_snapshot_hash",
+        "differing_fields_json",
+        "resolution_status",
+    } <= set(order_conflicts.keys())
 
     refunds = Base.metadata.tables["fact_walmart_refund_items"].c
     assert {

@@ -10,10 +10,12 @@ from sqlalchemy.orm import Session
 from app.modules.integration_sync.data_pages_business_rules_v2 import (
     DAILY_SALES_V2_VERSION,
     DataPagesRealSyncRunner,
+    _changed_order_fields,
     _cost_totals,
     _estimated_refund_sales_amount,
     _money_decimal,
     _net_commission_after_refund,
+    _order_identity_hash,
 )
 from app.modules.product_management.daily_sales_costs import DailySalesCostResolution
 
@@ -275,11 +277,73 @@ def test_order_writer_uses_one_provider_line_identity_for_hash_and_persisted_id(
     source = inspect.getsource(DataPagesRealSyncRunner._write_orders)
     assert 'line_id = _field(item, "order_item_no", "global_item_no", "id")' in source
     assert '"source_order_line_id": line_id' in source
-    assert '"line_id": line_id' in source
-    assert '"store": _field(row, "store_id")' in source
+    assert "_order_identity_hash(" in source
+    assert '"source_order_line_id": line_id' in source
+    assert '"store_id": store_id' in source
+    assert "pg_advisory_xact_lock" in source
+    assert ":source_line_hash,:canonical_identity_hash,true" in source
+    assert "order by is_identity_current desc" in source
+    assert "set synced_at=:synced_at" in source
 
 
-def test_sample_mart_only_accepts_verified_sample_version() -> None:
+def test_order_downstream_resolution_and_refund_matching_prefer_current_rows() -> None:
+    resolution_source = inspect.getsource(DataPagesRealSyncRunner._resolve_order_items)
+    refund_source = inspect.getsource(DataPagesRealSyncRunner._match_refund_order_line)
+
+    assert "o.is_identity_current=true" in resolution_source
+    assert "order by is_identity_current desc" in refund_source
+    assert "current_rows or rows" in refund_source
+
+
+def test_order_identity_is_scoped_by_account_store_order_and_line() -> None:
+    base = _order_identity_hash("account-a", "store-a", "order-a", "line-a")
+    assert base == _order_identity_hash("account-a", "store-a", "order-a", "line-a")
+    assert base != _order_identity_hash("account-b", "store-a", "order-a", "line-a")
+    assert base != _order_identity_hash("account-a", "store-b", "order-a", "line-a")
+    assert base != _order_identity_hash("account-a", "store-a", "order-b", "line-a")
+    assert base != _order_identity_hash("account-a", "store-a", "order-a", "line-b")
+
+
+def test_order_conflict_snapshot_detects_mutable_fields_not_identity() -> None:
+    prior = {
+        "quantity": Decimal("1.0000"),
+        "sales_revenue_amount": Decimal("0"),
+        "order_status_raw": "created",
+        "provider_item_id": "item-a",
+    }
+    observed = {
+        **prior,
+        "quantity": Decimal("2"),
+        "sales_revenue_amount": Decimal("4.50"),
+        "order_status_raw": "cancelled",
+    }
+
+    assert _changed_order_fields(prior, observed) == [
+        "quantity",
+        "order_status_raw",
+        "sales_revenue_amount",
+    ]
+
+
+def test_order_snapshot_ignores_listing_resolved_item_id() -> None:
+    prior = {
+        "provider_item_id": None,
+        "item_id": "listing-item-a",
+        "item_id_resolution_source": "listing_local_sku_unique",
+    }
+    observed = {
+        "provider_item_id": None,
+        "item_id": None,
+        "item_id_resolution_source": None,
+    }
+
+    assert _changed_order_fields(prior, observed) == []
+
+
+def test_sample_mart_accepts_historical_v3_and_current_v5_only() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
-    assert "sample_rule_version=:verified_sample_rule_version" in source
+    assert "(:historical_sample_rule_version,:verified_sample_rule_version)" in source
+    assert "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED" in source
     assert "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT" in source
+    assert "sample_data_not_observed" in source
+    assert "sample_verification_pending" in source

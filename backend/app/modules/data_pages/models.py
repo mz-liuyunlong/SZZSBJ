@@ -360,6 +360,30 @@ class WalmartOrderItemFact(Base):
     __table_args__ = (
         UniqueConstraint("source_account_ref", "source_order_id", "source_line_hash"),
         CheckConstraint("char_length(source_line_hash) = 64", name="source_line_hash_sha256"),
+        CheckConstraint(
+            "canonical_identity_hash IS NULL OR canonical_identity_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_fact_walmart_order_items_canonical_identity_hash_sha256",
+        ),
+        CheckConstraint(
+            "is_identity_current = false OR ("
+            "canonical_identity_hash IS NOT NULL AND "
+            "nullif(btrim(source_account_ref), '') IS NOT NULL AND "
+            "nullif(btrim(store_id), '') IS NOT NULL AND "
+            "nullif(btrim(source_order_id), '') IS NOT NULL AND "
+            "nullif(btrim(source_order_line_id), '') IS NOT NULL)",
+            name="ck_fact_walmart_order_items_canonical_identity_current_complete",
+        ),
+        CheckConstraint(
+            "is_identity_current = false OR ("
+            "(item_id IS NULL AND provider_item_id IS NULL AND "
+            "item_id_resolution_source IS NULL) OR ("
+            "nullif(btrim(item_id), '') IS NOT NULL AND (("
+            "nullif(btrim(provider_item_id), '') IS NOT NULL AND "
+            "item_id = provider_item_id AND item_id_resolution_source = 'provider') OR ("
+            "provider_item_id IS NULL AND item_id_resolution_source IN ("
+            "'listing_local_sku_unique', 'listing_local_sku_msku_unique')))))",
+            name="ck_fact_walmart_order_items_current_item_lineage",
+        ),
         CheckConstraint("quantity IS NULL OR quantity >= 0", name="quantity_nonnegative"),
         CheckConstraint("sales_revenue_amount IS NULL OR sales_revenue_amount >= 0", name="sales"),
         CheckConstraint(
@@ -367,6 +391,12 @@ class WalmartOrderItemFact(Base):
         ),
         Index("ix_fact_walmart_order_items_business_date", "business_date_la"),
         Index("ix_fact_walmart_order_items_store_item", "store_id", "item_id"),
+        Index(
+            "uq_fact_walmart_order_items_current_identity",
+            "canonical_identity_hash",
+            unique=True,
+            postgresql_where=text("is_identity_current = true"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -375,8 +405,14 @@ class WalmartOrderItemFact(Base):
     source_order_id: Mapped[str] = mapped_column(String(128), nullable=False)
     source_order_line_id: Mapped[str | None] = mapped_column(String(128))
     source_line_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_identity_hash: Mapped[str | None] = mapped_column(String(64))
+    is_identity_current: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     source_line_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider_item_id: Mapped[str | None] = mapped_column(String(128))
     item_id: Mapped[str | None] = mapped_column(String(128))
+    item_id_resolution_source: Mapped[str | None] = mapped_column(String(64))
     msku: Mapped[str | None] = mapped_column(Text)
     local_sku: Mapped[str | None] = mapped_column(Text)
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
@@ -414,6 +450,64 @@ class WalmartOrderItemFact(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+
+class WalmartOrderItemConflictAudit(Base):
+    """Immutable field-difference evidence for one canonical provider order line."""
+
+    __tablename__ = "audit_walmart_order_item_conflicts"
+    __table_args__ = (
+        UniqueConstraint(
+            "canonical_identity_hash",
+            "prior_fact_id",
+            "canonical_fact_id",
+            name="uq_audit_walmart_order_item_conflicts_transition",
+        ),
+        CheckConstraint(
+            "char_length(canonical_identity_hash) = 64",
+            name="ck_walmart_order_conflict_identity_hash",
+        ),
+        CheckConstraint(
+            "char_length(prior_snapshot_hash) = 64",
+            name="ck_walmart_order_conflict_prior_hash",
+        ),
+        CheckConstraint(
+            "char_length(observed_snapshot_hash) = 64",
+            name="ck_walmart_order_conflict_observed_hash",
+        ),
+        CheckConstraint(
+            "resolution_status IN ('observed', 'owner_reviewed', 'superseded')",
+            name="ck_walmart_order_conflict_status",
+        ),
+        Index(
+            "ix_audit_walmart_order_item_conflicts_identity_observed",
+            "canonical_identity_hash",
+            "observed_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    canonical_identity_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_order_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_order_line_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    prior_fact_id: Mapped[UUID] = mapped_column(
+        ForeignKey("fact_walmart_order_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    canonical_fact_id: Mapped[UUID] = mapped_column(
+        ForeignKey("fact_walmart_order_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    prior_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    observed_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    differing_fields_json: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    resolution_status: Mapped[str] = mapped_column(
+        String(32), default="observed", server_default=text("'observed'"), nullable=False
+    )
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -10,6 +10,7 @@ from sqlalchemy import text
 
 from app.modules.integration_sync.data_pages_business_rules import (
     BUSINESS_RULE_RUNNER_VERSION,
+    HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
     VERIFIED_SAMPLE_RULE_VERSION,
     DataPagesRealSyncRunner as BusinessRulesRunner,
 )
@@ -36,6 +37,70 @@ from app.modules.business_rules.constants import DEFAULT_STORE_COMMISSION_RATE
 DAILY_SALES_V2_VERSION = f"{BUSINESS_RULE_RUNNER_VERSION}+refund-v3-lpds+sampleguard-v5"
 LOW_PRICE_DELIVERY_THRESHOLD = Decimal("10")
 LOW_PRICE_DELIVERY_SURCHARGE_PER_UNIT = Decimal("1")
+
+ORDER_SNAPSHOT_FIELDS = (
+    "platform_order_no",
+    "reference_no",
+    "provider_item_id",
+    "msku",
+    "local_sku",
+    "quantity",
+    "source_purchase_at_raw",
+    "business_date_la",
+    "order_status_raw",
+    "order_sub_status_raw",
+    "flow_node_raw",
+    "sales_revenue_amount",
+    "sales_revenue_currency_code",
+    "order_total_amount",
+    "order_total_currency_code",
+    "discount_amount",
+    "discount_currency_code",
+)
+
+LISTING_ITEM_ID_RESOLUTION_SOURCES = frozenset(
+    {"listing_local_sku_unique", "listing_local_sku_msku_unique"}
+)
+
+
+def _order_identity_hash(
+    source_account_ref: str,
+    store_id: str,
+    source_order_id: str,
+    source_order_line_id: str,
+) -> str:
+    """Hash the immutable provider scope; mutable order values never affect identity."""
+
+    return _stable_hash(
+        {
+            "source_account_ref": source_account_ref,
+            "store_id": store_id,
+            "source_order_id": source_order_id,
+            "source_order_line_id": source_order_line_id,
+        }
+    )
+
+
+def _snapshot_value(value: object) -> object:
+    if isinstance(value, Decimal):
+        return format(value.normalize(), "f")
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return value
+
+
+def _order_snapshot(values: Mapping[str, Any]) -> dict[str, object]:
+    return {field: _snapshot_value(values.get(field)) for field in ORDER_SNAPSHOT_FIELDS}
+
+
+def _changed_order_fields(prior: Mapping[str, Any], observed: Mapping[str, Any]) -> list[str]:
+    prior_snapshot = _order_snapshot(prior)
+    observed_snapshot = _order_snapshot(observed)
+    return [
+        field
+        for field in ORDER_SNAPSHOT_FIELDS
+        if prior_snapshot[field] != observed_snapshot[field]
+    ]
 
 
 def _money_decimal(value: object) -> Decimal | None:
@@ -190,7 +255,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         return super()._write_sample_orders(normalized)
 
     def _write_orders(self, rows: Iterable[dict[str, Any]]) -> int:
-        """Persist provider order identifiers required for exact refund matching."""
+        """Adopt one current row per immutable provider line without deleting history."""
         count = 0
         for row in rows:
             order_id = _field(row, "global_order_no", "order_id", "platform_order_no")
@@ -200,7 +265,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     self.summary.order_unresolved_rows += 1
                     continue
                 raise DataPagesRealSyncError("DATA_PAGES_ORDER_IDENTITY_MISSING")
-            if not _field(row, "store_id"):
+            store_id = _field(row, "store_id")
+            if not store_id:
                 if _potential_sample_candidate(row):
                     self.summary.order_unresolved_rows += 1
                     continue
@@ -225,71 +291,218 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         self.summary.order_unresolved_rows += 1
                         continue
                     raise DataPagesRealSyncError("DATA_PAGES_ORDER_LINE_IDENTITY_MISSING")
-                line_hash = _stable_hash(
-                    {"store": _field(row, "store_id"), "order": order_id, "line_id": line_id}
+                identity_hash = _order_identity_hash(
+                    self.source_account_ref,
+                    store_id,
+                    order_id,
+                    line_id,
                 )
+                fact_id = str(uuid4())
+                provider_item_id = _field(item, "item_id", "platform_product_id")
+                values: dict[str, object] = {
+                    "id": fact_id,
+                    "source_account_ref": self.source_account_ref,
+                    "store_id": store_id,
+                    "source_order_id": order_id,
+                    "source_order_line_id": line_id,
+                    "platform_order_no": _field(item, "platform_order_no")
+                    or _field(row, "platform_order_no"),
+                    "reference_no": _field(row, "reference_no", "referenceNo"),
+                    # source_line_hash identifies this immutable physical
+                    # observation; canonical_identity_hash identifies the
+                    # provider line across every physical version.
+                    "source_line_hash": _stable_hash(
+                        {"canonical_identity_hash": identity_hash, "fact_id": fact_id}
+                    ),
+                    "canonical_identity_hash": identity_hash,
+                    "source_line_ordinal": ordinal,
+                    # Keep provider evidence separate from the effective Item ID.
+                    # Listing resolution may fill item_id later, but it must never
+                    # make a provider NULL look like a provider-side change.
+                    "provider_item_id": provider_item_id,
+                    "item_id": provider_item_id,
+                    "item_id_resolution_source": (
+                        "provider" if provider_item_id is not None else None
+                    ),
+                    "msku": _field(item, "msku"),
+                    "local_sku": _field(item, "local_sku", "sku"),
+                    "quantity": _decimal(item.get("quantity")),
+                    "source_purchase_at_raw": _field(row, "global_purchase_time"),
+                    "business_date_la": self.business_date,
+                    "order_status_raw": _field(row, "status"),
+                    "order_sub_status_raw": _field(row, "status_sub"),
+                    "flow_node_raw": _field(row, "flow_node"),
+                    "sales_revenue_amount": _money_decimal(item.get("sales_revenue_amount")),
+                    "sales_revenue_currency_code": _field(row, "amount_currency") or "USD",
+                    "order_total_amount": _money_decimal(
+                        _nested_first(row, "transaction_info", "order_total_amount")
+                    ),
+                    "order_total_currency_code": _field(row, "amount_currency") or "USD",
+                    "discount_amount": _money_decimal(item.get("discount_amount")),
+                    "discount_currency_code": _field(row, "amount_currency") or "USD",
+                    "is_sample_order": False,
+                    **_timestamps(),
+                }
+                # Serialize competing writers for exactly this provider identity.
+                self.session.execute(
+                    text("select pg_advisory_xact_lock(hashtextextended(:identity_hash,0))"),
+                    {"identity_hash": identity_hash},
+                )
+                existing = (
+                    self.session.execute(
+                        text(
+                            "select id,source_line_hash,canonical_identity_hash,is_identity_current,"
+                            "platform_order_no,reference_no,provider_item_id,item_id,"
+                            "item_id_resolution_source,msku,local_sku,"
+                            "quantity,source_purchase_at_raw,business_date_la,order_status_raw,"
+                            "order_sub_status_raw,flow_node_raw,sales_revenue_amount,"
+                            "sales_revenue_currency_code,order_total_amount,"
+                            "order_total_currency_code,discount_amount,discount_currency_code,"
+                            "synced_at,created_at,updated_at "
+                            "from fact_walmart_order_items where source_account_ref=:source_account_ref "
+                            "and store_id=:store_id and source_order_id=:source_order_id "
+                            "and source_order_line_id=:source_order_line_id "
+                            "order by is_identity_current desc,created_at asc,id asc for update"
+                        ),
+                        values,
+                    )
+                    .mappings()
+                    .all()
+                )
+                current_rows = [row for row in existing if bool(row["is_identity_current"])]
+                if len(current_rows) > 1:
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_CURRENT_IDENTITY_CONFLICT")
+
+                current = current_rows[0] if current_rows else None
+                if (
+                    current is not None
+                    and current["item_id_resolution_source"] in LISTING_ITEM_ID_RESOLUTION_SOURCES
+                    and provider_item_id is not None
+                    and current["item_id"] != provider_item_id
+                ):
+                    raise DataPagesRealSyncError("DATA_PAGES_ORDER_ITEM_ID_RESOLUTION_CONFLICT")
+                if current is not None and not _changed_order_fields(dict(current), values):
+                    # A successful identical observation advances freshness,
+                    # not the business-update timestamp.
+                    self.session.execute(
+                        text(
+                            "update fact_walmart_order_items set synced_at=:synced_at "
+                            "where id=cast(:current_id as uuid)"
+                        ),
+                        {"synced_at": values["synced_at"], "current_id": str(current["id"])},
+                    )
+                    count += 1
+                    continue
+
+                prior_rows = [current] if current is not None else existing
+                if current is not None:
+                    # Business columns stay untouched: the former current row
+                    # becomes the immutable prior physical version.
+                    self.session.execute(
+                        text(
+                            "update fact_walmart_order_items set is_identity_current=false "
+                            "where id=cast(:current_id as uuid)"
+                        ),
+                        {"current_id": str(current["id"])},
+                    )
+
                 self.session.execute(
                     text(
                         "insert into fact_walmart_order_items "
                         "(id,source_account_ref,store_id,source_order_id,source_order_line_id,"
-                        "platform_order_no,reference_no,source_line_hash,source_line_ordinal,item_id,msku,local_sku,"
+                        "platform_order_no,reference_no,source_line_hash,canonical_identity_hash,"
+                        "is_identity_current,source_line_ordinal,provider_item_id,item_id,"
+                        "item_id_resolution_source,msku,local_sku,"
                         "quantity,source_purchase_at_raw,business_date_la,order_status_raw,order_sub_status_raw,"
                         "flow_node_raw,sales_revenue_amount,sales_revenue_currency_code,order_total_amount,"
                         "order_total_currency_code,discount_amount,discount_currency_code,is_sample_order,"
                         "synced_at,created_at,updated_at) values "
                         "(:id,:source_account_ref,:store_id,:source_order_id,:source_order_line_id,"
-                        ":platform_order_no,:reference_no,:source_line_hash,:source_line_ordinal,:item_id,:msku,"
+                        ":platform_order_no,:reference_no,:source_line_hash,:canonical_identity_hash,true,"
+                        ":source_line_ordinal,:provider_item_id,:item_id,"
+                        ":item_id_resolution_source,:msku,"
                         ":local_sku,:quantity,:source_purchase_at_raw,:business_date_la,:order_status_raw,"
                         ":order_sub_status_raw,:flow_node_raw,:sales_revenue_amount,:sales_revenue_currency_code,"
                         ":order_total_amount,:order_total_currency_code,:discount_amount,:discount_currency_code,"
-                        ":is_sample_order,:synced_at,:created_at,:updated_at) "
-                        "on conflict (source_account_ref,source_order_id,source_line_hash) do update set "
-                        "store_id=excluded.store_id,source_order_line_id=excluded.source_order_line_id,"
-                        "platform_order_no=excluded.platform_order_no,reference_no=excluded.reference_no,"
-                        "item_id=coalesce(excluded.item_id,fact_walmart_order_items.item_id),"
-                        "msku=excluded.msku,local_sku=excluded.local_sku,quantity=excluded.quantity,"
-                        "source_purchase_at_raw=excluded.source_purchase_at_raw,"
-                        "business_date_la=excluded.business_date_la,"
-                        "order_status_raw=excluded.order_status_raw,"
-                        "order_sub_status_raw=excluded.order_sub_status_raw,"
-                        "discount_amount=excluded.discount_amount,"
-                        "sales_revenue_amount=excluded.sales_revenue_amount,order_total_amount=excluded.order_total_amount,"
-                        "updated_at=excluded.updated_at"
+                        ":is_sample_order,:synced_at,:created_at,:updated_at)"
                     ),
-                    {
-                        "id": str(uuid4()),
-                        "source_account_ref": self.source_account_ref,
-                        "store_id": _field(row, "store_id"),
-                        "source_order_id": order_id,
-                        "source_order_line_id": line_id,
-                        "platform_order_no": _field(item, "platform_order_no")
-                        or _field(row, "platform_order_no"),
-                        "reference_no": _field(row, "reference_no", "referenceNo"),
-                        "source_line_hash": line_hash,
-                        "source_line_ordinal": ordinal,
-                        "item_id": _field(item, "item_id", "platform_product_id"),
-                        "msku": _field(item, "msku"),
-                        "local_sku": _field(item, "local_sku", "sku"),
-                        "quantity": _decimal(item.get("quantity")),
-                        "source_purchase_at_raw": _field(row, "global_purchase_time"),
-                        "business_date_la": self.business_date,
-                        "order_status_raw": _field(row, "status"),
-                        "order_sub_status_raw": _field(row, "status_sub"),
-                        "flow_node_raw": _field(row, "flow_node"),
-                        "sales_revenue_amount": _money_decimal(item.get("sales_revenue_amount")),
-                        "sales_revenue_currency_code": _field(row, "amount_currency") or "USD",
-                        "order_total_amount": _money_decimal(
-                            _nested_first(row, "transaction_info", "order_total_amount")
-                        ),
-                        "order_total_currency_code": _field(row, "amount_currency") or "USD",
-                        "discount_amount": _money_decimal(item.get("discount_amount")),
-                        "discount_currency_code": _field(row, "amount_currency") or "USD",
-                        "is_sample_order": False,
-                        **_timestamps(),
-                    },
+                    values,
                 )
+
+                observed_snapshot_hash = _stable_hash(_order_snapshot(values))
+                for prior in prior_rows:
+                    prior_values = dict(prior)
+                    prior_snapshot_hash = _stable_hash(_order_snapshot(prior_values))
+                    changed_fields = _changed_order_fields(prior_values, values)
+                    if not changed_fields:
+                        continue
+                    self.session.execute(
+                        text(
+                            "insert into audit_walmart_order_item_conflicts "
+                            "(id,canonical_identity_hash,source_account_ref,store_id,"
+                            "source_order_id,source_order_line_id,prior_fact_id,canonical_fact_id,"
+                            "prior_snapshot_hash,observed_snapshot_hash,differing_fields_json,"
+                            "resolution_status,observed_at,created_at) values "
+                            "(:audit_id,:canonical_identity_hash,:source_account_ref,:store_id,"
+                            ":source_order_id,:source_order_line_id,:prior_fact_id,:canonical_fact_id,"
+                            ":prior_snapshot_hash,:observed_snapshot_hash,"
+                            "cast(:differing_fields_json as jsonb),'observed',:updated_at,:created_at) "
+                            "on conflict (canonical_identity_hash,prior_fact_id,"
+                            "canonical_fact_id) do nothing"
+                        ),
+                        {
+                            **values,
+                            "audit_id": str(uuid4()),
+                            "prior_fact_id": str(prior["id"]),
+                            "canonical_fact_id": values["id"],
+                            "prior_snapshot_hash": prior_snapshot_hash,
+                            "observed_snapshot_hash": observed_snapshot_hash,
+                            "differing_fields_json": _json(changed_fields),
+                        },
+                    )
                 count += 1
         return count
+
+    def _resolve_order_items(self) -> int:
+        """Resolve and count only canonical rows; legacy versions remain read-only evidence."""
+
+        now = _now()
+        self.session.execute(
+            text(
+                "with candidates as (select o.id, "
+                "(select count(*) from dim_walmart_listings l where l.source_account_ref=:account "
+                "and l.store_id=o.store_id and trim(l.local_sku)=trim(o.local_sku)) sku_count, "
+                "(select min(l.item_id) from dim_walmart_listings l where l.source_account_ref=:account "
+                "and l.store_id=o.store_id and trim(l.local_sku)=trim(o.local_sku)) sku_item, "
+                "(select count(*) from dim_walmart_listings l where l.source_account_ref=:account "
+                "and l.store_id=o.store_id and trim(l.local_sku)=trim(o.local_sku) "
+                "and trim(l.msku)=trim(o.msku)) exact_count, "
+                "(select min(l.item_id) from dim_walmart_listings l where l.source_account_ref=:account "
+                "and l.store_id=o.store_id and trim(l.local_sku)=trim(o.local_sku) "
+                "and trim(l.msku)=trim(o.msku)) exact_item "
+                "from fact_walmart_order_items o where o.source_account_ref=:account "
+                "and o.business_date_la=:day and o.is_identity_current=true and o.item_id is null), "
+                "resolved as (select id,case when sku_count=1 then sku_item "
+                "when sku_count>1 and exact_count=1 then exact_item else null end item_id,"
+                "case when sku_count=1 then 'listing_local_sku_unique' "
+                "when sku_count>1 and exact_count=1 then 'listing_local_sku_msku_unique' "
+                "else null end resolution_source from candidates) "
+                "update fact_walmart_order_items o set item_id=r.item_id,"
+                "item_id_resolution_source=r.resolution_source,updated_at=:now "
+                "from resolved r where o.id=r.id and r.item_id is not null"
+            ),
+            {"account": self.source_account_ref, "day": self.business_date, "now": now},
+        )
+        return int(
+            self.session.execute(
+                text(
+                    "select count(*) from fact_walmart_order_items "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and is_identity_current=true and item_id is null"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            ).scalar_one()
+        )
 
     def _match_refund_order_line(self, refund: Mapping[str, Any]) -> Mapping[str, Any] | None:
         """Match one refund only when order identity and store+item+MSKU are exact."""
@@ -310,7 +523,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         rows = (
             self.session.execute(
                 text(
-                    "select id,source_order_id,platform_order_no,reference_no,store_id,item_id,msku,local_sku,"
+                    "select id,source_order_id,source_order_line_id,platform_order_no,reference_no,"
+                    "store_id,item_id,msku,local_sku,"
+                    "is_identity_current,"
                     "quantity,sales_revenue_amount,sales_revenue_currency_code,business_date_la "
                     "from fact_walmart_order_items where source_account_ref=:account and ("
                     "(cast(:customer_order_id as text) is not null and ("
@@ -320,7 +535,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                     "and store_id=cast(:store_id as text) "
                     "and item_id=cast(:item_id as text) "
                     "and trim(msku)=trim(cast(:msku as text)) "
-                    "order by business_date_la desc nulls last,updated_at desc limit 2"
+                    "order by is_identity_current desc,business_date_la desc nulls last,"
+                    "updated_at desc limit 2"
                 ),
                 {
                     "account": self.source_account_ref,
@@ -334,11 +550,34 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             .mappings()
             .all()
         )
-        return rows[0] if len(rows) == 1 else None
+        current_rows = [row for row in rows if bool(row["is_identity_current"])]
+        candidates = current_rows or rows
+        return candidates[0] if len(candidates) == 1 else None
 
     def _refresh_daily_sales_mart(self) -> int:
         """Build the auditable paid-sales truth and snapshot all effective cost inputs."""
         now = _now()
+        unsupported_verified = int(
+            self.session.execute(
+                text(
+                    "select count(*) from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and is_valid_sample=true and sample_rule_version not in "
+                    "(:historical_sample_rule_version,:verified_sample_rule_version)"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "day": self.business_date,
+                    "historical_sample_rule_version": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                    "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
+                },
+            ).scalar_one()
+        )
+        if unsupported_verified:
+            raise DataPagesMartInvariantError(
+                "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED",
+                business_date=self.business_date,
+            )
         self.session.execute(
             text(
                 "delete from mart_daily_sales_item_day where source_account_ref=:account "
@@ -403,7 +642,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "sum(coalesce(s.unit_price_amount,0)*coalesce(s.quantity,0)) sample_amount "
                 "from fact_walmart_sample_order_items s "
                 "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
-                "and s.is_valid_sample=true and s.sample_rule_version=:verified_sample_rule_version and s.store_id is not null and s.item_id is not null "
+                "and s.is_valid_sample=true and s.sample_rule_version in "
+                "(:historical_sample_rule_version,:verified_sample_rule_version) "
+                "and s.store_id is not null and s.item_id is not null "
                 "and s.msku is not null and trim(s.msku)<>'' and exists ("
                 "select 1 from dim_walmart_listings l where l.source_account_ref=s.source_account_ref "
                 "and l.store_id=s.store_id and l.item_id=s.item_id and trim(l.msku)=trim(s.msku)) "
@@ -507,6 +748,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "account": self.source_account_ref,
                 "day": self.business_date,
                 "runner": DAILY_SALES_V2_VERSION,
+                "historical_sample_rule_version": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                 "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                 "default_commission_rate": DEFAULT_STORE_COMMISSION_RATE,
                 "now": now,
@@ -575,7 +817,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(quantity,0)) sample_qty "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
-                        "and sample_rule_version=:verified_sample_rule_version "
+                        "and sample_rule_version in "
+                        "(:historical_sample_rule_version,:verified_sample_rule_version) "
                         "and business_date_utc_minus_7 between :start_day and :end_day "
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
@@ -589,21 +832,22 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_7d_start,
                         "end_day": history_7d_end,
+                        "historical_sample_rule_version": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                         "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
                 .mappings()
                 .all()
             )
-            for trend in trend_rows:
+            for trend_row in trend_rows:
                 trend_map[
                     (
-                        str(trend["store_id"]),
-                        str(trend["item_id"]),
-                        str(trend["msku"]),
-                        trend["business_date_la"],
+                        str(trend_row["store_id"]),
+                        str(trend_row["item_id"]),
+                        str(trend_row["msku"]),
+                        trend_row["business_date_la"],
                     )
-                ] = _decimal(trend["sales_qty"]) or Decimal("0")
+                ] = _decimal(trend_row["sales_qty"]) or Decimal("0")
 
         rolling_map: dict[tuple[str, str, str], tuple[Decimal, Decimal]] = {}
         if history_30d_complete:
@@ -623,7 +867,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "sum(coalesce(quantity,0)) sample_qty "
                         "from fact_walmart_sample_order_items "
                         "where source_account_ref=:account and is_valid_sample=true "
-                        "and sample_rule_version=:verified_sample_rule_version "
+                        "and sample_rule_version in "
+                        "(:historical_sample_rule_version,:verified_sample_rule_version) "
                         "and business_date_utc_minus_7 between :start_day and :end_day "
                         "and store_id is not null and item_id is not null "
                         "and msku is not null and trim(msku)<>'' group by 1,2,3,4) "
@@ -637,6 +882,7 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                         "account": self.source_account_ref,
                         "start_day": history_30d_start,
                         "end_day": self.business_date,
+                        "historical_sample_rule_version": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                         "verified_sample_rule_version": VERIFIED_SAMPLE_RULE_VERSION,
                     },
                 )
@@ -705,6 +951,29 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             for row in actual_wfs_rows
         }
 
+        sample_state_rows = (
+            self.session.execute(
+                text(
+                    "select store_id,item_id,trim(msku) msku,count(*) captured_lines,"
+                    "count(*) filter (where is_cancelled=false and is_valid_sample=false) "
+                    "pending_lines from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and store_id is not null and item_id is not null "
+                    "and msku is not null and trim(msku)<>'' group by 1,2,3"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            )
+            .mappings()
+            .all()
+        )
+        sample_state_map = {
+            (str(row["store_id"]), str(row["item_id"]), str(row["msku"])): (
+                int(row["captured_lines"]),
+                int(row["pending_lines"]),
+            )
+            for row in sample_state_rows
+        }
+
         mart_rows = (
             self.session.execute(
                 text(
@@ -745,6 +1014,13 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
             cost = costs.get(sku_key) if sku_key is not None else None
             missing: list[str] = []
             warnings: list[str] = []
+            sample_state = sample_state_map.get(
+                (str(row["store_id"]), str(row["item_id"]), str(row["msku"]))
+            )
+            if sample_state is None or sample_state[0] == 0:
+                warnings.append("sample_data_not_observed")
+            elif sample_state[1] > 0:
+                warnings.append("sample_verification_pending")
             if sample_orders > gross_orders:
                 warnings.append("sample_order_count_exceeds_gross_order_count")
             if sample_qty > gross_qty:
