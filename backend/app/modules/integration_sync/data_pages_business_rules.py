@@ -245,7 +245,10 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
 
     # YC00512_OWNER_APPROVED_SAMPLE_HOTFIX_V1
     def _hotfix_unique_sample_item_id(
-        self, store_id: str | None, msku: str | None, local_sku: str | None,
+        self,
+        store_id: str | None,
+        msku: str | None,
+        local_sku: str | None,
     ) -> str | None:
         """Require uniquely agreeing Listing and same-day direct SaleStat IDs.
 
@@ -253,34 +256,38 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
         """
         if not store_id or not msku or not local_sku:
             return None
-        row = self.session.execute(
-            text(
-                "select "
-                "(select count(distinct item_id) from dim_walmart_listings "
-                "where source_account_ref=:account and store_id=:store "
-                "and trim(msku)=:msku and trim(local_sku)=:local_sku "
-                "and item_id is not null) listing_count, "
-                "(select min(item_id) from dim_walmart_listings "
-                "where source_account_ref=:account and store_id=:store "
-                "and trim(msku)=:msku and trim(local_sku)=:local_sku "
-                "and item_id is not null) listing_id, "
-                "(select count(distinct item_id) from fact_walmart_sales_item_daily "
-                "where source_account_ref=:account and business_date_la=:day "
-                "and store_id=:store and trim(msku)=:msku "
-                "and allocation_status='direct' and item_id is not null) sales_count, "
-                "(select min(item_id) from fact_walmart_sales_item_daily "
-                "where source_account_ref=:account and business_date_la=:day "
-                "and store_id=:store and trim(msku)=:msku "
-                "and allocation_status='direct' and item_id is not null) sales_id"
-            ),
-            {
-                "account": self.source_account_ref,
-                "day": self.business_date,
-                "store": store_id,
-                "msku": msku.strip(),
-                "local_sku": local_sku.strip(),
-            },
-        ).mappings().one()
+        row = (
+            self.session.execute(
+                text(
+                    "select "
+                    "(select count(distinct item_id) from dim_walmart_listings "
+                    "where source_account_ref=:account and store_id=:store "
+                    "and trim(msku)=:msku and trim(local_sku)=:local_sku "
+                    "and item_id is not null) listing_count, "
+                    "(select min(item_id) from dim_walmart_listings "
+                    "where source_account_ref=:account and store_id=:store "
+                    "and trim(msku)=:msku and trim(local_sku)=:local_sku "
+                    "and item_id is not null) listing_id, "
+                    "(select count(distinct item_id) from fact_walmart_sales_item_daily "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and store_id=:store and trim(msku)=:msku "
+                    "and allocation_status='direct' and item_id is not null) sales_count, "
+                    "(select min(item_id) from fact_walmart_sales_item_daily "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and store_id=:store and trim(msku)=:msku "
+                    "and allocation_status='direct' and item_id is not null) sales_id"
+                ),
+                {
+                    "account": self.source_account_ref,
+                    "day": self.business_date,
+                    "store": store_id,
+                    "msku": msku.strip(),
+                    "local_sku": local_sku.strip(),
+                },
+            )
+            .mappings()
+            .one()
+        )
         if (
             int(row["listing_count"]) == 1
             and int(row["sales_count"]) == 1
@@ -416,35 +423,43 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 new_line_id = _field(item, "order_item_no")
                 legacy_verified = None
                 if (
-                    old_line_id and new_line_id and old_line_id != new_line_id
-                    and source_order_id and store_id and platform_order_no
+                    old_line_id
+                    and new_line_id
+                    and old_line_id != new_line_id
+                    and source_order_id
+                    and store_id
+                    and platform_order_no
                 ):
-                    candidates = self.session.execute(
-                        text(
-                            "select business_date_utc_minus_7,source_order_id,platform_order_no,"
-                            "store_id,platform_code,source_order_line_id,item_id,msku,local_sku,"
-                            "quantity,unit_price_amount,unit_price_currency_code,order_total_amount,"
-                            "order_total_currency_code,cancel_time_raw,is_cancelled "
-                            "from fact_walmart_sample_order_items "
-                            "where source_account_ref=:account and store_id=:store "
-                            "and source_order_id=:order_id and platform_order_no=:platform_order "
-                            "and business_date_utc_minus_7=:day "
-                            "and source_order_line_id in (:legacy_line,:current_line) "
-                            "and is_valid_sample=true and sample_rule_version in (:rule_v3,:rule_v5) "
-                            "for update"
-                        ),
-                        {
-                            "account": self.source_account_ref,
-                            "store": store_id,
-                            "order_id": source_order_id,
-                            "platform_order": platform_order_no,
-                            "day": self.business_date,
-                            "legacy_line": old_line_id,
-                            "current_line": new_line_id,
-                            "rule_v3": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
-                            "rule_v5": VERIFIED_SAMPLE_RULE_VERSION,
-                        },
-                    ).mappings().all()
+                    candidates = (
+                        self.session.execute(
+                            text(
+                                "select business_date_utc_minus_7,source_order_id,platform_order_no,"
+                                "store_id,platform_code,source_order_line_id,item_id,msku,local_sku,"
+                                "quantity,unit_price_amount,unit_price_currency_code,order_total_amount,"
+                                "order_total_currency_code,cancel_time_raw,is_cancelled "
+                                "from fact_walmart_sample_order_items "
+                                "where source_account_ref=:account and store_id=:store "
+                                "and source_order_id=:order_id and platform_order_no=:platform_order "
+                                "and business_date_utc_minus_7=:day "
+                                "and source_order_line_id in (:legacy_line,:current_line) "
+                                "and is_valid_sample=true and sample_rule_version in (:rule_v3,:rule_v5) "
+                                "for update"
+                            ),
+                            {
+                                "account": self.source_account_ref,
+                                "store": store_id,
+                                "order_id": source_order_id,
+                                "platform_order": platform_order_no,
+                                "day": self.business_date,
+                                "legacy_line": old_line_id,
+                                "current_line": new_line_id,
+                                "rule_v3": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                                "rule_v5": VERIFIED_SAMPLE_RULE_VERSION,
+                            },
+                        )
+                        .mappings()
+                        .all()
+                    )
                     if len(candidates) > 1:
                         raise DataPagesMartInvariantError(
                             "DATA_PAGES_VERIFIED_LINE_ALIAS_AMBIGUOUS",
@@ -465,10 +480,13 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     order_total == Decimal("0")
                     and str(order_status_raw).strip() == "9"
                     and not is_cancelled
-                    and item_price is not None and item_price > 0
+                    and item_price is not None
+                    and item_price > 0
                     and discount is not None
-                    and quantity is not None and quantity > 0
-                    and unit_price is not None and unit_price > 0
+                    and quantity is not None
+                    and quantity > 0
+                    and unit_price is not None
+                    and unit_price > 0
                     and abs(item_price - discount) <= Decimal("0.01")
                     and abs(unit_price * quantity - discount) <= Decimal("0.01")
                 )
@@ -477,20 +495,20 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         store_id,
                         _field(item, "msku"),
                         _field(item, "local_sku", "sku"),
-                    ) if strict_discount else None
+                    )
+                    if strict_discount
+                    else None
                 )
-                identity_agrees = (
-                    resolved_item_id is not None
-                    and (provider_item_id is None or provider_item_id == resolved_item_id)
+                identity_agrees = resolved_item_id is not None and (
+                    provider_item_id is None or provider_item_id == resolved_item_id
                 )
                 # Pre-resolve the item ID even if auto-approval is off, to allow
                 # exact replay of already verified sample facts (YC00512).
-                effective_item_id = (
-                    resolved_item_id if identity_agrees else provider_item_id
-                )
-                owner_approved = (
-                    os.environ.get("WALMART_SAMPLE_AUTO_VERIFY") == "20261001-20261017"
-                    and date(2026, 10, 1) <= self.business_date <= date(2026, 10, 17)
+                effective_item_id = resolved_item_id if identity_agrees else provider_item_id
+                owner_approved = os.environ.get(
+                    "WALMART_SAMPLE_AUTO_VERIFY"
+                ) == "20261001-20261017" and date(2026, 10, 1) <= self.business_date <= date(
+                    2026, 10, 17
                 )
                 approve_sample = bool(strict_discount and identity_agrees and owner_approved)
                 # Keep cancelled, price-mismatched, and ambiguous lines as candidates.
@@ -527,7 +545,9 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "cancel_time_raw": cancel_time_raw,
                     "is_cancelled": is_cancelled,
                     "is_valid_sample": approve_sample,
-                    "sample_rule_version": (VERIFIED_SAMPLE_RULE_VERSION if approve_sample else SAMPLE_RULE_VERSION),
+                    "sample_rule_version": (
+                        VERIFIED_SAMPLE_RULE_VERSION if approve_sample else SAMPLE_RULE_VERSION
+                    ),
                     "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                     "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                     "changed_rule": "provider-verified-changed-v5",
@@ -655,31 +675,32 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             raise DataPagesMartInvariantError(
                 "DATA_PAGES_VERIFIED_SAMPLE_NOT_OBSERVED", business_date=self.business_date
             )
-        if (
-            os.environ.get("WALMART_SAMPLE_AUTO_VERIFY") == "20261001-20261017"
-            and date(2026, 10, 1) <= self.business_date <= date(2026, 10, 17)
-        ):
-            excess = int(self.session.execute(
-                text(
-                    "with v as (select store_id,item_id,trim(msku) msku, "
-                    "sum(quantity) sample_qty, "
-                    "sum(unit_price_amount*quantity) sample_amount "
-                    "from fact_walmart_sample_order_items "
-                    "where source_account_ref=:account "
-                    "and business_date_utc_minus_7=:day and is_valid_sample=true "
-                    "group by 1,2,3), s as (select store_id,item_id,trim(msku) msku, "
-                    "sum(sales_qty) sales_qty,sum(sales_amount) sales_amount "
-                    "from fact_walmart_sales_item_daily "
-                    "where source_account_ref=:account and business_date_la=:day "
-                    "and allocation_status='direct' group by 1,2,3) "
-                    "select count(*) from v left join s on "
-                    "v.store_id=s.store_id and v.item_id=s.item_id and v.msku=s.msku "
-                    "where s.item_id is null "
-                    "or v.sample_qty > coalesce(s.sales_qty,0) "
-                    "or v.sample_amount > coalesce(s.sales_amount,0)+0.01"
-                ),
-                {"account": self.source_account_ref, "day": self.business_date},
-            ).scalar_one())
+        if os.environ.get("WALMART_SAMPLE_AUTO_VERIFY") == "20261001-20261017" and date(
+            2026, 10, 1
+        ) <= self.business_date <= date(2026, 10, 17):
+            excess = int(
+                self.session.execute(
+                    text(
+                        "with v as (select store_id,item_id,trim(msku) msku, "
+                        "sum(quantity) sample_qty, "
+                        "sum(unit_price_amount*quantity) sample_amount "
+                        "from fact_walmart_sample_order_items "
+                        "where source_account_ref=:account "
+                        "and business_date_utc_minus_7=:day and is_valid_sample=true "
+                        "group by 1,2,3), s as (select store_id,item_id,trim(msku) msku, "
+                        "sum(sales_qty) sales_qty,sum(sales_amount) sales_amount "
+                        "from fact_walmart_sales_item_daily "
+                        "where source_account_ref=:account and business_date_la=:day "
+                        "and allocation_status='direct' group by 1,2,3) "
+                        "select count(*) from v left join s on "
+                        "v.store_id=s.store_id and v.item_id=s.item_id and v.msku=s.msku "
+                        "where s.item_id is null "
+                        "or v.sample_qty > coalesce(s.sales_qty,0) "
+                        "or v.sample_amount > coalesce(s.sales_amount,0)+0.01"
+                    ),
+                    {"account": self.source_account_ref, "day": self.business_date},
+                ).scalar_one()
+            )
             if excess:
                 raise DataPagesMartInvariantError(
                     "DATA_PAGES_SAMPLE_EXCEEDS_SALESTAT",
