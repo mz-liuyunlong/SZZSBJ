@@ -90,9 +90,9 @@ describe("operation log table columns", () => {
   it("renders the unified identity columns and owner", () => {
     render(<OperationLogTable {...createInputs()} />);
 
-    expect(screen.getByText("商品ID/品名")).toBeTruthy();
-    expect(screen.getByText("SKU/MSKU")).toBeTruthy();
-    expect(screen.getByText("负责人")).toBeTruthy();
+    expect(screen.getAllByText("商品ID/品名").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("SKU/MSKU").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("负责人").length).toBeGreaterThan(0);
 
     expect(screen.queryByText("运营")).toBeNull();
     expect(screen.queryByText("转化率")).toBeNull();
@@ -103,8 +103,8 @@ describe("operation log table columns", () => {
   it("shows profit and WFS inventory without shortcuts", () => {
     render(<OperationLogTable {...createInputs()} />);
 
-    expect(screen.getByText("近7天利润")).toBeTruthy();
-    expect(screen.getByText("WFS可售库存")).toBeTruthy();
+    expect(screen.getAllByText("近7天利润").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("WFS可售库存").length).toBeGreaterThan(0);
     expect(screen.getByText("$12.50")).toBeTruthy();
     expect(screen.getByText("18")).toBeTruthy();
 
