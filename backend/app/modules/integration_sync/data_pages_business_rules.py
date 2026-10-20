@@ -505,12 +505,6 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                 # Pre-resolve the item ID even if auto-approval is off, to allow
                 # exact replay of already verified sample facts (YC00512).
                 effective_item_id = resolved_item_id if identity_agrees else provider_item_id
-                owner_approved = os.environ.get(
-                    "WALMART_SAMPLE_AUTO_VERIFY"
-                ) == "20261001-20261017" and date(2026, 10, 1) <= self.business_date <= date(
-                    2026, 10, 17
-                )
-                approve_sample = bool(strict_discount and identity_agrees and owner_approved)
                 # Keep cancelled, price-mismatched, and ambiguous lines as candidates.
                 if legacy_verified is not None:
                     # The writer's strict evidence comparison below still checks
@@ -544,10 +538,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "order_total_currency_code": currency_code,
                     "cancel_time_raw": cancel_time_raw,
                     "is_cancelled": is_cancelled,
-                    "is_valid_sample": approve_sample,
-                    "sample_rule_version": (
-                        VERIFIED_SAMPLE_RULE_VERSION if approve_sample else SAMPLE_RULE_VERSION
-                    ),
+                    "is_valid_sample": False,
+                    "sample_rule_version": SAMPLE_RULE_VERSION,
                     "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                     "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                     "changed_rule": "provider-verified-changed-v5",
@@ -675,37 +667,6 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             raise DataPagesMartInvariantError(
                 "DATA_PAGES_VERIFIED_SAMPLE_NOT_OBSERVED", business_date=self.business_date
             )
-        if os.environ.get("WALMART_SAMPLE_AUTO_VERIFY") == "20261001-20261017" and date(
-            2026, 10, 1
-        ) <= self.business_date <= date(2026, 10, 17):
-            excess = int(
-                self.session.execute(
-                    text(
-                        "with v as (select store_id,item_id,trim(msku) msku, "
-                        "sum(quantity) sample_qty, "
-                        "sum(unit_price_amount*quantity) sample_amount "
-                        "from fact_walmart_sample_order_items "
-                        "where source_account_ref=:account "
-                        "and business_date_utc_minus_7=:day and is_valid_sample=true "
-                        "group by 1,2,3), s as (select store_id,item_id,trim(msku) msku, "
-                        "sum(sales_qty) sales_qty,sum(sales_amount) sales_amount "
-                        "from fact_walmart_sales_item_daily "
-                        "where source_account_ref=:account and business_date_la=:day "
-                        "and allocation_status='direct' group by 1,2,3) "
-                        "select count(*) from v left join s on "
-                        "v.store_id=s.store_id and v.item_id=s.item_id and v.msku=s.msku "
-                        "where s.item_id is null "
-                        "or v.sample_qty > coalesce(s.sales_qty,0) "
-                        "or v.sample_amount > coalesce(s.sales_amount,0)+0.01"
-                    ),
-                    {"account": self.source_account_ref, "day": self.business_date},
-                ).scalar_one()
-            )
-            if excess:
-                raise DataPagesMartInvariantError(
-                    "DATA_PAGES_SAMPLE_EXCEEDS_SALESTAT",
-                    business_date=self.business_date,
-                )
         return count
 
     def _resolve_sample_items(self) -> int:
