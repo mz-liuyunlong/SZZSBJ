@@ -243,6 +243,52 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             "store_id": list(self.store_ids),
         }
 
+    # YC00512_OWNER_APPROVED_SAMPLE_HOTFIX_V1
+    def _hotfix_unique_sample_item_id(
+        self, store_id: str | None, msku: str | None, local_sku: str | None,
+    ) -> str | None:
+        """Require uniquely agreeing Listing and same-day direct SaleStat IDs.
+
+        Provider responses often omit item_id. Never invent one from SKU alone.
+        """
+        if not store_id or not msku or not local_sku:
+            return None
+        row = self.session.execute(
+            text(
+                "select "
+                "(select count(distinct item_id) from dim_walmart_listings "
+                "where source_account_ref=:account and store_id=:store "
+                "and trim(msku)=:msku and trim(local_sku)=:local_sku "
+                "and item_id is not null) listing_count, "
+                "(select min(item_id) from dim_walmart_listings "
+                "where source_account_ref=:account and store_id=:store "
+                "and trim(msku)=:msku and trim(local_sku)=:local_sku "
+                "and item_id is not null) listing_id, "
+                "(select count(distinct item_id) from fact_walmart_sales_item_daily "
+                "where source_account_ref=:account and business_date_la=:day "
+                "and store_id=:store and trim(msku)=:msku "
+                "and allocation_status='direct' and item_id is not null) sales_count, "
+                "(select min(item_id) from fact_walmart_sales_item_daily "
+                "where source_account_ref=:account and business_date_la=:day "
+                "and store_id=:store and trim(msku)=:msku "
+                "and allocation_status='direct' and item_id is not null) sales_id"
+            ),
+            {
+                "account": self.source_account_ref,
+                "day": self.business_date,
+                "store": store_id,
+                "msku": msku.strip(),
+                "local_sku": local_sku.strip(),
+            },
+        ).mappings().one()
+        if (
+            int(row["listing_count"]) == 1
+            and int(row["sales_count"]) == 1
+            and row["listing_id"] == row["sales_id"]
+        ):
+            return str(row["listing_id"])
+        return None
+
     def _write_sample_orders(self, rows: Iterable[dict[str, Any]]) -> int:
         """Refresh unverified candidates while protecting provider-confirmed facts."""
 
@@ -253,7 +299,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "select count(*) from fact_walmart_sample_order_items "
                     "where source_account_ref=:account and business_date_utc_minus_7=:day "
                     "and is_valid_sample=true and sample_rule_version not in "
-                    "(:historical_rule,:verified_rule)"
+                    "(:historical_rule,:verified_rule,'owner-approved-raw-zero-full-discount-v1')"
                 ),
                 {
                     "account": self.source_account_ref,
@@ -363,6 +409,101 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     # A single malformed candidate cannot block all stores.
                     self.summary.sample_unresolved_rows += 1
                     continue
+                # YC00512_VERIFIED_LEGACY_LINE_ALIAS_V2
+                # Historic verified facts used global_item_no; newer Order V2 facts
+                # use order_item_no. Alias ONLY an already verified same-source line.
+                old_line_id = _field(item, "global_item_no")
+                new_line_id = _field(item, "order_item_no")
+                legacy_verified = None
+                if (
+                    old_line_id and new_line_id and old_line_id != new_line_id
+                    and source_order_id and store_id and platform_order_no
+                ):
+                    candidates = self.session.execute(
+                        text(
+                            "select business_date_utc_minus_7,source_order_id,platform_order_no,"
+                            "store_id,platform_code,source_order_line_id,item_id,msku,local_sku,"
+                            "quantity,unit_price_amount,unit_price_currency_code,order_total_amount,"
+                            "order_total_currency_code,cancel_time_raw,is_cancelled "
+                            "from fact_walmart_sample_order_items "
+                            "where source_account_ref=:account and store_id=:store "
+                            "and source_order_id=:order_id and platform_order_no=:platform_order "
+                            "and business_date_utc_minus_7=:day "
+                            "and source_order_line_id in (:legacy_line,:current_line) "
+                            "and is_valid_sample=true and sample_rule_version in (:rule_v3,:rule_v5) "
+                            "for update"
+                        ),
+                        {
+                            "account": self.source_account_ref,
+                            "store": store_id,
+                            "order_id": source_order_id,
+                            "platform_order": platform_order_no,
+                            "day": self.business_date,
+                            "legacy_line": old_line_id,
+                            "current_line": new_line_id,
+                            "rule_v3": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
+                            "rule_v5": VERIFIED_SAMPLE_RULE_VERSION,
+                        },
+                    ).mappings().all()
+                    if len(candidates) > 1:
+                        raise DataPagesMartInvariantError(
+                            "DATA_PAGES_VERIFIED_LINE_ALIAS_AMBIGUOUS",
+                            business_date=self.business_date,
+                        )
+                    if candidates:
+                        existing_line = str(candidates[0]["source_order_line_id"])
+                        if existing_line == old_line_id:
+                            source_order_line_id = old_line_id
+                            legacy_verified = dict(candidates[0])
+                # Do not invent an item ID for new samples. For an existing
+                # verified legacy line only, reuse its prior verified ID when
+                # the provider omits item_id and the catalog cannot resolve it.
+                # YC00512_OWNER_APPROVED_SAMPLE_HOTFIX_V1: strict provider evidence.
+                # This is deliberately opt-in for the approved backfill process.
+                provider_item_id = _field(item, "item_id", "platform_product_id")
+                strict_discount = (
+                    order_total == Decimal("0")
+                    and str(order_status_raw).strip() == "9"
+                    and not is_cancelled
+                    and item_price is not None and item_price > 0
+                    and discount is not None
+                    and quantity is not None and quantity > 0
+                    and unit_price is not None and unit_price > 0
+                    and abs(item_price - discount) <= Decimal("0.01")
+                    and abs(unit_price * quantity - discount) <= Decimal("0.01")
+                )
+                resolved_item_id = (
+                    self._hotfix_unique_sample_item_id(
+                        store_id,
+                        _field(item, "msku"),
+                        _field(item, "local_sku", "sku"),
+                    ) if strict_discount else None
+                )
+                identity_agrees = (
+                    resolved_item_id is not None
+                    and (provider_item_id is None or provider_item_id == resolved_item_id)
+                )
+                # Pre-resolve the item ID even if auto-approval is off, to allow
+                # exact replay of already verified sample facts (YC00512).
+                effective_item_id = (
+                    resolved_item_id if identity_agrees else provider_item_id
+                )
+                owner_approved = (
+                    os.environ.get("WALMART_SAMPLE_AUTO_VERIFY") == "20261001-20261017"
+                    and date(2026, 10, 1) <= self.business_date <= date(2026, 10, 17)
+                )
+                approve_sample = bool(strict_discount and identity_agrees and owner_approved)
+                # Keep cancelled, price-mismatched, and ambiguous lines as candidates.
+                if legacy_verified is not None:
+                    # The writer's strict evidence comparison below still checks
+                    # all other persisted fields and rejects any changed replay.
+                    if not strict_discount:
+                        raise DataPagesMartInvariantError(
+                            "DATA_PAGES_VERIFIED_SAMPLE_CHANGED",
+                            business_date=self.business_date,
+                        )
+                    if effective_item_id is None and provider_item_id is None:
+                        effective_item_id = legacy_verified["item_id"]
                 values: dict[str, object] = {
                     "id": str(uuid4()),
                     "business_date_utc_minus_7": self.business_date,
@@ -373,7 +514,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "store_name": store_name,
                     "platform_code": platform_code,
                     "source_order_line_id": source_order_line_id,
-                    "item_id": _field(item, "item_id", "platform_product_id"),
+                    "item_id": effective_item_id,
                     "msku": _field(item, "msku"),
                     "local_sku": _field(item, "local_sku", "sku"),
                     "quantity": quantity,
@@ -385,8 +526,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "order_total_currency_code": currency_code,
                     "cancel_time_raw": cancel_time_raw,
                     "is_cancelled": is_cancelled,
-                    "is_valid_sample": False,
-                    "sample_rule_version": SAMPLE_RULE_VERSION,
+                    "is_valid_sample": approve_sample,
+                    "sample_rule_version": (VERIFIED_SAMPLE_RULE_VERSION if approve_sample else SAMPLE_RULE_VERSION),
                     "historical_rule": HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
                     "verified_rule": VERIFIED_SAMPLE_RULE_VERSION,
                     "changed_rule": "provider-verified-changed-v5",
@@ -411,7 +552,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                             "where source_account_ref=:source_account_ref "
                             "and platform_order_no=:platform_order_no "
                             "and source_order_line_id=:source_order_line_id "
-                            "and is_valid_sample=true for update"
+                            "and is_valid_sample=true and sample_rule_version in "
+                            "(:historical_rule,:verified_rule) for update"
                         ),
                         values,
                     )
@@ -465,7 +607,8 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                         "and fact_walmart_sample_order_items.sample_rule_version in "
                         "(:historical_rule,:verified_rule) "
                         "then :changed_rule else excluded.sample_rule_version end,"
-                        "synced_at=excluded.synced_at,updated_at=excluded.updated_at"
+                        "synced_at=excluded.synced_at,updated_at=excluded.updated_at "
+                        "where fact_walmart_sample_order_items.sample_rule_version <> 'owner-approved-raw-zero-full-discount-v1'"
                     ),
                     values,
                 )
@@ -512,6 +655,36 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
             raise DataPagesMartInvariantError(
                 "DATA_PAGES_VERIFIED_SAMPLE_NOT_OBSERVED", business_date=self.business_date
             )
+        if (
+            os.environ.get("WALMART_SAMPLE_AUTO_VERIFY") == "20261001-20261017"
+            and date(2026, 10, 1) <= self.business_date <= date(2026, 10, 17)
+        ):
+            excess = int(self.session.execute(
+                text(
+                    "with v as (select store_id,item_id,trim(msku) msku, "
+                    "sum(quantity) sample_qty, "
+                    "sum(unit_price_amount*quantity) sample_amount "
+                    "from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account "
+                    "and business_date_utc_minus_7=:day and is_valid_sample=true "
+                    "group by 1,2,3), s as (select store_id,item_id,trim(msku) msku, "
+                    "sum(sales_qty) sales_qty,sum(sales_amount) sales_amount "
+                    "from fact_walmart_sales_item_daily "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and allocation_status='direct' group by 1,2,3) "
+                    "select count(*) from v left join s on "
+                    "v.store_id=s.store_id and v.item_id=s.item_id and v.msku=s.msku "
+                    "where s.item_id is null "
+                    "or v.sample_qty > coalesce(s.sales_qty,0) "
+                    "or v.sample_amount > coalesce(s.sales_amount,0)+0.01"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            ).scalar_one())
+            if excess:
+                raise DataPagesMartInvariantError(
+                    "DATA_PAGES_SAMPLE_EXCEEDS_SALESTAT",
+                    business_date=self.business_date,
+                )
         return count
 
     def _resolve_sample_items(self) -> int:
@@ -594,7 +767,7 @@ class DataPagesRealSyncRunner(BaseDataPagesRealSyncRunner):
                     "select count(*) from fact_walmart_sample_order_items s "
                     "where s.source_account_ref=:account and s.business_date_utc_minus_7=:day "
                     "and s.is_valid_sample=true and s.sample_rule_version in "
-                    "(:historical_rule,:verified_rule) "
+                    "(:historical_rule,:verified_rule,'owner-approved-raw-zero-full-discount-v1') "
                     "and (s.is_cancelled=true or s.quantity is null or s.quantity<=0 "
                     "or s.unit_price_amount is null "
                     "or s.store_id is null or s.item_id is null "
