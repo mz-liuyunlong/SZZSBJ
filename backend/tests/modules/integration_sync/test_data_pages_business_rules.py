@@ -7,17 +7,25 @@ from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.data_pages_business_rules import (
     CHINA_TZ,
+    HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION,
     DataPagesRealSyncRunner,
     _is_valid_sample,
     _refund_amounts,
     _sample_window_china,
 )
 from app.modules.integration_sync.data_pages_mart_invariants import DataPagesMartInvariantError
+from app.modules.integration_sync.data_pages_real_sync import _order_purchase_date_la
 
 
 class _ScalarResult:
     def scalar_one(self) -> int:
         return 0
+
+    def mappings(self) -> "_ScalarResult":
+        return self
+
+    def first(self) -> None:
+        return None
 
 
 class _MappingResult:
@@ -60,6 +68,16 @@ def _runner(session: object | None = None) -> DataPagesRealSyncRunner:
     return runner
 
 
+def _sample_upsert_params(session: _CaptureSession) -> dict[str, Any]:
+    params = next(
+        params
+        for sql, params in session.calls
+        if "insert into fact_walmart_sample_order_items" in sql and "on conflict" in sql
+    )
+    assert params is not None
+    return params
+
+
 def test_sample_order_window_converts_fixed_utc_minus_7_to_china_time() -> None:
     start_at, end_at = _sample_window_china(date(2026, 9, 1))
 
@@ -91,6 +109,31 @@ def test_sample_order_and_generic_order_share_la_business_day_window() -> None:
         datetime.fromtimestamp(generic_body["end_time"], CHINA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         == "2026-09-02 14:59:59"
     )
+
+
+@pytest.mark.parametrize(
+    ("business_day", "inclusive_seconds"),
+    [
+        (date(2026, 10, 1), 86_399),
+        (date(2026, 10, 17), 86_399),
+        (date(2026, 11, 1), 89_999),
+    ],
+)
+def test_order_windows_cover_la_business_dates_and_dst(
+    business_day: date,
+    inclusive_seconds: int,
+) -> None:
+    runner = _runner()
+    runner.business_date = business_day
+
+    sample_body = runner._sample_order_body(offset=0, size=3)
+    generic_body = runner._order_body(offset=0, size=3)
+
+    assert sample_body["start_time"] == generic_body["start_time"]
+    assert sample_body["end_time"] == generic_body["end_time"]
+    assert sample_body["end_time"] - sample_body["start_time"] == inclusive_seconds
+    assert _order_purchase_date_la(sample_body["start_time"]) == business_day
+    assert _order_purchase_date_la(sample_body["end_time"]) == business_day
 
 
 def test_sample_rule_uses_provider_status_and_normalized_cancel_time() -> None:
@@ -137,8 +180,7 @@ def test_sample_writer_keeps_required_business_fields() -> None:
     )
 
     assert written == 1
-    params = session.calls[1][1]
-    assert params is not None
+    params = _sample_upsert_params(session)
     assert params["platform_order_no"] == "platform-1"
     assert params["source_order_line_id"] == "line-1"
     assert params["store_name"] == "Store A"
@@ -185,7 +227,10 @@ def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> N
     assert runner._resolve_sample_items() == 0
     assert "and s.item_id is null" in session.calls[0][0]
     assert "and s.is_valid_sample=true and s.item_id is null" not in session.calls[0][0]
-    assert "sample_rule_version=:verified_rule" in session.calls[2][0]
+    assert (
+        "sample_rule_version in "
+        "(:historical_rule,:verified_rule,'owner-approved-raw-zero-full-discount-v1')"
+    ) in session.calls[2][0]
 
 
 def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
@@ -223,15 +268,70 @@ def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
     runner = _runner(session)
     with pytest.raises(DataPagesMartInvariantError, match="DATA_PAGES_VERIFIED_SAMPLE_CHANGED"):
         runner._write_sample_orders([row])
-    assert (
-        "and not (is_valid_sample=true and sample_rule_version=:verified_rule)"
-        in session.calls[0][0]
+    sql_calls = [sql for sql, _ in session.calls]
+    assert any("and is_valid_sample=false" in sql for sql in sql_calls)
+    assert any(
+        "then :changed_rule else excluded.sample_rule_version end" in sql for sql in sql_calls
     )
-    assert "then :changed_rule else excluded.sample_rule_version end" in session.calls[1][0]
-    assert (
-        "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)"
-        in session.calls[1][0]
+    assert "then coalesce(excluded.item_id,fact_walmart_sample_order_items.item_id)" in next(
+        sql for sql in sql_calls if "on conflict" in sql
     )
+
+
+def test_historical_v3_sample_rule_is_preserved_by_identical_replay() -> None:
+    session = _CaptureSession()
+    runner = _runner(session)
+    row = {
+        "global_order_no": "synthetic-order",
+        "global_purchase_time": str(int(datetime(2026, 9, 1, 16, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "transaction_info": [{"order_total_amount": "0"}],
+        "item_info": [
+            {
+                "order_item_no": "line-1",
+                "platform_order_no": "platform-1",
+                "quantity": "1",
+                "unit_price_amount": "10.00",
+            }
+        ],
+    }
+
+    assert runner._write_sample_orders([row]) == 1
+
+    upsert_sql, params = next(
+        (sql, params) for sql, params in session.calls if "on conflict" in sql
+    )
+    assert params is not None
+    assert params["historical_rule"] == HISTORICAL_VERIFIED_SAMPLE_RULE_VERSION
+    assert "sample_rule_version in (:historical_rule,:verified_rule)" in upsert_sql
+    assert "then fact_walmart_sample_order_items.sample_rule_version" in upsert_sql
+    assert any("and is_valid_sample=false" in sql for sql, _ in session.calls)
+
+
+def test_unknown_verified_sample_rule_blocks_before_candidate_cleanup() -> None:
+    class UnsupportedSession(_CaptureSession):
+        def execute(self, statement: object, params: dict[str, Any] | None = None) -> _ScalarResult:
+            statement_text = str(statement)
+            self.calls.append((statement_text, params))
+            if "sample_rule_version not in" in statement_text:
+
+                class OneResult:
+                    def scalar_one(self) -> int:
+                        return 1
+
+                return OneResult()  # type: ignore[return-value]
+            return _ScalarResult()
+
+    session = UnsupportedSession()
+    runner = _runner(session)
+    with pytest.raises(
+        DataPagesMartInvariantError,
+        match="DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED",
+    ):
+        runner._write_sample_orders([])
+
+    assert len(session.calls) == 1
+    assert not any("delete from fact_walmart_sample_order_items" in sql for sql, _ in session.calls)
 
 
 def test_sample_empty_items_counted_as_unresolved() -> None:
@@ -421,8 +521,7 @@ def test_sample_writer_preserves_full_item_discount_as_unverified_candidate() ->
         ]
     )
     assert written == 1
-    params = session.calls[1][1]
-    assert params is not None
+    params = _sample_upsert_params(session)
     assert params["platform_order_no"] == "reference-2"
     assert params["source_order_line_id"] == "line-2"
     assert params["unit_price_amount"] == Decimal("12.495")
@@ -475,5 +574,52 @@ def test_sample_writer_quarantines_ambiguous_multiple_unit_prices() -> None:
     runner = _runner(session)
     assert runner._write_sample_orders([row]) == 1
     assert runner.summary.sample_unresolved_rows == 1
-    assert session.calls[1][1]["unit_price_amount"] is None
-    assert session.calls[1][1]["is_valid_sample"] is False
+    params = _sample_upsert_params(session)
+    assert params["unit_price_amount"] is None
+    assert params["is_valid_sample"] is False
+
+
+def test_raw_sample_is_not_auto_verified_by_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WALMART_SAMPLE_AUTO_VERIFY", "20261001-20261017")
+
+    session = _CaptureSession()
+    runner = _runner(session)
+    runner.business_date = date(2026, 10, 16)
+    runner._hotfix_unique_sample_item_id = lambda *_args: "item-a"  # type: ignore[method-assign]
+
+    row = {
+        "global_order_no": "synthetic-raw-order",
+        "global_purchase_time": str(int(datetime(2026, 10, 17, 4, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "status": 9,
+        "amount_currency": "USD",
+        "transaction_info": [{"order_total_amount": "0"}],
+        "platform_info": [{"platform_code": "10008", "cancel_time": 0}],
+        "item_info": [
+            {
+                "order_item_no": "synthetic-raw-line",
+                "platform_order_no": "synthetic-platform-order",
+                "item_id": "item-a",
+                "msku": "MSKU-1",
+                "local_sku": "SKU-1",
+                "quantity": "1",
+                "unit_price_amount": "10",
+                "item_price_amount": "10",
+                "discount_amount": "10",
+            }
+        ],
+    }
+
+    assert runner._write_sample_orders([row]) == 1
+    params = _sample_upsert_params(session)
+    assert params["is_valid_sample"] is False
+    assert params["sample_rule_version"] == "candidate-unverified-v5"
+    assert params["item_id"] == "item-a"
+
+    upsert_sql = next(
+        sql for sql, _ in session.calls if "insert into fact_walmart_sample_order_items" in sql
+    )
+    assert (
+        "where fact_walmart_sample_order_items.sample_rule_version "
+        "<> 'owner-approved-raw-zero-full-discount-v1'"
+    ) in upsert_sql
