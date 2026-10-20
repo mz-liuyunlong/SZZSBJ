@@ -1,10 +1,10 @@
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Empty, Space, Table, Tag } from "antd";
+import { Button, Empty, Space, Table, Tag, Tooltip } from "antd";
 import type { Key } from "react";
 import ReportTableShell, { ReportTableSelectionBar } from "@/components/report-table/ReportTableShell";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
-import { CopyableTextCell, MoneyCell, StatusTagCell } from "@/components/report-table/cells";
+import { CopyableTextCell, MoneyCell, StatusTagCell, ProductIdentityCell } from "@/components/report-table/cells";
 import {
   WFS_FEE_ALERT_USD_TO_CNY_RATE,
   formatWfsMoney,
@@ -15,6 +15,7 @@ import {
 } from "@/pages/warehouse/wfsFeeAlertTypes";
 
 interface WfsFeeAlertTableProps {
+  loading: boolean;
   rows: WfsFeeAlertRow[];
   currency: WfsFeeAlertCurrency;
   appliedColumnKeys: string[];
@@ -27,11 +28,8 @@ interface WfsFeeAlertTableProps {
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
   onBulkOpenCase: () => void;
-  onBulkFollow: () => void;
   onCopy: (text: string) => void;
   onOpenDetail: (row: WfsFeeAlertRow) => void;
-  onOpenFollow: (row: WfsFeeAlertRow) => void;
-  canFollow: boolean;
 }
 
 const priorityColor: Record<WfsFeeAlertPriority, string> = {
@@ -66,8 +64,6 @@ const createColumns = (
   currency: WfsFeeAlertCurrency,
   onCopy: (text: string) => void,
   onOpenDetail: (row: WfsFeeAlertRow) => void,
-  onOpenFollow: (row: WfsFeeAlertRow) => void,
-  canFollow: boolean,
 ): ProColumns<WfsFeeAlertRow>[] => [
   {
     title: "图片",
@@ -81,34 +77,60 @@ const createColumns = (
     ),
   },
   {
-    title: "SKU",
-    key: "sku",
-    width: 154,
+    title: "商品ID/品名",
+    key: "productIdName",
+    width: 240,
     fixed: "left",
-    sorter: (a, b) => compareText(a.sku, b.sku),
+    sorter: (a, b) => compareText(a.productId, b.productId),
     render: (_, row) => (
-      <CopyableTextCell
-        text={row.sku}
-        label="SKU"
-        link
+      <div className="wfs-fee-alert__product-identity">
+        <ProductIdentityCell
+        productId={row.productId}
+        productName={row.productName}
         onCopy={onCopy}
-        onOpen={() => onOpenDetail(row)}
       />
+        </div>
     ),
   },
   {
-    title: "MSKU",
-    dataIndex: "msku",
-    key: "msku",
-    width: 138,
-    sorter: (a, b) => compareText(a.msku, b.msku),
+    title: "SKU/MSKU",
+    key: "skuMsku",
+    width: 190,
+    fixed: "left",
+    sorter: (a, b) =>
+      compareText(a.sku, b.sku) || compareText(a.msku, b.msku),
+    render: (_, row) => (
+      <Space
+        direction="vertical"
+        size={0}
+        className="report-table-identity-stack report-table-sku-msku-identity-stack"
+      >
+        <CopyableTextCell
+          text={row.sku}
+          label="SKU"
+          onCopy={onCopy}
+        />
+        <CopyableTextCell
+          text={row.msku}
+          label="MSKU"
+          onCopy={onCopy}
+        />
+      </Space>
+    ),
   },
   {
     title: "店铺",
     dataIndex: "store",
     key: "store",
-    width: 104,
+    width: 148,
     sorter: (a, b) => compareText(a.store, b.store),
+    render: (_, row) => (
+      <Tooltip title={row.store} placement="topLeft">
+        <span className="wfs-fee-alert__store-text">
+          {row.store}
+        </span>
+      </Tooltip>
+    ),
   },
   {
     title: "负责人",
@@ -118,20 +140,6 @@ const createColumns = (
     sorter: (a, b) => compareText(a.owner, b.owner),
   },
   {
-    title: "商品ID",
-    dataIndex: "productId",
-    key: "productId",
-    width: 128,
-    sorter: (a, b) => compareText(a.productId, b.productId),
-  },
-  {
-    title: "类目",
-    dataIndex: "category",
-    key: "category",
-    width: 112,
-    sorter: (a, b) => compareText(a.category, b.category),
-  },
-  {
     title: "订单量",
     dataIndex: "orders",
     key: "orders",
@@ -139,14 +147,28 @@ const createColumns = (
     sorter: numberSorter("orders"),
   },
   {
-    title: "销量",
-    dataIndex: "units",
-    key: "units",
-    width: 88,
-    sorter: numberSorter("units"),
+    title: "单件WFS费用",
+    key: "productUnitWfsFee",
+    width: 128,
+    sorter: (a, b) => {
+      if (a.productUnitWfsFee === null) return 1;
+      if (b.productUnitWfsFee === null) return -1;
+      return a.productUnitWfsFee - b.productUnitWfsFee;
+    },
+    render: (_, row) =>
+      row.productUnitWfsFee === null
+        ? "—"
+        : formatWfsMoney(row.productUnitWfsFee, currency),
   },
   {
-    title: "已收WFS费用",
+    title: "单价实收费用",
+    key: "unitCharged",
+    width: 128,
+    sorter: numberSorter("unitCharged"),
+    render: moneyRender("unitCharged", currency),
+  },
+  {
+    title: "实收费用",
     key: "chargedFee",
     width: 128,
     sorter: numberSorter("chargedFee"),
@@ -223,8 +245,47 @@ const createColumns = (
     title: "最新跟进",
     key: "latestFollow",
     width: 220,
-    ellipsis: true,
-    render: (_, row) => <span title={row.latestFollow}>{row.latestFollow}</span>,
+    render: (_, row) => {
+      const fullText = row.latestFollow?.trim();
+      if (!fullText) return "—";
+      return (
+        <Tooltip
+          placement="topLeft"
+          trigger={["hover", "focus"]}
+          mouseEnterDelay={0.15}
+          styles={{ root: { maxWidth: 480 } }}
+          title={
+            <div
+              style={{
+                maxHeight: 280,
+                overflowY: "auto",
+                whiteSpace: "pre-wrap",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {fullText}
+            </div>
+          }
+        >
+          <span
+            tabIndex={0}
+            aria-label="鼠标悬停或聚焦以查看完整最新跟进"
+            style={{
+              display: "inline-block",
+              width: 185,
+              maxWidth: "100%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              verticalAlign: "middle",
+              cursor: "help",
+            }}
+          >
+            {fullText.replace(/\s+/g, " ")}
+          </span>
+        </Tooltip>
+      );
+    },
   },
   {
     title: "操作",
@@ -233,7 +294,6 @@ const createColumns = (
     fixed: "right",
     render: (_, row) => (
       <Space size={4}>
-        {canFollow && <Button type="link" disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenFollow(row)}>编辑</Button>}
         <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
       </Space>
     ),
@@ -256,7 +316,7 @@ function TotalCell({
   rows: WfsFeeAlertRow[];
 }) {
   if (columnKey === "image") return <span className="report-table-summary-label">总计</span>;
-  if (columnKey === "sku") return <span>{rows.length.toLocaleString("zh-CN")} 个SKU</span>;
+  if (columnKey === "skuMsku") return <span>{rows.length.toLocaleString("zh-CN")} 个SKU</span>;
   if (totalNumberKeys.has(columnKey)) {
     return <span className="report-table-metric">{sum(rows, columnKey as keyof WfsFeeAlertRow).toLocaleString("zh-CN")}</span>;
   }
@@ -272,6 +332,7 @@ function TotalCell({
 }
 
 function WfsFeeAlertTable({
+  loading,
   rows,
   currency,
   appliedColumnKeys,
@@ -284,20 +345,27 @@ function WfsFeeAlertTable({
   onPageSizeChange,
   onSelectionChange,
   onBulkOpenCase,
-  onBulkFollow,
   onCopy,
   onOpenDetail,
-  onOpenFollow,
-  canFollow,
 }: WfsFeeAlertTableProps) {
-  const columnMap = new Map(createColumns(currency, onCopy, onOpenDetail, onOpenFollow, canFollow).map((column) => [String(column.key), column]));
-  const columns = appliedColumnKeys.flatMap((key) => {
+  const columnMap = new Map(createColumns(currency, onCopy, onOpenDetail).map((column) => [String(column.key), column]));
+  const normalizedColumnKeys = appliedColumnKeys.reduce<string[]>(
+    (keys, key) => {
+      const normalized =
+        key === "sku" || key === "msku" ? "skuMsku" : key === "productId" ? "productIdName" : key;
+      if (!keys.includes(normalized)) keys.push(normalized);
+      return keys;
+    },
+    [],
+  );
+
+  const columns = normalizedColumnKeys.flatMap((key) => {
     const column = columnMap.get(key);
     if (!column) return [];
 
     const title = wfsFeeAlertColumnFields.find((field) => field.key === key)?.title ?? key;
     const width = columnWidths[key] ?? (Number(column.width) || 96);
-    const minWidth = Math.max(key === "image" ? 72 : key === "sku" ? 140 : 88, title.length * 14 + 28);
+    const minWidth = Math.max(key === "image" ? 72 : key === "productIdName" ? 220 : key === "skuMsku" ? 178 : 88, title.length * 14 + 28);
 
     return [{
       ...column,
@@ -315,13 +383,23 @@ function WfsFeeAlertTable({
     }];
   });
 
+  const scrollX = columns.reduce(
+    (total, column) => total + Number(column.width ?? 112),
+    48,
+  );
+
   return (
     <ReportTableShell className="wfs-fee-alert__table" label="WFS费用异常数据表">
       <ProTable<WfsFeeAlertRow>
+        loading={{
+          spinning: loading,
+          tip: "正在加载 WFS 费用异常数据...",
+          size: "large",
+        }}
         rowKey="id"
         columns={columns}
         dataSource={rows}
-        rowSelection={{ fixed: true, selectedRowKeys, onChange: onSelectionChange }}
+        rowSelection={{ fixed: true, columnWidth: 48, selectedRowKeys, onChange: onSelectionChange }}
         search={false}
         options={false}
         toolBarRender={false}
@@ -330,7 +408,8 @@ function WfsFeeAlertTable({
         bordered
         size="small"
         showSorterTooltip={{ target: "sorter-icon" }}
-        scroll={{ x: "max-content", y: "100%" }}
+        scroll={{ x: scrollX, y: "100%" }}
+        tableLayout="fixed"
         summary={() => (
           <Table.Summary fixed="bottom">
             <Table.Summary.Row className="wfs-fee-alert__total-row" data-testid="wfs-fee-alert-total-row">
@@ -356,7 +435,6 @@ function WfsFeeAlertTable({
             selectedCount={selectedRowKeys.length}
             actions={[
               { key: "open-case", label: "批量开Case", onClick: onBulkOpenCase },
-              { key: "follow", label: "批量跟进", onClick: onBulkFollow },
             ]}
           />
         )}

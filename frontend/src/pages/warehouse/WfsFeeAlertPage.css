@@ -119,7 +119,8 @@
 }
 
 .wfs-fee-alert__summary {
-  height: 68px;
+  height: 100px;
+  min-height: 100px;
   display: grid;
   grid-template-columns: repeat(7, minmax(132px, 1fr));
   gap: 0;
@@ -138,7 +139,8 @@
 }
 
 .wfs-fee-alert__summary-card .ant-card-body {
-  height: 66px;
+  height: 98px;
+  min-height: 98px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -405,4 +407,255 @@
 .wfs-fee-alert-follow-modal__footer {
   display: flex;
   justify-content: flex-end;
+}
+
+/* WFS follow history: independent scrolling inside the detail modal. */
+.wfs-fee-alert__timeline-scroll {
+  max-height: 240px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 6px 12px 0 4px;
+}
+
+.wfs-fee-alert__timeline-scroll .ant-timeline {
+  margin-bottom: 0;
+}
+
+
+/* WFS detail: compact two-column layout */
+.wfs-fee-alert__compact-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.wfs-fee-alert__compact-modal .ant-modal-content {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 16px 20px 12px;
+}
+
+.wfs-fee-alert__compact-modal .ant-modal-header {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e5eaf3;
+}
+
+.wfs-fee-alert__compact-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.wfs-fee-alert__compact-modal .ant-modal-footer {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e5eaf3;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 12px 14px;
+  align-items: start;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-head,
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail > .ant-descriptions {
+  grid-column: 1 / -1;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-head {
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-image {
+  width: 52px;
+  height: 52px;
+  font-size: 25px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-tags {
+  margin-top: 5px;
+}
+
+.wfs-fee-alert__compact-modal .ant-descriptions .ant-descriptions-item-label,
+.wfs-fee-alert__compact-modal .ant-descriptions .ant-descriptions-item-content {
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail > .wfs-fee-alert__detail-section {
+  width: 100%;
+  height: 340px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail > div.wfs-fee-alert__detail-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__timeline-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: 6px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail > section.wfs-fee-alert__detail-section {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-section h5.ant-typography {
+  margin-top: 0;
+  margin-bottom: 7px;
+  font-size: 15px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-section p.ant-typography {
+  margin-bottom: 9px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-section .ant-form-item {
+  margin-bottom: 10px;
+}
+
+.wfs-fee-alert__compact-modal .wfs-fee-alert__detail-section textarea {
+  min-height: 65px;
+  max-height: 110px;
+}
+
+/* Narrow screens: stack panels and keep the whole modal scrollable */
+@media (max-width: 850px) {
+  .wfs-fee-alert__compact-modal .wfs-fee-alert__detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wfs-fee-alert__compact-modal .wfs-fee-alert__detail > .wfs-fee-alert__detail-section {
+    height: auto;
+    max-height: 310px;
+  }
+
+  .wfs-fee-alert__compact-modal .wfs-fee-alert__detail > div.wfs-fee-alert__detail-section {
+    height: 230px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 851px) {
+  .wfs-fee-alert__compact-modal .wfs-fee-alert__detail > .wfs-fee-alert__detail-section {
+    height: 300px;
+  }
+}
+
+
+/* WFS listing-style SKU/MSKU table */
+.wfs-fee-alert__table .ant-table-tbody > tr > td {
+  height: 56px;
+}
+
+.wfs-fee-alert__table
+.report-table-sku-msku-identity-stack
+.report-table-copyable {
+  width: 100%;
+  min-width: 0;
+}
+
+.wfs-fee-alert__table
+.report-table-sku-msku-identity-stack
+.report-table-copyable__text,
+.wfs-fee-alert__table
+.report-table-sku-msku-identity-stack
+.report-table-copyable__link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wfs-fee-alert__store-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* WFS product identity: align Listing-style two-line cells to the left */
+.wfs-fee-alert__table .wfs-fee-alert__product-identity {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.wfs-fee-alert__table .report-table-product-identity-stack,
+.wfs-fee-alert__table .report-table-sku-msku-identity-stack {
+  margin: 0;
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.wfs-fee-alert__table .report-table-product-identity-stack
+.report-table-copyable,
+.wfs-fee-alert__table .report-table-sku-msku-identity-stack
+.report-table-copyable {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.wfs-fee-alert__table .report-table-sku-msku-identity-stack
+.report-table-copyable__text {
+  color: #344054;
+  font-weight: 400;
+}
+
+
+/* WFS summary card content layout */
+.wfs-fee-alert__summary-card .ant-card-body > span:last-child {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.wfs-fee-alert__summary-card .wfs-fee-alert__summary-label,
+.wfs-fee-alert__summary-card strong,
+.wfs-fee-alert__summary-card small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wfs-fee-alert__summary-card strong {
+  line-height: 24px;
+}
+
+.wfs-fee-alert__summary-card small {
+  line-height: 18px;
 }

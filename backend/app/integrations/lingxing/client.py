@@ -126,7 +126,22 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
         outbound_enabled=True,
         allow_query_parameters=False,
         require_json_body=True,
-        allowed_body_fields=frozenset({"offset", "length", "sids"}),
+        allowed_body_fields=frozenset(
+            {
+                "offset",
+                "length",
+                "sids",
+                "mids",
+                "platformCodeS",
+                "transactionTypeS",
+                "currencyCode",
+                "searchDateType",
+                "startDate",
+                "endDate",
+                "searchField",
+                "searchValue",
+            }
+        ),
         required_body_fields=frozenset({"offset", "length", "sids"}),
         store_field="sids",
         page_size_field="length",

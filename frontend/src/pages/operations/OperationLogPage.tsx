@@ -1,7 +1,7 @@
 import { FileTextOutlined, RobotOutlined } from "@ant-design/icons";
 import { Button, Card, Input, message, Modal, Space, Typography } from "antd";
-import { useEffect, useMemo, useState, type Key } from "react";
-import { fetchOperationLogRows, fetchOperationLogDetail, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
+import { useEffect, useRef, useState, type Key } from "react";
+import { fetchPagedOperationLogRows, fetchOperationLogDetail, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
 import type { OperationLogSystemRecord } from "@/pages/operations/operationLogTypes";
 import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
 import PageShell from "@/components/page/PageShell";
@@ -22,7 +22,6 @@ import {
   createOperationLogInitialFilters,
   createSystemDraft,
   defaultOperationLogColumnWidths,
-  filterOperationLogRows,
   fixedOperationLogColumnKeys,
   operationLogColumnFields,
   type OperationLogBatchWriteValues,
@@ -52,23 +51,8 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   const [detailRow, setDetailRow] = useState<OperationLogRow | null>(null);
 
   const [filters, setFilters] = useState<OperationLogFilters>(createOperationLogInitialFilters);
-  useEffect(() => {
-    let active = true;
-    void fetchOperationLogRows(filters.dateRange[0], filters.dateRange[1])
-      .then((data) => {
-        if (!active) return;
-        setRows(data.rows);
-        setRevisions(data.revisions);
-        setSystemRecords(data.systemRecords);
-      })
-      .catch(() => {
-        if (!active) return;
-        setRows([]);
-        setSystemRecords([]);
-        void messageApi.error("运营日志读取失败，未加载模拟数据");
-      });
-    return () => { active = false; };
-  }, [filters.dateRange[0], filters.dateRange[1], messageApi]);
+  const [rangeStart, rangeEnd] = filters.dateRange;
+
   const [batchSearchOpen, setBatchSearchOpen] = useState(false);
   const [batchSearchText, setBatchSearchText] = useState("");
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -78,6 +62,93 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
+
+  const pendingPageQueries = useRef(
+    new Map<string, ReturnType<typeof fetchPagedOperationLogRows>>()
+  );
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [debouncedKeyword, setDebouncedKeyword] = useState(filters.keyword);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(filters.keyword);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [filters.keyword]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+
+    const queryFilters = {
+      ...filters,
+      keyword: debouncedKeyword,
+    };
+
+    const inflight = pendingPageQueries.current;
+    const requestKey = JSON.stringify([
+      queryFilters,
+      currentPage,
+      pageSize,
+    ]);
+
+    let pending = inflight.get(requestKey);
+
+    if (!pending) {
+      pending = fetchPagedOperationLogRows(
+        queryFilters,
+        currentPage,
+        pageSize,
+      );
+      inflight.set(requestKey, pending);
+
+      const request = pending;
+      const clear = () => {
+        if (inflight.get(requestKey) === request) {
+          inflight.delete(requestKey);
+        }
+      };
+
+      void request.then(clear, clear);
+    }
+
+    void pending.then((data) => {
+        if (!active) return;
+        setRows(data.rows);
+        setRevisions(data.revisions);
+        setSystemRecords(data.systemRecords);
+        setTotal(data.total);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRows([]);
+        setSystemRecords([]);
+        setTotal(0);
+        void messageApi.error("运营日志读取失败");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    rangeStart,
+    rangeEnd,
+    currentPage,
+    pageSize,
+    filters.owners,
+    filters.stores,
+    filters.workTypes,
+    filters.systemLog,
+    filters.searchField,
+    filters.batchValues,
+    debouncedKeyword,
+    messageApi,
+  ]);
+
   const [linkEditor, setLinkEditor] = useState<{
     row: OperationLogRow;
     entryType: "keyword" | "ad";
@@ -93,7 +164,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
     resetPageAndSelection();
   };
 
-  const filteredRows = useMemo(() => filterOperationLogRows(rows, filters), [filters, rows]);
+  const filteredRows = rows;
 
   const resetFilters = () => {
     setFilters(createOperationLogInitialFilters());
@@ -108,11 +179,19 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   };
 
   const persistRows = async (targets: OperationLogRow[], status: "draft" | "submitted") => {
-    if (!targets.length) return;
+    const writable = targets.filter(
+      (row) => row.manualLog.trim().length > 0
+    );
+
+    if (!writable.length) {
+      void messageApi.info("没有需要保存的新运营日志");
+      return;
+    }
+
     let completed = 0;
     try {
-      for (let index = 0; index < targets.length; index += 200) {
-        const chunk = targets.slice(index, index + 200);
+      for (let index = 0; index < writable.length; index += 200) {
+        const chunk = writable.slice(index, index + 200);
         const next = await saveOperationLogRows(chunk, revisions, status);
         setRevisions((old) => ({ ...old, ...next }));
         const ids = new Set(chunk.map((row) => row.id));
@@ -130,8 +209,9 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   };
   const fillBySystem = () => {
     setRows((currentRows) => currentRows.map((row) => {
-      if (row.manualLog.trim()) return row;
+      if (row.manualLog.trim() || row.legacyManualLog?.trim()) return row;
       const records = systemRecords.filter((record) => record.productId === row.productId && record.date === row.date && record.storeId === row.storeId && record.sourceAccountRef === row.sourceAccountRef && record.msku === row.msku);
+      if (!records.length) return row;
       return {
         ...row,
         manualLog: createSystemDraft(records),
@@ -144,7 +224,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
 
   const markNoChange = () => {
     setRows((currentRows) => currentRows.map((row) => (
-      row.manualLog.trim()
+      row.manualLog.trim() || row.legacyManualLog?.trim()
         ? row
         : { ...row, manualLog: "今日无需调整，数据正常。", workType: "无需调整", status: "草稿" }
     )));
@@ -181,7 +261,9 @@ function OperationLogPage({ page }: OperationLogPageProps) {
       let manualLog = row.manualLog;
       if (nextLogText) {
         if (values.writeMode === "replace") manualLog = nextLogText;
-        else if (values.writeMode === "onlyBlank" && !row.manualLog.trim()) manualLog = nextLogText;
+        else if (values.writeMode === "onlyBlank" && !(
+          row.manualLog.trim() || row.legacyManualLog?.trim()
+        )) manualLog = nextLogText;
         else if (values.writeMode === "append") manualLog = `${row.manualLog.trim() ? `${row.manualLog.trim()}\n` : ""}${nextLogText}`;
       }
 
@@ -258,6 +340,8 @@ function OperationLogPage({ page }: OperationLogPageProps) {
 
         <OperationLogTable
           rows={filteredRows}
+          total={total}
+          loading={loading}
           systemRecords={systemRecords}
           appliedColumnKeys={appliedColumnKeys}
           columnWidths={columnWidths}

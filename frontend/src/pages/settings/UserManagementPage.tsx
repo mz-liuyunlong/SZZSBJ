@@ -1,5 +1,5 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Input, Modal, Typography, message } from "antd";
+import { Alert, Button, Input, Modal, Select, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import {
@@ -17,7 +17,12 @@ import UserManagementTable from "@/pages/settings/components/UserManagementTable
 import UserManagementToolbar from "@/pages/settings/components/UserManagementToolbar";
 import UserRoleModal from "@/pages/settings/components/UserRoleModal";
 import {
+  assignOwnerBinding,
   createUser,
+  loadExistingOwnerBindings,
+  loadOwnerBindingCandidates,
+  type OwnerBindingCandidate,
+  type ExistingOwnerBinding,
   deleteUserPermanently,
   loadUserManagementData,
   loadUserDataScopes,
@@ -63,6 +68,13 @@ function UserManagementPage({ page }: UserManagementPageProps) {
   const [pageSize, setPageSize] = useState(REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [ownerBindingTarget, setOwnerBindingTarget] = useState<{ id: string; realName: string }>();
+  const [ownerCandidates, setOwnerCandidates] = useState<OwnerBindingCandidate[]>([]);
+  const [ownerBindings, setOwnerBindings] = useState<ExistingOwnerBinding[]>([]);
+  const [selectedOwnerBindings, setSelectedOwnerBindings] = useState<string[]>([]);
+  const [ownerBindingLoading, setOwnerBindingLoading] = useState(false);
+  const [ownerBindingSaving, setOwnerBindingSaving] = useState(false);
+  const [ownerBindingError, setOwnerBindingError] = useState<string>();
   const [editingUser, setEditingUser] = useState<UserManagementRow>();
   const [roleUser, setRoleUser] = useState<UserManagementRow>();
   const [dataScopeUser, setDataScopeUser] = useState<UserManagementRow>();
@@ -104,6 +116,14 @@ function UserManagementPage({ page }: UserManagementPageProps) {
     currentUser,
     "field:settings:user-management:email",
   );
+  const canBindOwners = Boolean(
+    (currentUser?.isSuperAdmin || currentUser?.roleKeys.includes("admin"))
+    && (
+      permitted(currentUser, "action:settings:user-management:edit", "settings:users:write")
+      || permitted(currentUser, "action:settings:user-management:configure-data-scope")
+      || permitted(currentUser, "action:operations:log:edit")
+    )
+  );
   const canHardDelete = Boolean(currentUser?.isSuperAdmin);
   const canConfigureDataScope = permitted(
     currentUser,
@@ -124,7 +144,22 @@ function UserManagementPage({ page }: UserManagementPageProps) {
       ]);
       if (!authenticatedUser) throw new Error("missing current user");
       setLoadError(undefined);
-      setUsers(data.users);
+      const bindingAdmin = authenticatedUser.isSuperAdmin
+        || authenticatedUser.roleKeys.includes("admin");
+      // A user-management administrator may not have operation-log read permission.
+      // Never hide the user-management page because mapping status could not load.
+      const mappings = bindingAdmin
+        ? await loadExistingOwnerBindings().catch(() => null)
+        : [];
+      const counts = new Map<string, number>();
+      for (const item of mappings ?? []) {
+        const key = String(item.app_user_id);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      setUsers(data.users.map((user) => ({
+        ...user,
+        ownerMappingCount: bindingAdmin && mappings !== null ? (counts.get(user.id) ?? 0) : undefined,
+      })));
       setRoleOptions(data.roleOptions);
       setCurrentUser(authenticatedUser);
     } catch {
@@ -188,6 +223,62 @@ function UserManagementPage({ page }: UserManagementPageProps) {
     setFormOpen(true);
   };
 
+  // Always require explicit admin selection of source account + Lingxing UID.
+  // No name-based auto assignment occurs, even for a unique name.
+  const openOwnerBinding = async (target: { id: string; realName: string }) => {
+    setOwnerBindingTarget(target);
+    setOwnerBindingError(undefined);
+    setSelectedOwnerBindings([]);
+    setOwnerBindingLoading(true);
+    try {
+      const [choices, mappings] = await Promise.all([
+        loadOwnerBindingCandidates(),
+        loadExistingOwnerBindings(),
+      ]);
+      setOwnerCandidates(choices);
+      setOwnerBindings(mappings);
+    } catch {
+      setOwnerBindingError("读取负责人 UID 失败：账号已创建时，需要稍后在用户管理中完成绑定。");
+      setOwnerCandidates([]);
+      setOwnerBindings([]);
+    } finally {
+      setOwnerBindingLoading(false);
+    }
+  };
+
+  const saveOwnerBindings = async () => {
+    if (!ownerBindingTarget || !canBindOwners || !selectedOwnerBindings.length) return;
+    setOwnerBindingSaving(true);
+    setOwnerBindingError(undefined);
+    try {
+      for (const id of selectedOwnerBindings) {
+        const choice = ownerCandidates.find(
+          (item) => JSON.stringify([item.sourceAccountRef, item.ownerUid]) === id,
+        );
+        if (!choice || !choice.eligible || choice.mappedUserId != null) {
+          throw new Error("负责人 UID 不可绑定，请刷新并重新核验");
+        }
+        await assignOwnerBinding(ownerBindingTarget.id, choice);
+      }
+      await refreshUsers();
+      setOwnerBindingTarget(undefined);
+      setSelectedOwnerBindings([]);
+      void messageApi.success("负责人 UID 已绑定，运营日志将按本人商品权限显示");
+    } catch {
+      setOwnerBindingError("绑定未全部完成；请检查员工的数据范围、UID 是否已绑定其他人。已经成功的绑定不回滚，请刷新后核对。");
+      try {
+        setOwnerBindings(await loadExistingOwnerBindings());
+        setOwnerCandidates(await loadOwnerBindingCandidates());
+        setSelectedOwnerBindings([]);
+        await refreshUsers();
+      } catch {
+        // Keep the visible error; do not retry any writes.
+      }
+    } finally {
+      setOwnerBindingSaving(false);
+    }
+  };
+
   const saveUser = async (values: UserFormValues) => {
     try {
       if (editingUser) {
@@ -202,8 +293,16 @@ function UserManagementPage({ page }: UserManagementPageProps) {
         void messageApi.success("用户已保存");
       } else {
         if (!canCreate || !canAssignRole) return;
-        await createUser(values, roleOptions);
-        void messageApi.success("用户已新增");
+        const createdUserId = await createUser(values, roleOptions);
+        void messageApi.warning("用户账号已新增，请完成领星负责人绑定；未绑定时运营日志不会显示商品");
+        setFormOpen(false);
+        setEditingUser(undefined);
+        resetPageAndSelection();
+        await refreshUsers();
+        if (canBindOwners) {
+          await openOwnerBinding({ id: createdUserId, realName: values.realName.trim() });
+        }
+        return;
       }
 
       setFormOpen(false);
@@ -411,6 +510,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
                 canEnableDisable={canEnableDisable}
                 canHardDelete={canHardDelete}
                 canConfigureDataScope={canConfigureDataScope}
+                canBindOwners={canBindOwners}
                 onColumnWidthChange={(key, width) => setColumnWidths((current) => ({
                   ...current,
                   [key]: width,
@@ -424,6 +524,7 @@ function UserManagementPage({ page }: UserManagementPageProps) {
                 onEdit={openEditModal}
                 onSetRole={setRoleUser}
                 onSetDataScope={(user) => void openDataScopeModal(user)}
+                onBindOwners={(user) => void openOwnerBinding(user)}
                 onResetPassword={resetPassword}
                 onToggleStatus={toggleStatus}
                 onDelete={deleteUser}
@@ -434,6 +535,49 @@ function UserManagementPage({ page }: UserManagementPageProps) {
           {loading && <Typography.Text type="secondary">正在加载真实用户数据...</Typography.Text>}
         </section>
       </div>
+      <Modal
+        title={`领星负责人绑定 · ${ownerBindingTarget?.realName || ""}`}
+        open={Boolean(ownerBindingTarget)}
+        okText="绑定选中 UID"
+        okButtonProps={{
+          disabled: ownerBindingLoading || selectedOwnerBindings.length === 0,
+          loading: ownerBindingSaving,
+        }}
+        onOk={() => void saveOwnerBindings()}
+        onCancel={() => {
+          if (ownerBindingSaving) return;
+          setOwnerBindingTarget(undefined);
+          setSelectedOwnerBindings([]);
+        }}
+      >
+        <Alert
+          type="info"
+          showIcon
+          message="必须由管理员核验并选择领星 UID，不会按员工姓名自动授权。未绑定负责人时，运营日志不会显示商品。"
+          style={{ marginBottom: 12 }}
+        />
+        {ownerBindingError && (
+          <Alert type="error" showIcon message={ownerBindingError} style={{ marginBottom: 12 }} />
+        )}
+        <Typography.Paragraph type="secondary">
+          当前已绑定 {ownerBindings.filter((item) =>
+            String(item.app_user_id) === ownerBindingTarget?.id
+          ).length} 组。已绑定其他人的 UID 不允许覆盖。
+        </Typography.Paragraph>
+        <Select
+          mode="multiple"
+          style={{ width: "100%" }}
+          loading={ownerBindingLoading}
+          value={selectedOwnerBindings}
+          onChange={setSelectedOwnerBindings}
+          placeholder="选择来源账号 / 领星负责人 / UID"
+          options={ownerCandidates.map((item) => ({
+            value: JSON.stringify([item.sourceAccountRef, item.ownerUid]),
+            label: `${item.sourceAccountRef} / ${item.ownerName} / ${item.ownerUid}（${item.productCount}条）`,
+            disabled: !item.eligible || item.mappedUserId != null,
+          }))}
+        />
+      </Modal>
       <UserFormModal
         open={formOpen}
         editingUser={editingUser}

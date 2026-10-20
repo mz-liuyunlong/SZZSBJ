@@ -29,6 +29,7 @@ interface UserManagementTableProps {
   canEnableDisable: boolean;
   canHardDelete: boolean;
   canConfigureDataScope: boolean;
+  canBindOwners: boolean;
   onColumnWidthChange: (key: string, width: number) => void;
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
@@ -36,6 +37,7 @@ interface UserManagementTableProps {
   onEdit: (row: UserManagementRow) => void;
   onSetRole: (row: UserManagementRow) => void;
   onSetDataScope: (row: UserManagementRow) => void;
+  onBindOwners: (row: UserManagementRow) => void;
   onResetPassword: (row: UserManagementRow) => void;
   onToggleStatus: (row: UserManagementRow) => void;
   onDelete: (row: UserManagementRow) => void;
@@ -70,9 +72,11 @@ function createColumns(
     | "canEnableDisable"
     | "canHardDelete"
     | "canConfigureDataScope"
+    | "canBindOwners"
     | "onEdit"
     | "onSetRole"
     | "onSetDataScope"
+    | "onBindOwners"
     | "onResetPassword"
     | "onToggleStatus"
     | "onDelete"
@@ -110,6 +114,17 @@ function createColumns(
             <Tag key={role} color={roleColor(role)}>{role}</Tag>
           ))}
         </Space>
+      ),
+    },
+    {
+      title: "领星负责人绑定",
+      key: "ownerBinding",
+      render: (_, row) => (
+        row.ownerMappingCount === undefined ? "—" : (
+          <Tag color={row.ownerMappingCount > 0 ? "success" : "warning"}>
+            {row.ownerMappingCount > 0 ? `已绑定 ${row.ownerMappingCount} 组` : "未绑定"}
+          </Tag>
+        )
       ),
     },
     {
@@ -155,6 +170,14 @@ function createColumns(
               disabled={isSelf || protectedSuperAdmin || row.isSuperAdmin}
               onClick={() => options.onSetDataScope(row)}
             >数据范围</Button>
+          ) : null,
+          options.canBindOwners ? (
+            <Button
+              key="owner-binding"
+              type="link"
+              disabled={protectedSuperAdmin || row.status !== "启用"}
+              onClick={() => options.onBindOwners(row)}
+            >绑定负责人</Button>
           ) : null,
           options.canResetPassword ? (
             <Button
@@ -213,6 +236,7 @@ function UserManagementTable(props: UserManagementTableProps) {
   const visibleFields = userManagementColumnFields.filter((field) => (
     (field.key !== "phone" || canViewPhone)
     && (field.key !== "email" || canViewEmail)
+    && (field.key !== "ownerBinding" || props.canBindOwners)
   ));
   const columnMap = new Map(
     createColumns(props).map((column) => [String(column.key), column]),

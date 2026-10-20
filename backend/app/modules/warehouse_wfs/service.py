@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import AppEnvironment, get_settings
+from app.modules.product_management.daily_sales_costs import (
+    load_daily_sales_costs,
+    normalize_sku_key,
+)
 from app.modules.warehouse_wfs.legacy_identity import (
     LEGACY_IDENTITY_CTE,
     LEGACY_IDENTITY_PREFLIGHT_SQL,
@@ -105,6 +109,7 @@ class WfsFeeAlertService:
         account_refs: frozenset[str],
     ) -> tuple[WfsFeeCaseListData, int]:
         rows, total = self._fetch_case_rows(query, account_refs)
+        self._attach_product_management_fees(rows, account_refs)
         return WfsFeeCaseListData(items=[WfsFeeCaseRead(**dict(row)) for row in rows]), total
 
     def list_alerts(
@@ -145,7 +150,9 @@ class WfsFeeAlertService:
         )
         if row is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
-        return WfsFeeCaseRead(**dict(row))
+        case = dict(row)
+        self._attach_product_management_fees([case], account_refs)
+        return WfsFeeCaseRead(**case)
 
     def save_follow(
         self,
@@ -167,9 +174,19 @@ class WfsFeeAlertService:
                   end,
                   case_nos = nullif(:case_nos, ''),
                   latest_follow_note = :latest_follow_note,
-                  follow_log = concat_ws(E'\n', nullif(follow_log, ''), :latest_follow_note),
+                  follow_log = concat_ws(E'\n', nullif(follow_log, ''), (
+                      '第' || (follow_count + 1)::text || '次跟进 · '
+                      || to_char(
+                           :now AT TIME ZONE 'Asia/Shanghai',
+                           'YYYY-MM-DD HH24:MI:SS'
+                         )
+                      || '（北京时间） · ' || :actor || ' · ' || :follow_line
+                    )),
                   log_updated_at = :now,
-                  next_follow_at = :next_follow_at,
+                  next_follow_at = (
+                    (CAST(:now AS timestamptz)
+                     AT TIME ZONE 'Asia/Shanghai')::date + 7
+                  ),
                   follow_count = follow_count + 1,
                   last_follow_by = :actor,
                   last_follow_at = :now,
@@ -187,7 +204,7 @@ class WfsFeeAlertService:
                 "case_id": str(case_id),
                 "case_nos": payload.case_nos,
                 "latest_follow_note": payload.latest_follow_note,
-                "next_follow_at": payload.next_follow_at,
+                "follow_line": " ".join(payload.latest_follow_note.split()),
                 "walmart_response_summary": payload.walmart_response_summary,
                 "evidence_summary": payload.evidence_summary,
                 "actor": actor_ref,
@@ -225,11 +242,29 @@ class WfsFeeAlertService:
                   reason = nullif(:reason, ''),
                   claim_amount = :claim_amount,
                   case_opened_at = :case_opened_at,
-                  next_follow_at = :next_follow_at,
+                  next_follow_at = (
+                    (CAST(:now AS timestamptz)
+                     AT TIME ZONE 'Asia/Shanghai')::date + 7
+                  ),
                   latest_follow_note = nullif(:latest_follow, ''),
                   follow_log = case when nullif(:latest_follow, '') is null then follow_log
-                    else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow) end,
+                    else concat_ws(E'\n', nullif(follow_log, ''), (
+                      '第' || (follow_count + 1)::text || '次跟进 · '
+                      || to_char(
+                           :now AT TIME ZONE 'Asia/Shanghai',
+                           'YYYY-MM-DD HH24:MI:SS'
+                         )
+                      || '（北京时间） · ' || :actor || ' · ' || :follow_line
+                    )) end,
                   log_updated_at = case when nullif(:latest_follow, '') is null then log_updated_at
+                    else :now end,
+                  follow_count = follow_count + case
+                    when nullif(:latest_follow, '') is null then 0 else 1 end,
+                  last_follow_by = case
+                    when nullif(:latest_follow, '') is null then last_follow_by
+                    else :actor end,
+                  last_follow_at = case
+                    when nullif(:latest_follow, '') is null then last_follow_at
                     else :now end,
                   status_changed_at = :now,
                   status_changed_by = :actor,
@@ -247,8 +282,8 @@ class WfsFeeAlertService:
                 "reason": payload.reason,
                 "claim_amount": payload.claim_amount,
                 "case_opened_at": payload.case_opened_at,
-                "next_follow_at": payload.next_follow_at,
                 "latest_follow": latest_note,
+                "follow_line": " ".join(latest_note.split()),
                 "actor": actor_ref,
                 "now": now,
             },
@@ -381,9 +416,24 @@ class WfsFeeAlertService:
                   latest_follow_note =
                     coalesce(nullif(:latest_follow_note, ''), latest_follow_note),
                   follow_log = case when nullif(:latest_follow_note, '') is null then follow_log
-                    else concat_ws(E'\n', nullif(follow_log, ''), :latest_follow_note) end,
+                    else concat_ws(E'\n', nullif(follow_log, ''), (
+                      '第' || (follow_count + 1)::text || '次跟进 · '
+                      || to_char(
+                           :now AT TIME ZONE 'Asia/Shanghai',
+                           'YYYY-MM-DD HH24:MI:SS'
+                         )
+                      || '（北京时间） · ' || :actor || ' · ' || :follow_line
+                    )) end,
                   log_updated_at = case when nullif(:latest_follow_note, '') is null
                     then log_updated_at
+                    else :now end,
+                  follow_count = follow_count + case
+                    when nullif(:latest_follow_note, '') is null then 0 else 1 end,
+                  last_follow_by = case
+                    when nullif(:latest_follow_note, '') is null then last_follow_by
+                    else :actor end,
+                  last_follow_at = case
+                    when nullif(:latest_follow_note, '') is null then last_follow_at
                     else :now end,
                   status_changed_at = :now,
                   status_changed_by = :actor,
@@ -397,6 +447,7 @@ class WfsFeeAlertService:
                 "claim_amount": payload.claim_amount,
                 "recovered_amount": payload.recovered_amount,
                 "latest_follow_note": payload.latest_follow_note,
+                "follow_line": " ".join(payload.latest_follow_note.split()),
                 "actor": actor_ref,
                 "now": now,
             },
@@ -623,6 +674,146 @@ class WfsFeeAlertService:
             .all()
         )
         return [dict(row) for row in rows], total
+
+    def _attach_product_management_fees(
+        self,
+        rows: list[dict],
+        account_refs: frozenset[str],
+    ) -> None:
+        """Resolve Product Management WFS cost without ambiguous SKU matches."""
+        if not rows:
+            return
+
+        for row in rows:
+            row["product_management_unit_wfs_fee"] = None
+
+        accounts = {
+            str(row["source_account_ref"])
+            for row in rows
+            if row.get("source_account_ref") in account_refs
+        }
+        item_ids = {
+            str(row["item_id"])
+            for row in rows
+            if row.get("source_account_ref") in accounts and row.get("item_id")
+        }
+        store_ids = {
+            str(row["store_id"])
+            for row in rows
+            if row.get("source_account_ref") in accounts and row.get("store_id")
+        }
+
+        if not accounts or not item_ids or not store_ids:
+            return
+
+        listing_rows = (
+            self.session.execute(
+                text(
+                    "select source_account_ref,store_id,item_id,msku,local_sku "
+                    "from dim_walmart_listings "
+                    "where source_account_ref=any(:accounts) "
+                    "and store_id=any(:stores) and item_id=any(:items)"
+                ),
+                {
+                    "accounts": sorted(accounts),
+                    "stores": sorted(store_ids),
+                    "items": sorted(item_ids),
+                },
+            )
+            .mappings()
+            .all()
+        )
+
+        listings = {
+            (
+                item["source_account_ref"],
+                item["store_id"],
+                item["item_id"],
+            ): item
+            for item in listing_rows
+        }
+
+        identity_rows = (
+            self.session.execute(
+                text(
+                    "select i.id,i.source_account_ref,"
+                    "i.lingxing_sku_code identity_sku,"
+                    "p.sku product_sku,c.lingxing_sku_code current_sku "
+                    "from dwd_lingxing_sku_identity_index i "
+                    "left join products p "
+                    "on p.id=i.product_id and p.deleted_at is null "
+                    "left join dwd_lingxing_sku_product_info_current c "
+                    "on c.identity_id=i.id "
+                    "where i.source_account_ref=any(:accounts) "
+                    "and i.is_active=true"
+                ),
+                {"accounts": sorted(accounts)},
+            )
+            .mappings()
+            .all()
+        )
+
+        aliases: dict[tuple[str, str], set[str]] = {}
+
+        for identity in identity_rows:
+            account = str(identity["source_account_ref"])
+            identity_id = str(identity["id"])
+
+            for field in ("identity_sku", "product_sku", "current_sku"):
+                key = normalize_sku_key(identity[field])
+                if key:
+                    aliases.setdefault((account, key), set()).add(identity_id)
+
+        unique_skus: dict[str, set[str]] = {}
+
+        for row in rows:
+            account = str(row["source_account_ref"])
+            if account not in accounts:
+                continue
+
+            listing = listings.get((account, row["store_id"], row["item_id"]))
+
+            if listing is None:
+                continue
+
+            # Listing 和 WFS Case 必须属于同一个 MSKU。
+            if not row.get("msku") or listing["msku"] != row["msku"]:
+                continue
+
+            sku = normalize_sku_key(listing["local_sku"])
+            if not sku:
+                continue
+
+            # 同账号 SKU 对应多个产品身份时，不允许猜测。
+            if len(aliases.get((account, sku), set())) != 1:
+                continue
+
+            unique_skus.setdefault(account, set()).add(sku)
+
+        costs_by_account = {
+            account: load_daily_sales_costs(
+                self.session,
+                source_account_ref=account,
+            )
+            for account in sorted(unique_skus)
+        }
+
+        for row in rows:
+            account = str(row["source_account_ref"])
+            if account not in costs_by_account:
+                continue
+
+            listing = listings.get((account, row["store_id"], row["item_id"]))
+            if listing is None or listing["msku"] != row.get("msku"):
+                continue
+
+            sku = normalize_sku_key(listing["local_sku"])
+            if sku not in unique_skus.get(account, set()):
+                continue
+
+            cost = costs_by_account[account].get(sku)
+            if cost is not None:
+                row["product_management_unit_wfs_fee"] = cost.wfs_fee_unit_usd
 
     def _to_alert_compat(self, row: dict) -> WfsFeeAlertRead:
         affected_units = Decimal(row["affected_units"] or 0)
@@ -907,6 +1098,7 @@ class WfsFeeAlertService:
           currency_code,
           manual_unit_fee,
           actual_unit_fee,
+          null::numeric product_management_unit_wfs_fee,
           unit_fee_diff,
           fee_source,
           fee_source_ref,
@@ -934,7 +1126,19 @@ class WfsFeeAlertService:
           follow_log,
           latest_follow_note,
           log_updated_at,
-          next_follow_at,
+          case
+            when status in ('pending_confirm', 'following') then
+              (
+                coalesce(
+                  last_follow_at,
+                  log_updated_at,
+                  case_opened_at,
+                  first_alert_at,
+                  created_at
+                ) AT TIME ZONE 'Asia/Shanghai'
+              )::date + 7
+            else null
+          end next_follow_at,
           follow_count,
           last_follow_by,
           last_follow_at,

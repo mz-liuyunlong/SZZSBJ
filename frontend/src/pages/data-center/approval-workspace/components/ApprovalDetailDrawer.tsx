@@ -1,109 +1,286 @@
-import { Alert, Button, Drawer, Form, Input, Modal, Space, Spin, Timeline, Typography, message } from "antd";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Drawer,
+  Form,
+  Input,
+  Modal,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+  message,
+} from "antd";
+import {
+  CheckCircleOutlined,
+  CloseOutlined,
+  CopyOutlined,
+  ExclamationCircleOutlined,
+  FileTextOutlined,
+  MessageOutlined,
+} from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import type { ApprovalDetail, ApprovalItem, Decision } from "../approvalTypes";
-import { decideApproval, fetchApprovalDetail, fetchLegacyApprovalDetail, supplementApproval } from "../approvalApi";
-import { statusNames } from "../approvalTypes";
+import {
+  decideApproval,
+  decideCurrentWfsCase,
+  fetchApprovalDetail,
+  fetchWfsCaseReviewDetail,
+  supplementApproval,
+} from "../approvalApi";
+import { riskNames, statusNames } from "../approvalTypes";
 import { WfsCaseApprovalDetail } from "./WfsCaseApprovalDetail";
 import GenericApprovalDetail from "./GenericApprovalDetail";
-import LegacyReattestModal from "./LegacyReattestModal";
+
+type ReviewAction = Decision | "resubmit";
 
 interface Props {
- selected?: ApprovalItem;
- canReview: boolean;
- canAdmin: boolean;
- canSupplement: boolean;
- canPurchaseSupplement: boolean;
- onClose(): void;
- onUpdated(): void;
+  reviewOnly?: boolean;
+  directReviewAction?: "approved" | "rejected";
+  selected?: ApprovalItem;
+  canReview: boolean;
+  canAdmin: boolean;
+  canSupplement: boolean;
+  canPurchaseSupplement: boolean;
+  onClose(): void;
+  onUpdated(): void;
 }
-export default function ApprovalDetailDrawer({ selected, canReview, canAdmin, canSupplement, canPurchaseSupplement, onClose, onUpdated }: Props) {
- const [detail, setDetail] = useState<ApprovalDetail>();
- const [loading, setLoading] = useState(false);
- const [failedDetailId, setFailedDetailId] = useState<string>();
- const [saving, setSaving] = useState(false);
- const [decision, setDecision] = useState<Decision>();
- const [reattestCase, setReattestCase] = useState<string>();
- const [note, setNote] = useState("");
- const [evidence, setEvidence] = useState("");
- const [messageApi, holder] = message.useMessage();
- useEffect(() => {
-  if (!selected) return;
-  let live = true;
-  void (selected.status === "legacy_unverified" ? fetchLegacyApprovalDetail(selected.id) : fetchApprovalDetail(selected.id)).then((value) => {
-   if (live) { setDetail(value); setFailedDetailId(undefined); }
-  }).catch(() => { if (live) { setFailedDetailId(selected.id); void messageApi.error("无法加载审批详情"); } })
-   .finally(() => { if (live) setLoading(false); });
-  return () => { live = false; };
- }, [selected, messageApi]);
 
- const save = async () => {
-  if (!shown || !decision || saving) return;
-  if ((decision !== "approved" || shown.status === "info_required") && note.trim().length < 5) {
-   void messageApi.warning("请填写不少于5个字的意见");
-   return;
-  }
-  setSaving(true);
-  try {
-   if (shown.status === "info_required") {
-    await supplementApproval(shown.id, shown.version, note, evidence);
-   } else {
-    await decideApproval(shown.id, shown.version, decision, note);
-   }
-   setDecision(undefined); setNote(""); setEvidence("");
-   onClose(); onUpdated();
-   void messageApi.success("操作成功");
-  } catch {
-   void messageApi.error("操作失败，请检查审批状态、权限与业务数据变化");
-  } finally { setSaving(false); }
- };
- const shown = detail?.id === selected?.id ? detail : undefined;
- const mayApprove = !shown?.requires_verification && (shown?.approval_type === "wfs_case_abandon" ? canReview : canAdmin) && shown?.can_review && !shown.data_changed && shown.status === "submitted";
- const maySupplement = shown?.can_supplement && (shown.approval_type === "wfs_case_abandon"
-  ? canSupplement
-  : canAdmin || (shown.approval_type === "purchase_exception" && canPurchaseSupplement));
- return <>
-  {holder}
-  <Drawer title={selected?.title || "审批详情"} open={!!selected} width={1020}
-   destroyOnHidden onClose={onClose}
-   footer={shown ? <Space style={{ display: "flex", justifyContent: "flex-end" }}>
-    <Button onClick={onClose}>关闭</Button>
-    {canSupplement && shown.requires_verification && <Button type="primary" onClick={() => setReattestCase(shown.business_ref)}>补充核验并提交</Button>}
-    {maySupplement &&
-     <Button onClick={() => { setDecision("info_required"); setNote(""); }}>补充资料后重新提交</Button>}
-    {mayApprove && <>
-     <Button onClick={() => { setDecision("info_required"); setNote(""); }}>要求补资料</Button>
-     <Button danger onClick={() => { setDecision("rejected"); setNote(""); }}>驳回申请</Button>
-     <Button type="primary" onClick={() => { setDecision("approved"); setNote(""); }}>审批通过</Button>
-    </>}
-   </Space> : null}>
-   {failedDetailId === selected?.id && <Alert type="error" showIcon message="审批详情加载失败" description="请关闭后重新打开或刷新列表重试" />}
-   {(loading || (!!selected && !shown && failedDetailId !== selected.id)) && <Spin />}
-   {shown && <>
-    <Alert showIcon type="info" message={"审批状态：" + statusNames[shown.status]}
-      description={shown.requires_verification ? "历史 Case ID：" + shown.business_ref + " · 原始申请人身份待核验" : "审批ID：" + shown.id + " · 申请人：" + (shown.applicant_id || "未知")} />
-    {shown.requires_verification && <Alert type="warning" showIcon message="历史待核验 · 禁止直接审批" description="历史申请理由与证据未完整保留；申请人身份及时间来源尚未核验。本记录仅供核查，不是正式审批单。" />}
-    {shown.approval_type === "wfs_case_abandon" ? <WfsCaseApprovalDetail detail={shown}/> :
-      <GenericApprovalDetail detail={shown} />}
-    <Typography.Title level={5}>{shown.requires_verification ? "历史审批事件（未经正式记录）" : "审批事件"}</Typography.Title>
-    <Timeline items={shown.events.map((e) => ({
-     children: <div><b>{e.event_type}</b> · {e.actor_id} · {e.created_at}
-      {e.note && <Typography.Paragraph>{e.note}</Typography.Paragraph>}</div>,
-    }))} />
-   </>}
-  </Drawer>
-  <LegacyReattestModal caseId={reattestCase} onClose={() => setReattestCase(undefined)}
-   onSuccess={() => { onClose(); onUpdated(); }}/>
-  <Modal open={!!decision} title={decision === "approved" ? "确认审批通过？" :
-   decision === "rejected" ? "驳回申请" : "要求补充资料"}
-   onCancel={() => setDecision(undefined)} onOk={() => void save()}
-   okButtonProps={{ loading: saving, danger: decision === "approved" }}>
-   <Form layout="vertical">
-    <Form.Item label="审批意见"><Input.TextArea value={note} rows={4} maxLength={4000}
-     onChange={(e) => setNote(e.target.value)} /></Form.Item>
-    {detail?.status === "info_required" && <Form.Item label="补充材料">
-     <Input.TextArea value={evidence} rows={3} maxLength={4000}
-      onChange={(e) => setEvidence(e.target.value)} /></Form.Item>}
-   </Form>
-  </Modal>
- </>;
+const timeText = (value: string | null | undefined) => {
+  if (!value) return "时间未记录";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("zh-CN");
+};
+
+const reviewTitle: Record<ReviewAction, string> = {
+  approved: "审批通过确认",
+  rejected: "驳回申请",
+  info_required: "要求补充资料",
+  resubmit: "补充资料后重新提交",
+};
+
+export default function ApprovalDetailDrawer(props: Props) {
+  return <ApprovalDetailDrawerInner key={props.selected?.id ?? "closed"} {...props} />;
+}
+
+function ApprovalDetailDrawerInner({
+  selected,
+  reviewOnly = false,
+  directReviewAction,
+  canReview,
+  canAdmin,
+  canSupplement,
+  canPurchaseSupplement,
+  onClose,
+  onUpdated,
+}: Props) {
+  const [detail, setDetail] = useState<ApprovalDetail>();
+  const [loading, setLoading] = useState(false);
+  const [failedDetailId, setFailedDetailId] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const [action, setAction] = useState<ReviewAction>();
+  const [note, setNote] = useState("");
+  const [evidence, setEvidence] = useState("");
+  const [riskConfirmed, setRiskConfirmed] = useState(false);
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const [messageApi, holder] = message.useMessage();
+
+  useEffect(() => {
+    if (!selected) return;
+    let live = true;
+    const fetcher = selected.case_review
+      ? fetchWfsCaseReviewDetail(selected.id)
+      : fetchApprovalDetail(selected.id);
+    void fetcher.then((data) => {
+      if (live) setDetail(data);
+    }).catch(() => {
+      if (live) {
+        setFailedDetailId(selected.id);
+        void messageApi.error("无法加载审批详情");
+      }
+    }).finally(() => {
+      if (live) setLoading(false);
+    });
+    return () => { live = false; };
+  }, [selected, messageApi]);
+
+  const shown = detail?.id === selected?.id ? detail : undefined;
+  const mayApprove = Boolean(
+    shown && !shown.requires_verification && (shown.status === "submitted" || (shown.case_review && shown.status === "info_required")) &&
+    shown.can_review && !shown.data_changed &&
+    (shown.approval_type === "wfs_case_abandon" ? canReview : canAdmin),
+  );
+  const maySupplement = Boolean(
+    shown && shown.can_supplement &&
+    (shown.approval_type === "wfs_case_abandon"
+      ? canSupplement
+      : canAdmin || (shown.approval_type === "purchase_exception" && canPurchaseSupplement)),
+  );
+
+  const openAction = (next: ReviewAction) => {
+    setNote("");
+    setEvidence("");
+    setRiskConfirmed(false);
+    setIdentityConfirmed(false);
+    setAction(next);
+  };
+
+  useEffect(() => {
+    if (
+      reviewOnly &&
+      directReviewAction &&
+      shown &&
+      mayApprove
+    ) {
+      setAction(directReviewAction);
+    }
+  }, [reviewOnly, directReviewAction, shown?.id, mayApprove]);
+
+  const closeAction = () => {
+    if (saving) return;
+    setAction(undefined);
+    if (reviewOnly && directReviewAction) onClose();
+  };
+
+  const save = async () => {
+    if (!shown || !action || saving || shown.requires_verification) return;
+    if (action === "resubmit" ? !maySupplement : !mayApprove) return;
+    if (action !== "approved" && note.trim().length < 5) {
+      void messageApi.warning("请填写至少 5 个字的处理意见");
+      return;
+    }
+    if (shown.case_review && !shown.applicant_id && !identityConfirmed) {
+      void messageApi.warning("请确认申请人身份记录缺失的审核风险");
+      return;
+    }
+    if (action === "approved" && shown.risk_level === "high" && !riskConfirmed) {
+      void messageApi.warning("请确认已审阅高风险业务依据");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (action === "resubmit") {
+        await supplementApproval(shown.id, shown.version, note.trim(), evidence.trim());
+      } else if (shown.case_review) {
+        await decideCurrentWfsCase(shown.business_ref, shown.version, action, note.trim(), identityConfirmed);
+      } else {
+        await decideApproval(shown.id, shown.version, action, note.trim());
+      }
+      setAction(undefined);
+      onClose();
+      onUpdated();
+      void messageApi.success("操作成功");
+    } catch {
+      void messageApi.error("操作失败，请检查审批权限、版本及业务状态");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyId = async () => {
+    if (!shown) return;
+    try {
+      await navigator.clipboard.writeText(shown.id);
+      void messageApi.success("编号已复制");
+    } catch {
+      void messageApi.warning("复制失败，请手动复制编号");
+    }
+  };
+
+  const detailName = shown?.approval_type === "wfs_case_abandon" ? "WFS费用" : "业务审批";
+  const riskLevel = shown?.risk_level ?? selected?.risk_level;
+  const isWfs = shown?.approval_type === "wfs_case_abandon";
+
+  return <>
+    {holder}
+    <Drawer
+      className="approval-review-drawer"
+      title={null}
+      closable={false}
+      open={Boolean(selected) && !reviewOnly}
+      width={1040}
+      destroyOnHidden
+      onClose={onClose}
+      styles={{ header: { display: "none" }, body: { padding: 0, overflow: "hidden" }, footer: { padding: 0 } }}
+      footer={shown ? <div className="approval-review__footer">
+        <div className="approval-review__footer-context">
+          <strong>{shown.title}</strong>
+          <span>{`申请人 ${shown.applicant_id || "未记录"} · ${timeText(shown.submitted_at)}`}</span>
+        </div>
+        <Space wrap size={8}>
+          {!mayApprove && !maySupplement ? <Tag color="default">"当前无可用审核操作"</Tag> : null}
+          {maySupplement ? <Button icon={<FileTextOutlined />} onClick={() => openAction("resubmit")}>补充资料后重新提交</Button> : null}
+          {mayApprove ? <>
+            <Button icon={<MessageOutlined />} onClick={() => openAction("info_required")}>要求补充资料</Button>
+            <Button danger icon={<CloseOutlined />} onClick={() => openAction("rejected")}>驳回</Button>
+            <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => openAction("approved")}>审批通过</Button>
+          </> : null}
+        </Space>
+      </div> : undefined}
+    >
+      <div className="approval-review__shell">
+        <header className="approval-review__header">
+          <div className="approval-review__header-main">
+            <div className="approval-review__tags">
+              <Tag color="blue">{detailName}</Tag>
+              {riskLevel ? <Tag color={riskLevel === "high" ? "red" : riskLevel === "medium" ? "orange" : "green"}>{riskNames[riskLevel]}</Tag> : null}
+              <Tag color="processing">{shown ? statusNames[shown.status] : selected ? statusNames[selected.status] : "加载中"}</Tag>
+            </div>
+            <h2>{shown?.title || selected?.title || "审批详情"}</h2>
+            <div className="approval-review__subline">
+              <span>{shown ? (shown.case_review ? `WFS Case ${shown.id}` : `审批单 ${shown.id}`) : "正在读取审批信息"}</span>
+              {shown ? <span>业务对象：{shown.business_ref}</span> : null}
+              <span>{shown ? timeText(shown.submitted_at) : ""}</span>
+            </div>
+          </div>
+          <Space size={8}>
+            {shown ? <Button aria-label="复制审批编号" icon={<CopyOutlined />} onClick={() => void copyId()} /> : null}
+            <Button aria-label="关闭审批详情" icon={<CloseOutlined />} onClick={onClose} />
+          </Space>
+        </header>
+
+        <div className="approval-review__scroll">
+          {failedDetailId === selected?.id ?
+            <Alert showIcon type="error" message="审批详情加载失败" description="请关闭后重新打开或刷新列表重试" /> : null}
+          {loading || (selected && !shown && failedDetailId !== selected.id) ?
+            <div className="approval-review__center"><Spin tip="正在读取审批详情"><div className="approval-review__spin-placeholder" /></Spin></div> : null}
+          {shown ? <>
+            {isWfs ? <WfsCaseApprovalDetail detail={shown} /> :
+              <div className="approval-review__generic"><GenericApprovalDetail detail={shown} /></div>}
+          </> : null}
+        </div>
+      </div>
+    </Drawer>
+
+    <Modal
+      className="approval-review__decision-modal"
+      open={Boolean(action)}
+      title={<div><div className="approval-review__modal-eyebrow">APPROVAL DECISION</div>{action ? reviewTitle[action] : "审批操作"}</div>}
+      onCancel={closeAction}
+      onOk={() => void save()}
+      okText={action === "approved" ? "确认通过" : action === "rejected" ? "确认驳回" : action === "resubmit" ? "重新提交" : "发送补充要求"}
+      okButtonProps={{ loading: saving, danger: action === "rejected" }}
+      okType={action === "rejected" ? "default" : "primary"}
+      cancelButtonProps={{ disabled: saving }}
+      maskClosable={!saving}
+      destroyOnHidden
+    >
+      {shown ? <div className="approval-review__modal-context">
+        <ExclamationCircleOutlined />
+        <div><strong>{shown.title}</strong><span>{riskLevel ? riskNames[riskLevel] : ""} · {`申请人 ${shown.applicant_id || "未记录"}`}</span></div>
+      </div> : null}
+      <Form layout="vertical" style={{ marginTop: 18 }}>
+        <Form.Item label={action === "approved" ? "审批意见（选填）" : action === "rejected" ? "驳回原因（至少 5 个字）" : action === "resubmit" ? "补充说明（至少 5 个字）" : "需补充的材料（至少 5 个字）"}>
+          <Input.TextArea rows={4} value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} showCount placeholder={action === "approved" ? "填写审批依据，便于后续追溯" : "请明确原因与下一步要求"} />
+        </Form.Item>
+        {action === "resubmit" ? <Form.Item label="补充证据"><Input.TextArea rows={3} value={evidence} onChange={(event) => setEvidence(event.target.value)} maxLength={4000} showCount /></Form.Item> : null}
+        {shown?.case_review && !shown.applicant_id ? <Checkbox checked={identityConfirmed} onChange={(event) => setIdentityConfirmed(event.target.checked)}>
+          我确认本 Case 缺少可验证的申请人身份，已核查业务资料并承担当前审核决定。
+        </Checkbox> : null}
+        {action === "approved" && riskLevel === "high" ? <Checkbox checked={riskConfirmed} onChange={(event) => setRiskConfirmed(event.target.checked)}>我已核对业务金额、申请原因、历史跟进与关联证据，并了解通过后的业务影响。</Checkbox> : null}
+        <Typography.Text type="secondary" className="approval-review__modal-hint">本操作将使用当前登录账号提交，由后端校验权限、业务状态、版本及审批记录。</Typography.Text>
+      </Form>
+    </Modal>
+  </>;
 }

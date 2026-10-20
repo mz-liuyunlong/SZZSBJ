@@ -187,6 +187,8 @@ const productIdentityLineStyle: CSSProperties = {
   maxWidth: 176,
   minWidth: 0,
   alignItems: "center",
+  justifyContent: "flex-start",
+  textAlign: "left",
   gap: 4,
   overflow: "hidden",
   verticalAlign: "bottom",
@@ -209,7 +211,18 @@ export function ProductIdentityCell({
   onCopy,
 }: ProductIdentityCellProps) {
   return (
-    <Space direction="vertical" size={0} className="report-table-identity-stack report-table-product-identity-stack">
+    <Space
+      direction="vertical"
+      size={0}
+      className="report-table-identity-stack report-table-product-identity-stack"
+      style={{
+        display: "flex",
+        width: "100%",
+        alignItems: "flex-start",
+        justifyContent: "flex-start",
+        textAlign: "left",
+      }}
+    >
       <WalmartProductIdCell
         productId={productId}
         onCopy={onCopy}

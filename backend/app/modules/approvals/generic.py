@@ -102,80 +102,6 @@ class GenericApprovalService:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         return json.loads(json.dumps(dict(row), ensure_ascii=False, default=str))
 
-    def submit(
-        self,
-        kind: str,
-        source_ref: str,
-        account: str,
-        accounts: frozenset[str],
-        actor: str,
-        reason: str,
-        evidence: str,
-    ) -> str:
-        if kind not in BUSINESS_TYPES or account not in accounts:
-            raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
-        if len(reason.strip()) < 5 or len(source_ref) > 128:
-            blocked(422)
-        rule = (
-            self.session.execute(
-                text("""
-            select required_steps,min_reason_length from app_approval_rules
-            where approval_type=:kind and is_active=true
-        """),
-                {"kind": kind},
-            )
-            .mappings()
-            .first()
-        )
-        if not rule or len(reason.strip()) < rule["min_reason_length"]:
-            blocked(422)
-        source = self._source(kind, source_ref, account)
-        policy = {"required_steps": int(rule["required_steps"])}
-        snapshot = {"source": source, "approval_policy": policy, "execution_pending": True}
-        now = datetime.now(UTC)
-        approval_id = str(uuid4())
-        self.session.execute(
-            text("""
-            insert into app_approval_requests
-              (id,approval_type,business_ref,source_account_ref,applicant_id,
-               title,reason,evidence,status,risk_level,snapshot,snapshot_hash,
-               submitted_at,updated_at)
-            values (:id,:kind,:ref,:account,:actor,:title,:reason,:evidence,
-                    'submitted',:risk,cast(:snapshot as jsonb),:hash,:now,:now)
-        """),
-            {
-                "id": approval_id,
-                "kind": kind,
-                "ref": source_ref,
-                "account": account,
-                "actor": actor,
-                "title": {
-                    "purchase_exception": "采购异常处理申请",
-                    "finance_exception": "财务例外处理申请",
-                    "access_change": "权限变更申请",
-                    "operations_plan_ack": "运营计划事项确认",
-                }[kind],
-                "reason": reason.strip(),
-                "evidence": evidence.strip(),
-                "risk": "low" if kind == "operations_plan_ack" else "high",
-                "snapshot": json.dumps(snapshot, ensure_ascii=False),
-                "hash": signature(snapshot),
-                "now": now,
-            },
-        )
-        self.approvals._event(
-            approval_id,
-            "submitted",
-            actor,
-            reason.strip(),
-            {
-                "execution_pending": True,
-                "source_hash": signature(source),
-            },
-        )
-        self.session.commit()
-        return approval_id
-
     def decide(
         self,
         approval_id: UUID,
@@ -264,7 +190,6 @@ class GenericApprovalService:
                 "executed": False,
             },
         )
-        self.approvals._notify_applicant(str(approval_id), decision)
         self.session.commit()
 
     def approve_bulk(
@@ -355,6 +280,5 @@ class GenericApprovalService:
                 note.strip(),
                 {"batch": True, "executed": False},
             )
-            self.approvals._notify_applicant(approval_id, "approved")
         self.session.commit()
         return len(rows)

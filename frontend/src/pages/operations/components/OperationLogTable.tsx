@@ -1,6 +1,10 @@
+import { ProTable, type ProColumns } from "@ant-design/pro-components";
+import ReportTableShell from "@/components/report-table/ReportTableShell";
+import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import { Button, Empty, Input, Popover, Space, Tag } from "antd";
-import type { Key, ReactNode } from "react";
-import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
+import { useState, type Key, type ReactNode } from "react";
+import { ProductIdentityCell, SkuMskuIdentityCell } from "@/components/report-table/cells";
+import { MoneyCell } from "@/components/report-table/cells";
 import {
   operationLogColumnFields,
   type OperationLogRow,
@@ -10,6 +14,8 @@ import {
 
 interface OperationLogTableProps {
   rows: OperationLogRow[];
+  total?: number;
+  loading?: boolean;
   systemRecords: OperationLogSystemRecord[];
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
@@ -49,49 +55,82 @@ const statusColor: Record<OperationLogStatus, string> = {
 const systemLogPopover = (records: OperationLogSystemRecord[]) => (
   <div className="operation-log__system-popover">
     {records.length === 0 ? (
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前没有抓到系统广告调整记录" />
-    ) : records.map((record) => (
-      <div className="operation-log__system-card" key={record.id}>
-        <div>
-          <Tag color="blue">检测日 {record.time}</Tag>
-          <strong>{record.type}</strong>
-          <span>来源：{record.source} · 操作人未确认</span>
-        </div>
-        <p>{record.detail}</p>
-        <small>{record.detail}</small>
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description="暂无系统运营日志"
+      />
+    ) : (
+      <div style={{
+        whiteSpace: "pre-wrap",
+        overflowWrap: "anywhere",
+        lineHeight: 1.9,
+      }}>
+        {[...records]
+          .sort((a, b) =>
+            a.id.localeCompare(b.id, undefined, { numeric: true })
+          )
+          .map((record) => record.detail)
+          .join("\n")}
       </div>
-    ))}
+    )}
   </div>
 );
 
-function ShortcutButton({
-  label,
-  missing,
-  onClick,
+function ManualLogEditor({
+  row,
+  onChange,
 }: {
-  label: string;
-  missing: boolean;
-  onClick: () => void;
+  row: OperationLogRow;
+  onChange: (rowId: string, value: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+
+  if (!editing) {
+    return (
+      <Button
+        type="text"
+        block
+        onClick={() => setEditing(true)}
+        style={{
+          height: "auto",
+          minHeight: 40,
+          whiteSpace: "pre-wrap",
+          overflowWrap: "anywhere",
+          textAlign: "left",
+        }}
+      >
+        {row.manualLog || "点击填写日志"}
+      </Button>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      className={`operation-log__mini-icon${missing ? " operation-log__mini-icon--missing" : ""}`}
-      onClick={onClick}
-      title={missing ? `${label}页面缺失，点击补录` : `打开${label}页面`}
-    >
-      {label}
-    </button>
+    <Input.TextArea
+      autoFocus
+      aria-label={`运营日志：${row.productId}`}
+      value={row.manualLog}
+      autoSize={{ minRows: 2, maxRows: 4 }}
+      onChange={(event) => onChange(row.id, event.target.value)}
+      onBlur={() => setEditing(false)}
+    />
   );
 }
 
 function OperationLogTable({
   rows,
+  total = rows.length,
+  loading = false,
   systemRecords,
   appliedColumnKeys,
   columnWidths,
-  onOpenProduct,
-  onOpenEntryEditor,
+  currentPage,
+  pageSize,
+  selectedRowKeys,
+  onColumnWidthChange,
+  onCurrentPageChange,
+  onPageSizeChange,
+  onSelectionChange,
+  onCopy,
   onManualLogChange,
   onSaveRow,
   onViewEntries,
@@ -117,54 +156,29 @@ function OperationLogTable({
     },
     {
       key: "productIdShortcut",
-      title: "商品ID / 快捷入口",
-      width: 248,
-      className: "operation-log__col-product",
-      render: (row) => {
-        const keywordMissing = row.keywordEntryStatus === "missing";
-        const adMissing = row.adEntryStatus === "missing";
-
-        return (
-          <div className="operation-log__pid-cell">
-            <div className="operation-log__pid-main">
-              <button
-                type="button"
-                className="operation-log__pid-link"
-                onClick={() => onOpenProduct(row)}
-              >
-                {row.productId}
-              </button>
-              <span>{row.sku} · {row.store}</span>
-            </div>
-            <div className="operation-log__mini-icons">
-              <ShortcutButton
-                label="词"
-                missing={keywordMissing}
-                onClick={() => {
-                  const url = resolveOperationLogLink(row.keywordUrl);
-                  if (url) window.open(url, "_blank", "noopener,noreferrer");
-                  else onOpenEntryEditor(row, "keyword");
-                }}
-              />
-              <ShortcutButton
-                label="广"
-                missing={adMissing}
-                onClick={() => {
-                  const url = resolveOperationLogLink(row.adUrl);
-                  if (url) window.open(url, "_blank", "noopener,noreferrer");
-                  else onOpenEntryEditor(row, "ad");
-                }}
-              />
-            </div>
-          </div>
-        );
-      },
+      title: "商品ID/品名",
+      width: 188,
+      className: "report-table-product-identity-column",
+      render: (row) => (
+        <ProductIdentityCell
+          productId={row.productId}
+          productName={row.productName}
+          onCopy={onCopy}
+        />
+      ),
     },
     {
-      key: "productName",
-      title: "商品名称",
-      width: 176,
-      render: (row) => row.productName,
+      key: "skuMsku",
+      title: "SKU/MSKU",
+      width: 188,
+      className: "report-table-sku-msku-identity-column",
+      render: (row) => (
+        <SkuMskuIdentityCell
+          sku={row.sku}
+          msku={row.msku}
+          onCopy={onCopy}
+        />
+      ),
     },
     {
       key: "store",
@@ -174,7 +188,7 @@ function OperationLogTable({
     },
     {
       key: "owner",
-      title: "运营",
+      title: "负责人",
       width: 90,
       render: (row) => row.owner,
     },
@@ -185,22 +199,24 @@ function OperationLogTable({
       render: (row) => <Tag color="purple">{row.workType}</Tag>,
     },
     {
-      key: "conversionRate",
-      title: "转化率",
-      width: 86,
-      render: (row) => row.conversionRate === null ? "—" : `${row.conversionRate.toFixed(1)}%`,
+      key: "profit7d",
+      title: "近7天利润",
+      width: 120,
+      render: (row) => (
+        <MoneyCell value={row.profit7d} tone="profit" />
+      ),
     },
     {
-      key: "adRatio",
-      title: "广告占比",
-      width: 92,
-      render: (row) => (row.adRatio === undefined ? "-" : `${row.adRatio.toFixed(1)}%`),
-    },
-    {
-      key: "salePrice",
-      title: "销售价",
-      width: 92,
-      render: (row) => row.salePrice === null ? "—" : `${row.salePrice.toFixed(2)}`,
+      key: "wfsAvailableInventory",
+      title: "WFS可售库存",
+      width: 130,
+      render: (row) => (
+        row.wfsAvailableInventory == null
+          ? "—"
+          : row.wfsAvailableInventory.toLocaleString("en-US", {
+              maximumFractionDigits: 4,
+            })
+      ),
     },
     {
       key: "systemLogs",
@@ -223,12 +239,13 @@ function OperationLogTable({
       width: 360,
       className: "operation-log__col-manual-log",
       render: (row) => (
-        <Input.TextArea
-          aria-label={`运营日志：${row.productId}`}
-          value={row.manualLog}
-          rows={2}
-          autoSize={{ minRows: 2, maxRows: 3 }}
-          onChange={(event) => onManualLogChange(row.id, event.target.value)}
+        <ManualLogEditor
+          row={
+            row.manualLog.trim()
+              ? row
+              : { ...row, manualLog: row.legacyManualLog ?? "" }
+          }
+          onChange={onManualLogChange}
         />
       ),
     },
@@ -236,7 +253,9 @@ function OperationLogTable({
       key: "status",
       title: "状态",
       width: 88,
-      render: (row) => <Tag color={statusColor[row.status]}>{row.status}</Tag>,
+      render: (row) => (
+        <Tag color={statusColor[row.status]}>{row.status}</Tag>
+      ),
     },
     {
       key: "actions",
@@ -246,68 +265,104 @@ function OperationLogTable({
     },
   ];
 
-  const columns = allColumns.filter((column) => appliedColumnKeys.includes(column.key));
+  const columns = allColumns.filter((column) => column.key === "skuMsku" || appliedColumnKeys.includes(column.key));
+
+
+  // PROTABLE_OPERATION_LOGS_20261021
+  const visibleColumns: ProColumns<OperationLogRow>[] =
+    columns.map((column) => {
+      const width = columnWidths[column.key] ?? column.width;
+
+      return {
+        key: column.key,
+        className: column.className,
+        width,
+        align: "left" as const,
+        title: (
+          <ResizableColumnTitle
+            label={columnTitleMap.get(column.key) ?? column.title}
+            width={width}
+            minWidth={80}
+            onWidthChange={(nextWidth) =>
+              onColumnWidthChange(column.key, nextWidth)
+            }
+          />
+        ),
+        render: (_value, row, index) => column.render(row, index),
+      };
+    });
 
   return (
-    <section className="operation-log__table" aria-label="商品ID维度运营日志表">
+    <ReportTableShell
+      className="operation-log__table"
+      label="商品ID维度运营日志表"
+    >
       <div className="operation-log__table-head">
         <div>
           <strong>商品ID维度运营日志</strong>
-          <span> · 表格内单行编辑；批量写入在弹窗内选择商品ID；鼠标移入系统日志查看详情</span>
+          <span> · 按登录用户权限查询，服务端分页</span>
         </div>
-        {tableActions ? <div className="operation-log__table-actions">{tableActions}</div> : null}
+        {tableActions ? (
+          <div className="operation-log__table-actions">
+            {tableActions}
+          </div>
+        ) : null}
       </div>
 
-      <div className="operation-log__native-table-wrap">
-        <table className="operation-log__native-table">
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  className={column.className}
-                  style={{ minWidth: columnWidths[column.key] ?? column.width }}
-                >
-                  {columnTitleMap.get(column.key) ?? column.title}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length}>
-                  <div className="operation-log__empty">暂无运营日志</div>
-                </td>
-              </tr>
-            ) : rows.map((row, index) => (
-              <tr key={row.id}>
-                {columns.map((column) => (
-                  <td
-                    key={`${row.id}-${column.key}`}
-                    className={column.className}
-                    style={{ minWidth: columnWidths[column.key] ?? column.width }}
-                  >
-                    {column.render(row, index)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ProTable<OperationLogRow>
+        rowKey="id"
+        columns={visibleColumns}
+        dataSource={rows}
+        loading={loading}
+        search={false}
+        options={false}
+        toolBarRender={false}
+        tableAlertRender={false}
+        tableAlertOptionRender={false}
+        rowSelection={{
+          fixed: true,
+          selectedRowKeys,
+          onChange: onSelectionChange,
+        }}
+        scroll={{ x: "max-content" }}
+        pagination={{
+          current: currentPage,
+          pageSize,
+          total,
+          showSizeChanger: true,
+          showQuickJumper: true,
+          pageSizeOptions: ["50", "100"],
+          showTotal: (count) => `共 ${count} 条`,
+          onChange: (nextPage, nextSize) => {
+            if (nextSize !== pageSize) {
+              onPageSizeChange(nextSize);
+            } else {
+              onCurrentPageChange(nextPage);
+            }
+          },
+        }}
+        locale={{
+          emptyText: <Empty description="暂无匹配运营日志" />,
+        }}
+      />
 
       <div className="operation-log__sticky-foot">
         <span>
-          批量写入不依赖外部表格勾选；请在弹窗内搜索并选择商品ID。词/广缺失时点击红色入口即可补录。
+          当前页 {rows.length} 条，共 {total} 条。
+          批量写入仅处理当前页商品。
         </span>
         <Space>
-          <Button onClick={onBulkSaveDraft}>保存草稿</Button>
-          <Button type="primary" onClick={onSubmitAll}>提交全部</Button>
+          <Button onClick={onBulkSaveDraft}>
+            保存当前页草稿
+          </Button>
+          <Button type="primary" onClick={onSubmitAll}>
+            提交当前页
+          </Button>
         </Space>
       </div>
-    </section>
+    </ReportTableShell>
   );
+
 }
 
 export default OperationLogTable;

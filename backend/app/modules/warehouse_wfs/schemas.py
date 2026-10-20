@@ -55,6 +55,7 @@ class WfsFeeCaseRead(StrictSchema):
     currency_code: str
     manual_unit_fee: Decimal
     actual_unit_fee: Decimal
+    product_management_unit_wfs_fee: Decimal | None = None
     unit_fee_diff: Decimal
     fee_source: str
     fee_source_ref: str | None

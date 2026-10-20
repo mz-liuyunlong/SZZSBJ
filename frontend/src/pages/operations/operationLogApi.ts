@@ -1,3 +1,46 @@
+
+export async function fetchPagedOperationLogRows(
+  filters: import("./operationLogTypes").OperationLogFilters,
+  page: number,
+  pageSize: number,
+): Promise<{
+  rows: OperationLogRow[];
+  revisions: Record<string, number>;
+  systemRecords: import("./operationLogTypes").OperationLogSystemRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const params = new URLSearchParams({
+    start_date: filters.dateRange[0],
+    end_date: filters.dateRange[1],
+    page: String(page),
+    page_size: String(pageSize),
+    search_field: filters.searchField,
+    keyword: filters.keyword.trim(),
+    system_log: filters.systemLog,
+    include_events: "true",
+  });
+
+  filters.owners.forEach((value) => params.append("owner", value));
+  filters.stores.forEach((value) => params.append("store", value));
+  filters.workTypes.forEach((value) => params.append("work_type", value));
+  filters.batchValues?.forEach((value) => {
+    if (value.trim()) params.append("batch_value", value.trim());
+  });
+
+  const response = await backendRequest<{
+    rows: OperationLogRow[];
+    revisions: Record<string, number>;
+    systemRecords: import("./operationLogTypes").OperationLogSystemRecord[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>(`/api/operations/logs/rows/query?${params}`);
+
+  return response.data;
+}
+
 import { backendRequest } from "@/api/backendApi";
 import type { OperationLogRow, OperationLogLinkFormValues } from "./operationLogTypes";
 export async function fetchOperationLogRows(startDate: string, endDate: string): Promise<{rows: OperationLogRow[]; revisions: Record<string, number>; systemRecords: import("./operationLogTypes").OperationLogSystemRecord[]}> {

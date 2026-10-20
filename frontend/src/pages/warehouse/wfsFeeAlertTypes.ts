@@ -19,6 +19,7 @@ export interface WfsFeeAlertRow {
   units: number;
   chargedFee: number;
   standardFee: number;
+  productUnitWfsFee: number | null;
   unitCharged: number;
   unitStandard: number;
   overFee: number;
@@ -33,6 +34,9 @@ export interface WfsFeeAlertRow {
   level: WfsFeeAlertPriority;
   latestFollow: string;
   followLog?: string;
+  followCount?: number;
+  lastFollowBy?: string | null;
+  lastFollowAt?: string | null;
 }
 
 export interface WfsFeeAlertFilters {
@@ -51,7 +55,7 @@ export interface WfsFeeAlertFollowFormValues {
   status: WfsFeeAlertCaseStatus;
   caseNo: string;
   recoveredAmount: number;
-  nextFollowAt: string;
+  nextFollowAt?: string;
   latestFollow: string;
 }
 
@@ -81,15 +85,14 @@ export const createWfsFeeAlertDateRange = (preset: WfsFeeAlertDatePreset): [stri
 
 export const wfsFeeAlertColumnFields: WfsFeeAlertColumnField[] = [
   { key: "image", title: "图片" },
-  { key: "sku", title: "SKU" },
-  { key: "msku", title: "MSKU" },
+  { key: "productIdName", title: "商品ID/品名" },
+  { key: "skuMsku", title: "SKU/MSKU" },
   { key: "store", title: "店铺" },
   { key: "owner", title: "负责人" },
-  { key: "productId", title: "商品ID" },
-  { key: "category", title: "类目" },
   { key: "orders", title: "受影响销量" },
-  { key: "units", title: "受影响计费量" },
-  { key: "chargedFee", title: "实收WFS费用" },
+  { key: "productUnitWfsFee", title: "单件WFS费用" },
+  { key: "unitCharged", title: "单价实收费用" },
+  { key: "chargedFee", title: "实收费用" },
   { key: "standardFee", title: "人工配送费测算" },
   { key: "overFee", title: "预计追回" },
   { key: "unitOverFee", title: "单件多收" },
@@ -104,7 +107,7 @@ export const wfsFeeAlertColumnFields: WfsFeeAlertColumnField[] = [
   { key: "actions", title: "操作" },
 ];
 
-export const fixedWfsFeeAlertColumnKeys = ["image", "sku"];
+export const fixedWfsFeeAlertColumnKeys = ["image", "productIdName", "skuMsku"];
 
 export const createWfsFeeAlertInitialFilters = (): WfsFeeAlertFilters => ({
   datePreset: "custom",

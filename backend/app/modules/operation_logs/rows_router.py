@@ -354,3 +354,7 @@ def get_rows(
         data={"rows": rows, "revisions": revisions, "systemRecords": system_records},
         meta=None,
     )
+
+
+from app.modules.operation_logs.paged_router import router as paged_router
+router.include_router(paged_router)

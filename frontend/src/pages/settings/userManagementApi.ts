@@ -203,8 +203,8 @@ export async function searchFeishuUsers(name: string): Promise<FeishuDirectorySe
 export async function createUser(
   values: UserFormValues,
   roleOptions: UserRoleOption[],
-): Promise<void> {
-  await backendRequest<BackendUser>("/api/settings/users", {
+): Promise<string> {
+  const created = await backendRequest<BackendUser>("/api/settings/users", {
     method: "POST",
     body: JSON.stringify({
       username: values.username.trim(),
@@ -223,6 +223,7 @@ export async function createUser(
       role_keys: roleKeysFromNames(values.roles, roleOptions),
     }),
   });
+  return String(created.data.id);
 }
 
 export async function updateUser(
@@ -300,4 +301,63 @@ export async function saveUserDataScopes(
     { method: "PUT", body: JSON.stringify({ items: normalized }) },
   );
   return toUserDataScopeState(response.data);
+}
+
+
+export interface OwnerBindingCandidate {
+  sourceAccountRef: string;
+  ownerUid: string;
+  ownerName: string;
+  productCount: number;
+  mappedUserId: number | null;
+  eligible: boolean;
+}
+
+export interface ExistingOwnerBinding {
+  source_account_ref: string;
+  owner_uid: string;
+  app_user_id: number;
+}
+
+export async function loadOwnerBindingCandidates(): Promise<OwnerBindingCandidate[]> {
+  const response = await backendRequest<Array<{
+    source_account_ref: string;
+    owner_uid: string;
+    owner_name: string | null;
+    product_count: number;
+    mapped_user_id: number | null;
+    eligible: boolean;
+  }>>("/api/operations/logs/owner-mappings/candidates");
+  return response.data.map((row) => ({
+    sourceAccountRef: row.source_account_ref,
+    ownerUid: row.owner_uid,
+    ownerName: row.owner_name || "未命名",
+    productCount: row.product_count,
+    mappedUserId: row.mapped_user_id,
+    eligible: row.eligible,
+  }));
+}
+
+export async function loadExistingOwnerBindings(): Promise<ExistingOwnerBinding[]> {
+  const response = await backendRequest<ExistingOwnerBinding[]>(
+    "/api/operations/logs/owner-mappings",
+  );
+  return response.data;
+}
+
+export async function assignOwnerBinding(
+  userId: string,
+  item: OwnerBindingCandidate,
+): Promise<void> {
+  await backendRequest<{ saved: boolean; created: boolean }>(
+    "/api/operations/logs/owner-mappings/assign",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        source_account_ref: item.sourceAccountRef,
+        owner_uid: item.ownerUid,
+        app_user_id: Number(userId),
+      }),
+    },
+  );
 }

@@ -27,6 +27,7 @@ export interface UserManagementRow {
   status: UserStatus;
   roles: UserRoleName[];
   isSuperAdmin: boolean;
+  ownerMappingCount?: number;
   feishuName?: string;
   feishuOpenId?: string;
   feishuUserId?: string;
@@ -81,6 +82,7 @@ export const userManagementColumnFields: UserManagementColumnField[] = [
   { key: "email", title: "邮箱" },
   { key: "status", title: "状态" },
   { key: "roles", title: "角色" },
+  { key: "ownerBinding", title: "领星负责人绑定" },
   { key: "createdAt", title: "创建时间" },
   { key: "lastLoginAt", title: "最近登录" },
   { key: "operation", title: "操作" },
@@ -93,6 +95,7 @@ export const defaultUserColumnWidths: Record<string, number> = {
   email: 180,
   status: 92,
   roles: 240,
+  ownerBinding: 142,
   createdAt: 156,
   lastLoginAt: 156,
   operation: 292,
