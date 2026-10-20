@@ -340,9 +340,12 @@ def test_order_snapshot_ignores_listing_resolved_item_id() -> None:
     assert _changed_order_fields(prior, observed) == []
 
 
-def test_sample_mart_accepts_historical_v3_and_current_v5_only() -> None:
+def test_sample_mart_accepts_historical_v3_v5_and_owner_approved_raw() -> None:
     source = inspect.getsource(DataPagesRealSyncRunner._refresh_daily_sales_mart)
-    assert "(:historical_sample_rule_version,:verified_sample_rule_version)" in source
+    assert (
+        "(:historical_sample_rule_version,:verified_sample_rule_version,"
+        "'owner-approved-raw-zero-full-discount-v1')"
+    ) in source
     assert "DATA_PAGES_SAMPLE_RULE_VERSION_UNSUPPORTED" in source
     assert "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT" in source
     assert "sample_data_not_observed" in source

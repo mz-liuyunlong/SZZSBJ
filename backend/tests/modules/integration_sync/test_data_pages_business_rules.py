@@ -227,7 +227,10 @@ def test_sample_resolver_enriches_unverified_candidates_without_verifying() -> N
     assert runner._resolve_sample_items() == 0
     assert "and s.item_id is null" in session.calls[0][0]
     assert "and s.is_valid_sample=true and s.item_id is null" not in session.calls[0][0]
-    assert "sample_rule_version in (:historical_rule,:verified_rule)" in session.calls[2][0]
+    assert (
+        "sample_rule_version in "
+        "(:historical_rule,:verified_rule,'owner-approved-raw-zero-full-discount-v1')"
+    ) in session.calls[2][0]
 
 
 def test_confirmed_sample_replay_is_protected_and_changes_block_mart() -> None:
@@ -574,3 +577,49 @@ def test_sample_writer_quarantines_ambiguous_multiple_unit_prices() -> None:
     params = _sample_upsert_params(session)
     assert params["unit_price_amount"] is None
     assert params["is_valid_sample"] is False
+
+
+def test_raw_sample_is_not_auto_verified_by_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WALMART_SAMPLE_AUTO_VERIFY", "20261001-20261017")
+
+    session = _CaptureSession()
+    runner = _runner(session)
+    runner.business_date = date(2026, 10, 16)
+    runner._hotfix_unique_sample_item_id = lambda *_args: "item-a"  # type: ignore[method-assign]
+
+    row = {
+        "global_order_no": "synthetic-raw-order",
+        "global_purchase_time": str(int(datetime(2026, 10, 17, 4, tzinfo=CHINA_TZ).timestamp())),
+        "store_id": "store-a",
+        "status": 9,
+        "amount_currency": "USD",
+        "transaction_info": [{"order_total_amount": "0"}],
+        "platform_info": [{"platform_code": "10008", "cancel_time": 0}],
+        "item_info": [
+            {
+                "order_item_no": "synthetic-raw-line",
+                "platform_order_no": "synthetic-platform-order",
+                "item_id": "item-a",
+                "msku": "MSKU-1",
+                "local_sku": "SKU-1",
+                "quantity": "1",
+                "unit_price_amount": "10",
+                "item_price_amount": "10",
+                "discount_amount": "10",
+            }
+        ],
+    }
+
+    assert runner._write_sample_orders([row]) == 1
+    params = _sample_upsert_params(session)
+    assert params["is_valid_sample"] is False
+    assert params["sample_rule_version"] == "candidate-unverified-v5"
+    assert params["item_id"] == "item-a"
+
+    upsert_sql = next(
+        sql for sql, _ in session.calls if "insert into fact_walmart_sample_order_items" in sql
+    )
+    assert (
+        "where fact_walmart_sample_order_items.sample_rule_version "
+        "<> 'owner-approved-raw-zero-full-discount-v1'"
+    ) in upsert_sql
