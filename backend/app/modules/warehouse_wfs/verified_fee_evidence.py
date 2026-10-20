@@ -52,9 +52,7 @@ def settlement_date(value: Any) -> date | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(
-            str(value).replace("Z", "+00:00")
-        ).date()
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
     except ValueError:
         return None
 
@@ -116,10 +114,7 @@ def analyze_wfs_evidence(
                 Decimal("0"),
             )
             fee = sum(
-                (
-                    decimal_value(row.get("platformLogisticsAmount"))
-                    for row in group
-                ),
+                (decimal_value(row.get("platformLogisticsAmount")) for row in group),
                 Decimal("0"),
             )
         except ValueError:
@@ -134,20 +129,14 @@ def analyze_wfs_evidence(
             warnings.add("NONINTEGER_SALES_QUANTITY")
             continue
 
-        dates = [
-            day
-            for row in group
-            if (day := settlement_date(row.get("settlementDate")))
-        ]
+        dates = [day for row in group if (day := settlement_date(row.get("settlementDate")))]
         if not dates:
             warnings.add("MISSING_SETTLEMENT_DATE")
             continue
 
         day = max(dates)
         units = int(sales)
-        rate = (abs(fee) / sales).quantize(
-            CENT, rounding=ROUND_HALF_UP
-        )
+        rate = (abs(fee) / sales).quantize(CENT, rounding=ROUND_HALF_UP)
 
         order_evidence.append((day, rate, units))
 
@@ -171,20 +160,14 @@ def analyze_wfs_evidence(
     latest = max(day for day, _, _ in order_evidence)
     cutoff = latest - timedelta(days=recent_window_days - 1)
 
-    recent = [
-        (day, rate, units)
-        for day, rate, units in order_evidence
-        if cutoff <= day <= latest
-    ]
+    recent = [(day, rate, units) for day, rate, units in order_evidence if cutoff <= day <= latest]
 
     distribution = Counter()
     latest_for_rate: dict[Decimal, date] = {}
 
     for day, rate, units in recent:
         distribution[rate] += units
-        latest_for_rate[rate] = max(
-            day, latest_for_rate.get(rate, day)
-        )
+        latest_for_rate[rate] = max(day, latest_for_rate.get(rate, day))
 
     recent_units = sum(distribution.values())
     actual_fee = None
@@ -215,24 +198,15 @@ def analyze_wfs_evidence(
     if actual_fee is not None:
         difference = actual_fee - standard_fee
         if historical_units is not None:
-            legacy_estimate = (
-                max(difference, Decimal("0"))
-                * historical_units
-            ).quantize(CENT)
+            legacy_estimate = (max(difference, Decimal("0")) * historical_units).quantize(CENT)
 
     evidenced_overcharge = sum(
-        (
-            max(rate - standard_fee, Decimal("0")) * units
-            for _, rate, units in order_evidence
-        ),
+        (max(rate - standard_fee, Decimal("0")) * units for _, rate, units in order_evidence),
         Decimal("0"),
     ).quantize(CENT)
 
     net_difference = sum(
-        (
-            (rate - standard_fee) * units
-            for _, rate, units in order_evidence
-        ),
+        ((rate - standard_fee) * units for _, rate, units in order_evidence),
         Decimal("0"),
     ).quantize(CENT)
 
@@ -242,14 +216,16 @@ def analyze_wfs_evidence(
         status = "REVIEW_REQUIRED"
     elif "STALE_SETTLEMENT_DATA" in warnings:
         status = "STALE"
-    elif warnings.intersection({
-        "DUPLICATE_SETTLEMENT_LINE",
-        "INCOMPLETE_ROW_IDENTITY",
-        "INVALID_SETTLEMENT_AMOUNT",
-        "UNPAIRED_SETTLEMENT",
-        "NONINTEGER_SALES_QUANTITY",
-        "MISSING_SETTLEMENT_DATE",
-    }):
+    elif warnings.intersection(
+        {
+            "DUPLICATE_SETTLEMENT_LINE",
+            "INCOMPLETE_ROW_IDENTITY",
+            "INVALID_SETTLEMENT_AMOUNT",
+            "UNPAIRED_SETTLEMENT",
+            "NONINTEGER_SALES_QUANTITY",
+            "MISSING_SETTLEMENT_DATE",
+        }
+    ):
         status = "REVIEW_REQUIRED"
     elif difference is not None and difference > 0:
         status = "OVERCHARGE_CANDIDATE"
@@ -261,14 +237,9 @@ def analyze_wfs_evidence(
         standard_fee=standard_fee,
         unit_difference=difference,
         historical_units=historical_units,
-        settlement_units=sum(
-            units for _, _, units in order_evidence
-        ),
+        settlement_units=sum(units for _, _, units in order_evidence),
         settlement_orders=len(order_evidence),
-        fee_distribution={
-            str(rate): units
-            for rate, units in sorted(distribution.items())
-        },
+        fee_distribution={str(rate): units for rate, units in sorted(distribution.items())},
         latest_settlement_date=latest,
         legacy_estimate=legacy_estimate,
         evidenced_overcharge=evidenced_overcharge,

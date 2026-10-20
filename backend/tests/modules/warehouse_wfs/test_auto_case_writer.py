@@ -46,10 +46,7 @@ def test_case_values_protect_claim_and_history():
         item_id="20500114893",
         candidate=candidate(),
     )
-    values = {
-        column.key: value.value
-        for column, value in statement._values.items()
-    }
+    values = {column.key: value.value for column, value in statement._values.items()}
 
     assert values["source_kind"] == "future_lingxing_profit_order"
     assert values["status"] == "pending_confirm"

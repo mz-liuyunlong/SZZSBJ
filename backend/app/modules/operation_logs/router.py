@@ -17,7 +17,6 @@ from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.operation_logs.access import LogAccess, require_log_access, require_owned_identity
 from app.modules.operation_logs.service import read_detail, save_batch, save_link
-from app.modules.operation_logs.owner_mapping_reconcile import reconcile_owner_mappings
 
 router = APIRouter(prefix="/api/operations/logs", tags=["Operation Logs"])
 db_dep = Annotated[Session, Depends(get_db_session)]
@@ -33,18 +32,25 @@ write_dep = Annotated[Principal, Depends(require_permission("action:operations:l
 # _admin_only(access) and source-account checks still apply to all routes.
 mapping_read_dep = Annotated[
     Principal,
-    Depends(require_any_permission(
-        "page:settings:user-management:view", "settings:users:read",
-        "page:operations:log:view", "page:sales:daily-sales:view",
-    )),
+    Depends(
+        require_any_permission(
+            "page:settings:user-management:view",
+            "settings:users:read",
+            "page:operations:log:view",
+            "page:sales:daily-sales:view",
+        )
+    ),
 ]
 mapping_write_dep = Annotated[
     Principal,
-    Depends(require_any_permission(
-        "action:settings:user-management:edit",
-        "action:settings:user-management:configure-data-scope",
-        "settings:users:write", "action:operations:log:edit",
-    )),
+    Depends(
+        require_any_permission(
+            "action:settings:user-management:edit",
+            "action:settings:user-management:configure-data-scope",
+            "settings:users:write",
+            "action:operations:log:edit",
+        )
+    ),
 ]
 errors: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},
@@ -224,7 +230,9 @@ def list_owner_mapping_candidates(
     access: access_dep,
 ) -> SuccessEnvelope[list[dict[str, Any]], Any]:
     _admin_only(access)
-    rows = session.execute(text("""
+    rows = (
+        session.execute(
+            text("""
         select p.source_account_ref, btrim(p.owner_uid) as owner_uid,
                min(nullif(btrim(p.owner_name), '')) as owner_name,
                count(*)::int as product_count,
@@ -239,7 +247,12 @@ def list_owner_mapping_candidates(
           and nullif(btrim(p.owner_uid), '') is not null
         group by p.source_account_ref, btrim(p.owner_uid), m.app_user_id
         order by p.source_account_ref, owner_name, owner_uid
-    """), {"accounts": list(access.accounts)}).mappings().all()
+    """),
+            {"accounts": list(access.accounts)},
+        )
+        .mappings()
+        .all()
+    )
     result = [
         {
             "source_account_ref": r["source_account_ref"],
@@ -280,57 +293,88 @@ def assign_owner_mapping(
         "target": payload.app_user_id,
         "actor": access.user_id,
     }
-    user_exists = bool(session.scalar(text("""
+    user_exists = bool(
+        session.scalar(
+            text("""
         select exists(select 1 from app_users where id=:target and is_active=true)
-    """), params))
+    """),
+            params,
+        )
+    )
     if not user_exists:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
     # A mapping must never substitute for the employee's RBAC account scope.
     from app.modules.iam.rbac_repository import RbacRepository
+
     granted = RbacRepository(session).resolve_user_data_scope(
         user_id=payload.app_user_id, scope_type="source_account"
     )
     if "*" not in granted and account not in granted:
-        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403,
-                       message="员工没有对应来源账号的数据范围，请先在用户管理中配置")
+        raise ApiError(
+            code=ErrorCode.DATA_SCOPE_DENIED,
+            status_code=403,
+            message="员工没有对应来源账号的数据范围，请先在用户管理中配置",
+        )
 
-    source = session.execute(text("""
+    source = (
+        session.execute(
+            text("""
         select count(*)::int as rows,
                count(distinct nullif(btrim(owner_name), ''))::int as names,
                count(*) filter (where nullif(btrim(owner_name), '') is null)::int as blanks
         from dwd_lingxing_sku_product_info_current
         where source_account_ref=:account and btrim(owner_uid)=:uid
-    """), params).mappings().one()
+    """),
+            params,
+        )
+        .mappings()
+        .one()
+    )
     if source["rows"] == 0 or source["names"] != 1 or source["blanks"]:
-        raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422,
-                       message="负责人UID不存在或源姓名存在冲突，必须先核验")
+        raise ApiError(
+            code=ErrorCode.VALIDATION_ERROR,
+            status_code=422,
+            message="负责人UID不存在或源姓名存在冲突，必须先核验",
+        )
 
     try:
-        inserted = session.scalar(text("""
+        inserted = session.scalar(
+            text("""
             insert into ops_lingxing_owner_user_mappings
                 (source_account_ref, owner_uid, app_user_id, updated_by_user_id)
             values (:account, :uid, :target, :actor)
             on conflict (source_account_ref, owner_uid) do nothing
             returning id
-        """), params)
+        """),
+            params,
+        )
         if inserted is None:
-            bound = session.scalar(text("""
+            bound = session.scalar(
+                text("""
                 select app_user_id from ops_lingxing_owner_user_mappings
                 where source_account_ref=:account and owner_uid=:uid
-            """), params)
+            """),
+                params,
+            )
             if bound != payload.app_user_id:
-                raise ApiError(code="OWNER_MAPPING_CONFLICT", status_code=409,
-                               message="该负责人UID已绑定其他用户，禁止覆盖")
+                raise ApiError(
+                    code="OWNER_MAPPING_CONFLICT",
+                    status_code=409,
+                    message="该负责人UID已绑定其他用户，禁止覆盖",
+                )
             session.commit()
             return success_response(request, data={"saved": True, "created": False}, meta=None)
 
-        session.execute(text("""
+        session.execute(
+            text("""
             insert into ops_lingxing_owner_mapping_audit
                 (source_account_ref, owner_uid, before_user_id,
                  after_user_id, actor_user_id, action)
             values (:account, :uid, null, :target, :actor, 'assign')
-        """), params)
+        """),
+            params,
+        )
         session.commit()
         return success_response(request, data={"saved": True, "created": True}, meta=None)
     except Exception:

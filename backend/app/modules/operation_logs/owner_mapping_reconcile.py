@@ -15,9 +15,7 @@ from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 def normalize_owner_name(value: object) -> str:
     """Normalize a name for exact matching; never use fuzzy matching."""
-    return " ".join(
-        unicodedata.normalize("NFKC", str(value or "")).split()
-    ).casefold()
+    return " ".join(unicodedata.normalize("NFKC", str(value or "")).split()).casefold()
 
 
 def matching_user_ids(
@@ -42,21 +40,27 @@ def matching_user_ids(
 
 
 def _is_admin_actor(session: Session, user_id: int) -> bool:
-    row = session.execute(
-        text("""
+    row = (
+        session.execute(
+            text("""
             select is_active, is_super_admin
             from app_users
             where id = :user_id
         """),
-        {"user_id": user_id},
-    ).mappings().one_or_none()
+            {"user_id": user_id},
+        )
+        .mappings()
+        .one_or_none()
+    )
 
     if row is None or not bool(row["is_active"]):
         return False
     if bool(row["is_super_admin"]):
         return True
 
-    return bool(session.scalar(text("""
+    return bool(
+        session.scalar(
+            text("""
         select exists (
             select 1
             from app_user_roles ur
@@ -64,14 +68,16 @@ def _is_admin_actor(session: Session, user_id: int) -> bool:
             where ur.user_id = :user_id
               and r.role_key = 'admin'
         )
-    """), {"user_id": user_id}))
+    """),
+            {"user_id": user_id},
+        )
+    )
 
 
-def _onboarding_admin_actor(
-    session: Session, target_user_id: int
-) -> int | None:
-    actors = session.execute(
-        text("""
+def _onboarding_admin_actor(session: Session, target_user_id: int) -> int | None:
+    actors = (
+        session.execute(
+            text("""
             select actor_user_id
             from iam_audit_events
             where target_type = 'user'
@@ -80,8 +86,11 @@ def _onboarding_admin_actor(
               and actor_user_id is not null
             order by created_at desc, id desc
         """),
-        {"target_key": str(target_user_id)},
-    ).scalars().all()
+            {"target_key": str(target_user_id)},
+        )
+        .scalars()
+        .all()
+    )
 
     for actor in actors:
         actor_id = int(actor)
@@ -105,14 +114,12 @@ def reconcile_owner_mappings(
     active user, an unambiguous source owner identity and an admin audit actor.
     """
     if apply:
-        raise RuntimeError("Automatic owner UID binding is forbidden; use administrator explicit assignment")
+        raise RuntimeError(
+            "Automatic owner UID binding is forbidden; use administrator explicit assignment"
+        )
 
     if accounts is None:
-        accounts = tuple(
-            IntegrationSyncRepository(
-                session
-            ).list_configured_source_account_refs()
-        )
+        accounts = tuple(IntegrationSyncRepository(session).list_configured_source_account_refs())
     else:
         accounts = tuple(dict.fromkeys(str(a) for a in accounts if str(a)))
 
@@ -131,7 +138,9 @@ def reconcile_owner_mappings(
             "details": [],
         }
 
-    owner_rows = session.execute(text("""
+    owner_rows = (
+        session.execute(
+            text("""
         select
             source_account_ref,
             btrim(owner_uid) as owner_uid,
@@ -148,16 +157,28 @@ def reconcile_owner_mappings(
           and nullif(btrim(owner_uid), '') is not null
         group by source_account_ref, btrim(owner_uid)
         order by source_account_ref, btrim(owner_uid)
-    """), {"accounts": list(accounts)}).mappings().all()
+    """),
+            {"accounts": list(accounts)},
+        )
+        .mappings()
+        .all()
+    )
 
-    all_users = session.execute(text("""
+    all_users = (
+        session.execute(
+            text("""
         select id, display_name, feishu_name, is_active, is_super_admin
         from app_users
-    """)).mappings().all()
+    """)
+        )
+        .mappings()
+        .all()
+    )
 
     role_user_ids = {
         int(value)
-        for value in session.execute(text("""
+        for value in session.execute(
+            text("""
             select distinct ur.user_id
             from app_user_roles ur
             join app_roles r on r.id = ur.role_id
@@ -167,27 +188,34 @@ def reconcile_owner_mappings(
                    'page:operations:log:view',
                    'page:sales:daily-sales:view'
                )
-        """)).scalars().all()
+        """)
+        )
+        .scalars()
+        .all()
     }
 
     users = [
-        row for row in all_users
+        row
+        for row in all_users
         if bool(row["is_active"])
-        and (
-            bool(row["is_super_admin"])
-            or int(row["id"]) in role_user_ids
-        )
+        and (bool(row["is_super_admin"]) or int(row["id"]) in role_user_ids)
     ]
 
-    mapping_rows = session.execute(text("""
+    mapping_rows = (
+        session.execute(
+            text("""
         select source_account_ref, owner_uid, app_user_id
         from ops_lingxing_owner_user_mappings
         where source_account_ref = any(:accounts)
-    """), {"accounts": list(accounts)}).mappings().all()
+    """),
+            {"accounts": list(accounts)},
+        )
+        .mappings()
+        .all()
+    )
 
     existing = {
-        (str(row["source_account_ref"]), str(row["owner_uid"]).strip()):
-            int(row["app_user_id"])
+        (str(row["source_account_ref"]), str(row["owner_uid"]).strip()): int(row["app_user_id"])
         for row in mapping_rows
     }
 
@@ -198,9 +226,7 @@ def reconcile_owner_mappings(
         owner_uid = str(owner["owner_uid"]).strip()
         owner_name = str(owner["owner_name"] or "").strip()
         owner_names = [
-            str(name).strip()
-            for name in (owner["owner_names"] or [])
-            if str(name or "").strip()
+            str(name).strip() for name in (owner["owner_names"] or []) if str(name or "").strip()
         ]
 
         candidates = matching_user_ids(owner_names, users)
@@ -229,9 +255,7 @@ def reconcile_owner_mappings(
 
         if not candidates:
             item["status"] = (
-                "mapped_name_unmatched"
-                if mapped_user_id is not None
-                else "no_matching_user"
+                "mapped_name_unmatched" if mapped_user_id is not None else "no_matching_user"
             )
             details.append(item)
             continue
@@ -246,9 +270,7 @@ def reconcile_owner_mappings(
 
         if mapped_user_id is not None:
             item["status"] = (
-                "already_mapped"
-                if mapped_user_id == matched_user_id
-                else "mapping_conflict"
+                "already_mapped" if mapped_user_id == matched_user_id else "mapping_conflict"
             )
             details.append(item)
             continue
@@ -264,9 +286,7 @@ def reconcile_owner_mappings(
             if _is_admin_actor(session, actor_user_id):
                 effective_actor = actor_user_id
         elif use_onboarding_actor:
-            effective_actor = _onboarding_admin_actor(
-                session, matched_user_id
-            )
+            effective_actor = _onboarding_admin_actor(session, matched_user_id)
 
         if effective_actor is None:
             item["status"] = "no_admin_actor"
@@ -280,38 +300,45 @@ def reconcile_owner_mappings(
             "actor": effective_actor,
         }
 
-        inserted = session.execute(text("""
+        inserted = session.execute(
+            text("""
             insert into ops_lingxing_owner_user_mappings
                 (source_account_ref, owner_uid, app_user_id, updated_by_user_id)
             values (:account, :owner_uid, :user_id, :actor)
             on conflict (source_account_ref, owner_uid) do nothing
             returning id
-        """), params).scalar_one_or_none()
+        """),
+            params,
+        ).scalar_one_or_none()
 
         if inserted is None:
-            current_user_id = session.scalar(text("""
+            current_user_id = session.scalar(
+                text("""
                 select app_user_id
                 from ops_lingxing_owner_user_mappings
                 where source_account_ref = :account
                   and owner_uid = :owner_uid
-            """), params)
+            """),
+                params,
+            )
 
             item["mapped_user_id"] = current_user_id
             item["status"] = (
-                "already_mapped"
-                if current_user_id == matched_user_id
-                else "mapping_conflict"
+                "already_mapped" if current_user_id == matched_user_id else "mapping_conflict"
             )
             details.append(item)
             continue
 
-        session.execute(text("""
+        session.execute(
+            text("""
             insert into ops_lingxing_owner_mapping_audit
                 (source_account_ref, owner_uid, before_user_id,
                  after_user_id, actor_user_id, action)
             values
                 (:account, :owner_uid, null, :user_id, :actor, 'assign')
-        """), params)
+        """),
+            params,
+        )
 
         existing[key] = matched_user_id
         item["mapped_user_id"] = matched_user_id

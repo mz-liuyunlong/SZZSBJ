@@ -24,11 +24,12 @@ def sample_rows():
             "platformOrderNo": f"order{n}",
             "settlementDate": "2026-10-01",
         }
-        rows.extend([
-            {**base, "rowIndex": 1, "salesNum": 5, "platformLogisticsAmount": 0},
-            {**base, "rowIndex": 2, "salesNum": 0,
-             "platformLogisticsAmount": "-34.75"},
-        ])
+        rows.extend(
+            [
+                {**base, "rowIndex": 1, "salesNum": 5, "platformLogisticsAmount": 0},
+                {**base, "rowIndex": 2, "salesNum": 0, "platformLogisticsAmount": "-34.75"},
+            ]
+        )
     return rows
 
 
@@ -54,7 +55,7 @@ def test_full_detection_with_dynamic_standard(monkeypatch):
         return {
             "code": 0,
             "total": len(rows),
-            "data": {"list": rows[offset:offset + params["length"]]},
+            "data": {"list": rows[offset : offset + params["length"]]},
         }
 
     result = module.run_wfs_read_only_detection(

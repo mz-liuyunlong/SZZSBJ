@@ -1,6 +1,6 @@
 import { FileTextOutlined, RobotOutlined } from "@ant-design/icons";
 import { Button, Card, Input, message, Modal, Space, Typography } from "antd";
-import { useEffect, useRef, useState, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import { fetchPagedOperationLogRows, fetchOperationLogDetail, saveOperationLogRows, saveOperationLink } from "@/pages/operations/operationLogApi";
 import type { OperationLogSystemRecord } from "@/pages/operations/operationLogTypes";
 import { resolveOperationLogLink } from "@/pages/operations/operationLogLinks";
@@ -51,7 +51,6 @@ function OperationLogPage({ page }: OperationLogPageProps) {
   const [detailRow, setDetailRow] = useState<OperationLogRow | null>(null);
 
   const [filters, setFilters] = useState<OperationLogFilters>(createOperationLogInitialFilters);
-  const [rangeStart, rangeEnd] = filters.dateRange;
 
   const [batchSearchOpen, setBatchSearchOpen] = useState(false);
   const [batchSearchText, setBatchSearchText] = useState("");
@@ -67,8 +66,17 @@ function OperationLogPage({ page }: OperationLogPageProps) {
     new Map<string, ReturnType<typeof fetchPagedOperationLogRows>>()
   );
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [settledRequestKey, setSettledRequestKey] = useState<string | null>(null);
   const [debouncedKeyword, setDebouncedKeyword] = useState(filters.keyword);
+  const queryFilters = useMemo(
+    () => ({ ...filters, keyword: debouncedKeyword }),
+    [filters, debouncedKeyword],
+  );
+  const requestKey = useMemo(
+    () => JSON.stringify([queryFilters, currentPage, pageSize]),
+    [queryFilters, currentPage, pageSize],
+  );
+  const loading = settledRequestKey !== requestKey;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -79,19 +87,7 @@ function OperationLogPage({ page }: OperationLogPageProps) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-
-    const queryFilters = {
-      ...filters,
-      keyword: debouncedKeyword,
-    };
-
     const inflight = pendingPageQueries.current;
-    const requestKey = JSON.stringify([
-      queryFilters,
-      currentPage,
-      pageSize,
-    ]);
 
     let pending = inflight.get(requestKey);
 
@@ -128,26 +124,13 @@ function OperationLogPage({ page }: OperationLogPageProps) {
         void messageApi.error("运营日志读取失败");
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setSettledRequestKey(requestKey);
       });
 
     return () => {
       active = false;
     };
-  }, [
-    rangeStart,
-    rangeEnd,
-    currentPage,
-    pageSize,
-    filters.owners,
-    filters.stores,
-    filters.workTypes,
-    filters.systemLog,
-    filters.searchField,
-    filters.batchValues,
-    debouncedKeyword,
-    messageApi,
-  ]);
+  }, [queryFilters, requestKey, currentPage, pageSize, messageApi]);
 
   const [linkEditor, setLinkEditor] = useState<{
     row: OperationLogRow;

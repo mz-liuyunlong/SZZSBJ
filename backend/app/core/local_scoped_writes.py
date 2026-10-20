@@ -4,6 +4,7 @@ Only used by an explicitly acknowledged local run. Authentication, authorization
 data-scope checks and business validation remain active on permitted routes.
 This is an HTTP entry-point restriction, not a PostgreSQL table-level permission.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,16 +21,21 @@ _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F
 _EXACT_POST_PATHS = frozenset(("/api/auth/login", "/api/auth/logout"))
 
 # Explicit operation-log business-write allowlist.
-_EXACT_PUT_PATHS = frozenset((
-    "/api/operations/logs/manual/batch",
-    "/api/operations/logs/links",
-))
-_POST_PATH_PATTERNS = tuple(re.compile(rf"{pattern}") for pattern in (
-    rf"/api/warehouse/wfs-fee-cases/{_UUID}/follow",
-    rf"/api/approvals/wfs-cases/{_UUID}/decision",
-    rf"/api/approvals/{_UUID}/decision",
-    rf"/api/approvals/{_UUID}/supplement",
-))
+_EXACT_PUT_PATHS = frozenset(
+    (
+        "/api/operations/logs/manual/batch",
+        "/api/operations/logs/links",
+    )
+)
+_POST_PATH_PATTERNS = tuple(
+    re.compile(rf"{pattern}")
+    for pattern in (
+        rf"/api/warehouse/wfs-fee-cases/{_UUID}/follow",
+        rf"/api/approvals/wfs-cases/{_UUID}/decision",
+        rf"/api/approvals/{_UUID}/decision",
+        rf"/api/approvals/{_UUID}/supplement",
+    )
+)
 
 
 def permitted_local_write(method: str, path: str) -> bool:
@@ -38,8 +44,7 @@ def permitted_local_write(method: str, path: str) -> bool:
         return path in _EXACT_PUT_PATHS
 
     return method == "POST" and (
-        path in _EXACT_POST_PATHS
-        or any(pattern.fullmatch(path) for pattern in _POST_PATH_PATTERNS)
+        path in _EXACT_POST_PATHS or any(pattern.fullmatch(path) for pattern in _POST_PATH_PATTERNS)
     )
 
 

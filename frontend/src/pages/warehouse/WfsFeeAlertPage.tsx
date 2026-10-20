@@ -75,7 +75,10 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   const [detailRow, setDetailRow] = useState<WfsFeeAlertRow>();
   const [abandonRow, setAbandonRow] = useState<WfsFeeAlertRow>();
   const [rows, setRows] = useState<WfsFeeAlertRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [settledRangeKey, setSettledRangeKey] = useState<string | null>(null);
+  const [rangeStart, rangeEnd] = filters.dateRange;
+  const requestedRangeKey = JSON.stringify([rangeStart, rangeEnd]);
+  const loading = settledRangeKey !== requestedRangeKey;
   const canFollow = hasPermission(permissions, "action:warehouse:wfs-fee-alert:follow");
   const canArchiveRequest = hasPermission(
     permissions,
@@ -95,12 +98,7 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   useEffect(() => {
     let cancelled = false;
 
-    setLoading(true);
-
-    void fetchWfsFeeAlerts(
-      filters.dateRange[0],
-      filters.dateRange[1],
-    )
+    void fetchWfsFeeAlerts(rangeStart, rangeEnd)
       .then((nextRows) => {
         if (!cancelled) {
           setRows(nextRows);
@@ -114,14 +112,14 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
       })
       .finally(() => {
         if (!cancelled) {
-          setLoading(false);
+          setSettledRangeKey(requestedRangeKey);
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [filters.dateRange, messageApi]);
+  }, [rangeStart, rangeEnd, requestedRangeKey, messageApi]);
 
   const stores = useMemo(() => [...new Set(rows.map((row) => row.store))], [rows]);
   const owners = useMemo(() => [...new Set(rows.map((row) => row.owner))], [rows]);

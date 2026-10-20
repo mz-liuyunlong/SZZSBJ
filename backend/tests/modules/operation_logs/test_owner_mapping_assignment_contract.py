@@ -1,4 +1,5 @@
 """Unit-level contracts for explicit owner-UID binding; never access a DB."""
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,30 +9,39 @@ from app.core.api import ApiError
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.operation_logs.access import LogAccess
 from app.modules.operation_logs.router import (
-    OwnerMappingWrite, assign_owner_mapping, put_owner_mapping,
+    OwnerMappingWrite,
+    assign_owner_mapping,
+    put_owner_mapping,
 )
 
 
 def request(method="POST"):
-    return Request({
-        "type": "http", "path": "/api/operations/logs/owner-mappings/assign",
-        "method": method, "headers": [],
-    })
+    return Request(
+        {
+            "type": "http",
+            "path": "/api/operations/logs/owner-mappings/assign",
+            "method": method,
+            "headers": [],
+        }
+    )
 
 
 def access(*, is_admin=True, accounts=frozenset({"primary"})):
-    return LogAccess(user_id=1, accounts=accounts, is_admin=is_admin,
-                     display_name="test admin")
+    return LogAccess(user_id=1, accounts=accounts, is_admin=is_admin, display_name="test admin")
 
 
 def payload(*, target=42, account="primary"):
-    return OwnerMappingWrite(source_account_ref=account, owner_uid="lingxing-test-uid",
-                             app_user_id=target)
+    return OwnerMappingWrite(
+        source_account_ref=account, owner_uid="lingxing-test-uid", app_user_id=target
+    )
 
 
-def session_with_source(monkeypatch, *, owner_scope={"primary"}, source=None):
+def session_with_source(monkeypatch, *, owner_scope=None, source=None):
+    if owner_scope is None:
+        owner_scope = {"primary"}
     monkeypatch.setattr(
-        RbacRepository, "resolve_user_data_scope",
+        RbacRepository,
+        "resolve_user_data_scope",
         lambda self, *, user_id, scope_type: owner_scope,
     )
     session = MagicMock()
@@ -78,8 +88,10 @@ def test_existing_same_uid_is_idempotent(monkeypatch):
     result = assign_owner_mapping(request(), payload(), session, None, access())
     assert result.data == {"saved": True, "created": False}
     session.commit.assert_called_once()
-    assert not any("ops_lingxing_owner_mapping_audit" in str(call.args[0])
-                   for call in session.execute.call_args_list)
+    assert not any(
+        "ops_lingxing_owner_mapping_audit" in str(call.args[0])
+        for call in session.execute.call_args_list
+    )
 
 
 def test_target_must_have_source_account_scope(monkeypatch):
@@ -103,17 +115,13 @@ def test_actor_must_be_admin(monkeypatch):
 def test_actor_must_have_source_account(monkeypatch):
     session = session_with_source(monkeypatch)
     with pytest.raises(ApiError) as error:
-        assign_owner_mapping(
-            request(), payload(account="secondary"), session, None, access()
-        )
+        assign_owner_mapping(request(), payload(account="secondary"), session, None, access())
     assert error.value.status_code == 403
     session.scalar.assert_not_called()
 
 
 def test_uncertain_source_identity_denied(monkeypatch):
-    session = session_with_source(
-        monkeypatch, source={"rows": 2, "names": 2, "blanks": 0}
-    )
+    session = session_with_source(monkeypatch, source={"rows": 2, "names": 2, "blanks": 0})
     session.scalar.return_value = True
     with pytest.raises(ApiError) as error:
         assign_owner_mapping(request(), payload(), session, None, access())

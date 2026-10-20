@@ -17,14 +17,18 @@ def main() -> int:
     with get_session_factory()() as session:
         session.execute(text("SET TRANSACTION READ ONLY"))
 
-        accounts = session.execute(
-            text(
-                "SELECT DISTINCT source_account_ref "
-                "FROM dim_lingxing_stores "
-                "WHERE platform_code = 'walmart' "
-                "OR platform_code_raw = '10008'"
+        accounts = (
+            session.execute(
+                text(
+                    "SELECT DISTINCT source_account_ref "
+                    "FROM dim_lingxing_stores "
+                    "WHERE platform_code = 'walmart' "
+                    "OR platform_code_raw = '10008'"
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         print("SOURCE_ACCOUNT_COUNT:", len(accounts))
 

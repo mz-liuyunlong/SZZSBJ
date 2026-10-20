@@ -75,11 +75,7 @@ def collect_wfs_settlements(
         top_total = response.get("total")
         nested_total = data.get("total") if isinstance(data, dict) else None
 
-        if (
-            top_total is not None
-            and nested_total is not None
-            and top_total != nested_total
-        ):
+        if top_total is not None and nested_total is not None and top_total != nested_total:
             raise WfsCollectionError("WFS_CONFLICTING_TOTAL")
 
         total = top_total if top_total is not None else nested_total

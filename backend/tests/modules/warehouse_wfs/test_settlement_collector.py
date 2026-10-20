@@ -22,10 +22,7 @@ def collect(fetch):
 def test_complete_pagination():
     def fetch(_interface, params):
         offset = params["offset"]
-        rows = [
-            {"uniqueId": "u", "rowIndex": i}
-            for i in range(offset, min(offset + 2, 3))
-        ]
+        rows = [{"uniqueId": "u", "rowIndex": i} for i in range(offset, min(offset + 2, 3))]
         return {"code": 0, "total": 3, "data": {"list": rows}}
 
     result = collect(fetch)
@@ -35,20 +32,20 @@ def test_complete_pagination():
 
 
 def test_empty_result():
-    result = collect(
-        lambda *_: {"code": 0, "total": 0, "data": {"list": []}}
-    )
+    result = collect(lambda *_: {"code": 0, "total": 0, "data": {"list": []}})
     assert result.rows == ()
 
 
 def test_duplicate_line_rejected():
     def fetch(_interface, params):
-        rows = [
-            {"uniqueId": "u", "rowIndex": 1},
-            {"uniqueId": "u", "rowIndex": 2},
-        ] if params["offset"] == 0 else [
-            {"uniqueId": "u", "rowIndex": 2}
-        ]
+        rows = (
+            [
+                {"uniqueId": "u", "rowIndex": 1},
+                {"uniqueId": "u", "rowIndex": 2},
+            ]
+            if params["offset"] == 0
+            else [{"uniqueId": "u", "rowIndex": 2}]
+        )
         return {"code": 0, "total": 3, "data": {"list": rows}}
 
     with pytest.raises(WfsCollectionError, match="WFS_DUPLICATE_LINE"):

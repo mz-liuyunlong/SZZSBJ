@@ -119,25 +119,21 @@ def main() -> int:
 
         objects = [r for r in records if isinstance(r, dict)]
         counts = Counter(
-            key
-            for row in objects
-            for key in REQUIRED_FIELDS
-            if row.get(key) is not None
+            key for row in objects for key in REQUIRED_FIELDS if row.get(key) is not None
         )
 
         print("REQUIRED_FIELD_PRESENCE:")
         for key in REQUIRED_FIELDS:
             print(f"  {key}: {counts[key]}/{len(objects)}")
 
-        print("UNSAFE_FLOAT_STORE_ID_ROWS:", sum(
-            isinstance(row.get("storeId"), float)
-            for row in objects
-        ))
+        print(
+            "UNSAFE_FLOAT_STORE_ID_ROWS:",
+            sum(isinstance(row.get("storeId"), float) for row in objects),
+        )
 
-        print("ZERO_SALES_ROWS:", sum(
-            str(row.get("salesNum", "")) in ("0", "0.0")
-            for row in objects
-        ))
+        print(
+            "ZERO_SALES_ROWS:", sum(str(row.get("salesNum", "")) in ("0", "0.0") for row in objects)
+        )
 
         print("RAW_OUTPUT: DISABLED")
         print("DATABASE_WRITES: 0")

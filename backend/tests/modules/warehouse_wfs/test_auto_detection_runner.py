@@ -59,9 +59,7 @@ def test_one_store_failure_isolated(monkeypatch):
             raise RuntimeError("provider unavailable")
         return fake_result(2)
 
-    monkeypatch.setattr(
-        runner, "run_wfs_read_only_detection", detect
-    )
+    monkeypatch.setattr(runner, "run_wfs_read_only_detection", detect)
     summary = runner.run_wfs_batch_read_only(
         session_factory=make_session,
         fetch_page=lambda *_: {},
@@ -81,9 +79,7 @@ def test_request_cap(monkeypatch):
         fetch_page("interface", {})
         return fake_result()
 
-    monkeypatch.setattr(
-        runner, "run_wfs_read_only_detection", detect
-    )
+    monkeypatch.setattr(runner, "run_wfs_read_only_detection", detect)
     summary = runner.run_wfs_batch_read_only(
         session_factory=make_session,
         fetch_page=lambda *_: {},

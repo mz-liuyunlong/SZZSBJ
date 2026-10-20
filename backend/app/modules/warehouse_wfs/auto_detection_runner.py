@@ -59,13 +59,9 @@ def run_wfs_batch_read_only(
     ):
         raise ValueError("WFS_BATCH_LIMIT_EXCEEDED")
 
-    identities = [
-        (s.source_account_ref, s.store_id)
-        for s in stores
-    ]
-    if (
-        len(set(identities)) != len(identities)
-        or any(not account or not store for account, store in identities)
+    identities = [(s.source_account_ref, s.store_id) for s in stores]
+    if len(set(identities)) != len(identities) or any(
+        not account or not store for account, store in identities
     ):
         raise ValueError("WFS_DUPLICATE_OR_INVALID_STORE")
 

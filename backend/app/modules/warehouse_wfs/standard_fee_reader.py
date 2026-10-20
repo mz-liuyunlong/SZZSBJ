@@ -86,31 +86,20 @@ def read_product_management_wfs_fee(
         )
     )
     profile = session.scalar(
-        select(SkuBaseProfileCurrent).where(
-            SkuBaseProfileCurrent.identity_id == identity.id
-        )
+        select(SkuBaseProfileCurrent).where(SkuBaseProfileCurrent.identity_id == identity.id)
     )
 
-    effective_rules = ProductManagementRepository(
-        session
-    ).list_effective_rules(
+    effective_rules = ProductManagementRepository(session).list_effective_rules(
         datetime.now(UTC),
         frozenset({source_account_ref}),
     )
     active_rule = effective_rules.get(source_account_ref)
 
     rule = ProductManagementService._sku_pricing_rule(active_rule)
-    calculation = ProductManagementService._sku_pricing_calculation(
-        current, profile, 0, rule
-    )
+    calculation = ProductManagementService._sku_pricing_calculation(current, profile, 0, rule)
 
     fee = calculation.wfs_fulfillment_fee_usd
-    if (
-        calculation.wfs_calc_status != "ok"
-        or fee is None
-        or not fee.is_finite()
-        or fee <= 0
-    ):
+    if calculation.wfs_calc_status != "ok" or fee is None or not fee.is_finite() or fee <= 0:
         return None
 
     return WfsStandardFee(
@@ -120,8 +109,6 @@ def read_product_management_wfs_fee(
         unit_fee=fee,
         source="product_management_live",
         rule_version=(
-            active_rule.version
-            if active_rule is not None
-            else "sku-pricing-defaults-v1"
+            active_rule.version if active_rule is not None else "sku-pricing-defaults-v1"
         ),
     )

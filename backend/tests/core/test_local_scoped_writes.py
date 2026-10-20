@@ -1,4 +1,5 @@
 """Fail-closed local production-tunnel write policy (no real DB)."""
+
 from __future__ import annotations
 
 from app.core.local_scoped_writes import permitted_local_write
@@ -8,7 +9,8 @@ ID = "00000000-0000-0000-0000-000000000001"
 
 def test_explicitly_allowed_writes() -> None:
     allowed = (
-        "/api/auth/login", "/api/auth/logout",
+        "/api/auth/login",
+        "/api/auth/logout",
         f"/api/warehouse/wfs-fee-cases/{ID}/follow",
         f"/api/approvals/wfs-cases/{ID}/decision",
         f"/api/approvals/{ID}/decision",

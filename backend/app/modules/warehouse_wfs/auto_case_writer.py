@@ -33,19 +33,20 @@ def build_wfs_case_insert(
     if not item_id or not item_id.strip():
         raise WfsCaseWriteError("WFS_ITEM_ID_REQUIRED")
 
-    if not all((
-        candidate.source_account_ref,
-        candidate.store_id,
-        candidate.msku,
-    )):
+    if not all(
+        (
+            candidate.source_account_ref,
+            candidate.store_id,
+            candidate.msku,
+        )
+    ):
         raise WfsCaseWriteError("WFS_INVALID_CASE_IDENTITY")
 
     if (
         candidate.actual_unit_fee <= 0
         or candidate.standard_unit_fee <= 0
         or candidate.unit_overcharge <= 0
-        or candidate.actual_unit_fee - candidate.standard_unit_fee
-        != candidate.unit_overcharge
+        or candidate.actual_unit_fee - candidate.standard_unit_fee != candidate.unit_overcharge
     ):
         raise WfsCaseWriteError("WFS_INVALID_FEE_DIFFERENCE")
 

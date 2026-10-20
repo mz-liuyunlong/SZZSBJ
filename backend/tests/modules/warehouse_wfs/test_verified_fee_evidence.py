@@ -10,34 +10,33 @@ def rows_for(rate, quantity, start):
     rows = []
     for index in range(quantity):
         order = f"order-{start + index}"
-        rows.extend([
-            {
-                "msku": "YC00115-1A",
-                "platformOrderNo": order,
-                "uniqueId": f"sale-{start + index}",
-                "rowIndex": 0,
-                "salesNum": 1,
-                "platformLogisticsAmount": 0,
-                "settlementDate": "2026-09-10",
-            },
-            {
-                "msku": "YC00115-1A",
-                "platformOrderNo": order,
-                "uniqueId": f"fee-{start + index}",
-                "rowIndex": 1,
-                "salesNum": 0,
-                "platformLogisticsAmount": str(-rate),
-                "settlementDate": "2026-09-10",
-            },
-        ])
+        rows.extend(
+            [
+                {
+                    "msku": "YC00115-1A",
+                    "platformOrderNo": order,
+                    "uniqueId": f"sale-{start + index}",
+                    "rowIndex": 0,
+                    "salesNum": 1,
+                    "platformLogisticsAmount": 0,
+                    "settlementDate": "2026-09-10",
+                },
+                {
+                    "msku": "YC00115-1A",
+                    "platformOrderNo": order,
+                    "uniqueId": f"fee-{start + index}",
+                    "rowIndex": 1,
+                    "salesNum": 0,
+                    "platformLogisticsAmount": str(-rate),
+                    "settlementDate": "2026-09-10",
+                },
+            ]
+        )
     return rows
 
 
 def test_evidenced_overcharge_and_legacy_estimate():
-    rows = (
-        rows_for(Decimal("6.26"), 49, 0)
-        + rows_for(Decimal("6.95"), 38, 100)
-    )
+    rows = rows_for(Decimal("6.26"), 49, 0) + rows_for(Decimal("6.95"), 38, 100)
     result = analyze_wfs_evidence(
         rows,
         msku="YC00115-1A",

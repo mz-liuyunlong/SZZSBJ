@@ -1,14 +1,9 @@
 """Paginated operation log listing with server-side ownership enforcement."""
+
 from __future__ import annotations
 
-from app.core.permissions import has_permission
-from app.modules.data_pages.field_access import (
-    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
-)
-
-from json import dumps
-
 from datetime import date, datetime
+from json import dumps
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
@@ -18,8 +13,11 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_any_permission
+from app.core.permissions import has_permission, require_any_permission
 from app.db.session import get_db_session
+from app.modules.data_pages.field_access import (
+    ORDER_PROFIT_GROSS_PROFIT_PERMISSION,
+)
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.operation_logs.access import LogAccess, owns_sku_sql, require_log_access
 
@@ -36,7 +34,7 @@ with current_keys as (
     cast(:start as date), cast(:end as date), interval '1 day'
   ) dates(day)
   where l.source_account_ref = any(:accounts)
-    and (:is_admin or {owns_sku_sql('l')} or exists (
+    and (:is_admin or {owns_sku_sql("l")} or exists (
       select 1 from ops_manual_operation_logs own
       where own.source_account_ref = l.source_account_ref
         and own.store_id = l.store_id and own.item_id = l.item_id
@@ -71,7 +69,7 @@ with current_keys as (
         and d.store_id = h.store_id and d.item_id = h.item_id
         and coalesce(d.msku, '') = h.msku
         and d.business_date_la = h.log_date
-        and {owns_sku_sql('d')}
+        and {owns_sku_sql("d")}
     ) or exists (
       select 1 from ops_manual_operation_logs own
       where own.source_account_ref = h.source_account_ref
@@ -204,43 +202,42 @@ with current_keys as (
 )
 """
 
+
 @router.get("/rows/query")
 def query_rows(
     request: Request,
     session: Annotated[Session, Depends(get_db_session)],
     _: Annotated[
         Principal,
-        Depends(require_any_permission(
-            "page:operations:log:view",
-            "page:sales:daily-sales:view",
-        )),
+        Depends(
+            require_any_permission(
+                "page:operations:log:view",
+                "page:sales:daily-sales:view",
+            )
+        ),
     ],
-    accounts: Annotated[
-        frozenset[str], Depends(require_source_account_scope)
-    ],
+    accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
     access: Annotated[LogAccess, Depends(require_log_access)],
     start_date: date | None = None,
     end_date: date | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    owner: list[str] | None = Query(None),
-    store: list[str] | None = Query(None),
-    work_type: list[str] | None = Query(None),
+    owner: Annotated[list[str] | None, Query()] = None,
+    store: Annotated[list[str] | None, Query()] = None,
+    work_type: Annotated[list[str] | None, Query()] = None,
     system_log: Literal["all", "has", "missing"] = "all",
     search_field: Literal[
         "productId", "sku", "productName", "store", "owner", "date"
     ] = "productId",
     keyword: str = "",
-    batch_value: list[str] | None = Query(None),
+    batch_value: Annotated[list[str] | None, Query()] = None,
     include_events: bool = False,
 ):
     today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
     start, end = start_date or today, end_date or today
 
     if start > end or (end - start).days > 30 or end > today:
-        raise ApiError(
-            code="OPERATION_LOG_DATE_RANGE_INVALID", status_code=422
-        )
+        raise ApiError(code="OPERATION_LOG_DATE_RANGE_INVALID", status_code=422)
 
     allowed = list(access.accounts.intersection(accounts))
     if not allowed:
@@ -269,16 +266,16 @@ def query_rows(
         "search_field": search_field,
         "keyword": "%" + keyword.strip() + "%",
         "batch_empty": not bool(batch_value),
-        "batch_values": [
-            value.strip() for value in (batch_value or [])
-            if value.strip()
-        ],
+        "batch_values": [value.strip() for value in (batch_value or []) if value.strip()],
         "limit": page_size,
         "offset": (page - 1) * page_size,
     }
 
-    results = session.execute(
-        text(_SQL + """
+    results = (
+        session.execute(
+            text(
+                _SQL
+                + """
         select f.*, count(*) over() as page_total,
           (select count(*) from ops_system_operation_events e
            where e.source_account_ref = f.source_account_ref
@@ -304,20 +301,20 @@ def query_rows(
         order by f.log_date desc, f.source_account_ref,
                  f.store_id, f.item_id, f.msku
         limit :limit offset :offset
-        """),
-        params,
-    ).mappings().all()
+        """
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
 
     # One query returns the selected page and its filtered total.
     # An empty page still requires a count query for correct pagination.
     total = (
         int(results[0]["page_total"])
         if results
-        else int(
-            session.scalar(
-                text(_SQL + "select count(*) from filtered"), params
-            ) or 0
-        )
+        else int(session.scalar(text(_SQL + "select count(*) from filtered"), params) or 0)
     )
 
     # LEGACY_HISTORY_PAGE_OVERLAY_V2
@@ -336,8 +333,9 @@ def query_rows(
             for r in results
         ]
 
-        historic = session.execute(
-            text(f"""
+        historic = (
+            session.execute(
+                text(f"""
                 with selected as (
                     select x.day::date as day,
                            x.account, x.store, x.item, x.msku
@@ -401,18 +399,18 @@ def query_rows(
                     ) as legacy_count
                 from authorized s
             """),
-            {
-                "keys": dumps(keys, ensure_ascii=False),
-                "is_admin": access.is_admin,
-                "user_id": access.user_id,
-            },
-        ).mappings().all()
+                {
+                    "keys": dumps(keys, ensure_ascii=False),
+                    "is_admin": access.is_admin,
+                    "user_id": access.user_id,
+                },
+            )
+            .mappings()
+            .all()
+        )
 
         history_by_key = {
-            (
-                h["day"], h["account"], h["store"],
-                h["item"], h["msku"]
-            ): {
+            (h["day"], h["account"], h["store"], h["item"], h["msku"]): {
                 "content": h["legacy_content"],
                 "count": int(h["legacy_count"]),
             }
@@ -441,8 +439,9 @@ def query_rows(
     metrics_by_key = {}
 
     if metric_keys:
-        metrics = session.execute(
-            text("""
+        metrics = (
+            session.execute(
+                text("""
                 WITH selected AS (
                     SELECT
                         x.day::date AS day,
@@ -507,36 +506,36 @@ def query_rows(
                  AND inventory_day.item_id = s.item
                  AND inventory_day.snapshot_date_la = s.day
             """),
-            {
-                "metric_keys": dumps(
-                    metric_keys, ensure_ascii=False
-                ),
-                "profit_allowed": profit_allowed,
-            },
-        ).mappings().all()
+                {
+                    "metric_keys": dumps(metric_keys, ensure_ascii=False),
+                    "profit_allowed": profit_allowed,
+                },
+            )
+            .mappings()
+            .all()
+        )
 
         metrics_by_key = {
-            (
-                m["day"], m["account"], m["store"],
-                m["item"], m["msku"]
-            ): m
-            for m in metrics
+            (m["day"], m["account"], m["store"], m["item"], m["msku"]): m for m in metrics
         }
 
     # OPLOG_VERIFIED_OWNER_DISPLAY_V1
     # Resolve display names through the authenticated UID mapping.
     # Never grant access by comparing a person's name.
-    owner_keys = sorted({
-        (str(r["source_account_ref"]), str(r["sku"]))
-        for r in results
-        if r["source_account_ref"] and r["sku"]
-    })
+    owner_keys = sorted(
+        {
+            (str(r["source_account_ref"]), str(r["sku"]))
+            for r in results
+            if r["source_account_ref"] and r["sku"]
+        }
+    )
 
     owner_names = {}
 
     if owner_keys:
-        owner_rows = session.execute(
-            text("""
+        owner_rows = (
+            session.execute(
+                text("""
                 WITH identities AS (
                     SELECT DISTINCT
                         k.account,
@@ -570,18 +569,20 @@ def query_rows(
                  AND m.app_user_id = :user_id
                 GROUP BY k.account, k.sku
             """),
-            {
-                "owner_keys": dumps([
-                    {"account": account, "sku": sku}
-                    for account, sku in owner_keys
-                ], ensure_ascii=False),
-                "user_id": access.user_id,
-            },
-        ).mappings().all()
+                {
+                    "owner_keys": dumps(
+                        [{"account": account, "sku": sku} for account, sku in owner_keys],
+                        ensure_ascii=False,
+                    ),
+                    "user_id": access.user_id,
+                },
+            )
+            .mappings()
+            .all()
+        )
 
         owner_names = {
-            (str(row["account"]), str(row["sku"])):
-                str(row["owner_name"]).strip()
+            (str(row["account"]), str(row["sku"])): str(row["owner_name"]).strip()
             for row in owner_rows
             if row["owner_name"]
         }
@@ -590,13 +591,15 @@ def query_rows(
     revisions = {}
 
     for r in results:
-        row_id = "|".join((
-            r["log_date"].isoformat(),
-            r["source_account_ref"],
-            r["store_id"],
-            r["item_id"],
-            r["msku"],
-        ))
+        row_id = "|".join(
+            (
+                r["log_date"].isoformat(),
+                r["source_account_ref"],
+                r["store_id"],
+                r["item_id"],
+                r["msku"],
+            )
+        )
 
         revisions[row_id] = int(r["revision"])
 
@@ -611,7 +614,6 @@ def query_rows(
             {},
         )
 
-
         legacy = history_by_key.get(
             (
                 r["log_date"],
@@ -623,72 +625,67 @@ def query_rows(
             {"content": "", "count": 0},
         )
 
-        rows.append({
-            "id": row_id,
-            "date": r["log_date"].isoformat(),
-            "sourceAccountRef": r["source_account_ref"],
-            "storeId": r["store_id"],
-            "msku": r["msku"],
-            "productId": r["item_id"],
-            "sku": r["sku"],
-            "productName": r["title"],
-            "store": r["store_name"],
-            "owner": (
-                owner_names.get((
-                    str(r["source_account_ref"]),
-                    str(r["sku"]),
-                ))
-                or access.display_name
-            ),
-            "workType": r["work_type"],
-            "workTypes": list(r["work_types_json"] or []),
-            "observeDays": r["observe_days"],
-            "conversionRate": None,
-            "salePrice": float(r["price"]) if r["price"] is not None else None,
-            "keywordEntryStatus": "ok" if r["keyword_url"] else "missing",
-            "keywordUrl": r["keyword_url"],
-            "adEntryStatus": "ok" if r["ad_url"] else "missing",
-            "adUrl": r["ad_url"],
-            "systemLogCount": int(r["system_count"]),
-            "profit7d": (
-                float(metric["profit_7d"])
-                if metric.get("profit_7d") is not None
-                else None
-            ),
-            "wfsAvailableInventory": (
-                float(metric["wfs_available"])
-                if metric.get("wfs_available") is not None
-                else None
-            ),
-            "manualLog": r["manual_content"],
-            "legacyManualLog": legacy["content"],
-            "legacyManualCount": legacy["count"],
-            "manualEntryCount": (
-                int(r["manual_count"])
-                + (0 if access.is_admin else legacy["count"])
-            ),
-            "status": (
-                "已保存"
-                if (
-                    r["edit_status"] == "submitted"
-                    or (
-                        not r["manual_content"]
-                        and bool(legacy["content"])
+        rows.append(
+            {
+                "id": row_id,
+                "date": r["log_date"].isoformat(),
+                "sourceAccountRef": r["source_account_ref"],
+                "storeId": r["store_id"],
+                "msku": r["msku"],
+                "productId": r["item_id"],
+                "sku": r["sku"],
+                "productName": r["title"],
+                "store": r["store_name"],
+                "owner": (
+                    owner_names.get(
+                        (
+                            str(r["source_account_ref"]),
+                            str(r["sku"]),
+                        )
                     )
-                )
-                else "草稿" if r["manual_content"]
-                else "缺记录"
-            ),
-        })
+                    or access.display_name
+                ),
+                "workType": r["work_type"],
+                "workTypes": list(r["work_types_json"] or []),
+                "observeDays": r["observe_days"],
+                "conversionRate": None,
+                "salePrice": float(r["price"]) if r["price"] is not None else None,
+                "keywordEntryStatus": "ok" if r["keyword_url"] else "missing",
+                "keywordUrl": r["keyword_url"],
+                "adEntryStatus": "ok" if r["ad_url"] else "missing",
+                "adUrl": r["ad_url"],
+                "systemLogCount": int(r["system_count"]),
+                "profit7d": (
+                    float(metric["profit_7d"]) if metric.get("profit_7d") is not None else None
+                ),
+                "wfsAvailableInventory": (
+                    float(metric["wfs_available"])
+                    if metric.get("wfs_available") is not None
+                    else None
+                ),
+                "manualLog": r["manual_content"],
+                "legacyManualLog": legacy["content"],
+                "legacyManualCount": legacy["count"],
+                "manualEntryCount": (
+                    int(r["manual_count"]) + (0 if access.is_admin else legacy["count"])
+                ),
+                "status": (
+                    "已保存"
+                    if (
+                        r["edit_status"] == "submitted"
+                        or (not r["manual_content"] and bool(legacy["content"]))
+                    )
+                    else "草稿"
+                    if r["manual_content"]
+                    else "缺记录"
+                ),
+            }
+        )
 
     events = []
 
-    if include_events and any(
-        int(r["system_count"]) > 0 for r in results
-    ):
-        event_targets = [
-            r for r in results if int(r["system_count"]) > 0
-        ]
+    if include_events and any(int(r["system_count"]) > 0 for r in results):
+        event_targets = [r for r in results if int(r["system_count"]) > 0]
         conditions = []
 
         for i, r in enumerate(event_targets):
@@ -699,26 +696,36 @@ def query_rows(
                 f"and e.item_id=:ei{i} "
                 f"and e.msku=:em{i})"
             )
-            params.update({
-                f"ea{i}": r["source_account_ref"],
-                f"ed{i}": r["log_date"],
-                f"es{i}": r["store_id"],
-                f"ei{i}": r["item_id"],
-                f"em{i}": r["msku"],
-            })
+            params.update(
+                {
+                    f"ea{i}": r["source_account_ref"],
+                    f"ed{i}": r["log_date"],
+                    f"es{i}": r["store_id"],
+                    f"ei{i}": r["item_id"],
+                    f"em{i}": r["msku"],
+                }
+            )
 
-        records = session.execute(
-            text("""
+        records = (
+            session.execute(
+                text(
+                    """
             select e.legacy_id, e.source_account_ref,
                    e.event_date, e.store_id, e.item_id, e.msku,
                    e.action_type, e.object_name, e.log_content
             from ops_system_operation_events e
-            where """ + " or ".join(conditions) + """
+            where """
+                    + " or ".join(conditions)
+                    + """
             order by e.event_date desc, e.legacy_id
             limit 20001
-            """),
-            params,
-        ).mappings().all()
+            """
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
 
         if len(records) > 20000:
             raise ApiError(
