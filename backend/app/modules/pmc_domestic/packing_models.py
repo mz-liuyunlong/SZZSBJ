@@ -3,7 +3,6 @@
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
-from app.db.base import Base
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -20,6 +19,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
 
 J = JSON().with_variant(JSONB(), "postgresql")
 
@@ -153,7 +154,9 @@ class PackingEvent(Base):
         UniqueConstraint("source_account_ref", "idempotency_key"),
         UniqueConstraint("order_id", "order_version"),
         CheckConstraint(
-            "event_kind IN ('approve','reject','link','void','test')", name="packing_event_kind"
+            "event_kind IN ('approve','reject','link','void','test','boxes','done',"
+            "'customs','note','unpacked','rebox','ib','sync')",
+            name="packing_event_kind",
         ),
     )
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

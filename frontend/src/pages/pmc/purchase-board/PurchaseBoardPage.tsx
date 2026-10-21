@@ -6,7 +6,7 @@
  * approved `/api/pmc/purchase/*` contract only; no export, no push, no manual override yet
  * (the 交期修正 Modal is Gate 4b and needs `pmc:purchase:override`).
  */
-import { Alert, Button, Card, Typography, message } from "antd";
+import { Alert, Button, Card, message } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
@@ -41,7 +41,6 @@ import {
   type PurchaseBoardFilters,
   type PurchaseBoardMoreFilters,
 } from "@/pages/pmc/purchase-board/purchaseBoardTypes";
-import { formatDateTime } from "@/shared/formatters";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import "@/pages/pmc/purchase-board/PurchaseBoardPage.css";
@@ -112,7 +111,6 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
 
   const rows = listQuery.data?.rows ?? [];
   const total = listQuery.data?.total ?? 0;
-  const meta = listQuery.data?.meta ?? summaryQuery.data?.meta;
   const isRequesting = listQuery.isFetching || summaryQuery.isFetching;
 
   const shownErrorsRef = useRef(new Set<string>());
@@ -166,18 +164,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
         <Card size="small" className="purchase-board__page-card">
           <RequestLoadingOverlay spinning={isRequesting && !listQuery.data} label="正在加载采购看板，请稍候" />
           <div className="purchase-board__title-row">
-            <div>
-              <h1>采购看板</h1>
-              <p>
-                采购单明细 × 计划的进度、逾期、ItemID 归属与交期看板；只读 DWS，不含未转单的采购计划。
-                {meta?.freshnessAt && (
-                  <Typography.Text type="secondary" className="purchase-board__freshness">
-                    数据更新 {formatDateTime(meta.freshnessAt)}
-                    {meta.ruleVersion !== null && meta.ruleVersion !== undefined ? ` · 规则版本 v${meta.ruleVersion}` : ""}
-                  </Typography.Text>
-                )}
-              </p>
-            </div>
+            <h1>采购看板</h1>
           </div>
 
           <Card size="small" className="purchase-board__toolbar-card">

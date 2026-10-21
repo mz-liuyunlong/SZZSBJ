@@ -1,6 +1,6 @@
 /** Local API composition; source selection and approvals remain server-owned. */
 import { Alert, Button, Card, Space, Tooltip, Typography, message } from "antd";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import PackingApprovalHistory from "./PackingApprovalHistory";
 import ManualPackingModal from "./ManualPackingModal";
@@ -11,8 +11,8 @@ import { approvalErrorText, type ApprovalCandidate, type DecisionKind, type Deci
 import { usePackingApproval } from "./packingApprovalQueries";
 import { initialPackingApprovalFilters, type PackingApprovalFilters } from "./packingApprovalTypes";
 import "./PackingApprovalPanel.css";
-interface Props { preferenceScope: string; storeOptions: { value: string; label: string }[]; optionsLoading: boolean }
-export default function PackingApprovalPanel({ preferenceScope }: Props) {
+interface Props { preferenceScope: string; storeOptions: { value: string; label: string }[]; optionsLoading: boolean; onListFetching?: (fetching: boolean) => void }
+export default function PackingApprovalPanel({ preferenceScope, onListFetching }: Props) {
   const scope = `domestic-approval:${preferenceScope}`;
   const [filters, setFilters] = usePageStateCache<PackingApprovalFilters>(`${scope}:filters`, initialPackingApprovalFilters);
   const [pagination, setPagination] = usePageStateCache(`${scope}:pagination`, { page: 1, pageSize: 50 });
@@ -23,6 +23,10 @@ export default function PackingApprovalPanel({ preferenceScope }: Props) {
   const retryRequest = useRef<{ signature: string; key: string } | undefined>(undefined);
   const [messages, context] = message.useMessage();
   const api = usePackingApproval(filters, pagination.page, pagination.pageSize, preferenceScope, historyOpen, historyPage);
+  useEffect(() => {
+    onListFetching?.(api.list.isFetching);
+    return () => onListFetching?.(false);
+  }, [api.list.isFetching, onListFetching]);
   const perms = api.user.data?.permissions ?? [];
   const permission = (kind: DecisionKind) => perms.includes("*") || perms.includes(`action:pmc:domestic-warehouse-board:packing-${kind}`);
   const commitFilters = (next: PackingApprovalFilters) => {
@@ -53,14 +57,12 @@ export default function PackingApprovalPanel({ preferenceScope }: Props) {
   return <section className="domestic-approval" aria-label="打包单审批内容">{context}
     <Card size="small" className="domestic-board__toolbar-card"><PackingApprovalToolbar filters={filters} storeOptions={api.options.data?.data.stores ?? []} optionsLoading={api.options.isFetching}
       onChange={commitFilters} onReset={() => commitFilters(initialPackingApprovalFilters())} /></Card>
-    <Alert className="domestic-approval__notice" type="info" showIcon message="本地打包审批已接通"
-      description="审批仅写入本地验证单，不创建领星 OWS。历史审批覆盖和收货明细尚未齐全；未知资料保留为空，资料不足的行会阻止通过。" />
     {error && <Alert type="error" showIcon message={approvalErrorText(error)} action={<Button onClick={() => void api.refresh()}>重试</Button>} />}
     {api.user.error && <Alert type="warning" message="审批权限加载失败，请刷新登录状态；暂不开放审批操作" />}
     <div className="domestic-approval__summary-row"><Typography.Text>待审批打包单（待审 {stats?.pending ?? "—"}，超时 {stats?.overdue ?? "—"}，待补资料 {stats?.blocked ?? "—"}；已审 {stats ? stats.approved + stats.rejected : "—"}）</Typography.Text>
       <Space><Button onClick={() => setHistoryOpen(true)}>审批记录</Button><Button onClick={() => void api.refresh()}>刷新</Button><Tooltip title="先选入库单×SKU，再填写目标商品与数量"><Button disabled={!(perms.includes("*") || perms.includes("action:pmc:domestic-warehouse-board:packing-manual-create"))} onClick={() => setManualOpen(true)}>手工添加打包单</Button></Tooltip></Space></div>
     <div className="domestic-board__table-wrap"><PackingApprovalTable rows={api.list.error ? [] : api.list.data?.data.items ?? []} total={api.list.error ? 0 : api.list.data?.data.total ?? 0}
-      loading={api.list.isFetching} canApprove={permission("approve")} canReject={permission("reject")} busy={api.decision.isPending}
+      canApprove={permission("approve")} canReject={permission("reject")} busy={api.decision.isPending}
       onDecision={(row, kind) => { retryRequest.current = undefined; setSelected({ row, kind }); }} pagination={pagination} widths={widths} sort={filters.sort}
       onPagination={(page, pageSize) => setPagination({ page, pageSize })} onResize={(key, width) => setWidths({ ...widths, [key]: width })} onSort={(sort) => commitFilters({ ...filters, sort })} /></div>
     {manualOpen && <ManualPackingModal open={manualOpen} scope={preferenceScope} onCancel={() => setManualOpen(false)} onSubmitted={() => { setManualOpen(false); void messages.success("已提交待审批，通过后才生成PK"); void api.refresh(); }} />}

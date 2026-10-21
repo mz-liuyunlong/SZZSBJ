@@ -62,7 +62,6 @@ describe("packing approval copy cells", () => {
         sort="created_desc"
         rows={[candidate()]}
         total={1}
-        loading={false}
         canApprove
         canReject
         busy={false}
@@ -88,7 +87,6 @@ describe("packing approval copy cells", () => {
         sort="created_desc"
         rows={[candidate({ gtin: null, item_id: null, purchase_order_sns: [] })]}
         total={1}
-        loading={false}
         canApprove
         canReject
         busy={false}

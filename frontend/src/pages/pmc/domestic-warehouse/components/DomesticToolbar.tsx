@@ -42,7 +42,7 @@ export default function DomesticToolbar({ filters, filterOptions, optionsLoading
         className="domestic-board__search" typeAriaLabel="搜索类型" typeValue={filters.searchType}
         typeOptions={domesticSearchOptions} inputAriaLabel="搜索国内仓批次"
         inputPlaceholder={filters.batchValues?.length ? `已提交 ${filters.batchValues.length} 项` : "输入 SKU 或单号"}
-        inputValue={filters.search} searchButtonText="搜索" batchPlacement="before-search"
+        inputValue={filters.search} searchAriaLabel="搜索国内仓批次"
         batch={{ ariaLabel: "批量搜索国内仓批次", placeholder: "一行一个，最多 50 项",
           isSupported: (field) => ["sku", "purchase", "inbound"].includes(field),
           unsupportedMessage: "批量搜索支持 SKU、采购单号和入库单号",
@@ -53,11 +53,16 @@ export default function DomesticToolbar({ filters, filterOptions, optionsLoading
         placeholder={["入库开始日期", "入库结束日期"]} allowEmpty={[true, true]} format="YYYY-MM-DD"
         value={[filters.inboundFrom ? dayjs(filters.inboundFrom) : null, filters.inboundTo ? dayjs(filters.inboundTo) : null]}
         onChange={(_, dates) => onChange({ ...filters, inboundFrom: dates[0] || undefined, inboundTo: dates[1] || undefined })} />
-      <Badge count={filters.warehouseIds.length + (filters.inventoryStatus ? 1 : 0)}><Button icon={<FilterOutlined />} onClick={onMore}>更多筛选</Button></Badge>
     </div>
     <div className="domestic-board__filter-actions">
-      <ResetButton onClick={onReset} /><Button onClick={onToggleStats}>{showStats ? "隐藏统计" : "显示统计"}</Button>
-      <Space className="domestic-board__toolbar-actions"><Button aria-label="列配置" icon={<SettingOutlined />} onClick={onColumns} /></Space>
+      <ResetButton onClick={onReset} />
+      <Button onClick={onToggleStats}>{showStats ? "隐藏统计" : "显示统计"}</Button>
+      <Badge count={filters.warehouseIds.length + (filters.inventoryStatus ? 1 : 0)}>
+        <Button icon={<FilterOutlined aria-hidden="true" />} onClick={onMore}>更多筛选</Button>
+      </Badge>
+      <Space className="domestic-board__toolbar-actions">
+        <Button aria-label="列配置" icon={<SettingOutlined aria-hidden="true" />} onClick={onColumns} />
+      </Space>
     </div>
   </div>;
 }

@@ -13,3 +13,8 @@
   .domestic-packing__approved-range > .ant-picker { width: auto; flex: 1; min-width: 0; }
   .domestic-packing__toolbar > .domestic-board__search { min-width: 0; flex-basis: 100%; }
 }
+
+.domestic-packing__summary { flex-shrink: 0; margin-bottom: 8px; flex-wrap: wrap; }
+.domestic-packing__box-line { border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin: 12px 0; }
+.domestic-packing__input { width: 100%; }
+.domestic-packing__audit { max-height: 360px; max-width: 100%; white-space: pre-wrap; overflow: auto; }

@@ -1,13 +1,13 @@
 /** Inbound batch board — published API data only. */
-import { Alert, Button, Card, Drawer, Input, Select, Space, Tabs, Typography, message, theme } from "antd";
+import { Alert, Button, Card, Drawer, Input, Select, Space, Typography, message, theme } from "antd";
 import { useState, type CSSProperties } from "react";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import type { NavigationPage } from "@/config/navigation";
-import { formatDateTime } from "@/shared/formatters";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
+import DomesticPackingRiskCard from "./components/DomesticPackingRiskCard";
 import DomesticToolbar from "./components/DomesticToolbar";
 import DomesticSummaryCards from "./components/DomesticSummaryCards";
 import DomesticBatchTable from "./components/DomesticBatchTable";
@@ -23,10 +23,10 @@ interface ColumnSettings { keys: string[]; widths: Record<string, number> }
 const preferenceKey = "pmc-domestic-inbound-board:columns";
 const columnGroups = [{ title: "入库批次字段", fields: domesticColumns.map(({ key, title }) => ({ key, title })) }];
 
-export default function DomesticWarehousePage({ page, preferenceScope = "anonymous" }: { page: NavigationPage; preferenceScope?: string }) {
+export default function DomesticWarehousePage({ page, preferenceScope = "anonymous", view = "batches" }: { page: NavigationPage; preferenceScope?: string; view?: "batches" | "approval" | "packing" }) {
   const { token } = theme.useToken();
   const scope = `domestic-board:${preferenceScope}`;
-  const [activeTab, setActiveTab] = usePageStateCache<"batches" | "approval" | "packing">(`${scope}:tab`, "batches");
+  const activeTab = view;
   const [filters, setFilters] = usePageStateCache<DomesticFilters>(`${scope}:inbound-filters-v2`, initialDomesticFilters);
   const [pagination, setPagination] = usePageStateCache(`${scope}:inbound-pagination-v1`, { page: 1, pageSize: 50 });
   const [showStats, setShowStats] = usePageStateCache(`${scope}:stats`, true);
@@ -39,6 +39,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
   const [moreOpen, setMoreOpen] = useState(false);
   const [warehouseText, setWarehouseText] = useState("");
   const [detail, setDetail] = useState<{ id: string; publication?: string | null }>();
+  const [approvalFetching, setApprovalFetching] = useState(false);
   const [messageApi, messageContext] = message.useMessage();
   const batchesTabActive = activeTab === "batches";
   const approvalTabActive = activeTab === "approval";
@@ -52,7 +53,6 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
   const rows = list.error ? [] : list.data?.data.items ?? [];
   const total = list.error ? 0 : list.data?.data.total ?? 0;
   const stats = !versionMismatch && meta?.data_status === "ready" && !error ? summary.data?.data : undefined;
-  const freshness = meta?.freshness_at;
   const commitFilters = (next: DomesticFilters) => {
     if (next.ownerUids.length > 50 || next.storeIds.length > 50 || next.warehouseIds.length > 50 || (next.batchValues?.length ?? 0) > 50) { void messageApi.warning("每个多值条件最多支持 50 项"); return; }
     if ([...next.ownerUids, ...next.storeIds, ...next.warehouseIds, ...(next.batchValues ?? [])].some((v) => !v.trim() || v.length > 255)
@@ -72,29 +72,15 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
       "--ant-color-fill-quaternary": token.colorFillQuaternary, "--ant-font-size-sm": `${token.fontSizeSM}px` } as CSSProperties}>
       <Card size="small" className="domestic-board__page-card">
         <RequestLoadingOverlay
-          spinning={isTableRequesting}
-          label="正在加载入库批次，请稍候"
+          spinning={activeTab === "approval" ? approvalFetching : isTableRequesting}
+          label={activeTab === "approval" ? "正在加载打包审批，请稍候" : "正在加载入库批次，请稍候"}
         />
         <div className="domestic-board__title-row">
-          <div><Typography.Title level={3}>国内仓看板</Typography.Title><Typography.Text type="secondary">{
-            activeTab === "batches" ? "按入库单、SKU 和店铺核对入库事实与当前批次余额。"
-              : activeTab === "approval" ? "支持手工添加、商品修改及通过／驳回审批；先选择入库单与 SKU。"
-              : "打包单（仓库）页面结构；业务查询、装箱和标签服务待接入。"}</Typography.Text></div>
-          <Typography.Text type="secondary" className="domestic-board__freshness">{activeTab === "batches" ? <>
-            已发布接口数据<br />
-            {freshness ? `来源采集 ${formatDateTime(freshness)}` : "暂无来源采集时间"}
-          </> : activeTab === "approval" ? "本地打包审批" : "打包单数据尚未接入"}</Typography.Text>
+          <Typography.Title level={3}>{page.title}</Typography.Title>
         </div>
-        <Tabs activeKey={activeTab} onChange={(key) => {
-          if (key === "batches" || key === "approval" || key === "packing") { setDetail(undefined); setActiveTab(key); }
-        }} className="domestic-board__tabs" items={[
-          { key: "batches", label: "批次看板" },
-          { key: "approval", label: "打包单审批" },
-          { key: "packing", label: "打包单（仓库）" },
-        ]} />
         {activeTab === "packing" ? <PackingWarehousePanel preferenceScope={preferenceScope} />
           : activeTab === "approval" ? <PackingApprovalPanel preferenceScope={preferenceScope}
-            storeOptions={options.data?.data?.stores ?? []} optionsLoading={options.isFetching} />
+            storeOptions={options.data?.data?.stores ?? []} optionsLoading={options.isFetching} onListFetching={setApprovalFetching} />
           : <>
           <Card size="small" className="domestic-board__toolbar-card"><DomesticToolbar filters={filters}
             filterOptions={options.data?.data} optionsLoading={options.isFetching}
@@ -105,6 +91,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
           {noPublication && <Alert showIcon type="info" message="尚未发布入库数据" description="接口已接入；当前范围没有成功发布版本。" />}
           {error && <Alert type="error" showIcon message={domesticErrorText(error)} action={<Button size="small" onClick={retry}>重试</Button>} />}
           {versionMismatch && <Alert type="warning" showIcon message="列表与统计版本不同，请刷新后核对" action={<Button onClick={retry}>刷新版本</Button>} />}
+          <DomesticPackingRiskCard scope={preferenceScope} />
           {showStats && <DomesticSummaryCards summary={stats} active={filters.inventoryStatus} onUnknown={() => commitFilters({ ...filters, inventoryStatus: filters.inventoryStatus === "unknown" ? undefined : "unknown" })} />}
           <Typography.Paragraph type="secondary" className="domestic-board__hint">一行 = 入库单 × SKU × 店铺。入库总量属于 IB×SKU，跨店铺不可直接相加；统计已去重。“—”表示未知。{stats && ` 统计日期 ${stats.as_of}。`}</Typography.Paragraph>
           <div className="domestic-board__table-wrap"><DomesticBatchTable rows={rows} total={total}

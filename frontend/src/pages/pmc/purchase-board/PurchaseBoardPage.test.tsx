@@ -259,11 +259,10 @@ describe("PurchaseBoardPage", () => {
     });
   });
 
-  it("renders cards, freshness meta and a board row with the shared Walmart item link", async () => {
+  it("renders cards and a board row with the shared Walmart item link", async () => {
     await renderPage();
 
     expect(screen.getByRole("region", { name: "采购看板" })).toBeInTheDocument();
-    expect(await screen.findByText(/数据更新 2026-09-23/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "待到货采购单：3" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "待采购超时：6" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "本月采购金额：¥1,234" })).toBeInTheDocument();

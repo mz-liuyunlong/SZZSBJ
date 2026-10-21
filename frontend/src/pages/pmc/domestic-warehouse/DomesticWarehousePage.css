@@ -25,8 +25,12 @@
 .domestic-board__sort { width: 168px; }
 .domestic-board__toolbar--batch { flex-direction: column; align-items: stretch; }
 .domestic-board__filter-row, .domestic-board__filter-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
-.domestic-board__toolbar--batch .domestic-board__search { max-width: none; }
-.domestic-board__toolbar--batch .report-table-connected-search__search { width: 82px; flex: 0 0 82px; }
+.domestic-board__toolbar--batch .domestic-board__search {
+  max-width: none;
+  width: 520px;
+  min-width: 420px;
+  flex: 1 1 500px;
+}
 .domestic-board__filter-actions { width: 100%; }
 .domestic-board__more-options { width: 100%; margin-top: 16px; }
 .domestic-board__more-options .ant-select { width: 100%; }

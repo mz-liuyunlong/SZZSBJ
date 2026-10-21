@@ -6,6 +6,8 @@ def register_productlist_sync_models() -> None:
     import app.modules.pmc_domestic.inbound_models
     import app.modules.pmc_domestic.models
     import app.modules.pmc_domestic.packing_models
+    import app.modules.pmc_domestic.packing_stock_models
+    import app.modules.pmc_domestic.warehouse_models
     import app.modules.pmc_purchase.gate3_models
     import app.modules.pmc_purchase.models
     import app.modules.product_management.models

@@ -29,7 +29,7 @@ function purchaseCopies(orderSns: string[]) {
 }
 interface Props {
   pagination: { page: number; pageSize: number }; widths: Record<string, number>; sort: PackingApprovalSort;
-  rows: ApprovalCandidate[]; total: number; loading: boolean; canApprove: boolean; canReject: boolean; busy: boolean;
+  rows: ApprovalCandidate[]; total: number; canApprove: boolean; canReject: boolean; busy: boolean;
   onDecision: (row: ApprovalCandidate, kind: DecisionKind) => void;
   onPagination: (page: number, pageSize: number) => void; onResize: (key: string, width: number) => void;
   onSort: (sort: PackingApprovalSort) => void;
@@ -68,7 +68,7 @@ export default function PackingApprovalTable(p: Props) {
     render: (_, row) => show(field.key, row),
   }));
   return <ReportTableShell label="打包单审批表格"><ProTable<ApprovalCandidate> rowKey="id" search={false} options={false} toolBarRender={false}
-    tableAlertRender={false} size="small" bordered columns={columns} dataSource={p.rows} loading={p.loading}
+    tableAlertRender={false} size="small" bordered columns={columns} dataSource={p.rows} loading={false}
     scroll={{ x: 2050, y: "100%" }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前条件下暂无待审批单据" /> }}
     onChange={(_, __, sorter, extra) => { if (extra.action === "sort" && !Array.isArray(sorter)) p.onSort(sorter.order === "ascend" ? "created_asc" : "created_desc"); }} pagination={false} />
     <Pagination className="ant-table-pagination" size="small" current={p.pagination.page} pageSize={p.pagination.pageSize} total={p.total} showSizeChanger showQuickJumper pageSizeOptions={[20, 50, 100, 200]} showTotal={(n) => `共 ${n} 条`} onChange={(page, size) => p.onPagination(size !== p.pagination.pageSize ? 1 : page, size)} />

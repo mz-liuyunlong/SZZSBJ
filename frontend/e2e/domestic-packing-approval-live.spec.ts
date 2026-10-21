@@ -19,7 +19,7 @@ test("real local list, approve, reject and audit trail", async ({ page }) => {
   });
   await page.goto("/#/pmc/domestic-warehouse-board");
   await page.getByRole("tab", { name: "打包单审批", exact: true }).click();
-  await expect(page.getByText("本地打包审批已接通")).toBeVisible();
+  await expect(page.getByText("待审批打包单", { exact: false })).toBeVisible();
   const approve = page.getByRole("button", { name: /^通\s*过$/ }).filter({ visible: true });
   await expect(approve.first()).toBeAttached();
   // Read the first eligible row from the actual rendered page, never a fixture SKU.

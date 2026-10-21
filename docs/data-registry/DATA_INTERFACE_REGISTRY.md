@@ -251,3 +251,14 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 本地备份后重建当前1454行发布版本，其中155行产品采购备注判定报关，1299行默认不报关；旧发布版本保留，MART历史总4362。迁移仍0052，无新表/字段/约束、无0053，历史4审批/3分配/4事件和用户29保留。
 
 操作列“修改”普通按钮、“审批通过”蓝色主按钮、“驳回”普通按钮，统一间距和最小280px列宽（兼容已有窄列设置），权限/业务阻断逻辑不变。当前仅进行本地本模块验证，不进行全局测试；全局回归待用户后续功能全部完成后统一安排。
+
+
+## PMC 仓库打包（2026-10-21 本地开发中）
+
+- 决策：`docs/data-sources/decisions/pmc-packing-warehouse-decision.md`；API/字段：`docs/delivery/pmc-packing-warehouse-api.md`；SOP：`docs/sop/pmc-domestic-packing-warehouse.md`。
+- NEW_SYSTEM_OWNED：ops_domestic_packing_box_sets（PK唯一当前装箱头/首次完成与版本）、ops_domestic_packing_box_lines（当前箱行）、ops_domestic_packing_notes（延迟备注投影）、ops_domestic_packing_variance_cases（未装/超发处置投影）、ops_domestic_packing_notification_outbox（待配置通知任务，无发送器）。历史由只INSERT的evt_domestic_packing_events记录。
+- 只读来源：已批准PackingOrder、当前MART/GOV、产品CURRENT、可靠关联收货DWD。业务GET不访问RAW/ODS/外部接口。
+- API前缀 /api/pmc/domestic/packing-warehouse；GET orders/summary/filter-options/detail/events；POST boxes/done/rebox/unpacked/customs/notes；登录/IAM/账号范围，动作分别授权，不自动授予角色。
+- 未装resend在同事务减少原PackingAllocation的有效qty（保留原Order.qty和审计），下轮人工审批余额读取该有效占用；void保留排除占用且不改领星库存。
+- 状态：本地业务及模拟联调已验证，新增ops_domestic_packing_extra_allocations；POST supplemental-inbound/supplemental-sync由中台独立授权。多装足额确认占用，不足记录blocked与本地outbox；真实领星provider未配置，mock仅回滚验收app。异常卡片、来源审计、并发预算已验证；外部消息与货件/领星写入未接入。
+- 本地schema SQL独立存档并有备份；0052未改。生产必须另行整合Alembic迁移并完整验证。

@@ -11,6 +11,8 @@ import app.modules.integration_sync.models  # noqa: F401  # Register sync govern
 import app.modules.pmc_domestic.inbound_models  # noqa: F401
 import app.modules.pmc_domestic.models  # noqa: F401  # Register domestic warehouse tables.
 import app.modules.pmc_domestic.packing_models  # noqa: F401
+import app.modules.pmc_domestic.packing_stock_models  # noqa: F401
+import app.modules.pmc_domestic.warehouse_models  # noqa: F401
 import app.modules.pmc_purchase.gate3_models  # noqa: F401  # Register PMC purchase Gate 3.
 import app.modules.pmc_purchase.models  # noqa: F401  # Register PMC purchase ODS.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.

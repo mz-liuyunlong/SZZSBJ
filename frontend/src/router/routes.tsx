@@ -33,7 +33,7 @@ import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWareho
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
-import { navigation } from "@/config/navigation";
+import { navigation, navigationRedirects } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
 import { isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
@@ -139,6 +139,9 @@ function BusinessRoute({
   const activeUser = currentUser ?? DEFAULT_AUTH_USER;
   const defaultPath = firstAccessibleBusinessPath(activeUser);
 
+  const redirect = navigationRedirects[location.pathname];
+  if (redirect) return <Navigate replace to={redirect} />;
+
   if (location.pathname === "/") {
     return <Navigate replace to={defaultPath} />;
   }
@@ -189,8 +192,9 @@ function BusinessRoute({
           <WfsFeeAlertPage page={page} permissions={activeUser.permissions} />
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
-        ) : page.key === "pmc_domestic_warehouse_board" ? (
-          <DomesticWarehousePage page={page} preferenceScope={activeUser.username} />
+        ) : ["pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse"].includes(page.key) ? (
+          <DomesticWarehousePage page={page} preferenceScope={activeUser.username}
+            view={page.key === "pmc_packing_approval" ? "approval" : page.key === "pmc_packing_warehouse" ? "packing" : "batches"} />
         ) : page.key === "data_center_approval_workspace" ? (
           <ApprovalWorkspacePage page={page} permissions={activeUser.permissions} />
         ) : page.key === "data_center_data_import" ? (

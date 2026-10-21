@@ -9,6 +9,8 @@ from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func, select
+
 from app.modules.data_pages.models import LingxingStoreDimension as Store
 from app.modules.data_pages.models import WalmartListingDimension as Listing
 from app.modules.pmc_domestic.inbound_models import DomesticBoardPublication as Pub
@@ -17,8 +19,9 @@ from app.modules.pmc_domestic.packing_customs_rules import candidate_customs
 from app.modules.pmc_domestic.packing_models import PackingAllocation, PackingOrder
 from app.modules.pmc_domestic.packing_rules import fingerprint
 from app.modules.pmc_domestic.packing_schemas import Candidate, OrderRead
+from app.modules.pmc_domestic.packing_stock_models import PackingExtraAllocation
+from app.modules.pmc_domestic.packing_stock_repository import PackingStockRepository
 from app.modules.pmc_purchase.gate3_models import DwdPurchaseOrderLineItem
-from sqlalchemy import func, select
 
 
 def order_read(row):
@@ -140,6 +143,30 @@ class PackingRepository:
                 )
             )
         }
+        for a, w, b, q in s.execute(
+            select(
+                PackingExtraAllocation.source_account_ref,
+                PackingExtraAllocation.warehouse_id,
+                PackingExtraAllocation.source_board_id,
+                func.sum(PackingExtraAllocation.qty),
+            )
+            .join(PackingOrder, PackingOrder.id == PackingExtraAllocation.order_id)
+            .where(
+                PackingOrder.status == "approved",
+                PackingExtraAllocation.source_account_ref.in_(accounts),
+            )
+            .group_by(
+                PackingExtraAllocation.source_account_ref,
+                PackingExtraAllocation.warehouse_id,
+                PackingExtraAllocation.source_board_id,
+            )
+        ):
+            key = (a, w, str(b))
+            used[key] = used.get(key, 0) + q
+        stock = PackingStockRepository(s)
+        budgets = stock.budgets(
+            {(b.source_account_ref, b.source_warehouse_id, b.sku) for b, _ in sources}
+        )
         orders = [r for r in self.orders(accounts) if r.status != "voided"]
         decided = {(r.source_account_ref, str(r.candidate_id)) for r in orders}
         final_decided = {
@@ -176,6 +203,13 @@ class PackingRepository:
                     qty - used.get((b.source_account_ref, b.source_warehouse_id, str(b.id)), 0),
                 )
                 if qty is not None
+                else None
+            )
+            key = (b.source_account_ref, b.source_warehouse_id, b.sku)
+            global_available = budgets[key].available
+            available = (
+                min(available, global_available)
+                if available is not None and global_available is not None
                 else None
             )
             purchases = payload.get("purchase_order_sns", [])

@@ -87,3 +87,11 @@
 | 外部 CSV 批次 | Source Registry → Landing → RAW → Standardized；后续层由 Source Decision 决定 | candidate |
 | 页面聚合查询 | 受保护 API 读取获批 MART/READ MODEL，权威字段仍回溯 Core/DIM/FACT | candidate |
 | 旧库历史清洗表 | 标记 `legacy_reference`/`legacy_derived`，不得改名冒充 RAW | legacy_reference |
+
+
+### 国内仓仓库打包本地业务投影（2026-10-21）
+
+`ops_domestic_packing_box_sets`、`ops_domestic_packing_box_lines`、`ops_domestic_packing_notes`、`ops_domestic_packing_variance_cases`、`ops_domestic_packing_notification_outbox` 均为 NEW_SYSTEM_OWNED，按父PK来源账号/惠州仓范围授权。CURRENT装箱/备注/异常可由命令更新；历史来自不可变PackingEvent。通知表目前仅持久化结构，无外部发送能力。来源与完成口径见仓库数据源决策，不得作为领星已发货或已同步凭证。
+
+
+国内仓多装扩展（本地验收）：ops_domestic_packing_extra_allocations为NEW_SYSTEM_OWNED有效额外分配投影，逐PK与来源MART行复合FK、数量正整数、原Q不变；替换投影前后进入不可变事件，保证历史来源可查。业务GET只读MART/DIM/DWD/OPS，补单模拟证据由受信任服务端提供并重新核验，真实数据源未配置。

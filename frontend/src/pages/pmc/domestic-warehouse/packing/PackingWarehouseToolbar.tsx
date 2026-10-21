@@ -1,5 +1,5 @@
 /** Uses the existing committed-search and reset controls; does not submit business requests. */
-import { DatePicker, Select, Tooltip, Typography } from "antd";
+import { DatePicker, Select, Typography } from "antd";
 import zhCN from "antd/es/date-picker/locale/zh_CN";
 import dayjs from "dayjs";
 import CommittedSearch from "@/components/report-table/CommittedSearch";
@@ -10,13 +10,13 @@ interface Props {
   filters: PackingWarehouseFilters;
   onChange: (filters: PackingWarehouseFilters) => void;
   onReset: () => void;
+  storeOptions: { value: string; label: string }[];
+  optionsLoading: boolean;
 }
 
-export default function PackingWarehouseToolbar({ filters, onChange, onReset }: Props) {
+export default function PackingWarehouseToolbar({ filters, onChange, onReset, storeOptions, optionsLoading }: Props) {
   return <div className="domestic-board__toolbar domestic-packing__toolbar" role="search" aria-label="仓库打包单筛选">
-    <Tooltip title="店铺选项待打包单查询服务接入后提供">
-      <Select aria-label="打包单店铺" placeholder="店铺" disabled className="domestic-board__facet" />
-    </Tooltip>
+    <Select aria-label="打包单店铺" placeholder="全部店铺" allowClear showSearch optionFilterProp="label" className="domestic-board__facet" value={filters.storeId} options={storeOptions} loading={optionsLoading} onChange={(storeId) => onChange({ ...filters, storeId })} />
     <Select<PackingWarehouseStatus> aria-label="打包状态" className="domestic-board__facet" value={filters.status}
       options={[{ value: "todo", label: "待打包" }, { value: "packed", label: "已打包待发" }, { value: "all", label: "全部状态" }]}
       onChange={(status) => onChange({ ...filters, status })} />

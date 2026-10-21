@@ -1,5 +1,4 @@
 .domestic-approval { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; }
-.domestic-approval__notice { flex-shrink: 0; margin-bottom: 12px; }
 .domestic-approval__summary-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .domestic-approval__created-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .domestic-approval__created-range > .ant-picker { width: 270px; }

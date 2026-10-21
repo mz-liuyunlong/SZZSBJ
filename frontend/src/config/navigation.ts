@@ -72,6 +72,11 @@ export interface PageHelp {
 }
 
 export interface NavigationPage {
+  sidebarSection?: string;
+  description?: string;
+  showWhenDisabled?: boolean;
+  /** Preserve existing IAM page grants when one page becomes multiple navigation entries. */
+  viewPermissionKey?: string;
   key: string;
   title: string;
   path: string;
@@ -92,6 +97,7 @@ export interface NavigationGroup {
   title: string;
   icon: ReactElement;
   children: NavigationPage[];
+  sidebarSections?: { key: string; title: string }[];
 }
 
 const defaults = {
@@ -253,6 +259,7 @@ export const navigation: NavigationGroup[] = [
   },
   {
     // PMC group approved by Rocky 2026-09-24 (PRP pmc-purchase-board §2, option A); owner review in PR.
+    sidebarSections: [{ key: 'pmc-domestic', title: '国内仓' }, { key: 'pmc-wfs', title: 'WFS' }],
     key: 'pmc',
     title: 'PMC',
     icon: createElement(DeploymentUnitOutlined, { 'aria-hidden': true }),
@@ -266,19 +273,27 @@ export const navigation: NavigationGroup[] = [
         // Backend permission key (docs/api/pmc-purchase-api.md); the frontend does not enforce it.
         permissionKey: 'pmc:purchase:read',
       }),
-      page('pmc', 'domestic_warehouse_board', '国内仓看板', '/pmc/domestic-warehouse-board', {
-        status: 'testing',
-        source: 'new_postgres',
-        migrationMode: 'native',
-        sourceTables: ['dwd_domestic_receipt_batch', 'dwd_domestic_receipt_batch_link', 'dim_lingxing_stores', 'dwd_lingxing_sku_identity_index', 'dwd_lingxing_sku_product_info_current'],
-        permissionKey: 'pmc:domestic-batch:read',
-        readOnly: true,
+      page('pmc', 'logistics', '物流', '/pmc/logistics', { readOnly: true }),
+      page('pmc', 'domestic_batches', '批次看板', '/pmc/domestic/batches', {
+        sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
+        sourceTables: ['mart_domestic_inbound_batch_board', 'gov_domestic_board_publications'],
+        permissionKey: 'pmc:domestic-batch:read', viewPermissionKey: 'page:pmc:domestic-warehouse-board:view', readOnly: true,
       }),
-      page('pmc', 'wfs', 'WFS', '/pmc/wfs', {
-        readOnly: true,
+      page('pmc', 'packing_approval', '打包单审批', '/pmc/domestic/packing-approval', {
+        sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
+        viewPermissionKey: 'page:pmc:domestic-warehouse-board:view',
       }),
-      page('pmc', 'logistics', '物流', '/pmc/logistics', {
-        readOnly: true,
+      page('pmc', 'packing_warehouse', '打包单（仓库）', '/pmc/domestic/packing-warehouse', {
+        sidebarSection: 'pmc-domestic', status: 'testing', source: 'new_postgres', migrationMode: 'native',
+        viewPermissionKey: 'page:pmc:domestic-warehouse-board:view',
+      }),
+      page('pmc', 'wfs_pending_packing', '待发货打包单', '/pmc/wfs/pending-packing', {
+        sidebarSection: 'pmc-wfs', status: 'disabled', showWhenDisabled: true,
+        viewPermissionKey: 'page:pmc:wfs:view',
+      }),
+      page('pmc', 'wfs_shipments', '系统货件', '/pmc/wfs/shipments', {
+        sidebarSection: 'pmc-wfs', description: '写入 Walmart', status: 'disabled', showWhenDisabled: true,
+        viewPermissionKey: 'page:pmc:wfs:view',
       }),
     ],
   },
@@ -369,3 +384,9 @@ export const navigation: NavigationGroup[] = [
     ],
   },
 ];
+
+
+/** Old container URLs redirect without registering a page or restoring a legacy top tab. */
+export const navigationRedirects: Readonly<Record<string, string>> = {
+  '/pmc/domestic-warehouse-board': '/pmc/domestic/batches',
+};

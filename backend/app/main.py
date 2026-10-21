@@ -2,9 +2,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Request
-from pydantic import BaseModel
-
 from app.core.api import SuccessEnvelope, install_api_foundation, success_response
 from app.core.auth import enforce_protected_by_default
 from app.db.session import dispose_engine
@@ -25,11 +22,16 @@ from app.modules.pmc_domestic.packing_router import (
     router as domestic_packing_approval_router,
 )
 from app.modules.pmc_domestic.router import router as pmc_domestic_router
+from app.modules.pmc_domestic.warehouse_router import (
+    router as domestic_packing_warehouse_router,
+)
 from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
 from app.modules.sku_detail.router import router as sku_detail_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
+from fastapi import Depends, FastAPI, Request
+from pydantic import BaseModel
 
 
 class HealthData(BaseModel):
@@ -68,6 +70,7 @@ def create_app() -> FastAPI:
     application.include_router(pmc_domestic_router)
     application.include_router(domestic_inbound_router)
     application.include_router(domestic_packing_approval_router)
+    application.include_router(domestic_packing_warehouse_router)
     application.include_router(product_management_router)
     application.include_router(products_router)
     application.include_router(sku_detail_router)
