@@ -15,3 +15,7 @@ Registry Status: `draft; approved only after owner review and merge`
 - 只登记有 navigation、route、PRP 或实现证据的页面；未知写 TBD，不猜测。
 - `planned/no_api/mock_only/api_connected/implemented` 必须与仓库事实一致。
 - 新增或改变页面、route、数据依赖、permission 或 Shared 组件时同 PR 更新。
+
+| `ai_center_keyword_launch` | 关键词投放 | AI中心 | 关键词投放 | `/ai-center/keyword-launch` | `testing` / `mock_only` | PageShell, ProTable, ReportTableShell, KeywordTextCell, Upload | 无真实API | 内存mock | `ai_center.keyword_launch.view` | Owner-approved keyword demo PRPs 2026-10-22 | TBD | 本地解析卖家精灵Excel，演示广告与翻译；非真实广告执行 |
+| `ai_center_keyword_rules` | 规则配置 | AI中心（隐藏） | 关键词投放内部 | `/ai-center/keyword-launch/rules` | `testing` / `mock_only` | PageShell, Form, Tabs | 无真实API | 内存mock | `ai_center.keyword_rules.view` | 同上 | TBD | 左侧导航隐藏，通过页面右上角进入 |
+| `ads_keyword_library` | 词库 | 广告 | 词库 | `/ads/keyword-library` | `testing` / `mock_only` | PageShell, ProTable, ReportTableShell, ConnectedSearch | 无真实API | 内存mock | `ads.keyword_library.view` | 同上 | TBD | 原导航原路径，跨SKU演示、计划对账与人工录入 |
