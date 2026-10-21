@@ -1,0 +1,7 @@
+.keyword-rules{display:flex;flex:1;flex-direction:column;min-height:0;overflow-y:auto;gap:12px;padding:4px 2px 18px}
+.keyword-rules__fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 15px}
+.keyword-rules__fields .ant-form-item{margin-bottom:8px}
+.keyword-rules__wide{grid-column:span 2}
+.keyword-rules__diff{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:400px;overflow:auto;margin-top:14px}
+.keyword-rules__diff pre{background:var(--ant-color-fill-quaternary,#f7f9fc);padding:10px;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:900px){.keyword-rules__fields{grid-template-columns:1fr}.keyword-rules__wide{grid-column:auto}.keyword-rules__diff{grid-template-columns:1fr}}
