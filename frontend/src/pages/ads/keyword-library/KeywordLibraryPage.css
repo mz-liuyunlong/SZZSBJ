@@ -1,0 +1,5 @@
+.keyword-library>.ant-card{min-width:0}
+.keyword-library .ant-card-body{min-width:0}
+.keyword-library .report-table-connected-search{min-width:320px}
+.keyword-library .report-table-shell{min-height:390px}
+@media(max-width:900px){.keyword-library .report-table-connected-search{min-width:100%;width:100%}}
