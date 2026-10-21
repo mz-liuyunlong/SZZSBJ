@@ -13,3 +13,9 @@
   .domestic-approval__created-range > .ant-picker { width: auto; flex: 1; min-width: 0; }
   .domestic-approval__toolbar > .domestic-board__search { min-width: 0; flex-basis: 100%; }
 }
+.domestic-approval__customs-select { width: 112px; max-width: 100%; }
+.domestic-approval__customs-cell { width: 100%; }
+.domestic-approval__row-actions { flex-wrap: nowrap; white-space: nowrap; }
+.domestic-approval__row-actions .ant-btn { height: 28px; padding-inline: 10px; border-radius: 6px; }
+.domestic-approval__row-edit, .domestic-approval__row-reject { min-width: 56px; }
+.domestic-approval__row-approve { min-width: 92px; }

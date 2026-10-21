@@ -40,3 +40,21 @@ def fingerprint(value):
             separators=(",", ":"),
         ).encode()
     ).hexdigest()
+
+
+def listing_version(row):
+    """Bind the user's final identity choice to the complete current Listing proof."""
+    return fingerprint(
+        [
+            str(row.id),
+            row.source_account_ref,
+            row.store_id,
+            row.local_sku,
+            row.item_id,
+            row.gtin,
+            row.msku,
+            row.standard_status,
+            row.fulfillment_type,
+            row.business_hash,
+        ]
+    )

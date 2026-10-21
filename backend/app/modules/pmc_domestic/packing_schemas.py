@@ -21,11 +21,7 @@ class PackingFilter(Strict):
 
     @model_validator(mode="after")
     def dates(self):
-        if (
-            self.created_from
-            and self.created_to
-            and self.created_from > self.created_to
-        ):
+        if self.created_from and self.created_to and self.created_from > self.created_to:
             raise ValueError("invalid date range")
         return self
 
@@ -56,6 +52,16 @@ class Candidate(Strict):
     arrival_received: int | None = None
     arrival_pending: int | None = None
     arrival_status: Literal["unknown"] = "unknown"
+    customs_default: bool = False
+    customs_default_src: Literal["default", "product_remark", "purchase_remark"] = "default"
+    customs_proof: dict | None = None
+    waiting_days: int | None = None
+    history_complete: bool = False
+    origin: Literal["automatic", "manual"] = "automatic"
+    manual_reason: str | None = None
+    source_store_id: str | None = None
+    manual_customs: Literal["default", "declare", "skip"] | None = None
+    manual_rwh: str | None = None
     candidate_created_on: date | None
     overdue: bool | None
     stock_balance: int | None
@@ -91,6 +97,10 @@ class ApproveCommand(PackingCommand):
     customs: Literal["default", "declare", "skip"] = "default"
     is_test: Literal[True] = True
     rwh: str | None = Field(default=None, max_length=128)
+    target_store_id: str | None = Field(default=None, min_length=1, max_length=64)
+    target_item_id: str | None = Field(default=None, min_length=1, max_length=64)
+    listing_version: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+    edit_reason: str | None = Field(default=None, min_length=2, max_length=500)
 
 
 class RejectCommand(PackingCommand):
@@ -108,7 +118,7 @@ class OrderRead(Strict):
     id: UUID
     candidate_id: UUID
     pk: str | None
-    status: Literal["approved", "rejected"]
+    status: Literal["approved", "rejected", "voided"]
     qty: int | None
     version: int
     is_test: bool
@@ -119,6 +129,9 @@ class OrderRead(Strict):
     note: str | None
     created_at: datetime
     snapshot: Candidate
+    source_snapshot: Candidate | None = None
+    voided_at: datetime | None = None
+    void_note: str | None = None
 
 
 class OrderList(Strict):
@@ -148,3 +161,46 @@ class EventRead(Strict):
 
 class EventList(Strict):
     items: list[EventRead]
+
+
+class ListingChoice(Strict):
+    store_id: str
+    store_name: str | None
+    item_id: str
+    gtin: str | None
+    msku: str | None
+    listing_version: str
+    cross_store: bool
+
+
+class EditOptions(Strict):
+    candidate: Candidate
+    listings: list[ListingChoice]
+    cross_store_proof_available: bool = False
+
+
+class ManualCommand(Strict):
+    source_account_ref: str = Field(min_length=1, max_length=128)
+    warehouse_id: Literal["16168"] = "16168"
+    board_id: UUID
+    source_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_store_id: str = Field(min_length=1, max_length=64)
+    target_item_id: str = Field(min_length=1, max_length=64)
+    listing_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    qty: int = Field(strict=True, ge=1, le=1000000)
+    customs: Literal["default", "declare", "skip"] = "default"
+    rwh: str | None = Field(default=None, max_length=128)
+    reason: str = Field(min_length=2, max_length=500)
+    idempotency_key: UUID
+
+    @model_validator(mode="after")
+    def reason_not_blank(self):
+        self.reason = self.reason.strip()
+        if len(self.reason) < 2:
+            raise ValueError("reason required")
+        return self
+
+
+class ManualSubmitted(Strict):
+    id: UUID
+    status: Literal["pending"] = "pending"

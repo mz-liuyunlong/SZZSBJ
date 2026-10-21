@@ -78,12 +78,12 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
         <div className="domestic-board__title-row">
           <div><Typography.Title level={3}>国内仓看板</Typography.Title><Typography.Text type="secondary">{
             activeTab === "batches" ? "按入库单、SKU 和店铺核对入库事实与当前批次余额。"
-              : activeTab === "approval" ? "待审批打包单列表与手工添加结构；审批通过与 OWS 联动待后端接入。"
+              : activeTab === "approval" ? "支持手工添加、商品修改及通过／驳回审批；先选择入库单与 SKU。"
               : "打包单（仓库）页面结构；业务查询、装箱和标签服务待接入。"}</Typography.Text></div>
           <Typography.Text type="secondary" className="domestic-board__freshness">{activeTab === "batches" ? <>
             已发布接口数据<br />
             {freshness ? `来源采集 ${formatDateTime(freshness)}` : "暂无来源采集时间"}
-          </> : activeTab === "approval" ? "打包单审批数据尚未接入" : "打包单数据尚未接入"}</Typography.Text>
+          </> : activeTab === "approval" ? "本地打包审批" : "打包单数据尚未接入"}</Typography.Text>
         </div>
         <Tabs activeKey={activeTab} onChange={(key) => {
           if (key === "batches" || key === "approval" || key === "packing") { setDetail(undefined); setActiveTab(key); }

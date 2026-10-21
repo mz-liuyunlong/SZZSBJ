@@ -1,10 +1,32 @@
+import PackingCustomsSelect from "./PackingCustomsSelect";
+import { useState } from "react";
+import { customsHint, customsSourceLabel, type CustomsChoice } from "./packingCustoms";
 /** Published approval candidates with explicit blocking and server pagination. */
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
+import { CopyableTextCell } from "@/components/report-table/cells";
 import { packingApprovalFields, type PackingApprovalSort } from "./packingApprovalTypes";
 import { approvalBlockedText, type ApprovalCandidate, type DecisionKind } from "./packingApprovalApi";
+
+function copyOrDash(text: string | null | undefined, label: string) {
+  const value = text?.trim();
+  return value ? <CopyableTextCell text={value} label={label} /> : "—";
+}
+
+function purchaseCopies(orderSns: string[]) {
+  const values = orderSns.map((sn) => sn.trim()).filter(Boolean);
+  if (!values.length) return "—";
+  if (values.length === 1) return <CopyableTextCell text={values[0]} label="采购单号" />;
+  return (
+    <Space direction="vertical" size={0} className="report-table-identity-stack">
+      {values.map((sn) => (
+        <CopyableTextCell key={sn} text={sn} label="采购单号" />
+      ))}
+    </Space>
+  );
+}
 interface Props {
   pagination: { page: number; pageSize: number }; widths: Record<string, number>; sort: PackingApprovalSort;
   rows: ApprovalCandidate[]; total: number; loading: boolean; canApprove: boolean; canReject: boolean; busy: boolean;
@@ -13,18 +35,34 @@ interface Props {
   onSort: (sort: PackingApprovalSort) => void;
 }
 export default function PackingApprovalTable(p: Props) {
+  const [customs, setCustoms] = useState<Record<string, CustomsChoice>>({});
+  const choiceOf = (row: ApprovalCandidate) => customs[`${row.id}|${row.candidate_version}`] ?? row.manual_customs ?? "default";
+  const withChoice = (row: ApprovalCandidate): ApprovalCandidate => ({ ...row, manual_customs: choiceOf(row) });
   const show = (key: string, row: ApprovalCandidate) => {
-    const values: Record<string, string | number | null> = { number: row.candidate_created_on, inbound: row.inbound_order_sn, purchase: row.purchase_order_sns.join(" / "), sku: row.sku, gtin: row.gtin, item: row.item_id, msku: row.msku, store: row.store_name ?? row.store_id, qty: row.available_quantity };
-    if (key === "number") return <Space direction="vertical" size={0}><Typography.Text type="secondary">待审批（未发PK）</Typography.Text><small>{row.candidate_created_on ?? "日期未知"}</small></Space>;
+    const values: Record<string, string | number | null> = { msku: row.msku, store: row.store_name ?? row.store_id, qty: row.available_quantity };
+    if (key === "number") return <Space direction="vertical" size={0}><Typography.Text type="secondary">{row.origin === "manual" ? "手工待审批（未发PK）" : "待审批（未发PK）"}</Typography.Text><small>{row.candidate_created_on ?? "日期未知"}</small></Space>;
+    if (key === "inbound") return copyOrDash(row.inbound_order_sn, "入库单号");
+    if (key === "purchase") return purchaseCopies(row.purchase_order_sns);
+    if (key === "sku") return copyOrDash(row.sku, "SKU");
+    if (key === "gtin") return copyOrDash(row.gtin, "GTIN");
+    if (key === "item") return copyOrDash(row.item_id, "ItemID");
     if (key === "arrival") return <Tooltip title="收货明细尚未标准化，已到/未到保持未知">{row.arrival_purchased ?? "—"} / {row.arrival_received ?? "—"} / {row.arrival_pending ?? "—"}</Tooltip>;
-    if (key === "customs") return "审批时选择";
+    if (key === "customs") {
+      const choice = choiceOf(row);
+      return <Space className="domestic-approval__customs-cell" direction="vertical" size={0}><PackingCustomsSelect row={row} size="small" aria-label={`是否报关 ${row.inbound_order_sn} ${row.item_id ?? row.id}`} value={choice} disabled={!p.canApprove || p.busy}
+        onChange={(value: CustomsChoice) => setCustoms((previous) => ({ ...previous, [`${row.id}|${row.candidate_version}`]: value }))} />
+        <Tooltip title={customsHint(row, choice)}><Tag>{customsSourceLabel(choice === "default" ? row.customs_default_src ?? "default" : "manual")}</Tag></Tooltip></Space>;
+    }
+    if (key === "waiting") return row.waiting_days ?? "—";
+    if (key === "coverage") return row.history_complete ? "完整" : "部分历史";
     if (key === "status") return <Tooltip title={approvalBlockedText(row.blocked_reasons)}><Tag color={row.can_approve ? "processing" : "warning"}>{row.can_approve ? "待审批" : "待补资料"}</Tag>{row.overdue && <Tag color="red">超时</Tag>}</Tooltip>;
-    if (key === "actions") return <Space><Tooltip title={!p.canApprove ? "缺少审批通过权限" : approvalBlockedText(row.blocked_reasons)}><Button size="small" disabled={!p.canApprove || !row.can_approve || p.busy} onClick={() => p.onDecision(row, "approve")}>通过</Button></Tooltip><Button size="small" disabled={!p.canReject || p.busy} onClick={() => p.onDecision(row, "reject")}>驳回</Button></Space>;
+    if (key === "actions") return <Space className="domestic-approval__row-actions" size={12}><Button className="domestic-approval__row-edit" size="small" disabled={!p.canApprove || p.busy} onClick={() => p.onDecision(withChoice(row), "approve")}>修改</Button><Tooltip title={!p.canApprove ? "缺少审批通过权限" : approvalBlockedText(row.blocked_reasons)}><Button type="primary" className="domestic-approval__row-approve" size="small" disabled={!p.canApprove || !row.can_approve || p.busy} onClick={() => p.onDecision(withChoice(row), "approve")}>审批通过</Button></Tooltip><Button className="domestic-approval__row-reject" size="small" disabled={!p.canReject || p.busy} onClick={() => p.onDecision(row, "reject")}>驳回</Button></Space>;
     return values[key] ?? "—";
   };
+  const widthOf = (key: string, fallback: number) => key === "actions" ? Math.max(280, p.widths[key] ?? fallback) : p.widths[key] ?? fallback;
   const columns: ProColumns<ApprovalCandidate>[] = packingApprovalFields.map((field) => ({
-    key: field.key, dataIndex: field.key, width: p.widths[field.key] ?? field.width,
-    title: <ResizableColumnTitle label={field.title} minWidth={90} width={p.widths[field.key] ?? field.width} onWidthChange={(w) => p.onResize(field.key, w)} />,
+    key: field.key, dataIndex: field.key, width: widthOf(field.key, field.width),
+    title: <ResizableColumnTitle label={field.title} minWidth={field.key === "actions" ? 280 : 90} width={widthOf(field.key, field.width)} onWidthChange={(w) => p.onResize(field.key, w)} />,
     fixed: field.key === "number" ? "left" : field.key === "actions" ? "right" : undefined,
     sorter: field.key === "number", sortOrder: field.key === "number" ? (p.sort === "created_asc" ? "ascend" : "descend") : null,
     render: (_, row) => show(field.key, row),

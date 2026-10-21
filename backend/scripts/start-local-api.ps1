@@ -41,7 +41,7 @@ if (-not (Test-Path $Python)) {
 }
 
 # Fail closed before startup if this is not the isolated local development DB.
-& $Python -c 'import os, sys; from sqlalchemy.engine import make_url; u = make_url(os.environ["DATABASE_URL"]); ok = os.environ.get("APP_ENV") == "local" and u.drivername == "postgresql+psycopg" and u.host == "127.0.0.1" and u.port == 55432 and u.database == "szzsbj_dev" and not u.query; sys.exit(0 if ok else 1)'
+& $Python (Join-Path $PSScriptRoot "preflight_local_api.py")
 if ($LASTEXITCODE -ne 0) {
     throw "Local startup requires APP_ENV=local and database 127.0.0.1:55432/szzsbj_dev."
 }

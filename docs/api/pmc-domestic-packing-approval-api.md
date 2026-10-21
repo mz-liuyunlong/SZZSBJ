@@ -45,9 +45,9 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 阻断码：STORE_UNKNOWN、ELIGIBLE_LISTING_MISSING、GTIN_INVALID、MSKU_MISSING、STOCK_PROOF_UNKNOWN、STOCK_FULLY_ALLOCATED。
 
 ## 写请求与响应
-共同body：source_account_ref(string<=128)、warehouse_id='16168'、candidate_version、idempotency_key(UUID)。approve增加qty（严格整数1..1000000且不超过来源可用量）、customs(default/declare/skip，默认未知)、rwh(可选备注<=128)、is_test=true。reject增加note（trim后非空，<=500）。客户端不传actor、PK或订单状态。
+共同body：source_account_ref(string<=128)、warehouse_id='16168'、candidate_version、idempotency_key(UUID)。approve增加qty（严格整数1..1000000且不超过来源可用量）、customs(default/declare/skip，default按当前备注自动结果)、rwh(可选备注<=128)、is_test=true。reject增加note（trim后非空，<=500）。客户端不传actor、PK或订单状态。
 
-响应data：id、candidate_id、pk(null仅驳回)、status(approved/rejected)、qty、version=1、is_test、customs_value(bool/null)、customs_src(manual/unknown)、rwh、actor_uid、note、created_at、snapshot(完整Candidate)。默认报关未知，不能伪造采购备注auto结果。
+响应data：id、candidate_id、pk(null仅驳回)、status(approved/rejected)、qty、version=1、is_test、customs_value(bool/null)、customs_src(default/product_remark/purchase_remark/manual；旧unknown保留)、rwh、actor_uid、note、created_at、snapshot(完整Candidate)。自动报关结果按已发布customs_proof计算，无明确备注时默认不报关；人工选择与默认来源分开保存，旧历史不重算。
 
 ## 事务、幂等与错误
 来源账号+幂等键先加事务锁；相同动作/候选/actor/body重试返回原响应，不重复发号；不同请求409。随后与发布器共用账号+仓库事务锁，重查来源版本、已决定状态和库存；发号/订单/分配/事件单事务。PK为PKYYMMDD-001..999，北京业务日全库统一序列。幂等成功响应写入不可变事件，事件trigger禁止UPDATE/DELETE；订单保存version，为后续变更留扩展。

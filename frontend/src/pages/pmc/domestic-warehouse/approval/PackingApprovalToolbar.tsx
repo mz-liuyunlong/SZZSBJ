@@ -30,12 +30,12 @@ export default function PackingApprovalToolbar({ filters, storeOptions, optionsL
     <CommittedSearch key={filters.search} className="domestic-board__search"
       typeAriaLabel="审批搜索类型" typeValue="all" typeOptions={[{ value: "all", label: "SKU / 单号" }]}
       inputAriaLabel="搜索待审批打包单" inputValue={filters.search}
-      inputPlaceholder="SKU / 入库单 / 采购单 / 打包单"
+      inputPlaceholder="SKU / 入库单 / 采购单 / ItemID"
       searchAriaLabel="搜索打包单审批"
       onCommit={({ keyword }) => onChange({ ...filters, search: keyword })} />
     <label className="domestic-approval__created-range">
-      <Typography.Text type="secondary">生成日期</Typography.Text>
-      <DatePicker.RangePicker aria-label="打包单生成日期" locale={zhCN} format="YYYY-MM-DD"
+      <Typography.Text type="secondary">到仓日期</Typography.Text>
+      <DatePicker.RangePicker aria-label="来源入库到仓日期" locale={zhCN} format="YYYY-MM-DD"
         allowEmpty={[true, true]} placeholder={["开始日期", "结束日期"]}
         value={[filters.createdFrom ? dayjs(filters.createdFrom) : null, filters.createdTo ? dayjs(filters.createdTo) : null]}
         onChange={(_, dates) => onChange({ ...filters, createdFrom: dates[0] || undefined, createdTo: dates[1] || undefined })} />

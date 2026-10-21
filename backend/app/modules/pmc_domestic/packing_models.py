@@ -3,6 +3,7 @@
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
+from app.db.base import Base
 from sqlalchemy import (
     JSON,
     Boolean,
@@ -19,8 +20,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
 
 J = JSON().with_variant(JSONB(), "postgresql")
 
@@ -48,7 +47,20 @@ class PackingOrder(Base):
         ),
         CheckConstraint("is_test", name="packing_local_verification"),
         CheckConstraint("status<>'rejected' OR length(trim(note))>0", name="packing_reject_note"),
-        UniqueConstraint("source_account_ref", "candidate_id"),
+        Index(
+            "uq_domestic_packing_candidate_active",
+            "source_account_ref",
+            "candidate_id",
+            unique=True,
+            postgresql_where=text("status IN ('approved','rejected')"),
+        ),
+        Index(
+            "uq_domestic_packing_identity_active",
+            "source_account_ref",
+            "final_identity_key",
+            unique=True,
+            postgresql_where=text("status IN ('approved','rejected')"),
+        ),
         ForeignKeyConstraint(
             ["source_publication_id", "source_board_id"],
             [
@@ -57,10 +69,10 @@ class PackingOrder(Base):
             ],
             ondelete="RESTRICT",
         ),
-        CheckConstraint("status IN ('approved','rejected')", name="packing_status"),
+        CheckConstraint("status IN ('approved','rejected','voided')", name="packing_status"),
         CheckConstraint("version > 0", name="packing_version"),
         CheckConstraint(
-            "(status='approved' AND pk IS NOT NULL AND qty BETWEEN 1 AND 1000000) "
+            "(status IN ('approved','voided') AND pk IS NOT NULL AND qty BETWEEN 1 AND 1000000) "
             "OR (status='rejected' AND pk IS NULL AND qty IS NULL)",
             name="packing_decision_fields",
         ),
@@ -84,6 +96,13 @@ class PackingOrder(Base):
     source_publication_id: Mapped[UUID] = mapped_column(nullable=False)
     source_board_id: Mapped[UUID] = mapped_column(nullable=False)
     snapshot_json: Mapped[dict] = mapped_column(J, nullable=False)
+    source_snapshot_json: Mapped[dict | None] = mapped_column(J)
+    final_identity_key: Mapped[str | None] = mapped_column(String(64))
+    business_test: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    void_note: Mapped[str | None] = mapped_column(String(500))
     actor_uid: Mapped[str] = mapped_column(String(128), nullable=False)
     note: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
@@ -124,6 +143,7 @@ class PackingAllocation(Base):
     source_board_id: Mapped[UUID] = mapped_column(nullable=False)
     source_publication_id: Mapped[UUID] = mapped_column(nullable=False)
     qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PackingEvent(Base):
@@ -132,7 +152,9 @@ class PackingEvent(Base):
         CheckConstraint("order_version>0", name="packing_event_version"),
         UniqueConstraint("source_account_ref", "idempotency_key"),
         UniqueConstraint("order_id", "order_version"),
-        CheckConstraint("event_kind IN ('approve','reject')", name="packing_event_kind"),
+        CheckConstraint(
+            "event_kind IN ('approve','reject','link','void','test')", name="packing_event_kind"
+        ),
     )
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     order_id: Mapped[UUID] = mapped_column(
@@ -148,5 +170,41 @@ class PackingEvent(Base):
     request_json: Mapped[dict] = mapped_column(J, nullable=False)
     response_json: Mapped[dict] = mapped_column(J, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now, nullable=False
+    )
+
+
+class PackingManualRequest(Base):
+    """A submitted manual request; approval and stock allocation happen later."""
+
+    __tablename__ = "ops_domestic_packing_manual_requests"
+    __table_args__ = (
+        UniqueConstraint("source_account_ref", "idempotency_key"),
+        ForeignKeyConstraint(
+            ["source_publication_id", "source_board_id"],
+            [
+                "mart_domestic_inbound_batch_board.publication_id",
+                "mart_domestic_inbound_batch_board.id",
+            ],
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("requested_qty BETWEEN 1 AND 1000000", name="manual_quantity"),
+    )
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    warehouse_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_publication_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_board_id: Mapped[UUID] = mapped_column(nullable=False)
+    source_snapshot_json: Mapped[dict] = mapped_column(J, nullable=False)
+    requested_snapshot_json: Mapped[dict] = mapped_column(J, nullable=False)
+    requested_qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    customs: Mapped[str] = mapped_column(String(16), nullable=False)
+    rwh: Mapped[str | None] = mapped_column(String(128))
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    actor_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    idempotency_key: Mapped[UUID] = mapped_column(nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_json: Mapped[dict] = mapped_column(J, nullable=False)
+    submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now, nullable=False
     )

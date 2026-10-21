@@ -271,6 +271,8 @@ def permission_for_request(method: str, path: str, declared_permission: str) -> 
             return "action:pmc:domestic-warehouse-board:packing-approve"
         if path.endswith("/reject"):
             return "action:pmc:domestic-warehouse-board:packing-reject"
+    if normalized_method == "POST" and path == "/api/pmc/domestic/packing-approval/manual":
+        return "action:pmc:domestic-warehouse-board:packing-manual-create"
     for rule in _RULES:
         if rule.matches(normalized_method, path):
             if (

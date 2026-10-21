@@ -16,7 +16,7 @@ test("read-only role sees candidate and blocked reason without write controls", 
   });
   await page.goto("/#/pmc/domestic-warehouse-board"); await page.getByRole("tab", { name: "打包单审批", exact: true }).click();
   await expect(page.getByText("FIXTURE-SKU", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^通\s*过$/ }).first()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "审批通过", exact: true }).first()).toBeDisabled();
   await expect(page.getByRole("button", { name: /^驳\s*回$/ }).first()).toBeDisabled();
   await expect(page.getByRole("button", { name: "手工添加打包单", exact: true })).toBeDisabled();
 });

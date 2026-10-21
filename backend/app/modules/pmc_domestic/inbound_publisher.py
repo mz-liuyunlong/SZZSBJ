@@ -6,9 +6,6 @@ import hashlib
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, text, update
-from sqlalchemy.orm import Session
-
 from app.modules.integration_sync.models import ApiRawRequestRef, IntegrationSyncRun
 from app.modules.pmc_domestic.inbound_builder import (
     VERSION,
@@ -25,6 +22,9 @@ from app.modules.pmc_domestic.inbound_models import (
     DomesticWarehouseStatement,
 )
 from app.modules.pmc_domestic.models import LingxingDomesticBatchOds
+from app.modules.pmc_domestic.packing_customs_materializer import enrich_customs
+from sqlalchemy import select, text, update
+from sqlalchemy.orm import Session
 
 
 class InboundPublisher:
@@ -108,6 +108,7 @@ class InboundPublisher:
                 warehouse=warehouse,
                 source_timezone=source_timezone,
             )
+            enrich_customs(self.session, account, projection)
             all_refs = list(
                 self.session.scalars(
                     select(ApiRawRequestRef).where(

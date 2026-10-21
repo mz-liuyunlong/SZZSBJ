@@ -1,4 +1,4 @@
-/** Display-only types; no packing approval API is wired yet. */
+/** Column definitions and filter state for the local packing approval API. */
 import type { DomesticFilterOptions } from "../domesticWarehouseTypes";
 
 export type PackingApprovalOverdueFilter = "all" | "overdue" | "not_overdue";
@@ -53,8 +53,10 @@ export const packingApprovalFields = [
   { key: "store", title: "店铺", width: 170 },
   { key: "qty", title: "备货数量", width: 100 },
   { key: "customs", title: "是否报关", width: 120 },
+  { key: "waiting", title: "待审批天数", width: 100 },
+  { key: "coverage", title: "历史覆盖", width: 100 },
   { key: "status", title: "状态", width: 100 },
-  { key: "actions", title: "操作", width: 160 },
+  { key: "actions", title: "操作", width: 280 },
 ] as const;
 
 export type PackingApprovalFilterOptions = Pick<DomesticFilterOptions, "stores">;

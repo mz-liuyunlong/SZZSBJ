@@ -9,11 +9,15 @@ export interface ApprovalCandidate {
   arrival_status: "unknown"; candidate_created_on: string | null; overdue: boolean | null;
   stock_balance: number | null; available_quantity: number | null; default_quantity: number | null;
   can_approve: boolean; blocked_reasons: string[]; source_observed_at: string;
+  origin?: "automatic" | "manual"; manual_reason?: string | null; source_store_id?: string | null; manual_customs?: "default" | "declare" | "skip" | null; manual_rwh?: string | null;
+  customs_default?: boolean; customs_default_src?: "default" | "product_remark" | "purchase_remark"; customs_proof?: { value: boolean; source: string; rule: string; field: string | null; remark: string | null; ref: string | null; observed_at: string | null } | null; waiting_days?: number | null; history_complete?: boolean;
 }
 export interface PackingOrder {
-  id: string; candidate_id: string; pk: string | null; status: "approved" | "rejected"; qty: number | null;
+  id: string; candidate_id: string; pk: string | null; status: "approved" | "rejected" | "voided"; qty: number | null;
   version: number; is_test: boolean; customs_value: boolean | null; customs_src: string; rwh: string | null;
   actor_uid: string; note: string | null; created_at: string; snapshot: ApprovalCandidate;
+  source_snapshot?: ApprovalCandidate | null;
+  voided_at?: string | null; void_note?: string | null;
 }
 export interface PackingSummary { pending: number; overdue: number; blocked: number; approved: number; rejected: number }
 export interface PackingEvent { id: string; event_kind: string; actor_uid: string; order_version: number; occurred_at: string; note: string | null }
@@ -21,6 +25,7 @@ export type DecisionKind = "approve" | "reject";
 export interface DecisionPayload {
   source_account_ref: string; warehouse_id: string; candidate_version: string; idempotency_key: string;
   qty?: number; customs?: "default" | "declare" | "skip"; rwh?: string; is_test?: true; note?: string;
+  target_store_id?: string; target_item_id?: string; listing_version?: string; edit_reason?: string;
 }
 const prefix = "/api/pmc/domestic/packing-approval";
 export function approvalQuery(filters: PackingApprovalFilters, page?: number, pageSize?: number) {
@@ -49,3 +54,12 @@ export function approvalErrorText(error: unknown) {
   }
   return "打包审批服务请求失败，请重试；未确认成功前请勿重复创建其他审批。";
 }
+
+export interface ListingChoice { store_id: string; store_name: string | null; item_id: string; gtin: string | null; msku: string | null; listing_version: string; cross_store: boolean }
+export interface PackingEditOptions { candidate: ApprovalCandidate; listings: ListingChoice[]; cross_store_proof_available: boolean }
+export const getPackingEditOptions = (row: ApprovalCandidate, signal?: AbortSignal) => backendRequest<PackingEditOptions>(`${prefix}/pending/${encodeURIComponent(row.id)}/edit-options?${new URLSearchParams({ source_account_ref: row.source_account_ref })}`, { signal });
+
+export interface ManualPackingPayload { source_account_ref: string; warehouse_id: "16168"; board_id: string; source_version: string; target_store_id: string; target_item_id: string; listing_version: string; qty: number; customs: "default" | "declare" | "skip"; rwh?: string; reason: string; idempotency_key: string }
+export const listManualPackingSources = (keyword: string, signal?: AbortSignal) => backendRequest<{ items: ApprovalCandidate[]; total: number }>(`${prefix}/manual/sources?${new URLSearchParams({ keyword, page: "1", page_size: "50" })}`, { signal });
+export const getManualPackingOptions = (row: ApprovalCandidate, signal?: AbortSignal) => backendRequest<PackingEditOptions>(`${prefix}/manual/${encodeURIComponent(row.board_id)}/options?${new URLSearchParams({ source_account_ref: row.source_account_ref })}`, { signal });
+export const submitManualPacking = (body: ManualPackingPayload) => backendRequest<{ id: string; status: "pending" }>(`${prefix}/manual`, { method: "POST", body: JSON.stringify(body) });

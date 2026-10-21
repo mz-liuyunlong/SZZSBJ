@@ -1,3 +1,4 @@
+import { customsSourceLabel } from "./packingCustoms";
 /** Immutable local approval outcomes and per-order audit trail. */
 import { Alert, Button, Descriptions, Drawer, Empty, Table, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
@@ -13,7 +14,7 @@ export default function PackingApprovalHistory(p: Props) {
       pagination={{ current: p.page, pageSize: 20, total: p.total, onChange: p.onPage }} locale={{ emptyText: <Empty description="暂无审批记录" /> }} columns={[
         { title: "打包单号", render: (_, r) => r.pk ?? "驳回（未发PK）" },
         { title: "入库单 / SKU", render: (_, r) => `${r.snapshot.inbound_order_sn} / ${r.snapshot.sku}` },
-        { title: "状态", render: (_, r) => <Tag color={r.status === "approved" ? "success" : "error"}>{r.status === "approved" ? "已通过" : "已驳回"}</Tag> },
+        { title: "状态", render: (_, r) => <Tag color={r.status === "approved" ? "success" : "error"}>{r.status === "approved" ? "已通过" : r.status === "voided" ? "已作废" : "已驳回"}</Tag> },
         { title: "数量", dataIndex: "qty" }, { title: "记录", render: (_, r) => <Button onClick={() => setSelected(r)}>查看审计</Button> },
       ]} />
     <Drawer title="审批审计" open={!!selected && p.open} onClose={() => setSelected(undefined)} width={620}>
@@ -21,7 +22,9 @@ export default function PackingApprovalHistory(p: Props) {
         { key: "pk", label: "打包单", children: selected.pk ?? "未发号" },
         { key: "actor", label: "审批人UID", children: selected.actor_uid },
         { key: "date", label: "审批时间", children: selected.created_at },
-        { key: "note", label: "原因", children: selected.note ?? "—" },
+        { key: "note", label: "原因", children: selected.void_note ?? selected.note ?? "—" },
+        { key: "identity", label: "原店铺 / ItemID → 最终店铺 / ItemID", children: `${selected.source_snapshot?.store_id ?? selected.snapshot.store_id} / ${selected.source_snapshot?.item_id ?? selected.snapshot.item_id} → ${selected.snapshot.store_id} / ${selected.snapshot.item_id}` },
+        { key: "customs", label: "是否报关 / 来源", children: `${selected.customs_value === null ? "未知" : selected.customs_value ? "报关" : "不报关"} / ${customsSourceLabel(selected.customs_src)}` },
         { key: "source", label: "来源版本", children: selected.snapshot.publication_id },
       ]} />}
       {events.error ? <Alert type="error" message={approvalErrorText(events.error)} action={<Button onClick={() => void events.refetch()}>重试</Button>} /> : null}

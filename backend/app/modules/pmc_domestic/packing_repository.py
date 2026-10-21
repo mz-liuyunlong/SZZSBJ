@@ -9,16 +9,16 @@ from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
-
 from app.modules.data_pages.models import LingxingStoreDimension as Store
 from app.modules.data_pages.models import WalmartListingDimension as Listing
 from app.modules.pmc_domestic.inbound_models import DomesticBoardPublication as Pub
 from app.modules.pmc_domestic.inbound_models import DomesticInboundBoard as Board
+from app.modules.pmc_domestic.packing_customs_rules import candidate_customs
 from app.modules.pmc_domestic.packing_models import PackingAllocation, PackingOrder
 from app.modules.pmc_domestic.packing_rules import fingerprint
 from app.modules.pmc_domestic.packing_schemas import Candidate, OrderRead
 from app.modules.pmc_purchase.gate3_models import DwdPurchaseOrderLineItem
+from sqlalchemy import func, select
 
 
 def order_read(row):
@@ -37,6 +37,11 @@ def order_read(row):
         note=row.note,
         created_at=row.created_at,
         snapshot=Candidate.model_validate(row.snapshot_json),
+        source_snapshot=Candidate.model_validate(row.source_snapshot_json)
+        if row.source_snapshot_json
+        else None,
+        voided_at=row.voided_at,
+        void_note=row.void_note,
     )
 
 
@@ -70,7 +75,7 @@ class PackingRepository:
     def orders(self, accounts):
         if not accounts:
             return []
-        return list(
+        rows = list(
             self.session.scalars(
                 select(PackingOrder)
                 .where(
@@ -80,6 +85,8 @@ class PackingRepository:
                 .order_by(PackingOrder.created_at.desc(), PackingOrder.id)
             )
         )
+
+        return rows
 
     def candidates(self, accounts, include_decided=False):
         if not accounts:
@@ -123,6 +130,7 @@ class PackingRepository:
                 .join(PackingOrder, PackingOrder.id == PackingAllocation.order_id)
                 .where(
                     PackingOrder.status == "approved",
+                    PackingAllocation.released_at.is_(None),
                     PackingAllocation.source_account_ref.in_(accounts),
                 )
                 .group_by(
@@ -132,7 +140,11 @@ class PackingRepository:
                 )
             )
         }
-        decided = {(r.source_account_ref, str(r.candidate_id)) for r in self.orders(accounts)}
+        orders = [r for r in self.orders(accounts) if r.status != "voided"]
+        decided = {(r.source_account_ref, str(r.candidate_id)) for r in orders}
+        final_decided = {
+            (r.source_account_ref, str(r.source_board_id), r.store_id, r.item_id) for r in orders
+        }
         stores = {
             (r.source_account_ref, r.store_id): r.store_name
             for r in s.scalars(select(Store).where(Store.source_account_ref.in_(accounts)))
@@ -186,7 +198,10 @@ class PackingRepository:
                     f"szzsbj:packing:{b.source_account_ref}:{b.source_warehouse_id}:"
                     f"{b.id}:{item or 'unmapped'}",
                 )
-                if not include_decided and (b.source_account_ref, str(ident)) in decided:
+                if not include_decided and (
+                    (b.source_account_ref, str(ident)) in decided
+                    or (b.source_account_ref, str(b.id), b.store_id, item) in final_decided
+                ):
                     continue
                 blocked = []
                 if not b.store_id:
@@ -212,6 +227,7 @@ class PackingRepository:
                     "inbound_order_sn": b.inbound_order_sn,
                     "sku": b.sku,
                     "store_id": b.store_id,
+                    "source_store_id": b.store_id,
                     "store_name": stores.get((b.source_account_ref, b.store_id)),
                     "item_id": item,
                     "gtin": listing.gtin if listing else None,
@@ -229,9 +245,18 @@ class PackingRepository:
                     "can_approve": not blocked,
                     "blocked_reasons": blocked,
                     "source_observed_at": pub.source_observed_at,
+                    "waiting_days": max(0, (today - b.arrival_business_date).days)
+                    if b.arrival_business_date
+                    else None,
+                    "history_complete": bool(payload.get("history_complete", False)),
+                    **candidate_customs(payload.get("customs_proof")),
                 }
                 # Do not include date-dependent overdue in a source concurrency token.
-                token = {k: v for k, v in raw.items() if k not in ("overdue", "store_name")}
+                token = {
+                    k: v
+                    for k, v in raw.items()
+                    if k not in ("overdue", "store_name", "waiting_days")
+                }
                 token["listing_hash"] = listing.business_hash if listing else None
                 raw["candidate_version"] = fingerprint(token)
                 result.append(Candidate.model_validate(raw))
