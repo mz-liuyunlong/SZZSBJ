@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from alembic import op
 from sqlalchemy import text
+
+from alembic import op
 
 revision: str = "20261019_0048_domestic_warehouse_dwd_and_permission"
 down_revision: str | Sequence[str] | None = "20261019_0047_domestic_warehouse_ods"

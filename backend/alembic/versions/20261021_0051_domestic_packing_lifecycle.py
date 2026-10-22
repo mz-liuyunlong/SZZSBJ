@@ -2,8 +2,9 @@
 
 # ruff: noqa: E501
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "20261021_0051_domestic_packing_lifecycle"
 down_revision = "20261020_0050_domestic_packing_approval"

@@ -24,11 +24,16 @@ class DomesticApiRegistryEntry:
 
 DOMESTIC_BATCH_API_REGISTRY: Final[dict[DomesticApiKey, DomesticApiRegistryEntry]] = {
     "filter-options": DomesticApiRegistryEntry(
-        key="filter-options", route_path="/api/pmc/domestic/filter-options",
+        key="filter-options",
+        route_path="/api/pmc/domestic/filter-options",
         permission=PERMISSION_READ,
-        source_objects=("dwd_domestic_receipt_batch", "dwd_domestic_receipt_batch_link",
-                        "dim_lingxing_stores", "dwd_lingxing_sku_identity_index",
-                        "dwd_lingxing_sku_product_info_current"),
+        source_objects=(
+            "dwd_domestic_receipt_batch",
+            "dwd_domestic_receipt_batch_link",
+            "dim_lingxing_stores",
+            "dwd_lingxing_sku_identity_index",
+            "dwd_lingxing_sku_product_info_current",
+        ),
     ),
     "batches": DomesticApiRegistryEntry(
         key="batches",

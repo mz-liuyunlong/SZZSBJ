@@ -4,12 +4,13 @@ from uuid import uuid4
 
 import pytest
 import test_packing_approval as m1
+from sqlalchemy import func, select, text
+
 from app.core.api import ApiError
 from app.modules.pmc_domestic.packing_manual_service import ManualPackingService
 from app.modules.pmc_domestic.packing_models import PackingAllocation, PackingManualRequest
 from app.modules.pmc_domestic.packing_schemas import ManualCommand, PackingQuery
 from app.modules.pmc_domestic.packing_service import PackingService
-from sqlalchemy import func, select, text
 
 db = m1.db
 seeded = m1.seeded
@@ -114,11 +115,12 @@ def test_manual_insufficient_stock_and_changed_source_cannot_submit(db, seeded):
 
 
 def test_manual_permission_and_removed_system_routes(db, seeded):
+    from fastapi.testclient import TestClient
+
     from app.core.auth import Principal, get_optional_principal
     from app.db.session import get_db_session
     from app.main import create_app
     from app.modules.integration_sync.dependencies import require_source_account_scope
-    from fastapi.testclient import TestClient
 
     account, _, _ = seeded
     app = create_app()

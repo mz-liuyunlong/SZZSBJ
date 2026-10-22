@@ -4,7 +4,7 @@
 
 状态：READY_FOR_PRP，仅适用于本文限定的 M1；PRP 尚待负责人批准。此状态不是代码实施、真实采集或数据库写入授权。
 
-存放说明：本文为当前工作区内可审阅交付；目标归档路径为 SZZSBJ `docs/data-sources/decisions/pmc-domestic-inbound-board-decision.md`，本次实施同步归档到该项目。
+存放说明：本文为当前工作区内可审阅交付；目标归档路径为 本项目 `docs/data-sources/decisions/pmc-domestic-inbound-board-decision.md`，本次实施同步归档到该项目。
 
 ## 1. 已确认需求与限制
 
@@ -19,11 +19,11 @@
 1. 用户文件：`C:/Users/treas/Desktop/工作文件/PMC交接文档_20261019.html`，第 5.2.1、5.2.2、5.2.5 节；第 2.1.17、2.1.19 节。
 2. 文档明确主表为采购入库单 IB × SKU × 店铺批次；库存流水 2202 建行，批次明细补余额；旧构建实际不读收货单或 inventoryDetails。
 3. 本地旧项目对应 `features/pmc-domestic-warehouse/drafts/build_from_daily.py`，仅作为业务证据，不作为新系统运行依赖或直接复制来源。
-4. SZZSBJ `backend/app/modules/pmc_domestic/{models,publisher,schemas,router}.py`：现 `/batches` 为收货行；不能通过仅换字段名称改为入库事实。
-5. SZZSBJ `backend/app/modules/integration_sync/pmc_domestic_catalog.py`：已有仓库、库存、批次、批次流水四个来源；缺少库存流水（新）的对应国内仓采集流程。
+4. 本项目 `backend/app/modules/pmc_domestic/{models,publisher,schemas,router}.py`：现 `/batches` 为收货行；不能通过仅换字段名称改为入库事实。
+5. 本项目 `backend/app/modules/integration_sync/pmc_domestic_catalog.py`：已有仓库、库存、批次、批次流水四个来源；缺少库存流水（新）的对应国内仓采集流程。
 6. 官方批次明细：https://apidoc.lingxing.com/new/api-docs/Warehouse/GetBatchDetailList/
 7. 官方库存流水：https://apidoc.lingxing.com/new/api-docs/Warehouse/WarehouseStatementNew/
-8. SZZSBJ 官方接口索引：库存流水（新）ID `LX-F0CE5B7F589B`，批次明细 ID `LX-1181D4F827FB`；索引登记不代表外呼已启用。
+8. 本项目 官方接口索引：库存流水（新）ID `LX-F0CE5B7F589B`，批次明细 ID `LX-1181D4F827FB`；索引登记不代表外呼已启用。
 9. 用户提供网页 `/api/batch_detail/list` 单条样本：code=1，data.list，wh_id=28030/WFS虚拟仓，调拨入库 2401，收货和采购关联数组为空；不是惠州采购入库验收样本。
 
 ## 3. 强制来源调查

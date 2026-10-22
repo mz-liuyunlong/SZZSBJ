@@ -197,12 +197,12 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 
 ## 2026-10-20 国内仓最新本地数据发布
 
-当前开发环境已明确为local 127.0.0.1:55432/szzsbj_dev，0049已就绪。重新只读拉取领星惠州16168近30天W3（1296）及当前完整W1（1541），通过RAW/ODS审计后发布1个版本，MART1454行。所列是本地数量，不替代上午生产审计。真实来源新鲜度17:43北京时间。GET入库list/summary/options/detail/trace读取本地当前版本；原收货/batches保持不变。没有生产DB连接/修改、无migration/env/权限变化；本地必要治理配置默认关闭，无定时。路由真实本地DB合成鉴权联调200，运行服务匿名401，本地IAM用户/会话为0，未验证浏览器登录。详细证据见PRPs/pmc-domestic-inbound-local-execution.md。
+当前开发环境已明确为local 127.0.0.1:55432/LOCAL_DATABASE_NAME，0049已就绪。重新只读拉取领星惠州16168近30天W3（1296）及当前完整W1（1541），通过RAW/ODS审计后发布1个版本，MART1454行。所列是本地数量，不替代上午生产审计。真实来源新鲜度17:43北京时间。GET入库list/summary/options/detail/trace读取本地当前版本；原收货/batches保持不变。没有生产DB连接/修改、无migration/env/权限变化；本地必要治理配置默认关闭，无定时。路由真实本地DB合成鉴权联调200，运行服务匿名401，本地IAM用户/会话为0，未验证浏览器登录。详细证据见PRPs/pmc-domestic-inbound-local-execution.md。
 
 
 ## 2026-10-20 采购看板本地数据已导入
 
-负责人授权全量采购看板依赖复制到local 127.0.0.1:55432/szzsbj_dev/public。源生产只读，未重新采集领星；采购来源最新观察时间10-17 18:00:43，不能把10-20本地重算时间视为采集时间。27张非空来源表及完整FK父记录、每条相关记录最新血缘已导入，人工覆盖源为0。核心结果：DWD计划1119/采购单784/明细867，DWS看板867/周期652/重算后待处理711；店铺9、Listing3223、SKU当前资料1435、产品1301。接口只读真实本地DB合成鉴权联调200：看板867、待采购计划196、负责人17；店铺/负责人筛选和带收货详情通过，匿名401，真人浏览器登录态未代替验证。原国内仓1454/用户29保留，所有本地同步/定时/外呼关闭。没有改schema/env/认证/生产或部署。执行与逐表清单：PRPs/pmc-purchase-local-data-execution.md；Navicat：docs/delivery/local-purchase-import-verification.sql，7查询已实跑。仍dev、未提交推送。
+负责人授权全量采购看板依赖复制到local 127.0.0.1:55432/LOCAL_DATABASE_NAME/public。源生产只读，未重新采集领星；采购来源最新观察时间10-17 18:00:43，不能把10-20本地重算时间视为采集时间。27张非空来源表及完整FK父记录、每条相关记录最新血缘已导入，人工覆盖源为0。核心结果：DWD计划1119/采购单784/明细867，DWS看板867/周期652/重算后待处理711；店铺9、Listing3223、SKU当前资料1435、产品1301。接口只读真实本地DB合成鉴权联调200：看板867、待采购计划196、负责人17；店铺/负责人筛选和带收货详情通过，匿名401，真人浏览器登录态未代替验证。原国内仓1454/用户29保留，所有本地同步/定时/外呼关闭。没有改schema/env/认证/生产或部署。执行与逐表清单：PRPs/pmc-purchase-local-data-execution.md；Navicat：docs/delivery/local-purchase-import-verification.sql，7查询已实跑。仍dev、未提交推送。
 
 
 ## 2026-10-20 国内仓打包单审批本地M1
@@ -211,7 +211,7 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 
 ## 国内仓打包审批M2：最终手工流程（2026-10-21）
 
-2026-10-21，当前dev，本地127.0.0.1:55432/szzsbj_dev。最终范围是手工添加打包单与审批前同SKU商品身份修改；系统打包单管理已按负责人要求删除。没有生产访问、提交、推送或部署。
+2026-10-21，当前dev，本地127.0.0.1:55432/LOCAL_DATABASE_NAME。最终范围是手工添加打包单与审批前同SKU商品身份修改；系统打包单管理已按负责人要求删除。没有生产访问、提交、推送或部署。
 
 流程：先选择当前批次看板的入库单×SKU，再选择同账号同SKU的有效Listing目标店铺/ItemID；GTIN/MSKU跟随Listing，不能自由修改SKU。填写数量、报关、收货仓备注和原因后，仅保存待审批申请，不发PK、不分配库存。通过审批时重新核对当前来源和Listing指纹、库存上限，并在单事务中发PK、分配原来源库存和写不可变审计；驳回需要原因。多个手工申请共用原入库库存池，可分批审批但不可超量。
 
@@ -262,3 +262,6 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 - 未装resend在同事务减少原PackingAllocation的有效qty（保留原Order.qty和审计），下轮人工审批余额读取该有效占用；void保留排除占用且不改领星库存。
 - 状态：本地业务及模拟联调已验证，新增ops_domestic_packing_extra_allocations；POST supplemental-inbound/supplemental-sync由中台独立授权。多装足额确认占用，不足记录blocked与本地outbox；真实领星provider未配置，mock仅回滚验收app。异常卡片、来源审计、并发预算已验证；外部消息与货件/领星写入未接入。
 - 本地schema SQL独立存档并有备份；0052未改。生产必须另行整合Alembic迁移并完整验证。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。

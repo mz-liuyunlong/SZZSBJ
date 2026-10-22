@@ -50,7 +50,7 @@
 
 ### 实际范围与安全边界
 
-只使用 backend/.env 中本地 APP_ENV=local、127.0.0.1:55432/szzsbj_dev；URL驱动/host/port/db/query与连接后的数据库身份均核对，指纹9caf2d76b6ec467c，0049已存在，不新增迁移。项目仍dev，保留其他并发改动，未提交推送。没有修改.env/原有密钥/权限/用户/会话，没有部署或重启服务。
+只使用 backend/.env 中本地 APP_ENV=local、127.0.0.1:55432/LOCAL_DATABASE_NAME；URL驱动/host/port/db/query与连接后的数据库身份均核对，指纹9caf2d76b6ec467c，0049已存在，不新增迁移。项目仍dev，保留其他并发改动，未提交推送。没有修改.env/原有密钥/权限/用户/会话，没有部署或重启服务。
 
 本地没有领星App凭据，文件采集在已有服务器凭据所在环境单独执行：仅加载LINGXING白名单变量，不加载生产DATABASE_URL；阻止PostgreSQL驱动import，网络DNS仅准openapi.lingxing.com:443。仅W1/W3，仓库惠州16168，2026-09-21（含）至2026-10-21（不含），源时区Asia/Shanghai，W1当前全量含零库存。读取服务器凭据不等于连接生产库；本轮**没有连接或修改生产数据库**，没有修改生产配置/服务。新采集不是复制上午生产库或复用旧CSV。
 
@@ -85,12 +85,15 @@
 
 ## 2026-10-20 本地用户导入完成（取代“本地用户为0”的旧状态）
 
-负责人明确授权把生产用户数据导入本地以恢复登录，并确认目标为szzsbj_dev而非szzsbj_test。本轮只读连接生产：default_transaction_read_only=on、REPEATABLE READ、transaction_read_only=on；核对原生产身份指纹1029699bdbcf02fc。生产未写入、未改配置、未重启。仅七表IAM快照经已验证SSH在进程内存传输，用户资料/密码哈希未写源dump、日志、聊天或Git；未复制生产会话、重置令牌、生产审计。
+负责人明确授权把生产用户数据导入本地以恢复登录，并确认目标为LOCAL_DATABASE_NAME而非ISOLATED_TEST_DATABASE_NAME。本轮只读连接生产：default_transaction_read_only=on、REPEATABLE READ、transaction_read_only=on；核对原生产身份指纹1029699bdbcf02fc。生产未写入、未改配置、未重启。仅七表IAM快照经已验证SSH在进程内存传输，用户资料/密码哈希未写源dump、日志、聊天或Git；未复制生产会话、重置令牌、生产审计。
 
-本地目标127.0.0.1:55432/szzsbj_dev/public，导入前用户与会话均0；先完整custom-format本地备份并核验pg_restore目录，备份1354412字节、SHA256 c118d59d67c564af730106302d9f0e5ed83740ee1196a56fbde0109fbd7fbc51。单事务导入、保留用户ID及全部原字段、原密码哈希、启停/超级管理员标记；角色ID冲突则拒绝；角色授权和范围按源精确替换而非并集合并，不扩大已有生产授权；用户序列校准。源数据和导入后哈希/用户字段/授权逐项内存比对一致，不输出值。
+本地目标127.0.0.1:55432/LOCAL_DATABASE_NAME/public，导入前用户与会话均0；先完整custom-format本地备份并核验pg_restore目录，备份1354412字节、SHA256 c118d59d67c564af730106302d9f0e5ed83740ee1196a56fbde0109fbd7fbc51。单事务导入、保留用户ID及全部原字段、原密码哈希、启停/超级管理员标记；角色ID冲突则拒绝；角色授权和范围按源精确替换而非并集合并，不扩大已有生产授权；用户序列校准。源数据和导入后哈希/用户字段/授权逐项内存比对一致，不输出值。
 
 结果：app_users29（启用28、超级管理员1）；app_roles6；app_user_roles29；app_role_permissions112；app_role_data_scopes5；app_user_data_scopes0；app_permissions本地160，源159，保留本地额外1条权限定义但不自动授权。会话未迁移，导入后0，用户需重新登录，原生产用户名/密码校验数据保留。国内仓MART仍1454，不改其它业务数据；.env、认证逻辑、数据库结构均未改；仍dev、未提交推送。
 
 Navicat只读核对脚本：docs/delivery/local-iam-import-verification.sql，5条查询已在本地只读事务实际执行通过，检查目标、11张表计数、用户角色、启用/管理员数量、当前发布1454。脚本不查询密码哈希/Token；app_sessions在正常登录后自然增长不应固定为0。没有使用未知生产明文密码做实际登录验证，不声称已验证某个真人的原密码登录200。
 
 详细安全证据存Codex artifact local-iam-import-20261020/import-evidence.json，仅计数/范围/校验结论，无密码哈希或用户资料。后续只在本地正常重新登录；不要因为本轮读取授权继续写生产或迁移生产会话。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。

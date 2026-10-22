@@ -1,6 +1,7 @@
 import os
 from logging.config import fileConfig
 
+from alembic.ddl.postgresql import PostgresqlImpl
 from sqlalchemy import Column, MetaData, PrimaryKeyConstraint, String, Table, create_engine, pool
 from sqlalchemy.engine import URL, Connection
 
@@ -19,7 +20,6 @@ import app.modules.product_management.models  # noqa: F401  # Register product m
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.
 import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS projections.
 from alembic import context
-from alembic.ddl.postgresql import PostgresqlImpl
 from app.core.config import AppEnvironment, SettingsError, get_database_url, get_settings
 from app.db.base import Base
 

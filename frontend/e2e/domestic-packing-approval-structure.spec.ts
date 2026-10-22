@@ -14,7 +14,8 @@ test("read-only role sees candidate and blocked reason without write controls", 
       : { items: [], total: 0 };
     await route.fulfill({ status: 200, contentType: "application/json", body: envelope(data) });
   });
-  await page.goto("/#/pmc/domestic-warehouse-board"); await page.getByRole("tab", { name: "打包单审批", exact: true }).click();
+  await page.goto("/#/pmc/domestic/packing-approval");
+  await expect(page.getByRole("heading", { name: "打包单审批", exact: true })).toBeVisible();
   await expect(page.getByText("FIXTURE-SKU", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "审批通过", exact: true }).first()).toBeDisabled();
   await expect(page.getByRole("button", { name: /^驳\s*回$/ }).first()).toBeDisabled();
@@ -29,7 +30,8 @@ test("list errors are actionable and never shown as empty success", async ({ pag
     const data = p === "/api/auth/me" ? { id: 16, username: "packing-ui-test", display_name: "UI测试", is_super_admin: false, role_keys: [], role_names: [], permissions: ["page:pmc:domestic-warehouse-board:view"] } : p.endsWith("/filter-options") ? { stores: [], owners: [] } : { items: [], total: 0 };
     await route.fulfill({ status: 200, contentType: "application/json", body: envelope(data) });
   });
-  await page.goto("/#/pmc/domestic-warehouse-board"); await page.getByRole("tab", { name: "打包单审批", exact: true }).click();
+  await page.goto("/#/pmc/domestic/packing-approval");
+  await expect(page.getByRole("heading", { name: "打包单审批", exact: true })).toBeVisible();
   await expect(page.getByText(/打包审批服务请求失败/)).toBeVisible({ timeout: 20000 });
   await expect(page.getByRole("button", { name: /^重\s*试$/ })).toBeVisible();
 });

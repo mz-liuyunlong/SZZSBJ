@@ -3,7 +3,7 @@
 2026-10-20；状态testing、本地已实现，不代表已部署或允许生产审批。来源决策/PRP：pmc-domestic-packing-approval-decision.md、pmc-domestic-packing-approval-backend.md。复用统一SuccessEnvelope，OpenAPI已注册，数据中心API目录同步。
 
 ## 范围和权限
-前缀`/api/pmc/domestic/packing-approval`。所有接口需登录及可信source-account scope。GET需`page:pmc:domestic-warehouse-board:view`；通过需`action:pmc:domestic-warehouse-board:packing-approve`；驳回需`action:pmc:domestic-warehouse-board:packing-reject`。页面权限不能替代动作权限，已有角色未自动授予动作。来源仓库固定惠州16168。任何POST还校验APP_ENV及真实Engine连接目标，只允许本地szzsbj_dev（测试环境仅szzsbj_test）；均为is_test=true，不创建OWS、不触发Celery、不调用领星或Walmart。
+前缀`/api/pmc/domestic/packing-approval`。所有接口需登录及可信source-account scope。GET需`page:pmc:domestic-warehouse-board:view`；通过需`action:pmc:domestic-warehouse-board:packing-approve`；驳回需`action:pmc:domestic-warehouse-board:packing-reject`。页面权限不能替代动作权限，已有角色未自动授予动作。来源仓库固定惠州16168。任何POST还校验APP_ENV及真实Engine连接目标，只允许本地LOCAL_DATABASE_NAME（测试环境仅ISOLATED_TEST_DATABASE_NAME）；均为is_test=true，不创建OWS、不触发Celery、不调用领星或Walmart。
 
 ## 端点
 | 方法 | 路径 | 返回 |
@@ -56,3 +56,6 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 
 ## 技术依据
 事务嵌套测试按[SQLAlchemy Session文档](https://docs.sqlalchemy.org/en/20/orm/session_api.html#sqlalchemy.orm.Session.params.join_transaction_mode)；发布/审批互斥使用[PostgreSQL事务咨询锁](https://www.postgresql.org/docs/14/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS)。实际验证结果见交付记录，不把文档设计当成测试结果。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。

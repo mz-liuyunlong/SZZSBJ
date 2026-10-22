@@ -160,14 +160,9 @@ def test_shared_stock_idempotency_and_rollback(db, seeded):
     cmd = command(rows[0])
     cmd.qty = 7
     order = svc.decide(rows[0].id, cmd, "approve", "synthetic-test", scope)
+    assert svc.decide(rows[0].id, cmd, "approve", "synthetic-test", scope).id == order.id
     assert (
-        svc.decide(rows[0].id, cmd, "approve", "synthetic-test", scope).id == order.id
-    )
-    assert (
-        db.scalar(
-            select(PackingAllocation.qty).where(PackingAllocation.order_id == order.id)
-        )
-        == 7
+        db.scalar(select(PackingAllocation.qty).where(PackingAllocation.order_id == order.id)) == 7
     )
     remaining = svc.pending(PackingQuery(), scope).items
     assert len(remaining) == 1 and remaining[0].available_quantity == 3
@@ -214,9 +209,7 @@ def test_reject_terminal_and_audit_immutable(db, seeded):
     event = db.scalar(select(PackingEvent).where(PackingEvent.order_id == order.id))
     with pytest.raises(DBAPIError), db.begin_nested():
         db.execute(
-            text(
-                "UPDATE evt_domestic_packing_events SET actor_uid=actor_uid WHERE id=:id"
-            ),
+            text("UPDATE evt_domestic_packing_events SET actor_uid=actor_uid WHERE id=:id"),
             {"id": event.id},
         )
 
@@ -241,9 +234,7 @@ def test_page_only_cannot_approve_and_reject(db, seeded):
     account, _, _ = seeded
     app = create_app()
     app.dependency_overrides[get_db_session] = lambda: db
-    app.dependency_overrides[require_source_account_scope] = lambda: frozenset(
-        {account}
-    )
+    app.dependency_overrides[require_source_account_scope] = lambda: frozenset({account})
     app.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id="synthetic-test", permissions=frozenset({READ})
     )
@@ -257,18 +248,10 @@ def test_page_only_cannot_approve_and_reject(db, seeded):
         "idempotency_key": str(uuid4()),
         "qty": 1,
     }
-    assert (
-        client.post(
-            PREFIX + "/pending/" + row["id"] + "/approve", json=body
-        ).status_code
-        == 403
-    )
+    assert client.post(PREFIX + "/pending/" + row["id"] + "/approve", json=body).status_code == 403
     body.pop("qty")
     body["note"] = "test"
-    assert (
-        client.post(PREFIX + "/pending/" + row["id"] + "/reject", json=body).status_code
-        == 403
-    )
+    assert client.post(PREFIX + "/pending/" + row["id"] + "/reject", json=body).status_code == 403
     app.dependency_overrides[get_optional_principal] = lambda: None
     assert client.get(PREFIX + "/pending").status_code == 401
 
@@ -283,8 +266,8 @@ def test_daily_cap_is_atomic(db, seeded):
     day = datetime.now(ZoneInfo("Asia/Shanghai")).date()
     db.execute(
         text(
-                "INSERT INTO ops_domestic_pk_sequences (business_date,last_value) "
-                "VALUES (:day,999) ON CONFLICT(business_date) DO UPDATE SET last_value=999"
+            "INSERT INTO ops_domestic_pk_sequences (business_date,last_value) "
+            "VALUES (:day,999) ON CONFLICT(business_date) DO UPDATE SET last_value=999"
         ),
         {"day": day},
     )
@@ -301,9 +284,7 @@ def test_event_failure_rolls_back_order_allocation_and_counter(db, seeded, monke
     scope = frozenset({account})
     row = svc.pending(PackingQuery(), scope).items[0]
     db.commit()
-    before = db.scalar(
-        text("SELECT COALESCE(sum(last_value),0) FROM ops_domestic_pk_sequences")
-    )
+    before = db.scalar(text("SELECT COALESCE(sum(last_value),0) FROM ops_domestic_pk_sequences"))
     db.commit()
     original = db.add
 
@@ -318,16 +299,12 @@ def test_event_failure_rolls_back_order_allocation_and_counter(db, seeded, monke
     assert len(svc.repo.orders(scope)) == 0
     assert (
         db.scalar(
-            select(PackingAllocation.id).where(
-                PackingAllocation.source_account_ref == account
-            )
+            select(PackingAllocation.id).where(PackingAllocation.source_account_ref == account)
         )
         is None
     )
     assert (
-        db.scalar(
-            text("SELECT COALESCE(sum(last_value),0) FROM ops_domestic_pk_sequences")
-        )
+        db.scalar(text("SELECT COALESCE(sum(last_value),0) FROM ops_domestic_pk_sequences"))
         == before
     )
 

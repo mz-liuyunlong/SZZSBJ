@@ -6,6 +6,9 @@ import hashlib
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy import select, text, update
+from sqlalchemy.orm import Session
+
 from app.modules.integration_sync.models import ApiRawRequestRef, IntegrationSyncRun
 from app.modules.pmc_domestic.inbound_builder import (
     VERSION,
@@ -23,8 +26,6 @@ from app.modules.pmc_domestic.inbound_models import (
 )
 from app.modules.pmc_domestic.models import LingxingDomesticBatchOds
 from app.modules.pmc_domestic.packing_customs_materializer import enrich_customs
-from sqlalchemy import select, text, update
-from sqlalchemy.orm import Session
 
 
 class InboundPublisher:

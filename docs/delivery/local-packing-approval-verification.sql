@@ -1,4 +1,5 @@
--- Navicat连接本地55432，数据库选择szzsbj_dev。以下全部只读。
+-- 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。
+-- Navicat连接本地55432，数据库选择LOCAL_DATABASE_NAME。以下全部只读。
 SELECT current_database() AS database_name, inet_server_port() AS server_port;
 SELECT version_num FROM public.alembic_version;
 SELECT 'ops_domestic_pk_sequences' AS table_name,count(*) AS row_count FROM public.ops_domestic_pk_sequences

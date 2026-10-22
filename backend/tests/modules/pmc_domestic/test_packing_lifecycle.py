@@ -2,11 +2,12 @@
 
 import pytest
 import test_packing_approval as m1
+from sqlalchemy import select
+
 from app.core.api import ApiError
 from app.modules.pmc_domestic.packing_models import PackingAllocation
 from app.modules.pmc_domestic.packing_schemas import PackingQuery
 from app.modules.pmc_domestic.packing_service import PackingService
-from sqlalchemy import select
 
 db = m1.db
 seeded = m1.seeded

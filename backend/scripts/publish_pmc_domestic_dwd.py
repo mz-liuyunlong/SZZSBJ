@@ -40,9 +40,7 @@ def main() -> int:
 
     try:
         with get_session_factory()() as session:
-            result = PmcDomesticDwdPublisher(session).publish(
-                source_account_ref=source_account_ref
-            )
+            result = PmcDomesticDwdPublisher(session).publish(source_account_ref=source_account_ref)
     except PmcDomesticDwdPublishError as error:
         print(str(error))
         return 1

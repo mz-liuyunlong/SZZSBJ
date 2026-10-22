@@ -85,9 +85,7 @@ def downgrade():
             {"key": key},
         ):
             raise RuntimeError("PACKING_PERMISSION_IN_USE")
-        bind.execute(
-            text("DELETE FROM app_permissions WHERE permission_key=:key"), {"key": key}
-        )
+        bind.execute(text("DELETE FROM app_permissions WHERE permission_key=:key"), {"key": key})
     bind.execute(
         text(
             "DROP TABLE evt_domestic_packing_events; DROP FUNCTION prevent_domestic_packing_event_mutation(); DROP TABLE ops_domestic_packing_allocations; DROP TABLE ops_domestic_packing_orders; DROP TABLE ops_domestic_pk_sequences;"

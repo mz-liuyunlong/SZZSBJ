@@ -25,9 +25,7 @@ def _payment_text(value: object) -> str:
     return "".join(value.split())
 
 
-def payment_is_online_bank_transfer(
-    payment_method: object, payment: object = None
-) -> bool:
+def payment_is_online_bank_transfer(payment_method: object, payment: object = None) -> bool:
     if _int_flag(payment_method) == ONLINE_BANK_TRANSFER_METHOD:
         return True
     text = _payment_text(payment)
@@ -45,9 +43,7 @@ def purchase_order_requires_customs(header: Mapping[str, Any]) -> bool:
 
 
 def _order_remark(order_sn: str, header: Mapping[str, Any]) -> str:
-    if payment_is_online_bank_transfer(
-        header.get("payment_method"), header.get("payment")
-    ):
+    if payment_is_online_bank_transfer(header.get("payment_method"), header.get("payment")):
         method = header.get("payment")
         if isinstance(method, str) and method.strip():
             return f"{order_sn}：支付方式 {method.strip()}"
@@ -58,9 +54,7 @@ def _order_remark(order_sn: str, header: Mapping[str, Any]) -> str:
 
 
 def _order_field(header: Mapping[str, Any]) -> str:
-    if payment_is_online_bank_transfer(
-        header.get("payment_method"), header.get("payment")
-    ):
+    if payment_is_online_bank_transfer(header.get("payment_method"), header.get("payment")):
         return "purchase_order.payment_method"
     if is_tax_included(header.get("is_tax")):
         return "purchase_order.is_tax"

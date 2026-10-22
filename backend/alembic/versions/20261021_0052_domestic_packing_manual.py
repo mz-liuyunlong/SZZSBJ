@@ -1,10 +1,10 @@
 """Manual drafts precede approval; retired system-management definitions are disabled."""
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 # ruff: noqa: E501
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 revision = "20261021_0052_domestic_packing_manual"
 down_revision = "20261021_0051_domestic_packing_lifecycle"

@@ -2,6 +2,7 @@
 
 import pytest
 import test_packing_approval as m1
+
 from app.modules.pmc_domestic.packing_customs_rules import (
     customs_proof,
     is_tax_included,
@@ -76,9 +77,7 @@ def test_customs_proof_all_orders_non_matching():
         ("declare", True, "manual"),
     ],
 )
-def test_approval_uses_server_default_or_explicit_override(
-    db, seeded, choice, value, source
-):
+def test_approval_uses_server_default_or_explicit_override(db, seeded, choice, value, source):
     account, board, _ = seeded
     board.payload_json = {
         **board.payload_json,

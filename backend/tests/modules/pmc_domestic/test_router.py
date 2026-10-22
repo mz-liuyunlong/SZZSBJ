@@ -85,10 +85,13 @@ def test_openapi_lists_the_four_read_routes() -> None:
 def test_filter_options_envelope_scope_and_owner_validation(monkeypatch: Any) -> None:
     def fake_options(self: Any, accounts: frozenset[str]) -> DomesticFilterOptionsData:
         assert accounts == frozenset({"synthetic-account"})
-        return DomesticFilterOptionsData.model_validate({
-            "stores": [{"value": "001", "label": "店铺"}],
-            "owners": [{"value": "002", "label": "当前产品负责人"}],
-        })
+        return DomesticFilterOptionsData.model_validate(
+            {
+                "stores": [{"value": "001", "label": "店铺"}],
+                "owners": [{"value": "002", "label": "当前产品负责人"}],
+            }
+        )
+
     monkeypatch.setattr(PmcDomesticBatchReadService, "filter_options", fake_options)
     client = TestClient(_app(READ))
     body = _envelope(client.get("/api/pmc/domestic/filter-options"))

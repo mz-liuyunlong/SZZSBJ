@@ -2,6 +2,8 @@
 
 from uuid import uuid4
 
+from sqlalchemy import select, text
+
 from app.core.api import ApiError, ErrorCode
 from app.modules.data_pages.models import LingxingStoreDimension as Store
 from app.modules.pmc_domestic.packing_models import PackingEvent
@@ -16,7 +18,6 @@ from app.modules.pmc_domestic.packing_schemas import (
     ListingChoice,
     ManualSubmitted,
 )
-from sqlalchemy import select, text
 
 
 class ManualPackingService:

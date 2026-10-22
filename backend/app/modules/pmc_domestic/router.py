@@ -69,11 +69,16 @@ def _meta(
     summary="国内仓可见批次的店铺与当前产品负责人选项",
 )
 def filter_options(
-    request: Request, session: db_session, _: read_principal, accounts: source_scope,
+    request: Request,
+    session: db_session,
+    _: read_principal,
+    accounts: source_scope,
 ) -> SuccessEnvelope[DomesticFilterOptionsData, DomesticReadMeta]:
     data = PmcDomesticBatchReadService(session).filter_options(accounts)
     return success_response(
-        request, data=data, meta=_meta(*BATCH_OBJECTS, "dim_lingxing_stores", *OWNER_OBJECTS),
+        request,
+        data=data,
+        meta=_meta(*BATCH_OBJECTS, "dim_lingxing_stores", *OWNER_OBJECTS),
     )
 
 
@@ -96,7 +101,8 @@ def list_batches(
         request,
         data=data,
         meta=_meta(
-            *BATCH_OBJECTS, *(OWNER_OBJECTS if query.owner_uid else ()),
+            *BATCH_OBJECTS,
+            *(OWNER_OBJECTS if query.owner_uid else ()),
             freshness_at=freshness,
             page=query.page,
             page_size=query.page_size,
@@ -120,9 +126,15 @@ def batch_summary(
     accounts: source_scope,
 ) -> SuccessEnvelope[BatchSummaryData, DomesticReadMeta]:
     data, freshness = PmcDomesticBatchReadService(session).summary(query, accounts)
-    return success_response(request, data=data, meta=_meta(
-        *BATCH_OBJECTS, *(OWNER_OBJECTS if query.owner_uid else ()), freshness_at=freshness,
-    ))
+    return success_response(
+        request,
+        data=data,
+        meta=_meta(
+            *BATCH_OBJECTS,
+            *(OWNER_OBJECTS if query.owner_uid else ()),
+            freshness_at=freshness,
+        ),
+    )
 
 
 @router.get(

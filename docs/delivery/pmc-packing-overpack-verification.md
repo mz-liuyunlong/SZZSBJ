@@ -4,6 +4,9 @@
 
 2项Playwright本地真实业务接口+可信模拟provider：装13/Q5/库存10→缺3阻塞及卡片→登记IB→模拟新增入库3→ready且尚未完成→勾选占用8→人工完成→详情核对逐来源8件；另验证仓库不显示中台补单/同步按钮。测试记录始终在外层事务内，停止回滚服务后清理。
 
-数据基线核对和最终类型/lint见本地artifact的verification-status.json。备份见packing-overpack-20261021/szzsbj_dev_before_overpack.dump，目录已校验。版本0052不变，仅本地schema delta，生产迁移待未来批准发布。
+数据基线核对和最终类型/lint见本地artifact的verification-status.json。备份见packing-overpack-20261021/LOCAL_DATABASE_NAME_before_overpack.dump，目录已校验。版本0052不变，仅本地schema delta，生产迁移待未来批准发布。
 
 未运行全局测试；未真实调用领星、未发送飞书/钉钉、未写生产、未创建货件/回写箱规。没有把mock当真实数据接通。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。

@@ -205,7 +205,9 @@ class DwdDomesticReceiptBatch(DomesticDwdMixin, Base):
     __tablename__ = "dwd_domestic_receipt_batch"
     __table_args__ = (
         UniqueConstraint("source_account_ref", "receipt_order_sn", "line_ordinal"),
-        CheckConstraint("char_length(trim(receipt_order_sn)) > 0", name="nonblank_receipt_order_sn"),
+        CheckConstraint(
+            "char_length(trim(receipt_order_sn)) > 0", name="nonblank_receipt_order_sn"
+        ),
         CheckConstraint("line_ordinal >= 0", name="line_ordinal"),
     )
 
@@ -224,9 +226,7 @@ class DwdDomesticReceiptBatchLink(Base):
 
     __tablename__ = "dwd_domestic_receipt_batch_link"
     __table_args__ = (
-        CheckConstraint(
-            "mapping_status IN ('unresolved', 'matched')", name="mapping_status"
-        ),
+        CheckConstraint("mapping_status IN ('unresolved', 'matched')", name="mapping_status"),
         Index("ix_dwd_domestic_receipt_batch_link_batch", "receipt_batch_id"),
     )
 

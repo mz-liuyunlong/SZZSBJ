@@ -215,7 +215,7 @@ Module：既有pmc_domestic的独立入库模型（非收货行），inbound_rou
 
 ## 国内仓打包审批M2：最终手工流程（2026-10-21）
 
-2026-10-21，当前dev，本地127.0.0.1:55432/szzsbj_dev。最终范围是手工添加打包单与审批前同SKU商品身份修改；系统打包单管理已按负责人要求删除。没有生产访问、提交、推送或部署。
+2026-10-21，当前dev，本地127.0.0.1:55432/LOCAL_DATABASE_NAME。最终范围是手工添加打包单与审批前同SKU商品身份修改；系统打包单管理已按负责人要求删除。没有生产访问、提交、推送或部署。
 
 流程：先选择当前批次看板的入库单×SKU，再选择同账号同SKU的有效Listing目标店铺/ItemID；GTIN/MSKU跟随Listing，不能自由修改SKU。填写数量、报关、收货仓备注和原因后，仅保存待审批申请，不发PK、不分配库存。通过审批时重新核对当前来源和Listing指纹、库存上限，并在单事务中发PK、分配原来源库存和写不可变审计；驳回需要原因。多个手工申请共用原入库库存池，可分批审批但不可超量。
 
@@ -241,3 +241,6 @@ Module：既有pmc_domestic的独立入库模型（非收货行），inbound_rou
 其余历史及事件接口保持。/packs及/orders/{id}/link、/void、/test-flag已删除。来源、Listing、库存或状态变化返回冲突而非假成功。完整原接口契约见pmc-domestic-packing-approval-api.md；具体模型以packing_schemas.py为准。
 
 验收证据：docs/delivery/pmc-domestic-packing-approval-m2-verification.md。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。

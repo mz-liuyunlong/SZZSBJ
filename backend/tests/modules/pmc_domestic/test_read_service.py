@@ -254,21 +254,41 @@ def test_detail_and_trace_hide_other_accounts_and_mark_outbound_unknown(seeded: 
     assert unknown.value.status_code == 404
 
 
-def _owner(session: Session, sku: str, uid: str | None, name: str | None = "同名负责人",
-           account: str = ACCOUNT, active: bool = True) -> None:
+def _owner(
+    session: Session,
+    sku: str,
+    uid: str | None,
+    name: str | None = "同名负责人",
+    account: str = ACCOUNT,
+    active: bool = True,
+) -> None:
     identity = LingxingSkuIdentity(
-        id=uuid4(), provider="lingxing", source_account_ref=account,
-        lingxing_sku_id=str(uuid4()), lingxing_sku_code=sku, is_active=active,
-        first_seen_run_id=uuid4(), last_seen_run_id=uuid4(),
-        first_seen_at=NOW, last_seen_at=NOW,
+        id=uuid4(),
+        provider="lingxing",
+        source_account_ref=account,
+        lingxing_sku_id=str(uuid4()),
+        lingxing_sku_code=sku,
+        is_active=active,
+        first_seen_run_id=uuid4(),
+        last_seen_run_id=uuid4(),
+        first_seen_at=NOW,
+        last_seen_at=NOW,
     )
     session.add(identity)
     session.flush()
-    session.add(LingxingSkuProductInfoCurrent(
-        provider="lingxing", source_account_ref=account, identity_id=identity.id,
-        lingxing_sku_id=identity.lingxing_sku_id, source_snapshot_id=uuid4(),
-        source_run_id=uuid4(), source_observed_at=NOW, owner_uid=uid, owner_name=name,
-    ))
+    session.add(
+        LingxingSkuProductInfoCurrent(
+            provider="lingxing",
+            source_account_ref=account,
+            identity_id=identity.id,
+            lingxing_sku_id=identity.lingxing_sku_id,
+            source_snapshot_id=uuid4(),
+            source_run_id=uuid4(),
+            source_observed_at=NOW,
+            owner_uid=uid,
+            owner_name=name,
+        )
+    )
 
 
 def test_current_owner_filters_share_scope_and_summary_without_duplicate_rows(seeded: Session):
@@ -297,20 +317,38 @@ def test_current_owner_filters_share_scope_and_summary_without_duplicate_rows(se
 
 
 def test_store_options_use_real_ids_and_fail_safe_on_ambiguous_names(seeded: Session):
-    seeded.add_all([
-        LingxingStoreDimension(source_account_ref=ACCOUNT, platform_code_raw="walmart",
-                              store_id=STORE, store_name="本店", synced_at=NOW),
-        LingxingStoreDimension(source_account_ref=OTHER, platform_code_raw="walmart",
-                              store_id=STORE, store_name="其他账号店铺", synced_at=NOW),
-    ])
+    seeded.add_all(
+        [
+            LingxingStoreDimension(
+                source_account_ref=ACCOUNT,
+                platform_code_raw="walmart",
+                store_id=STORE,
+                store_name="本店",
+                synced_at=NOW,
+            ),
+            LingxingStoreDimension(
+                source_account_ref=OTHER,
+                platform_code_raw="walmart",
+                store_id=STORE,
+                store_name="其他账号店铺",
+                synced_at=NOW,
+            ),
+        ]
+    )
     seeded.flush()
     assert _svc(seeded).filter_options(SCOPE).stores[0].model_dump() == {
-        "value": STORE, "label": "本店",
+        "value": STORE,
+        "label": "本店",
     }
-    seeded.add(LingxingStoreDimension(
-        source_account_ref=ACCOUNT, platform_code_raw="amazon", store_id=STORE,
-        store_name="冲突名称", synced_at=NOW,
-    ))
+    seeded.add(
+        LingxingStoreDimension(
+            source_account_ref=ACCOUNT,
+            platform_code_raw="amazon",
+            store_id=STORE,
+            store_name="冲突名称",
+            synced_at=NOW,
+        )
+    )
     _link(seeded, MATCHED_ID, status="matched", store_id="unknown-id", batch_no="B-other")
     seeded.flush()
     options = {item.value: item.label for item in _svc(seeded).filter_options(SCOPE).stores}

@@ -271,8 +271,19 @@ def permission_for_request(method: str, path: str, declared_permission: str) -> 
             return "action:pmc:domestic-warehouse-board:packing-approve"
         if path.endswith("/reject"):
             return "action:pmc:domestic-warehouse-board:packing-reject"
-    if normalized_method == "POST" and path.startswith("/api/pmc/domestic/packing-warehouse/orders/"):
-        actions = {"boxes": "packing-boxes-save", "done": "packing-done", "customs": "packing-customs", "notes": "packing-note", "unpacked": "packing-unpacked-dispose", "rebox": "packing-rebox", "supplemental-inbound": "packing-supplement-ib", "supplemental-sync": "packing-supplement-sync"}
+    if normalized_method == "POST" and path.startswith(
+        "/api/pmc/domestic/packing-warehouse/orders/"
+    ):
+        actions = {
+            "boxes": "packing-boxes-save",
+            "done": "packing-done",
+            "customs": "packing-customs",
+            "notes": "packing-note",
+            "unpacked": "packing-unpacked-dispose",
+            "rebox": "packing-rebox",
+            "supplemental-inbound": "packing-supplement-ib",
+            "supplemental-sync": "packing-supplement-sync",
+        }
         action = actions.get(path.rsplit("/", 1)[-1])
         if action:
             return "action:pmc:domestic-warehouse-board:" + action

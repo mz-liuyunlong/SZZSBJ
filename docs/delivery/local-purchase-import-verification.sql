@@ -1,5 +1,6 @@
--- Navicat: 连接「SZZSBJ 本地开发55432」，数据库下拉选择 szzsbj_dev，再执行。
--- 全部只读；不是在 postgres / szzsbj_test / 生产库执行。
+-- 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。
+-- Navicat: 连接「本项目 本地开发55432」，数据库下拉选择 LOCAL_DATABASE_NAME，再执行。
+-- 全部只读；不是在 postgres / ISOLATED_TEST_DATABASE_NAME / 生产库执行。
 SELECT current_database() AS database_name, inet_server_port() AS server_port;
 
 SELECT 'dwd_purchase_plan' AS table_name, count(*) AS row_count FROM public.dwd_purchase_plan

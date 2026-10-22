@@ -65,9 +65,7 @@ def unique_records(rows: list[dict[str, Any]], kind: str) -> list[dict[str, Any]
         if kind == "statement":
             key = str(source_id(row.get("statement_id"), required=True))
         else:
-            key = json.dumps(
-                [row.get(k) for k in ("wid", "batch_no", "sku", "store_id")]
-            )
+            key = json.dumps([row.get(k) for k in ("wid", "batch_no", "sku", "store_id")])
             source_id(row.get("batch_no"), required=True)
         if key in seen and seen[key] != row:
             raise InboundDataError("INBOUND_DUPLICATE_CONFLICT")
@@ -102,10 +100,7 @@ def build_inbound_rows(
     source_id(warehouse, required=True)
     parents: dict[tuple[str, str], dict[str, Any]] = {}
     for event in unique_records(statements, "statement"):
-        if (
-            source_id(event.get("wid")) != warehouse
-            or str(event.get("sub_type")) != "2202"
-        ):
+        if source_id(event.get("wid")) != warehouse or str(event.get("sub_type")) != "2202":
             continue
         ib = str(source_id(event.get("order_sn"), required=True))
         sku = str(source_id(event.get("sku"), required=True))
@@ -191,9 +186,7 @@ def build_inbound_rows(
             raw = min(parent["dates"]) if parent["dates"] else None
             date_source = "inventory_statement" if raw else "unknown"
             if not raw and components:
-                candidates = [
-                    b.get("purchase_in_time") or b.get("batch_time") for b in components
-                ]
+                candidates = [b.get("purchase_in_time") or b.get("batch_time") for b in components]
                 raw = min(str(v) for v in candidates if v) if any(candidates) else None
                 date_source = "batch_fallback" if raw else "unknown"
             timestamp, business_date = arrival(raw, source_timezone)
@@ -201,9 +194,7 @@ def build_inbound_rows(
             good, locked, available = available_good_stock(components)
             # No direct store-level allocation evidence: even a single current store
             # may be only the remaining part of a historically split inbound order.
-            identity = json.dumps(
-                [account, warehouse, ib, sku, store], ensure_ascii=False
-            )
+            identity = json.dumps([account, warehouse, ib, sku, store], ensure_ascii=False)
             result.append(
                 {
                     "id": str(uuid5(NAMESPACE_URL, "szzsbj:inbound:" + identity)),
@@ -217,11 +208,7 @@ def build_inbound_rows(
                     "product_name": parent["name"],
                     "store_id": store,
                     "store_name": next(
-                        (
-                            b.get("store_name")
-                            for b in components
-                            if b.get("store_name")
-                        ),
+                        (b.get("store_name") for b in components if b.get("store_name")),
                         None,
                     ),
                     "attribution_status": "known" if store else "unknown",
@@ -233,9 +220,7 @@ def build_inbound_rows(
                     "arrival_date_status": "known" if business_date else "unknown",
                     "total_inbound_qty": None,
                     "parent_inbound_qty": parent_qty,
-                    "quantity_scope": "inbound_sku"
-                    if parent_qty is not None
-                    else "unknown",
+                    "quantity_scope": "inbound_sku" if parent_qty is not None else "unknown",
                     "balance_num": balance,
                     "good_num": good,
                     "good_locked_num": locked,
@@ -267,7 +252,5 @@ def with_request_days(row: dict[str, Any], today: date) -> dict[str, Any]:
     date_text = row.get("arrival_business_date")
     return {
         **row,
-        "days_in_warehouse": (today - date.fromisoformat(date_text)).days
-        if date_text
-        else None,
+        "days_in_warehouse": (today - date.fromisoformat(date_text)).days if date_text else None,
     }

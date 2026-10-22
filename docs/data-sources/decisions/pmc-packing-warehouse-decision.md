@@ -1,6 +1,6 @@
 # 仓库打包数据源与规则决策（2026-10-21）
 
-本轮负责人授权当前dev、本地127.0.0.1:55432/szzsbj_dev，业务接口与本地模拟联调。无新分支、无提交推送、无生产操作。PMC静态分组导航及已移除的双轨对账/通知设置菜单保持现状。
+本轮负责人授权当前dev、本地127.0.0.1:55432/LOCAL_DATABASE_NAME，业务接口与本地模拟联调。无新分支、无提交推送、无生产操作。PMC静态分组导航及已移除的双轨对账/通知设置菜单保持现状。
 
 ## 业务权威
 
@@ -33,3 +33,6 @@ PK为新系统单据本体，替代备货单；仓库不核对领星备货单数
 ## 本地结构
 
 仓库相关业务投影共六表：box_sets、box_lines、notes、variance_cases、notification_outbox、extra_allocations（均有ops_domestic_packing_前缀）。最后一表新增于本轮，保存额外占用来源。审计复用evt_domestic_packing_events，仅INSERT。建表前备份并核验，既有业务/用户角色数据不变，alembic_version仍0052；本地SQL不是生产部署迁移，未来合并生产前须统一正式Alembic升级路径。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。

@@ -1,7 +1,8 @@
--- 在 Navicat 选择本地连接：127.0.0.1:55432 -> szzsbj_dev。
+-- 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。
+-- 在 Navicat 选择本地连接：127.0.0.1:55432 -> LOCAL_DATABASE_NAME。
 -- 以下只有只读查询，不输出密码哈希或登录令牌。
 
--- 1. 确认查询环境：database_name 应为 szzsbj_dev，server_port 应为 55432。
+-- 1. 确认查询环境：database_name 应为 LOCAL_DATABASE_NAME，server_port 应为 55432。
 SELECT current_database() AS database_name,
        inet_server_addr() AS server_address,
        inet_server_port() AS server_port;

@@ -290,7 +290,7 @@ jobs:
           uv run alembic upgrade 20261019_0045_approval_scope
           PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py verify
   operation-logs-migration-smoke:
-    name: Operation logs 0043 PostgreSQL migration smoke
+    name: Operation logs 0046 PostgreSQL migration smoke
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -315,11 +315,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Migrate isolated PostgreSQL through unified operation-logs head
+      - name: Migrate isolated PostgreSQL through operation-logs revision 0046
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run alembic upgrade head
+          # Verify this feature at its own revision; IAM separately tests head.
+          uv run alembic upgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, text
           from app.core.config import get_database_url

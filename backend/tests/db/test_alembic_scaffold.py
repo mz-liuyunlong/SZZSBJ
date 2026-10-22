@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261019_0048_domestic_warehouse_dwd_and_permission"
+EXPECTED_HEAD_REVISION = "20261022_0053_domestic_packing_production_compat"
 
 
 @pytest.fixture(autouse=True)
@@ -94,10 +94,22 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         script.get_revision("20261019_0047_domestic_warehouse_ods").down_revision
         == "20261019_0046_operation_logs"
     )
-    assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
-        == "20261019_0047_domestic_warehouse_ods"
+    expected_chain = (
+        (
+            "20261019_0048_domestic_warehouse_dwd_and_permission",
+            "20261019_0047_domestic_warehouse_ods",
+        ),
+        (
+            "20261020_0049_domestic_inbound_board",
+            "20261019_0048_domestic_warehouse_dwd_and_permission",
+        ),
+        ("20261020_0050_domestic_packing_approval", "20261020_0049_domestic_inbound_board"),
+        ("20261021_0051_domestic_packing_lifecycle", "20261020_0050_domestic_packing_approval"),
+        ("20261021_0052_domestic_packing_manual", "20261021_0051_domestic_packing_lifecycle"),
+        (EXPECTED_HEAD_REVISION, "20261021_0052_domestic_packing_manual"),
     )
+    for revision, parent in expected_chain:
+        assert script.get_revision(revision).down_revision == parent
     assert len(EXPECTED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {

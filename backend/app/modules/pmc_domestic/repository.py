@@ -34,31 +34,49 @@ class PmcDomesticBatchRepository:
         store = LingxingStoreDimension
         store_name = func.nullif(func.trim(store.store_name), "")
         store_rows = self.session.execute(
-            select(LinkRow.store_id, func.count(func.distinct(store_name)),
-                   func.max(store_name))
-            .join(BatchRow, and_(BatchRow.id == LinkRow.receipt_batch_id,
-                                BatchRow.source_account_ref == LinkRow.source_account_ref))
-            .outerjoin(store, and_(store.source_account_ref == LinkRow.source_account_ref,
-                                  store.store_id == LinkRow.store_id))
-            .where(BatchRow.source_account_ref.in_(sorted(accounts)),
-                   LinkRow.store_id.is_not(None), func.trim(LinkRow.store_id) != "")
-            .group_by(LinkRow.store_id).order_by(LinkRow.store_id)
+            select(LinkRow.store_id, func.count(func.distinct(store_name)), func.max(store_name))
+            .join(
+                BatchRow,
+                and_(
+                    BatchRow.id == LinkRow.receipt_batch_id,
+                    BatchRow.source_account_ref == LinkRow.source_account_ref,
+                ),
+            )
+            .outerjoin(
+                store,
+                and_(
+                    store.source_account_ref == LinkRow.source_account_ref,
+                    store.store_id == LinkRow.store_id,
+                ),
+            )
+            .where(
+                BatchRow.source_account_ref.in_(sorted(accounts)),
+                LinkRow.store_id.is_not(None),
+                func.trim(LinkRow.store_id) != "",
+            )
+            .group_by(LinkRow.store_id)
+            .order_by(LinkRow.store_id)
         ).all()
         owners = self._current_owners(accounts)
         owner_rows = self.session.execute(
-            select(owners.c.uid, func.count(func.distinct(owners.c.name)),
-                   func.max(owners.c.name))
-            .join(BatchRow, and_(BatchRow.source_account_ref == owners.c.account,
-                                BatchRow.sku == owners.c.sku))
+            select(owners.c.uid, func.count(func.distinct(owners.c.name)), func.max(owners.c.name))
+            .join(
+                BatchRow,
+                and_(BatchRow.source_account_ref == owners.c.account, BatchRow.sku == owners.c.sku),
+            )
             .where(BatchRow.source_account_ref.in_(sorted(accounts)))
-            .group_by(owners.c.uid).order_by(owners.c.uid)
+            .group_by(owners.c.uid)
+            .order_by(owners.c.uid)
         ).all()
+
         # Name conflicts across accounts/platforms must not pick an arbitrary display name.
         def option(value: str, count: int, name: str | None) -> dict[str, str]:
             return {"value": value, "label": name if count == 1 and name else value}
 
-        return {"stores": [option(*row) for row in store_rows],
-                "owners": [option(*row) for row in owner_rows]}
+        return {
+            "stores": [option(*row) for row in store_rows],
+            "owners": [option(*row) for row in owner_rows],
+        }
 
     def list_batches(
         self, query: BatchListQuery, accounts: frozenset[str]
@@ -71,9 +89,7 @@ class PmcDomesticBatchRepository:
         rows = list(self.session.scalars(stmt.limit(query.page_size)))
         return rows, total
 
-    def summary_rows(
-        self, query: BatchFilterQuery, accounts: frozenset[str]
-    ) -> list[BatchRow]:
+    def summary_rows(self, query: BatchFilterQuery, accounts: frozenset[str]) -> list[BatchRow]:
         if not accounts:
             return []
         return list(self.session.scalars(self._filtered(query, accounts)))
@@ -89,7 +105,9 @@ class PmcDomesticBatchRepository:
         )
 
     def links_for(
-        self, batch_ids: Sequence[UUID], accounts: frozenset[str],
+        self,
+        batch_ids: Sequence[UUID],
+        accounts: frozenset[str],
     ) -> dict[UUID, list[LinkRow]]:
         grouped: dict[UUID, list[LinkRow]] = {batch_id: [] for batch_id in batch_ids}
         if not batch_ids or not accounts:
@@ -114,13 +132,17 @@ class PmcDomesticBatchRepository:
         return value if isinstance(value, datetime) else None
 
     def _filtered(
-        self, query: BatchFilterQuery, accounts: frozenset[str],
+        self,
+        query: BatchFilterQuery,
+        accounts: frozenset[str],
     ) -> Select[tuple[BatchRow]]:
         stmt = select(BatchRow).where(*self._clauses(query, accounts))
         return stmt
 
     def _clauses(
-        self, query: BatchFilterQuery, accounts: frozenset[str],
+        self,
+        query: BatchFilterQuery,
+        accounts: frozenset[str],
     ) -> list[ColumnElement[bool]]:
         account_list = sorted(accounts)
         clauses: list[ColumnElement[bool]] = [BatchRow.source_account_ref.in_(account_list)]
@@ -140,11 +162,15 @@ class PmcDomesticBatchRepository:
             clauses.append(BatchRow.id.in_(self._store_ids(query.store_id, account_list)))
         if query.owner_uid:
             owners = self._current_owners(accounts)
-            clauses.append(select(owners.c.uid).where(
-                owners.c.account == BatchRow.source_account_ref,
-                owners.c.sku == BatchRow.sku,
-                owners.c.uid.in_(query.owner_uid),
-            ).exists())
+            clauses.append(
+                select(owners.c.uid)
+                .where(
+                    owners.c.account == BatchRow.source_account_ref,
+                    owners.c.sku == BatchRow.sku,
+                    owners.c.uid.in_(query.owner_uid),
+                )
+                .exists()
+            )
         if query.mapping_status == "matched":
             clauses.append(BatchRow.id.in_(self._matched_ids(account_list)))
         elif query.mapping_status == "unresolved":
