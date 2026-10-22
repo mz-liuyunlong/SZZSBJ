@@ -171,6 +171,14 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261022_0053_domestic_packing_production_compat.py",
         "20261022_0054_merge_walmart_identity_and_domestic_packing.py",
     } <= revisions
+    merge_revision = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "20261022_0054_merge_walmart_identity_and_domestic_packing.py"
+    ).read_text(encoding="utf-8")
+    assert "ops_domestic_packing_extra_allocations" in merge_revision
+    assert "20261022_0055" not in merge_revision
 
     rbac_revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20261017_0042_approval_rbac_backfill.py"

@@ -66,6 +66,34 @@ def test_adopt_rejects_column_drift(isolated_postgresql_connection) -> None:
         adopt_domestic_ods_tables(isolated_postgresql_connection)
 
 
+def test_adopt_rejects_timestamp_without_time_zone(isolated_postgresql_connection) -> None:
+    adopt_domestic_ods_tables(isolated_postgresql_connection)
+    isolated_postgresql_connection.execute(
+        text(
+            """
+            alter table ods_lingxing_domestic_warehouses
+            alter column observed_at type timestamp without time zone
+            """
+        )
+    )
+    with pytest.raises(DomesticOdsSchemaMismatchError, match="observed_at"):
+        adopt_domestic_ods_tables(isolated_postgresql_connection)
+
+
+def test_adopt_rejects_varchar_without_length(isolated_postgresql_connection) -> None:
+    adopt_domestic_ods_tables(isolated_postgresql_connection)
+    isolated_postgresql_connection.execute(
+        text(
+            """
+            alter table ods_lingxing_domestic_warehouses
+            alter column source_account_ref type varchar
+            """
+        )
+    )
+    with pytest.raises(DomesticOdsSchemaMismatchError, match="source_account_ref"):
+        adopt_domestic_ods_tables(isolated_postgresql_connection)
+
+
 def test_hand_sql_then_adopt_matches_orm(isolated_postgresql_connection) -> None:
     isolated_postgresql_connection.execute(text(SQL_PATH.read_text(encoding="utf-8")))
     adopt_domestic_ods_tables(isolated_postgresql_connection)

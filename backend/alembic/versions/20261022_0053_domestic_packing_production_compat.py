@@ -90,6 +90,135 @@ def _replace_event_kind_check(bind):
     )
 
 
+WAREHOUSE_COLUMNS = {
+    "ops_domestic_packing_box_sets": {
+        "id": ("uuid", True),
+        "order_id": ("uuid", True),
+        "version": ("integer", True),
+        "total_qty": ("integer", True),
+        "approved_qty_snapshot": ("integer", True),
+        "variance_reason": ("varchar(500)", False),
+        "package_snapshot": ("jsonb", False),
+        "product_snapshot_id": ("uuid", False),
+        "completed_at": ("timestamptz", False),
+        "completed_by": ("varchar(128)", False),
+        "actor_uid": ("varchar(128)", True),
+        "created_at": ("timestamptz", True),
+        "updated_at": ("timestamptz", True),
+    },
+    "ops_domestic_packing_box_lines": {
+        "id": ("uuid", True),
+        "box_set_id": ("uuid", True),
+        "line_no": ("integer", True),
+        "box_type": ("varchar(16)", True),
+        "boxes": ("integer", True),
+        "units_per_box": ("integer", True),
+        "length_cm": ("numeric(12,4)", True),
+        "width_cm": ("numeric(12,4)", True),
+        "height_cm": ("numeric(12,4)", True),
+        "gross_weight_kg": ("numeric(12,4)", True),
+    },
+    "ops_domestic_packing_notes": {
+        "order_id": ("uuid", True),
+        "category": ("varchar(32)", True),
+        "text": ("varchar(500)", True),
+        "resolved": ("boolean", True),
+        "last_event_id": ("uuid", True),
+        "actor_uid": ("varchar(128)", True),
+        "updated_at": ("timestamptz", True),
+    },
+    "ops_domestic_packing_variance_cases": {
+        "order_id": ("uuid", True),
+        "kind": ("varchar(16)", True),
+        "state": ("varchar(16)", True),
+        "quantity": ("integer", True),
+        "gap_qty": ("integer", False),
+        "reason_category": ("varchar(32)", False),
+        "reason": ("varchar(500)", False),
+        "supplemental_ib": ("varchar(128)", False),
+        "evidence": ("jsonb", True),
+        "actor_uid": ("varchar(128)", True),
+        "created_at": ("timestamptz", True),
+        "updated_at": ("timestamptz", True),
+    },
+    "ops_domestic_packing_notification_outbox": {
+        "id": ("uuid", True),
+        "order_id": ("uuid", True),
+        "order_version": ("integer", True),
+        "kind": ("varchar(32)", True),
+        "state": ("varchar(32)", True),
+        "payload": ("jsonb", True),
+        "created_at": ("timestamptz", True),
+    },
+}
+WAREHOUSE_PRIMARY_KEYS = {
+    "ops_domestic_packing_box_sets": ("id",),
+    "ops_domestic_packing_box_lines": ("id",),
+    "ops_domestic_packing_notes": ("order_id",),
+    "ops_domestic_packing_variance_cases": ("order_id",),
+    "ops_domestic_packing_notification_outbox": ("id",),
+}
+
+
+def _column_token(row) -> str:
+    if row.udt_name == "uuid":
+        return "uuid"
+    if row.udt_name == "int4":
+        return "integer"
+    if row.udt_name == "bool":
+        return "boolean"
+    if row.udt_name == "jsonb":
+        return "jsonb"
+    if row.udt_name == "varchar":
+        if row.character_maximum_length is None:
+            return "varchar"
+        return f"varchar({row.character_maximum_length})"
+    if row.udt_name == "numeric":
+        return f"numeric({row.numeric_precision},{row.numeric_scale})"
+    if row.data_type == "timestamp with time zone":
+        return "timestamptz"
+    return row.data_type
+
+
+def _require_warehouse_shape(bind, table: str) -> None:
+    expected = WAREHOUSE_COLUMNS[table]
+    rows = bind.execute(
+        sa.text(
+            """
+            SELECT column_name, data_type, udt_name, is_nullable,
+                   character_maximum_length, numeric_precision, numeric_scale
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = :table
+            """
+        ),
+        {"table": table},
+    ).all()
+    actual = {row.column_name: (_column_token(row), row.is_nullable == "NO") for row in rows}
+    if actual != expected:
+        raise RuntimeError(
+            f"PACKING_WAREHOUSE_TABLE_SHAPE_MISMATCH:{table}:"
+            f"actual={sorted(actual)}:expected={sorted(expected)}"
+        )
+    primary_key = tuple(
+        bind.execute(
+            sa.text(
+                """
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a
+                  ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
+                WHERE i.indrelid = CAST(:qualified AS regclass)
+                  AND i.indisprimary
+                ORDER BY array_position(i.indkey, a.attnum)
+                """
+            ),
+            {"qualified": f"public.{table}"},
+        ).scalars()
+    )
+    if primary_key != WAREHOUSE_PRIMARY_KEYS[table]:
+        raise RuntimeError(f"PACKING_WAREHOUSE_TABLE_SHAPE_MISMATCH:{table}")
+
+
 def _create_warehouse_tables():
     inspector = sa.inspect(op.get_bind())
     if not inspector.has_table("ops_domestic_packing_box_sets"):
@@ -128,6 +257,8 @@ def _create_warehouse_tables():
                 name="warehouse_completion",
             ),
         )
+    else:
+        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_box_sets")
     if not inspector.has_table("ops_domestic_packing_box_lines"):
         op.create_table(
             "ops_domestic_packing_box_lines",
@@ -158,6 +289,8 @@ def _create_warehouse_tables():
             ),
             sa.CheckConstraint("gross_weight_kg BETWEEN 0.01 AND 200", name="warehouse_box_weight"),
         )
+    else:
+        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_box_lines")
     if not inspector.has_table("ops_domestic_packing_notes"):
         op.create_table(
             "ops_domestic_packing_notes",
@@ -184,6 +317,8 @@ def _create_warehouse_tables():
             ),
             sa.CheckConstraint("resolved=(category='resolved')", name="warehouse_note_resolution"),
         )
+    else:
+        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_notes")
     if not inspector.has_table("ops_domestic_packing_variance_cases"):
         op.create_table(
             "ops_domestic_packing_variance_cases",
@@ -211,6 +346,8 @@ def _create_warehouse_tables():
                 "quantity>0 AND (gap_qty IS NULL OR gap_qty>=0)", name="packing_variance_qty"
             ),
         )
+    else:
+        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_variance_cases")
     if not inspector.has_table("ops_domestic_packing_notification_outbox"):
         op.create_table(
             "ops_domestic_packing_notification_outbox",
@@ -230,6 +367,8 @@ def _create_warehouse_tables():
                 name="packing_notice_state",
             ),
         )
+    else:
+        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_notification_outbox")
 
 
 def _insert_permissions(bind):
