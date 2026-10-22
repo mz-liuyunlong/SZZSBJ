@@ -379,7 +379,7 @@ jobs:
           from app.core.config import get_database_url
 
           with create_engine(get_database_url()).connect() as conn:
-              assert conn.scalar(text("select version_num from alembic_version")) == "20261020_0047_walmart_order_identity_guard"
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261022_0048_walmart_monitor_raw_events"
               for name in (
                   "ops_system_operation_events",
                   "ops_manual_operation_logs",
