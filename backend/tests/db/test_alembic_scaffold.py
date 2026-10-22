@@ -18,6 +18,7 @@ SYNTHETIC_DATABASE_URL = (
 )
 WALMART_HEAD_REVISION = "20261020_0047_walmart_order_identity_guard"
 DOMESTIC_HEAD_REVISION = "20261022_0053_domestic_packing_production_compat"
+MERGED_HEAD_REVISION = "20261022_0054_merge_walmart_identity_and_domestic_packing"
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +47,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert set(script.get_heads()) == {WALMART_HEAD_REVISION, DOMESTIC_HEAD_REVISION}
+    assert script.get_heads() == [MERGED_HEAD_REVISION]
+    assert set(script.get_revision(MERGED_HEAD_REVISION).down_revision) == {
+        WALMART_HEAD_REVISION,
+        DOMESTIC_HEAD_REVISION,
+    }
     assert (
         script.get_revision("20261015_0036_wfs_cases").down_revision
         == "20261014_0035_add_auth_rbac"
@@ -92,8 +97,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261019_0045_approval_scope"
     )
     assert (
-        script.get_revision(WALMART_HEAD_REVISION).down_revision
-        == "20261019_0046_operation_logs"
+        script.get_revision(WALMART_HEAD_REVISION).down_revision == "20261019_0046_operation_logs"
     )
     assert (
         script.get_revision("20261019_0047_domestic_warehouse_ods").down_revision
@@ -117,6 +121,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         assert script.get_revision(revision).down_revision == parent
     assert len(WALMART_HEAD_REVISION) <= 128
     assert len(DOMESTIC_HEAD_REVISION) <= 128
+    assert len(MERGED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -164,6 +169,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261021_0051_domestic_packing_lifecycle.py",
         "20261021_0052_domestic_packing_manual.py",
         "20261022_0053_domestic_packing_production_compat.py",
+        "20261022_0054_merge_walmart_identity_and_domestic_packing.py",
     } <= revisions
 
     rbac_revision = (
