@@ -8,8 +8,8 @@ function fixture(rows:number,translated:boolean){
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['词语','出现频次'],['storage',rows]]),'Unique Words');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['ASIN'],['B012345678'],['B012345679']]),'Asin');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Notes: synthetic fixture']]),'Notes');
- const raw=XLSX.write(wb,{bookType:'xlsx',type:'array'}) as Uint8Array;
- return {name:'synthetic.xlsx',size:raw.byteLength,arrayBuffer:async()=>raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength)} as File;
+ const raw=XLSX.write(wb,{bookType:'xlsx',type:'array'}) as ArrayBuffer;
+ return {name:'synthetic.xlsx',size:raw.byteLength,arrayBuffer:async()=>raw} as File;
 }
 describe('SellerSprite import',()=>{
  it('reads four sheets and exactly 819 synthetic keyword rows',async()=>{const book=await parseSellerSprite(fixture(819,false));expect(book.keywords).toHaveLength(819);expect(book.roots[0]).toEqual({term:'storage',count:819});expect(book.asins).toHaveLength(2);expect(book.keywords[0].monthlySearches).toBeNull();expect(book.keywords[1].monthlySearches).toBe(2);expect(book.keywords[0].amazonPpc).toBe(.51);expect(book.keywords[0].translation).toBeNull()});
