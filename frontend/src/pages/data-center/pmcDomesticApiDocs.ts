@@ -74,7 +74,7 @@ const packingQueries: ApiDocItem[] = [
 const packingWrites: ApiDocItem[] = ["approve", "reject"].map((kind) => ({
   ...common, method: "POST" as const, id: `pmc-packing-${kind}`, title: kind === "approve" ? "通过打包审批" : "驳回打包审批",
   path: `/api/pmc/domestic/packing-approval/pending/{id}/${kind}`, requestMode: "JSON Body", scenario: "本地打包审批",
-  authScope: `action:pmc:domestic-warehouse-board:packing-${kind} + 来源账号范围`, purpose: "原子审批及幂等审计，仅写本地验证单，不创建OWS",
+  authScope: `action:pmc:domestic-warehouse-board:packing-${kind} + 来源账号范围`, purpose: "原子审批及幂等审计，写入本系统打包单，不创建领星海外仓备货单，不回写箱规",
   successReturn: "统一envelope，data为订单详情及来源snapshot", queryParams: [],
   bodyParams: [{ name: "source_account_ref / candidate_version / idempotency_key", type: "string", required: true, description: "可信来源、版本和幂等UUID；approve另需qty，reject另需note，完整约束见Markdown契约" }],
   returnFields: [{ name: "data", type: "object", required: true, description: "id、pk、status、qty、version、is_test、snapshot；驳回pk为null" }],

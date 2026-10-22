@@ -1,12 +1,15 @@
-"""Atomic local decisions. Locks serialize with publication; no provider write exists.
+"""Atomic packing decisions. Locks serialize with publication; no provider write exists.
 
-The source snapshot does not prove historical approval coverage. All commands are
-restricted to real local verification records, with a second guard on the DB URL.
+The source snapshot does not prove historical approval coverage. Writes stay on the
+database selected by APP_ENV: local and test remain verification records, and
+production writes formal records on the production database only.
 """
 
 import hashlib
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+from sqlalchemy import select, text
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import get_settings
@@ -31,11 +34,44 @@ from app.modules.pmc_domestic.packing_schemas import (
     OrderRead,
     PackingSummary,
 )
-from sqlalchemy import select, text
 
 
 def conflict(reason):
     raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409, details={"reason": reason})
+
+
+LOCAL_DATABASE_HOST = "127.0.0.1"
+LOCAL_DATABASE_PORT = 55432
+
+
+def database_write_allowed(env, url) -> bool:
+    """Local and test stay on the isolated databases. Production uses its own server database."""
+    if url.query or not url.host or not url.database:
+        return False
+    if env == "local":
+        return (
+            url.host == LOCAL_DATABASE_HOST
+            and url.port == LOCAL_DATABASE_PORT
+            and url.database == "szzsbj_dev"
+        )
+    if env == "test":
+        return (
+            url.host == LOCAL_DATABASE_HOST
+            and url.port == LOCAL_DATABASE_PORT
+            and url.database == "szzsbj_test"
+        )
+    if env == "production":
+        return not (
+            url.host == LOCAL_DATABASE_HOST
+            and url.port == LOCAL_DATABASE_PORT
+            and url.database in {"szzsbj_dev", "szzsbj_test"}
+        )
+    return False
+
+
+def verification_record(env: str) -> bool:
+    """Production orders are formal. Local and test orders stay marked as verification records."""
+    return env != "production"
 
 
 def missing():
@@ -99,13 +135,8 @@ class PackingService:
         self.session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": value})
 
     def guard_local(self):
-        bind = self.session.get_bind()
-        u = bind.engine.url
-        env = get_settings().app_env.value
-        allowed = (env == "local" and u.database == "szzsbj_dev") or (
-            env == "test" and u.database == "szzsbj_test"
-        )
-        if not allowed or u.host != "127.0.0.1" or u.port != 55432 or u.query:
+        url = self.session.get_bind().engine.url
+        if not database_write_allowed(get_settings().app_env.value, url):
             raise ApiError(
                 code=ErrorCode.FORBIDDEN,
                 status_code=403,
@@ -214,6 +245,7 @@ class PackingService:
                     conflict("PK_DAILY_LIMIT")
                 pk = f"PK{day:%y%m%d}-{serial:03d}"
             customs = getattr(cmd, "customs", "default")
+            verify = verification_record(get_settings().app_env.value)
             row = PackingOrder(
                 source_account_ref=cmd.source_account_ref,
                 warehouse_id=cmd.warehouse_id,
@@ -224,10 +256,12 @@ class PackingService:
                 item_id=candidate.item_id,
                 pk=pk,
                 qty=cmd.qty if kind == "approve" else None,
-                customs_value=candidate.customs_default if customs == "default" else customs == "declare",
+                customs_value=candidate.customs_default
+                if customs == "default"
+                else customs == "declare",
                 customs_src=candidate.customs_default_src if customs == "default" else "manual",
                 rwh=getattr(cmd, "rwh", None),
-                is_test=True,
+                is_test=verify,
                 status="approved" if kind == "approve" else "rejected",
                 version=1,
                 source_publication_id=candidate.publication_id,
@@ -235,7 +269,7 @@ class PackingService:
                 snapshot_json=candidate.model_dump(mode="json"),
                 source_snapshot_json=original_candidate.model_dump(mode="json"),
                 final_identity_key=identity_key if candidate.origin != "manual" else None,
-                business_test=True,
+                business_test=verify,
                 actor_uid=actor,
                 note=getattr(cmd, "note", None),
             )

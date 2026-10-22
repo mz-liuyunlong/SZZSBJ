@@ -1,7 +1,8 @@
-"""Inventory/exception workflow. Real Lingxing transport is deliberately unconfigured.
+"""Inventory/exception workflow. Sync reads a governed publication, never Lingxing.
 
-The optional publication provider is a trusted test seam, never accepted from an
+The optional publication provider is a trusted server seam, never accepted from an
 HTTP request. It must return a governed current publication, validated again here.
+The HTTP route supplies the current publication in this process database.
 """
 
 from uuid import UUID
@@ -17,6 +18,22 @@ from app.modules.pmc_domestic.packing_stock_repository import PackingStockReposi
 from app.modules.pmc_domestic.warehouse_completion_rules import decide_completion
 from app.modules.pmc_domestic.warehouse_models import PackingNotificationOutbox as Notice
 from app.modules.pmc_domestic.warehouse_models import PackingVarianceCase as Case
+
+
+def current_board_publication(session, account, warehouse_id, _sku, _inbound_sn):
+    """Current inbound publication for this account and warehouse.
+
+    Matching the supplemental inbound row stays in validate_publication.
+    This lookup does not call Lingxing and uses only the process database.
+    """
+    return session.scalar(
+        select(Pub.id).where(
+            Pub.is_current.is_(True),
+            Pub.status == "published",
+            Pub.source_account_ref == account,
+            Pub.source_warehouse_id == warehouse_id,
+        )
+    )
 
 
 class WarehouseOverpack:
@@ -170,8 +187,8 @@ class WarehouseOverpack:
         code = "LINGXING_SYNC_NOT_CONFIGURED"
         detail = {}
         if self.publication_provider is not None:
-            # Only local mock providers are wired today. A future real collector must
-            # run outside the command transaction and publish through the governed chain.
+            # The provider only names an already published version. A newer Lingxing
+            # capture must finish outside this command and publish before sync can match.
             try:
                 with self.session.begin_nested():
                     ident = self.publication_provider(

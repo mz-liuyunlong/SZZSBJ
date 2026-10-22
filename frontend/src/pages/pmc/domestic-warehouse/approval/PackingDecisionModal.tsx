@@ -23,7 +23,7 @@ export default function PackingDecisionModal({ row, kind, busy, scope, onCancel,
     okButtonProps={{ disabled: kind === "approve" && (options.isFetching || !!options.error) }}
     cancelButtonProps={{ disabled: busy }} closable={!busy} maskClosable={!busy} onCancel={onCancel}
     onOk={() => { void form.validateFields().then(onSubmit).catch(() => undefined); }} destroyOnHidden>
-    <Alert type="info" showIcon message="仅写本地验证单，不创建领星 OWS" />
+    <Alert type="info" showIcon message="写入本系统打包单，不创建领星海外仓备货单，不回写箱规" />
     <Typography.Paragraph>{row?.inbound_order_sn} / SKU：{row?.sku}（固定不可修改）</Typography.Paragraph>
     {kind === "approve" && options.error && <Alert type="error" message={approvalErrorText(options.error)} action={<Button onClick={() => void options.refetch()}>重试</Button>} />}
     <Form form={form} layout="vertical">

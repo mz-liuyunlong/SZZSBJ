@@ -11,6 +11,7 @@ from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.pmc_domestic.warehouse_overpack import current_board_publication
 from app.modules.pmc_domestic.warehouse_schemas import (
     BoxesCommand,
     CustomsCommand,
@@ -251,9 +252,13 @@ def rebox(
     )
 
 
-def warehouse_publication_provider():
-    """Real Lingxing synchronization is intentionally unconfigured for this local slice."""
-    return None
+def warehouse_publication_provider(session: DB):
+    """Name the current governed publication in this process database."""
+
+    def provide(account, warehouse_id, sku, inbound_sn):
+        return current_board_publication(session, account, warehouse_id, sku, inbound_sn)
+
+    return provide
 
 
 @router.post(

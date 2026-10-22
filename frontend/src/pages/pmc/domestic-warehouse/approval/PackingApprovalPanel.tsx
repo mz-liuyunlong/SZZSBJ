@@ -38,7 +38,7 @@ export default function PackingApprovalPanel({ preferenceScope, onListFetching }
     if (!selected) return;
     const { row, kind } = selected;
     const payload = { source_account_ref: row.source_account_ref, warehouse_id: row.warehouse_id, candidate_version: row.candidate_version,
-      ...(kind === "approve" ? { qty: values.qty, customs: values.customs, rwh: values.rwh || undefined, is_test: true as const } : { note: values.note?.trim() }) };
+      ...(kind === "approve" ? { qty: values.qty, customs: values.customs, rwh: values.rwh || undefined } : { note: values.note?.trim() }) };
     if (kind === "approve" && values.target) {
       const [target_store_id, target_item_id, listing_version] = JSON.parse(values.target) as string[];
       Object.assign(payload, { target_store_id, target_item_id, listing_version, edit_reason: values.edit_reason?.trim() || undefined });

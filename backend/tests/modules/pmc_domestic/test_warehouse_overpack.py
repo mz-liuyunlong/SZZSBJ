@@ -186,6 +186,31 @@ def test_unconfigured_sync_is_audited_and_never_claims_success(db, order):
     assert svc.events(row.id, scope, 1, 20).items[0].kind == "sync"
 
 
+def test_process_database_provider_reads_current_publication(db, order):
+    from app.modules.pmc_domestic.warehouse_overpack import current_board_publication
+
+    svc, row, scope, pub, _ = blocked_case(db, order)
+    registered = svc.command(
+        row.id,
+        "ib",
+        SupplementalInboundCommand(**base(row), inbound_order_sn="IBSUPPLEMENT"),
+        "mid",
+        scope,
+    )
+
+    def provide(*args):
+        return current_board_publication(db, *args)
+
+    svc = WarehouseService(db, provide)
+    stale = svc.command(row.id, "sync", SupplementalSyncCommand(**base(registered)), "mid", scope)
+    assert stale.variance_case.last_sync_code == "SYNC_EVIDENCE_STALE"
+    new = fresh_publication(db, pub)
+    add_source(db, new, 3)
+    matched = svc.command(row.id, "sync", SupplementalSyncCommand(**base(stale)), "mid", scope)
+    assert matched.variance_case.last_sync_code == "MATCHED"
+    assert matched.status == "todo" and matched.variance_case.state == "ready"
+
+
 @pytest.mark.parametrize(
     "kind,expected",
     [

@@ -36,7 +36,7 @@
 | product_requirement | 资料完整/缺失/未知及版本令牌 |
 | completed_at / completed_by | 首次完成时间/登录操作人，改装箱保留 |
 
-多装余量足须confirm_extra=true；不足须reason并返回成功接受但command_outcome=blocked，未完成。登记补单传inbound_order_sn；同步无额外请求字段。真实同步未配置时明确返回variance_case.last_sync_code=LINGXING_SYNC_NOT_CONFIGURED。unpacked回池仅修改本单有效分配qty，不改原审批Q；审计前后记录与异常证据保留。void保留排除占用，不写领星库存。
+多装余量足须confirm_extra=true；不足须reason并返回成功接受但command_outcome=blocked，未完成。登记补单传inbound_order_sn；同步无额外请求字段。同步读取本进程库当前入库发布版本，不在请求内调用领星。没有当前发布版本时返回variance_case.last_sync_code=LINGXING_SYNC_NOT_CONFIGURED；发布版本未新于异常单时返回SYNC_EVIDENCE_STALE。unpacked回池仅修改本单有效分配qty，不改原审批Q；审计前后记录与异常证据保留。void保留排除占用，不写领星库存。
 
 
 ## 多装扩展契约
@@ -55,4 +55,4 @@ GET /orders支持exception=overpack筛选blocked异常；summary新增overpack_b
 | variance_case.notification_state | 本地待配置/已取消的通知状态，无发送器 |
 | variance_case.proposed_lines | 已完成PK因改装箱缺口保存的提议；原实装冻结，获准后再提交rebox |
 
-同步provider默认None；真实网络适配未接入。mock只在回滚验收app中依赖覆盖，不存在HTTP开关或证据上传绕过。当前接口不触发Celery或外部消息，未配置/失败也审计；未来真实网络采集须在命令事务外通过治理同步发布。
+HTTP同步使用本进程库当前发布版本，不接受客户端提交发布号。测试仍可注入受信任provider；未注入时保持LINGXING_SYNC_NOT_CONFIGURED。不存在HTTP开关或证据上传绕过。当前接口不触发Celery或外部消息，未配置/失败也审计；更新领星数据须在命令事务外通过治理同步发布。

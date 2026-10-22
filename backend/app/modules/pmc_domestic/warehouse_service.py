@@ -395,7 +395,7 @@ class WarehouseService:
                 )
             ):
                 conflict("IDEMPOTENCY_KEY_REUSED")
-            if order.status != "approved" or not order.is_test:
+            if order.status != "approved":
                 conflict("ORDER_STATE_CHANGED")
             if order.version != cmd.expected_version:
                 conflict("ORDER_VERSION_CHANGED")

@@ -24,7 +24,7 @@ export interface PackingEvent { id: string; event_kind: string; actor_uid: strin
 export type DecisionKind = "approve" | "reject";
 export interface DecisionPayload {
   source_account_ref: string; warehouse_id: string; candidate_version: string; idempotency_key: string;
-  qty?: number; customs?: "default" | "declare" | "skip"; rwh?: string; is_test?: true; note?: string;
+  qty?: number; customs?: "default" | "declare" | "skip"; rwh?: string; note?: string;
   target_store_id?: string; target_item_id?: string; listing_version?: string; edit_reason?: string;
 }
 const prefix = "/api/pmc/domestic/packing-approval";

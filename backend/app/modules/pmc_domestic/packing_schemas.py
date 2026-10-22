@@ -97,7 +97,6 @@ class PackingCommand(Strict):
 class ApproveCommand(PackingCommand):
     qty: int = Field(strict=True, ge=1, le=1000000)
     customs: Literal["default", "declare", "skip"] = "default"
-    is_test: Literal[True] = True
     rwh: str | None = Field(default=None, max_length=128)
     target_store_id: str | None = Field(default=None, min_length=1, max_length=64)
     target_item_id: str | None = Field(default=None, min_length=1, max_length=64)

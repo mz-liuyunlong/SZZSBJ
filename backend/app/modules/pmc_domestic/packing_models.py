@@ -46,7 +46,6 @@ class PackingOrder(Base):
             text("created_at DESC"),
             "id",
         ),
-        CheckConstraint("is_test", name="packing_local_verification"),
         CheckConstraint("status<>'rejected' OR length(trim(note))>0", name="packing_reject_note"),
         Index(
             "uq_domestic_packing_candidate_active",
