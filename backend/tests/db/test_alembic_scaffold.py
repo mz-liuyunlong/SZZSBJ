@@ -1,3 +1,4 @@
+import ast
 import runpy
 from collections.abc import Iterator
 from contextlib import nullcontext
@@ -261,3 +262,20 @@ def test_nonproduction_migration_behavior_is_unchanged(
     configured = run_offline_env(monkeypatch)
 
     assert configured["url"].render_as_string(hide_password=False) == SYNTHETIC_DATABASE_URL
+
+
+def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
+    revisions = []
+    for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py"):
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if any(
+                    isinstance(target, ast.Name) and target.id == "revision" for target in targets
+                ):
+                    revisions.append(ast.literal_eval(node.value))
+    assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
+    script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
+    assert script.get_heads() == [MERGED_HEAD_REVISION]
+    assert len(script.get_bases()) == 1
+    assert {item.revision for item in script.walk_revisions()} == set(revisions)

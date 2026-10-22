@@ -7,6 +7,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from app.db.domestic_schema_contract import require_domestic_table
 
 revision = "20261022_0053_domestic_packing_production_compat"
 down_revision = "20261021_0052_domestic_packing_manual"
@@ -90,285 +91,152 @@ def _replace_event_kind_check(bind):
     )
 
 
-WAREHOUSE_COLUMNS = {
-    "ops_domestic_packing_box_sets": {
-        "id": ("uuid", True),
-        "order_id": ("uuid", True),
-        "version": ("integer", True),
-        "total_qty": ("integer", True),
-        "approved_qty_snapshot": ("integer", True),
-        "variance_reason": ("varchar(500)", False),
-        "package_snapshot": ("jsonb", False),
-        "product_snapshot_id": ("uuid", False),
-        "completed_at": ("timestamptz", False),
-        "completed_by": ("varchar(128)", False),
-        "actor_uid": ("varchar(128)", True),
-        "created_at": ("timestamptz", True),
-        "updated_at": ("timestamptz", True),
-    },
-    "ops_domestic_packing_box_lines": {
-        "id": ("uuid", True),
-        "box_set_id": ("uuid", True),
-        "line_no": ("integer", True),
-        "box_type": ("varchar(16)", True),
-        "boxes": ("integer", True),
-        "units_per_box": ("integer", True),
-        "length_cm": ("numeric(12,4)", True),
-        "width_cm": ("numeric(12,4)", True),
-        "height_cm": ("numeric(12,4)", True),
-        "gross_weight_kg": ("numeric(12,4)", True),
-    },
-    "ops_domestic_packing_notes": {
-        "order_id": ("uuid", True),
-        "category": ("varchar(32)", True),
-        "text": ("varchar(500)", True),
-        "resolved": ("boolean", True),
-        "last_event_id": ("uuid", True),
-        "actor_uid": ("varchar(128)", True),
-        "updated_at": ("timestamptz", True),
-    },
-    "ops_domestic_packing_variance_cases": {
-        "order_id": ("uuid", True),
-        "kind": ("varchar(16)", True),
-        "state": ("varchar(16)", True),
-        "quantity": ("integer", True),
-        "gap_qty": ("integer", False),
-        "reason_category": ("varchar(32)", False),
-        "reason": ("varchar(500)", False),
-        "supplemental_ib": ("varchar(128)", False),
-        "evidence": ("jsonb", True),
-        "actor_uid": ("varchar(128)", True),
-        "created_at": ("timestamptz", True),
-        "updated_at": ("timestamptz", True),
-    },
-    "ops_domestic_packing_notification_outbox": {
-        "id": ("uuid", True),
-        "order_id": ("uuid", True),
-        "order_version": ("integer", True),
-        "kind": ("varchar(32)", True),
-        "state": ("varchar(32)", True),
-        "payload": ("jsonb", True),
-        "created_at": ("timestamptz", True),
-    },
-}
-WAREHOUSE_PRIMARY_KEYS = {
-    "ops_domestic_packing_box_sets": ("id",),
-    "ops_domestic_packing_box_lines": ("id",),
-    "ops_domestic_packing_notes": ("order_id",),
-    "ops_domestic_packing_variance_cases": ("order_id",),
-    "ops_domestic_packing_notification_outbox": ("id",),
-}
-
-
-def _column_token(row) -> str:
-    if row.udt_name == "uuid":
-        return "uuid"
-    if row.udt_name == "int4":
-        return "integer"
-    if row.udt_name == "bool":
-        return "boolean"
-    if row.udt_name == "jsonb":
-        return "jsonb"
-    if row.udt_name == "varchar":
-        if row.character_maximum_length is None:
-            return "varchar"
-        return f"varchar({row.character_maximum_length})"
-    if row.udt_name == "numeric":
-        return f"numeric({row.numeric_precision},{row.numeric_scale})"
-    if row.data_type == "timestamp with time zone":
-        return "timestamptz"
-    return row.data_type
-
-
-def _require_warehouse_shape(bind, table: str) -> None:
-    expected = WAREHOUSE_COLUMNS[table]
-    rows = bind.execute(
-        sa.text(
-            """
-            SELECT column_name, data_type, udt_name, is_nullable,
-                   character_maximum_length, numeric_precision, numeric_scale
-            FROM information_schema.columns
-            WHERE table_schema = 'public' AND table_name = :table
-            """
-        ),
-        {"table": table},
-    ).all()
-    actual = {row.column_name: (_column_token(row), row.is_nullable == "NO") for row in rows}
-    if actual != expected:
-        raise RuntimeError(
-            f"PACKING_WAREHOUSE_TABLE_SHAPE_MISMATCH:{table}:"
-            f"actual={sorted(actual)}:expected={sorted(expected)}"
+def _create_or_verify_table(name, *elements):
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table(name, schema="public"):
+        require_domestic_table(
+            bind,
+            sa.Table(name, sa.MetaData(), *elements),
+            prefix="PACKING_WAREHOUSE_TABLE_SHAPE_MISMATCH",
         )
-    primary_key = tuple(
-        bind.execute(
-            sa.text(
-                """
-                SELECT a.attname
-                FROM pg_index i
-                JOIN pg_attribute a
-                  ON a.attrelid = i.indrelid AND a.attnum = ANY (i.indkey)
-                WHERE i.indrelid = CAST(:qualified AS regclass)
-                  AND i.indisprimary
-                ORDER BY array_position(i.indkey, a.attnum)
-                """
-            ),
-            {"qualified": f"public.{table}"},
-        ).scalars()
-    )
-    if primary_key != WAREHOUSE_PRIMARY_KEYS[table]:
-        raise RuntimeError(f"PACKING_WAREHOUSE_TABLE_SHAPE_MISMATCH:{table}")
+    else:
+        op.create_table(name, *elements)
 
 
 def _create_warehouse_tables():
-    inspector = sa.inspect(op.get_bind())
-    if not inspector.has_table("ops_domestic_packing_box_sets"):
-        op.create_table(
-            "ops_domestic_packing_box_sets",
-            sa.Column("id", sa.Uuid(), primary_key=True),
-            sa.Column("order_id", sa.Uuid(), nullable=False),
-            sa.Column("version", sa.Integer(), nullable=False),
-            sa.Column("total_qty", sa.Integer(), nullable=False),
-            sa.Column("approved_qty_snapshot", sa.Integer(), nullable=False),
-            sa.Column("variance_reason", sa.String(500)),
-            sa.Column("package_snapshot", postgresql.JSONB()),
-            sa.Column("product_snapshot_id", sa.Uuid()),
-            sa.Column("completed_at", sa.DateTime(timezone=True)),
-            sa.Column("completed_by", sa.String(128)),
-            sa.Column("actor_uid", sa.String(128), nullable=False),
-            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(
-                ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
-            ),
-            sa.ForeignKeyConstraint(
-                ["product_snapshot_id"],
-                ["dwd_lingxing_sku_product_info_snapshots.id"],
-                ondelete="RESTRICT",
-            ),
-            sa.UniqueConstraint("order_id"),
-            sa.CheckConstraint("version>0", name="warehouse_box_version"),
-            sa.CheckConstraint("total_qty BETWEEN 1 AND 1000000", name="warehouse_box_total"),
-            sa.CheckConstraint(
-                "approved_qty_snapshot BETWEEN 1 AND 1000000", name="warehouse_approved_qty"
-            ),
-            sa.CheckConstraint(
-                "(completed_at IS NULL AND completed_by IS NULL) OR "
-                "(completed_at IS NOT NULL AND completed_by IS NOT NULL)",
-                name="warehouse_completion",
-            ),
-        )
-    else:
-        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_box_sets")
-    if not inspector.has_table("ops_domestic_packing_box_lines"):
-        op.create_table(
-            "ops_domestic_packing_box_lines",
-            sa.Column("id", sa.Uuid(), primary_key=True),
-            sa.Column("box_set_id", sa.Uuid(), nullable=False),
-            sa.Column("line_no", sa.Integer(), nullable=False),
-            sa.Column("box_type", sa.String(16), nullable=False),
-            sa.Column("boxes", sa.Integer(), nullable=False),
-            sa.Column("units_per_box", sa.Integer(), nullable=False),
-            sa.Column("length_cm", sa.Numeric(12, 4), nullable=False),
-            sa.Column("width_cm", sa.Numeric(12, 4), nullable=False),
-            sa.Column("height_cm", sa.Numeric(12, 4), nullable=False),
-            sa.Column("gross_weight_kg", sa.Numeric(12, 4), nullable=False),
-            sa.ForeignKeyConstraint(
-                ["box_set_id"], ["ops_domestic_packing_box_sets.id"], ondelete="RESTRICT"
-            ),
-            sa.UniqueConstraint("box_set_id", "line_no"),
-            sa.CheckConstraint("line_no BETWEEN 1 AND 20", name="warehouse_line_no"),
-            sa.CheckConstraint("box_type IN ('A','B','C','custom')", name="warehouse_box_type"),
-            sa.CheckConstraint(
-                "boxes BETWEEN 1 AND 9999 AND units_per_box BETWEEN 1 AND 100000",
-                name="warehouse_line_quantity",
-            ),
-            sa.CheckConstraint(
-                "length_cm BETWEEN 1 AND 300 AND width_cm BETWEEN 1 AND 300 "
-                "AND height_cm BETWEEN 1 AND 300",
-                name="warehouse_box_dimensions",
-            ),
-            sa.CheckConstraint("gross_weight_kg BETWEEN 0.01 AND 200", name="warehouse_box_weight"),
-        )
-    else:
-        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_box_lines")
-    if not inspector.has_table("ops_domestic_packing_notes"):
-        op.create_table(
-            "ops_domestic_packing_notes",
-            sa.Column("order_id", sa.Uuid(), primary_key=True),
-            sa.Column("category", sa.String(32), nullable=False),
-            sa.Column("text", sa.String(500), nullable=False),
-            sa.Column("resolved", sa.Boolean(), nullable=False),
-            sa.Column("last_event_id", sa.Uuid(), nullable=False),
-            sa.Column("actor_uid", sa.String(128), nullable=False),
-            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(
-                ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
-            ),
-            sa.ForeignKeyConstraint(
-                ["last_event_id"], ["evt_domestic_packing_events.id"], ondelete="RESTRICT"
-            ),
-            sa.CheckConstraint(
-                "category IN ('arrival_incomplete','labels','materials','operations',"
-                "'schedule','quality','other','resolved')",
-                name="warehouse_note_category",
-            ),
-            sa.CheckConstraint(
-                "category<>'other' OR length(trim(text))>=2", name="warehouse_note_text"
-            ),
-            sa.CheckConstraint("resolved=(category='resolved')", name="warehouse_note_resolution"),
-        )
-    else:
-        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_notes")
-    if not inspector.has_table("ops_domestic_packing_variance_cases"):
-        op.create_table(
-            "ops_domestic_packing_variance_cases",
-            sa.Column("order_id", sa.Uuid(), primary_key=True),
-            sa.Column("kind", sa.String(16), nullable=False),
-            sa.Column("state", sa.String(16), nullable=False),
-            sa.Column("quantity", sa.Integer(), nullable=False),
-            sa.Column("gap_qty", sa.Integer()),
-            sa.Column("reason_category", sa.String(32)),
-            sa.Column("reason", sa.String(500)),
-            sa.Column("supplemental_ib", sa.String(128)),
-            sa.Column("evidence", postgresql.JSONB(), nullable=False),
-            sa.Column("actor_uid", sa.String(128), nullable=False),
-            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-            sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(
-                ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
-            ),
-            sa.CheckConstraint("kind IN ('under','over')", name="packing_variance_kind"),
-            sa.CheckConstraint(
-                "state IN ('pending','blocked','ready','released','voided','resolved')",
-                name="packing_variance_state",
-            ),
-            sa.CheckConstraint(
-                "quantity>0 AND (gap_qty IS NULL OR gap_qty>=0)", name="packing_variance_qty"
-            ),
-        )
-    else:
-        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_variance_cases")
-    if not inspector.has_table("ops_domestic_packing_notification_outbox"):
-        op.create_table(
-            "ops_domestic_packing_notification_outbox",
-            sa.Column("id", sa.Uuid(), primary_key=True),
-            sa.Column("order_id", sa.Uuid(), nullable=False),
-            sa.Column("order_version", sa.Integer(), nullable=False),
-            sa.Column("kind", sa.String(32), nullable=False),
-            sa.Column("state", sa.String(32), nullable=False),
-            sa.Column("payload", postgresql.JSONB(), nullable=False),
-            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-            sa.ForeignKeyConstraint(
-                ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
-            ),
-            sa.UniqueConstraint("order_id", "order_version", "kind"),
-            sa.CheckConstraint(
-                "state IN ('pending_configuration','cancelled','delivered','failed')",
-                name="packing_notice_state",
-            ),
-        )
-    else:
-        _require_warehouse_shape(op.get_bind(), "ops_domestic_packing_notification_outbox")
+    _create_or_verify_table(
+        "ops_domestic_packing_box_sets",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("order_id", sa.Uuid(), nullable=False),
+        sa.Column("version", sa.Integer(), nullable=False),
+        sa.Column("total_qty", sa.Integer(), nullable=False),
+        sa.Column("approved_qty_snapshot", sa.Integer(), nullable=False),
+        sa.Column("variance_reason", sa.String(500)),
+        sa.Column("package_snapshot", postgresql.JSONB()),
+        sa.Column("product_snapshot_id", sa.Uuid()),
+        sa.Column("completed_at", sa.DateTime(timezone=True)),
+        sa.Column("completed_by", sa.String(128)),
+        sa.Column("actor_uid", sa.String(128), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["product_snapshot_id"],
+            ["dwd_lingxing_sku_product_info_snapshots.id"],
+            ondelete="RESTRICT",
+        ),
+        sa.UniqueConstraint("order_id"),
+        sa.CheckConstraint("version>0", name="warehouse_box_version"),
+        sa.CheckConstraint("total_qty BETWEEN 1 AND 1000000", name="warehouse_box_total"),
+        sa.CheckConstraint(
+            "approved_qty_snapshot BETWEEN 1 AND 1000000", name="warehouse_approved_qty"
+        ),
+        sa.CheckConstraint(
+            "(completed_at IS NULL AND completed_by IS NULL) OR "
+            "(completed_at IS NOT NULL AND completed_by IS NOT NULL)",
+            name="warehouse_completion",
+        ),
+    )
+    _create_or_verify_table(
+        "ops_domestic_packing_box_lines",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("box_set_id", sa.Uuid(), nullable=False),
+        sa.Column("line_no", sa.Integer(), nullable=False),
+        sa.Column("box_type", sa.String(16), nullable=False),
+        sa.Column("boxes", sa.Integer(), nullable=False),
+        sa.Column("units_per_box", sa.Integer(), nullable=False),
+        sa.Column("length_cm", sa.Numeric(12, 4), nullable=False),
+        sa.Column("width_cm", sa.Numeric(12, 4), nullable=False),
+        sa.Column("height_cm", sa.Numeric(12, 4), nullable=False),
+        sa.Column("gross_weight_kg", sa.Numeric(12, 4), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["box_set_id"], ["ops_domestic_packing_box_sets.id"], ondelete="RESTRICT"
+        ),
+        sa.UniqueConstraint("box_set_id", "line_no"),
+        sa.CheckConstraint("line_no BETWEEN 1 AND 20", name="warehouse_line_no"),
+        sa.CheckConstraint("box_type IN ('A','B','C','custom')", name="warehouse_box_type"),
+        sa.CheckConstraint(
+            "boxes BETWEEN 1 AND 9999 AND units_per_box BETWEEN 1 AND 100000",
+            name="warehouse_line_quantity",
+        ),
+        sa.CheckConstraint(
+            "length_cm BETWEEN 1 AND 300 AND width_cm BETWEEN 1 AND 300 "
+            "AND height_cm BETWEEN 1 AND 300",
+            name="warehouse_box_dimensions",
+        ),
+        sa.CheckConstraint("gross_weight_kg BETWEEN 0.01 AND 200", name="warehouse_box_weight"),
+    )
+    _create_or_verify_table(
+        "ops_domestic_packing_notes",
+        sa.Column("order_id", sa.Uuid(), primary_key=True),
+        sa.Column("category", sa.String(32), nullable=False),
+        sa.Column("text", sa.String(500), nullable=False),
+        sa.Column("resolved", sa.Boolean(), nullable=False),
+        sa.Column("last_event_id", sa.Uuid(), nullable=False),
+        sa.Column("actor_uid", sa.String(128), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["last_event_id"], ["evt_domestic_packing_events.id"], ondelete="RESTRICT"
+        ),
+        sa.CheckConstraint(
+            "category IN ('arrival_incomplete','labels','materials','operations',"
+            "'schedule','quality','other','resolved')",
+            name="warehouse_note_category",
+        ),
+        sa.CheckConstraint(
+            "category<>'other' OR length(trim(text))>=2", name="warehouse_note_text"
+        ),
+        sa.CheckConstraint("resolved=(category='resolved')", name="warehouse_note_resolution"),
+    )
+    _create_or_verify_table(
+        "ops_domestic_packing_variance_cases",
+        sa.Column("order_id", sa.Uuid(), primary_key=True),
+        sa.Column("kind", sa.String(16), nullable=False),
+        sa.Column("state", sa.String(16), nullable=False),
+        sa.Column("quantity", sa.Integer(), nullable=False),
+        sa.Column("gap_qty", sa.Integer()),
+        sa.Column("reason_category", sa.String(32)),
+        sa.Column("reason", sa.String(500)),
+        sa.Column("supplemental_ib", sa.String(128)),
+        sa.Column("evidence", postgresql.JSONB(), nullable=False),
+        sa.Column("actor_uid", sa.String(128), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
+        ),
+        sa.CheckConstraint("kind IN ('under','over')", name="packing_variance_kind"),
+        sa.CheckConstraint(
+            "state IN ('pending','blocked','ready','released','voided','resolved')",
+            name="packing_variance_state",
+        ),
+        sa.CheckConstraint(
+            "quantity>0 AND (gap_qty IS NULL OR gap_qty>=0)", name="packing_variance_qty"
+        ),
+    )
+    _create_or_verify_table(
+        "ops_domestic_packing_notification_outbox",
+        sa.Column("id", sa.Uuid(), primary_key=True),
+        sa.Column("order_id", sa.Uuid(), nullable=False),
+        sa.Column("order_version", sa.Integer(), nullable=False),
+        sa.Column("kind", sa.String(32), nullable=False),
+        sa.Column("state", sa.String(32), nullable=False),
+        sa.Column("payload", postgresql.JSONB(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["order_id"], ["ops_domestic_packing_orders.id"], ondelete="RESTRICT"
+        ),
+        sa.UniqueConstraint("order_id", "order_version", "kind"),
+        sa.CheckConstraint(
+            "state IN ('pending_configuration','cancelled','delivered','failed')",
+            name="packing_notice_state",
+        ),
+    )
 
 
 def _insert_permissions(bind):

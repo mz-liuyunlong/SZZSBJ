@@ -4,8 +4,9 @@ Fresh environments: create tables, constraints and indexes from ORM metadata.
 Existing environments (e.g. production tables created from
 ``docs/delivery/domestic-warehouse-ods-tables.sql``): verify column nullability,
 varchar length, and PostgreSQL data types match the ORM. ``timestamp without
-time zone`` does not match ``timestamptz``. Then create any missing non-unique
-indexes only.
+time zone`` does not match ``timestamptz``. Constraints and ordered indexes must
+also match; partial table sets and missing indexes are refused without repairing
+business tables.
 Mismatch raises ``DomesticOdsSchemaMismatchError`` so Alembic stops instead of
 silently diverging.
 """
@@ -20,6 +21,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.db.base import Base
+from app.db.domestic_schema_contract import require_domestic_table
 from app.modules.pmc_domestic.models import PMC_DOMESTIC_ODS_TABLES
 
 TABLE_ORDER: Final[tuple[str, ...]] = (
@@ -122,33 +124,11 @@ def _verify_columns(table_name: str, db_columns: dict[str, tuple[str, bool]]) ->
             )
 
 
-def _existing_index_names(connection: Connection, table_name: str) -> set[str]:
-    rows = connection.execute(
-        text(
-            """
-            select indexname
-            from pg_indexes
-            where schemaname = 'public' and tablename = :table_name
-            """
-        ),
-        {"table_name": table_name},
-    ).all()
-    return {row.indexname for row in rows}
-
-
 def _create_table(connection: Connection, table_name: str) -> None:
     table = Base.metadata.tables[table_name]
     connection.execute(CreateTable(table))
     for index in table.indexes:
         if index.name:
-            connection.execute(CreateIndex(index))
-
-
-def _ensure_indexes(connection: Connection, table_name: str) -> None:
-    existing = _existing_index_names(connection, table_name)
-    table = Base.metadata.tables[table_name]
-    for index in table.indexes:
-        if index.name and index.name not in existing:
             connection.execute(CreateIndex(index))
 
 
@@ -165,6 +145,9 @@ def adopt_domestic_ods_tables(connection: Connection | Engine) -> None:
 
 def _adopt_on_connection(conn: Connection) -> None:
     inspector = inspect(conn)
+    present = {name for name in TABLE_ORDER if inspector.has_table(name, schema="public")}
+    if present and present != set(TABLE_ORDER):
+        raise DomesticOdsSchemaMismatchError("domestic ODS partial table set; refusing adoption")
     for table_name in TABLE_ORDER:
         if table_name not in PMC_DOMESTIC_ODS_TABLES:
             raise DomesticOdsSchemaMismatchError(f"unknown domestic ODS table {table_name}")
@@ -173,4 +156,6 @@ def _adopt_on_connection(conn: Connection) -> None:
             continue
         db_columns = _load_db_columns(conn, table_name)
         _verify_columns(table_name, db_columns)
-        _ensure_indexes(conn, table_name)
+        require_domestic_table(
+            conn, Base.metadata.tables[table_name], error_type=DomesticOdsSchemaMismatchError
+        )

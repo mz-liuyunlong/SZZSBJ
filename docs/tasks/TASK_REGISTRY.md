@@ -52,3 +52,5 @@ Registry Status: `draft; approved only after owner review and merge`
 - [ ] 未合并任务不得标记 `implemented`。
 - [ ] PR 和 merge commit 仅在真实存在后填写。
 - [ ] 未写入账号、密钥、连接串或生产数据。
+
+| domestic-chain-0054-safety-review | Harden domestic schema adoption and isolated PostgreSQL acceptance for PR 242 | Backend Engineer | implemented | existing project checkout | dev (explicit Owner authorization) | c76208c | N/A — Owner-authorized migration defect repair; no new table design or revision | domestic ODS validator, existing 0053/0054 validation, PostgreSQL tests/CI, delivery evidence | #242 | TBD | PostgreSQL 14.24: 56 passed, 0 failed/errors/skipped; Ruff lint/format 532 files PASS; 62 revisions, single 0054 head; report docs/delivery/domestic-chain-0054-validation.md | no new branch/worktree | Production access/deployment, 0055, historical 0047–0049 changes, stamp/version rewrites, provider calls, commit/push/merge | Owner review and final-commit GitHub PostgreSQL 16 CI | Owner confirms old 0054 was never applied; current 0054 remains final target; production deployed blobs/live version not verified |
