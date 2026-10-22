@@ -13,6 +13,9 @@ from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
     RawRetentionPolicy,
 )
+from app.modules.integration_sync.pmc_domestic_catalog import (
+    PMC_DOMESTIC_SYNC_INTERFACE_SPECS,
+)
 from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SYNC_INTERFACE_SPECS,
 )
@@ -31,6 +34,10 @@ class DataPagesGovernanceBootstrapError(RuntimeError):
 
 class PmcPurchaseGovernanceBootstrapError(RuntimeError):
     """Safe PMC purchase bootstrap validation error without account values."""
+
+
+class PmcDomesticGovernanceBootstrapError(RuntimeError):
+    """Safe PMC domestic bootstrap validation error without account values."""
 
 
 class SyncInterfaceSpecLike(Protocol):
@@ -87,6 +94,7 @@ class DataPagesGovernanceBootstrapResult:
 
 
 PmcPurchaseGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
+PmcDomesticGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
 
 
 class IntegrationCatalogService:
@@ -389,6 +397,39 @@ class IntegrationCatalogService:
             self.session.rollback()
             raise
 
+    def bootstrap_pmc_domestic_governance(
+        self,
+        source_account_ref: str,
+    ) -> PmcDomesticGovernanceBootstrapResult:
+        """Create disabled governance metadata for domestic warehouse Lingxing interfaces."""
+
+        source_account_ref = validate_pmc_domestic_source_account_ref(source_account_ref)
+        interface_statuses: list[BootstrapStatus] = []
+        retention_policy_statuses: list[BootstrapStatus] = []
+        sync_config_statuses: list[BootstrapStatus] = []
+        try:
+            for spec in PMC_DOMESTIC_SYNC_INTERFACE_SPECS:
+                interface, interface_status = self._bootstrap_data_pages_interface(spec)
+                policy, retention_policy_status = self._bootstrap_data_pages_retention_policy(spec)
+                sync_config_status = self._bootstrap_data_pages_sync_config(
+                    interface,
+                    policy,
+                    spec,
+                    source_account_ref,
+                )
+                interface_statuses.append(interface_status)
+                retention_policy_statuses.append(retention_policy_status)
+                sync_config_statuses.append(sync_config_status)
+            self.session.commit()
+            return PmcDomesticGovernanceBootstrapResult(
+                interface_statuses=tuple(interface_statuses),
+                retention_policy_statuses=tuple(retention_policy_statuses),
+                sync_config_statuses=tuple(sync_config_statuses),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
     def _bootstrap_data_pages_interface(
         self,
         spec: SyncInterfaceSpecLike,
@@ -543,6 +584,14 @@ def validate_pmc_purchase_source_account_ref(value: str) -> str:
     if not value or value != value.strip() or len(value) > 128:
         raise PmcPurchaseGovernanceBootstrapError(
             "PMC_PURCHASE_GOVERNANCE_BOOTSTRAP_SOURCE_ACCOUNT_REF_INVALID"
+        )
+    return value
+
+
+def validate_pmc_domestic_source_account_ref(value: str) -> str:
+    if not value or value != value.strip() or len(value) > 128:
+        raise PmcDomesticGovernanceBootstrapError(
+            "PMC_DOMESTIC_GOVERNANCE_BOOTSTRAP_SOURCE_ACCOUNT_REF_INVALID"
         )
     return value
 

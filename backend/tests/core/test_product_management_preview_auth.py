@@ -218,6 +218,7 @@ def test_correct_preview_token_creates_only_the_approved_principal(
                 "page:warehouse:wfs-fee-alert:view",
                 "page:settings:fee-rules:view",
                 "page:pmc:purchase-board:view",
+                "page:pmc:domestic-warehouse-board:view",
                 "page:operations:plan:view",
                 "page:data-center:task-center:view",
                 "products:read",
@@ -234,6 +235,7 @@ def test_correct_preview_token_creates_only_the_approved_principal(
                 "business-rules:execute",
                 "warehouse:wfs-fee-alert:read",
                 "pmc:purchase:read",
+                "pmc:domestic-batch:read",
                 "operations:plan:read",
                 "operations:plan:write",
             }

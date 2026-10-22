@@ -18,6 +18,7 @@ from app.modules.pmc_purchase.schemas import (
     BoardListQuery,
     PendingPlanQuery,
     SkuCycleQuery,
+    SummaryCardFilter,
 )
 from app.modules.pmc_purchase.service import PmcPurchaseReadService
 from tests.modules.pmc_purchase.test_refresh import (
@@ -102,8 +103,9 @@ def test_board_filters_sorting_and_scope(seeded: Session) -> None:
     assert {i.sku for i in data.items} == {"SKU-A", "SKU-B"}
 
     data, total, *_ = svc.list_board(BoardListQuery(item_id_source=["pending_packing_slip"]), SCOPE)
-    # PO4 inherits P1's remark ItemID even though its store is unattributed
-    assert {i.purchase_order_sn for i in data.items} == {"PO2", "PO3"}
+    # PO3 has no plan remark but matches the single Listing for store + SKU-A.
+    # PO4 inherits P1's remark ItemID even though its store is unattributed.
+    assert {i.purchase_order_sn for i in data.items} == {"PO2"}
 
     data, total, *_ = svc.list_board(
         BoardListQuery(owner_uid=["u-1"], price_min=Decimal("5"), price_max=Decimal("5")), SCOPE
@@ -120,6 +122,20 @@ def test_board_filters_sorting_and_scope(seeded: Session) -> None:
     data, total, *_ = svc.list_board(BoardListQuery(), frozenset({"other"}))
     assert total == 0 and data.items == []
 
+    cards: dict[SummaryCardFilter, set[str]] = {
+        "awaiting_arrival": {"PO2", "PO4"},
+        "arrival_overdue": {"PO2"},
+        "purchase_overdue": {"PO3"},
+        "average_cycle": {"PO1"},
+        "month_amount": {"PO1"},
+        "unstable_sku": set(),
+        "itemid_pending": {"PO2"},
+    }
+    for card, orders in cards.items():
+        data, total, *_ = svc.list_board(BoardListQuery(summary_filter=card), SCOPE)
+        assert {i.purchase_order_sn for i in data.items} == orders, card
+        assert total == len(orders)
+
 
 def test_summary_cards(seeded: Session) -> None:
     data, _freshness, rule = PmcPurchaseReadService(seeded, today=TODAY).summary(
@@ -131,12 +147,39 @@ def test_summary_cards(seeded: Session) -> None:
     assert data.purchase_overdue_orders == 1  # PO3 待下单 20 d
     assert data.purchase_overdue_plans == 1  # P3 (P4 fresh, P5 sid=0 suppressed)
     assert data.average_purchase_cycle_days_90d == Decimal("10.0000")  # PO1: 15 - 5
+    assert data.median_purchase_cycle_days_90d == Decimal("10.0000")
+    assert data.purchase_cycle_sample_orders_90d == 1
     assert data.month_purchase_amount == [] or all(
         m.currency_code == "CNY" for m in data.month_purchase_amount
     )
-    assert data.itemid_pending_lines == 2 and data.unattributed_store_lines == 1
-    assert data.wfs_not_ready_lines == 1  # PO1 listing fulfillment_type=0; PO4 has no store
+    assert data.itemid_pending_lines == 1 and data.unattributed_store_lines == 1
+    assert data.wfs_not_ready_lines == 2  # PO1 and PO3 share the SKU-A listing (fulfillment 0)
     assert data.unstable_sku_count == 0
+
+
+def test_unstable_sku_count_follows_page_filters_and_dedupes_sku(seeded: Session) -> None:
+    for row in seeded.query(DwsPurchaseBoard).all():
+        row.sku_cycle_unstable = row.order_sn in {"PO1", "PO2", "PO3", "PO4"}
+    seeded.commit()
+    svc = PmcPurchaseReadService(seeded, today=TODAY)
+
+    everything, *_ = svc.summary(BoardFilterQuery(), SCOPE)
+    # PO1, PO3, and PO4 are the same account + SKU-A. PO2 is SKU-B.
+    assert everything.unstable_sku_count == 2
+
+    store_only, *_ = svc.summary(BoardFilterQuery(store_id=[STORE]), SCOPE)
+    # PO4 has no store, so SKU-A remains through PO1 and PO3, plus SKU-B.
+    assert store_only.unstable_sku_count == 2
+
+    owner_only, *_ = svc.summary(BoardFilterQuery(owner_uid=["u-1"]), SCOPE)
+    assert owner_only.unstable_sku_count == 1
+
+    listed, total, *_ = svc.list_board(
+        BoardListQuery(owner_uid=["u-1"], summary_filter="unstable_sku"), SCOPE
+    )
+    assert {item.sku for item in listed.items} == {"SKU-A"}
+    assert {item.purchase_order_sn for item in listed.items} == {"PO1", "PO3", "PO4"}
+    assert total == 3
 
 
 def test_order_detail_and_missing(seeded: Session) -> None:

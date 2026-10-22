@@ -18,6 +18,7 @@ import type {
   PurchaseBoardSort,
   PurchaseBoardStatusFilter,
   PurchaseBoardSummary,
+  PurchaseBoardSummaryFilter,
   PurchaseItemIdRef,
   PurchaseOrderDetail,
   PurchaseOwnerRef,
@@ -148,6 +149,8 @@ interface BackendBoardSummaryData {
   purchase_overdue_orders: number;
   purchase_overdue_plans: number;
   average_purchase_cycle_days_90d: string | null;
+  median_purchase_cycle_days_90d: string | null;
+  purchase_cycle_sample_orders_90d: number;
   month_purchase_amount: BackendMoneyByCurrency[];
   unstable_sku_count: number;
   itemid_pending_lines: number;
@@ -411,11 +414,13 @@ export function buildPurchaseBoardListQuery(
   page: number,
   pageSize: number,
   sort: PurchaseBoardSort = filters.sort,
+  summaryFilter?: PurchaseBoardSummaryFilter,
 ) {
   const query = buildPurchaseBoardFilterQuery(filters);
   query.set("page", String(page));
   query.set("page_size", String(pageSize));
   query.set("sort", sort);
+  if (summaryFilter) query.set("summary_filter", summaryFilter);
   return query;
 }
 
@@ -426,8 +431,9 @@ export async function listPurchaseBoard(
   page: number,
   pageSize: number,
   signal?: AbortSignal,
+  summaryFilter?: PurchaseBoardSummaryFilter,
 ): Promise<PurchaseBoardListResult> {
-  const query = buildPurchaseBoardListQuery(filters, page, pageSize);
+  const query = buildPurchaseBoardListQuery(filters, page, pageSize, filters.sort, summaryFilter);
   const response = await backendRequest<BackendBoardListData, BackendPurchaseReadMeta>(
     `/api/pmc/purchase/board?${query.toString()}`,
     { signal },
@@ -456,6 +462,8 @@ export async function getPurchaseBoardSummary(
     purchaseOverdueOrders: data.purchase_overdue_orders,
     purchaseOverduePlans: data.purchase_overdue_plans,
     averagePurchaseCycleDays90d: toNumber(data.average_purchase_cycle_days_90d),
+    medianPurchaseCycleDays90d: toNumber(data.median_purchase_cycle_days_90d),
+    purchaseCycleSampleOrders90d: data.purchase_cycle_sample_orders_90d,
     monthPurchaseAmount: data.month_purchase_amount.map(mapMoneyByCurrency),
     unstableSkuCount: data.unstable_sku_count,
     itemidPendingLines: data.itemid_pending_lines,

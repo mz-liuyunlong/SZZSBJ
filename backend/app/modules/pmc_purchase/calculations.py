@@ -14,6 +14,7 @@ whose defaults mirror the v3 document and are the seed values of
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
@@ -23,9 +24,28 @@ from typing import Final, Literal
 
 FOUR_PLACES: Final = Decimal("0.0001")
 ONE: Final = Decimal("1")
+AVERAGE_CYCLE_WINDOW_DAYS: Final = 90
 
-# §5.1 row 1: ``ITEMID:19051502014`` in the plan remark; exactly eleven digits.
+
+def median_days(values: Sequence[int]) -> Decimal | None:
+    """Median of integer day counts. An even count averages the two middle values."""
+
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        raw = Decimal(ordered[mid])
+    else:
+        raw = (Decimal(ordered[mid - 1]) + Decimal(ordered[mid])) / Decimal(2)
+    return raw.quantize(FOUR_PLACES, rounding=ROUND_HALF_UP)
+
+
+# §5.1 row 1: an ItemID in the plan remark is eleven digits.
+# Prefixed ``ITEMID:19051502014`` wins; a bare eleven-digit token is also accepted.
+# Longer numbers such as a 14-digit GTIN are not an ItemID.
 ITEMID_REMARK_PATTERN: Final = re.compile(r"ITEMID:\s*(\d{11})(?!\d)", re.IGNORECASE)
+BARE_ITEMID_PATTERN: Final = re.compile(r"(?<!\d)(\d{11})(?!\d)")
 
 # Provider status codes (contract docs + §2 table).
 PLAN_STATUS_PENDING_APPROVAL: Final = 121
@@ -50,8 +70,6 @@ type StageCode = Literal["S1", "S2", "S3", "S4", "S9", "S0", "UNKNOWN"]
 type ItemIdSource = Literal[
     "from_system_plan",
     "from_plan_remark",
-    # Read compatibility for production rows created by the separately-owned
-    # Listing attribution flow. This module does not create that attribution.
     "from_listing",
     "from_packing_slip",
     "pending_packing_slip",
@@ -148,12 +166,19 @@ def days_between(start: date | None, end: date | None) -> int | None:
 
 
 def parse_itemid_remark(remark: object) -> str | None:
-    """Extract the first ``ITEMID:<11 digits>`` marker from a plan remark."""
+    """Extract an 11-digit ItemID from a plan remark.
+
+    ``ITEMID:`` plus eleven digits is preferred. Otherwise the first standalone
+    eleven-digit token is used. Digits inside a longer number are ignored.
+    """
 
     if not isinstance(remark, str):
         return None
-    match = ITEMID_REMARK_PATTERN.search(remark)
-    return match.group(1) if match else None
+    prefixed = ITEMID_REMARK_PATTERN.search(remark)
+    if prefixed:
+        return prefixed.group(1)
+    bare = BARE_ITEMID_PATTERN.search(remark)
+    return bare.group(1) if bare else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,22 +191,27 @@ def resolve_item_id(
     *,
     system_plan_item_id: str | None = None,
     plan_remark_item_id: str | None = None,
+    listing_item_id: str | None = None,
     packing_slip_item_id: str | None = None,
     packing_slip_pending: bool = False,
 ) -> ItemIdAttribution:
-    """Apply the §5.1 priority (rules v4, Owner decision 2026-09-21):
+    """Apply the ItemID priority:
 
-    ``from_system_plan`` > ``from_plan_remark`` > ``from_packing_slip`` > ``unresolved``.
-    There is no manual source: the board never accepts a hand-typed ItemID. When no
-    source resolves and the row is still waiting for a packing slip (``packing_slip_pending``),
-    the attribution is ``pending_packing_slip`` rather than ``unresolved`` so the board
-    can label it 待打包回填 instead of 待处理. Blank strings count as absent.
+    ``from_system_plan`` > ``from_plan_remark`` > ``from_listing`` >
+    ``from_packing_slip`` > ``unresolved``.
+
+    Listing is the Walmart item id already stored for the same store and local SKU.
+    It is used only when that pair maps to exactly one item id. There is no manual
+    source. When nothing resolves and a packing slip is still expected, the row stays
+    ``pending_packing_slip``. Blank strings count as absent.
     """
 
     if _nonblank(system_plan_item_id):
         return ItemIdAttribution(str(system_plan_item_id).strip(), "from_system_plan")
     if _nonblank(plan_remark_item_id):
         return ItemIdAttribution(str(plan_remark_item_id).strip(), "from_plan_remark")
+    if _nonblank(listing_item_id):
+        return ItemIdAttribution(str(listing_item_id).strip(), "from_listing")
     if _nonblank(packing_slip_item_id):
         return ItemIdAttribution(str(packing_slip_item_id).strip(), "from_packing_slip")
     if packing_slip_pending:

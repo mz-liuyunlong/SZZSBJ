@@ -23,12 +23,19 @@ Registry Status: `draft; approved only after owner review and merge`
 | `ext-lingxing-auth-refresh-token-candidate` | Lingxing | 续约接口令牌 | Outbound auth request | POST | `/api/auth-server/oauth/refresh` | AppID + single-use refreshToken | `secret_ref` only | 为后端 Token Manager 刷新访问令牌 | Enterprise credential scope；不涉及 store scope | On demand；internal client implemented, default disabled | None | No | None；Token 明文禁止写 RAW | None | None | None | None | None | Backend internal only；不暴露业务 API | Project Owner | `implemented` | `PRPs/lingxing-token-manager.md` | `#46` evidence；`#47` approval；`#48` implementation；`#49` controlled validation（`0032e4e`）；worker-lifecycle repair PR TBD | 2026-10-16 | 2026-09-11 controlled validation 确认 RefreshToken 成功、refresh token 与 snapshot 轮换且旧 refresh token 未复用；立即刷新时 access token 字符串未变化，因此不得以字符串变化作为成功条件；当前修复仍仅使用进程内 lock/single-flight，不增加 Redis/DB 或跨实例共享，也未记录凭据 |
 | `ext-lingxing-product-list-candidate` | Lingxing | 查询本地产品列表 | Outbound business read | POST | `/erp/sc/routing/data/local_inventory/productList` | Query Params signing implemented in PR #57；credential values remain behind `secret_ref` | `secret_ref` only | 服务器正式 ProductList-only 分页同步，保存 RAW/request evidence 并发布 Lingxing SKU identity | 官方 endpoint 未列 store/seller/company/warehouse 参数；当前授权仅限既有账号范围，不建立 store-level scope | Formal server paginated sync | Manual and Owner-configured automatic schedule through the common Celery scheduler | Yes | `APPLICATION_DATABASE` database: `ods_api_raw_blobs` + `ods_api_raw_request_refs` | `APPLICATION_DATABASE` database: `ods_lingxing_productlist_sku_refs` -> `dwd_lingxing_sku_identity_index` | Existing Product Core remains separate | None | Protected integration trigger/status APIs only | Sync Task page | `integrations:execute` and protected metadata reads | Project Owner | `implemented` | `PRPs/integration-sync-governance-backend-v1.md` | `#57` client；`#61` governance；`#176` automatic scheduling | 2026-10-01 | ProductList and required Token only；PR #176 added queue/scheduler runtime；this repair adds the common five-minute lease, per-page heartbeat, and bounded legacy orphan recovery；no legacy MySQL, new table, migration, or additional provider endpoint |
 | `ext-lingxing-batch-product-info-candidate` | Lingxing | 批量查询本地产品详情 | Outbound business read | POST | `/erp/sc/routing/data/local_inventory/batchGetProductInfo` | Endpoint-specific real auth and request-field selection remain unverified；implementation transport stays disabled | `secret_ref` only | 已合并 SKU 详情 RAW-first/DWD/DWS skeleton；contract-aligned fixture publication extension pending review | Non-secret `source_account_ref`；no inferred store scope | `id_batch_page` dry-run/mock/fixture only | Disabled；real cadence requires separate Owner approval | Yes | `storage-ods-api-raw-blobs-planned` + request refs | `dwd_lingxing_sku_product_info_*` foundation | Product Core remains manual authority；`OD-ProductInfo-Bootstrap-01` permits only minimal exact-SKU create/link | `dws_sku_base_profile_current` foundation | Implemented backend-only SKU contracts | None；backend-only | `integrations:execute` / protected SKU read keys | Project Owner | `implemented` | `PRPs/integration-sync-governance-backend-v1.md` | `#61` (`e8bc130`) | 2026-09-14 | Contract snapshots `productinfo-lx-bb8d0df598af.md` and `productinfo-lx-dcb0c142100b.md` support offline response parsing；real parameters, Token, provider calls and schedule remain blocked |
+| `ext-lingxing-domestic-warehouse-list` | Lingxing | 国内仓仓库列表 | Outbound business read | POST | `/erp/sc/data/local_inventory/warehouse` | Gate 2 query-sign；handler on `dev` | `secret_ref` only | Append-only ODS `ods_lingxing_domestic_warehouses` | `source_account_ref` | `domesticWarehouseList` | Owner CLI；默认不调度 | Yes | `ods_api_raw_*` + ODS | Alembic `0047` adopt | None | None | None | `integrations:execute` | Project Owner | `candidate` | `docs/delivery/domestic-warehouse-ods-tables.md` | TBD | 2026-10-19 | 生产四表可能已手工创建；0047 校验不 stamp |
+| `ext-lingxing-domestic-inventory-details` | Lingxing | 国内仓库存明细 | Outbound business read | POST | `/erp/sc/routing/data/local_inventory/inventoryDetails` | Gate 2 query-sign | `secret_ref` only | ODS `ods_lingxing_domestic_inventory` | `source_account_ref` | `domesticInventoryDetails` | Owner CLI | Yes | same | `0047` | None | None | None | `integrations:execute` | Project Owner | `candidate` | same doc | TBD | 2026-10-19 | Index `ix_ods_domestic_inventory_wh_sku` |
+| `ext-lingxing-domestic-batch-detail-list` | Lingxing | 国内仓批次明细 | Outbound business read | POST | `/erp/sc/routing/data/local_inventory/getBatchDetailList` | Gate 2 query-sign | `secret_ref` only | ODS `ods_lingxing_domestic_batches` | `source_account_ref` | `domesticBatchDetailList` | Owner CLI | Yes | same | `0047` | None | None | None | `integrations:execute` | Project Owner | `candidate` | same doc | TBD | 2026-10-19 | 看板 DWD 来自收货 ODS，非本表直读 |
+| `ext-lingxing-domestic-batch-statement-list` | Lingxing | 国内仓批次流水 | Outbound business read | POST | `/erp/sc/routing/data/local_inventory/getBatchStatementList` | Gate 2 query-sign | `secret_ref` only | ODS `ods_lingxing_domestic_inventory_events` | `source_account_ref` | `domesticBatchStatementList` | Owner CLI；≤90d | Yes | same | `0047` | None | None | None | `integrations:execute` | Project Owner | `candidate` | same doc | TBD | 2026-10-19 | `statement_id` nullable |
 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 
 ## Internal Backend API Registry
 
+2026-10-19 国内仓增量：负责人已确认补齐选项和当前产品负责人筛选，PRP 为 `PRPs/pmc-domestic-filter-options.md`，数据源决策为 `docs/data-sources/decisions/pmc-domestic-filter-options-decision.md`。本地实现和合成测试不等于已合并或部署；既有批次接口新增重复 `owner_uid`（最多50项），列表与统计共同查询SKU身份和当前负责人DWD，数据范围不变，不新增表/同步/写操作。
+
 | API ID | Method | Route | Purpose | Source Layer | Read Model / Table | Permission Key | Data Scope | Frontend Page | Status | PRP | PR | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `api-pmc-domestic-filter-options-v1` | GET | `/api/pmc/domestic/filter-options` | 可见收货批次的店铺与当前产品负责人选项 | Existing DWD + DIM | `dwd_domestic_receipt_batch`, `dwd_domestic_receipt_batch_link`, `dim_lingxing_stores`, `dwd_lingxing_sku_identity_index`, `dwd_lingxing_sku_product_info_current` | `pmc:domestic-batch:read` / existing page policy | Trusted source-account scope; fail closed | 国内仓批次看板 `ReportFacetSelect` | `approved_for_implementation` | `PRPs/pmc-domestic-filter-options.md` | TBD | 本地实现待评审合并；value为ID/UID，名称仅展示；歧义不猜，不返回跨模块数量；无外部API/写入 |
 | `api-rbac-user-data-scopes-v2` | GET/PUT | `/api/settings/rbac/users/{user_id}/data-scopes` | 查看或替换单个普通用户的数据范围，并返回 user/role 有效来源 | IAM/Governance | `app_user_data_scopes`, `app_role_data_scopes`, governance-configured source accounts, `iam_audit_events` | `page:settings:user-management:view` + `action:settings:user-management:configure-data-scope` | 管理动作受 grant boundary；精确 `source_account` 必须已登记；普通管理员不能授予超出自身有效范围的值 | 用户管理 | `approved` | N/A — Owner-authorized RBAC post-0041 hardening | `#226` | Current branch ready for review, not merged/implemented；GET/PUT 都要求 page + 高风险 action；`*` 需前端二次确认，后端仍校验；不返回业务数据或 secret |
 | `api-product-list` | GET | `/api/v1/products` | 分页查询内部 SKU 产品 | L4 Core, manual-write exception | `products`; optional listing filters join `product_platform_listings` | `products:read` | Future `platform + store_name`; trusted module provider required, absent provider fails closed | `products_product_management` | `implemented` | `PRPs/product-management-backend-mvp.md` | `#41` | PR #41 merged at `fab3aef`; no legacy runtime source, external API or read model |
 | `api-product-detail` | GET | `/api/v1/products/{product_id}` | 查询单个内部 SKU 产品 | L4 Core, manual-write exception | `products` | `products:read` | Trusted Product module scope; absent provider fails closed | `products_product_management` | `implemented` | `PRPs/product-management-backend-mvp.md` | `#41` | PR #41 merged at `fab3aef`; product response excludes listing collection |
@@ -71,6 +78,10 @@ Registry Status: `draft; approved only after owner review and merge`
 | `api-pmc-purchase-pending-plans-v1` | GET | `/api/pmc/purchase/plans/pending` | 待采购计划（status=2 未转单，S2 卡片下钻） | L6 DWD | `dwd_purchase_plan`, `dws_purchase_board`, `dim_lingxing_stores` | `pmc:purchase:read` | Trusted source-account scope | `/pmc/purchase-board` 待采购计划抽屉 (Gate 4a, #171) | `approved_for_implementation` | `PRPs/pmc-purchase-board.md` | #159 (API), #171 (page) | Overdue vs `rule_purchase_thresholds.s2_pending_days`; unattributed stores never overdue |
 | `api-pmc-purchase-sku-cycle-overrides-list-v1` | GET | `/api/pmc/purchase/sku-cycles/{sku}/overrides` | SKU 交期人工修正记录（含已失效） | Manual layer | `manual_purchase_cycle_override` | `pmc:purchase:read` | Trusted source-account scope | Future 修正记录 Drawer | `approved_for_implementation` | `PRPs/pmc-purchase-board.md` | TBD | Read-only history; nothing deleted |
 | `api-pmc-purchase-sku-cycle-override-create-v1` | POST | `/api/pmc/purchase/sku-cycles/{sku}/overrides` | SKU 交期人工修正：剔除 / 恢复 / 改到仓日 / 基准 | Manual layer + L9 DWS rebuild | `manual_purchase_cycle_override` → `dws_purchase_*` | `pmc:purchase:override` | Trusted source-account scope; body account must be in scope | Future 交期修正 Modal | `approved_for_implementation` | `PRPs/pmc-purchase-board.md` | TBD | Append-only with before/after/operator/reason/request_id; idempotent by request_id; not reachable via preview principal; no ItemID override (Owner 2026-09-21) |
+| `api-pmc-domestic-batches-v1` | GET | `/api/pmc/domestic/batches` | 国内仓批次看板列表（一行一张收货单的一行） | L6 DWD | `dwd_domestic_receipt_batch`, `dwd_domestic_receipt_batch_link` | `page:pmc:domestic-warehouse-board:view` | Trusted source-account scope; fail closed | `/pmc/domestic-warehouse-board` 仍是占位页 | `approved_for_implementation` | 2026-10-19 执行方案任务 2 的查询切片 | TBD | 不读 ODS。在仓天数按台北日历日。至少一条 matched 链接算已对应 |
+| `api-pmc-domestic-batches-summary-v1` | GET | `/api/pmc/domestic/batches/summary` | 国内仓批次看板统计 | L6 DWD | `dwd_domestic_receipt_batch`, `dwd_domestic_receipt_batch_link` | `page:pmc:domestic-warehouse-board:view` | 与列表同一套筛选和账号范围 | 占位页统计卡 | `approved_for_implementation` | 2026-10-19 执行方案任务 2 | TBD | 统计按收货行，不按采购单去重 |
+| `api-pmc-domestic-batch-detail-v1` | GET | `/api/pmc/domestic/batches/{batch_id}` | 国内仓收货批次详情 | L6 DWD | `dwd_domestic_receipt_batch`, `dwd_domestic_receipt_batch_link` | `page:pmc:domestic-warehouse-board:view` | 账号范围外返回 404 | 占位页详情 | `approved_for_implementation` | 2026-10-19 执行方案任务 2 | TBD | 收货日为空时 arrival_date_status=unknown |
+| `api-pmc-domestic-batch-trace-v1` | GET | `/api/pmc/domestic/batches/{batch_id}/trace` | 收货批次追溯 | L6 DWD | 同上 | `page:pmc:domestic-warehouse-board:view` | 账号范围外返回 404 | 占位页追溯 | `approved_for_implementation` | 2026-10-19 执行方案任务 2 | TBD | 出库分配表未建，outbound.status=unknown，reason=source_not_published |
 
 ## Storage / Table / Read Model Registry
 
@@ -110,6 +121,7 @@ Registry Status: `draft; approved only after owner review and merge`
 
 | Page Key | Page Name | Data Dependency | Backend API | Read Model | Display-only Calculation | Mock Status | Permission Key | Status | PRP | PR | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| `pmc_domestic_warehouse_board` | 国内仓批次看板 | Scoped receipt/link DWD + store DIM + current product-owner DWD | `/api/pmc/domestic/filter-options` and existing batches/summary/trace | Existing five tables in options API registry; no new read model | None; age remains backend-defined | No runtime mock; synthetic browser tests only | `pmc:domestic-batch:read` / existing page policy | `approved_for_implementation` | `PRPs/pmc-domestic-filter-options.md` | TBD | 本地testing；店铺ID和当前负责人UID多选，列表统计同条件；未部署，业务状态/出库仍缺契约 |
 | `products_product_management` | 产品管理 | Product Core plus approved Product Management BFF dependency | Existing CRUD APIs plus the `api-product-management-*` contracts above | `dws_product_management_pricing_current` | None; WFS/storage/pricing/ROI/grade are backend-only | Existing page is not modified by this backend task | Backend API keys are recorded above; field/action permissions remain enforced server-side | `approved` | `PRPs/product-detail-sync-product-management-api-v1.md` | TBD | Frontend integration requires a separate task; it must display backend statuses/breakdown and perform no pricing calculation |
 
 ## Sync / Import / Export Registry
@@ -155,3 +167,102 @@ automatic schedule, legacy MySQL/`raw_lingxing_api` write, frontend change or RA
 - [ ] 权限、data scope、敏感性和 freshness 已说明。
 - [ ] 只记录 `secret_ref`，没有秘密值。
 - [ ] 同一 PR 同步更新受影响的 Page/Task/Module catalog。
+
+
+## 国内仓入库批次 M1（2026-10-20，本地实现待真实验收）
+
+| ID | 类型 | 来源/目标 | 权限/边界 | 状态 |
+|---|---|---|---|---|
+| ext-domestic-warehouse-statement | External | LX-F0CE5B7F589B wareHouseCenterStatement → RAW/独立ODS | 领星只读、显式账号/仓库/窗口、默认关闭 | implemented_local |
+| ext-domestic-inbound-batch | External | LX-1181D4F827FB getBatchDetailList → 既有RAW/批次ODS | 包含零库存，账号/仓库隔离 | implemented_local |
+| storage-domestic-warehouse-statements | Storage | ods_lingxing_domestic_warehouse_statements | RAW引用、来源run，append-only | applied_production_20261020; source_runs_published |
+| storage-domestic-inbound-board | Read model | mart_domestic_inbound_batch_board + gov_domestic_board_publications | 有版本的IB×SKU×归属；不改收货DWD | applied_production_20261020; source_runs_published |
+| export-domestic-inbound-csv | Export | 上述两来源 → CSV/脱敏JSONL/manifest | 不连接数据库，未执行真实采集 | implemented_local |
+| api-domestic-inbound-board | API | GET /api/pmc/domestic/inbound-batches（列表/summary/detail/trace） | pmc:domestic-batch:read，经页面权限策略与source-account scope；只读mart | implemented_local; not_deployed |
+| frontend-domestic-inbound-board | Frontend dependency | inbound-batches列表/summary/trace + 用户主动选择的预览CSV/manifest | API按来源权限；文件只在浏览器内存校验，不上传/写库 | implemented_testing; pending_real_data_acceptance |
+
+Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源决策：docs/data-sources/decisions/pmc-domestic-inbound-board-decision.md。实现本次不含Git上传/部署；真实任务结果另行验收。密钥只通过安全运行配置，不写入registry。
+
+
+2026-10-20国内仓执行结果：0049已应用；惠州仓16168批次1528/30天流水1264成功，当前入库mart1441行，版本化保留两版。时区负责人确认Asia/Shanghai；CSV同源、哈希和汇总已核对。DOMESTIC同步开关已关闭；公共gov_parse_jobs只用于DWD，本模块ODS使用已有run/work-item与DataLineage，不改其结构。前端接新API，当前开发后端需重启加载路由；未部署生产服务。精确证据见PRPs/pmc-domestic-inbound-production-execution.md。
+
+## 2026-10-20 入库批次选项增量（本地实现）
+
+| 接口/消费 | 来源及用途 | 边界 |
+|---|---|---|
+| GET /api/pmc/domestic/inbound-batches/filter-options | 当前入库 MART/GOV 的完整可见范围；DIM店铺名称、DWD SKU当前负责人 | pmc:domestic-batch:read + 页面策略 + 账号范围；warehouse_id；业务状态只返回禁用能力 |
+| 入库 list/summary owner_uid | DWD identity + product_info_current，account+SKU唯一active身份，EXISTS | 当前负责人语义；不查询收货DWD，不复制行/数量 |
+| 批次页三个下拉 | backendRequest + React Query用户范围/仓库key + ReportFacetSelect/AntD Select | loading/empty/error+retry；packing不请求；不写DB/不调领星 |
+
+决策：pmc-domestic-inbound-filter-options-decision.md；PRP：pmc-domestic-inbound-filter-options.md。无新增表/字段/迁移、无生产变更。状态建设方案为候选，不表示实施。
+
+## 2026-10-20 国内仓最新本地数据发布
+
+当前开发环境已明确为local 127.0.0.1:55432/LOCAL_DATABASE_NAME，0049已就绪。重新只读拉取领星惠州16168近30天W3（1296）及当前完整W1（1541），通过RAW/ODS审计后发布1个版本，MART1454行。所列是本地数量，不替代上午生产审计。真实来源新鲜度17:43北京时间。GET入库list/summary/options/detail/trace读取本地当前版本；原收货/batches保持不变。没有生产DB连接/修改、无migration/env/权限变化；本地必要治理配置默认关闭，无定时。路由真实本地DB合成鉴权联调200，运行服务匿名401，本地IAM用户/会话为0，未验证浏览器登录。详细证据见PRPs/pmc-domestic-inbound-local-execution.md。
+
+
+## 2026-10-20 采购看板本地数据已导入
+
+负责人授权全量采购看板依赖复制到local 127.0.0.1:55432/LOCAL_DATABASE_NAME/public。源生产只读，未重新采集领星；采购来源最新观察时间10-17 18:00:43，不能把10-20本地重算时间视为采集时间。27张非空来源表及完整FK父记录、每条相关记录最新血缘已导入，人工覆盖源为0。核心结果：DWD计划1119/采购单784/明细867，DWS看板867/周期652/重算后待处理711；店铺9、Listing3223、SKU当前资料1435、产品1301。接口只读真实本地DB合成鉴权联调200：看板867、待采购计划196、负责人17；店铺/负责人筛选和带收货详情通过，匿名401，真人浏览器登录态未代替验证。原国内仓1454/用户29保留，所有本地同步/定时/外呼关闭。没有改schema/env/认证/生产或部署。执行与逐表清单：PRPs/pmc-purchase-local-data-execution.md；Navicat：docs/delivery/local-purchase-import-verification.sql，7查询已实跑。仍dev、未提交推送。
+
+
+## 2026-10-20 国内仓打包单审批本地M1
+
+来源决策READY_FOR_PRP及负责人本轮授权；四表OPS发号/订单/分配+EVT事件，0050接本地0049，保留已有迁移及业务资料。候选来自当前入库MART×符合条件Listing；builder v2把既有ODS良品/锁定证明规范化到MART payload，本地重新发布保留旧版，当前1454行。GET不查ODS、不调用外部。8个API见pmc-domestic-packing-approval-api.md；POST独立动作权限，可信账号隔离、幂等/并发库存/统一北京日发号/不可变事件。前端真实列表、审批弹窗、筛选/重试/分页及历史审计已接通。所有写入仅本地验证is_test=true，生产写保护；原采购与IAM保留，未自动授权角色。AD/manual/OWS/装箱/六态为后续切片。验证与逐表记录：docs/delivery/pmc-domestic-packing-approval-verification.md。继续dev，未新建分支/提交/推送/部署。
+
+## 国内仓打包审批M2：最终手工流程（2026-10-21）
+
+2026-10-21，当前dev，本地127.0.0.1:55432/LOCAL_DATABASE_NAME。最终范围是手工添加打包单与审批前同SKU商品身份修改；系统打包单管理已按负责人要求删除。没有生产访问、提交、推送或部署。
+
+流程：先选择当前批次看板的入库单×SKU，再选择同账号同SKU的有效Listing目标店铺/ItemID；GTIN/MSKU跟随Listing，不能自由修改SKU。填写数量、报关、收货仓备注和原因后，仅保存待审批申请，不发PK、不分配库存。通过审批时重新核对当前来源和Listing指纹、库存上限，并在单事务中发PK、分配原来源库存和写不可变审计；驳回需要原因。多个手工申请共用原入库库存池，可分批审批但不可超量。
+
+跨店铺以当前批次看板入库单为依据，保存原始和目标快照，不要求不存在的领星审批/转移单，不修改领星库存归属。缺少报关信息默认不报关并标记default；人工选择标记manual。未知到货数量保持未知。全部审批仍受local-only/is_test保护，不创建领星OWS或调用WFS。
+
+手工新增需独立packing-manual-create动作权限；页面只读权限不能提交。既有approve/reject动作和来源账号隔离继续生效，不自动授予角色或用户权限。
+
+本轮本地历史：0051已执行，保留其迁移历史；0052接0051，已在全库备份并检查pg_restore目录后仅应用本地。0052确认OWS关联表为空后删除，停用3条系统管理动作定义；新增ops_domestic_packing_manual_requests，保存来源复合外键、来源/目标快照、数量、报关、备注、原因、操作者、请求JSON/哈希、账号幂等键和UTC提交时间。原发号/审批/分配/事件四表沿用；orders的原快照与最终身份字段用于审批，0051剩余兼容字段不代表存在系统管理功能。
+
+负责人最新要求：后续本地开发不再自动新增或执行迁移编号。本次不增加0053，不回退现有0051/0052。未来结构调整记录SQL及影响；上线前必须单独整理最终生产迁移方案，从生产实际版本验证，不把本地迁移历史直接当作发布批准。当前代码依赖新表/字段，不能只部署代码。现有local-only审批保护也不代表生产写入已开放。
+
+前缀 /api/pmc/domestic/packing-approval，复用标准success/data/error/meta/request_id响应。
+
+|方法/路径|用途/参数|权限与校验|
+|---|---|---|
+|GET /manual/sources|入库单×SKU来源，keyword/page/page_size及既有PackingQuery筛选|页面读+来源账号；当前发布惠州仓；余额含本地分配扣减|
+|GET /manual/{board_id}/options|source_account_ref，返回来源指纹与同SKUListing身份及listing_version|页面读+来源账号；不跨账号|
+|POST /manual|source_account_ref、warehouse_id=16168、board_id、source_version、target_store_id、target_item_id、listing_version、qty、customs、rwh、reason、idempotency_key|manual-create+local guard；同SKU/当前有效Listing/可用量/原因；响应id和pending|
+|GET /pending/{candidate_id}/edit-options|source_account_ref，读取候选与目标身份|适用于自动候选或手工申请|
+|GET /pending、/pending/summary|沿用现有列表及统计，追加origin=manual待审行|手工来源变化时阻断，成功审批后退出待审|
+|POST /pending/{candidate_id}/approve、/reject|沿用既有命令，approve扩展目标店铺/ItemID、listing_version、edit_reason|独立approve/reject；单事务幂等、并发库存、审计|
+
+其余历史及事件接口保持。/packs及/orders/{id}/link、/void、/test-flag已删除。来源、Listing、库存或状态变化返回冲突而非假成功。完整原接口契约见pmc-domestic-packing-approval-api.md；具体模型以packing_schemas.py为准。
+
+验收证据：docs/delivery/pmc-domestic-packing-approval-m2-verification.md。
+
+## 2026-10-21 报关与操作列最终调整
+
+下拉仅有“报关”和“不报关”，列表、手工添加、审批弹窗一致，没有可选“默认规则”。初次显示服务端自动结果，未修改时内部命令仍为default，并非前端第三个选项；用户选择后命令declare/skip，结果标记manual，随审批保存，列表暂存不直接写库。
+
+优先产品purchase_remark（当前DWD产品快照所指原始成功响应，按商品ID精确匹配）。字段存在但为空视为无明确备注，默认false；字段不可用时回退同账号同SKU当前DWD所指ODS采购计划/采购明细item_purchase_remark/remark/plan_remark。否定词优先。采购兜底最新明确不报关优先，否则任一历史当前单据明确报关则报关，否则默认false。单据只读取DWD当前版本所指ODS，不能累加同一单据历史旧版本；拆分采购行去重。
+
+既有MART payload新增customs_proof：value(bool)、source(default/product_remark/purchase_remark)、rule(domestic.customs.v1)、field、remark(最多500字)、ref(来源RAW引用或ODS记录UUID)、observed_at。Candidate映射customs_default、customs_default_src与customs_proof，来源证据进入candidate_version；default命令由后端取当前自动结果，人工选择记manual。订单现有customs_value/customs_src及JSON快照/不可变事件保存审批结果，不覆盖历史。旧无证据快照兼容默认false，不追写历史审批。
+
+数据整理在既有发布流程完成，正常业务GET不访问RAW/ODS、不调用领星；CSV不带该新增数据库备注证据，不能声称CSV和本次备注富化字段相同。未改库存、商品身份和到仓日期。
+
+本地备份后重建当前1454行发布版本，其中155行产品采购备注判定报关，1299行默认不报关；旧发布版本保留，MART历史总4362。迁移仍0052，无新表/字段/约束、无0053，历史4审批/3分配/4事件和用户29保留。
+
+操作列“修改”普通按钮、“审批通过”蓝色主按钮、“驳回”普通按钮，统一间距和最小280px列宽（兼容已有窄列设置），权限/业务阻断逻辑不变。当前仅进行本地本模块验证，不进行全局测试；全局回归待用户后续功能全部完成后统一安排。
+
+
+## PMC 仓库打包（2026-10-21 本地开发中）
+
+- 决策：`docs/data-sources/decisions/pmc-packing-warehouse-decision.md`；API/字段：`docs/delivery/pmc-packing-warehouse-api.md`；SOP：`docs/sop/pmc-domestic-packing-warehouse.md`。
+- NEW_SYSTEM_OWNED：ops_domestic_packing_box_sets（PK唯一当前装箱头/首次完成与版本）、ops_domestic_packing_box_lines（当前箱行）、ops_domestic_packing_notes（延迟备注投影）、ops_domestic_packing_variance_cases（未装/超发处置投影）、ops_domestic_packing_notification_outbox（待配置通知任务，无发送器）。历史由只INSERT的evt_domestic_packing_events记录。
+- 只读来源：已批准PackingOrder、当前MART/GOV、产品CURRENT、可靠关联收货DWD。业务GET不访问RAW/ODS/外部接口。
+- API前缀 /api/pmc/domestic/packing-warehouse；GET orders/summary/filter-options/detail/events；POST boxes/done/rebox/unpacked/customs/notes；登录/IAM/账号范围，动作分别授权，不自动授予角色。
+- 未装resend在同事务减少原PackingAllocation的有效qty（保留原Order.qty和审计），下轮人工审批余额读取该有效占用；void保留排除占用且不改领星库存。
+- 状态：本地业务及模拟联调已验证，新增ops_domestic_packing_extra_allocations；POST supplemental-inbound/supplemental-sync由中台独立授权。多装足额确认占用，不足记录blocked与本地outbox；真实领星provider未配置，mock仅回滚验收app。异常卡片、来源审计、并发预算已验证；外部消息与货件/领星写入未接入。
+- 本地schema SQL独立存档并有备份；0052未改。生产必须另行整合Alembic迁移并完整验证。
+
+
+> 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。
