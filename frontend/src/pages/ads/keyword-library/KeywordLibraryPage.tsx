@@ -50,7 +50,7 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
    if(tab==='performance')return Boolean(performance(r.mockAds));
    return true;
  });
- const currentAds=ads.filter(a=>mode==='global'||a.skuId===skuId);const unmapped=ads.filter(a=>!a.skuId);
+ const unmapped=ads.filter(a=>!a.skuId);
  const edit=(k:MarketKeyword)=>editTranslation(k,updateTranslation);
  const commonColumns:ProColumns<LibraryRow>[]=[
   {title:'关键词 / 中文翻译',key:'term',width:275,render:(_,r)=><KeywordTextCell keyword={r.keyword} onEdit={edit}/>},
