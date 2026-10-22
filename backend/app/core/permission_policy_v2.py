@@ -201,6 +201,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "/api/integrations/sync-runs/",
         "action:data-center:task-center:execute",
     ),
+    RequestPermissionRule(
+        "GET",
+        "/api/integrations/walmart-monitor/targets",
+        "integrations:walmart-monitor:read",
+        True,
+    ),
     RequestPermissionRule(None, "/api/integrations/", "page:data-center:task-center:view"),
     RequestPermissionRule(
         "POST",
