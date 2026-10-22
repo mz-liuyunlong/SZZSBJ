@@ -45,7 +45,7 @@ export async function parseSellerSprite(file:File):Promise<SourceWorkbook>{
     const normalized=normalizeTerm(original);if(!normalized)continue;
     if(map.has(normalized))continue;
     const translated=text(getCell(row,heads,'关键词翻译'));
-    const asins=text(getCell(row,heads,'相关ASIN')).split(/[\/,;，；\s]+/).filter(v=>/^[A-Z0-9]{10}$/.test(v.toUpperCase()));
+    const asins=text(getCell(row,heads,'相关ASIN')).split(/[/,;，；\s]+/).filter(v=>/^[A-Z0-9]{10}$/.test(v.toUpperCase()));
     const k:MarketKeyword={id:makeTermId(original),term:original,normalized,originalTranslation:translated||null,translation:translated||null,translationSource:translated?'file':'missing',monthlySearches:num(getCell(row,heads,'月搜索量')),monthlyPurchases:num(getCell(row,heads,'月购买量')),marketPurchaseRate:rate(getCell(row,heads,'购买率')),amazonPpc:price(getCell(row,heads,'PPC竞价')),bidRange:text(getCell(row,heads,'建议竞价范围'))||null,trafficType:text(getCell(row,heads,'流量词类型'))||null,relatedAsins:[...new Set(asins)],sponsoredCompetitors:num(getCell(row,heads,'广告竞品数')),listingCount:num(getCell(row,heads,'商品数')),root:normalized.split(' ').slice(0,2).join(' '),source:'excel',sourceRow:i+1};
     map.set(normalized,k);
   }
