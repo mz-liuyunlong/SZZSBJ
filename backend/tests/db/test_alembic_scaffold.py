@@ -16,7 +16,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261020_0047_walmart_order_identity_guard"
+EXPECTED_HEAD_REVISION = "20261022_0048_walmart_monitor_raw_events"
 
 
 @pytest.fixture(autouse=True)
@@ -91,7 +91,12 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261019_0045_approval_scope"
     )
     assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision == "20261019_0046_operation_logs"
+        script.get_revision("20261020_0047_walmart_order_identity_guard").down_revision
+        == "20261019_0046_operation_logs"
+    )
+    assert (
+        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
+        == "20261020_0047_walmart_order_identity_guard"
     )
     assert len(EXPECTED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
@@ -134,6 +139,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261019_0045_approval_scope.py",
         "20261019_0046_operation_logs.py",
         "20261020_0047_walmart_order_identity_guard.py",
+        "20261022_0048_walmart_monitor_raw_events.py",
     } <= revisions
 
     rbac_revision = (

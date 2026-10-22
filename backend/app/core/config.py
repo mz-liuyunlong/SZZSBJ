@@ -17,6 +17,7 @@ from sqlalchemy import URL, make_url
 from sqlalchemy.exc import ArgumentError
 
 PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH: Final = 32
+WALMART_MONITOR_INGEST_TOKEN_MIN_LENGTH: Final = 32
 
 
 class AppEnvironment(StrEnum):
@@ -58,6 +59,10 @@ class Settings(BaseSettings):
         default=None,
         repr=False,
         validation_alias="PRODUCT_MANAGEMENT_PREVIEW_SOURCE_ACCOUNT_REFS",
+    )
+    walmart_monitor_ingest_token: SecretStr | None = Field(
+        default=None,
+        validation_alias="WALMART_MONITOR_INGEST_TOKEN",
     )
     lingxing_base_url: str | None = Field(default=None, validation_alias="LINGXING_BASE_URL")
     lingxing_app_id: str | None = Field(default=None, validation_alias="LINGXING_APP_ID")
@@ -263,6 +268,19 @@ class Settings(BaseSettings):
             raise SettingsError("Product Management preview auth settings are invalid")
         return value
 
+    @field_validator("walmart_monitor_ingest_token", mode="before")
+    @classmethod
+    def validate_walmart_monitor_ingest_token(cls, value: object) -> object:
+        if value in (None, ""):
+            return None
+        if (
+            not isinstance(value, str)
+            or len(value) < WALMART_MONITOR_INGEST_TOKEN_MIN_LENGTH
+            or not value.isascii()
+        ):
+            raise SettingsError("Walmart monitor ingestion settings are invalid")
+        return value
+
     @field_validator("lingxing_base_url")
     @classmethod
     def validate_lingxing_base_url(cls, value: str | None) -> str | None:
@@ -429,6 +447,13 @@ class Settings(BaseSettings):
         if value is None:
             return frozenset()
         return frozenset(part.strip() for part in value.split(",") if part.strip())
+
+    @property
+    def walmart_monitor_ingest_configured(self) -> bool:
+        token = self.walmart_monitor_ingest_token
+        return token is not None and len(token.get_secret_value()) >= (
+            WALMART_MONITOR_INGEST_TOKEN_MIN_LENGTH
+        )
 
     def sqlalchemy_url(self) -> URL:
         value = self.test_database_url if self.app_env is AppEnvironment.TEST else self.database_url
