@@ -2,13 +2,24 @@
 
 ## 结论与边界
 
-本轮基于 `dev` 的 `c76208c275ffd09a92618f463a22b622fde228ad`，修复 PR [#242](https://github.com/mz-liuyunlong/SZZSBJ/pull/242) 剩余接管校验、隔离测试安全和验收覆盖问题。负责人明确授权在 `dev` 修改、不新建分支、不新增 0055，并确认旧版不包含额外分配表创建逻辑的 0054 从未执行。
+本轮基于 `dev` 的 `c76208c275ffd09a92618f463a22b622fde228ad`，修复 PR #242 剩余接管校验、隔离测试安全和验收覆盖问题。负责人明确授权在 `dev` 修改、不新建分支、不新增 0055，并确认旧版不包含额外分配表创建逻辑的 0054 从未执行。
 
 真实独立 PostgreSQL **14.24** 最终验收：**56 passed、0 failed、0 errors、0 skipped，170.39 秒**。其中数据库迁移/业务测试 24 项、ODS 接管测试 14 项、版本链/迁移环境静态测试 13 项、测试库安全测试 5 项。全后端 Ruff 检查通过，532 个 Python 文件格式检查通过。
 
-代码和隔离验收已完成，等待负责人审核。本轮代码尚未提交、推送或运行 GitHub 上的新 CI，不能将这些本地结果描述为 GitHub PostgreSQL 16 或全项目 CI 已通过。没有连接生产数据库，没有读取生产业务明细，没有生产升级、降级、stamp、部署或服务重启。
+代码和隔离验收已完成，等待负责人审核。上述本地验收结束时尚未提交、推送或运行 GitHub 新 CI；提交后的实际 CI 证据见下节，不能将本地结果替代为全项目 CI 通过。没有连接生产数据库，没有读取生产业务明细，没有生产升级、降级、stamp、部署或服务重启。
 
 最终目标仍为 `20261022_0054_merge_walmart_identity_and_domestic_packing`。
+
+## 提交后 GitHub CI 复核
+
+负责人提交并推送 `dd45223e540fbefb80b60d54ae867f296904b04e` 后，PR 事件 run `39761275789` 已完成：10 个任务中 9 个通过、1 个失败。
+
+- PostgreSQL **16.15** 国内仓专项：**56 passed，0 skipped，106.07 秒**；JUnit 禁止跳过检查通过。
+- 后端全量：**1410 passed、114 skipped、1 warning，115.49 秒**；跳过的是普通后端任务中的 opt-in 套件，国内仓独立 PostgreSQL 任务已实际执行且未跳过。
+- 前端、Walmart identity、IAM、WFS、PMC 0043 兼容、审批及操作日志任务全部通过。
+- 唯一失败是 rule-pack-check：本报告四行包含规则禁止出现在 docs 的项目名/库名前缀/服务器路径。本地已改成通用表述，未放宽检查脚本，重新执行 `bash scripts/check-rule-pack.sh` 和 `git diff --check` 均通过。
+
+这项文档修复仍待负责人提交推送。当前已发布提交的 CI 结论仍为 failure，不能将本地规则检查通过视为已修复远端记录。
 
 ## 修改文件清单
 
@@ -85,7 +96,7 @@
 
 ## 实际 PostgreSQL 测试
 
-环境：Windows、Python 3.13、PostgreSQL **14.24**，SQLAlchemy **2.0.52**、Alembic **1.19.1**、psycopg **3.3.5**。使用全新 initdb 数据目录，回环地址随机端口 54323，专用用户和主库 `domestic_chain_ci`。每个测试用例创建随机名 `szzsbj_chain_*` 数据库；不会连既有 szzsbj_dev、szzsbj_app 或服务实例。只使用合成账号、SKU、订单和发布数据。
+环境：Windows、Python 3.13、PostgreSQL **14.24**，SQLAlchemy **2.0.52**、Alembic **1.19.1**、psycopg **3.3.5**。使用全新 initdb 数据目录，回环地址随机端口 54323，专用用户和主库 `domestic_chain_ci`。每个测试用例创建随机名的一次性数据库；不会连接既有开发库、生产库或服务实例。只使用合成账号、SKU、订单和发布数据。
 
 实际执行（backend 目录，环境变量 APP_ENV=test、DOMESTIC_CHAIN_DB_TESTS=1，TEST_DATABASE_URL 指向上述新实例）：
 
@@ -114,7 +125,7 @@ $evidence = "$env:USERPROFILE/.codex/visualizations/2026/10/19/01a15238-e1bb-79f
 | ODS 接管 | 手工 SQL 参考结构和新建结构均能复验；类型、长度、PK/FK/UQ/CHECK、非空、未验证约束、索引顺序/缺失、部分缺表均拒绝。 | 14 项通过 |
 | 静态及测试库保护 | 62 revision 完整图；保护非测试/业务/远程目标、缺配置、其他进程所有的库。 | 18 项通过 |
 
-总计 **56 通过、0 失败、0 错误、0 跳过**。结束后查询本次集群剩余 `szzsbj_chain_*` 数据库为 **0**，本次独立测试实例已停止，确认 postmaster.pid 不再存在。首轮测试中发现的 numeric 类型格式化和测试断言问题均修复，以上为最终完整复跑结果，不是把失败用例排除后的结果。
+总计 **56 通过、0 失败、0 错误、0 跳过**。结束后查询本次集群剩余的一次性测试数据库为 **0**，本次独立测试实例已停止，确认 postmaster.pid 不再存在。首轮测试中发现的 numeric 类型格式化和测试断言问题均修复，以上为最终完整复跑结果，不是把失败用例排除后的结果。
 
 独立 GitHub CI 仍使用 PostgreSQL 16，运行上述四个测试文件并检查 JUnit 不得含 skip。缺少必需测试配置会失败；没有数据库不能被描述为验收通过。
 
@@ -128,7 +139,7 @@ $evidence = "$env:USERPROFILE/.codex/visualizations/2026/10/19/01a15238-e1bb-79f
 | `20261019_0048_domestic_warehouse_dwd_and_permission.py` | `d2e26b48c4ead4e90e1c18ae9d4cc7286c130b30` |
 | `20261020_0049_domestic_inbound_board.py` | `3e26ecd854ba7a9e189e98562af9aaea49b8da98` |
 
-本轮未能核实服务器 `/opt/szzsbj/staging/domestic-inbound-20261020-1115/` 的已执行文件 Blob，也未查询生产实时版本。上述哈希只证明当前仓库历史文件未被本轮改写，不能证明它们与生产实际文件一致。此前生产 0049 仅是历史背景，不能当作当前状态。
+本轮未能核实此前授权的服务器 staging 目录（`domestic-inbound-20261020-1115`）的已执行文件 Blob，也未查询生产实时版本。上述哈希只证明当前仓库历史文件未被本轮改写，不能证明它们与生产实际文件一致。此前生产 0049 仅是历史背景，不能当作当前状态。
 
 ## 风险与恢复
 
