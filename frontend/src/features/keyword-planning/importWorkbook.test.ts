@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import {parseSellerSprite} from './importWorkbook';
 function fixture(rows:number,translated:boolean){
  const wb=XLSX.utils.book_new();const grid=[['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','建议竞价范围','相关ASIN']];
- for(let i=0;i<rows;i++)grid.push([`test storage ${i}`,translated?'测试收纳': '',i===0?'':String(i+1),String(i+2),0.1,'$0.51','$0.38 - $0.64','B012345678/B012345679']);
+ for(let i=0;i<rows;i++)grid.push([`test storage ${i}`,translated?'测试收纳': '',i===0?'':String(i+1),String(i+2),'0.1','$0.51','$0.38 - $0.64','B012345678/B012345679']);
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(grid),'SellerSprite');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['词语','出现频次'],['storage',rows]]),'Unique Words');
  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['ASIN'],['B012345678'],['B012345679']]),'Asin');
