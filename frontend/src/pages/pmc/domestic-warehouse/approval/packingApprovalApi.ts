@@ -10,7 +10,7 @@ export interface ApprovalCandidate {
   stock_balance: number | null; available_quantity: number | null; default_quantity: number | null;
   can_approve: boolean; blocked_reasons: string[]; source_observed_at: string;
   origin?: "automatic" | "manual"; manual_reason?: string | null; source_store_id?: string | null; manual_customs?: "default" | "declare" | "skip" | null; manual_rwh?: string | null;
-  customs_default?: boolean; customs_default_src?: "default" | "product_remark" | "purchase_remark"; customs_proof?: { value: boolean; source: string; rule: string; field: string | null; remark: string | null; ref: string | null; observed_at: string | null } | null; waiting_days?: number | null; history_complete?: boolean;
+  customs_default?: boolean; customs_default_src?: "default" | "product_remark" | "purchase_remark" | "purchase_order"; customs_proof?: { value: boolean; source: string; rule: string; field: string | null; remark: string | null; ref: string | null; observed_at: string | null } | null; waiting_days?: number | null; history_complete?: boolean;
 }
 export interface PackingOrder {
   id: string; candidate_id: string; pk: string | null; status: "approved" | "rejected" | "voided"; qty: number | null;

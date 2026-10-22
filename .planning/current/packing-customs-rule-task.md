@@ -3,7 +3,9 @@
 
 下拉仅有“报关”和“不报关”，列表、手工添加、审批弹窗一致，没有可选“默认规则”。初次显示服务端自动结果，未修改时内部命令仍为default，并非前端第三个选项；用户选择后命令declare/skip，结果标记manual，随审批保存，列表暂存不直接写库。
 
-优先产品purchase_remark（当前DWD产品快照所指原始成功响应，按商品ID精确匹配）。字段存在但为空视为无明确备注，默认false；字段不可用时回退同账号同SKU当前DWD所指ODS采购计划/采购明细item_purchase_remark/remark/plan_remark。否定词优先。采购兜底最新明确不报关优先，否则任一历史当前单据明确报关则报关，否则默认false。单据只读取DWD当前版本所指ODS，不能累加同一单据历史旧版本；拆分采购行去重。
+## 2026-10-21 计划报关规则（采购单口径）
+
+默认是否报关由入库行关联的领星采购单（DWD 当前版本 + ODS 单头 payload）判定，满足其一即计划报关：支付方式为网银转账（`payment_method=1` 或 `payment` 含「网银转账」），或含税为是（`is_tax=1`）。不再解析产品/采购备注中的「报关/不报关」关键词。规则版本 `domestic.customs.v2`，证据来源 `purchase_order`；无关联采购单或均不满足时默认不报关。需重新发布入库 MART 后待审候选刷新。
 
 既有MART payload新增customs_proof：value(bool)、source(default/product_remark/purchase_remark)、rule(domestic.customs.v1)、field、remark(最多500字)、ref(来源RAW引用或ODS记录UUID)、observed_at。Candidate映射customs_default、customs_default_src与customs_proof，来源证据进入candidate_version；default命令由后端取当前自动结果，人工选择记manual。订单现有customs_value/customs_src及JSON快照/不可变事件保存审批结果，不覆盖历史。旧无证据快照兼容默认false，不追写历史审批。
 

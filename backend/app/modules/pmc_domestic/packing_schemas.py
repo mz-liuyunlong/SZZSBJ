@@ -53,7 +53,9 @@ class Candidate(Strict):
     arrival_pending: int | None = None
     arrival_status: Literal["unknown"] = "unknown"
     customs_default: bool = False
-    customs_default_src: Literal["default", "product_remark", "purchase_remark"] = "default"
+    customs_default_src: Literal[
+        "default", "product_remark", "purchase_remark", "purchase_order"
+    ] = "default"
     customs_proof: dict | None = None
     waiting_days: int | None = None
     history_complete: bool = False
