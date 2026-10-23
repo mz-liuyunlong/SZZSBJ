@@ -2,7 +2,9 @@
 
 ## 结论与边界
 
-此前修复基于 `dev` 的 `c76208c275ffd09a92618f463a22b622fde228ad`；本次合并前文档复核重新确认，本地与 PR #242 的最新提交均为 `7c0a1f4b0c36d616f4ad312f200deaf484eb8595`，开始时工作区干净。负责人明确授权在 `dev` 修改、不新建分支、不新增 0055，并确认旧版不包含额外分配表创建逻辑的 0054 从未执行。
+2026-10-23 复核：本轮仅修正文档，未修改迁移、模型或接口，未提交或推送。
+
+此前修复基于 `dev` 的 `c76208c275ffd09a92618f463a22b622fde228ad`；本次合并前文档复核重新确认，本地与 PR #242 的最新提交均为 `2c3ace1af6e7f01732a6861238f6eb0d4e6cc1fc`；`7c0a1f4b0c36d616f4ad312f200deaf484eb8595` 保留为数据库代码与测试验收基线，两个提交之间仅更新本验收文档，开始时工作区干净。负责人明确授权在 `dev` 修改、不新建分支、不新增 0055，并确认旧版不包含额外分配表创建逻辑的 0054 从未执行。
 
 真实独立 PostgreSQL **14.24** 最终验收：**56 passed、0 failed、0 errors、0 skipped，170.39 秒**。其中数据库迁移/业务测试 24 项、ODS 接管测试 14 项、版本链/迁移环境静态测试 13 项、测试库安全测试 5 项。全后端 Ruff 检查通过，532 个 Python 文件格式检查通过。
 
@@ -12,12 +14,12 @@
 
 ## 最新 GitHub CI（当前有效）
 
-重新读取 Actions 与任务日志后确认：最新提交 `7c0a1f4b0c36d616f4ad312f200deaf484eb8595` 的 PR run `39762292250`、push run `39762285931` 均为 completed / success；每轮 **10 个任务通过、0 失败、0 任务跳过**。PR checks rollup 另含两个成功的预览部署状态，不能将其计作数据库测试。
+重新读取 Actions 与任务日志后确认：最新提交 `2c3ace1af6e7f01732a6861238f6eb0d4e6cc1fc` 的 PR run `39887488320`、push run `39887484441` 均为 completed / success；每轮 **10 个任务通过、0 失败、0 任务跳过**。PR checks rollup 另含两个成功的预览部署状态，不能将其计作数据库测试。
 
 | 验证组 | 最新 PR run 实际结果 | 解释 |
 |---|---|---|
-| 国内仓 PostgreSQL 16.15 | 56 passed，0 failed，0 skipped，115.08 秒 | 包含真实空库和已有 0049 合成数据升级；JUnit 零跳过门禁通过。 |
-| 后端全量 | 1410 passed，0 failed，114 skipped，1 warning，115.02 秒 | 普通任务的 opt-in 测试仍有跳过；不能宣称这些业务路径均实际执行。 |
+| 国内仓 PostgreSQL 16.15 | 56 passed，0 failed，0 skipped，120.70 秒 | 包含真实空库和已有 0049 合成数据升级；JUnit 零跳过门禁通过。 |
+| 后端全量 | 1410 passed，0 failed，114 skipped，1 warning，114.11 秒 | 普通任务的 opt-in 测试仍有跳过；不能宣称这些业务路径均实际执行。 |
 | 前端 Vitest | 51 个文件、258 项通过，0 失败 | 包含国内仓接口与组件契约测试。 |
 | 前端 Playwright | 14 passed、6 skipped，0 failed | 六项为需要本地测试桥接的 live 用例，见页面验收边界。 |
 | 其他任务 | 规则、IAM、Walmart identity、PMC 0043、WFS、审批、操作日志均通过 | 前端 lint/类型检查/build 与后端 Ruff 也通过。 |
@@ -182,19 +184,26 @@ $evidence = "$env:USERPROFILE/.codex/visualizations/2026/10/19/01a15238-e1bb-79f
 
 当前 Playwright 六项 live 跳过：审批 1、手工申请 1、仓库 2、超发 2；它们分别要求 PACKING_LIVE_E2E、PACKING_WAREHOUSE_E2E 或 PACKING_OVERPACK_E2E 及本地桥接。后端 PACKING_LOCAL_INTEGRATION 的完整审批/仓库/并发业务用例也未由本轮开启。本次不改 skip、不虚构通过、不使用生产写操作补验收。
 
-### PR 规则、评审与旧 PR
+### PR #242 规则、评审与范围
 
 - PR #242 为 OPEN、非 draft，dev → main，代码无合并冲突（MERGEABLE），但 mergeStateStatus 为 **BLOCKED**。
 - 官方 review submissions 为 0，未解决 review threads 为 0（已检查分页，hasNextPage=false）；请求审核人尚未完成审查，不能写成“已批准”。
 - main 使用 active ruleset，传统 branchProtectionRule 为 null。实际规则含：只允许 squash、review thread 必须解决、普通 required approval count=0、未归属改动可能要求额外批准，并限制 update。当前账号只有 WRITE，无 admin/maintain；规则集返回的 bypass_actors 为 null，不能据此宣称满足或可以绕过全部规则。具体 BLOCKED 原因需负责人在 GitHub merge 区核对，本轮不改规则。
 - 完整 PR diff 为 268 文件，包含国内仓前后端/迁移，也累积采购看板与治理/计划文件。按 scope gate 需要负责人说明整体合并与原子回滚边界或安排拆分；本轮未证明所有旧改动无法安全拆分，不把 CI 全绿当作范围批准。
-- 旧 PR #234 仍 OPEN、CONFLICTING/DIRTY，不关闭。其 14 个文件中 13 个路径出现在 #242 diff，不能因此推断内容完全覆盖：两分支已经 diverged，#242 相对旧分支 ahead 27 / behind 6。旧 0047 Blob 为 `058bfbdae8fdc0a08a94092d61bf14fb2f2bd682`，与本 PR/已知历史 `7699c9664f5012c3e1fc9c9331603091bc42c360` 不同；不应重复合并覆盖历史脚本。旧 PR 独有的 PR 正文草稿也不能当成新实现缺表的证据。负责人须按实际差异处置旧 PR。
+
+### 变更范围分类与回退边界
+
+- 直接功能：国内仓三个前端面板、模块 router/service/repository、0047–0054、对应 API/SOP/测试。
+- 依赖修改：权限策略与目录、模型注册、集成同步与领星契约、导航/布局/共享搜索、API 文档目录、Alembic env 与 CI；须按调用方影响审查，不能当作仅国内仓私有代码。
+- 携带其他业务：pmc_purchase 计算、查询/发布、页面与采购规则；另有其他页面占位/导航测试及 WFS 实施计划，属于需负责人确认范围的候选项，不在本轮修改。
+- 治理资料：.planning、PRP、registry、handoff、gitignore，非运行时实现；是否全部应进入功能 PR 由负责人审查，不自行删除或重写提交。
+- 合并风险：共享权限/组件和采购行为也随 PR 一起变化。未证明可按页面独立回退；代码回退需以实际合并结果及调用依赖评审，数据库已写入数据后不自动 downgrade，生产恢复另行审批。
 
 ### 生产只读核对：尚未执行，提供负责人命令
 
 本轮没有现成、已确认授权的生产只读连接，也未登录服务器、读取连接密钥或申请更高权限。生产实时版本、全部版本行、服务器实际执行 0047–0049 Blob、是否已执行 0050–0054、是否执行过旧版 0054 **均未重新确认**；此前 0049 只是历史值。当前仓库三份 Blob 与已知历史值一致，但不能代替服务器文件对照。
 
-以下由负责人在**现有授权的服务器 shell**执行；STAGING_ROOT 仅指此前指定的 staging 目录，不另建目录、不覆盖文件。目录结构若不同/文件缺失，报告实际情况，不猜测或自动拷贝：
+以下由负责人在**现有授权的服务器 shell**执行；STAGING_ROOT 仅指此前指定的 staging 根目录（根下直接为 alembic/versions，不含 backend 层），不另建目录、不覆盖文件。目录结构若不同/文件缺失，报告实际情况，不猜测或自动拷贝：
 
 ```bash
 : "${STAGING_ROOT:?use the already-authorized staging directory}"
@@ -203,7 +212,7 @@ for name in \
   20261019_0048_domestic_warehouse_dwd_and_permission.py \
   20261020_0049_domestic_inbound_board.py
 do
-  file="$STAGING_ROOT/backend/alembic/versions/$name"
+  file="$STAGING_ROOT/alembic/versions/$name"
   test -f "$file" || { printf 'MISSING: %s\n' "$file"; exit 1; }
   printf '%s ' "$name"
   git hash-object --no-filters -- "$file"
@@ -236,6 +245,6 @@ SQL
 
 - P0：未发现当前代码/CI 的新 P0；生产若确认已执行旧版 0054 或历史文件不一致，应按潜在 P0 停止升级路径。当前是未核实风险，不冒充已发生事故。
 - P1：GitHub BLOCKED 规则资格、268 文件范围说明、真实测试登录业务验收/并发场景，需负责人处理或明确延期；生产实时版本/历史文件/恢复演练尚未完成，阻断生产执行。
-- P2：旧 #234 仍开放且内容分叉，需负责人决定后续处置，避免重复合并；本轮只读核查。历史 CI 文案已修正。
+- P2：staging 路径中的多余 backend 层已在本轮修正，Bash 示例完成语法检查；历史 CI 文案已更新。已正式废弃的 PR 不再检查或列为合并阻碍。
 - **PR #242 是否具备代码合并条件？技术自动化通过，建议有条件合并；目前仍有 GitHub 保护门禁和上述负责人验收事项，不能直接标记为无条件可合并。**
 - **生产是否具备升级到 0054 的条件？尚未具备可执行条件，也未获得升级授权。可以准备独立申请，但必须先补齐现场只读证据、备份恢复验证和维护窗口，由负责人另行批准。**
