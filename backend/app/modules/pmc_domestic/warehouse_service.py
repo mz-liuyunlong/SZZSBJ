@@ -399,6 +399,10 @@ class WarehouseService:
                 conflict("ORDER_STATE_CHANGED")
             if order.version != cmd.expected_version:
                 conflict("ORDER_VERSION_CHANGED")
+            if kind in {"boxes", "rebox", "customs"}:
+                from app.modules.pmc_wfs.repository import assert_not_occupied
+
+                assert_not_occupied(s, ident)
             before = self.read_rows([order])[0]
             box = s.scalar(select(PackingBoxSet).where(PackingBoxSet.order_id == ident))
             event_id = uuid4()

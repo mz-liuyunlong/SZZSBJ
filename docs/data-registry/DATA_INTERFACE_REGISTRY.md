@@ -1,5 +1,13 @@
 # Data Interface Registry
 
+## PMC WFS 待发货打包单（2026-10-23，本地testing）
+
+- 决策：`docs/data-sources/decisions/pmc-wfs-pending-packing-decision.md`；批准PRP：`PRPs/pmc-wfs-pending-packing.md`；契约：`docs/api/pmc-wfs-pending-packing-api.md`。
+- NEW_SYSTEM_OWNED：ops_pmc_wfs_drafts、ops_pmc_wfs_draft_items、ops_pmc_wfs_box_allocations、evt_pmc_wfs_draft_events；来源国内仓PK/已完成装箱，已发布身份资料，不读旧库/RAW/外部API。
+- 前缀 `/api/pmc/wfs/pending-packing`；GET orders/summary/filter-options/detail/identity-options/draft；POST identity/drafts。page:pmc:wfs:view＋独立动作＋来源账号/店铺范围；不自动授权用户。
+- 整行占用唯一、预期版本、幂等、共享事务锁和事件不可变；改箱/报关复用国内仓并增加占用守卫。业务测试与环境标记分开，Q/T分开。
+- 本地加法建四表，不改既有记录/迁移版本；当前真实读0待发货、4待装箱。pytest/Vitest/Playwright及类型/lint/build证据见专属handoff。页面testing；未开放审批/外部执行，生产迁移另行批准。
+
 Registry Status: `draft; approved only after owner review and merge`
 
 ## Registry Rules Summary

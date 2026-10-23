@@ -194,7 +194,7 @@ function BusinessRoute({
         ) : page.key === "pmc_purchase_board" ? (
           <PurchaseBoardPage page={page} preferenceScope={activeUser.username} />
         ) : page.key.startsWith("pmc_wfs_") ? (
-          <WfsFrontendPage page={page} />
+          <WfsFrontendPage page={page} scope={activeUser.username} permissions={activeUser.permissions} />
         ) : ["pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse"].includes(page.key) ? (
           <DomesticWarehousePage page={page} preferenceScope={activeUser.username}
             view={page.key === "pmc_packing_approval" ? "approval" : page.key === "pmc_packing_warehouse" ? "packing" : "batches"} />

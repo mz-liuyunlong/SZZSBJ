@@ -1,17 +1,33 @@
 /** Local preview rows for the WFS screens. They do not come from an API. */
 
+export type PendingPackingState = "ok" | "used" | "blocked";
+
 export interface PendingPackingRow {
   id: string;
   pk: string;
+  test: boolean;
+  who: string;
+  at: string;
   store: string;
   sku: string;
+  name: string;
   itemId: string;
   gtin: string;
   qty: number;
-  boxes: string;
-  customs: "报关" | "不报关";
-  packedAt: string;
+  ows: string;
+  customs: "Y" | "N";
+  packageLabel: string | null;
+  boxes: number;
+  units: number;
+  boxDetail: string;
+  boxNote: string;
+  reboxed: boolean;
+  state: PendingPackingState;
+  why: string;
 }
+
+/** Approved orders that have not been packed. They stay off the table. */
+export const pendingNotReady = { total: 0, noBox: 0, filledNotDone: 0 };
 
 export interface SystemShipmentRow {
   id: string;
@@ -71,28 +87,7 @@ export interface CreateBoardRow {
 
 export const WFS_STORES = ["HK2615-邓业(港澳国际)", "HK2614-李镜颜(几米智航)"] as const;
 
-export const pendingPackingRows: PendingPackingRow[] = [
-  {
-    id: "pk-006", pk: "PK261017-018", store: WFS_STORES[0], sku: "BUH-SET-01",
-    itemId: "1792222460273", gtin: "00612345678901", qty: 150, boxes: "10 箱",
-    customs: "报关", packedAt: "2026-10-17 14:24",
-  },
-  {
-    id: "pk-005", pk: "PK261017-017", store: WFS_STORES[1], sku: "RITT-CUP-02",
-    itemId: "1792222707447", gtin: "00612345678918", qty: 100, boxes: "25 箱",
-    customs: "报关", packedAt: "2026-10-17 14:24",
-  },
-  {
-    id: "pk-004", pk: "PK261017-016", store: WFS_STORES[1], sku: "RIDE-LAMP-03",
-    itemId: "1792222612949", gtin: "00612345678925", qty: 100, boxes: "25 箱",
-    customs: "报关", packedAt: "2026-10-17 14:20",
-  },
-  {
-    id: "pk-003", pk: "PK261016-009", store: WFS_STORES[0], sku: "BUH-SET-04",
-    itemId: "1788001122001", gtin: "00612345678932", qty: 40, boxes: "4 箱",
-    customs: "不报关", packedAt: "2026-10-16 18:02",
-  },
-];
+export const pendingPackingRows: PendingPackingRow[] = [];
 
 export const systemShipmentRows: SystemShipmentRow[] = [
   {

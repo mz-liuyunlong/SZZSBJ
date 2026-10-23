@@ -288,9 +288,9 @@ export const navigation: NavigationGroup[] = [
         viewPermissionKey: 'page:pmc:domestic-warehouse-board:view',
       }),
       page('pmc', 'wfs_pending_packing', '待发货打包单', '/pmc/wfs/pending-packing', {
-        sidebarSection: 'pmc-wfs', status: 'building', readOnly: true,
+        sidebarSection: 'pmc-wfs', status: 'testing', readOnly: false, source: 'new_postgres', migrationMode: 'native',
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 货件使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: '待发货打包单使用说明', helpUrl: '/help/pmc-wfs-pending-packing.html', openInNewTab: true },
       }),
       page('pmc', 'wfs_shipments', '系统货件', '/pmc/wfs/shipments', {
         sidebarSection: 'pmc-wfs', description: '写入 Walmart', status: 'building', readOnly: true,

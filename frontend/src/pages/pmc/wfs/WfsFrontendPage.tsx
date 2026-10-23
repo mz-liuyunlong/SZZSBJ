@@ -5,10 +5,10 @@ import ShipmentBoardPage from "./ShipmentBoardPage";
 import SystemShipmentPage from "./SystemShipmentPage";
 import { CreateBoardPage, ExceptionCenterPage, ProbeListPage, WfsSettingsPage } from "./WfsSupportPages";
 
-export default function WfsFrontendPage({ page }: { page: NavigationPage }) {
+export default function WfsFrontendPage({ page, scope, permissions }: { page: NavigationPage; scope?: string; permissions?: string[] }) {
   switch (page.key) {
     case "pmc_wfs_pending_packing":
-      return <PendingPackingPage page={page} />;
+      return <PendingPackingPage page={page} scope={scope} permissions={permissions} />;
     case "pmc_wfs_shipments":
       return <SystemShipmentPage page={page} />;
     case "pmc_wfs_probe":
