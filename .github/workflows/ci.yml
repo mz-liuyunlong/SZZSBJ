@@ -199,6 +199,8 @@ jobs:
           uv run pytest -q -s \
             tests/modules/integration_sync/test_walmart_order_identity_postgresql.py
           uv run pytest -q -s \
+            tests/modules/integration_sync/test_sem_attribution_postgresql.py
+          uv run pytest -q -s \
             tests/modules/integration_sync/test_walmart_order_identity_downgrade_postgresql.py
           uv run alembic downgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
