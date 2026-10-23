@@ -640,3 +640,16 @@
 /* End force full-width business workspace */
 
 
+
+
+.main-layout__menu-label { display: flex; align-items: center; gap: 6px; }
+.main-layout__menu-label small { font-size: 10px; color: #8c8c8c; }
+
+.main-layout__secondary-menu .main-layout__section-leaf { padding-inline-start: 34px !important; }
+
+.main-layout__menu-section > .ant-menu-item-group-title {
+  padding: 20px 16px 8px;
+  color: #8c8c99;
+  font-size: 14px;
+  font-weight: 400;
+}

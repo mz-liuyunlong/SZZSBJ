@@ -18,10 +18,10 @@ Scope (rules v4, PRP §7, gate3-plan G3-D, Rocky 2026-09-23 "按之前的来"):
   ``quantity_total × arrival_ratio`` (§3.2, ratio from the rule table, default 0.5).
 * Two overdue notions stay apart through ``stage_code``: ``S2`` = purchase overdue
   (order still 待下单), ``S3``/``S4`` = arrival overdue (ordered, not arrived).
-* ItemID: ``from_system_plan`` > ``from_plan_remark`` > ``from_packing_slip`` >
-  ``pending_packing_slip`` (#144). The packing-slip source is an injection point
-  (``PackingSlipSource``); the default source has no data, so every row without a
-  plan-remark ItemID is ``pending_packing_slip``. No manual ItemID exists.
+* ItemID: ``from_system_plan`` > ``from_plan_remark`` > ``from_listing`` >
+  ``from_packing_slip`` > ``pending_packing_slip``. Listing uses the Walmart item
+  id on ``dim_walmart_listings`` for the same store and local SKU, and only when
+  that pair has one item id. Packing slip remains the fallback. No manual ItemID.
 * ``sid = 0`` rows keep ``store_attributed = False``: no overdue, no cycle sample.
 * Manual layer is read, never written; DWD is never written.
 
@@ -165,9 +165,16 @@ class DwsRefreshResult:
 
 @dataclass(frozen=True, slots=True)
 class _Listing:
+    item_id: str
     msku: str | None
     gtin: str | None
     fulfillment_type: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ListingIndex:
+    by_item: dict[tuple[str, str], _Listing]
+    by_store_sku: dict[tuple[str, str], _Listing]
 
 
 @dataclass(frozen=True, slots=True)
@@ -399,15 +406,35 @@ class PmcPurchaseDwsRefresher:
             )
         }
 
-    def _listings(self, account: str) -> dict[tuple[str, str], _Listing]:
-        return {
-            (row.store_id, row.item_id): _Listing(row.msku, row.gtin, row.fulfillment_type)
-            for row in self.session.scalars(
-                select(WalmartListingDimension).where(
-                    WalmartListingDimension.source_account_ref == account
-                )
+    def _listings(self, account: str) -> _ListingIndex:
+        """Index listings by store+item and by store+local SKU.
+
+        A store+SKU key is kept only when every listing row for that pair shares one
+        item id. Several different item ids are left unmatched instead of picking one.
+        """
+
+        by_item: dict[tuple[str, str], _Listing] = {}
+        grouped: dict[tuple[str, str], dict[str, _Listing]] = defaultdict(dict)
+        rows = self.session.scalars(
+            select(WalmartListingDimension).where(
+                WalmartListingDimension.source_account_ref == account
             )
+        )
+        for row in rows:
+            item_id = row.item_id.strip()
+            if not item_id:
+                continue
+            listing = _Listing(item_id, row.msku, row.gtin, row.fulfillment_type)
+            by_item[(row.store_id, item_id)] = listing
+            local_sku = (row.local_sku or "").strip()
+            if local_sku:
+                grouped[(row.store_id, local_sku)][item_id] = listing
+        by_store_sku = {
+            key: next(iter(matches.values()))
+            for key, matches in grouped.items()
+            if len(matches) == 1
         }
+        return _ListingIndex(by_item, by_store_sku)
 
     def _products(self, account: str) -> dict[str, _Product]:
         out: dict[str, _Product] = {}
@@ -567,7 +594,7 @@ class PmcPurchaseDwsRefresher:
         cycle: SkuCycleResult | None,
         sku_threshold: int | None,
         stores: dict[str, str | None],
-        listings: dict[tuple[str, str], _Listing],
+        listings: _ListingIndex,
         products: dict[str, _Product],
         overrides: _SkuOverrides | None,
         thresholds: PurchaseThresholds,
@@ -586,12 +613,8 @@ class PmcPurchaseDwsRefresher:
             today=today,
             thresholds=thresholds,
         )
-        attribution, source_ref, matched_at = self._attribute_item_id(line, plan)
-        listing = (
-            listings.get((line.store_id, attribution.item_id))
-            if line.store_id and attribution.item_id
-            else None
-        )
+        attribution, source_ref, matched_at = self._attribute_item_id(line, plan, listings)
+        listing = self._listing_for(line, attribution.item_id, listings)
         product = products.get(line.sku or "")
         wfs_flag = wfs_not_ready(attribution.source, listing.fulfillment_type if listing else None)
         if attribution.item_id is not None:
@@ -729,10 +752,40 @@ class PmcPurchaseDwsRefresher:
             )
         return row, pendings
 
+    def _listing_for(
+        self,
+        line: DwdPurchaseOrderLineItem,
+        item_id: str | None,
+        listings: _ListingIndex,
+    ) -> _Listing | None:
+        """Listing attributes that belong to this row's ItemID.
+
+        A resolved ItemID accepts only the listing stored for that same store and
+        item. Using the store+SKU listing here would copy MSKU, GTIN, and fulfillment
+        from a different item. That fallback stays available only while the row has
+        no ItemID yet.
+        """
+
+        if item_id:
+            if not line.store_id:
+                return None
+            return listings.by_item.get((line.store_id, item_id))
+        sku = (line.sku or "").strip()
+        if line.store_id and sku:
+            return listings.by_store_sku.get((line.store_id, sku))
+        return None
+
     def _attribute_item_id(
-        self, line: DwdPurchaseOrderLineItem, plan: DwdPurchasePlan | None
+        self,
+        line: DwdPurchaseOrderLineItem,
+        plan: DwdPurchasePlan | None,
+        listings: _ListingIndex,
     ) -> tuple[ItemIdAttribution, str | None, datetime | None]:
         remark_item_id = line.remark_item_id or (plan.remark_item_id if plan else None)
+        sku_listing = None
+        sku = (line.sku or "").strip()
+        if line.store_id and sku:
+            sku_listing = listings.by_store_sku.get((line.store_id, sku))
         slip = self.packing_slips.lookup(
             order_sn=line.order_sn,
             order_item_id=line.order_item_id,
@@ -742,11 +795,14 @@ class PmcPurchaseDwsRefresher:
         attribution = resolve_item_id(
             system_plan_item_id=None,  # reserved: plans created by this system (not built yet)
             plan_remark_item_id=remark_item_id,
+            listing_item_id=sku_listing.item_id if sku_listing else None,
             packing_slip_item_id=slip.item_id if slip else None,
             packing_slip_pending=slip is None,
         )
         if attribution.source == "from_plan_remark":
             return attribution, line.plan_sn, self.now
+        if attribution.source == "from_listing":
+            return attribution, None, self.now
         if attribution.source == "from_packing_slip" and slip is not None:
             return attribution, slip.packing_slip_no, slip.matched_at
         return attribution, None, None

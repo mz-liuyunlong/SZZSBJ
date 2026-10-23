@@ -22,7 +22,7 @@ export function isMockImplementedPage(page: NavigationPage) {
 }
 
 export function getPagePermissionKey(page: NavigationPage) {
-  return PAGE_PERMISSION_BY_KEY.get(page.key) ?? page.permissionKey;
+  return page.viewPermissionKey ?? PAGE_PERMISSION_BY_KEY.get(page.key) ?? page.permissionKey;
 }
 
 export function hasPermission(
@@ -39,6 +39,9 @@ export function isMockPageVisibleForRole(
   page: NavigationPage,
   permissions?: readonly string[],
 ) {
+  if (page.status === "disabled" && page.showWhenDisabled) {
+    return hasPermission(permissions, getPagePermissionKey(page));
+  }
   if (page.status === "hidden" || page.status === "disabled") return false;
   return isMockImplementedPage(page) && hasPermission(permissions, getPagePermissionKey(page));
 }

@@ -172,6 +172,50 @@
   white-space: nowrap;
 }
 
+.management-stat-card--leading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.management-stat-card--leading .management-stat-card__visual {
+  position: static;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  color: #16a34a;
+  background: #e9f9ef;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.management-stat-card--leading .management-stat-card__copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.management-stat-card--leading .management-stat-card__value {
+  margin-top: 0;
+  font-size: 28px;
+  line-height: 30px;
+}
+
+.management-stat-card--leading .management-stat-card__unit {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+}
+
+.management-stat-card--leading .management-stat-card__subtitle {
+  max-width: 100%;
+}
+
 @media (max-width: 1500px) {
   .management-stat-cards {
     grid-template-columns: repeat(3, minmax(0, 1fr));

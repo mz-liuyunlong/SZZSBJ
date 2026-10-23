@@ -6,9 +6,8 @@
  * approved `/api/pmc/purchase/*` contract only; no export, no push, no manual override yet
  * (the 交期修正 Modal is Gate 4b and needs `pmc:purchase:override`).
  */
-import { Alert, Button, Card, Typography, message } from "antd";
-import dayjs from "dayjs";
-import { useEffect, useMemo, useRef } from "react";
+import { Alert, Button, Card, message } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "@/components/page/PageShell";
 import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import RuntimeColumnConfigDrawer, {
@@ -37,17 +36,17 @@ import {
   createInitialPurchaseBoardFilters,
   fixedPurchaseBoardColumnKeys,
   purchaseBoardColumnFields,
+  purchaseBoardDefaultColumnKeys,
   purchaseBoardDefaultColumnWidths,
   type PurchaseBoardFilters,
   type PurchaseBoardMoreFilters,
 } from "@/pages/pmc/purchase-board/purchaseBoardTypes";
-import { formatDateTime } from "@/shared/formatters";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import "@/pages/pmc/purchase-board/PurchaseBoardPage.css";
 
 const COLUMN_PREFERENCE_KEY = "pmc-purchase-board:columns";
-const COLUMN_PREFERENCE_VERSION = 1;
+const COLUMN_PREFERENCE_VERSION = 2;
 const DEFAULT_PAGE_SIZE = 50;
 
 interface ColumnPreference {
@@ -55,45 +54,18 @@ interface ColumnPreference {
   columnWidths: Record<string, number>;
 }
 
-const defaultColumnKeys = purchaseBoardColumnFields.map((field) => field.key);
+const allowedColumnKeys = purchaseBoardColumnFields.map((field) => field.key);
 const columnGroups: RuntimeColumnGroup[] = [
-  { title: "主表字段", fields: purchaseBoardColumnFields.slice(0, 9) },
-  { title: "日期 / 交期 / 金额", fields: purchaseBoardColumnFields.slice(9) },
+  { title: "主表字段", fields: purchaseBoardColumnFields.slice(0, 8) },
+  { title: "交期 / 状态 / 金额", fields: purchaseBoardColumnFields.slice(8, 16) },
+  { title: "其他", fields: purchaseBoardColumnFields.slice(16) },
 ];
 
 const normalizeColumnKeys = (keys: string[]) => {
-  const allowed = new Set(defaultColumnKeys);
+  const allowed = new Set(allowedColumnKeys);
   const merged = keys.filter((key) => allowed.has(key));
   for (const key of fixedPurchaseBoardColumnKeys) if (!merged.includes(key)) merged.unshift(key);
   return merged;
-};
-
-/** Card → filter mapping (display convenience only; the backend owns the definitions). */
-const filtersForCard = (
-  key: PurchaseBoardCardKey,
-  current: PurchaseBoardFilters,
-): PurchaseBoardFilters => {
-  const base = { ...createInitialPurchaseBoardFilters(), ownerUids: current.ownerUids };
-  switch (key) {
-    case "awaiting_arrival":
-      return { ...base, statuses: ["s3", "s4"] };
-    case "arrival_overdue":
-      return { ...base, statuses: ["overdue"], sort: "overdue_days_desc" };
-    case "purchase_overdue":
-      return { ...base, statuses: ["s2"], sort: "overdue_days_desc" };
-    case "month_amount":
-      return {
-        ...base,
-        orderDateFrom: dayjs().startOf("month").format("YYYY-MM-DD"),
-        orderDateTo: dayjs().format("YYYY-MM-DD"),
-      };
-    case "itemid_pending":
-      return { ...base, itemIdSources: ["pending_packing_slip", "unresolved"] };
-    case "average_cycle":
-    case "unstable_sku":
-    default:
-      return base;
-  }
 };
 
 interface PurchaseBoardPageProps {
@@ -117,17 +89,18 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
   const [pendingPage, setPendingPage] = usePageStateCache(`${stateKey}:pendingPage`, 1);
   const [pendingPageSize, setPendingPageSize] = usePageStateCache(`${stateKey}:pendingPageSize`, DEFAULT_PAGE_SIZE);
   const [pendingOverdueOnly, setPendingOverdueOnly] = usePageStateCache(`${stateKey}:pendingOverdueOnly`, false);
+  const [cardRequest, setCardRequest] = useState(0);
 
   const initialColumns = useMemo(() => {
     const stored = readUserPreference<ColumnPreference>(preferenceScope, COLUMN_PREFERENCE_KEY, COLUMN_PREFERENCE_VERSION);
     return {
-      appliedColumnKeys: normalizeColumnKeys(stored?.appliedColumnKeys ?? defaultColumnKeys),
+      appliedColumnKeys: normalizeColumnKeys(stored?.appliedColumnKeys ?? purchaseBoardDefaultColumnKeys),
       columnWidths: { ...purchaseBoardDefaultColumnWidths, ...stored?.columnWidths },
     } satisfies ColumnPreference;
   }, [preferenceScope]);
-  const [columnPreference, setColumnPreference] = usePageStateCache<ColumnPreference>(`${stateKey}:columns`, initialColumns);
+  const [columnPreference, setColumnPreference] = usePageStateCache<ColumnPreference>(`${stateKey}:columns:v2`, initialColumns);
 
-  const listQuery = usePurchaseBoardListQuery(filters, currentPage, pageSize);
+  const listQuery = usePurchaseBoardListQuery(filters, currentPage, pageSize, activeCard, cardRequest);
   const summaryQuery = usePurchaseBoardSummaryQuery(filters);
   const ownersQuery = usePurchaseBoardOwnerOptionsQuery();
   const detailQuery = usePurchaseOrderDetailQuery(detailOrderSn);
@@ -138,7 +111,6 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
 
   const rows = listQuery.data?.rows ?? [];
   const total = listQuery.data?.total ?? 0;
-  const meta = listQuery.data?.meta ?? summaryQuery.data?.meta;
   const isRequesting = listQuery.isFetching || summaryQuery.isFetching;
 
   const shownErrorsRef = useRef(new Set<string>());
@@ -192,18 +164,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
         <Card size="small" className="purchase-board__page-card">
           <RequestLoadingOverlay spinning={isRequesting && !listQuery.data} label="正在加载采购看板，请稍候" />
           <div className="purchase-board__title-row">
-            <div>
-              <h1>采购看板</h1>
-              <p>
-                采购单明细 × 计划的进度、逾期、ItemID 归属与交期看板；只读 DWS，不含未转单的采购计划。
-                {meta?.freshnessAt && (
-                  <Typography.Text type="secondary" className="purchase-board__freshness">
-                    数据更新 {formatDateTime(meta.freshnessAt)}
-                    {meta.ruleVersion !== null && meta.ruleVersion !== undefined ? ` · 规则版本 v${meta.ruleVersion}` : ""}
-                  </Typography.Text>
-                )}
-              </p>
-            </div>
+            <h1>采购看板</h1>
           </div>
 
           <Card size="small" className="purchase-board__toolbar-card">
@@ -230,11 +191,9 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
             summary={summaryQuery.data}
             activeKey={activeCard}
             onCardClick={(key) => {
-              if (activeCard === key) {
-                resetFilters();
-                return;
-              }
-              commitFilters(filtersForCard(key, filters), key);
+              setActiveCard(activeCard === key ? undefined : key);
+              setCurrentPage(1);
+              setCardRequest((current) => current + 1);
             }}
           />
 
@@ -283,7 +242,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
           open={columnConfigOpen}
           groups={columnGroups}
           fixedKeys={fixedPurchaseBoardColumnKeys}
-          defaultKeys={defaultColumnKeys}
+          defaultKeys={purchaseBoardDefaultColumnKeys}
           appliedKeys={columnPreference.appliedColumnKeys}
           onApply={(keys) => persistColumns({ ...columnPreference, appliedColumnKeys: normalizeColumnKeys(keys) })}
           onClose={() => setColumnConfigOpen(false)}

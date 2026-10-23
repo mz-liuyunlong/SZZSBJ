@@ -136,6 +136,14 @@
   flex-direction: column;
 }
 
+.purchase-board__sku-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .purchase-board__stage-cell,
 .purchase-board__cycle-cell,
 .purchase-board__itemid-cell {
@@ -148,7 +156,23 @@
 .purchase-board__itemid-cell {
   flex-direction: column;
   align-items: flex-start;
-  gap: 0;
+  gap: 2px;
+  max-width: 100%;
+}
+
+.purchase-board__itemid-line {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+.purchase-board__itemid-msku {
+  display: block;
+  max-width: 100%;
+  color: #98a2b3;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .purchase-board__plan-sns,

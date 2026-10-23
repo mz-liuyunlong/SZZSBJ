@@ -288,6 +288,33 @@ def test_republish_is_idempotent_and_newer_version_rewrites(session: Session) ->
     assert again.parse_jobs_written == 0 and again.lineage_written == 0
     assert session.scalar(select(func.count(DataLineage.id))) == lineage_before
 
+
+def test_republish_applies_remark_parse_without_duplicate_lineage(session: Session) -> None:
+    _seed_first_window(session)
+    PmcPurchaseDwdPublisher(session, now=T1).publish(source_account_ref=ACCOUNT)
+    lineage_before = session.scalar(select(func.count(DataLineage.id)))
+
+    plan = session.scalar(select(LingxingPurchasePlanOds))
+    assert plan is not None
+    plan.remark = "20400862776"
+    plan.plan_remark = "20400862776"
+    session.commit()
+
+    again = PmcPurchaseDwdPublisher(session, now=T2).publish(source_account_ref=ACCOUNT)
+    assert again.plans_updated == 1 and again.lines_updated == 1
+    assert again.lineage_written == 0
+    assert session.scalar(select(func.count(DataLineage.id))) == lineage_before
+    published = session.scalar(select(DwdPurchasePlan))
+    line = session.scalar(select(DwdPurchaseOrderLineItem))
+    assert published is not None and line is not None
+    assert published.remark_item_id == "20400862776"
+    assert line.remark_item_id == "20400862776"
+
+
+def test_republish_is_idempotent_and_newer_version_rewrites_continued(session: Session) -> None:
+    _seed_first_window(session)
+    PmcPurchaseDwdPublisher(session, now=T1).publish(source_account_ref=ACCOUNT)
+
     # A later window re-delivers P1 (status → -2 completed) and PO1 with one more line.
     run2, ref2 = _run(session, "purchasePlanList")
     session.add(

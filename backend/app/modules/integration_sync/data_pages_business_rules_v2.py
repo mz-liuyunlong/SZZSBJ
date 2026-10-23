@@ -621,6 +621,10 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "on m.store_id=s.store_id and m.campaign_id=s.campaign_id "
                 "where coalesce(s.parsed_item_id,m.mapped_item_id) is not null "
                 "group by s.sem_date,s.store_id,coalesce(s.parsed_item_id,m.mapped_item_id)),"
+                "sem_resolved as (select sem.sem_date,sem.store_id,sem.item_id,trim(l.msku) msku,"
+                "sem.sem_ad_spend from sem join dim_walmart_listings l "
+                "on l.source_account_ref=:account and l.store_id=sem.store_id "
+                "and l.item_id=sem.item_id and nullif(trim(l.msku),'') is not null),"
                 "r as (select r.source_account_ref,r.purchase_time_at::date business_date_la,"
                 "r.store_id,r.item_id,trim(r.msku) msku,max(r.local_sku) local_sku,"
                 "sum(coalesce(r.return_qty,0)) return_qty,"
@@ -652,7 +656,8 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "k as (select business_date_la,source_account_ref,store_id,item_id,msku from s union "
                 "select business_date_la,source_account_ref,store_id,item_id,msku from a union "
                 "select business_date_la,source_account_ref,store_id,item_id,msku from r union "
-                "select business_date_la,source_account_ref,store_id,item_id,msku from sample),"
+                "select business_date_la,source_account_ref,store_id,item_id,msku from sample "
+                "union select sem_date,:account,store_id,item_id,msku from sem_resolved),"
                 "commission_seed as (select 1 as unused) "
                 "insert into mart_daily_sales_item_day "
                 "(id,business_date_la,source_account_ref,platform_code,store_id,store_name,item_id,msku,local_sku,"
@@ -710,8 +715,9 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
                 "and s.store_id=k.store_id and s.item_id=k.item_id and s.msku=k.msku "
                 "left join a on a.source_account_ref=k.source_account_ref and a.business_date_la=k.business_date_la "
                 "and a.store_id=k.store_id and a.item_id=k.item_id and a.msku=k.msku "
-                "left join sem on sem.sem_date=k.business_date_la and sem.store_id=k.store_id "
-                "and sem.item_id=k.item_id "
+                "left join sem_resolved sem on sem.sem_date=k.business_date_la "
+                "and sem.store_id=k.store_id and sem.item_id=k.item_id "
+                "and sem.msku=k.msku "
                 "left join r on r.source_account_ref=k.source_account_ref and r.business_date_la=k.business_date_la "
                 "and r.store_id=k.store_id and r.item_id=k.item_id and r.msku=k.msku "
                 "left join sample on sample.source_account_ref=k.source_account_ref "
@@ -1257,6 +1263,47 @@ class DataPagesRealSyncRunner(BusinessRulesRunner):
         ) or Decimal("0")
         if provider_spend != mart_spend:
             raise RuntimeError("DATA_PAGES_DAILY_SALES_AD_SPEND_MISMATCH")
+
+        # SEM CSV is asynchronous and independent of standard Walmart SP ads.
+        # Refuse to publish a MART that silently drops positive SEM expense,
+        # including a missing Listing identity or a campaign mapping gap.
+        expected_sem = _decimal(
+            self.session.execute(
+                text(
+                    "with task_candidates as (select distinct store_id,task_id,created_at "
+                    "from legacy_mirror.raw_walmart_sem_csv where csv_type='sem_daily' "
+                    "and row_json ->> 'Date'=cast(:day as text)), "
+                    "latest_task as (select distinct on (store_id) store_id,task_id "
+                    "from task_candidates order by store_id,created_at desc,task_id desc) "
+                    "select coalesce(sum(coalesce(nullif(regexp_replace("
+                    "coalesce(r.row_json ->> 'Spend',''),'[^0-9.-]','','g'),"
+                    "'')::numeric,0)),0) "
+                    "from legacy_mirror.raw_walmart_sem_csv r join latest_task lt "
+                    "on lt.store_id=r.store_id and lt.task_id=r.task_id "
+                    "where r.csv_type='sem_daily' and r.row_json ->> 'Date'=cast(:day as text) "
+                    "and (exists (select 1 from dim_walmart_listings l "
+                    "where l.source_account_ref=:account and l.store_id=r.store_id) "
+                    "or exists (select 1 from dim_lingxing_stores st "
+                    "where st.source_account_ref=:account and st.store_id=r.store_id))"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            ).scalar_one()
+        ) or Decimal("0")
+        booked_sem = _decimal(
+            self.session.execute(
+                text(
+                    "select coalesce(sum(sem_ad_spend_amount),0) "
+                    "from mart_daily_sales_item_day "
+                    "where source_account_ref=:account and business_date_la=:day"
+                ),
+                {"account": self.source_account_ref, "day": self.business_date},
+            ).scalar_one()
+        ) or Decimal("0")
+        if expected_sem.quantize(Decimal("0.01")) != booked_sem.quantize(Decimal("0.01")):
+            raise DataPagesMartInvariantError(
+                "DATA_PAGES_SEM_SPEND_UNATTRIBUTED",
+                business_date=self.business_date,
+            )
         return _row_count(
             self.session,
             "mart_daily_sales_item_day",
