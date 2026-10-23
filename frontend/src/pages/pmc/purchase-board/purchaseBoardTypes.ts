@@ -36,6 +36,16 @@ export type PurchaseStageCode = "S1" | "S2" | "S3" | "S4" | "S9" | "S0" | "UNKNO
 
 export type PurchaseOverdueKind = "purchase" | "arrival";
 
+/** List-only drill-down. The summary request never sends this, so card numbers stay put. */
+export type PurchaseBoardSummaryFilter =
+  | "awaiting_arrival"
+  | "arrival_overdue"
+  | "purchase_overdue"
+  | "average_cycle"
+  | "month_amount"
+  | "unstable_sku"
+  | "itemid_pending";
+
 export type SkuCycleSource = "samples" | "baseline_mix" | "lingxing_default" | "no_baseline";
 
 export type SkuCycleExclusion = "auto_short" | "manual" | "before_baseline" | "outside_window";
@@ -220,6 +230,8 @@ export interface PurchaseBoardSummary {
   purchaseOverdueOrders: number;
   purchaseOverduePlans: number;
   averagePurchaseCycleDays90d: number | null;
+  medianPurchaseCycleDays90d: number | null;
+  purchaseCycleSampleOrders90d: number;
   monthPurchaseAmount: MoneyByCurrency[];
   unstableSkuCount: number;
   itemidPendingLines: number;
@@ -289,50 +301,72 @@ export interface PurchaseBoardColumnField {
   title: string;
 }
 
-/** Column catalogue (business rules v4 §9); order here is the default column order. */
+/** Column catalogue (business rules §9). Order is the default table order. */
 export const purchaseBoardColumnFields: PurchaseBoardColumnField[] = [
   { key: "purchaseOrderSn", title: "采购单号" },
-  { key: "stage", title: "状态" },
+  { key: "sku", title: "SKU / 产品" },
   { key: "store", title: "店铺" },
-  { key: "sku", title: "SKU" },
-  { key: "productName", title: "产品名" },
+  { key: "itemId", title: "ItemID 归属" },
   { key: "gtin", title: "GTIN" },
-  { key: "itemId", title: "ItemID" },
   { key: "owner", title: "负责人" },
-  { key: "progress", title: "进度" },
   { key: "orderDate", title: "下单日期" },
+  { key: "quantity", title: "采购量" },
+  { key: "progress", title: "收货进度" },
   { key: "arrivalDate", title: "到仓日期" },
   { key: "purchaseCycleDays", title: "采购交期" },
-  { key: "approvalCycleDays", title: "审批周期" },
   { key: "skuCycle", title: "实际采购交期" },
-  { key: "unitPrice", title: "单价" },
+  { key: "approvalCycleDays", title: "审批周期" },
+  { key: "stage", title: "状态" },
+  { key: "overdue", title: "逾期" },
   { key: "amountAllocated", title: "金额" },
+  { key: "unitPrice", title: "单价" },
   { key: "planSn", title: "计划号" },
+];
+
+/** Columns shown on first load. 单价 and 计划号 stay available in the column picker. */
+export const purchaseBoardDefaultColumnKeys = [
+  "purchaseOrderSn",
+  "sku",
+  "store",
+  "itemId",
+  "gtin",
+  "owner",
+  "orderDate",
+  "quantity",
+  "progress",
+  "arrivalDate",
+  "purchaseCycleDays",
+  "skuCycle",
+  "approvalCycleDays",
+  "stage",
+  "overdue",
+  "amountAllocated",
 ];
 
 /** Default widths for the board columns (px); users can resize at runtime. */
 export const purchaseBoardDefaultColumnWidths: Record<string, number> = {
   purchaseOrderSn: 168,
-  stage: 220,
+  sku: 220,
   store: 140,
-  sku: 150,
-  productName: 220,
+  itemId: 220,
   gtin: 140,
-  itemId: 170,
   owner: 100,
-  progress: 130,
   orderDate: 112,
+  quantity: 96,
+  progress: 150,
   arrivalDate: 112,
   purchaseCycleDays: 120,
-  approvalCycleDays: 100,
   skuCycle: 170,
-  unitPrice: 110,
+  approvalCycleDays: 100,
+  stage: 160,
+  overdue: 130,
   amountAllocated: 120,
+  unitPrice: 110,
   planSn: 150,
   actions: 80,
 };
 
-export const fixedPurchaseBoardColumnKeys = ["purchaseOrderSn", "stage"];
+export const fixedPurchaseBoardColumnKeys = ["purchaseOrderSn"];
 
 export const purchaseBoardStatusOptions: { value: PurchaseBoardStatusFilter; label: string }[] = [
   { value: "s2", label: "待下单" },
@@ -357,8 +391,8 @@ export const purchaseBoardItemIdSourceOptions: {
   label: string;
 }[] = [
   { value: "from_system_plan", label: "已归属（系统计划）" },
-  { value: "from_plan_remark", label: "已归属（计划备注）" },
-  { value: "from_listing", label: "已归属（Listing）" },
+  { value: "from_plan_remark", label: "已归属（采购备注）" },
+  { value: "from_listing", label: "已归属（按货件）" },
   { value: "from_packing_slip", label: "已归属（打包单）" },
   { value: "pending_packing_slip", label: "待打包单" },
   { value: "unresolved", label: "待处理" },

@@ -9,14 +9,23 @@ import {
   listPendingPurchasePlans,
   listPurchaseBoard,
 } from "@/pages/pmc/purchase-board/purchaseBoardApi";
-import type { PurchaseBoardFilters } from "@/pages/pmc/purchase-board/purchaseBoardTypes";
+import type {
+  PurchaseBoardFilters,
+  PurchaseBoardSummaryFilter,
+} from "@/pages/pmc/purchase-board/purchaseBoardTypes";
 
 const filterKey = (filters: PurchaseBoardFilters) => buildPurchaseBoardFilterQuery(filters).toString();
 
 export const purchaseBoardKeys = {
   all: ["pmc-purchase-board"] as const,
-  list: (filters: PurchaseBoardFilters, page: number, pageSize: number) => (
-    ["pmc-purchase-board", "list", filterKey(filters), filters.sort, page, pageSize] as const
+  list: (
+    filters: PurchaseBoardFilters,
+    page: number,
+    pageSize: number,
+    summaryFilter?: PurchaseBoardSummaryFilter,
+    cardRequest = 0,
+  ) => (
+    ["pmc-purchase-board", "list", filterKey(filters), filters.sort, summaryFilter ?? "", cardRequest, page, pageSize] as const
   ),
   summary: (filters: PurchaseBoardFilters) => (
     ["pmc-purchase-board", "summary", filterKey(filters)] as const
@@ -32,10 +41,12 @@ export function usePurchaseBoardListQuery(
   filters: PurchaseBoardFilters,
   page: number,
   pageSize: number,
+  summaryFilter?: PurchaseBoardSummaryFilter,
+  cardRequest = 0,
 ) {
   return useQuery({
-    queryKey: purchaseBoardKeys.list(filters, page, pageSize),
-    queryFn: ({ signal }) => listPurchaseBoard(filters, page, pageSize, signal),
+    queryKey: purchaseBoardKeys.list(filters, page, pageSize, summaryFilter, cardRequest),
+    queryFn: ({ signal }) => listPurchaseBoard(filters, page, pageSize, signal, summaryFilter),
     staleTime: SERVER_STATE_STALE_TIME.list,
     placeholderData: keepPreviousData,
   });

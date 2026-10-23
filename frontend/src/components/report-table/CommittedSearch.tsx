@@ -26,6 +26,8 @@ interface CommittedSearchProps {
   inputPlaceholder: string;
   inputValue: string;
   searchAriaLabel?: string;
+  searchButtonText?: string;
+  batchPlacement?: "before-search" | "after-search";
   batch?: BatchSearchConfig;
   onCommit: (payload: CommittedSearchPayload) => void;
 }
@@ -46,6 +48,8 @@ function CommittedSearch({
   inputPlaceholder,
   inputValue,
   searchAriaLabel = "搜索",
+  searchButtonText,
+  batchPlacement,
   batch,
   onCommit,
 }: CommittedSearchProps) {
@@ -141,6 +145,8 @@ function CommittedSearch({
       inputPlaceholder={inputPlaceholder}
       inputValue={draftKeyword}
       searchAriaLabel={searchAriaLabel}
+      searchButtonText={searchButtonText}
+      batchPlacement={batchPlacement}
       batchControl={batchControl}
       onTypeChange={setDraftType}
       onInputChange={setDraftKeyword}

@@ -129,6 +129,40 @@ jobs:
             tests/modules/iam/test_auth_query_performance.py \
             tests/modules/iam/test_auth_postgresql_integration.py
 
+  domestic-chain-postgresql:
+    name: Domestic chain PostgreSQL upgrade from empty and 0049
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: domestic_chain_ci
+          POSTGRES_USER: domestic_chain_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U domestic_chain_ci -d domestic_chain_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://domestic_chain_ci:local_ci_only@127.0.0.1:5432/domestic_chain_ci
+      DOMESTIC_CHAIN_DB_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Verify empty and 0049 databases reach revision 0054
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
+          uv run python -c "import xml.etree.ElementTree as E; r=E.parse('domestic-chain-results.xml'); assert r.findall('.//testcase') and not r.findall('.//skipped'), 'Domestic PostgreSQL acceptance must execute without skipped cases'"
+
   walmart-order-identity-postgresql:
     name: Walmart order identity PostgreSQL integration
     runs-on: ubuntu-latest
@@ -344,7 +378,7 @@ jobs:
           uv run alembic upgrade 20261019_0045_approval_scope
           PYTHONPATH=. uv run python scripts/ci_approval_migration_smoke.py verify
   operation-logs-migration-smoke:
-    name: Operation logs 0043 PostgreSQL migration smoke
+    name: Operation logs 0046 PostgreSQL migration smoke
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -369,17 +403,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Migrate isolated PostgreSQL through unified operation-logs head
+      - name: Migrate isolated PostgreSQL through operation-logs revision 0046
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run alembic upgrade head
+          # Verify this feature at its own revision; IAM separately tests head.
+          uv run alembic upgrade 20261019_0046_operation_logs
           uv run python - <<'PY'
           from sqlalchemy import create_engine, text
           from app.core.config import get_database_url
 
           with create_engine(get_database_url()).connect() as conn:
-              assert conn.scalar(text("select version_num from alembic_version")) == "20261020_0047_walmart_order_identity_guard"
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261019_0046_operation_logs"
               for name in (
                   "ops_system_operation_events",
                   "ops_manual_operation_logs",

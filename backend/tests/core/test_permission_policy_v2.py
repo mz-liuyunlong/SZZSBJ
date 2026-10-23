@@ -102,6 +102,17 @@ def test_wfs_case_actions_are_bound_to_their_page_actions() -> None:
     )
 
 
+def test_domestic_batch_board_uses_the_page_permission() -> None:
+    assert (
+        permission_for_request(
+            "GET",
+            "/api/pmc/domestic/batches",
+            "pmc:domestic-batch:read",
+        )
+        == "page:pmc:domestic-warehouse-board:view"
+    )
+
+
 def test_method_specific_writes_are_not_reduced_to_page_view() -> None:
     assert (
         permission_for_request(
