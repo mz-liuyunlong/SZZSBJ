@@ -5,7 +5,8 @@ writes it. Contract (rules v4 §7, gate3-plan G3-B):
 
 * Only ODS rows from runs with ``status = 'succeeded'`` are considered.
 * DWD keeps one row per business key. A row is inserted when new, rewritten when the
-  chosen ODS version changed (``source_ods_id`` differs), and left untouched otherwise.
+  chosen ODS version changed (``source_ods_id`` differs) or a derived field such as
+  ``remark_item_id`` changed, and left untouched otherwise.
   Nothing is deleted: documents never disappear from the append-only ODS layer.
 * ``dwd_purchase_plan.first_seen_pending_date`` (rules §2, S2 start) is set the first
   time the plan is published with status 2 and never overwritten afterwards.
@@ -201,6 +202,7 @@ class PmcPurchaseDwdPublisher:
         lines = self._upsert_lines(account, built.lines, stores, lineage, touched_sources)
 
         parse_jobs = self._record_parse_jobs(touched_sources)
+        lineage = self._without_existing_lineage(lineage)
         if lineage:
             self.session.add_all(lineage)
             self.session.flush()
@@ -276,7 +278,11 @@ class PmcPurchaseDwdPublisher:
                     self._lineage(record.id, "dwd_purchase_plan", PLAN_LINEAGE_FIELDS, row.source)
                 )
                 continue
-            if current.source_ods_id == row.source.ods_id:
+            # Parser output (remark_item_id) can change without a new ODS version.
+            unchanged = current.source_ods_id == row.source.ods_id and all(
+                getattr(current, key) == value for key, value in values.items()
+            )
+            if unchanged:
                 counter.unchanged += 1
                 continue
             for key, value in values.items():
@@ -490,6 +496,48 @@ class PmcPurchaseDwdPublisher:
             written += 1
         self.session.flush()
         return written
+
+    def _without_existing_lineage(self, rows: list[DataLineage]) -> list[DataLineage]:
+        """Drop lineage rows already stored for the same target field.
+
+        A derived-field rewrite re-traces every key field. Those traces were written
+        on the first insert and the unique key rejects a second copy.
+        """
+
+        if not rows:
+            return []
+        record_ids = {row.target_record_id for row in rows}
+        stored = self.session.scalars(
+            select(DataLineage).where(DataLineage.target_record_id.in_(record_ids))
+        )
+        existing = {
+            (
+                row.raw_request_ref_id,
+                row.target_table,
+                row.target_record_id,
+                row.target_field,
+                row.source_path,
+                row.transform_key,
+                row.transform_version,
+            )
+            for row in stored
+        }
+        fresh: list[DataLineage] = []
+        for row in rows:
+            key = (
+                row.raw_request_ref_id,
+                row.target_table,
+                row.target_record_id,
+                row.target_field,
+                row.source_path,
+                row.transform_key,
+                row.transform_version,
+            )
+            if key in existing:
+                continue
+            existing.add(key)
+            fresh.append(row)
+        return fresh
 
     def _lineage(
         self,

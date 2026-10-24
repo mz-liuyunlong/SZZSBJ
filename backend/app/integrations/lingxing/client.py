@@ -13,6 +13,12 @@ from app.integrations.lingxing.data_pages_contracts import (
     data_pages_probe_page_size_limit,
     normalize_data_pages_body,
 )
+from app.integrations.lingxing.pmc_domestic_contracts import (
+    PMC_DOMESTIC_ENDPOINT_SPECS,
+    PmcDomesticContractError,
+    build_pmc_domestic_page_body,
+    get_pmc_domestic_spec,
+)
 from app.integrations.lingxing.pmc_purchase_contracts import (
     PMC_PURCHASE_ENDPOINT_SPECS,
     PMC_PURCHASE_MAX_PAGE_SIZE,
@@ -24,6 +30,7 @@ from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_q
 from app.integrations.lingxing.security import redact_json
 
 type LingxingEndpoint = Literal[
+    "/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
     "/basicOpen/multiplatform/walmart/list",
     "/basicOpen/platformStatisticsV2/saleStat/pageList",
     "/erp/sc/routing/data/local_inventory/batchGetProductInfo",
@@ -37,6 +44,10 @@ type LingxingEndpoint = Literal[
     "/erp/sc/routing/data/local_inventory/getPurchasePlans",
     "/erp/sc/routing/data/local_inventory/purchaseOrderList",
     "/erp/sc/routing/deliveryReceipt/PurchaseReceiptOrder/getOrderList",
+    "/erp/sc/data/local_inventory/warehouse",
+    "/erp/sc/routing/data/local_inventory/inventoryDetails",
+    "/erp/sc/routing/data/local_inventory/getBatchDetailList",
+    "/erp/sc/routing/data/local_inventory/getBatchStatementList",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
@@ -296,6 +307,21 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
             auth_strategy="query_sign",
         )
         for spec in PMC_PURCHASE_ENDPOINT_SPECS.values()
+    },
+    **{
+        spec.api_path: LingxingEndpointContract(
+            method="POST",
+            outbound_enabled=True,
+            allow_query_parameters=False,
+            require_json_body=True,
+            allowed_body_fields=spec.allowed_body_fields,
+            required_body_fields=spec.required_body_fields,
+            store_field=None,
+            page_size_field="length",
+            offset_field="offset",
+            auth_strategy="query_sign",
+        )
+        for spec in PMC_DOMESTIC_ENDPOINT_SPECS.values()
     },
 }
 
@@ -592,6 +618,116 @@ class LingxingReadonlyClient:
             first_page_only=False,
         )
         return self._fetch_page(capture, page, contract, max_attempts=1)
+
+    def fetch_pmc_domestic_page(
+        self,
+        *,
+        api_path: str,
+        offset: int,
+        length: int,
+        page_no: int,
+        start_date: date | None,
+        end_date: date | None,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing source account scope is invalid")
+        _required_integer(page_no, minimum=1)
+        try:
+            spec = get_pmc_domestic_spec(api_path)
+            body = build_pmc_domestic_page_body(
+                api_path,
+                offset=offset,
+                length=length,
+                start_date=start_date,
+                end_date=end_date,
+                extra={"show_zero_stock": 1} if api_path.endswith("/getBatchDetailList") else None,
+            )
+        except PmcDomesticContractError as exc:
+            raise LingxingClientError(str(exc)) from exc
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=length,
+            params=None,
+            body=body,
+        )
+        capture = LingxingCaptureRequest(
+            api_path=spec.api_path,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=spec.object_type,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=spec.max_page_size,
+            first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract, max_attempts=1)
+
+    def fetch_inbound_page(
+        self,
+        *,
+        api_path: str,
+        body: dict[str, JsonValue],
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """File-only caller still uses the shared allowlist, query signing and real-call gate."""
+        from app.integrations.lingxing.pmc_domestic_contracts import (
+            BATCH_DETAIL_LIST_ENDPOINT,
+            WAREHOUSE_STATEMENT_ENDPOINT,
+        )
+
+        if not self._settings.lingxing_enable_real_calls or api_path not in {
+            BATCH_DETAIL_LIST_ENDPOINT,
+            WAREHOUSE_STATEMENT_ENDPOINT,
+        }:
+            raise LingxingClientError("Inbound collection is not authorized")
+        if (
+            not source_account_ref.strip()
+            or not isinstance(body.get("wids"), str)
+            or not body["wids"].strip()
+        ):
+            raise LingxingClientError("Inbound source scope is missing")
+        spec = get_pmc_domestic_spec(api_path)
+        page = LingxingPageRequest.model_construct(
+            page_no=1, page_size=body.get("length"), params=None, body=body
+        )
+        capture = LingxingCaptureRequest(
+            api_path=spec.api_path,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=spec.object_type,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture, page, contract, page_size_limit=spec.max_page_size, first_page_only=False
+        )
+        if api_path == WAREHOUSE_STATEMENT_ENDPOINT:
+            try:
+                start = date.fromisoformat(str(body["start_date"]))
+                end = date.fromisoformat(str(body["end_date"]))
+                if not 0 < (end - start).days <= 30:
+                    raise ValueError
+            except (ValueError, KeyError):
+                raise LingxingClientError("Inbound date window invalid") from None
+        elif body.get("show_zero_stock") != 1:
+            raise LingxingClientError("Inbound batch snapshot must include zero stock")
+        return self._fetch_page(capture, page, contract)
 
     def fetch_batch_product_info(
         self,

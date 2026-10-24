@@ -1,3 +1,4 @@
+import ast
 import runpy
 from collections.abc import Iterator
 from contextlib import nullcontext
@@ -16,7 +17,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 SYNTHETIC_DATABASE_URL = (
     "postgresql+psycopg://synthetic_user:synthetic_password@localhost/synthetic_db"
 )
-EXPECTED_HEAD_REVISION = "20261022_0048_walmart_monitor_raw_events"
+WALMART_HEAD_REVISION = "20261020_0047_walmart_order_identity_guard"
+DOMESTIC_HEAD_REVISION = "20261022_0053_domestic_packing_production_compat"
+MERGED_HEAD_REVISION = "20261022_0054_merge_walmart_identity_and_domestic_packing"
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +48,11 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == [EXPECTED_HEAD_REVISION]
+    assert script.get_heads() == [MERGED_HEAD_REVISION]
+    assert set(script.get_revision(MERGED_HEAD_REVISION).down_revision) == {
+        WALMART_HEAD_REVISION,
+        DOMESTIC_HEAD_REVISION,
+    }
     assert (
         script.get_revision("20261015_0036_wfs_cases").down_revision
         == "20261014_0035_add_auth_rbac"
@@ -91,14 +98,31 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == "20261019_0045_approval_scope"
     )
     assert (
-        script.get_revision("20261020_0047_walmart_order_identity_guard").down_revision
-        == "20261019_0046_operation_logs"
+        script.get_revision(WALMART_HEAD_REVISION).down_revision == "20261019_0046_operation_logs"
     )
     assert (
-        script.get_revision(EXPECTED_HEAD_REVISION).down_revision
-        == "20261020_0047_walmart_order_identity_guard"
+        script.get_revision("20261019_0047_domestic_warehouse_ods").down_revision
+        == "20261019_0046_operation_logs"
     )
-    assert len(EXPECTED_HEAD_REVISION) <= 128
+    expected_chain = (
+        (
+            "20261019_0048_domestic_warehouse_dwd_and_permission",
+            "20261019_0047_domestic_warehouse_ods",
+        ),
+        (
+            "20261020_0049_domestic_inbound_board",
+            "20261019_0048_domestic_warehouse_dwd_and_permission",
+        ),
+        ("20261020_0050_domestic_packing_approval", "20261020_0049_domestic_inbound_board"),
+        ("20261021_0051_domestic_packing_lifecycle", "20261020_0050_domestic_packing_approval"),
+        ("20261021_0052_domestic_packing_manual", "20261021_0051_domestic_packing_lifecycle"),
+        (DOMESTIC_HEAD_REVISION, "20261021_0052_domestic_packing_manual"),
+    )
+    for revision, parent in expected_chain:
+        assert script.get_revision(revision).down_revision == parent
+    assert len(WALMART_HEAD_REVISION) <= 128
+    assert len(DOMESTIC_HEAD_REVISION) <= 128
+    assert len(MERGED_HEAD_REVISION) <= 128
     revisions = {path.name for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py")}
     assert {
         "20260912_0003_add_integration_governance.py",
@@ -139,12 +163,27 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         "20261019_0045_approval_scope.py",
         "20261019_0046_operation_logs.py",
         "20261020_0047_walmart_order_identity_guard.py",
-        "20261022_0048_walmart_monitor_raw_events.py",
+        "20261019_0047_domestic_warehouse_ods.py",
+        "20261019_0048_domestic_warehouse_dwd_and_permission.py",
+        "20261020_0049_domestic_inbound_board.py",
+        "20261020_0050_domestic_packing_approval.py",
+        "20261021_0051_domestic_packing_lifecycle.py",
+        "20261021_0052_domestic_packing_manual.py",
+        "20261022_0053_domestic_packing_production_compat.py",
+        "20261022_0054_merge_walmart_identity_and_domestic_packing.py",
     } <= revisions
+    merge_revision = (
+        BACKEND_ROOT
+        / "alembic"
+        / "versions"
+        / "20261022_0054_merge_walmart_identity_and_domestic_packing.py"
+    ).read_text(encoding="utf-8")
+    assert "ops_domestic_packing_extra_allocations" in merge_revision
+    assert "20261022_0055" not in merge_revision
 
     rbac_revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20261017_0042_approval_rbac_backfill.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert 'revision: str = "20261017_0042_rbac_backfill"' in rbac_revision
     assert '"source_account_refs_json"' in rbac_revision
     assert '"field:sales:order-profit:gross-profit"' in rbac_revision
@@ -152,14 +191,14 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
 
     revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20260910_0002_add_raw_lingxing_api.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert revision.count('name=op.f("ck_raw_lingxing_api_api_path")') == 1
     assert '"ix_raw_lingxing_api_raw_hash"' in revision
     assert '"ix_raw_lingxing_api_object_type"' not in revision
 
     legacy_revision = (
         BACKEND_ROOT / "alembic" / "versions" / "20261006_0029_legacy_selected_mirror_tables.py"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert "create schema if not exists legacy_mirror" in legacy_revision
     assert "legacy_mirror.biz_product_operation_log" in legacy_revision
     assert "legacy_mirror.event_wfs_fee_case" in legacy_revision
@@ -223,3 +262,20 @@ def test_nonproduction_migration_behavior_is_unchanged(
     configured = run_offline_env(monkeypatch)
 
     assert configured["url"].render_as_string(hide_password=False) == SYNTHETIC_DATABASE_URL
+
+
+def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
+    revisions = []
+    for path in (BACKEND_ROOT / "alembic" / "versions").glob("*.py"):
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if any(
+                    isinstance(target, ast.Name) and target.id == "revision" for target in targets
+                ):
+                    revisions.append(ast.literal_eval(node.value))
+    assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
+    script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
+    assert script.get_heads() == [MERGED_HEAD_REVISION]
+    assert len(script.get_bases()) == 1
+    assert {item.revision for item in script.walk_revisions()} == set(revisions)

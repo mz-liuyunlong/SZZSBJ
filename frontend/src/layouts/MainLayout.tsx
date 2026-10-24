@@ -10,9 +10,9 @@ import { navigation, type NavigationPage } from "@/config/navigation";
 import {
   DEFAULT_BUSINESS_ROUTE,
   findRouteByKey,
-  isRoutableStatus,
   resolveRoute,
 } from "@/router/routeResolver";
+import { secondaryMenuItems } from "./components/secondaryMenuItems";
 import TopbarActions from "@/layouts/components/TopbarActions";
 import { DEFAULT_MOCK_AUTH_USER, type MockAuthUser } from "@/mocks/auth";
 import {
@@ -334,6 +334,7 @@ function MainLayout({
                   </span>
                 ),
               },
+              ...(activePage.sidebarSection ? [{ title: activePageGroup.sidebarSections?.find((s) => s.key === activePage.sidebarSection)?.title }] : []),
               { title: activePage.title },
             ]}
           />
@@ -432,16 +433,13 @@ function MainLayout({
             <Typography.Text strong>{activeGroup.title}</Typography.Text>
           </div>
           <Menu
+            key={activeGroup.key}
             className="main-layout__secondary-menu"
             aria-label={`${activeGroup.title}二级导航`}
             mode="inline"
             selectedKeys={[activePage.key]}
             onClick={({ key }) => selectPage(key)}
-            items={secondaryPages.map((page) => ({
-              key: page.key,
-              label: page.title,
-              disabled: !isRoutableStatus(page.status),
-            }))}
+            items={secondaryMenuItems(activeGroup, secondaryPages)}
           />
         </Layout.Sider>
 

@@ -1,0 +1,85 @@
+/** Real local business endpoints with a trusted mock publication provider; every write rolls back. */
+import { expect, test, type Page } from "@playwright/test";
+test.use({ channel: process.env.PLAYWRIGHT_CHANNEL, viewport: { width: 1920, height: 1080 } });
+test.skip(process.env.PACKING_OVERPACK_E2E !== "1", "requires loopback rollback bridge 8014");
+const prefix = "/api/pmc/domestic/packing-warehouse";
+async function setup(page: Page, mid: boolean) {
+  await page.addInitScript(() => localStorage.setItem("szzsbj_auth_token", "synthetic-overpack-acceptance"));
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (!url.pathname.startsWith("/api/")) return route.fallback();
+    if (url.pathname.startsWith(prefix)) return route.fulfill({ response: await route.fetch({ url: "http://127.0.0.1:8014" + url.pathname + url.search }) });
+    const actions = ["packing-boxes-save", "packing-done", "packing-rebox", ...(mid ? ["packing-supplement-ib", "packing-supplement-sync"] : [])];
+    const data = url.pathname === "/api/auth/me" ? { id: 16, username: "overpack-fixture", display_name: "本地模拟联调", is_super_admin: false, role_keys: [], role_names: [], permissions: ["page:pmc:domestic-warehouse-board:view", ...actions.map((a) => "action:pmc:domestic-warehouse-board:" + a)] }
+      : url.pathname.endsWith("/filter-options") ? { stores: [], owners: [] } : { items: [], total: 0 };
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data, error: null, meta: { publication_ids: [], data_status: "not_published", freshness_at: null }, request_id: "synthetic-overpack-ui" }) });
+  });
+}
+test("overpack shortage, IB mock sync, manual reconfirmation and source audit", async ({ page }, info) => {
+  await setup(page, true);
+  await page.goto("/#/pmc/domestic/packing-warehouse");
+  const row = page.locator('.domestic-packing tr[data-row-key]').first();
+  await expect(row).toContainText("FIXTURE-SKU");
+  await row.getByRole("button", { name: "填装箱", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "填写装箱数据", exact: true });
+  await dialog.getByRole("spinbutton", { name: "每箱件数" }).fill("13");
+  await dialog.getByRole("spinbutton", { name: "单箱毛重（kg）" }).fill("3");
+  let response = page.waitForResponse((r) => r.url().endsWith("/boxes") && r.request().method() === "POST");
+  await dialog.getByRole("button", { name: /^保\s*存$/ }).click();
+  expect((await response).status()).toBe(200);
+  await expect(dialog).not.toBeVisible();
+  await row.getByRole("button", { name: "打包完成", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "确认打包完成", exact: true });
+  await expect(dialog).toContainText("缺口 3 件");
+  await dialog.getByRole("textbox", { name: "超发原因" }).fill("实物清点数量大于账面");
+  for (const [name, value] of [["单品包装长（cm）", "10"], ["单品包装宽（cm）", "8"], ["单品包装高（cm）", "3"], ["单品毛重（g）", "150"]]) await dialog.getByRole("spinbutton", { name }).fill(value);
+  response = page.waitForResponse((r) => r.url().endsWith("/done") && r.request().method() === "POST");
+  await dialog.getByRole("button", { name: "确认完成", exact: true }).click();
+  let body = await (await response).json();
+  expect(body.data.command_outcome).toBe("blocked");
+  expect(body.data.box_set.completed_at).toBeNull();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toContainText("超发 8 件 · 待补入库单");
+  await page.goto("/#/pmc/domestic/batches");
+  await expect(page.locator(".ant-alert-message").filter({ hasText: /^超发待补入库 1 张$/ })).toBeVisible();
+  await page.goto("/#/pmc/domestic/packing-warehouse");
+  await row.getByRole("button", { name: "已补入库单", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "已补入库单", exact: true });
+  await dialog.getByRole("textbox", { name: "补入库单号" }).fill("IBMOCKSUPPLEMENT");
+  response = page.waitForResponse((r) => r.url().endsWith("/supplemental-inbound"));
+  await dialog.getByRole("button", { name: /^保\s*存$/ }).click();
+  expect((await response).status()).toBe(200);
+  await expect(dialog).not.toBeVisible();
+  await row.getByRole("button", { name: /^同\s*步$/ }).click();
+  dialog = page.getByRole("dialog", { name: "同步校验补入库单", exact: true });
+  response = page.waitForResponse((r) => r.url().endsWith("/supplemental-sync"));
+  await dialog.getByRole("button", { name: /^保\s*存$/ }).click();
+  body = await (await response).json();
+  expect(body.data.variance_case.last_sync_code).toBe("MATCHED");
+  expect(body.data.box_set.completed_at).toBeNull();
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toContainText("已解除，请再次确认");
+  await row.getByRole("button", { name: "打包完成", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "确认打包完成", exact: true });
+  await expect(dialog).toContainText("超出 8 件，占用同 SKU 其他在仓库存");
+  await dialog.getByRole("checkbox", { name: "确认占用额外库存" }).check();
+  for (const [name, value] of [["单品包装长（cm）", "10"], ["单品包装宽（cm）", "8"], ["单品包装高（cm）", "3"], ["单品毛重（g）", "150"]]) await dialog.getByRole("spinbutton", { name }).fill(value);
+  response = page.waitForResponse((r) => r.url().endsWith("/done") && r.request().method() === "POST");
+  await dialog.getByRole("button", { name: "确认完成", exact: true }).click();
+  body = await (await response).json();
+  expect(body.data.command_outcome).toBe("completed");
+  expect(body.data.extra_allocations.reduce((n: number, a: { quantity: number }) => n + a.quantity, 0)).toBe(8);
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: /^已打包待发\s*1$/ }).click();
+  await expect(row).toContainText("已打包待发");
+  await row.getByRole("button", { name: /^详\s*情$/ }).click();
+  await expect(page.getByRole("dialog", { name: "仓库打包单详情与审计", exact: true })).toContainText("IBMOCKSUPPLEMENT");
+  await page.screenshot({ path: info.outputPath("overpack-mock-closed.png"), fullPage: true, animations: "disabled" });
+});
+test("warehouse permissions do not expose mid-office IB or sync buttons", async ({ page }) => {
+  await setup(page, false);
+  await page.goto("/#/pmc/domestic/packing-warehouse");
+  await expect(page.getByText("仓库打包单已接通本地数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "已补入库单", exact: true })).toHaveCount(0);
+  await expect(page.locator('.domestic-packing').getByRole("button", { name: /^同\s*步$/ })).toHaveCount(0);
+});

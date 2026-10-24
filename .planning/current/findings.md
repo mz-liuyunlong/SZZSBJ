@@ -1,7 +1,7 @@
-# Findings
+# 调查
 
-- The monitor producer emits one `walmart-monitor.raw.v1` event containing targets, all provider attempts, compressed source artifacts, and a final observation.
-- Chrome and Decodo are attempts within one event, not separate RAW schemas.
-- The receiver needs a dedicated append-only L2 RAW table because the event includes replay evidence and compressed artifacts not represented by current Lingxing request-reference tables.
-- Current project authentication resolves bearer sessions through IAM; the approved service token therefore needs an exact-route, least-privilege principal before IAM resolution.
-- Current Alembic head at approval time is `20261020_0047_walmart_order_identity_guard`; the new additive revision is `0048`.
+2026-10-22：当前 dev 的 0054 原本是空合并。缺表修复在提交 a912b12，不在任何分支上，已取回同一修订号。本地 szzsbj_dev 已是 0054 且表已存在，因此没有再升级它。0053 只看表是否存在会放过错误结构；ODS 原先把所有 timestamp 都当成 timestamptz，也不核对 varchar 长度。
+
+# 调查
+
+Listing选项value通常为名称，不能传国内仓store_id。负责人采用现有产品详情的当前UID；同账号SKU身份歧义不猜归属。国内仓已有DWD，店铺DIM和产品身份/当前详情均可复用。无需表、迁移、外部API或新增权限。

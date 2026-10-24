@@ -1,7 +1,9 @@
-# Progress
+# 进展
 
-- 2026-10-22: Source Decision completed (`READY_FOR_PRP`).
-- 2026-10-22: Project Owner approved the PRP for local implementation only.
-- 2026-10-22: Implementation started on `codex/walmart-monitor-raw-ingestion-v2` from `a35c690f`.
-- 2026-10-22: Implementation, docs, and migration completed; targeted `28 passed`, full backend `1336 passed, 28 skipped`, Ruff/compile/Alembic/rule-pack checks passed.
-- 2026-10-22: Ready for Owner/code review; no Git publish, database, external API, deployment, or production action performed.
+2026-10-22：在现有 0054 补回 extra allocations 建表，0053 增加结构核对，ODS 增加时间类型和 varchar 长度核对。一次性库测试 4 项通过，ODS 类型拒绝测试 3 项通过。未升级 szzsbj_dev，未提交。
+
+# 进展
+
+2026-10-19：用户批准补齐后端、当前产品负责人。已读取项目内前后端分层Skill和规则；完成来源与PRP记录，开始增量实现。
+
+完成国内仓filter-options和owner_uid查询，复用ReportFacetSelect和现有表。后端13项、前端13项、浏览器8项通过；目标静态检查和构建通过。SOP、API目录和登记、交接同步完成。无真实数据库/外部API/生产/迁移/部署操作，dev未提交推送。
