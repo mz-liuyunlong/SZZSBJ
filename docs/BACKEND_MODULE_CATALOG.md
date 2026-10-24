@@ -245,6 +245,26 @@
 | PR | `#226`；open，未合并 |
 | Not in scope | 生产数据库/服务器、生产 migration/deploy/restart、真实角色自动扩权、`source_account='*'` 自动授予、外部 API/Token、旧系统修改、store/owner/sku/product 通用过滤实现 |
 
+## Walmart Monitor Target Source V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Walmart Monitor Target Source V1 |
+| Module key | `walmart-monitor-target-source-v1` |
+| Status | `approved_for_implementation`；本地实现待评审，未合并或部署 |
+| Directory | `backend/app/modules/walmart_monitor_targets/` |
+| Purpose | 通过专用只读 machine contract 向 Walmart 监控程序稳定分页提供未归档 Listing 目标 |
+| API | `GET /api/integrations/walmart-monitor/targets`；统一 envelope、response model 与 OpenAPI metadata |
+| Data source | `mart_listing_management_current`；用 `listing_archive_states` 排除归档商品；`REBUILD_SYNC`；不读取 RAW、旧系统或外部 provider |
+| Stable key | `source_account_ref + store_id + item_id`，同时作为稳定分页顺序 |
+| Fields | 店铺、SKU/MSKU、负责人、来源商品名、来源类目、可空 WFS 库存、V1 固定 `monitoring_eligible=true` |
+| Permission | 专用 principal + `integrations:walmart-monitor:read`；独立 Bearer Token；普通用户会话不可用 |
+| Database | 无新表、无 migration、无写入 |
+| External effects | 不触发同步、Celery、Walmart、Lingxing、Decodo 或其他外部 API |
+| PRP / Decision | `PRPs/walmart-monitor-target-source.md`；`docs/data-sources/decisions/walmart-monitor-target-source-decision.md` |
+| API docs | `docs/api/walmart-monitor-target-source.md` |
+| PR | TBD |
+| Not in scope | RAW 接收、资格持久化、历史回传、真实联调、生产 secret/deploy、frontend、old-system、GPT/归档状态写入/利润/成本 |
 
 ## PMC Domestic Inbound Board M1
 

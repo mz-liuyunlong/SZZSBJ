@@ -431,7 +431,7 @@ def test_api_requires_machine_token_and_returns_no_raw_payload(
     assert SYNTHETIC_TOKEN not in response_text
 
 
-def test_openapi_registers_only_the_approved_monitor_write_contract() -> None:
+def test_openapi_registers_only_the_approved_monitor_contracts() -> None:
     application = create_app()
     schema = application.openapi()
     paths = schema["paths"]
@@ -442,11 +442,10 @@ def test_openapi_registers_only_the_approved_monitor_write_contract() -> None:
     assert "201" in operation["responses"]
     assert "409" in operation["responses"]
     assert "413" in operation["responses"]
-    assert not any(
-        path.startswith("/api/integrations/walmart-monitor/")
-        and path != "/api/integrations/walmart-monitor/raw-events"
-        for path in paths
-    )
+    assert {path for path in paths if path.startswith("/api/integrations/walmart-monitor/")} == {
+        "/api/integrations/walmart-monitor/raw-events",
+        "/api/integrations/walmart-monitor/targets",
+    }
 
 
 def test_api_rejects_idempotency_key_mismatch_without_disclosure(

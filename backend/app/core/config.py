@@ -18,6 +18,7 @@ from sqlalchemy.exc import ArgumentError
 
 PRODUCT_MANAGEMENT_PREVIEW_AUTH_TOKEN_MIN_LENGTH: Final = 32
 WALMART_MONITOR_INGEST_TOKEN_MIN_LENGTH: Final = 32
+WALMART_MONITOR_TARGETS_TOKEN_MIN_LENGTH: Final = 32
 
 
 class AppEnvironment(StrEnum):
@@ -63,6 +64,10 @@ class Settings(BaseSettings):
     walmart_monitor_ingest_token: SecretStr | None = Field(
         default=None,
         validation_alias="WALMART_MONITOR_INGEST_TOKEN",
+    )
+    walmart_monitor_targets_token: SecretStr | None = Field(
+        default=None,
+        validation_alias="WALMART_MONITOR_TARGETS_TOKEN",
     )
     lingxing_base_url: str | None = Field(default=None, validation_alias="LINGXING_BASE_URL")
     lingxing_app_id: str | None = Field(default=None, validation_alias="LINGXING_APP_ID")
@@ -249,6 +254,19 @@ class Settings(BaseSettings):
             raise ValueError("database URL must be a valid PostgreSQL psycopg URL") from None
         if url.drivername != "postgresql+psycopg":
             raise ValueError("database URL must use PostgreSQL with the psycopg driver")
+        return value
+
+    @field_validator("walmart_monitor_targets_token", mode="before")
+    @classmethod
+    def validate_walmart_monitor_targets_token(cls, value: object) -> object:
+        if value in (None, ""):
+            return None
+        if (
+            not isinstance(value, str)
+            or len(value) < WALMART_MONITOR_TARGETS_TOKEN_MIN_LENGTH
+            or not value.isascii()
+        ):
+            raise SettingsError("Walmart monitor target source settings are invalid")
         return value
 
     @field_validator("product_management_preview_auth_token", mode="before")
@@ -453,6 +471,13 @@ class Settings(BaseSettings):
         token = self.walmart_monitor_ingest_token
         return token is not None and len(token.get_secret_value()) >= (
             WALMART_MONITOR_INGEST_TOKEN_MIN_LENGTH
+        )
+
+    @property
+    def walmart_monitor_targets_configured(self) -> bool:
+        token = self.walmart_monitor_targets_token
+        return token is not None and len(token.get_secret_value()) >= (
+            WALMART_MONITOR_TARGETS_TOKEN_MIN_LENGTH
         )
 
     def sqlalchemy_url(self) -> URL:
