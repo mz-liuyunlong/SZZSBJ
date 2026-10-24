@@ -54,6 +54,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     assert script.get_revision(KEYWORD_HEAD_REVISION).down_revision == KEYWORD_MERGE_REVISION
     assert set(script.get_revision(KEYWORD_MERGE_REVISION).down_revision) == {
         "20261022_0048_decodo_config_usage",
+        "20261022_0048_walmart_monitor_raw_events",
         "20261023_0055_keyword_planning_core",
     }
     assert set(script.get_revision(MERGED_HEAD_REVISION).down_revision) == {
