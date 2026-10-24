@@ -5,6 +5,7 @@ import type { ListingManagementRow } from "@/pages/products/listingManagementDat
 
 interface BackendListingItem {
   id: string;
+  source_account_ref: string;
   store_id: string;
   store_name: string | null;
   item_id: string;
@@ -217,6 +218,7 @@ const normalizeBuyBoxStatus = (value: string | null) => {
 
 const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
+  sourceAccountRef: item.source_account_ref,
   image: item.picture_url ?? "▤",
   msku: item.msku ?? "-",
   productId: item.item_id,

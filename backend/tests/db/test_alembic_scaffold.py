@@ -20,6 +20,8 @@ SYNTHETIC_DATABASE_URL = (
 WALMART_HEAD_REVISION = "20261020_0047_walmart_order_identity_guard"
 DOMESTIC_HEAD_REVISION = "20261022_0053_domestic_packing_production_compat"
 MERGED_HEAD_REVISION = "20261022_0054_merge_walmart_identity_and_domestic_packing"
+KEYWORD_MERGE_REVISION = "20261023_0056_merge_decodo_keyword_heads"
+KEYWORD_HEAD_REVISION = "20261024_0057_keyword_rule_decisions"
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +50,13 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == [MERGED_HEAD_REVISION]
+    assert script.get_heads() == [KEYWORD_HEAD_REVISION]
+    assert script.get_revision(KEYWORD_HEAD_REVISION).down_revision == KEYWORD_MERGE_REVISION
+    assert set(script.get_revision(KEYWORD_MERGE_REVISION).down_revision) == {
+        "20261022_0048_decodo_config_usage",
+        "20261022_0048_walmart_monitor_raw_events",
+        "20261023_0055_keyword_planning_core",
+    }
     assert set(script.get_revision(MERGED_HEAD_REVISION).down_revision) == {
         WALMART_HEAD_REVISION,
         DOMESTIC_HEAD_REVISION,
@@ -276,6 +284,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [MERGED_HEAD_REVISION]
+    assert script.get_heads() == [KEYWORD_HEAD_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)
