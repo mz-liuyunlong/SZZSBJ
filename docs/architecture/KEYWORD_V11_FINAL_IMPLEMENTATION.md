@@ -65,7 +65,7 @@ API 路由清单（均为 `/api/v1/keyword-planning` 前缀）：`GET /products/
 
 ## 前端实际绑定
 
-`frontend/src/pages/ai-center/keyword-launch/KeywordLaunchPage.tsx`、`keyword-rules/KeywordRulesPage.tsx`、`ads/keyword-library/KeywordLibraryPage.tsx` 已有本地 Zustand 工作流，**不是三页完整后端持久化闭环**；页面刷新不能保证从关键词后端恢复全部状态。`frontend/src/features/keyword-planning/components/KeywordV11LiveConsole.tsx` 有真实 API 调用封装，但尚未挂到正式页面。`frontend/src/api/keywordPlanningV11Api.ts` 是可用客户端契约，不能据此宣称页面联调通过。本轮不覆盖原有 UI、不虚构成功数据。
+`frontend/src/pages/ai-center/keyword-launch/KeywordLaunchPage.tsx` 和 `ads/keyword-library/KeywordLibraryPage.tsx` 保留原有本地 Zustand 工作流；`keyword-rules/KeywordRulesPage.tsx` 只导出投放页内的规则面板，**没有独立规则路由或三页后端持久化闭环**。页面刷新不能保证从关键词后端恢复全部状态。`frontend/src/api/keywordPlanningV11Api.ts` 是客户端契约，不能据此宣称页面联调通过。未使用的新工作台组件已移除，不覆盖原有 UI。
 
 ## A–L 交付状态
 

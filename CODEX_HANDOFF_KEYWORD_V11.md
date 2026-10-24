@@ -1,6 +1,6 @@
 # CODEX_HANDOFF — SZZSBJ 关键词 V1.1 规则 + 建表交付
 
-> 2026-10-24 一次性开发更新：下文保留为**历史交接**，不能作为当前工作树的完成状态。当前源码已增加带证据短语的 25 类归类、三个正式页面默认后端读取、0057 独立规则审批、内部五表和官方模板拒绝式适配；详情和真实测试见 [`docs/architecture/KEYWORD_V11_ONE_SHOT_STATUS.md`](docs/architecture/KEYWORD_V11_ONE_SHOT_STATUS.md)。D01–D08 尚未获真实批准，外部采集授权/当前官方模板尚缺，整体仍为 **NO-GO**。未提交、未推送、未上线。
+> 2026-10-24 开发更新：下文保留为**历史交接**，不能作为当前分支的完成状态。当前源码有带证据短语的分类、0057 独立规则审批、内部五表和官方模板拒绝式适配；原有关键词页面已恢复，本地工作流尚未接通后端持久化。详情和真实测试见 [`docs/architecture/KEYWORD_V11_ONE_SHOT_STATUS.md`](docs/architecture/KEYWORD_V11_ONE_SHOT_STATUS.md)。D01–D08 尚未获真实批准，外部采集授权/当前官方模板尚缺，整体仍为 **NO-GO**。分支已推送到 Draft PR，未合并、未上线。
 
 ## 范围和状态
 
