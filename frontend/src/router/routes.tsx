@@ -36,6 +36,7 @@ import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWareho
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
+import BusinessConfigPage from "@/pages/settings/BusinessConfigPage";
 import { navigation, navigationRedirects } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
@@ -216,6 +217,8 @@ function BusinessRoute({
           <UserManagementPage page={page} />
         ) : page.key === "settings_role_management" ? (
           <RoleManagementPage page={page} />
+        ) : page.key === "settings_business_config" ? (
+          <BusinessConfigPage page={page} />
         ) : page.key === "settings_fee_rules" ? (
           <FeeRulesPage page={page} />
         ) : (

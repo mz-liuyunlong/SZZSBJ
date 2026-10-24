@@ -1,6 +1,7 @@
 import {Button, Space, Typography} from 'antd';
 import {CopyableTextCell} from '@/components/report-table/cells';
 import type {MarketKeyword} from '../types';
+import './KeywordTextCell.css';
 
 /** Feature-local composition of existing canonical report cells; no parallel Shared component. */
 export function KeywordTextCell({keyword,onEdit}:{keyword:MarketKeyword;onEdit?:(keyword:MarketKeyword)=>void}){

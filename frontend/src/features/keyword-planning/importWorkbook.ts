@@ -61,8 +61,8 @@ export async function parseSellerSprite(file:File):Promise<SourceWorkbook>{
   }}else warnings.push('未找到 Asin 工作表；请手动录入');
   return {fileName:file.name,sheets:wb.SheetNames,keywords:[...map.values()],roots,asins,importedAt:new Date().toISOString(),warnings};
 }
-export function downloadDemoWorkbook(fileName:string,headers:string[],rows:Array<Array<string|number|null>>):void{
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([headers,...rows]),'DEMO_关键词资产');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['状态','MOCK_ONLY · 演示用途，不是 Walmart 官方批量上传文件'],['声明','市场PPC为Amazon参考值；演示广告指标不是实际数据']]),'说明');
-  XLSX.writeFile(wb,'DEMO_'+fileName+'.xlsx');
+export function downloadKeywordReviewWorkbook(fileName:string,headers:string[],rows:Array<Array<string|number|null>>):void{
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([headers,...rows]),'关键词资产');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['状态','本地关键词初筛，不是 Walmart 官方批量上传文件'],['声明','市场 PPC 来自上传源文件，当前未接入真实广告数据或 AI 分析服务']]),'说明');
+  XLSX.writeFile(wb,fileName+'_关键词资产.xlsx');
 }
