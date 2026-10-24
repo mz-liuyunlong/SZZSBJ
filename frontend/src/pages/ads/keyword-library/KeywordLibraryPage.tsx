@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useState} from 'react';
 import {useLocation,useNavigate} from 'react-router-dom';
 import {Alert,Button,Card,Descriptions,Drawer,Empty,Form,Input,InputNumber,Modal,Select,Space,Tabs,Tag,Typography,Upload,message} from 'antd';
 import {PlusOutlined,TranslationOutlined,UploadOutlined} from '@ant-design/icons';
@@ -33,7 +33,7 @@ const performance=(ads:AdRecord[])=>{
 function editTranslation(k:MarketKeyword,change:(id:string,value:string)=>Promise<void>){let value=k.translation||'';Modal.confirm({title:`修改中文翻译 · ${k.term}`,content:<Input.TextArea rows={3} defaultValue={value} onChange={e=>{value=e.target.value}}/>,okText:'保存翻译',onOk:()=>change(k.id,value)})}
 export default function KeywordLibraryPage({page}:{page:NavigationPage}){
  const navigate=useNavigate(),location=useLocation();const startSku=(location.state as {skuId?:string}|null)?.skuId;
- const {skus,keywords,entries,ads,analyses,updateTranslation,addManual,assignManual,upsertProductSku,installServerRun,installServerLibrary}=useKeywordStore();
+ const {skus,entries,ads,analyses,updateTranslation,addManual,assignManual,upsertProductSku,installServerRun,installServerLibrary}=useKeywordStore();
  const [skuId,setSkuId]=useState(()=>{
    if(startSku)return startSku;
    try{return (JSON.parse(sessionStorage.getItem('keyword-planning:selected-product')||'{}') as {id?:string}).id||skus[0]?.id||''}
@@ -49,6 +49,7 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
  const [libraryTotal,setLibraryTotal]=useState(0);
  const [globalTotal,setGlobalTotal]=useState(0);
  const [globalRows,setGlobalRows]=useState<LibraryRow[]>([]);
+ const [skuRows,setSkuRows]=useState<LibraryRow[]>([]);
  const [libraryPage,setLibraryPage]=useState(1);
  const [runTotal,setRunTotal]=useState(0);
  const [latestRunId,setLatestRunId]=useState<string|null>(null);
@@ -83,7 +84,15 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
    const read=await listKeywordLibrary(sku.id,sourceAccountRef,{q:search,
      source:sourceFilter==='manual'?'operator_manual':sourceFilter,
      grade,limit:50,offset:(pageNumber-1)*50});
-   installServerLibrary(sku.id,read.items);setLibraryTotal(read.total);setLibraryPage(pageNumber);
+   installServerLibrary(sku.id,read.items);
+   const saved=useKeywordStore.getState();
+   setSkuRows(read.items.flatMap(item=>{
+     const keyword=saved.keywords[item.term_id];
+     const current=saved.entries.find(entry=>entry.skuId===sku.id&&entry.keywordId===item.term_id);
+     return keyword?[{key:item.term_id,keyword,associated:current?[current]:[],current:current??null,
+       mockAds:saved.ads.filter(ad=>ad.skuId===sku.id&&ad.keywordId===item.term_id)}]:[];
+   }));
+   setLibraryTotal(read.total);setLibraryPage(pageNumber);
    setLatestRunId(read.latest_run_id);
  };
  const refreshGlobalLibrary=async(pageNumber=libraryPage,search=query,filterSource=sourceFilter,filterGrade=grade)=>{
@@ -158,11 +167,7 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
  // Filter changes must be applied before backend pagination.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[mode,sourceFilter,grade]);
- const records=useMemo<LibraryRow[]>(()=>{
-   const grouped=new Map<string,SkuKeyword[]>();for(const entry of entries){if(mode==='sku'&&entry.skuId!==skuId)continue;const list=grouped.get(entry.keywordId)||[];list.push(entry);grouped.set(entry.keywordId,list)}
-   return [...grouped.entries()].flatMap(([id,associated])=>{const keyword=keywords[id];if(!keyword)return [];return [{key:id,keyword,associated,current:associated.find(x=>x.skuId===skuId)||associated[0]||null,mockAds:ads.filter(a=>a.keywordId===id&&(mode==='global'||a.skuId===skuId))}]}).sort((a,b)=>(b.current?.score||0)-(a.current?.score||0));
- },[entries,keywords,ads,mode,skuId]);
- const visible=(mode==='global'?globalRows:records).filter(r=>{
+ const visible=(mode==='global'?globalRows:skuRows).filter(r=>{
    if(mode==='global'){
      if(tab==='todo')return r.associated.some(x=>x.status==='待测试'||x.status==='风险复查');
      if(tab==='execution')return r.associated.some(x=>x.exact||x.broad);
@@ -181,7 +186,7 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
    if(!sourceAccountRef||!itemId)throw new Error('请先选择账户与 Listing');
    try{
      const result=await updateKeywordTranslation(sku.id,id,sourceAccountRef,itemId,value);
-     updateTranslation(id,result.translation??'');message.success('翻译已保存');
+     updateTranslation(id,result.translation??'');await refreshLibrary(libraryPage);message.success('翻译已保存');
    }catch(error){message.error(error instanceof Error?error.message:'翻译保存失败');throw error;}
  });
  const commonColumns:ProColumns<LibraryRow>[]=[

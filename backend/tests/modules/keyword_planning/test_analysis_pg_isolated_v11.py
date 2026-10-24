@@ -16,6 +16,7 @@ import secrets
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import asdict, replace
@@ -205,6 +206,7 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
         row_id = uuid4()
         term_id = uuid4()
         asin_snapshot_id = uuid4()
+        extra_asin_snapshot_ids = (uuid4(), uuid4())
         account = "sandbox-account"
         item = "12345678"
         actor = "isolated-test"
@@ -281,6 +283,19 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                         fetch_provider="fixture",
                         title="Synthetic organizer comparison",
                     ),
+                    *(
+                        RawKwAsinSnapshot(
+                            id=snapshot_id,
+                            source_account_ref=account,
+                            asin=asin,
+                            fetch_status="succeeded",
+                            fetch_provider="fixture",
+                            title="Synthetic organizer comparison",
+                        )
+                        for asin, snapshot_id in zip(
+                            ("B000000002", "B000000003"), extra_asin_snapshot_ids, strict=True
+                        )
+                    ),
                 ]
             )
             session.flush()
@@ -332,6 +347,20 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                         is_active=True,
                         latest_snapshot_id=asin_snapshot_id,
                         selected_by=actor,
+                    ),
+                    *(
+                        BizSkuAsinReference(
+                            source_account_ref=account,
+                            product_id=product_id,
+                            asin=asin,
+                            reference_role="competitor",
+                            is_active=True,
+                            latest_snapshot_id=snapshot_id,
+                            selected_by=actor,
+                        )
+                        for asin, snapshot_id in zip(
+                            ("B000000002", "B000000003"), extra_asin_snapshot_ids, strict=True
+                        )
                     ),
                 ]
             )
@@ -647,7 +676,11 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                     target=server.run, kwargs={"sockets": [listener]}, daemon=True
                 )
                 prior_write_flag = os.environ.get("KEYWORD_V11_WRITE_ENABLED")
+                prior_private_root = os.environ.get("SZZSBJ_KEYWORD_PRIVATE_ROOT")
+                private_root = Path(tempfile.mkdtemp(prefix="szzsbj-keyword-qa-"))
+                private_root.chmod(0o700)
                 os.environ["KEYWORD_V11_WRITE_ENABLED"] = "1"
+                os.environ["SZZSBJ_KEYWORD_PRIVATE_ROOT"] = str(private_root)
                 thread.start()
                 try:
                     for _ in range(100):
@@ -683,6 +716,11 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                         os.environ.pop("KEYWORD_V11_WRITE_ENABLED", None)
                     else:
                         os.environ["KEYWORD_V11_WRITE_ENABLED"] = prior_write_flag
+                    if prior_private_root is None:
+                        os.environ.pop("SZZSBJ_KEYWORD_PRIVATE_ROOT", None)
+                    else:
+                        os.environ["SZZSBJ_KEYWORD_PRIVATE_ROOT"] = prior_private_root
+                    shutil.rmtree(private_root)
         finally:
             app.dependency_overrides.clear()
         with Session(engine) as session:
@@ -712,7 +750,7 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                 limits=ColdStartLimits(max_p0=4),
                 confirmed_brands={},
                 suspected_brands={},
-                editor_config={"weights": {"match": 30}, "riskWords": "synthetic"},
+                editor_config={"riskWords": "synthetic"},
             )
             assert saved.status == "draft"
         with Session(engine) as session:

@@ -23,6 +23,11 @@ from app.modules.keyword_planning.rule_governance import (
     update_scoring_draft,
 )
 
+SCORING_EDITOR = {
+    "weights": {"match": 30, "intent": 20, "coverage": 20, "root": 15, "market": 15},
+    "thresholds": {"p0": 85, "p1": 75, "p2": 60},
+}
+
 
 class DraftSession:
     def __init__(self, scope="tenant-a", rule_type="scoring"):
@@ -125,7 +130,7 @@ def test_editor_config_is_persisted_without_approving_rule():
         limits=ColdStartLimits(),
         confirmed_brands={},
         suspected_brands={},
-        editor_config={"weights": {"match": 30}, "riskWords": "synthetic risk"},
+        editor_config={**SCORING_EDITOR, "riskWords": "synthetic risk"},
     )
     assert config["editor_config"]["riskWords"] == "synthetic risk"
     assert config["business_approvals"]["D01"] == "pending"
@@ -147,7 +152,7 @@ def test_draft_save_rehashes_only_unsubmitted_owner_draft():
         limits=ColdStartLimits(max_p0=4),
         confirmed_brands={},
         suspected_brands={},
-        editor_config={"weights": {"match": 30}},
+        editor_config=SCORING_EDITOR,
     )
     assert receipt.status == "draft"
     assert session.version.config_json["limits"]["max_p0"] == 4

@@ -102,6 +102,7 @@ class Session:
             ),
         ]
         self.terms = [NS(id=TERM, normalized_keyword="pantry organizer")]
+        self.market_observations = []
         self.asin_references = []
         self.scalar_index = 0
         self.scalars_index = 0
@@ -120,7 +121,9 @@ class Session:
 
     def scalars(self, stmt):
         self.scalars_index += 1
-        return [self.rows, self.terms, self.asin_references][self.scalars_index - 1]
+        return [self.rows, self.terms, self.market_observations, self.asin_references][
+            self.scalars_index - 1
+        ]
 
 
 def prepare(s=None, selected_asins=None):
@@ -149,6 +152,39 @@ def test_db_only_request_deduplicates_without_erasing_raw_references():
     assert command.input_sha256 != "0" * 64
     assert command.asin_snapshot_ids == ()
     assert policy.version_id == str(RULE) and product.item_verified
+
+
+def test_excel_market_observation_is_carried_as_unscored_source_evidence():
+    session = Session()
+    observation_id = uuid4()
+    session.market_observations = [
+        NS(id=observation_id, upload_row_id=R1, source_metrics_json={"parse_errors": []})
+    ]
+    command, _, _ = prepare(session)
+    assessment = command.candidates[0].assessment
+    assert assessment.market_observation_refs == (str(observation_id),)
+    assert assessment.market_evidence_status == "formula_pending"
+    assert assessment.data is None  # No approved conversion from metrics to 0..15 points.
+
+
+def test_market_observation_quality_and_duplicate_status_remain_review_only():
+    session = Session()
+    session.market_observations = [
+        NS(id=uuid4(), upload_row_id=R1, source_metrics_json={"parse_errors": ["PPC_USD_INVALID"]})
+    ]
+    command, _, _ = prepare(session)
+    assert command.candidates[0].assessment.market_evidence_status == "source_invalid"
+    assert command.candidates[0].assessment.data is None
+    session = Session()
+    session.market_observations = [
+        NS(id=uuid4(), upload_row_id=ref, source_metrics_json={"parse_errors": []})
+        for ref in (R1, R2)
+    ]
+    command, _, _ = prepare(session)
+    assert command.candidates[0].assessment.market_evidence_status == (
+        "multiple_observations_review"
+    )
+    assert command.candidates[0].assessment.data is None
 
 
 def test_asin_snapshot_references_are_frozen_into_analysis_input():

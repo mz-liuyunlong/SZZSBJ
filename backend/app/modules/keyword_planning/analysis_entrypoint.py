@@ -28,6 +28,7 @@ from .models import (
     AiKwProductFactSnapshot,
     AiKwRuleDecision,
     AiKwRuleVersion,
+    BizKwMarketObservation,
     BizSkuAsinReference,
     DimKwTerm,
     RawKwUploadFile,
@@ -40,6 +41,7 @@ from .rule_gates import (
     ColdStartLimits,
     ProductConfirmation,
     ProductField,
+    ScoringProfile,
     normalize_keyword,
 )
 from .runtime_rules import PublishedPolicy
@@ -128,6 +130,19 @@ def prepare_verified_analysis(
             raise ValueError("brand registry is not a map")
     except (KeyError, TypeError, ValueError) as exc:
         raise AnalysisBlocked("RULE_CONFIGURATION_INVALID") from exc
+    editor = cfg.get("editor_config") or {}
+    try:
+        scoring = ScoringProfile.from_editor_config(editor)
+        risk_words = editor.get("riskWords", "")
+        if not isinstance(risk_words, str):
+            raise ValueError("RULE_RISK_WORDS_INVALID")
+        reviewed_risk_words = tuple(
+            word for line in risk_words.splitlines() if (word := normalize_keyword(line))
+        )
+        if len(reviewed_risk_words) > 200 or any(len(word) > 200 for word in reviewed_risk_words):
+            raise ValueError("RULE_RISK_WORDS_INVALID")
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise AnalysisBlocked("RULE_CONFIGURATION_INVALID") from exc
     d04 = (
         session.scalar(
             select(AiKwRuleDecision).where(
@@ -149,8 +164,10 @@ def prepare_verified_analysis(
         source_account_ref=account,
         product_id=str(product_id),
         limits=limits,
+        scoring=scoring,
         confirmed_brands=confirmed_brands,
         suspected_brands=suspected_brands,
+        review_risk_words=reviewed_risk_words,
         data_missing_strategy=d04_strategy,
         d04_evidence_ref=f"rule-decision:{d04.id}" if d04 else None,
     )
@@ -210,6 +227,32 @@ def prepare_verified_analysis(
     if set(grouped) != set(by_keyword):
         # This factory never inserts unknown vocabulary on its own.
         raise AnalysisBlocked("STORED_TERM_MISSING")
+    observations = list(
+        session.scalars(
+            select(BizKwMarketObservation).where(
+                BizKwMarketObservation.source_account_ref == account,
+                BizKwMarketObservation.product_id == product_id,
+                BizKwMarketObservation.upload_row_id.in_([row.id for row in rows]),
+            )
+        )
+    )
+    observation_by_row = {str(row.upload_row_id): str(row.id) for row in observations}
+    quality_by_row = {str(row.upload_row_id): row.source_metrics_json for row in observations}
+
+    def market_status(refs: list[str]) -> str:
+        matched = [ref for ref in refs if ref in observation_by_row]
+        if not matched:
+            return "source_missing"
+        if any(
+            isinstance(quality_by_row.get(ref), dict) and quality_by_row[ref].get("parse_errors")
+            for ref in matched
+        ):
+            return "source_invalid"
+        if len(matched) != 1:
+            # D08 has not approved aggregation across duplicate observations.
+            return "multiple_observations_review"
+        return "formula_pending"
+
     reviewed_phrases = parse_reviewed_phrases(source_fields.get("semantic_phrases", []))
     candidates = tuple(
         ReviewedCandidate(
@@ -218,6 +261,10 @@ def prepare_verified_analysis(
                 keyword=normalized,
                 source_rank=i,
                 source_row_refs=tuple(refs),
+                market_observation_refs=tuple(
+                    observation_by_row[ref] for ref in refs if ref in observation_by_row
+                ),
+                market_evidence_status=market_status(refs),
                 product=product,
                 policy=policy,
                 reviewed_phrases=reviewed_phrases,

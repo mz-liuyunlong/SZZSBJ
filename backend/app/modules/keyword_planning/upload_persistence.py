@@ -37,13 +37,20 @@ MARKET_HEADERS = {
     "购买量": "monthly_purchases",
     "月购买量": "monthly_purchases",
     "monthly purchases": "monthly_purchases",
+    "购买率": "purchase_rate",
+    "purchase rate": "purchase_rate",
+    "conversion rate": "purchase_rate",
     "ppc": "ppc_usd",
+    "ppc竞价": "ppc_usd",
     "ppc ($)": "ppc_usd",
     "ppc usd": "ppc_usd",
     "最低出价": "bid_min_usd",
     "min bid": "bid_min_usd",
     "最高出价": "bid_max_usd",
     "max bid": "bid_max_usd",
+    "广告竞品数": "sponsored_competitors",
+    "商品数": "listing_count",
+    "建议竞价范围": "suggested_bid_range",
 }
 
 
@@ -56,7 +63,11 @@ def market_observation_from_row(
     This never coalesces duplicate terms or selects a scoring observation.
     """
     values: dict[str, int | Decimal | None] = {}
-    quality: dict[str, object] = {"source_columns": {}, "parse_errors": []}
+    quality: dict[str, object] = {
+        "source_columns": {},
+        "parse_errors": [],
+        "normalized_metrics": {},
+    }
     for column, label in header_cells.items():
         target = MARKET_HEADERS.get(" ".join(str(label).strip().casefold().split()))
         if target is None:
@@ -66,18 +77,37 @@ def market_observation_from_row(
             values[target] = None
             continue
         quality["source_columns"][target] = column
-        raw = str(source_cells.get(column, "")).strip().replace(",", "").removeprefix("$")
+        raw_cell = str(source_cells.get(column, "")).strip()
+        raw = raw_cell.replace(",", "").removeprefix("$")
         if not raw:
             values[target] = None
             continue
+        if target == "suggested_bid_range":
+            # Keep this as a source value, not a Walmart bid recommendation.
+            quality["normalized_metrics"][target] = raw_cell[:128]
+            values[target] = None
+            continue
         try:
-            number = Decimal(raw)
+            number = Decimal(raw.removesuffix("%"))
+            if target == "purchase_rate" and raw.endswith("%"):
+                number /= 100
             if not number.is_finite() or number < 0 or number > Decimal("999999999999"):
                 raise InvalidOperation
-            if target in ("monthly_searches", "monthly_purchases"):
+            if target == "purchase_rate" and number > 1:
+                raise InvalidOperation
+            if target in (
+                "monthly_searches",
+                "monthly_purchases",
+                "sponsored_competitors",
+                "listing_count",
+            ):
                 if number != number.to_integral_value():
                     raise InvalidOperation
                 values[target] = int(number)
+                if target in ("sponsored_competitors", "listing_count"):
+                    quality["normalized_metrics"][target] = int(number)
+            elif target == "purchase_rate":
+                quality["normalized_metrics"][target] = str(number)
             else:
                 values[target] = number
         except InvalidOperation:

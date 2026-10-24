@@ -11,11 +11,11 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 NORMALIZER_VERSION = "v1_trim_casefold_whitespace"
-ALGORITHM_VERSION = "v1_1_safe_gates_20261023"
+ALGORITHM_VERSION = "v1_1_versioned_scoring_20261025"
 ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10}$")
 MISSING_MARKERS = frozenset(
     {
@@ -184,6 +184,63 @@ class ColdStartLimits:
 
 
 @dataclass(frozen=True)
+class ScoringProfile:
+    """Versioned weights for evidenced components; hard-risk gates remain fixed."""
+
+    match: int = 30
+    intent: int = 20
+    page: int = 20
+    root: int = 15
+    market: int = 15
+    p0: int = 85
+    p1: int = 75
+    p2: int = 60
+
+    @classmethod
+    def from_editor_config(cls, value: object) -> ScoringProfile:
+        if not isinstance(value, dict):
+            raise ValueError("RULE_EDITOR_CONFIG_INVALID")
+        weights = value.get("weights")
+        thresholds = value.get("thresholds")
+        if weights is None and thresholds is None:
+            return cls()
+        if not isinstance(weights, dict) or not isinstance(thresholds, dict):
+            raise ValueError("RULE_SCORING_CONFIG_INCOMPLETE")
+        if set(weights) != {"match", "intent", "coverage", "root", "market"} or set(thresholds) != {
+            "p0",
+            "p1",
+            "p2",
+        }:
+            raise ValueError("RULE_SCORING_CONFIG_INVALID")
+        profile = cls(
+            match=weights["match"],
+            intent=weights["intent"],
+            page=weights["coverage"],
+            root=weights["root"],
+            market=weights["market"],
+            p0=thresholds["p0"],
+            p1=thresholds["p1"],
+            p2=thresholds["p2"],
+        )
+        profile.validate()
+        return profile
+
+    def validate(self) -> None:
+        weights = (self.match, self.intent, self.page, self.root, self.market)
+        thresholds = (self.p0, self.p1, self.p2)
+        if any(type(value) is not int or not 0 <= value <= 100 for value in weights):
+            raise ValueError("RULE_WEIGHTS_INVALID")
+        if sum(weights) != 100 or self.page != 20:
+            # The existing UI calls this ASIN coverage, which cannot be used as
+            # evidence of Walmart page coverage. Keep this dimension locked.
+            raise ValueError("RULE_WEIGHTS_INVALID")
+        if any(type(value) is not int for value in thresholds) or not (
+            100 >= self.p0 > self.p1 > self.p2 >= 45
+        ):
+            raise ValueError("RULE_THRESHOLDS_INVALID")
+
+
+@dataclass(frozen=True)
 class KeywordEvidence:
     keyword: str
     primary_type: str | None
@@ -227,7 +284,7 @@ def _points_ok(value: int | None, ceiling: int, floor: int = 0) -> bool:
     return type(value) is int and floor <= value <= ceiling
 
 
-def score_evidence(e: KeywordEvidence) -> KeywordDecision:
+def score_evidence(e: KeywordEvidence, profile: ScoringProfile | None = None) -> KeywordDecision:
     """Never create classifications or numeric evidence from missing data."""
     reasons: list[str] = []
     if not normalize_keyword(e.keyword):
@@ -299,6 +356,8 @@ def score_evidence(e: KeywordEvidence) -> KeywordDecision:
         return KeywordDecision(
             e.keyword, None, "候选复查", "候选复查", reasons=tuple(reasons), source=e
         )
+    profile = profile or ScoringProfile()
+    profile.validate()
     components = (
         e.match_points,
         e.intent_points,
@@ -308,14 +367,31 @@ def score_evidence(e: KeywordEvidence) -> KeywordDecision:
         e.risk_points,
     )
     assert all(isinstance(x, int) for x in components)
-    total = max(0, min(100, sum(x for x in components if x is not None)))
+    base_caps = (30, 20, 20, 15, 15)
+    weights = (profile.match, profile.intent, profile.page, profile.root, profile.market)
+    weighted = sum(
+        Decimal(points) * Decimal(weight) / Decimal(cap)
+        for points, weight, cap in zip(components[:5], weights, base_caps, strict=True)
+        if points is not None
+    )
+    total = max(
+        0,
+        min(
+            100,
+            int(
+                (weighted + Decimal(e.risk_points or 0)).quantize(
+                    Decimal("1"), rounding=ROUND_HALF_UP
+                )
+            ),
+        ),
+    )
     base: Grade = (
         "P0"
-        if total >= 85
+        if total >= profile.p0
         else "P1"
-        if total >= 75
+        if total >= profile.p1
         else "P2"
-        if total >= 60
+        if total >= profile.p2
         else "候选复查"
         if total >= 45
         else "不投放"
@@ -348,12 +424,14 @@ def _sort_key(d: KeywordDecision) -> tuple[object, ...]:
 
 
 def allocate_ads(
-    evidence: tuple[KeywordEvidence, ...], limits: ColdStartLimits | None = None
+    evidence: tuple[KeywordEvidence, ...],
+    limits: ColdStartLimits | None = None,
+    profile: ScoringProfile | None = None,
 ) -> tuple[KeywordDecision, ...]:
     """Stable V1 quota allocation. Broad is NOT inferred from P-grade or Exact eligibility."""
     limits = limits or ColdStartLimits()
     limits.validate()
-    decisions = [score_evidence(e) for e in evidence]
+    decisions = [score_evidence(e, profile) for e in evidence]
     if len({normalize_keyword(d.keyword) for d in decisions}) != len(decisions):
         raise ValueError("ANALYSIS_DUPLICATE_KEYWORDS; raw rows must remain preserved")
     active = [d for d in decisions if d.base_grade in ("P0", "P1", "P2")]

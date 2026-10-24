@@ -4,7 +4,11 @@ from dataclasses import replace
 
 import pytest
 
-from app.modules.keyword_planning.rule_gates import ProductConfirmation, ProductField
+from app.modules.keyword_planning.rule_gates import (
+    ProductConfirmation,
+    ProductField,
+    ScoringProfile,
+)
 from app.modules.keyword_planning.runtime_rules import (
     TYPE_PRIORITY,
     KeywordInput,
@@ -113,6 +117,44 @@ def test_run_produces_ad_decision_only_for_verified_evidence():
     assert run.decisions[0].exact_selected
     assert run.decisions[0].broad_selected
     assert run.official_export_authorized is False
+
+
+def test_frozen_rule_versions_change_evidence_score_without_changing_old_run():
+    source = row(
+        match=ReviewedScore("verified_material_spec_pack", "synthetic:product"),
+        intent=ReviewedScore("buy_with_verified_modifier", "synthetic:intent"),
+        root=VerifiedRoot("drawer organizer", "R1", "synthetic:root", True),
+    )
+    original = run_published_v11(
+        product=product(), policy=policy(), candidates=(source,), source_total_rows=1, page=PAGE
+    )
+    changed = run_published_v11(
+        product=product(),
+        policy=policy(
+            version_id="rules:v4",
+            scoring=ScoringProfile(match=20, intent=30, page=20, root=15, market=15, p0=92),
+        ),
+        candidates=(
+            replace(source, data=MarketPoints(15, ("synthetic:observation",), "rules:v4", True)),
+        ),
+        source_total_rows=1,
+        page=PAGE,
+    )
+    assert original.decisions[0].score == 89
+    assert original.decisions[0].base_grade == "P0"
+    assert changed.decisions[0].score == 90
+    assert changed.decisions[0].base_grade == "P1"
+    assert original.decisions[0].score == 89  # immutable V1 decision remains unchanged
+
+
+def test_invalid_scoring_profile_fails_instead_of_silently_ignoring_editor():
+    with pytest.raises(ValueError, match="RULE_WEIGHTS_INVALID"):
+        ScoringProfile.from_editor_config(
+            {
+                "weights": {"match": 29, "intent": 20, "coverage": 21, "root": 15, "market": 15},
+                "thresholds": {"p0": 85, "p1": 75, "p2": 60},
+            }
+        )
 
 
 def test_top40_cannot_be_skipped_even_when_missing_keyword_ranks_are_risky():

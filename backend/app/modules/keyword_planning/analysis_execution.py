@@ -36,7 +36,12 @@ from .models import (
     RawKwUploadRow,
     RawKwWalmartPageSnapshot,
 )
-from .rule_gates import REQUIRED_PRODUCT_FIELDS, ProductConfirmation, normalize_keyword
+from .rule_gates import (
+    REQUIRED_PRODUCT_FIELDS,
+    ProductConfirmation,
+    ScoringProfile,
+    normalize_keyword,
+)
 from .runtime_rules import (
     KeywordInput,
     PublishedPolicy,
@@ -172,6 +177,19 @@ def _validate_published_config(version: AiKwRuleVersion, policy: PublishedPolicy
     ):
         if not isinstance(raw.get(key), dict) or raw.get(key) != dict(actual):
             raise AnalysisBlocked("RULE_BRAND_REGISTRY_MISMATCH")
+    editor = raw.get("editor_config") or {}
+    try:
+        expected_scoring = ScoringProfile.from_editor_config(editor)
+        words = editor.get("riskWords", "")
+        if not isinstance(words, str):
+            raise ValueError("RULE_RISK_WORDS_INVALID")
+        expected_words = tuple(
+            word for line in words.splitlines() if (word := normalize_keyword(line))
+        )
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise AnalysisBlocked("RULE_EDITOR_CONFIG_INVALID") from exc
+    if policy.scoring != expected_scoring or policy.review_risk_words != expected_words:
+        raise AnalysisBlocked("RULE_SCORING_POLICY_MISMATCH")
 
 
 def _valid_text(value: str, *, maxlen: int) -> bool:
@@ -349,18 +367,22 @@ def _validate_persisted_sources(
             for ref in candidate.assessment.source_row_refs
         ):
             raise AnalysisBlocked("SOURCE_ROW_KEYWORD_MISMATCH")
-    market_references: dict[UUID, UUID] = {}
+    market_references: dict[UUID, tuple[UUID, set[UUID]]] = {}
     for candidate in cmd.candidates:
-        if candidate.assessment.data is None:
-            continue
-        for ref in candidate.assessment.data.observation_refs:
+        scored_refs = (
+            candidate.assessment.data.observation_refs
+            if candidate.assessment.data is not None
+            else ()
+        )
+        for ref in (*candidate.assessment.market_observation_refs, *scored_refs):
             try:
                 uid = UUID(ref)
             except (ValueError, TypeError, AttributeError) as exc:
                 raise AnalysisBlocked("MARKET_EVIDENCE_REFERENCE_INVALID") from exc
-            if uid in market_references and market_references[uid] != candidate.term_id:
+            bound = (candidate.term_id, {UUID(row) for row in candidate.assessment.source_row_refs})
+            if uid in market_references and market_references[uid] != bound:
                 raise AnalysisBlocked("MARKET_EVIDENCE_TERM_CONFLICT")
-            market_references[uid] = candidate.term_id
+            market_references[uid] = bound
     if market_references:
         observations = list(
             session.scalars(
@@ -372,7 +394,10 @@ def _validate_persisted_sources(
             )
         )
         if len(observations) != len(market_references) or any(
-            market_references.get(ob.id) != ob.term_id for ob in observations
+            ob.id not in market_references
+            or market_references[ob.id][0] != ob.term_id
+            or ob.upload_row_id not in market_references[ob.id][1]
+            for ob in observations
         ):
             raise AnalysisBlocked("MARKET_EVIDENCE_MISSING_OR_CROSS_SCOPED")
     asin_references = list(
@@ -581,9 +606,12 @@ def execute_reviewed_analysis(
                         "root_evidence_ref": getattr(
                             candidate.assessment.root, "evidence_ref", None
                         ),
-                        "market_observation_refs": list(candidate.assessment.data.observation_refs)
-                        if candidate.assessment.data
-                        else [],
+                        "market_observation_refs": list(
+                            candidate.assessment.market_observation_refs
+                        ),
+                        "market_scoring_status": "scored"
+                        if candidate.assessment.data is not None
+                        else candidate.assessment.market_evidence_status,
                         "rule_version_id": str(command.rule_version_id),
                     },
                     match_points=evidence.match_points,

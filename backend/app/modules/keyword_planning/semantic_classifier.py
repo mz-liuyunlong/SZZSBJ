@@ -92,12 +92,13 @@ def classify_from_evidence(
     reviewed_phrases: tuple[ReviewedPhrase, ...] = (),
     page_title: str = "",
     page_snapshot_id: str | None = None,
+    market_observation_refs: tuple[str, ...] = (),
+    market_evidence_status: str = "source_missing",
 ) -> KeywordInput:
     """Infer only relationships supported by confirmed fields or reviewed phrases.
 
     The output still passes through runtime_rules.build_evidence and the quota
-    engine. Market scoring remains null until a versioned D04/D08 policy is
-    approved; classification is useful for review without fabricating scores.
+    engine. Market scoring remains null until a versioned policy is approved.
     """
     text = normalize_keyword(keyword)
     labels: list[tuple[VerifiedLabel, str]] = []
@@ -125,6 +126,7 @@ def classify_from_evidence(
     for brand, ref in (policy.confirmed_brands or {}).items():
         if ref.strip() and _contains_full_brand(text, brand):
             labels.append((VerifiedLabel("品牌/竞品词", ref), "confirmed_fact"))
+    risk_word_match = any(_literal_in(phrase, text) for phrase in policy.review_risk_words)
     page_review: PageReview | None = None
     for relation in reviewed_phrases:
         if _literal_in(relation.phrase, text):
@@ -191,6 +193,10 @@ def classify_from_evidence(
         intent=intent,
         root=root,
         data=None,
+        market_observation_refs=market_observation_refs,
+        market_evidence_status=market_evidence_status,
+        hard_risk_codes=("RULE_RISK_WORD_REVIEW",) if risk_word_match else (),
+        hard_risk_evidence_refs=(f"rule-version:{policy.version_id}",) if risk_word_match else (),
         page_review=page_review,
         risk_penalty=0,
         exact_requested=item_match,

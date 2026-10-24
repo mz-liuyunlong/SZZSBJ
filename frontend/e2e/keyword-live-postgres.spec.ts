@@ -1,4 +1,5 @@
 import {expect,test} from '@playwright/test';
+import * as XLSX from 'xlsx';
 
 const api = process.env.KW_LIVE_API_BASE;
 test.skip(!api, 'Requires the disposable PostgreSQL + FastAPI sandbox');
@@ -57,8 +58,39 @@ test('original pages read frozen results and a manual word from real FastAPI aft
   await expect(page.getByText('pantry organizer',{exact:true}).first()).toBeVisible();
   expect(realKeywordReads).toBeGreaterThanOrEqual(2);
 
+  // Exercise the original four-step page against a new, genuinely persisted
+  // upload and analysis Run. The product facts and ASIN snapshots are controlled
+  // PostgreSQL fixtures; only the external collection is outside this test.
+  await page.getByRole('button',{name:'修改资料 / 重新导入'}).click();
+  const workbook=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([
+    ['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','建议竞价范围'],
+    ['pantry organizer set','',120,12,'10%','0.45','0.30-0.50'],
+  ]),'Keyword');
+  const bytes=Buffer.from(XLSX.write(workbook,{bookType:'xlsx',type:'array'}));
+  await page.locator('input[type="file"]').setInputFiles({
+    name:'synthetic-fresh-source.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:bytes,
+  });
+  await expect(page.getByText('真实 Excel 已导入',{exact:false})).toBeVisible();
+  await page.getByRole('button',{name:'核对商品信息'}).click();
+  await page.getByRole('checkbox',{name:/我已核对 SKU/}).check();
+  await page.getByRole('button',{name:'确认参数'}).click();
+  await expect(page.getByText('Excel 原件与商品事实已保存')).toBeVisible();
+  const createdAnalysis=page.waitForResponse(response=>
+    response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith('/analyses'));
+  await page.getByRole('button',{name:'开始分析'}).click();
+  const createdResponse=await createdAnalysis;
+  expect(createdResponse.status(),await createdResponse.text()).toBe(200);
+  const created=(await createdResponse.json()).data as {run_id:string;created:boolean};
+  expect(created.created).toBe(true);
+  const persisted=await page.request.get(new URL(`/api/v1/keyword-planning/runs/${created.run_id}?source_account_ref=${account}`,api).toString());
+  expect(persisted.status()).toBe(200);
+  await expect(page.getByText('pantry organizer set',{exact:true}).first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('pantry organizer set',{exact:true}).first()).toBeVisible();
+
   await page.goto('/#/ads/keyword-library');
-  await expect(page.getByRole('region',{name:'SKU 关键词词库明细'}).getByRole('row',{name:/pantry organizer/})).toBeVisible();
+  await expect(page.getByRole('region',{name:'SKU 关键词词库明细'}).getByRole('row',{name:/pantry organizer set/})).toBeVisible();
   await page.getByRole('button',{name:'跨 SKU 关键词'}).click();
   await expect(page.getByRole('button',{name:'2 个 SKU'}).first()).toBeVisible();
   await page.getByRole('button',{name:'按 SKU 查看'}).click();

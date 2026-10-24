@@ -25,6 +25,7 @@ export const initialRules: RuleConfig = {
 export function ruleErrors(rule:RuleConfig):string[]{
   const e:string[]=[];const weight=Object.values(rule.weights).reduce((a,b)=>a+b,0);
   if(weight!==100)e.push(`评分权重合计必须为 100，当前 ${weight}`);
+  if(rule.weights.coverage!==20)e.push('竞品 ASIN 覆盖权重尚无可执行评分口径，当前只能保持 20');
   if(!(rule.thresholds.p0>rule.thresholds.p1&&rule.thresholds.p1>rule.thresholds.p2&&rule.thresholds.p2>=0&&rule.thresholds.p0<=100))e.push('P0 / P1 / P2 分级阈值必须由高到低且在 0–100 之间');
   if(Object.values(rule.limits).some(v=>!Number.isInteger(v)||v<0))e.push('所有名额必须是非负整数');
   if(rule.limits.p0+rule.limits.p1>rule.limits.exact)e.push('P0 + P1 计划名额不得超过 Exact 最大数量');

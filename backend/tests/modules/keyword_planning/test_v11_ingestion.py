@@ -64,6 +64,21 @@ def test_synthetic_market_observations_keep_each_row_and_do_not_guess_metrics():
     assert set(quality["parse_errors"]) == {"MONTHLY_SEARCHES_INVALID", "PPC_USD_INVALID"}
 
 
+def test_synthetic_extended_market_columns_keep_value_and_quality_separate():
+    values, quality = market_observation_from_row(
+        {"B": "购买率", "C": "广告竞品数", "D": "商品数", "E": "PPC竞价", "F": "建议竞价范围"},
+        {"B": "2.5%", "C": "7", "D": "40", "E": "$0.55", "F": "$0.40-$0.60"},
+    )
+    assert quality["normalized_metrics"] == {
+        "purchase_rate": "0.025",
+        "sponsored_competitors": 7,
+        "listing_count": 40,
+        "suggested_bid_range": "$0.40-$0.60",
+    }
+    assert str(values["ppc_usd"]) == "0.55"
+    assert quality["parse_errors"] == []
+
+
 def test_no_keyword_header_refused():
     raw = _make_xlsx([("Notes", ("Column A", "Column B"), [("x", "y")])])
     with pytest.raises(WorkbookRejected, match="KEYWORD_COLUMN_MISSING"):

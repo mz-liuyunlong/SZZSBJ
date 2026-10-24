@@ -128,6 +128,27 @@ def test_confirmed_product_phrases_classify_without_review_label_injection():
     assert evidence.data_points is None
 
 
+def test_review_risk_words_and_market_refs_are_bound_to_the_candidate():
+    policy = PublishedPolicy(
+        "synthetic-rule",
+        "published",
+        "synthetic-account",
+        "synthetic-product",
+        review_risk_words=("replacement parts",),
+    )
+    row = classify_from_evidence(
+        keyword="replacement parts spatula",
+        source_rank=1,
+        source_row_refs=("synthetic:row",),
+        product=_product(),
+        policy=policy,
+        market_observation_refs=("synthetic:observation",),
+    )
+    assert row.market_observation_refs == ("synthetic:observation",)
+    assert row.data is None
+    assert "RULE_RISK_WORD_REVIEW" in build_evidence(row, policy, None).hard_risk_reasons
+
+
 def test_reviewed_phrase_must_match_whole_phrase_and_have_valid_provenance():
     records = parse_reviewed_phrases(
         [

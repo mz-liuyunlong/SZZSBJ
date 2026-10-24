@@ -21,6 +21,7 @@ from .rule_gates import (
     KeywordDecision,
     KeywordEvidence,
     ProductConfirmation,
+    ScoringProfile,
     allocate_ads,
     normalize_keyword,
     product_confirmation_errors,
@@ -169,6 +170,10 @@ class KeywordInput:
     intent: ReviewedScore | None
     root: VerifiedRoot | None
     data: MarketPoints | None
+    market_observation_refs: tuple[str, ...] = ()
+    market_evidence_status: Literal[
+        "source_missing", "source_invalid", "multiple_observations_review", "formula_pending"
+    ] = "source_missing"
     classification_origin: Literal["confirmed_fact", "reviewed_phrase", "manual_review"] = (
         "manual_review"
     )
@@ -193,9 +198,11 @@ class PublishedPolicy:
     source_account_ref: str
     product_id: str
     limits: ColdStartLimits = ColdStartLimits()
+    scoring: ScoringProfile = ScoringProfile()
     # Registry requires external confirmation records; full token match, not substrings.
     confirmed_brands: Mapping[str, str] | None = None
     suspected_brands: Mapping[str, str] | None = None
+    review_risk_words: tuple[str, ...] = ()
     data_missing_strategy: Literal["null_review", "legacy_unknown_two"] = "null_review"
     d04_evidence_ref: str | None = None
 
@@ -452,7 +459,7 @@ def run_published_v11(
     ):
         raise ValueError("PAGE_SNAPSHOT_IDENTITY_OR_ACCOUNT_MISMATCH")
     evidence = tuple(build_evidence(x, policy, page) for x in candidates)
-    decisions = allocate_ads(evidence, policy.limits)
+    decisions = allocate_ads(evidence, policy.limits, policy.scoring)
     if policy.status != "published":
         # Draft calculations are visible for review but cannot create an
         # executable Exact/Broad target or official output.

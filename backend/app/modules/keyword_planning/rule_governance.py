@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import AiKwRuleDecision, AiKwRuleDecisionEvent, AiKwRuleSet, AiKwRuleVersion
-from .rule_gates import ALGORITHM_VERSION, ColdStartLimits
+from .rule_gates import ALGORITHM_VERSION, ColdStartLimits, ScoringProfile
 
 
 class RuleGovernanceBlocked(ValueError):
@@ -88,6 +88,10 @@ def build_draft_config(
         or len(json.dumps(editor_config, ensure_ascii=False)) > 16384
     ):
         raise RuleGovernanceBlocked("EDITOR_CONFIG_INVALID")
+    try:
+        ScoringProfile.from_editor_config(dict(editor_config or {}))
+    except ValueError as exc:
+        raise RuleGovernanceBlocked(str(exc)) from exc
     return {
         "limits": values,
         "confirmed_brands": confirmed,
