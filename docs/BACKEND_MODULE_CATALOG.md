@@ -14,6 +14,7 @@
 | Data Layer Foundation | `backend/app/core/config.py`, `backend/app/db/`, `backend/alembic/` | PostgreSQL 配置、同步 SQLAlchemy 会话和 Alembic 基础设施 |
 | Product Management Backend MVP | `backend/app/modules/products/` | 新系统自有的产品主数据与平台销售关系 CRUD 边界 |
 | Lingxing RAW Foundation | `backend/app/integrations/lingxing/`, `backend/app/models/raw_lingxing_api.py`, `backend/app/repositories/lingxing_raw.py`, `backend/app/services/lingxing_raw.py` | 受控 endpoint allowlist 的 readonly client 与脱敏 L2 RAW 写入边界 |
+| Walmart Monitor RAW Ingestion V1 | `backend/app/modules/walmart_monitor/` | 接收一个统一 logical-check 事件，校验压缩 RAW 完整性并幂等写入独立 L2 RAW 表；不写 Listing/ODS/MART |
 | Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
 | Integration Sync Governance + Lingxing SKU Detail Foundation V1 | `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | 当前实现分支已准备可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW importer、任务骨架与受保护 API contract；合并前仍为 `approved_for_implementation` |
 | Media Image Assets M1 | `backend/app/modules/media_assets/` | 第三方商品图登记、异步安全缓存、128/512 WebP 派生图、签名同源读取和 Product Management 图片加速；受控 backfill 同时承担 pending/retryable-failed/stale-processing reconciliation；生产 migration/backfill 需独立授权 |
@@ -81,6 +82,28 @@
 | PRP | `PRPs/product-management-backend-mvp.md` |
 | PR | `#41`；merge commit `fab3aef` |
 | Not in scope | Frontend, legacy migration/runtime reads, external APIs/sync, import/export, workers, calculations, mart/read model, production DB, deployment, CI PostgreSQL |
+
+## Walmart Monitor RAW Ingestion V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Walmart Monitor RAW Ingestion V1 |
+| Module key | `walmart-monitor-raw-ingestion-v1` |
+| Status | `approved_for_implementation`；当前分支实现已通过定向和完整后端验证，合并前不标记 `implemented` |
+| Main role | Backend Engineer；branch `codex/walmart-monitor-raw-ingestion-v2` |
+| Purpose | 将监控端一个 logical check（含 Decodo、Chrome 和 fallback attempts）作为单一 `walmart-monitor.raw.v1` 事件完整、幂等、append-only 保存 |
+| Backend files | `backend/app/modules/walmart_monitor/`、一个 additive Alembic revision、settings/auth seam、scoped synthetic tests |
+| API | `POST /api/integrations/walmart-monitor/raw-events`；统一 envelope；无 RAW read API |
+| Authentication | 精确 POST 路径专用 bearer secret；machine principal `walmart-monitor-service`；仅 `integrations:walmart-monitor:write` |
+| Data scope | Producer-bound opaque `source_account_ref + store_id + item_id`；不推断、不扩权、不返回 RAW |
+| Storage | 独立 `raw_walmart_monitor_events` L2 RAW 表；完整 payload JSONB + searchable safe envelope；无 business-table foreign key |
+| Integrity | base64/gzip/declared bytes/SHA-256、bounded decompression、schema limits、canonical hash、PostgreSQL atomic `event_id` conflict handling |
+| Transaction | 首次事件 commit；相同重放返回 duplicate；同 ID 不同内容 409；任何失败 rollback，不留部分事件 |
+| Source Decision | `docs/data-sources/decisions/walmart-monitor-raw-ingestion-decision.md` |
+| PRP | `PRPs/walmart-monitor-raw-ingestion.md` (Approved 2026-10-22) |
+| API documentation | `docs/api/walmart-monitor-integration.md` |
+| Validation | targeted `28 passed`; full backend `1336 passed, 28 skipped`; full Ruff/compileall/Alembic head/rule-pack PASS；isolated PostgreSQL suites remain opt-in and were not connected |
+| Not in scope | 商品来源 GET、监控端代码/SQLite、历史导入、RAW parser、ODS/MART/Listing、Celery、对象存储、外部 API、生产 migration/deploy、frontend、old-system |
 
 ## Lingxing RAW Foundation
 
