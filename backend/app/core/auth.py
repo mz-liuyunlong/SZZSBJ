@@ -35,6 +35,7 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "page:warehouse:wfs-fee-alert:view",
         "page:settings:fee-rules:view",
         "page:pmc:purchase-board:view",
+        "page:pmc:domestic-warehouse-board:view",
         "page:operations:plan:view",
         "page:data-center:task-center:view",
         "products:read",
@@ -51,6 +52,7 @@ _PREVIEW_PERMISSIONS: Final = frozenset(
         "business-rules:write",
         "business-rules:execute",
         "pmc:purchase:read",
+        "pmc:domestic-batch:read",
         "operations:plan:read",
         "operations:plan:write",
     }

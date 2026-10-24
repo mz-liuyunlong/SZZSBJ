@@ -3,7 +3,9 @@ import { Tag, Tooltip, Typography } from "antd";
 import { WalmartItemLink } from "@/components/report-table/cells";
 import StatusTag from "@/shared/status/StatusTag";
 import {
+  EMPTY,
   exclusionLabels,
+  itemIdSourceColors,
   itemIdSourceLabels,
   skuCycleSourceLabels,
   stageLabels,
@@ -15,22 +17,34 @@ import type {
   SkuCycleSample,
 } from "@/pages/pmc/purchase-board/purchaseBoardTypes";
 
-/** Status column: stage tag + overdue days (purchase vs arrival kept apart) + WFS flag. */
-export function StageCell({ stage, wfsNotReady }: { stage: PurchaseStageRef; wfsNotReady?: boolean | null }) {
+/** Overdue days, kept apart from the stage label. Purchase timeout and arrival overdue use different copy. */
+export function OverdueCell({ stage }: { stage: PurchaseStageRef }) {
+  if (stage.overdueDays <= 0) return EMPTY;
+  const purchaseTimeout = stage.overdueKind === "purchase";
+  return (
+    <Tooltip title={purchaseTimeout ? "待采购超时" : "到货逾期"}>
+      <Tag color="red">
+        {purchaseTimeout ? "待采购超时" : "逾期"} {stage.overdueDays} 天
+      </Tag>
+    </Tooltip>
+  );
+}
+
+/** Status column: stage tag and the WFS flag. Overdue days render in their own column. */
+export function StageCell({
+  stage,
+  wfsNotReady,
+  showOverdue = false,
+}: {
+  stage: PurchaseStageRef;
+  wfsNotReady?: boolean | null;
+  showOverdue?: boolean;
+}) {
   const preset = stageLabels[stage.stageCode] ?? stageLabels.UNKNOWN;
-  const overdue = stage.overdueDays > 0
-    ? (
-      <Tooltip title={stage.overdueKind === "purchase" ? "待采购超时" : "到货逾期"}>
-        <Tag color="red">
-          {stage.overdueKind === "purchase" ? "待采购超时" : "逾期"} {stage.overdueDays} 天
-        </Tag>
-      </Tooltip>
-    )
-    : null;
   return (
     <span className="purchase-board__stage-cell">
       <StatusTag value={stage.stageCode} label={preset.label} color={preset.color} />
-      {overdue}
+      {showOverdue && stage.overdueDays > 0 ? <OverdueCell stage={stage} /> : null}
       {wfsNotReady ? <Tag color="orange">WFS 待转换</Tag> : null}
     </span>
   );
@@ -82,15 +96,22 @@ export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
   const { itemId } = row;
   if (!itemId.itemId) {
     return (
-      <Tag color={itemId.matchStatus === "unresolved" ? "red" : "gold"}>
+      <Tag color={itemIdSourceColors[itemId.source]}>
         {itemIdSourceLabels[itemId.source]}
       </Tag>
     );
   }
   return (
     <span className="purchase-board__itemid-cell">
-      <WalmartItemLink itemId={itemId.itemId} />
-      <Typography.Text type="secondary">{itemIdSourceLabels[itemId.source]}</Typography.Text>
+      <span className="purchase-board__itemid-line">
+        <WalmartItemLink itemId={itemId.itemId} />
+        <Tag color={itemIdSourceColors[itemId.source]}>{itemIdSourceLabels[itemId.source]}</Tag>
+      </span>
+      {itemId.msku ? (
+        <Typography.Text className="purchase-board__itemid-msku" ellipsis={{ tooltip: itemId.msku }}>
+          {itemId.msku}
+        </Typography.Text>
+      ) : null}
     </span>
   );
 }

@@ -10,6 +10,10 @@ export interface ManagementStatCardItem<Key extends string = string> {
   ariaLabel?: string;
   subtitle: string;
   value: number | string;
+  /** Shown under the number. Used by the leading layout. */
+  unit?: string;
+  /** Icon sits on the left; title, number, unit and subtitle stack on the right. */
+  layout?: "leading";
   tone: ManagementStatTone;
   icon: ReactNode;
   accent?: string;
@@ -73,6 +77,8 @@ function ManagementStatCards<Key extends string>({
       {cards.map((card) => {
         const active = activeKey === card.key;
         const tone = toneConfig[card.tone];
+        const shownValue = formatValue(card.value);
+        const accessibleValue = card.unit && card.value !== "—" ? `${shownValue} ${card.unit}` : shownValue;
 
         return (
           <button
@@ -80,6 +86,7 @@ function ManagementStatCards<Key extends string>({
             className={[
               "management-stat-card",
               `management-stat-card--${card.tone}`,
+              card.layout === "leading" ? "management-stat-card--leading" : "",
               active ? "is-active" : "",
             ].filter(Boolean).join(" ")}
             style={{
@@ -88,7 +95,7 @@ function ManagementStatCards<Key extends string>({
             } as CSSProperties}
             type="button"
             aria-pressed={active}
-            aria-label={`${card.ariaLabel ?? card.title}：${formatValue(card.value)}`}
+            aria-label={`${card.ariaLabel ?? card.title}：${accessibleValue}`}
             onClick={() => onCardClick(card.key)}
             onKeyDown={(event) => handleKeyDown(event, card.key)}
           >
@@ -96,14 +103,27 @@ function ManagementStatCards<Key extends string>({
               {card.icon}
             </span>
 
-            <span className="management-stat-card__content">
-              <span className="management-stat-card__title">{card.title}</span>
-              <span className="management-stat-card__subtitle">{card.subtitle}</span>
-            </span>
+            {card.layout === "leading" ? (
+              <span className="management-stat-card__copy">
+                <span className="management-stat-card__title">{card.title}</span>
+                <span className="management-stat-card__value">{shownValue}</span>
+                {card.unit && card.value !== "—" ? (
+                  <span className="management-stat-card__unit">{card.unit}</span>
+                ) : null}
+                <span className="management-stat-card__subtitle">{card.subtitle}</span>
+              </span>
+            ) : (
+              <>
+                <span className="management-stat-card__content">
+                  <span className="management-stat-card__title">{card.title}</span>
+                  <span className="management-stat-card__subtitle">{card.subtitle}</span>
+                </span>
 
-            <span className="management-stat-card__value">
-              {formatValue(card.value)}
-            </span>
+                <span className="management-stat-card__value">
+                  {shownValue}
+                </span>
+              </>
+            )}
           </button>
         );
       })}

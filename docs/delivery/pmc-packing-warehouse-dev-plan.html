@@ -1,0 +1,142 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>国内仓 · 打包单（仓库）开发计划</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--ink:#101828;--sub:#667085;--line:#e4e7ec;--acc:#1677ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.7 "PingFang SC","Microsoft YaHei",Inter,system-ui,sans-serif;padding:20px}
+main{max-width:1080px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px 32px}
+h1{font-size:24px;margin:0 0 8px}h2{font-size:18px;margin:28px 0 8px;border-top:1px solid var(--line);padding-top:18px}h3{font-size:15px;margin:18px 0 6px}
+.meta{color:var(--sub);font-size:12px;margin-bottom:16px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 14px}th,td{border:1px solid var(--line);padding:6px 8px;vertical-align:top;text-align:left}th{background:#f9fafb;white-space:nowrap}
+code{background:#f2f4f7;padding:1px 4px;border-radius:4px;font:12.5px/1.5 ui-monospace,Menlo,monospace}
+ul{margin:6px 0 10px;padding-left:20px}
+@media print{body{background:#fff;padding:0}main{border:0}}
+</style><aside style="padding:18px;background:#fff7e6;border:1px solid #ffd591;margin:16px"><strong>2026-10-21 负责人定稿更新</strong><p>到仓日期采用入库日；资料不足须仓库补填；少装带分类原因可完成并待中台处置；已完成单独走改装箱。复用现有IAM分别授权。超发通知仅本地待通知任务。余量已确认扣除当前PK审批Q；多装业务接口与本地模拟联调已完成，真实领星同步未配置；下文旧暂行等量限制及待定日期口径已失效。权威规则见 docs/data-sources/decisions/pmc-packing-warehouse-decision.md，接口见 docs/delivery/pmc-packing-warehouse-api.md。</p></aside>
+<main>
+<p class="meta">2026-10-21 · 只作开发计划 · 本次不建分支、不提交、不改业务代码、不升级版本、不连生产</p>
+<h1>国内仓「打包单（仓库）」开发计划</h1>
+<p>对照线上国内仓看板 <a href="http://170.106.176.172:8088/domestic/">http://170.106.176.172:8088/domestic/</a>（DEMO v11，数据截至 2026-10-20）、仓库 <code>old-walmar-flie</code>（20261019 快照，审批服务 <code>review_server/server.py</code>）和《PMC 交接文档》2026-10-19 第 4 章、第 5.2 节。本计划只覆盖国内仓页的「打包单（仓库）」页签，包括列表、装箱、打包完成、改报关、延迟备注，以及对应的接口和表。打包单审批、批次看板、双轨对账、通知设置、WFS 改装箱和领星写入不在这里开发。</p>
+
+<h2>1. 三个来源怎么对上</h2>
+<table>
+<thead><tr><th>来源</th><th>这一页在做什么</th></tr></thead>
+<tbody>
+<tr><td>线上页面</td><td>页签「打包单（仓库）」。行来自已审批、尚未按发货单发出的打包单。是否已打包由本系统判定：仓库填装箱并点打包完成。不再用领星装箱信息代替。箱型固定 A 58×40×45、B 46×46×52、C 53×43×48，另可自定义。装箱和打包完成挂系统 PK。没有 PK 的领星人工单用「OWS|ItemID」。</td></tr>
+<tr><td>旧代码</td><td>页面构建只读 CSV。运行时 <code>GET /pmc-api/domestic/state</code> 读状态，<code>POST /pmc-api/domestic/event</code> 追加事件。本页会提交的 kind 是 <code>boxes</code>、<code>done</code>、<code>customs</code>、<code>pnote</code>。口令加固定姓名，不是正式登录。服务本身不调领星。</td></tr>
+<tr><td>交接文档</td><td>打包完成后进入领星「更多箱规」队列，由另行执行器写入。延迟备注 8 类，最新一条为准，「已处理」表示解除。改装箱和换店铺的入口在 WFS 页，不在本页。</td></tr>
+</tbody>
+</table>
+
+<h2>2. 新系统现在有什么</h2>
+<p>国内仓看板里已经有「打包单（仓库）」页签，但是空表。筛选、分页、列宽只存在浏览器里。填装箱、打包完成、标签 PDF 都是禁用，并写明服务未接入。页面不请求批次接口来冒充打包单。</p>
+<p>后端已有打包审批的订单、库存分配、事件和人工 OWS 关联。事件目前只允许通过、驳回、关联、作废、测试标记。没有装箱行、打包完成、报关修改、延迟备注这几类数据。本计划不另建一套与审批单无关的打包单主表，装箱挂在已经通过的 <code>ops_domestic_packing_orders</code> 上。</p>
+
+<h2>3. 页面要做成什么样</h2>
+<p>继续用现有页签和现有列，接入真实查询后再打开按钮。线上这一页的列是：</p>
+<table>
+<thead><tr><th>列</th><th>规则</th></tr></thead>
+<tbody>
+<tr><td>审批日期、打包单</td><td>审批通过时间与系统 PK。能复制 PK。没有本系统 PK 的领星人工单本计划先不造出来。</td></tr>
+<tr><td>到仓日期</td><td>用收货单的实际收货日。一张单有多个收货日就都保留。没有收货日显示待核实，不用入库日代替。</td></tr>
+<tr><td>入库单号、采购单号、SKU、店铺、ItemID、GTIN</td><td>取审批当时保存的快照。SKU、入库单号、采购单号、GTIN、ItemID 提供复制，和批次看板同一套复制按钮。ItemID 可打开沃尔玛链接。</td></tr>
+<tr><td>领星打包单</td><td>显示已保存的人工 OWS 号。领星侧状态未发布时标明未核对，不显示成已关联成功。</td></tr>
+<tr><td>打包数量、批次余额</td><td>打包数量是审批通过的数量。批次余额来自当前已发布入库看板，缺失保持未知，不写成 0。</td></tr>
+<tr><td>装箱数据</td><td>箱型、箱数、每箱件数、单箱毛重。自定义箱还要长宽高。合计与打包数量不一致时必须有原因。</td></tr>
+<tr><td>状态</td><td>待打包，或已打包待发。打包完成由本系统记录。领星箱规写入状态单独显示，未执行就写未写入，不假装已写入。</td></tr>
+<tr><td>打包天数、在仓天数</td><td>按北京业务日计算。没有审批日或到仓日则未知。</td></tr>
+<tr><td>延迟备注</td><td>原因分类加说明。列表显示最新一条。历史留在事件里。</td></tr>
+<tr><td>是否报关</td><td>显示审批时保存的值。本页可以改为报关或不报关，必须写原因。</td></tr>
+<tr><td>单品包装 / 毛重</td><td>仅当产品默认箱规缺少包装规格或单品毛重时，打包完成前必填。长宽高厘米，毛重克。资料还不能判断时，不强制、也不写成已齐全。</td></tr>
+<tr><td>产品标签、操作</td><td>操作是填装箱、改装箱（仅未完成）、打包完成、写延迟备注、改报关。标签 PDF 单独切片，未做之前按钮保持禁用。</td></tr>
+</tbody>
+</table>
+<p>筛选保持现有三项：待打包、已打包待发、全部。可按店铺、关键字、审批日期筛选。默认待打包，按审批时间倒序。</p>
+
+<h2>4. 谁能进这张表</h2>
+<ul>
+<li>只列出本系统已通过、未作废、且还没有被发货单标成已发出的 PK。驳回单不出现。</li>
+<li>已打包完成的仍留在「已打包待发」和「全部」里，直到发货事实接入后再移出。发货完成率本计划不算，缺少发货事实时不把单标成已发出。</li>
+<li>仓库固定惠州仓。调用方不能改仓库范围。</li>
+<li>测试单可以显示，但要带测试标记。不能把测试单写成正式单。</li>
+</ul>
+
+<h2>5. 数据库</h2>
+<p>不新建与审批平行的主表，不把旧 JSONL 原样导入。事件继续只插入，不能改、不能删。</p>
+<table>
+<thead><tr><th>对象</th><th>作用</th><th>约束</th></tr></thead>
+<tbody>
+<tr><td>已有 <code>ops_domestic_packing_orders</code></td><td>打包单主体和审批快照。</td><td>本计划只读它来列表，不改审批状态机。</td></tr>
+<tr><td><code>ops_domestic_packing_box_sets</code></td><td>一张 PK 当前的装箱头：合计件数、申报数量、差异原因、是否已完成、完成人与完成时间、单品包装。</td><td>一张有效订单只有一套当前装箱。完成后禁止再覆盖，除非以后的改装箱切片。</td></tr>
+<tr><td><code>ops_domestic_packing_box_lines</code></td><td>箱行。</td><td>1 到 20 行。箱型 A、B、C 或 custom。箱数 1 到 9999，每箱件数 1 到 100000，毛重 0.01 到 200 千克。自定义箱长宽高 1 到 300 厘米。</td></tr>
+<tr><td><code>ops_domestic_packing_notes</code></td><td>延迟备注当前投影，方便列表读最新一条。</td><td>分类只允许：到货不齐、等标签、等包材、等运营确认、仓库排期、质检问题、其他、已处理。选其他时说明至少 2 个字。</td></tr>
+<tr><td>已有 <code>evt_domestic_packing_events</code></td><td>追加 <code>boxes</code>、<code>done</code>、<code>customs</code>、<code>note</code>。</td><td>放宽事件种类约束。请求、原因、操作人、订单版本写入事件。旧的通过和驳回事件不动。</td></tr>
+</tbody>
+</table>
+<p>报关修改写回订单上的报关值和来源「人工」，同时留事件。不覆盖原来的审批事件。</p>
+<p>领星箱规写入记录本计划不建执行表。页面状态固定为未写入，直到单独批准写入领星。</p>
+
+<h2>6. 接口</h2>
+<p>前缀 <code>/api/pmc/domestic/packing-warehouse</code>。统一返回 <code>{ success, data, error, meta, request_id }</code>。都要登录，并且只能看被允许的数据源账号。GET 不写库、不调领星。</p>
+<table>
+<thead><tr><th>方法</th><th>路径</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td>GET</td><td><code>/orders</code></td><td>分页列表。筛选状态、店铺、关键字、审批日期。返回上表各列和当前装箱、最新备注。</td></tr>
+<tr><td>GET</td><td><code>/orders/summary</code></td><td>待打包、已打包待发张数。数字来自同一查询条件，点击只筛选列表。</td></tr>
+<tr><td>GET</td><td><code>/orders/{id}</code></td><td>装箱明细、报关、备注历史、完成状态。</td></tr>
+<tr><td>POST</td><td><code>/orders/{id}/boxes</code></td><td>保存装箱。未完成才能保存。合计不等于打包数量时原因必填。幂等键重复提交返回原结果。</td></tr>
+<tr><td>POST</td><td><code>/orders/{id}/done</code></td><td>打包完成。必须已有装箱。需要单品包装时校验长宽高和毛重。完成后再次装箱或再次完成都拒绝。</td></tr>
+<tr><td>POST</td><td><code>/orders/{id}/customs</code></td><td>改为报关或不报关。原因至少 2 个字，新值必须和当前值不同。未通过或已作废不能改。</td></tr>
+<tr><td>POST</td><td><code>/orders/{id}/notes</code></td><td>追加延迟备注。只追加，列表用最新一条。</td></tr>
+</tbody>
+</table>
+<p>查看用国内仓页面权限。填装箱、打包完成、改报关、写备注各自独立动作权限，不能用能看页面代替。已作废、已驳回、来源版本对不上，写操作拒绝并要求刷新。</p>
+<p>不做这些接口：一个地址接收所有 kind、<code>/pmc-api/domestic/event</code>、口令校验、标签 PDF、改装箱、换店铺、调用领星建备货单或写箱规。</p>
+
+<h2>7. 后端放在哪</h2>
+<p>继续放在现有 <code>pmc_domestic</code> 模块，单独的仓库路由和服务，不塞进审批通过的同一个函数。保存装箱、完成、改报关、写备注各自一个事务：锁这张订单，重读状态，校验，写当前表和事件，然后提交。失败整单回滚。</p>
+<p>列表读已通过订单、装箱投影、备注投影、入库看板余额和收货日。打不开页面时不去领星补查。</p>
+
+<h2>8. 前端</h2>
+<p>替换现有空表的数据源，保留页签、筛选和列。接入列表后再启用填装箱、打包完成、改报关、延迟备注。标签 PDF 仍禁用。接口失败时显示错误，不用空表假装没有单。无写权限时按钮不可用，并说明缺哪一个权限。</p>
+
+<h2>9. 实施顺序</h2>
+<p>一次只做一刀。下面是顺序，不是本次要写的代码。</p>
+<table>
+<thead><tr><th>顺序</th><th>范围</th><th>完成就停</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>列表和汇总。只读已通过 PK，空表变真数据，写按钮仍禁用。</td><td>有接口文档、权限、分页和到仓日规则的测试。</td></tr>
+<tr><td>2</td><td>填装箱、改装箱（仅未完成）、装箱表。</td><td>箱数和数量校验、完成后不能再改。</td></tr>
+<tr><td>3</td><td>打包完成，以及必要时的单品包装。</td><td>没有装箱不能完成。资料不足时不编造「已齐全」。</td></tr>
+<tr><td>4</td><td>改报关、延迟备注。</td><td>原因和分类校验，事件只追加。</td></tr>
+<tr><td>以后另开</td><td>标签 PDF、发货后移出列表、WFS 改装箱、领星箱规写入、领星人工单补录、生产开放。</td><td>每一项单独计划和批准。</td></tr>
+</tbody>
+</table>
+
+<h2>10. 验收</h2>
+<ul>
+<li>待打包列表只出现已通过且未完成的 PK。完成后进入已打包待发，审批页的驳回单不出现。</li>
+<li>装箱合计与数量不一致且没写原因时不能保存。完成后填装箱和再次完成都失败。</li>
+<li>到仓日缺失时是待核实，不是入库日。</li>
+<li>改报关和延迟备注都留下不能修改的事件。</li>
+<li>无页面权限打不开。有页面权限但没有对应动作权限时，按钮不可用。</li>
+<li>不调用领星，不把箱规状态显示成已写入。</li>
+</ul>
+
+<h2>11. 不要做的事</h2>
+<ul>
+<li>不把 <code>old-walmar-flie</code> 的页面或 <code>server.py</code> 抄进新系统。</li>
+<li>不用国内仓口令或固定姓名当权限。</li>
+<li>不用批次看板的入库行冒充已审批打包单。</li>
+<li>不在本计划写入领星，不改采购、用户和角色里已有的授权数据。</li>
+<li>不把本地测试 PK 当成生产打包记录。</li>
+</ul>
+
+<h2>12. 还要负责人拍板的点</h2>
+<ul>
+<li>产品默认箱规缺包装规格或毛重时，打包完成是否强制填写。线上是强制；新系统在这几列还没同步进来之前，不能判断，需要确认先不强制还是先补同步。</li>
+<li>已打包待发要一直留到发货单接入，还是完成后就只在「全部」里。</li>
+<li>没有本系统 PK、只有领星人工 OWS 的旧单，要不要进这张表。本计划默认不进。</li>
+<li>生产何时允许真实装箱。在此之前沿用打包审批的本地验证限制。</li>
+</ul>
+</main>

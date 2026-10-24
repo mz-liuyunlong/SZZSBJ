@@ -7,13 +7,14 @@ the rule table and ``dim_lingxing_stores``. Never ODS / RAW, never writes.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.pmc_purchase.calculations import AVERAGE_CYCLE_WINDOW_DAYS
 from app.modules.pmc_purchase.gate3_models import (
     DwdPurchasePlan,
     DwsPurchaseBoard,
@@ -120,6 +121,29 @@ class PmcPurchaseReadRepository:
             clauses.append(b.wfs_not_ready.is_(query.wfs_not_ready))
         if query.today_followup:
             clauses.append(or_(b.overdue_days > 0, b.due_date == today))
+        summary_filter = query.summary_filter if isinstance(query, BoardListQuery) else None
+        if summary_filter == "awaiting_arrival":
+            clauses.append(b.stage_code.in_(("S3", "S4")))
+        elif summary_filter == "arrival_overdue":
+            clauses.append(b.stage_code.in_(("S3", "S4")))
+            clauses.append(b.overdue_days > 0)
+        elif summary_filter == "purchase_overdue":
+            clauses.append(b.stage_code == "S2")
+            clauses.append(b.overdue_days > 0)
+        elif summary_filter == "average_cycle":
+            window_start = today - timedelta(days=AVERAGE_CYCLE_WINDOW_DAYS)
+            clauses.append(b.arrival_date.is_not(None))
+            clauses.append(b.purchase_cycle_days.is_not(None))
+            clauses.append(b.arrival_date >= window_start)
+        elif summary_filter == "month_amount":
+            clauses.append(b.order_date >= today.replace(day=1))
+            clauses.append(b.amount_allocated.is_not(None))
+            clauses.append(b.amount_allocated != 0)
+        elif summary_filter == "unstable_sku":
+            clauses.append(b.sku_cycle_unstable.is_(True))
+        elif summary_filter == "itemid_pending":
+            clauses.append(b.item_id.is_(None))
+            clauses.append(b.stage_code != "S0")
         return clauses
 
     def _board_select(
@@ -192,19 +216,6 @@ class PmcPurchaseReadRepository:
                 )
                 .order_by(DwsPurchaseSkuCycle.sku)
             )
-        )
-
-    def unstable_sku_count(self, accounts: frozenset[str]) -> int:
-        return int(
-            self.session.scalar(
-                select(func.count())
-                .select_from(DwsPurchaseSkuCycle)
-                .where(
-                    DwsPurchaseSkuCycle.source_account_ref.in_(sorted(accounts)),
-                    DwsPurchaseSkuCycle.unstable.is_(True),
-                )
-            )
-            or 0
         )
 
     # -- pending plans (status = 2, not yet on any purchase-order line) --

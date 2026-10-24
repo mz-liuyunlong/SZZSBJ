@@ -37,6 +37,7 @@ AI 开发新页面前，必须先查看本文件，优先复用已有组件，�
 | ReportTableShell | Shared | `frontend/src/components/report-table/ReportTableShell.tsx` | 固定表头、内部滚动与固定分页外壳 | 高密度运营报表 |
 | ReportTableSelectionBar | Shared | `frontend/src/components/report-table/ReportTableShell.tsx` | 已选数量与向上展开的批量操作入口 | 可多选的高密度报表 |
 | ConnectedSearch | Shared | `frontend/src/components/report-table/ConnectedSearch.tsx` | 搜索类型、输入、搜索与批量入口的连体控件 | 产品、销售及后续高密度报表工具栏 |
+| CommittedSearch | Shared | `frontend/src/components/report-table/CommittedSearch.tsx` | 已提交搜索与批量输入，避免输入时立即查询 | 采购/国内仓；复用ConnectedSearch。可选searchButtonText与batchPlacement用于文字搜索按钮及批量入口先后位置，默认行为保持兼容；ConnectedSearch.test.tsx覆盖默认与新增布局；未新增UI依赖 |
 | ResetButton | Shared | `frontend/src/components/report-table/ResetButton.tsx` | 报表筛选区统一重置按钮 | 产品、销售及后续高密度报表工具栏 |
 | RuntimeColumnConfigDrawer | Shared | `frontend/src/components/report-table/RuntimeColumnConfigDrawer.tsx` | 仅运行时生效的列显示与顺序配置 | 可配置列的报表表格 |
 | ResizableColumnTitle | Shared | `frontend/src/components/report-table/ResizableColumnTitle.tsx` | 拖拽参考线预览、松开后应用且无持久化的可访问列宽调整 | 支持列宽调整的报表表格 |

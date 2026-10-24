@@ -163,6 +163,7 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "action:pmc:purchase-board:override",
     ),
     RequestPermissionRule(None, "/api/pmc/purchase", "page:pmc:purchase-board:view"),
+    RequestPermissionRule(None, "/api/pmc/domestic", "page:pmc:domestic-warehouse-board:view"),
     RequestPermissionRule(
         "POST",
         "/api/operations/plans/products/",
@@ -269,6 +270,31 @@ def permission_for_request(method: str, path: str, declared_permission: str) -> 
         if path.endswith("/mark-recovered"):
             return "action:warehouse:wfs-fee-alert:mark-recovered"
 
+    if normalized_method == "POST" and path.startswith(
+        "/api/pmc/domestic/packing-approval/pending/"
+    ):
+        if path.endswith("/approve"):
+            return "action:pmc:domestic-warehouse-board:packing-approve"
+        if path.endswith("/reject"):
+            return "action:pmc:domestic-warehouse-board:packing-reject"
+    if normalized_method == "POST" and path.startswith(
+        "/api/pmc/domestic/packing-warehouse/orders/"
+    ):
+        actions = {
+            "boxes": "packing-boxes-save",
+            "done": "packing-done",
+            "customs": "packing-customs",
+            "notes": "packing-note",
+            "unpacked": "packing-unpacked-dispose",
+            "rebox": "packing-rebox",
+            "supplemental-inbound": "packing-supplement-ib",
+            "supplemental-sync": "packing-supplement-sync",
+        }
+        action = actions.get(path.rsplit("/", 1)[-1])
+        if action:
+            return "action:pmc:domestic-warehouse-board:" + action
+    if normalized_method == "POST" and path == "/api/pmc/domestic/packing-approval/manual":
+        return "action:pmc:domestic-warehouse-board:packing-manual-create"
     for rule in _RULES:
         if rule.matches(normalized_method, path):
             if (

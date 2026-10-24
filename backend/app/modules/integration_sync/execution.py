@@ -21,6 +21,9 @@ from app.modules.integration_sync.handlers.lingxing_batch_product_info import (
     BatchPlan,
     LingxingBatchGetProductInfoSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_pmc_domestic_sync import (
+    PMC_DOMESTIC_HANDLERS,
+)
 from app.modules.integration_sync.handlers.lingxing_pmc_purchase_sync import (
     PMC_PURCHASE_HANDLERS,
 )
@@ -87,6 +90,15 @@ class SyncRunExecutionService:
             and interface.handler_key == purchase_handler.handler_key
         ):
             purchase_handler(self.session).execute(run, interface)
+            return
+
+        domestic_handler = PMC_DOMESTIC_HANDLERS.get(run.interface_key)
+        if (
+            run.provider == "lingxing"
+            and domestic_handler is not None
+            and interface.handler_key == domestic_handler.handler_key
+        ):
+            domestic_handler(self.session).execute(run, interface)
             return
 
         is_productinfo = (

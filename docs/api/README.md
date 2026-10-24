@@ -24,3 +24,4 @@ settings.md
 - `integration-sync-governance-sku-detail-v1.md`
 - `pmc-purchase-api.md`（PMC 采购看板只读 API，Gate 3）
 - `walmart-monitor-target-source.md`（Walmart 监控目标只读来源接口）
+- `pmc-domestic-batch-board-api.md`（PMC 国内仓批次看板只读 API）

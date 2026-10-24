@@ -1,0 +1,1 @@
+2026-10-21：当前dev、本地szzsbj_dev。手工创建、审批前商品修改、默认报关、权限、并发库存/幂等及前后端联调完成。后端26 passed，Vitest6 passed，Playwright3 passed，tsc/ESLint通过。最终只读核对4审批/3分配/4事件/0手工申请/0合成MART，原用户29与MART2908保留。临时8012/4173已停，无生产操作或Git提交。

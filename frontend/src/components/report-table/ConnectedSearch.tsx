@@ -14,6 +14,8 @@ interface ConnectedSearchProps {
   inputValue: string;
   searchAriaLabel?: string;
   batchControl?: ReactNode;
+  searchButtonText?: string;
+  batchPlacement?: "before-search" | "after-search";
   filterAction?: {
     ariaLabel: string;
     tooltip?: string;
@@ -34,6 +36,8 @@ function ConnectedSearch({
   inputValue,
   searchAriaLabel = "搜索",
   batchControl,
+  searchButtonText,
+  batchPlacement = "after-search",
   filterAction,
   onTypeChange,
   onInputChange,
@@ -55,12 +59,14 @@ function ConnectedSearch({
         onChange={(event) => onInputChange(event.target.value)}
         onPressEnter={onSearch}
       />
+      {batchPlacement === "before-search" && batchControl}
       <Button
         className="report-table-connected-search__search"
+        type={searchButtonText ? "primary" : "default"}
         aria-label={searchAriaLabel}
-        icon={<SearchOutlined aria-hidden="true" />}
+        icon={searchButtonText ? undefined : <SearchOutlined aria-hidden="true" />}
         onClick={onSearch}
-      />
+      >{searchButtonText}</Button>
       {filterAction && (
         <Tooltip title={filterAction.tooltip}>
           <Button
@@ -71,7 +77,7 @@ function ConnectedSearch({
           />
         </Tooltip>
       )}
-      {batchControl}
+      {batchPlacement === "after-search" && batchControl}
     </div>
   );
 }

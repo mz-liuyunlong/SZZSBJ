@@ -1,0 +1,20 @@
+.domestic-approval { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; }
+.domestic-approval__summary-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.domestic-approval__created-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.domestic-approval__created-range > .ant-picker { width: 270px; }
+.domestic-approval__full-width { width: 100%; }
+.domestic-approval__hint { margin-bottom: 16px; }
+.domestic-approval .report-table-shell { flex-direction: column; }
+.domestic-approval .report-table-shell > .ant-pro-table { height: 0; flex: 1 1 0; min-height: 0; }
+.domestic-approval .report-table-shell > .ant-pagination { height: 42px; flex: 0 0 42px; min-height: 42px; }
+@media (max-width: 1200px) {
+  .domestic-approval__created-range { width: 100%; }
+  .domestic-approval__created-range > .ant-picker { width: auto; flex: 1; min-width: 0; }
+  .domestic-approval__toolbar > .domestic-board__search { min-width: 0; flex-basis: 100%; }
+}
+.domestic-approval__customs-select { width: 112px; max-width: 100%; }
+.domestic-approval__customs-cell { width: 100%; }
+.domestic-approval__row-actions { flex-wrap: nowrap; white-space: nowrap; }
+.domestic-approval__row-actions .ant-btn { height: 28px; padding-inline: 10px; border-radius: 6px; }
+.domestic-approval__row-edit, .domestic-approval__row-reject { min-width: 56px; }
+.domestic-approval__row-approve { min-width: 92px; }

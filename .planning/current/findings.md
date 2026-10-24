@@ -1,9 +1,7 @@
-# Findings
+# 调查
 
-- `mart_listing_management_current` already has the required stable unique key and approved descriptive fields.
-- `category` is the product-source category; page-observed Walmart category remains a separate RAW field.
-- `wfs_available_quantity` is nullable and must stay nullable in the contract.
-- Existing user data-scope resolution rejects non-user machine principals, so the service endpoint needs a dedicated exact-path all-current scope documented in the PRP.
-- The monitor client already supports bearer auth, nested `data.items`, pagination and nullable inventory after the companion local change.
-- The generic `/api/integrations/**` permission rule would otherwise remap the dedicated machine permission, so the exact GET policy must be registered first.
-- No schema change is required: the approved fields all exist on the current Listing MART.
+2026-10-22：当前 dev 的 0054 原本是空合并。缺表修复在提交 a912b12，不在任何分支上，已取回同一修订号。本地 szzsbj_dev 已是 0054 且表已存在，因此没有再升级它。0053 只看表是否存在会放过错误结构；ODS 原先把所有 timestamp 都当成 timestamptz，也不核对 varchar 长度。
+
+# 调查
+
+Listing选项value通常为名称，不能传国内仓store_id。负责人采用现有产品详情的当前UID；同账号SKU身份歧义不猜归属。国内仓已有DWD，店铺DIM和产品身份/当前详情均可复用。无需表、迁移、外部API或新增权限。
