@@ -20,7 +20,7 @@
 
 `frontend/src/features/keyword-planning/components/KeywordV11LiveConsole.tsx`
 
-为 Ant Design v5 React 组件，集中展示商品/账户/快照标识、原件上传、前置核验、分析批次、逐词结果、内部 Excel 下载、规则集与草稿限额。所有页面均调用 SZZSBJ `backendRequest` / `backendDownload`，不用浏览器 Mock 分数，也不提供官方上传按钮。
+为 Ant Design v5 React 组件，集中展示商品/账户/快照标识、原件上传、前置核验、分析批次、逐词结果、内部 Excel 下载、规则集与草稿限额。所有页面均调用项目现有的 `backendRequest` / `backendDownload`，不用浏览器 Mock 分数，也不提供官方上传按钮。
 
 **集成差异说明：**用户 Mac 上现有的三个页面有未提交修改，当前工作环境没有这些精确内容。本交付**不自动改写**它们。可在准确核对页面后挂载 `<KeywordV11LiveConsole />`；需要保留现有导航和设计。没有挂载前，不得宣称前端完整联调。
 
@@ -36,14 +36,14 @@
 
 ## Mac 安装（只执行一次）
 
-1. 将同名 `.patch` 保存至 `~/Downloads/`。
+1. 将已批准的 `.patch` 保存到本机，并通过 `KEYWORD_GOVERNANCE_PATCH` 指定其完整路径。
 2. 运行：
 
 ```bash
-REPO="/Users/sakura/Desktop/YC-System/SZZSBJ-worktrees/frontend/SZZSBJ-frontend-acceptance"
-PATCH="$HOME/Downloads/SZZSBJ_V11_governance_live_20261024.patch"
+REPO="$(git rev-parse --show-toplevel)"
+PATCH="${KEYWORD_GOVERNANCE_PATCH:?set approved patch path}"
 if [ ! -f "$PATCH" ]; then
-  echo "STOP: 补丁尚未下载至 Downloads"
+  echo "STOP: 指定的补丁文件不存在"
 elif git -C "$REPO" apply --check "$PATCH"; then
   git -C "$REPO" apply "$PATCH" && echo "PASS: 补丁安装成功"
 else
@@ -54,7 +54,7 @@ fi
 3. 验收（当前工作树有 Python 3.13 和后端虚拟环境）：
 
 ```bash
-cd "/Users/sakura/Desktop/YC-System/SZZSBJ-worktrees/frontend/SZZSBJ-frontend-acceptance/backend"
+cd "$(git rev-parse --show-toplevel)/backend"
 .venv/bin/python -m pytest -q tests/modules/keyword_planning tests/modules/decodo
 .venv/bin/python -m compileall -q app/modules/keyword_planning
 .venv/bin/python -m ruff check app/modules/keyword_planning/governance_routes.py app/modules/keyword_planning/rule_governance.py app/modules/keyword_planning/preflight_routes.py app/modules/keyword_planning/analysis_preflight.py
@@ -65,7 +65,7 @@ cd .. && git diff --check && git diff --cached --check
 4. 仅在确认 Docker Desktop 的本地 `desktop-linux` Context 后，才可额外执行临时数据库测试：
 
 ```bash
-cd "/Users/sakura/Desktop/YC-System/SZZSBJ-worktrees/frontend/SZZSBJ-frontend-acceptance/backend"
+cd "$(git rev-parse --show-toplevel)/backend"
 RUN_KW_ANALYSIS_PG_SANDBOX=1 .venv/bin/python -m pytest -q -s -rs tests/modules/keyword_planning/test_analysis_pg_isolated_v11.py
 ```
 

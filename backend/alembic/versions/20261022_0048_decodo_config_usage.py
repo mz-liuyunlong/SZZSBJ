@@ -3,6 +3,7 @@
 Migration intentionally does not fetch data or seed secrets.
 Run only after explicit database migration authorization.
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -52,7 +53,8 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_decodo_request_logs_us_day_target", "decodo_request_logs",
+        "ix_decodo_request_logs_us_day_target",
+        "decodo_request_logs",
         ["request_date_us", "target"],
     )
     op.create_table(
@@ -67,10 +69,10 @@ def upgrade() -> None:
         sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
     )
     op.create_index(
-        "ix_decodo_snapshots_lookup", "decodo_product_snapshots",
+        "ix_decodo_snapshots_lookup",
+        "decodo_product_snapshots",
         ["sku_id", "target", "identifier", "fetched_at"],
     )
-
 
 
 def downgrade() -> None:

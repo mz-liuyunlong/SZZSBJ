@@ -4,6 +4,7 @@ Only enabled with APP_ENV=local AND DECODO_LOCAL_TEST_MODE=1. Secrets live in
 process environment and are never written to SQLite; usage and normalized
 product snapshots are stored in a user-private SQLite database on this Mac.
 """
+
 from __future__ import annotations
 
 import json
@@ -111,23 +112,36 @@ def start_log(target: str, identifier: str, actor: str) -> str:
             """INSERT INTO requests
                (id,target,identifier,actor_ref,request_date_us,status,started_at)
                VALUES (?,?,?,?,?,'pending',?)""",
-            (event_id, target, identifier, actor,
-             now.astimezone(US_ZONE).date().isoformat(), now.isoformat()),
+            (
+                event_id,
+                target,
+                identifier,
+                actor,
+                now.astimezone(US_ZONE).date().isoformat(),
+                now.isoformat(),
+            ),
         )
     return event_id
 
 
 def finish_log(
-    event_id: str, status: str, duration_ms: int,
-    http_status: int | None, error_code: str | None,
+    event_id: str,
+    status: str,
+    duration_ms: int,
+    http_status: int | None,
+    error_code: str | None,
 ) -> None:
     with _db() as conn:
         conn.execute(
             """UPDATE requests SET status=?, duration_ms=?, http_status=?,
                error_code=?, finished_at=? WHERE id=?""",
             (
-                status, duration_ms, http_status, error_code,
-                datetime.now(UTC).isoformat(), event_id,
+                status,
+                duration_ms,
+                http_status,
+                error_code,
+                datetime.now(UTC).isoformat(),
+                event_id,
             ),
         )
 
@@ -165,7 +179,12 @@ def usage_read(days: int) -> DecodoUsageRead:
 
 
 def save_snapshot(
-    *, target: str, sku_id: str, identifier: str, data: dict, actor: str,
+    *,
+    target: str,
+    sku_id: str,
+    identifier: str,
+    data: dict,
+    actor: str,
 ) -> str:
     snapshot_id = str(uuid4())
     with _db() as conn:
@@ -173,7 +192,14 @@ def save_snapshot(
             """INSERT INTO snapshots
                (id,target,sku_id,identifier,payload,fetched_at,actor_ref)
                VALUES (?,?,?,?,?,?,?)""",
-            (snapshot_id, target, sku_id, identifier,
-             json.dumps(data, ensure_ascii=False), datetime.now(UTC).isoformat(), actor),
+            (
+                snapshot_id,
+                target,
+                sku_id,
+                identifier,
+                json.dumps(data, ensure_ascii=False),
+                datetime.now(UTC).isoformat(),
+                actor,
+            ),
         )
     return snapshot_id

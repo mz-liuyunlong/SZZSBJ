@@ -34,6 +34,8 @@ settings_router = APIRouter(prefix="/api/business-rules/decodo", tags=["Decodo C
 research_router = APIRouter(prefix="/api/keyword-planning", tags=["Keyword Research"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
 write_perm = Annotated[Principal, Depends(require_super_admin)]
+
+
 def require_decodo_research_access(
     principal: Annotated[Principal, Depends(require_principal)],
 ) -> Principal:

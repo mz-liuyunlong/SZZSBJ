@@ -8,7 +8,7 @@
 
 - `products.id`: UUID PK；`products.sku` 系统现有唯一 SKU。不要并行创建 `kw_products`、`kw_sku_master`。
 - `product_platform_listings.id`: UUID PK，引用 `products.id`，含 platform/store_name/msku/external_listing_id。Walmart Item ID 关联需要结合真实查询和平台 Listing 的实际字段核验，不强行把 `external_listing_id` 当 Item ID。
-- `source_account_ref`：SZZSBJ 接口层沿用的账户数据范围；关键词业务库按产品共享，原始 API/广告来源按账户和店铺分开。在 API 层必须由登录主体解析并检查权限，**不可直接信任前端提交的账户范围**。
+- `source_account_ref`：现有接口层沿用的账户数据范围；关键词业务库按产品共享，原始 API/广告来源按账户和店铺分开。在 API 层必须由登录主体解析并检查权限，**不可直接信任前端提交的账户范围**。
 - `store_id`：平台店铺维度；不能用单个 SKU 代替广告账户/店铺分区。没有确认来源的店铺信息要为空或待匹配。
 
 ## 2. 第一阶段物理表（21 张新增）

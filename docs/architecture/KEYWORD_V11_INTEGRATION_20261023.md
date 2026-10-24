@@ -1,4 +1,4 @@
-# SZZSBJ Keyword V1.1 — 本批交付、边界与验收
+# Walmart Keyword V1.1 — 本批交付、边界与验收
 
 ## 执行基线
 - 本地 worktree: `acceptance/keyword-planning`；用户此前已验证 **84 passed / 1 skipped**。
@@ -17,7 +17,7 @@
 
 ### 私有 XLSX 存储
 
-本批实现 `PrivateLocalKeywordStore` 作为本机隔离开发存储。需要环境变量 `SZZSBJ_KEYWORD_PRIVATE_ROOT` 指向**已存在的绝对路径、权限 0700、非符号链接的目录**，且不在 web 静态文件目录内。每次上传使用不可覆盖的 0600 文件，保存 SHA-256 和唯一对象键。真正生产部署应替换为组织批准的私有对象存储 + KMS，而非使用本地目录作为长期对象存储。
+本批实现 `PrivateLocalKeywordStore` 作为本机隔离开发存储。私有存储根目录环境变量的准确名称以 `backend/app/modules/keyword_planning/analysis_routes.py` 中的定义为准；其值必须指向**已存在的绝对路径、权限 0700、非符号链接的目录**，且不在 web 静态文件目录内。每次上传使用不可覆盖的 0600 文件，保存 SHA-256 和唯一对象键。真正生产部署应替换为组织批准的私有对象存储 + KMS，而非使用本地目录作为长期对象存储。
 
 上传前校验 `product_fact_snapshot_id` 确属本账户、本商品、`confirmed` 且 `item_verified=true`，否则拒绝；仅有可访问店铺账户的权限并不等于能写入任意商品。
 
@@ -50,7 +50,7 @@
 ## 运行测试（Mac worktree）
 
 ```bash
-cd /Users/sakura/Desktop/YC-System/SZZSBJ-worktrees/frontend/SZZSBJ-frontend-acceptance/backend
+cd "$(git rev-parse --show-toplevel)/backend"
 .venv/bin/python -m pytest -q tests/modules/keyword_planning tests/modules/decodo
 git diff --check
 git diff --cached --check

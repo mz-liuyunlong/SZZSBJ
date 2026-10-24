@@ -45,7 +45,8 @@ def permitted_local_write(method: str, path: str) -> bool:
     # Access still requires the normal FastAPI authentication and permissions.
     if (
         method == "POST"
-        and path in {
+        and path
+        in {
             "/api/keyword-planning/products/confirm",
             "/api/keyword-planning/amazon/research",
         }

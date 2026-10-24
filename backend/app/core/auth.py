@@ -155,7 +155,8 @@ def get_optional_principal(request: Request) -> Principal | None:
     # The special-case is unavailable in production and does not grant broad writes.
     decodo_local_preview_write_allowed = (
         request.method == "POST"
-        and path in {
+        and path
+        in {
             "/api/keyword-planning/products/confirm",
             "/api/keyword-planning/amazon/research",
         }

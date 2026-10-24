@@ -1,7 +1,7 @@
-# SZZSBJ Walmart 关键词系统 · V1.1 规则重构（审查与工程基线）
+# Walmart 关键词系统 · V1.1 规则重构（审查与工程基线）
 
 > 状态：**待业务审批 / 可供安全基础设施开发**，不是已发布的 V1.1 投放规则。
-> 来源：`广告投放正式版V1.0(4).md`（49 章，4036 行）；`SZZSBJ_Walmart_Ads_V1_rules_audit_20261023(1).md`（2026-10-23）；`SZZSBJ-本地修改.txt`（上传的本地 `git diff origin/main`，未包含 untracked 文件源代码）。
+> 来源：`广告投放正式版V1.0(4).md`（49 章，4036 行）；Walmart Ads V1 规则审计附件（2026-10-23）；本地差异附件（上传的 `git diff origin/main`，未包含 untracked 文件源代码）。以下规则正文及决策状态不因文件名表述调整而改变。
 > 实施目标：**真实数据、不可变来源、逐词一次分析、多来源词库、后端版本化规则、正式文件二次确认、未来可扩展到广告自动入库/自动创建。**
 > 安全边界：没有生产写入授权；不迁移、不部署、不调用真实广告创建接口。
 
@@ -20,7 +20,7 @@
 
 | Rule ID | 必须满足的契约 | 不符合的处理 |
 |---|---|---|
-| `PRODUCT-001` | SZZSBJ `products.id` 选择 SKU；选择真实 Walmart Item ID；后端核实所选 Item ID 与目标商品的关系，保存身份验证结果与证据 | `item_verified=false`；禁止「确认参数」 |
+| `PRODUCT-001` | 当前项目的 `products.id` 选择 SKU；选择真实 Walmart Item ID；后端核实所选 Item ID 与目标商品的关系，保存身份验证结果与证据 | `item_verified=false`；禁止「确认参数」 |
 | `PRODUCT-002` | Walmart API/采集**只填写确实返回的字段**，未返回的字段为空。不得用 SKU、标题想象材质/Pack/尺寸/结构 | 空白+人工补充入口，保留来源 |
 | `PRODUCT-003` | `title/item_type/brand/material/color/pack/size/structure/use/owner` 必填；禁止 `待核对/未知/N/A/--` 等占位文字冒充事实 | 不能确认，前后端双重拒绝 |
 | `PRODUCT-004` | 用户可补充或修正真实商品事实。逐字段保存 value、source=`walmart/operator/product_management`、evidence_ref、确认人和时间 | 未核对项保留草稿，不自动认可 |

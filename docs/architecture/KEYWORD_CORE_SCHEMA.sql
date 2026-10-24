@@ -1,4 +1,4 @@
--- SZZSBJ keyword V1.1 schema: REVIEW ONLY, no production execution.
+-- Walmart keyword V1.1 schema: REVIEW ONLY, no production execution.
 -- Requires existing products / product_platform_listings; staged against GitHub main 0054.
 
 CREATE TABLE ai_kw_rule_set (
