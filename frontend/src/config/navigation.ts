@@ -305,7 +305,6 @@ export const navigation: NavigationGroup[] = [
       page('ai_center', 'assistant', 'AI助手', '/ai-center/assistant'),
       page('ai_center', 'ads_optimization', '广告优化', '/ai-center/ads-optimization'),
       page('ai_center', 'keyword_launch', '关键词投放', '/ai-center/keyword-launch', { status: 'testing', source: 'pending' }),
-      page('ai_center', 'keyword_rules', '规则配置', '/ai-center/keyword-launch/rules', { status: 'testing', source: 'new_postgres' }),
       page('ai_center', 'image_generation', '图片生成', '/ai-center/image-generation'),
       page('ai_center', 'copywriting', '文案生成', '/ai-center/copywriting'),
       page('ai_center', 'product_research', '智能选品', '/ai-center/product-research'),

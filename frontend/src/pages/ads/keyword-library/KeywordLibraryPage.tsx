@@ -1,6 +1,6 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useMemo,useState} from 'react';
 import {useLocation,useNavigate} from 'react-router-dom';
-import {Alert,Button,Card,Descriptions,Drawer,Empty,Form,Input,InputNumber,Modal,Select,Space,Table,Tabs,Tag,Typography,Upload,message} from 'antd';
+import {Alert,Button,Card,Descriptions,Drawer,Empty,Form,Input,InputNumber,Modal,Select,Space,Tabs,Tag,Typography,Upload,message} from 'antd';
 import {PlusOutlined,TranslationOutlined,UploadOutlined} from '@ant-design/icons';
 import {ProTable,type ProColumns} from '@ant-design/pro-components';
 import PageShell from '@/components/page/PageShell';
@@ -9,7 +9,6 @@ import ConnectedSearch from '@/components/report-table/ConnectedSearch';
 import ResetButton from '@/components/report-table/ResetButton';
 import {MoneyCell,PercentCell} from '@/components/report-table/cells';
 import type {NavigationPage} from '@/config/navigation';
-import {addManualKeywordWords,listKeywordLibrary,type KeywordLibraryRead} from '@/api/keywordPlanningV11Api';
 import {KeywordTextCell} from '@/features/keyword-planning/components/KeywordTextCell';
 import {countText,normalizeTerm} from '@/features/keyword-planning/model';
 import {parseSellerSprite,downloadKeywordReviewWorkbook} from '@/features/keyword-planning/importWorkbook';
@@ -31,84 +30,6 @@ const performance=(ads:AdRecord[])=>{
 };
 function editTranslation(k:MarketKeyword,change:(id:string,value:string)=>void){let value=k.translation||'';Modal.confirm({title:`修改中文翻译 · ${k.term}`,content:<Input.TextArea rows={3} defaultValue={value} onChange={e=>{value=e.target.value}}/>,okText:'保存翻译',onOk:()=>change(k.id,value)})}
 export default function KeywordLibraryPage({page}:{page:NavigationPage}){
- const [showLocal,setShowLocal]=useState(false);
- if(showLocal)return <LocalKeywordLibraryPage page={page}/>;
- return <PersistedKeywordLibraryPage page={page} onLocal={()=>setShowLocal(true)}/>;
-}
-
-function PersistedKeywordLibraryPage({page,onLocal}:{page:NavigationPage;onLocal:()=>void}){
- const [account,setAccount]=useState(()=>sessionStorage.getItem('kw-v11-library-account')||'');
- const [productId,setProductId]=useState(()=>sessionStorage.getItem('kw-v11-library-product')||'');
- const [restored]=useState(()=>({account:sessionStorage.getItem('kw-v11-library-account')||'',
-  productId:sessionStorage.getItem('kw-v11-library-product')||''}));
- const [itemId,setItemId]=useState('');
- const [search,setSearch]=useState('');
- const [status,setStatus]=useState('all');
- const [word,setWord]=useState('');
- const [result,setResult]=useState<KeywordLibraryRead|null>(null);
- const [busy,setBusy]=useState(false);
- const [error,setError]=useState('');
- useEffect(()=>{
-  sessionStorage.setItem('kw-v11-library-account',account);
-  sessionStorage.setItem('kw-v11-library-product',productId);
- },[account,productId]);
- useEffect(()=>{
-  if(!restored.account||!restored.productId)return;
-  let cancelled=false;
-  listKeywordLibrary(restored.productId,restored.account,{q:'',status:'all',limit:50,offset:0})
-   .then(data=>{if(!cancelled)setResult(data);})
-   .catch(()=>{if(!cancelled)setError('词库刷新失败，请检查权限');});
-  return ()=>{cancelled=true;};
- },[restored]); // restore selected backend query; later filters use the explicit query button
- const load=async(offset=0)=>{
-  if(!account.trim()||!productId.trim())return;
-  setBusy(true);setError('');
-  try{setResult(await listKeywordLibrary(productId.trim(),account.trim(),{q:search,status,limit:50,offset}));}
-  catch(e){setError(e instanceof Error?e.message:'词库读取失败');}
-  finally{setBusy(false);}
- };
- const add=async()=>{
-  if(!word.trim()||!account.trim()||!productId.trim())return;
-  setBusy(true);setError('');
-  try{
-   await addManualKeywordWords(productId.trim(),{source_account_ref:account.trim(),
-    item_id:itemId.trim(),request_key:crypto.randomUUID(),words:[{keyword:word.trim()}]});
-   setWord('');await load();
-  }catch(e){setError(e instanceof Error?e.message:'保存失败');}
-  finally{setBusy(false);}
- };
- return <PageShell page={page}>
-  <Card title="关键词词库 · 后端持久化" bordered={false}>
-   <Alert type="warning" showIcon message="正式词库以服务器记录为准；未验证广告 API 不显示真实投放成绩。历史本地草稿不会自动迁入。"/>
-   {error&&<Alert type="error" showIcon style={{marginTop:12}} message={error}/>}
-   <Space wrap style={{marginTop:16}}>
-    <Input aria-label="来源账户" placeholder="来源账户" value={account} onChange={e=>setAccount(e.target.value)}/>
-    <Input aria-label="产品 UUID" placeholder="产品 UUID" value={productId} onChange={e=>setProductId(e.target.value)}/>
-    <Input aria-label="Walmart Item ID" placeholder="Walmart Item ID" value={itemId} onChange={e=>setItemId(e.target.value)}/>
-    <Input aria-label="搜索关键词" placeholder="搜索关键词" value={search} onChange={e=>setSearch(e.target.value)}/>
-    <Select aria-label="状态筛选" value={status} style={{width:130}} onChange={setStatus}
-     options={['all','active','review','paused','excluded'].map(value=>({label:value,value}))}/>
-    <Button loading={busy} onClick={()=>void load()}>读取词库</Button>
-   </Space>
-   <Space wrap style={{marginTop:12}}>
-    <Input aria-label="人工添加关键词" placeholder="人工添加关键词" value={word} onChange={e=>setWord(e.target.value)}/>
-    <Button disabled={!word.trim()||!itemId.trim()||!result} onClick={()=>void add()}>保存人工词到后端</Button>
-    <Button onClick={onLocal}>旧版本地草稿（非持久化）</Button>
-   </Space>
-   <Table style={{marginTop:16}} rowKey="term_id" loading={busy} dataSource={result?.items??[]}
-    pagination={{current:Math.floor((result?.offset??0)/50)+1,pageSize:50,total:result?.total??0,
-     onChange:page=>void load((page-1)*50)}}
-    columns={[{title:'关键词',dataIndex:'keyword'},{title:'翻译',dataIndex:'translation',render:(v:string|null)=>v||'—'},
-     {title:'状态',dataIndex:'status',render:(v:string)=><Tag>{v}</Tag>},
-     {title:'来源',dataIndex:'source_kinds',render:(v:string[])=>v?.join('、')||'—'},
-     {title:'证据数',dataIndex:'source_count'},{title:'分析等级',dataIndex:'latest_grade',render:(v:string|null)=>v||'待复核'},
-     {title:'分数',dataIndex:'latest_score',render:(v:number|null)=>v??'—'}]}/>
-   {result?.latest_run_id&&<Tag>最近分析批次：{result.latest_run_id}</Tag>}
-  </Card>
- </PageShell>;
-}
-
-function LocalKeywordLibraryPage({page}:{page:NavigationPage}){
  const navigate=useNavigate(),location=useLocation();const startSku=(location.state as {skuId?:string}|null)?.skuId;
  const {skus,keywords,entries,ads,analyses,updateTranslation,addManual,assignManual,importSupplement,addWord}=useKeywordStore();
  const [skuId,setSkuId]=useState(startSku&&skus.some(x=>x.id===startSku)?startSku:skus[0]?.id??'');

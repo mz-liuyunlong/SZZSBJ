@@ -26,7 +26,6 @@ import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForS
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence} from "@/api/decodoApi";
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
-import {KeywordV11LiveConsole} from '@/features/keyword-planning/components/KeywordV11LiveConsole';
 
 const {Text}=Typography;
 type KeywordRow={entry:SkuKeyword;keyword:MarketKeyword};
@@ -83,16 +82,6 @@ function exportFiveSheets(name:string,records:KeywordRow[],facts:ProductFacts,ma
 function Metric({label,value,hint,symbol}:{label:string;value:string|number;hint:string;symbol:string}){return <div className="kw-v2-stat"><div className="kw-v2-stat-icon">{symbol}</div><div><div className="kw-v2-muted">{label}</div><strong>{value}</strong><div className="kw-v2-muted">{hint}</div></div></div>}
 
 export default function KeywordLaunchPage({page}:{page:NavigationPage}){
- const [showLocalDraft,setShowLocalDraft]=useState(false);
- if (!showLocalDraft) return <PageShell page={page}>
-   <Alert type="warning" showIcon message="正式工作区只读取后端持久化数据；D01–D08 未批准，分析仅供内部复核，不可上传 Walmart。" />
-   <KeywordV11LiveConsole />
-   <Button style={{marginTop:16}} onClick={()=>setShowLocalDraft(true)}>查看旧版本地草稿（不持久化）</Button>
- </PageShell>;
- return <LocalKeywordLaunchPage page={page} />;
-}
-
-function LocalKeywordLaunchPage({page}:{page:NavigationPage}){
  const navigate=useNavigate();
  const [panel,setPanel]=useState<'workspace'|'rules'>('workspace');
  const {skus,keywords,entries,staged,rules,analyses,setStaged,analyze,upsertProductSku,updateTranslation,listing,saveListing}=useKeywordStore();
