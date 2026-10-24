@@ -2,9 +2,7 @@
 /* KEYWORD_SKU_RESELECT_FIX_20261022 */
 /* KEYWORD_SKU_INITIAL_PREFETCH_20261022 */
 /* KEYWORD_PRODUCT_LISTING_API_LOCAL_20261022 */
-/** V2 workspace aligned with the owner-provided 2026-10-22 interactive prototype.
- * Keyword suggestions are local rule calculations; no ad-performance API is connected; this page does not call external APIs.
- */
+/** Owner-approved workspace; persisted V1.1 results are read from the backend. */
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {Alert,Button,Card,Checkbox,Descriptions,Divider,Drawer,Empty,Input,InputNumber,Modal,Select,Space,Steps,Tabs,Tag,Typography,Upload,message} from 'antd';
@@ -23,7 +21,8 @@ import type {MarketKeyword,SkuKeyword,SkuDefinition} from '@/features/keyword-pl
 import type {ProductManagementRow} from '@/pages/products/productManagementTypes';
 import type {ListingCandidate} from '@/features/keyword-planning/keywordProductLookup';
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
-import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence} from "@/api/decodoApi";
+import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
+import {confirmStoredKeywordFacts,createKeywordAnalysis,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuleSets,listKeywordRuleVersions,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun} from '@/api/keywordPlanningV11Api';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
 
@@ -67,24 +66,12 @@ function csvDownload(name:string,headers:string[],rows:(string|number|null|undef
  const file=[headers,...rows].map(row=>row.map(safe).join(',')).join('\r\n');
  const url=URL.createObjectURL(new Blob(['\uFEFF'+file],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);
 }
-function exportFiveSheets(name:string,records:KeywordRow[],facts:ProductFacts,manualBid:number,autoBid:number){
- const wb=XLSX.utils.book_new();
- const sheets:[string,(string|number|null)[][]][]=[
-  ['01_最终投放总表', [['关键词','关键词中文意思','SKU','投放等级','潜力分','手动Exact','手动Broad','参考PPC','建议 Bid（本地规则）','运营判断'],...records.map(({entry:e,keyword:k})=>[k.term,k.translation||'待翻译',name,e.grade,e.score,e.exact?'是':'否',e.broad?'是':'否',k.amazonPpc,e.exact?manualBid:e.broad?autoBid:null,e.reason])]],
-  ['02_词根与Broad拓展规则', [['关键词','词根（参考）','Broad','月搜索量','Amazon月购买量'],...records.filter(r=>r.entry.broad).map(({entry:e,keyword:k})=>[k.term,k.root,e.broad?'是':'否',k.monthlySearches,k.monthlyPurchases])]],
-  ['03_风险词与不投放词', [['关键词','等级','风险或复核理由'],...records.filter(r=>r.entry.grade==='不投放'||r.entry.grade==='复查'||r.entry.grade==='候选复查'||r.entry.grade==='品牌等级').map(({entry:e,keyword:k})=>[k.term,e.grade,e.reason])]],
-  ['04_投放建议_未执行', [['SKU','匹配方式','关键词','建议竞价（USD）','状态'],...records.filter(r=>r.entry.exact||r.entry.broad).flatMap(({entry:e,keyword:k})=>[...(e.exact?[[name,'Exact',k.term,manualBid,'未执行']]:[]),...(e.broad?[[name,'Broad',k.term,autoBid,'未执行']]:[])])]],
-  ['05_Listing优化建议', [['字段','内容'],['Title',facts.title],['商品类型',facts.itemType],['材质',facts.material],['Pack',facts.pack],['用途',facts.use],['提示','根据用户上传文件和本地规则计算；不是 Walmart 官方 Bulk 上传模板']]],
- ];
- for(const [title,rows] of sheets)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),title);
- XLSX.writeFile(wb,`${name}_本地初筛五表.xlsx`);
-}
 function Metric({label,value,hint,symbol}:{label:string;value:string|number;hint:string;symbol:string}){return <div className="kw-v2-stat"><div className="kw-v2-stat-icon">{symbol}</div><div><div className="kw-v2-muted">{label}</div><strong>{value}</strong><div className="kw-v2-muted">{hint}</div></div></div>}
 
 export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const navigate=useNavigate();
  const [panel,setPanel]=useState<'workspace'|'rules'>('workspace');
- const {skus,keywords,entries,staged,rules,analyses,setStaged,analyze,upsertProductSku,updateTranslation,listing,saveListing}=useKeywordStore();
+ const {skus,keywords,entries,staged,rules,analyses,setStaged,installServerRun,upsertProductSku,updateTranslation,listing,saveListing}=useKeywordStore();
  const [skuId,setSkuId]=useState('');
  const [editing,setEditing]=useState(false);
  const [skuSearch,setSkuSearch]=useState('');
@@ -98,14 +85,24 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const [itemManual,setItemManual]=useState(false);
  const [selectedListing,setSelectedListing]=useState<ListingCandidate|null>(null);
  const [productConfirmation,setProductConfirmation]=useState<ConfirmedSelection|null>(null);
+ const [decodoSnapshotId,setDecodoSnapshotId]=useState<string|null>(null);
+ const [factId,setFactId]=useState<string|null>(null);
+ const [sourceFile,setSourceFile]=useState<File|null>(null);
+ const [storedUpload,setStoredUpload]=useState<{id:string;filename:string;rows:number}|null>(null);
+ const [activeRunId,setActiveRunId]=useState<string|null>(null);
+ const [serverRuns,setServerRuns]=useState<KeywordRun[]>([]);
+ const [historyTotal,setHistoryTotal]=useState(0);
+ const [historyPage,setHistoryPage]=useState(1);
+ const [sourceError,setSourceError]=useState('');
 
  const [pendingSelection,setPendingSelection]=useState<ConfirmedSelection|null>(null);
  const [walmartError,setWalmartError]=useState(false);
- const [walmartEvidence,setWalmartEvidence]=useState<{
+ const [,setWalmartEvidence]=useState<{
    title:string;
    description:string;
    attributes:string;
  }|null>(null);
+ const [walmartSource,setWalmartSource]=useState<WalmartFacts|null>(null);
  const [,setAmazonEvidence]=useState<AmazonEvidence[]>([]);
  const [confirmingProduct,setConfirmingProduct]=useState(false);
  const selectionSeq=useRef(0);
@@ -137,6 +134,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const parsedAsins=useMemo(()=>parseAsins(asins),[asins]);
  const listingId=itemManual?null:selectedListing?String(selectedListing.listing.id):null;
  const listingStore=itemManual?null:selectedListing?.listing.store??null;
+ const sourceAccountRef=selectedListing?.listing.sourceAccountRef??null;
  const productConfirmed=Boolean(productConfirmation
    && productConfirmation.skuId===sku.id
    && productConfirmation.itemId===itemId
@@ -145,7 +143,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    && productConfirmation.store===listingStore);
  const productPending=Boolean(confirmingProduct&&pendingSelection&&pendingSelection.skuId===sku.id&&pendingSelection.itemId===itemId&&pendingSelection.mode===(itemManual?'manual':'listing')&&pendingSelection.listingId===listingId&&pendingSelection.store===listingStore);
  const step02Unlocked=productConfirmed||productPending;
- const canConfirmProduct=Boolean(sku.id)&&/^\d{1,20}$/.test(itemId)&&!listingLoading&&!confirmingProduct&&(itemManual||Boolean(selectedListing));
+ const canConfirmProduct=Boolean(sku.id&&sourceAccountRef)&&/^\d{1,20}$/.test(itemId)&&!listingLoading&&!confirmingProduct&&Boolean(selectedListing);
  // Confirmation of item identity and final analysis parameters are separate gates.
  const inputsComplete=step02Unlocked&&Boolean(staged)&&parsedAsins.invalid.length===0&&parsedAsins.valid.length>=rules.asin.min;
  const ready=productConfirmed&&inputsComplete;
@@ -176,7 +174,8 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const invalidateProductConfirmation=()=>{
    confirmationSeq.current+=1;
    setProductConfirmation(null);
-   setPendingSelection(null);setConfirmingProduct(false);setWalmartError(false);setWalmartEvidence(null);
+   setDecodoSnapshotId(null);setFactId(null);setSourceFile(null);setStoredUpload(null);setActiveRunId(null);
+   setPendingSelection(null);setConfirmingProduct(false);setWalmartError(false);setWalmartEvidence(null);setWalmartSource(null);
 
    setFacts(old=>({
      ...initialFacts('','','',rules.bid),
@@ -190,6 +189,47 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
 
    setBusy(false);
  };
+ useEffect(()=>{
+   if(!sku.id||!sourceAccountRef||!itemId||!selectedListing)return;
+   let live=true;
+   const ticket=confirmationSeq.current;
+   void Promise.all([getKeywordSourceState(sku.id,sourceAccountRef),listKeywordRuns(sku.id,sourceAccountRef,20,0)])
+     .then(async([source,history])=>{
+       if(!live||ticket!==confirmationSeq.current)return;
+       setServerRuns(history.items);setHistoryTotal(history.total);setSourceError('');
+       if(source.item_id===itemId&&source.latest_confirmed_fact_id){
+         setFactId(source.latest_confirmed_fact_id);
+         setConfirmed(true);
+         setAsins(source.asin_references.join('\n'));
+         setStoredUpload(source.latest_upload_id?{
+           id:source.latest_upload_id,filename:source.latest_upload_filename??'已保存的 Excel',
+           rows:source.latest_upload_rows,
+         }:null);
+         setFacts(old=>({...old,
+           title:source.confirmed_fields.title??old.title,
+           itemType:source.confirmed_fields.item_type??old.itemType,
+           brand:source.confirmed_fields.brand??old.brand,
+           material:source.confirmed_fields.material??old.material,
+           color:source.confirmed_fields.color??old.color,
+           pack:source.confirmed_fields.pack??old.pack,
+           size:source.confirmed_fields.size??old.size,
+           structure:source.confirmed_fields.structure??old.structure,
+           use:source.confirmed_fields.use??old.use,
+           owner:source.confirmed_fields.owner??old.owner,
+         }));
+         setProductConfirmation({skuId:sku.id,itemId,mode:itemManual?'manual':'listing',
+           listingId,store:listingStore});
+       }
+       if(history.items[0]){
+         const latest=history.items[0];
+         const results=await loadAllRunKeywords(latest.run_id,sourceAccountRef);
+         if(live&&ticket===confirmationSeq.current){
+           installServerRun(sku.id,latest,results);setActiveRunId(latest.run_id);
+         }
+       }
+     }).catch(()=>{if(live)setSourceError('已保存来源或分析历史加载失败，请检查权限与连接')});
+   return()=>{live=false};
+ },[sku.id,sourceAccountRef,itemId,selectedListing,itemManual,listingId,listingStore,installServerRun]);
  const confirmProduct=async()=>{
    if(!canConfirmProduct)return message.warning('请先选择真实 SKU 和有效的 Walmart Item ID');
    if(!itemManual&&selectedListing?.listing.productId!==itemId)return message.error('Listing 与 Item ID 不一致，请重新选择');
@@ -204,6 +244,8 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
      const doc=await confirmWalmartFacts(targetSku,targetItem);
      if(ticket!==confirmationSeq.current)return;
      if(doc.item_id!==targetItem||doc.sku_id!==targetSku||!doc.verified)throw new Error('采集商品身份与所选商品不一致');
+     if(!doc.snapshot_id)throw new Error('采集来源未保存，无法确认商品事实');
+     setDecodoSnapshotId(doc.snapshot_id);setWalmartSource(doc);
      const rawDescription =
        (doc as unknown as {description?:unknown}).description;
      setWalmartEvidence({
@@ -259,6 +301,8 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  // Typing a different SKU is an edit, not confirmation of the old product.
  // Clear the old selection and all dependent facts/Item ID immediately.
  const clearSelectedSku=()=>{
+   sessionStorage.removeItem('keyword-planning:selected-product');
+   sessionStorage.removeItem('keyword-planning:selected-listing');
    selectionSeq.current+=1; // ignore pending product/detail/listing responses
    invalidateProductConfirmation();
    setSkuId('');setItemId('');setItemManual(false);setSelectedListing(null);
@@ -329,14 +373,17 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    },q.length>=2?300:0);
    return ()=>{active=false;window.clearTimeout(timer)};
  },[skuSearch]);
- const pickProduct=async(productId:string)=>{
-   const row=skuDropdownRows.find(p=>p.id===productId)
+ const pickProduct=async(productId:string,rowOverride?:ProductManagementRow)=>{
+   const row=rowOverride??(
+     skuDropdownRows.find(p=>p.id===productId)
      ||initialSkuRef.current.find(p=>p.id===productId)
-     ||skuOptions.find(p=>p.id===productId);
+     ||skuOptions.find(p=>p.id===productId)
+   );
    if(!row||!row.sku)return;
    const id=String(row.id),ticket=selectionSeq.current+1;
    const product:SkuDefinition={id,sku:row.sku,name:row.productName||row.sku,material:row.materialEn||row.materialCn||'',uses:[],storeIds:[],hasLibrary:false};
    upsertProductSku(product);switchSku(id);selectionSeq.current=ticket;
+   sessionStorage.setItem('keyword-planning:selected-product',JSON.stringify({id,sku:row.sku}));
    skuQueryRef.current='';setSkuSearch('');setSkuOptions(initialSkuRef.current);
    setFacts(old=>({...old,owner:row.ownerName||''}));
    setListingLoading(true);setListingError('');
@@ -354,21 +401,41 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
      setListingCandidates(candidates);
      if(found.value.warnings.length)setListingError(found.value.warnings.join('；'));
      const exact=candidates.filter(x=>x.match==='sku_exact');
-     if(exact.length===1){setSelectedListing(exact[0]);setItemId(exact[0].listing.productId);}
+     const remembered=sessionStorage.getItem('keyword-planning:selected-listing');
+     const restored=candidates.find(x=>x.listing.id===remembered);
+     if(restored||exact.length===1){const choice=restored??exact[0];setSelectedListing(choice);setItemId(choice.listing.productId);sessionStorage.setItem('keyword-planning:selected-listing',choice.listing.id);}
      // Ambiguous matches and all MSKU candidates must be confirmed by the operator.
      const fromDetail=detail.status==='fulfilled'?detail.value:null;
      upsertProductSku({...product,material:fromDetail?.materialEn||fromDetail?.materialCn||product.material,uses:(fromDetail?.usageEn||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean),storeIds:[...new Set(candidates.filter(x=>x.match==='sku_exact').map(x=>x.listing.store))]});
    }else setListingError('Listing 查询失败：不能认定无关联，请检查 API 或手动填写 Item ID');
    setListingLoading(false);
  };
+ useEffect(()=>{
+   const saved=sessionStorage.getItem('keyword-planning:selected-product');
+   if(!saved)return;
+   try{
+     const value=JSON.parse(saved) as {id:string;sku:string};
+     if(!value.id||!value.sku)return;
+     void searchProductsBySku(value.sku).then(found=>{
+       const row=found.find(item=>item.id===value.id);
+       if(row){setSkuOptions(found);void pickProduct(row.id,row);}
+     });
+   }catch{sessionStorage.removeItem('keyword-planning:selected-product');}
+ // Restore once on mount; product and listing are revalidated by the live APIs.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[]);
  const loadFile=async(file:File)=>{
    if(!step02Unlocked){message.warning('请先点击确认商品');return}
+   if(!/\.xlsx$/i.test(file.name)){
+     message.error('后端原始文件归档仅支持 xlsx，请先保存为 xlsx');return;
+   }
    const ticket=confirmationSeq.current;
    setBusy(true);
    try{
      const book=await parseSellerSprite(file);
      if(ticket!==confirmationSeq.current)return; // Discard stale async result.
-     setStaged(book);
+     setStaged(book);setSourceFile(file);
+     setStoredUpload(null);
      setConfirmed(false);
      setAsins(old=>old.trim()?old:book.asins.slice(0,5).join('\n'));
      message.success(`真实 Excel 已导入：${book.keywords.length} 条关键词`);
@@ -381,83 +448,139 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  };
 
  const openFacts=()=>{if(!productConfirmed)return message.warning('请先在步骤 01 点击确认商品');if(!ready)return message.warning('请先上传 Excel 并满足 ASIN 数量要求');setConsent(false);setFactOpen(true)};
+ const confirmParameters=async()=>{
+   if(!ready||!consent||!parametersComplete||!sourceAccountRef){
+     message.warning('请先补齐商品事实、账户和规则参数');return;
+   }
+   if(!decodoSnapshotId||!walmartSource){
+     if(factId&&sourceFile){
+       setBusy(true);
+       try{
+         const upload=await uploadKeywordSourceXlsx(sourceFile,sourceAccountRef,sku.id,factId);
+         if(upload.status!=='parsed')throw new Error('EXCEL_SOURCE_REVIEW_REQUIRED');
+         setStoredUpload({id:upload.upload_id,filename:sourceFile.name,rows:upload.source_rows});
+         setConfirmed(true);setFactOpen(false);message.success('Excel 原件与商品事实已保存');
+       }catch(error){message.error(error instanceof Error?error.message:'Excel 保存失败');}
+       finally{setBusy(false);}
+       return;
+     }
+     if(factId){setConfirmed(true);setFactOpen(false);return;}
+     message.error('缺少已保存 Walmart 来源快照，无法确认');return;
+   }
+   const original:Record<string,string>={
+     title:walmartSource.title,item_type:walmartSource.category_path.at(-1)??'',
+     brand:walmartSource.brand??'',material:'',color:'',pack:'',size:'',structure:'',use:'',owner:'',
+   };
+   const attr=(...names:string[])=>{
+     const key=Object.keys(walmartSource.attributes).find(k=>names.some(n=>k.trim().toLowerCase()===n.toLowerCase()));
+     return key?walmartSource.attributes[key].trim():'';
+   };
+   original.material=attr('Material');original.color=attr('Color');
+   original.pack=attr('Pack Size','Pack Quantity','Package Quantity');
+   original.size=attr('Dimensions','Product Dimensions','Size');
+   original.structure=attr('Included Components','Package Contents');
+   original.use=attr('Recommended Uses','Recommended Uses for Product','Usage','Uses');
+   const values:Record<string,string>={title:facts.title,item_type:facts.itemType,
+     brand:facts.brand,material:facts.material,color:facts.color,pack:facts.pack,
+     size:facts.size,structure:facts.structure,use:facts.use,owner:facts.owner};
+   let factSaved=false;
+   setBusy(true);
+   try{
+     const receipt=await confirmStoredKeywordFacts({source_account_ref:sourceAccountRef,
+       product_id:sku.id,item_id:itemId,decodo_snapshot_id:decodoSnapshotId,
+       fields:Object.fromEntries(Object.entries(values).map(([key,value])=>[key,{
+         value:value.trim(),source:key!=='owner'&&value.trim()===original[key]?'walmart':'operator',
+       }])),
+       risk_boundary_mode:facts.forbidden.trim()?'provided':'none',
+       risk_boundary_acknowledged:true,semantic_phrases:[]});
+     setFactId(receipt.product_fact_snapshot_id);factSaved=true;
+     if(sourceFile){
+       const upload=await uploadKeywordSourceXlsx(sourceFile,sourceAccountRef,sku.id,receipt.product_fact_snapshot_id);
+       if(upload.status!=='parsed')throw new Error('EXCEL_SOURCE_REVIEW_REQUIRED');
+       setStoredUpload({id:upload.upload_id,filename:sourceFile.name,rows:upload.source_rows});
+     }
+     setConfirmed(true);setFactOpen(false);
+     message.success('商品事实与 Excel 原件已保存，可开始分析');
+   }catch{message.error(factSaved?'商品事实已保存，但 Excel 原件未保存；请重试确认参数':'商品事实未保存；请核对来源、账户权限和必填字段');}
+   finally{setBusy(false);}
+ };
  const doAnalysis=async()=>{
-   if(!productConfirmed||!confirmed||!ready||!staged||!parametersComplete)return message.warning('请先确认商品并通过分析前参数核对');
+   if(!productConfirmed||!confirmed||!ready||!staged||!storedUpload||!factId||!sourceAccountRef||!parametersComplete)return message.warning('请先保存商品事实、上传来源文件并完成参数核对');
    if(busy)return;
    const ticket=confirmationSeq.current,targetSku=sku.id,asinsForRun=[...parsedAsins.valid];
    setBusy(true);
    try{
-     const output=await researchAmazonAsins(asinsForRun,targetSku);
+     const source=await getKeywordSourceState(targetSku,sourceAccountRef);
      if(ticket!==confirmationSeq.current)return;
-     // Do not silently claim full competitor coverage if any ASIN failed.
-     if(output.failures.length||output.items.length!==asinsForRun.length){
-       message.error(`Amazon 采集部分失败：${output.failures.join('、')||'数量不一致'}；本次未执行评分。重试后再分析`);return;
+     const stored=new Set(source.item_id===itemId?source.asin_references:[]);
+     const missing=asinsForRun.filter(asin=>!stored.has(asin));
+     if(missing.length){
+       const output=await researchAmazonAsins(missing,targetSku);
+       if(ticket!==confirmationSeq.current)return;
+       if(output.failures.length||output.items.length!==missing.length){
+         message.error(`Amazon 采集部分失败：${output.failures.join('、')||'数量不一致'}；本次未执行评分。重试后再分析`);return;
+       }
+       if(output.items.some(doc=>!doc.snapshot_id||!doc.verified)){
+         message.error('Amazon 来源未保存或未验证，本次未分析');return;
+       }
+       for(const doc of output.items){
+         await importStoredAsin({source_account_ref:sourceAccountRef,product_id:targetSku,
+           asin:doc.asin,decodo_snapshot_id:doc.snapshot_id!});
+       }
      }
-     const normalize=(x:string)=>x.toLowerCase().replace(/\s+/g,' ').trim();
-     const matched=(term:string,doc:AmazonEvidence)=>{
-       const needle=normalize(term);
-       return Boolean(needle)&&[doc.title,...doc.bullet_points,doc.description||'']
-         .some(part=>normalize(part).includes(needle));
-     };
-     // Use verified live textual phrase matches, not imported ASIN identifiers,
-     // for the existing rule engine's competitor-coverage component.
-     setStaged({...staged,keywords:staged.keywords.map(k=>({...k,
-       relatedAsins:output.items.filter(doc=>matched(k.term,doc)).map(doc=>doc.asin),
-     }))});
-     setAmazonEvidence(output.items);
-     const n=analyze(targetSku,{facts:{itemType:facts.itemType,brand:facts.brand,material:facts.material,color:facts.color,pack:facts.pack,structure:facts.structure,use:facts.use,forbidden:facts.forbidden},walmart:walmartError?null:walmartEvidence});
-     if(!n)return message.error('没有可显示的分析结果');
+     const ruleSets=await listKeywordRuleSets(sourceAccountRef);
+     const versions=(await Promise.all(ruleSets.filter(x=>x.is_enabled).map(x=>listKeywordRuleVersions(sourceAccountRef,x.rule_set_id)))).flat();
+     const published=versions.filter(x=>x.status==='published').sort((a,b)=>b.version_number-a.version_number)[0];
+     if(!published)throw new Error('PUBLISHED_RULE_REQUIRED');
+     const input={source_account_ref:sourceAccountRef,product_id:targetSku,item_id:itemId,
+       product_fact_snapshot_id:factId,rule_version_id:published.version_id,
+       upload_file_id:storedUpload.id,selected_asins:asinsForRun};
+     const preflight=await preflightKeywordAnalysis(input);
+     if(!preflight.can_create_review_run)throw new Error(preflight.review_reason_codes.join('、'));
+     const receipt=await createKeywordAnalysis({...input,request_key:crypto.randomUUID()});
+     const run=await getKeywordRun(receipt.run_id,sourceAccountRef);
+     const results=await loadAllRunKeywords(receipt.run_id,sourceAccountRef);
+     if(ticket!==confirmationSeq.current)return;
+     installServerRun(targetSku,run,results);setActiveRunId(receipt.run_id);
+     setServerRuns(old=>[run,...old]);setHistoryTotal(old=>old+1);
      setEditing(false);setResultsTab('keywords');setFactOpen(false);
      window.scrollTo({top:0,behavior:'smooth'});
-     message.success(`已采集 ${output.completed} 个真实 Amazon 文案，并生成 ${n} 条规则分析结果`);
-   }catch{if(ticket===confirmationSeq.current)message.error('Amazon 采集失败；未执行关键词分析，请检查后端和 Decodo 配置');}
+     if(run.status==='succeeded')message.success(`已保存 ${results.length} 条后端分析结果`);
+     else message.warning(`已保存 ${results.length} 条分析记录，批次状态为${run.status}；待复核词不能作为正式投放结果`);
+   }catch(error){if(ticket===confirmationSeq.current)message.error(error instanceof Error?error.message:'分析未完成，请检查来源、规则与权限');}
    finally{if(ticket===confirmationSeq.current)setBusy(false);}
  };
- const openTranslation=(k:MarketKeyword)=>{let value=k.translation||'';Modal.confirm({title:`修改中文翻译 · ${k.term}`,content:<Input.TextArea rows={3} defaultValue={value} onChange={e=>{value=e.target.value}}/>,okText:'保存',onOk:()=>updateTranslation(k.id,value)})};
+ const openTranslation=(k:MarketKeyword)=>{let value=k.translation||'';Modal.confirm({title:`修改中文翻译 · ${k.term}`,content:<Input.TextArea rows={3} defaultValue={value} onChange={e=>{value=e.target.value}}/>,okText:'保存',onOk:async()=>{
+   if(!sourceAccountRef||!itemId)throw new Error('请先选择账户与 Listing');
+   try{
+     const result=await updateKeywordTranslation(sku.id,k.id,sourceAccountRef,itemId,value);
+     updateTranslation(k.id,result.translation??'');message.success('翻译已保存');
+   }catch(error){message.error(error instanceof Error?error.message:'翻译保存失败');throw error;}
+ }})};
 
- const downloadAll=()=>exportFiveSheets(sku.sku,filtered,facts,rules.bid.exact,rules.bid.auto);
+ const downloadAll=()=>{
+   if(!activeRunId||!sourceAccountRef)return message.warning('请先加载已保存的分析批次');
+   void downloadKeywordInternalWorkbook(activeRunId,sourceAccountRef).catch(()=>message.error('五表下载失败，请检查分析批次和权限'));
+ };
+ const openRun=async(run:KeywordRun)=>{
+   if(!sourceAccountRef)return;
+   try{
+     const results=await loadAllRunKeywords(run.run_id,sourceAccountRef);
+     installServerRun(sku.id,run,results);setActiveRunId(run.run_id);
+     setEditing(false);setHistoryOpen(false);
+   }catch{message.error('历史分析读取失败，原结果未修改');}
+ };
+ const loadHistoryPage=async(pageNumber:number)=>{
+   if(!sku.id||!sourceAccountRef)return;
+   try{
+     const response=await listKeywordRuns(sku.id,sourceAccountRef,20,(pageNumber-1)*20);
+     setServerRuns(response.items);setHistoryTotal(response.total);setHistoryPage(pageNumber);
+   }catch{message.error('分析历史加载失败');}
+ };
  const makeListing=()=>{if(!analyzed)return message.warning('请先完成关键词分析');const title=`${facts.title}, ${facts.pack} ${facts.material} for ${facts.use}`.replace(/\s+/g,' ').slice(0,180);const features=[`Organization: ${facts.itemType} for ${facts.use}.`,`Material: Made with ${facts.material}, ${facts.color}.`,`Pack: ${facts.pack}, ${facts.structure}.`,`Size: ${facts.size}; check dimensions before purchase.`,`Review compatibility, package contents and product details before ordering.`].join('\n');setDraft({title,features,description:`${facts.title}. ${facts.itemType}. Material: ${facts.material}; pack: ${facts.pack}; purpose: ${facts.use}. Verify all facts before publishing.`});message.info('仅生成待人工核对的模板草稿，非 AI 生成内容；请人工校对英语和商品事实')};
  const keywordCol:ProColumns<KeywordRow>={title:'关键词 / 中文翻译',key:'term',width:260,render:(_,r)=><><KeywordTextCell keyword={r.keyword} onEdit={openTranslation}/><div className="kw-v2-muted">{r.keyword.source==='excel'?'Excel':'人工新增'} · {r.keyword.root}</div></>};
 
- // 页面承接只使用本轮 Walmart 实际采集到的页面证据
- const suggestedBid=(r:KeywordRow):string=>{
-   const grade=r.entry.grade;
-
-   if(grade==='不投放')return '不建议出价';
-
-   const range=(r.keyword.bidRange||'')
-     .match(/\$?([0-9]+(?:\.[0-9]+)?)/g)
-     ?.map(x=>Number(x.replace('$','')))||[];
-
-   let bid:number;
-
-   if(range.length>=2&&range[0]>0&&range[1]>=range[0]){
-     const [low,high]=range;
-
-     bid=grade==='P0'
-       ?low+(high-low)*0.25
-       :grade==='P1'
-       ?low+(high-low)*0.1
-       :low;
-
-   }else if(
-     r.keyword.amazonPpc!=null&&
-     r.keyword.amazonPpc>0
-   ){
-     const ppc=r.keyword.amazonPpc;
-
-     bid=ppc*(
-       grade==='P0'||grade==='P1'?0.8:
-       grade==='P2'?0.6:0.5
-     );
-
-   }else{
-     bid=grade==='P0'?0.35:
-       grade==='P1'?0.31:0.30;
-   }
-
-   return '$'+Math.max(0.30,bid).toFixed(2);
- };
+ const suggestedBid=(r:KeywordRow):string=>r.entry.suggestedBid?`$${r.entry.suggestedBid}`:'—';
 
  const noSelectionReason=(r:KeywordRow):string=>r.entry.nonSelectionReason||'—';
  const decisionCols:ProColumns<KeywordRow>[]=[
@@ -642,7 +765,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
   <div className="kw-v2-pagehead__actions">{panel==='rules'?<Button onClick={()=>setPanel('workspace')}>返回关键词投放</Button>:(<Space size={6} wrap><Tag color="blue">生效规则 V{rules.version}.0</Tag><Button icon={<HistoryOutlined/>} onClick={()=>setHistoryOpen(true)}>分析历史</Button><Button onClick={()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','相关ASIN']]),'Keyword');XLSX.writeFile(wb,'关键词导入模板.xlsx')}}>下载关键词模板</Button><Button icon={<SettingOutlined/>} onClick={()=>setPanel('rules')}>规则配置</Button></Space>)}</div>
 </div>
 
-   {panel==='rules'?<KeywordRulesPanel/>:<>
+   {panel==='rules'?<KeywordRulesPanel sourceAccountRef={sourceAccountRef}/>:<>
    {editing&&hasAnalysis?<div className="kw-v2-resume"><Button onClick={()=>{setEditing(false);setStaged(null)}}>取消修改，返回上次分析结果</Button></div>:null}
    <Card size="small" className="kw-v2-flow"><Steps size="small" current={step} items={[{title:'选择 SKU'},{title:`参考 ASIN（≥${rules.asin.min}）`},{title:'关键词数据'},{title:'确认并分析'}]}/><Text type="secondary" className="kw-v2-small">SKU 为词库主键；店铺及 Item ID 不拆分词库。</Text></Card>
    <div className="kw-v2-setup">
@@ -655,7 +778,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
         onChange={choice=>{if(choice?.value)void pickProduct(String(choice.value))}}
         notFoundContent={skuLoading?'搜索中':skuError||'未找到匹配的 SKU'}
         options={skuDropdownRows.map(p=>({value:p.id,label:`${p.sku} · ${p.productName||'未命名'}`}))}/>
-      {skuError?<Alert type="error" showIcon message={skuError} style={{marginTop:8}}/>:null}
+      {skuError||sourceError?<Alert type="error" showIcon message={skuError||sourceError} style={{marginTop:8}}/>:null}
       <div className="kw-v2-snapshot"><div className="kw-v2-thumb">▦</div><div className="kw-v2-grow"><Text strong>{sku.name}</Text><div className="kw-v2-muted">{sku.sku} · {facts.material} · {facts.pack} · {sku.storeIds.length} 个已关联店铺</div></div><Tag color="blue">来自产品管理</Tag></div>
       <div className="kw-v2-itemid-section">
        <div className="kw-v2-itemid-heading">
@@ -673,7 +796,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
        {!itemManual?<Select showSearch optionFilterProp="label" className="kw-v2-block" disabled={!sku.id||listingLoading} loading={listingLoading}
          placeholder={listingLoading?'查询 Listing 中':'请选择 Listing 对应的 Item ID'} value={!itemManual&&selectedListing?`${selectedListing.listing.id}:${selectedListing.listing.productId}`:undefined}
          onChange={value=>{const found=listingCandidates.find(x=>`${x.listing.id}:${x.listing.productId}`===value);
-           if(!found)return;invalidateProductConfirmation();setSelectedListing(found);setItemId(found.listing.productId);setItemManual(false)}}
+           if(!found)return;invalidateProductConfirmation();setSelectedListing(found);setItemId(found.listing.productId);setItemManual(false);sessionStorage.setItem('keyword-planning:selected-listing',found.listing.id)}}
          options={listingCandidates.map(c=>({value:`${c.listing.id}:${c.listing.productId}`,label:`${c.listing.productId} · ${c.listing.store} · ${c.listing.msku}`}))}/>:<Input
          className="kw-v2-block"
          value={itemId}
@@ -681,7 +804,10 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
          maxLength={20}
          onChange={e=>{
            invalidateProductConfirmation();
-           setItemId(e.target.value.replace(/\D/g,''));
+           const next=e.target.value.replace(/\D/g,'');
+           setItemId(next);
+           const matches=listingCandidates.filter(candidate=>candidate.listing.productId===next);
+           if(matches.length===1)setSelectedListing(matches[0]);
          }}
        />}
 
@@ -708,28 +834,28 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    <Card size="small" className="kw-v2-section" title={<Space><Tag color="blue">03</Tag>关键词数据</Space>} extra={<Tag>{existing?'已有 SKU 词库':'新品 · Excel 上传'}</Tag>}>
     {existing?<Alert showIcon type="info" message="当前 SKU 已有关键词词库" description={`已收录 ${rows.length} 个关键词。建议直接进入词库查看或导出，不重复上传或重建。`} action={<Space wrap><Button onClick={()=>navigate('/ads/keyword-library',{state:{skuId:sku.id}})}>打开词库</Button><Button type="primary" onClick={downloadAll}>直接下载词库</Button><Button onClick={()=>{setEditing(true);setConfirmed(false);setStaged(null)}}>导入新 Excel / 重新分析</Button></Space>}/>:<>
        {!step02Unlocked?<Alert type="warning" showIcon style={{marginBottom:10}} message="请先点击确认商品"/>:null}
-      <Upload.Dragger showUploadList={false} accept=".xlsx,.xls,.csv,.tsv" disabled={busy||!step02Unlocked} beforeUpload={file=>{void loadFile(file);return false}}><InboxOutlined className="kw-v2-upload-icon"/><div>导入你的卖家精灵关键词 Excel（真实文件解析）</div><div className="kw-v2-muted">支持 xlsx / xls / csv / tsv · 文件最大 12MB；上传后预览，不直接生成投放结果</div></Upload.Dragger>
-      {staged?<><div className="kw-v2-filemeta"><Tag icon={<FileExcelOutlined/>} color="green">{staged.fileName}</Tag>{staged.keywords.length} 个去重词 · 词根 {staged.roots.length} · 待翻译 {staged.keywords.filter(k=>!k.translation).length}</div><ProTable rowKey="id" size="small" search={false} options={false} toolBarRender={false} pagination={false} columns={[{title:'关键词',dataIndex:'term'},{title:'中文释义',dataIndex:'translation',render:(_,r)=>r.translation||'待翻译'},{title:'月搜索量',dataIndex:'monthlySearches'},{title:'PPC',dataIndex:'amazonPpc'}]} dataSource={staged.keywords.slice(0,5)}/>{staged.warnings.length?<Alert type="warning" showIcon message={staged.warnings.join('；')}/>:null}</>:null}
+      <Upload.Dragger showUploadList={false} accept=".xlsx" disabled={busy||!step02Unlocked} beforeUpload={file=>{void loadFile(file);return false}}><InboxOutlined className="kw-v2-upload-icon"/><div>导入你的卖家精灵关键词 Excel（真实文件解析）</div><div className="kw-v2-muted">支持 xlsx · 文件最大 12MB；上传后预览，不直接生成投放结果</div></Upload.Dragger>
+      {staged?<><div className="kw-v2-filemeta"><Tag icon={<FileExcelOutlined/>} color="green">{staged.fileName}</Tag>{staged.keywords.length} 个去重词 · 词根 {staged.roots.length} · 待翻译 {staged.keywords.filter(k=>!k.translation).length}</div><ProTable rowKey="id" size="small" search={false} options={false} toolBarRender={false} pagination={false} columns={[{title:'关键词',dataIndex:'term'},{title:'中文释义',dataIndex:'translation',render:(_,r)=>r.translation||'待翻译'},{title:'月搜索量',dataIndex:'monthlySearches'},{title:'PPC',dataIndex:'amazonPpc'}]} dataSource={staged.keywords.slice(0,5)}/>{staged.warnings.length?<Alert type="warning" showIcon message={staged.warnings.join('；')}/>:null}</>:storedUpload?<div className="kw-v2-filemeta"><Tag icon={<FileExcelOutlined/>} color="green">{storedUpload.filename}</Tag>{storedUpload.rows} 行原始来源已保存；重新分析请重新选择文件</div>:null}
      </>}
    </Card>
    {!existing?<Card size="small" className="kw-v2-preflight"><Space><Button onClick={openFacts} disabled={!ready} loading={waitingForWalmart}>核对商品信息</Button>{waitingForWalmart?<Text type="secondary">正在获取 Walmart 商品资料，完成后自动允许核对</Text>:null}<Button type="primary" disabled={!ready||!confirmed||!parametersComplete||busy} loading={busy} onClick={()=>void doAnalysis()}>开始分析</Button></Space></Card>:null}
    {analyzed&&rows.length?<div className="kw-v2-results">
     <div className="kw-v2-results-toolbar">
-      <Space wrap><Tag color="blue">SKU：{sku.sku}</Tag><Text type="secondary">来源：{lastAnalysis?.sourceFile||'当前会话'}</Text><Tag color="orange">市场数据来自 Excel · 评分为本地规则计算（非 AI）· 无广告实绩</Tag></Space>
+      <Space wrap><Tag color="blue">SKU：{sku.sku}</Tag><Text type="secondary">来源：{lastAnalysis?.sourceFile||'已保存来源'}</Text><Tag color="orange">后端冻结分析 · 证据不足的词待人工复核 · 无广告实绩</Tag></Space>
       <Space wrap><Button onClick={()=>{setEditing(true);setStaged(null);setConfirmed(false);setConsent(false)}}>修改资料 / 重新导入</Button><Button onClick={()=>navigate('/ads/keyword-library',{state:{skuId:sku.id}})}>查看词库</Button></Space>
     </div>
     <div className="kw-v2-stats"><Metric symbol="⌕" label="分析关键词" value={rows.length} hint="SKU 内去重后"/><Metric symbol="✓" label="Exact 精准" value={`${rows.filter(x=>x.entry.exact).length} / ${rules.limits.exact}`} hint="P0 → P1 → P2 补位"/><Metric symbol="⌘" label="Broad 广泛" value={`${rows.filter(x=>x.entry.broad).length} / ${rules.limits.broad}`} hint={`核心词根 ≤${rules.limits.roots}`} /><Metric symbol="!" label="待复核 / 风险" value={rows.filter(x=>['复查','候选复查','不投放','品牌等级'].includes(x.entry.grade)).length} hint="硬风险优先隔离"/></div>
     <Card size="small" className="kw-v2-resultcard">
-     <div className="kw-v2-tabhead"><Tabs activeKey={resultsTab} onChange={x=>setResultsTab(x as ResultsTab)} items={[{key:'keywords',label:`关键词筛选 ${rows.length}`},{key:'plan',label:'投放方案'},{key:'listing',label:'Listing 文案'}]}/><Tag color="orange">本地规则初筛 · 非 AI 结果</Tag></div>
+     <div className="kw-v2-tabhead"><Tabs activeKey={resultsTab} onChange={x=>setResultsTab(x as ResultsTab)} items={[{key:'keywords',label:`关键词筛选 ${rows.length}`},{key:'plan',label:'投放方案'},{key:'listing',label:'Listing 文案'}]}/><Tag color="orange">已保存的后端分析 · 非广告执行</Tag></div>
      {resultsTab==='keywords'?<>
       <div className="kw-v2-subtabs"><Space><Button type={keywordView==='decision'?'primary':'default'} size="small" onClick={()=>setKeywordView('decision')}>投放决策</Button><Button type={keywordView==='market'?'primary':'default'} size="small" onClick={()=>setKeywordView('market')}>市场与竞品数据</Button></Space></div>
       <div className="kw-v2-filters"><Input.Search placeholder="搜索关键词 / 词根 / 中文" allowClear className="kw-v2-search" value={query} onChange={e=>setQuery(e.target.value)}/><Select value={filter} onChange={setFilter} style={{width:150}} options={['全部','P0','P1','P2','品牌等级','候选复查','复查','不投放'].map(x=>({value:x,label:x}))}/><Select value={placement} onChange={setPlacement} style={{width:150}} options={[{value:'all',label:'全部投放状态'},{value:'exact',label:'进入 Exact'},{value:'broad',label:'进入 Broad'},{value:'none',label:'未进入投放'}]}/><Button onClick={()=>{setQuery('');setFilter('全部');setPlacement('all')}}>重置筛选</Button><Button icon={<TranslationOutlined/>} disabled title="自动翻译服务尚未接入；可在关键词下方点击编辑人工填写中文">批量翻译（待接入）</Button></div>
       <ReportTableShell label="关键词分析结果"><ProTable<KeywordRow> rowKey={r=>r.keyword.id} size="small" search={false} options={false} toolBarRender={false} columns={keywordView==='decision'?decisionCols:marketCols} dataSource={filtered} pagination={{pageSize:10,showSizeChanger:true,pageSizeOptions:[10,20,50]}} scroll={{x:keywordView==='decision'?1580:1460,y:430}}/></ReportTableShell>
      </>:null}
      {resultsTab==='plan'?<>
-      <Alert type="warning" showIcon message="下面是本地规则广告方案；不是 Walmart 官方出价，也不会执行广告。"/>
-      <div className="kw-v2-plan-stats"><Metric symbol="E" label="Exact 计划词" value={rows.filter(r=>r.entry.exact).length} hint={`上限 ${rules.limits.exact}`}/><Metric symbol="B" label="Broad 计划词" value={rows.filter(r=>r.entry.broad).length} hint={`上限 ${rules.limits.broad}`}/><Metric symbol="$" label="手动 Bid" value={dollarText(rules.bid.exact)} hint="本地规则参数"/><Metric symbol="$" label="自动 Bid" value={dollarText(rules.bid.auto)} hint="本地规则参数"/></div>
-      <div className="kw-v2-plan-layout"><Card size="small" title="本次广告执行目标"><Text strong>店铺 / 账号</Text><Select className="kw-v2-block" value={selectedListing?.listing.store} disabled options={selectedListing?[{label:selectedListing.listing.store,value:selectedListing.listing.store}]:[]}/><div className="kw-v2-muted">当前已选择 Item ID：{itemId||'未选择'}{selectedListing?` · ${selectedListing.listing.store}`:''}</div><Divider/><Text strong>手动 Campaign</Text><div>{sku.sku?sku.sku+'-Manual':'—'}</div><Text strong>自动 Campaign</Text><div>{sku.sku?sku.sku+'-Auto':'—'}</div></Card><Card size="small" title="本地广告参数建议（未执行）"><Descriptions size="small" bordered column={1} items={[{key:'bid',label:'手动 Bid',children:dollarText(rules.bid.exact)},{key:'auto',label:'自动 Bid',children:dollarText(rules.bid.auto)},{key:'budget',label:'手动 / 自动每日预算',children:`$${rules.bid.dailyBudget} / $${rules.bid.dailyBudget}`},{key:'start',label:'美国开始日期',children:rulesDate||'未配置'},{key:'rule',label:'规则版本',children:`V${rules.version}.0`} ]}/></Card></div>
+      <Alert type="warning" showIcon message="下面是已保存分析的内部投放候选；不是 Walmart 官方出价，也不会执行广告。"/>
+      <div className="kw-v2-plan-stats"><Metric symbol="E" label="Exact 计划词" value={rows.filter(r=>r.entry.exact).length} hint="已保存分析"/><Metric symbol="B" label="Broad 计划词" value={rows.filter(r=>r.entry.broad).length} hint="已保存分析"/><Metric symbol="$" label="手动 Bid" value={dollarText(rules.bid.exact)} hint="本地规则参数"/><Metric symbol="$" label="自动 Bid" value={dollarText(rules.bid.auto)} hint="本地规则参数"/></div>
+      <div className="kw-v2-plan-layout"><Card size="small" title="本次广告执行目标"><Text strong>店铺 / 账号</Text><Select className="kw-v2-block" value={selectedListing?.listing.store} disabled options={selectedListing?[{label:selectedListing.listing.store,value:selectedListing.listing.store}]:[]}/><div className="kw-v2-muted">当前已选择 Item ID：{itemId||'未选择'}{selectedListing?` · ${selectedListing.listing.store}`:''}</div><Divider/><Text strong>手动 Campaign</Text><div>{sku.sku?sku.sku+'-Manual':'—'}</div><Text strong>自动 Campaign</Text><div>{sku.sku?sku.sku+'-Auto':'—'}</div></Card><Card size="small" title="本地广告参数建议（未执行）"><Descriptions size="small" bordered column={1} items={[{key:'bid',label:'手动 Bid',children:dollarText(rules.bid.exact)},{key:'auto',label:'自动 Bid',children:dollarText(rules.bid.auto)},{key:'budget',label:'手动 / 自动每日预算',children:`$${rules.bid.dailyBudget} / $${rules.bid.dailyBudget}`},{key:'start',label:'美国开始日期',children:rulesDate||'未配置'},{key:'rule',label:'分析规则版本',children:lastAnalysis?.ruleVersionId||'未加载'} ]}/></Card></div>
       <div className="kw-v2-exportbar"><Button onClick={()=>csvDownload(`${sku.sku}_分析报告.csv`,['关键词','中文','得分','等级','Exact','Broad','市场搜索量'],filtered.map(({entry:e,keyword:k})=>[k.term,k.translation||'',e.score,e.grade,e.exact?'Y':'N',e.broad?'Y':'N',k.monthlySearches]))}>下载分析报告 CSV</Button><Button type="primary" onClick={downloadAll}>下载五表分析 Excel</Button></div>
      </>:null}
      {resultsTab==='listing'?<div className="kw-v2-listing"><div className="kw-v2-listing-main"><Card size="small" title={`Title · ${effectiveDraft.title.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.title)}>复制</Button>}><Input.TextArea rows={3} value={effectiveDraft.title} onChange={e=>setDraft({...effectiveDraft,title:e.target.value})}/></Card><Card size="small" title={`Key Features · ${effectiveDraft.features.split('\n').filter(Boolean).length} / 5 条`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.features)}>复制</Button>}><Input.TextArea rows={6} value={effectiveDraft.features} onChange={e=>setDraft({...effectiveDraft,features:e.target.value})}/></Card><Card size="small" title={`Description · ${effectiveDraft.description.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.description)}>复制</Button>}><Input.TextArea rows={5} value={effectiveDraft.description} onChange={e=>setDraft({...effectiveDraft,description:e.target.value})}/></Card></div><Card size="small" title="Listing 生成依据"><p className="kw-v2-muted">已核对的商品事实、风险词和当前候选关键词。仅根据人工填写的商品资料生成模板，未调用 AI 文案 API。</p><Alert type="warning" message="模板英文文案必须人工核对，不能直接作为正式 Listing 发布"/><Divider/><Space wrap>{rows.filter(x=>x.entry.exact).slice(0,7).map(x=><Tag key={x.keyword.id}>{x.keyword.term}</Tag>)}</Space><Divider/><Button type="primary" block onClick={makeListing}>生成文案草稿</Button><Button block onClick={()=>{saveListing(sku.id,effectiveDraft);message.success('草稿已保存到当前浏览器会话')}}>保存当前草稿</Button><Button block onClick={()=>csvDownload(`${sku.sku}_Listing.csv`,['字段','文案'],[['Title',effectiveDraft.title],['Key Features',effectiveDraft.features],['Description',effectiveDraft.description]])}>导出 Listing 文案 CSV</Button></Card></div>:null}
@@ -738,17 +864,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    {!analyzed&&existing?<Empty description="该 SKU 已收录关键词。若需重新分析，请在词库中操作；本页按新品流程设计。"/>:null}
    </>}
   </div>
-  <Modal open={factOpen} width={830} onCancel={()=>setFactOpen(false)} title="核对商品信息" okText="确认参数" okButtonProps={{disabled:!ready||!consent||!parametersComplete}} onOk={()=>{
-    if(!ready||!consent||!parametersComplete){
-      message.warning('请先补齐真实商品资料并完成规则配置');
-      return;
-    }
-    upsertProductSku({
-      ...sku,
-      material:facts.material,
-      uses:facts.use.split(/[,，、;；\n]+/).map(x=>x.trim()).filter(Boolean)
-    });
-    setConfirmed(true);setFactOpen(false);message.success('商品事实与投放参数已确认，现在可开始分析')}}>
+  <Modal open={factOpen} width={830} onCancel={()=>setFactOpen(false)} title="核对商品信息" okText="确认参数" okButtonProps={{disabled:!ready||!consent||!parametersComplete,loading:busy}} onOk={()=>{void confirmParameters()}}>
 
    {walmartError?
      <Alert
@@ -869,8 +985,8 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    <Checkbox checked={consent} onChange={e=>setConsent(e.target.checked)} style={{marginTop:14}}>我已核对 SKU、商品资料和至少 {rules.asin.min} 个 ASIN 编号；了解开始分析后会采集真实 Amazon 文案，规则评分仍需人工复核。</Checkbox>
   </Modal>
 
-  <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="该分值是本地规则初筛计算，不是 AI 评估。当前版本未根据 Amazon 正文重新计算关键词覆盖。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'本地规则分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根（初步）',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/></Drawer>
-  <Drawer open={!!compare} title={`跨 SKU 关键词 · ${compare?.term||''}`} width={620} onClose={()=>setCompare(null)}><Alert type="info" message="每个 SKU 独立评分；当前结果来自本次上传的数据和本地计算。"/><ProTable rowKey="skuId" pagination={false} search={false} options={false} toolBarRender={false} columns={[{title:'SKU',dataIndex:'skuId',render:(_,r)=>skus.find(s=>s.id===r.skuId)?.sku},{title:'得分',dataIndex:'score'},{title:'等级',dataIndex:'grade'},{title:'Exact',dataIndex:'exact',render:(_,r)=>r.exact?'✓':'—'},{title:'Broad',dataIndex:'broad',render:(_,r)=>r.broad?'✓':'—'}]} dataSource={compare?allAssoc(compare.id):[]}/></Drawer>
-  <Drawer open={historyOpen} title="分析历史" width={600} onClose={()=>setHistoryOpen(false)}><Alert type="info" message="分析历史只在当前浏览器会话保存；不写入服务端。"/><ProTable rowKey={r=>`${r.skuId}-${r.at}`} pagination={false} search={false} options={false} toolBarRender={false} dataSource={analyses} columns={[{title:'SKU',dataIndex:'skuId',render:(_,r)=>skus.find(s=>s.id===r.skuId)?.sku},{title:'日期',dataIndex:'at'},{title:'规则版本',dataIndex:'version'},{title:'关键词数',dataIndex:'rows'},{title:'来源文件',dataIndex:'sourceFile'}]}/></Drawer>
+  <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="分数与等级来自已保存的后端分析；缺少可验证证据时保持待复核，不推断广告表现。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'后端分析分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/></Drawer>
+  <Drawer open={!!compare} title={`跨 SKU 关键词 · ${compare?.term||''}`} width={620} onClose={()=>setCompare(null)}><Alert type="info" message="每个 SKU 独立分析；这里只比较已加载的后端结果。"/><ProTable rowKey="skuId" pagination={false} search={false} options={false} toolBarRender={false} columns={[{title:'SKU',dataIndex:'skuId',render:(_,r)=>skus.find(s=>s.id===r.skuId)?.sku},{title:'得分',dataIndex:'score'},{title:'等级',dataIndex:'grade'},{title:'Exact',dataIndex:'exact',render:(_,r)=>r.exact?'✓':'—'},{title:'Broad',dataIndex:'broad',render:(_,r)=>r.broad?'✓':'—'}]} dataSource={compare?allAssoc(compare.id):[]}/></Drawer>
+  <Drawer open={historyOpen} title="分析历史" width={600} onClose={()=>setHistoryOpen(false)}><Alert type="info" message="分析历史读取已保存批次；点击一行可恢复当时冻结的分析结果。"/><ProTable<KeywordRun> rowKey="run_id" pagination={{current:historyPage,pageSize:20,total:historyTotal,onChange:pageNumber=>{void loadHistoryPage(pageNumber)}}} search={false} options={false} toolBarRender={false} dataSource={serverRuns} onRow={run=>({onClick:()=>{void openRun(run)}})} columns={[{title:'SKU',dataIndex:'product_id',render:()=>sku.sku},{title:'日期',dataIndex:'created_at'},{title:'规则版本',dataIndex:'rule_version_id'},{title:'关键词数',dataIndex:'keyword_count'},{title:'来源文件',render:()=> '已保存来源'}]}/></Drawer>
  </PageShell>;
 }

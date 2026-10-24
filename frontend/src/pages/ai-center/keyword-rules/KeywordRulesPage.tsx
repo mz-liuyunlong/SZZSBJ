@@ -1,10 +1,11 @@
-import {useMemo,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 import {Alert,Button,Card,Descriptions,Form,Input,InputNumber,Modal,Space,Switch,Tag,message} from 'antd';
 import {DiffOutlined} from '@ant-design/icons';
 import {ProTable} from '@ant-design/pro-components';
 import {analyzeKeyword,initialRules,ruleErrors} from '@/features/keyword-planning/model';
 import {useKeywordStore} from '@/features/keyword-planning/store';
 import type {RuleConfig,RuleHistory} from '@/features/keyword-planning/types';
+import {createKeywordRuleDraft,createKeywordRuleSet,listKeywordRuleSets,listKeywordRuleVersions,saveKeywordRuleDraft,type KeywordRuleVersion,type KeywordDraftLimits} from '@/api/keywordPlanningV11Api';
 import './KeywordRulesPage.css';
 type Group='weights'|'thresholds'|'limits'|'asin'|'bid'|'naming'|'listing'|'export';
 const labels:Record<Group,string>={weights:'评分权重',thresholds:'分级阈值',limits:'投放名额',asin:'Amazon 参考',bid:'出价预算',naming:'Campaign 命名',listing:'Listing 规则',export:'Excel 配置'};
@@ -24,11 +25,74 @@ function editField(rule:RuleConfig,group:Group,key:string,value:string|number):R
   target[key]=value;
   return updated;
 }
-export function KeywordRulesPanel(){
- const {rules,draft,history,startDraft,changeDraft,publishDraft,resetDraft,rollback,keywords,skus}=useKeywordStore();
+const limitsFromRule=(r:RuleConfig):KeywordDraftLimits=>({max_p0:r.limits.p0,max_p1:r.limits.p1,
+ max_p2:r.limits.p2,max_exact:r.limits.exact,max_broad_roots:r.limits.roots,
+ max_broad_long_tails:Math.max(0,r.limits.broad-r.limits.roots)});
+const storedRule=(row:KeywordRuleVersion):RuleConfig|null=>{
+ const value=row.config.editor_config;
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const r=value as RuleConfig;
+ return r.weights&&r.thresholds&&r.limits&&r.asin&&r.bid&&r.naming&&r.listing&&r.export
+   ?{...r,version:row.version_number}:null;
+};
+export function KeywordRulesPanel({sourceAccountRef}:{sourceAccountRef?:string|null}){
+ const {rules,draft,history,changeDraft,resetDraft,rollback,keywords,skus}=useKeywordStore();
  const [tab,setTab]=useState('score');const [compare,setCompare]=useState(false);const [testOpen,setTestOpen]=useState(false);
+ const [ruleSetId,setRuleSetId]=useState<string|null>(null);
+ const [draftVersionId,setDraftVersionId]=useState<string|null>(null);
+ const [saving,setSaving]=useState(false);
+ useEffect(()=>{
+  let live=true;
+  queueMicrotask(()=>{if(live){
+   useKeywordStore.setState({rules:structuredClone(initialRules),draft:null,history:[]});
+   setRuleSetId(null);setDraftVersionId(null);
+  }});
+  if(!sourceAccountRef)return()=>{live=false};
+  void listKeywordRuleSets(sourceAccountRef).then(async sets=>{
+   const selected=sets.find(row=>row.rule_key==='keyword_v11_ui');
+   if(!selected||!live)return;
+   const versions=await listKeywordRuleVersions(sourceAccountRef,selected.rule_set_id);
+   if(!live)return;
+   setRuleSetId(selected.rule_set_id);
+   const published=versions.find(row=>row.status==='published'&&storedRule(row));
+   const open=versions.find(row=>row.status==='draft'&&storedRule(row));
+   const savedHistory:RuleHistory[]=versions.flatMap(row=>{
+    const rule=storedRule(row);
+    return rule?[{version:row.version_number,at:row.created_at??'',
+      reason:row.status,rule}]:[];
+   });
+   useKeywordStore.setState({rules:published?storedRule(published)!:structuredClone(initialRules),
+     draft:open?storedRule(open):null,history:savedHistory});
+   setDraftVersionId(open?.version_id??null);
+  }).catch(()=>{if(live)message.error('规则版本加载失败')});
+  return()=>{live=false};
+ },[sourceAccountRef]);
+ const createDraft=async(rule:RuleConfig=rules)=>{
+  if(!sourceAccountRef)throw new Error('请先选择有账户归属的 Listing');
+  let id=ruleSetId;
+  if(!id){id=(await createKeywordRuleSet(sourceAccountRef)).rule_set_id;setRuleSetId(id);}
+  const receipt=await createKeywordRuleDraft(sourceAccountRef,id,limitsFromRule(rule),rule as unknown as Record<string,unknown>);
+  setDraftVersionId(receipt.version_id);
+  useKeywordStore.setState({draft:{...structuredClone(rule),version:receipt.version_number}});
+  return receipt.version_id;
+ };
+ const saveDraft=async()=>{
+  if(!draft||!sourceAccountRef)return message.warning('请先创建草稿并选择账户');
+  if(errors.length)return message.error('请先处理规则校验错误');
+  setSaving(true);
+  try{
+   const id=draftVersionId??await createDraft(draft);
+   const receipt=await saveKeywordRuleDraft(sourceAccountRef,id,limitsFromRule(draft),draft as unknown as Record<string,unknown>);
+   useKeywordStore.setState(state=>({history:[
+    {version:receipt.version_number,at:new Date().toISOString(),reason:'draft',rule:structuredClone(draft)},
+    ...state.history.filter(row=>row.version!==receipt.version_number),
+   ]}));
+   message.success('规则草稿已保存到后端');
+  }catch(error){message.error(error instanceof Error?error.message:'草稿保存失败')}
+  finally{setSaving(false)}
+ };
  const shown=draft||rules;
- const errors=useMemo(()=>ruleErrors(shown),[shown]);
+ const errors=ruleErrors(shown);
  const computed=useMemo(()=>{
   const keys=Object.values(keywords).slice(0,300);const sku=skus[0];
   const stats=(r:RuleConfig)=>keys.reduce<Record<string,number>>((acc,k)=>{if(!sku)return acc;const grade=analyzeKeyword(k,sku,r).grade;acc[grade]=(acc[grade]||0)+1;return acc},{}) ;
@@ -42,26 +106,29 @@ export function KeywordRulesPanel(){
       {area?<Input.TextArea rows={4} disabled={!draft} value={String(value)} onChange={e=>draft&&changeDraft(editField(draft,g,x.key,e.target.value))}/>:isText?<Input type={x.key==='startDate'?'date':undefined} disabled={!draft} value={String(value??'')} onChange={e=>draft&&changeDraft(editField(draft,g,x.key,e.target.value))}/>:<InputNumber style={{width:'100%'}} disabled={!draft} step={x.step||1} value={Number(value)} min={0} onChange={n=>draft&&changeDraft(editField(draft,g,x.key,n??0))}/>}
    </Form.Item>})}</div></Card>
  };
- const confirmPublish=()=>{if(!draft)return message.warning('请先创建草稿');if(errors.length)return message.error('请先处理规则校验错误');
-  let reason='运营规则调整';Modal.confirm({title:'发布本地规则版本',content:<><Alert type="warning" message="这是浏览器内 仅本地 发布，不会更改数据库、历史分析或 Walmart 广告。"/><Input style={{marginTop:12}} placeholder="修改原因" defaultValue={reason} onChange={e=>{reason=e.target.value}}/></>,okText:'发布本地规则版本',onOk:()=>{const err=publishDraft(reason);if(err)message.error(err);else message.success('本地规则版本已发布，已有分析结果不会自动重算')}})};
+ const confirmPublish=()=>{
+  if(!draft)return message.warning('请先创建草稿');
+  if(errors.length)return message.error('请先处理规则校验错误');
+  message.warning('后端规则发布仍需完成项目审批例外；本地预览不能作为生效版本');
+ };
  return <>
    <div className="keyword-rules kw-v2-rules">
-     <Alert showIcon type="info" message={`当前发布版本：V${rules.version}。所有业务参数均可修改；规则只影响新分析，已有 SKU 的历史等级不自动覆盖。`}/>
-     <div className="kw-v2-rule-actions"><Space wrap><Button type="primary" onClick={()=>{startDraft();message.success('已创建独立草稿')}}>{draft?'重新从当前版本创建草稿':'创建规则草稿'}</Button><Button disabled={!draft} onClick={()=>setCompare(true)} icon={<DiffOutlined/>}>比较修改</Button><Button disabled={!draft} onClick={()=>setTestOpen(true)}>规则预览</Button><Button disabled={!draft} onClick={()=>{if(!draft)return;changeDraft({...structuredClone(initialRules),version:rules.version});message.info('已将默认参数载入草稿')}}>草稿恢复默认</Button><Button disabled={!draft} onClick={resetDraft}>放弃草稿</Button><Button type="primary" disabled={!draft||errors.length>0} onClick={confirmPublish}>发布本地版本</Button><Button disabled={!draft} onClick={()=>message.success("规则草稿已保存在当前会话（仅本地）")}>保存草稿</Button></Space></div>
+     <Alert showIcon type="info" message={`规则版本：V${rules.version}。草稿保存到后端；正式发布仍受项目审批门禁约束。`}/>
+     <div className="kw-v2-rule-actions"><Space wrap><Button type="primary" onClick={()=>{void createDraft().then(()=>message.success('已创建后端规则草稿')).catch(e=>message.error(e instanceof Error?e.message:'草稿创建失败'))}}>{draft?'重新从当前版本创建草稿':'创建规则草稿'}</Button><Button disabled={!draft} onClick={()=>setCompare(true)} icon={<DiffOutlined/>}>比较修改</Button><Button disabled={!draft} onClick={()=>setTestOpen(true)}>规则预览</Button><Button disabled={!draft} onClick={()=>{if(!draft)return;changeDraft({...structuredClone(initialRules),version:rules.version});message.info('已将默认参数载入草稿')}}>草稿恢复默认</Button><Button disabled={!draft} onClick={resetDraft}>放弃草稿</Button><Button type="primary" disabled={!draft||errors.length>0} onClick={confirmPublish}>发布本地版本</Button><Button disabled={!draft} loading={saving} onClick={()=>{void saveDraft()}}>保存草稿</Button></Space></div>
      {errors.length?<Alert type="error" message="规则校验未通过" description={errors.join('；')} showIcon/>:draft?<Alert type="success" message="草稿校验通过，可以规则预览。" showIcon/>:<Alert type="warning" message="当前为只读已发布版本。要修改请先创建草稿。"/>}
      <div className="kw-v2-rule-layout">
       <nav className="kw-v2-rule-nav" aria-label="规则业务分组">
        {[['score','▦ 评分与分级'],['amazon','⌕ Amazon 竞品埋词'],['limits','⊞ 投放名额与结构'],['risk','⚠ 风险与品牌隔离'],['defaults','$ 广告执行默认值'],['listing','T Listing 文案规则'],['governance','▣ 版本与权限']].map(([value,label])=><Button key={value} block type={tab===value?'primary':'text'} onClick={()=>setTab(value)}>{label}</Button>)}
       </nav>
       <main className="kw-v2-rule-main">
-       <div className="kw-v2-rule-banner"><div><strong>{draft?'当前正在编辑规则草稿':`当前生效规则 V${rules.version}.0`}</strong><p>{draft?'草稿待回测与确认；发布只影响新分析':'已发布版本只读；请先创建草稿，再编辑并回测'}</p></div><Tag color={draft?'gold':'green'}>{draft?'待发布草稿':'已发布'}</Tag></div>
+       <div className="kw-v2-rule-banner"><div><strong>{draft?'当前正在编辑本地规则草稿':`本地规则预览 V${rules.version}.0`}</strong><p>{draft?'草稿仅供预览；发布门禁待审批例外处理':'后端生效版本以已保存规则为准'}</p></div><Tag color="gold">本地预览</Tag></div>
        {tab==='score'?<>{group('weights')}{group('thresholds')}<Alert type="info" message="评分权重总和必须为 100；历史关键词分数保持原版本，不自动重算。"/></>:null}
        {tab==='amazon'?<>{group('asin')}<Alert type="warning" message="ASIN 覆盖需要标题、五点、描述文本；未接入 Amazon API 时，只允许人工或人工提供的文案。"/></>:null}
        {tab==='limits'?<>{group('limits')}<Card title="投放结构说明" size="small"><Descriptions column={1} bordered size="small" items={[{key:'exact',label:'Exact',children:'按等级优先级选取；不允许硬风险与品牌词自动投放'},{key:'broad',label:'Broad',children:'需区分核心词根与安全长尾，超额词保留候选'},{key:'export',label:'五表导出',children:'正式 Walmart Bulk 模板待接入，不等同本地导出'}]}/></Card></>:null}
        {tab==='risk'?<Card title="风险与品牌隔离" size="small"><Form.Item label="风险词（每行一个）"><Input.TextArea rows={9} disabled={!draft} value={shown.riskWords} onChange={e=>draft&&changeDraft({...draft,riskWords:e.target.value})}/></Form.Item><Alert type="info" message="硬风险与品牌识别为本地规则，人工可检查，不应未经审核直接上传真实关键词。"/></Card>:null}
        {tab==='defaults'?<>{group('bid')}{group('naming')}</>:null}
        {tab==='listing'?<>{group('listing')}<Card title="Listing 内容配置" size="small"><Form.Item label="允许生成 Description 草稿"><Switch checked={shown.listing.description} disabled={!draft} onChange={checked=>draft&&changeDraft({...draft,listing:{...draft.listing,description:checked}})}/></Form.Item></Card>{group('export')}<Alert type="warning" message="这里只配置本地导出字段，不声明与 Walmart 官方批量上传模板兼容。"/></>:null}
-       {tab==='governance'?<Card title="版本与权限" size="small"><Descriptions column={1} bordered size="small" items={[{key:'version',label:'当前版本',children:`V${rules.version}.0`},{key:'draft',label:'编辑权限',children:'本地本地会话允许编辑；真实权限由后端 RBAC 管理'},{key:'history',label:'历史结果',children:'已分析的 SKU 结果不随新版本自动覆盖'}]}/></Card>:null}
+       {tab==='governance'?<Card title="版本与权限" size="small"><Descriptions column={1} bordered size="small" items={[{key:'version',label:'当前版本',children:`V${rules.version}.0`},{key:'draft',label:'编辑权限',children:'本地会话允许编辑预览；真实权限由后端 RBAC 管理'},{key:'history',label:'历史结果',children:'已分析的 SKU 结果不随新版本自动覆盖'}]}/></Card>:null}
        <Card size="small" className="kw-v2-rule-history" title="规则版本历史" extra={<Tag color="blue">{history.length} 条</Tag>}><ProTable<RuleHistory>
         rowKey="version"
         search={false} options={false} toolBarRender={false}
@@ -71,7 +138,7 @@ export function KeywordRulesPanel(){
           {title:'版本',dataIndex:'version',width:95,render:(_,h)=>`V${h.version}.0`},
           {title:'时间',dataIndex:'at',width:180},
           {title:'修改原因',dataIndex:'reason'},
-          {title:'操作',key:'action',width:120,render:(_,h)=><Button type="link" onClick={()=>{rollback(h.version);message.info('旧版本已复制到草稿，未修改已发布版本')}}>复制为草稿</Button>}
+          {title:'操作',key:'action',width:120,render:(_,h)=><Button type="link" onClick={()=>{rollback(h.version);setDraftVersionId(null);message.info('旧版本已复制到草稿，保存后创建新版本')}}>复制为草稿</Button>}
         ]}
       /></Card>
       </main>

@@ -23,6 +23,7 @@ from .models import (
     AiKwProductFactSnapshot,
     BizSkuAsinReference,
     RawKwUploadFile,
+    RawKwUploadRow,
 )
 from .rule_gates import REQUIRED_PRODUCT_FIELDS
 from .source_bridge import (
@@ -82,8 +83,12 @@ class KeywordSourceStateRead(BaseModel):
     product_id: UUID
     latest_confirmed_fact_id: UUID | None
     latest_upload_id: UUID | None
+    latest_upload_filename: str | None
+    latest_upload_rows: int
     item_id: str | None
+    confirmed_fields: dict[str, str]
     asin_reference_count: int
+    asin_references: list[str]
     source_status: Literal["ready_for_import", "fact_confirmed"]
 
 
@@ -133,7 +138,7 @@ def get_source_state(
         .limit(1)
     )
     upload = session.scalar(
-        select(RawKwUploadFile.id)
+        select(RawKwUploadFile)
         .where(
             RawKwUploadFile.source_account_ref == source_account_ref,
             RawKwUploadFile.product_id == product_id,
@@ -142,26 +147,50 @@ def get_source_state(
         .order_by(RawKwUploadFile.created_at.desc())
         .limit(1)
     )
-    count = (
+    upload_rows = (
         session.scalar(
             select(func.count())
-            .select_from(BizSkuAsinReference)
+            .select_from(RawKwUploadRow)
+            .where(
+                RawKwUploadRow.source_account_ref == source_account_ref,
+                RawKwUploadRow.upload_id == upload.id,
+            )
+        )
+        if upload
+        else 0
+    )
+    asin_references = list(
+        session.scalars(
+            select(BizSkuAsinReference.asin)
             .where(
                 BizSkuAsinReference.source_account_ref == source_account_ref,
                 BizSkuAsinReference.product_id == product_id,
                 BizSkuAsinReference.is_active.is_(True),
+                BizSkuAsinReference.latest_snapshot_id.is_not(None),
             )
+            .order_by(BizSkuAsinReference.asin.asc())
         )
-        or 0
     )
     return success_response(
         request,
         data=KeywordSourceStateRead(
             product_id=product_id,
             latest_confirmed_fact_id=fact.id if fact else None,
-            latest_upload_id=upload,
+            latest_upload_id=upload.id if upload else None,
+            latest_upload_filename=upload.original_filename if upload else None,
+            latest_upload_rows=int(upload_rows or 0),
             item_id=fact.item_id if fact else None,
-            asin_reference_count=int(count),
+            confirmed_fields={
+                key: str(value["value"])
+                for key, value in (fact.facts_with_sources_json or {}).items()
+                if key in REQUIRED_PRODUCT_FIELDS
+                and isinstance(value, dict)
+                and isinstance(value.get("value"), str)
+            }
+            if fact
+            else {},
+            asin_reference_count=len(asin_references),
+            asin_references=asin_references,
             source_status="fact_confirmed" if fact else "ready_for_import",
         ),
         meta=None,

@@ -29,6 +29,7 @@ from .rule_governance import (
     retire_published_rule,
     review_rule_decision,
     submit_rule_decision,
+    update_scoring_draft,
 )
 
 router = APIRouter(tags=["Keyword Planning"])
@@ -39,6 +40,7 @@ class CreateDraftBody(BaseModel):
     limits: dict[str, int] = Field(default_factory=dict)
     confirmed_brands: dict[str, str] = Field(default_factory=dict)
     suspected_brands: dict[str, str] = Field(default_factory=dict)
+    editor_config: dict[str, object] = Field(default_factory=dict)
 
 
 class CreateRuleSetBody(BaseModel):
@@ -289,6 +291,36 @@ def create_draft(
             limits=limits,
             confirmed_brands=body.confirmed_brands,
             suspected_brands=body.suspected_brands,
+            editor_config=body.editor_config,
+        )
+    except (RuleGovernanceBlocked, TypeError, ValueError) as exc:
+        raise _invalid(RuleGovernanceBlocked(str(exc))) from exc
+    return success_response(request, data=_receipt(receipt), meta=None)
+
+
+@router.patch("/rules/{version_id}/draft", response_model=SuccessEnvelope[RuleDraftRead, None])
+def save_draft(
+    request: Request,
+    version_id: UUID,
+    body: CreateDraftBody,
+    session: Annotated[Session, Depends(get_db_session)],
+    allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
+    principal: Annotated[Principal, Depends(require_super_admin)],
+) -> SuccessEnvelope[RuleDraftRead, None]:
+    _account_allowed(body.source_account_ref, allowed_accounts, principal)
+    _isolated_write(session)
+    try:
+        if set(body.limits) - set(asdict(ColdStartLimits())):
+            raise RuleGovernanceBlocked("UNRECOGNIZED_DRAFT_LIMIT")
+        receipt = update_scoring_draft(
+            session,
+            account=body.source_account_ref,
+            version_id=version_id,
+            actor=principal.user_id,
+            limits=ColdStartLimits(**body.limits),
+            confirmed_brands=body.confirmed_brands,
+            suspected_brands=body.suspected_brands,
+            editor_config=body.editor_config,
         )
     except (RuleGovernanceBlocked, TypeError, ValueError) as exc:
         raise _invalid(RuleGovernanceBlocked(str(exc))) from exc

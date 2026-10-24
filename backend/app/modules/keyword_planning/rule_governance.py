@@ -72,6 +72,7 @@ def build_draft_config(
     limits: ColdStartLimits,
     confirmed_brands: Mapping[str, str],
     suspected_brands: Mapping[str, str],
+    editor_config: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     limits.validate()
     # Quotas are configurable business policy, never claimed Walmart API limits.
@@ -82,6 +83,11 @@ def build_draft_config(
     suspected = _registry(suspected_brands)
     if confirmed.keys() & suspected.keys():
         raise RuleGovernanceBlocked("BRAND_REVIEW_CONFLICT")
+    if editor_config is not None and (
+        not isinstance(editor_config, dict)
+        or len(json.dumps(editor_config, ensure_ascii=False)) > 16384
+    ):
+        raise RuleGovernanceBlocked("EDITOR_CONFIG_INVALID")
     return {
         "limits": values,
         "confirmed_brands": confirmed,
@@ -89,6 +95,7 @@ def build_draft_config(
         "business_approvals": {f"D{i:02d}": "pending" for i in range(1, 9)},
         "automatic_classification_approved": False,
         "official_bulk_template_approved": False,
+        "editor_config": dict(editor_config or {}),
     }
 
 
@@ -141,6 +148,7 @@ def create_scoring_draft(
     limits: ColdStartLimits,
     confirmed_brands: Mapping[str, str],
     suspected_brands: Mapping[str, str],
+    editor_config: Mapping[str, object] | None = None,
 ) -> RuleVersionReceipt:
     """Create a non-executable draft, serializing version allocation on the rule set."""
     if not account or not actor or len(actor) > 255:
@@ -149,6 +157,7 @@ def create_scoring_draft(
         limits=limits,
         confirmed_brands=confirmed_brands,
         suspected_brands=suspected_brands,
+        editor_config=editor_config,
     )
     with session.begin():
         rule_set = session.scalar(
@@ -185,6 +194,47 @@ def create_scoring_draft(
             number,
             "draft",
             record.config_sha256,
+        )
+
+
+def update_scoring_draft(
+    session: Session,
+    *,
+    account: str,
+    version_id: UUID,
+    actor: str,
+    limits: ColdStartLimits,
+    confirmed_brands: Mapping[str, str],
+    suspected_brands: Mapping[str, str],
+    editor_config: Mapping[str, object],
+) -> RuleVersionReceipt:
+    """Save only an unsubmitted draft; a reviewed or published digest is immutable."""
+    config = build_draft_config(
+        limits=limits,
+        confirmed_brands=confirmed_brands,
+        suspected_brands=suspected_brands,
+        editor_config=editor_config,
+    )
+    with session.begin():
+        version, owner = _owned_version(session, account=account, version_id=version_id)
+        if version.status != "draft" or owner.created_by != actor:
+            raise RuleGovernanceBlocked("DRAFT_NOT_EDITABLE")
+        if (
+            session.scalar(
+                select(AiKwRuleDecision.id).where(AiKwRuleDecision.rule_version_id == version_id)
+            )
+            is not None
+        ):
+            raise RuleGovernanceBlocked("DRAFT_DECISIONS_ALREADY_SUBMITTED")
+        version.config_json = config
+        version.config_sha256 = canonical_digest(config)
+        session.flush()
+        return RuleVersionReceipt(
+            version.id,
+            version.rule_set_id,
+            version.version_number,
+            version.status,
+            version.config_sha256,
         )
 
 

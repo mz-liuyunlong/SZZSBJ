@@ -25,9 +25,13 @@ from .models import (
     AiKwProductFactSnapshot,
     AiKwRuleSet,
     AiKwRuleVersion,
+    AiKwRunAsin,
+    AiKwRunFile,
     AiKwRunKeyword,
     BizKwMarketObservation,
+    BizSkuAsinReference,
     DimKwTerm,
+    RawKwAsinSnapshot,
     RawKwUploadFile,
     RawKwUploadRow,
     RawKwWalmartPageSnapshot,
@@ -76,6 +80,7 @@ class AnalysisCommand:
     candidates: tuple[ReviewedCandidate, ...]
     walmart_page_snapshot_id: UUID | None = None
     store_id: str | None = None
+    asin_snapshot_ids: tuple[UUID, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -115,6 +120,7 @@ def calculate_input_sha256(
         else None,
         "rule_version_id": str(command.rule_version_id),
         "store_id": command.store_id,
+        "asin_snapshot_ids": [str(value) for value in command.asin_snapshot_ids],
         "engine_version": command.engine_version,
         "parser_version": command.parser_version,
         "normalizer_version": command.normalizer_version,
@@ -204,6 +210,8 @@ def _validate(
         raise AnalysisBlocked("PRODUCT_ITEM_MISMATCH")
     if command.input_sha256 != calculate_input_sha256(command, product, policy):
         raise AnalysisBlocked("INPUT_HASH_MISMATCH")
+    if command.asin_snapshot_ids != tuple(sorted(set(command.asin_snapshot_ids))):
+        raise AnalysisBlocked("ASIN_SNAPSHOT_REFERENCES_INVALID")
     if any(not isinstance(item.term_id, UUID) for item in command.candidates):
         raise AnalysisBlocked("TERM_ID_INVALID")
     ids = [x.term_id for x in command.candidates]
@@ -232,7 +240,12 @@ def _lock_key(account: str, request_key: str) -> int:
 
 def _validate_persisted_sources(
     session: Session, cmd: AnalysisCommand, policy: PublishedPolicy, product: ProductConfirmation
-) -> tuple[RawKwWalmartPageSnapshot | None, dict[UUID, DimKwTerm]]:
+) -> tuple[
+    RawKwWalmartPageSnapshot | None,
+    dict[UUID, DimKwTerm],
+    tuple[UUID, ...],
+    tuple[UUID, ...],
+]:
     account = cmd.source_account_ref
     fact = session.scalar(
         _scoped_ref_query(AiKwProductFactSnapshot, cmd.product_fact_snapshot_id, account)
@@ -362,7 +375,39 @@ def _validate_persisted_sources(
             market_references.get(ob.id) != ob.term_id for ob in observations
         ):
             raise AnalysisBlocked("MARKET_EVIDENCE_MISSING_OR_CROSS_SCOPED")
-    return page, terms
+    asin_references = list(
+        session.scalars(
+            select(BizSkuAsinReference).where(
+                BizSkuAsinReference.source_account_ref == account,
+                BizSkuAsinReference.product_id == cmd.product_id,
+                BizSkuAsinReference.is_active.is_(True),
+                BizSkuAsinReference.latest_snapshot_id.in_(cmd.asin_snapshot_ids),
+            )
+        )
+    )
+    snapshot_ids = {ref.latest_snapshot_id for ref in asin_references if ref.latest_snapshot_id}
+    if tuple(sorted(snapshot_ids)) != cmd.asin_snapshot_ids:
+        raise AnalysisBlocked("ASIN_SNAPSHOT_REFERENCES_CHANGED")
+    snapshots = (
+        {
+            snapshot.id: snapshot
+            for snapshot in session.scalars(
+                select(RawKwAsinSnapshot).where(
+                    RawKwAsinSnapshot.source_account_ref == account,
+                    RawKwAsinSnapshot.id.in_(snapshot_ids),
+                )
+            )
+        }
+        if snapshot_ids
+        else {}
+    )
+    for ref in asin_references:
+        if ref.latest_snapshot_id is None:
+            continue
+        snapshot = snapshots.get(ref.latest_snapshot_id)
+        if snapshot is None or snapshot.asin != ref.asin:
+            raise AnalysisBlocked("ASIN_SNAPSHOT_SCOPE_MISMATCH")
+    return page, terms, tuple(sorted(uploads)), tuple(sorted(snapshot_ids))
 
 
 def _page_evidence(
@@ -431,7 +476,9 @@ def execute_reviewed_analysis(
                 int((getattr(existing, "summary_json", {}) or {}).get("total", 0)),
             )
 
-        stored_page, _terms = _validate_persisted_sources(session, command, policy, product)
+        stored_page, _terms, upload_ids, asin_snapshot_ids = _validate_persisted_sources(
+            session, command, policy, product
+        )
         output = run_published_v11(
             product=product,
             policy=policy,
@@ -452,8 +499,7 @@ def execute_reviewed_analysis(
         if output.official_export_authorized:
             raise AnalysisBlocked("AUTOMATIC_EXPORT_NOT_AUTHORIZED")
         now = datetime.now(UTC)
-        # Any unresolved keyword keeps the whole run blocked. A proven hard-risk
-        # exclusion is final even though it deliberately has no numeric score.
+        # A partial run is persisted for review; it is not labelled fully succeeded.
         scored = sum(d.score is not None for d in output.decisions)
         review_required = sum(
             d.score is None and d.allocation_grade != "不投放" for d in output.decisions
@@ -497,6 +543,12 @@ def execute_reviewed_analysis(
         )
         session.add(run)
         session.flush()
+        for upload_id in upload_ids:
+            session.add(AiKwRunFile(source_account_ref=account, run_id=run.id, upload_id=upload_id))
+        for snapshot_id in asin_snapshot_ids:
+            session.add(
+                AiKwRunAsin(source_account_ref=account, run_id=run.id, asin_snapshot_id=snapshot_id)
+            )
         for index, decision in enumerate(output.decisions, 1):
             candidate = candidates_by_keyword[normalize_keyword(decision.keyword)]
             evidence = decision.source

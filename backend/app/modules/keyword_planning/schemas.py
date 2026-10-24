@@ -40,6 +40,12 @@ class KeywordRead(BaseModel):
     page_coverage: str | None
     core_root: str | None
     score: int | None
+    match_points: int | None = None
+    intent_points: int | None = None
+    page_points: int | None = None
+    root_points: int | None = None
+    data_points: int | None = None
+    risk_points: int | None = None
     base_grade: str | None
     allocation_grade: str | None
     exact_selected: bool
@@ -52,6 +58,7 @@ class KeywordRead(BaseModel):
     broad_reason: str | None
     quality_note: str | None
     rank_index: int | None
+    evidence: dict[str, object] = Field(default_factory=dict)
 
 
 class KeywordListRead(BaseModel):

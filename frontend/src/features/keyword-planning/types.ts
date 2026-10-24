@@ -26,7 +26,7 @@ export interface MarketKeyword {
 export interface SourceWorkbook { fileName: string; sheets: string[]; keywords: MarketKeyword[]; roots: Array<{term:string;count:number}>; asins: string[]; importedAt: string; warnings: string[]; }
 export interface SkuDefinition { id:string; sku:string; name:string; material:string; uses:string[]; storeIds:string[]; hasLibrary:boolean; }
 export interface SkuKeyword {
-  keywordType?:string; pageCoverage?:string; coreRoot?:string; qualityNote?:string; nonSelectionReason?:string; skuId:string; keywordId:string; grade:Grade; score:number | null; reason:string; exact:boolean; broad:boolean; status:'待测试'|'已计划'|'风险复查'|'已暂停'; analysisVersion:string; }
+  keywordType?:string; pageCoverage?:string; coreRoot?:string; qualityNote?:string; nonSelectionReason?:string; suggestedBid?:string|null; skuId:string; keywordId:string; grade:Grade; score:number | null; reason:string; exact:boolean; broad:boolean; status:'待测试'|'已计划'|'风险复查'|'已暂停'; analysisVersion:string; }
 export interface AdRecord { id:string; skuId:string|null; keywordId:string; term:string; store:string; campaign:string; adGroup:string; match:MatchType; bid:number; status:'启用'|'暂停'; source:'manual'; clicks:number|null; spend:number|null; orders:number|null; sales:number|null; impressions:number|null; }
 export interface RuleConfig {
   version:number;
@@ -41,4 +41,4 @@ export interface RuleConfig {
   export:{sheetNames:string;columnNames:string};
 }
 export interface RuleHistory { version:number; at:string; reason:string; rule:RuleConfig; }
-export interface KeywordAnalysis {skuId:string; sourceFile:string; version:number; at:string; rows:number;}
+export interface KeywordAnalysis {skuId:string; sourceFile:string; version:number; at:string; rows:number; runId?:string; ruleVersionId?:string;}

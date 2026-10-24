@@ -229,10 +229,11 @@ def test_persists_atomic_blocked_review_without_fabricating_scores(monkeypatch):
         fake, command=command(), policy=policy(), product=product()
     )
     assert receipt == x.ExecutionReceipt(RUN, "blocked", True, 2)
-    assert len(fake.added) == 3
-    run, first, second = fake.added
+    assert len(fake.added) == 4
+    run, source_file, first, second = fake.added
     assert run.status == "blocked"
     assert run.error_code == "KW_EVIDENCE_INSUFFICIENT"
+    assert source_file.upload_id == UPLOAD and source_file.run_id == RUN
     assert first.term_id == TERM2 and second.term_id == TERM1
     assert first.score is None and second.score is None
     assert first.exact_selected is False and first.broad_selected is False
@@ -395,6 +396,14 @@ def test_input_hash_binds_candidate_assessments_before_database_access():
     assert not fake.executed
 
 
+def test_input_hash_binds_asin_snapshot_references_before_database_access():
+    fake = FakeSession()
+    tampered = replace(command(), asin_snapshot_ids=(UUID("10000000-0000-0000-0000-000000000011"),))
+    with pytest.raises(x.AnalysisBlocked, match="INPUT_HASH_MISMATCH"):
+        x.execute_reviewed_analysis(fake, command=tampered, policy=policy(), product=product())
+    assert not fake.executed
+
+
 def test_frozen_product_fact_payload_must_match_reviewed_confirmation():
     fake = FakeSession()
     fake.fact.facts_with_sources_json["title"]["value"] = "fabricated"
@@ -451,10 +460,10 @@ def test_successful_scored_run_is_saved_as_succeeded(monkeypatch):
     assert fake.added[0].summary_json["reviewed_evidence_count"] == 1
     assert fake.added[0].summary_json["manual_review_count"] == 0
     assert fake.added[0].summary_json["official_export_authorized"] is False
-    assert fake.added[1].term_id == TERM1
-    assert fake.added[1].score == 92
-    assert fake.added[1].decision_status == "ready"
-    assert fake.added[1].component_evidence_json["classification_origin"] == "confirmed_fact"
+    assert fake.added[2].term_id == TERM1
+    assert fake.added[2].score == 92
+    assert fake.added[2].decision_status == "ready"
+    assert fake.added[2].component_evidence_json["classification_origin"] == "confirmed_fact"
 
 
 def test_partially_scored_run_remains_blocked_for_review(monkeypatch):

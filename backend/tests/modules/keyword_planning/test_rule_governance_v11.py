@@ -20,6 +20,7 @@ from app.modules.keyword_planning.rule_governance import (
     retire_published_rule,
     review_rule_decision,
     submit_rule_decision,
+    update_scoring_draft,
 )
 
 
@@ -117,6 +118,53 @@ def test_create_draft_allocates_next_version_without_publishing():
     assert result.status == "draft" and s.flushed == 1
     assert s.added[0].status == "draft"
     assert s.added[0].config_sha256 == canonical_digest(s.added[0].config_json)
+
+
+def test_editor_config_is_persisted_without_approving_rule():
+    config = build_draft_config(
+        limits=ColdStartLimits(),
+        confirmed_brands={},
+        suspected_brands={},
+        editor_config={"weights": {"match": 30}, "riskWords": "synthetic risk"},
+    )
+    assert config["editor_config"]["riskWords"] == "synthetic risk"
+    assert config["business_approvals"]["D01"] == "pending"
+
+
+def test_draft_save_rehashes_only_unsubmitted_owner_draft():
+    class SaveSession(ApprovalSession):
+        def scalar(self, stmt):
+            if stmt.column_descriptions[0]["entity"] is AiKwRuleDecision:
+                return None
+            return self.version
+
+    session = SaveSession()
+    receipt = update_scoring_draft(
+        session,
+        account="tenant-a",
+        version_id=session.version_id,
+        actor="maker",
+        limits=ColdStartLimits(max_p0=4),
+        confirmed_brands={},
+        suspected_brands={},
+        editor_config={"weights": {"match": 30}},
+    )
+    assert receipt.status == "draft"
+    assert session.version.config_json["limits"]["max_p0"] == 4
+    assert session.version.config_sha256 == canonical_digest(session.version.config_json)
+    assert session.version.published_at is None
+    session.version.status = "published"
+    with pytest.raises(RuleGovernanceBlocked, match="DRAFT_NOT_EDITABLE"):
+        update_scoring_draft(
+            session,
+            account="tenant-a",
+            version_id=session.version_id,
+            actor="maker",
+            limits=ColdStartLimits(),
+            confirmed_brands={},
+            suspected_brands={},
+            editor_config={},
+        )
 
 
 def test_cross_tenant_draft_rejected_without_write():

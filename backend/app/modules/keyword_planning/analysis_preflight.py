@@ -37,12 +37,13 @@ def inspect_readiness(
     rule_version_id: UUID,
     upload_id: UUID,
     actor: str,
+    selected_asins: tuple[str, ...] | None = None,
 ) -> PreflightResult:
     """Inspect frozen rows; no PostgreSQL write and no fallback to guessed data."""
     if not account or not actor or not item_id:
         raise ValueError("PREFLIGHT_SCOPE_REQUIRED")
     try:
-        command, _, _ = prepare_verified_analysis(
+        command, _, policy = prepare_verified_analysis(
             session,
             account=account,
             product_id=product_id,
@@ -52,14 +53,12 @@ def inspect_readiness(
             upload_id=upload_id,
             request_key="preflight-only",
             actor=actor,
+            selected_asins=selected_asins,
         )
         candidates = command.candidates
-        reasons = {
-            "AUTOMATIC_SEMANTIC_REVIEW_NOT_APPROVED",
-            "D01_D08_BUSINESS_DECISIONS_NOT_APPROVED",
-        }
-        # Existing entrypoint conservatively assigns no match/intent/root/market
-        # scores to unreviewed uploads. An analysis may be stored as BLOCKED.
+        reasons: set[str] = set()
+        # Missing components remain visible for manual review. They do not
+        # prevent proven terms from being persisted in the same analysis run.
         incomplete = sum(
             item.assessment.match is None
             or item.assessment.intent is None
@@ -70,15 +69,18 @@ def inspect_readiness(
         if incomplete:
             reasons.add("KEYWORD_SCORE_EVIDENCE_REQUIRED")
         origins = [item.assessment.classification_origin for item in candidates]
+        published = getattr(policy, "status", None) == "published"
+        if not published:
+            reasons.add("PUBLISHED_RULE_REQUIRED")
         return PreflightResult(
             can_create_review_run=True,
-            can_generate_scored_results=False,
+            can_generate_scored_results=published and incomplete < len(candidates),
             can_generate_official_upload=False,
             candidate_count=len(candidates),
             automatic_evidence_count=origins.count("confirmed_fact"),
             reviewed_evidence_count=origins.count("reviewed_phrase"),
             manual_review_count=origins.count("manual_review"),
-            top40_review_required=min(40, len(candidates)),
+            top40_review_required=min(40, incomplete),
             review_reason_codes=tuple(sorted(reasons)),
             source_account_ref=account,
             product_id=product_id,

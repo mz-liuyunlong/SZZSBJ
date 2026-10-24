@@ -14,7 +14,9 @@ import re
 import runpy
 import secrets
 import shutil
+import socket
 import subprocess
+import threading
 import time
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
@@ -28,6 +30,8 @@ from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.modules.data_pages.models import ListingManagementCurrentMart
+from app.modules.keyword_planning.analysis_entrypoint import prepare_verified_analysis
 from app.modules.keyword_planning.analysis_execution import (
     AnalysisBlocked,
     AnalysisCommand,
@@ -41,8 +45,14 @@ from app.modules.keyword_planning.models import (
     AiKwProductFactSnapshot,
     AiKwRuleSet,
     AiKwRuleVersion,
+    AiKwRunAsin,
+    AiKwRunFile,
     AiKwRunKeyword,
+    BizKwSourceEvent,
+    BizSkuAsinReference,
+    BizSkuKeyword,
     DimKwTerm,
+    RawKwAsinSnapshot,
     RawKwUploadFile,
     RawKwUploadRow,
     RawKwWalmartPageSnapshot,
@@ -62,6 +72,7 @@ from app.modules.keyword_planning.rule_governance import (
     publish_scoring_rule,
     review_rule_decision,
     submit_rule_decision,
+    update_scoring_draft,
 )
 from app.modules.keyword_planning.runtime_rules import KeywordInput, PublishedPolicy, VerifiedLabel
 from app.modules.products import models as product_models  # noqa: F401 - register FK targets
@@ -165,10 +176,11 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             )
 
         with engine.begin() as connection:
-            connection.exec_driver_sql("CREATE TABLE products (id UUID PRIMARY KEY)")
+            product_models.Product.__table__.create(connection)
             connection.exec_driver_sql(
                 "CREATE TABLE product_platform_listings (id UUID PRIMARY KEY)"
             )
+            ListingManagementCurrentMart.__table__.create(connection)
             for section in ("TABLE_DDL", "INDEX_DDL", "GUARD_DDL"):
                 for statement in ddl[section]:
                     connection.execute(text(statement))
@@ -183,6 +195,8 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             upgrade()
 
         product_id = uuid4()
+        second_product_id = uuid4()
+        other_product_id = uuid4()
         page_id = uuid4()
         fact_id = uuid4()
         ruleset_id = uuid4()
@@ -190,6 +204,7 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
         file_id = uuid4()
         row_id = uuid4()
         term_id = uuid4()
+        asin_snapshot_id = uuid4()
         account = "sandbox-account"
         item = "12345678"
         actor = "isolated-test"
@@ -209,9 +224,25 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
         }
         now = datetime.now(UTC)
         with Session(engine) as session, session.begin():
-            session.connection().exec_driver_sql(
-                "INSERT INTO products(id) VALUES (%s)",
-                (product_id,),
+            session.add_all(
+                [
+                    product_models.Product(id=row_id, sku=sku, product_name=sku)
+                    for row_id, sku in (
+                        (product_id, "SYNTHETIC-A"),
+                        (second_product_id, "SYNTHETIC-B"),
+                        (other_product_id, "OTHER-ACCOUNT"),
+                    )
+                ]
+            )
+            session.flush()
+            session.add(
+                ListingManagementCurrentMart(
+                    source_account_ref=account,
+                    store_id="synthetic-store",
+                    item_id=item,
+                    local_sku="SYNTHETIC-A",
+                    calculated_at=now,
+                )
             )
             session.add_all(
                 [
@@ -241,6 +272,14 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                         canonical_keyword="pantry organizer",
                         normalized_keyword="pantry organizer",
                         normalization_version=NORMALIZER_VERSION,
+                    ),
+                    RawKwAsinSnapshot(
+                        id=asin_snapshot_id,
+                        source_account_ref=account,
+                        asin="B000000001",
+                        fetch_status="succeeded",
+                        fetch_provider="fixture",
+                        title="Synthetic organizer comparison",
                     ),
                 ]
             )
@@ -285,9 +324,58 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                         parser_version="fixture",
                         status="parsed",
                     ),
+                    BizSkuAsinReference(
+                        source_account_ref=account,
+                        product_id=product_id,
+                        asin="B000000001",
+                        reference_role="competitor",
+                        is_active=True,
+                        latest_snapshot_id=asin_snapshot_id,
+                        selected_by=actor,
+                    ),
                 ]
             )
             session.flush()
+            session.add_all(
+                [
+                    BizSkuKeyword(
+                        source_account_ref=account,
+                        product_id=product_id,
+                        term_id=term_id,
+                        status="review",
+                    ),
+                    BizSkuKeyword(
+                        source_account_ref=account,
+                        product_id=second_product_id,
+                        term_id=term_id,
+                        status="active",
+                    ),
+                    BizSkuKeyword(
+                        source_account_ref="other-account",
+                        product_id=other_product_id,
+                        term_id=term_id,
+                        status="active",
+                    ),
+                    BizKwSourceEvent(
+                        source_account_ref=account,
+                        product_id=product_id,
+                        term_id=term_id,
+                        source_kind="excel",
+                        source_event_key="synthetic-file-1",
+                        evidence_json={},
+                        discovered_at=now,
+                    ),
+                    BizKwSourceEvent(
+                        source_account_ref=account,
+                        product_id=second_product_id,
+                        term_id=term_id,
+                        source_kind="operator_manual",
+                        source_event_key="synthetic-manual-1",
+                        evidence_json={},
+                        discovered_at=now,
+                    ),
+                ]
+            )
             session.add(
                 RawKwUploadRow(
                     id=row_id,
@@ -301,6 +389,22 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                     parse_errors=[],
                 )
             )
+
+        with Session(engine) as session:
+            prepared, _, _ = prepare_verified_analysis(
+                session,
+                account=account,
+                product_id=product_id,
+                item_id=item,
+                fact_id=fact_id,
+                rule_version_id=rule_id,
+                upload_id=file_id,
+                request_key="selected-asin-provenance",
+                actor=actor,
+                selected_asins=("B000000001",),
+            )
+            assert prepared.asin_snapshot_ids == (asin_snapshot_id,)
+            session.rollback()
 
         product = ProductConfirmation(
             item_id=item,
@@ -339,6 +443,7 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             parser_version="fixture",
             normalizer_version=NORMALIZER_VERSION,
             source_total_rows=1,
+            asin_snapshot_ids=(asin_snapshot_id,),
             candidates=(
                 ReviewedCandidate(
                     term_id,
@@ -401,6 +506,185 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
         with Session(engine) as session:
             assert session.scalar(select(func.count()).select_from(AiKwAnalysisRun)) == 1
             assert session.scalar(select(func.count()).select_from(AiKwRunKeyword)) == 1
+            assert session.scalar(select(func.count()).select_from(AiKwRunFile)) == 1
+            assert session.scalar(select(func.count()).select_from(AiKwRunAsin)) == 1
+        # Exercise the real FastAPI read/export contract against the same
+        # disposable PostgreSQL rows used by the write transaction above.
+        from fastapi.testclient import TestClient
+
+        from app.core.auth import Principal, get_optional_principal
+        from app.db.session import get_db_session
+        from app.main import create_app
+        from app.modules.integration_sync.dependencies import require_source_account_scope
+
+        app = create_app()
+
+        def sandbox_session():
+            with Session(engine) as db_session:
+                yield db_session
+
+        app.dependency_overrides[get_db_session] = sandbox_session
+        app.dependency_overrides[require_source_account_scope] = lambda: frozenset({account})
+        app.dependency_overrides[get_optional_principal] = lambda: Principal(
+            user_id=actor, permissions=frozenset({"*"})
+        )
+        try:
+            client = TestClient(app)
+            base = "/api/v1/keyword-planning"
+            params = {"source_account_ref": account}
+            runs = client.get(f"{base}/products/{product_id}/runs", params=params)
+            assert runs.status_code == 200
+            assert runs.json()["data"]["total"] == 1
+            assert runs.json()["data"]["items"][0]["run_id"] == str(first.run_id)
+            keywords = client.get(
+                f"{base}/runs/{first.run_id}/keywords",
+                params={**params, "limit": 1, "offset": 0},
+            )
+            assert keywords.status_code == 200
+            assert keywords.json()["data"]["total"] == 1
+            assert keywords.json()["data"]["items"][0]["keyword"] == "pantry organizer"
+            assert keywords.json()["data"]["items"][0]["score"] is None
+            global_read = client.get(f"{base}/library", params=params)
+            assert global_read.status_code == 200
+            assert global_read.json()["data"]["total"] == 1
+            assert global_read.json()["data"]["items"][0]["sku_count"] == 2
+            assert {a["sku"] for a in global_read.json()["data"]["items"][0]["associations"]} == {
+                "SYNTHETIC-A",
+                "SYNTHETIC-B",
+            }
+            manual_read = client.get(
+                f"{base}/library", params={**params, "source": "operator_manual"}
+            )
+            assert manual_read.status_code == 200
+            assert manual_read.json()["data"]["total"] == 1
+            assert (
+                client.get(
+                    f"{base}/library", params={"source_account_ref": "other-account"}
+                ).status_code
+                == 403
+            )
+            workbook = client.get(f"{base}/runs/{first.run_id}/internal-workbook", params=params)
+            assert workbook.status_code == 200
+            assert workbook.headers["content-type"].startswith(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            from io import BytesIO
+            from xml.etree import ElementTree as ET
+            from zipfile import ZipFile
+
+            from app.modules.keyword_planning.internal_export import SHEET_NAMES
+
+            with ZipFile(BytesIO(workbook.content)) as archive:
+                document = ET.fromstring(archive.read("xl/workbook.xml"))
+            sheet_tag = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"
+            assert [node.get("name") for node in document.iter(sheet_tag)] == list(SHEET_NAMES)
+            denied = client.get(
+                f"{base}/runs/{first.run_id}/keywords",
+                params={"source_account_ref": "other-account"},
+            )
+            assert denied.status_code == 403
+            previous_write_flag = os.environ.get("KEYWORD_V11_WRITE_ENABLED")
+            os.environ["KEYWORD_V11_WRITE_ENABLED"] = "1"
+            try:
+                created_set = client.post(
+                    f"{base}/rulesets",
+                    json={
+                        "source_account_ref": account,
+                        "rule_key": "keyword_v11_ui",
+                        "display_name": "Synthetic UI",
+                    },
+                )
+                assert created_set.status_code == 200
+                ui_set_id = created_set.json()["data"]["rule_set_id"]
+                created_draft = client.post(
+                    f"{base}/rulesets/{ui_set_id}/drafts",
+                    json={
+                        "source_account_ref": account,
+                        "editor_config": {"riskWords": "synthetic"},
+                    },
+                )
+                assert created_draft.status_code == 200
+                ui_version_id = created_draft.json()["data"]["version_id"]
+                saved_draft = client.patch(
+                    f"{base}/rules/{ui_version_id}/draft",
+                    json={
+                        "source_account_ref": account,
+                        "editor_config": {"riskWords": "synthetic review"},
+                    },
+                )
+                assert saved_draft.status_code == 200
+                reopened = client.get(f"{base}/rulesets/{ui_set_id}/versions", params=params)
+                assert reopened.status_code == 200
+                assert (
+                    reopened.json()["data"]["items"][0]["config"]["editor_config"]["riskWords"]
+                    == "synthetic review"
+                )
+            finally:
+                if previous_write_flag is None:
+                    os.environ.pop("KEYWORD_V11_WRITE_ENABLED", None)
+                else:
+                    os.environ["KEYWORD_V11_WRITE_ENABLED"] = previous_write_flag
+            if os.environ.get("RUN_KW_BROWSER_SANDBOX") == "1":
+                import uvicorn
+
+                frontend = Path(__file__).resolve().parents[4] / "frontend"
+                playwright = frontend / "node_modules/.bin/playwright"
+                assert playwright.is_file(), "Install locked frontend dependencies first"
+                with Session(engine) as session:
+                    listing_id = session.scalar(
+                        select(ListingManagementCurrentMart.id).where(
+                            ListingManagementCurrentMart.source_account_ref == account,
+                            ListingManagementCurrentMart.item_id == item,
+                        )
+                    )
+                assert listing_id is not None
+                listener = socket.socket()
+                listener.bind(("127.0.0.1", 0))
+                listener.listen(128)
+                api_port = listener.getsockname()[1]
+                server = uvicorn.Server(uvicorn.Config(app, log_level="error", lifespan="off"))
+                thread = threading.Thread(
+                    target=server.run, kwargs={"sockets": [listener]}, daemon=True
+                )
+                prior_write_flag = os.environ.get("KEYWORD_V11_WRITE_ENABLED")
+                os.environ["KEYWORD_V11_WRITE_ENABLED"] = "1"
+                thread.start()
+                try:
+                    for _ in range(100):
+                        if server.started:
+                            break
+                        time.sleep(0.05)
+                    assert server.started, "Disposable FastAPI server did not start"
+                    browser = subprocess.run(
+                        [
+                            str(playwright),
+                            "test",
+                            "e2e/keyword-live-postgres.spec.ts",
+                            "--workers=1",
+                        ],
+                        cwd=frontend,
+                        env={
+                            **os.environ,
+                            "KW_LIVE_API_BASE": f"http://127.0.0.1:{api_port}",
+                            "KW_LIVE_PRODUCT_ID": str(product_id),
+                            "KW_LIVE_LISTING_ID": str(listing_id),
+                        },
+                        capture_output=True,
+                        text=True,
+                        timeout=150,
+                        check=False,
+                    )
+                    assert browser.returncode == 0, (browser.stdout + browser.stderr)[-6000:]
+                finally:
+                    server.should_exit = True
+                    thread.join(timeout=10)
+                    listener.close()
+                    if prior_write_flag is None:
+                        os.environ.pop("KEYWORD_V11_WRITE_ENABLED", None)
+                    else:
+                        os.environ["KEYWORD_V11_WRITE_ENABLED"] = prior_write_flag
+        finally:
+            app.dependency_overrides.clear()
         with Session(engine) as session:
             approval_set = create_scoring_ruleset(
                 session,
@@ -419,6 +703,23 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                 confirmed_brands={},
                 suspected_brands={},
             )
+        with Session(engine) as session:
+            saved = update_scoring_draft(
+                session,
+                account="approval-synthetic",
+                version_id=draft.id,
+                actor="maker",
+                limits=ColdStartLimits(max_p0=4),
+                confirmed_brands={},
+                suspected_brands={},
+                editor_config={"weights": {"match": 30}, "riskWords": "synthetic"},
+            )
+            assert saved.status == "draft"
+        with Session(engine) as session:
+            persisted = session.get(AiKwRuleVersion, draft.id)
+            assert persisted is not None
+            assert persisted.config_json["editor_config"]["riskWords"] == "synthetic"
+            assert persisted.config_json["limits"]["max_p0"] == 4
         with Session(engine) as session:
             with pytest.raises(
                 RuleGovernanceBlocked, match="INDEPENDENT_D01_D08_APPROVAL_REQUIRED"

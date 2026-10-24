@@ -21,6 +21,12 @@ export interface KeywordResult {
   page_coverage: string | null;
   core_root: string | null;
   score: number | null;
+  match_points: number | null;
+  intent_points: number | null;
+  page_points: number | null;
+  root_points: number | null;
+  data_points: number | null;
+  risk_points: number | null;
   base_grade: string | null;
   allocation_grade: string | null;
   exact_selected: boolean;
@@ -33,6 +39,7 @@ export interface KeywordResult {
   broad_reason: string | null;
   quality_note: string | null;
   rank_index: number | null;
+  evidence: Record<string, unknown>;
 }
 export interface KeywordResultList {
   run_id: string;
@@ -50,6 +57,7 @@ export interface CreateKeywordAnalysisRequest {
   rule_version_id: string;
   upload_file_id: string;
   request_key: string;
+  selected_asins?: string[];
 }
 export interface CreateKeywordAnalysisResult {
   run_id: string;
@@ -82,6 +90,16 @@ export const listRunKeywords = async (
   (await backendRequest<KeywordResultList>(
     `${API}/runs/${encodeURIComponent(runId)}/keywords?${query(account, {limit, offset})}`,
   )).data;
+
+export async function loadAllRunKeywords(runId: string, account: string): Promise<KeywordResult[]> {
+  const items: KeywordResult[] = [];
+  for (let offset = 0; offset < 12000; offset += 200) {
+    const page = await listRunKeywords(runId, account, 200, offset);
+    items.push(...page.items);
+    if (items.length >= page.total) return items;
+  }
+  throw new Error('分析结果超过页面安全上限');
+}
 
 export const createKeywordAnalysis = async (
   input: CreateKeywordAnalysisRequest,
@@ -129,7 +147,7 @@ export interface KeywordPreflight {
   product_id: string;
   rule_version_id: string;
   can_create_review_run: boolean;
-  can_generate_scored_results: false;
+  can_generate_scored_results: boolean;
   can_generate_official_upload: false;
   candidate_count: number;
   automatic_evidence_count: number;
@@ -182,16 +200,17 @@ export const DEFAULT_DRAFT_LIMITS: KeywordDraftLimits = {
 
 export const preflightKeywordAnalysis = async (
   input: Omit<CreateKeywordAnalysisRequest, 'request_key'>,
-): Promise<KeywordPreflight> =>
-  (await backendRequest<KeywordPreflight>(
-    `${API}/preflight?${query(input.source_account_ref, {
+): Promise<KeywordPreflight> => {
+  const params = new URLSearchParams(query(input.source_account_ref, {
       product_id: input.product_id,
       item_id: input.item_id,
       product_fact_snapshot_id: input.product_fact_snapshot_id,
       rule_version_id: input.rule_version_id,
       upload_file_id: input.upload_file_id,
-    })}`,
-  )).data;
+    }));
+  input.selected_asins?.forEach(asin=>params.append('selected_asins',asin));
+  return (await backendRequest<KeywordPreflight>(`${API}/preflight?${params.toString()}`)).data;
+};
 
 export const listKeywordRuleSets = async (account: string): Promise<KeywordRuleSet[]> =>
   (await backendRequest<{items: KeywordRuleSet[]; total: number}>(
@@ -207,14 +226,28 @@ export const listKeywordRuleVersions = async (
 
 export const createKeywordRuleDraft = async (
   account: string, ruleSetId: string, limits: KeywordDraftLimits,
+  editorConfig: Record<string, unknown> = {},
 ): Promise<KeywordVersionReceipt> =>
   (await backendRequest<KeywordVersionReceipt>(
     `${API}/rulesets/${encodeURIComponent(ruleSetId)}/drafts`,
     { method: 'POST', body: JSON.stringify({
       source_account_ref: account,
-      limits, confirmed_brands: {}, suspected_brands: {},
+      limits, confirmed_brands: {}, suspected_brands: {}, editor_config: editorConfig,
     }) },
   )).data;
+
+export const createKeywordRuleSet = async (account: string): Promise<{rule_set_id:string}> =>
+  (await backendRequest<{rule_set_id:string}>(`${API}/rulesets`, {
+    method:'POST', body:JSON.stringify({source_account_ref:account,rule_key:'keyword_v11_ui',display_name:'Walmart 关键词 V1.1'}),
+  })).data;
+
+export const saveKeywordRuleDraft = async (
+  account:string, versionId:string, limits:KeywordDraftLimits, editorConfig:Record<string,unknown>,
+):Promise<KeywordVersionReceipt> =>
+  (await backendRequest<KeywordVersionReceipt>(`${API}/rules/${encodeURIComponent(versionId)}/draft`, {
+    method:'PATCH',body:JSON.stringify({source_account_ref:account,limits,
+      confirmed_brands:{},suspected_brands:{},editor_config:editorConfig}),
+  })).data;
 
 export interface KeywordRuleDecision {
   decision_key: string;
@@ -266,8 +299,12 @@ export interface KeywordSourceState {
   product_id: string;
   latest_confirmed_fact_id: string | null;
   latest_upload_id: string | null;
+  latest_upload_filename: string | null;
+  latest_upload_rows: number;
   item_id: string | null;
+  confirmed_fields: Record<string, string>;
   asin_reference_count: number;
+  asin_references: string[];
   source_status: 'ready_for_import' | 'fact_confirmed';
 }
 export interface KeywordFactConfirmation {
@@ -336,15 +373,32 @@ export interface KeywordLibraryRead {
 }
 export const listKeywordLibrary = async (
   productId: string, account: string, filters: {
-    q?: string; status?: string; limit?: number; offset?: number;
+    q?: string; status?: string; source?:string; grade?:string; limit?: number; offset?: number;
   } = {},
 ): Promise<KeywordLibraryRead> =>
   (await backendRequest<KeywordLibraryRead>(
     `${API}/products/${encodeURIComponent(productId)}/library?${query(account, {
       q: filters.q ?? '', status: filters.status ?? 'all',
+      source:filters.source??'all',grade:filters.grade??'all',
       limit: filters.limit ?? 50, offset: filters.offset ?? 0,
     })}`,
   )).data;
+
+export interface GlobalKeywordLibraryItem {
+  term_id:string; keyword:string; translation:string|null; sku_count:number;
+  source_kinds:string[];
+  associations:Array<{product_id:string;sku:string;status:string;grade:string|null;score:number|null;exact_selected:boolean;broad_selected:boolean}>;
+}
+export interface GlobalKeywordLibraryRead {
+  items:GlobalKeywordLibraryItem[];total:number;limit:number;offset:number;
+}
+export const listGlobalKeywordLibrary = async (
+  account:string, filters:{q?:string;status?:string;source?:string;grade?:string;limit?:number;offset?:number}={},
+):Promise<GlobalKeywordLibraryRead> =>
+  (await backendRequest<GlobalKeywordLibraryRead>(`${API}/library?${query(account,{
+    q:filters.q??'',status:filters.status??'all',source:filters.source??'all',
+    grade:filters.grade??'all',limit:filters.limit??50,offset:filters.offset??0,
+  })}`)).data;
 
 export const addManualKeywordWords = async (
   productId: string, input: {
@@ -355,5 +409,16 @@ export const addManualKeywordWords = async (
   (await backendRequest<{accepted: number; source_events_created: number; status: 'review'}>(
     `${API}/products/${encodeURIComponent(productId)}/library/manual`, {
       method: 'POST', body: JSON.stringify(input),
+    },
+  )).data;
+
+export const updateKeywordTranslation = async (
+  productId: string, termId: string, account: string, itemId: string, translation: string,
+): Promise<{term_id: string; translation: string | null}> =>
+  (await backendRequest<{term_id: string; translation: string | null}>(
+    `${API}/products/${encodeURIComponent(productId)}/library/${encodeURIComponent(termId)}/translation`, {
+      method: 'PATCH', body: JSON.stringify({
+        source_account_ref: account, item_id: itemId, translation,
+      }),
     },
   )).data;

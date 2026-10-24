@@ -8,6 +8,7 @@ This module does not call external APIs or create Walmart ads.
 
 from __future__ import annotations
 
+import re
 from collections import OrderedDict
 from dataclasses import replace
 from uuid import UUID
@@ -27,6 +28,7 @@ from .models import (
     AiKwProductFactSnapshot,
     AiKwRuleDecision,
     AiKwRuleVersion,
+    BizSkuAsinReference,
     DimKwTerm,
     RawKwUploadFile,
     RawKwUploadRow,
@@ -57,6 +59,7 @@ def prepare_verified_analysis(
     upload_id: UUID,
     request_key: str,
     actor: str,
+    selected_asins: tuple[str, ...] | None = None,
 ) -> tuple[AnalysisCommand, ProductConfirmation, PublishedPolicy]:
     """Prepare server-owned assessments; source rows are never deduplicated in DB.
 
@@ -224,6 +227,24 @@ def prepare_verified_analysis(
         )
         for i, (normalized, refs) in enumerate(grouped.items(), 1)
     )
+    if selected_asins is not None and (
+        not 1 <= len(selected_asins) <= 20
+        or len(set(selected_asins)) != len(selected_asins)
+        or any(re.fullmatch(r"[A-Z0-9]{10}", asin) is None for asin in selected_asins)
+    ):
+        raise AnalysisBlocked("SELECTED_ASIN_LIST_INVALID")
+    asin_query = select(BizSkuAsinReference).where(
+        BizSkuAsinReference.source_account_ref == account,
+        BizSkuAsinReference.product_id == product_id,
+        BizSkuAsinReference.is_active.is_(True),
+        BizSkuAsinReference.latest_snapshot_id.is_not(None),
+    )
+    if selected_asins is not None:
+        asin_query = asin_query.where(BizSkuAsinReference.asin.in_(selected_asins))
+    references = list(session.scalars(asin_query))
+    if selected_asins is not None and {ref.asin for ref in references} != set(selected_asins):
+        raise AnalysisBlocked("SELECTED_ASIN_SNAPSHOT_MISSING")
+    asin_snapshot_ids = tuple(sorted({ref.latest_snapshot_id for ref in references}))
     command = AnalysisCommand(
         source_account_ref=account,
         product_id=product_id,
@@ -240,6 +261,7 @@ def prepare_verified_analysis(
         candidates=candidates,
         walmart_page_snapshot_id=page.id,
         store_id=page.store_id,
+        asin_snapshot_ids=asin_snapshot_ids,
     )
     return (
         replace(command, input_sha256=calculate_input_sha256(command, product, policy)),
@@ -259,6 +281,7 @@ def create_analysis_from_stored_sources(
     upload_id: UUID,
     request_key: str,
     actor: str,
+    selected_asins: tuple[str, ...] | None = None,
 ) -> ExecutionReceipt:
     """Read frozen records, close implicit SELECT transaction, then write atomically.
 
@@ -279,6 +302,7 @@ def create_analysis_from_stored_sources(
             upload_id=upload_id,
             request_key=request_key,
             actor=actor,
+            selected_asins=selected_asins,
         )
     finally:
         # SQLAlchemy 2.0 SELECT starts an implicit transaction. No side-effects here.

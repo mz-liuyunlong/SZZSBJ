@@ -4,6 +4,7 @@ import {create} from 'zustand';
 import {analyzeKeyword, initialRules, makeTermId, normalizeTerm, selectPlan} from './model';
 import {selectFactPlan,type DecisionContext} from './keywordDecision';
 import type {AdRecord, KeywordAnalysis, MarketKeyword, RuleConfig, RuleHistory, SkuDefinition, SkuKeyword, SourceWorkbook, MatchType} from './types';
+import type {KeywordLibraryItem,KeywordResult,KeywordRun} from '@/api/keywordPlanningV11Api';
 /** Empty, user-supplied data baseline: never synthesize product, keyword or ad records. */
 const emptyKeyword=(term:string,meaning=''):MarketKeyword=>({
  id:makeTermId(term),term,normalized:normalizeTerm(term),
@@ -18,6 +19,8 @@ export interface KeywordStore{
   skus:SkuDefinition[];keywords:Record<string,MarketKeyword>;entries:SkuKeyword[];ads:AdRecord[];analyses:KeywordAnalysis[];
   staged:SourceWorkbook|null;rules:RuleConfig;draft:RuleConfig|null;history:RuleHistory[];listing:Record<string,{title:string;features:string;description:string}>;
   upsertProductSku:(product:SkuDefinition)=>void;
+  installServerRun:(skuId:string,run:KeywordRun,results:KeywordResult[])=>void;
+  installServerLibrary:(skuId:string,items:KeywordLibraryItem[])=>void;
   setStaged:(value:SourceWorkbook|null)=>void;importSupplement:(skuId:string,book:SourceWorkbook)=>number;analyze:(skuId:string,context?:DecisionContext)=>number;getSkuTerms:(skuId:string)=>SkuKeyword[];
   updateTranslation:(wordId:string,value:string)=>void;addWord:(skuId:string,term:string,meaning:string)=>boolean;
   addManual:(payload:{skuId:string|null;term:string;store:string;match:MatchType;bid:number;campaign:string;note?:string})=>void;
@@ -31,6 +34,57 @@ export const useKeywordStore=create<KeywordStore>((set,get)=>({
     const current=state.skus.find(s=>s.id===product.id);
     const next={...product,hasLibrary:current?.hasLibrary??false};
     return {skus:current?state.skus.map(s=>s.id===product.id?next:s):[next,...state.skus]};
+  }),
+  installServerRun:(skuId,run,results)=>set(state=>{
+    const words={...state.keywords};
+    const current:SkuKeyword[]=results.map(row=>{
+      const prior=words[row.term_id];
+      words[row.term_id]={
+        id:row.term_id,term:row.keyword,normalized:normalizeTerm(row.keyword),
+        originalTranslation:prior?.originalTranslation??null,
+        translation:prior?.translation??null,translationSource:prior?.translationSource??'missing',
+        monthlySearches:null,monthlyPurchases:null,marketPurchaseRate:null,
+        amazonPpc:null,bidRange:null,trafficType:null,relatedAsins:[],
+        sponsoredCompetitors:null,listingCount:null,root:row.core_root??'',
+        source:'excel',sourceRow:row.rank_index??0,
+      };
+      const grade=(['P0','P1','P2','品牌等级','候选复查','不投放'].includes(row.allocation_grade??'')
+        ?row.allocation_grade:'复查') as SkuKeyword['grade'];
+      return {skuId,keywordId:row.term_id,keywordType:row.primary_type??undefined,
+        pageCoverage:row.page_coverage??undefined,coreRoot:row.core_root??undefined,
+        qualityNote:row.quality_note??undefined,
+        suggestedBid:row.suggested_optimization_bid==null?null:String(row.suggested_optimization_bid),
+        nonSelectionReason:row.exact_reason||row.broad_reason||row.risk_reasons.join('；'),
+        grade,score:row.score,reason:row.risk_reasons.join('；')||row.exact_reason||'后端规则分析',
+        exact:row.exact_selected,broad:row.broad_selected,
+        status:row.decision_status==='ready'?'已计划':'风险复查',
+        analysisVersion:run.rule_version_id};
+    });
+    const history=state.analyses.filter(item=>item.skuId!==skuId||item.runId!==run.run_id);
+    return {keywords:words,entries:[...state.entries.filter(item=>item.skuId!==skuId),...current],
+      skus:state.skus.map(item=>item.id===skuId?{...item,hasLibrary:true}:item),
+      analyses:[...history,{skuId,sourceFile:'已保存来源',version:0,at:run.created_at,
+        rows:results.length,runId:run.run_id,ruleVersionId:run.rule_version_id}]};
+  }),
+  installServerLibrary:(skuId,items)=>set(state=>{
+    const words={...state.keywords};
+    const existing=state.entries.filter(entry=>entry.skuId===skuId);
+    const entries=items.map(item=>{
+      const prior=words[item.term_id];
+      words[item.term_id]={...emptyKeyword(item.keyword,item.translation??''),
+        id:item.term_id,source:item.source_kinds.includes('operator_manual')?'manual':'excel',
+        root:prior?.root??'',translation:item.translation,originalTranslation:prior?.originalTranslation??item.translation,
+        translationSource:item.translation?'manual':'missing'};
+      const fromRun=existing.find(entry=>entry.keywordId===item.term_id);
+      if(fromRun)return fromRun;
+      const grade=(['P0','P1','P2','品牌等级','候选复查','不投放'].includes(item.latest_grade??'')
+        ?item.latest_grade:'复查') as SkuKeyword['grade'];
+      return {skuId,keywordId:item.term_id,grade,score:item.latest_score,
+        reason:'已保存词库，尚待分析',exact:false,broad:false,
+        status:'待测试' as const,analysisVersion:'未分析'};
+    });
+    return {keywords:words,entries:[...state.entries.filter(entry=>entry.skuId!==skuId),...entries],
+      skus:state.skus.map(item=>item.id===skuId?{...item,hasLibrary:true}:item)};
   }),
   setStaged:(staged)=>set({staged}),
   importSupplement:(skuId,book)=>{const existing=get().entries;const kw={...get().keywords};let added=0;const next=[...existing];for(const word of book.keywords){if(!kw[word.id])kw[word.id]=word;else{const previous=kw[word.id];kw[word.id]={...word,translation:previous.translation||word.translation,translationSource:previous.translationSource==='manual'?'manual':word.translationSource};}if(!next.some(x=>x.skuId===skuId&&x.keywordId===word.id)){next.push({skuId,keywordId:word.id,grade:'复查',score:null,reason:'新增 Excel 补词，尚未重新分析',exact:false,broad:false,status:'待测试',analysisVersion:'待分析'});added++}}set({keywords:kw,entries:next});return added},

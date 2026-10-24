@@ -42,6 +42,7 @@ class CreateRunRequest(BaseModel):
     rule_version_id: UUID
     upload_file_id: UUID
     request_key: str = Field(min_length=1, max_length=255)
+    selected_asins: list[str] | None = Field(default=None, min_length=1, max_length=20)
 
 
 class UploadRead(BaseModel):
@@ -166,6 +167,7 @@ def create_analysis(
             upload_id=body.upload_file_id,
             request_key=body.request_key,
             actor=principal.user_id,
+            selected_asins=tuple(body.selected_asins) if body.selected_asins is not None else None,
         )
     except AnalysisBlocked as exc:
         # Stable machine-readable code, never raw payload or secrets.

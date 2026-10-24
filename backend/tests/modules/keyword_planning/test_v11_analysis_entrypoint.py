@@ -25,6 +25,7 @@ TERM2 = uuid4()
 R1 = uuid4()
 R2 = uuid4()
 R3 = uuid4()
+ASIN_SNAPSHOT = uuid4()
 
 
 class Session:
@@ -101,6 +102,7 @@ class Session:
             ),
         ]
         self.terms = [NS(id=TERM, normalized_keyword="pantry organizer")]
+        self.asin_references = []
         self.scalar_index = 0
         self.scalars_index = 0
 
@@ -118,10 +120,10 @@ class Session:
 
     def scalars(self, stmt):
         self.scalars_index += 1
-        return [self.rows, self.terms][self.scalars_index - 1]
+        return [self.rows, self.terms, self.asin_references][self.scalars_index - 1]
 
 
-def prepare(s=None):
+def prepare(s=None, selected_asins=None):
     return prepare_verified_analysis(
         s or Session(),
         account="acct",
@@ -132,6 +134,7 @@ def prepare(s=None):
         upload_id=UPLOAD,
         request_key="key",
         actor="user",
+        selected_asins=selected_asins,
     )
 
 
@@ -144,7 +147,24 @@ def test_db_only_request_deduplicates_without_erasing_raw_references():
     assert command.candidates[0].assessment.exact_requested is False
     assert command.candidates[0].assessment.labels[0].name == "人工确认词"
     assert command.input_sha256 != "0" * 64
+    assert command.asin_snapshot_ids == ()
     assert policy.version_id == str(RULE) and product.item_verified
+
+
+def test_asin_snapshot_references_are_frozen_into_analysis_input():
+    without_asin, _, _ = prepare()
+    session = Session()
+    session.asin_references = [NS(asin="B000000001", latest_snapshot_id=ASIN_SNAPSHOT)]
+    with_asin, _, _ = prepare(session, ("B000000001",))
+    assert with_asin.asin_snapshot_ids == (ASIN_SNAPSHOT,)
+    assert with_asin.input_sha256 != without_asin.input_sha256
+
+
+def test_selected_asin_requires_matching_stored_snapshot():
+    session = Session()
+    session.asin_references = [NS(asin="B000000001", latest_snapshot_id=ASIN_SNAPSHOT)]
+    with pytest.raises(AnalysisBlocked, match="SELECTED_ASIN_SNAPSHOT_MISSING"):
+        prepare(session, ("B000000002",))
 
 
 def test_wrong_item_blocks_before_writes():

@@ -80,6 +80,12 @@ class KeywordPlanningService:
                 page_coverage=row.page_coverage,
                 core_root=row.core_root,
                 score=row.score,
+                match_points=getattr(row, "match_points", None),
+                intent_points=getattr(row, "intent_points", None),
+                page_points=getattr(row, "page_points", None),
+                root_points=getattr(row, "root_points", None),
+                data_points=getattr(row, "data_points", None),
+                risk_points=getattr(row, "risk_points", None),
                 base_grade=row.base_grade,
                 allocation_grade=row.allocation_grade,
                 exact_selected=row.exact_selected,
@@ -92,6 +98,7 @@ class KeywordPlanningService:
                 broad_reason=row.broad_reason,
                 quality_note=row.quality_note,
                 rank_index=row.rank_index,
+                evidence=getattr(row, "component_evidence_json", None) or {},
             )
             for row, term in rows
         ]

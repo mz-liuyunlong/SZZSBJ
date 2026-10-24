@@ -75,6 +75,73 @@ def test_new_routes_registered(protected_app):
         app.url_path_for("download_internal_workbook", run_id=RUN)
         == BASE + f"/runs/{RUN}/internal-workbook"
     )
+    assert (
+        app.url_path_for("update_library_translation", product_id=PRODUCT, term_id=FACT)
+        == BASE + f"/products/{PRODUCT}/library/{FACT}/translation"
+    )
+
+
+def test_translation_write_requires_auth_scope_and_opt_in(protected_app):
+    app, spy = protected_app
+    url = BASE + f"/products/{PRODUCT}/library/{FACT}/translation"
+    body = {"source_account_ref": "tenant", "item_id": "123", "translation": "synthetic"}
+    app.dependency_overrides[get_optional_principal] = lambda: None
+    assert TestClient(app).patch(url, json=body).status_code == 401
+    _login(app, permissions=("products:read",))
+    assert TestClient(app).patch(url, json=body).status_code == 403
+    _login(app)
+    assert (
+        TestClient(app).patch(url, json={**body, "source_account_ref": "other"}).status_code == 403
+    )
+    assert TestClient(app).patch(url, json=body).status_code == 403
+    assert spy.statements == []
+
+
+def test_source_state_restores_saved_fact_and_upload_summary(protected_app):
+    app, _ = protected_app
+    _login(app, permissions=("products:read",))
+
+    class SavedSourceSession:
+        def __init__(self):
+            self.values = iter(
+                [
+                    RUN,
+                    NS(
+                        id=FACT,
+                        item_id="123",
+                        facts_with_sources_json={
+                            "title": {"value": "Synthetic title", "source": "operator"},
+                            "risk_boundary": {"mode": "none"},
+                        },
+                    ),
+                    NS(id=UPLOAD, original_filename="synthetic.xlsx"),
+                    3,
+                ]
+            )
+
+        def get(self, _model, _id):
+            return NS(deleted_at=None, sku="SYNTHETIC")
+
+        def scalar(self, _statement):
+            return next(self.values)
+
+        def scalars(self, _statement):
+            return ["B000000001", "B000000002"]
+
+    app.dependency_overrides[get_db_session] = SavedSourceSession
+    response = TestClient(app).get(
+        BASE + f"/products/{PRODUCT}/source-state",
+        params={"source_account_ref": "tenant"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["latest_confirmed_fact_id"] == str(FACT)
+    assert data["confirmed_fields"] == {"title": "Synthetic title"}
+    assert data["latest_upload_id"] == str(UPLOAD)
+    assert data["latest_upload_filename"] == "synthetic.xlsx"
+    assert data["latest_upload_rows"] == 3
+    assert data["asin_reference_count"] == 2
+    assert data["asin_references"] == ["B000000001", "B000000002"]
 
 
 @pytest.mark.parametrize("endpoint", ["/analyses", "/imports/xlsx"])
