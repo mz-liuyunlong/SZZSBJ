@@ -173,6 +173,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
         { title: "启用", dataIndex: "enabled", render: (v: boolean) => v ? "是" : "否" },
         { title: "操作", key: "edit", render: (_, row) => canManage ? <Button type="link" onClick={() => {
           templateForm.setFieldsValue(row); setDrawer("template"); }}>编辑</Button> : null }]}/>
+    </>}
     {(section === "usage" || section === "all") && <><div className="business-config__draft-heading"><strong>用量与统计（最近30天）</strong></div>
     {usage && <div className="business-config__instance-meta">
       <span>通知发送：{usage.notifications.filter(x => x.status === "sent").reduce((sum, x) => sum + Number(x.n), 0)}</span>
@@ -187,7 +188,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
       columns={[{ title: "事件", dataIndex: "event_key" }, { title: "状态", dataIndex: "status" },
         { title: "尝试", dataIndex: "attempts" }, { title: "失败码", dataIndex: "error_code" }, { title: "创建时间", dataIndex: "created_at" }]}/>
     </>}
-    {showAI && <><div className="business-config__draft-heading"><strong>AI 单次调用明细</strong></div>
+    {(section === "usage" || section === "all") && showAI && <><div className="business-config__draft-heading"><strong>AI 单次调用明细</strong></div>
       <Table<AIUsageRow> size="small" rowKey="id" dataSource={aiUsage} pagination={{ pageSize: 10 }}
         columns={[
           {title: "时间", dataIndex: "created_at"},
@@ -199,7 +200,6 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
           {title: "状态", dataIndex: "status"},
           {title: "错误码", dataIndex: "error_code"},
         ]}/>
-    </>}
     </>}
     <Drawer title={editing ? "编辑正式连接" : "新增正式连接"} open={drawer === "connector"} width={540}
       onClose={() => { form.setFieldsValue({credential:"",signing_secret:"",endpoint:""}); setDrawer(null); }}
