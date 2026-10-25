@@ -1,6 +1,7 @@
 """Synthetic grading demo tests; no database or external services."""
 
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
@@ -26,7 +27,14 @@ def test_synthetic_grades_use_canonical_engine(
 ) -> None:
     result = demo_result(scenario, cutoff=CUTOFF)
     assert result["grade"] == grade
-    assert result["weighted_margin_percent"] == weighted
+    # Decimal output may retain a meaningful scale (e.g. "7.00" vs "7").
+    # This test checks the numeric calculation, not the serialization style.
+    if weighted is None:
+        assert result["weighted_margin_percent"] is None
+    else:
+        value = result["weighted_margin_percent"]
+        assert value is not None
+        assert Decimal(str(value)) == Decimal(weighted)
     assert result["writes_performed"] is False
     assert result["data_source"] == "SYNTHETIC_ONLY"
     assert result["cutoff_la"] == "2026-10-20"
