@@ -25,8 +25,8 @@ from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
 from app.modules.integration_sync.router import router as integration_sync_router
 from app.modules.keyword_planning.router import router as keyword_planning_router
-from app.modules.media_assets.router import router as media_assets_router
 from app.modules.listing_rule_config.router import router as listing_rule_config_router
+from app.modules.media_assets.router import router as media_assets_router
 from app.modules.operation_logs.router import router as operation_logs_router
 from app.modules.operation_logs.rows_router import router as operation_logs_rows_router
 from app.modules.operation_plans.router import router as operation_plans_router

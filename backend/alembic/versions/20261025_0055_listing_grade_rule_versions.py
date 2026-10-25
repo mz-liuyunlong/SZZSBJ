@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "20261025_0055_listing_grade_rule_versions"
 down_revision: str | Sequence[str] | None = (
