@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from itertools import pairwise
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -43,7 +44,7 @@ class SalesTierPercents(BaseModel):
     @model_validator(mode="after")
     def validate_tiers(self) -> SalesTierPercents:
         tiers = (self.lt2, self.from2to5, self.from5to10, self.from10to20, self.gte20)
-        if any(a < b for a, b in zip(tiers, tiers[1:], strict=True)):
+        if any(a < b for a, b in pairwise(tiers)):
             raise ValueError("销量阶梯百分比应随基准销量增长而不递增")
         return self
 
