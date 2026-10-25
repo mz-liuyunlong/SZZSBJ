@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {useLocation,useNavigate} from 'react-router-dom';
 import {Alert,Button,Card,Descriptions,Drawer,Empty,Form,Input,InputNumber,Modal,Select,Space,Tabs,Tag,Typography,Upload,message} from 'antd';
 import {PlusOutlined,TranslationOutlined,UploadOutlined} from '@ant-design/icons';
@@ -50,6 +50,8 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
  const [globalTotal,setGlobalTotal]=useState(0);
  const [globalRows,setGlobalRows]=useState<LibraryRow[]>([]);
  const [skuRows,setSkuRows]=useState<LibraryRow[]>([]);
+ const [skuRowsKey,setSkuRowsKey]=useState('');
+ const libraryRequest=useRef(0);
  const [libraryPage,setLibraryPage]=useState(1);
  const [runTotal,setRunTotal]=useState(0);
  const [latestRunId,setLatestRunId]=useState<string|null>(null);
@@ -81,9 +83,12 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
  },[sku.id,sku.sku]);
  const refreshLibrary=async(pageNumber=libraryPage,search=query)=>{
    if(!sku.id||!sourceAccountRef)return;
+   const requestId=++libraryRequest.current;
+   const scopeKey=`${sourceAccountRef}:${sku.id}`;
    const read=await listKeywordLibrary(sku.id,sourceAccountRef,{q:search,
      source:sourceFilter==='manual'?'operator_manual':sourceFilter,
      grade,limit:50,offset:(pageNumber-1)*50});
+   if(requestId!==libraryRequest.current)return;
    installServerLibrary(sku.id,read.items);
    const saved=useKeywordStore.getState();
    setSkuRows(read.items.flatMap(item=>{
@@ -92,6 +97,7 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
      return keyword?[{key:item.term_id,keyword,associated:current?[current]:[],current:current??null,
        mockAds:saved.ads.filter(ad=>ad.skuId===sku.id&&ad.keywordId===item.term_id)}]:[];
    }));
+   setSkuRowsKey(scopeKey);
    setLibraryTotal(read.total);setLibraryPage(pageNumber);
    setLatestRunId(read.latest_run_id);
  };
@@ -167,7 +173,7 @@ export default function KeywordLibraryPage({page}:{page:NavigationPage}){
  // Filter changes must be applied before backend pagination.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[mode,sourceFilter,grade]);
- const visible=(mode==='global'?globalRows:skuRows).filter(r=>{
+ const visible=(mode==='global'?globalRows:skuRowsKey===`${sourceAccountRef}:${sku.id}`?skuRows:[]).filter(r=>{
    if(mode==='global'){
      if(tab==='todo')return r.associated.some(x=>x.status==='待测试'||x.status==='风险复查');
      if(tab==='execution')return r.associated.some(x=>x.exact||x.broad);
