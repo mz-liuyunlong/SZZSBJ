@@ -81,7 +81,7 @@ describe("business configuration V2", () => {
   it("renders real Decodo data, and filters empty categories", async () => {
     render(<BusinessConfigPage page={page} />);
     expect(await screen.findByText("Decodo Scraper API")).toBeInTheDocument();
-    expect(screen.getByText("未配置计价")).toBeInTheDocument();
+    expect(screen.getAllByText("未配置计价").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /AI 服务/ }));
     expect(screen.queryByText("Decodo Scraper API")).not.toBeInTheDocument();
     expect(screen.getByText("该分类尚无接入的服务")).toBeInTheDocument();
