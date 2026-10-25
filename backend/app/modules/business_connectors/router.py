@@ -131,7 +131,7 @@ def _endpoint(kind: str, value: str | None) -> str:
 def _config(value: ConnectorWrite) -> dict[str, Any]:
     if value.kind not in ("feishu_webhook", "openai"):
         raise ConfigError("CONNECTOR_KIND_UNSUPPORTED")
-    endpoint = _endpoint(value.kind, value.endpoint)
+    endpoint = _endpoint(value.kind, value.endpoint) if value.kind == "openai" or value.endpoint else None
     if value.kind == "openai":
         models = [value.default_model, value.backup_model, *value.model_allowlist]
         if any(v and not VALID_MODELS.fullmatch(v) for v in models):
@@ -187,7 +187,9 @@ def list_connectors(request: Request, _: read_perm) -> SuccessEnvelope[list[dict
 def create_connector(request: Request, payload: ConnectorWrite, principal: admin_perm) -> SuccessEnvelope[dict[str, Any], None]:
     try:
         cfg = _config(payload)
-        if payload.enabled and not payload.credential:
+        if payload.kind == "feishu_webhook" and not payload.endpoint:
+            raise ConfigError("FEISHU_ENDPOINT_REQUIRED")
+        if payload.kind == "openai" and payload.enabled and not payload.credential:
             raise ConfigError("CREDENTIAL_REQUIRED")
         uid = uuid4()
         with get_session_factory()() as session:
