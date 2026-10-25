@@ -594,6 +594,12 @@ def enqueue_notification(
             .all()
         )
         for route in routes:
+            # Serialize per-route limit/cooldown checks with the eventual insert.
+            # Competing event producers cannot bypass thresholds concurrently.
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:route))"),
+                {"route": str(route["id"])},
+            )
             day_count = session.execute(
                 text("""
                 SELECT count(*) FROM biz_notification_deliveries WHERE route_id=:id
