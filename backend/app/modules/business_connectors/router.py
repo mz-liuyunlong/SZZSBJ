@@ -452,7 +452,8 @@ def save_template(
             INSERT INTO biz_notification_templates (id,event_key,title,body_template,enabled,updated_by)
             VALUES (:id,:event,:title,:body,:enabled,:actor)
             ON CONFLICT (event_key) DO UPDATE SET title=EXCLUDED.title,body_template=EXCLUDED.body_template,
-                enabled=EXCLUDED.enabled,updated_by=EXCLUDED.updated_by,updated_at=now()
+                enabled=EXCLUDED.enabled,updated_by=EXCLUDED.updated_by,updated_at=now(),
+                version=biz_notification_templates.version + 1
         """),
             {
                 "id": uuid4(),
@@ -476,7 +477,7 @@ def list_deliveries(
         rows = (
             session.execute(
                 text("""
-            SELECT id, route_id,connector_id,event_key,source_event_id,status,attempts,error_code,created_at,
+            SELECT id, route_id,connector_id,event_key,source_event_id,status,attempts,error_code,template_version,created_at,
                    last_attempt_at,next_retry_at FROM biz_notification_deliveries ORDER BY created_at DESC LIMIT :lim
         """),
                 {"lim": limit},
@@ -567,7 +568,7 @@ def enqueue_notification(
     with get_session_factory()() as session:
         template = session.execute(
             text("""
-                SELECT title,body_template,enabled FROM biz_notification_templates
+                SELECT title,body_template,enabled,version FROM biz_notification_templates
                  WHERE event_key=:event
             """),
             {"event": payload.event_key},
@@ -621,8 +622,8 @@ def enqueue_notification(
             result = session.execute(
                 text("""
                 INSERT INTO biz_notification_deliveries
-                  (id,route_id,connector_id,event_key,source_event_id,rendered_text,status)
-                VALUES (:id,:route,:connector,:event,:source,:body,'queued')
+                  (id,route_id,connector_id,event_key,source_event_id,rendered_text,status,template_version)
+                VALUES (:id,:route,:connector,:event,:source,:body,'queued',:version)
                 ON CONFLICT (connector_id,event_key,source_event_id) DO NOTHING
                 RETURNING id
             """),
@@ -633,6 +634,7 @@ def enqueue_notification(
                     "event": payload.event_key,
                     "source": payload.source_event_id,
                     "body": rendered,
+                    "version": template["version"] if template else None,
                 },
             )
             if result.first():
