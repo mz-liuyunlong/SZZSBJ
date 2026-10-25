@@ -42,6 +42,10 @@ import {
 } from "@/api/decodoApi";
 import "@/pages/settings/BusinessConfigPage.css";
 import BusinessConfigDraftManager from "@/pages/settings/BusinessConfigDraftManager";
+import BusinessConfigServiceEditor from "@/pages/settings/BusinessConfigServiceEditor";
+import { listBusinessConnectors, type BusinessConnector } from "@/api/businessConnectorsApi";
+import { readBrowserDrafts, type ServiceDraft } from "@/pages/settings/businessConfigDrafts";
+import { PlusOutlined } from "@ant-design/icons";
 import LiveBusinessConnectors from "@/pages/settings/LiveBusinessConnectors";
 
 type Section = "connections" | "usage" | "policies";
@@ -93,6 +97,13 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
   const [draftAuthorization, setDraftAuthorization] = useState("");
   const [draftZip, setDraftZip] = useState("10001");
   const [draftEnabled, setDraftEnabled] = useState(false);
+  const [live, setLive] = useState<BusinessConnector[]>([]);
+  const [liveError, setLiveError] = useState(false);
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [drafts, setDrafts] = useState<ServiceDraft[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingLive, setEditingLive] = useState<BusinessConnector | null>(null);
+  const [editingDraft, setEditingDraft] = useState<ServiceDraft | null>(null);
 
   const loadConfig = useCallback(async () => {
     setConfigLoading(true);
@@ -171,6 +182,26 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
     return () => { active = false; };
   }, [usageRange]);
 
+  const refreshConnectors = useCallback(async () => {
+    setLiveLoading(true);
+    try { setLive(await listBusinessConnectors()); setLiveError(false); }
+    catch { setLiveError(true); }
+    finally { setLiveLoading(false); }
+    setDrafts(readBrowserDrafts().services);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void listBusinessConnectors().then((rows) => {
+      if (active) { setLive(rows); setLiveError(false); }
+    }).catch(() => { if (active) setLiveError(true); })
+      .finally(() => { if (active) setLiveLoading(false); });
+    return () => { active = false; };
+  }, []);
+  const openServiceEditor = (connector?: BusinessConnector, draft?: ServiceDraft) => {
+    setEditingLive(connector ?? null);
+    setEditingDraft(draft ?? null);
+    setEditorOpen(true);
+  };
   const isLocalMode = config?.mode === "local_test";
   const todayRow = useMemo(
     () => usageRows.find((row) => row.date === usageToday),
@@ -183,12 +214,6 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
   const chartRows = useMemo(() => [...usageRows].reverse(), [usageRows]);
   const chartMax = Math.max(...chartRows.map((row) => row.total), 1);
 
-  const matchesCategory = category === "all" || category === "crawler";
-  const matchesKeyword = "decodo scraper api 爬虫与代理 商品信息采集 amazon walmart"
-    .includes(keyword.toLowerCase().trim());
-  const matchesStatus = statusFilter === "all"
-    || (config != null && decodoStatus(config) === statusFilter);
-  const visible = Boolean(config && matchesCategory && matchesKeyword && matchesStatus);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const openEditor = () => {
@@ -232,58 +257,54 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
     setUsageRange(7);
   };
 
-  const columns: ColumnsType<DecodoConfig> = [
-    {
-      title: "服务 / 配置名称",
-      key: "name",
-      width: 250,
-      render: () => (
-        <Space>
-          <span className="business-config__service-avatar">DE</span>
-          <span>
-            <strong>Decodo Scraper API</strong>
-            <span className="business-config__subline">Decodo · 爬虫与代理</span>
-          </span>
-        </Space>
-      ),
-    },
-    { title: "配置实例", key: "instance", width: 130, render: () => "系统默认实例" },
-    { title: "业务用途", key: "purpose", render: () => "Amazon / Walmart 商品信息采集" },
-    {
-      title: "状态",
-      key: "status",
-      width: 115,
-      render: (_, record) => {
-        const status = decodoStatus(record);
-        return <Tag color={status === "已启用" ? "success" : status === "未配置" ? "warning" : "default"}>{status}</Tag>;
-      },
-    },
-    {
-      title: "今日请求",
-      key: "calls",
-      width: 110,
-      render: () => usageError ? "读取失败" : (usageLoading ? "加载中" : (todayRow?.total ?? 0)),
-    },
-    {
-      title: "计费",
-      key: "billing",
-      width: 130,
-      render: () => <span className="business-config__muted">未配置计价</span>,
-    },
-    { title: "最近修改", dataIndex: "updated_at", width: 160, render: labelDate },
-    {
-      title: "操作",
-      key: "actions",
-      width: 170,
-      fixed: "right",
-      render: () => (
-        <Space size={0}>
-          <Button type="link" size="small" onClick={() => setDetailsOpen(true)}>详情</Button>
-          <Button type="link" size="small" onClick={goToUsage}>用量</Button>
-          {canEdit && !isLocalMode ? <Button type="link" size="small" onClick={openEditor}>编辑</Button> : null}
-        </Space>
-      ),
-    },
+  type ServiceRow = { key: string; name: string; subtitle: string; category: Category; purpose: string; state: string; calls: string; billing: string; updated: string; connector?: BusinessConnector; draft?: ServiceDraft; decodo?: boolean };
+  const rows: ServiceRow[] = [
+    ...(config ? [{
+      key: "decodo", name: "Decodo Scraper API", subtitle: "Decodo · 系统默认实例",
+      category: "crawler" as Category, purpose: "Amazon / Walmart 商品信息采集",
+      state: decodoStatus(config), calls: usageError ? "—" : String(todayRow?.total ?? 0),
+      billing: "未配置计价", updated: labelDate(config.updated_at), decodo: true,
+    }] : []),
+    ...live.map((item): ServiceRow => ({
+      key: item.id, name: item.name,
+      subtitle: item.kind === "openai" ? "OpenAI · 模型服务" : "飞书 · 群机器人",
+      category: item.kind === "openai" ? "ai" : "bots",
+      purpose: item.kind === "openai" ? "AI 模型生成与调用" : "业务群通知推送",
+      state: item.enabled ? "已启用" : "已停用", calls: "—",
+      billing: item.kind === "openai" ? "按 Token 估算" : "不计费",
+      updated: labelDate(item.updated_at), connector: item,
+    })),
+    ...drafts.map((item): ServiceRow => ({
+      key: item.id, name: item.name, subtitle: item.provider + " · 配置草稿",
+      category: item.category, purpose: item.purpose || "未设置用途",
+      state: "草稿", calls: "—", billing: "未接入",
+      updated: labelDate(item.updatedAt), draft: item,
+    })),
+  ];
+  const filteredRows = rows.filter((item) => (
+    (category === "all" || item.category === category) &&
+    (statusFilter === "all" || item.state === statusFilter || (statusFilter === "未配置" && item.state === "草稿")) &&
+    [item.name, item.subtitle, item.purpose].join(" ").toLowerCase().includes(keyword.toLowerCase().trim())
+  ));
+  const categoriesCount = (key: Category) => key === "all" ? rows.length : rows.filter((item) => item.category === key).length;
+  const columns: ColumnsType<ServiceRow> = [
+    { title: "服务 / 配置名称", key: "name", width: 245,
+      render: (_, item) => <Space align="center">
+        <span className="business-config__service-avatar">{item.decodo ? "DE" : item.category === "ai" ? "AI" : item.category === "bots" ? "飞" : "◆"}</span>
+        <span><strong>{item.name}</strong><span className="business-config__subline">{item.subtitle}</span></span>
+      </Space> },
+    { title: "业务用途", dataIndex: "purpose" },
+    { title: "连接状态", dataIndex: "state", width: 115,
+      render: (value: string) => <Tag color={value === "已启用" ? "success" : value === "草稿" ? "warning" : "default"}>{value}</Tag> },
+    { title: "今日调用", dataIndex: "calls", width: 95 },
+    { title: "计费方式", dataIndex: "billing", width: 125 },
+    { title: "最近修改", dataIndex: "updated", width: 145 },
+    { title: "操作", key: "actions", width: 172, render: (_, item) => <Space size={0}>
+      <Button type="link" size="small" onClick={() => item.decodo ? setDetailsOpen(true) : item.connector || item.draft ? openServiceEditor(item.connector, item.draft) : undefined}>详情</Button>
+      {item.decodo && <Button type="link" size="small" onClick={goToUsage}>用量</Button>}
+      {canEdit && (item.connector || item.draft || (item.decodo && !isLocalMode)) &&
+        <Button type="link" size="small" onClick={() => item.decodo ? openEditor() : openServiceEditor(item.connector, item.draft)}>编辑</Button>}
+    </Space> },
   ];
 
   return (
@@ -297,8 +318,11 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
               <h1>业务配置中心</h1>
               <p>第三方服务统一接入、调用统计与使用策略管理</p>
             </div>
-            <Button icon={<ReloadOutlined />} loading={configLoading || usageLoading}
-              onClick={() => { void loadConfig(); void loadUsage(usageRange); }}>刷新数据</Button>
+            <Space>
+              <Button icon={<ReloadOutlined />} loading={configLoading || usageLoading || liveLoading}
+                onClick={() => { void loadConfig(); void loadUsage(usageRange); void refreshConnectors(); }}>刷新数据</Button>
+              {canEdit && <Button icon={<PlusOutlined />} type="primary" onClick={() => openServiceEditor()}>新增服务配置</Button>}
+            </Space>
           </section>
           <div className="business-config__tabs">
             <Tabs activeKey={section} onChange={(key) => setSection(key as Section)} items={[
@@ -311,8 +335,8 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
           {section === "connections" ? (
             <div className="business-config__body">
               <div className="business-config__stats">
-                <Card><Statistic title="已接入服务" value={config ? 1 : 0} prefix={<LinkOutlined />} /><span>实际接入的服务实例</span></Card>
-                <Card><Statistic title="已启用连接" value={config?.enabled ? 1 : 0} prefix={<SafetyCertificateOutlined />} /><span>由后端配置状态决定</span></Card>
+                <Card><Statistic title="已接入服务" value={(config ? 1 : 0) + live.length} prefix={<LinkOutlined />} /><span>实际接入的服务实例</span></Card>
+                <Card><Statistic title="已启用连接" value={(config?.enabled ? 1 : 0) + live.filter((item) => item.enabled).length} prefix={<SafetyCertificateOutlined />} /><span>由后端配置状态决定</span></Card>
                 <Card><Statistic title="今日总请求" value={usageError ? "—" : (todayRow?.total ?? 0)} prefix={<ApiOutlined />} loading={usageLoading} /><span>美国东部业务日期</span></Card>
                 <Card><Statistic title="今日预估费用" value="未配置计价" prefix={<CloudOutlined />} /><span>不将调用次数误认为收费金额</span></Card>
               </div>
@@ -326,14 +350,14 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                   {BUSINESS_CONFIG_CATEGORIES.map((item) => (
                     <Button key={item.key} size="small" type={category === item.key ? "primary" : "default"}
                       ghost={category === item.key} onClick={() => setCategory(item.key)}>
-                      {item.label}<span className="business-config__count">{item.key === "all" || item.key === "crawler" ? (config ? 1 : 0) : 0}</span>
+                      {item.label}<span className="business-config__count">{categoriesCount(item.key)}</span>
                     </Button>
                   ))}
                 </div>
               </div>
 
               <Card className="business-config__list-card" title={category === "all" ? "全部服务" : BUSINESS_CONFIG_CATEGORIES.find((item) => item.key === category)?.label}
-                extra={<span className="business-config__muted">{visible ? "1 个实例" : "0 个实例"}</span>}>
+                extra={<Space><span className="business-config__muted">{filteredRows.length} 个实例</span>{canEdit && <Button size="small" icon={<PlusOutlined />} onClick={() => openServiceEditor()}>新增配置</Button>}</Space>}>
                 <div className="business-config__filters">
                   <Input.Search aria-label="搜索服务配置" allowClear placeholder="搜索服务名称、实例、业务用途"
                     value={keyword} onChange={(event) => setKeyword(event.target.value)} className="business-config__search" />
@@ -344,38 +368,27 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                     options={[{ label: <TableOutlined />, value: "table" }, { label: <AppstoreOutlined />, value: "cards" }]} />
                 </div>
 
+                {liveError && <Alert type="warning" showIcon message="飞书与 AI 连接暂时无法读取" description="已保留 Decodo 数据和现有设计草稿，请检查后端服务及测试库。"
+                  action={<Button size="small" onClick={() => void refreshConnectors()}>重试</Button>} />}
                 {viewMode === "table" ? (
-                  <Table<DecodoConfig> rowKey={() => "decodo"} size="small" loading={configLoading}
-                    dataSource={visible && config ? [config] : []} columns={columns}
-                    locale={{ emptyText: <Empty description={category === "all" || category === "crawler" ? "暂无匹配的服务配置" : "该分类尚无接入的服务"} /> }}
-                    pagination={false} scroll={{ x: 1150 }} />
+                  <Table<ServiceRow> rowKey="key" size="small" loading={configLoading || liveLoading} dataSource={filteredRows} columns={columns}
+                    locale={{ emptyText: <Empty description="该分类暂无服务配置" /> }} pagination={false} scroll={{ x: 970 }} />
                 ) : (
                   <div className="business-config__cards">
-                    {visible && config ? (
-                      <div className="business-config__instance">
-                        <div className="business-config__instance-head">
-                          <span className="business-config__service-avatar">DE</span>
-                          <div><strong>Decodo Scraper API</strong><span className="business-config__subline">爬虫与代理 · 系统默认实例</span></div>
-                          <Tag color={config.enabled ? "success" : config.configured ? "default" : "warning"}>{decodoStatus(config)}</Tag>
-                        </div>
-                        <p>Amazon / Walmart 商品信息采集</p>
-                        <div className="business-config__instance-meta">
-                          <span>今日请求：{usageError ? "读取失败" : (todayRow?.total ?? 0)}</span>
-                          <span>费用：未配置计价</span>
-                          <span>更新：{labelDate(config.updated_at)}</span>
-                        </div>
-                        <Space>
-                          <Button size="small" onClick={() => setDetailsOpen(true)}>详情</Button>
-                          <Button size="small" onClick={goToUsage}>查看用量</Button>
-                          {canEdit && !isLocalMode ? <Button size="small" type="primary" icon={<EditOutlined />} onClick={openEditor}>编辑配置</Button> : null}
-                        </Space>
+                    {filteredRows.map((item) => <div key={item.key} className="business-config__instance">
+                      <div className="business-config__instance-head">
+                        <span className="business-config__service-avatar">{item.decodo ? "DE" : item.category === "ai" ? "AI" : "飞"}</span>
+                        <div><strong>{item.name}</strong><span className="business-config__subline">{item.subtitle}</span></div>
+                        <Tag color={item.state === "已启用" ? "success" : "default"}>{item.state}</Tag>
                       </div>
-                    ) : <Empty description="该分类暂无匹配的已接入服务" />}
+                      <p>{item.purpose}</p><div className="business-config__instance-meta"><span>{item.billing}</span><span>{item.updated}</span></div>
+                      <Space><Button size="small" onClick={() => item.decodo ? setDetailsOpen(true) : openServiceEditor(item.connector, item.draft)}>详情</Button>
+                        {canEdit && <Button size="small" onClick={() => item.decodo ? openEditor() : openServiceEditor(item.connector, item.draft)}>编辑</Button>}</Space>
+                    </div>)}
+                    {filteredRows.length === 0 && <Empty description="该分类暂无服务配置" />}
                   </div>
                 )}
-                <LiveBusinessConnectors canManage={canEdit} category={category} keyword={keyword} status={statusFilter} />
-                <BusinessConfigDraftManager section="connections" category={category} keyword={keyword} status={statusFilter} canManage={canEdit} />
-                <div className="business-config__list-footer">当前只接入 Decodo 单实例。其他服务将在后端接入后展示，不使用演示账号或虚构费用。</div>
+                <div className="business-config__list-footer">共 {filteredRows.length} 条配置 · 飞书和 AI 以实际后端状态为准，草稿未建立真实连接</div>
               </Card>
             </div>
           ) : section === "usage" ? (
@@ -420,6 +433,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                   <Tag color="warning">计费未启用</Tag>
                 </Card>
               </div>
+              <Card className="business-config__related-panel"><LiveBusinessConnectors section="usage" canManage={canEdit} category="all" keyword="" status="all" /></Card>
               <Card title="Decodo 每日调用明细" className="business-config__detail">
                 <Table<DecodoUsageDay> size="small" rowKey="date" loading={usageLoading} pagination={{ pageSize: 10, showSizeChanger: false }}
                   dataSource={usageError ? [] : usageRows} columns={[
@@ -450,12 +464,15 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                   </div>
                 ) : <Empty description="尚未读取到 Decodo 配置" />}
               </Card>
+              <Card className="business-config__related-panel"><LiveBusinessConnectors section="policies" canManage={canEdit} category="all" keyword="" status="all" /></Card>
               <Card><BusinessConfigDraftManager section="policies" category="all" keyword="" status="all" canManage={canEdit}/></Card>
             </div>
           )}
         </div>
       </PageShell>
 
+      <BusinessConfigServiceEditor open={editorOpen} connector={editingLive} draft={editingDraft}
+        preferredCategory={category} onClose={() => setEditorOpen(false)} onSaved={() => void refreshConnectors()} />
       <Drawer title="Decodo · 配置详情" width={480} open={detailsOpen} onClose={() => setDetailsOpen(false)}>
         <Alert type="info" showIcon message="真实 Decodo 后端配置" description="与浏览器内的配置草稿分离；当前后端仅支持一个 Decodo 系统实例。" />
         <div className="business-config__form">
