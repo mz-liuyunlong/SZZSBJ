@@ -42,6 +42,7 @@ interface ListingManagementToolbarProps {
   onMessage: (content: string) => void;
   onToggleStatistics: () => void;
   onOpenTagManager?: () => void;
+  onOpenRuleConfig: () => void;
   onOpenColumnConfig: () => void;
   onDownload: () => void;
   downloadDisabled?: boolean;
@@ -79,6 +80,7 @@ function ListingManagementToolbar({
   onMessage,
   onToggleStatistics,
   onOpenTagManager,
+  onOpenRuleConfig,
   onOpenColumnConfig,
   onDownload,
   downloadDisabled = false,
@@ -266,6 +268,7 @@ function ListingManagementToolbar({
         {statisticsVisible ? "隐藏统计" : "显示统计"}
       </Button>
       <Space className="listing-management__toolbar-actions" size={8}>
+        <Button aria-label="Listing规则配置" icon={<SettingOutlined aria-hidden="true" />} onClick={onOpenRuleConfig}>规则配置</Button>
         <Button
           aria-label="列配置"
           icon={<SettingOutlined aria-hidden="true" />}

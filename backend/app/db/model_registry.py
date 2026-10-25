@@ -1,6 +1,7 @@
 def register_productlist_sync_models() -> None:
     """Register ProductList ORM metadata; these imports are not business dependencies."""
     import app.modules.integration_sync.models
+    import app.modules.listing_rule_config.models
     import app.modules.media_assets.models
     import app.modules.operation_plans.models
     import app.modules.pmc_domestic.inbound_models
