@@ -40,6 +40,7 @@ from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
 from app.modules.sku_detail.router import router as sku_detail_router
+from app.modules.walmart_monitor_targets.router import router as walmart_monitor_targets_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
 
 
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     application.include_router(products_router)
     application.include_router(sku_detail_router)
     application.include_router(warehouse_wfs_router)
+    application.include_router(walmart_monitor_targets_router)
 
     @application.get("/health", response_model=SuccessEnvelope[HealthData, None])
     def health_check(request: Request) -> SuccessEnvelope[HealthData, None]:
