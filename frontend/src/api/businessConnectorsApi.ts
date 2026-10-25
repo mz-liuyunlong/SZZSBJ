@@ -16,6 +16,8 @@ export interface BusinessConnector {
     daily_limit?: number;
     monthly_budget_usd?: string;
     max_output_tokens?: number;
+    input_price_per_million?: string;
+    output_price_per_million?: string;
   };
   updated_at: string | null;
   last_test_at: string | null;
@@ -35,6 +37,8 @@ export interface ConnectorWrite {
   daily_limit: number;
   monthly_budget_usd: number;
   max_output_tokens: number;
+  input_price_per_million: number;
+  output_price_per_million: number;
 }
 export interface FeishuRoute {
   id: string;
