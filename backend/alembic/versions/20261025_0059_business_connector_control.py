@@ -156,7 +156,9 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
-        sa.CheckConstraint("status IN ('pending','success','failed')", name="ck_biz_ai_usage_status"),
+        sa.CheckConstraint(
+            "status IN ('pending','success','failed')", name="ck_biz_ai_usage_status"
+        ),
     )
     op.create_index("ix_biz_ai_usage_month", "biz_ai_usage", ["connector_id", "created_at"])
     op.create_table(
