@@ -24,14 +24,14 @@ docker compose -f infra/local-listing-rules/compose.yaml up -d
 docker compose -f infra/local-listing-rules/compose.yaml ps
 ```
 
-专用数据库端口 **127.0.0.1:55432**，数据库 `szzsbj_listing_rules_dev`，仅绑定本机，不使用生产账号、令牌或服务器连接。**不要把原脚本复制到这个环境运行**。
+专用数据库端口 **127.0.0.1:55432**，数据库 `listing_rules_dev`，仅绑定本机，不使用生产账号、令牌或服务器连接。**不要把原脚本复制到这个环境运行**。
 
 运行任何 Alembic 前，单独在终端设置本地测试环境（不要覆盖已有启动脚本的进程）：
 
 ```bash
 cd backend
 export APP_ENV=test
-export TEST_DATABASE_URL='postgresql+psycopg://listing_rules_dev:local_testing_only@127.0.0.1:55432/szzsbj_listing_rules_dev'
+export TEST_DATABASE_URL='postgresql+psycopg://listing_rules_dev:local_testing_only@127.0.0.1:55432/listing_rules_dev'
 export DATABASE_URL="$TEST_DATABASE_URL"
 export CELERY_BROKER_URL='memory://'
 export LINGXING_ENABLE_REAL_CALLS=false
@@ -44,7 +44,7 @@ from sqlalchemy.engine import make_url
 u = make_url(os.environ["DATABASE_URL"])
 assert os.environ["APP_ENV"] == "test"
 assert (u.host, u.port, u.database, u.username) == (
-    "127.0.0.1", 55432, "szzsbj_listing_rules_dev", "listing_rules_dev")
+    "127.0.0.1", 55432, "listing_rules_dev", "listing_rules_dev")
 print("ISOLATED_DB_GUARD=PASS")
 PY
 

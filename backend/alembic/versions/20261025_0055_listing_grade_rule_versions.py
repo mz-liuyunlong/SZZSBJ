@@ -1,4 +1,5 @@
 """Add append-only global Listing grade rule versions (no rating/backfill)."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -8,7 +9,9 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "20261025_0055_listing_grade_rule_versions"
-down_revision: str | Sequence[str] | None = "20261022_0054_merge_walmart_identity_and_domestic_packing"
+down_revision: str | Sequence[str] | None = (
+    "20261022_0054_merge_walmart_identity_and_domestic_packing"
+)
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -23,10 +26,13 @@ def upgrade() -> None:
         sa.Column("created_by", sa.String(128), nullable=False),
         sa.Column("change_reason", sa.Text(), nullable=False),
         sa.CheckConstraint("version > 0", name="listing_grade_rule_positive_version"),
-        sa.CheckConstraint("length(btrim(change_reason)) >= 3", name="listing_grade_rule_change_reason"),
+        sa.CheckConstraint(
+            "length(btrim(change_reason)) >= 3", name="listing_grade_rule_change_reason"
+        ),
     )
     # Keep the IAM permission catalog in sync with the newly gated action.
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
       INSERT INTO app_permissions
       (permission_key,name,group_key,description,permission_type,module_key,page_key,
        action_key,field_key,risk_level,sort_order,is_active,created_at,updated_at)
@@ -36,7 +42,8 @@ def upgrade() -> None:
        'action','products','products_listing_management','configure_rules',NULL,
        'high',60,true,now(),now())
       ON CONFLICT(permission_key) DO NOTHING
-    """))
+    """)
+    )
 
 
 def downgrade() -> None:

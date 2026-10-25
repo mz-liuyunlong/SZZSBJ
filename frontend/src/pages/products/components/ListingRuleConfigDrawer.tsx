@@ -72,17 +72,25 @@ export default function ListingRuleConfigDrawer({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setLoading(true);
-    setError(false);
-    setHistory(null);
-    setDirty(false);
-    void transport.fetchRule().then((result) => {
+    // Defer the load to a microtask so effect setup does not synchronously
+    // update React state; this also honors StrictMode effect cleanup.
+    void Promise.resolve().then(async () => {
       if (cancelled) return;
-      setRecord(result);
-      form.setFieldsValue(toForm(result.config));
-    }).catch(() => {
-      if (!cancelled) setError(true);
-    }).finally(() => { if (!cancelled) setLoading(false); });
+      setLoading(true);
+      setError(false);
+      setHistory(null);
+      setDirty(false);
+      try {
+        const result = await transport.fetchRule();
+        if (cancelled) return;
+        setRecord(result);
+        form.setFieldsValue(toForm(result.config));
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    });
     return () => { cancelled = true; };
   }, [open, form, reloadCount, transport]);
 
