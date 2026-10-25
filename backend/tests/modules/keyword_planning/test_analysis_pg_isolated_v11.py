@@ -276,6 +276,15 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                     calculated_at=now,
                 )
             )
+            session.add(
+                ListingManagementCurrentMart(
+                    source_account_ref=account,
+                    store_id="synthetic-store",
+                    item_id="87654321",
+                    local_sku="SYNTHETIC-B",
+                    calculated_at=now,
+                )
+            )
             session.add_all(
                 [
                     RawKwWalmartPageSnapshot(
@@ -593,6 +602,30 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             client = TestClient(app)
             base = "/api/v1/keyword-planning"
             params = {"source_account_ref": account}
+            fresh_source = client.get(
+                f"{base}/products/{second_product_id}/source-state", params=params
+            )
+            assert fresh_source.status_code == 200
+            assert fresh_source.json()["data"]["source_status"] == "ready_for_import"
+            assert fresh_source.json()["data"]["latest_confirmed_fact_id"] is None
+            assert fresh_source.json()["data"]["latest_upload_id"] is None
+            fresh_runs = client.get(f"{base}/products/{second_product_id}/runs", params=params)
+            assert fresh_runs.status_code == 200
+            assert fresh_runs.json()["data"]["items"] == []
+            assert fresh_runs.json()["data"]["total"] == 0
+            assert (
+                client.get(
+                    f"{base}/products/{other_product_id}/source-state", params=params
+                ).status_code
+                == 404
+            )
+            assert (
+                client.get(
+                    f"{base}/products/{second_product_id}/source-state",
+                    params={"source_account_ref": "other-account"},
+                ).status_code
+                == 403
+            )
             runs = client.get(f"{base}/products/{product_id}/runs", params=params)
             assert runs.status_code == 200
             assert runs.json()["data"]["total"] == 1

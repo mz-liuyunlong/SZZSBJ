@@ -24,6 +24,7 @@ import type {ListingCandidate} from '@/features/keyword-planning/keywordProductL
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
 import {confirmStoredKeywordFacts,createKeywordAnalysis,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun} from '@/api/keywordPlanningV11Api';
+import {BackendRequestError} from '@/api/backendApi';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
 
@@ -69,6 +70,21 @@ function csvDownload(name:string,headers:string[],rows:(string|number|null|undef
 }
 function Metric({label,value,hint,symbol}:{label:string;value:string|number;hint:string;symbol:string}){return <div className="kw-v2-stat"><div className="kw-v2-stat-icon">{symbol}</div><div><div className="kw-v2-muted">{label}</div><strong>{value}</strong><div className="kw-v2-muted">{hint}</div></div></div>}
 
+function keywordReadError(kind:'rule'|'source'|'history',error:unknown):string{
+ const label={rule:'规则',source:'已保存来源',history:'分析历史'}[kind];
+ if(!(error instanceof BackendRequestError))return `${label}读取失败，请检查连接`;
+ const trace=error.requestId?`（请求 ID：${error.requestId}）`:'';
+ if(error.status===403)return `${label}读取被拒绝：当前账号缺少权限或账户数据范围不匹配${trace}`;
+ if(error.status===404){
+   if(kind==='source')return `来源接口返回 404：请核对后端版本及商品、Listing SKU 与账户关联；未保存来源应返回空状态${trace}`;
+   if(kind==='rule')return `规则接口返回 404：请核对后端部署版本；没有自定义规则时应返回系统默认规则${trace}`;
+   return `分析历史接口返回 404：请核对后端部署版本；无历史应返回空列表${trace}`;
+ }
+ if(error.status>=500)return `${label}服务端异常（HTTP ${error.status}），请按请求 ID 排查${trace}`;
+ if(error.kind==='network'||error.kind==='timeout')return `${label}网络或代理连接失败${trace}`;
+ return `${label}读取失败（HTTP ${error.status}）${trace}`;
+}
+
 export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const navigate=useNavigate();
  const [panel,setPanel]=useState<'workspace'|'rules'>('workspace');
@@ -95,6 +111,8 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const [historyTotal,setHistoryTotal]=useState(0);
  const [historyPage,setHistoryPage]=useState(1);
  const [sourceError,setSourceError]=useState('');
+ const [ruleError,setRuleError]=useState('');
+ const [historyError,setHistoryError]=useState('');
  const [currentRuleVersionId,setCurrentRuleVersionId]=useState<string|null>(null);
 
  const [pendingSelection,setPendingSelection]=useState<ConfirmedSelection|null>(null);
@@ -139,14 +157,15 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const sourceAccountRef=selectedListing?.listing.sourceAccountRef??null;
  useEffect(()=>{
    let live=true;
-   queueMicrotask(()=>{if(live)setCurrentRuleVersionId(null)});
+   queueMicrotask(()=>{if(live){setCurrentRuleVersionId(null);setRuleError('')}});
    if(sourceAccountRef)void loadEffectiveRule(sourceAccountRef).then(current=>{
      if(!live)return;
      const parsed=current?displayRule(current.version):null;
-     if(!parsed){setCurrentRuleVersionId(null);return;}
+     if(!parsed){setCurrentRuleVersionId(null);setRuleError('当前账户没有可用的后端规则版本');return;}
      useKeywordStore.setState({rules:parsed});
      setCurrentRuleVersionId(current.version.version_id);
-   }).catch(()=>{if(live)setCurrentRuleVersionId(null)});
+     setRuleError('');
+   }).catch(error=>{if(live){setCurrentRuleVersionId(null);setRuleError(keywordReadError('rule',error))}});
    return()=>{live=false};
  },[sourceAccountRef]);
  const productConfirmed=Boolean(productConfirmation
@@ -180,6 +199,8 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    confirmationSeq.current+=1;
    setProductConfirmation(null);
    setDecodoSnapshotId(null);setFactId(null);setSourceFile(null);setStoredUpload(null);setActiveRunId(null);
+   setServerRuns([]);setHistoryTotal(0);setHistoryPage(1);
+   setSourceError('');setHistoryError('');
    setPendingSelection(null);setConfirmingProduct(false);setWalmartError(false);setWalmartEvidence(null);setWalmartSource(null);
 
    setFacts(old=>({
@@ -198,10 +219,10 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    if(!sku.id||!sourceAccountRef||!itemId||!selectedListing)return;
    let live=true;
    const ticket=confirmationSeq.current;
-   void Promise.all([getKeywordSourceState(sku.id,sourceAccountRef),listKeywordRuns(sku.id,sourceAccountRef,20,0)])
-     .then(async([source,history])=>{
+   void getKeywordSourceState(sku.id,sourceAccountRef)
+     .then(source=>{
        if(!live||ticket!==confirmationSeq.current)return;
-       setServerRuns(history.items);setHistoryTotal(history.total);setSourceError('');
+       setSourceError('');
        if(source.item_id===itemId&&source.latest_confirmed_fact_id){
          setFactId(source.latest_confirmed_fact_id);
          setConfirmed(true);
@@ -225,6 +246,11 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
          setProductConfirmation({skuId:sku.id,itemId,mode:itemManual?'manual':'listing',
            listingId,store:listingStore});
        }
+     }).catch(error=>{if(live&&ticket===confirmationSeq.current)setSourceError(keywordReadError('source',error))});
+   void listKeywordRuns(sku.id,sourceAccountRef,20,0)
+     .then(async history=>{
+       if(!live||ticket!==confirmationSeq.current)return;
+       setServerRuns(history.items);setHistoryTotal(history.total);setHistoryError('');
        if(history.items[0]){
          const latest=history.items[0];
          const results=await loadAllRunKeywords(latest.run_id,sourceAccountRef);
@@ -232,7 +258,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
            installServerRun(sku.id,latest,results);setActiveRunId(latest.run_id);
          }
        }
-     }).catch(()=>{if(live)setSourceError('已保存来源或分析历史加载失败，请检查权限与连接')});
+     }).catch(error=>{if(live&&ticket===confirmationSeq.current)setHistoryError(keywordReadError('history',error))});
    return()=>{live=false};
  },[sku.id,sourceAccountRef,itemId,selectedListing,itemManual,listingId,listingStore,installServerRun]);
  const confirmProduct=async()=>{
@@ -579,10 +605,13 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  };
  const loadHistoryPage=async(pageNumber:number)=>{
    if(!sku.id||!sourceAccountRef)return;
+   const ticket=confirmationSeq.current;
    try{
      const response=await listKeywordRuns(sku.id,sourceAccountRef,20,(pageNumber-1)*20);
+     if(ticket!==confirmationSeq.current)return;
      setServerRuns(response.items);setHistoryTotal(response.total);setHistoryPage(pageNumber);
-   }catch{message.error('分析历史加载失败');}
+     setHistoryError('');
+   }catch(error){if(ticket===confirmationSeq.current)setHistoryError(keywordReadError('history',error));}
  };
  const makeListing=()=>{if(!analyzed)return message.warning('请先完成关键词分析');const title=`${facts.title}, ${facts.pack} ${facts.material} for ${facts.use}`.replace(/\s+/g,' ').slice(0,180);const features=[`Organization: ${facts.itemType} for ${facts.use}.`,`Material: Made with ${facts.material}, ${facts.color}.`,`Pack: ${facts.pack}, ${facts.structure}.`,`Size: ${facts.size}; check dimensions before purchase.`,`Review compatibility, package contents and product details before ordering.`].join('\n');setDraft({title,features,description:`${facts.title}. ${facts.itemType}. Material: ${facts.material}; pack: ${facts.pack}; purpose: ${facts.use}. Verify all facts before publishing.`});message.info('仅生成待人工核对的模板草稿，非 AI 生成内容；请人工校对英语和商品事实')};
  const keywordCol:ProColumns<KeywordRow>={title:'关键词 / 中文翻译',key:'term',width:260,render:(_,r)=><><KeywordTextCell keyword={r.keyword} onEdit={openTranslation}/><div className="kw-v2-muted">{r.keyword.source==='excel'?'Excel':'人工新增'} · {r.keyword.root}</div></>};
@@ -785,7 +814,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
         onChange={choice=>{if(choice?.value)void pickProduct(String(choice.value))}}
         notFoundContent={skuLoading?'搜索中':skuError||'未找到匹配的 SKU'}
         options={skuDropdownRows.map(p=>({value:p.id,label:`${p.sku} · ${p.productName||'未命名'}`}))}/>
-      {skuError||sourceError?<Alert type="error" showIcon message={skuError||sourceError} style={{marginTop:8}}/>:null}
+      {skuError||ruleError||sourceError||historyError?<Alert type="error" showIcon message={[skuError,ruleError,sourceError,historyError].filter(Boolean).join('；')} style={{marginTop:8}}/>:null}
       <div className="kw-v2-snapshot"><div className="kw-v2-thumb">▦</div><div className="kw-v2-grow"><Text strong>{sku.name}</Text><div className="kw-v2-muted">{sku.sku} · {facts.material} · {facts.pack} · {sku.storeIds.length} 个已关联店铺</div></div><Tag color="blue">来自产品管理</Tag></div>
       <div className="kw-v2-itemid-section">
        <div className="kw-v2-itemid-heading">
