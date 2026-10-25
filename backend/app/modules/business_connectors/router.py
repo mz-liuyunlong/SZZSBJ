@@ -152,7 +152,8 @@ def _config(value: ConnectorWrite) -> dict[str, Any]:
 
 
 def _public(row: Any) -> dict[str, Any]:
-    c = row["config"] if isinstance(row["config"], dict) else json.loads(row["config"])
+    raw = row["config"] if isinstance(row["config"], dict) else json.loads(row["config"])
+    c = {key: value for key, value in raw.items() if key != "webhook_endpoint_ciphertext"}
     return {
         "id": str(row["id"]), "kind": row["kind"], "name": row["name"],
         "enabled": row["enabled"], "credential_configured": bool(row["ciphertext"]),
@@ -227,7 +228,7 @@ def update_connector(connector_id: UUID, request: Request, payload: ConnectorWri
                     _encrypt(_endpoint(payload.kind, payload.endpoint)) if payload.endpoint
                     else old_config.get("webhook_endpoint_ciphertext")
                 )
-            if payload.enabled and not (payload.credential or old["ciphertext"] or (payload.kind == "feishu_webhook" and cfg.get("webhook_endpoint_ciphertext"))):
+            if payload.kind == "openai" and payload.enabled and not (payload.credential or old["ciphertext"]):
                 raise ConfigError("CREDENTIAL_REQUIRED")
             session.execute(text("""
                 UPDATE biz_connectors SET name=:name, enabled=:enabled,
@@ -477,6 +478,9 @@ async def ai_generate(request: Request, payload: AIRequest, principal: admin_per
             # Strictly fail closed when there is no verified pricing policy.
             if Decimal(str(cfg.get("monthly_budget_usd", "0"))) <= 0:
                 raise ConfigError("AI_BUDGET_NOT_CONFIGURED", 409)
+            # Prices are not yet stored/verified. Do not allow potentially billable calls
+            # under a misleading budget cap that cannot account for actual spend.
+            raise ConfigError("AI_PRICING_NOT_CONFIGURED", 409)
             if Decimal(str(monthly_spend)) >= Decimal(str(cfg["monthly_budget_usd"])):
                 raise ConfigError("AI_MONTHLY_BUDGET_EXCEEDED", 429)
             credential = _decrypt(row["ciphertext"])
