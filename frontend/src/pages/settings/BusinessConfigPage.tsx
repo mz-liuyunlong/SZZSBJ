@@ -48,7 +48,7 @@ type Category = "all" | "crawler" | "ai" | "communication" | "bots" | "commerce"
 type ViewMode = "table" | "cards";
 type UsageRange = 7 | 30;
 
-export const BUSINESS_CONFIG_CATEGORIES: ReadonlyArray<{ key: Category; label: string }> = [
+const BUSINESS_CONFIG_CATEGORIES: ReadonlyArray<{ key: Category; label: string }> = [
   { key: "all", label: "全部服务" },
   { key: "crawler", label: "爬虫与代理" },
   { key: "ai", label: "AI 服务" },
@@ -62,7 +62,7 @@ export const BUSINESS_CONFIG_CATEGORIES: ReadonlyArray<{ key: Category; label: s
 const labelDate = (date: string | null | undefined) =>
   date && dayjs(date).isValid() ? dayjs(date).format("YYYY-MM-DD HH:mm") : "—";
 
-export const decodoStatus = (config: DecodoConfig): "未配置" | "已启用" | "已停用" => {
+const decodoStatus = (config: DecodoConfig): "未配置" | "已启用" | "已停用" => {
   if (!config.configured) return "未配置";
   return config.enabled ? "已启用" : "已停用";
 };
