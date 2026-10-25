@@ -3,7 +3,6 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   CloudOutlined,
-  EditOutlined,
   LinkOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
