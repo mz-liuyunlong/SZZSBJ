@@ -1,0 +1,8 @@
+/* Shared feature-local keyword cell: English first, Chinese beneath, without a separate translation column. */
+.keyword-planning__term {display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;min-width:0;max-width:280px;line-height:1.3}
+.keyword-planning__term .report-table-copyable__text {font-size:12px;font-weight:650;color:#1677ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.keyword-planning__term .ant-space {display:flex;align-items:center;gap:4px!important;min-height:16px}
+.keyword-planning__term .keyword-planning__term-translation {font-size:10px;color:#96a2b2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:230px}
+.keyword-planning__term .ant-btn {font-size:10px;height:18px;padding:0 2px}
+.keyword-planning__term .report-table-copyable__button {opacity:0;transition:opacity .1s}
+.keyword-planning__term:hover .report-table-copyable__button,.keyword-planning__term:focus-within .report-table-copyable__button {opacity:1}

@@ -13,10 +13,17 @@ from app.modules.after_sales.router import router as after_sales_router
 from app.modules.approvals.router import router as approvals_router
 from app.modules.business_rules.router import router as business_rules_router
 from app.modules.data_pages.router import router as data_pages_router
+from app.modules.decodo.router import (
+    research_router as decodo_research_router,
+)
+from app.modules.decodo.router import (
+    settings_router as decodo_settings_router,
+)
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
 from app.modules.integration_sync.router import router as integration_sync_router
+from app.modules.keyword_planning.router import router as keyword_planning_router
 from app.modules.media_assets.router import router as media_assets_router
 from app.modules.operation_logs.router import router as operation_logs_router
 from app.modules.operation_logs.rows_router import router as operation_logs_rows_router
@@ -61,10 +68,13 @@ def create_app() -> FastAPI:
     application.include_router(after_sales_router)
     application.include_router(approvals_router)
     application.include_router(business_rules_router)
+    application.include_router(decodo_settings_router)
+    application.include_router(decodo_research_router)
     application.include_router(data_pages_router)
     application.include_router(iam_router)
     application.include_router(rbac_router)
     application.include_router(integration_sync_router)
+    application.include_router(keyword_planning_router)
     application.include_router(password_reset_router)
     application.include_router(media_assets_router)
     application.include_router(operation_logs_rows_router)

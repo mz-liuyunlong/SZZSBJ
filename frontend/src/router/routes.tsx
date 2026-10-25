@@ -21,6 +21,8 @@ import DailySalesPage from "@/pages/sales/DailySalesPage";
 import OrderProfitPage from "@/pages/sales/OrderProfitPage";
 import RefundManagementPage from "@/pages/aftersales/RefundManagementPage";
 import AdsCampaignsPage from "@/pages/ads/campaigns/AdsCampaignsPage";
+import KeywordLaunchPage from "@/pages/ai-center/keyword-launch/KeywordLaunchPage";
+import KeywordLibraryPage from "@/pages/ads/keyword-library/KeywordLibraryPage";
 import OperationLogPage from "@/pages/operations/OperationLogPage";
 import OperationPlanPage from "@/pages/operations/OperationPlanPage";
 import SyncTaskPage from "@/pages/data-center/SyncTaskPage";
@@ -33,6 +35,7 @@ import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWareho
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
+import BusinessConfigPage from "@/pages/settings/BusinessConfigPage";
 import { navigation, navigationRedirects } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
@@ -180,6 +183,10 @@ function BusinessRoute({
           <DailySalesPage page={page} />
         ) : page.key === "sales_order_profit" ? (
           <OrderProfitPage page={page} />
+        ) : page.key === "ai_center_keyword_launch" ? (
+          <KeywordLaunchPage page={page} />
+        ) : page.key === "ads_keyword_library" ? (
+          <KeywordLibraryPage page={page} />
         ) : page.key === "ads_campaigns" ? (
           <AdsCampaignsPage page={page} />
         ) : page.key === "aftersales_refund_management" ? (
@@ -207,6 +214,8 @@ function BusinessRoute({
           <UserManagementPage page={page} />
         ) : page.key === "settings_role_management" ? (
           <RoleManagementPage page={page} />
+        ) : page.key === "settings_business_config" ? (
+          <BusinessConfigPage page={page} />
         ) : page.key === "settings_fee_rules" ? (
           <FeeRulesPage page={page} />
         ) : (

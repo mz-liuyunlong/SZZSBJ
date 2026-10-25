@@ -105,7 +105,7 @@ def test_fresh_database_reaches_0054_with_all_domestic_tables() -> None:
     url = _admin_url()
     database = create_database(url, "empty")
     try:
-        first = _alembic(url, database, "head")
+        first = _alembic(url, database, HEAD)
         assert first.returncode == 0, first.stderr
         assert _version(url, database) == [HEAD]
         assert _tables(url, database) == set(DOMESTIC_TABLES)
@@ -122,7 +122,7 @@ def test_fresh_database_reaches_0054_with_all_domestic_tables() -> None:
             ).fetchone()
             assert formatted is not None
             assert formatted[0] == "timestamp with time zone"
-        second = _alembic(url, database, "head")
+        second = _alembic(url, database, HEAD)
         assert second.returncode == 0, second.stderr
         assert "Running upgrade" not in second.stdout + second.stderr
         assert _version(url, database) == [HEAD]
@@ -143,7 +143,7 @@ def test_database_at_0049_keeps_synthetic_rows_when_upgraded_to_0054() -> None:
         assert _version(url, database) == [DOMESTIC_0049]
         marker = _seed_0049(url, database)
         before = _snapshot_0049(url, database)
-        upgraded = _alembic(url, database, "head")
+        upgraded = _alembic(url, database, HEAD)
         assert upgraded.returncode == 0, upgraded.stderr
         log = upgraded.stdout + upgraded.stderr
         upgrade_lines = [line for line in log.splitlines() if "Running upgrade" in line]
@@ -181,7 +181,7 @@ def test_database_at_0049_keeps_synthetic_rows_when_upgraded_to_0054() -> None:
                 ).fetchone()[0]
                 == "ops_domestic_packing_extra_allocations"
             )
-        repeated = _alembic(url, database, "head")
+        repeated = _alembic(url, database, HEAD)
         assert repeated.returncode == 0, repeated.stderr
         assert "Running upgrade" not in repeated.stdout + repeated.stderr
         assert _snapshot_0049(url, database) == before
@@ -340,7 +340,7 @@ def test_mismatched_extra_allocation_table_rejects_0054() -> None:
             conn.execute(
                 "CREATE TABLE ops_domestic_packing_extra_allocations (id uuid PRIMARY KEY)"
             )
-        rejected = _alembic(url, database, "head")
+        rejected = _alembic(url, database, HEAD)
         assert rejected.returncode != 0
         assert "PACKING_EXTRA_ALLOCATIONS" in rejected.stderr
         assert "COLUMNS_MISMATCH" in rejected.stderr
@@ -551,7 +551,7 @@ def test_existing_extra_table_is_adopted_only_if_complete(drift):
             before = conn.execute(
                 "SELECT to_jsonb(t)::text FROM ops_domestic_packing_extra_allocations t"
             ).fetchall()
-        result = _alembic(url, database, "head")
+        result = _alembic(url, database, HEAD)
         if drift:
             assert result.returncode != 0
             assert "PACKING_EXTRA_ALLOCATIONS" in result.stderr, result.stderr
@@ -709,7 +709,7 @@ def test_0052_refuses_nonempty_ows_history_and_rolls_back():
             before = conn.execute(
                 "SELECT to_jsonb(t)::text FROM ops_domestic_packing_ows_links t"
             ).fetchall()
-        result = _alembic(url, database, "head")
+        result = _alembic(url, database, HEAD)
         assert result.returncode != 0
         assert "OWS_LINK_HISTORY_PRESENT_DO_NOT_DROP" in result.stderr
         assert _version(url, database) == [revision]
