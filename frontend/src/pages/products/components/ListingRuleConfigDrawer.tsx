@@ -1,13 +1,26 @@
-/** Owner-approved V1: Listing grade configuration only; other sections are read-only. */
+/** Listing rule configuration: grade, lifecycle, inventory/repair and follow-up. */
 import { useEffect, useState } from "react";
 import { Alert, Button, Checkbox, Drawer, Empty, Form, Input, InputNumber, Modal, Skeleton, Space, Tabs, Tag, Typography, message } from "antd";
 import type { GradeStage, ListingGradeRuleConfig, ListingGradeRuleHistory, ListingGradeRuleRead } from "@/pages/products/listingRuleConfigApi";
 import { fetchListingGradeRule, fetchListingGradeRuleHistory, saveListingGradeRule } from "@/pages/products/listingRuleConfigApi";
 import { BackendRequestError } from "@/api/backendApi";
 
+export interface ListingRuleTransport {
+  fetchRule: typeof fetchListingGradeRule;
+  fetchHistory: typeof fetchListingGradeRuleHistory;
+  saveRule: typeof saveListingGradeRule;
+}
+
+const DEFAULT_TRANSPORT: ListingRuleTransport = {
+  fetchRule: fetchListingGradeRule,
+  fetchHistory: fetchListingGradeRuleHistory,
+  saveRule: saveListingGradeRule,
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
+  transport?: ListingRuleTransport;
 }
 
 interface FormValues extends Omit<ListingGradeRuleConfig, "c_min_percent" | "b_min_percent" | "a_above_percent"> {
@@ -39,7 +52,11 @@ const toConfig = (values: FormValues, previous: ListingGradeRuleConfig): Listing
   included_stages: values.included_stages,
 });
 
-export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
+export default function ListingRuleConfigDrawer({
+  open,
+  onClose,
+  transport = DEFAULT_TRANSPORT,
+}: Props) {
   const [form] = Form.useForm<FormValues>();
   const [messageApi, contextHolder] = message.useMessage();
   const [record, setRecord] = useState<ListingGradeRuleRead | null>(null);
@@ -59,7 +76,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
     setError(false);
     setHistory(null);
     setDirty(false);
-    void fetchListingGradeRule().then((result) => {
+    void transport.fetchRule().then((result) => {
       if (cancelled) return;
       setRecord(result);
       form.setFieldsValue(toForm(result.config));
@@ -67,12 +84,12 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
       if (!cancelled) setError(true);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [open, form, reloadCount]);
+  }, [open, form, reloadCount, transport]);
 
   const loadHistory = async () => {
     setHistoryLoading(true);
     try {
-      setHistory(await fetchListingGradeRuleHistory());
+      setHistory(await transport.fetchHistory());
     } catch {
       messageApi.error("规则历史读取失败");
     } finally {
@@ -111,7 +128,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
     const config = toConfig(values, record.config);
     setSaving(true);
     try {
-      const next = await saveListingGradeRule(config, record.version, values.change_reason);
+      const next = await transport.saveRule(config, record.version, values.change_reason);
       setRecord(next);
       setDirty(false);
       form.setFieldsValue(toForm(next.config));
@@ -150,7 +167,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
         ...record.config,
         [section]: sectionValues,
       } as ListingGradeRuleConfig;
-      const next = await saveListingGradeRule(updatedConfig, record.version, change_reason);
+      const next = await transport.saveRule(updatedConfig, record.version, change_reason);
       setRecord(next);
       form.setFieldsValue(toForm(next.config));
       setDirty(false);
