@@ -332,6 +332,58 @@ def disable_connector(
     return success_response(request, data=_public(row))
 
 
+
+@router.post("/{connector_id}/test")
+def test_connector(
+    connector_id: UUID, request: Request, principal: admin_perm
+) -> SuccessEnvelope[dict[str, Any], None]:
+    # Explicit user action. Never send on save, list, page load, or migration.
+    if os.getenv("BUSINESS_CONNECTOR_TEST_CALLS_ENABLED", "").lower() != "true":
+        raise ApiError(code="CONNECTOR_TESTS_DISABLED", status_code=409)
+    try:
+        with get_session_factory()() as session:
+            row = _get(session, connector_id)
+            if not row["enabled"]:
+                raise ConfigError("CONNECTOR_NOT_ENABLED", 409)
+            if row["kind"] == "feishu_webhook":
+                try:
+                    _post_feishu(row, "SZZSBJ 业务配置中心：飞书群机器人测试消息")
+                    success = True
+                except ConfigError:
+                    success = False
+                except httpx.HTTPError:
+                    success = False
+            else:
+                # OpenAI model validation uses an explicit no-generation model lookup.
+                # No paid generation or access to business data occurs here.
+                credential = _decrypt(row["ciphertext"])
+                cfg = row["config"]
+                if not isinstance(cfg, dict):
+                    cfg = json.loads(cfg)
+                model = cfg.get("default_model")
+                if not model:
+                    raise ConfigError("AI_DEFAULT_MODEL_MISSING", 409)
+                try:
+                    from openai import OpenAI
+                    with OpenAI(api_key=credential, timeout=8.0, max_retries=0) as client:
+                        client.models.retrieve(model)
+                    success = True
+                except Exception:
+                    success = False
+            session.execute(
+                text("""
+                    UPDATE biz_connectors SET last_test_at=now(), last_test_ok=:ok,
+                        updated_at=now() WHERE id=:id
+                """),
+                {"id": connector_id, "ok": success},
+            )
+            _audit(session, principal.user_id, "connector.test", str(connector_id))
+            session.commit()
+        return success_response(request, data={"ok": success})
+    except ConfigError as exc:
+        raise _fail(exc) from None
+
+
 @router.get("/routes/list")
 def list_routes(request: Request, _: read_perm) -> SuccessEnvelope[list[dict[str, Any]], None]:
     with get_session_factory()() as session:
