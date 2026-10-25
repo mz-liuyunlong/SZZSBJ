@@ -78,6 +78,11 @@ export async function saveBusinessConnector(body: ConnectorWrite, id?: string): 
 export async function disableBusinessConnector(id: string): Promise<BusinessConnector> {
   return (await backendRequest<BusinessConnector>(base + "/" + id, { method: "DELETE" })).data;
 }
+export async function testBusinessConnector(id: string): Promise<{ok: boolean}> {
+  return (await backendRequest<{ok: boolean}>(base + "/" + id + "/test", {
+    method: "POST",
+  })).data;
+}
 export async function listFeishuRoutes(): Promise<FeishuRoute[]> {
   return (await backendRequest<FeishuRoute[]>(base + "/routes/list")).data;
 }
