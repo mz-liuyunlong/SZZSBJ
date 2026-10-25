@@ -17,6 +17,7 @@ import {
   Empty,
   Input,
   Segmented,
+  Popconfirm,
   Select,
   Space,
   Statistic,
@@ -42,7 +43,7 @@ import {
 import "@/pages/settings/BusinessConfigPage.css";
 import BusinessConfigDraftManager from "@/pages/settings/BusinessConfigDraftManager";
 import BusinessConfigServiceEditor from "@/pages/settings/BusinessConfigServiceEditor";
-import { listBusinessConnectors, type BusinessConnector } from "@/api/businessConnectorsApi";
+import { listBusinessConnectors, testBusinessConnector, type BusinessConnector } from "@/api/businessConnectorsApi";
 import { readBrowserDrafts, type ServiceDraft } from "@/pages/settings/businessConfigDrafts";
 import { PlusOutlined } from "@ant-design/icons";
 import LiveBusinessConnectors from "@/pages/settings/LiveBusinessConnectors";
@@ -300,6 +301,14 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
     { title: "最近修改", dataIndex: "updated", width: 145 },
     { title: "操作", key: "actions", width: 172, render: (_, item) => <Space size={0}>
       <Button type="link" size="small" onClick={() => item.decodo ? setDetailsOpen(true) : item.connector || item.draft ? openServiceEditor(item.connector, item.draft) : undefined}>详情</Button>
+      {item.connector && canEdit && item.connector.enabled && <Popconfirm
+        title="测试真实服务连接？" description={item.connector.kind === "feishu_webhook" ? "将向真实飞书群发送固定测试消息，需服务端允许测试。" : "将检查模型可访问性，不执行文本生成。"}
+        okText="确认测试" cancelText="取消"
+        onConfirm={() => void testBusinessConnector(item.connector!.id)
+          .then((result) => { if (result.ok) messageApi.success("连接正常"); else messageApi.error("连接失败"); })
+          .catch(() => messageApi.error("测试未通过，请检查服务端授权"))}>
+        <Button type="link" size="small">测试</Button>
+      </Popconfirm>}
       {item.decodo && <Button type="link" size="small" onClick={goToUsage}>用量</Button>}
       {canEdit && (item.connector || item.draft || (item.decodo && !isLocalMode)) &&
         <Button type="link" size="small" onClick={() => item.decodo ? openEditor() : openServiceEditor(item.connector, item.draft)}>编辑</Button>}
@@ -335,7 +344,6 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
             <div className="business-config__body">
               <Alert className="business-config__intro-note" type="info" showIcon message="真实连接与安全配置" description={isLocalMode ? "Decodo 处于本地 SQLite 测试模式，密钥由本机环境管理。飞书和 AI 使用独立的服务端配置，未迁移数据库前无法保存。" : "显示真实 Decodo、飞书群和 AI 连接；未接入服务仅以草稿标识，不展示虚构凭据或费用。"} />
               {configError ? <Alert showIcon type="error" message="Decodo 配置读取失败" description="请检查登录、权限、后端服务及数据库版本；未读取到真实配置时不显示虚拟实例。" action={<Button size="small" onClick={() => void loadConfig()}>重试</Button>} /> : null}
-              {isLocalMode ? <Alert showIcon type="info" message="当前是 Decodo 本地 SQLite 测试模式" description="密钥由本地后端环境变量管理，页面只读；请求统计保存在本机。真实采集可能产生服务商费用。" /> : null}
               <div className="business-config__stats">
                 <Card><Statistic title="已接入服务" value={(config ? 1 : 0) + live.length} prefix={<LinkOutlined />} /><span>实际接入的服务实例</span></Card>
                 <Card><Statistic title="已启用连接" value={(config?.enabled ? 1 : 0) + live.filter((item) => item.enabled).length} prefix={<SafetyCertificateOutlined />} /><span>由后端配置状态决定</span></Card>
