@@ -12,6 +12,7 @@ from app.db.session import dispose_engine
 from app.modules.after_sales.router import router as after_sales_router
 from app.modules.approvals.router import router as approvals_router
 from app.modules.business_rules.router import router as business_rules_router
+from app.modules.business_connectors.router import router as business_connectors_router
 from app.modules.data_pages.router import router as data_pages_router
 from app.modules.decodo.router import (
     research_router as decodo_research_router,
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     application.include_router(after_sales_router)
     application.include_router(approvals_router)
     application.include_router(business_rules_router)
+    application.include_router(business_connectors_router)
     application.include_router(decodo_settings_router)
     application.include_router(decodo_research_router)
     application.include_router(data_pages_router)
