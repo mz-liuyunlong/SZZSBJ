@@ -18,7 +18,12 @@ const events = [
 
 type FormConnector = ConnectorWrite;
 
-export default function LiveBusinessConnectors({ canManage }: { canManage: boolean }) {
+export default function LiveBusinessConnectors({ canManage, category, keyword, status }: {
+  canManage: boolean;
+  category: string;
+  keyword: string;
+  status: string;
+}) {
   const [messageApi, context] = message.useMessage();
   const [modal, modalContext] = Modal.useModal();
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof listBusinessUsage>> | null>(null);
@@ -35,6 +40,13 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
   const [routeForm] = Form.useForm<Omit<FeishuRoute, "id">>();
   const [templateForm] = Form.useForm<Omit<NotificationTemplate, "id">>();
   const kind = Form.useWatch("kind", form);
+  const showFeishu = category === "all" || category === "bots";
+  const showAI = category === "all" || category === "ai";
+  const shownItems = items.filter((item) => (
+    (item.kind === "feishu_webhook" ? showFeishu : showAI)
+    && (status === "all" || (status === "已启用" && item.enabled) || (status === "已停用" && !item.enabled))
+    && item.name.toLowerCase().includes(keyword.toLowerCase().trim())
+  ));
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -115,7 +127,7 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
         {canManage && <Button type="primary" onClick={() => openConnector()}>新增真实连接</Button>}</Space>
     </div>
     {error && <Alert type="error" showIcon message="真实连接服务尚不可用" description="请检查后端路由、数据库迁移及权限；本页面不会回退到虚拟连接。" />}
-    <Table<BusinessConnector> loading={loading} size="small" rowKey="id" dataSource={items} pagination={false}
+    <Table<BusinessConnector> loading={loading} size="small" rowKey="id" dataSource={shownItems} pagination={false}
       columns={[
         { title: "连接名称", dataIndex: "name" },
         { title: "服务类型", dataIndex: "kind", render: (v: string) => v === "feishu_webhook" ? "飞书群机器人" : "OpenAI" },
@@ -137,7 +149,7 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
             .then(refresh).catch(() => messageApi.error("停用失败"))}>停用</Button>}
         </Space> : null },
       ]} />
-    <div className="business-config__draft-heading"><strong>飞书通知路由</strong>
+    {showFeishu && <><div className="business-config__draft-heading"><strong>飞书通知路由</strong>
       {canManage && <Button size="small" onClick={() => { routeForm.resetFields(); routeForm.setFieldsValue({
         enabled: false, cooldown_seconds: 60, daily_limit: 100,
       }); setDrawer("route"); }}>新增通知路由</Button>}</div>
@@ -169,6 +181,7 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
     <Table<NotificationDelivery> size="small" rowKey="id" dataSource={deliveries} pagination={{ pageSize: 10 }}
       columns={[{ title: "事件", dataIndex: "event_key" }, { title: "状态", dataIndex: "status" },
         { title: "尝试", dataIndex: "attempts" }, { title: "失败码", dataIndex: "error_code" }, { title: "创建时间", dataIndex: "created_at" }]}/>
+    </>}
     <Drawer title={editing ? "编辑正式连接" : "新增正式连接"} open={drawer === "connector"} width={540}
       onClose={() => { form.setFieldsValue({credential:"",signing_secret:"",endpoint:""}); setDrawer(null); }}
       extra={<Space><Button onClick={() => setDrawer(null)}>取消</Button><Button type="primary" loading={saving} onClick={() => void submitConnector()}>保存配置</Button></Space>}>
