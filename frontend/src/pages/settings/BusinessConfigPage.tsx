@@ -348,10 +348,10 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
               </div>
               {usageError ? <Alert type="error" showIcon message="用量读取失败，请检查后端及权限" /> : null}
               <div className="business-config__stats">
-                <Card><Statistic loading={usageLoading} title="今日请求" value={usageError ? "—" : todayRow?.total ?? 0} /><span>America/New_York</span></Card>
-                <Card><Statistic loading={usageLoading} title="Amazon 请求" value={usageError ? "—" : todayRow?.amazon_requests ?? 0} /><span>今日采集请求</span></Card>
-                <Card><Statistic loading={usageLoading} title="Walmart 请求" value={usageError ? "—" : todayRow?.walmart_requests ?? 0} /><span>今日采集请求</span></Card>
-                <Card><Statistic loading={usageLoading} title="所选区间请求" value={usageError ? "—" : totalRequests} /><span>包含成功、失败及处理中</span></Card>
+                <Card><Statistic title="今日请求" value={usageError ? "—" : todayRow?.total ?? 0} /><span>America/New_York</span></Card>
+                <Card><Statistic title="Amazon 请求" value={usageError ? "—" : todayRow?.amazon_requests ?? 0} /><span>今日采集请求</span></Card>
+                <Card><Statistic title="Walmart 请求" value={usageError ? "—" : todayRow?.walmart_requests ?? 0} /><span>今日采集请求</span></Card>
+                <Card><Statistic title="所选区间请求" value={usageError ? "—" : totalRequests} /><span>包含成功、失败及处理中</span></Card>
               </div>
               <div className="business-config__usage-grid">
                 <Card title="每日请求趋势" className="business-config__chart">
