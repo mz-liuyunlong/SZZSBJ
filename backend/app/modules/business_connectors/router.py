@@ -744,8 +744,7 @@ async def ai_generate(
             max_input_tokens = len(payload.prompt.encode("utf-8"))
             max_output_tokens = int(cfg["max_output_tokens"])
             reserved_cost = (
-                Decimal(max_input_tokens) * input_rate
-                + Decimal(max_output_tokens) * output_rate
+                Decimal(max_input_tokens) * input_rate + Decimal(max_output_tokens) * output_rate
             ) / Decimal(1000000)
             previous_spend = session.execute(
                 text("""
@@ -765,9 +764,12 @@ async def ai_generate(
                     VALUES (:id,:connector,:model,:version,0,0,:cost,'pending',:actor)
                 """),
                 {
-                    "id": reservation_id, "connector": payload.connector_id,
-                    "model": model, "version": payload.prompt_version,
-                    "cost": reserved_cost, "actor": principal.user_id,
+                    "id": reservation_id,
+                    "connector": payload.connector_id,
+                    "model": model,
+                    "version": payload.prompt_version,
+                    "cost": reserved_cost,
+                    "actor": principal.user_id,
                 },
             )
             session.commit()
@@ -789,7 +791,7 @@ async def ai_generate(
                            SET status='failed',error_code='AI_PROVIDER_FAILURE',
                                duration_ms=:duration WHERE id=:id
                     """),
-                    {"id": reservation_id, "duration": int((time.monotonic()-started)*1000)},
+                    {"id": reservation_id, "duration": int((time.monotonic() - started) * 1000)},
                 )
                 session.commit()
             raise ConfigError("AI_PROVIDER_FAILURE", 502) from None
@@ -808,18 +810,23 @@ async def ai_generate(
                      WHERE id=:id
                 """),
                 {
-                    "id": reservation_id, "input": input_tokens, "output": output_tokens,
+                    "id": reservation_id,
+                    "input": input_tokens,
+                    "output": output_tokens,
                     "cost": max(actual_cost, reserved_cost),
-                    "duration": int((time.monotonic()-started)*1000),
+                    "duration": int((time.monotonic() - started) * 1000),
                 },
             )
             session.commit()
         return success_response(
             request,
             data={
-                "text": content, "model": model,
-                "input_tokens": input_tokens, "output_tokens": output_tokens,
-                "estimated_cost_usd": str(actual_cost), "billing_note": "configured_rate_estimate",
+                "text": content,
+                "model": model,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "estimated_cost_usd": str(actual_cost),
+                "billing_note": "configured_rate_estimate",
             },
         )
     except ConfigError as exc:
