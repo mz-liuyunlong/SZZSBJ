@@ -1,8 +1,8 @@
-import { Alert, Button, Drawer, Form, Input, InputNumber, Select, Space, Switch, Table, Tag, message } from "antd";
+import { Alert, Button, Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
-  disableBusinessConnector, listBusinessConnectors, listFeishuRoutes, listNotificationDeliveries,
-  listNotificationTemplates, saveBusinessConnector, saveFeishuRoute, saveNotificationTemplate,
+  disableBusinessConnector, listBusinessConnectors, listBusinessUsage, listFeishuRoutes, listNotificationDeliveries,
+  listNotificationTemplates, saveBusinessConnector, saveFeishuRoute, saveNotificationTemplate, testBusinessConnector,
   type BusinessConnector, type ConnectorWrite, type FeishuRoute, type NotificationDelivery,
   type NotificationTemplate,
 } from "@/api/businessConnectorsApi";
@@ -20,6 +20,8 @@ type FormConnector = ConnectorWrite;
 
 export default function LiveBusinessConnectors({ canManage }: { canManage: boolean }) {
   const [messageApi, context] = message.useMessage();
+  const [modal, modalContext] = Modal.useModal();
+  const [usage, setUsage] = useState<Awaited<ReturnType<typeof listBusinessUsage>> | null>(null);
   const [items, setItems] = useState<BusinessConnector[]>([]);
   const [routes, setRoutes] = useState<FeishuRoute[]>([]);
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
@@ -41,6 +43,7 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
       ]);
       setItems(connectors); setRoutes(loadedRoutes); setTemplates(loadedTemplates); setDeliveries(loadedDeliveries);
       setError(false);
+      void listBusinessUsage().then(setUsage).catch(() => setUsage(null));
     } catch {
       setError(true);
     } finally {
@@ -53,6 +56,7 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
     ]).then(([connectors, loadedRoutes, loadedTemplates, loadedDeliveries]) => {
       setItems(connectors); setRoutes(loadedRoutes); setTemplates(loadedTemplates); setDeliveries(loadedDeliveries);
       setError(false);
+      void listBusinessUsage().then(setUsage).catch(() => setUsage(null));
     }).catch(() => setError(true)).finally(() => setLoading(false));
   }, []);
   const openConnector = (item?: BusinessConnector) => {
@@ -104,7 +108,7 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
     finally { setSaving(false); }
   };
   return <div className="business-config__live">
-    {context}
+    {context}{modalContext}
     <div className="business-config__draft-heading">
       <div><strong>正式服务连接管理</strong><p>服务端加密保存；可管理飞书群 Webhook 与 OpenAI 配置。默认关闭外发。</p></div>
       <Space><Button size="small" onClick={() => void refresh()}>刷新</Button>
@@ -120,6 +124,15 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
           <Tag color={v || row.kind === "feishu_webhook" ? "success" : "warning"}>{v || row.kind === "feishu_webhook" ? "配置已保存" : "未配置"}</Tag> },
         { title: "操作", key: "actions", render: (_, row) => canManage ? <Space>
           <Button type="link" size="small" onClick={() => openConnector(row)}>编辑</Button>
+          <Button type="link" size="small" disabled={!row.enabled} onClick={() => {
+            void modal.confirm({title: "确认发送连接测试？", content: row.kind === "feishu_webhook" ? "将向真实飞书群发送一条固定测试消息，需服务端已授权测试外发。" : "将调用供应商模型查询接口，不会进行文本生成。", okText: "确认测试", cancelText: "取消"}).then((ok) => {
+              if (!ok) return;
+              void testBusinessConnector(row.id).then(result => {
+                messageApi[result.ok ? "success" : "error"](result.ok ? "连接检查成功" : "连接检查失败");
+                void refresh();
+              }).catch(() => messageApi.error("连接检查未执行或未通过，请检查服务端授权"));
+            });
+          }}>测试连接</Button>
           {row.enabled && <Button danger type="link" size="small" onClick={() => void disableBusinessConnector(row.id)
             .then(refresh).catch(() => messageApi.error("停用失败"))}>停用</Button>}
         </Space> : null },
@@ -143,6 +156,15 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
         { title: "启用", dataIndex: "enabled", render: (v: boolean) => v ? "是" : "否" },
         { title: "操作", key: "edit", render: (_, row) => canManage ? <Button type="link" onClick={() => {
           templateForm.setFieldsValue(row); setDrawer("template"); }}>编辑</Button> : null }]}/>
+    <div className="business-config__draft-heading"><strong>用量与统计（最近30天）</strong></div>
+    {usage && <div className="business-config__instance-meta">
+      <span>通知发送：{usage.notifications.filter(x => x.status === "sent").reduce((sum, x) => sum + Number(x.n), 0)}</span>
+      <span>通知失败：{usage.notifications.filter(x => x.status === "failed").reduce((sum, x) => sum + Number(x.n), 0)}</span>
+      <span>AI 请求：{usage.ai.reduce((sum, x) => sum + Number(x.requests), 0)}</span>
+      <span>AI 输入 Token：{usage.ai.reduce((sum, x) => sum + Number(x.input_tokens ?? 0), 0)}</span>
+      <span>AI 输出 Token：{usage.ai.reduce((sum, x) => sum + Number(x.output_tokens ?? 0), 0)}</span>
+      <span>AI 费用：按已配置的估算单价计量，最终以服务商账单为准</span>
+    </div>}
     <div className="business-config__draft-heading"><strong>发送记录</strong></div>
     <Table<NotificationDelivery> size="small" rowKey="id" dataSource={deliveries} pagination={{ pageSize: 10 }}
       columns={[{ title: "事件", dataIndex: "event_key" }, { title: "状态", dataIndex: "status" },
