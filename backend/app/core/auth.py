@@ -1,4 +1,5 @@
 import logging
+import os
 import secrets
 from dataclasses import dataclass
 from typing import Annotated, Final
@@ -189,12 +190,26 @@ def get_optional_principal(request: Request) -> Principal | None:
         any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
         or path in _PREVIEW_READ_PATHS
     )
+    # Explicit local Decodo research opt-in. Preview credentials remain mandatory.
+    # The special-case is unavailable in production and does not grant broad writes.
+    decodo_local_preview_write_allowed = (
+        request.method == "POST"
+        and path
+        in {
+            "/api/keyword-planning/products/confirm",
+            "/api/keyword-planning/amazon/research",
+        }
+        and os.getenv("APP_ENV", "").strip().lower() == "local"
+        and os.getenv("DECODO_LOCAL_TEST_MODE", "").strip() == "1"
+        and os.getenv("DECODO_LOCAL_TEST_ENABLE_REAL_CALLS", "").strip() == "1"
+    )
     write_allowed = (
         request.method in _PREVIEW_WRITE_METHODS
         and isinstance(path, str)
         and (
             path in _PREVIEW_WRITE_PATHS
             or any(path.startswith(prefix) for prefix in _PREVIEW_WRITE_PATH_PREFIXES)
+            or decodo_local_preview_write_allowed
         )
     )
     operation_plan_mutation_allowed = (

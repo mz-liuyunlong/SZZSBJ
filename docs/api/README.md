@@ -26,3 +26,4 @@ settings.md
 - `walmart-monitor-integration.md`（Walmart Monitor 统一 RAW 事件接收；无 RAW 读取或 Listing 写入）
 - `walmart-monitor-target-source.md`（Walmart 监控目标只读来源接口）
 - `pmc-domestic-batch-board-api.md`（PMC 国内仓批次看板只读 API）
+- `keyword-planning-v11.md`（关键词 V1.1 本地开发契约；未部署、未开放正式投放）

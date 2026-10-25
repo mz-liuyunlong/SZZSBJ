@@ -40,6 +40,21 @@ _POST_PATH_PATTERNS = tuple(
 
 def permitted_local_write(method: str, path: str) -> bool:
     """Default deny: do not allow sync, retry, backfill or broad WFS mutations."""
+    # SQLite-only Decodo research is safe to run while the PostgreSQL
+    # local production-tunnel write guard continues to block all other writes.
+    # Access still requires the normal FastAPI authentication and permissions.
+    if (
+        method == "POST"
+        and path
+        in {
+            "/api/keyword-planning/products/confirm",
+            "/api/keyword-planning/amazon/research",
+        }
+        and os.getenv("APP_ENV", "").strip().lower() == "local"
+        and os.getenv("DECODO_LOCAL_TEST_MODE", "").strip() == "1"
+        and os.getenv("DECODO_LOCAL_TEST_ENABLE_REAL_CALLS", "").strip() == "1"
+    ):
+        return True
     if method == "PUT":
         return path in _EXACT_PUT_PATHS
 

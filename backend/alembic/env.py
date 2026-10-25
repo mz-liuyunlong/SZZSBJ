@@ -9,6 +9,7 @@ import app.models.raw_lingxing_api  # noqa: F401  # Register approved RAW metada
 import app.modules.data_pages.business_models  # noqa: F401  # Register sample/refund business models.
 import app.modules.data_pages.models  # noqa: F401  # Register DATA-PAGES DIM/FACT/MART.
 import app.modules.integration_sync.models  # noqa: F401  # Register sync governance/ODS.
+import app.modules.keyword_planning.models  # noqa: F401
 import app.modules.pmc_domestic.inbound_models  # noqa: F401
 import app.modules.pmc_domestic.models  # noqa: F401  # Register domestic warehouse tables.
 import app.modules.pmc_domestic.packing_models  # noqa: F401
