@@ -332,7 +332,6 @@ def disable_connector(
     return success_response(request, data=_public(row))
 
 
-
 @router.post("/{connector_id}/test")
 def test_connector(
     connector_id: UUID, request: Request, principal: admin_perm
@@ -365,6 +364,7 @@ def test_connector(
                     raise ConfigError("AI_DEFAULT_MODEL_MISSING", 409)
                 try:
                     from openai import OpenAI
+
                     with OpenAI(api_key=credential, timeout=8.0, max_retries=0) as client:
                         client.models.retrieve(model)
                     success = True
@@ -555,6 +555,7 @@ def _post_feishu(row: Any, text_value: str) -> None:
     body: dict[str, Any] = {"msg_type": "text", "content": {"text": text_value}}
     if row["secret_ciphertext"]:
         import base64
+
         timestamp = str(int(time.time()))
         secret = _decrypt(row["secret_ciphertext"])
         signature = base64.b64encode(
