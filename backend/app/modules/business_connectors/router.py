@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, Query, Request
-from openai import AsyncOpenAI
+from app.integrations.llm.openai_provider import generate_text
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -47,6 +47,8 @@ class ConnectorWrite(BaseModel):
     daily_limit: int = Field(default=100, ge=1, le=100000)
     monthly_budget_usd: Decimal = Field(default=Decimal("0"), ge=0, le=1000000)
     max_output_tokens: int = Field(default=1024, ge=1, le=16384)
+    input_price_per_million: Decimal = Field(default=Decimal("0"), ge=0, le=100000)
+    output_price_per_million: Decimal = Field(default=Decimal("0"), ge=0, le=100000)
 
 
 class RouteWrite(BaseModel):
@@ -148,6 +150,8 @@ def _config(value: ConnectorWrite) -> dict[str, Any]:
         "daily_limit": value.daily_limit,
         "monthly_budget_usd": str(value.monthly_budget_usd),
         "max_output_tokens": value.max_output_tokens,
+        "input_price_per_million": str(value.input_price_per_million),
+        "output_price_per_million": str(value.output_price_per_million),
     }
 
 
@@ -454,9 +458,19 @@ def dispatch_notifications(request: Request, principal: admin_perm, limit: Annot
 
 
 @router.post("/ai/generate")
-async def ai_generate(request: Request, payload: AIRequest, principal: admin_perm) -> SuccessEnvelope[dict[str, Any], None]:
+async def ai_generate(
+    request: Request, payload: AIRequest, principal: admin_perm
+) -> SuccessEnvelope[dict[str, Any], None]:
     try:
+        # Prices must be explicitly checked against the model provider's current pricing.
+        # Reserve an upper-bound budget atomically BEFORE creating an outbound request.
+        started = time.monotonic()
+        reservation_id = uuid4()
         with get_session_factory()() as session:
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": str(payload.connector_id)},
+            )
             row = _get(session, payload.connector_id)
             if row["kind"] != "openai" or not row["enabled"]:
                 raise ConfigError("AI_CONNECTOR_NOT_ENABLED", 409)
@@ -464,56 +478,101 @@ async def ai_generate(request: Request, payload: AIRequest, principal: admin_per
             model = payload.model or cfg.get("default_model")
             if model not in cfg.get("model_allowlist", []):
                 raise ConfigError("AI_MODEL_NOT_ALLOWED")
-            # Daily quota is enforced by server records, never by the React UI.
-            daily = session.execute(text("""
-                SELECT count(*) FROM biz_ai_usage WHERE connector_id=:id
-                  AND created_at>=date_trunc('day',now())
-            """), {"id": payload.connector_id}).scalar_one()
-            if daily >= int(cfg["daily_limit"]):
+            daily_count = session.execute(
+                text("""
+                    SELECT count(*) FROM biz_ai_usage
+                     WHERE connector_id=:id AND created_at>=date_trunc('day',now())
+                """),
+                {"id": payload.connector_id},
+            ).scalar_one()
+            if daily_count >= int(cfg["daily_limit"]):
                 raise ConfigError("AI_DAILY_QUOTA_EXCEEDED", 429)
-            monthly_spend = session.execute(text("""
-                SELECT coalesce(sum(cost_usd),0) FROM biz_ai_usage WHERE connector_id=:id
-                  AND created_at>=date_trunc('month',now())
-            """), {"id": payload.connector_id}).scalar_one()
-            # Strictly fail closed when there is no verified pricing policy.
-            if Decimal(str(cfg.get("monthly_budget_usd", "0"))) <= 0:
-                raise ConfigError("AI_BUDGET_NOT_CONFIGURED", 409)
-            # Prices are not yet stored/verified. Do not allow potentially billable calls
-            # under a misleading budget cap that cannot account for actual spend.
-            raise ConfigError("AI_PRICING_NOT_CONFIGURED", 409)
-            if Decimal(str(monthly_spend)) >= Decimal(str(cfg["monthly_budget_usd"])):
+            monthly_budget = Decimal(str(cfg.get("monthly_budget_usd", "0")))
+            input_rate = Decimal(str(cfg.get("input_price_per_million", "0")))
+            output_rate = Decimal(str(cfg.get("output_price_per_million", "0")))
+            if min(monthly_budget, input_rate, output_rate) <= 0:
+                raise ConfigError("AI_PRICING_NOT_CONFIGURED", 409)
+            # UTF-8 byte count is used as a conservative prompt-token bound.
+            max_input_tokens = len(payload.prompt.encode("utf-8"))
+            max_output_tokens = int(cfg["max_output_tokens"])
+            reserved_cost = (
+                Decimal(max_input_tokens) * input_rate
+                + Decimal(max_output_tokens) * output_rate
+            ) / Decimal(1000000)
+            previous_spend = session.execute(
+                text("""
+                    SELECT coalesce(sum(cost_usd),0) FROM biz_ai_usage
+                     WHERE connector_id=:id AND created_at>=date_trunc('month',now())
+                """),
+                {"id": payload.connector_id},
+            ).scalar_one()
+            if Decimal(str(previous_spend)) + reserved_cost > monthly_budget:
                 raise ConfigError("AI_MONTHLY_BUDGET_EXCEEDED", 429)
             credential = _decrypt(row["ciphertext"])
-        started = time.monotonic()
+            session.execute(
+                text("""
+                    INSERT INTO biz_ai_usage
+                        (id,connector_id,model,prompt_version,input_tokens,output_tokens,
+                         cost_usd,status,created_by)
+                    VALUES (:id,:connector,:model,:version,0,0,:cost,'pending',:actor)
+                """),
+                {
+                    "id": reservation_id, "connector": payload.connector_id,
+                    "model": model, "version": payload.prompt_version,
+                    "cost": reserved_cost, "actor": principal.user_id,
+                },
+            )
+            session.commit()
+
         try:
-            async with AsyncOpenAI(api_key=credential, timeout=30.0, max_retries=0) as client:
-                response = await client.responses.create(
-                    model=model, input=payload.prompt, max_output_tokens=int(cfg["max_output_tokens"])
-                )
+            content, input_tokens, output_tokens = await generate_text(
+                api_key=credential,
+                model=model,
+                prompt=payload.prompt,
+                max_output_tokens=max_output_tokens,
+            )
         except Exception:
+            # Keep the reserved amount after an indeterminate provider failure;
+            # a provider may have billed the call even without returning usage.
             with get_session_factory()() as session:
-                session.execute(text("""
-                    INSERT INTO biz_ai_usage (id,connector_id,model,prompt_version,status,error_code,
-                        duration_ms,created_by)
-                    VALUES (:id,:connector,:model,:version,'failed','AI_PROVIDER_FAILURE',:duration,:actor)
-                """), {"id": uuid4(), "connector": payload.connector_id, "model": model,
-                     "version": payload.prompt_version, "duration": int((time.monotonic() - started) * 1000),
-                     "actor": principal.user_id})
+                session.execute(
+                    text("""
+                        UPDATE biz_ai_usage
+                           SET status='failed',error_code='AI_PROVIDER_FAILURE',
+                               duration_ms=:duration WHERE id=:id
+                    """),
+                    {"id": reservation_id, "duration": int((time.monotonic()-started)*1000)},
+                )
                 session.commit()
             raise ConfigError("AI_PROVIDER_FAILURE", 502) from None
-        input_tokens = int(response.usage.input_tokens if response.usage else 0)
-        output_tokens = int(response.usage.output_tokens if response.usage else 0)
+
+        actual_cost = (
+            Decimal(input_tokens) * input_rate + Decimal(output_tokens) * output_rate
+        ) / Decimal(1000000)
+        # Do not reduce accounted usage below zero and do not overstate certainty
+        # of the provider's final invoice.
         with get_session_factory()() as session:
-            session.execute(text("""
-                INSERT INTO biz_ai_usage (id,connector_id,model,prompt_version,input_tokens,
-                    output_tokens,status,duration_ms,created_by)
-                VALUES (:id,:connector,:model,:version,:input,:output,'success',:duration,:actor)
-            """), {"id": uuid4(), "connector": payload.connector_id, "model": model,
-                 "version": payload.prompt_version, "input": input_tokens, "output": output_tokens,
-                 "duration": int((time.monotonic() - started) * 1000), "actor": principal.user_id})
+            session.execute(
+                text("""
+                    UPDATE biz_ai_usage
+                       SET input_tokens=:input,output_tokens=:output,
+                           cost_usd=:cost,status='success',duration_ms=:duration
+                     WHERE id=:id
+                """),
+                {
+                    "id": reservation_id, "input": input_tokens, "output": output_tokens,
+                    "cost": max(actual_cost, reserved_cost),
+                    "duration": int((time.monotonic()-started)*1000),
+                },
+            )
             session.commit()
-        return success_response(request, data={"text": response.output_text,
-            "model": model, "input_tokens": input_tokens, "output_tokens": output_tokens,
-            "cost_usd": None})
+        return success_response(
+            request,
+            data={
+                "text": content, "model": model,
+                "input_tokens": input_tokens, "output_tokens": output_tokens,
+                "estimated_cost_usd": str(actual_cost), "billing_note": "configured_rate_estimate",
+            },
+        )
     except ConfigError as exc:
         raise _fail(exc) from None
