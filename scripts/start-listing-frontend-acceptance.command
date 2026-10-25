@@ -47,8 +47,15 @@ npm run dev -- --host 127.0.0.1 --port "$PORT" --strictPort &
 vite_pid=$!
 
 cleanup() {
-  kill "$vite_pid" 2>/dev/null || true
-  wait "$vite_pid" 2>/dev/null || true
+  # Cleanup is best effort; do not mask an earlier Vite startup/runtime error.
+  if kill -0 "$vite_pid" 2>/dev/null; then
+    if ! kill "$vite_pid" 2>/dev/null; then
+      echo "WARNING: could not stop the local Vite process $vite_pid" >&2
+    fi
+  fi
+  if wait "$vite_pid" 2>/dev/null; then
+    :
+  fi
 }
 trap cleanup EXIT INT TERM
 
