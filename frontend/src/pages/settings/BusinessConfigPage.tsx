@@ -42,6 +42,7 @@ import {
 } from "@/api/decodoApi";
 import "@/pages/settings/BusinessConfigPage.css";
 import BusinessConfigDraftManager from "@/pages/settings/BusinessConfigDraftManager";
+import LiveBusinessConnectors from "@/pages/settings/LiveBusinessConnectors";
 
 type Section = "connections" | "usage" | "policies";
 type Category = "all" | "crawler" | "ai" | "communication" | "bots" | "commerce" | "erp" | "logistics";
@@ -372,6 +373,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                     ) : <Empty description="该分类暂无匹配的已接入服务" />}
                   </div>
                 )}
+                <LiveBusinessConnectors canManage={canEdit} />
                 <BusinessConfigDraftManager section="connections" category={category} keyword={keyword} status={statusFilter} canManage={canEdit} />
                 <div className="business-config__list-footer">当前只接入 Decodo 单实例。其他服务将在后端接入后展示，不使用演示账号或虚构费用。</div>
               </Card>
