@@ -501,6 +501,22 @@ def list_audit(request: Request, _: read_perm) -> SuccessEnvelope[list[dict[str,
     return success_response(request, data=[dict(r) for r in rows])
 
 
+@router.get("/usage/ai")
+def ai_usage_rows(
+    request: Request, _: read_perm, limit: Annotated[int, Query(ge=1, le=200)] = 50
+) -> SuccessEnvelope[list[dict[str, Any]], None]:
+    with get_session_factory()() as session:
+        rows = session.execute(
+            text("""
+                SELECT id,connector_id,model,prompt_version,input_tokens,output_tokens,
+                       cost_usd,status,error_code,duration_ms,created_by,created_at
+                  FROM biz_ai_usage ORDER BY created_at DESC LIMIT :lim
+            """),
+            {"lim": limit},
+        ).mappings().all()
+    return success_response(request, data=[dict(row) for row in rows])
+
+
 @router.get("/usage/summary")
 def usage_summary(request: Request, _: read_perm) -> SuccessEnvelope[dict[str, Any], None]:
     with get_session_factory()() as session:
