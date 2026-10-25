@@ -140,13 +140,23 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
         { title: "操作", key: "actions", render: (_, row) => canManage ? <Space>
           <Button type="link" size="small" onClick={() => openConnector(row)}>编辑</Button>
           <Button type="link" size="small" disabled={!row.enabled} onClick={() => {
-            void modal.confirm({title: "确认发送连接测试？", content: row.kind === "feishu_webhook" ? "将向真实飞书群发送一条固定测试消息，需服务端已授权测试外发。" : "将调用供应商模型查询接口，不会进行文本生成。", okText: "确认测试", cancelText: "取消"}).then((ok) => {
-              if (!ok) return;
-              void testBusinessConnector(row.id).then(result => {
-                if (result.ok) messageApi.success("连接检查成功");
-                else messageApi.error("连接检查失败");
-                void refresh();
-              }).catch(() => messageApi.error("连接检查未执行或未通过，请检查服务端授权"));
+            modal.confirm({
+              title: "确认发送连接测试？",
+              content: row.kind === "feishu_webhook"
+                ? "将向真实飞书群发送一条固定测试消息，需服务端已授权测试外发。"
+                : "将调用供应商模型查询接口，不会进行文本生成。",
+              okText: "确认测试",
+              cancelText: "取消",
+              onOk: async () => {
+                try {
+                  const result = await testBusinessConnector(row.id);
+                  if (result.ok) messageApi.success("连接检查成功");
+                  else messageApi.error("连接检查失败");
+                  await refresh();
+                } catch {
+                  messageApi.error("连接检查未执行或未通过，请检查服务端授权");
+                }
+              },
             });
           }}>测试连接</Button>
           {row.enabled && <Button danger type="link" size="small" onClick={() => void disableBusinessConnector(row.id)
