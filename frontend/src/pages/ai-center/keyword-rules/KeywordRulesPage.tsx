@@ -34,12 +34,13 @@ export function KeywordRulesPanel({sourceAccountRef}:{sourceAccountRef?:string|n
  const [tab,setTab]=useState('score');const [compare,setCompare]=useState(false);const [testOpen,setTestOpen]=useState(false);
  const [ruleSetId,setRuleSetId]=useState<string|null>(null);
  const [draftVersionId,setDraftVersionId]=useState<string|null>(null);
+ const [activeRuleLoaded,setActiveRuleLoaded]=useState(false);
  const [saving,setSaving]=useState(false);
  useEffect(()=>{
   let live=true;
   queueMicrotask(()=>{if(live){
    useKeywordStore.setState({rules:structuredClone(initialRules),draft:null,history:[]});
-   setRuleSetId(null);setDraftVersionId(null);
+   setRuleSetId(null);setDraftVersionId(null);setActiveRuleLoaded(false);
   }});
   if(!sourceAccountRef)return()=>{live=false};
   void Promise.all([listKeywordRuleSets(sourceAccountRef),loadEffectiveRule(sourceAccountRef)]).then(async([sets,current])=>{
@@ -58,12 +59,14 @@ export function KeywordRulesPanel({sourceAccountRef}:{sourceAccountRef?:string|n
    if(!active){message.error('后端尚无可用的生效规则');return;}
    useKeywordStore.setState({rules:active,
      draft:open?displayRule(open):null,history:savedHistory});
+   setActiveRuleLoaded(true);
    setDraftVersionId(open?.version_id??null);
   }).catch(()=>{if(live)message.error('规则版本加载失败')});
   return()=>{live=false};
  },[sourceAccountRef]);
  const createDraft=async(rule:RuleConfig=rules)=>{
   if(!sourceAccountRef)throw new Error('请先选择有账户归属的 Listing');
+  if(!activeRuleLoaded)throw new Error('请等待后端生效规则加载完成');
   let id=ruleSetId;
   if(!id){id=(await createKeywordRuleSet(sourceAccountRef)).rule_set_id;setRuleSetId(id);}
   const receipt=await createKeywordRuleDraft(sourceAccountRef,id,limitsFromRule(rule),rule as unknown as Record<string,unknown>);
@@ -108,8 +111,8 @@ export function KeywordRulesPanel({sourceAccountRef}:{sourceAccountRef?:string|n
  };
  return <>
    <div className="keyword-rules kw-v2-rules">
-     <Alert showIcon type="info" message={`规则版本：V${rules.version}。草稿保存到后端；正式发布仍受项目审批门禁约束。`}/>
-     <div className="kw-v2-rule-actions"><Space wrap><Button type="primary" onClick={()=>{void createDraft().then(()=>message.success('已创建后端规则草稿')).catch(e=>message.error(e instanceof Error?e.message:'草稿创建失败'))}}>{draft?'重新从当前版本创建草稿':'创建规则草稿'}</Button><Button disabled={!draft} onClick={()=>setCompare(true)} icon={<DiffOutlined/>}>比较修改</Button><Button disabled={!draft} onClick={()=>setTestOpen(true)}>规则预览</Button><Button disabled={!draft} onClick={()=>{if(!draft)return;changeDraft({...structuredClone(initialRules),version:rules.version});message.info('已将默认参数载入草稿')}}>草稿恢复默认</Button><Button disabled={!draft} onClick={resetDraft}>放弃草稿</Button><Button type="primary" disabled={!draft||errors.length>0} onClick={confirmPublish}>发布本地版本</Button><Button disabled={!draft} loading={saving} onClick={()=>{void saveDraft()}}>保存草稿</Button></Space></div>
+     <Alert showIcon type="info" message={activeRuleLoaded?`规则版本：V${rules.version}。草稿保存到后端；正式发布仍受项目审批门禁约束。`:'正在读取后端生效规则；本地示例不可用于正式分析或保存。'}/>
+     <div className="kw-v2-rule-actions"><Space wrap><Button type="primary" disabled={!activeRuleLoaded} onClick={()=>{void createDraft().then(()=>message.success('已创建后端规则草稿')).catch(e=>message.error(e instanceof Error?e.message:'草稿创建失败'))}}>{draft?'重新从当前版本创建草稿':'创建规则草稿'}</Button><Button disabled={!draft} onClick={()=>setCompare(true)} icon={<DiffOutlined/>}>比较修改</Button><Button disabled={!draft} onClick={()=>setTestOpen(true)}>规则预览</Button><Button disabled={!draft} onClick={()=>{if(!draft)return;changeDraft({...structuredClone(initialRules),version:rules.version});message.info('已将默认参数载入草稿')}}>草稿恢复默认</Button><Button disabled={!draft} onClick={resetDraft}>放弃草稿</Button><Button type="primary" disabled={!draft||errors.length>0} onClick={confirmPublish}>发布本地版本</Button><Button disabled={!draft} loading={saving} onClick={()=>{void saveDraft()}}>保存草稿</Button></Space></div>
      {errors.length?<Alert type="error" message="规则校验未通过" description={errors.join('；')} showIcon/>:draft?<Alert type="success" message="草稿校验通过，可以规则预览。" showIcon/>:<Alert type="warning" message="当前为只读已发布版本。要修改请先创建草稿。"/>}
      <div className="kw-v2-rule-layout">
       <nav className="kw-v2-rule-nav" aria-label="规则业务分组">
