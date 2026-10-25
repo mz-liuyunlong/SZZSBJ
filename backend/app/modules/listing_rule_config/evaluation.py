@@ -3,13 +3,14 @@
 Inputs are LA-calendar-day evidence. Incomplete days never become zero business days.
 Callers MUST provide external proof of advertising/financial completeness.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
@@ -23,10 +24,19 @@ def rating_cutoff_la(executed_at: datetime) -> date:
         raise ValueError("executed_at must contain a time zone")
     return executed_at.astimezone(LOS_ANGELES).date() - timedelta(days=2)
 
+
 Grade = Literal["A", "B", "C", "D", "待评级", "不参与评级"]
 Lifecycle = Literal[
-    "测品期", "打品期", "启动期", "上升期", "稳定期",
-    "下滑期", "断货期", "修复期", "清货期", "已归档",
+    "测品期",
+    "打品期",
+    "启动期",
+    "上升期",
+    "稳定期",
+    "下滑期",
+    "断货期",
+    "修复期",
+    "清货期",
+    "已归档",
 ]
 TIER_KEYS = ("lt2", "from2to5", "from5to10", "from10to20", "gte20")
 
@@ -43,8 +53,10 @@ class FinancialDay:
     @property
     def valid(self) -> bool:
         return (
-            self.upstream_confirmed and self.cost_status == "complete"
-            and not self.missing_cost_codes and self.profit is not None
+            self.upstream_confirmed
+            and self.cost_status == "complete"
+            and not self.missing_cost_codes
+            and self.profit is not None
             and self.sales >= ZERO
         )
 
@@ -67,21 +79,26 @@ class GradeResult:
 
 
 def grade_listing(
-    *, cutoff: date, stage: str | None, days: list[FinancialDay],
+    *,
+    cutoff: date,
+    stage: str | None,
+    days: list[FinancialDay],
     config: ListingGradeRuleConfig,
 ) -> GradeResult:
     """Calculate weighted profitability only from complete, independently confirmed days."""
     window_start = cutoff - timedelta(days=config.medium_days - 1)
     by_day = {d.day: d for d in days if window_start <= d.day <= cutoff}
     medium_dates = [window_start + timedelta(days=i) for i in range(config.medium_days)]
-    short_dates = medium_dates[-config.short_days:]
+    short_dates = medium_dates[-config.short_days :]
     valid = {d for d, row in by_day.items() if row.valid}
     mdates = [d for d in medium_dates if d in valid]
     sdates = [d for d in short_dates if d in valid]
 
     def totals(dates: list[date]) -> tuple[Decimal, Decimal]:
-        return (sum((by_day[d].sales for d in dates), ZERO),
-                sum((by_day[d].profit for d in dates if by_day[d].profit is not None), ZERO))
+        return (
+            sum((by_day[d].sales for d in dates), ZERO),
+            sum((by_day[d].profit for d in dates if by_day[d].profit is not None), ZERO),
+        )
 
     ss, sp = totals(sdates)
     ms, mp = totals(mdates)
@@ -99,8 +116,7 @@ def grade_listing(
         grade, reason = "D", "近短期零销售额且实际亏损"
     elif ss > ZERO and ms > ZERO and sm is not None and mm is not None:
         weighted = (
-            sm * Decimal(config.short_weight_percent)
-            + mm * Decimal(config.medium_weight_percent)
+            sm * Decimal(config.short_weight_percent) + mm * Decimal(config.medium_weight_percent)
         ) / Decimal(100)
         if weighted > config.a_above_percent:
             grade = "A"
@@ -111,8 +127,9 @@ def grade_listing(
         else:
             grade = "D"
         reason = "已确认财务数据的滚动加权毛利率"
-    return GradeResult(grade, reason, cutoff, len(sdates), len(mdates), ss, sp,
-                       ms, mp, sm, mm, weighted, invalid)
+    return GradeResult(
+        grade, reason, cutoff, len(sdates), len(mdates), ss, sp, ms, mp, sm, mm, weighted, invalid
+    )
 
 
 @dataclass(frozen=True)
@@ -161,8 +178,12 @@ def _streak(records: list[BusinessDay], cutoff: date, field: str, value: bool) -
 
 
 def lifecycle_listing(
-    *, cutoff: date, previous_stage: str, days: list[BusinessDay],
-    first_effective_stock: bool, config: ListingGradeRuleConfig,
+    *,
+    cutoff: date,
+    previous_stage: str,
+    days: list[BusinessDay],
+    first_effective_stock: bool,
+    config: ListingGradeRuleConfig,
     stockout_previous_stage: str | None = None,
     stockout_days_before_recovery: int | None = None,
     repair_stock_valid_days: int | None = None,
@@ -187,11 +208,18 @@ def lifecycle_listing(
         consecutive += 1
         cursor -= timedelta(days=1)
     recent = [by_day.get(cutoff - timedelta(days=i)) for i in range(30)]
-    valid30 = sum(1 for row in recent if row is not None
-                  and row.wfs_qty is not None and row.wfs_qty > low
-                  and row.sales_qty is not None)
+    valid30 = sum(
+        1
+        for row in recent
+        if row is not None
+        and row.wfs_qty is not None
+        and row.wfs_qty > low
+        and row.sales_qty is not None
+    )
     if today is None or today.wfs_qty is None:
-        return LifecycleResult(previous_stage, "当日WFS快照缺失，保留原状态", valid30, consecutive, False)
+        return LifecycleResult(
+            previous_stage, "当日WFS快照缺失，保留原状态", valid30, consecutive, False
+        )
     if first_effective_stock and consecutive >= config.inventory_repair.stockout_consecutive_days:
         return LifecycleResult("断货期", "连续低WFS库存达断货门槛", valid30, consecutive, True)
 
@@ -201,7 +229,9 @@ def lifecycle_listing(
         if stockout_days_before_recovery is None:
             return LifecycleResult("断货期", "缺少本轮断货持续天数", valid30, consecutive, False)
         if stockout_days_before_recovery > config.inventory_repair.long_stockout_days:
-            return LifecycleResult("修复期", "长期断货恢复，进入修复验收", valid30, consecutive, True)
+            return LifecycleResult(
+                "修复期", "长期断货恢复，进入修复验收", valid30, consecutive, True
+            )
         if stockout_previous_stage is None:
             return LifecycleResult("断货期", "缺少断货前阶段快照", valid30, consecutive, False)
         previous_stage = stockout_previous_stage
@@ -215,12 +245,15 @@ def lifecycle_listing(
             or today.wfs_qty <= low
         ):
             return LifecycleResult("修复期", "库存修复验收尚未完成", valid30, consecutive, True)
-        for field, reason in (
-            ("strike_price_abnormal", "划线价"), ("buybox_abnormal", "购物车")
-        ):
+        for field, reason in (("strike_price_abnormal", "划线价"), ("buybox_abnormal", "购物车")):
             if field in repair_reasons:
-                if _streak(days, cutoff, field, False) < config.inventory_repair.abnormal_recovery_days:
-                    return LifecycleResult("修复期", reason + "恢复确认未完成", valid30, consecutive, False)
+                if (
+                    _streak(days, cutoff, field, False)
+                    < config.inventory_repair.abnormal_recovery_days
+                ):
+                    return LifecycleResult(
+                        "修复期", reason + "恢复确认未完成", valid30, consecutive, False
+                    )
         # Leaving repair resets normal-stage evaluation to 启动期 if sample is inadequate.
         previous_stage = "启动期"
 
@@ -233,35 +266,57 @@ def lifecycle_listing(
 
     # A stage cannot be inferred from a single latest sales/stock snapshot.
     recent28 = [by_day.get(cutoff - timedelta(days=i)) for i in range(27, -1, -1)]
-    weeks = [recent28[i:i + 7] for i in range(0, 28, 7)]
+    weeks = [recent28[i : i + 7] for i in range(0, 28, 7)]
     counts = []
     means = []
     for week in weeks:
-        valid = [r for r in week if r is not None and r.wfs_qty is not None
-                 and r.wfs_qty > low and r.sales_qty is not None]
+        valid = [
+            r
+            for r in week
+            if r is not None
+            and r.wfs_qty is not None
+            and r.wfs_qty > low
+            and r.sales_qty is not None
+        ]
         counts.append(len(valid))
         means.append(sum((r.sales_qty for r in valid), ZERO) / len(valid) if valid else ZERO)
 
     t = config.lifecycle
-    first14 = [r for r in recent28[:14] if r is not None and r.wfs_qty is not None
-               and r.wfs_qty > low and r.sales_qty is not None]
-    last14 = [r for r in recent28[14:] if r is not None and r.wfs_qty is not None
-              and r.wfs_qty > low and r.sales_qty is not None]
+    first14 = [
+        r
+        for r in recent28[:14]
+        if r is not None and r.wfs_qty is not None and r.wfs_qty > low and r.sales_qty is not None
+    ]
+    last14 = [
+        r
+        for r in recent28[14:]
+        if r is not None and r.wfs_qty is not None and r.wfs_qty > low and r.sales_qty is not None
+    ]
     avg1 = sum((r.sales_qty for r in first14), ZERO) / len(first14) if first14 else ZERO
     avg2 = sum((r.sales_qty for r in last14), ZERO) / len(last14) if last14 else ZERO
     valid3 = all(counts[i] >= t.min_week_valid_days for i in (1, 2, 3))
-    growth = (valid30 >= t.growth_min_valid_days_30 and valid3 and avg1 > 0
-              and means[1] < means[2] < means[3]
-              and (avg2 - avg1) * 100 / avg1 >= _tier(avg1, t.growth_threshold_pct))
-    decline = (valid30 >= t.decline_min_valid_days_30 and valid3 and avg1 > 0
-               and means[1] > means[2] > means[3]
-               and (avg1 - avg2) * 100 / avg1 >= _tier(avg1, t.decline_threshold_pct))
+    growth = (
+        valid30 >= t.growth_min_valid_days_30
+        and valid3
+        and avg1 > 0
+        and means[1] < means[2] < means[3]
+        and (avg2 - avg1) * 100 / avg1 >= _tier(avg1, t.growth_threshold_pct)
+    )
+    decline = (
+        valid30 >= t.decline_min_valid_days_30
+        and valid3
+        and avg1 > 0
+        and means[1] > means[2] > means[3]
+        and (avg1 - avg2) * 100 / avg1 >= _tier(avg1, t.decline_threshold_pct)
+    )
     mean4 = sum(means, ZERO) / Decimal(4)
-    stable = (valid30 >= t.stable_min_valid_days_30
-              and all(n >= t.min_week_valid_days for n in counts)
-              and all(x > 0 for x in means) and mean4 > 0
-              and all(abs(m - mean4) * 100 / mean4 <= _tier(mean4, t.stable_tolerance_pct)
-                      for m in means))
+    stable = (
+        valid30 >= t.stable_min_valid_days_30
+        and all(n >= t.min_week_valid_days for n in counts)
+        and all(x > 0 for x in means)
+        and mean4 > 0
+        and all(abs(m - mean4) * 100 / mean4 <= _tier(mean4, t.stable_tolerance_pct) for m in means)
+    )
 
     if decline:
         return LifecycleResult("下滑期", "有效销量连续下降", valid30, consecutive, True)
@@ -272,5 +327,9 @@ def lifecycle_listing(
     if stable:
         return LifecycleResult("稳定期", "四周有效销量处于稳定区间", valid30, consecutive, True)
     if previous_stage not in {"启动期", "上升期", "稳定期", "下滑期"}:
-        return LifecycleResult("启动期", "修复验收后重新判断，趋势证据不足", valid30, consecutive, False)
-    return LifecycleResult(previous_stage, "趋势证据不足，保留原经营阶段", valid30, consecutive, False)
+        return LifecycleResult(
+            "启动期", "修复验收后重新判断，趋势证据不足", valid30, consecutive, False
+        )
+    return LifecycleResult(
+        previous_stage, "趋势证据不足，保留原经营阶段", valid30, consecutive, False
+    )
