@@ -25,7 +25,8 @@ const toForm = (config: ListingGradeRuleConfig): Partial<FormValues> => ({
   a_above_percent: Number(config.a_above_percent),
   change_reason: "",
 });
-const toConfig = (values: FormValues): ListingGradeRuleConfig => ({
+const toConfig = (values: FormValues, previous: ListingGradeRuleConfig): ListingGradeRuleConfig => ({
+  ...previous,
   short_days: values.short_days,
   medium_days: values.medium_days,
   short_weight_percent: values.short_weight_percent,
@@ -107,7 +108,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
     if (!values.included_stages?.length || !values.change_reason?.trim()) {
       messageApi.error("请填写参与评级的生命周期及修改原因"); return;
     }
-    const config = toConfig(values);
+    const config = toConfig(values, record.config);
     setSaving(true);
     try {
       const next = await saveListingGradeRule(config, record.version, values.change_reason);
@@ -130,6 +131,132 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
       <InputNumber min={1} max={max} step={step} precision={step === 1 ? 0 : 2} style={{ width: "100%" }} disabled={!record?.can_edit}/>
     </Form.Item>
   );
+
+  const saveSection = async (section: "lifecycle" | "inventory_repair" | "follow_up", values: Record<string, unknown>) => {
+    if (!record || !record.can_edit || !record.storage_ready) return;
+    const { change_reason, ...rawSectionValues } = values;
+    const sectionValues = section === "follow_up"
+      ? { ...rawSectionValues,
+          reminder_time: rawSectionValues.reminder_time || null,
+          deadline_time: rawSectionValues.deadline_time || null }
+      : rawSectionValues;
+    if (typeof change_reason !== "string" || change_reason.trim().length < 3) {
+      messageApi.error("请输入至少3个字符的变更原因");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updatedConfig = {
+        ...record.config,
+        [section]: sectionValues,
+      } as ListingGradeRuleConfig;
+      const next = await saveListingGradeRule(updatedConfig, record.version, change_reason);
+      setRecord(next);
+      form.setFieldsValue(toForm(next.config));
+      setDirty(false);
+      setHistory(null);
+      messageApi.success("已保存规则新版本；配置引擎尚未接入生命周期和提醒自动执行");
+    } catch (error) {
+      if (error instanceof BackendRequestError && error.status === 409) {
+        messageApi.error("规则版本冲突或没有变更，请重新打开页面获取新版本");
+      } else if (error instanceof BackendRequestError && error.status === 422) {
+        messageApi.error("参数不符合业务约束，请检查窗口、阶梯或时间设置");
+      } else {
+        messageApi.error("保存失败；请确认使用隔离开发库和写入权限");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const numberInput = (name: string | string[], label: string, min = 1, max = 365) => (
+    <Form.Item name={name} label={label} rules={[{ required: true, message: "请输入" + label }]}>
+      <InputNumber min={min} max={max} precision={0} style={{ width: "100%" }} />
+    </Form.Item>
+  );
+
+  const sectionEditor = (section: "lifecycle" | "inventory_repair" | "follow_up") => {
+    const values = record?.config[section];
+    if (!values) return null;
+    const editable = record.can_edit && record.storage_ready;
+    const tierFields = [
+      { key: "lt2", label: "日均不足2件" },
+      { key: "from2to5", label: "2–不足5件" },
+      { key: "from5to10", label: "5–不足10件" },
+      { key: "from10to20", label: "10–不足20件" },
+      { key: "gte20", label: "20件及以上" },
+    ];
+    const lifecycle = section === "lifecycle" ? (
+      <>
+        <Alert type="info" showIcon message="按28天4个周窗口计算有效日均销量；每周7天、连续2次周趋势等算法结构不开放修改。" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "0 16px", marginTop: 16 }}>
+          {numberInput("min_week_valid_days", "每周最低有效有货日", 1, 7)}
+          {numberInput("growth_min_valid_days_30", "上升期30天最低有效日", 1, 30)}
+          {numberInput("stable_min_valid_days_30", "稳定期30天最低有效日", 1, 30)}
+          {numberInput("decline_min_valid_days_30", "下滑期30天最低有效日", 1, 30)}
+        </div>
+        {([
+          ["growth_threshold_pct", "上升期增长幅度"],
+          ["decline_threshold_pct", "下滑期下降幅度"],
+          ["stable_tolerance_pct", "稳定期允许波动"],
+        ] as const).map(([field, label]) => (
+          <div key={field}>
+            <Typography.Title level={5}>{label}（%）</Typography.Title>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "0 12px" }}>
+              {tierFields.map((tier) => (
+                <div key={tier.key}>{numberInput([field, tier.key], tier.label, 1, 200)}</div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </>
+    ) : null;
+    const inventory = section === "inventory_repair" ? (
+      <>
+        <Alert type="info" showIcon message="低库存阈值≤N、有效有货>N自动联动。首次有效入库、二次断货清零、清货审批及归档规则固定不变。" style={{ marginBottom: 16 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "0 16px" }}>
+          {numberInput("low_stock_max_units", "WFS低库存阈值（件）", 0, 10000)}
+          {numberInput("stockout_consecutive_days", "连续低库存进入断货期（天）", 1, 90)}
+          {numberInput("long_stockout_days", "长期断货门槛（超过N天）", 2, 365)}
+          {numberInput("stockout_repair_valid_days", "长期断货修复有效有货日", 1, 180)}
+          {numberInput("strike_price_abnormal_days", "划线价异常门槛（超过N天）", 1, 365)}
+          {numberInput("buybox_abnormal_days", "购物车异常门槛（超过N天）", 1, 365)}
+          {numberInput("abnormal_recovery_days", "异常恢复连续正常天数", 1, 90)}
+        </div>
+      </>
+    ) : null;
+    const follow = section === "follow_up" ? (
+      <>
+        <Alert type="info" showIcon message="C/D级每天逐条跟进、D级优先、日志复用的原则固定。此处仅保存待未来提醒服务消费的参数，不会自动发出提醒。" style={{ marginBottom: 16 }} />
+        <Form.Item name="reminder_time" label="每日提醒时间（中国时间）" rules={[{ pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: "格式 HH:mm" }]}>
+          <Input placeholder="例如 09:00，留空则不设置" />
+        </Form.Item>
+        <Form.Item name="deadline_time" label="每日完成截止时间（中国时间）" rules={[{ pattern: /^([01]\d|2[0-3]):[0-5]\d$/, message: "格式 HH:mm" }]}>
+          <Input placeholder="例如 18:00，留空则不设置" />
+        </Form.Item>
+        <Form.Item name="overdue_notice" valuePropName="checked">
+          <Checkbox>启用未来逾期通知（当前不会派发）</Checkbox>
+        </Form.Item>
+      </>
+    ) : null;
+    return (
+      <Form key={section + record.version + reloadCount} layout="vertical" initialValues={values}
+        disabled={!editable} onValuesChange={() => setDirty(true)}
+        onFinish={(values) => void saveSection(section, values as Record<string, unknown>)}>
+        {lifecycle}{inventory}{follow}
+        {editable ? (
+          <>
+            <Form.Item name="change_reason" label="变更原因" rules={[{ required: true, min: 3 }]}>
+              <Input.TextArea rows={2} maxLength={500} placeholder="说明为何调整这组规则"/>
+            </Form.Item>
+            <Space><Button onClick={() => { setDirty(false); setReloadCount((n) => n + 1); }}>放弃本次修改</Button><Button type="primary" loading={saving} htmlType="submit">保存新版本</Button></Space>
+          </>
+        ) : (
+          <Alert type="warning" showIcon message={record.storage_ready ? "当前账号没有规则编辑权限" : "仅只读预览；请先在隔离开发库初始化存储"} />
+        )}
+      </Form>
+    );
+  };
 
   const gradeContent = (
     <Form form={form} layout="vertical" onFinish={(values) => void save(values)} onValuesChange={() => setDirty(true)} disabled={!record?.can_edit}>
@@ -177,18 +304,11 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
     </Form>
   );
 
-  const readOnly = (title: string, description: string) => (
-    <div style={{ padding: 16 }}>
-      <Typography.Title level={5}>{title}</Typography.Title>
-      <Alert type="info" showIcon message="本分组的在线编辑将在后续独立版本实现" description={description}/>
-    </div>
-  );
-
   return (
     <>
       {contextHolder}
       <Drawer title="Listing 规则配置" open={open} onClose={handleClose} destroyOnHidden width={760}
-        extra={record && <Space><Tag color={!record.storage_ready ? "orange" : record.is_pending ? "gold" : "blue"}>{record.storage_ready ? `v${record.version}${record.is_pending ? " 待生效" : ""}` : "默认规则（只读）"}</Tag><Button onClick={() => { form.setFieldsValue(toForm(record.config)); setDirty(false); }}>重置草稿</Button></Space>}>
+        extra={record && <Space><Tag color={!record.storage_ready ? "orange" : record.is_pending ? "gold" : "blue"}>{record.storage_ready ? `v${record.version}${record.is_pending ? " 待生效" : ""}` : "默认规则（只读）"}</Tag><Button onClick={() => { form.setFieldsValue(toForm(record.config)); setDirty(false); setReloadCount((n) => n + 1); }}>重置草稿</Button></Space>}>
         {loading ? <Skeleton active paragraph={{ rows: 10 }}/> : error || !record ? (
           <Alert type="error" showIcon message="规则加载失败" description="无法连接规则配置服务；非缺表故障不会伪装为默认数据。" action={<Button onClick={() => setReloadCount((count) => count + 1)}>重新加载</Button>}/>
         ) : (
@@ -198,9 +318,9 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
             if (key === "history" && record.storage_ready) void loadHistory();
           }} items={[
             { key: "grade", label: "等级评级", children: gradeContent },
-            { key: "lifecycle", label: "生命周期", children: readOnly("生命周期", "上升、稳定、下滑的销量阶梯及样本门槛。") },
-            { key: "stock", label: "库存与修复", children: readOnly("库存与修复", "WFS低库存、连续断货和修复验收规则。") },
-            { key: "follow", label: "运营跟进", children: readOnly("运营跟进", "C/D逐条检查，复用运营日志。跟进时间尚待业务确认。") },
+            { key: "lifecycle", label: "生命周期", children: sectionEditor("lifecycle") },
+            { key: "stock", label: "库存与修复", children: sectionEditor("inventory_repair") },
+            { key: "follow", label: "运营跟进", children: sectionEditor("follow_up") },
             { key: "history", label: "变更记录", children: !record.storage_ready ? (
               <Alert type="warning" showIcon message="版本历史尚不可用" description="配置存储未初始化。可预览默认规则，但没有已保存的版本记录。" />
             ) : historyLoading ? <Skeleton active/> : history?.items.length ? (

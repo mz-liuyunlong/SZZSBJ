@@ -4,6 +4,38 @@ export type GradeStage =
   | "测品期" | "打品期" | "启动期" | "上升期" | "稳定期"
   | "下滑期" | "断货期" | "修复期";
 
+export interface TierPercents {
+  lt2: number;
+  from2to5: number;
+  from5to10: number;
+  from10to20: number;
+  gte20: number;
+}
+
+export interface LifecycleRuleConfig {
+  min_week_valid_days: number;
+  growth_min_valid_days_30: number;
+  stable_min_valid_days_30: number;
+  decline_min_valid_days_30: number;
+  growth_threshold_pct: TierPercents;
+  decline_threshold_pct: TierPercents;
+  stable_tolerance_pct: TierPercents;
+}
+export interface InventoryRepairRuleConfig {
+  low_stock_max_units: number;
+  stockout_consecutive_days: number;
+  long_stockout_days: number;
+  stockout_repair_valid_days: number;
+  strike_price_abnormal_days: number;
+  buybox_abnormal_days: number;
+  abnormal_recovery_days: number;
+}
+export interface FollowUpRuleConfig {
+  reminder_time: string | null;
+  deadline_time: string | null;
+  overdue_notice: boolean;
+}
+
 export interface ListingGradeRuleConfig {
   short_days: number;
   medium_days: number;
@@ -15,6 +47,9 @@ export interface ListingGradeRuleConfig {
   b_min_percent: string;
   a_above_percent: string;
   included_stages: GradeStage[];
+  lifecycle: LifecycleRuleConfig;
+  inventory_repair: InventoryRepairRuleConfig;
+  follow_up: FollowUpRuleConfig;
 }
 
 export interface ListingGradeRuleRead {
