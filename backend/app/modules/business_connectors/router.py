@@ -415,9 +415,11 @@ def enqueue_notification(request: Request, payload: NotifyRequest, principal: ad
     return success_response(request, data={"queued": created})
 
 
-@router.post("/notifications/dispatch")
-def dispatch_notifications(request: Request, principal: admin_perm, limit: Annotated[int, Query(ge=1, le=10)] = 5) -> SuccessEnvelope[dict[str, int], None]:
-    # Explicit privileged action only; never send as part of a settings mutation.
+def dispatch_pending(*, limit: int, actor: str) -> dict[str, int]:
+    # Disabled by default, including on production. Activation requires explicit
+    # environment authorization as well as enabled connector and route states.
+    if os.getenv("BUSINESS_NOTIFICATIONS_OUTBOUND_ENABLED", "").lower() != "true":
+        return {"sent": 0, "failed": 0}
     counts = {"sent": 0, "failed": 0}
     with get_session_factory()() as session:
         rows = session.execute(text("""
@@ -452,9 +454,17 @@ def dispatch_notifications(request: Request, principal: admin_perm, limit: Annot
                  "attempts": attempts, "error": error_code,
                  "retry": None if ok or attempts >= 3 else datetime.now(UTC) + timedelta(minutes=2 ** attempts)})
             counts["sent" if ok else "failed"] += 1
-        _audit(session, principal.user_id, "notification.dispatch", str(len(rows)))
+        _audit(session, actor, "notification.dispatch", str(len(rows)))
         session.commit()
-    return success_response(request, data=counts)
+    return counts
+
+
+@router.post("/notifications/dispatch")
+def dispatch_notifications(
+    request: Request, principal: admin_perm, limit: Annotated[int, Query(ge=1, le=10)] = 5
+) -> SuccessEnvelope[dict[str, int], None]:
+    # Explicit manual dispatch, subject to the same outbound guard as Celery.
+    return success_response(request, data=dispatch_pending(limit=limit, actor=principal.user_id))
 
 
 @router.post("/ai/generate")
