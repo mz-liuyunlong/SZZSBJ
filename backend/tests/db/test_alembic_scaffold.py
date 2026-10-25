@@ -22,6 +22,7 @@ DOMESTIC_HEAD_REVISION = "20261022_0053_domestic_packing_production_compat"
 MERGED_HEAD_REVISION = "20261022_0054_merge_walmart_identity_and_domestic_packing"
 KEYWORD_MERGE_REVISION = "20261023_0056_merge_decodo_keyword_heads"
 KEYWORD_HEAD_REVISION = "20261025_0058_keyword_internal_default"
+BUSINESS_CONNECTOR_HEAD_REVISION = "20261025_0059_business_connector_control"
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +51,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == [KEYWORD_HEAD_REVISION]
+    assert script.get_heads() == [BUSINESS_CONNECTOR_HEAD_REVISION]
+    assert (
+        script.get_revision(BUSINESS_CONNECTOR_HEAD_REVISION).down_revision == KEYWORD_HEAD_REVISION
+    )
     assert (
         script.get_revision(KEYWORD_HEAD_REVISION).down_revision
         == "20261024_0057_keyword_rule_decisions"
@@ -291,6 +295,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [KEYWORD_HEAD_REVISION]
+    assert script.get_heads() == [BUSINESS_CONNECTOR_HEAD_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)
