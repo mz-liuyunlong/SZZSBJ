@@ -1,8 +1,9 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 
 from app.modules.listing_rule_config.evaluation import (
-    BusinessDay, FinancialDay, grade_listing, lifecycle_listing,
+    BusinessDay, FinancialDay, grade_listing, lifecycle_listing, rating_cutoff_la,
 )
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
@@ -76,3 +77,8 @@ def test_missing_stock_snapshot_preserves_state() -> None:
         first_effective_stock=True, config=CFG)
     assert value.stage == "稳定期"
     assert not value.evidence_complete
+
+
+def test_la_t_minus_two_in_summer_and_winter() -> None:
+    assert rating_cutoff_la(datetime(2026, 10, 25, 22, 30, tzinfo=ZoneInfo("Asia/Shanghai"))) == date(2026, 10, 23)
+    assert rating_cutoff_la(datetime(2026, 12, 25, 22, 30, tzinfo=ZoneInfo("Asia/Shanghai"))) == date(2026, 12, 23)

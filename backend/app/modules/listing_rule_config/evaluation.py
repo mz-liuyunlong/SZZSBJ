@@ -6,13 +6,23 @@ Callers MUST provide external proof of advertising/financial completeness.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from typing import Literal
 
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
 ZERO = Decimal("0")
+LOS_ANGELES = ZoneInfo("America/Los_Angeles")
+
+
+def rating_cutoff_la(executed_at: datetime) -> date:
+    """Use the Los Angeles calendar day of the execution instant, minus two days."""
+    if executed_at.tzinfo is None or executed_at.utcoffset() is None:
+        raise ValueError("executed_at must contain a time zone")
+    return executed_at.astimezone(LOS_ANGELES).date() - timedelta(days=2)
+
 Grade = Literal["A", "B", "C", "D", "待评级", "不参与评级"]
 Lifecycle = Literal[
     "测品期", "打品期", "启动期", "上升期", "稳定期",
