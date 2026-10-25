@@ -18,8 +18,9 @@ const events = [
 
 type FormConnector = ConnectorWrite;
 
-export default function LiveBusinessConnectors({ canManage, category, keyword, status }: {
+export default function LiveBusinessConnectors({ canManage, category, keyword, status, section = "all" }: {
   canManage: boolean;
+  section?: "all" | "policies" | "usage";
   category: string;
   keyword: string;
   status: string;
@@ -123,7 +124,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
   };
   return <div className="business-config__live">
     {context}{modalContext}
-    <div className="business-config__draft-heading">
+    {section === "all" && <><div className="business-config__draft-heading">
       <div><strong>正式服务连接管理</strong><p>服务端加密保存；可管理飞书群 Webhook 与 OpenAI 配置。默认关闭外发。</p></div>
       <Space><Button size="small" onClick={() => void refresh()}>刷新</Button>
         {canManage && <Button type="primary" onClick={() => openConnector()}>新增真实连接</Button>}</Space>
@@ -152,7 +153,8 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
             .then(refresh).catch(() => messageApi.error("停用失败"))}>停用</Button>}
         </Space> : null },
       ]} />
-    {showFeishu && <><div className="business-config__draft-heading"><strong>飞书通知路由</strong>
+    </>}
+    {(section === "all" || section === "policies") && showFeishu && <><div className="business-config__draft-heading"><strong>飞书通知路由</strong>
       {canManage && <Button size="small" onClick={() => { routeForm.resetFields(); routeForm.setFieldsValue({
         enabled: false, cooldown_seconds: 60, daily_limit: 100,
       }); setDrawer("route"); }}>新增通知路由</Button>}</div>
@@ -171,7 +173,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
         { title: "启用", dataIndex: "enabled", render: (v: boolean) => v ? "是" : "否" },
         { title: "操作", key: "edit", render: (_, row) => canManage ? <Button type="link" onClick={() => {
           templateForm.setFieldsValue(row); setDrawer("template"); }}>编辑</Button> : null }]}/>
-    <div className="business-config__draft-heading"><strong>用量与统计（最近30天）</strong></div>
+    {(section === "usage" || section === "all") && <><div className="business-config__draft-heading"><strong>用量与统计（最近30天）</strong></div>
     {usage && <div className="business-config__instance-meta">
       <span>通知发送：{usage.notifications.filter(x => x.status === "sent").reduce((sum, x) => sum + Number(x.n), 0)}</span>
       <span>通知失败：{usage.notifications.filter(x => x.status === "failed").reduce((sum, x) => sum + Number(x.n), 0)}</span>
@@ -197,6 +199,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
           {title: "状态", dataIndex: "status"},
           {title: "错误码", dataIndex: "error_code"},
         ]}/>
+    </>}
     </>}
     <Drawer title={editing ? "编辑正式连接" : "新增正式连接"} open={drawer === "connector"} width={540}
       onClose={() => { form.setFieldsValue({credential:"",signing_secret:"",endpoint:""}); setDrawer(null); }}
