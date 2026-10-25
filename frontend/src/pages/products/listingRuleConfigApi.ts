@@ -35,10 +35,12 @@ export interface ListingGradeRuleRead {
   is_pending: boolean;
   source: "default" | "database";
   can_edit: boolean;
+  storage_ready: boolean;
 }
 
 export interface ListingGradeRuleHistory {
   total: number;
+  storage_ready: boolean;
   items: Array<{
     version: number;
     config: ListingGradeRuleConfig;

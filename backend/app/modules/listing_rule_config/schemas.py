@@ -78,6 +78,7 @@ class ListingGradeRuleRead(BaseModel):
     is_pending: bool = False
     source: Literal["default", "database"]
     can_edit: bool = False
+    storage_ready: bool = True
 
 
 class ListingGradeRuleHistoryItem(BaseModel):
@@ -92,3 +93,4 @@ class ListingGradeRuleHistoryItem(BaseModel):
 class ListingGradeRuleHistoryData(BaseModel):
     items: list[ListingGradeRuleHistoryItem]
     total: int
+    storage_ready: bool = True

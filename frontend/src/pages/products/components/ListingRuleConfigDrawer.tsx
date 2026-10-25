@@ -49,6 +49,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [tab, setTab] = useState("grade");
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -65,7 +66,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
       if (!cancelled) setError(true);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [open, form]);
+  }, [open, form, reloadCount]);
 
   const loadHistory = async () => {
     setHistoryLoading(true);
@@ -90,7 +91,7 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
   };
 
   const save = async (values: FormValues) => {
-    if (!record || !record.can_edit) return;
+    if (!record || !record.can_edit || !record.storage_ready) return;
     if (values.short_days >= values.medium_days) {
       messageApi.error("短期统计窗口必须小于中期统计窗口"); return;
     }
@@ -166,7 +167,13 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
           </Space>
         </>
       )}
-      {!record?.can_edit && <Alert type="warning" message="当前账号只有查看权限。请通过角色管理授予「配置Listing评级规则」动作权限。" showIcon/>}
+      {record && !record.storage_ready && (
+        <Alert type="warning" showIcon message="只读预览：规则配置表尚未初始化"
+          description="当前显示的是内置V1.0默认值，并非数据库中的生效版本。固定启动脚本使用生产数据库隧道，不允许迁移或保存。请在隔离开发库验收写入。" />
+      )}
+      {record?.storage_ready && !record?.can_edit && (
+        <Alert type="warning" message="当前账号只有查看权限。请通过角色管理授予「配置Listing评级规则」动作权限。" showIcon/>
+      )}
     </Form>
   );
 
@@ -181,20 +188,22 @@ export default function ListingRuleConfigDrawer({ open, onClose }: Props) {
     <>
       {contextHolder}
       <Drawer title="Listing 规则配置" open={open} onClose={handleClose} destroyOnHidden width={760}
-        extra={record && <Space><Tag color={record.is_pending ? "gold" : "blue"}>v{record.version}{record.is_pending ? " 待生效" : ""}</Tag><Button onClick={() => { form.setFieldsValue(toForm(record.config)); setDirty(false); }}>重置草稿</Button></Space>}>
+        extra={record && <Space><Tag color={!record.storage_ready ? "orange" : record.is_pending ? "gold" : "blue"}>{record.storage_ready ? `v${record.version}${record.is_pending ? " 待生效" : ""}` : "默认规则（只读）"}</Tag><Button onClick={() => { form.setFieldsValue(toForm(record.config)); setDirty(false); }}>重置草稿</Button></Space>}>
         {loading ? <Skeleton active paragraph={{ rows: 10 }}/> : error || !record ? (
-          <Alert type="error" message="规则加载失败" action={<Button onClick={() => { onClose(); }}>关闭后重试</Button>}/>
+          <Alert type="error" showIcon message="规则加载失败" description="无法连接规则配置服务；非缺表故障不会伪装为默认数据。" action={<Button onClick={() => setReloadCount((count) => count + 1)}>重新加载</Button>}/>
         ) : (
           <Tabs activeKey={tab} onChange={(key) => {
             if (dirty && key !== tab) { messageApi.warning("请先保存或恢复当前修改，再切换分组"); return; }
             setTab(key);
-            if (key === "history") void loadHistory();
+            if (key === "history" && record.storage_ready) void loadHistory();
           }} items={[
             { key: "grade", label: "等级评级", children: gradeContent },
             { key: "lifecycle", label: "生命周期", children: readOnly("生命周期", "上升、稳定、下滑的销量阶梯及样本门槛。") },
             { key: "stock", label: "库存与修复", children: readOnly("库存与修复", "WFS低库存、连续断货和修复验收规则。") },
             { key: "follow", label: "运营跟进", children: readOnly("运营跟进", "C/D逐条检查，复用运营日志。跟进时间尚待业务确认。") },
-            { key: "history", label: "变更记录", children: historyLoading ? <Skeleton active/> : history?.items.length ? (
+            { key: "history", label: "变更记录", children: !record.storage_ready ? (
+              <Alert type="warning" showIcon message="版本历史尚不可用" description="配置存储未初始化。可预览默认规则，但没有已保存的版本记录。" />
+            ) : historyLoading ? <Skeleton active/> : history?.items.length ? (
               <Space direction="vertical" style={{ width: "100%" }}>
                 {history.items.map((item) => (
                   <div key={item.version} style={{ borderBottom: "1px solid #e5e7eb", padding: "12px 0" }}>

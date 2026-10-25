@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -18,6 +19,16 @@ from app.modules.listing_rule_config.schemas import (
 )
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _rule_table_missing(error: DBAPIError) -> bool:
+    """Only an undefined PostgreSQL relation can mean uninitialized storage.
+
+    Never mistake network, permission or SQL errors for valid zero/default data.
+    The caller only applies this to queries on the versioned Listing rule table.
+    """
+    orig = error.orig
+    return getattr(orig, "sqlstate", getattr(orig, "pgcode", None)) == "42P01"
 
 
 def next_rating_time_utc(now: datetime) -> datetime:
@@ -53,7 +64,21 @@ class ListingGradeRuleService:
         )
 
     def get(self, *, can_edit: bool) -> ListingGradeRuleRead:
-        return self._read(self.repo.latest(), can_edit=can_edit)
+        try:
+            return self._read(self.repo.latest(), can_edit=can_edit)
+        except DBAPIError as error:
+            if not _rule_table_missing(error):
+                raise
+            # No schema migration is authorized against the local production tunnel.
+            # Permit a truthful read-only preview of the approved defaults.
+            self.session.rollback()
+            return ListingGradeRuleRead(
+                version=0,
+                config=ListingGradeRuleConfig(),
+                source="default",
+                can_edit=False,
+                storage_ready=False,
+            )
 
     def update(self, *, request: ListingGradeRuleUpdate, actor: str) -> ListingGradeRuleRead:
         now = datetime.now(UTC)
@@ -85,12 +110,27 @@ class ListingGradeRuleService:
             self.repo.append(row)
             self.session.commit()
             return self._read(row, can_edit=True)
+        except DBAPIError as error:
+            self.session.rollback()
+            if _rule_table_missing(error):
+                raise ApiError(
+                    code="LISTING_RULE_STORAGE_NOT_READY",
+                    status_code=503,
+                    message="规则配置表尚未初始化；仅允许在隔离开发库迁移",
+                ) from error
+            raise
         except Exception:
             self.session.rollback()
             raise
 
     def history(self, *, limit: int, offset: int) -> ListingGradeRuleHistoryData:
-        rows, total = self.repo.history(limit=limit, offset=offset)
+        try:
+            rows, total = self.repo.history(limit=limit, offset=offset)
+        except DBAPIError as error:
+            if not _rule_table_missing(error):
+                raise
+            self.session.rollback()
+            return ListingGradeRuleHistoryData(items=[], total=0, storage_ready=False)
         return ListingGradeRuleHistoryData(
             total=total,
             items=[ListingGradeRuleHistoryItem(
