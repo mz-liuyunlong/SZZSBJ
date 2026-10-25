@@ -208,6 +208,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("ai_center", "product_research", "智能选品", 50),
             _page("ai_center", "competitor_analysis", "竞品分析", 60),
             _page("ai_center", "keyword_rules", "关键词规则", 70),
+            _page("ai_center", "keyword_launch", "关键词投放", 80),
         ),
     ),
     ModuleDefinition(
@@ -255,6 +256,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
 )
 
 ACTIONS: tuple[ActionDefinition, ...] = (
+    ActionDefinition("ai_center_keyword_launch", "manage", "维护关键词来源与分析", 10),
     ActionDefinition("ai_center_keyword_rules", "submit", "提交关键词规则裁决", 10, "high"),
     ActionDefinition("ai_center_keyword_rules", "review", "复核关键词规则裁决", 20, "high"),
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),

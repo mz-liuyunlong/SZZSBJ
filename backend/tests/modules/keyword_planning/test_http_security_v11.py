@@ -101,7 +101,7 @@ def test_app():
     app.dependency_overrides.clear()
 
 
-def _as(app, user="101", permissions=frozenset({"products:read"})):
+def _as(app, user="101", permissions=frozenset({"page:ai-center:keyword-launch:view"})):
     app.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id=user, permissions=permissions
     )

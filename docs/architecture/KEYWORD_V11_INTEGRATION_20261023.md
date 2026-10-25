@@ -9,9 +9,9 @@
 ## 本批接口（额外 3 条）
 | Method | Path | 权限 | 结果 |
 |---|---|---|---|
-| POST | `/api/v1/keyword-planning/imports/xlsx?source_account_ref=...&product_id=...&product_fact_snapshot_id=...&filename=...` | `products:write`, 账户范围, 写入开关 | 私有原件不可覆盖存储、工作表全部原始行、词条 upsert、来源事件 |
-| POST | `/api/v1/keyword-planning/analyses` | `products:write`, 账户范围, 写入开关 | 可信快照+已发布规则+已解析原始行 -> 批次、不可变逐词结果；证据不足为 `blocked` |
-| GET | `/api/v1/keyword-planning/runs/{run_id}/internal-workbook?source_account_ref=...` | `products:read`, 账户范围 | 五 Sheet **内部分析报告**；01 固定 14 列；04 强制标“禁止上传” |
+| POST | `/api/v1/keyword-planning/imports/xlsx?source_account_ref=...&product_id=...&product_fact_snapshot_id=...&filename=...` | `action:ai-center:keyword-launch:manage`, 账户范围, 写入开关 | 私有原件不可覆盖存储、工作表全部原始行、词条 upsert、来源事件 |
+| POST | `/api/v1/keyword-planning/analyses` | `action:ai-center:keyword-launch:manage`, 账户范围, 写入开关 | 可信快照+已发布规则+已解析原始行 -> 批次、不可变逐词结果；证据不足为 `blocked` |
+| GET | `/api/v1/keyword-planning/runs/{run_id}/internal-workbook?source_account_ref=...` | `page:ai-center:keyword-launch:view`, 账户范围 | 五 Sheet **内部分析报告**；01 固定 14 列；04 强制标“禁止上传” |
 
 以上全部继承 FastAPI 全局认证和数据范围约束，并显式拒绝 `frontend-preview` 主体；新增 POST 默认为禁用（返回 403），须**仅在隔离开发环境**使用 `KEYWORD_V11_WRITE_ENABLED=1` 显式开启。真实生产上线不属于本批授权。
 

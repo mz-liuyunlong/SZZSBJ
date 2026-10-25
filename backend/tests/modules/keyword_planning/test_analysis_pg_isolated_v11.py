@@ -1,13 +1,13 @@
 """Opt-in, real SQLAlchemy 2 + PostgreSQL persistence acceptance for V1.1.
 
 Security: fresh Docker-only disposable DB, random loopback port, no volumes,
-never reads DATABASE_URL, never runs Alembic or connects to the production tunnel.
+never reads DATABASE_URL or connects to the production tunnel. Full Alembic
+migrations run only against this verified disposable database.
 Requires a LOCAL unix-socket Docker context and RUN_KW_ANALYSIS_PG_SANDBOX=1.
 """
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import re
@@ -16,6 +16,7 @@ import secrets
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -25,13 +26,17 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from alembic.operations import Operations
-from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.db.session import dispose_engine
 from app.modules.data_pages.models import ListingManagementCurrentMart
+from app.modules.iam.rbac_repository import RbacRepository
+from app.modules.iam.repository import IamRepository
+from app.modules.iam.security import hash_password
+from app.modules.integration_sync.models import IntegrationInterface, IntegrationSyncConfig
 from app.modules.keyword_planning.analysis_entrypoint import (
     create_analysis_from_stored_sources,
     prepare_verified_analysis,
@@ -109,18 +114,6 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
         pytest.fail("Refusing unverified nonlocal Docker Context", pytrace=False)
     assert docker("info", "--format", "{{.ServerVersion}}").returncode == 0
 
-    migration = (
-        Path(__file__).resolve().parents[3]
-        / "alembic/versions/20261023_0055_keyword_planning_core.py"
-    )
-    tree = ast.parse(migration.read_text(encoding="utf-8"))
-    ddl: dict[str, tuple[str, ...]] = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if getattr(target, "id", "") in {"TABLE_DDL", "INDEX_DDL", "GUARD_DDL"}:
-                    ddl[target.id] = ast.literal_eval(node.value)
-    assert len(ddl["TABLE_DDL"]) == 21 and len(ddl["GUARD_DDL"]) == 20
     name = "szzsbj-analysis-qa-" + secrets.token_hex(6)
     password = secrets.token_urlsafe(32)
     started = False
@@ -180,34 +173,31 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                 pytrace=False,
             )
 
-        with engine.begin() as connection:
-            product_models.Product.__table__.create(connection)
-            connection.exec_driver_sql(
-                "CREATE TABLE product_platform_listings (id UUID PRIMARY KEY)"
+        backend = Path(__file__).resolve().parents[3]
+        migration_env = {
+            key: os.environ[key] for key in ("PATH", "HOME", "LANG", "TMPDIR") if key in os.environ
+        }
+        migration_env.update(
+            APP_ENV="test",
+            TEST_DATABASE_URL=f"postgresql+psycopg://postgres:{password}@127.0.0.1:{port}/postgres",
+        )
+        migrated = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=backend,
+            env=migration_env,
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+        assert migrated.returncode == 0, "Disposable full Alembic upgrade failed"
+        with engine.connect() as connection:
+            assert connection.scalar(text("select version_num from alembic_version")) == (
+                "20261025_0058_keyword_internal_default"
             )
-            ListingManagementCurrentMart.__table__.create(connection)
-            for section in ("TABLE_DDL", "INDEX_DDL", "GUARD_DDL"):
-                for statement in ddl[section]:
-                    connection.execute(text(statement))
-            approval_migration = runpy.run_path(
-                str(
-                    Path(__file__).resolve().parents[3]
-                    / "alembic/versions/20261024_0057_keyword_rule_decisions.py"
-                )
-            )
-            upgrade = approval_migration["upgrade"]
-            upgrade.__globals__["op"] = Operations(MigrationContext.configure(connection))
-            upgrade()
-            default_migration = runpy.run_path(
-                str(
-                    Path(__file__).resolve().parents[3]
-                    / "alembic/versions/20261025_0058_keyword_internal_default.py"
-                )
-            )
-            install_default = default_migration["upgrade"]
-            install_default.__globals__["op"] = Operations(MigrationContext.configure(connection))
-            install_default()
-            install_default()  # Idempotent even when retried.
+        default_migration = runpy.run_path(
+            str(backend / "alembic/versions/20261025_0058_keyword_internal_default.py")
+        )
 
         with Session(engine) as session:
             baseline = effective_scoring_rule(session, "fresh-synthetic-account")
@@ -715,7 +705,12 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                 )
                 app.dependency_overrides[get_optional_principal] = lambda: Principal(
                     user_id="ordinary-operator",
-                    permissions=frozenset({"products:read", "products:write"}),
+                    permissions=frozenset(
+                        {
+                            "page:ai-center:keyword-launch:view",
+                            "action:ai-center:keyword-launch:manage",
+                        }
+                    ),
                 )
                 visible = client.get(f"{base}/rulesets", params=params)
                 assert visible.status_code == 200
@@ -752,6 +747,70 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             if os.environ.get("RUN_KW_BROWSER_SANDBOX") == "1":
                 import uvicorn
 
+                with Session(engine) as session:
+                    interface = IntegrationInterface(
+                        provider="synthetic",
+                        interface_key="keyword_browser",
+                        display_name="Synthetic browser account",
+                        method="POST",
+                        endpoint_path="/synthetic/browser",
+                        request_kind="offset_page",
+                        handler_key="synthetic",
+                        contract_version="v1",
+                    )
+                    session.add(interface)
+                    session.flush()
+                    session.add(
+                        IntegrationSyncConfig(interface_id=interface.id, source_account_ref=account)
+                    )
+                    iam = IamRepository(session)
+                    iam.create_role(
+                        role_key="synthetic-keyword-browser",
+                        name="Synthetic keyword browser",
+                        description=None,
+                    )
+                    user_id = iam.create_user(
+                        username="synthetic-keyword-browser",
+                        password_hash=hash_password("synthetic-password"),
+                        display_name="Synthetic browser operator",
+                        phone=None,
+                        email=None,
+                        feishu_name=None,
+                        feishu_open_id=None,
+                        feishu_user_id=None,
+                        feishu_union_id=None,
+                        feishu_employee_id=None,
+                        feishu_department_ids=None,
+                    )
+                    iam.set_user_roles(user_id=user_id, role_keys=["synthetic-keyword-browser"])
+                    rbac = RbacRepository(session)
+                    assert rbac.set_role_permissions(
+                        role_key="synthetic-keyword-browser",
+                        permission_keys=[
+                            "page:ai-center:keyword-launch:view",
+                            "page:ads:keyword-library:view",
+                            "action:ai-center:keyword-launch:manage",
+                        ],
+                        expected_version=1,
+                    )
+                    rbac.set_user_data_scopes(user_id=user_id, scopes=[("source_account", account)])
+                    session.commit()
+                previous_app_env = os.environ.get("APP_ENV")
+                previous_test_database_url = os.environ.get("TEST_DATABASE_URL")
+                os.environ["APP_ENV"] = "test"
+                os.environ["TEST_DATABASE_URL"] = migration_env["TEST_DATABASE_URL"]
+                get_settings.cache_clear()
+                dispose_engine()
+                app.dependency_overrides.clear()
+                login = TestClient(app).post(
+                    "/api/auth/login",
+                    json={
+                        "username": "synthetic-keyword-browser",
+                        "password": "synthetic-password",
+                    },
+                )
+                assert login.status_code == 200
+                browser_token = login.json()["data"]["access_token"]
                 frontend = Path(__file__).resolve().parents[4] / "frontend"
                 playwright = frontend / "node_modules/.bin/playwright"
                 assert playwright.is_file(), "Install locked frontend dependencies first"
@@ -797,6 +856,7 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                             "KW_LIVE_API_BASE": f"http://127.0.0.1:{api_port}",
                             "KW_LIVE_PRODUCT_ID": str(product_id),
                             "KW_LIVE_LISTING_ID": str(listing_id),
+                            "KW_LIVE_AUTH_TOKEN": browser_token,
                         },
                         capture_output=True,
                         text=True,
@@ -817,6 +877,16 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                     else:
                         os.environ["SZZSBJ_KEYWORD_PRIVATE_ROOT"] = prior_private_root
                     shutil.rmtree(private_root)
+                    dispose_engine()
+                    get_settings.cache_clear()
+                    if previous_app_env is None:
+                        os.environ.pop("APP_ENV", None)
+                    else:
+                        os.environ["APP_ENV"] = previous_app_env
+                    if previous_test_database_url is None:
+                        os.environ.pop("TEST_DATABASE_URL", None)
+                    else:
+                        os.environ["TEST_DATABASE_URL"] = previous_test_database_url
         finally:
             app.dependency_overrides.clear()
         with Session(engine) as session, session.begin():

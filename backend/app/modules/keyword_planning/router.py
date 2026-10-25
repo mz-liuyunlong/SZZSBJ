@@ -22,7 +22,9 @@ router = APIRouter(prefix="/api/v1/keyword-planning", tags=["Keyword Planning"])
 
 session_dependency = Annotated[Session, Depends(get_db_session)]
 account_scope_dependency = Annotated[frozenset[str], Depends(require_source_account_scope)]
-principal_dependency = Annotated[Principal, Depends(require_permission("products:read"))]
+principal_dependency = Annotated[
+    Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+]
 
 
 def get_service(

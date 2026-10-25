@@ -108,7 +108,9 @@ def get_source_state(
     source_account_ref: Annotated[str, Query(min_length=1, max_length=128)],
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:read"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+    ],
 ) -> SuccessEnvelope[KeywordSourceStateRead, None]:
     _account_allowed(source_account_ref, allowed_accounts, principal)
     product = session.get(Product, product_id)
@@ -203,7 +205,9 @@ def confirm_walmart_source(
     body: ConfirmWalmartBody,
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:write"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("action:ai-center:keyword-launch:manage"))
+    ],
 ) -> SuccessEnvelope[ConfirmWalmartRead, None]:
     _account_allowed(body.source_account_ref, allowed_accounts, principal)
     _require_opted_in_writes()
@@ -250,7 +254,9 @@ def import_asin_source(
     body: ImportAsinBody,
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:write"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("action:ai-center:keyword-launch:manage"))
+    ],
 ) -> SuccessEnvelope[ImportAsinRead, None]:
     _account_allowed(body.source_account_ref, allowed_accounts, principal)
     _require_opted_in_writes()

@@ -49,7 +49,11 @@ def protected_app(monkeypatch):
     app.dependency_overrides.clear()
 
 
-def _login(app, user="owner", permissions=("products:read", "products:write")):
+def _login(
+    app,
+    user="owner",
+    permissions=("page:ai-center:keyword-launch:view", "action:ai-center:keyword-launch:manage"),
+):
     app.dependency_overrides[get_optional_principal] = lambda: Principal(
         user_id=user, permissions=frozenset(permissions)
     )
@@ -87,7 +91,7 @@ def test_translation_write_requires_auth_scope_and_opt_in(protected_app):
     body = {"source_account_ref": "tenant", "item_id": "123", "translation": "synthetic"}
     app.dependency_overrides[get_optional_principal] = lambda: None
     assert TestClient(app).patch(url, json=body).status_code == 401
-    _login(app, permissions=("products:read",))
+    _login(app, permissions=("page:ai-center:keyword-launch:view",))
     assert TestClient(app).patch(url, json=body).status_code == 403
     _login(app)
     assert (
@@ -99,7 +103,7 @@ def test_translation_write_requires_auth_scope_and_opt_in(protected_app):
 
 def test_source_state_restores_saved_fact_and_upload_summary(protected_app):
     app, _ = protected_app
-    _login(app, permissions=("products:read",))
+    _login(app, permissions=("page:ai-center:keyword-launch:view",))
 
     class SavedSourceSession:
         def __init__(self):

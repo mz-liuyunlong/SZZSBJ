@@ -47,7 +47,9 @@ def inspect_analysis_preflight(
     upload_file_id: UUID,
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:read"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+    ],
     selected_asins: Annotated[list[str] | None, Query()] = None,
 ):
     _account_allowed(source_account_ref, allowed_accounts, principal)

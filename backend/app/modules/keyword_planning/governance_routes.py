@@ -133,7 +133,9 @@ def list_rule_sets(
     source_account_ref: Annotated[str, Query(min_length=1, max_length=128)],
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:read"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+    ],
 ) -> SuccessEnvelope[RuleSetListRead, None]:
     _account_allowed(source_account_ref, allowed_accounts, principal)
     rows = list(
@@ -176,7 +178,9 @@ def list_rule_versions(
     source_account_ref: Annotated[str, Query(min_length=1, max_length=128)],
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:read"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+    ],
 ):
     _account_allowed(source_account_ref, allowed_accounts, principal)
     owner = session.get(AiKwRuleSet, rule_set_id)
@@ -364,7 +368,9 @@ def list_rule_decisions(
     source_account_ref: Annotated[str, Query(min_length=1, max_length=128)],
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:read"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+    ],
 ):
     _account_allowed(source_account_ref, allowed_accounts, principal)
     version = session.get(AiKwRuleVersion, version_id)

@@ -2,6 +2,7 @@ import {expect,test} from '@playwright/test';
 import * as XLSX from 'xlsx';
 
 const api = process.env.KW_LIVE_API_BASE;
+const authToken = process.env.KW_LIVE_AUTH_TOKEN;
 test.skip(!api, 'Requires the disposable PostgreSQL + FastAPI sandbox');
 
 test('original pages read frozen results and a manual word from real FastAPI after refresh',async({page})=>{
@@ -20,15 +21,16 @@ test('original pages read frozen results and a manual word from real FastAPI aft
   page.on('console',entry=>{if(entry.type()==='error')browserErrors.push(entry.text());});
   page.on('requestfailed',request=>browserErrors.push(`request ${request.url()} ${request.failure()?.errorText}`));
   page.on('response',response=>{if(response.status()>=400)browserErrors.push(`HTTP ${response.status()} ${response.url()}`);});
-  await page.addInitScript(({product,listing})=>{
-    localStorage.setItem('szzsbj_auth_token','synthetic-test-token');
+  expect(authToken).toBeTruthy();
+  await page.addInitScript(({product,listing,token})=>{
+    localStorage.setItem('szzsbj_auth_token',token);
     sessionStorage.setItem('keyword-planning:selected-product',JSON.stringify({id:product,sku:'SYNTHETIC-A'}));
     sessionStorage.setItem('keyword-planning:selected-listing',listing);
-  },{product,listing});
+  },{product,listing,token:authToken!});
   await page.route('**/api/**',async route=>{
     const url=new URL(route.request().url());
     if(!url.pathname.startsWith('/api/'))return route.fallback();
-    if(url.pathname.startsWith('/api/v1/keyword-planning/')){
+    if(url.pathname.startsWith('/api/v1/keyword-planning/')||url.pathname==='/api/auth/me'){
       if(url.pathname.endsWith('/keywords'))realKeywordReads++;
       const response=await route.fetch({url:new URL(url.pathname+url.search,api).toString()});
       await route.fulfill({response});
@@ -36,9 +38,7 @@ test('original pages read frozen results and a manual word from real FastAPI aft
     }
     let data:unknown={items:[],total:0};
     let meta:Record<string,unknown>={total:0};
-    if(url.pathname==='/api/auth/me')data={id:1,username:'synthetic',display_name:'Synthetic',
-      is_super_admin:true,role_keys:[],role_names:[],permissions:['*']};
-    else if(url.pathname==='/api/product-management/skus'){
+    if(url.pathname==='/api/product-management/skus'){
       data={items:[productRow]};meta={total:1};
     }else if(url.pathname==='/api/listings/walmart'){
       data={items:[listingRow]};meta={total:1};
@@ -83,8 +83,21 @@ test('original pages read frozen results and a manual word from real FastAPI aft
   expect(createdResponse.status(),await createdResponse.text()).toBe(200);
   const created=(await createdResponse.json()).data as {run_id:string;created:boolean};
   expect(created.created).toBe(true);
-  const persisted=await page.request.get(new URL(`/api/v1/keyword-planning/runs/${created.run_id}?source_account_ref=${account}`,api).toString());
+  const persisted=await page.request.get(new URL(`/api/v1/keyword-planning/runs/${created.run_id}?source_account_ref=${account}`,api).toString(),{
+    headers:{Authorization:`Bearer ${authToken}`},
+  });
   expect(persisted.status()).toBe(200);
+  const internal=await page.request.get(new URL(`/api/v1/keyword-planning/runs/${created.run_id}/internal-workbook?source_account_ref=${account}`,api).toString(),{
+    headers:{Authorization:`Bearer ${authToken}`},
+  });
+  expect(internal.status()).toBe(200);
+  expect(XLSX.read(Buffer.from(await internal.body()),{type:'buffer'}).SheetNames).toEqual([
+    '01_最终投放总表','02_词根Broad拓展','03_风险与不投放','04_广告结构_内部预览','05_Listing优化建议',
+  ]);
+  const denied=await page.request.get(new URL(`/api/v1/keyword-planning/runs/${created.run_id}?source_account_ref=other-account`,api).toString(),{
+    headers:{Authorization:`Bearer ${authToken}`},
+  });
+  expect(denied.status()).toBe(403);
   await expect(page.getByText('pantry organizer set',{exact:true}).first()).toBeVisible();
   await page.reload();
   await expect(page.getByText('pantry organizer set',{exact:true}).first()).toBeVisible();

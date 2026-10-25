@@ -54,6 +54,26 @@ CONFIG_SHA256 = hashlib.sha256(CONFIG_JSON.encode("utf-8")).hexdigest()
 
 def upgrade() -> None:
     connection = op.get_bind()
+    # Existing databases passed the IAM catalogue migration before this page existed.
+    # Register permissions without granting them to any role.
+    connection.execute(
+        sa.text("""
+            INSERT INTO app_permissions
+                (permission_key, name, group_key, description, permission_type,
+                 module_key, page_key, action_key, field_key, risk_level,
+                 sort_order, is_active, created_at, updated_at)
+            VALUES
+                ('page:ai-center:keyword-launch:view', '关键词投放', 'AI中心',
+                 '允许查看关键词来源、规则和分析', 'page', 'ai_center',
+                 'ai_center_keyword_launch', NULL, NULL, 'normal', 110080,
+                 true, now(), now()),
+                ('action:ai-center:keyword-launch:manage', '维护关键词来源与分析',
+                 'AI中心', '允许保存关键词来源、上传和内部分析', 'action',
+                 'ai_center', 'ai_center_keyword_launch', 'manage', NULL,
+                 'normal', 10, true, now(), now())
+            ON CONFLICT (permission_key) DO NOTHING
+        """)
+    )
     connection.execute(
         sa.text("""
             INSERT INTO ai_kw_rule_set

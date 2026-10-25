@@ -1,7 +1,7 @@
 """Authenticated source-derived runs and INTERNAL-only five-sheet download.
 
 No arbitrary user-supplied scores, rules or keywords; no Walmart write actions.
-POST is protected by the repository's scoped-write guard and products:write RBAC.
+POST is protected by the repository's scoped-write guard and keyword-launch manage RBAC.
 """
 
 from __future__ import annotations
@@ -84,7 +84,9 @@ async def upload_keyword_xlsx(
     filename: Annotated[str, Query(min_length=1, max_length=255)],
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:write"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("action:ai-center:keyword-launch:manage"))
+    ],
 ) -> SuccessEnvelope[UploadRead, None]:
     _account_allowed(source_account_ref, allowed_accounts, principal)
     _require_opted_in_writes()
@@ -152,7 +154,9 @@ def create_analysis(
     body: CreateRunRequest,
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:write"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("action:ai-center:keyword-launch:manage"))
+    ],
 ) -> SuccessEnvelope[CreateRunRead, None]:
     _account_allowed(body.source_account_ref, allowed_accounts, principal)
     _require_opted_in_writes()
@@ -192,7 +196,9 @@ def download_internal_workbook(
     source_account_ref: Annotated[str, Query(min_length=1, max_length=128)],
     session: Annotated[Session, Depends(get_db_session)],
     allowed_accounts: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    principal: Annotated[Principal, Depends(require_permission("products:read"))],
+    principal: Annotated[
+        Principal, Depends(require_permission("page:ai-center:keyword-launch:view"))
+    ],
 ) -> StreamingResponse:
     _account_allowed(source_account_ref, allowed_accounts, principal)
     run = session.scalar(
