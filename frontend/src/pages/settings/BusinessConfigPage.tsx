@@ -25,7 +25,6 @@ import {
   Table,
   Tabs,
   Tag,
-  Typography,
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -122,15 +121,53 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
   }, []);
 
   useEffect(() => {
-    void loadConfig();
+    let active = true;
+
+    void fetchDecodoConfig()
+      .then((result) => {
+        if (!active) return;
+        setConfig(result);
+        setConfigError(false);
+      })
+      .catch(() => {
+        if (active) setConfigError(true);
+      })
+      .finally(() => {
+        if (active) setConfigLoading(false);
+      });
+
     void fetchCurrentUser()
-      .then((user) => setCanEdit(Boolean(user?.isSuperAdmin)))
-      .catch(() => setCanEdit(false));
-  }, [loadConfig]);
+      .then((user) => {
+        if (active) setCanEdit(Boolean(user?.isSuperAdmin));
+      })
+      .catch(() => {
+        if (active) setCanEdit(false);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
-    void loadUsage(usageRange);
-  }, [loadUsage, usageRange]);
+    let active = true;
+
+    void fetchDecodoUsage(usageRange)
+      .then((result) => {
+        if (!active) return;
+        setUsageRows(result.days);
+        setUsageToday(result.today);
+        setUsageError(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setUsageRows([]);
+        setUsageError(true);
+      })
+      .finally(() => {
+        if (active) setUsageLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [usageRange]);
 
   const isLocalMode = config?.mode === "local_test";
   const todayRow = useMemo(
@@ -340,7 +377,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                 description="当前 Decodo 按实际发起的请求尝试计数（含失败）；官方计费请求可能不同。暂不提供没有计价依据的美元估算。" />
               <div className="business-config__usage-toolbar">
                 <Space>
-                  <Segmented value={usageRange} onChange={(value) => setUsageRange(value as UsageRange)}
+                  <Segmented value={usageRange} onChange={(value) => { setUsageLoading(true); setUsageRange(value as UsageRange); }}
                     options={[{ label: "最近 7 天", value: 7 }, { label: "最近 30 天", value: 30 }]} />
                   <Tag>Decodo</Tag>
                 </Space>
