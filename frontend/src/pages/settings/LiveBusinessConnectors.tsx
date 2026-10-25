@@ -68,6 +68,8 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
       daily_limit: item?.config.daily_limit ?? 100,
       monthly_budget_usd: Number(item?.config.monthly_budget_usd ?? 0),
       max_output_tokens: item?.config.max_output_tokens ?? 1024,
+      input_price_per_million: Number(item?.config.input_price_per_million ?? 0),
+      output_price_per_million: Number(item?.config.output_price_per_million ?? 0),
     });
     setDrawer("connector");
   };
@@ -164,6 +166,8 @@ export default function LiveBusinessConnectors({ canManage }: { canManage: boole
           <Form.Item name="backup_model" label="备用模型"><Input maxLength={100} /></Form.Item>
           <Form.Item name="model_allowlist" label="模型白名单" rules={[{required:true}]}><Select mode="tags" tokenSeparators={[","]} /></Form.Item>
           <Form.Item name="max_output_tokens" label="最大输出 Token"><InputNumber min={1} max={16384}/></Form.Item>
+          <Form.Item name="input_price_per_million" label="每百万输入 Token 单价（USD）" extra="需根据供应商当前价格手工核准，未配置时禁止实际调用"><InputNumber min={0} precision={6} style={{width:"100%"}}/></Form.Item>
+          <Form.Item name="output_price_per_million" label="每百万输出 Token 单价（USD）"><InputNumber min={0} precision={6} style={{width:"100%"}}/></Form.Item>
         </>}
         <Form.Item name="daily_limit" label="每日次数上限"><InputNumber min={1} max={100000}/></Form.Item>
         <Form.Item name="monthly_budget_usd" label="月度美元预算（仅 AI 适用）"><InputNumber min={0} max={1000000} precision={2}/></Form.Item>
