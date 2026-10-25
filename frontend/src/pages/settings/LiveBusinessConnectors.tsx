@@ -1,9 +1,9 @@
 import { Alert, Button, Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
-  disableBusinessConnector, listBusinessConnectors, listBusinessUsage, listFeishuRoutes, listNotificationDeliveries,
+  disableBusinessConnector, listAIUsage, listBusinessConnectors, listBusinessUsage, listFeishuRoutes, listNotificationDeliveries,
   listNotificationTemplates, saveBusinessConnector, saveFeishuRoute, saveNotificationTemplate, testBusinessConnector,
-  type BusinessConnector, type ConnectorWrite, type FeishuRoute, type NotificationDelivery,
+  type AIUsageRow, type BusinessConnector, type ConnectorWrite, type FeishuRoute, type NotificationDelivery,
   type NotificationTemplate,
 } from "@/api/businessConnectorsApi";
 
@@ -27,6 +27,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
   const [messageApi, context] = message.useMessage();
   const [modal, modalContext] = Modal.useModal();
   const [usage, setUsage] = useState<Awaited<ReturnType<typeof listBusinessUsage>> | null>(null);
+  const [aiUsage, setAIUsage] = useState<AIUsageRow[]>([]);
   const [items, setItems] = useState<BusinessConnector[]>([]);
   const [routes, setRoutes] = useState<FeishuRoute[]>([]);
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
@@ -56,6 +57,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
       setItems(connectors); setRoutes(loadedRoutes); setTemplates(loadedTemplates); setDeliveries(loadedDeliveries);
       setError(false);
       void listBusinessUsage().then(setUsage).catch(() => setUsage(null));
+      void listAIUsage().then(setAIUsage).catch(() => setAIUsage([]));
     } catch {
       setError(true);
     } finally {
@@ -181,6 +183,19 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
     <Table<NotificationDelivery> size="small" rowKey="id" dataSource={deliveries} pagination={{ pageSize: 10 }}
       columns={[{ title: "事件", dataIndex: "event_key" }, { title: "状态", dataIndex: "status" },
         { title: "尝试", dataIndex: "attempts" }, { title: "失败码", dataIndex: "error_code" }, { title: "创建时间", dataIndex: "created_at" }]}/>
+    </>}
+    {showAI && <><div className="business-config__draft-heading"><strong>AI 单次调用明细</strong></div>
+      <Table<AIUsageRow> size="small" rowKey="id" dataSource={aiUsage} pagination={{ pageSize: 10 }}
+        columns={[
+          {title: "时间", dataIndex: "created_at"},
+          {title: "模型", dataIndex: "model"},
+          {title: "提示词版本", dataIndex: "prompt_version"},
+          {title: "输入 Token", dataIndex: "input_tokens"},
+          {title: "输出 Token", dataIndex: "output_tokens"},
+          {title: "估算费用 USD", dataIndex: "cost_usd", render: (v: string | null) => v ?? "未定"},
+          {title: "状态", dataIndex: "status"},
+          {title: "错误码", dataIndex: "error_code"},
+        ]}/>
     </>}
     <Drawer title={editing ? "编辑正式连接" : "新增正式连接"} open={drawer === "connector"} width={540}
       onClose={() => { form.setFieldsValue({credential:"",signing_secret:"",endpoint:""}); setDrawer(null); }}
