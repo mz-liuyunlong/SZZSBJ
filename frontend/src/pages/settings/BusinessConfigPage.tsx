@@ -41,6 +41,7 @@ import {
   type DecodoUsageDay,
 } from "@/api/decodoApi";
 import "@/pages/settings/BusinessConfigPage.css";
+import BusinessConfigDraftManager from "@/pages/settings/BusinessConfigDraftManager";
 
 type Section = "connections" | "usage" | "policies";
 type Category = "all" | "crawler" | "ai" | "communication" | "bots" | "commerce" | "erp" | "logistics";
@@ -187,6 +188,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
   const matchesStatus = statusFilter === "all"
     || (config != null && decodoStatus(config) === statusFilter);
   const visible = Boolean(config && matchesCategory && matchesKeyword && matchesStatus);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const openEditor = () => {
     if (!config || isLocalMode || !canEdit) return;
@@ -275,6 +277,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
       fixed: "right",
       render: () => (
         <Space size={0}>
+          <Button type="link" size="small" onClick={() => setDetailsOpen(true)}>详情</Button>
           <Button type="link" size="small" onClick={goToUsage}>用量</Button>
           {canEdit && !isLocalMode ? <Button type="link" size="small" onClick={openEditor}>编辑</Button> : null}
         </Space>
@@ -361,6 +364,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                           <span>更新：{labelDate(config.updated_at)}</span>
                         </div>
                         <Space>
+                          <Button size="small" onClick={() => setDetailsOpen(true)}>详情</Button>
                           <Button size="small" onClick={goToUsage}>查看用量</Button>
                           {canEdit && !isLocalMode ? <Button size="small" type="primary" icon={<EditOutlined />} onClick={openEditor}>编辑配置</Button> : null}
                         </Space>
@@ -368,6 +372,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                     ) : <Empty description="该分类暂无匹配的已接入服务" />}
                   </div>
                 )}
+                <BusinessConfigDraftManager section="connections" category={category} keyword={keyword} status={statusFilter} canManage={canEdit} />
                 <div className="business-config__list-footer">当前只接入 Decodo 单实例。其他服务将在后端接入后展示，不使用演示账号或虚构费用。</div>
               </Card>
             </div>
@@ -443,11 +448,27 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                   </div>
                 ) : <Empty description="尚未读取到 Decodo 配置" />}
               </Card>
+              <Card><BusinessConfigDraftManager section="policies" category="all" keyword="" status="all" canManage={canEdit}/></Card>
             </div>
           )}
         </div>
       </PageShell>
 
+      <Drawer title="Decodo · 配置详情" width={480} open={detailsOpen} onClose={() => setDetailsOpen(false)}>
+        <Alert type="info" showIcon message="真实 Decodo 后端配置" description="与浏览器内的配置草稿分离；当前后端仅支持一个 Decodo 系统实例。" />
+        <div className="business-config__form">
+          <strong>认证状态</strong><span>{config?.configured ? "已配置" : "未配置"}</span>
+          <strong>服务状态</strong><span>{config ? decodoStatus(config) : "未读取"}</span>
+          <strong>美国 ZIP Code</strong><span>{config?.us_zip ?? "—"}</span>
+          <strong>运行模式</strong><span>{isLocalMode ? "本地 SQLite 测试" : "数据库"}</span>
+          <strong>最近更新</strong><span>{labelDate(config?.updated_at)}</span>
+          <strong>今日请求次数</strong><span>{usageError ? "读取失败" : (todayRow?.total ?? 0)}</span>
+          <strong>计费方式</strong><span>未配置计价</span>
+          <strong>授权凭据</strong><span>不回显、不进入浏览器存储</span>
+          {canEdit && !isLocalMode && <Button type="primary" onClick={() => { setDetailsOpen(false); openEditor(); }}>编辑真实 Decodo 配置</Button>}
+          {isLocalMode && <Alert type="warning" showIcon message="本地测试模式使用后端环境变量，不能在此编辑真实授权。" />}
+        </div>
+      </Drawer>
       <Drawer className="business-config__drawer" title="Decodo · 编辑配置" width={520} open={drawerOpen}
         destroyOnHidden maskClosable={!saving} closable={!saving} onClose={() => setDrawerOpen(false)}
         extra={<Space><Button disabled={saving} onClick={() => setDrawerOpen(false)}>取消</Button>
