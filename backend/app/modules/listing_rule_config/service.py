@@ -1,4 +1,5 @@
 """Global Listing grade rule validation, scheduling and audit service."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -49,7 +50,10 @@ class ListingGradeRuleService:
     def _read(row: ListingGradeRuleVersion | None, *, can_edit: bool) -> ListingGradeRuleRead:
         if row is None:
             return ListingGradeRuleRead(
-                version=0, config=ListingGradeRuleConfig(), source="default", can_edit=can_edit,
+                version=0,
+                config=ListingGradeRuleConfig(),
+                source="default",
+                can_edit=can_edit,
             )
         return ListingGradeRuleRead(
             version=row.version,
@@ -93,7 +97,10 @@ class ListingGradeRuleService:
                     message="规则已被他人修改，请刷新后重试",
                     details={"current_version": current_version},
                 )
-            if latest and ListingGradeRuleConfig.model_validate(latest.config_json) == request.config:
+            if (
+                latest
+                and ListingGradeRuleConfig.model_validate(latest.config_json) == request.config
+            ):
                 raise ApiError(
                     code="LISTING_RULE_NO_CHANGES",
                     status_code=409,
@@ -133,12 +140,15 @@ class ListingGradeRuleService:
             return ListingGradeRuleHistoryData(items=[], total=0, storage_ready=False)
         return ListingGradeRuleHistoryData(
             total=total,
-            items=[ListingGradeRuleHistoryItem(
-                version=row.version,
-                config=ListingGradeRuleConfig.model_validate(row.config_json),
-                effective_from=row.effective_from,
-                created_at=row.created_at,
-                created_by=row.created_by,
-                change_reason=row.change_reason,
-            ) for row in rows],
+            items=[
+                ListingGradeRuleHistoryItem(
+                    version=row.version,
+                    config=ListingGradeRuleConfig.model_validate(row.config_json),
+                    effective_from=row.effective_from,
+                    created_at=row.created_at,
+                    created_by=row.created_by,
+                    change_reason=row.change_reason,
+                )
+                for row in rows
+            ],
         )

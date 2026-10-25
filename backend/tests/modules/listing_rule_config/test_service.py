@@ -1,4 +1,5 @@
 """Isolated service tests using a fake repository; never touch production."""
+
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -35,7 +36,7 @@ class FakeRepo:
         self.rows.append(row)
 
     def history(self, *, limit: int, offset: int):
-        return list(reversed(self.rows))[offset:offset + limit], len(self.rows)
+        return list(reversed(self.rows))[offset : offset + limit], len(self.rows)
 
 
 def test_write_creates_version_and_rejects_stale_expected_version() -> None:
@@ -44,7 +45,9 @@ def test_write_creates_version_and_rejects_stale_expected_version() -> None:
     repo = FakeRepo()
     service.repo = repo  # type: ignore[assignment]
     config = ListingGradeRuleConfig(short_days=6, short_min_valid_days=4)
-    payload = ListingGradeRuleUpdate(expected_version=0, change_reason="缩短短期窗口", config=config)
+    payload = ListingGradeRuleUpdate(
+        expected_version=0, change_reason="缩短短期窗口", config=config
+    )
     result = service.update(request=payload, actor="operator-1")
     assert repo.locked
     assert result.version == 1 and result.source == "database"
@@ -63,13 +66,19 @@ def test_no_change_does_not_create_duplicate_version() -> None:
     repo = FakeRepo()
     service.repo = repo  # type: ignore[assignment]
     payload = ListingGradeRuleUpdate(
-        expected_version=0, change_reason="调整参数测试",
+        expected_version=0,
+        change_reason="调整参数测试",
         config=ListingGradeRuleConfig(short_weight_percent=55, medium_weight_percent=45),
     )
     service.update(request=payload, actor="operator")
     with pytest.raises(ApiError) as error:
-        service.update(request=ListingGradeRuleUpdate(
-            expected_version=1, change_reason="重复保存测试", config=payload.config,
-        ), actor="operator")
+        service.update(
+            request=ListingGradeRuleUpdate(
+                expected_version=1,
+                change_reason="重复保存测试",
+                config=payload.config,
+            ),
+            actor="operator",
+        )
     assert error.value.code == "LISTING_RULE_NO_CHANGES"
     assert len(repo.rows) == 1

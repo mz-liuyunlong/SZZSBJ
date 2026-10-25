@@ -1,4 +1,5 @@
 """Request/response contracts for the Listing grade rules configuration."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -8,12 +9,23 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ListingStage = Literal[
-    "测品期", "打品期", "启动期", "上升期", "稳定期",
-    "下滑期", "断货期", "修复期",
+    "测品期",
+    "打品期",
+    "启动期",
+    "上升期",
+    "稳定期",
+    "下滑期",
+    "断货期",
+    "修复期",
 ]
 
 DEFAULT_INCLUDED_STAGES: tuple[ListingStage, ...] = (
-    "打品期", "启动期", "上升期", "稳定期", "下滑期", "修复期",
+    "打品期",
+    "启动期",
+    "上升期",
+    "稳定期",
+    "下滑期",
+    "修复期",
 )
 
 
@@ -29,9 +41,9 @@ class SalesTierPercents(BaseModel):
     gte20: int = Field(ge=1, le=200)
 
     @model_validator(mode="after")
-    def validate_tiers(self) -> "SalesTierPercents":
+    def validate_tiers(self) -> SalesTierPercents:
         tiers = (self.lt2, self.from2to5, self.from5to10, self.from10to20, self.gte20)
-        if any(a < b for a, b in zip(tiers, tiers[1:])):
+        if any(a < b for a, b in zip(tiers, tiers[1:], strict=True)):
             raise ValueError("销量阶梯百分比应随基准销量增长而不递增")
         return self
 
@@ -47,17 +59,29 @@ class LifecycleRuleConfig(BaseModel):
     decline_min_valid_days_30: int = Field(default=21, ge=1, le=30)
     growth_threshold_pct: SalesTierPercents = Field(
         default_factory=lambda: SalesTierPercents(
-            lt2=50, from2to5=40, from5to10=30, from10to20=25, gte20=20,
+            lt2=50,
+            from2to5=40,
+            from5to10=30,
+            from10to20=25,
+            gte20=20,
         )
     )
     decline_threshold_pct: SalesTierPercents = Field(
         default_factory=lambda: SalesTierPercents(
-            lt2=50, from2to5=40, from5to10=30, from10to20=25, gte20=20,
+            lt2=50,
+            from2to5=40,
+            from5to10=30,
+            from10to20=25,
+            gte20=20,
         )
     )
     stable_tolerance_pct: SalesTierPercents = Field(
         default_factory=lambda: SalesTierPercents(
-            lt2=60, from2to5=45, from5to10=35, from10to20=30, gte20=25,
+            lt2=60,
+            from2to5=45,
+            from5to10=35,
+            from10to20=30,
+            gte20=25,
         )
     )
 
@@ -76,7 +100,7 @@ class InventoryRepairRuleConfig(BaseModel):
     abnormal_recovery_days: int = Field(default=7, ge=1, le=90)
 
     @model_validator(mode="after")
-    def validate_recovery(self) -> "InventoryRepairRuleConfig":
+    def validate_recovery(self) -> InventoryRepairRuleConfig:
         if self.stockout_consecutive_days >= self.long_stockout_days:
             raise ValueError("长期断货天数必须大于进入断货期的天数")
         return self
@@ -92,7 +116,7 @@ class FollowUpRuleConfig(BaseModel):
     overdue_notice: bool = False
 
     @model_validator(mode="after")
-    def validate_reminder(self) -> "FollowUpRuleConfig":
+    def validate_reminder(self) -> FollowUpRuleConfig:
         if self.overdue_notice and self.deadline_time is None:
             raise ValueError("开启逾期提醒前必须设置每日截止时间")
         if self.reminder_time and self.deadline_time and self.reminder_time >= self.deadline_time:
@@ -114,13 +138,15 @@ class ListingGradeRuleConfig(BaseModel):
     c_min_percent: Decimal = Field(default=Decimal("5"), ge=-100, le=1000)
     b_min_percent: Decimal = Field(default=Decimal("10"), ge=-100, le=1000)
     a_above_percent: Decimal = Field(default=Decimal("15"), ge=-100, le=1000)
-    included_stages: list[ListingStage] = Field(default_factory=lambda: list(DEFAULT_INCLUDED_STAGES))
+    included_stages: list[ListingStage] = Field(
+        default_factory=lambda: list(DEFAULT_INCLUDED_STAGES)
+    )
     lifecycle: LifecycleRuleConfig = Field(default_factory=LifecycleRuleConfig)
     inventory_repair: InventoryRepairRuleConfig = Field(default_factory=InventoryRepairRuleConfig)
     follow_up: FollowUpRuleConfig = Field(default_factory=FollowUpRuleConfig)
 
     @model_validator(mode="after")
-    def validate_business_rules(self) -> "ListingGradeRuleConfig":
+    def validate_business_rules(self) -> ListingGradeRuleConfig:
         if self.short_days >= self.medium_days:
             raise ValueError("短期统计窗口必须小于中期统计窗口")
         if self.short_weight_percent + self.medium_weight_percent != 100:

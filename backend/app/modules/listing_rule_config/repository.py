@@ -1,4 +1,5 @@
 """SQLAlchemy access to append-only Listing grade rule versions."""
+
 from __future__ import annotations
 
 from sqlalchemy import func, select, text

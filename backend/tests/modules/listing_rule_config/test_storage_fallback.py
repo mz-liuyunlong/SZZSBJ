@@ -1,4 +1,5 @@
 """Missing rule table falls back to read-only defaults, not silent writes."""
+
 from unittest.mock import Mock
 
 import pytest
@@ -56,7 +57,8 @@ def test_missing_table_save_reports_503() -> None:
     service.repo.lock_for_version_change = Mock()
     service.repo.latest = Mock(side_effect=db_error(PgUndefinedTable()))
     payload = ListingGradeRuleUpdate(
-        expected_version=0, change_reason="test reason",
+        expected_version=0,
+        change_reason="test reason",
         config=ListingGradeRuleConfig(),
     )
     with pytest.raises(ApiError) as e:
