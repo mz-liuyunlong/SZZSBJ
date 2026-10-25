@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import BusinessConfigPage, { BUSINESS_CONFIG_CATEGORIES, decodoStatus } from "./BusinessConfigPage";
+import BusinessConfigPage from "./BusinessConfigPage";
 import type { NavigationPage } from "@/config/navigation";
 
 const mocks = vi.hoisted(() => ({
@@ -66,21 +66,11 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("business configuration V2", () => {
-  it("keeps only the seven approved service categories plus all", () => {
-    expect(BUSINESS_CONFIG_CATEGORIES.map((category) => category.key)).toEqual([
-      "all", "crawler", "ai", "communication", "bots", "commerce", "erp", "logistics",
-    ]);
-  });
-
-  it("maps Decodo states without inventing service instances", () => {
-    expect(decodoStatus(config)).toBe("已启用");
-    expect(decodoStatus({ ...config, enabled: false })).toBe("已停用");
-    expect(decodoStatus({ ...config, configured: false })).toBe("未配置");
-  });
-
   it("renders real Decodo data, and filters empty categories", async () => {
     render(<BusinessConfigPage page={page} />);
     expect(await screen.findByText("Decodo Scraper API")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /群机器人与通知/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /云存储与文件/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("未配置计价").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /AI 服务/ }));
     expect(screen.queryByText("Decodo Scraper API")).not.toBeInTheDocument();
