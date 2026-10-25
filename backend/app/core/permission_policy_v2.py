@@ -70,6 +70,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
+        "PUT",
+        "/api/listings/rule-config",
+        "action:products:listing-management:configure-rules",
+        True,
+    ),
+    RequestPermissionRule(
         "GET",
         "/api/listings/walmart/export",
         "action:products:listing-management:export",
