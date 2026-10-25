@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   saveConfig: vi.fn(),
   currentUser: vi.fn(),
   listConnectors: vi.fn(),
+  listFeishuRoutes: vi.fn(),
+  listNotificationTemplates: vi.fn(),
+  listNotificationDeliveries: vi.fn(),
+  listBusinessUsage: vi.fn(),
+  listAIUsage: vi.fn(),
 }));
 
 vi.mock("@/api/decodoApi", () => ({
@@ -20,6 +25,16 @@ vi.mock("@/api/decodoApi", () => ({
 }));
 vi.mock("@/api/businessConnectorsApi", () => ({
   listBusinessConnectors: mocks.listConnectors,
+  listFeishuRoutes: mocks.listFeishuRoutes,
+  listNotificationTemplates: mocks.listNotificationTemplates,
+  listNotificationDeliveries: mocks.listNotificationDeliveries,
+  listBusinessUsage: mocks.listBusinessUsage,
+  listAIUsage: mocks.listAIUsage,
+  saveBusinessConnector: vi.fn(),
+  saveFeishuRoute: vi.fn(),
+  saveNotificationTemplate: vi.fn(),
+  disableBusinessConnector: vi.fn(),
+  testBusinessConnector: vi.fn(),
 }));
 vi.mock("@/pages/auth/authApi", () => ({
   fetchCurrentUser: mocks.currentUser,
@@ -60,6 +75,11 @@ beforeEach(() => {
   }));
   mocks.fetchConfig.mockReset().mockResolvedValue(config);
   mocks.listConnectors.mockReset().mockResolvedValue([]);
+  mocks.listFeishuRoutes.mockReset().mockResolvedValue([]);
+  mocks.listNotificationTemplates.mockReset().mockResolvedValue([]);
+  mocks.listNotificationDeliveries.mockReset().mockResolvedValue([]);
+  mocks.listBusinessUsage.mockReset().mockResolvedValue({ notifications: [], ai: [] });
+  mocks.listAIUsage.mockReset().mockResolvedValue([]);
   mocks.fetchUsage.mockReset().mockResolvedValue({
     timezone: "America/New_York",
     today: "2026-10-25",
