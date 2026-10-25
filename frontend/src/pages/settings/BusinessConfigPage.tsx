@@ -333,6 +333,9 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
 
           {section === "connections" ? (
             <div className="business-config__body">
+              <Alert className="business-config__intro-note" type="info" showIcon message="真实连接与安全配置" description={isLocalMode ? "Decodo 处于本地 SQLite 测试模式，密钥由本机环境管理。飞书和 AI 使用独立的服务端配置，未迁移数据库前无法保存。" : "显示真实 Decodo、飞书群和 AI 连接；未接入服务仅以草稿标识，不展示虚构凭据或费用。"} />
+              {configError ? <Alert showIcon type="error" message="Decodo 配置读取失败" description="请检查登录、权限、后端服务及数据库版本；未读取到真实配置时不显示虚拟实例。" action={<Button size="small" onClick={() => void loadConfig()}>重试</Button>} /> : null}
+              {isLocalMode ? <Alert showIcon type="info" message="当前是 Decodo 本地 SQLite 测试模式" description="密钥由本地后端环境变量管理，页面只读；请求统计保存在本机。真实采集可能产生服务商费用。" /> : null}
               <div className="business-config__stats">
                 <Card><Statistic title="已接入服务" value={(config ? 1 : 0) + live.length} prefix={<LinkOutlined />} /><span>实际接入的服务实例</span></Card>
                 <Card><Statistic title="已启用连接" value={(config?.enabled ? 1 : 0) + live.filter((item) => item.enabled).length} prefix={<SafetyCertificateOutlined />} /><span>由后端配置状态决定</span></Card>
@@ -340,8 +343,6 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
                 <Card><Statistic title="今日预估费用" value="未配置计价" prefix={<CloudOutlined />} /><span>不将调用次数误认为收费金额</span></Card>
               </div>
 
-              {configError ? <Alert showIcon type="error" message="Decodo 配置读取失败" description="请检查登录、权限、后端服务及数据库版本；未读取到真实配置时不显示虚拟实例。" action={<Button size="small" onClick={() => void loadConfig()}>重试</Button>} /> : null}
-              {isLocalMode ? <Alert showIcon type="info" message="当前是 Decodo 本地 SQLite 测试模式" description="密钥由本地后端环境变量管理，页面只读；请求统计保存在本机。真实采集可能产生服务商费用。" /> : null}
 
               <div className="business-config__categories" role="group" aria-label="服务分类">
                 <strong>服务分类</strong>
@@ -448,8 +449,7 @@ export default function BusinessConfigPage({ page }: BusinessConfigPageProps) {
             </div>
           ) : (
             <div className="business-config__body">
-              <Alert type="info" showIcon message="只显示当前 Decodo 后端已支持的配置策略"
-                description="预算限制、故障切换、AI 默认模型及通知路由需要独立的后端支持；本页不会提供无法生效的模拟开关。" />
+              <Alert type="info" showIcon message="按服务管理实际策略" description="Decodo 使用现有配置，飞书通知路由与模板通过服务端管理；其他未接入业务策略仍标识为草稿。" />
               <Card title="Decodo 当前策略" className="business-config__policy-card" loading={configLoading}>
                 {configError ? <Alert showIcon type="error" message="配置状态读取失败" /> : config ? (
                   <div className="business-config__policy-grid">
