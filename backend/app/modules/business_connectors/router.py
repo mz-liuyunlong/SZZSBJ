@@ -583,21 +583,29 @@ def enqueue_notification(
     # No outgoing action here. A scheduled worker can dispatch explicitly queued deliveries.
     created = 0
     with get_session_factory()() as session:
-        template = session.execute(
-            text("""
+        template = (
+            session.execute(
+                text("""
                 SELECT title,body_template,enabled,version FROM biz_notification_templates
                  WHERE event_key=:event
             """),
-            {"event": payload.event_key},
-        ).mappings().first()
+                {"event": payload.event_key},
+            )
+            .mappings()
+            .first()
+        )
         if template is not None and not template["enabled"]:
             return success_response(request, data={"queued": 0})
         rendered = payload.text
         if template:
-            rendered = template["title"] + "\n" + (
-                template["body_template"]
-                .replace("{{message}}", payload.text)
-                .replace("{{event_key}}", payload.event_key)
+            rendered = (
+                template["title"]
+                + "\n"
+                + (
+                    template["body_template"]
+                    .replace("{{message}}", payload.text)
+                    .replace("{{event_key}}", payload.event_key)
+                )
             )
         routes = (
             session.execute(
