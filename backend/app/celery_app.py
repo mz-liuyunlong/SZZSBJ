@@ -14,16 +14,19 @@ APP_ENV_ENV = "APP_ENV"
 MEDIA_QUEUE = "media"
 INTEGRATION_QUEUE = "integration"
 OPERATION_LOG_QUEUE = "operation-logs"
+NOTIFICATION_QUEUE = "notifications"
 
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
     "app.modules.operation_logs.tasks",
+    "app.modules.business_connectors.tasks",
 )
 
 TASK_ROUTES = {
     "media_assets.*": {"queue": MEDIA_QUEUE, "routing_key": MEDIA_QUEUE},
     "operation_logs.*": {"queue": OPERATION_LOG_QUEUE, "routing_key": OPERATION_LOG_QUEUE},
+    "business_connectors.*": {"queue": NOTIFICATION_QUEUE, "routing_key": NOTIFICATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -72,6 +75,7 @@ def create_celery_app(
             Queue(MEDIA_QUEUE, exchange, routing_key=MEDIA_QUEUE),
             Queue(INTEGRATION_QUEUE, exchange, routing_key=INTEGRATION_QUEUE),
             Queue(OPERATION_LOG_QUEUE, exchange, routing_key=OPERATION_LOG_QUEUE),
+            Queue(NOTIFICATION_QUEUE, exchange, routing_key=NOTIFICATION_QUEUE),
         ),
         task_routes=TASK_ROUTES,
         task_default_queue=INTEGRATION_QUEUE,
@@ -93,6 +97,10 @@ def create_celery_app(
             "operation-logs-mirror-reconcile": {
                 "task": "operation_logs.mirror_reconcile",
                 "schedule": crontab(hour=3, minute=0),
+            },
+            "business-notifications-retry": {
+                "task": "business_connectors.notification_tick",
+                "schedule": 60.0,
             },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
