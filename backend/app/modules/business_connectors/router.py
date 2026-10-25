@@ -17,7 +17,6 @@ from uuid import UUID, uuid4
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, Query, Request
-from app.integrations.llm.openai_provider import generate_text
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
@@ -25,6 +24,7 @@ from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
+from app.integrations.llm.openai_provider import generate_text
 
 router = APIRouter(prefix="/api/business-rules/connectors", tags=["Business connectors"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
@@ -235,7 +235,8 @@ def create_connector(
                 text("""
                 INSERT INTO biz_connectors (id, kind, name, enabled, ciphertext, secret_ciphertext,
                   config, created_by, updated_by)
-                VALUES (:id,:kind,:name,:enabled,:credential,:secret,CAST(:config AS jsonb),:actor,:actor)
+                VALUES (:id,:kind,:name,:enabled,:credential,:secret,
+                        CAST(:config AS jsonb),:actor,:actor)
             """),
                 {
                     "id": uid,
@@ -449,9 +450,11 @@ def save_template(
     with get_session_factory()() as session:
         session.execute(
             text("""
-            INSERT INTO biz_notification_templates (id,event_key,title,body_template,enabled,updated_by)
+            INSERT INTO biz_notification_templates
+                (id,event_key,title,body_template,enabled,updated_by)
             VALUES (:id,:event,:title,:body,:enabled,:actor)
-            ON CONFLICT (event_key) DO UPDATE SET title=EXCLUDED.title,body_template=EXCLUDED.body_template,
+            ON CONFLICT (event_key) DO UPDATE SET
+                title=EXCLUDED.title,body_template=EXCLUDED.body_template,
                 enabled=EXCLUDED.enabled,updated_by=EXCLUDED.updated_by,updated_at=now(),
                 version=biz_notification_templates.version + 1
         """),
@@ -477,8 +480,10 @@ def list_deliveries(
         rows = (
             session.execute(
                 text("""
-            SELECT id, route_id,connector_id,event_key,source_event_id,status,attempts,error_code,template_version,created_at,
-                   last_attempt_at,next_retry_at FROM biz_notification_deliveries ORDER BY created_at DESC LIMIT :lim
+            SELECT id, route_id,connector_id,event_key,source_event_id,status,attempts,
+                   error_code,template_version,created_at,
+                   last_attempt_at,next_retry_at FROM biz_notification_deliveries
+            ORDER BY created_at DESC LIMIT :lim
         """),
                 {"lim": limit},
             )
@@ -537,7 +542,8 @@ def usage_summary(request: Request, _: read_perm) -> SuccessEnvelope[dict[str, A
         ai = (
             session.execute(
                 text("""
-            SELECT connector_id, model, sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens,
+            SELECT connector_id,model,sum(input_tokens) AS input_tokens,
+                   sum(output_tokens) AS output_tokens,
                    count(*) AS requests, sum(cost_usd) AS cost_usd
             FROM biz_ai_usage WHERE created_at >= now() - interval '30 days'
             GROUP BY connector_id,model
