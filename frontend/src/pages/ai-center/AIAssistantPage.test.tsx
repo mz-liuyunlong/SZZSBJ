@@ -64,9 +64,9 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     fireEvent.change(screen.getByRole('textbox',{name:'输入问题'}),{target:{value:'第二个聊天的草稿'}});
     const first=screen.getByRole('button',{name:/聊天操作：第一条消息/});
     expect(first).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'第一条消息 1 条提问'}));
+    fireEvent.click(screen.getByRole('button',{name:/^第一条消息\s*1 条提问$/}));
     expect(screen.getByRole('textbox',{name:'输入问题'})).toHaveValue('');
-    fireEvent.click(screen.getByRole('button',{name:/新聊天 暂无消息/}));
+    fireEvent.click(screen.getByRole('button',{name:/^新聊天\s*暂无消息$/}));
     expect(screen.getByRole('textbox',{name:'输入问题'})).toHaveValue('第二个聊天的草稿');
   });
   it('supports attachment-only messages and removal',()=>{
