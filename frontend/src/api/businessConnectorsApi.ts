@@ -107,3 +107,21 @@ export async function listBusinessUsage(): Promise<{
     ai: Array<{ connector_id: string; model: string; requests: number; input_tokens: number; output_tokens: number; cost_usd: string | null }>;
   }>(base + "/usage/summary")).data;
 }
+
+export interface AIUsageRow {
+  id: string;
+  connector_id: string;
+  model: string;
+  prompt_version: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: string | null;
+  status: string;
+  error_code: string | null;
+  duration_ms: number | null;
+  created_at: string;
+}
+export async function listAIUsage(): Promise<AIUsageRow[]> {
+  return (await backendRequest<AIUsageRow[]>(base + "/usage/ai")).data;
+}
+
