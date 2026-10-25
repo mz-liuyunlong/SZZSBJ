@@ -155,6 +155,10 @@ export const navigation: NavigationGroup[] = [
     children: [
       page('products', 'product_management', '产品管理', '/products/management'),
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
+      page('products', 'clearance_center', '清货中心', '/products/clearance-center', {
+        status: 'testing', readOnly: true, migrationMode: 'native',
+        viewPermissionKey: 'page:products:product-management:view',
+      }),
       page('products', 'claim_center', '认领中心', '/products/claim-center'),
       page('products', 'new_product_analysis', '新品分析', '/products/new-product-analysis'),
       page('products', 'lifecycle', '产品生命周期', '/products/lifecycle'),
