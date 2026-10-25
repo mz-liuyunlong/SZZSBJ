@@ -11,5 +11,8 @@ const word:MarketKeyword={id:'drawer organizer',term:'drawer organizer',normaliz
 describe('keyword planning model',()=>{
  it('normalizes case/spacing and ASINs safely',()=>{expect(normalizeTerm('  Drawer   Organizer  ')).toBe('drawer organizer');expect(parseAsins('B012345678\nB012345678\nINVALID\nB012345679')).toEqual({valid:['B012345678','B012345679'],invalid:['INVALID']})});
  it('checks rules and preserves SKU-specific scores',()=>{expect(ruleErrors(initialRules)).toEqual([]);const risk=analyzeKeyword({...word,id:'bamboo drawer organizer',term:'bamboo drawer organizer',normalized:'bamboo drawer organizer'},fixtureSkus[0],initialRules);expect(risk.grade).toBe('不投放');const baseline=analyzeKeyword(word,fixtureSkus[0],initialRules);const other=analyzeKeyword(word,fixtureSkus[1],initialRules);expect(baseline.skuId).not.toBe(other.skuId)});
+ it('does not require unapproved ad execution values for internal analysis rules',()=>{
+  expect(ruleErrors({...initialRules,bid:{exact:0,broad:0,auto:0,dailyBudget:0,startDate:''}})).toEqual([]);
+ });
  it('enforces Exact/Broad caps on recommendations',()=>{const plan=selectPlan(Array.from({length:30},(_,i)=>({...analyzeKeyword(word,fixtureSkus[0],initialRules),keywordId:String(i),grade:'P0' as const,score:99-i})),initialRules);expect(plan.filter(x=>x.exact).length).toBeLessThanOrEqual(initialRules.limits.exact);expect(plan.filter(x=>x.broad).length).toBeLessThanOrEqual(initialRules.limits.broad)});
 });

@@ -3,9 +3,10 @@ import {Alert,Button,Card,Descriptions,Form,Input,InputNumber,Modal,Space,Switch
 import {DiffOutlined} from '@ant-design/icons';
 import {ProTable} from '@ant-design/pro-components';
 import {analyzeKeyword,initialRules,ruleErrors} from '@/features/keyword-planning/model';
+import {displayRule,loadEffectiveRule} from '@/features/keyword-planning/effectiveRule';
 import {useKeywordStore} from '@/features/keyword-planning/store';
 import type {RuleConfig,RuleHistory} from '@/features/keyword-planning/types';
-import {createKeywordRuleDraft,createKeywordRuleSet,listKeywordRuleSets,listKeywordRuleVersions,saveKeywordRuleDraft,type KeywordRuleVersion,type KeywordDraftLimits} from '@/api/keywordPlanningV11Api';
+import {createKeywordRuleDraft,createKeywordRuleSet,listKeywordRuleSets,listKeywordRuleVersions,saveKeywordRuleDraft,type KeywordDraftLimits} from '@/api/keywordPlanningV11Api';
 import './KeywordRulesPage.css';
 type Group='weights'|'thresholds'|'limits'|'asin'|'bid'|'naming'|'listing'|'export';
 const labels:Record<Group,string>={weights:'评分权重',thresholds:'分级阈值',limits:'投放名额',asin:'Amazon 参考',bid:'出价预算',naming:'Campaign 命名',listing:'Listing 规则',export:'Excel 配置'};
@@ -28,13 +29,6 @@ function editField(rule:RuleConfig,group:Group,key:string,value:string|number):R
 const limitsFromRule=(r:RuleConfig):KeywordDraftLimits=>({max_p0:r.limits.p0,max_p1:r.limits.p1,
  max_p2:r.limits.p2,max_exact:r.limits.exact,max_broad_roots:r.limits.roots,
  max_broad_long_tails:Math.max(0,r.limits.broad-r.limits.roots)});
-const storedRule=(row:KeywordRuleVersion):RuleConfig|null=>{
- const value=row.config.editor_config;
- if(!value||typeof value!=='object'||Array.isArray(value))return null;
- const r=value as RuleConfig;
- return r.weights&&r.thresholds&&r.limits&&r.asin&&r.bid&&r.naming&&r.listing&&r.export
-   ?{...r,version:row.version_number}:null;
-};
 export function KeywordRulesPanel({sourceAccountRef}:{sourceAccountRef?:string|null}){
  const {rules,draft,history,changeDraft,resetDraft,rollback,keywords,skus}=useKeywordStore();
  const [tab,setTab]=useState('score');const [compare,setCompare]=useState(false);const [testOpen,setTestOpen]=useState(false);
@@ -48,21 +42,22 @@ export function KeywordRulesPanel({sourceAccountRef}:{sourceAccountRef?:string|n
    setRuleSetId(null);setDraftVersionId(null);
   }});
   if(!sourceAccountRef)return()=>{live=false};
-  void listKeywordRuleSets(sourceAccountRef).then(async sets=>{
+  void Promise.all([listKeywordRuleSets(sourceAccountRef),loadEffectiveRule(sourceAccountRef)]).then(async([sets,current])=>{
    const selected=sets.find(row=>row.rule_key==='keyword_v11_ui');
-   if(!selected||!live)return;
-   const versions=await listKeywordRuleVersions(sourceAccountRef,selected.rule_set_id);
+   const versions=selected?await listKeywordRuleVersions(sourceAccountRef,selected.rule_set_id):[];
    if(!live)return;
-   setRuleSetId(selected.rule_set_id);
-   const published=versions.find(row=>row.status==='published'&&storedRule(row));
-   const open=versions.find(row=>row.status==='draft'&&storedRule(row));
-   const savedHistory:RuleHistory[]=versions.flatMap(row=>{
-    const rule=storedRule(row);
+   setRuleSetId(selected?.rule_set_id??null);
+   const open=versions.find(row=>row.status==='draft'&&displayRule(row));
+   const historyVersions=versions.length?versions:current?[current.version]:[];
+   const savedHistory:RuleHistory[]=historyVersions.flatMap(row=>{
+    const rule=displayRule(row);
     return rule?[{version:row.version_number,at:row.created_at??'',
       reason:row.status,rule}]:[];
    });
-   useKeywordStore.setState({rules:published?storedRule(published)!:structuredClone(initialRules),
-     draft:open?storedRule(open):null,history:savedHistory});
+   const active=current?displayRule(current.version):null;
+   if(!active){message.error('后端尚无可用的生效规则');return;}
+   useKeywordStore.setState({rules:active,
+     draft:open?displayRule(open):null,history:savedHistory});
    setDraftVersionId(open?.version_id??null);
   }).catch(()=>{if(live)message.error('规则版本加载失败')});
   return()=>{live=false};

@@ -213,6 +213,7 @@ def list_rule_versions(
                     "config_sha256": row.config_sha256,
                     "config": row.config_json,
                     "created_at": row.created_at.isoformat() if row.created_at else None,
+                    "published_at": row.published_at.isoformat() if row.published_at else None,
                     "publish_eligible": False,  # never infer approval from a version list
                 }
                 for row in versions

@@ -59,6 +59,7 @@ class Session:
             store_id="store-1",
         )
         self.version = NS(
+            id=RULE,
             status="published",
             config_json={
                 "limits": asdict(ColdStartLimits()),
@@ -110,7 +111,7 @@ class Session:
     def scalar(self, stmt):
         self.scalar_index += 1
         values = (
-            [self.fact, self.page, None, self.upload]
+            [self.fact, self.page, self.version, None, self.upload]
             if self.version.status == "published"
             else [self.fact, self.page, self.upload]
         )
@@ -225,11 +226,18 @@ def test_unverified_page_blocks():
         prepare(s)
 
 
-def test_draft_rule_allows_internal_review_only():
+def test_draft_rule_cannot_be_used_for_analysis():
     s = Session()
     s.version.status = "draft"
-    _, _, policy = prepare(s)
-    assert policy.status == "draft"
+    with pytest.raises(AnalysisBlocked, match="RULE_VERSION_NOT_AVAILABLE"):
+        prepare(s)
+
+
+def test_noncurrent_published_rule_cannot_be_used_for_new_analysis():
+    s = Session()
+    s.version.id = uuid4()
+    with pytest.raises(AnalysisBlocked, match="RULE_VERSION_NOT_CURRENT"):
+        prepare(s)
 
 
 def test_retired_rule_blocks():

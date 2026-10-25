@@ -24,6 +24,7 @@ from .analysis_execution import (
     calculate_input_sha256,
     execute_reviewed_analysis,
 )
+from .effective_rule import effective_scoring_rule
 from .models import (
     AiKwProductFactSnapshot,
     AiKwRuleDecision,
@@ -116,8 +117,11 @@ def prepare_verified_analysis(
         raise AnalysisBlocked("FROZEN_FACT_DOCUMENT_INVALID") from exc
 
     version = session.get(AiKwRuleVersion, rule_version_id)
-    if version is None or version.status not in ("published", "draft"):
+    if version is None or version.status != "published":
         raise AnalysisBlocked("RULE_VERSION_NOT_AVAILABLE")
+    current = effective_scoring_rule(session, account)
+    if current is None or current.id != rule_version_id:
+        raise AnalysisBlocked("RULE_VERSION_NOT_CURRENT")
     cfg = version.config_json
     if not isinstance(cfg, dict):
         raise AnalysisBlocked("RULE_CONFIGURATION_INVALID")

@@ -32,7 +32,10 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import ListingManagementCurrentMart
-from app.modules.keyword_planning.analysis_entrypoint import prepare_verified_analysis
+from app.modules.keyword_planning.analysis_entrypoint import (
+    create_analysis_from_stored_sources,
+    prepare_verified_analysis,
+)
 from app.modules.keyword_planning.analysis_execution import (
     AnalysisBlocked,
     AnalysisCommand,
@@ -41,6 +44,7 @@ from app.modules.keyword_planning.analysis_execution import (
     calculate_input_sha256,
     execute_reviewed_analysis,
 )
+from app.modules.keyword_planning.effective_rule import effective_scoring_rule
 from app.modules.keyword_planning.models import (
     AiKwAnalysisRun,
     AiKwProductFactSnapshot,
@@ -194,6 +198,31 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             upgrade = approval_migration["upgrade"]
             upgrade.__globals__["op"] = Operations(MigrationContext.configure(connection))
             upgrade()
+            default_migration = runpy.run_path(
+                str(
+                    Path(__file__).resolve().parents[3]
+                    / "alembic/versions/20261025_0058_keyword_internal_default.py"
+                )
+            )
+            install_default = default_migration["upgrade"]
+            install_default.__globals__["op"] = Operations(MigrationContext.configure(connection))
+            install_default()
+            install_default()  # Idempotent even when retried.
+
+        with Session(engine) as session:
+            baseline = effective_scoring_rule(session, "fresh-synthetic-account")
+            assert baseline is not None
+            assert baseline.version_number == 1
+            assert baseline.config_json["purpose"] == "internal_analysis_and_manual_review_only"
+            assert baseline.config_json["editor_config"]["bid"]["dailyBudget"] == 0
+            assert (
+                session.scalar(
+                    select(func.count())
+                    .select_from(AiKwRuleSet)
+                    .where(AiKwRuleSet.rule_key == "keyword_v11_internal_default")
+                )
+                == 1
+            )
 
         product_id = uuid4()
         second_product_id = uuid4()
@@ -223,6 +252,7 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             "limits": asdict(ColdStartLimits()),
             "confirmed_brands": {},
             "suspected_brands": {},
+            "editor_config": default_migration["CONFIG"]["editor_config"],
         }
         now = datetime.now(UTC)
         with Session(engine) as session, session.begin():
@@ -420,6 +450,8 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
             )
 
         with Session(engine) as session:
+            assert effective_scoring_rule(session, account).id == rule_id
+            assert effective_scoring_rule(session, "fresh-synthetic-account").id != rule_id
             prepared, _, _ = prepare_verified_analysis(
                 session,
                 account=account,
@@ -648,7 +680,38 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                     reopened.json()["data"]["items"][0]["config"]["editor_config"]["riskWords"]
                     == "synthetic review"
                 )
+                app.dependency_overrides[get_optional_principal] = lambda: Principal(
+                    user_id="ordinary-operator",
+                    permissions=frozenset({"products:read", "products:write"}),
+                )
+                visible = client.get(f"{base}/rulesets", params=params)
+                assert visible.status_code == 200
+                assert any(
+                    row["rule_key"] == "keyword_v11_internal_default"
+                    for row in visible.json()["data"]["items"]
+                )
+                assert (
+                    client.post(
+                        f"{base}/rulesets",
+                        json={
+                            "source_account_ref": account,
+                            "rule_key": "unauthorized_rule",
+                            "display_name": "Unauthorized",
+                        },
+                    ).status_code
+                    == 403
+                )
+                assert (
+                    client.post(
+                        f"{base}/rules/{ui_version_id}/publish",
+                        json={"source_account_ref": account},
+                    ).status_code
+                    == 403
+                )
             finally:
+                app.dependency_overrides[get_optional_principal] = lambda: Principal(
+                    user_id=actor, permissions=frozenset({"*"})
+                )
                 if previous_write_flag is None:
                     os.environ.pop("KEYWORD_V11_WRITE_ENABLED", None)
                 else:
@@ -723,6 +786,41 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                     shutil.rmtree(private_root)
         finally:
             app.dependency_overrides.clear()
+        with Session(engine) as session, session.begin():
+            old_runs = {
+                row.id: row.rule_version_id
+                for row in session.scalars(
+                    select(AiKwAnalysisRun).where(AiKwAnalysisRun.source_account_ref == account)
+                )
+            }
+            session.get(AiKwRuleSet, ruleset_id).is_enabled = False
+        with Session(engine) as session:
+            baseline = effective_scoring_rule(session, account)
+            assert baseline is not None and baseline.id != rule_id
+            baseline_id = baseline.id
+            session.rollback()
+            receipt = create_analysis_from_stored_sources(
+                session,
+                account=account,
+                product_id=product_id,
+                item_id=item,
+                fact_id=fact_id,
+                rule_version_id=baseline_id,
+                upload_id=file_id,
+                request_key="system-default-internal-analysis",
+                actor="ordinary-operator",
+                selected_asins=("B000000001", "B000000002", "B000000003"),
+            )
+            assert receipt.created
+        with Session(engine) as session:
+            new_run = session.get(AiKwAnalysisRun, receipt.run_id)
+            assert new_run.rule_version_id == baseline_id
+            assert {
+                row.id: row.rule_version_id
+                for row in session.scalars(
+                    select(AiKwAnalysisRun).where(AiKwAnalysisRun.id.in_(old_runs))
+                )
+            } == old_runs
         with Session(engine) as session:
             approval_set = create_scoring_ruleset(
                 session,
@@ -797,6 +895,8 @@ def test_real_postgres_analysis_idempotency_and_rollback() -> None:
                 actor="publisher",
             )
             assert published.status == "published"
+        with Session(engine) as session:
+            assert effective_scoring_rule(session, "approval-synthetic").id == draft.id
         with engine.connect() as connection:
             assert (
                 connection.exec_driver_sql("SELECT count(*) FROM ai_kw_rule_decision").scalar_one()

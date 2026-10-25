@@ -31,7 +31,8 @@ export function ruleErrors(rule:RuleConfig):string[]{
   if(rule.limits.p0+rule.limits.p1>rule.limits.exact)e.push('P0 + P1 计划名额不得超过 Exact 最大数量');
   if(rule.asin.min<1||rule.asin.recommend<rule.asin.min||rule.asin.max<rule.asin.recommend)e.push('ASIN 数量顺序不合法');
   if(Object.values({exact:rule.bid.exact,broad:rule.bid.broad,auto:rule.bid.auto,dailyBudget:rule.bid.dailyBudget}).some(v=>!Number.isFinite(v)||v<0))e.push('Bid / Budget 不得为负数');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(rule.bid.startDate??'')||Number.isNaN(Date.parse(rule.bid.startDate??'')))e.push('请在出价预算规则中设置有效的美国开始日期');
+  if((rule.bid.startDate||rule.bid.exact>0||rule.bid.broad>0||rule.bid.auto>0||rule.bid.dailyBudget>0)
+    &&(!/^\d{4}-\d{2}-\d{2}$/.test(rule.bid.startDate??'')||Number.isNaN(Date.parse(rule.bid.startDate??''))))e.push('请在出价预算规则中设置有效的美国开始日期');
   if(rule.listing.features<1||rule.listing.features>15)e.push('Key Features 条数应在 1–15');
   return e;
 }

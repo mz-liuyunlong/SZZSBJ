@@ -16,13 +16,14 @@ import type {NavigationPage} from '@/config/navigation';
 import {KeywordTextCell} from '@/features/keyword-planning/components/KeywordTextCell';
 import {useKeywordStore} from '@/features/keyword-planning/store';
 import {countText,dollarText,parseAsins} from '@/features/keyword-planning/model';
+import {displayRule,loadEffectiveRule} from '@/features/keyword-planning/effectiveRule';
 import {parseSellerSprite} from '@/features/keyword-planning/importWorkbook';
 import type {MarketKeyword,SkuKeyword,SkuDefinition} from '@/features/keyword-planning/types';
 import type {ProductManagementRow} from '@/pages/products/productManagementTypes';
 import type {ListingCandidate} from '@/features/keyword-planning/keywordProductLookup';
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
-import {confirmStoredKeywordFacts,createKeywordAnalysis,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuleSets,listKeywordRuleVersions,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun} from '@/api/keywordPlanningV11Api';
+import {confirmStoredKeywordFacts,createKeywordAnalysis,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun} from '@/api/keywordPlanningV11Api';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
 
@@ -94,6 +95,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const [historyTotal,setHistoryTotal]=useState(0);
  const [historyPage,setHistoryPage]=useState(1);
  const [sourceError,setSourceError]=useState('');
+ const [currentRuleVersionId,setCurrentRuleVersionId]=useState<string|null>(null);
 
  const [pendingSelection,setPendingSelection]=useState<ConfirmedSelection|null>(null);
  const [walmartError,setWalmartError]=useState(false);
@@ -135,6 +137,18 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const listingId=itemManual?null:selectedListing?String(selectedListing.listing.id):null;
  const listingStore=itemManual?null:selectedListing?.listing.store??null;
  const sourceAccountRef=selectedListing?.listing.sourceAccountRef??null;
+ useEffect(()=>{
+   let live=true;
+   queueMicrotask(()=>{if(live)setCurrentRuleVersionId(null)});
+   if(sourceAccountRef)void loadEffectiveRule(sourceAccountRef).then(current=>{
+     if(!live)return;
+     const parsed=current?displayRule(current.version):null;
+     if(!parsed){setCurrentRuleVersionId(null);return;}
+     useKeywordStore.setState({rules:parsed});
+     setCurrentRuleVersionId(current.version.version_id);
+   }).catch(()=>{if(live)setCurrentRuleVersionId(null)});
+   return()=>{live=false};
+ },[sourceAccountRef]);
  const productConfirmed=Boolean(productConfirmation
    && productConfirmation.skuId===sku.id
    && productConfirmation.itemId===itemId
@@ -145,22 +159,13 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const step02Unlocked=productConfirmed||productPending;
  const canConfirmProduct=Boolean(sku.id&&sourceAccountRef)&&/^\d{1,20}$/.test(itemId)&&!listingLoading&&!confirmingProduct&&Boolean(selectedListing);
  // Confirmation of item identity and final analysis parameters are separate gates.
- const inputsComplete=step02Unlocked&&Boolean(staged)&&parsedAsins.invalid.length===0&&parsedAsins.valid.length>=rules.asin.min;
+ const inputsComplete=step02Unlocked&&Boolean(staged)&&Boolean(currentRuleVersionId)&&parsedAsins.invalid.length===0&&parsedAsins.valid.length>=rules.asin.min;
  const ready=productConfirmed&&inputsComplete;
  const rulesDate=rules.bid.startDate??'';
- const validDate=/^\d{4}-\d{2}-\d{2}$/.test(rulesDate)
-   &&!Number.isNaN(Date.parse(rulesDate));
  const missingRequired=[
    ...requiredProductFields
      .filter(({key})=>!filledFact(facts[key]))
      .map(({label})=>label),
-   ...(!Number.isFinite(rules.bid.exact)||rules.bid.exact<=0
-     ?['Manual Bid']:[]),
-   ...(!Number.isFinite(rules.bid.auto)||rules.bid.auto<=0
-     ?['Auto Bid']:[]),
-   ...(!Number.isFinite(rules.bid.dailyBudget)||rules.bid.dailyBudget<=0
-     ?['每日预算']:[]),
-   ...(!validDate?['Start Date（请在规则配置设置）']:[]),
  ];
  const parametersComplete=missingRequired.length===0;
  const waitingForWalmart=productPending&&inputsComplete;
@@ -528,12 +533,14 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
            asin:doc.asin,decodo_snapshot_id:doc.snapshot_id!});
        }
      }
-     const ruleSets=await listKeywordRuleSets(sourceAccountRef);
-     const versions=(await Promise.all(ruleSets.filter(x=>x.is_enabled).map(x=>listKeywordRuleVersions(sourceAccountRef,x.rule_set_id)))).flat();
-     const published=versions.filter(x=>x.status==='published').sort((a,b)=>b.version_number-a.version_number)[0];
+     const published=await loadEffectiveRule(sourceAccountRef);
      if(!published)throw new Error('PUBLISHED_RULE_REQUIRED');
+     const serverRule=displayRule(published.version);
+     if(!serverRule)throw new Error('RULE_CONFIGURATION_INVALID');
+     useKeywordStore.setState({rules:serverRule});
+     setCurrentRuleVersionId(published.version.version_id);
      const input={source_account_ref:sourceAccountRef,product_id:targetSku,item_id:itemId,
-       product_fact_snapshot_id:factId,rule_version_id:published.version_id,
+       product_fact_snapshot_id:factId,rule_version_id:published.version.version_id,
        upload_file_id:storedUpload.id,selected_asins:asinsForRun};
      const preflight=await preflightKeywordAnalysis(input);
      if(!preflight.can_create_review_run)throw new Error(preflight.review_reason_codes.join('、'));
@@ -855,7 +862,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
      {resultsTab==='plan'?<>
       <Alert type="warning" showIcon message="下面是已保存分析的内部投放候选；不是 Walmart 官方出价，也不会执行广告。"/>
       <div className="kw-v2-plan-stats"><Metric symbol="E" label="Exact 计划词" value={rows.filter(r=>r.entry.exact).length} hint="已保存分析"/><Metric symbol="B" label="Broad 计划词" value={rows.filter(r=>r.entry.broad).length} hint="已保存分析"/><Metric symbol="$" label="手动 Bid" value={dollarText(rules.bid.exact)} hint="本地规则参数"/><Metric symbol="$" label="自动 Bid" value={dollarText(rules.bid.auto)} hint="本地规则参数"/></div>
-      <div className="kw-v2-plan-layout"><Card size="small" title="本次广告执行目标"><Text strong>店铺 / 账号</Text><Select className="kw-v2-block" value={selectedListing?.listing.store} disabled options={selectedListing?[{label:selectedListing.listing.store,value:selectedListing.listing.store}]:[]}/><div className="kw-v2-muted">当前已选择 Item ID：{itemId||'未选择'}{selectedListing?` · ${selectedListing.listing.store}`:''}</div><Divider/><Text strong>手动 Campaign</Text><div>{sku.sku?sku.sku+'-Manual':'—'}</div><Text strong>自动 Campaign</Text><div>{sku.sku?sku.sku+'-Auto':'—'}</div></Card><Card size="small" title="本地广告参数建议（未执行）"><Descriptions size="small" bordered column={1} items={[{key:'bid',label:'手动 Bid',children:dollarText(rules.bid.exact)},{key:'auto',label:'自动 Bid',children:dollarText(rules.bid.auto)},{key:'budget',label:'手动 / 自动每日预算',children:`$${rules.bid.dailyBudget} / $${rules.bid.dailyBudget}`},{key:'start',label:'美国开始日期',children:rulesDate||'未配置'},{key:'rule',label:'分析规则版本',children:lastAnalysis?.ruleVersionId||'未加载'} ]}/></Card></div>
+      <div className="kw-v2-plan-layout"><Card size="small" title="本次广告执行目标"><Text strong>店铺 / 账号</Text><Select className="kw-v2-block" value={selectedListing?.listing.store} disabled options={selectedListing?[{label:selectedListing.listing.store,value:selectedListing.listing.store}]:[]}/><div className="kw-v2-muted">当前已选择 Item ID：{itemId||'未选择'}{selectedListing?` · ${selectedListing.listing.store}`:''}</div><Divider/><Text strong>手动 Campaign</Text><div>{sku.sku?sku.sku+'-Manual':'—'}</div><Text strong>自动 Campaign</Text><div>{sku.sku?sku.sku+'-Auto':'—'}</div></Card><Card size="small" title="本地广告参数建议（未执行）"><Descriptions size="small" bordered column={1} items={[{key:'bid',label:'手动 Bid',children:currentRuleVersionId&&rules.bid.exact>0?dollarText(rules.bid.exact):'未配置'},{key:'auto',label:'自动 Bid',children:currentRuleVersionId&&rules.bid.auto>0?dollarText(rules.bid.auto):'未配置'},{key:'budget',label:'手动 / 自动每日预算',children:currentRuleVersionId&&rules.bid.dailyBudget>0?`$${rules.bid.dailyBudget} / $${rules.bid.dailyBudget}`:'未配置'},{key:'start',label:'美国开始日期',children:currentRuleVersionId?rulesDate||'未配置':'未加载'},{key:'rule',label:'分析规则版本',children:lastAnalysis?.ruleVersionId||currentRuleVersionId||'未加载'} ]}/></Card></div>
       <div className="kw-v2-exportbar"><Button onClick={()=>csvDownload(`${sku.sku}_分析报告.csv`,['关键词','中文','得分','等级','Exact','Broad','市场搜索量'],filtered.map(({entry:e,keyword:k})=>[k.term,k.translation||'',e.score,e.grade,e.exact?'Y':'N',e.broad?'Y':'N',k.monthlySearches]))}>下载分析报告 CSV</Button><Button type="primary" onClick={downloadAll}>下载五表分析 Excel</Button></div>
      </>:null}
      {resultsTab==='listing'?<div className="kw-v2-listing"><div className="kw-v2-listing-main"><Card size="small" title={`Title · ${effectiveDraft.title.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.title)}>复制</Button>}><Input.TextArea rows={3} value={effectiveDraft.title} onChange={e=>setDraft({...effectiveDraft,title:e.target.value})}/></Card><Card size="small" title={`Key Features · ${effectiveDraft.features.split('\n').filter(Boolean).length} / 5 条`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.features)}>复制</Button>}><Input.TextArea rows={6} value={effectiveDraft.features} onChange={e=>setDraft({...effectiveDraft,features:e.target.value})}/></Card><Card size="small" title={`Description · ${effectiveDraft.description.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.description)}>复制</Button>}><Input.TextArea rows={5} value={effectiveDraft.description} onChange={e=>setDraft({...effectiveDraft,description:e.target.value})}/></Card></div><Card size="small" title="Listing 生成依据"><p className="kw-v2-muted">已核对的商品事实、风险词和当前候选关键词。仅根据人工填写的商品资料生成模板，未调用 AI 文案 API。</p><Alert type="warning" message="模板英文文案必须人工核对，不能直接作为正式 Listing 发布"/><Divider/><Space wrap>{rows.filter(x=>x.entry.exact).slice(0,7).map(x=><Tag key={x.keyword.id}>{x.keyword.term}</Tag>)}</Space><Divider/><Button type="primary" block onClick={makeListing}>生成文案草稿</Button><Button block onClick={()=>{saveListing(sku.id,effectiveDraft);message.success('草稿已保存到当前浏览器会话')}}>保存当前草稿</Button><Button block onClick={()=>csvDownload(`${sku.sku}_Listing.csv`,['字段','文案'],[['Title',effectiveDraft.title],['Key Features',effectiveDraft.features],['Description',effectiveDraft.description]])}>导出 Listing 文案 CSV</Button></Card></div>:null}

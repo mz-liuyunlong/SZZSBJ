@@ -172,6 +172,7 @@ export interface KeywordRuleVersion {
   config_sha256: string;
   config: Record<string, unknown>;
   created_at: string | null;
+  published_at: string | null;
   publish_eligible: boolean;
 }
 

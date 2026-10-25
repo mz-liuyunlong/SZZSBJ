@@ -21,7 +21,7 @@ WALMART_HEAD_REVISION = "20261020_0047_walmart_order_identity_guard"
 DOMESTIC_HEAD_REVISION = "20261022_0053_domestic_packing_production_compat"
 MERGED_HEAD_REVISION = "20261022_0054_merge_walmart_identity_and_domestic_packing"
 KEYWORD_MERGE_REVISION = "20261023_0056_merge_decodo_keyword_heads"
-KEYWORD_HEAD_REVISION = "20261024_0057_keyword_rule_decisions"
+KEYWORD_HEAD_REVISION = "20261025_0058_keyword_internal_default"
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +51,14 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
 
     assert config.get_main_option("sqlalchemy.url") is None
     assert script.get_heads() == [KEYWORD_HEAD_REVISION]
-    assert script.get_revision(KEYWORD_HEAD_REVISION).down_revision == KEYWORD_MERGE_REVISION
+    assert (
+        script.get_revision(KEYWORD_HEAD_REVISION).down_revision
+        == "20261024_0057_keyword_rule_decisions"
+    )
+    assert (
+        script.get_revision("20261024_0057_keyword_rule_decisions").down_revision
+        == KEYWORD_MERGE_REVISION
+    )
     assert set(script.get_revision(KEYWORD_MERGE_REVISION).down_revision) == {
         "20261022_0048_decodo_config_usage",
         "20261022_0048_walmart_monitor_raw_events",
