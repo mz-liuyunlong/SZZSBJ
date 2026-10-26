@@ -259,16 +259,25 @@ def get_keyword_ai_suggestions(
     _check(source_account_ref, accounts, principal)
     _job(session, job_id, source_account_ref, principal)
     batches = session.execute(
-        text("""SELECT output_json FROM ai_runtime_results
-            WHERE job_id=:id AND status='succeeded' ORDER BY batch_index"""),
+        text(
+            """SELECT output_json FROM ai_runtime_results
+            WHERE job_id=:id AND status='succeeded' ORDER BY batch_index"""
+        ),
         {"id": job_id},
     ).scalars().all()
     items = []
     for batch in batches:
         if isinstance(batch, dict) and isinstance(batch.get("items"), list):
             items.extend(
-                {"keyword": x.get("keyword"), "relevance": x.get("relevance"),
-                 "risk": x.get("risk"), "reason": x.get("reason")}
-                for x in batch["items"] if isinstance(x, dict)
+                {
+                    "keyword": x.get("keyword"),
+                    "relevance": x.get("relevance"),
+                    "risk": x.get("risk"),
+                    "reason": x.get("reason"),
+                }
+                for x in batch["items"]
+                if isinstance(x, dict)
             )
-    return success_response(request, data={"items": items, "total": len(items), "advisory_only": True})
+    return success_response(
+        request, data={"items": items, "total": len(items), "advisory_only": True}
+    )
