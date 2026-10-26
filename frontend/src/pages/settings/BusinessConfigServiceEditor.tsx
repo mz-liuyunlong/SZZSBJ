@@ -58,9 +58,10 @@ export default function BusinessConfigServiceEditor({
       endpoint: "",
       credential: "",
       signing_secret: "",
-      default_model: connector?.config.default_model ?? "gpt-4.1-mini",
+      default_model: "gpt-6-luna",
       backup_model: connector?.config.backup_model ?? "",
-      model_allowlist: connector?.config.model_allowlist ?? ["gpt-4.1-mini"],
+      model_allowlist: ["gpt-6-luna"],
+      application_scenes: connector?.config.application_scenes ?? ["keyword_launch", "ai_assistant", "listing_optimization"],
       daily_limit: connector?.config.daily_limit ?? 100,
       monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 0),
       max_output_tokens: connector?.config.max_output_tokens ?? 1024,
@@ -127,7 +128,8 @@ export default function BusinessConfigServiceEditor({
           signing_secret: data.signing_secret?.trim() || undefined,
           default_model: data.choice === "openai" ? data.default_model : undefined,
           backup_model: data.choice === "openai" ? data.backup_model : undefined,
-          model_allowlist: data.choice === "openai" ? data.model_allowlist : [],
+          model_allowlist: data.choice === "openai" ? ["gpt-6-luna"] : [],
+          application_scenes: data.choice === "openai" ? data.application_scenes ?? [] : [],
           daily_limit: data.daily_limit,
           monthly_budget_usd: data.monthly_budget_usd ?? 0,
           max_output_tokens: data.max_output_tokens,
@@ -209,12 +211,19 @@ export default function BusinessConfigServiceEditor({
             <Input.Password autoComplete="new-password" placeholder="已配置时可留空，保持原密钥" />
           </Form.Item>
           <Form.Item name="default_model" label="默认模型" rules={[{ required: true }]}>
-            <Input maxLength={100} />
+            <Input readOnly />
           </Form.Item>
-          <Form.Item name="backup_model" label="备用模型"><Input maxLength={100} /></Form.Item>
-          <Form.Item name="model_allowlist" label="模型白名单" rules={[{ required: true }]}>
-            <Select mode="tags" tokenSeparators={[","]} />
+          <Form.Item name="application_scenes" label="应用场景（多选）">
+            <Select mode="multiple" options={[
+              { value: "keyword_launch", label: "关键词投放" },
+              { value: "ai_assistant", label: "AI 助手" },
+              { value: "listing_optimization", label: "Listing 优化" },
+              { value: "ads_optimization", label: "广告优化（预留）" },
+              { value: "product_research", label: "智能选品（预留）" },
+            ]} />
           </Form.Item>
+          <Form.Item name="backup_model" hidden><Input /></Form.Item>
+          <Form.Item name="model_allowlist" hidden><Select mode="tags" /></Form.Item>
           <Form.Item name="max_output_tokens" label="最大输出 Token">
             <InputNumber min={1} max={16384} style={{ width: "100%" }} />
           </Form.Item>
