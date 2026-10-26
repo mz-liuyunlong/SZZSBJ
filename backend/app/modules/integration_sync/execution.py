@@ -373,7 +373,9 @@ class SyncRunExecutionService:
                     heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 )
                 try:
-                    summary = self._execute_data_pages_interface(run.interface_key, runner, run_id=run.id)
+                    summary = self._execute_data_pages_interface(
+                        run.interface_key, runner, run_id=run.id
+                    )
                 except DataPagesMartInvariantError as error:
                     self.session.rollback()
                     active_run = self.repository.get_run_for_update(run.id)
@@ -422,7 +424,9 @@ class SyncRunExecutionService:
         completed.error_message = (
             "退款事实已保存，但历史利润校验失败"
             if mart_failures and run.interface_key == "walmartReturnOrderList"
-            else "同步业务日校验失败" if mart_failures else None
+            else "同步业务日校验失败"
+            if mart_failures
+            else None
         )
         self._event(
             completed.id,

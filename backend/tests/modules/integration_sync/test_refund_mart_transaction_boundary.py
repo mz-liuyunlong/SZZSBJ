@@ -44,9 +44,7 @@ def test_refund_facts_commit_before_mart_failure() -> None:
     run_id = uuid4()
 
     with pytest.raises(DataPagesMartInvariantError):
-        service._execute_data_pages_interface(
-            "walmartReturnOrderList", runner, run_id=run_id
-        )
+        service._execute_data_pages_interface("walmartReturnOrderList", runner, run_id=run_id)
 
     runner._write_refunds.assert_called_once()
     runner._reprice_refunds.assert_called_once()
@@ -70,12 +68,8 @@ def test_refund_provider_permission_denied_does_not_commit() -> None:
     service._event = MagicMock()
     runner = _refund_runner(provider_denied=True)
 
-    with pytest.raises(
-        DataPagesRealSyncError, match="DATA_PAGES_REFUND_PERMISSION_DENIED"
-    ):
-        service._execute_data_pages_interface(
-            "walmartReturnOrderList", runner, run_id=uuid4()
-        )
+    with pytest.raises(DataPagesRealSyncError, match="DATA_PAGES_REFUND_PERMISSION_DENIED"):
+        service._execute_data_pages_interface("walmartReturnOrderList", runner, run_id=uuid4())
 
     runner._write_refunds.assert_not_called()
     service._event.assert_not_called()
