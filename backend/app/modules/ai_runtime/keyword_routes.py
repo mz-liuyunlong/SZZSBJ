@@ -109,3 +109,22 @@ def cancel_keyword_ai_job(job_id:UUID,request:Request,source_account_ref:Annotat
       WHERE id=:id AND status IN ('queued','running')"""),{"id":job_id})
     session.commit()
     return success_response(request,data=_read(_job(session,job_id,source_account_ref,principal)))
+
+@router.post("/{job_id}/retry",response_model=SuccessEnvelope[JobResponse,None])
+def retry_keyword_ai_job(job_id:UUID,request:Request,source_account_ref:Annotated[str,Query(min_length=1)],
+    session:Annotated[Session,Depends(get_db_session)],accounts:scope_dep,principal:write_perm):
+    _check(source_account_ref,accounts,principal)
+    _require_opted_in_writes()
+    row=_job(session,job_id,source_account_ref,principal)
+    if row["status"] not in ("failed","partial_success"):
+        raise ApiError(code=ErrorCode.INVALID_REQUEST,status_code=409)
+    session.execute(text("""UPDATE ai_runtime_jobs SET status='queued',phase='queued',error_code=NULL,
+      started_at=NULL,finished_at=NULL,lease_until=NULL,progress=0,failed=0,
+      completed=0 WHERE id=:id"""),{"id":job_id})
+    session.commit()
+    from app.modules.ai_runtime.tasks import execute_keyword_ai_job
+    try:
+        execute_keyword_ai_job.apply_async(args=[str(job_id)],queue=AI_QUEUE,routing_key=AI_QUEUE)
+    except Exception:
+        pass
+    return success_response(request,data=_read(_job(session,job_id,source_account_ref,principal)))

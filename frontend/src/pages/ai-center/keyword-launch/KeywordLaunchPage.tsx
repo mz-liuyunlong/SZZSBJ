@@ -23,7 +23,7 @@ import type {ProductManagementRow} from '@/pages/products/productManagementTypes
 import type {ListingCandidate} from '@/features/keyword-planning/keywordProductLookup';
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
-import {confirmStoredKeywordFacts,submitKeywordAiJob,listKeywordAiJobs,cancelKeywordAiJob,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun,type KeywordAiJob} from '@/api/keywordPlanningV11Api';
+import {confirmStoredKeywordFacts,submitKeywordAiJob,listKeywordAiJobs,cancelKeywordAiJob,retryKeywordAiJob,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun,type KeywordAiJob} from '@/api/keywordPlanningV11Api';
 import {BackendRequestError,backendRequest} from '@/api/backendApi';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
@@ -495,12 +495,19 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    return()=>window.clearInterval(timer);
  },[sourceAccountRef,aiTasksOpen]);
  const openAiTaskResult=async(job:KeywordAiJob,target:'keywords'|'plan'|'listing')=>{
-   if(job.product_id!==sku.id){message.info('请先选择对应 SKU，再打开此任务结果');return;}
    if(!job.run_id||!sourceAccountRef){message.warning('分析结果尚未生成');return;}
    try{
+     if(job.product_id!==sku.id){
+       const known=skus.find(x=>x.id===job.product_id);
+       if(!known){message.warning('请先搜索并选择该 SKU，再打开结果');return;}
+       const candidates=await searchProductsBySku(known.sku);
+       const product=candidates.find(x=>x.id===job.product_id);
+       if(!product){message.warning('无法读取对应 SKU 的产品资料');return;}
+       await pickProduct(product.id,product);
+     }
      const run=await getKeywordRun(job.run_id,sourceAccountRef);
      const result=await loadAllRunKeywords(job.run_id,sourceAccountRef);
-     installServerRun(sku.id,run,result);setActiveRunId(run.run_id);
+     installServerRun(job.product_id,run,result);setActiveRunId(run.run_id);
      setEditing(false);setResultsTab(target);setAiTasksOpen(false);
    }catch{message.error('读取任务结果失败');}
  };
@@ -1069,6 +1076,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
             <Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'plan')}>投放方案</Button>
             <Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'listing')}>Listing 文案</Button></>:null}
           {['queued','running'].includes(r.status)?<Button danger size="small" onClick={()=>void cancelKeywordAiJob(r.id,r.source_account_ref).then(()=>reloadAiTasks())}>取消</Button>:null}
+          {['failed','partial_success'].includes(r.status)?<Button size="small" onClick={()=>void retryKeywordAiJob(r.id,r.source_account_ref).then(()=>reloadAiTasks())}>重试失败部分</Button>:null}
         </Space>},
       ]}/>
   </Drawer>

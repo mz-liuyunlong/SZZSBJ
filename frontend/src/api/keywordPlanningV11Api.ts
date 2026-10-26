@@ -445,3 +445,5 @@ export const listKeywordAiJobs=async(account:string):Promise<KeywordAiJob[]> =>
   (await backendRequest<{items:KeywordAiJob[];total:number}>(`${API}/ai-tasks?${query(account)}`)).data.items;
 export const cancelKeywordAiJob=async(id:string,account:string):Promise<KeywordAiJob>=>
   (await backendRequest<KeywordAiJob>(`${API}/ai-tasks/${id}/cancel?${query(account)}`,{method:'POST'})).data;
+export const retryKeywordAiJob=async(id:string,account:string):Promise<KeywordAiJob>=>
+  (await backendRequest<KeywordAiJob>(`${API}/ai-tasks/${id}/retry?${query(account)}`,{method:'POST'})).data;
