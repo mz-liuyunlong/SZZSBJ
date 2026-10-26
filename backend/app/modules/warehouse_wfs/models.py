@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Numeric,
     String,
@@ -50,6 +51,10 @@ class WalmartWfsFeeActualFact(Base):
     item_id: Mapped[str] = mapped_column(String(128), nullable=False)
     msku: Mapped[str] = mapped_column(Text, nullable=False)
     source_line_ref: Mapped[str] = mapped_column(String(255), nullable=False)
+    platform_order_no: Mapped[str | None] = mapped_column(String(255))
+    sales_num: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    platform_logistics_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    settlement_date: Mapped[date | None] = mapped_column(Date)
     actual_fee_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     currency_code: Mapped[str] = mapped_column(
         String(3), default="USD", server_default=text("'USD'"), nullable=False
@@ -61,6 +66,9 @@ class WalmartWfsFeeActualFact(Base):
         nullable=False,
     )
     source_observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_raw_request_ref_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
@@ -161,6 +169,16 @@ class WfsFeeAnomalyCase(Base):
     )
     estimate_formula: Mapped[str | None] = mapped_column(String(128))
     estimate_calculated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    valid_sample_units: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    valid_fee_orders: Mapped[int | None]
+    mode_count: Mapped[int | None]
+    theoretical_overcharge_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    net_sample_difference_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    latest_settlement_date: Mapped[date | None] = mapped_column(Date)
+    detection_status: Mapped[str | None] = mapped_column(String(64))
+    data_freshness_status: Mapped[str | None] = mapped_column(String(32))
+    standard_fee_source: Mapped[str | None] = mapped_column(String(64))
+    detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     claim_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     recovered_amount: Mapped[Decimal] = mapped_column(
@@ -185,7 +203,7 @@ class WfsFeeAnomalyCase(Base):
     reopen_count: Mapped[int] = mapped_column(default=0, server_default=text("0"), nullable=False)
 
     case_nos: Mapped[str | None] = mapped_column(Text)
-    case_numbers_json: Mapped[list] = mapped_column(
+    case_numbers_json: Mapped[list[str]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb"), nullable=False
     )
     follow_log: Mapped[str | None] = mapped_column(Text)

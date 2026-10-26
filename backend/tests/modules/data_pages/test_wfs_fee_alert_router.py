@@ -11,6 +11,7 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.warehouse_wfs.automation_service import WfsBatchDetectionPreview
 from app.modules.warehouse_wfs.schemas import (
     WfsFeeAlertListData,
     WfsFeeAlertRead,
@@ -75,6 +76,7 @@ def test_wfs_fee_case_routes_are_registered_without_profit_mutation_endpoint() -
     assert "/api/warehouse/wfs-fee-cases/{case_id}/archive-review" in paths
     assert "/api/warehouse/wfs-fee-cases/{case_id}/mark-recovered" in paths
     assert "/api/warehouse/wfs-fee-alerts/{case_id}/case" in paths
+    assert "/api/warehouse/wfs-fee-alerts/detection-preview" in paths
     assert "/api/warehouse/wfs-fee-actuals" not in paths
 
 
@@ -131,3 +133,47 @@ def test_wfs_case_write_uses_page_specific_follow_permission(monkeypatch: Any) -
     )
     assert response.status_code == 200
     assert captured["actor_ref"] == "synthetic-user"
+
+
+def test_detection_preview_is_super_admin_only_and_read_only(monkeypatch: Any) -> None:
+    denied = TestClient(_app("page:warehouse:wfs-fee-alert:view")).post(
+        "/api/warehouse/wfs-fee-alerts/detection-preview",
+        json={"start_date": "2026-08-19", "end_date": "2026-10-17"},
+    )
+    assert denied.status_code == 403
+
+    captured: dict[str, object] = {}
+
+    def preview(session: Session, **kwargs: Any) -> WfsBatchDetectionPreview:
+        assert session is not None
+        captured.update(kwargs)
+        return WfsBatchDetectionPreview(
+            scanned_accounts=1,
+            scanned_stores=1,
+            scanned_skus=2,
+            valid_samples=1,
+            overcharge_candidates=1,
+            would_create=1,
+            already_exists=0,
+            review_required=0,
+            skipped=1,
+            failed=0,
+            stores=(),
+        )
+
+    monkeypatch.setattr(
+        "app.modules.warehouse_wfs.router.preview_persisted_wfs_detection",
+        preview,
+    )
+    monkeypatch.setattr(
+        "app.modules.warehouse_wfs.router.get_settings",
+        lambda: MagicMock(),
+    )
+    response = TestClient(_app("*")).post(
+        "/api/warehouse/wfs-fee-alerts/detection-preview",
+        json={"start_date": "2026-08-19", "end_date": "2026-10-17"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["would_create"] == 1
+    assert captured["source_account_refs"] == frozenset({"synthetic-account"})

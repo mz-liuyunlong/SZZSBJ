@@ -153,6 +153,38 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="PRODUCTLIST_REAL_SYNC_AUTHORIZED",
     )
+    wfs_auto_detect_enabled: bool = Field(
+        default=False,
+        validation_alias="WFS_AUTO_DETECT_ENABLED",
+    )
+    wfs_auto_case_create_enabled: bool = Field(
+        default=False,
+        validation_alias="WFS_AUTO_CASE_CREATE_ENABLED",
+    )
+    wfs_detect_lookback_days: int = Field(
+        default=60,
+        ge=1,
+        le=366,
+        validation_alias="WFS_DETECT_LOOKBACK_DAYS",
+    )
+    wfs_detect_settlement_lag_days: int = Field(
+        default=2,
+        ge=0,
+        le=31,
+        validation_alias="WFS_DETECT_SETTLEMENT_LAG_DAYS",
+    )
+    wfs_detect_min_sample_units: int = Field(
+        default=10,
+        ge=1,
+        le=10000,
+        validation_alias="WFS_DETECT_MIN_SAMPLE_UNITS",
+    )
+    wfs_detect_max_stale_days: int = Field(
+        default=14,
+        ge=1,
+        le=366,
+        validation_alias="WFS_DETECT_MAX_STALE_DAYS",
+    )
     lingxing_allow_full_sync: bool = Field(
         default=False,
         validation_alias="LINGXING_ALLOW_FULL_SYNC",

@@ -87,6 +87,17 @@ def parse_settlement_rows(
                 rejected += 1
                 continue
 
+            platform_order_no = _string(item.get("platformOrderNo"))
+            if not platform_order_no:
+                missing_identity += 1
+                rejected += 1
+                continue
+
+            currency_code = _string(item.get("currencyCode"))
+            if currency_code and currency_code.upper() != "USD":
+                rejected += 1
+                continue
+
             settled = _settlement_date(item.get("settlementDate"))
             if not window_start.isoformat() <= settled <= window_end.isoformat():
                 rejected += 1
@@ -99,7 +110,7 @@ def parse_settlement_rows(
                 rejected += 1
                 continue
 
-            line_ref = f"{unique_id}:{row_index}"
+            line_ref = f"{store_id}:{unique_id}:{row_index}"
             if line_ref in seen:
                 duplicate_lines += 1
                 continue
@@ -113,7 +124,7 @@ def parse_settlement_rows(
                     source_account_ref=source_account_ref,
                     store_id=store_id,
                     msku=msku,
-                    platform_order_no=_string(item.get("platformOrderNo")),
+                    platform_order_no=platform_order_no,
                     sales_num=sales,
                     platform_logistics_amount=logistics,
                     settlement_date=settled,

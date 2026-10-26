@@ -7,8 +7,10 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.dml import ReturningInsert
 
 from app.modules.warehouse_wfs.anomaly_detection import WfsAnomalyCandidate
 from app.modules.warehouse_wfs.models import WfsFeeAnomalyCase
@@ -28,7 +30,7 @@ def build_wfs_case_insert(
     *,
     item_id: str,
     candidate: WfsAnomalyCandidate,
-):
+) -> ReturningInsert[tuple[UUID]]:
     """Create an insert-only statement; never update existing cases."""
     if not item_id or not item_id.strip():
         raise WfsCaseWriteError("WFS_ITEM_ID_REQUIRED")
@@ -77,9 +79,27 @@ def build_wfs_case_insert(
         updated_by="wfs_auto_detection",
         created_at=now,
         updated_at=now,
-        affected_units=0,
-        affected_units_source=None,
-        estimated_recover_amount=Decimal("0"),
+        affected_units=(
+            int(candidate.historical_units) if candidate.historical_units is not None else 0
+        ),
+        affected_units_source=(
+            "mart_daily_sales_item_day_lifetime" if candidate.historical_units is not None else None
+        ),
+        affected_sales_start_date=candidate.sales_start_date,
+        affected_sales_end_date=candidate.sales_end_date,
+        estimated_recover_amount=candidate.legacy_estimated_overcharge or Decimal("0"),
+        estimate_formula="modal_fee_diff_x_lifetime_sales",
+        estimate_calculated_at=now,
+        valid_sample_units=candidate.sample_units,
+        valid_fee_orders=candidate.sample_orders,
+        mode_count=candidate.mode_count,
+        theoretical_overcharge_amount=candidate.theoretical_overcharge,
+        net_sample_difference_amount=candidate.net_sample_difference,
+        latest_settlement_date=candidate.latest_settlement_date,
+        detection_status=candidate.evidence_status,
+        data_freshness_status=("stale" if candidate.evidence_status == "STALE" else "current"),
+        standard_fee_source=candidate.standard_source,
+        detected_at=now,
         claim_amount=None,
         recovered_amount=Decimal("0"),
         archive_review_status="none",
@@ -102,6 +122,8 @@ def create_wfs_case(
     item_id: str,
     candidate: WfsAnomalyCandidate,
     execute: bool = False,
+    detect_enabled: bool = False,
+    case_create_enabled: bool = False,
 ) -> WfsCaseWriteResult:
     """Insert only with explicit authorization; never commit internally.
 
@@ -113,7 +135,30 @@ def create_wfs_case(
         candidate=candidate,
     )
 
+    existing_id = session.scalar(
+        select(WfsFeeAnomalyCase.id).where(
+            WfsFeeAnomalyCase.source_account_ref == candidate.source_account_ref,
+            WfsFeeAnomalyCase.store_id == candidate.store_id,
+            WfsFeeAnomalyCase.item_id == item_id.strip(),
+            WfsFeeAnomalyCase.msku == candidate.msku,
+        )
+    )
+    if existing_id is not None:
+        return WfsCaseWriteResult(action="already_exists", case_id=existing_id)
+
+    if not candidate.case_eligible:
+        return WfsCaseWriteResult(action="review_required", case_id=None)
+
     if not execute:
         return WfsCaseWriteResult(action="dry_run", case_id=None)
 
-    raise WfsCaseWriteError("WFS_CASE_EXECUTION_NOT_ENABLED")
+    if not detect_enabled or not case_create_enabled:
+        raise WfsCaseWriteError("WFS_CASE_EXECUTION_NOT_ENABLED")
+
+    case_id = session.execute(
+        build_wfs_case_insert(item_id=item_id, candidate=candidate)
+    ).scalar_one_or_none()
+    return WfsCaseWriteResult(
+        action="created" if case_id is not None else "already_exists",
+        case_id=case_id,
+    )

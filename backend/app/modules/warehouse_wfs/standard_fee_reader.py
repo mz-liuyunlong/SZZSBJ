@@ -107,8 +107,15 @@ def read_product_management_wfs_fee(
         store_id=store_id,
         msku=msku,
         unit_fee=fee,
-        source="product_management_live",
+        source=(
+            "product_management_rule"
+            if active_rule is not None
+            else "product_management_default_unconfirmed"
+        ),
         rule_version=(
             active_rule.version if active_rule is not None else "sku-pricing-defaults-v1"
         ),
+        calculation_status=calculation.wfs_calc_status,
+        calculated_at=datetime.now(UTC),
+        historical_applicability="current_only",
     )

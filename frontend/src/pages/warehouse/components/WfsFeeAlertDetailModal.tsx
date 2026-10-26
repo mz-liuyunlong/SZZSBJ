@@ -158,6 +158,20 @@ function WfsFeeAlertDetailModal({
           <Descriptions.Item label="待追回金额">{formatWfsMoney(getPendingWfsAmount(row), currency)}</Descriptions.Item>
           <Descriptions.Item label="订单量">{row.orders.toLocaleString("zh-CN")}</Descriptions.Item>
           <Descriptions.Item label="销量">{row.units.toLocaleString("zh-CN")}</Descriptions.Item>
+          <Descriptions.Item label="有效费用订单">{row.validFeeOrders ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="有效结算件数">{row.validSampleUnits ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="众数订单数">{row.modeCount ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="逐单理论超额">
+            {row.theoreticalOvercharge == null ? "—" : formatWfsMoney(row.theoreticalOvercharge, currency)}
+          </Descriptions.Item>
+          <Descriptions.Item label="结算样本净差额">
+            {row.netSampleDifference == null ? "—" : formatWfsMoney(row.netSampleDifference, currency)}
+          </Descriptions.Item>
+          <Descriptions.Item label="最新有效结算">{row.latestSettlementDate ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="标准费用来源">{row.standardFeeSource ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="检测状态">{row.detectionStatus ?? "历史案件"}</Descriptions.Item>
+          <Descriptions.Item label="数据时效">{row.freshnessStatus ?? "未知"}</Descriptions.Item>
+          <Descriptions.Item label="检测时间">{row.detectedAt ?? "—"}</Descriptions.Item>
           <Descriptions.Item label="异常原因">{row.reason}</Descriptions.Item>
           <Descriptions.Item label="发现时间">{row.discoveredAt}</Descriptions.Item>
           <Descriptions.Item label="Case编号">{row.caseNo || "未开Case"}</Descriptions.Item>

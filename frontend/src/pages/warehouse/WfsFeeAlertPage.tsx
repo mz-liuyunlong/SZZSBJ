@@ -1,6 +1,7 @@
-/** WFS fee alert No-API page: WFS overcharge, Case status and recovery tracking. */
+/** API-connected WFS fee evidence, case status and recovery tracking. */
 import {
   CloudDownloadOutlined,
+  ExperimentOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
   SettingOutlined,
@@ -22,10 +23,12 @@ import WfsFeeAlertTable from "@/pages/warehouse/components/WfsFeeAlertTable";
 import WfsFeeAlertToolbar from "@/pages/warehouse/components/WfsFeeAlertToolbar";
 import {
   fetchWfsFeeAlerts,
+  previewWfsFeeDetection,
   updateWfsFeeAlertCase,
 } from "@/pages/warehouse/wfsFeeAlertApi";
 import {
   createWfsFeeAlertInitialFilters,
+  defaultWfsDetectionWindow,
   filterWfsFeeAlertRows,
   fixedWfsFeeAlertColumnKeys,
   wfsFeeAlertColumnFields,
@@ -75,6 +78,7 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   const [detailRow, setDetailRow] = useState<WfsFeeAlertRow>();
   const [abandonRow, setAbandonRow] = useState<WfsFeeAlertRow>();
   const [rows, setRows] = useState<WfsFeeAlertRow[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [settledRangeKey, setSettledRangeKey] = useState<string | null>(null);
   const [rangeStart, rangeEnd] = filters.dateRange;
   const requestedRangeKey = JSON.stringify([rangeStart, rangeEnd]);
@@ -84,6 +88,29 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
     permissions,
     "action:warehouse:wfs-fee-alert:archive-request",
   );
+  const canPreviewDetection = hasPermission(permissions, "*");
+
+  const handleDetectionPreview = async () => {
+    if (!canPreviewDetection || previewLoading) return;
+    const [fallbackStart, fallbackEnd] = defaultWfsDetectionWindow();
+    setPreviewLoading(true);
+    try {
+      const result = await previewWfsFeeDetection(
+        filters.dateRange[0] || fallbackStart,
+        filters.dateRange[1] || fallbackEnd,
+      );
+      void messageApi.info(
+        `预览完成：${result.scanned_stores} 个店铺、${result.scanned_skus} 个 SKU，` +
+        `${result.would_create} 个拟新增、${result.already_exists} 个已有、` +
+        `${result.review_required} 个待复核、${result.failed} 个失败。未写入案件。`,
+        8,
+      );
+    } catch {
+      void messageApi.error("WFS 检测预览失败，未执行任何写入");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const reloadRows = async () => {
     try {
@@ -184,6 +211,15 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
 
   const headerActions = (
     <>
+      {canPreviewDetection && (
+        <Button
+          icon={<ExperimentOutlined aria-hidden="true" />}
+          loading={previewLoading}
+          onClick={() => void handleDetectionPreview()}
+        >
+          检测预览
+        </Button>
+      )}
     </>
   );
 

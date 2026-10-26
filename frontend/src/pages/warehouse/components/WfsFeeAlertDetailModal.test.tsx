@@ -94,3 +94,39 @@ describe("WfsFeeAlertDetailModal authorization controls", () => {
     expect(screen.getByRole("button", { name: "申请放弃跟进" })).toBeInTheDocument();
   });
 });
+
+describe("WfsFeeAlertDetailModal fee evidence", () => {
+  it("shows order-count evidence, amount breakdown and freshness separately", () => {
+    render(
+      <WfsFeeAlertDetailModal
+        row={{
+          ...wfsFeeAlertRows[0],
+          validFeeOrders: 54,
+          validSampleUnits: 62,
+          modeCount: 32,
+          theoreticalOvercharge: 15.2,
+          netSampleDifference: 0.99,
+          latestSettlementDate: "2026-09-23",
+          standardFeeSource: "product_management_rule",
+          detectionStatus: "STALE",
+          freshnessStatus: "stale",
+          detectedAt: "2026-10-20T00:00:00Z",
+        }}
+        currency="USD"
+        canFollow={false}
+        canArchiveRequest={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onOpenAbandon={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("54")).toBeInTheDocument();
+    expect(screen.getByText("62")).toBeInTheDocument();
+    expect(screen.getByText("32")).toBeInTheDocument();
+    expect(screen.getByText("$15.20")).toBeInTheDocument();
+    expect(screen.getByText("$0.99")).toBeInTheDocument();
+    expect(screen.getByText("STALE")).toBeInTheDocument();
+    expect(screen.getByText("stale")).toBeInTheDocument();
+  });
+});

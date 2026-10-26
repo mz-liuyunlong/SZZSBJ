@@ -66,7 +66,7 @@ def analyze_wfs_evidence(
     as_of: date | None = None,
     max_age_days: int = 14,
     min_sample_units: int = 10,
-    recent_window_days: int = 30,
+    recent_window_days: int = 60,
 ) -> FeeEvidence:
     """Evaluate WFS fee evidence without writing any data."""
     if standard_fee < 0:
@@ -162,14 +162,17 @@ def analyze_wfs_evidence(
 
     recent = [(day, rate, units) for day, rate, units in order_evidence if cutoff <= day <= latest]
 
-    distribution = Counter()
+    distribution: Counter[Decimal] = Counter()
+    unit_distribution: Counter[Decimal] = Counter()
     latest_for_rate: dict[Decimal, date] = {}
 
     for day, rate, units in recent:
-        distribution[rate] += units
+        # The operational detection mode is counted by orders, never units.
+        distribution[rate] += 1
+        unit_distribution[rate] += units
         latest_for_rate[rate] = max(day, latest_for_rate.get(rate, day))
 
-    recent_units = sum(distribution.values())
+    recent_units = sum(units for _, _, units in recent)
     actual_fee = None
 
     if recent_units >= min_sample_units:
@@ -239,7 +242,7 @@ def analyze_wfs_evidence(
         historical_units=historical_units,
         settlement_units=sum(units for _, _, units in order_evidence),
         settlement_orders=len(order_evidence),
-        fee_distribution={str(rate): units for rate, units in sorted(distribution.items())},
+        fee_distribution={str(rate): units for rate, units in sorted(unit_distribution.items())},
         latest_settlement_date=latest,
         legacy_estimate=legacy_estimate,
         evidenced_overcharge=evidenced_overcharge,

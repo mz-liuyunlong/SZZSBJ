@@ -77,3 +77,16 @@ def test_invalid_money_rejected():
     result = parse([item])
     assert len(result.rows) == 0
     assert result.rejected_rows == 1
+
+
+def test_non_usd_and_missing_order_are_rejected():
+    non_usd = row(0, 10, "-40")
+    non_usd["currencyCode"] = "EUR"
+    missing_order = row(1, 10, "-40")
+    missing_order["platformOrderNo"] = ""
+
+    result = parse([non_usd, missing_order])
+
+    assert result.rows == ()
+    assert result.rejected_rows == 2
+    assert result.missing_identity == 1

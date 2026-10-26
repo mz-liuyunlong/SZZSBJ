@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 Nonblank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 CaseStatus = Literal["pending_confirm", "following", "archive_pending", "archived", "recovered"]
@@ -68,6 +68,16 @@ class WfsFeeCaseRead(StrictSchema):
     affected_units_source: str | None
     estimated_recover_amount: Decimal
     pending_recover_amount: Decimal
+    valid_sample_units: Decimal | None = None
+    valid_fee_orders: int | None = None
+    mode_count: int | None = None
+    theoretical_overcharge_amount: Decimal | None = None
+    net_sample_difference_amount: Decimal | None = None
+    latest_settlement_date: date | None = None
+    detection_status: str | None = None
+    data_freshness_status: str | None = None
+    standard_fee_source: str | None = None
+    detected_at: datetime | None = None
 
     claim_amount: Decimal | None
     recovered_amount: Decimal
@@ -175,6 +185,44 @@ class WfsFeeAlertMeta(StrictSchema):
     page: int
     page_size: int
     total: int
+
+
+class WfsFeeDetectionPreviewWrite(StrictSchema):
+    start_date: date
+    end_date: date
+    store_id: Nonblank | None = None
+
+    @model_validator(mode="after")
+    def validate_window(self) -> WfsFeeDetectionPreviewWrite:
+        if self.start_date > self.end_date or (self.end_date - self.start_date).days >= 366:
+            raise ValueError("WFS_PREVIEW_WINDOW_INVALID")
+        return self
+
+
+class WfsFeeDetectionStorePreviewRead(StrictSchema):
+    source_account_ref: str
+    store_id: str
+    scanned_skus: int
+    valid_samples: int
+    overcharge_candidates: int
+    would_create: int
+    already_exists: int
+    review_required: int
+    skipped: int
+
+
+class WfsFeeDetectionPreviewRead(StrictSchema):
+    scanned_accounts: int
+    scanned_stores: int
+    scanned_skus: int
+    valid_samples: int
+    overcharge_candidates: int
+    would_create: int
+    already_exists: int
+    review_required: int
+    skipped: int
+    failed: int
+    stores: list[WfsFeeDetectionStorePreviewRead]
 
 
 class WfsFeeCaseFollowWrite(StrictSchema):

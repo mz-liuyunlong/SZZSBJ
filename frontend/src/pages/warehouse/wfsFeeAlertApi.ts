@@ -42,6 +42,16 @@ interface BackendWfsFeeCase {
   affected_units_source: string | null;
   estimated_recover_amount: NumericLike;
   pending_recover_amount: NumericLike;
+  valid_sample_units?: NumericLike;
+  valid_fee_orders?: number | null;
+  mode_count?: number | null;
+  theoretical_overcharge_amount?: NumericLike;
+  net_sample_difference_amount?: NumericLike;
+  latest_settlement_date?: string | null;
+  detection_status?: string | null;
+  data_freshness_status?: string | null;
+  standard_fee_source?: string | null;
+  detected_at?: string | null;
   claim_amount: NumericLike;
   recovered_amount: NumericLike;
   recovered_at: string | null;
@@ -130,6 +140,10 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     category: "-",
     orders: affectedUnits,
     units: affectedUnits,
+    validFeeOrders: item.valid_fee_orders ?? null,
+    validSampleUnits:
+      item.valid_sample_units == null ? null : numberValue(item.valid_sample_units),
+    modeCount: item.mode_count ?? null,
     chargedFee: actualUnitFee * affectedUnits,
     standardFee: manualUnitFee * affectedUnits,
     productUnitWfsFee:
@@ -139,6 +153,14 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     unitCharged: actualUnitFee,
     unitStandard: manualUnitFee,
     overFee: estimatedRecoverAmount,
+    theoreticalOvercharge:
+      item.theoretical_overcharge_amount == null
+        ? null
+        : numberValue(item.theoretical_overcharge_amount),
+    netSampleDifference:
+      item.net_sample_difference_amount == null
+        ? null
+        : numberValue(item.net_sample_difference_amount),
     unitOverFee: numberValue(item.unit_fee_diff),
     recoveredAmount: numberValue(item.recovered_amount),
     status: statusLabelMap[item.status],
@@ -153,8 +175,40 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     lastFollowBy: item.last_follow_by,
     lastFollowAt: item.last_follow_at,
     latestFollow: (item.follow_log ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1) ?? item.latest_follow_note ?? "",
+    latestSettlementDate: dateValue(item.latest_settlement_date) || "-",
+    detectionStatus: item.detection_status ?? "历史案件",
+    freshnessStatus: item.data_freshness_status ?? "unknown",
+    standardFeeSource: item.standard_fee_source ?? item.fee_source,
+    detectedAt: dateValue(item.detected_at) || discoveredAt,
   };
 };
+
+export interface WfsFeeDetectionPreview {
+  scanned_accounts: number;
+  scanned_stores: number;
+  scanned_skus: number;
+  valid_samples: number;
+  overcharge_candidates: number;
+  would_create: number;
+  already_exists: number;
+  review_required: number;
+  skipped: number;
+  failed: number;
+}
+
+export async function previewWfsFeeDetection(
+  startDate: string,
+  endDate: string,
+): Promise<WfsFeeDetectionPreview> {
+  const envelope = await backendRequest<WfsFeeDetectionPreview, null>(
+    "/api/warehouse/wfs-fee-alerts/detection-preview",
+    {
+      method: "POST",
+      body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+    },
+  );
+  return envelope.data;
+}
 
 export async function fetchWfsFeeAlerts(
   startDate?: string,
