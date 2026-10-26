@@ -24,7 +24,7 @@ def _config(row):
     cfg=row["config"]
     return cfg if isinstance(cfg,dict) else __import__("json").loads(cfg)
 
-async def invoke(*, scene:str, prompt:str, actor:str, prompt_version:str) -> tuple[str,int,int]:
+async def invoke(*, scene:str, prompt:str, actor:str, prompt_version:str, skill_version_id:str|None=None) -> tuple[str,int,int]:
     if scene not in SCENES or not prompt.strip() or len(prompt)>10000:
         raise AIUnavailable("AI_REQUEST_INVALID")
     started=time.monotonic()
@@ -40,6 +40,12 @@ async def invoke(*, scene:str, prompt:str, actor:str, prompt_version:str) -> tup
             raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
         if scene not in cfg.get("application_scenes",[]):
             raise AIUnavailable("AI_SCENE_DISABLED")
+        if skill_version_id is not None:
+            skill=session.execute(text("""SELECT instructions, scene, connector_id
+                FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),{"id":skill_version_id}).mappings().first()
+            if skill is None or skill["scene"]!=scene or skill["connector_id"]!=row["id"]:
+                raise AIUnavailable("AI_SKILL_VERSION_INVALID")
+            prompt="Skill instructions (administrator approved):\n"+skill["instructions"][:3000]+"\n\n"+prompt
         from app.modules.business_connectors.router import _decrypt
         credential=_decrypt(row["ciphertext"])
         session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:id))"),{"id":str(row["id"])})
@@ -53,6 +59,8 @@ async def invoke(*, scene:str, prompt:str, actor:str, prompt_version:str) -> tup
         if min(in_rate,out_rate,budget)<=0:
             raise AIUnavailable("AI_BILLING_NOT_CONFIGURED")
         max_out=int(cfg.get("max_output_tokens",1024))
+        if len(prompt)>10000:
+            raise AIUnavailable("AI_CONTEXT_TOO_LONG")
         reservation=(Decimal(len(prompt.encode("utf8")))*in_rate+Decimal(max_out)*out_rate)/Decimal(1000000)
         spent=Decimal(str(session.execute(text("""SELECT coalesce(sum(cost_usd),0) FROM biz_ai_usage
           WHERE connector_id=:id AND created_at>=date_trunc('month',now())"""),{"id":row["id"]}).scalar_one()))

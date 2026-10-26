@@ -63,7 +63,8 @@ def execute_keyword_ai_job(job_id: str) -> None:
                   +json.dumps([item["keyword"] for item in group],ensure_ascii=False))
                 try:
                     output,inp,out=asyncio.run(invoke(scene="keyword_launch",prompt=prompt,
-                        actor=_requested_by(identifier),prompt_version="keyword-semantic-v1"))
+                        actor=_requested_by(identifier),prompt_version="keyword-semantic-v1",
+                        skill_version_id=p.get("skill_version_id")))
                     parsed=json.loads(output)
                     items=parsed.get("items")
                     expected={item["keyword"] for item in group}

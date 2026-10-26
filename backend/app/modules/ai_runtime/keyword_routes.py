@@ -59,18 +59,24 @@ def _read(row) -> JobResponse:
 def create_keyword_ai_job(request:Request, body:CreateRunRequest, session:Annotated[Session,Depends(get_db_session)], accounts:scope_dep, principal:write_perm):
     _check(body.source_account_ref, accounts, principal)
     _require_opted_in_writes()
-    digest=hashlib.sha256(json.dumps(body.model_dump(mode="json"),sort_keys=True).encode()).hexdigest()
+    payload=body.model_dump(mode="json")
+    digest=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     with session.begin():
         session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"),{"key":body.source_account_ref+":"+body.request_key})
         existing=session.execute(text("SELECT * FROM ai_runtime_jobs WHERE source_account_ref=:a AND request_key=:k"),{"a":body.source_account_ref,"k":body.request_key}).mappings().first()
         if existing is not None:
-            if hashlib.sha256(json.dumps(existing["input_json"],sort_keys=True).encode()).hexdigest()!=digest:
+            stored={k:existing["input_json"].get(k) for k in payload}
+            if hashlib.sha256(json.dumps(stored,sort_keys=True).encode()).hexdigest()!=digest:
                 raise ApiError(code=ErrorCode.INVALID_REQUEST,status_code=409)
             data=_read(existing)
         else:
+            skill=session.execute(text("""SELECT id FROM ai_runtime_skill_versions
+              WHERE scene='keyword_launch' AND status='published'
+              ORDER BY created_at DESC LIMIT 1""")).scalar_one_or_none()
+            payload["skill_version_id"]=str(skill) if skill else None
             job_id=uuid4()
             session.execute(text("""INSERT INTO ai_runtime_jobs(id,source_account_ref,product_id,requested_by,request_key,input_json)
-              VALUES (:id,:account,:product,:actor,:key,CAST(:input AS jsonb))"""),{"id":job_id,"account":body.source_account_ref,"product":body.product_id,"actor":principal.user_id,"key":body.request_key,"input":json.dumps(body.model_dump(mode="json"))})
+              VALUES (:id,:account,:product,:actor,:key,CAST(:input AS jsonb))"""),{"id":job_id,"account":body.source_account_ref,"product":body.product_id,"actor":principal.user_id,"key":body.request_key,"input":json.dumps(payload)})
             row=session.execute(text("SELECT * FROM ai_runtime_jobs WHERE id=:id"),{"id":job_id}).mappings().one()
             data=_read(row)
     if data.status=="queued":
