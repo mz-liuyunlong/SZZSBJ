@@ -34,6 +34,7 @@ const statusColors: Record<SyncTaskStatus, string> = {
   部分成功: "warning",
   超时: "orange",
   已停用: "default",
+  未执行: "default",
 };
 
 const anomalyStatuses = new Set<SyncTaskStatus>(["失败", "超时", "部分成功"]);

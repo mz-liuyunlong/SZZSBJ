@@ -166,7 +166,31 @@ class SyncRunCreated(StrictSchema):
     retry_of_run_id: UUID | None = None
 
 
+class RefundMartPendingDay(StrictSchema):
+    source_account_ref: str
+    business_date: str
+    run_id: UUID
+
+
+class RefundMartPendingData(StrictSchema):
+    items: list[RefundMartPendingDay]
+
+
+class SyncTaskTodayStat(StrictSchema):
+    interface_id: UUID
+    source_account_ref: str
+    runs: int
+    success: int
+    failed: int
+
+
+class SyncTaskDashboardData(StrictSchema):
+    latest_runs: list[SyncRunRead]
+    today_stats: list[SyncTaskTodayStat]
+
+
 class SyncRunListQuery(PageQuery):
+    include_product_detail: bool = False
     source_account_ref: Nonblank128 | None = None
     provider: Annotated[str, StringConstraints(max_length=32)] | None = None
     interface_key: Nonblank128 | None = None

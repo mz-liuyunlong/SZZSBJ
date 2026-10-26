@@ -527,8 +527,24 @@ class SyncRunExecutionService:
                         "affected_purchase_days": len(
                             getattr(runner, "_refund_affected_business_dates", ())
                         ),
+                        "purchase_dates": [
+                            day.isoformat()
+                            for day in getattr(runner, "_refund_affected_business_dates", ())
+                        ],
                     },
                 )
+            if run_id is not None:
+                for purchase_day in sorted(set((
+                    runner.business_date,
+                    *getattr(runner, "_refund_affected_business_dates", ()),
+                ))):
+                    self._event(
+                        run_id,
+                        "running",
+                        "running",
+                        "SYNC_REFUND_MART_PENDING",
+                        safe_details={"business_date": purchase_day.isoformat()},
+                    )
             self.session.commit()
 
         elif interface_key == "walmartAdItemSpList":
@@ -564,6 +580,18 @@ class SyncRunExecutionService:
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()
         runner.summary.mart_order_profit_rows = runner._refresh_order_profit_mart()
+        if interface_key == "walmartReturnOrderList" and run_id is not None:
+            for purchase_day in sorted(set((
+                runner.business_date,
+                *getattr(runner, "_refund_affected_business_dates", ()),
+            ))):
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "SYNC_REFUND_MART_VALIDATED",
+                    safe_details={"business_date": purchase_day.isoformat()},
+                )
         self.session.commit()
         return runner.summary
 

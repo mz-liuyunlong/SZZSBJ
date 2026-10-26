@@ -1,6 +1,6 @@
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from uuid import uuid4
 
 import pytest
@@ -49,18 +49,36 @@ def test_refund_facts_commit_before_mart_failure() -> None:
     runner._write_refunds.assert_called_once()
     runner._reprice_refunds.assert_called_once()
     service.session.commit.assert_called_once()
-    service._event.assert_called_once_with(
-        run_id,
-        "running",
-        "running",
-        "SYNC_REFUND_FACTS_COMMITTED",
-        safe_details={
-            "business_date": "2026-10-26",
-            "refund_rows": 1,
-            "refund_unresolved_rows": 0,
-            "affected_purchase_days": 1,
-        },
-    )
+    assert service._event.call_args_list == [
+        call(
+            run_id,
+            "running",
+            "running",
+            "SYNC_REFUND_FACTS_COMMITTED",
+            safe_details={
+                "business_date": "2026-10-26",
+                "refund_rows": 1,
+                "refund_unresolved_rows": 0,
+                "affected_purchase_days": 1,
+                "purchase_dates": ["2026-08-04"],
+            },
+        ),
+        call(
+            run_id,
+            "running",
+            "running",
+            "SYNC_REFUND_MART_PENDING",
+            safe_details={"business_date": "2026-08-04"},
+        ),
+        call(
+            run_id,
+            "running",
+            "running",
+            "SYNC_REFUND_MART_PENDING",
+            safe_details={"business_date": "2026-10-26"},
+        ),
+    ]
+
 
 
 def test_refund_provider_permission_denied_does_not_commit() -> None:

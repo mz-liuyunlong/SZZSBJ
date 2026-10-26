@@ -15,7 +15,7 @@ import {
 } from "antd";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listIntegrationSyncRunLogPage } from "@/pages/data-center/integrationSyncTaskApi";
+import { listIntegrationSyncRunLogPage, listRefundMartPendingDays } from "@/pages/data-center/integrationSyncTaskApi";
 import dayjs, { type Dayjs } from "dayjs";
 import {
   useIntegrationSyncRunRawRequestRefsQuery,
@@ -46,6 +46,7 @@ const statusColors: Record<SyncTaskStatus, string> = {
   部分成功: "warning",
   超时: "orange",
   已停用: "default",
+  未执行: "default",
 };
 
 const workStatusLabels: Record<string, SyncTaskStatus> = {
@@ -265,6 +266,7 @@ function SyncTaskLogDrawer({
       pageSize,
       sourceAccount: task?.source,
       interfaceKey: task?.interfaceKey,
+      includeProductDetail: task?.interfaceKey === "productList" && Boolean(task.source),
       status: status ? ({ "成功": "succeeded", "失败": "failed", "运行中": "running", "已停用": "canceled" } as Record<string, string>)[status] : undefined,
       triggerType: triggerType ? ({ "自动": "schedule", "手动": "manual", "重试": "retry" } as Record<string, string>)[triggerType] : undefined,
       createdFrom: dateRange?.[0].startOf("day").format("YYYY-MM-DDTHH:mm:ssZ"),
@@ -273,6 +275,15 @@ function SyncTaskLogDrawer({
     enabled: open,
   });
 
+  const refundPendingQuery = useQuery({
+    queryKey: ["integration-refund-mart-pending"],
+    queryFn: listRefundMartPendingDays,
+    enabled: open && task?.interfaceKey === "walmartReturnOrderList",
+    staleTime: 30_000,
+  });
+  const pendingDays = (refundPendingQuery.data ?? []).filter(
+    (item) => !task?.source || item.source_account_ref === task.source,
+  );
   const detailRunId = detailLog?.id;
   const workItemsQuery = useIntegrationSyncRunWorkItemsQuery(
     detailRunId,
@@ -527,6 +538,18 @@ function SyncTaskLogDrawer({
           </Button>
         }
       >
+        {task?.interfaceKey === "walmartReturnOrderList" && pendingDays.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`待完成财务重算：${pendingDays.length} 个业务日`}
+            description={`已采集的退款事实不代表历史利润已重新校验。待重算日期：${pendingDays.slice(0, 12).map((day) => day.business_date).join("、")}${pendingDays.length > 12 ? " 等" : ""}。请审核数据归集异常后通过受控流程重算。`}
+          />
+        )}
+        {refundPendingQuery.error && task?.interfaceKey === "walmartReturnOrderList" && (
+          <Alert type="warning" showIcon message="财务待重算状态暂不可用" />
+        )}
         <div className="sync-task__log-summary-grid">
           <div className="sync-task__log-summary-card">
             <span>今日执行</span>

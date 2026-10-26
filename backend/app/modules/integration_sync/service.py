@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Literal, cast
 from uuid import UUID, uuid4
 
@@ -40,6 +41,10 @@ from app.modules.integration_sync.schemas import (
     SyncConfigRead,
     SyncConfigUpdate,
     SyncRunCreated,
+    RefundMartPendingData,
+    RefundMartPendingDay,
+    SyncTaskDashboardData,
+    SyncTaskTodayStat,
     SyncRunListData,
     SyncRunListQuery,
     SyncRunRead,
@@ -93,6 +98,7 @@ class IntegrationSyncService:
         rows, total = self.repository.list_configs(
             account_refs=account_refs,
             source_account_ref=query.source_account_ref,
+            include_product_detail=query.include_product_detail,
             provider=query.provider,
             interface_key=query.interface_key,
             enabled=query.enabled,
@@ -377,6 +383,26 @@ class IntegrationSyncService:
             raise
 
         return self._created(run)
+
+    def refund_mart_pending_days(
+        self, account_refs: frozenset[str]
+    ) -> RefundMartPendingData:
+        return RefundMartPendingData(items=[
+            RefundMartPendingDay(source_account_ref=account, business_date=day, run_id=run_id)
+            for account, day, run_id in self.repository.refund_mart_pending_days(account_refs)
+        ])
+
+    def task_dashboard(self, account_refs: frozenset[str]) -> SyncTaskDashboardData:
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        start = datetime(today.year, today.month, today.day, tzinfo=ZoneInfo("Asia/Shanghai"))
+        latest, counts = self.repository.task_dashboard(account_refs, start, start + timedelta(days=1))
+        return SyncTaskDashboardData(
+            latest_runs=[SyncRunRead.model_validate(row) for row in latest],
+            today_stats=[
+                SyncTaskTodayStat(interface_id=interface_id, source_account_ref=account, runs=runs, success=success, failed=failed)
+                for interface_id, account, runs, success, failed in counts
+            ],
+        )
 
     def list_runs(
         self, query: SyncRunListQuery, account_refs: frozenset[str]

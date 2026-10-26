@@ -244,6 +244,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
     "部分成功",
     "超时",
     "已停用",
+    "未执行",
   ];
 
   const filteredRows = useMemo(() => {
@@ -713,6 +714,9 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
         initialTab={scheduleInitialTab}
         dayItems={scheduleViews.day}
         weekItems={scheduleViews.week}
+        weeklyItems={scheduleViews.weekly}
+        truncated={scheduleViews.dayTruncated}
+        unsupportedCount={scheduleViews.unsupported.length}
         onClose={() => setScheduleOpen(false)}
         onOpenGlobalLog={() => {
           setScheduleOpen(false);

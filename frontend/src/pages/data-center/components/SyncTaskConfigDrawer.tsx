@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   Drawer,
   Form,
@@ -374,6 +375,15 @@ function SyncTaskConfigDrawer({
           </div>
         </section>
 
+        {task && typeof task.backfillDays === "number" && task.backfillDays > 14 && (
+          <Alert
+            showIcon
+            type="warning"
+            style={{ marginBottom: 12 }}
+            message={`存量回刷配置为 ${task.backfillDays} 天，超过常规任务支持的 14 天`}
+            description="当前值不会按预期执行。请在下方改为 1–14 天并保存；如确需更久历史回填，须使用单独的受控回填流程。"
+          />
+        )}
         <section className="sync-task__drawer-section">
           <h3>执行计划</h3>
           <div className="sync-task__form-grid">

@@ -304,11 +304,12 @@ const latestDate = (...values: Array<string | null | undefined>) => (
 
 const statusPriority: Record<SyncTaskStatus, number> = {
   已停用: 0,
-  成功: 1,
-  运行中: 2,
-  部分成功: 3,
-  超时: 4,
-  失败: 5,
+  未执行: 1,
+  成功: 2,
+  运行中: 3,
+  部分成功: 4,
+  超时: 5,
+  失败: 6,
 };
 
 const worseStatus = (left: SyncTaskStatus, right: SyncTaskStatus) => (
@@ -365,9 +366,9 @@ function row(
   config: ConfigDto | undefined,
   run: RunDto | undefined,
 ): SyncTaskRow {
-  const lastStatus = run ? status[run.status] ?? "失败" : config?.is_enabled === false
-    ? "已停用"
-    : "已停用";
+  const lastStatus = run
+    ? status[run.status] ?? "失败"
+    : config?.is_enabled === false ? "已停用" : "未执行";
   return {
     id: config?.id ?? run?.id ?? item.id,
     configId: config?.id ?? run?.config_id ?? null,
@@ -418,50 +419,40 @@ function row(
 }
 
 export async function listIntegrationSyncTasks() {
-  // Fetch all current China-calendar-day runs for honest "today" totals.
-  // Historical log pagination remains separate from this aggregation.
-  const chinaToday = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  const chinaStart = `${chinaToday}T00:00:00+08:00`;
-  const fetchTodayRuns = async (): Promise<RunDto[]> => {
-    const collected: RunDto[] = [];
+  async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
+    const items: T[] = [];
     for (let page = 1; page <= 1000; page += 1) {
-      const response = await backendRequest<{ items: RunDto[] }>(
-        `/api/integrations/sync-runs?page=${page}&page_size=100&created_from=${encodeURIComponent(chinaStart)}`,
+      const response = await backendRequest<{ items: T[] }>(
+        `${endpoint}?page=${page}&page_size=100`,
       );
-      collected.push(...response.data.items);
-      if (response.data.items.length < 100) return collected;
+      items.push(...response.data.items);
+      if (response.data.items.length < 100) return items;
     }
-    throw new Error("TODAY_RUNS_EXCEED_QUERY_LIMIT");
-  };
-  const [interfaces, configs, runs, todayRuns] = await Promise.all([
-    backendRequest<{ items: InterfaceDto[] }>("/api/integrations/interfaces?page_size=100"),
-    backendRequest<{ items: ConfigDto[] }>("/api/integrations/sync-configs?page_size=100"),
-    backendRequest<{ items: RunDto[] }>("/api/integrations/sync-runs?page_size=100"),
-    fetchTodayRuns(),
+    throw new Error("SYNC_TASK_CONFIG_LIST_TOO_LARGE");
+  }
+  const [interfacesList, configsList, dashboard] = await Promise.all([
+    fetchAllPages<InterfaceDto>("/api/integrations/interfaces"),
+    fetchAllPages<ConfigDto>("/api/integrations/sync-configs"),
+    backendRequest<{ latest_runs: RunDto[]; today_stats: Array<{
+      interface_id: string; source_account_ref: string;
+      runs: number; success: number; failed: number;
+    }> }>("/api/integrations/sync-tasks/dashboard"),
   ]);
-  const interfaceById = new Map(interfaces.data.items.map((item) => [item.id, item]));
-  const rows = configs.data.items.flatMap((config) => {
+  const runs = { data: { items: dashboard.data.latest_runs } };
+  const todayStats = dashboard.data.today_stats;
+  const interfaceById = new Map(interfacesList.map((item) => [item.id, item]));
+  const rows = configsList.flatMap((config) => {
     const item = interfaceById.get(config.interface_id);
     return item ? [row(item, config, newestRun(runs.data.items, item.id, config.source_account_ref))] : [];
   });
-  for (const item of interfaces.data.items) {
+  for (const item of interfacesList) {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
     rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
   }
-  const todayTotals = new Map<string, { success: number; failed: number; runs: number }>();
-  for (const run of todayRuns) {
-    const key = `${run.interface_id}:${run.source_account_ref}`;
-    const entry = todayTotals.get(key) ?? { success: 0, failed: 0, runs: 0 };
-    entry.runs += 1;
-    if (run.status === "succeeded") entry.success += 1;
-    if (run.status === "failed") entry.failed += 1;
-    todayTotals.set(key, entry);
-  }
+  const todayTotals = new Map(todayStats.map((stat) => [
+    `${stat.interface_id}:${stat.source_account_ref}`,
+    { success: stat.success, failed: stat.failed, runs: stat.runs },
+  ]));
   const withTodayCounts = rows.map((task) => {
     const counts = todayTotals.get(`${task.interfaceId}:${task.source ?? ""}`);
     return { ...task, todaySuccess: counts?.success ?? 0, todayFailed: counts?.failed ?? 0, todayRuns: counts?.runs ?? 0 };
@@ -499,6 +490,7 @@ export async function listIntegrationSyncRunLogPage(params: {
   pageSize: number;
   sourceAccount?: string | null;
   interfaceKey?: string;
+  includeProductDetail?: boolean;
   createdFrom?: string;
   createdTo?: string;
   status?: string;
@@ -510,6 +502,7 @@ export async function listIntegrationSyncRunLogPage(params: {
   });
   if (params.sourceAccount) query.set("source_account_ref", params.sourceAccount);
   if (params.interfaceKey) query.set("interface_key", params.interfaceKey);
+  if (params.includeProductDetail) query.set("include_product_detail", "true");
   if (params.createdFrom) query.set("created_from", params.createdFrom);
   if (params.createdTo) query.set("created_to", params.createdTo);
   if (params.status) query.set("status", params.status);
@@ -635,4 +628,17 @@ export async function updateIntegrationSyncConfig(
     },
   );
   return response.data;
+}
+
+export interface RefundMartPendingDay {
+  source_account_ref: string;
+  business_date: string;
+  run_id: string;
+}
+
+export async function listRefundMartPendingDays(): Promise<RefundMartPendingDay[]> {
+  const response = await backendRequest<{ items: RefundMartPendingDay[] }>(
+    "/api/integrations/sync-tasks/refund-mart-pending",
+  );
+  return response.data.items;
 }
