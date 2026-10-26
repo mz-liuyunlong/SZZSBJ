@@ -1,0 +1,95 @@
+"""Offline Walmart API request planning. No credentials, HTTP, or SSH."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping
+
+# References are names only, never credential values.
+STORE_ROUTES: dict[str, tuple[str, str | None]] = {
+    "HK2612": ("HK2612", "43.153.1.194"),
+    "HK2613": ("HK2613", "43.153.26.207"),
+    "HK2614": ("HK2614", "43.153.101.213"),
+    "HK2615": ("HK2615", "43.135.153.225"),
+    "CN2501": ("YC006", "43.173.120.215"),
+    "CN2502": ("", None),
+    "CN2601": ("YC005", "43.173.115.200"),
+    "CN2602": ("YC007", "43.173.92.40"),
+    "CN2603": ("YC008", "43.172.73.203"),
+}
+
+# Taken from the colleague's four-capability GET-only worker.
+API_SPECS: dict[str, tuple[str, frozenset[str]]] = {
+    "wfs_inventory": ("/v3/wfs/inventory", frozenset({"limit", "offset"})),
+    "inbound_shipments": (
+        "/v3/fulfillment/inbound-shipments",
+        frozenset({"limit", "offset", "fromCreatedDate", "toCreatedDate"}),
+    ),
+    "inbound_shipment_items": (
+        "/v3/fulfillment/inbound-shipment-items",
+        frozenset({"limit", "offset", "shipmentId"}),
+    ),
+    "inventory_log": (
+        "/v3/fulfillment/inventory-log",
+        frozenset({"limit", "offset", "gtin", "fromDate", "toDate"}),
+    ),
+}
+
+
+class WalmartPlanError(ValueError):
+    """Only stable error codes; never expose supplied credentials or values."""
+
+
+@dataclass(frozen=True, slots=True)
+class WalmartPlan:
+    store_code: str
+    api_key: str
+    method: str
+    path: str
+    params: Mapping[str, str | int]
+    expected_exit_ip: str
+
+
+def plan_call(
+    store_code: str,
+    api_key: str,
+    params: Mapping[str, object] | None = None,
+    *,
+    allowed_stores: frozenset[str] = frozenset(),
+) -> WalmartPlan:
+    """Return a validated offline plan; it cannot perform a real API call."""
+    if store_code not in STORE_ROUTES:
+        raise WalmartPlanError("WALMART_STORE_UNKNOWN")
+    if store_code == "CN2502":
+        raise WalmartPlanError("COLLECTION_DISABLED")
+    if store_code not in allowed_stores:
+        raise WalmartPlanError("WALMART_STORE_FORBIDDEN")
+    route = STORE_ROUTES[store_code]
+    if route[1] is None:
+        raise WalmartPlanError("WALMART_EXIT_UNAVAILABLE")
+    if api_key not in API_SPECS:
+        raise WalmartPlanError("WALMART_API_NOT_REGISTERED")
+    path, allowed = API_SPECS[api_key]
+    provided = params if params is not None else {}
+    if not isinstance(provided, Mapping) or len(provided) > 8:
+        raise WalmartPlanError("WALMART_PARAMS_INVALID")
+    normalized: dict[str, str | int] = {}
+    for key, value in provided.items():
+        if key not in allowed:
+            raise WalmartPlanError("WALMART_PARAM_NOT_ALLOWED")
+        if key == "limit":
+            if type(value) is not int or not 1 <= value <= 100:
+                raise WalmartPlanError("WALMART_PARAMS_INVALID")
+        elif key == "offset":
+            if type(value) is not int or not 0 <= value <= 1000000:
+                raise WalmartPlanError("WALMART_PARAMS_INVALID")
+        elif key in {"fromCreatedDate", "toCreatedDate"}:
+            if type(value) is not int or not 1000000000000 <= value <= 9999999999999:
+                raise WalmartPlanError("WALMART_PARAMS_INVALID")
+        elif not isinstance(value, str) or not 1 <= len(value) <= 64 or not value.isascii():
+            raise WalmartPlanError("WALMART_PARAMS_INVALID")
+        normalized[key] = value
+    for start, end in (("fromDate", "toDate"), ("fromCreatedDate", "toCreatedDate")):
+        if start in normalized and end in normalized and normalized[start] > normalized[end]:
+            raise WalmartPlanError("WALMART_DATE_RANGE_INVALID")
+    return WalmartPlan(store_code, api_key, "GET", path, normalized, route[1])
