@@ -1,4 +1,5 @@
 """Offline tests: no Walmart, Tencent, SSH or database I/O."""
+
 import pytest
 
 from app.integrations.walmart.planner import API_SPECS, STORE_ROUTES, WalmartPlanError, plan_call
@@ -13,14 +14,17 @@ def test_routes_and_pending_egress_store() -> None:
 def test_colleague_get_catalog() -> None:
     assert len(API_SPECS) == 4
     assert set(API_SPECS) == {
-        "wfs_inventory", "inbound_shipments",
-        "inbound_shipment_items", "inventory_log",
+        "wfs_inventory",
+        "inbound_shipments",
+        "inbound_shipment_items",
+        "inventory_log",
     }
 
 
 def test_authorized_plan() -> None:
     plan = plan_call(
-        "HK2615", "wfs_inventory",
+        "HK2615",
+        "wfs_inventory",
         {"limit": 20, "offset": 0},
         allowed_stores=frozenset({"HK2615"}),
     )
@@ -43,7 +47,8 @@ def test_authorized_plan() -> None:
         ("HK2615", "inbound_shipments", {"fromCreatedDate": 1700000000002, "toCreatedDate": 1700000000001}, frozenset({"HK2615"}), "WALMART_DATE_RANGE_INVALID"),
     ],
 )
-def test_fail_closed(store: str, api: str, params: dict[str, object],
-                     scope: frozenset[str], error: str) -> None:
+def test_fail_closed(
+    store: str, api: str, params: dict[str, object], scope: frozenset[str], error: str
+) -> None:
     with pytest.raises(WalmartPlanError, match=f"^{error}$"):
         plan_call(store, api, params, allowed_stores=scope)
