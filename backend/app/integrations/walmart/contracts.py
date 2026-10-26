@@ -4,6 +4,7 @@ Owner-supplied OpenAPI 3.x snapshots can describe many Walmart endpoints
 without writing per-endpoint HTTP code. Import does not enable a real API:
 the owner-controlled executor must separately authorize method and scope.
 """
+
 from __future__ import annotations
 
 import re
@@ -134,10 +135,7 @@ class ContractRegistry:
             raise ContractError("WALMART_BODY_NOT_ALLOWED")
         if operation.has_body and body is None:
             raise ContractError("WALMART_BODY_REQUIRED")
-        if body is not None and (
-            not isinstance(body, (dict, list))
-            or len(str(body)) > 2_000_000
-        ):
+        if body is not None and (not isinstance(body, (dict, list)) or len(str(body)) > 2_000_000):
             raise ContractError("WALMART_BODY_INVALID")
         path = operation.path
         query: dict[str, str | int | bool] = {}
