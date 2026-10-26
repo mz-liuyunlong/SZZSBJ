@@ -10,6 +10,7 @@ import {
   type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent,
 } from 'react';
 import PageShell from '@/components/page/PageShell';
+import { backendRequest } from '@/api/backendApi';
 import type { NavigationPage } from '@/config/navigation';
 import './AIAssistantPage.css';
 
@@ -85,6 +86,8 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
   const [imageUrls,setImageUrls] = useState<Record<string,string>>({});
   const [attachmentMenu,setAttachmentMenu] = useState(false);
   const [dragging,setDragging] = useState(false);
+  const [sending,setSending] = useState(false);
+  const [serverChats,setServerChats] = useState<Record<string,string>>({});
   const images = useRef<HTMLInputElement>(null);
   const files = useRef<HTMLInputElement>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -125,15 +128,24 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
   const send = (preset?:string) => {
     const text=(preset??chat.draft).trim();
     if(!text && !uploads.length)return;
-    const added:Attachment[]=uploads.map(f=>({id:f.id,name:f.name,size:f.size,image:f.image}));
-    setThreads(before=>before.map(t=>{
-      if(t.id!==chat.id)return t;
-      return {...t,title:t.messages.length===0 && t.title==='新聊天'?(text||'附件：'+added[0].name).slice(0,40):t.title,
-        draft:'',updatedAt:Date.now(),messages:[...t.messages,
-          {id:id(),role:'user',text,files:added},
-          {id:id(),role:'assistant',text:text?'':'文件已添加至本地演示会话。尚未上传服务器或供 OpenAI 解析。',analysis:!!text}]};
-    }));
-    setPending(before=>({...before,[chat.id]:[]}));
+    if(uploads.length){void msgApi.warning('附件解析尚未接通真实后端，请移除附件后发送文字');return;}
+    if(sending)return;
+    const target=chat.id;
+    setSending(true);
+    setThreads(before=>before.map(t=>t.id!==target?t:{...t,
+      title:t.messages.length===0 && t.title==='新聊天'?text.slice(0,40):t.title,
+      draft:'',updatedAt:Date.now(),messages:[...t.messages,{id:id(),role:'user',text}]}));
+    void backendRequest<{chat_id:string;response:string}>('/api/ai-runtime/assistant/ask',{
+      method:'POST',body:JSON.stringify({chat_id:serverChats[target]??null,message:text}),
+    }).then(({data})=>{
+      setServerChats(before=>({...before,[target]:data.chat_id}));
+      setThreads(before=>before.map(t=>t.id!==target?t:{...t,updatedAt:Date.now(),
+        messages:[...t.messages,{id:id(),role:'assistant',text:data.response}]}));
+    }).catch(()=>{
+      void msgApi.error('AI 服务暂时无法回应，请检查模型服务、账户权限和额度');
+      setThreads(before=>before.map(t=>t.id!==target?t:{...t,
+        messages:[...t.messages,{id:id(),role:'assistant',text:'AI 请求失败；没有生成模拟经营数据。请在业务配置中检查 OpenAI 服务。'}]}));
+    }).finally(()=>setSending(false));
     setAttachmentMenu(false);
   };
   const onKeys=(e:KeyboardEvent<HTMLTextAreaElement>)=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send();}};
@@ -205,7 +217,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
               {key:'images',label:'上传图片',icon:<FileImageOutlined/>,onClick:()=>images.current?.click()},
               {key:'files',label:'上传文件（PDF、Excel、Word 等）',icon:<PaperClipOutlined/>,onClick:()=>files.current?.click()},
             ]}}><Tooltip title="添加图片或文件"><Button type="text" className="ai7-attach-btn" icon={<PlusOutlined/>} aria-label="添加附件"/></Tooltip></Dropdown>
-            <Button type="primary" shape="circle" className="ai7-send" icon={<ArrowUpOutlined/>} aria-label="发送消息" disabled={!chat.draft.trim()&&!uploads.length} onClick={()=>send()}/>
+            <Button type="primary" shape="circle" className="ai7-send" icon={<ArrowUpOutlined/>} aria-label="发送消息" disabled={sending||(!chat.draft.trim()&&!uploads.length)} loading={sending} onClick={()=>send()}/>
           </div>
           <input ref={images} type="file" accept="image/*" multiple hidden onChange={onSelect} aria-label="选择图片"/>
           <input ref={files} type="file" multiple hidden onChange={onSelect} aria-label="选择文件"/>
