@@ -1,4 +1,5 @@
 """Offline contracts and write-gate verification."""
+
 import pytest
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry
@@ -12,20 +13,30 @@ def document() -> dict[str, object]:
                 "get": {
                     "operationId": "listItems",
                     "parameters": [
-                        {"name": "limit", "in": "query", "schema": {"type": "integer", "maximum": 100}}
+                        {
+                            "name": "limit",
+                            "in": "query",
+                            "schema": {"type": "integer", "maximum": 100},
+                        }
                     ],
                 },
                 "post": {
                     "operationId": "createItem",
-                    "requestBody": {"content": {"application/json": {"schema": {"type": "object"}}}},
+                    "requestBody": {
+                        "content": {"application/json": {"schema": {"type": "object"}}}
+                    },
                 },
             },
             "/v3/orders/{orderId}": {
                 "get": {
                     "operationId": "getOrder",
                     "parameters": [
-                        {"name": "orderId", "in": "path", "required": True,
-                         "schema": {"type": "string"}},
+                        {
+                            "name": "orderId",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string"},
+                        },
                     ],
                 }
             },
@@ -46,20 +57,14 @@ def test_approved_read_contract() -> None:
     )
     req = registry.prepare("listItems", params={"limit": 50})
     assert (req.method, req.path, req.query) == ("GET", "/v3/items", {"limit": 50})
-    assert registry.prepare("getOrder", params={"orderId": "a/b"}).path == (
-        "/v3/orders/a%2Fb"
-    )
+    assert registry.prepare("getOrder", params={"orderId": "a/b"}).path == ("/v3/orders/a%2Fb")
 
 
 def test_writes_require_second_gate() -> None:
-    registry = ContractRegistry.from_openapi(
-        document(), approved_keys=frozenset({"createItem"})
-    )
+    registry = ContractRegistry.from_openapi(document(), approved_keys=frozenset({"createItem"}))
     with pytest.raises(ContractError, match="WALMART_WRITE_NOT_AUTHORIZED"):
         registry.prepare("createItem", body={"sku": "fixture"})
-    request = registry.prepare(
-        "createItem", body={"sku": "fixture"}, allow_writes=True
-    )
+    request = registry.prepare("createItem", body={"sku": "fixture"}, allow_writes=True)
     assert (request.method, request.is_write) == ("POST", True)
 
 
@@ -72,9 +77,7 @@ def test_writes_require_second_gate() -> None:
     ],
 )
 def test_rejects_bad_inputs(parameters: dict[str, object], code: str) -> None:
-    registry = ContractRegistry.from_openapi(
-        document(), approved_keys=frozenset({"listItems"})
-    )
+    registry = ContractRegistry.from_openapi(document(), approved_keys=frozenset({"listItems"}))
     with pytest.raises(ContractError, match=code):
         registry.prepare("listItems", params=parameters)
 
