@@ -442,7 +442,7 @@ class SyncRunExecutionService:
         interface_key: str,
         runner: DataPagesRealSyncRunner,
         *,
-        run_id: UUID,
+        run_id: UUID | None = None,
     ) -> DataPagesRealSyncSummary:
         """Run only the dataset represented by the configured task."""
 
@@ -501,7 +501,7 @@ class SyncRunExecutionService:
 
         elif interface_key == "walmartReturnOrderList":
             refunds = runner._fetch_return_all()
-            if runner.summary.return_permission_403:
+            if getattr(runner.summary, "return_permission_403", False):
                 # A denied provider request must not masquerade as an empty, successful day.
                 raise DataPagesRealSyncError("DATA_PAGES_REFUND_PERMISSION_DENIED")
             heartbeat()
@@ -514,20 +514,21 @@ class SyncRunExecutionService:
             # Refund facts and their source-store scope are a durable ingestion phase.
             # Do not roll back the facts when an affected purchase day's financial
             # MART fails its independent SEM, sample, or replay invariants.
-            self._event(
-                run_id,
-                "running",
-                "running",
-                "SYNC_REFUND_FACTS_COMMITTED",
-                safe_details={
-                    "business_date": runner.business_date.isoformat(),
-                    "refund_rows": runner.summary.refund_rows,
-                    "refund_unresolved_rows": runner.summary.refund_unresolved_rows,
-                    "affected_purchase_days": len(
-                        getattr(runner, "_refund_affected_business_dates", ())
-                    ),
-                },
-            )
+            if run_id is not None:
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "SYNC_REFUND_FACTS_COMMITTED",
+                    safe_details={
+                        "business_date": runner.business_date.isoformat(),
+                        "refund_rows": runner.summary.refund_rows,
+                        "refund_unresolved_rows": runner.summary.refund_unresolved_rows,
+                        "affected_purchase_days": len(
+                            getattr(runner, "_refund_affected_business_dates", ())
+                        ),
+                    },
+                )
             self.session.commit()
 
         elif interface_key == "walmartAdItemSpList":
