@@ -23,7 +23,7 @@ import type {ProductManagementRow} from '@/pages/products/productManagementTypes
 import type {ListingCandidate} from '@/features/keyword-planning/keywordProductLookup';
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
-import {confirmStoredKeywordFacts,createKeywordAnalysis,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun} from '@/api/keywordPlanningV11Api';
+import {confirmStoredKeywordFacts,submitKeywordAiJob,listKeywordAiJobs,cancelKeywordAiJob,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun,type KeywordAiJob} from '@/api/keywordPlanningV11Api';
 import {BackendRequestError} from '@/api/backendApi';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
@@ -146,6 +146,9 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const [detail,setDetail]=useState<KeywordRow|null>(null);
  const [compare,setCompare]=useState<MarketKeyword|null>(null);
  const [historyOpen,setHistoryOpen]=useState(false);
+ const [aiTasksOpen,setAiTasksOpen]=useState(false);
+ const [aiTasks,setAiTasks]=useState<KeywordAiJob[]>([]);
+ const [aiTasksLoading,setAiTasksLoading]=useState(false);
  const [draft,setDraft]=useState<{title:string;features:string;description:string}|null>(null);
  const sku=skus.find(x=>x.id===skuId)||{id:'',sku:'',name:'',material:'',uses:[],storeIds:[],hasLibrary:false};
  const skuEntries=useMemo(()=>entries.filter(e=>e.skuId===sku.id),[entries,sku.id]);
@@ -478,6 +481,29 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    }
  };
 
+ const reloadAiTasks=async()=>{
+   if(!sourceAccountRef)return;
+   setAiTasksLoading(true);
+   try{setAiTasks(await listKeywordAiJobs(sourceAccountRef));}
+   catch{message.error('任务状态读取失败，请检查权限和连接');}
+   finally{setAiTasksLoading(false);}
+ };
+ useEffect(()=>{
+   if(!sourceAccountRef||!aiTasksOpen)return;
+   void reloadAiTasks();
+   const timer=window.setInterval(()=>{void listKeywordAiJobs(sourceAccountRef).then(setAiTasks).catch(()=>{})},4000);
+   return()=>window.clearInterval(timer);
+ },[sourceAccountRef,aiTasksOpen]);
+ const openAiTaskResult=async(job:KeywordAiJob,target:'keywords'|'plan'|'listing')=>{
+   if(job.product_id!==sku.id){message.info('请先选择对应 SKU，再打开此任务结果');return;}
+   if(!job.run_id||!sourceAccountRef){message.warning('分析结果尚未生成');return;}
+   try{
+     const run=await getKeywordRun(job.run_id,sourceAccountRef);
+     const result=await loadAllRunKeywords(job.run_id,sourceAccountRef);
+     installServerRun(sku.id,run,result);setActiveRunId(run.run_id);
+     setEditing(false);setResultsTab(target);setAiTasksOpen(false);
+   }catch{message.error('读取任务结果失败');}
+ };
  const openFacts=()=>{if(!productConfirmed)return message.warning('请先在步骤 01 点击确认商品');if(!ready)return message.warning('请先上传 Excel 并满足 ASIN 数量要求');setConsent(false);setFactOpen(true)};
  const confirmParameters=async()=>{
    if(!ready||!consent||!parametersComplete||!sourceAccountRef){
@@ -570,16 +596,11 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
        upload_file_id:storedUpload.id,selected_asins:asinsForRun};
      const preflight=await preflightKeywordAnalysis(input);
      if(!preflight.can_create_review_run)throw new Error(preflight.review_reason_codes.join('、'));
-     const receipt=await createKeywordAnalysis({...input,request_key:crypto.randomUUID()});
-     const run=await getKeywordRun(receipt.run_id,sourceAccountRef);
-     const results=await loadAllRunKeywords(receipt.run_id,sourceAccountRef);
+     await submitKeywordAiJob({...input,request_key:crypto.randomUUID()});
      if(ticket!==confirmationSeq.current)return;
-     installServerRun(targetSku,run,results);setActiveRunId(receipt.run_id);
-     setServerRuns(old=>[run,...old]);setHistoryTotal(old=>old+1);
-     setEditing(false);setResultsTab('keywords');setFactOpen(false);
-     window.scrollTo({top:0,behavior:'smooth'});
-     if(run.status==='succeeded')message.success(`已保存 ${results.length} 条后端分析结果`);
-     else message.warning(`已保存 ${results.length} 条分析记录，批次状态为${run.status}；待复核词不能作为正式投放结果`);
+     setFactOpen(false);setAiTasksOpen(true);
+     message.success('AI 分析任务已提交，可以继续操作其他 SKU');
+     void reloadAiTasks();
    }catch(error){if(ticket===confirmationSeq.current)message.error(error instanceof Error?error.message:'分析未完成，请检查来源、规则与权限');}
    finally{if(ticket===confirmationSeq.current)setBusy(false);}
  };
@@ -798,7 +819,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
       先选 SKU；已有分析结果可直接查看词库。新品按商品事实、竞品文案及市场数据进行筛选。
     </div>
   </div>
-  <div className="kw-v2-pagehead__actions">{panel==='rules'?<Button onClick={()=>setPanel('workspace')}>返回关键词投放</Button>:(<Space size={6} wrap><Tag color="blue">生效规则 V{rules.version}.0</Tag><Button icon={<HistoryOutlined/>} onClick={()=>setHistoryOpen(true)}>分析历史</Button><Button onClick={()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','相关ASIN']]),'Keyword');XLSX.writeFile(wb,'关键词导入模板.xlsx')}}>下载关键词模板</Button><Button icon={<SettingOutlined/>} onClick={()=>setPanel('rules')}>规则配置</Button></Space>)}</div>
+  <div className="kw-v2-pagehead__actions">{panel==='rules'?<Button onClick={()=>setPanel('workspace')}>返回关键词投放</Button>:(<Space size={6} wrap><Tag color="blue">生效规则 V{rules.version}.0</Tag><Button onClick={()=>setAiTasksOpen(true)}>AI 任务</Button><Button icon={<HistoryOutlined/>} onClick={()=>setHistoryOpen(true)}>分析历史</Button><Button onClick={()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','相关ASIN']]),'Keyword');XLSX.writeFile(wb,'关键词导入模板.xlsx')}}>下载关键词模板</Button><Button icon={<SettingOutlined/>} onClick={()=>setPanel('rules')}>规则配置</Button></Space>)}</div>
 </div>
 
    {panel==='rules'?<KeywordRulesPanel sourceAccountRef={sourceAccountRef}/>:<>
@@ -1024,5 +1045,23 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
   <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="分数与等级来自已保存的后端分析；缺少可验证证据时保持待复核，不推断广告表现。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'后端分析分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/></Drawer>
   <Drawer open={!!compare} title={`跨 SKU 关键词 · ${compare?.term||''}`} width={620} onClose={()=>setCompare(null)}><Alert type="info" message="每个 SKU 独立分析；这里只比较已加载的后端结果。"/><ProTable rowKey="skuId" pagination={false} search={false} options={false} toolBarRender={false} columns={[{title:'SKU',dataIndex:'skuId',render:(_,r)=>skus.find(s=>s.id===r.skuId)?.sku},{title:'得分',dataIndex:'score'},{title:'等级',dataIndex:'grade'},{title:'Exact',dataIndex:'exact',render:(_,r)=>r.exact?'✓':'—'},{title:'Broad',dataIndex:'broad',render:(_,r)=>r.broad?'✓':'—'}]} dataSource={compare?allAssoc(compare.id):[]}/></Drawer>
   <Drawer open={historyOpen} title="分析历史" width={600} onClose={()=>setHistoryOpen(false)}><Alert type="info" message="分析历史读取已保存批次；点击一行可恢复当时冻结的分析结果。"/><ProTable<KeywordRun> rowKey="run_id" pagination={{current:historyPage,pageSize:20,total:historyTotal,onChange:pageNumber=>{void loadHistoryPage(pageNumber)}}} search={false} options={false} toolBarRender={false} dataSource={serverRuns} onRow={run=>({onClick:()=>{void openRun(run)}})} columns={[{title:'SKU',dataIndex:'product_id',render:()=>sku.sku},{title:'日期',dataIndex:'created_at'},{title:'规则版本',dataIndex:'rule_version_id'},{title:'关键词数',dataIndex:'keyword_count'},{title:'来源文件',render:()=> '已保存来源'}]}/></Drawer>
+  <Drawer open={aiTasksOpen} title="AI 分析任务" width={760} onClose={()=>setAiTasksOpen(false)}
+    extra={<Button loading={aiTasksLoading} onClick={()=>void reloadAiTasks()}>刷新状态</Button>}>
+    <Alert type="info" showIcon message="后台持续分析，无需保持当前 SKU 页面打开；AI 语义结果独立保存，不会改写原有表格评分。"/>
+    <ProTable<KeywordAiJob> rowKey="id" search={false} options={false} toolBarRender={false}
+      dataSource={aiTasks} pagination={{pageSize:8}} columns={[
+        {title:'SKU',dataIndex:'product_id',render:(_,r)=>skus.find(x=>x.id===r.product_id)?.sku||r.product_id.slice(0,8)},
+        {title:'提交人',dataIndex:'requested_by'},
+        {title:'状态',dataIndex:'status',render:(_,r)=><Tag color={r.status==='succeeded'?'green':r.status==='running'?'blue':r.status==='failed'?'red':'default'}>{r.status}</Tag>},
+        {title:'当前阶段',dataIndex:'phase'},
+        {title:'AI 进度',render:(_,r)=>r.total?`${r.completed}/${r.total} 批 · ${r.progress}%`:`${r.progress}%`},
+        {title:'操作',render:(_,r)=><Space size={4}>
+          {r.run_id?<><Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'keywords')}>关键词筛选</Button>
+            <Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'plan')}>投放方案</Button>
+            <Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'listing')}>Listing 文案</Button></>:null}
+          {['queued','running'].includes(r.status)?<Button danger size="small" onClick={()=>void cancelKeywordAiJob(r.id,r.source_account_ref).then(()=>reloadAiTasks())}>取消</Button>:null}
+        </Space>},
+      ]}/>
+  </Drawer>
  </PageShell>;
 }

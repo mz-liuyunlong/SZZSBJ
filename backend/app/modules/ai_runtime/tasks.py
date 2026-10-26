@@ -26,7 +26,7 @@ def execute_keyword_ai_job(job_id: str) -> None:
                 upload_id=UUID(p["upload_file_id"]),request_key=p["request_key"],actor=_requested_by(identifier),
                 selected_asins=tuple(p["selected_asins"]) if p.get("selected_asins") is not None else None)
             # The existing deterministic run is immutable. AI stores independent, review-only annotations.
-            keywords=session.execute(text("""SELECT t.keyword_normalized AS keyword
+            keywords=session.execute(text("""SELECT t.normalized_keyword AS keyword
               FROM ai_kw_run_keyword k JOIN dim_kw_term t ON t.id=k.term_id
               WHERE k.run_id=:run AND k.source_account_ref=:account
               ORDER BY k.rank_index NULLS LAST, t.keyword_normalized"""),
