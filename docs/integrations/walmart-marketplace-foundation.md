@@ -2,7 +2,7 @@
 
 **状态：Mock-only；不支持真实 API。**
 
-新增 `backend/app/integrations/walmart/planner.py` 提供 9 店路由（含 CN2502 停用）和同事 `run_worker.py` 已实现的 4 类只读 GET 接口的规划校验。
+新增 `backend/app/integrations/walmart/planner.py` 提供 9 店路由（CN2502 不再禁止，但专用出口尚未配置）和同事 `run_worker.py` 已实现的 4 类只读 GET 接口的规划校验。
 
 调用示例：
 
@@ -19,7 +19,7 @@ assert plan.path == "/v3/wfs/inventory"
 该模块只返回请求规划，不会读取 SSM、申请 Token、SSH 登录、访问 Walmart 或写入数据库。它也不是全接口目录，所有新增官方 API 仍需按来源决策、权限、版本契约进行逐项批准。
 
 代码风险：
-- IP 映射根据 2026-10-15 同事交接文档静态登记，**不是**实时网络验证。
+- IP 映射根据 2026-10-15 同事交接文档静态登记，**不是**实时网络验证。CN2502 无专属出口配置时返回 `WALMART_EXIT_UNAVAILABLE`，不借用其他店铺 IP。
 - `allowed_stores` 仅本地附加限制，不替代生产执行网关的强制身份与店铺权限校验。
 - 未来 Gateway 必须独立校验调用方、店铺、方法、参数、速率、写入审批，并在受保护环境处理短期 Token。
 - 若必须保证主服务器管理员也无法获得 Access Token，就不能把 Token 返回给主服务器或让其直接管理远程采集进程。
