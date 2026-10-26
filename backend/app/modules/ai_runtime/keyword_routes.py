@@ -66,9 +66,8 @@ def _job(session: Session, job_id: UUID, account: str, principal: Principal):
     )
     if row is None:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
-    if (
-        row["requested_by"] != principal.user_id
-        and not has_permission(principal, "business-rules:write")
+    if row["requested_by"] != principal.user_id and not has_permission(
+        principal, "business-rules:write"
     ):
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
     return row
@@ -258,13 +257,17 @@ def get_keyword_ai_suggestions(
     """Show AI-sidecar recommendations without changing the immutable V1.1 decisions."""
     _check(source_account_ref, accounts, principal)
     _job(session, job_id, source_account_ref, principal)
-    batches = session.execute(
-        text(
-            """SELECT output_json FROM ai_runtime_results
+    batches = (
+        session.execute(
+            text(
+                """SELECT output_json FROM ai_runtime_results
             WHERE job_id=:id AND status='succeeded' ORDER BY batch_index"""
-        ),
-        {"id": job_id},
-    ).scalars().all()
+            ),
+            {"id": job_id},
+        )
+        .scalars()
+        .all()
+    )
     items = []
     for batch in batches:
         if isinstance(batch, dict) and isinstance(batch.get("items"), list):
