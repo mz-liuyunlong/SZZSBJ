@@ -1,0 +1,31 @@
+name: AI branch one-time formatting
+on:
+  push:
+    branches:
+      - feat/ai-unified-luna-keyword-jobs-20261026
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@v6
+      - name: Apply backend project's Ruff formatting
+        working-directory: backend
+        run: |
+          uv run ruff check --fix app/modules/ai_runtime app/celery_app.py app/main.py app/modules/business_connectors/router.py app/modules/keyword_planning/router.py alembic/versions/20261026_0060_ai_runtime.py tests/core/test_celery_app.py || true
+          uv run ruff format app/modules/ai_runtime app/celery_app.py app/main.py app/modules/business_connectors/router.py app/modules/keyword_planning/router.py alembic/versions/20261026_0060_ai_runtime.py tests/core/test_celery_app.py
+          uv run alembic heads
+      - name: Commit formatting to this feature branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend
+          if ! git diff --cached --quiet; then
+            git commit -m "style(ai): apply repository Ruff formatting"
+            git push origin HEAD:refs/heads/feat/ai-unified-luna-keyword-jobs-20261026
+          fi

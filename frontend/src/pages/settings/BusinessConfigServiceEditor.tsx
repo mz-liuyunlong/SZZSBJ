@@ -59,7 +59,13 @@ export default function BusinessConfigServiceEditor({
     setSkillList(result.data);
   };
   useEffect(()=>{
-    if(open && connector?.kind==="openai")void loadSkills(connector.id).catch(()=>setSkillList([]));
+    if(open && connector?.kind==="openai"){
+      let active=true;
+      void backendRequest<SkillVersion[]>(`/api/ai-runtime/skills?connector_id=${encodeURIComponent(connector.id)}`)
+        .then(result=>{if(active)setSkillList(result.data)})
+        .catch(()=>{if(active)setSkillList([])});
+      return()=>{active=false};
+    }
   },[open,connector?.id,connector?.kind]);
   const saveSkillDraft=async()=>{
     if(!connector || !skillText.trim())return;

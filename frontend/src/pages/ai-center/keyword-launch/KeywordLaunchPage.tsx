@@ -490,9 +490,12 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  };
  useEffect(()=>{
    if(!sourceAccountRef||!aiTasksOpen)return;
-   void reloadAiTasks();
-   const timer=window.setInterval(()=>{void listKeywordAiJobs(sourceAccountRef).then(setAiTasks).catch(()=>{})},4000);
-   return()=>window.clearInterval(timer);
+   let active=true;
+   const refresh=()=>{void listKeywordAiJobs(sourceAccountRef)
+     .then(rows=>{if(active)setAiTasks(rows)}).catch(()=>{})};
+   refresh();
+   const timer=window.setInterval(refresh,4000);
+   return()=>{active=false;window.clearInterval(timer)};
  },[sourceAccountRef,aiTasksOpen]);
  const openAiTaskResult=async(job:KeywordAiJob,target:'keywords'|'plan'|'listing')=>{
    if(!job.run_id||!sourceAccountRef){message.warning('分析结果尚未生成');return;}
