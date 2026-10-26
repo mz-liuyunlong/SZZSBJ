@@ -6,7 +6,7 @@
 在 `backend/app/integrations/walmart/` 建立 Walmart 官方直连接口的离线、默认拒绝基础规划模块。供主服务器未来业务模块复用，不在本 PR 打通真实环境。
 
 ## In scope
-- 9 家店铺路由，其中 8 家启用，CN2502 禁用。
+- 9 家店铺均允许进入授权流程；目前 8 家有专用出口映射，CN2502 尚缺专用出口，拒绝实际请求规划。
 - 同事 worker 源代码已有的四类 GET 接口目录：wfs_inventory、inbound_shipments、inbound_shipment_items、inventory_log。
 - 不允许调用者指定 URL、HTTP 方法或请求头；只接受白名单参数。
 - Python plan_call 与 pytest 离线拒绝测试。
@@ -48,6 +48,6 @@ uv run pytest -q tests/integrations/walmart/test_planner.py
 ## Acceptance
 - [ ] GitHub 范围审查
 - [ ] Python 3.13 Ruff/pytest 通过
-- [ ] 模拟测试默认拒绝、禁用店铺、未知接口及参数非法
+- [ ] 模拟测试验证 CN2502 缺少出口时失败、未知/越权店铺、未知接口及参数非法
 - [ ] 无生产外部调用或 secret
 - [ ] 负责人审阅数据源决策并另批正式接入
