@@ -47,24 +47,6 @@ function restore(scope: string): Thread[] {
   return [fresh()];
 }
 function sizeText(n: number) { return n < 1024 ? n + ' B' : n < 1048576 ? Math.ceil(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
-function DemoReply({ question, followup }: { question: string; followup: (text: string) => void }) {
-  const isManager = /整体|公司|店铺|管理/.test(question);
-  const isAds = /广告|ACOS|ROAS/.test(question);
-  const title = isManager ? '整体经营变化分析' : isAds ? '广告投入与订单分析' : /哪些|排名|最严重/.test(question) ? '异常 SKU 排查' : 'SKU 经营诊断';
-  const metrics = isManager
-    ? [['销售额','$28,560','-6.2%'],['订单利润','$3,410','-12.8%'],['广告费用','$4,820','+9.4%']]
-    : isAds ? [['广告费用','$726','+14.2%'],['广告订单','52 单','-5.5%'],['广告占比','18.6%','+3.1pp']]
-    : [['销售额','$1,240','-8.2%'],['订单利润','$186','-27.4%'],['退款损失','$42','+$19']];
-  return <div className="ai7-answer">
-    <div className="ai7-demo-label">演示分析 · 模拟数据，尚未接入真实业务接口和 OpenAI</div>
-    <h3>{title}</h3>
-    <p>从销售、利润、广告和退款变化中定位经营异常。此处为界面预览，所有指标仅用于演示，不能据此作出真实经营决策。</p>
-    <div className="ai7-card"><h4>关键指标对比</h4><div className="ai7-metrics">{metrics.map(m => <div key={m[0]}><small>{m[0]}</small><strong>{m[1]}</strong><em>{m[2]} 较上期</em></div>)}</div></div>
-    <div className="ai7-card"><h4>{isManager ? '店铺经营明细' : '需要关注的 SKU'}</h4><div className="ai7-table-wrap"><table><thead><tr><th>{isManager ? '店铺' : 'SKU'}</th><th>销售额</th><th>订单利润</th><th>利润变化</th></tr></thead><tbody>{(isManager ? [['Store A','$12,100','$1,420','-$270'],['Store B','$9,260','$1,180','-$142'],['Store C','$7,200','$810','+$30']] : [['SKU-1082','$1,240','$186','-$70'],['SKU-3106','$986','$94','-$63'],['SKU-4210','$876','$128','-$51']]).map(row => <tr key={row[0]}>{row.map((cell,i) => <td key={i}>{i===0 ? <button type="button" className="ai7-textlink" onClick={() => followup('继续分析 ' + cell)}>{cell}</button> : cell}</td>)}</tr>)}</tbody></table></div></div>
-    <div className="ai7-card"><h4>分析与建议</h4><ol><li>核对利润变化与费用变化的金额，不将相关性当作因果关系。</li><li>如果广告或退款明细缺失，应标注数据不足并优先核实。</li></ol></div>
-    <div className="ai7-followups"><button type="button" onClick={() => followup(isManager ? '按负责人继续分析' : '分析 SKU-1082 的广告费用')}>进一步下钻 ↗</button><button type="button" onClick={() => followup('列出利润下降最严重的 SKU')}>查看异常产品 ↗</button></div>
-  </div>;
-}
 function FileCard({ file, url, remove }: { file: Attachment; url?: string; remove?: () => void }) {
   return <div className="ai7-file">{file.image && url ? <img src={url} alt={file.name} /> : file.image ? <FileImageOutlined /> : <FileOutlined />}
     <div className="ai7-file-name"><strong title={file.name}>{file.name}</strong><small>{sizeText(file.size)}</small></div>

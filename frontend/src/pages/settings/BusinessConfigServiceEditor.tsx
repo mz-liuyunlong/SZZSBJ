@@ -59,7 +59,7 @@ export default function BusinessConfigServiceEditor({
       credential: "",
       signing_secret: "",
       default_model: "gpt-6-luna",
-      backup_model: connector?.config.backup_model ?? "",
+      backup_model: "",
       model_allowlist: ["gpt-6-luna"],
       application_scenes: connector?.config.application_scenes ?? ["keyword_launch", "ai_assistant", "listing_optimization"],
       daily_limit: connector?.config.daily_limit ?? 100,
