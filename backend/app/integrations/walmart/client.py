@@ -7,7 +7,8 @@ execute requests, and gateway MUST re-authorize store and operation independentl
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 from app.integrations.walmart.contracts import ContractRegistry, PreparedRequest
 from app.integrations.walmart.planner import STORE_ROUTES, WalmartPlanError
