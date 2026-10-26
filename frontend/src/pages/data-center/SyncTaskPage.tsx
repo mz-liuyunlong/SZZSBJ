@@ -1,5 +1,5 @@
 import { CalendarOutlined } from "@ant-design/icons";
-import { Button, Input, Modal, Spin, Typography, message } from "antd";
+import { Button, Input, Modal, Select, Spin, Typography, message } from "antd";
 import { useEffect, useMemo, useRef, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
@@ -25,6 +25,7 @@ import {
 } from "@/pages/data-center/syncTaskOperationGuards";
 import { formatSyncTaskOperationError } from "@/pages/data-center/syncTaskOperationMessages";
 import { formatSyncTaskFrequency } from "@/pages/data-center/syncTaskDisplayFormatters";
+import { buildSyncScheduleViews } from "@/pages/data-center/syncTaskScheduleViews";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import type {
@@ -215,7 +216,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   const syncTaskOverview = tasksQuery.data ?? emptySyncTaskOverview;
   const rows: SyncTaskRow[] = syncTaskOverview.rows;
   const logs = syncTaskOverview.logs;
-  const scheduleItems = syncTaskOverview.schedules;
+  const scheduleViews = useMemo(() => buildSyncScheduleViews(rows), [rows]);
 
   useEffect(() => {
     messageApiRef.current = messageApi;
@@ -545,9 +546,68 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   };
 
   const bulkAction = () => {
-    void messageApi.info(
-      selectedRowKeys.length > 0 ? "批量操作接口待接入" : "请先勾选任务",
-    );
+    const selected = rows.filter((row) => selectedRowKeys.includes(row.id));
+    if (selected.length === 0) {
+      void messageApi.warning("请先勾选任务");
+      return;
+    }
+    let action: "enable" | "disable" = "disable";
+    modalApi.confirm({
+      title: "批量修改自动同步",
+      content: (
+        <div>
+          <Typography.Paragraph>已选择 {selected.length} 项。将逐项调用现有受权限保护的配置接口，不触发即时同步。</Typography.Paragraph>
+          <Select
+            defaultValue="disable"
+            style={{ width: "100%" }}
+            options={[
+              { label: "关闭自动同步", value: "disable" },
+              { label: "开启自动同步（仅已有合法 Cron 的任务）", value: "enable" },
+            ]}
+            onChange={(value: "enable" | "disable") => { action = value; }}
+          />
+        </div>
+      ),
+      okText: "确认批量修改",
+      onOk: async () => {
+        const checked = selected.map((task) => ({
+          task,
+          guard: getAutoSyncGuard(task, action === "enable"),
+        }));
+        const blocked = checked.filter(({ guard }) => !guard.allowed);
+        const executable = checked.filter(({ guard }) => guard.allowed);
+        if (executable.length === 0) {
+          void messageApi.warning(`没有可执行的任务；${blocked.length} 项被权限或配置校验阻止`);
+          return;
+        }
+        let succeeded = 0;
+        const failed: string[] = [];
+        for (const { task } of executable) {
+          try {
+            await updateConfigMutation.mutateAsync({
+              configId: task.configId!,
+              payload: action === "enable"
+                ? { is_enabled: true, schedule_enabled: true, schedule_cron: task.scheduleCron }
+                : { schedule_enabled: false },
+            });
+            succeeded += 1;
+          } catch (error) {
+            failed.push(`${task.taskName}：${formatSyncTaskOperationError(error)}`);
+          }
+        }
+        setSelectedRowKeys([]);
+        void tasksQuery.refetch();
+        if (failed.length || blocked.length) {
+          void modalApi.info({
+            title: "批量操作完成（存在未成功项）",
+            content: `成功 ${succeeded}，执行失败 ${failed.length}，校验阻止 ${blocked.length}。\n${failed.slice(0, 8).join("\n")}`,
+            width: 600,
+          });
+        } else {
+          void messageApi.success(`已完成 ${succeeded} 项配置修改`);
+        }
+      },
+    });
   };
 
   return (
@@ -641,13 +701,18 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
         open={logOpen}
         task={logTask}
         logs={logs}
+        todayTotals={logTask
+          ? { success: logTask.todaySuccess, failed: logTask.todayFailed, runs: logTask.todayRuns ?? 0 }
+          : { success: rows.reduce((sum, row) => sum + row.todaySuccess, 0),
+              failed: rows.reduce((sum, row) => sum + row.todayFailed, 0),
+              runs: rows.reduce((sum, row) => sum + (row.todayRuns ?? 0), 0) }}
         onClose={() => setLogOpen(false)}
       />
       <SyncTaskScheduleDrawer
         open={scheduleOpen}
         initialTab={scheduleInitialTab}
-        dayItems={scheduleItems}
-        weekItems={scheduleItems}
+        dayItems={scheduleViews.day}
+        weekItems={scheduleViews.week}
         onClose={() => setScheduleOpen(false)}
         onOpenGlobalLog={() => {
           setScheduleOpen(false);

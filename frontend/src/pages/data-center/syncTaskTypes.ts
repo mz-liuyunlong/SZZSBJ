@@ -41,6 +41,7 @@ export interface SyncTaskRow {
   lastRunFinishedAt: string | null;
   todaySuccess: number;
   todayFailed: number;
+  todayRuns?: number;
   description: string;
   cycle: SyncTaskCycle;
   workItemsPlanned: number;

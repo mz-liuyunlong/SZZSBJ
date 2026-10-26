@@ -92,6 +92,7 @@ class IntegrationSyncService:
     ) -> tuple[SyncConfigListData, int]:
         rows, total = self.repository.list_configs(
             account_refs=account_refs,
+            source_account_ref=query.source_account_ref,
             provider=query.provider,
             interface_key=query.interface_key,
             enabled=query.enabled,
@@ -114,6 +115,17 @@ class IntegrationSyncService:
     ) -> SyncConfigRead:
         config = self._require_config(config_id, account_refs)
         values = payload.model_dump(exclude_unset=True)
+        # DATA-PAGES max_pages is a business-date window, not an API page limit.
+        # Reject unsupported windows before persisting an inert schedule.
+        if values.get("max_pages") is not None:
+            interface_for_window = self.repository.get_interface(config.interface_id)
+            if (
+                interface_for_window is not None
+                and interface_for_window.interface_key
+                in {"saleStatPageList", "walmartReturnOrderList", "walmartAdItemSpList"}
+                and not 1 <= values["max_pages"] <= 14
+            ):
+                raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
         schedule_enabled = values.get("schedule_enabled", config.schedule_enabled)
         schedule_cron = values.get("schedule_cron", config.schedule_cron)
         if schedule_enabled and not schedule_cron:

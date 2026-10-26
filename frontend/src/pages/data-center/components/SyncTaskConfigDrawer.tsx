@@ -475,7 +475,10 @@ function SyncTaskConfigDrawer({
                 name="backfillDays"
                 label="业务日期回刷范围"
                 className="sync-task__backfill-field"
-                rules={[{ required: true, message: "请选择每次回刷范围" }]}
+                rules={[
+                  { required: true, message: "请选择每次回刷范围" },
+                  { type: "number", min: 1, max: 14, message: "常规任务最多回刷最近 14 天" },
+                ]}
               >
                 <Select
                   className="sync-task__backfill-select"
@@ -487,7 +490,7 @@ function SyncTaskConfigDrawer({
                     { label: "最近 7 天", value: 7 },
                     { label: "最近 10 天", value: 10 },
                     { label: "最近 14 天", value: 14 },
-                    { label: "最近 30 天", value: 30 },
+                    
                   ]}
                   placeholder="选择每次自动同步要回刷的业务日期范围"
                 />
@@ -531,7 +534,12 @@ function SyncTaskConfigDrawer({
           <Tooltip title="保存前会进行二次确认">
             <Button
               type="primary"
-              onClick={() => task && onSave(task, form.getFieldsValue())}
+              onClick={() => {
+                if (!task) return;
+                void form.validateFields().then((values) => onSave(task, values)).catch(() => {
+                  // Ant Design renders field-level validation messages.
+                });
+              }}
             >
               保存配置
             </Button>

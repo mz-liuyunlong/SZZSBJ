@@ -167,6 +167,7 @@ class SyncRunCreated(StrictSchema):
 
 
 class SyncRunListQuery(PageQuery):
+    source_account_ref: Nonblank128 | None = None
     provider: Annotated[str, StringConstraints(max_length=32)] | None = None
     interface_key: Nonblank128 | None = None
     status: RunStatus | None = None

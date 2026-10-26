@@ -271,11 +271,13 @@ class IntegrationSyncRepository:
         created_to: datetime | None,
         page: int,
         page_size: int,
+        source_account_ref: str | None = None,
     ) -> tuple[list[IntegrationSyncRun], int]:
         statement = select(IntegrationSyncRun).where(
             IntegrationSyncRun.source_account_ref.in_(account_refs)
         )
         filters = (
+            (IntegrationSyncRun.source_account_ref, source_account_ref),
             (IntegrationSyncRun.provider, provider),
             (IntegrationSyncRun.interface_key, interface_key),
             (IntegrationSyncRun.status, status),
