@@ -164,6 +164,14 @@ const pmcPurchaseInterfaceKeys = new Set([
   "purchaseReceiptOrderList",
 ]);
 
+const pmcDomesticInterfaceKeys = new Set([
+  "domesticWarehouseList",
+  "domesticInventoryDetails",
+  "domesticBatchDetailList",
+  "domesticBatchStatementList",
+  "domesticWarehouseStatement",
+]);
+
 const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
   if (dataPagesInterfaceKeys.has(item.interface_key)) {
     if (
@@ -188,6 +196,7 @@ const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
   }
 
   if (pmcPurchaseInterfaceKeys.has(item.interface_key)) return "仓库";
+  if (pmcDomesticInterfaceKeys.has(item.interface_key)) return "国内仓";
   if (item.interface_key === "productList" || productDetailDependencyKeys.has(item.interface_key)) return "商品";
 
   return "商品";
@@ -207,6 +216,11 @@ const chineseTaskNames: Record<string, string> = {
   purchasePlanList: "采购计划同步",
   purchaseOrderList: "采购单同步",
   purchaseReceiptOrderList: "采购入库同步",
+  domesticWarehouseStatement: "批次看板－入库流水同步",
+  domesticBatchDetailList: "批次看板－批次库存同步",
+  domesticBatchStatementList: "国内仓－批次流水同步",
+  domesticInventoryDetails: "国内仓－库存明细同步",
+  domesticWarehouseList: "国内仓－仓库资料同步",
 };
 
 const chineseInterfaceNames: Record<string, string> = {
@@ -222,6 +236,11 @@ const chineseInterfaceNames: Record<string, string> = {
   purchasePlanList: "领星采购计划接口",
   purchaseOrderList: "领星采购单接口",
   purchaseReceiptOrderList: "领星采购入库接口",
+  domesticWarehouseStatement: "领星国内仓库存中心流水接口",
+  domesticBatchDetailList: "领星国内仓批次明细接口",
+  domesticBatchStatementList: "领星国内仓批次流水接口",
+  domesticInventoryDetails: "领星国内仓库存明细接口",
+  domesticWarehouseList: "领星国内仓仓库列表接口",
 };
 
 const descriptionForInterface = (item: InterfaceDto) => {
@@ -259,6 +278,10 @@ const descriptionForInterface = (item: InterfaceDto) => {
 
   if (pmcPurchaseInterfaceKeys.has(item.interface_key)) {
     return "PMC 采购接口需后端治理配置启用后才能执行。";
+  }
+
+  if (pmcDomesticInterfaceKeys.has(item.interface_key)) {
+    return `${chineseTaskNames[item.interface_key]}。可开启定时同步；入库流水和批次流水未指定日期时，按上海日期同步最近 90 天。`;
   }
 
   return item.display_name;

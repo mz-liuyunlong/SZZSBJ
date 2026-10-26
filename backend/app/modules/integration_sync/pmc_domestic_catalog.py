@@ -34,7 +34,7 @@ PMC_DOMESTIC_SYNC_INTERFACE_SPECS: Final[tuple[PmcDomesticSyncInterfaceSpec, ...
     PmcDomesticSyncInterfaceSpec(
         interface_key="domesticWarehouseList",
         registry_interface_id="LX-41E509578C0D",
-        display_name="Lingxing Domestic Warehouse List",
+        display_name="国内仓－仓库资料同步",
         endpoint_path="/erp/sc/data/local_inventory/warehouse",
         request_kind="offset_page",
         handler_key=f"{PMC_DOMESTIC_HANDLER_PREFIX}warehouse_list.v1",
@@ -49,7 +49,7 @@ PMC_DOMESTIC_SYNC_INTERFACE_SPECS: Final[tuple[PmcDomesticSyncInterfaceSpec, ...
     PmcDomesticSyncInterfaceSpec(
         interface_key="domesticInventoryDetails",
         registry_interface_id="LX-41B3AF612B29",
-        display_name="Lingxing Domestic Inventory Details",
+        display_name="国内仓－库存明细同步",
         endpoint_path="/erp/sc/routing/data/local_inventory/inventoryDetails",
         request_kind="offset_page",
         handler_key=f"{PMC_DOMESTIC_HANDLER_PREFIX}inventory_details.v1",
@@ -64,7 +64,7 @@ PMC_DOMESTIC_SYNC_INTERFACE_SPECS: Final[tuple[PmcDomesticSyncInterfaceSpec, ...
     PmcDomesticSyncInterfaceSpec(
         interface_key="domesticBatchDetailList",
         registry_interface_id="LX-1181D4F827FB",
-        display_name="Lingxing Domestic Batch Detail List",
+        display_name="批次看板－批次库存同步",
         endpoint_path="/erp/sc/routing/data/local_inventory/getBatchDetailList",
         request_kind="offset_page",
         handler_key=f"{PMC_DOMESTIC_HANDLER_PREFIX}batch_detail_list.v1",
@@ -79,7 +79,7 @@ PMC_DOMESTIC_SYNC_INTERFACE_SPECS: Final[tuple[PmcDomesticSyncInterfaceSpec, ...
     PmcDomesticSyncInterfaceSpec(
         interface_key="domesticBatchStatementList",
         registry_interface_id="LX-BCB9BCE2437F",
-        display_name="Lingxing Domestic Batch Statement List",
+        display_name="国内仓－批次流水同步",
         endpoint_path="/erp/sc/routing/data/local_inventory/getBatchStatementList",
         request_kind="offset_page",
         handler_key=f"{PMC_DOMESTIC_HANDLER_PREFIX}batch_statement_list.v1",
@@ -94,7 +94,7 @@ PMC_DOMESTIC_SYNC_INTERFACE_SPECS: Final[tuple[PmcDomesticSyncInterfaceSpec, ...
     PmcDomesticSyncInterfaceSpec(
         interface_key="domesticWarehouseStatement",
         registry_interface_id="LX-F0CE5B7F589B",
-        display_name="Lingxing Domestic Warehouse Statement",
+        display_name="批次看板－入库流水同步",
         endpoint_path="/erp/sc/routing/inventoryLog/WareHouseInventory/wareHouseCenterStatement",
         request_kind="offset_page",
         handler_key=f"{PMC_DOMESTIC_HANDLER_PREFIX}warehouse_statement.v1",
