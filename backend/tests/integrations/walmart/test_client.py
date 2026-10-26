@@ -1,4 +1,5 @@
 """In-memory fake transport; never calls Walmart/SSM/SSH."""
+
 import pytest
 
 from app.integrations.walmart.client import WalmartClient, WalmartResult
@@ -10,8 +11,9 @@ class FakeGateway:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str | None]] = []
 
-    def execute(self, *, store_code: str, request: object,
-                approval_ref: str | None) -> WalmartResult:
+    def execute(
+        self, *, store_code: str, request: object, approval_ref: str | None
+    ) -> WalmartResult:
         self.calls.append((store_code, request.key, approval_ref))
         return WalmartResult(status_code=200, data={"mock": True})
 
@@ -42,9 +44,7 @@ def test_sdk_denies_without_live_gateway() -> None:
 
 def test_mock_sdk_read() -> None:
     fake = FakeGateway()
-    client = WalmartClient(
-        registry(), gateway=fake, allowed_stores=frozenset({"HK2615"})
-    )
+    client = WalmartClient(registry(), gateway=fake, allowed_stores=frozenset({"HK2615"}))
     assert client.call("HK2615", "listItems").data == {"mock": True}
     assert fake.calls == [("HK2615", "listItems", None)]
 
@@ -58,7 +58,10 @@ def test_write_needs_scope_and_approval() -> None:
         client.call("HK2615", "submitItem", body={"sku": "fictional"}, allow_writes=True)
     assert fake.calls == []
     result = client.call(
-        "HK2615", "submitItem", body={"sku": "fictional"}, allow_writes=True,
+        "HK2615",
+        "submitItem",
+        body={"sku": "fictional"},
+        allow_writes=True,
         approval_ref="offline-mock-only",
     )
     assert result.status_code == 200
