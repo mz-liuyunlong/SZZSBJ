@@ -20,6 +20,7 @@ from app.modules.integration_sync.schemas import (
     RawRequestMetadataRead,
     RequestKind,
 )
+from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.service import IntegrationSyncService
 from app.modules.integration_sync.tasks import TaskDispatchError, execute_sync_run, scheduler_tick
 from app.modules.products.dependencies import get_product_scope_provider
@@ -285,3 +286,47 @@ def test_trigger_dispatch_failure_returns_safe_503(
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "TASK_DISPATCH_UNAVAILABLE"
     assert "safe" not in response.text
+
+
+def test_sync_config_list_does_not_receive_run_only_filters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def scoped_configs(self: IntegrationSyncRepository, **kwargs: object) -> tuple[list, int]:
+        captured.update(kwargs)
+        return [], 0
+
+    monkeypatch.setattr(IntegrationSyncRepository, "list_configs", scoped_configs)
+    response = TestClient(_app()).get("/api/integrations/sync-configs")
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == []
+    assert captured["account_refs"] == frozenset({"default"})
+    assert "include_product_detail" not in captured
+    assert "source_account_ref" not in captured
+
+
+def test_sync_run_list_forwards_account_scope_and_product_detail_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def scoped_runs(self: IntegrationSyncRepository, **kwargs: object) -> tuple[list, int]:
+        captured.update(kwargs)
+        return [], 0
+
+    monkeypatch.setattr(IntegrationSyncRepository, "list_runs", scoped_runs)
+    response = TestClient(_app()).get(
+        "/api/integrations/sync-runs",
+        params={
+            "source_account_ref": "default",
+            "include_product_detail": "true",
+            "interface_key": "productList",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["items"] == []
+    assert captured["account_refs"] == frozenset({"default"})
+    assert captured["source_account_ref"] == "default"
+    assert captured["include_product_detail"] is True
+    assert captured["interface_key"] == "productList"

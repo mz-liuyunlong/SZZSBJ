@@ -97,8 +97,6 @@ class IntegrationSyncService:
     ) -> tuple[SyncConfigListData, int]:
         rows, total = self.repository.list_configs(
             account_refs=account_refs,
-            source_account_ref=query.source_account_ref,
-            include_product_detail=query.include_product_detail,
             provider=query.provider,
             interface_key=query.interface_key,
             enabled=query.enabled,
@@ -417,6 +415,8 @@ class IntegrationSyncService:
     ) -> tuple[SyncRunListData, int]:
         rows, total = self.repository.list_runs(
             account_refs=account_refs,
+            source_account_ref=query.source_account_ref,
+            include_product_detail=query.include_product_detail,
             provider=query.provider,
             interface_key=query.interface_key,
             status=query.status.value if query.status else None,
