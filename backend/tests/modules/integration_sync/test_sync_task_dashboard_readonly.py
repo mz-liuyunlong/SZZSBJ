@@ -42,9 +42,7 @@ def test_dashboard_queries_latest_and_today_counts_with_scope() -> None:
 def test_pending_refund_mart_query_is_account_scoped() -> None:
     session = MagicMock(spec=Session)
     run_id = uuid4()
-    session.execute.return_value.all.return_value = [
-        ("synthetic-scope", "2026-08-04", run_id)
-    ]
+    session.execute.return_value.all.return_value = [("synthetic-scope", "2026-08-04", run_id)]
     repo = IntegrationSyncRepository(session)
 
     result = repo.refund_mart_pending_days(frozenset({"synthetic-scope"}))

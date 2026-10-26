@@ -109,4 +109,3 @@ def test_refund_mart_success_writes_validated_events_after_pending() -> None:
         "SYNC_REFUND_MART_VALIDATED",
         "SYNC_REFUND_MART_VALIDATED",
     ]
-
