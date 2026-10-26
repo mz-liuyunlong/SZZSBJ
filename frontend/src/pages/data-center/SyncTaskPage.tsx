@@ -552,28 +552,42 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
       void messageApi.warning("请先勾选任务");
       return;
     }
-    let action: "enable" | "disable" = "disable";
+    type BulkAction = "enable" | "disable" | "manual" | "retry";
+    let action: BulkAction = "disable";
     modalApi.confirm({
-      title: "批量修改自动同步",
+      title: "批量任务操作",
+      width: 560,
       content: (
         <div>
-          <Typography.Paragraph>已选择 {selected.length} 项。将逐项调用现有受权限保护的配置接口，不触发即时同步。</Typography.Paragraph>
+          <Typography.Paragraph>
+            已选择 {selected.length} 项。所有操作均逐项进行后端权限校验并留下审计记录；
+            立即同步及失败重试会创建真实 Worker 任务，每次最多 10 项。
+          </Typography.Paragraph>
           <Select
             defaultValue="disable"
             style={{ width: "100%" }}
             options={[
               { label: "关闭自动同步", value: "disable" },
-              { label: "开启自动同步（仅已有合法 Cron 的任务）", value: "enable" },
+              { label: "开启自动同步（要求合法的 Cron）", value: "enable" },
+              { label: "立即同步（真实执行，最多 10 项）", value: "manual" },
+              { label: "重试失败任务（真实执行，最多 10 项）", value: "retry" },
             ]}
-            onChange={(value: "enable" | "disable") => { action = value; }}
+            onChange={(value: BulkAction) => { action = value; }}
           />
         </div>
       ),
-      okText: "确认批量修改",
+      okText: "确认执行所选操作",
+      cancelText: "取消",
       onOk: async () => {
+        if ((action === "manual" || action === "retry") && selected.length > 10) {
+          void messageApi.warning("真实同步和重试每次最多选择 10 个任务，请减少选择数量");
+          return;
+        }
         const checked = selected.map((task) => ({
           task,
-          guard: getAutoSyncGuard(task, action === "enable"),
+          guard: action === "manual" ? getManualSyncGuard(task)
+            : action === "retry" ? getRetryGuard(task)
+              : getAutoSyncGuard(task, action === "enable"),
         }));
         const blocked = checked.filter(({ guard }) => !guard.allowed);
         const executable = checked.filter(({ guard }) => guard.allowed);
@@ -583,20 +597,34 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
         }
         let succeeded = 0;
         const failed: string[] = [];
+        const failedIds: string[] = blocked.map(({ task }) => task.id);
         for (const { task } of executable) {
           try {
-            await updateConfigMutation.mutateAsync({
-              configId: task.configId!,
-              payload: action === "enable"
-                ? { is_enabled: true, schedule_enabled: true, schedule_cron: task.scheduleCron }
-                : { schedule_enabled: false },
-            });
+            if (action === "manual") {
+              await manualRunMutation.mutateAsync({
+                configId: task.configId!,
+                reason: `批量手动同步：${task.taskName}`,
+              });
+            } else if (action === "retry") {
+              await retryRunMutation.mutateAsync({
+                runId: task.latestRunId!,
+                reason: `批量重试失败 Run：${task.taskName}`,
+              });
+            } else {
+              await updateConfigMutation.mutateAsync({
+                configId: task.configId!,
+                payload: action === "enable"
+                  ? { is_enabled: true, schedule_enabled: true, schedule_cron: task.scheduleCron }
+                  : { schedule_enabled: false },
+              });
+            }
             succeeded += 1;
           } catch (error) {
+            failedIds.push(task.id);
             failed.push(`${task.taskName}：${formatSyncTaskOperationError(error)}`);
           }
         }
-        setSelectedRowKeys([]);
+        setSelectedRowKeys(failedIds);
         void tasksQuery.refetch();
         if (failed.length || blocked.length) {
           void modalApi.info({
@@ -605,7 +633,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
             width: 600,
           });
         } else {
-          void messageApi.success(`已完成 ${succeeded} 项配置修改`);
+          void messageApi.success(`已完成 ${succeeded} 项批量操作`);
         }
       },
     });

@@ -275,6 +275,23 @@ function SyncTaskLogDrawer({
     enabled: open,
   });
 
+  const latestSuccessQuery = useQuery({
+    queryKey: [
+      "integration-sync-latest-success",
+      task?.interfaceKey,
+      task?.source,
+    ],
+    queryFn: () => listIntegrationSyncRunLogPage({
+      page: 1,
+      pageSize: 1,
+      sourceAccount: task?.source,
+      interfaceKey: task?.interfaceKey,
+      includeProductDetail: task?.interfaceKey === "productList" && Boolean(task.source),
+      status: "succeeded",
+    }),
+    enabled: open,
+    staleTime: 30_000,
+  });
   const refundPendingQuery = useQuery({
     queryKey: ["integration-refund-mart-pending"],
     queryFn: listRefundMartPendingDays,
@@ -565,7 +582,7 @@ function SyncTaskLogDrawer({
           </div>
           <div className="sync-task__log-summary-card">
             <span>最近成功</span>
-            <strong>{latestRunTime(logStats.latestSuccess)}</strong>
+            <strong>{latestRunTime(latestSuccessQuery.data?.items[0])}</strong>
           </div>
         </div>
 
