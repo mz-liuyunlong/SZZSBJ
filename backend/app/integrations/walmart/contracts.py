@@ -8,8 +8,8 @@ the owner-controlled executor must separately authorize method and scope.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
