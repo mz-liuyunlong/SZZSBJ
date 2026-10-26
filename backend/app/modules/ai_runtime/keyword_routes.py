@@ -244,3 +244,31 @@ def retry_keyword_ai_job(
     return success_response(
         request, data=_read(_job(session, job_id, source_account_ref, principal))
     )
+
+
+@router.get("/{job_id}/results")
+def get_keyword_ai_suggestions(
+    job_id: UUID,
+    request: Request,
+    source_account_ref: Annotated[str, Query(min_length=1)],
+    session: Annotated[Session, Depends(get_db_session)],
+    accounts: scope_dep,
+    principal: read_perm,
+):
+    """Show AI-sidecar recommendations without changing the immutable V1.1 decisions."""
+    _check(source_account_ref, accounts, principal)
+    _job(session, job_id, source_account_ref, principal)
+    batches = session.execute(
+        text("""SELECT output_json FROM ai_runtime_results
+            WHERE job_id=:id AND status='succeeded' ORDER BY batch_index"""),
+        {"id": job_id},
+    ).scalars().all()
+    items = []
+    for batch in batches:
+        if isinstance(batch, dict) and isinstance(batch.get("items"), list):
+            items.extend(
+                {"keyword": x.get("keyword"), "relevance": x.get("relevance"),
+                 "risk": x.get("risk"), "reason": x.get("reason")}
+                for x in batch["items"] if isinstance(x, dict)
+            )
+    return success_response(request, data={"items": items, "total": len(items), "advisory_only": True})

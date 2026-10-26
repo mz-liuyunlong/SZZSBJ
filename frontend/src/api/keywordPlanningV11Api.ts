@@ -447,3 +447,13 @@ export const cancelKeywordAiJob=async(id:string,account:string):Promise<KeywordA
   (await backendRequest<KeywordAiJob>(`${API}/ai-tasks/${id}/cancel?${query(account)}`,{method:'POST'})).data;
 export const retryKeywordAiJob=async(id:string,account:string):Promise<KeywordAiJob>=>
   (await backendRequest<KeywordAiJob>(`${API}/ai-tasks/${id}/retry?${query(account)}`,{method:'POST'})).data;
+
+export interface KeywordAiSuggestion {
+  keyword:string;
+  relevance:'high'|'medium'|'low'|'review';
+  risk:string;
+  reason:string;
+}
+export const readKeywordAiSuggestions=async(jobId:string,account:string):Promise<KeywordAiSuggestion[]>=>
+  (await backendRequest<{items:KeywordAiSuggestion[];total:number;advisory_only:boolean}>(
+    `${API}/ai-tasks/${jobId}/results?${query(account)}`)).data.items;

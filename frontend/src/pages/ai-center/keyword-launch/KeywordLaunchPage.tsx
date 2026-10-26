@@ -23,7 +23,7 @@ import type {ProductManagementRow} from '@/pages/products/productManagementTypes
 import type {ListingCandidate} from '@/features/keyword-planning/keywordProductLookup';
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
-import {confirmStoredKeywordFacts,submitKeywordAiJob,listKeywordAiJobs,cancelKeywordAiJob,retryKeywordAiJob,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun,type KeywordAiJob} from '@/api/keywordPlanningV11Api';
+import {confirmStoredKeywordFacts,submitKeywordAiJob,listKeywordAiJobs,cancelKeywordAiJob,retryKeywordAiJob,readKeywordAiSuggestions,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun,type KeywordAiJob,type KeywordAiSuggestion} from '@/api/keywordPlanningV11Api';
 import {BackendRequestError,backendRequest} from '@/api/backendApi';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
@@ -149,6 +149,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const [aiTasksOpen,setAiTasksOpen]=useState(false);
  const [aiTasks,setAiTasks]=useState<KeywordAiJob[]>([]);
  const [aiTasksLoading,setAiTasksLoading]=useState(false);
+ const [aiSuggestions,setAiSuggestions]=useState<Record<string,KeywordAiSuggestion>>({});
  const [draft,setDraft]=useState<{title:string;features:string;description:string}|null>(null);
  const sku=skus.find(x=>x.id===skuId)||{id:'',sku:'',name:'',material:'',uses:[],storeIds:[],hasLibrary:false};
  const skuEntries=useMemo(()=>entries.filter(e=>e.skuId===sku.id),[entries,sku.id]);
@@ -514,6 +515,19 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
      setEditing(false);setResultsTab(target);setAiTasksOpen(false);
    }catch{message.error('读取任务结果失败');}
  };
+ useEffect(()=>{
+   if(!detail?.keyword.term||!activeRunId||!sourceAccountRef)return;
+   let active=true;
+   const lookup=async()=>{
+     const jobs=aiTasks.length?aiTasks:await listKeywordAiJobs(sourceAccountRef);
+     const target=jobs.find(x=>x.run_id===activeRunId);
+     if(!target)return;
+     const notes=await readKeywordAiSuggestions(target.id,sourceAccountRef);
+     if(active)setAiSuggestions(Object.fromEntries(notes.map(x=>[x.keyword,x])));
+   };
+   void lookup().catch(()=>{});
+   return()=>{active=false};
+ },[detail?.keyword.term,activeRunId,sourceAccountRef,aiTasks]);
  const openFacts=()=>{if(!productConfirmed)return message.warning('请先在步骤 01 点击确认商品');if(!ready)return message.warning('请先上传 Excel 并满足 ASIN 数量要求');setConsent(false);setFactOpen(true)};
  const confirmParameters=async()=>{
    if(!ready||!consent||!parametersComplete||!sourceAccountRef){
@@ -1061,7 +1075,9 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    <Checkbox checked={consent} onChange={e=>setConsent(e.target.checked)} style={{marginTop:14}}>我已核对 SKU、商品资料和至少 {rules.asin.min} 个 ASIN 编号；了解开始分析后会采集真实 Amazon 文案，规则评分仍需人工复核。</Checkbox>
   </Modal>
 
-  <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="分数与等级来自已保存的后端分析；缺少可验证证据时保持待复核，不推断广告表现。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'后端分析分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/></Drawer>
+  <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="分数与等级来自已保存的后端分析；缺少可验证证据时保持待复核，不推断广告表现。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'后端分析分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/>{detail&&aiSuggestions[detail.keyword.term]?<Alert type="info" showIcon style={{marginTop:12}}
+    message={`AI 语义建议 · ${aiSuggestions[detail.keyword.term].relevance}`}
+    description={`${aiSuggestions[detail.keyword.term].reason||'—'} · 风险：${aiSuggestions[detail.keyword.term].risk||'无具体风险说明'}（仅供人工参考，不改变现有投放分数）`}/>:null}</Drawer>
   <Drawer open={!!compare} title={`跨 SKU 关键词 · ${compare?.term||''}`} width={620} onClose={()=>setCompare(null)}><Alert type="info" message="每个 SKU 独立分析；这里只比较已加载的后端结果。"/><ProTable rowKey="skuId" pagination={false} search={false} options={false} toolBarRender={false} columns={[{title:'SKU',dataIndex:'skuId',render:(_,r)=>skus.find(s=>s.id===r.skuId)?.sku},{title:'得分',dataIndex:'score'},{title:'等级',dataIndex:'grade'},{title:'Exact',dataIndex:'exact',render:(_,r)=>r.exact?'✓':'—'},{title:'Broad',dataIndex:'broad',render:(_,r)=>r.broad?'✓':'—'}]} dataSource={compare?allAssoc(compare.id):[]}/></Drawer>
   <Drawer open={historyOpen} title="分析历史" width={600} onClose={()=>setHistoryOpen(false)}><Alert type="info" message="分析历史读取已保存批次；点击一行可恢复当时冻结的分析结果。"/><ProTable<KeywordRun> rowKey="run_id" pagination={{current:historyPage,pageSize:20,total:historyTotal,onChange:pageNumber=>{void loadHistoryPage(pageNumber)}}} search={false} options={false} toolBarRender={false} dataSource={serverRuns} onRow={run=>({onClick:()=>{void openRun(run)}})} columns={[{title:'SKU',dataIndex:'product_id',render:()=>sku.sku},{title:'日期',dataIndex:'created_at'},{title:'规则版本',dataIndex:'rule_version_id'},{title:'关键词数',dataIndex:'keyword_count'},{title:'来源文件',render:()=> '已保存来源'}]}/></Drawer>
   <Drawer open={aiTasksOpen} title="AI 分析任务" width={760} onClose={()=>setAiTasksOpen(false)}
