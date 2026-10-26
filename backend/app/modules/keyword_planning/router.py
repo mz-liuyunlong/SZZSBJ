@@ -115,4 +115,5 @@ router.include_router(source_routes_router)
 router.include_router(library_routes_router)
 
 from app.modules.ai_runtime.keyword_routes import router as keyword_ai_router  # noqa: E402
+
 router.include_router(keyword_ai_router)

@@ -151,9 +151,23 @@ def _config(value: ConnectorWrite) -> dict[str, Any]:
         _endpoint(value.kind, value.endpoint) if value.kind == "openai" or value.endpoint else None
     )
     if value.kind == "openai":
-        if value.default_model != "gpt-6-luna" or value.model_allowlist != ["gpt-6-luna"] or value.backup_model:
+        if (
+            value.default_model != "gpt-6-luna"
+            or value.model_allowlist != ["gpt-6-luna"]
+            or value.backup_model
+        ):
             raise ConfigError("AI_MODEL_MUST_BE_GPT_6_LUNA")
-        if len(set(value.application_scenes)) != len(value.application_scenes) or any(x not in {"keyword_launch","ai_assistant","listing_optimization","ads_optimization","product_research"} for x in value.application_scenes):
+        if len(set(value.application_scenes)) != len(value.application_scenes) or any(
+            x
+            not in {
+                "keyword_launch",
+                "ai_assistant",
+                "listing_optimization",
+                "ads_optimization",
+                "product_research",
+            }
+            for x in value.application_scenes
+        ):
             raise ConfigError("AI_SCENES_INVALID")
         models = [value.default_model, value.backup_model, *value.model_allowlist]
         if any(v and not VALID_MODELS.fullmatch(v) for v in models):

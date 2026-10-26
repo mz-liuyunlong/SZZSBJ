@@ -5,9 +5,9 @@ import importlib
 import pytest
 
 from app.celery_app import (
+    AI_QUEUE,
     BROKER_URL_ENV,
     INTEGRATION_QUEUE,
-    AI_QUEUE,
     MEDIA_QUEUE,
     NOTIFICATION_QUEUE,
     OPERATION_LOG_QUEUE,
@@ -50,7 +50,10 @@ def test_celery_app_declares_only_expected_queues() -> None:
         "task": "business_connectors.notification_tick",
         "schedule": 60.0,
     }
-    assert celery.conf.beat_schedule["ai-keyword-recovery"]["task"] == "ai_runtime.recover_keyword_jobs"
+    assert (
+        celery.conf.beat_schedule["ai-keyword-recovery"]["task"]
+        == "ai_runtime.recover_keyword_jobs"
+    )
     assert celery.conf.beat_schedule["integration-sync-scheduler"] == {
         "task": "integration_sync.scheduler_tick",
         "schedule": 60.0,
