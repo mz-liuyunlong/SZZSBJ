@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode, ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import type { NavigationPage } from '@/config/navigation';
 import AIAssistantPage from './AIAssistantPage';
+const requestMock = vi.hoisted(() => vi.fn());
+vi.mock('@/api/backendApi',()=>({backendRequest:requestMock}));
+
 
 vi.mock('@/components/page/PageShell', () => ({
   default: ({ children }: { children: ReactNode }) => <div data-testid="page-shell">{children}</div>,
@@ -33,11 +36,15 @@ vi.mock('antd', async () => {
   return {
     Button, Input, Dropdown, Modal,
     Tooltip:({children}:{children:ReactNode})=><>{children}</>,
-    message:{useMessage:()=>[{warning:vi.fn()},null]},
+    message:{useMessage:()=>[{warning:vi.fn(),error:vi.fn()},null]},
   };
 });
 const page={key:'ai_center_assistant',title:'AI助手'} as NavigationPage;
-beforeEach(()=>window.localStorage.clear());
+beforeEach(()=>{
+  window.localStorage.clear();
+  requestMock.mockReset();
+  requestMock.mockResolvedValue({data:{chat_id:"00000000-0000-0000-0000-000000000001",response:"已连接模型服务，当前缺少真实利润数据。"}});
+});
 afterEach(cleanup);
 function mount(){return render(<AIAssistantPage page={page} preferenceScope="ai-v7-test"/>);}
 describe('AI assistant V7 inside existing MainLayout',()=>{
@@ -49,12 +56,13 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     expect(screen.queryByText('我的授权产品')).not.toBeInTheDocument();
     expect(screen.queryByText('数据依据与分析边界')).not.toBeInTheDocument();
   });
-  it('sends mock analysis with prominent disclaimer',()=>{
+  it('sends text to the backend without inventing sales metrics',async()=>{
     mount();
     fireEvent.change(screen.getByRole('textbox',{name:'输入问题'}),{target:{value:'哪些 SKU 利润下降？'}});
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    expect(screen.getByText(/演示分析 · 模拟数据/)).toBeInTheDocument();
-    expect(screen.getByText('异常 SKU 排查')).toBeInTheDocument();
+    await waitFor(()=>expect(requestMock).toHaveBeenCalled());
+    expect(await screen.findByText('已连接模型服务，当前缺少真实利润数据。')).toBeInTheDocument();
+    expect(screen.queryByText(/演示分析 · 模拟数据/)).not.toBeInTheDocument();
   });
   it('preserves independent drafts across conversations',()=>{
     mount();
@@ -69,13 +77,14 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     fireEvent.click(screen.getByRole('button',{name:/^新聊天\s*暂无消息$/}));
     expect(screen.getByRole('textbox',{name:'输入问题'})).toHaveValue('第二个聊天的草稿');
   });
-  it('supports attachment-only messages and removal',()=>{
+  it('does not send unparsed attachments to the AI provider',()=>{
     mount();
     const report=new File(['sample'],'report.csv',{type:'text/csv'});
     fireEvent.change(screen.getByLabelText('选择文件'),{target:{files:[report]}});
     expect(screen.getByText('report.csv')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    expect(screen.getByText(/尚未上传服务器或供 OpenAI 解析/)).toBeInTheDocument();
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(screen.getByText('report.csv')).toBeInTheDocument();
     const picture=new File(['mock'],'demo.png',{type:'image/png'});
     fireEvent.change(screen.getByLabelText('选择图片'),{target:{files:[picture]}});
     expect(screen.getByText('demo.png')).toBeInTheDocument();
