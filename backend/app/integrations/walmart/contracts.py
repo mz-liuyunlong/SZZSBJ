@@ -148,7 +148,7 @@ class ContractRegistry:
                 path = path.replace("{" + name + "}", quote(str(value), safe=""))
             else:
                 query[name] = value
-        if not _path_valid(path):
+        if _VAR.search(path) or not path.startswith("/v3/") or ".." in path or "//" in path:
             raise ContractError("WALMART_PATH_INVALID")
         return PreparedRequest(key, operation.method, path, query, body, operation.is_write)
 
