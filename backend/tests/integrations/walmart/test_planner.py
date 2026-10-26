@@ -41,10 +41,34 @@ def test_authorized_plan() -> None:
         ("UNKNOWN", "wfs_inventory", {}, frozenset({"UNKNOWN"}), "WALMART_STORE_UNKNOWN"),
         ("HK2615", "wfs_inventory", {}, frozenset(), "WALMART_STORE_FORBIDDEN"),
         ("HK2615", "not_registered", {}, frozenset({"HK2615"}), "WALMART_API_NOT_REGISTERED"),
-        ("HK2615", "wfs_inventory", {"url": "https://example.com"}, frozenset({"HK2615"}), "WALMART_PARAM_NOT_ALLOWED"),
-        ("HK2615", "wfs_inventory", {"limit": True}, frozenset({"HK2615"}), "WALMART_PARAMS_INVALID"),
-        ("HK2615", "wfs_inventory", {"limit": 101}, frozenset({"HK2615"}), "WALMART_PARAMS_INVALID"),
-        ("HK2615", "inbound_shipments", {"fromCreatedDate": 1700000000002, "toCreatedDate": 1700000000001}, frozenset({"HK2615"}), "WALMART_DATE_RANGE_INVALID"),
+        (
+            "HK2615",
+            "wfs_inventory",
+            {"url": "https://example.com"},
+            frozenset({"HK2615"}),
+            "WALMART_PARAM_NOT_ALLOWED",
+        ),
+        (
+            "HK2615",
+            "wfs_inventory",
+            {"limit": True},
+            frozenset({"HK2615"}),
+            "WALMART_PARAMS_INVALID",
+        ),
+        (
+            "HK2615",
+            "wfs_inventory",
+            {"limit": 101},
+            frozenset({"HK2615"}),
+            "WALMART_PARAMS_INVALID",
+        ),
+        (
+            "HK2615",
+            "inbound_shipments",
+            {"fromCreatedDate": 1700000000002, "toCreatedDate": 1700000000001},
+            frozenset({"HK2615"}),
+            "WALMART_DATE_RANGE_INVALID",
+        ),
     ],
 )
 def test_fail_closed(
