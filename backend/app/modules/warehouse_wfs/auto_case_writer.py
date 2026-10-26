@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -13,7 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.dml import ReturningInsert
 
 from app.modules.warehouse_wfs.anomaly_detection import WfsAnomalyCandidate
-from app.modules.warehouse_wfs.models import WfsFeeAnomalyCase
+from app.modules.warehouse_wfs.models import WfsFeeAnomalyCase, WfsFeeDetectionEvidence
 
 
 class WfsCaseWriteError(ValueError):
@@ -24,6 +25,68 @@ class WfsCaseWriteError(ValueError):
 class WfsCaseWriteResult:
     action: str
     case_id: UUID | None
+
+
+def record_wfs_detection_evidence(
+    session: Session,
+    *,
+    collection_id: UUID,
+    item_id: str,
+    candidate: WfsAnomalyCandidate,
+    case_id: UUID | None,
+    business_as_of_date: date,
+    detected_at: datetime,
+    persist: bool,
+    is_backtest: bool = False,
+) -> UUID | None:
+    """Append one immutable evidence snapshot; previews/backtests write nothing."""
+
+    if not persist or is_backtest:
+        return None
+    evidence_id = uuid4()
+    statement = (
+        insert(WfsFeeDetectionEvidence)
+        .values(
+            id=evidence_id,
+            collection_id=collection_id,
+            case_id=case_id,
+            source_account_ref=candidate.source_account_ref,
+            store_id=candidate.store_id,
+            item_id=item_id,
+            msku=candidate.msku,
+            actual_unit_fee=candidate.actual_unit_fee,
+            standard_unit_fee=candidate.standard_unit_fee,
+            unit_fee_diff=candidate.unit_overcharge,
+            sample_units=candidate.sample_units,
+            sample_orders=candidate.sample_orders,
+            mode_count=candidate.mode_count,
+            historical_units=candidate.historical_units,
+            sales_start_date=candidate.sales_start_date,
+            sales_end_date=candidate.sales_end_date,
+            sales_coverage_status=candidate.sales_coverage_status,
+            sales_coverage_reason=candidate.sales_coverage_reason,
+            sales_coverage_start_date=candidate.sales_coverage_start_date,
+            sales_coverage_end_date=candidate.sales_coverage_end_date,
+            sales_source_watermark=candidate.sales_source_watermark,
+            legacy_estimated_overcharge=candidate.legacy_estimated_overcharge,
+            theoretical_overcharge=candidate.theoretical_overcharge,
+            net_sample_difference=candidate.net_sample_difference,
+            latest_settlement_date=candidate.latest_settlement_date,
+            evidence_status=candidate.evidence_status,
+            fee_scope_status=candidate.fee_scope_status,
+            standard_fee_source=candidate.standard_source,
+            rule_version=candidate.rule_version[:64],
+            business_as_of_date=business_as_of_date,
+            detected_at=detected_at,
+            is_backtest=False,
+            created_at=detected_at,
+        )
+        .on_conflict_do_nothing(
+            index_elements=["collection_id", "item_id", "msku"],
+        )
+        .returning(WfsFeeDetectionEvidence.id)
+    )
+    return cast(UUID | None, session.execute(statement).scalar_one_or_none())
 
 
 def build_wfs_case_insert(
@@ -97,7 +160,15 @@ def build_wfs_case_insert(
         net_sample_difference_amount=candidate.net_sample_difference,
         latest_settlement_date=candidate.latest_settlement_date,
         detection_status=candidate.evidence_status,
-        data_freshness_status=("stale" if candidate.evidence_status == "STALE" else "current"),
+        data_freshness_status=(
+            "stale"
+            if candidate.evidence_status == "STALE"
+            else "invalid"
+            if candidate.evidence_status == "FUTURE_EVIDENCE"
+            else "current"
+            if candidate.evidence_status == "OVERCHARGE_CANDIDATE"
+            else "review_required"
+        ),
         standard_fee_source=candidate.standard_source,
         detected_at=now,
         claim_amount=None,

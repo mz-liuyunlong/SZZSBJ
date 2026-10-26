@@ -111,6 +111,12 @@ describe("WfsFeeAlertDetailModal fee evidence", () => {
           detectionStatus: "STALE",
           freshnessStatus: "stale",
           detectedAt: "2026-10-20T00:00:00Z",
+          salesCoverageStatus: "complete",
+          salesCoverageReason: "verified_contiguous_sync_windows",
+          salesCoverageStartDate: "2026-07-03",
+          salesCoverageEndDate: "2026-10-17",
+          feeScopeStatus: "verified_wfs",
+          automaticCaseEligible: false,
         }}
         currency="USD"
         canFollow={false}
@@ -128,5 +134,9 @@ describe("WfsFeeAlertDetailModal fee evidence", () => {
     expect(screen.getByText("$0.99")).toBeInTheDocument();
     expect(screen.getByText("STALE")).toBeInTheDocument();
     expect(screen.getByText("stale")).toBeInTheDocument();
+    expect(screen.getByText("complete")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-03 ～ 2026-10-17")).toBeInTheDocument();
+    expect(screen.getByText("verified_wfs")).toBeInTheDocument();
+    expect(screen.getByText("仅人工复核")).toBeInTheDocument();
   });
 });

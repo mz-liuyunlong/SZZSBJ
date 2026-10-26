@@ -1,6 +1,6 @@
 # PRP: WFS 费用异常自动检测 V1
 
-- Status: Approved for implementation
+- Status: Approved for implementation；implementation ready for PR review, not merged
 - Main execution role: Backend Engineer（含现有前端页面最小集成）
 - Source Decision: `docs/data-sources/decisions/wfs-fee-anomaly-auto-detection-decision.md`
 - Branch: `feat/wfs-fee-anomaly-auto-detection`
@@ -54,6 +54,22 @@
 - 代码层链路全部接线且隔离测试通过；没有把 mock/计划写成生产已验证。
 - 已知商品数值仅用于脱敏夹具回归，不作为业务常量。
 - 自动检测与自动建案默认关闭；生产迁移、采集、案件写入、Beat 启用和部署仍需单独 Owner 授权。
+
+## Owner-review hardening record
+
+- 正式时效以 `detection_executed_at.date()` 与最新结算日计算；历史窗口结束日不能冒充检测日。Backtest 必须显式标记，且禁止写案件或检测证据。
+- 每个账号/店铺/窗口由 `gov_wfs_settlement_collections` 独立证明完整性。只有分页总数稳定、全部行已分类、无无效/重复/缺失身份/未知店铺且事实数一致的 `verified` collection 才能检测。
+- 销量存在不等于生命周期完整。只有 Listing 生命周期起点与连续成功的 `saleStatPageList` 同步窗口共同覆盖所需日期，才标记 `complete`；否则为 `partial`、`missing` 或 `unknown` 并阻断自动立案。
+- `storeId` 是请求范围内的稳定店铺身份；`storeName` 仅作描述。`CS*` 是可计数的业务排除项，不等同于异常行。
+- 仓库证据尚不能证明 profit-order 每个物流费行都属于 WFS，因此 `WFS_SETTLEMENT_SCOPE_VERIFIED=false` 默认保持 fail closed。只有后续受控合同证据与 Owner 授权才能开启。
+- 案件主体仍为 insert-only；每次新的 verified collection 可追加独立检测证据，历史人工字段、跟进、审批、归档、索赔和追回状态不被自动覆盖。
+- 0061 在隔离 PostgreSQL 16 上完成带历史合成事实/人工案件的 0060→0061、案件并发/回滚测试、0061→0060→0061。生产索引重建仍存在锁风险，需单独低峰变更计划和生产授权。
+
+## Performance record
+
+- 标准费用批量读取：100 个身份固定 3 次 `execute` + 2 次 `scalars`；销量与覆盖证明固定 3 次查询；结算事实每批为 1 次 Listing 身份查询 + 1 次批量 upsert。
+- 合成纯计算基线（本机、非生产）：1 店/100 SKU 为 collection `1.88 ms`、detection `15.61 ms`、峰值 `0.31 MiB`；9 店/1,000 SKU 为 `18.56 ms`、`164.09 ms`、`2.90 MiB`；20 店/10,000 SKU 为 `241.77 ms`、`1804.87 ms`、`28.98 MiB`。
+- 上述是合成 parser/detection 资源基线，不是数据库或真实 provider SLA；生产容量仍需受控观测。
 
 ## Explicitly not implemented in production
 

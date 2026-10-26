@@ -78,6 +78,13 @@ class WfsFeeCaseRead(StrictSchema):
     data_freshness_status: str | None = None
     standard_fee_source: str | None = None
     detected_at: datetime | None = None
+    sales_coverage_status: str | None = None
+    sales_coverage_reason: str | None = None
+    sales_coverage_start_date: date | None = None
+    sales_coverage_end_date: date | None = None
+    sales_source_watermark: str | None = None
+    fee_scope_status: str | None = None
+    automatic_case_eligible: bool | None = None
 
     claim_amount: Decimal | None
     recovered_amount: Decimal

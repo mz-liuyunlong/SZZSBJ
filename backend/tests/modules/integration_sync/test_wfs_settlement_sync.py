@@ -1,5 +1,6 @@
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -18,10 +19,28 @@ from app.modules.integration_sync.models import (
     IntegrationSyncRun,
     RawRetentionPolicy,
 )
+from app.modules.warehouse_wfs.models import WfsSettlementCollection
 from app.modules.warehouse_wfs.store_discovery import WfsSettlementStore
 
 SYNTHETIC_DATABASE_URL = "postgresql+psycopg://synthetic@db.invalid/synthetic"
 NOW = datetime(2026, 10, 18, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def verified_collection_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
+    def finalize(
+        _repository: object,
+        collection: WfsSettlementCollection,
+        **kwargs: Any,
+    ) -> None:
+        collection.collection_status = "verified"
+        collection.verified_count = kwargs["accepted_count"]
+
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync."
+        "WfsSettlementRepository.finalize_collection",
+        finalize,
+    )
 
 
 class FakeClient:
@@ -38,6 +57,15 @@ class FakeClient:
             )
         )
         return self.envelopes.pop(0)
+
+
+class ExplodingClient:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch_wfs_settlement_page(self, **_kwargs: object) -> LingxingRawEnvelope:
+        self.calls += 1
+        raise RuntimeError("unsafe provider detail must not escape")
 
 
 def settings() -> Settings:
@@ -57,7 +85,7 @@ def envelope(
     rows: list[dict[str, JsonValue]],
     total: int,
 ) -> LingxingRawEnvelope:
-    payload: JsonValue = {"code": 0, "data": {"list": rows, "total": total}}
+    payload = cast(JsonValue, {"code": 0, "data": {"list": rows, "total": total}})
     return LingxingRawEnvelope(
         api_path="/basicOpen/multiplatform/profit/report/order",
         request_body_json={"offset": (page - 1) * 2, "length": 2, "sids": store},
@@ -77,8 +105,10 @@ def envelope(
 
 
 def row(store_name: str, index: int) -> dict[str, JsonValue]:
+    store_id = "1" if store_name == "A" else "2"
     return {
         "storeName": store_name,
+        "storeId": store_id,
         "msku": "SKU-A",
         "settlementDate": "2026-10-10",
         "uniqueId": f"source-{store_name}-{index}",
@@ -87,7 +117,15 @@ def row(store_name: str, index: int) -> dict[str, JsonValue]:
         "salesNum": 1,
         "platformLogisticsAmount": "-6.95",
         "currencyCode": "USD",
+        "platformCode": "10008",
+        "transactionTypes": 0,
     }
+
+
+def dated_row(store_name: str, index: int, settlement_date: str) -> dict[str, JsonValue]:
+    value = row(store_name, index)
+    value["settlementDate"] = settlement_date
+    return value
 
 
 def run() -> IntegrationSyncRun:
@@ -272,8 +310,102 @@ def test_partial_store_failure_marks_run_failed_and_never_detects_failed_store(
     assert result.status == "completed_with_warnings"
     assert result.stores_completed == 1
     assert result.stores_failed == 1
-    assert selected_run.status == "failed"
+    assert selected_run.status == "succeeded"
     assert selected_run.error_code == "SYNC_WFS_STORE_PARTIAL"
     assert detect.call_count == 1
     assert detect.call_args.kwargs["store_id"] == "1"
-    assert detect.call_args.kwargs["collection_verified"] is True
+    assert detect.call_args.kwargs["collection_id"] is not None
+
+
+def test_large_window_is_split_and_all_child_pages_are_collected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeClient(
+        [
+            envelope("1", 1, [row("A", 1), row("A", 2)], 5),
+            envelope(
+                "1",
+                1,
+                [dated_row("A", 1, "2026-10-10"), dated_row("A", 2, "2026-10-10")],
+                2,
+            ),
+            envelope(
+                "1",
+                1,
+                [dated_row("A", 3, "2026-10-11"), dated_row("A", 4, "2026-10-11")],
+                3,
+            ),
+            envelope("1", 2, [dated_row("A", 5, "2026-10-11")], 3),
+        ]
+    )
+    handler, _ = configured_handler(client)
+    handler.repository.get_config.return_value.max_pages = 2
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync.discover_walmart_stores",
+        lambda *_args, **_kwargs: (WfsSettlementStore("primary", "1", "A", "1"),),
+    )
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync.WfsSettlementRepository.upsert_rows",
+        lambda _repository, rows, **_kwargs: len(rows),
+    )
+    detect = MagicMock(return_value=SimpleNamespace(would_create=0))
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync.detect_store_from_persisted_evidence",
+        detect,
+    )
+
+    selected_run = run()
+    selected_run.window_start = date(2026, 10, 10)
+    selected_run.window_end = date(2026, 10, 11)
+    result = handler.execute(selected_run, interface(selected_run))
+
+    assert result.status == "completed"
+    assert result.records_captured == 5
+    assert [call[1:] for call in client.calls] == [(0, 2), (0, 2), (0, 2), (2, 2)]
+    detect.assert_called_once()
+
+
+def test_one_day_over_page_limit_fails_closed_before_detection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = FakeClient([envelope("1", 1, [row("A", 1), row("A", 2)], 5)])
+    handler, _ = configured_handler(client)
+    handler.repository.get_config.return_value.max_pages = 2
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync.discover_walmart_stores",
+        lambda *_args, **_kwargs: (WfsSettlementStore("primary", "1", "A", "1"),),
+    )
+    detect = MagicMock()
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync.detect_store_from_persisted_evidence",
+        detect,
+    )
+    selected_run = run()
+    selected_run.window_start = date(2026, 10, 17)
+    selected_run.window_end = date(2026, 10, 17)
+
+    result = handler.execute(selected_run, interface(selected_run))
+
+    assert result.status == "failed"
+    detect.assert_not_called()
+
+
+def test_transport_exception_is_safely_terminalized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = ExplodingClient()
+    handler, _ = configured_handler(cast(Any, client))
+    monkeypatch.setattr(
+        "app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync.discover_walmart_stores",
+        lambda *_args, **_kwargs: (WfsSettlementStore("primary", "1", "A", "1"),),
+    )
+    terminalize = MagicMock()
+    monkeypatch.setattr(handler, "_terminalize_store_work_items", terminalize)
+    selected_run = run()
+
+    result = handler.execute(selected_run, interface(selected_run))
+
+    assert result.status == "failed"
+    assert client.calls == 1
+    terminalize.assert_called_once_with(selected_run, "1", "SYNC_WFS_UNEXPECTED")
+    assert selected_run.error_message == "WFS 结算采集未完成"

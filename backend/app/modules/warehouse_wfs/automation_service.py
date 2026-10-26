@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,14 +12,17 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.modules.data_pages.models import WalmartListingDimension
 from app.modules.warehouse_wfs.anomaly_detection import detect_wfs_anomalies
-from app.modules.warehouse_wfs.auto_case_writer import create_wfs_case
+from app.modules.warehouse_wfs.auto_case_writer import (
+    create_wfs_case,
+    record_wfs_detection_evidence,
+)
 from app.modules.warehouse_wfs.fee_detection import resolve_wfs_fees
 from app.modules.warehouse_wfs.sales_reader import (
     WfsSalesReadError,
-    read_walmart_lifetime_sales,
+    read_walmart_lifetime_sales_batch,
 )
 from app.modules.warehouse_wfs.settlement_repository import WfsSettlementRepository
-from app.modules.warehouse_wfs.standard_fee_reader import read_product_management_wfs_fee
+from app.modules.warehouse_wfs.standard_fee_reader import read_product_management_wfs_fees
 from app.modules.warehouse_wfs.store_discovery import discover_walmart_stores
 
 
@@ -59,17 +63,24 @@ def detect_store_from_persisted_evidence(
     start_date: date,
     end_date: date,
     execute_cases: bool = False,
-    collection_verified: bool = False,
+    collection_id: UUID | None = None,
+    detection_executed_at: datetime | None = None,
+    business_as_of_date: date | None = None,
+    backtest: bool = False,
+    persist_evidence: bool = False,
 ) -> WfsStoreDetectionPreview:
     """Detect one store after collection completed and pagination was verified."""
 
     repository = WfsSettlementRepository(session)
-    if not collection_verified and not repository.has_completed_collection(
+    if backtest and (execute_cases or persist_evidence):
+        raise ValueError("WFS_BACKTEST_WRITE_FORBIDDEN")
+    collection = repository.get_verified_collection(
         source_account_ref=source_account_ref,
         store_id=store_id,
         start_date=start_date,
         end_date=end_date,
-    ):
+    )
+    if collection is None or (collection_id is not None and collection.id != collection_id):
         raise ValueError("WFS_COLLECTION_NOT_VERIFIED")
 
     rows = repository.list_rows(
@@ -77,6 +88,7 @@ def detect_store_from_persisted_evidence(
         store_id=store_id,
         start_date=start_date,
         end_date=end_date,
+        collection_id=collection.id,
     )
     resolved = resolve_wfs_fees(
         list(rows),
@@ -89,37 +101,54 @@ def detect_store_from_persisted_evidence(
     review_required = 0
     skipped = 0
 
+    item_rows = session.execute(
+        select(WalmartListingDimension.msku, WalmartListingDimension.item_id).where(
+            WalmartListingDimension.source_account_ref == source_account_ref,
+            WalmartListingDimension.store_id == store_id,
+            WalmartListingDimension.msku.in_([item.msku for item in resolved]),
+        )
+    ).all()
+    item_ids_by_msku: dict[str, list[str]] = {}
+    for msku, item_id in item_rows:
+        item_ids_by_msku.setdefault(msku, []).append(item_id)
+
+    identity_values: set[tuple[str, str, str, str]] = set()
     for actual in resolved:
-        item_ids = session.scalars(
-            select(WalmartListingDimension.item_id).where(
-                WalmartListingDimension.source_account_ref == source_account_ref,
-                WalmartListingDimension.store_id == store_id,
-                WalmartListingDimension.msku == actual.msku,
-            )
-        ).all()
+        item_ids = item_ids_by_msku.get(actual.msku, [])
+        if len(item_ids) == 1:
+            identity_values.add((source_account_ref, store_id, item_ids[0], actual.msku))
+    resolved_identities = frozenset(identity_values)
+    standards_by_identity = read_product_management_wfs_fees(
+        session,
+        identities=resolved_identities,
+    )
+    try:
+        sales_by_identity = read_walmart_lifetime_sales_batch(
+            session,
+            identities=resolved_identities,
+            required_coverage_end=end_date,
+        )
+    except WfsSalesReadError:
+        sales_by_identity = {}
+
+    executed_at = detection_executed_at or datetime.now(UTC)
+    effective_date = business_as_of_date if backtest else executed_at.date()
+    if effective_date is None:
+        raise ValueError("WFS_BACKTEST_DATE_REQUIRED")
+
+    for actual in resolved:
+        item_ids = item_ids_by_msku.get(actual.msku, [])
         if len(item_ids) != 1:
             skipped += 1
             continue
         item_id = item_ids[0]
-        standard = read_product_management_wfs_fee(
-            session,
-            source_account_ref=source_account_ref,
-            store_id=store_id,
-            item_id=item_id,
-            msku=actual.msku,
-        )
+        identity = (source_account_ref, store_id, item_id, actual.msku)
+        standard = standards_by_identity.get(identity)
         if standard is None:
             skipped += 1
             continue
-        try:
-            sales = read_walmart_lifetime_sales(
-                session,
-                source_account_ref=source_account_ref,
-                store_id=store_id,
-                item_id=item_id,
-                msku=actual.msku,
-            )
-        except WfsSalesReadError:
+        sales = sales_by_identity.get(identity)
+        if sales is None:
             skipped += 1
             continue
 
@@ -128,7 +157,7 @@ def detect_store_from_persisted_evidence(
             [actual],
             [standard],
             {key: sales},
-            as_of=end_date,
+            as_of=effective_date,
             max_stale_days=settings.wfs_detect_max_stale_days,
         )
         if not detection.candidates:
@@ -143,6 +172,17 @@ def detect_store_from_persisted_evidence(
             execute=execute_cases,
             detect_enabled=settings.wfs_auto_detect_enabled,
             case_create_enabled=settings.wfs_auto_case_create_enabled,
+        )
+        record_wfs_detection_evidence(
+            session,
+            collection_id=collection.id,
+            item_id=item_id,
+            candidate=candidate,
+            case_id=result.case_id,
+            business_as_of_date=effective_date,
+            detected_at=executed_at,
+            persist=persist_evidence,
+            is_backtest=backtest,
         )
         if result.action == "dry_run":
             would_create += 1

@@ -1,6 +1,8 @@
-from datetime import date
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -10,6 +12,7 @@ from app.modules.warehouse_wfs.auto_case_writer import (
     WfsCaseWriteError,
     build_wfs_case_insert,
     create_wfs_case,
+    record_wfs_detection_evidence,
 )
 
 
@@ -158,3 +161,61 @@ def test_dry_run_reports_existing_case_without_writing():
 def test_missing_item_id_rejected():
     with pytest.raises(WfsCaseWriteError):
         build_wfs_case_insert(item_id="", candidate=candidate())
+
+
+def test_detection_evidence_is_append_only_and_contains_coverage_proof() -> None:
+    session = MagicMock()
+    evidence_id = uuid4()
+    session.execute.return_value.scalar_one_or_none.return_value = evidence_id
+    selected = replace(
+        candidate(),
+        sales_coverage_status="complete",
+        sales_coverage_reason="verified_contiguous_sync_windows",
+        sales_coverage_start_date=date(2026, 7, 3),
+        sales_coverage_end_date=date(2026, 10, 17),
+        sales_source_watermark="saleStatPageList:2026-07-03:2026-10-17",
+        fee_scope_status="verified_wfs",
+    )
+
+    result = record_wfs_detection_evidence(
+        session,
+        collection_id=uuid4(),
+        item_id="20500114893",
+        candidate=selected,
+        case_id=None,
+        business_as_of_date=date(2026, 10, 17),
+        detected_at=datetime(2026, 10, 26, tzinfo=UTC),
+        persist=True,
+    )
+
+    assert result == evidence_id
+    statement = session.execute.call_args.args[0]
+    sql = str(statement.compile(dialect=postgresql.dialect()))
+    assert "ON CONFLICT" in sql
+    assert "DO NOTHING" in sql
+    assert "DO UPDATE" not in sql
+    assert "sales_source_watermark" in sql
+    session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize(("persist", "is_backtest"), [(False, False), (True, True)])
+def test_preview_and_backtest_never_persist_detection_evidence(
+    persist: bool,
+    is_backtest: bool,
+) -> None:
+    session = MagicMock()
+
+    result = record_wfs_detection_evidence(
+        session,
+        collection_id=uuid4(),
+        item_id="20500114893",
+        candidate=candidate(),
+        case_id=None,
+        business_as_of_date=date(2026, 10, 17),
+        detected_at=datetime(2026, 10, 26, tzinfo=UTC),
+        persist=persist,
+        is_backtest=is_backtest,
+    )
+
+    assert result is None
+    session.execute.assert_not_called()

@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from app.modules.warehouse_wfs.fee_detection import (
     ResolvedWfsFee,
+    calculate_wfs_amounts,
     is_wfs_overcharge,
 )
 
@@ -33,6 +34,10 @@ class WfsSalesEvidence:
     sales_start_date: date | None
     sales_end_date: date | None
     coverage_status: str
+    coverage_start_date: date | None = None
+    coverage_end_date: date | None = None
+    coverage_reason: str = "unproven"
+    source_watermark: str | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +63,13 @@ class WfsAnomalyCandidate:
     latest_settlement_date: date | None = None
     evidence_status: str = "REVIEW_REQUIRED"
     case_eligible: bool = False
+    sales_coverage_status: str = "unknown"
+    sales_coverage_reason: str = "unproven"
+    sales_coverage_start_date: date | None = None
+    sales_coverage_end_date: date | None = None
+    sales_source_watermark: str | None = None
+    fee_scope_status: str = "unverified"
+    evidence_age_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -135,43 +147,42 @@ def detect_wfs_anomalies(
         diff = actual.unit_fee - matched_standard.unit_fee
         sales = sales_evidence.get(key)
         historical_units = sales.historical_units if sales is not None else None
-        legacy_estimate = (
-            (diff * historical_units).quantize(MONEY, rounding=ROUND_HALF_UP)
-            if historical_units is not None
-            else None
-        )
         if actual.order_samples:
-            theoretical = sum(
-                (
-                    max(sample.unit_fee - matched_standard.unit_fee, Decimal("0"))
-                    * sample.sales_units
-                    for sample in actual.order_samples
-                ),
-                Decimal("0"),
-            ).quantize(MONEY, rounding=ROUND_HALF_UP)
-            net_difference = sum(
-                (
-                    (sample.unit_fee - matched_standard.unit_fee) * sample.sales_units
-                    for sample in actual.order_samples
-                ),
-                Decimal("0"),
-            ).quantize(MONEY, rounding=ROUND_HALF_UP)
+            amounts = calculate_wfs_amounts(
+                actual.order_samples,
+                standard_unit_fee=matched_standard.unit_fee,
+                actual_unit_fee=actual.unit_fee,
+                historical_units=historical_units,
+            )
+            legacy_estimate = amounts.legacy_estimate
+            theoretical = amounts.theoretical_overcharge
+            net_difference = amounts.net_sample_difference
         else:
             # Compatibility for pre-evidence callers. Persisted/live detection
             # always supplies order samples and therefore uses the exact formula.
             theoretical = (diff * actual.sample_units).quantize(MONEY, rounding=ROUND_HALF_UP)
             net_difference = theoretical
-        stale = (
-            actual.latest_settlement_date is None
-            or (detection_date - actual.latest_settlement_date).days > max_stale_days
+            legacy_estimate = (
+                (diff * historical_units).quantize(MONEY, rounding=ROUND_HALF_UP)
+                if historical_units is not None
+                else None
+            )
+        evidence_age_days = (
+            (detection_date - actual.latest_settlement_date).days
+            if actual.latest_settlement_date is not None
+            else None
         )
+        future_evidence = evidence_age_days is not None and evidence_age_days < 0
+        stale = evidence_age_days is None or evidence_age_days > max_stale_days
         sales_complete = sales is not None and sales.coverage_status == "complete"
         standard_confirmed = matched_standard.source != "product_management_default_unconfirmed"
         evidence_status = (
             "STALE"
             if stale
+            else "FUTURE_EVIDENCE"
+            if future_evidence
             else "OVERCHARGE_CANDIDATE"
-            if sales_complete and standard_confirmed
+            if sales_complete and standard_confirmed and actual.fee_scope_status == "verified_wfs"
             else "REVIEW_REQUIRED"
         )
 
@@ -198,6 +209,17 @@ def detect_wfs_anomalies(
                 case_eligible=evidence_status == "OVERCHARGE_CANDIDATE",
                 standard_source=matched_standard.source,
                 rule_version=matched_standard.rule_version,
+                sales_coverage_status=(sales.coverage_status if sales is not None else "missing"),
+                sales_coverage_reason=(
+                    sales.coverage_reason if sales is not None else "sales_evidence_missing"
+                ),
+                sales_coverage_start_date=(
+                    sales.coverage_start_date if sales is not None else None
+                ),
+                sales_coverage_end_date=(sales.coverage_end_date if sales is not None else None),
+                sales_source_watermark=(sales.source_watermark if sales is not None else None),
+                fee_scope_status=actual.fee_scope_status,
+                evidence_age_days=evidence_age_days,
             )
         )
 

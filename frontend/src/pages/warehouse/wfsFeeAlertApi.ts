@@ -52,6 +52,12 @@ interface BackendWfsFeeCase {
   data_freshness_status?: string | null;
   standard_fee_source?: string | null;
   detected_at?: string | null;
+  sales_coverage_status?: string | null;
+  sales_coverage_reason?: string | null;
+  sales_coverage_start_date?: string | null;
+  sales_coverage_end_date?: string | null;
+  fee_scope_status?: string | null;
+  automatic_case_eligible?: boolean | null;
   claim_amount: NumericLike;
   recovered_amount: NumericLike;
   recovered_at: string | null;
@@ -180,6 +186,12 @@ const toRow = (item: BackendWfsFeeCase): WfsFeeAlertRow => {
     freshnessStatus: item.data_freshness_status ?? "unknown",
     standardFeeSource: item.standard_fee_source ?? item.fee_source,
     detectedAt: dateValue(item.detected_at) || discoveredAt,
+    salesCoverageStatus: item.sales_coverage_status ?? "unknown",
+    salesCoverageReason: item.sales_coverage_reason ?? "unproven",
+    salesCoverageStartDate: dateValue(item.sales_coverage_start_date) || "-",
+    salesCoverageEndDate: dateValue(item.sales_coverage_end_date) || "-",
+    feeScopeStatus: item.fee_scope_status ?? "unverified",
+    automaticCaseEligible: item.automatic_case_eligible ?? null,
   };
 };
 

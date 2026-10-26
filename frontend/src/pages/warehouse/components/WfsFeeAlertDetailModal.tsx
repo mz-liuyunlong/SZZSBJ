@@ -172,6 +172,21 @@ function WfsFeeAlertDetailModal({
           <Descriptions.Item label="检测状态">{row.detectionStatus ?? "历史案件"}</Descriptions.Item>
           <Descriptions.Item label="数据时效">{row.freshnessStatus ?? "未知"}</Descriptions.Item>
           <Descriptions.Item label="检测时间">{row.detectedAt ?? "—"}</Descriptions.Item>
+          <Descriptions.Item label="销量覆盖状态">{row.salesCoverageStatus ?? "unknown"}</Descriptions.Item>
+          <Descriptions.Item label="销量覆盖区间">
+            {row.salesCoverageStartDate && row.salesCoverageEndDate
+              ? `${row.salesCoverageStartDate} ～ ${row.salesCoverageEndDate}`
+              : "—"}
+          </Descriptions.Item>
+          <Descriptions.Item label="销量覆盖说明">{row.salesCoverageReason ?? "unproven"}</Descriptions.Item>
+          <Descriptions.Item label="WFS范围证据">{row.feeScopeStatus ?? "unverified"}</Descriptions.Item>
+          <Descriptions.Item label="自动立案资格">
+            {row.automaticCaseEligible == null
+              ? "历史案件未记录"
+              : row.automaticCaseEligible
+                ? "可自动立案"
+                : "仅人工复核"}
+          </Descriptions.Item>
           <Descriptions.Item label="异常原因">{row.reason}</Descriptions.Item>
           <Descriptions.Item label="发现时间">{row.discoveredAt}</Descriptions.Item>
           <Descriptions.Item label="Case编号">{row.caseNo || "未开Case"}</Descriptions.Item>

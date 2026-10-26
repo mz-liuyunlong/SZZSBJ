@@ -109,6 +109,7 @@ def test_lingxing_settings_default_to_dry_run_and_deny_dangerous_actions() -> No
     assert settings.lingxing_max_response_bytes == 1_048_576
     assert settings.wfs_auto_detect_enabled is False
     assert settings.wfs_auto_case_create_enabled is False
+    assert settings.wfs_settlement_scope_verified is False
     assert settings.wfs_detect_lookback_days == 60
     assert settings.wfs_detect_settlement_lag_days == 2
     assert settings.wfs_detect_min_sample_units == 10

@@ -43,6 +43,12 @@ export interface WfsFeeAlertRow {
   freshnessStatus?: string;
   standardFeeSource?: string;
   detectedAt?: string;
+  salesCoverageStatus?: string;
+  salesCoverageReason?: string;
+  salesCoverageStartDate?: string;
+  salesCoverageEndDate?: string;
+  feeScopeStatus?: string;
+  automaticCaseEligible?: boolean | null;
   followLog?: string;
   followCount?: number;
   lastFollowBy?: string | null;

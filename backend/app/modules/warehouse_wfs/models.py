@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -69,11 +70,96 @@ class WalmartWfsFeeActualFact(Base):
     source_raw_request_ref_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("ods_api_raw_request_refs.id", ondelete="SET NULL")
     )
+    collection_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("gov_wfs_settlement_collections.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False
+    )
+
+
+class WfsSettlementCollection(Base):
+    """Store/window completeness proof for normalized settlement evidence."""
+
+    __tablename__ = "gov_wfs_settlement_collections"
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "source_account_ref",
+            "store_id",
+            "window_start",
+            "window_end",
+        ),
+        CheckConstraint(
+            "collection_status in ('running','verified','partial','failed')",
+            name="wfs_collection_status_allowed",
+        ),
+        CheckConstraint(
+            "wfs_scope_status in ('verified_wfs','unverified')",
+            name="wfs_collection_scope_status_allowed",
+        ),
+        CheckConstraint(
+            "expected_total is null or expected_total >= 0",
+            name="wfs_collection_expected_nonnegative",
+        ),
+        CheckConstraint(
+            "captured_count >= 0 and accepted_count >= 0 and "
+            "business_excluded_count >= 0 and invalid_count >= 0 and "
+            "missing_store_count >= 0 and duplicate_count >= 0 and "
+            "missing_identity_count >= 0 and "
+            "verified_count >= 0",
+            name="wfs_collection_counts_nonnegative",
+        ),
+        Index(
+            "ix_wfs_collection_scope_window",
+            "source_account_ref",
+            "store_id",
+            "window_start",
+            "window_end",
+            "collection_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gov_integration_sync_runs.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    window_start: Mapped[date] = mapped_column(Date, nullable=False)
+    window_end: Mapped[date] = mapped_column(Date, nullable=False)
+    collection_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    wfs_scope_status: Mapped[str] = mapped_column(
+        String(32), default="unverified", server_default=text("'unverified'"), nullable=False
+    )
+    expected_total: Mapped[int | None]
+    captured_count: Mapped[int] = mapped_column(default=0, server_default=text("0"), nullable=False)
+    accepted_count: Mapped[int] = mapped_column(default=0, server_default=text("0"), nullable=False)
+    business_excluded_count: Mapped[int] = mapped_column(
+        default=0, server_default=text("0"), nullable=False
+    )
+    invalid_count: Mapped[int] = mapped_column(default=0, server_default=text("0"), nullable=False)
+    missing_store_count: Mapped[int] = mapped_column(
+        default=0, server_default=text("0"), nullable=False
+    )
+    duplicate_count: Mapped[int] = mapped_column(
+        default=0, server_default=text("0"), nullable=False
+    )
+    missing_identity_count: Mapped[int] = mapped_column(
+        default=0, server_default=text("0"), nullable=False
+    )
+    verified_count: Mapped[int] = mapped_column(default=0, server_default=text("0"), nullable=False)
+    latest_settlement_date: Mapped[date | None] = mapped_column(Date)
+    error_code: Mapped[str | None] = mapped_column(String(128))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
     )
 
 
@@ -242,4 +328,77 @@ class WfsFeeAnomalyCase(Base):
     )
     is_deleted: Mapped[bool] = mapped_column(
         default=False, server_default=text("false"), nullable=False
+    )
+
+
+class WfsFeeDetectionEvidence(Base):
+    """Append-only system evidence; never owns or overwrites human case state."""
+
+    __tablename__ = "ops_wfs_fee_detection_evidence"
+    __table_args__ = (
+        UniqueConstraint("collection_id", "item_id", "msku"),
+        CheckConstraint(
+            "actual_unit_fee >= 0 and standard_unit_fee >= 0 and unit_fee_diff >= 0",
+            name="wfs_evidence_fee_nonnegative",
+        ),
+        CheckConstraint(
+            "sample_units >= 0 and sample_orders >= 0 and mode_count >= 0",
+            name="wfs_evidence_samples_nonnegative",
+        ),
+        CheckConstraint(
+            "sales_coverage_status in ('complete','partial','missing','unknown')",
+            name="wfs_evidence_sales_coverage_allowed",
+        ),
+        CheckConstraint(
+            "fee_scope_status in ('verified_wfs','unverified')",
+            name="wfs_evidence_scope_status_allowed",
+        ),
+        Index(
+            "ix_wfs_detection_evidence_latest",
+            "source_account_ref",
+            "store_id",
+            "item_id",
+            "msku",
+            "detected_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    collection_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gov_wfs_settlement_collections.id", ondelete="RESTRICT"), nullable=False
+    )
+    case_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("ops_wfs_fee_anomaly_cases.id", ondelete="SET NULL")
+    )
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    msku: Mapped[str] = mapped_column(Text, nullable=False)
+    actual_unit_fee: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    standard_unit_fee: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    unit_fee_diff: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False)
+    sample_units: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    sample_orders: Mapped[int] = mapped_column(nullable=False)
+    mode_count: Mapped[int] = mapped_column(nullable=False)
+    historical_units: Mapped[Decimal | None] = mapped_column(Numeric(18, 4))
+    sales_start_date: Mapped[date | None] = mapped_column(Date)
+    sales_end_date: Mapped[date | None] = mapped_column(Date)
+    sales_coverage_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    sales_coverage_reason: Mapped[str] = mapped_column(String(128), nullable=False)
+    sales_coverage_start_date: Mapped[date | None] = mapped_column(Date)
+    sales_coverage_end_date: Mapped[date | None] = mapped_column(Date)
+    sales_source_watermark: Mapped[str | None] = mapped_column(String(255))
+    legacy_estimated_overcharge: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    theoretical_overcharge: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    net_sample_difference: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    latest_settlement_date: Mapped[date | None] = mapped_column(Date)
+    evidence_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    fee_scope_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    standard_fee_source: Mapped[str] = mapped_column(String(64), nullable=False)
+    rule_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    business_as_of_date: Mapped[date] = mapped_column(Date, nullable=False)
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_backtest: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
     )

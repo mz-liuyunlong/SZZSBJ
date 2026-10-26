@@ -1,10 +1,17 @@
 from pathlib import Path
 from typing import cast
+from unittest.mock import MagicMock
 
 from sqlalchemy import Table
 
 from app.modules.integration_sync.models import IntegrationSyncRunWorkItem
-from app.modules.warehouse_wfs.models import WalmartWfsFeeActualFact, WfsFeeAnomalyCase
+from app.modules.warehouse_wfs.models import (
+    WalmartWfsFeeActualFact,
+    WfsFeeAnomalyCase,
+    WfsFeeDetectionEvidence,
+    WfsSettlementCollection,
+)
+from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
 
 def test_wfs_detection_metadata_keeps_source_identity_and_store_page_scope() -> None:
@@ -32,6 +39,17 @@ def test_wfs_detection_metadata_keeps_source_identity_and_store_page_scope() -> 
         "detected_at",
     }.issubset(case_table.columns.keys())
     assert work_table.c.scope_key.nullable is False
+    assert {
+        "missing_store_count",
+        "wfs_scope_status",
+        "verified_count",
+    }.issubset(WfsSettlementCollection.__table__.columns.keys())
+    assert {
+        "sales_coverage_start_date",
+        "sales_coverage_end_date",
+        "sales_source_watermark",
+        "fee_scope_status",
+    }.issubset(WfsFeeDetectionEvidence.__table__.columns.keys())
     offset_index = next(
         index for index in work_table.indexes if index.name == "uq_gov_sync_work_offset"
     )
@@ -58,3 +76,12 @@ def test_wfs_migration_is_schema_only_and_reversible() -> None:
     assert "op.execute" not in migration
     assert "fact_walmart_wfs_fee_actual" in migration
     assert "ops_wfs_fee_anomaly_cases" in migration
+
+
+def test_latest_evidence_projection_does_not_label_review_states_current() -> None:
+    projection = " ".join(WfsFeeAlertService(MagicMock())._case_select_sql().split())
+
+    assert "evidence_status = 'STALE' then 'stale'" in projection
+    assert "evidence_status = 'FUTURE_EVIDENCE' then 'invalid'" in projection
+    assert "evidence_status = 'OVERCHARGE_CANDIDATE' then 'current'" in projection
+    assert "detected_at is not null then 'review_required'" in projection

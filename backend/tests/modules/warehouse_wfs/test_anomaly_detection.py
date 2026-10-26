@@ -14,6 +14,9 @@ from app.modules.warehouse_wfs.fee_detection import ResolvedOrderFeeSample, Reso
 def actual(
     store="store-a",
     fee="5.18",
+    *,
+    latest_settlement_date: date | None = None,
+    fee_scope_status: str = "unverified",
 ):
     return ResolvedWfsFee(
         source_account_ref="account-a",
@@ -24,6 +27,8 @@ def actual(
         fee_orders=2,
         mode_count=2,
         skipped_no_qty=0,
+        latest_settlement_date=latest_settlement_date,
+        fee_scope_status=fee_scope_status,
     )
 
 
@@ -129,6 +134,7 @@ def test_three_amounts_are_distinct_and_order_evidenced() -> None:
             ),
         ),
         latest_settlement_date=date(2026, 9, 23),
+        fee_scope_status="verified_wfs",
     )
     result = detect_wfs_anomalies(
         [actual_fee],
@@ -187,3 +193,71 @@ def test_unconfirmed_default_standard_requires_review() -> None:
 
     assert result.candidates[0].evidence_status == "REVIEW_REQUIRED"
     assert result.candidates[0].case_eligible is False
+
+
+def complete_sales() -> WfsSalesEvidence:
+    return WfsSalesEvidence(
+        historical_units=Decimal("87"),
+        sales_start_date=date(2026, 7, 3),
+        sales_end_date=date(2026, 9, 22),
+        coverage_status="complete",
+        coverage_start_date=date(2026, 7, 3),
+        coverage_end_date=date(2026, 10, 17),
+        coverage_reason="verified_contiguous_sync_windows",
+        source_watermark="saleStatPageList:2026-07-03:2026-10-17",
+    )
+
+
+@pytest.mark.parametrize(
+    ("latest", "as_of", "expected_status", "expected_age"),
+    [
+        (date(2026, 10, 17), date(2026, 10, 17), "OVERCHARGE_CANDIDATE", 0),
+        (date(2026, 10, 3), date(2026, 10, 17), "OVERCHARGE_CANDIDATE", 14),
+        (date(2026, 10, 2), date(2026, 10, 17), "STALE", 15),
+        (date(2026, 10, 18), date(2026, 10, 17), "FUTURE_EVIDENCE", -1),
+    ],
+)
+def test_freshness_uses_actual_detection_date_and_boundary(
+    latest: date,
+    as_of: date,
+    expected_status: str,
+    expected_age: int,
+) -> None:
+    result = detect_wfs_anomalies(
+        [
+            actual(
+                latest_settlement_date=latest,
+                fee_scope_status="verified_wfs",
+            )
+        ],
+        [standard()],
+        {("account-a", "store-a", "SKU-TEST"): complete_sales()},
+        as_of=as_of,
+        max_stale_days=14,
+    )
+
+    candidate = result.candidates[0]
+    assert candidate.evidence_status == expected_status
+    assert candidate.evidence_age_days == expected_age
+    assert candidate.case_eligible is (expected_status == "OVERCHARGE_CANDIDATE")
+    assert candidate.sales_source_watermark == "saleStatPageList:2026-07-03:2026-10-17"
+
+
+def test_missing_latest_settlement_and_unverified_scope_fail_closed() -> None:
+    missing_date = detect_wfs_anomalies(
+        [actual(fee_scope_status="verified_wfs")],
+        [standard()],
+        {("account-a", "store-a", "SKU-TEST"): complete_sales()},
+        as_of=date(2026, 10, 17),
+    ).candidates[0]
+    unverified_scope = detect_wfs_anomalies(
+        [actual(latest_settlement_date=date(2026, 10, 17))],
+        [standard()],
+        {("account-a", "store-a", "SKU-TEST"): complete_sales()},
+        as_of=date(2026, 10, 17),
+    ).candidates[0]
+
+    assert missing_date.evidence_status == "STALE"
+    assert missing_date.case_eligible is False
+    assert unverified_scope.evidence_status == "REVIEW_REQUIRED"
+    assert unverified_scope.case_eligible is False

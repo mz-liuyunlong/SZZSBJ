@@ -161,6 +161,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="WFS_AUTO_CASE_CREATE_ENABLED",
     )
+    wfs_settlement_scope_verified: bool = Field(
+        default=False,
+        validation_alias="WFS_SETTLEMENT_SCOPE_VERIFIED",
+    )
     wfs_detect_lookback_days: int = Field(
         default=60,
         ge=1,
