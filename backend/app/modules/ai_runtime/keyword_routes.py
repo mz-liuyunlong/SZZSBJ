@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.celery_app import AI_QUEUE
 from app.core.api import ApiError, ErrorCode, SuccessEnvelope, success_response
 from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
-from app.core.permissions import require_permission, has_permission
+from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.keyword_planning.analysis_routes import CreateRunRequest, _require_opted_in_writes
