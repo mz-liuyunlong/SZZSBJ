@@ -81,3 +81,28 @@ describe("buildSyncScheduleViews", () => {
     expect(buildSyncScheduleViews([disabled], new Date("2026-10-26T08:00:00Z")).week).toHaveLength(0);
   });
 });
+
+describe("Cron preview safety", () => {
+  it("shows only true weekly schedules in weekly-only view", () => {
+    const daily = row("a", "productList", "成功", "a");
+    const weeklyTask = { ...row("b", "productList", "成功", "b"), scheduleCron: "0 0 * * 1" };
+    const result = buildSyncScheduleViews([daily, weeklyTask], new Date("2026-10-26T08:00:00Z"));
+    expect(result.week).toHaveLength(8);
+    expect(result.weekly).toHaveLength(1);
+    expect(result.weekly[0].taskName).toBe(weeklyTask.taskName);
+  });
+
+  it("warns rather than silently truncating high-frequency daily schedules", () => {
+    const minuteTask = { ...row("a", "productList", "成功", "a"), scheduleCron: "* * * * *" };
+    const result = buildSyncScheduleViews([minuteTask], new Date("2026-10-26T08:00:00Z"));
+    expect(result.day).toHaveLength(500);
+    expect(result.dayTruncated).toBe(true);
+  });
+
+  it("requires both day-of-month and day-of-week for advanced Cron", () => {
+    const task = { ...row("a", "productList", "成功", "a"), scheduleCron: "0 0 26 * 1" };
+    const result = buildSyncScheduleViews([task], new Date("2026-10-26T08:00:00Z"));
+    expect(result.week).toHaveLength(1);
+    expect(result.weekly).toHaveLength(1);
+  });
+});

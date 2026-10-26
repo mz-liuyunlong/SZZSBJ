@@ -91,3 +91,22 @@ def test_refund_provider_permission_denied_does_not_commit() -> None:
     runner._write_refunds.assert_not_called()
     service._event.assert_not_called()
     service.session.commit.assert_not_called()
+
+
+def test_refund_mart_success_writes_validated_events_after_pending() -> None:
+    service = SyncRunExecutionService(MagicMock())
+    service._event = MagicMock()
+    runner = _refund_runner()
+    run_id = uuid4()
+
+    service._execute_data_pages_interface("walmartReturnOrderList", runner, run_id=run_id)
+
+    assert service.session.commit.call_count == 2
+    assert [item.args[3] for item in service._event.call_args_list] == [
+        "SYNC_REFUND_FACTS_COMMITTED",
+        "SYNC_REFUND_MART_PENDING",
+        "SYNC_REFUND_MART_PENDING",
+        "SYNC_REFUND_MART_VALIDATED",
+        "SYNC_REFUND_MART_VALIDATED",
+    ]
+
