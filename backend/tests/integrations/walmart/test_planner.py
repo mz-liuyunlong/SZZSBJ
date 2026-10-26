@@ -4,7 +4,7 @@ import pytest
 from app.integrations.walmart.planner import API_SPECS, STORE_ROUTES, WalmartPlanError, plan_call
 
 
-def test_routes_and_disabled_store() -> None:
+def test_routes_and_pending_egress_store() -> None:
     assert len(STORE_ROUTES) == 9
     assert STORE_ROUTES["HK2615"][1] == "43.135.153.225"
     assert STORE_ROUTES["CN2502"][1] is None
@@ -32,7 +32,8 @@ def test_authorized_plan() -> None:
 @pytest.mark.parametrize(
     ("store", "api", "params", "scope", "error"),
     [
-        ("CN2502", "wfs_inventory", {}, frozenset({"CN2502"}), "COLLECTION_DISABLED"),
+        ("CN2502", "wfs_inventory", {}, frozenset({"CN2502"}), "WALMART_EXIT_UNAVAILABLE"),
+        ("CN2502", "wfs_inventory", {}, frozenset(), "WALMART_STORE_FORBIDDEN"),
         ("UNKNOWN", "wfs_inventory", {}, frozenset({"UNKNOWN"}), "WALMART_STORE_UNKNOWN"),
         ("HK2615", "wfs_inventory", {}, frozenset(), "WALMART_STORE_FORBIDDEN"),
         ("HK2615", "not_registered", {}, frozenset({"HK2615"}), "WALMART_API_NOT_REGISTERED"),
