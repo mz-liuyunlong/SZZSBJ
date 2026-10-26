@@ -3,6 +3,7 @@
 No real transport is bundled. Only owner-approved gateway implementations may
 execute requests, and gateway MUST re-authorize store and operation independently.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -50,9 +51,7 @@ class WalmartClient:
         allow_writes: bool = False,
     ) -> PreparedRequest:
         self._validate_store(store_code)
-        return self.registry.prepare(
-            operation, params=params, body=body, allow_writes=allow_writes
-        )
+        return self.registry.prepare(operation, params=params, body=body, allow_writes=allow_writes)
 
     def call(
         self,
