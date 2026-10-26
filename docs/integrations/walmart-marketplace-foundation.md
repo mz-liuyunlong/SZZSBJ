@@ -36,3 +36,30 @@ uv run ruff format --check app/integrations/walmart tests/integrations/walmart
 完整项目 CI 以 `.github/workflows/ci.yml` 为准，当前未声称通过。
 
 真实 SCF 角色绑定、SSM、Walmart 真实 API、SSH、生产部署和数据库修改**全部未执行**。
+
+
+## 新增：OpenAPI 3.x 通用契约注册与可审查写接口门禁
+
+`backend/app/integrations/walmart/contracts.py` 提供 `ContractRegistry.from_openapi(spec, approved_keys=frozenset(...))`，把一份**人工核对过**的 OpenAPI 3.x 快照映射到本地方法/参数/路径校验。默认 `approved_keys` 为空，所有接口不可调用。这个入口没有网络 I/O，不会从网上自动拉取不可信定义；不支持任意 `$ref`、复杂 schema 的全部验证或 Walmart 广告单独授权。
+
+```python
+from app.integrations.walmart.contracts import ContractRegistry
+
+registry = ContractRegistry.from_openapi(
+    {
+        "openapi": "3.0.3",
+        "paths": {"/v3/items": {
+            "get": {"operationId": "listItems",
+                    "parameters": [{"name": "limit", "in": "query",
+                                    "schema": {"type": "integer", "maximum": 100}}]}
+        }},
+    },
+    approved_keys=frozenset({"listItems"}),
+)
+request = registry.prepare("listItems", params={"limit": 20})
+assert request.method == "GET"
+```
+
+生成的 `PreparedRequest` 仅是离线请求对象，不能发给公网执行。真实网关须独立验证服务身份、店铺与操作权限、HTTP method、参数及每次写操作的审批。复杂嵌套 requestBody、multipart/Feed、分页游标与响应模型须按官方契约补专用验证器；本模块不会误称它们已经完成。
+
+新测试：`backend/tests/integrations/walmart/test_contracts.py`；CI 与本地测试仍须独立执行。
