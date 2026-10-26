@@ -534,10 +534,14 @@ class SyncRunExecutionService:
                     },
                 )
             if run_id is not None:
-                for purchase_day in sorted(set((
-                    runner.business_date,
-                    *getattr(runner, "_refund_affected_business_dates", ()),
-                ))):
+                for purchase_day in sorted(
+                    set(
+                        (
+                            runner.business_date,
+                            *getattr(runner, "_refund_affected_business_dates", ()),
+                        )
+                    )
+                ):
                     self._event(
                         run_id,
                         "running",
@@ -581,10 +585,14 @@ class SyncRunExecutionService:
         heartbeat()
         runner.summary.mart_order_profit_rows = runner._refresh_order_profit_mart()
         if interface_key == "walmartReturnOrderList" and run_id is not None:
-            for purchase_day in sorted(set((
-                runner.business_date,
-                *getattr(runner, "_refund_affected_business_dates", ()),
-            ))):
+            for purchase_day in sorted(
+                set(
+                    (
+                        runner.business_date,
+                        *getattr(runner, "_refund_affected_business_dates", ()),
+                    )
+                )
+            ):
                 self._event(
                     run_id,
                     "running",

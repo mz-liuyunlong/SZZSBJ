@@ -259,9 +259,7 @@ class IntegrationSyncRepository:
         self.session.flush()
         return run
 
-    def refund_mart_pending_days(
-        self, account_refs: frozenset[str]
-    ) -> list[tuple[str, str, UUID]]:
+    def refund_mart_pending_days(self, account_refs: frozenset[str]) -> list[tuple[str, str, UUID]]:
         """Latest pending/validated state per scoped purchase day; no data writes."""
         date_expr = IntegrationSyncRunEvent.safe_details["business_date"].astext
         statuses = (
@@ -270,22 +268,26 @@ class IntegrationSyncRepository:
                 date_expr.label("business_date"),
                 IntegrationSyncRunEvent.run_id.label("run_id"),
                 IntegrationSyncRunEvent.message_code.label("state"),
-                func.row_number().over(
+                func.row_number()
+                .over(
                     partition_by=(IntegrationSyncRun.source_account_ref, date_expr),
                     order_by=(
                         IntegrationSyncRunEvent.occurred_at.desc(),
                         IntegrationSyncRunEvent.id.desc(),
                     ),
-                ).label("rank"),
+                )
+                .label("rank"),
             )
             .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
             .where(
                 IntegrationSyncRun.source_account_ref.in_(account_refs),
                 IntegrationSyncRun.interface_key == "walmartReturnOrderList",
-                IntegrationSyncRunEvent.message_code.in_((
-                    "SYNC_REFUND_MART_PENDING",
-                    "SYNC_REFUND_MART_VALIDATED",
-                )),
+                IntegrationSyncRunEvent.message_code.in_(
+                    (
+                        "SYNC_REFUND_MART_PENDING",
+                        "SYNC_REFUND_MART_VALIDATED",
+                    )
+                ),
                 date_expr.is_not(None),
             )
             .subquery()
@@ -301,24 +303,33 @@ class IntegrationSyncRepository:
         ).all()
         return [(str(a), str(d), r) for a, d, r in rows]
 
-    def task_dashboard(self, account_refs: frozenset[str], today_start: datetime, tomorrow_start: datetime) -> tuple[list[IntegrationSyncRun], list[tuple[UUID, str, int, int, int]]]:
+    def task_dashboard(
+        self, account_refs: frozenset[str], today_start: datetime, tomorrow_start: datetime
+    ) -> tuple[list[IntegrationSyncRun], list[tuple[UUID, str, int, int, int]]]:
         """One latest Run per scoped interface/account, and today's Run status counts."""
         ranked = (
             select(
                 IntegrationSyncRun.id.label("id"),
-                func.row_number().over(
-                    partition_by=(IntegrationSyncRun.interface_id, IntegrationSyncRun.source_account_ref),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        IntegrationSyncRun.interface_id,
+                        IntegrationSyncRun.source_account_ref,
+                    ),
                     order_by=(IntegrationSyncRun.created_at.desc(), IntegrationSyncRun.id.desc()),
-                ).label("rank"),
+                )
+                .label("rank"),
             )
             .where(IntegrationSyncRun.source_account_ref.in_(account_refs))
             .subquery()
         )
-        latest = list(self.session.scalars(
-            select(IntegrationSyncRun)
-            .join(ranked, IntegrationSyncRun.id == ranked.c.id)
-            .where(ranked.c.rank == 1)
-        ).all())
+        latest = list(
+            self.session.scalars(
+                select(IntegrationSyncRun)
+                .join(ranked, IntegrationSyncRun.id == ranked.c.id)
+                .where(ranked.c.rank == 1)
+            ).all()
+        )
         counts = self.session.execute(
             select(
                 IntegrationSyncRun.interface_id,
@@ -329,8 +340,10 @@ class IntegrationSyncRepository:
             )
             .where(
                 IntegrationSyncRun.source_account_ref.in_(account_refs),
-                IntegrationSyncRun.created_at >= today_start,
-                IntegrationSyncRun.created_at < tomorrow_start,
+                func.coalesce(IntegrationSyncRun.started_at, IntegrationSyncRun.queued_at)
+                >= today_start,
+                func.coalesce(IntegrationSyncRun.started_at, IntegrationSyncRun.queued_at)
+                < tomorrow_start,
             )
             .group_by(IntegrationSyncRun.interface_id, IntegrationSyncRun.source_account_ref)
         ).all()

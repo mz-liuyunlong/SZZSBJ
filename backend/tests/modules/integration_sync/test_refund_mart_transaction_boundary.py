@@ -80,7 +80,6 @@ def test_refund_facts_commit_before_mart_failure() -> None:
     ]
 
 
-
 def test_refund_provider_permission_denied_does_not_commit() -> None:
     service = SyncRunExecutionService(MagicMock())
     service._event = MagicMock()

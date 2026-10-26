@@ -277,9 +277,7 @@ def get_sync_dashboard(
     account_refs: source_scope,
 ) -> SuccessEnvelope[SyncTaskDashboardData, ReadMeta]:
     data = IntegrationSyncService(session).task_dashboard(account_refs)
-    return success_response(
-        request, data=data, meta=_meta("gov_integration_sync_runs")
-    )
+    return success_response(request, data=data, meta=_meta("gov_integration_sync_runs"))
 
 
 @router.get(
