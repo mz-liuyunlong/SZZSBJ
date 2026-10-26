@@ -12,7 +12,7 @@ STORE_ROUTES: dict[str, tuple[str, str | None]] = {
     "HK2614": ("HK2614", "43.153.101.213"),
     "HK2615": ("HK2615", "43.135.153.225"),
     "CN2501": ("YC006", "43.173.120.215"),
-    "CN2502": ("", None),
+    "CN2502": ("", None),  # Eligible; dedicated fixed egress not configured yet.
     "CN2601": ("YC005", "43.173.115.200"),
     "CN2602": ("YC007", "43.173.92.40"),
     "CN2603": ("YC008", "43.172.73.203"),
@@ -60,11 +60,10 @@ def plan_call(
     """Return a validated offline plan; it cannot perform a real API call."""
     if store_code not in STORE_ROUTES:
         raise WalmartPlanError("WALMART_STORE_UNKNOWN")
-    if store_code == "CN2502":
-        raise WalmartPlanError("COLLECTION_DISABLED")
     if store_code not in allowed_stores:
         raise WalmartPlanError("WALMART_STORE_FORBIDDEN")
     route = STORE_ROUTES[store_code]
+    # Unconfigured stores cannot silently use another store's egress.
     if route[1] is None:
         raise WalmartPlanError("WALMART_EXIT_UNAVAILABLE")
     if api_key not in API_SPECS:
