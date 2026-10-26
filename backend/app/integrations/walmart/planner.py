@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from collections.abc import Mapping
 
 # References are names only, never credential values.
 STORE_ROUTES: dict[str, tuple[str, str | None]] = {
