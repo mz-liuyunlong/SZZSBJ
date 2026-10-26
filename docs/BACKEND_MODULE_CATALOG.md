@@ -48,7 +48,7 @@
 | Validation | Backend compileall/Ruff/Alembic PASS；full pytest `1747 passed, 118 skipped`；changed-module mypy PASS；frontend Node 24 lint、`60 files / 281 tests`、typecheck/build PASS；isolated PostgreSQL and real-provider validation not executed |
 | Documentation | `docs/api/wfs-fee-anomaly-auto-detection.md`; `docs/sop/warehouse-wfs-fee-anomaly-auto-detection.md` |
 | PRP / Decision | `PRPs/wfs-fee-anomaly-auto-detection-v1.md`; `docs/data-sources/decisions/wfs-fee-anomaly-auto-detection-decision.md` |
-| PR | TBD |
+| PR | `#257`；merge commit TBD |
 | Not in scope | 真实 Lingxing/Token、生产 DB/migration/collection/case write/schedule/deploy/restart、自动确认索赔、旧系统修改、临时 JSONL 正式依赖 |
 
 ## Backend API Foundation
