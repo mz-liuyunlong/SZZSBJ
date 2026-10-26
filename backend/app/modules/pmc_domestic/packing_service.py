@@ -156,7 +156,7 @@ class PackingService:
                 "kind": kind,
                 "candidate_id": str(ident),
                 "actor_uid": actor,
-                **cmd.model_dump(mode="json"),
+                **cmd.model_dump(mode="json", exclude={"passcode"}),
             }
             digest = fingerprint(request)
             prior = s.scalar(
@@ -399,6 +399,9 @@ class PackingService:
         )
 
     def all_candidates(self, accounts):
+        from app.modules.pmc_domestic.draft_numbers import attach_draft_numbers
         from app.modules.pmc_domestic.packing_manual_service import ManualPackingService
 
-        return self.repo.candidates(accounts) + ManualPackingService(self).pending(accounts)
+        rows = self.repo.candidates(accounts) + ManualPackingService(self).pending(accounts)
+        attach_draft_numbers(self.session, rows, accounts)
+        return rows

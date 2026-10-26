@@ -85,6 +85,7 @@ LINE_LINEAGE_FIELDS: dict[str, str] = {
     "store_id": "$.data[].item_list[].sid",
     "quantity_allocated": "$.data[].item_list[].quantity_real",
     "amount_allocated": "$.data[].item_list[].amount",
+    "draft_no": "$.data[].item_list[].remark",
 }
 
 
@@ -410,6 +411,7 @@ class PmcPurchaseDwdPublisher:
                 "unit_price": row.unit_price,
                 "expect_arrive_date": row.expect_arrive_date,
                 "remark_item_id": row.remark_item_id,
+                "draft_no": row.draft_no,
             }
             current = existing.get((row.order_sn, row.order_item_id, plan_key))
             if current is None:

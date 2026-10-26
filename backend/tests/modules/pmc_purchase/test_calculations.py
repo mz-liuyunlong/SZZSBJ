@@ -23,6 +23,7 @@ from app.modules.pmc_purchase.calculations import (
     days_between,
     median_days,
     normalize_store_id,
+    parse_draft_remark,
     parse_itemid_remark,
     parse_provider_date,
     resolve_item_id,
@@ -113,6 +114,21 @@ def test_parse_itemid_remark_requires_exactly_eleven_digits(
     remark: object, expected: object
 ) -> None:
     assert parse_itemid_remark(remark) == expected
+
+
+@pytest.mark.parametrize(
+    ("remark", "expected"),
+    [
+        ("ITEMID:20540519308 | 草稿:CG261017-039", "CG261017-039"),
+        ("草稿：WS261017-001", "WS261017-001"),
+        ("草稿: CG261017-039", "CG261017-039"),
+        ("no draft here", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_parse_draft_remark_from_purchase_line_remark(remark: object, expected: object) -> None:
+    assert parse_draft_remark(remark) == expected
 
 
 def test_resolve_item_id_priority_system_plan_over_remark_over_packing_slip() -> None:

@@ -5,6 +5,24 @@ test.use({ channel: process.env.PLAYWRIGHT_CHANNEL });
 const meta = { source: "new_system_postgresql", source_objects: ["mart_domestic_inbound_batch_board"], freshness_at: "2026-10-20T02:00:00Z",
   data_status: "ready", publication_ids: ["synthetic-publication"], coverage_start: "2026-10-01", coverage_end: "2026-10-21", as_of: "2026-10-20" };
 const envelope = (data: unknown, metadata: unknown = meta) => JSON.stringify({ success: true, data, error: null, meta: metadata, request_id: "synthetic-inbound-test" });
+
+test("shows the three identity columns for legacy column preferences without inventing missing data", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(`szzsbj:user-preference:inbound-test:${encodeURIComponent("pmc-domestic-inbound-board:columns")}`,
+      JSON.stringify({ version: 1, value: { keys: ["arrival", "inbound", "sku", "store", "balance"], widths: { sku: 190 } } }));
+  });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/#/pmc/domestic/batches");
+  await expect(page.getByText("IB-1", { exact: true })).toBeVisible();
+  const table = page.getByRole("region", { name: "国内仓批次表格" });
+  await expect(table.getByRole("columnheader", { name: /^ItemID/ })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: /^GTIN/ })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: /^负责人/ })).toBeVisible();
+  await expect(table.getByText("待归属", { exact: true }).first()).toBeVisible();
+  await expect(table.getByText("待补齐", { exact: true }).first()).toBeVisible();
+  await expect(table.getByText("未知", { exact: true }).first()).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: /^采购单号/ })).toHaveCount(0);
+});
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("szzsbj_auth_token", "synthetic-inbound-session"));
   await page.route("**/api/**", async (route) => {

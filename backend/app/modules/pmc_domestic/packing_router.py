@@ -13,6 +13,7 @@ from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_domestic.packing_models import PackingEvent
+from app.modules.pmc_domestic.packing_passcode import verify_domestic_passcode
 from app.modules.pmc_domestic.packing_repository import order_read
 from app.modules.pmc_domestic.packing_schemas import (
     ApproveCommand,
@@ -177,6 +178,8 @@ def approve(
     actor: Approve,
     accounts: Scope,
 ):
+    if (body.passcode or "").strip():
+        verify_domestic_passcode(body.operator_name, body.passcode, actor.user_id)
     return success_response(
         request,
         data=PackingService(session).decide(candidate_id, body, "approve", actor.user_id, accounts),
@@ -197,6 +200,7 @@ def reject(
     actor: Reject,
     accounts: Scope,
 ):
+    verify_domestic_passcode(body.operator_name, body.passcode, actor.user_id)
     return success_response(
         request,
         data=PackingService(session).decide(candidate_id, body, "reject", actor.user_id, accounts),

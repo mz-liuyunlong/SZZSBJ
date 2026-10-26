@@ -26,11 +26,13 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 | id | UUID | 账号/仓库/稳定board_id/ItemID的确定性候选身份；SKU和店铺已含在board_id中 |
 | candidate_version | 64位摘要 | 当前来源发布、库存分配及Listing指纹，时间规范UTC；非OPS订单version |
 | source_account_ref、warehouse_id | string | 可信账号与惠州仓标识；不得由用户扩展来源范围 |
+| warehouse_name | string/null | 已发布批次的仓库名称。手工添加和修改都不展示收货仓，提交把该名称写入 rwh；没有名称则不填。不参与候选版本 |
 | publication_id、board_id | UUID | 当前MART复合来源主键；审批保留历史引用 |
 | inbound_order_sn、sku | string | 入库单与SKU，不使用空收货DWD替代 |
 | product_name、store_id/name | string/null | 发布资料及DIM，未知归属保留null |
 | item_id、gtin、msku | string/null | 同账号+店铺+SKU的PUBLISHED且履约类型0/1的DIM记录；不转数字丢前导零 |
 | purchase_order_sns | string[] | 入库来源采购关联，不猜测 |
+| draft_nos | string[] | 采购看板同一账号、采购单号、SKU 上的草稿号。只读展示，不参与候选版本，不新发号 |
 | arrival_purchased | int/null | DWD原采购行order_item_id去重后汇总quantity_real；关联不完整为null |
 | arrival_received/pending | int/null | 当前收货DWD未齐全，两者为null，不拿库存余额代替到货量 |
 | arrival_status | unknown | 当前没有足够标准收货事实 |
@@ -45,7 +47,7 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 阻断码：STORE_UNKNOWN、ELIGIBLE_LISTING_MISSING、GTIN_INVALID、MSKU_MISSING、STOCK_PROOF_UNKNOWN、STOCK_FULLY_ALLOCATED。
 
 ## 写请求与响应
-共同body：source_account_ref(string<=128)、warehouse_id='16168'、candidate_version、idempotency_key(UUID)。approve增加qty（严格整数1..1000000且不超过来源可用量）、customs(default/declare/skip，default按当前备注自动结果)、rwh(可选备注<=128)、is_test=true。reject增加note（trim后非空，<=500）。客户端不传actor、PK或订单状态。
+共同body：source_account_ref(string<=128)、warehouse_id='16168'、candidate_version、idempotency_key(UUID)。approve增加qty（严格整数1..1000000且不超过来源可用量）、customs(default/declare/skip，default按当前备注自动结果)、rwh(可选，取候选 warehouse_name，没有名称则省略)、is_test=true。修改打包单不提交姓名和口令；请求里带了非空 passcode 时仍校验口令。reject增加note（trim后非空，<=500），并必须校验姓名和口令。客户端不传actor、PK或订单状态。
 
 响应data：id、candidate_id、pk(null仅驳回)、status(approved/rejected)、qty、version=1、is_test、customs_value(bool/null)、customs_src(default/product_remark/purchase_remark/manual；旧unknown保留)、rwh、actor_uid、note、created_at、snapshot(完整Candidate)。自动报关结果按已发布customs_proof计算，无明确备注时默认不报关；人工选择与默认来源分开保存，旧历史不重算。
 

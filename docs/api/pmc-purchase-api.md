@@ -64,7 +64,8 @@ The list total counts detail rows; order cards on the summary count distinct ord
 未转单计划 are not board rows — `purchase_overdue` lists the overdue S2 orders only.
 Unknown parameters and inconsistent ranges are `422 VALIDATION_ERROR`.
 
-Row fields: `purchase_order_sn, order_item_id, plan_sn, plan_sns[], order_status,
+Row fields: `purchase_order_sn, draft_no (parsed from purchase order line 采购备注, e.g. ``草稿:CG261017-039``),
+order_item_id, plan_sn, plan_sns[], order_status,
 stage{stage_code, stage_start, stage_start_estimated, threshold_days, due_date, overdue_days,
 overdue_kind(purchase|arrival|null), alert_due_since}, store{id,name,attributed}, sku,
 product_name, item_id{item_id, source, source_ref, matched_at, match_status, msku, gtin,

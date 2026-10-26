@@ -60,23 +60,29 @@ describe("packing approval copy cells", () => {
         pagination={{ page: 1, pageSize: 20 }}
         widths={{}}
         sort="created_desc"
-        rows={[candidate()]}
+        rows={[candidate({ draft_nos: ["CG261017-039"] })]}
         total={1}
         canApprove
         canReject
         busy={false}
         onDecision={vi.fn()}
+        onApprove={vi.fn()}
         onPagination={vi.fn()}
         onResize={vi.fn()}
         onSort={vi.fn()}
       />,
     );
+    expect(screen.getByRole("columnheader", { name: /草稿号/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制草稿号：CG261017-039" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制入库单号：IB261006014" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制采购单号：PO260001" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制采购单号：PO260002" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制SKU：YC00236" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制GTIN：00000000000000" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制ItemID：20394207859" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /修\s*改/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "审批通过" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "驳回" })).not.toBeInTheDocument();
   });
 
   it("leaves a dash when gtin and item id are missing", () => {
@@ -91,6 +97,7 @@ describe("packing approval copy cells", () => {
         canReject
         busy={false}
         onDecision={vi.fn()}
+        onApprove={vi.fn()}
         onPagination={vi.fn()}
         onResize={vi.fn()}
         onSort={vi.fn()}

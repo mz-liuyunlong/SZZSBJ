@@ -103,6 +103,7 @@ interface BackendSkuCycle {
 
 interface BackendBoardRow {
   purchase_order_sn: string;
+  draft_no: string | null;
   order_item_id: string;
   plan_sn: string | null;
   plan_sns: string[];
@@ -315,6 +316,7 @@ export const purchaseBoardRowId = (
 const mapRow = (row: BackendBoardRow): PurchaseBoardRow => ({
   id: purchaseBoardRowId(row),
   purchaseOrderSn: row.purchase_order_sn,
+  draftNo: row.draft_no,
   orderItemId: row.order_item_id,
   planSn: row.plan_sn,
   planSns: row.plan_sns,

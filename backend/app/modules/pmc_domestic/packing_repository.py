@@ -256,6 +256,9 @@ class PackingRepository:
                     "id": str(ident),
                     "source_account_ref": b.source_account_ref,
                     "warehouse_id": b.source_warehouse_id,
+                    "warehouse_name": name.strip()
+                    if isinstance(name := payload.get("warehouse_name"), str) and name.strip()
+                    else None,
                     "publication_id": str(pub.id),
                     "board_id": str(b.id),
                     "inbound_order_sn": b.inbound_order_sn,
@@ -289,7 +292,7 @@ class PackingRepository:
                 token = {
                     k: v
                     for k, v in raw.items()
-                    if k not in ("overdue", "store_name", "waiting_days")
+                    if k not in ("overdue", "store_name", "waiting_days", "warehouse_name", "draft_nos")
                 }
                 token["listing_hash"] = listing.business_hash if listing else None
                 raw["candidate_version"] = fingerprint(token)

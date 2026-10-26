@@ -37,6 +37,7 @@ class Candidate(Strict):
     candidate_version: str
     source_account_ref: str
     warehouse_id: str
+    warehouse_name: str | None = None
     publication_id: UUID
     board_id: UUID
     inbound_order_sn: str
@@ -48,6 +49,7 @@ class Candidate(Strict):
     gtin: str | None
     msku: str | None
     purchase_order_sns: list[str]
+    draft_nos: list[str] = Field(default_factory=list)
     arrival_purchased: int | None
     arrival_received: int | None = None
     arrival_pending: int | None = None
@@ -102,10 +104,14 @@ class ApproveCommand(PackingCommand):
     target_item_id: str | None = Field(default=None, min_length=1, max_length=64)
     listing_version: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
     edit_reason: str | None = Field(default=None, min_length=2, max_length=500)
+    operator_name: str | None = Field(default=None, max_length=40)
+    passcode: str | None = Field(default=None, max_length=128)
 
 
 class RejectCommand(PackingCommand):
     note: str = Field(min_length=1, max_length=500)
+    operator_name: str | None = Field(default=None, max_length=40)
+    passcode: str | None = Field(default=None, max_length=128)
 
     @model_validator(mode="after")
     def reason(self):

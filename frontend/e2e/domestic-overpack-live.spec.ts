@@ -79,7 +79,7 @@ test("overpack shortage, IB mock sync, manual reconfirmation and source audit", 
 test("warehouse permissions do not expose mid-office IB or sync buttons", async ({ page }) => {
   await setup(page, false);
   await page.goto("/#/pmc/domestic/packing-warehouse");
-  await expect(page.getByText("仓库打包单已接通本地数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新仓库列表", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "已补入库单", exact: true })).toHaveCount(0);
   await expect(page.locator('.domestic-packing').getByRole("button", { name: /^同\s*步$/ })).toHaveCount(0);
 });

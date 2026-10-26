@@ -65,6 +65,11 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="LINGXING_APP_SECRET",
     )
+    pmc_domestic_passcode_sha256: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias="PMC_DOMESTIC_PASSCODE_SHA256",
+    )
     lingxing_access_token: SecretStr | None = Field(
         default=None,
         validation_alias="LINGXING_ACCESS_TOKEN",

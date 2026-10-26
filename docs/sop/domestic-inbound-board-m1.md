@@ -8,6 +8,8 @@
 4. 空列表时先看meta.data_status：not_published表示尚无当前发布；ready表示已发布后当前筛选确实无记录。
 5. 余额为零不代表已发货；未知余额不等于零。源时区未核实时在仓天数不展示。
 6. 查看trace可核对入库事件和对应批次。发货完成率、打包状态和系统PK暂未接入，不从数量相等猜关联。
+7. 表格第二列是草稿号，与采购看板相同，按本行采购单号和 SKU 读取。没有采购备注草稿时显示破折号。
+8. ItemID 按本行店铺、采购单号和 SKU 现算。从采购明细备注、明细里的 item_purchase_remark，以及关联采购计划的 remark、plan_remark、item_purchase_remark 取出全部独立的 11 位数字，`ITEMID:` 后面的优先，14 位 GTIN 不算。只保留这一行店铺的号码，并且 Listing 的本地 SKU 必须相同。对不上时，用这一行店铺加 SKU 的 Listing。一家店有多个 ItemID 时全部显示并标归属冲突，数量不拆。没有店铺时，只有这个 SKU 只在一个店铺上架才自动归属。
 
 接口路径、字段、筛选和错误码见 `docs/api/pmc-domestic-inbound-board-api.md`。页面后续切换时再把本说明挂接页面帮助入口，不覆盖当前收货页面帮助。
 

@@ -177,6 +177,8 @@ export interface PurchaseBoardRow {
   /** Stable row key: `${purchaseOrderSn}::${orderItemId}::${planSn ?? ""}`. */
   id: string;
   purchaseOrderSn: string;
+  /** Parsed from Lingxing purchase order line remark (``草稿:…``). */
+  draftNo: string | null;
   orderItemId: string;
   planSn: string | null;
   planSns: string[];
@@ -304,6 +306,7 @@ export interface PurchaseBoardColumnField {
 /** Column catalogue (business rules §9). Order is the default table order. */
 export const purchaseBoardColumnFields: PurchaseBoardColumnField[] = [
   { key: "purchaseOrderSn", title: "采购单号" },
+  { key: "draftNo", title: "草稿号" },
   { key: "sku", title: "SKU / 产品" },
   { key: "store", title: "店铺" },
   { key: "itemId", title: "ItemID 归属" },
@@ -326,6 +329,7 @@ export const purchaseBoardColumnFields: PurchaseBoardColumnField[] = [
 /** Columns shown on first load. 单价 and 计划号 stay available in the column picker. */
 export const purchaseBoardDefaultColumnKeys = [
   "purchaseOrderSn",
+  "draftNo",
   "sku",
   "store",
   "itemId",
@@ -346,6 +350,7 @@ export const purchaseBoardDefaultColumnKeys = [
 /** Default widths for the board columns (px); users can resize at runtime. */
 export const purchaseBoardDefaultColumnWidths: Record<string, number> = {
   purchaseOrderSn: 168,
+  draftNo: 140,
   sku: 220,
   store: 140,
   itemId: 220,

@@ -252,6 +252,7 @@ def _stage(row: DwsPurchaseBoard) -> StageRef:
 def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
     return BoardRowRead(
         purchase_order_sn=row.order_sn,
+        draft_no=row.draft_no,
         order_item_id=row.order_item_id,
         plan_sn=row.plan_sn,
         plan_sns=list(row.plan_sns_json or []),

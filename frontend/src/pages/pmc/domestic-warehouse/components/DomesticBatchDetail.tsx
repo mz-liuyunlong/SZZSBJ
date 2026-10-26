@@ -21,6 +21,7 @@ export default function DomesticBatchDetail({ id, scope, expectedPublication, on
         { key: "inbound", label: "入库单号", children: batch.inbound_order_sn }, { key: "sku", label: "SKU", children: batch.sku },
         { key: "product", label: "产品", children: batch.product_name || "—", span: 2 },
         { key: "purchase", label: "采购单号", children: batch.purchase_order_sns.join(" / ") || "—", span: 2 },
+        { key: "item", label: "ItemID", children: batch.item_identities?.map((item) => item.item_id).join(" / ") || "待归属", span: 2 },
         { key: "account", label: "来源账号", children: batch.source_account_ref }, { key: "warehouse", label: "仓库", children: `${batch.warehouse_name ?? ""} ${batch.source_warehouse_id}` },
         { key: "store", label: "店铺", children: batch.store_id ? `${batch.store_name ?? ""} ${batch.store_id}` : "归属未知" },
         { key: "parent", label: "入库总量（IB×SKU）", children: formatQuantity(batch.parent_inbound_qty) },

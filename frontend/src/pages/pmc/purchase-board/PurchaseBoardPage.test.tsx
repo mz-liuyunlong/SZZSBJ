@@ -78,6 +78,7 @@ const page = navigation
 const row: PurchaseBoardRow = {
   id: "PO1::L1::P1",
   purchaseOrderSn: "PO1",
+  draftNo: "CG261017-039",
   orderItemId: "L1",
   planSn: "P1",
   planSns: ["P1"],
@@ -273,6 +274,7 @@ describe("PurchaseBoardPage", () => {
     const headers = within(screen.getByTestId("pro-table")).getAllByRole("columnheader").map((cell) => cell.textContent);
     expect(headers).toEqual([
       "采购单号",
+      "草稿号",
       "SKU / 产品",
       "店铺",
       "ItemID 归属",

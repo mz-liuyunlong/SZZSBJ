@@ -6,7 +6,7 @@ import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import type { NavigationPage } from "@/config/navigation";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
-import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
+import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import DomesticPackingRiskCard from "./components/DomesticPackingRiskCard";
 import DomesticToolbar from "./components/DomesticToolbar";
 import DomesticSummaryCards from "./components/DomesticSummaryCards";
@@ -16,11 +16,10 @@ import PackingApprovalPanel from "./approval/PackingApprovalPanel";
 import PackingWarehousePanel from "./packing/PackingWarehousePanel";
 import { domesticErrorText } from "./domesticWarehouseApi";
 import { useDomesticBoard, useDomesticFilterOptions } from "./domesticWarehouseQueries";
-import { defaultColumnKeys, defaultColumnWidths, domesticColumns, initialDomesticFilters, type DomesticFilters, type BatchSort, type InventoryStatus } from "./domesticWarehouseTypes";
+import { defaultColumnKeys, domesticColumns, initialDomesticFilters, type DomesticFilters, type BatchSort, type InventoryStatus } from "./domesticWarehouseTypes";
+import { readDomesticColumns, domesticColumnPreferenceKey, domesticColumnPreferenceVersion, type DomesticColumnSettings } from "./domesticColumnPreferences";
 import "./DomesticWarehousePage.css";
 
-interface ColumnSettings { keys: string[]; widths: Record<string, number> }
-const preferenceKey = "pmc-domestic-inbound-board:columns";
 const columnGroups = [{ title: "入库批次字段", fields: domesticColumns.map(({ key, title }) => ({ key, title })) }];
 
 export default function DomesticWarehousePage({ page, preferenceScope = "anonymous", view = "batches" }: { page: NavigationPage; preferenceScope?: string; view?: "batches" | "approval" | "packing" }) {
@@ -30,11 +29,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
   const [filters, setFilters] = usePageStateCache<DomesticFilters>(`${scope}:inbound-filters-v2`, initialDomesticFilters);
   const [pagination, setPagination] = usePageStateCache(`${scope}:inbound-pagination-v1`, { page: 1, pageSize: 50 });
   const [showStats, setShowStats] = usePageStateCache(`${scope}:stats`, true);
-  const [settings, setSettings] = useState<ColumnSettings>(() => {
-    const stored = readUserPreference<ColumnSettings>(preferenceScope, preferenceKey, 1);
-    const allowed = new Set(defaultColumnKeys);
-    return { keys: ["arrival", ...(stored?.keys ?? defaultColumnKeys).filter((key) => key !== "arrival" && allowed.has(key))], widths: { ...defaultColumnWidths, ...stored?.widths } };
-  });
+  const [settings, setSettings] = useState<DomesticColumnSettings>(() => readDomesticColumns(preferenceScope));
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [warehouseText, setWarehouseText] = useState("");
@@ -60,7 +55,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
     if (next.inboundFrom && next.inboundTo && next.inboundFrom > next.inboundTo) { void messageApi.warning("开始日期不能晚于结束日期"); return; }
     setDetail(undefined); setFilters(next); setPagination({ ...pagination, page: 1 });
   };
-  const persistColumns = (next: ColumnSettings) => { setSettings(next); writeUserPreference(preferenceScope, preferenceKey, 1, next); };
+  const persistColumns = (next: DomesticColumnSettings) => { setSettings(next); writeUserPreference(preferenceScope, domesticColumnPreferenceKey, domesticColumnPreferenceVersion, next); };
   const retry = () => { void list.refetch(); void summary.refetch(); void options.refetch(); };
   const noPublication = meta?.data_status === "not_published";
   const emptyTitle = error ? "数据加载失败" : noPublication ? "尚无已发布入库数据" : "暂无入库批次";

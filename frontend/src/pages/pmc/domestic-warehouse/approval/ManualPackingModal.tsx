@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { approvalErrorText, getManualPackingOptions, listManualPackingSources, submitManualPacking, type ApprovalCandidate, type ManualPackingPayload } from "./packingApprovalApi";
 
-interface Values { source: string; target: string; qty: number; customs: "default" | "declare" | "skip"; rwh?: string; reason: string }
+interface Values { source: string; target: string; qty: number; customs: "default" | "declare" | "skip"; reason: string }
 interface Props { open: boolean; scope: string; onCancel: () => void; onSubmitted: () => void }
 export default function ManualPackingModal({ open, scope, onCancel, onSubmitted }: Props) {
   const [form] = Form.useForm<Values>();
@@ -25,14 +25,14 @@ export default function ManualPackingModal({ open, scope, onCancel, onSubmitted 
     const values = await form.validateFields();
     if (!basis || !target) return;
     const data = { source_account_ref: basis.source_account_ref, warehouse_id: "16168" as const, board_id: basis.board_id, source_version: basis.candidate_version,
-      target_store_id: target.store_id, target_item_id: target.item_id, listing_version: target.listing_version, qty: values.qty, customs: values.customs, rwh: values.rwh?.trim() || undefined, reason: values.reason.trim() };
+      target_store_id: target.store_id, target_item_id: target.item_id, listing_version: target.listing_version, qty: values.qty, customs: values.customs, rwh: basis.warehouse_name?.trim() || undefined, reason: values.reason.trim() };
     const signature = JSON.stringify(data);
     if (retry.current?.signature !== signature) retry.current = { signature, key: crypto.randomUUID() };
     const body: ManualPackingPayload = { ...data, idempotency_key: retry.current.key };
     mutation.mutate(body);
   };
   const error = sources.error ?? options.error;
-  return <Modal title="手工添加打包单" open={open} okText="提交审批" cancelText="取消" width={680} confirmLoading={mutation.isPending}
+  return <Modal title="手工添加打包单" open={open} destroyOnHidden okText="提交审批" cancelText="取消" width={680} confirmLoading={mutation.isPending} getContainer={() => document.body}
     onCancel={() => { if (!mutation.isPending) onCancel(); }} closable={!mutation.isPending} cancelButtonProps={{ disabled: mutation.isPending }}
     okButtonProps={{ disabled: !basis || !target || options.isFetching || !!error }} onOk={() => { void submit().catch(() => undefined); }}>
     {context}
@@ -51,10 +51,9 @@ export default function ManualPackingModal({ open, scope, onCancel, onSubmitted 
       </Form.Item>
       <Descriptions size="small" column={2} items={[{ key: "gtin", label: "GTIN", children: target?.gtin ?? "—" }, { key: "msku", label: "MSKU", children: target?.msku ?? "—" }]} />
       {target?.cross_store && <Alert type="warning" message="目标店铺与来源店铺不同。以所选入库单为分配依据，保留两者快照，不改写领星库存归属。" />}
-      <Form.Item name="qty" label="备货数量" rules={[{ required: true }, { type: "integer", min: 1, max: Math.min(basis?.available_quantity ?? 0, 1000000), message: "填写可用范围内的正整数" }]}><InputNumber min={1} precision={0} max={basis?.available_quantity ?? 0} /></Form.Item>
+      <Form.Item name="qty" label="备货数量" rules={[{ required: true, message: "请填写备货数量" }, { type: "integer", min: 1, max: Math.min(basis?.available_quantity ?? 0, 1000000), message: "填写可用范围内的正整数" }]}><InputNumber min={1} precision={0} max={basis?.available_quantity ?? 0} /></Form.Item>
       <Form.Item name="customs" label="是否报关"><PackingCustomsSelect row={basis} /></Form.Item>
-      <Form.Item name="rwh" label="收货仓备注（选填）" rules={[{ max: 128 }]}><Input maxLength={128} /></Form.Item>
-      <Form.Item name="reason" label="添加原因（必填）" rules={[{ required: true, whitespace: true, min: 2, max: 500 }]}><Input.TextArea maxLength={500} rows={3} /></Form.Item>
+      <Form.Item name="reason" label="添加原因（必填）" rules={[{ required: true, whitespace: true, message: "请填写添加原因" }, { min: 2, max: 500, message: "添加原因请填写 2 到 500 个字" }]}><Input.TextArea maxLength={500} rows={3} /></Form.Item>
     </Form>
   </Modal>;
 }

@@ -161,6 +161,21 @@ def test_single_plan_line_keeps_quantity_and_amount_and_inherits_plan_itemid() -
     assert counts["lines_split_from_merged"] == 0
 
 
+def test_order_line_parses_draft_no_from_purchase_remark() -> None:
+    remark = "ITEMID:20540519308 | 草稿:CG261017-039"
+    plans_by_sn = {
+        p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19051502014")])[0]
+    }
+    _, lines, _ = build_orders(
+        [Order(RUN_1, T1)],
+        [Item(RUN_1, T1, remark=remark)],
+        plans_by_sn,
+    )
+    assert len(lines) == 1
+    assert lines[0].draft_no == "CG261017-039"
+    assert lines[0].remark_item_id == "19051502014"
+
+
 def test_merged_line_is_split_across_plans_by_plan_quantity() -> None:
     plans, _ = build_plans(
         [

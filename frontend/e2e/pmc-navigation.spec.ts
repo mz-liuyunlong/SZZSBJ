@@ -44,7 +44,7 @@ test("PMC has expanded groups and three independent pages without internal tabs"
   await page.getByRole("menuitem", { name: "PMC", exact: true }).click();
   await menu.getByRole("menuitem", { name: "打包单（仓库）", exact: true }).click();
   await expect(page).toHaveURL(/#\/pmc\/domestic\/packing-warehouse$/);
-  await expect(page.getByText("仓库打包单已接通本地数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新仓库列表", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "批次看板", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "打包单审批", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "打包单（仓库）", exact: true })).toBeVisible();

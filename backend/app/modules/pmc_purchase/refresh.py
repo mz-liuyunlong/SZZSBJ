@@ -643,6 +643,7 @@ class PmcPurchaseDwsRefresher:
             source_lineage_json=lineage,
             order_sn=line.order_sn,
             order_item_id=line.order_item_id,
+            draft_no=line.draft_no,
             plan_key=line.plan_key,
             plan_sn=line.plan_sn,
             plan_sns_json=[line.plan_sn] if line.plan_sn else [],

@@ -34,6 +34,7 @@ from app.modules.pmc_purchase.calculations import (
     ReceiptEvent,
     allocate_by_plan_quantity,
     normalize_store_id,
+    parse_draft_remark,
     parse_itemid_remark,
     parse_provider_date,
 )
@@ -189,6 +190,7 @@ class DwdOrderLineRow:
     unit_price: Decimal | None
     expect_arrive_date: date | None
     remark_item_id: str | None
+    draft_no: str | None
     plan_found: bool
     source: SourceRef
 
@@ -360,6 +362,7 @@ def _line(
     quantity: int,
     amount: Decimal | None,
     remark_item_id: str | None,
+    draft_no: str | None,
     plan_found: bool,
 ) -> DwdOrderLineRow:
     return DwdOrderLineRow(
@@ -383,6 +386,7 @@ def _line(
         unit_price=item.price,
         expect_arrive_date=parse_provider_date(item.expect_arrive_time),
         remark_item_id=remark_item_id,
+        draft_no=draft_no,
         plan_found=plan_found,
         source=_source(item),
     )
@@ -423,6 +427,7 @@ def build_orders(
             item.quantity_real if item.quantity_real is not None else (item.quantity_plan or 0)
         )
         line_count_by_order[(item.source_account_ref, item.order_sn)] += 1
+        draft_no = parse_draft_remark(item.remark)
 
         if not plan_sns:
             counts["without_plan"] += 1
@@ -436,6 +441,7 @@ def build_orders(
                     quantity=quantity,
                     amount=item.amount,
                     remark_item_id=parse_itemid_remark(item.remark),
+                    draft_no=draft_no,
                     plan_found=False,
                 )
             )
@@ -467,6 +473,7 @@ def build_orders(
                         if plan is not None
                         else parse_itemid_remark(item.remark)
                     ),
+                    draft_no=draft_no,
                     plan_found=plan is not None,
                 )
             )

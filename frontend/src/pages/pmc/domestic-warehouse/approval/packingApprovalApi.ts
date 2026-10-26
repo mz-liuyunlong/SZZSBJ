@@ -2,14 +2,14 @@
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 import type { PackingApprovalFilters } from "./packingApprovalTypes";
 export interface ApprovalCandidate {
-  id: string; candidate_version: string; source_account_ref: string; warehouse_id: string;
+  id: string; candidate_version: string; source_account_ref: string; warehouse_id: string; warehouse_name?: string | null;
   publication_id: string; board_id: string; inbound_order_sn: string; sku: string; product_name: string | null;
   store_id: string | null; store_name: string | null; item_id: string | null; gtin: string | null; msku: string | null;
-  purchase_order_sns: string[]; arrival_purchased: number | null; arrival_received: number | null; arrival_pending: number | null;
+  purchase_order_sns: string[]; draft_nos?: string[]; arrival_purchased: number | null; arrival_received: number | null; arrival_pending: number | null;
   arrival_status: "unknown"; candidate_created_on: string | null; overdue: boolean | null;
   stock_balance: number | null; available_quantity: number | null; default_quantity: number | null;
   can_approve: boolean; blocked_reasons: string[]; source_observed_at: string;
-  origin?: "automatic" | "manual"; manual_reason?: string | null; source_store_id?: string | null; manual_customs?: "default" | "declare" | "skip" | null; manual_rwh?: string | null;
+  origin?: "automatic" | "manual"; manual_reason?: string | null; source_store_id?: string | null; manual_customs?: "default" | "declare" | "skip" | null; manual_rwh?: string | null; pk?: string | null;
   customs_default?: boolean; customs_default_src?: "default" | "product_remark" | "purchase_remark" | "purchase_order"; customs_proof?: { value: boolean; source: string; rule: string; field: string | null; remark: string | null; ref: string | null; observed_at: string | null } | null; waiting_days?: number | null; history_complete?: boolean;
 }
 export interface PackingOrder {
@@ -24,7 +24,7 @@ export interface PackingEvent { id: string; event_kind: string; actor_uid: strin
 export type DecisionKind = "approve" | "reject";
 export interface DecisionPayload {
   source_account_ref: string; warehouse_id: string; candidate_version: string; idempotency_key: string;
-  qty?: number; customs?: "default" | "declare" | "skip"; rwh?: string; note?: string;
+  qty?: number; customs?: "default" | "declare" | "skip"; rwh?: string; note?: string; operator_name?: string; passcode?: string;
   target_store_id?: string; target_item_id?: string; listing_version?: string; edit_reason?: string;
 }
 const prefix = "/api/pmc/domestic/packing-approval";
@@ -47,6 +47,10 @@ const reasons: Record<string, string> = { STORE_UNKNOWN: "店铺归属未知", E
 export const approvalBlockedText = (codes: string[]) => codes.map((code) => reasons[code] ?? code).join("；");
 export function approvalErrorText(error: unknown) {
   if (error instanceof BackendRequestError) {
+    if (error.code === "PASSCODE_REJECTED") return "口令不对";
+    if (error.code === "PASSCODE_LOCKED") return "口令错误次数过多，请 10 分钟后再试";
+    if (error.code === "PASSCODE_UNSET") return "服务器尚未设置国内仓口令";
+    if (error.code === "OPERATOR_NOT_ALLOWED") return "国内仓打包单目前只能由吴贤玲提交";
     if (error.status === 401) return "登录已失效，请重新登录";
     if (error.status === 403) return "没有审批权限、数据范围，或当前连接不允许本地审批";
     if (error.status === 409) return "审批状态、库存或来源已变化；请刷新后核对。重试不会重复生成打包单。";

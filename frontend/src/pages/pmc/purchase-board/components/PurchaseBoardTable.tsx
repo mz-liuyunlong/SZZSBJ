@@ -96,6 +96,14 @@ function PurchaseBoardTable({
         <CopyableTextCell text={row.purchaseOrderSn} label="采购单号" link onOpen={() => onOpenDetail(row)} />
       ),
     },
+    draftNo: {
+      key: "draftNo",
+      title: title("draftNo", fieldTitle.draftNo),
+      width: width("draftNo"),
+      onHeaderCell: headerCell,
+      render: (_, row) =>
+        row.draftNo ? <CopyableTextCell text={row.draftNo} label="草稿号" /> : EMPTY,
+    },
     sku: {
       key: "sku",
       title: title("sku", fieldTitle.sku),

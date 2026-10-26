@@ -43,6 +43,7 @@ export const initialPackingApprovalFilters = (): PackingApprovalFilters => ({
 
 export const packingApprovalFields = [
   { key: "number", title: "打包单号", width: 150 },
+  { key: "draft", title: "草稿号", width: 160 },
   { key: "inbound", title: "入库单号", width: 150 },
   { key: "purchase", title: "采购单号", width: 150 },
   { key: "arrival", title: "到货情况（采购/已到/未到）", width: 200 },
@@ -56,7 +57,7 @@ export const packingApprovalFields = [
   { key: "waiting", title: "待审批天数", width: 100 },
   { key: "coverage", title: "历史覆盖", width: 100 },
   { key: "status", title: "状态", width: 100 },
-  { key: "actions", title: "操作", width: 280 },
+  { key: "actions", title: "操作", width: 96 },
 ] as const;
 
 export type PackingApprovalFilterOptions = Pick<DomesticFilterOptions, "stores">;

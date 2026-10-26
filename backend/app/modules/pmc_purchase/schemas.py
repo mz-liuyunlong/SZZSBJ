@@ -179,6 +179,7 @@ class SkuCycleSample(StrictSchema):
 
 class BoardRowRead(StrictSchema):
     purchase_order_sn: str
+    draft_no: str | None = None
     order_item_id: str
     plan_sn: str | None
     plan_sns: list[str]

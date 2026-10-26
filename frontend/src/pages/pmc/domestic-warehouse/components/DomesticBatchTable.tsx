@@ -12,9 +12,20 @@ interface Props {
   onPagination: (page: number, size: number) => void; onSort: (sort: BatchSort) => void;
   onResize: (key: string, width: number) => void; onDetail: (id: string) => void;
 }
+function copyStack(values: string[] | undefined, label: string) {
+  const items = (values ?? []).map((value) => value.trim()).filter(Boolean);
+  if (!items.length) return "—";
+  if (items.length === 1) return <CopyableTextCell text={items[0]} label={label} />;
+  return (
+    <Space direction="vertical" size={0} className="report-table-identity-stack">
+      {items.map((value) => <CopyableTextCell key={value} text={value} label={label} />)}
+    </Space>
+  );
+}
 function renderCell(key: string, row: DomesticBatch) {
   switch (key) {
     case "arrival": return row.arrival_business_date ? <Tooltip title={`来源：${arrivalSourceText[row.arrival_source]}；原值：${row.inbound_at_raw ?? "未知"}`}>{row.arrival_business_date}</Tooltip> : <Tag color="warning">待核实</Tag>;
+    case "draft": return copyStack(row.draft_nos, "草稿号");
     case "inbound":
       return row.inbound_order_sn.trim()
         ? <CopyableTextCell text={row.inbound_order_sn} label="入库单号" />
@@ -39,6 +50,22 @@ function renderCell(key: string, row: DomesticBatch) {
         : "—";
     case "product": return row.product_name || "—";
     case "store": return row.store_id ? `${row.store_name || "店铺"} (${row.store_id})` : <Tag>归属未知</Tag>;
+    case "item": return <Space direction="vertical" size={0}>
+      {row.item_identities?.length
+        ? row.item_identities.map((identity, index) => <CopyableTextCell key={`${identity.item_id}:${index}`} text={identity.item_id} label="ItemID" />)
+        : <Tooltip title="这家店的备注和 Listing 都没有对上 ItemID"><Tag>待归属</Tag></Tooltip>}
+      {row.identity_status === "conflict" && <Tag color="warning">归属冲突</Tag>}
+      {row.identity_status === "partial" && <Tag color="warning">归属不完整</Tag>}
+    </Space>;
+    case "gtin": return row.item_identities?.length ? <Space direction="vertical" size={0}>
+      {row.item_identities.map((identity, index) => <Tooltip key={`${identity.item_id}:${index}`} title={`对应 ItemID：${identity.item_id}`}>
+        <span>{identity.gtin ? <CopyableTextCell text={identity.gtin} label="GTIN" /> : <Tag>待补齐</Tag>}</span>
+      </Tooltip>)}
+    </Space> : <Tooltip title="商品归属确定后展示对应 GTIN"><Tag>待补齐</Tag></Tooltip>;
+    case "owner": return row.owner?.status === "conflict" ? <Tag color="warning">负责人冲突</Tag>
+      : row.owner?.status === "resolved" && (row.owner.name?.trim() || row.owner.uid?.trim())
+        ? <Tooltip title="当前产品负责人">{row.owner.name?.trim() || row.owner.uid}</Tooltip>
+        : <Tooltip title="当前入库记录尚未提供产品负责人"><Tag>未知</Tag></Tooltip>;
     case "age": return row.days_in_warehouse === null ? "—" : `${row.days_in_warehouse} 天`;
     case "quantity": return <Tooltip title="该数量属于整个 IB×SKU，可能在多个店铺行重复展示；请以去重统计为准，不能直接累加此列。">{formatQuantity(row.parent_inbound_qty)}</Tooltip>;
     case "balance": return formatQuantity(row.balance_num);

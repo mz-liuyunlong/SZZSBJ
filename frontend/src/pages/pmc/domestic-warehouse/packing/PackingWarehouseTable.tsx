@@ -1,17 +1,17 @@
 /** Approved PKs only; reference stock and warehouse-owned packing remain separate. */
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
-import { Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Empty, Pagination, Select, Space, Tag, Tooltip, Typography } from "antd";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import { CopyableTextCell, WalmartItemLink } from "@/components/report-table/cells";
 import { packingWarehouseFields, type PackingWarehouseRow, type PackingWarehouseSort } from "./packingWarehouseTypes";
 import { warehouseSyncLabel } from "./packingWarehouseApi";
-import { customsSourceLabel } from "../approval/packingCustoms";
-export type WarehouseDialogKind = "boxes" | "done" | "customs" | "notes" | "unpacked" | "rebox" | "supplemental-inbound" | "supplemental-sync" | "detail";
+export type WarehouseDialogKind = "boxes" | "done" | "notes" | "unpacked" | "rebox" | "supplemental-inbound" | "supplemental-sync" | "detail";
 interface Props {
   pagination: { page: number; pageSize: number }; widths: Record<string, number>; sort: PackingWarehouseSort;
-  rows: PackingWarehouseRow[]; total: number; loading: boolean; busy: boolean;
-  can: (kind: WarehouseDialogKind) => boolean; onAction: (row: PackingWarehouseRow, kind: WarehouseDialogKind) => void;
+  rows: PackingWarehouseRow[]; total: number; loading: boolean; busy: boolean; customsDraft?: Record<string, boolean | null>;
+  can: (kind: WarehouseDialogKind | "customs") => boolean; onAction: (row: PackingWarehouseRow, kind: WarehouseDialogKind) => void;
+  onCustomsChange: (row: PackingWarehouseRow, value: boolean | null) => void;
   onPagination: (page: number, size: number) => void; onResize: (key: string, width: number) => void; onSort: (sort: PackingWarehouseSort) => void;
 }
 const copy = (value: string | null, label: string) => value ? <CopyableTextCell text={value} label={label} /> : "—";
@@ -19,6 +19,11 @@ export default function PackingWarehouseTable(p: Props) {
   const render = (key: string, row: PackingWarehouseRow) => {
     switch (key) {
       case "approved": return row.approved_date;
+      case "draft": {
+        const drafts = (row.draft_nos ?? []).map((value) => value.trim()).filter(Boolean);
+        if (!drafts.length) return "—";
+        return <Space direction="vertical" size={0}>{drafts.map((value) => <CopyableTextCell key={value} text={value} label="草稿号" />)}</Space>;
+      }
       case "number": return <Space direction="vertical" size={0}>{copy(row.pk, "打包单号")}{row.is_test && <Tag>本地验证单</Tag>}</Space>;
       case "arrival": return <Tooltip title="与批次看板一致，采用入库业务日">{row.arrival_date ?? "日期未知"}</Tooltip>;
       case "received": return row.received_dates.length ? row.received_dates.join(" / ") : "待核实";
@@ -34,7 +39,13 @@ export default function PackingWarehouseTable(p: Props) {
         {row.variance_case?.kind === "over" && row.variance_case.state === "blocked" && <><Tag color="orange">超发 {row.variance_case.quantity} 件 · 待补入库单</Tag><small>缺口 {row.variance_case.gap_qty ?? "待核实"} 件</small><small>{warehouseSyncLabel(row.variance_case.last_sync_code)}{row.variance_case.last_sync_gap ? `，仍差 ${row.variance_case.last_sync_gap} 件` : ""}</small><small>通知：本地待配置</small></>}
         {row.variance_case?.kind === "over" && row.variance_case.state === "ready" && <Tag color="green">已解除，请再次确认</Tag>}<Tag color={row.status === "packed" ? "purple" : "processing"}>{row.status === "packed" ? "已打包待发" : "待打包"}</Tag><small>领星箱规：未接入</small></Space>;
       case "days": return `${row.packing_days} / ${row.warehouse_days ?? "未知"} 天`;
-      case "customs": return <Space direction="vertical" size={0}><Tag color={row.customs_value ? "red" : undefined}>{row.customs_value === null ? "未知" : row.customs_value ? "报关" : "不报关"}</Tag><small>{customsSourceLabel(row.customs_src)}</small></Space>;
+      case "customs": {
+        const shown = p.customsDraft && row.id in p.customsDraft ? p.customsDraft[row.id] : row.customs_value;
+        const current = shown === true ? "declare" : shown === false ? "skip" : "unknown";
+        return <Select className="domestic-packing__customs-select" size="small" aria-label={`是否报关 ${row.pk}`} disabled={p.busy || !p.can("customs")} value={current}
+          options={[{ value: "declare", label: "报关" }, { value: "skip", label: "不报关" }, { value: "unknown", label: "未知" }]}
+          onChange={(choice: "declare" | "skip" | "unknown") => { const next = choice === "declare" ? true : choice === "skip" ? false : null; if (next !== shown) p.onCustomsChange(row, next); }} />;
+      }
       case "package": { const values = row.box_set?.package_snapshot?.values ?? row.product_requirement.package; return values ? <span>{values.length_cm}×{values.width_cm}×{values.height_cm} cm<br />毛重 {values.gross_weight_g} g</span> : <Tag color="warning">缺资料，仓库须补填</Tag>; }
       case "note": return row.current_note ? <Space direction="vertical" size={0}><Tag color={row.current_note.resolved ? "success" : "warning"}>{row.current_note.category_label}</Tag><span>{row.current_note.text}</span></Space> : "—";
       case "labels": return <Tooltip title="标签PDF不在本轮范围"><Button size="small" disabled>标签 PDF</Button></Tooltip>;
@@ -42,7 +53,6 @@ export default function PackingWarehouseTable(p: Props) {
         <Button size="small" disabled={p.busy || !p.can("boxes") || row.status === "packed"} onClick={() => p.onAction(row, "boxes")}>{row.box_set ? "改装箱" : "填装箱"}</Button>
         {row.status === "packed" && p.can("rebox") && <Button size="small" disabled={p.busy || ["released", "voided"].includes(row.variance_case?.state ?? "")} onClick={() => p.onAction(row, "rebox")}>改装箱</Button>}
         <Tooltip title={(row.box_set?.variance_qty ?? 0) > 0 ? "完成时校验额外库存；余量不足则记录待补入库" : !row.box_set ? "请先保存装箱" : row.product_requirement.state !== "complete" ? "完成前须补填单品尺寸及毛重" : "确认装箱和包装资料"}><Button size="small" type="primary" disabled={p.busy || !p.can("done") || row.status === "packed" || !row.box_set} onClick={() => p.onAction(row, "done")}>打包完成</Button></Tooltip>
-        {p.can("customs") && <Button size="small" disabled={p.busy} onClick={() => p.onAction(row, "customs")}>改报关</Button>}
         {p.can("notes") && <Button size="small" disabled={p.busy} onClick={() => p.onAction(row, "notes")}>延迟备注</Button>}
         {p.can("unpacked") && row.variance_case?.kind === "under" && row.variance_case.state === "pending" && <Button size="small" disabled={p.busy} onClick={() => p.onAction(row, "unpacked")}>未装处置</Button>}
         {row.variance_case?.kind === "over" && row.variance_case.state === "blocked" && <>
