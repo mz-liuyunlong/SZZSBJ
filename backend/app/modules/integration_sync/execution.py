@@ -373,7 +373,7 @@ class SyncRunExecutionService:
                     heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 )
                 try:
-                    summary = self._execute_data_pages_interface(run.interface_key, runner)
+                    summary = self._execute_data_pages_interface(run.interface_key, runner, run_id=run.id)
                 except DataPagesMartInvariantError as error:
                     self.session.rollback()
                     active_run = self.repository.get_run_for_update(run.id)
@@ -419,7 +419,11 @@ class SyncRunExecutionService:
         completed.records_seen = records_seen
         completed.records_written = records_written
         completed.error_code = mart_failures[0].code if mart_failures else None
-        completed.error_message = "同步业务日校验失败" if mart_failures else None
+        completed.error_message = (
+            "退款事实已保存，但历史利润校验失败"
+            if mart_failures and run.interface_key == "walmartReturnOrderList"
+            else "同步业务日校验失败" if mart_failures else None
+        )
         self._event(
             completed.id,
             from_status,
@@ -433,6 +437,8 @@ class SyncRunExecutionService:
         self,
         interface_key: str,
         runner: DataPagesRealSyncRunner,
+        *,
+        run_id: UUID,
     ) -> DataPagesRealSyncSummary:
         """Run only the dataset represented by the configured task."""
 
@@ -491,12 +497,34 @@ class SyncRunExecutionService:
 
         elif interface_key == "walmartReturnOrderList":
             refunds = runner._fetch_return_all()
+            if runner.summary.return_permission_403:
+                # A denied provider request must not masquerade as an empty, successful day.
+                raise DataPagesRealSyncError("DATA_PAGES_REFUND_PERMISSION_DENIED")
             heartbeat()
             runner.summary.refund_rows = runner._write_refunds(refunds)
             heartbeat()
             runner.summary.refund_unresolved_rows = runner._resolve_refund_items()
             heartbeat()
             runner._reprice_refunds()
+
+            # Refund facts and their source-store scope are a durable ingestion phase.
+            # Do not roll back the facts when an affected purchase day's financial
+            # MART fails its independent SEM, sample, or replay invariants.
+            self._event(
+                run_id,
+                "running",
+                "running",
+                "SYNC_REFUND_FACTS_COMMITTED",
+                safe_details={
+                    "business_date": runner.business_date.isoformat(),
+                    "refund_rows": runner.summary.refund_rows,
+                    "refund_unresolved_rows": runner.summary.refund_unresolved_rows,
+                    "affected_purchase_days": len(
+                        getattr(runner, "_refund_affected_business_dates", ())
+                    ),
+                },
+            )
+            self.session.commit()
 
         elif interface_key == "walmartAdItemSpList":
             advertisers = runner._fetch_page_all(
