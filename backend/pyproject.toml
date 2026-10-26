@@ -41,6 +41,8 @@ extend-exclude = [
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
+"app/modules/ai_runtime/*.py" = ["E501"]
+"alembic/versions/20261026_0060_ai_runtime.py" = ["E501"]
 "alembic/versions/20260917_0012_add_sample_and_refund_business_amounts.py" = ["E501"]
 "app/modules/integration_sync/data_pages_business_rules.py" = ["E501", "I001", "UP035"]
 "app/modules/integration_sync/data_pages_business_rules_v2.py" = ["E501", "I001", "UP035"]
