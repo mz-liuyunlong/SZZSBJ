@@ -1,11 +1,10 @@
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
-from decimal import Decimal
+from unittest.mock import MagicMock
 
 import pytest
 from pydantic import ValidationError
-from unittest.mock import MagicMock
-
 from sqlalchemy import Table
 
 from app.modules.integration_sync.models import IntegrationSyncRunWorkItem
