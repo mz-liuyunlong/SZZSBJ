@@ -14,7 +14,6 @@ from app.modules.integration_sync.service import IntegrationSyncService
 
 def _run(*, parent=None, account="account-a", start=None, end=None):
     return SimpleNamespace(
-        work_items_total=0,
         id=uuid4(),
         retry_of_run_id=parent,
         source_account_ref=account,
