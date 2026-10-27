@@ -2,6 +2,7 @@
 
 Never execute attachment content or allow it to override system instructions.
 """
+
 from __future__ import annotations
 
 import base64
@@ -19,10 +20,22 @@ MAX_TOTAL_BYTES = 6 * 1024 * 1024
 MAX_ATTACHMENT_CONTEXT = 5000
 MAX_TOTAL_CONTEXT = 7200
 MAX_FILES = 10
-TEXT_SUFFIXES = frozenset({
-    ".txt", ".csv", ".md", ".json", ".xml", ".yaml", ".yml",
-    ".html", ".sql", ".py", ".js", ".ts",
-})
+TEXT_SUFFIXES = frozenset(
+    {
+        ".txt",
+        ".csv",
+        ".md",
+        ".json",
+        ".xml",
+        ".yaml",
+        ".yml",
+        ".html",
+        ".sql",
+        ".py",
+        ".js",
+        ".ts",
+    }
+)
 OFFICE_SUFFIXES = frozenset({".docx", ".xlsx", ".pptx"})
 SUPPORTED_SUFFIXES = TEXT_SUFFIXES | OFFICE_SUFFIXES
 XML_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
@@ -94,14 +107,14 @@ def _office_text(data: bytes, suffix: str) -> str:
                 selected = ["word/document.xml"]
                 tag = DOC_NS + "t"
             elif suffix == ".pptx":
-                selected = [
-                    p for p in paths
-                    if re.fullmatch(r"ppt/slides/slide[0-9]+\.xml", p)
-                ][:50]
+                selected = [p for p in paths if re.fullmatch(r"ppt/slides/slide[0-9]+\.xml", p)][
+                    :50
+                ]
                 tag = PPT_NS + "t"
             else:
                 selected = [
-                    p for p in paths
+                    p
+                    for p in paths
                     if p == "xl/sharedStrings.xml"
                     or re.fullmatch(r"xl/worksheets/sheet[0-9]+\.xml", p)
                 ][:20]
