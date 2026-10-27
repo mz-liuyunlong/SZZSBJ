@@ -16,7 +16,6 @@ import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
 import LoginPage from "@/pages/auth/LoginPage";
 import NotFoundPage from "@/pages/errors/NotFoundPage";
 import ListingManagementPage from "@/pages/products/ListingManagementPage";
-import ClearanceCenterPage from "@/pages/products/ClearanceCenterPage";
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
 import DailySalesPage from "@/pages/sales/DailySalesPage";
 import OrderProfitPage from "@/pages/sales/OrderProfitPage";
@@ -181,8 +180,6 @@ function BusinessRoute({
           <ProductManagementPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
-        ) : page.key === "products_clearance_center" ? (
-          <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
           <DailySalesPage page={page} />
         ) : page.key === "sales_order_profit" ? (

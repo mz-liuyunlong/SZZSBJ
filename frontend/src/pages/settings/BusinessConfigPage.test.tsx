@@ -74,7 +74,7 @@ describe("business configuration V2", () => {
     expect(screen.getAllByText("未配置计价").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /AI 服务/ }));
     expect(screen.queryByText("Decodo Scraper API")).not.toBeInTheDocument();
-    expect(screen.getByText("该分类尚无接入的服务")).toBeInTheDocument();
+    expect(screen.getByText("该分类暂无服务配置")).toBeInTheDocument();
     expect(mocks.fetchConfig).toHaveBeenCalledTimes(1);
   });
 
@@ -90,7 +90,7 @@ describe("business configuration V2", () => {
     mocks.fetchConfig.mockResolvedValue({ ...config, mode: "local_test" });
     render(<BusinessConfigPage page={page} />);
     expect(await screen.findByText("Decodo Scraper API")).toBeInTheDocument();
-    expect(screen.getByText("当前是 Decodo 本地 SQLite 测试模式")).toBeInTheDocument();
+    expect(screen.getByText(/Decodo 处于本地 SQLite 测试模式/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "编辑" })).not.toBeInTheDocument();
   });
 });
