@@ -67,7 +67,8 @@ def prepare_visual_input(name: str, raw: bytes) -> tuple[dict[str, str], int]:
     return (
         {
             "type": "input_image",
-            "image_url": "data:image/jpeg;base64," + base64.b64encode(output.getvalue()).decode("ascii"),
+            "image_url": "data:image/jpeg;base64,"
+            + base64.b64encode(output.getvalue()).decode("ascii"),
             "detail": "low",
         },
         8000,
