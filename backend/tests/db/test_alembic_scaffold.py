@@ -24,7 +24,8 @@ KEYWORD_MERGE_REVISION = "20261023_0056_merge_decodo_keyword_heads"
 KEYWORD_HEAD_REVISION = "20261025_0058_keyword_internal_default"
 BUSINESS_CONNECTOR_HEAD_REVISION = "20261025_0059_business_connector_control"
 LISTING_INTEGRATION_HEAD_REVISION = "20261026_0060_merge_listing_business_heads"
-AI_RUNTIME_HEAD_REVISION = "20261026_0060_ai_runtime"
+AI_RUNTIME_PREVIOUS_REVISION = "20261026_0060_ai_runtime"
+AI_RUNTIME_HEAD_REVISION = "20261027_0061_ai_runtime_skill_context"
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +57,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     assert script.get_heads() == [AI_RUNTIME_HEAD_REVISION]
     assert (
         script.get_revision(AI_RUNTIME_HEAD_REVISION).down_revision
+        == AI_RUNTIME_PREVIOUS_REVISION
+    )
+    assert (
+        script.get_revision(AI_RUNTIME_PREVIOUS_REVISION).down_revision
         == LISTING_INTEGRATION_HEAD_REVISION
     )
     assert set(script.get_revision(LISTING_INTEGRATION_HEAD_REVISION).down_revision) == {
