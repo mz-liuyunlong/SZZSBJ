@@ -554,16 +554,19 @@ def test_data_pages_mart_failure_rolls_back_day_and_continues(
 
     assert service._execute_data_pages_interface.call_count == 2
     session.rollback.assert_called_once_with()
-    assert run.status == "failed"
-    assert run.work_items_succeeded == 1
-    assert run.work_items_failed == 1
-    assert run.error_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
+    assert run.status == "succeeded"
+    assert run.work_items_succeeded == 2
+    assert run.work_items_failed == 0
+    assert run.error_code is None
     assert run.records_written == 3
     assert service._heartbeat_data_pages_lock.call_count == 1
     events = [call.args[0] for call in repository.add_event.call_args_list]
     assert events[0].message_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
     assert events[0].safe_details == {"business_date": first_day.isoformat()}
-    assert events[1].safe_details == {"failed_business_dates": 1}
+    assert events[1].message_code == "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
+    assert events[1].safe_details == {"failed_capture_dates": 0, "pending_financial_dates": 1}
+    repository.record_business_anomaly.assert_called_once()
+    assert repository.record_business_anomaly.call_args.kwargs["error_code"] == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
 
 
 def test_listing_management_path_does_not_write_sales_profit_marts() -> None:
