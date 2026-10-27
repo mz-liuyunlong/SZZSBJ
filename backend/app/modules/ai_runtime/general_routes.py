@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import binascii
 from pathlib import PurePath
-
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -19,7 +18,6 @@ from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
 
 from .attachment_extraction import AttachmentBody, AttachmentError, extract_attachments
-from .visual_attachments import VISUAL_SUFFIXES, VisualAttachmentError, prepare_visual_input
 from .provider import (
     MAX_SKILL_INSTRUCTIONS,
     MAX_SKILL_RUNTIME_INSTRUCTIONS,
@@ -28,6 +26,7 @@ from .provider import (
     invoke,
     resolve_runtime_instructions,
 )
+from .visual_attachments import VISUAL_SUFFIXES, VisualAttachmentError, prepare_visual_input
 
 router = APIRouter(prefix="/api/ai-runtime", tags=["AI Runtime"])
 view_perm = Annotated[Principal, Depends(require_permission("page:ai-center:assistant:view"))]
