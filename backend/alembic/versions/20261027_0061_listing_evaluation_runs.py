@@ -2,9 +2,10 @@
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "20261027_0061_listing_evaluation_runs"
 down_revision: str | Sequence[str] | None = "20261026_0060_merge_listing_business_heads"
