@@ -1,4 +1,5 @@
 """Offline pagination tests, with no credentials, network, or database."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -49,31 +50,37 @@ def contract(mode: str = "offset") -> PageContract:
 
 
 def test_complete_offset_pages() -> None:
-    client = FakeClient([
-        {"items": [{"id": 1}, {"id": 2}], "total": 3},
-        {"items": [{"id": 3}], "total": 3},
-    ])
-    rows = collect_read_pages(
-        client, store_code="HK2615", contract=contract(), page_size=2
+    client = FakeClient(
+        [
+            {"items": [{"id": 1}, {"id": 2}], "total": 3},
+            {"items": [{"id": 3}], "total": 3},
+        ]
     )
+    rows = collect_read_pages(client, store_code="HK2615", contract=contract(), page_size=2)
     assert len(rows) == 3
     assert [call["offset"] for call in client.calls] == [0, 2]
 
 
 def test_incomplete_offset_rejected() -> None:
-    client = FakeClient([
-        {"items": [{"id": 1}], "total": 3},
-        {"items": [], "total": 3},
-    ])
+    client = FakeClient(
+        [
+            {"items": [{"id": 1}], "total": 3},
+            {"items": [], "total": 3},
+        ]
+    )
     with pytest.raises(PaginationRejected, match="WALMART_PAGE_LIMIT_REACHED"):
-        collect_read_pages(client, store_code="HK2615", contract=contract(), page_size=2, max_pages=1)
+        collect_read_pages(
+            client, store_code="HK2615", contract=contract(), page_size=2, max_pages=1
+        )
 
 
 def test_cursor_loop_rejected() -> None:
-    client = FakeClient([
-        {"items": [{"id": 1}], "total": 3, "nextCursor": "one"},
-        {"items": [{"id": 2}], "total": 3, "nextCursor": "one"},
-    ])
+    client = FakeClient(
+        [
+            {"items": [{"id": 1}], "total": 3, "nextCursor": "one"},
+            {"items": [{"id": 2}], "total": 3, "nextCursor": "one"},
+        ]
+    )
     with pytest.raises(PaginationRejected, match="WALMART_PAGE_CURSOR_LOOP"):
         collect_read_pages(client, store_code="HK2615", contract=contract("cursor"), page_size=2)
 
