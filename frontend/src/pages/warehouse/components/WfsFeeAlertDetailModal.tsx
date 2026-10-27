@@ -154,7 +154,7 @@ function RecoveryEditor({
           rules={[
             { required: true, message: "请输入实际追回金额" },
             {
-              validator: async (_, value: number | undefined) => {
+              validator: async (_, value: unknown) => {
                 if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
                   throw new Error("追回金额必须大于 0");
                 }
