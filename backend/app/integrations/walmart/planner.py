@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 
 # References are names only, never credential values.
 STORE_ROUTES: dict[str, tuple[str, str | None]] = {
@@ -23,7 +24,7 @@ API_SPECS: dict[str, tuple[str, frozenset[str]]] = {
     "wfs_inventory": ("/v3/wfs/inventory", frozenset({"limit", "offset"})),
     "inbound_shipments": (
         "/v3/fulfillment/inbound-shipments",
-        frozenset({"limit", "offset", "fromCreatedDate", "toCreatedDate"}),
+        frozenset({"limit", "offset", "fromCreateDate", "toCreateDate", "shipmentId", "inboundOrderId", "status"}),
     ),
     "inbound_shipment_items": (
         "/v3/fulfillment/inbound-shipment-items",
@@ -31,7 +32,7 @@ API_SPECS: dict[str, tuple[str, frozenset[str]]] = {
     ),
     "inventory_log": (
         "/v3/fulfillment/inventory-log",
-        frozenset({"limit", "offset", "gtin", "fromDate", "toDate"}),
+        frozenset({"limit", "offset", "gtin", "startDate", "endDate", "shipmentId", "transactionType", "transactionLocation", "sort_by", "sort_order"}),
     ),
 }
 
@@ -82,13 +83,24 @@ def plan_call(
         elif key == "offset":
             if type(value) is not int or not 0 <= value <= 1000000:
                 raise WalmartPlanError("WALMART_PARAMS_INVALID")
-        elif key in {"fromCreatedDate", "toCreatedDate"}:
-            if type(value) is not int or not 1000000000000 <= value <= 9999999999999:
+        elif key in {"fromCreateDate", "toCreateDate", "startDate", "endDate"}:
+            if not isinstance(value, str) or not 8 <= len(value) <= 40:
                 raise WalmartPlanError("WALMART_PARAMS_INVALID")
+            try:
+                if key in {"startDate", "endDate"}:
+                    date.fromisoformat(value)
+                    if len(value) != 10:
+                        raise ValueError("date must use YYYY-MM-DD")
+                else:
+                    datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    if not (value.endswith("Z") or "+00:00" in value):
+                        raise ValueError("datetime must be UTC")
+            except ValueError:
+                raise WalmartPlanError("WALMART_PARAMS_INVALID") from None
         elif not isinstance(value, str) or not 1 <= len(value) <= 64 or not value.isascii():
             raise WalmartPlanError("WALMART_PARAMS_INVALID")
         normalized[key] = value
-    for start, end in (("fromDate", "toDate"), ("fromCreatedDate", "toCreatedDate")):
+    for start, end in (("startDate", "endDate"), ("fromCreateDate", "toCreateDate")):
         if start in normalized and end in normalized and normalized[start] > normalized[end]:
             raise WalmartPlanError("WALMART_DATE_RANGE_INVALID")
     return WalmartPlan(store_code, api_key, "GET", path, normalized, route[1])
