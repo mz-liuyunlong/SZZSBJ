@@ -4,6 +4,7 @@ from app.modules.business_connectors.encryption_key import (
     get_business_fernet,
 )
 
+
 def main() -> int:
     try:
         get_business_fernet()
@@ -12,6 +13,7 @@ def main() -> int:
         return 2
     print("BUSINESS_CONFIG_ENCRYPTION_PREFLIGHT: READY")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
