@@ -48,7 +48,6 @@ def prepare_visual_input(name: str, raw: bytes) -> tuple[dict[str, str], int]:
                 "type": "input_file",
                 "filename": PurePath(name).name,
                 "file_data": "data:application/pdf;base64," + base64.b64encode(raw).decode("ascii"),
-                "detail": "low",
             },
             pages * 10000,
         )
