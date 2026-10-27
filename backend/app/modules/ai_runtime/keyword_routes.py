@@ -383,7 +383,6 @@ def download_keyword_ai_four_sheet(
     )
 
 
-
 class V1GenerateRequest(BaseModel):
     source_account_ref: str
     sku: str
