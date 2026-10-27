@@ -180,8 +180,8 @@ def create_listing_actions(
     actions: list[tuple[str, ...]] = []
     for order, row in enumerate(rows_01, 1):
 
-        def field(name: str) -> str:
-            value = row[columns[name]]
+        def field(name: str, *, record: Sequence[object] = row) -> str:
+            value = record[columns[name]]
             return str(value) if value is not None else ""
 
         keyword = field("关键词")
@@ -214,7 +214,7 @@ def create_listing_actions(
             # Exactly ONE saved listing draft. Mark every line as human-review only.
             copy_rows = (
                 [("标题", title)]
-                + [(f"五点", item) for item in features]
+                + [("五点", item) for item in features]
                 + [("详情描述", description)]
             )
             for pos, content in copy_rows:
