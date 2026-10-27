@@ -51,10 +51,9 @@ def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
         feed_keys = set(feed_monitor_registry().keys())
         if approved_keys - (wfs_keys | feed_keys):
             raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
-        combined = (
-            tuple(wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values())
-            + tuple(feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values())
-        )
+        combined = tuple(
+            wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values()
+        ) + tuple(feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values())
         return ContractRegistry(combined)
     path = Path(source)
     expected = os.environ.get("SZZSBJ_WALMART_CONTRACT_SHA256", "").lower()
