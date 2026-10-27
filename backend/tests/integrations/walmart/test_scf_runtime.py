@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from app.integrations.walmart.scf_runtime import ReadOnlyStorePolicy, main_handler
+from app.integrations.walmart.scf_runtime import ReadOnlyStorePolicy, _load_registry, main_handler
 
 
 def test_default_runtime_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,3 +55,14 @@ def test_unapproved_cross_store_and_write_rejected() -> None:
         is_write=True,
         approval_ref="owner-ticket",
     )
+
+
+def test_default_runtime_registry_includes_feed_operations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SZZSBJ_WALMART_CONTRACT_FILE", raising=False)
+    registry = _load_registry(frozenset({"feed_status_list", "wfs_inventory"}))
+    assert {"feed_status_list", "feed_item_status", "wfs_inventory"} <= set(registry.keys())
+    assert registry.get("feed_status_list").enabled
+    assert not registry.get("feed_item_status").enabled
+    assert registry.get("wfs_inventory").enabled
