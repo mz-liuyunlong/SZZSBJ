@@ -15,6 +15,7 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import require_permission
 from app.db.session import get_session_factory
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.keyword_planning.analysis_routes import _require_opted_in_writes
 
 from .provider import AIUnavailable, invoke
 
@@ -103,6 +104,42 @@ async def draft(
         raise ApiError(code=exc.code, status_code=503) from None
     except (ValueError, TypeError, KeyError):
         raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=502) from None
+    # Persist at most ONE review-only Listing draft per AI job. The -1 index is
+    # outside keyword semantic batches (0..N-1), so retries never mix the records.
+    # This does not publish or change Walmart listings.
+    _require_opted_in_writes()
+    with get_session_factory()() as session:
+        job = session.execute(
+            text("""SELECT id FROM ai_runtime_jobs
+                WHERE run_id=:run AND source_account_ref=:account
+                  AND status IN ('succeeded','partial_success')
+                ORDER BY finished_at DESC NULLS LAST,created_at DESC LIMIT 1"""),
+            {"run": body.run_id, "account": body.source_account_ref},
+        ).scalar_one_or_none()
+        if job is not None:
+            session.execute(
+                text("""INSERT INTO ai_runtime_results
+                   (job_id,batch_index,status,output_json,input_tokens,output_tokens)
+                   VALUES (:job,-1,'succeeded',CAST(:draft AS jsonb),:inp,:out)
+                   ON CONFLICT(job_id,batch_index) DO UPDATE SET
+                     status='succeeded',output_json=excluded.output_json,
+                     input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens,
+                     error_code=NULL"""),
+                {
+                    "job": job,
+                    "draft": json.dumps(
+                        {
+                            "title": parsed["title"],
+                            "features": features,
+                            "description": parsed["description"],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "inp": 0,
+                    "out": 0,
+                },
+            )
+            session.commit()
     return success_response(
         request,
         data=ListingDraftRead(
