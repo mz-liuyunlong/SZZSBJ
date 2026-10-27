@@ -1,4 +1,5 @@
 """Read-only connector encryption configuration preflight; never print the key."""
+
 from app.modules.business_connectors.encryption_key import (
     EncryptionKeyUnavailable,
     get_business_fernet,
