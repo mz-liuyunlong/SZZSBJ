@@ -43,4 +43,4 @@ def test_ai_annotations_do_not_change_scoring_or_export_structure() -> None:
     with ZipFile(BytesIO(content)) as workbook:
         names = workbook.read("xl/workbook.xml").decode("utf-8")
         assert len([name for name in SHEET_NAMES if name in names]) == 4
-        assert len([name for name in workbook.namelist() if name.startswith("xl/worksheets/sheet")]) == 4
+        assert sum(name.startswith("xl/worksheets/sheet") for name in workbook.namelist()) == 4
