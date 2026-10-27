@@ -62,6 +62,21 @@ _OPERATIONS = (
         ),
         source="https://developer.walmart.com/us-marketplace/reference/getrequestsstatus",
     ),
+
+    Operation(
+        key="shipping_settings_get",
+        method="GET",
+        path="/v3/settings/shipping",
+        fields=(),
+        source="https://developer.walmart.com/us-marketplace/docs/shipping-and-fulfillment-settings-api-overview",
+    ),
+    Operation(
+        key="shipping_carriers_list",
+        method="GET",
+        path="/v3/shipping/labels/carriers",
+        fields=(),
+        source="https://developer.walmart.com/us-marketplace/reference/getcarriers",
+    ),
     Operation(
         key="report_request_status_get",
         method="GET",
