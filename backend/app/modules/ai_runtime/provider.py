@@ -37,9 +37,7 @@ class AIUnavailable(Exception):
         super().__init__(code)
 
 
-def resolve_runtime_instructions(
-    instructions: str, runtime_instructions: str | None
-) -> str:
+def resolve_runtime_instructions(instructions: str, runtime_instructions: str | None) -> str:
     """Use compact instructions; never inject a long reference document."""
     runtime = (runtime_instructions or "").strip()
     if runtime:
@@ -110,6 +108,7 @@ def select_active_connector(session, scene: str, connector_id: UUID | None = Non
     if model_compatible:
         raise AIUnavailable("AI_SCENE_DISABLED")
     raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
+
 
 def select_published_skill(session, connector_id: UUID, scene: str):
     """Only load a published Skill belonging to the selected OpenAI connector."""
