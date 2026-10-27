@@ -3,6 +3,7 @@
 Return approval, rejection and refund operations are deliberately excluded:
 they have financial/customer impact and require a separately reviewed write gate.
 """
+
 from __future__ import annotations
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry, Field, Operation
