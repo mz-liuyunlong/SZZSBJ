@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from decimal import Decimal
 from io import BytesIO
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -388,6 +389,10 @@ class V1GenerateRequest(BaseModel):
     confirmation: str
     template_version: str
     start_date: str | None = None
+    manual_bid: Decimal = Decimal("0.31")
+    auto_bid: Decimal = Decimal("0.21")
+    manual_budget: Decimal = Decimal("10")
+    auto_budget: Decimal = Decimal("10")
 
 
 @router.post("/{job_id}/v1-workbook")
@@ -458,6 +463,20 @@ def download_confirmed_v1_workbook(
         for item in batch.get("items", [])
         if isinstance(item, dict)
     ]
+    metadata = {
+        keyword.casefold(): {
+            "broad_role": row.broad_role,
+            "root_grade": row.root_grade,
+            "broad_reason": row.broad_reason,
+            "risk_reasons": row.risk_reasons_json,
+        }
+        for row, keyword in rows
+    }
+    listing_draft = session.execute(
+        text("""SELECT output_json FROM ai_runtime_results
+        WHERE job_id=:job AND batch_index=-1 AND status='succeeded'"""),
+        {"job": job_id},
+    ).scalar_one_or_none()
     try:
         reviewed = generate_four_sheet_review(run=run, keyword_rows=rows, ai_items=ai_items)
         source_rows = read_review_primary_sheet(reviewed)
@@ -470,11 +489,17 @@ def download_confirmed_v1_workbook(
             user_confirmed_generation=True,
             walmart_template_verified=True,
             start_date=body.start_date,
+            manual_bid=body.manual_bid,
+            auto_bid=body.auto_bid,
+            manual_budget=body.manual_budget,
+            auto_budget=body.auto_budget,
         )
         content = create_v1_workbook(
             tuple(HEADERS_01),
             source_rows,
             cfg,
+            metadata=metadata,
+            listing_draft=listing_draft if isinstance(listing_draft, dict) else None,
         )
     except (ValueError, KeyError, TypeError):
         raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409) from None
