@@ -24,7 +24,7 @@ from app.core.api import ApiError, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
-from app.integrations.llm.openai_provider import generate_text
+from app.integrations.llm.openai_provider import failed_call_reservation, generate_text
 
 router = APIRouter(prefix="/api/business-rules/connectors", tags=["Business connectors"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
@@ -844,20 +844,27 @@ async def ai_generate(
                 prompt=payload.prompt,
                 max_output_tokens=max_output_tokens,
             )
-        except Exception:
-            # Keep the reserved amount after an indeterminate provider failure;
-            # a provider may have billed the call even without returning usage.
+        except Exception as exc:
+            # Definite provider rejections release the reservation; uncertain failures retain it.
+            failed_cost, failure_code = failed_call_reservation(
+                reserved_cost, getattr(exc, "status_code", None)
+            )
             with get_session_factory()() as session:
                 session.execute(
                     text("""
                         UPDATE biz_ai_usage
-                           SET status='failed',error_code='AI_PROVIDER_FAILURE',
+                           SET status='failed',cost_usd=:cost,error_code=:error,
                                duration_ms=:duration WHERE id=:id
                     """),
-                    {"id": reservation_id, "duration": int((time.monotonic() - started) * 1000)},
+                    {
+                        "id": reservation_id,
+                        "cost": failed_cost,
+                        "error": failure_code,
+                        "duration": int((time.monotonic() - started) * 1000),
+                    },
                 )
                 session.commit()
-            raise ConfigError("AI_PROVIDER_FAILURE", 502) from None
+            raise ConfigError(failure_code, 502) from None
 
         actual_cost = (
             Decimal(input_tokens) * input_rate + Decimal(output_tokens) * output_rate
