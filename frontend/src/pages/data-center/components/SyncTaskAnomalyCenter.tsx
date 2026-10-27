@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Typography, message } from "antd";
 import { backendRequest } from "@/api/backendApi";
 
@@ -69,7 +69,7 @@ export default function SyncTaskAnomalyCenter() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const query = new URLSearchParams({ page: String(page), page_size: "20" });
@@ -85,12 +85,15 @@ export default function SyncTaskAnomalyCenter() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => { void refresh(); }, [page, status, searchText]);
+  }, [page, status, searchText, messageApi]);
 
   useEffect(() => {
-    if (!selected) { setHistory([]); return; }
+    // Defer the request to avoid synchronous state updates during effect execution.
+    void Promise.resolve().then(refresh);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!selected) return;
     let cancelled = false;
     void backendRequest<{ items: AnomalyAudit[] }>(
       `/api/integrations/sync-anomalies/${selected.id}/history`
@@ -100,7 +103,7 @@ export default function SyncTaskAnomalyCenter() {
       if (!cancelled) setHistory([]);
     });
     return () => { cancelled = true; };
-  }, [selected?.id]);
+  }, [selected]);
 
   const submit = async () => {
     if (!selected || note.trim().length < 3) {
@@ -158,12 +161,12 @@ export default function SyncTaskAnomalyCenter() {
           { title: "次数", dataIndex: "occurrence_count", width: 70 },
           { title: "操作", key: "view", fixed: "right", width: 90,
             render: (_, row) => <Button type="link" onClick={() => {
-              setSelected(row); setNote(row.owner_note ?? ""); setNextStatus(row.status);
+              setHistory([]); setSelected(row); setNote(row.owner_note ?? ""); setNextStatus(row.status);
             }}>核对详情</Button> },
         ]}
       />
       <Drawer title="异常核对详情" width={680} open={!!selected}
-        onClose={() => setSelected(null)}>
+        onClose={() => { setSelected(null); setHistory([]); }}>
         {selected && <>
           <Alert type="warning" showIcon style={{ marginBottom: 16 }}
             message="异常不代表源接口同步失败；财务结果需独立校验" />
