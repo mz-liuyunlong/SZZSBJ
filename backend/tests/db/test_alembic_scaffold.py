@@ -65,8 +65,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == SYNC_ANOMALY_HEAD_REVISION
     )
     assert (
-        script.get_revision(SYNC_ANOMALY_HEAD_REVISION).down_revision
-        == WFS_DETECTION_HEAD_REVISION
+        script.get_revision(SYNC_ANOMALY_HEAD_REVISION).down_revision == WFS_DETECTION_HEAD_REVISION
     )
     assert (
         script.get_revision(WFS_DETECTION_HEAD_REVISION).down_revision
