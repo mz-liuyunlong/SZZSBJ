@@ -12,6 +12,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
+
 class EncryptionKeyUnavailable(Exception):
     """Safe error without secret material."""
 
