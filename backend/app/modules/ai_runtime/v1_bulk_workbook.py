@@ -7,6 +7,9 @@ unverified template, unconfirmed product facts and quota violations.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
+from xml.etree import ElementTree as ET
+from zipfile import ZipFile
 from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -176,8 +179,16 @@ def create_v1_workbook(
                    budget=str(config.auto_budget), start=start, targeting="auto"),
         _structure("【auto】检查Item ID与预算", "Ad Group", automatic, "auto"),
     ])
-    # The auto item row is part of the approved Walmart template. Do not fabricate
-    # its Record Type or fields until the configured official template is confirmed.
+    rows04.append(
+        _structure(
+            "【auto】检查Item ID与默认竞价",
+            "Item",
+            automatic,
+            "auto",
+            item=config.item_id,
+            bid=str(config.auto_bid),
+        )
+    )
     headers05, listing = create_listing_actions(headers_01, rows_01)
     return _make_xlsx(
         [
@@ -189,3 +200,34 @@ def create_v1_workbook(
         ],
         header_fill=False,
     )
+
+
+def read_review_primary_sheet(workbook: bytes) -> list[tuple]:
+    """Recover the locked 14-column 01 view without recalculating any score."""
+    namespace = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    with ZipFile(BytesIO(workbook)) as archive:
+        root = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+    rows = []
+    for record in root.findall(f".//{namespace}sheetData/{namespace}row"):
+        cells = [""] * len(HEADERS_01)
+        for cell in record.findall(f"{namespace}c"):
+            column = cell.get("r", "").rstrip("0123456789")
+            position = 0
+            for character in column:
+                position = position * 26 + ord(character) - 64
+            if not 1 <= position <= len(HEADERS_01):
+                raise ValueError("V1_SOURCE_SCHEMA_INVALID")
+            content = cell.find(f"{namespace}is/{namespace}t")
+            if content is None:
+                content = cell.find(f"{namespace}v")
+            value = content.text if content is not None and content.text is not None else ""
+            if cell.get("t") != "inlineStr" and value != "":
+                try:
+                    value = float(value) if "." in value else int(value)
+                except ValueError:
+                    pass
+            cells[position - 1] = value
+        rows.append(tuple(cells))
+    if not rows or rows[0] != HEADERS_01:
+        raise ValueError("V1_SOURCE_SCHEMA_INVALID")
+    return rows[1:]
