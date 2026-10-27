@@ -147,7 +147,9 @@ def _make_sheet(headers: tuple[str, ...], rows: list[tuple]) -> bytes:
     return _xml(ws)
 
 
-def _make_xlsx(sheets: list[tuple[str, tuple[str, ...], list[tuple]]]) -> bytes:
+def _make_xlsx(
+    sheets: list[tuple[str, tuple[str, ...], list[tuple]]], *, header_fill: bool = True
+) -> bytes:
     out = BytesIO()
     with ZipFile(out, "w", ZIP_DEFLATED) as zipf:
         types = ET.Element(
@@ -252,7 +254,9 @@ def _make_xlsx(sheets: list[tuple[str, tuple[str, ...], list[tuple]]]) -> bytes:
         ET.SubElement(f, f"{{{X}}}name", {"val": "Microsoft YaHei"})
         f = ET.SubElement(fonts, f"{{{X}}}font")
         ET.SubElement(f, f"{{{X}}}b")
-        ET.SubElement(f, f"{{{X}}}color", {"rgb": "FFFFFFFF"})
+        ET.SubElement(
+            f, f"{{{X}}}color", {"rgb": "FFFFFFFF" if header_fill else "FF222222"}
+        )
         ET.SubElement(f, f"{{{X}}}sz", {"val": "10"})
         fills = ET.SubElement(styles, f"{{{X}}}fills", {"count": "3"})
         ET.SubElement(
@@ -273,7 +277,7 @@ def _make_xlsx(sheets: list[tuple[str, tuple[str, ...], list[tuple]]]) -> bytes:
             xfs, f"{{{X}}}xf", {"numFmtId": "0", "fontId": "0", "fillId": "0", "borderId": "0"}
         )
         xfs = ET.SubElement(styles, f"{{{X}}}cellXfs", {"count": "2"})
-        for fontid, fillid in ((0, 0), (1, 2)):
+        for fontid, fillid in ((0, 0), (1, 2 if header_fill else 0)):
             xf = ET.SubElement(
                 xfs,
                 f"{{{X}}}xf",
