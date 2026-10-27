@@ -228,10 +228,7 @@ class WalmartReadCollector:
                         endpoint,
                         {
                             "fromCreatedDate": int(
-                                datetime.combine(
-                                    from_date, time.min, tzinfo=UTC
-                                ).timestamp()
-                                * 1000
+                                datetime.combine(from_date, time.min, tzinfo=UTC).timestamp() * 1000
                             ),
                             "toCreatedDate": int(
                                 datetime.combine(
