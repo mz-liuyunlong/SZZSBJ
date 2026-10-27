@@ -146,7 +146,7 @@ uv run python scripts/wfs_settlement_probe.py
 
 ## 最终本地验收记录（2026-10-27）
 
-- 远端 PR HEAD `6695114a8594ad585e0556e6491a3b0f7e1f430e` 的 12 个 GitHub checks 全部成功；尚无正式 Reviewer approval。
+- 远端 PR HEAD `6695114a8594ad585e0556e6491a3b0f7e1f430e` 的 13 个 GitHub checks 全部成功；尚无正式 Reviewer approval，`mergeStateStatus=BLOCKED`。
 - 本地补修提交 `064bad82d356077c9c9f43a6645040d489b6cbf4` 尚未推送，因此远端 CI 不覆盖该提交。
 - 本地：Ruff format/check PASS；WFS `157 passed, 9 skipped`；全后端 `1783 passed, 127 skipped`；应用导入与 Alembic 0061 单一 head PASS。
 - Frontend 未改动；Node 24 单 worker Vitest `60 files / 281 tests`、lint、build PASS。

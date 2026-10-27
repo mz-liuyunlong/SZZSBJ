@@ -75,8 +75,8 @@
 
 ## Final independent acceptance record（2026-10-27）
 
-- GitHub PR HEAD: `6695114a8594ad585e0556e6491a3b0f7e1f430e`；PR #257 为 Open、非 Draft、mergeable，该远端 HEAD 的 12 个 GitHub checks 全部成功，但尚无正式 Reviewer approval。
-- 本地最终补修提交：`064bad82d356077c9c9f43a6645040d489b6cbf4`，包含历史适用性门禁、部分店铺失败状态修复、受控 Provider probe 和只读 0061 preflight。该提交尚未推送，因此 GitHub 12/12 不能作为此本地提交的 CI 证据。
+- GitHub PR HEAD: `6695114a8594ad585e0556e6491a3b0f7e1f430e`；PR #257 为 Open、非 Draft、mergeable，该远端 HEAD 的 13 个 GitHub checks 全部成功，但尚无正式 Reviewer approval，`mergeStateStatus=BLOCKED`。
+- 本地最终补修提交：`064bad82d356077c9c9f43a6645040d489b6cbf4`，包含历史适用性门禁、部分店铺失败状态修复、受控 Provider probe 和只读 0061 preflight。该提交尚未推送，因此远端 13 个成功 checks 不能作为此本地提交的 CI 证据。
 - 本地补修验证：Ruff format/check PASS；WFS `157 passed, 9 skipped`；全后端 `1783 passed, 127 skipped`；应用导入 PASS；Alembic 单一 head 为 0061。Frontend 未改动，Node 24 单 worker 全量 `60 files / 281 tests`、lint、build PASS。
 - 默认门禁与实际执行路径一致：`WFS_AUTO_DETECT_ENABLED=false`、`WFS_AUTO_CASE_CREATE_ENABLED=false`、`WFS_SETTLEMENT_SCOPE_VERIFIED=false`。正式出站还同时要求 interface/config/outbound/real-call 门禁；案件写入还要求 verified collection、唯一身份、完整销量覆盖、已确认标准费、未过期证据和 `verified_wfs`。
 - Dry-run preview 不请求 provider、不持久化 detection evidence、不创建或更新案件。正式案件写入仍为 insert-only，冲突时保留既有人工状态。

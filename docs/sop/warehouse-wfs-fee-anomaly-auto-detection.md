@@ -101,7 +101,7 @@
 
 ## 13. 当前验收结论
 
-- 代码：远端 PR HEAD `6695114a8594ad585e0556e6491a3b0f7e1f430e` 的 12 个 GitHub checks 全绿；本地补修提交 `064bad82d356077c9c9f43a6645040d489b6cbf4` 已通过 Ruff、WFS `157 passed, 9 skipped`、全后端 `1783 passed, 127 skipped`、应用导入和 Alembic heads，但尚未推送，远端 CI 尚未覆盖，仍待正式 Reviewer/Owner approval。
+- 代码：远端 PR HEAD `6695114a8594ad585e0556e6491a3b0f7e1f430e` 的 13 个 GitHub checks 全绿，`mergeStateStatus=BLOCKED`；本地补修提交 `064bad82d356077c9c9f43a6645040d489b6cbf4` 已通过 Ruff、WFS `157 passed, 9 skipped`、全后端 `1783 passed, 127 skipped`、应用导入和 Alembic heads，但尚未推送，远端 CI 尚未覆盖，仍待正式 Reviewer/Owner approval。
 - Provider：未真实调用；合同仅离线/Mock 验证，WFS scope 未确认。
 - 标准费：默认公式可计算；`current_only` 已在代码层阻断建案，但 Owner 规则/范围/历史适用仍未批准。
 - Migration：隔离 PostgreSQL 16 往返通过；只读 preflight 已准备但未连接任何数据库，生产备份、锁预检和执行授权未完成。
