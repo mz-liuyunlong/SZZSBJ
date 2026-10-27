@@ -137,16 +137,18 @@ def test_probe_rejects_non_sales_and_non_numeric_fee_fields() -> None:
 def test_probe_rejects_missing_settlement_evidence() -> None:
     with pytest.raises(ProbeError, match="WFS_PROBE_REQUIRED_FIELD_MISSING"):
         _validate_scope(
-            [{
-                "storeId": "110704872940532224",
-                "msku": "YC00115-1A",
-                "platformOrderNo": "order-1",
-                "salesNum": "1",
-                "uniqueId": "line-1",
-                "rowIndex": 0,
-                "currencyCode": "USD",
-                "platformCode": "10008",
-                "transactionTypes": 0,
-            }],
+            [
+                {
+                    "storeId": "110704872940532224",
+                    "msku": "YC00115-1A",
+                    "platformOrderNo": "order-1",
+                    "salesNum": "1",
+                    "uniqueId": "line-1",
+                    "rowIndex": 0,
+                    "currencyCode": "USD",
+                    "platformCode": "10008",
+                    "transactionTypes": 0,
+                }
+            ],
             config=config(),
         )
