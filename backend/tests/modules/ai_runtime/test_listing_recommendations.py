@@ -6,7 +6,11 @@ from app.modules.ai_runtime.listing_recommendations import (
 )
 
 HEADERS = (
-    "关键词", "关键词中文意思", "关键词类型", "页面承接情况", "投放等级",
+    "关键词",
+    "关键词中文意思",
+    "关键词类型",
+    "页面承接情况",
+    "投放等级",
     "未上传原因",
 )
 
@@ -14,7 +18,14 @@ HEADERS = (
 def test_listing_actions_have_14_columns_and_block_hard_risk() -> None:
     rows = [
         ("coffee organizer", "咖啡收纳架", "核心本体词", "页面没埋但可优化", "P0", ""),
-        ("competitor brand organizer", "", "品牌/竞品词", "页面没埋但可优化", "品牌等级", "竞品品牌"),
+        (
+            "competitor brand organizer",
+            "",
+            "品牌/竞品词",
+            "页面没埋但可优化",
+            "品牌等级",
+            "竞品品牌",
+        ),
         ("mystery use", "", "人工确认词", "页面看不出来", "候选复查", "事实待确认"),
     ]
     headers, result = create_listing_actions(HEADERS, rows)
