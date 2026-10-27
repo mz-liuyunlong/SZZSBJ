@@ -23,6 +23,15 @@ interface Anomaly {
   last_seen_at: string;
 }
 
+interface AnomalyAudit {
+  id: string;
+  actor_ref: string;
+  from_status: string;
+  to_status: string;
+  note: string;
+  created_at: string;
+}
+
 const statusNames: Record<string, string> = {
   pending: "待核对",
   investigating: "核对中",
@@ -54,6 +63,7 @@ export default function SyncTaskAnomalyCenter() {
   const [note, setNote] = useState("");
   const [nextStatus, setNextStatus] = useState("investigating");
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState<AnomalyAudit[]>([]);
   const [messageApi, contextHolder] = message.useMessage();
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -76,6 +86,19 @@ export default function SyncTaskAnomalyCenter() {
   };
 
   useEffect(() => { void refresh(); }, [page, status]);
+
+  useEffect(() => {
+    if (!selected) { setHistory([]); return; }
+    let cancelled = false;
+    void backendRequest<{ items: AnomalyAudit[] }>(
+      `/api/integrations/sync-anomalies/${selected.id}/history`
+    ).then(result => {
+      if (!cancelled) setHistory(result.data.items);
+    }).catch(() => {
+      if (!cancelled) setHistory([]);
+    });
+    return () => { cancelled = true; };
+  }, [selected?.id]);
 
   const submit = async () => {
     if (!selected || note.trim().length < 3) {
@@ -166,6 +189,15 @@ export default function SyncTaskAnomalyCenter() {
           <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
             {JSON.stringify(selected.details, null, 2)}
           </pre>
+          <Typography.Title level={5}>历史核对记录</Typography.Title>
+          <Table<AnomalyAudit> size="small" rowKey="id" dataSource={history}
+            pagination={false} columns={[
+              { title: "时间", dataIndex: "created_at", width: 170 },
+              { title: "操作人", dataIndex: "actor_ref", width: 120 },
+              { title: "处理状态", dataIndex: "to_status", width: 100,
+                render: value => statusNames[value] ?? value },
+              { title: "核对备注", dataIndex: "note" },
+            ]} />
           <Typography.Title level={5}>处理状态与核对记录</Typography.Title>
           <Space direction="vertical" style={{ width: "100%" }}>
             <Select value={nextStatus} onChange={setNextStatus}
