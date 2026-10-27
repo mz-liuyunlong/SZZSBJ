@@ -64,7 +64,8 @@ def test_v1_five_sheet_export_contains_expected_source_keywords() -> None:
 def test_v1_rejects_missing_explicit_confirmation() -> None:
     with pytest.raises(ValueError, match="V1_GENERATION_NOT_AUTHORIZED"):
         create_v1_workbook(
-            HEADERS_01, [_row("storage organizer")],
+            HEADERS_01,
+            [_row("storage organizer")],
             _config(user_confirmed_generation=False),
         )
 
