@@ -59,7 +59,11 @@ _MARKETPLACE = (
             Field("sku", "query"),
             Field("customerOrderId", "query"),
             Field("purchaseOrderId", "query"),
-            Field("status", "query", enum=("Created", "Acknowledged", "Shipped", "Delivered", "Cancelled")),
+            Field(
+                "status",
+                "query",
+                enum=("Created", "Acknowledged", "Shipped", "Delivered", "Cancelled"),
+            ),
             Field("limit", "query", kind="integer", maximum=200),
             Field("cursor", "query"),
         ),
