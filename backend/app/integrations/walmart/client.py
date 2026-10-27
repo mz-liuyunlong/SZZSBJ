@@ -36,10 +36,12 @@ class WalmartClient:
         registry: ContractRegistry,
         *,
         allowed_stores: frozenset[str] = frozenset(),
+        configured_stores: frozenset[str] = frozenset(),
         gateway: ProtectedGateway | None = None,
     ) -> None:
         self.registry = registry
         self.allowed_stores = allowed_stores
+        self.configured_stores = configured_stores
         self.gateway = gateway
 
     def prepare(
@@ -82,5 +84,5 @@ class WalmartClient:
         if store_code not in self.allowed_stores:
             raise WalmartPlanError("WALMART_STORE_FORBIDDEN")
         # CN2502 is eligible but cannot run without its own egress.
-        if STORE_ROUTES[store_code][1] is None:
+        if STORE_ROUTES[store_code][1] is None and store_code not in self.configured_stores:
             raise WalmartPlanError("WALMART_EXIT_UNAVAILABLE")
