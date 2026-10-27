@@ -1,5 +1,8 @@
 from pathlib import Path
 from typing import cast
+
+import pytest
+from pydantic import ValidationError
 from unittest.mock import MagicMock
 
 from sqlalchemy import Table
@@ -11,6 +14,7 @@ from app.modules.warehouse_wfs.models import (
     WfsFeeDetectionEvidence,
     WfsSettlementCollection,
 )
+from app.modules.warehouse_wfs.schemas import WfsFeeRecoveredWrite
 from app.modules.warehouse_wfs.service import WfsFeeAlertService
 
 
@@ -85,3 +89,13 @@ def test_latest_evidence_projection_does_not_label_review_states_current() -> No
     assert "evidence_status = 'FUTURE_EVIDENCE' then 'invalid'" in projection
     assert "evidence_status = 'OVERCHARGE_CANDIDATE' then 'current'" in projection
     assert "detected_at is not null then 'review_required'" in projection
+
+
+def test_recovered_amount_must_be_positive_and_cents_precision() -> None:
+    assert WfsFeeRecoveredWrite(recovered_amount="0.01").recovered_amount == 0.01
+    with pytest.raises(ValidationError):
+        WfsFeeRecoveredWrite(recovered_amount="0")
+    with pytest.raises(ValidationError):
+        WfsFeeRecoveredWrite(recovered_amount="-1")
+    with pytest.raises(ValidationError):
+        WfsFeeRecoveredWrite(recovered_amount="1.234")
