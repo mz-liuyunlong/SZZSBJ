@@ -22,7 +22,7 @@ type Props = { page: NavigationPage; preferenceScope?: string };
 const MAX_FILES = 10;
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024;
-const EXT = new Set('docx xlsx csv txt md json pptx xml yaml yml html sql py js ts'.split(' '));
+const EXT = new Set('pdf png jpg jpeg webp gif docx xlsx csv txt md json pptx xml yaml yml html sql py js ts'.split(' '));
 const QUESTIONS = [
   ['产品利润分析', '分析一个 SKU 最近 7 天的利润变化'],
   ['异常产品定位', '哪些 SKU 利润下降最严重？'],
@@ -116,7 +116,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
       next.push({id:identifier,name:file.name,size:file.size,image,file,url});
     }
     setPending(before=>({...before,[chat.id]:next}));
-    if(rejected)void msgApi.warning(rejected+' 个附件不符合格式、2MB 或 10 个的限制；当前支持文本、CSV、JSON 和 Office 文件，不支持图片或 PDF 解析');
+    if(rejected)void msgApi.warning(rejected+' 个附件不符合格式、2MB 或 10 个的限制；当前支持 PDF（最多6页）、常见图片、文本与 Office 文件；无法识别的文件将被拒绝');
     setAttachmentMenu(false);
   };
   const send = async (preset?:string) => {
