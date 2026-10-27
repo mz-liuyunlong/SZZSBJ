@@ -152,12 +152,7 @@ async def invoke(
             instructions = skill["instructions"]
             if len(instructions) > MAX_SKILL_INSTRUCTIONS:
                 raise AIUnavailable("AI_SKILL_TOO_LONG")
-            prompt = (
-                "Skill instructions (administrator approved):\n"
-                + instructions
-                + "\n\n"
-                + prompt
-            )
+            prompt = "Skill instructions (administrator approved):\n" + instructions + "\n\n" + prompt
         from app.modules.business_connectors.router import _decrypt
 
         credential = _decrypt(row["ciphertext"])
