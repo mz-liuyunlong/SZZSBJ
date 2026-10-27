@@ -155,3 +155,12 @@ uv run python -c "import app.main"
 - `feeds_catalog.py` 定义两项官方只读接口：`GET /v3/feeds`、`GET /v3/feeds/{feedId}`，通过 `approved_keys` 控制启用。`test_feeds_catalog.py` 覆盖未知字段、必填 `feedId`、上限、特殊字符编码。
 - 核对资料：Walmart US Marketplace 官方 [List all feed statuses](https://developer.walmart.com/us-marketplace/docs/list-all-feed-statuses) 与 [Feed item status API](https://developer.walmart.com/us-marketplace/docs/feed-item-status-api)。
 - 这两项**仅为读取处理状态**，不包括上传 Feed 文件、提交 Feed、复杂 XML/JSON schema、异步轮询任务、下载错误报告。尚未生产联调及正式执行授权。
+
+
+### 2026-10-27：US Marketplace 商品与订单只读目录
+
+新增 `marketplace_catalog.py` 并接入默认 SCF registry，来源核对：
+- 商品列表、单商品、商品搜索：Walmart US Marketplace [Get my item details and insights](https://developer.walmart.com/us-marketplace/docs/get-item-details)；基础端点为 `GET /v3/items`、`GET /v3/items/{ID}`、`GET /v3/items/walmart/search`。
+- 订单列表、已释放订单、单订单：Walmart US Marketplace [Retrieve orders](https://developer.walmart.com/us-marketplace/docs/retrieve-and-acknowledge-orders) 与 [All released orders](https://developer.walmart.com/us-marketplace/docs/get-all-released-orders)；基础端点为 `GET /v3/orders`、`GET /v3/orders/released`、`GET /v3/orders/{purchaseOrderId}`。
+- 六项操作全部默认 disabled，只有 SCF 运行配置中明确加入 operation key 才能执行；新增 `test_marketplace_catalog.py` 覆盖参数上限、必填、枚举、路径编码与未知操作拒绝。
+- 此目录仅为已核对的只读起步清单，不是全量接口；未包含订单写操作、退货、价格、WFS 报表、广告、复杂 Feed、全部响应 schema 和各接口分页自动化。实际账号授权与 US market scope 仍须云端验收。
