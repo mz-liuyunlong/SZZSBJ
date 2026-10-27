@@ -47,7 +47,7 @@ def test_xlsx_text_is_extracted_without_external_service() -> None:
         archive.writestr(
             "xl/worksheets/sheet1.xml",
             '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            "<sheetData><row><c t=\"inlineStr\"><is><t>coasters</t></is></c></row></sheetData>"
+            '<sheetData><row><c t="inlineStr"><is><t>coasters</t></is></c></row></sheetData>'
             "</worksheet>",
         )
     assert "coasters" in extract_attachments([_attachment("keywords.xlsx", buf.getvalue())])
