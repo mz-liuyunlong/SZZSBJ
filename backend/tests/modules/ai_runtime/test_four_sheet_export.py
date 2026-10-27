@@ -13,9 +13,7 @@ from app.modules.ai_runtime.four_sheet_export import SHEET_NAMES, generate_four_
 
 
 def test_four_sheet_workbook_contains_only_requested_review_sheets() -> None:
-    run = SimpleNamespace(
-        id=uuid4(), status="succeeded", source_account_ref="synthetic-account"
-    )
+    run = SimpleNamespace(id=uuid4(), status="succeeded", source_account_ref="synthetic-account")
     content = generate_four_sheet_review(run=run, keyword_rows=[])
     with ZipFile(BytesIO(content)) as workbook:
         xml = workbook.read("xl/workbook.xml").decode("utf-8")
@@ -23,7 +21,7 @@ def test_four_sheet_workbook_contains_only_requested_review_sheets() -> None:
         assert "04_广告结构_内部预览" not in xml
         assert len([p for p in workbook.namelist() if p.startswith("xl/worksheets/sheet")]) == 4
         styles = workbook.read("xl/styles.xml").decode("utf-8")
-        assert "patternType=\"solid\"" not in styles or "fillId=\"2\"" not in styles
+        assert 'patternType="solid"' not in styles or 'fillId="2"' not in styles
 
 
 def test_four_sheet_rejects_unfinished_runs() -> None:
