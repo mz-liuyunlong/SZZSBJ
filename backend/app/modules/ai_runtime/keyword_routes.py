@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from io import BytesIO
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.celery_app import AI_QUEUE
@@ -18,17 +19,15 @@ from app.core.api import ApiError, ErrorCode, SuccessEnvelope, success_response
 from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session, get_session_factory
+from app.modules.ai_runtime.four_sheet_export import generate_four_sheet_review
 from app.modules.ai_runtime.provider import (
     AIUnavailable,
     select_active_connector,
     select_published_skill,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
-from app.modules.keyword_planning.models import AiKwAnalysisRun, AiKwRunKeyword, DimKwTerm
-from app.modules.ai_runtime.four_sheet_export import generate_four_sheet_review
-from sqlalchemy import select
-from io import BytesIO
 from app.modules.keyword_planning.analysis_routes import CreateRunRequest, _require_opted_in_writes
+from app.modules.keyword_planning.models import AiKwAnalysisRun, AiKwRunKeyword, DimKwTerm
 
 router = APIRouter(prefix="/ai-tasks", tags=["AI keyword jobs"])
 
