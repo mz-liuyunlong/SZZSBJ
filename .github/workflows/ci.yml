@@ -42,6 +42,42 @@ jobs:
             --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=old-system || \
             (echo "Potential secret detected" >&2; exit 1)
 
+  ai-runtime-postgresql:
+    name: AI runtime PostgreSQL 0060/0061 acceptance
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ai_runtime_ci
+          POSTGRES_USER: ai_runtime_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_runtime_ci -d ai_runtime_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      AI_RUNTIME_PG_TESTS: "1"
+      TEST_DATABASE_URL: postgresql+psycopg://ai_runtime_ci:local_ci_only@127.0.0.1:5432/ai_runtime_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated PostgreSQL to 0061 and validate AI runtime
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
+          uv run alembic downgrade 20261027_0063_ai_runtime
+          uv run alembic upgrade head
+
   frontend-if-present:
     runs-on: ubuntu-latest
     steps:
@@ -191,11 +227,12 @@ jobs:
                      now(), now(), false)
               """))
           PY
-          uv run alembic upgrade head
+          uv run alembic upgrade 20261027_0062_sync_anomaly_center
       - name: Verify real PostgreSQL auto-case safety and migration rollback
         working-directory: backend
         run: |
           uv run pytest -q -s tests/modules/warehouse_wfs/test_auto_case_postgresql.py
+          uv run pytest -q -s tests/modules/integration_sync/test_financial_transaction_postgresql.py
           uv run python - <<'PY'
           from alembic.config import Config
           from alembic.script import ScriptDirectory

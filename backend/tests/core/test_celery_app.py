@@ -5,6 +5,7 @@ import importlib
 import pytest
 
 from app.celery_app import (
+    AI_QUEUE,
     BROKER_URL_ENV,
     INTEGRATION_QUEUE,
     MEDIA_QUEUE,
@@ -23,6 +24,7 @@ def test_task_routes_are_queue_isolated() -> None:
     assert TASK_ROUTES["integration_sync.*"]["queue"] == INTEGRATION_QUEUE
     assert TASK_ROUTES["operation_logs.*"]["queue"] == OPERATION_LOG_QUEUE
     assert TASK_ROUTES["business_connectors.*"]["queue"] == NOTIFICATION_QUEUE
+    assert TASK_ROUTES["ai_runtime.*"]["queue"] == AI_QUEUE
     assert TASK_ROUTES["media_assets.*"]["queue"] != TASK_ROUTES["integration_sync.*"]["queue"]
 
 
@@ -35,10 +37,12 @@ def test_celery_app_declares_only_expected_queues() -> None:
         INTEGRATION_QUEUE,
         OPERATION_LOG_QUEUE,
         NOTIFICATION_QUEUE,
+        AI_QUEUE,
     }
     assert celery.conf.task_create_missing_queues is False
     assert celery.conf.task_default_queue == INTEGRATION_QUEUE
     assert celery.conf.broker_url == "memory://"
+    assert "app.modules.ai_runtime.tasks" in TASK_IMPORTS
     assert "app.modules.approvals.tasks" not in TASK_IMPORTS
     assert "approvals.*" not in TASK_ROUTES
     assert "approval-reminder-scheduler" not in celery.conf.beat_schedule
@@ -46,6 +50,10 @@ def test_celery_app_declares_only_expected_queues() -> None:
         "task": "business_connectors.notification_tick",
         "schedule": 60.0,
     }
+    assert (
+        celery.conf.beat_schedule["ai-keyword-recovery"]["task"]
+        == "ai_runtime.recover_keyword_jobs"
+    )
     assert celery.conf.beat_schedule["integration-sync-scheduler"] == {
         "task": "integration_sync.scheduler_tick",
         "schedule": 60.0,

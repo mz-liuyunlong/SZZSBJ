@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Identity,
@@ -547,6 +548,75 @@ class DataLineage(Base):
     target_field: Mapped[str] = mapped_column(String(128), nullable=False)
     transform_key: Mapped[str] = mapped_column(String(128), nullable=False)
     transform_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
+
+class IntegrationSyncAnomaly(Base):
+    """Business validation exception; never a substitute for a failed source fetch."""
+
+    __tablename__ = "gov_integration_sync_anomalies"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_account_ref",
+            "interface_key",
+            "business_date",
+            "error_code",
+            "subject_key",
+            name="uq_gov_sync_anomaly_identity",
+        ),
+        CheckConstraint(
+            "status IN ('pending','investigating','fix_pending','review_pending',"
+            "'resolved','dismissed')",
+            name="ck_gov_sync_anomaly_status",
+        ),
+        Index("ix_gov_sync_anomaly_scope_status", "source_account_ref", "status", "last_seen_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    interface_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gov_integration_sync_runs.id", ondelete="RESTRICT"), nullable=False
+    )
+    business_date: Mapped[date] = mapped_column(Date, nullable=False)
+    error_code: Mapped[str] = mapped_column(String(128), nullable=False)
+    subject_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    store_id: Mapped[str | None] = mapped_column(String(128))
+    item_id: Mapped[str | None] = mapped_column(String(128))
+    msku: Mapped[str | None] = mapped_column(Text)
+    local_sku: Mapped[str | None] = mapped_column(Text)
+    platform_order_no: Mapped[str | None] = mapped_column(Text)
+    campaign_name: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    details: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    owner_note: Mapped[str | None] = mapped_column(Text)
+    updated_by: Mapped[str | None] = mapped_column(String(128))
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class IntegrationSyncAnomalyAudit(Base):
+    """Append-only operator review trail for a synchronization anomaly."""
+
+    __tablename__ = "gov_integration_sync_anomaly_audit"
+    __table_args__ = (Index("ix_gov_sync_anomaly_audit_history", "anomaly_id", "created_at"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    anomaly_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gov_integration_sync_anomalies.id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )

@@ -13,6 +13,7 @@ export interface BusinessConnector {
     default_model?: string | null;
     backup_model?: string | null;
     model_allowlist?: string[];
+    application_scenes?: string[];
     daily_limit?: number;
     monthly_budget_usd?: string;
     max_output_tokens?: number;
@@ -34,6 +35,7 @@ export interface ConnectorWrite {
   default_model?: string;
   backup_model?: string;
   model_allowlist?: string[];
+  application_scenes?: string[];
   daily_limit: number;
   monthly_budget_usd: number;
   max_output_tokens: number;

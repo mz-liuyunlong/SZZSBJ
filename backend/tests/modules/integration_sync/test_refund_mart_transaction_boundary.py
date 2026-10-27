@@ -49,7 +49,7 @@ def test_refund_facts_commit_before_mart_failure() -> None:
 
     runner._write_refunds.assert_called_once()
     runner._reprice_refunds.assert_called_once()
-    service.session.commit.assert_called_once()
+    assert service.session.commit.call_count == 2
     assert service._event.call_args_list == [
         call(
             run_id,
@@ -102,7 +102,7 @@ def test_refund_mart_success_writes_validated_events_after_pending() -> None:
 
     service._execute_data_pages_interface("walmartReturnOrderList", runner, run_id=run_id)
 
-    assert service.session.commit.call_count == 2
+    assert service.session.commit.call_count == 3
     assert [item.args[3] for item in service._event.call_args_list] == [
         "SYNC_REFUND_FACTS_COMMITTED",
         "SYNC_REFUND_MART_PENDING",

@@ -25,8 +25,11 @@ KEYWORD_HEAD_REVISION = "20261025_0058_keyword_internal_default"
 BUSINESS_CONNECTOR_HEAD_REVISION = "20261025_0059_business_connector_control"
 LISTING_INTEGRATION_HEAD_REVISION = "20261026_0060_merge_listing_business_heads"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
-LISTING_EVALUATION_REVISION = "20261027_0062_listing_evaluation_runs"
-WALMART_MONITOR_PROJECTION_HEAD_REVISION = "20261027_0063_walmart_monitor_listing_projection"
+SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
+AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
+AI_RUNTIME_HEAD_REVISION = "20261027_0064_ai_runtime_skill_context"
+LISTING_EVALUATION_REVISION = "20261028_0065_listing_evaluation_runs"
+WALMART_MONITOR_PROJECTION_HEAD_REVISION = "20261028_0066_walmart_monitor_listing_projection"
 
 
 @pytest.fixture(autouse=True)
@@ -61,8 +64,17 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
         == LISTING_EVALUATION_REVISION
     )
     assert (
-        script.get_revision(LISTING_EVALUATION_REVISION).down_revision
-        == WFS_DETECTION_HEAD_REVISION
+        script.get_revision(LISTING_EVALUATION_REVISION).down_revision == AI_RUNTIME_HEAD_REVISION
+    )
+    assert (
+        script.get_revision(AI_RUNTIME_HEAD_REVISION).down_revision == AI_RUNTIME_PREVIOUS_REVISION
+    )
+    assert (
+        script.get_revision(AI_RUNTIME_PREVIOUS_REVISION).down_revision
+        == SYNC_ANOMALY_HEAD_REVISION
+    )
+    assert (
+        script.get_revision(SYNC_ANOMALY_HEAD_REVISION).down_revision == WFS_DETECTION_HEAD_REVISION
     )
     assert (
         script.get_revision(WFS_DETECTION_HEAD_REVISION).down_revision
