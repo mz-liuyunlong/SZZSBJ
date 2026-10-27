@@ -99,9 +99,7 @@ class ListingEvaluationBatchService:
             self._evaluate_pages(run_id=run_id, cutoff=cutoff_date_la, batch_size=batch_size)
             self.session.refresh(run)
             run.finished_at = datetime.now(UTC)
-            run.status = (
-                "succeeded" if run.processed_listings == run.total_listings else "partial"
-            )
+            run.status = "succeeded" if run.processed_listings == run.total_listings else "partial"
             self.session.commit()
         except Exception:
             self.session.rollback()
