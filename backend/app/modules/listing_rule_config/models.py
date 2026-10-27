@@ -37,7 +37,6 @@ class ListingGradeRuleVersion(Base):
     change_reason: Mapped[str] = mapped_column(Text, nullable=False)
 
 
-
 def utc_now() -> datetime:
     return datetime.now(UTC)
 

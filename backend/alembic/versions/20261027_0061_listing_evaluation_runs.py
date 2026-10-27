@@ -178,7 +178,10 @@ def downgrade() -> None:
     op.drop_index(
         "ix_listing_evaluation_snapshot_grade", table_name="biz_listing_evaluation_snapshots"
     )
-    op.drop_index("ix_listing_evaluation_snapshot_listing_cutoff", table_name="biz_listing_evaluation_snapshots")
+    op.drop_index(
+        "ix_listing_evaluation_snapshot_listing_cutoff",
+        table_name="biz_listing_evaluation_snapshots",
+    )
     op.drop_table("biz_listing_evaluation_snapshots")
     op.drop_index(
         "ix_listing_evaluation_runs_status_created", table_name="biz_listing_evaluation_runs"
