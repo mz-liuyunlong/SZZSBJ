@@ -6,6 +6,7 @@ unverified template, unconfirmed product facts and quota violations.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO
 from xml.etree import ElementTree as ET
@@ -14,7 +15,12 @@ from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from app.modules.ai_runtime.listing_recommendations import create_listing_actions
+from app.modules.ai_runtime.listing_recommendations import BLOCKED_TYPES, create_listing_actions
+from app.modules.ai_runtime.v1_review_sheets import (
+    RISK_HEADERS,
+    ROOT_HEADERS,
+    project_v1_review_sheets,
+)
 from app.modules.keyword_planning.internal_export import HEADERS_01, _make_xlsx
 
 HEADERS_04 = (
@@ -88,17 +94,22 @@ def _structure(
 
 
 def create_v1_workbook(
-    headers_01: tuple[str, ...], rows_01: list[tuple],
+    headers_01: tuple[str, ...],
+    rows_01: list[tuple],
     config: V1ConfirmedConfig,
+    *,
+    metadata: Mapping[str, Mapping[str, object]] | None = None,
+    listing_draft: dict | None = None,
 ) -> bytes:
     config.validate()
+    metadata = metadata or {}
     if headers_01 != HEADERS_01:
         raise ValueError("V1_SOURCE_SCHEMA_INVALID")
     col = {name: index for index, name in enumerate(headers_01)}
     exact = []
     broad = []
-    roots = []
-    risk = []
+    root_count = 0
+    tail_count = 0
     seen = set()
     grades = {"P0": 0, "P1": 0, "P2": 0}
     for row in rows_01:
@@ -114,28 +125,29 @@ def create_v1_workbook(
             raise ValueError("V1_UNVERIFIED_SCORE")
         if grade in grades:
             grades[grade] += 1
+            minimum = {"P0": 85, "P1": 75, "P2": 60}[grade]
+            if not isinstance(score, (int, float)) or score < minimum:
+                raise ValueError("V1_GRADE_SCORE_MISMATCH")
         selected_exact = row[col["是否进入手动Exact"]] == "是"
         selected_broad = row[col["是否进入手动Broad"]] == "是"
         if selected_exact or selected_broad:
             if grade not in grades or not isinstance(score, (int, float)):
                 raise ValueError("V1_INCONSISTENT_SELECTION")
+            if str(row[col["关键词类型"]]) in BLOCKED_TYPES:
+                raise ValueError("V1_RISK_KEYWORD_SELECTED")
             if row[col["页面承接情况"]] in ("页面看不出来", "页面不建议埋"):
                 raise ValueError("V1_UNVERIFIED_PAGE_COVERAGE")
         if selected_exact:
             exact.append((grade, keyword))
         if selected_broad:
-            broad.append((str(row[col["核心词根"]]), keyword))
-        if selected_broad or row[col["核心词根"]]:
-            roots.append((
-                keyword, row[col["核心词根"]], "Broad" if selected_broad else "待复核",
-                "是" if selected_broad else "否",
-                "已确认的01表结果，不重新筛选",
-            ))
-        if grade in ("不投放", "品牌等级", "候选复查") or row[col["未上传原因"]]:
-            risk.append((
-                keyword, row[col["关键词类型"]], grade, score,
-                row[col["未上传原因"]], "只用于人工复核，不自动创建否定词",
-            ))
+            role = str(metadata.get(keyword.casefold(), {}).get("broad_role") or "")
+            if role not in ("root", "long_tail"):
+                raise ValueError("V1_BROAD_ROLE_EVIDENCE_MISSING")
+            broad.append((role, keyword))
+            if role == "root":
+                root_count += 1
+            else:
+                tail_count += 1
     if grades["P0"] > 5 or grades["P1"] > 10 or grades["P2"] > 30:
         raise ValueError("V1_GRADE_QUOTA_EXCEEDED")
     if len(exact) > 20 or len(broad) > 20:
@@ -149,8 +161,8 @@ def create_v1_workbook(
         > 20
     ):
         raise ValueError("V1_P2_BEFORE_PRIORITY_SELECTION")
-    if len({root.casefold().strip() for root, _ in broad if root}) > 5:
-        raise ValueError("V1_BROAD_ROOT_QUOTA_EXCEEDED")
+    if root_count > 5 or tail_count > 15:
+        raise ValueError("V1_BROAD_ROLE_QUOTA_EXCEEDED")
     start = config.start_date or datetime.now(ZoneInfo("America/Los_Angeles")).strftime(
         "%m/%d/%Y"
     )
@@ -168,8 +180,8 @@ def create_v1_workbook(
             item=config.item_id,
         ))
     rows04.append(_structure("【结构行】检查Campaign、Ad Group命名", "Ad Group", manual, "Broad"))
-    for root, kw in broad:
-        role = "Broad词根" if root.strip().casefold() == kw.casefold() else "Broad长尾"
+    for recorded_role, kw in broad:
+        role = "Broad词根" if recorded_role == "root" else "Broad长尾"
         rows04.append(_structure(
             f"【{role}】前台检查相关度及跑偏风险", "Keyword", manual, "Broad",
             keyword=kw, match="broad", bid=str(config.manual_bid), item=config.item_id,
@@ -189,12 +201,13 @@ def create_v1_workbook(
             bid=str(config.auto_bid),
         )
     )
-    headers05, listing = create_listing_actions(headers_01, rows_01)
+    roots, risk = project_v1_review_sheets(headers_01, rows_01, metadata)
+    headers05, listing = create_listing_actions(headers_01, rows_01, draft=listing_draft)
     return _make_xlsx(
         [
             (SHEET_NAMES[0], headers_01, rows_01),
-            (SHEET_NAMES[1], ("关键词", "核心词根", "Broad角色", "Broad入选", "判断依据"), roots),
-            (SHEET_NAMES[2], ("关键词", "关键词类型", "投放等级", "原始评分", "风险原因", "处理边界"), risk),
+            (SHEET_NAMES[1], ROOT_HEADERS, roots),
+            (SHEET_NAMES[2], RISK_HEADERS, risk),
             (SHEET_NAMES[3], HEADERS_04, rows04),
             (SHEET_NAMES[4], headers05, listing),
         ],
