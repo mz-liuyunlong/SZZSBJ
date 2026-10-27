@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+from pathlib import PurePath
+
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -15,6 +19,7 @@ from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
 
 from .attachment_extraction import AttachmentBody, AttachmentError, extract_attachments
+from .visual_attachments import VISUAL_SUFFIXES, VisualAttachmentError, prepare_visual_input
 from .provider import (
     MAX_SKILL_INSTRUCTIONS,
     MAX_SKILL_RUNTIME_INSTRUCTIONS,
@@ -66,7 +71,29 @@ async def ask(request: Request, body: AskBody, principal: view_perm):
             )
     prior = "\n".join(f"{x['role']}: {x['content'][:500]}" for x in reversed(conversation))
     try:
-        attachment_text = extract_attachments(body.attachments)
+        text_files = []
+        visual_parts: list[dict[str, str]] = []
+        visual_reserve = 0
+        for file in body.attachments:
+            suffix = PurePath(file.name).suffix.lower()
+            if suffix not in VISUAL_SUFFIXES:
+                text_files.append(file)
+                continue
+            if len(visual_parts) >= 4:
+                raise AttachmentError("ATTACHMENT_VISUAL_COUNT_LIMIT")
+            try:
+                raw = base64.b64decode(file.content_base64, validate=True)
+            except binascii.Error:
+                raise AttachmentError("ATTACHMENT_BASE64_INVALID") from None
+            if len(raw) > 2 * 1024 * 1024:
+                raise AttachmentError("ATTACHMENT_TOO_LARGE")
+            try:
+                part, reservation = prepare_visual_input(file.name, raw)
+            except VisualAttachmentError as exc:
+                raise AttachmentError(str(exc)) from None
+            visual_parts.append(part)
+            visual_reserve += reservation
+        attachment_text = extract_attachments(text_files)
     except AttachmentError as exc:
         raise ApiError(
             code=ErrorCode.INVALID_REQUEST,
@@ -97,6 +124,8 @@ async def ask(request: Request, body: AskBody, principal: view_perm):
             prompt=prompt,
             actor=principal.user_id,
             prompt_version="ai-assistant-v1",
+            visual_parts=visual_parts,
+            visual_token_reserve=visual_reserve,
         )
     except AIUnavailable as exc:
         raise ApiError(code=exc.code, status_code=503) from None
