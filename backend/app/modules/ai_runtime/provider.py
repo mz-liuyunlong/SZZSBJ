@@ -17,7 +17,9 @@ from app.db.session import get_session_factory
 from app.integrations.llm.openai_provider import generate_text
 
 MODEL = "gpt-6-luna"
-MAX_SKILL_INSTRUCTIONS = 3000
+MAX_SKILL_INSTRUCTIONS = 150000
+MAX_SKILL_RUNTIME_INSTRUCTIONS = 3000
+MAX_COMBINED_PROMPT_CHARS = 14000
 SCENES = frozenset(
     {
         "ai_assistant",
@@ -33,6 +35,20 @@ class AIUnavailable(Exception):
     def __init__(self, code: str):
         self.code = code
         super().__init__(code)
+
+
+def resolve_runtime_instructions(
+    instructions: str, runtime_instructions: str | None
+) -> str:
+    """Use compact instructions; never inject a long reference document."""
+    runtime = (runtime_instructions or "").strip()
+    if runtime:
+        if len(runtime) > MAX_SKILL_RUNTIME_INSTRUCTIONS:
+            raise AIUnavailable("AI_SKILL_RUNTIME_INSTRUCTIONS_TOO_LONG")
+        return runtime
+    if len(instructions) <= MAX_SKILL_RUNTIME_INSTRUCTIONS:
+        return instructions
+    raise AIUnavailable("AI_SKILL_RUNTIME_INSTRUCTIONS_REQUIRED")
 
 
 def _config(row):
@@ -99,7 +115,7 @@ def select_published_skill(session, connector_id: UUID, scene: str):
     """Only load a published Skill belonging to the selected OpenAI connector."""
     return (
         session.execute(
-            text("""SELECT id, instructions FROM ai_runtime_skill_versions
+            text("""SELECT id, instructions, runtime_instructions FROM ai_runtime_skill_versions
             WHERE connector_id=:connector AND scene=:scene AND status='published'
             ORDER BY version DESC LIMIT 1"""),
             {"connector": connector_id, "scene": scene},
@@ -130,7 +146,7 @@ async def invoke(
         if skill_version_id is not None:
             skill = (
                 session.execute(
-                    text("""SELECT instructions, scene, connector_id, status
+                    text("""SELECT instructions, runtime_instructions, scene, connector_id, status
                   FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),
                     {"id": skill_version_id},
                 )
@@ -149,10 +165,17 @@ async def invoke(
         else:
             skill = None
         if skill is not None:
-            instructions = skill["instructions"]
-            if len(instructions) > MAX_SKILL_INSTRUCTIONS:
-                raise AIUnavailable("AI_SKILL_TOO_LONG")
-            prompt = "Skill instructions (administrator approved):\n" + instructions + "\n\n" + prompt
+            instructions = resolve_runtime_instructions(
+                skill["instructions"], skill.get("runtime_instructions")
+            )
+            prompt = (
+                "Skill runtime instructions (administrator approved):\n"
+                + instructions
+                + "\n\n"
+                + prompt
+            )
+        if len(prompt) > MAX_COMBINED_PROMPT_CHARS:
+            raise AIUnavailable("AI_CONTEXT_TOO_LONG")
         from app.modules.business_connectors.router import _decrypt
 
         credential = _decrypt(row["ciphertext"])
