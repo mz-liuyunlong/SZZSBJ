@@ -410,6 +410,13 @@ class SyncRunExecutionService:
                             "financial_status": "pending" if source_committed else "not_ready",
                         },
                     )
+                    if error.code == "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT":
+                        self.repository.record_sample_exceedance_details(
+                            run_id=active_run.id,
+                            account=active_run.source_account_ref,
+                            interface_key=active_run.interface_key,
+                            business_date=error.business_date or business_date,
+                        )
                     self._event(
                         active_run.id,
                         "running",
