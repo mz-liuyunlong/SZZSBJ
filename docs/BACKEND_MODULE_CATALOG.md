@@ -105,6 +105,22 @@
 | Validation | targeted `28 passed`; full backend `1336 passed, 28 skipped`; full Ruff/compileall/Alembic head/rule-pack PASS；isolated PostgreSQL suites remain opt-in and were not connected |
 | Not in scope | 商品来源 GET、监控端代码/SQLite、历史导入、RAW parser、ODS/MART/Listing、Celery、对象存储、外部 API、生产 migration/deploy、frontend、old-system |
 
+## Walmart Monitor Listing Projection V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | Walmart Monitor Listing Projection V1 |
+| Module key | `walmart-monitor-listing-projection-v1` |
+| Status | `approved_for_implementation`；PR #260 分支实现中，未迁移、部署或回放生产数据 |
+| Purpose | 将统一 RAW 解析为不可变 L3 观察和最新 L9 监控投影，并在 Listing 管理读取时按字段覆盖 |
+| Stable identity | `source_account_ref + store_id + item_id`；监控不得推断或替换身份 |
+| Precedence | 最新监控字段非空时优先；为空时回退现有 Listing MART；不直接写现有 Listing MART |
+| Hidden lineage | 监控来源、图片、错误码、RAW 标识、来源原始类目不进入页面响应 |
+| Replay | `backend/scripts/project_walmart_monitor_raw.py`；默认 rollback，生产 commit 需显式双门禁 |
+| Source Decision | `docs/data-sources/decisions/walmart-monitor-listing-projection-decision.md` |
+| PRP | `PRPs/walmart-monitor-listing-projection.md` |
+| Not in scope | 生产迁移/回放/部署、监控端通知逻辑、外部 API、同步触发、正式评级发布、old-system |
+
 ## Lingxing RAW Foundation
 
 | 项目 | 内容 |

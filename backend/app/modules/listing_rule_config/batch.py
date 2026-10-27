@@ -20,8 +20,10 @@ from app.modules.listing_rule_config.models import (
     ListingEvaluationRun,
     ListingEvaluationSnapshot,
     ListingGradeFollowUpTask,
+    ListingGradeRuleVersion,
 )
 from app.modules.listing_rule_config.preview import ListingEvaluationPreviewService
+from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
 
 class ListingEvaluationBatchService:
@@ -47,7 +49,8 @@ class ListingEvaluationBatchService:
             return existing.id
         retry_existing = existing is not None
         if existing is None:
-            latest_rule_version = self._latest_effective_rule_version()
+            selected_rule = self._latest_effective_rule()
+            latest_rule_version = selected_rule.version if selected_rule is not None else 0
             total = (
                 self.session.scalar(select(func.count()).select_from(ListingManagementCurrentMart))
                 or 0
@@ -96,7 +99,23 @@ class ListingEvaluationBatchService:
         self.session.commit()
         run_id = run.id
         try:
-            self._evaluate_pages(run_id=run_id, cutoff=cutoff_date_la, batch_size=batch_size)
+            selected_rule = (
+                self.session.get(ListingGradeRuleVersion, run.rule_version)
+                if run.rule_version
+                else None
+            )
+            config = (
+                ListingGradeRuleConfig.model_validate(selected_rule.config_json)
+                if selected_rule is not None
+                else ListingGradeRuleConfig()
+            )
+            self._evaluate_pages(
+                run_id=run_id,
+                cutoff=cutoff_date_la,
+                batch_size=batch_size,
+                config=config,
+                rule_version=run.rule_version,
+            )
             self.session.refresh(run)
             run.finished_at = datetime.now(UTC)
             run.status = "succeeded" if run.processed_listings == run.total_listings else "partial"
@@ -112,32 +131,35 @@ class ListingEvaluationBatchService:
             raise
         return run_id
 
-    def _latest_effective_rule_version(self) -> int:
-        from app.modules.listing_rule_config.models import ListingGradeRuleVersion
-
-        row = self.session.scalar(
+    def _latest_effective_rule(self) -> ListingGradeRuleVersion | None:
+        return self.session.scalar(
             select(ListingGradeRuleVersion)
             .where(ListingGradeRuleVersion.effective_from <= datetime.now(UTC))
             .order_by(ListingGradeRuleVersion.version.desc())
             .limit(1)
         )
-        return row.version if row else 0
 
-    def _evaluate_pages(self, *, run_id: UUID, cutoff: date, batch_size: int) -> None:
+    def _evaluate_pages(
+        self,
+        *,
+        run_id: UUID,
+        cutoff: date,
+        batch_size: int,
+        config: ListingGradeRuleConfig,
+        rule_version: int,
+    ) -> None:
         run = self.session.get(ListingEvaluationRun, run_id)
         if run is None:
             raise RuntimeError("Listing evaluation run disappeared")
         evaluator = ListingEvaluationPreviewService(self.session)
-        offset = 0
+        last_id: UUID | None = None
         while True:
-            listings = list(
-                self.session.scalars(
-                    select(ListingManagementCurrentMart)
-                    .order_by(ListingManagementCurrentMart.id)
-                    .offset(offset)
-                    .limit(batch_size)
-                ).all()
+            statement = select(ListingManagementCurrentMart).order_by(
+                ListingManagementCurrentMart.id
             )
+            if last_id is not None:
+                statement = statement.where(ListingManagementCurrentMart.id > last_id)
+            listings = list(self.session.scalars(statement.limit(batch_size)).all())
             if not listings:
                 break
             for listing in listings:
@@ -145,6 +167,8 @@ class ListingEvaluationBatchService:
                     listing_id=listing.id,
                     account_refs=frozenset({listing.source_account_ref}),
                     cutoff=cutoff,
+                    config=config,
+                    rule_version=rule_version,
                 )
                 evidence = list(result.missing_evidence)
                 # This run is deliberately diagnostic-only until upstream ad/cost
@@ -184,7 +208,7 @@ class ListingEvaluationBatchService:
                 run.grade_candidate_count += int(result.grade_candidate is not None)
                 run.lifecycle_candidate_count += int(result.lifecycle_candidate is not None)
             self.session.commit()
-            offset += len(listings)
+            last_id = listings[-1].id
         run = self.session.get(ListingEvaluationRun, run_id)
         if run is not None and run.processed_listings != run.total_listings:
             run.error_code = "LISTING_COUNT_CHANGED_DURING_EVALUATION"

@@ -39,7 +39,7 @@
 | 按 LA 天的销售额、利润 | REBUILD_SYNC（沿用 DATA-PAGES-1） | DailySalesItemDayMart | 必须严格匹配 `source_account_ref/store_id/item_id/msku`，避免重复归集 |
 | WFS 每日历史库存 | REBUILD_SYNC（待单独审核） | 已有库存 FACT 及历史快照 | 需验证无快照日、断货历史是否够用 |
 | 广告与必要成本完整性证明 | **NEED_OWNER_DECISION** | 经核验的上游发布/对账与质量记录 | `cost_status=complete` 不能自动当作独立证明；缺失则输出“待评级” |
-| 历史划线价/购物车异常 | **NEED_OWNER_DECISION** | 按日期证据与变更事件 | 不能用当前异常布尔值推断25天持续异常 |
+| 历史划线价/购物车异常 | APPROVED_SOURCE | `std_walmart_monitor_listing_observations` 按 LA 日的监控观察 | 仅使用明确观察；缺失日保持未知，不推断连续异常 |
 | 清货/归档审批事件 | **NEED_OWNER_DECISION** | 现有审批记录及事件顺序 | 审批状态优先级必须可追溯 |
 | 自动评级结果历史快照 | NEW_SYSTEM_OWNED（未来切片） | 新系统唯一写入源 | 需新表、权限、审计、回滚、迁移 PRP |
 | C/D 运营跟进记录 | NEW_SYSTEM_OWNED（未来切片） | 现有运营日志/待办模块 | 关联键、跨日去重、完成口径需确认 |
@@ -55,7 +55,7 @@
 
 ## 最终建议
 
-- **BLOCKED_BY_OWNER_DECISION**：在广告/成本完整性证明、WFS 历史证据、审批/异常来源及回填原则批准前，不实现真实数据 API 或生产定时任务。
+- **BLOCKED_BY_OWNER_DECISION**：监控历史已经获批用于划线价/购物车诊断证据，但广告/成本完整性证明、WFS 历史证据和审批事件仍未闭环；因此正式发布与生产定时任务继续阻塞。
 - 独立 PRP 后按顺序：只读数据适配/试算 → 结果快照 → C/D日志联动 → Celery调度及灰度。
 - 审批前可完成前端 mock E2E、纯计算测试、业务规则说明与后端数据血缘调查。
 - 本文件不构成数据库连接、迁移、执行 Celery 或部署授权。

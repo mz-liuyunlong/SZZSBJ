@@ -8,6 +8,7 @@ import pytest
 
 from app.modules.listing_rule_config.preview import (
     basic_financial_candidate,
+    lifecycle_allows_grade,
     stockout_candidate,
 )
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
@@ -43,6 +44,15 @@ def test_financial_candidate_requires_explicit_currency():
         rows, cutoff=CUTOFF, config=ListingGradeRuleConfig()
     )
     assert (grade, short, medium, margin) == ("A", 6, 13, Decimal("20"))
+
+
+def test_grade_candidate_honors_configured_lifecycle_scope() -> None:
+    config = ListingGradeRuleConfig(included_stages=["启动期", "稳定期"])
+
+    assert lifecycle_allows_grade("启动期", archived=False, config=config)
+    assert not lifecycle_allows_grade("测品期", archived=False, config=config)
+    assert not lifecycle_allows_grade("断货期", archived=False, config=config)
+    assert not lifecycle_allows_grade("启动期", archived=True, config=config)
 
 
 def test_stockout_requires_prior_stock_and_wfs_fulfillment():

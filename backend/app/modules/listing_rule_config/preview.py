@@ -9,9 +9,10 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
@@ -24,8 +25,19 @@ from app.modules.data_pages.models import (
 from app.modules.listing_rule_config.evaluation import BusinessDay, lifecycle_listing
 from app.modules.listing_rule_config.models import ListingGradeRuleVersion
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
+from app.modules.walmart_monitor.models import StandardizedWalmartMonitorListingObservation
 
 ZERO = Decimal("0")
+LOS_ANGELES = ZoneInfo("America/Los_Angeles")
+
+
+def lifecycle_allows_grade(
+    stage: str | None,
+    *,
+    archived: bool,
+    config: ListingGradeRuleConfig,
+) -> bool:
+    return not archived and stage in config.included_stages
 
 
 class ListingEvaluationPreview(BaseModel):
@@ -88,10 +100,10 @@ def basic_financial_candidate(
     if n_short < config.short_min_valid_days or n_medium < config.medium_min_valid_days:
         return None, n_short, n_medium, None
 
-    sales_short = sum((row.sales_amount for row in short), ZERO)
-    profit_short = sum((row.gross_profit_amount for row in short), ZERO)
-    sales_medium = sum((row.sales_amount for row in medium), ZERO)
-    profit_medium = sum((row.gross_profit_amount for row in medium), ZERO)
+    sales_short = sum((row.sales_amount or ZERO for row in short), ZERO)
+    profit_short = sum((row.gross_profit_amount or ZERO for row in short), ZERO)
+    sales_medium = sum((row.sales_amount or ZERO for row in medium), ZERO)
+    profit_medium = sum((row.gross_profit_amount or ZERO for row in medium), ZERO)
 
     if sales_short == ZERO and profit_short < ZERO:
         return "D", n_short, n_medium, None
@@ -159,6 +171,8 @@ class ListingEvaluationPreviewService:
         listing_id: UUID,
         account_refs: frozenset[str],
         cutoff: date,
+        config: ListingGradeRuleConfig | None = None,
+        rule_version: int | None = None,
     ) -> ListingEvaluationPreview:
         listing = self.session.scalar(
             select(ListingManagementCurrentMart).where(
@@ -170,18 +184,22 @@ class ListingEvaluationPreviewService:
             # Hidden records and unknown identifiers share the same response.
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
 
-        now = datetime.now(UTC)
-        version = self.session.scalar(
-            select(ListingGradeRuleVersion)
-            .where(ListingGradeRuleVersion.effective_from <= now)
-            .order_by(ListingGradeRuleVersion.version.desc())
-            .limit(1)
-        )
-        config = (
-            ListingGradeRuleConfig.model_validate(version.config_json)
-            if version is not None
-            else ListingGradeRuleConfig()
-        )
+        if config is None:
+            now = datetime.now(UTC)
+            version = self.session.scalar(
+                select(ListingGradeRuleVersion)
+                .where(ListingGradeRuleVersion.effective_from <= now)
+                .order_by(ListingGradeRuleVersion.version.desc())
+                .limit(1)
+            )
+            config = (
+                ListingGradeRuleConfig.model_validate(version.config_json)
+                if version is not None
+                else ListingGradeRuleConfig()
+            )
+            rule_version = version.version if version is not None else 0
+        elif rule_version is None:
+            raise ValueError("rule_version is required when config is provided")
 
         start = cutoff - timedelta(days=max(30, config.medium_days) - 1)
         sales = list(
@@ -231,7 +249,32 @@ class ListingEvaluationPreviewService:
             select(ListingArchiveState).where(ListingArchiveState.listing_id == listing.id)
         )
         archive_state_known = archive is not None
-        archived = archive_state_known and archive.is_archived
+        archived = bool(archive is not None and archive.is_archived)
+        monitor_start = datetime.combine(start, datetime.min.time(), LOS_ANGELES).astimezone(UTC)
+        monitor_end = datetime.combine(
+            cutoff + timedelta(days=1),
+            datetime.min.time(),
+            LOS_ANGELES,
+        ).astimezone(UTC)
+        monitor_rows = list(
+            self.session.scalars(
+                select(StandardizedWalmartMonitorListingObservation)
+                .where(
+                    StandardizedWalmartMonitorListingObservation.source_account_ref
+                    == listing.source_account_ref,
+                    StandardizedWalmartMonitorListingObservation.store_id == listing.store_id,
+                    StandardizedWalmartMonitorListingObservation.item_id == listing.item_id,
+                    func.lower(StandardizedWalmartMonitorListingObservation.monitor_outcome)
+                    == "success",
+                    StandardizedWalmartMonitorListingObservation.captured_at >= monitor_start,
+                    StandardizedWalmartMonitorListingObservation.captured_at < monitor_end,
+                )
+                .order_by(StandardizedWalmartMonitorListingObservation.captured_at)
+            ).all()
+        )
+        monitor_by_day = {
+            row.captured_at.astimezone(LOS_ANGELES).date(): row for row in monitor_rows
+        }
         grade, n_short, n_medium, margin = basic_financial_candidate(
             sales, cutoff=cutoff, config=config
         )
@@ -264,18 +307,50 @@ class ListingEvaluationPreviewService:
             and listing.lifecycle_status in known_stages
         ):
             sales_by_day = {row.business_date_la: row for row in sales}
-            business_days = [
-                BusinessDay(
-                    day=row.snapshot_date_la,
-                    wfs_qty=row.wfs_available_quantity,
-                    sales_qty=(
-                        sales_by_day[row.snapshot_date_la].sales_qty
-                        if row.snapshot_date_la in sales_by_day
-                        else None
-                    ),
+            stock_by_day = {row.snapshot_date_la: row for row in stock}
+            business_days = []
+            for business_date in sorted(set(stock_by_day) | set(monitor_by_day)):
+                stock_row = stock_by_day.get(business_date)
+                monitor_row = monitor_by_day.get(business_date)
+                strike_abnormal = None
+                buybox_abnormal = None
+                if monitor_row is not None:
+                    if (
+                        monitor_row.strike_price_amount is not None
+                        and monitor_row.sale_price_amount is not None
+                    ):
+                        strike_abnormal = (
+                            monitor_row.strike_price_amount <= monitor_row.sale_price_amount
+                        )
+                    if monitor_row.buybox_status in {
+                        "未拥有",
+                        "LOST",
+                        "NOT_OWNED",
+                        "secondary",
+                        "other",
+                    }:
+                        buybox_abnormal = True
+                    elif monitor_row.buybox_status in {
+                        "拥有",
+                        "PRIMARY",
+                        "primary",
+                        "WON",
+                        "WINNING",
+                    }:
+                        buybox_abnormal = False
+                business_days.append(
+                    BusinessDay(
+                        day=business_date,
+                        wfs_qty=stock_row.wfs_available_quantity if stock_row else None,
+                        sales_qty=(
+                            sales_by_day[business_date].sales_qty
+                            if business_date in sales_by_day
+                            else None
+                        ),
+                        strike_price_abnormal=strike_abnormal,
+                        buybox_abnormal=buybox_abnormal,
+                    )
                 )
-                for row in stock
-            ]
             lifecycle_result = lifecycle_listing(
                 cutoff=cutoff,
                 previous_stage=listing.lifecycle_status,
@@ -299,9 +374,13 @@ class ListingEvaluationPreviewService:
             missing.append("PREVIOUS_LIFECYCLE_STAGE_UNVERIFIED")
         if not archive_state_known:
             missing.append("ARCHIVE_STATE_UNVERIFIED")
-        if version is None:
+        if not rule_version:
             missing.append("RULE_VERSION_NOT_PUBLISHED")
-        if listing.lifecycle_status in {"清货期", "已归档"} or archived:
+        if not lifecycle_allows_grade(
+            listing.lifecycle_status,
+            archived=archived,
+            config=config,
+        ):
             grade = None
             margin = None
             missing.append("LIFECYCLE_EXCLUDED_FROM_GRADING")
@@ -334,7 +413,7 @@ class ListingEvaluationPreviewService:
             low_stock_days_7=low,
             prior_effective_stock=prior is not None,
             currently_archived=archived,
-            rule_version=version.version if version is not None else 0,
-            rule_source="database" if version is not None else "default",
+            rule_version=rule_version or 0,
+            rule_source="database" if rule_version else "default",
             missing_evidence=missing,
         )
