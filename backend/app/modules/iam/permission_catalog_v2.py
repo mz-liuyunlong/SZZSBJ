@@ -284,7 +284,9 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition(
         "products_listing_management", "configure_rules", "配置Listing评级规则", 60, "high"
     ),
-    ActionDefinition("products_listing_management", "manage_followups", "处理C/D等级跟进", 70, "high"),
+    ActionDefinition(
+        "products_listing_management", "manage_followups", "处理C/D等级跟进", 70, "high"
+    ),
     ActionDefinition("sales_daily_sales", "export", "导出每日销售", 10),
     ActionDefinition("sales_order_profit", "export", "导出订单利润", 10),
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),

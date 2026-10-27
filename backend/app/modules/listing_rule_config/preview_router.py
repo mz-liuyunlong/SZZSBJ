@@ -32,7 +32,9 @@ router = APIRouter(prefix="/api/listings", tags=["Listing Evaluation Preview"])
 DB = Annotated[Session, Depends(get_db_session)]
 scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 view = Depends(require_permission("page:products:listing-management:view"))
-follow_up_writer = Annotated[Principal, Depends(require_permission("action:products:listing-management:manage-followups"))]
+follow_up_writer = Annotated[
+    Principal, Depends(require_permission("action:products:listing-management:manage-followups"))
+]
 
 
 @router.get(

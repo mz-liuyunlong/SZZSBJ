@@ -189,7 +189,6 @@ class ListingEvaluationBatchService:
             run.blocked_count += abs(run.total_listings - run.processed_listings)
         self.session.commit()
 
-
     def create_followups_for_published_run(self, *, run_id: UUID) -> int:
         """Idempotently create daily C/D tasks only for explicitly published snapshots."""
         from app.modules.listing_rule_config.models import ListingEvaluationSnapshot
