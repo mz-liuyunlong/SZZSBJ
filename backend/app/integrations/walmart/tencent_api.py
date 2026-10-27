@@ -11,7 +11,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -64,7 +64,7 @@ def tc3_headers(
     if region != "ap-guangzhou":
         raise TencentApiRejected("TC_REGION_NOT_ALLOWED")
     host, action, version = _ENDPOINTS[service]
-    day = datetime.fromtimestamp(timestamp, UTC).strftime("%Y-%m-%d")
+    day = datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d")
     scope = f"{day}/{service}/tc3_request"
     content_type = "application/json; charset=utf-8"
     request = (
