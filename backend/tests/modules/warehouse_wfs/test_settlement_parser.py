@@ -107,6 +107,23 @@ def test_non_usd_and_missing_order_are_rejected():
     assert result.missing_identity == 1
 
 
+def test_reject_invalid_units_without_losing_valid_duplicate_identity() -> None:
+    for quantity in ("-1", "1.5", "-0.5"):
+        invalid = row(0, quantity, "-6.95")
+        valid = row(0, 10, "-46.50")
+        result = parse([invalid, valid])
+        assert result.invalid_rows == 1
+        assert result.duplicate_rows == 0
+        assert result.accepted_rows == 1
+        assert result.rows[0].sales_num == Decimal("10")
+
+
+def test_keep_zero_quantity_fee_line_for_order_pairing() -> None:
+    result = parse([row(0, 10, 0), row(1, 0, "-46.50")])
+    assert result.invalid_rows == 0
+    assert resolve_wfs_fees(list(result.rows))[0].unit_fee == Decimal("4.65")
+
+
 def test_mixed_page_classifies_every_provider_row_without_hiding_errors() -> None:
     accepted = row(0, 10, "-40")
     excluded = row(1, 1, "-4")
