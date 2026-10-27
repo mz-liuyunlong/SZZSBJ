@@ -592,3 +592,24 @@ class IntegrationSyncAnomaly(Base):
         DateTime(timezone=True), default=utc_now, nullable=False
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class IntegrationSyncAnomalyAudit(Base):
+    """Append-only operator review trail for a synchronization anomaly."""
+
+    __tablename__ = "gov_integration_sync_anomaly_audit"
+    __table_args__ = (
+        Index("ix_gov_sync_anomaly_audit_history", "anomaly_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    anomaly_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gov_integration_sync_anomalies.id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
