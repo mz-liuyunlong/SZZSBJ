@@ -65,7 +65,7 @@ def test_authorized_plan() -> None:
         (
             "HK2615",
             "inbound_shipments",
-            {"fromCreatedDate": 1700000000002, "toCreatedDate": 1700000000001},
+            {"fromCreateDate": "2026-10-27T00:00:00Z", "toCreateDate": "2026-10-26T00:00:00Z"},
             frozenset({"HK2615"}),
             "WALMART_DATE_RANGE_INVALID",
         ),
