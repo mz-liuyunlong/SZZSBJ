@@ -10,7 +10,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Mapping, Sequence
 
 from app.integrations.walmart.client import WalmartClient
@@ -226,8 +226,8 @@ class WalmartReadCollector:
                     )
                 elif endpoint == "inbound_shipments":
                     rows, pages = self._collect_offset(endpoint, {
-                        "fromCreateDate": from_date.isoformat(),
-                        "toCreateDate": to_date.isoformat(),
+                        "fromCreatedDate": int(datetime.combine(from_date, time.min, tzinfo=timezone.utc).timestamp() * 1000),
+                        "toCreatedDate": int(datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=timezone.utc).timestamp() * 1000) - 1,
                     })
                 elif endpoint == "inbound_shipment_items":
                     shipments = collected.get("inbound_shipments")
