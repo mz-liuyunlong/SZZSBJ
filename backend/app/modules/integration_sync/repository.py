@@ -272,8 +272,6 @@ class IntegrationSyncRepository:
                 IntegrationSyncRun.interface_key == "walmartReturnOrderList",
                 IntegrationSyncRunEvent.message_code == "SYNC_REFUND_FACTS_COMMITTED",
             )
-            .distinct()
-            .order_by(IntegrationSyncRunEvent.safe_details["business_date"].astext)
         ).all()
         return tuple(sorted({date.fromisoformat(value) for value in rows if value}))
 
