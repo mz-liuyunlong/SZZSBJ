@@ -28,6 +28,8 @@ WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
 AI_RUNTIME_HEAD_REVISION = "20261027_0064_ai_runtime_skill_context"
+LISTING_EVALUATION_REVISION = "20261028_0065_listing_evaluation_runs"
+WALMART_MONITOR_PROJECTION_HEAD_REVISION = "20261028_0066_walmart_monitor_listing_projection"
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +58,14 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     script = ScriptDirectory.from_config(config)
 
     assert config.get_main_option("sqlalchemy.url") is None
-    assert script.get_heads() == [AI_RUNTIME_HEAD_REVISION]
+    assert script.get_heads() == [WALMART_MONITOR_PROJECTION_HEAD_REVISION]
+    assert (
+        script.get_revision(WALMART_MONITOR_PROJECTION_HEAD_REVISION).down_revision
+        == LISTING_EVALUATION_REVISION
+    )
+    assert (
+        script.get_revision(LISTING_EVALUATION_REVISION).down_revision == AI_RUNTIME_HEAD_REVISION
+    )
     assert (
         script.get_revision(AI_RUNTIME_HEAD_REVISION).down_revision == AI_RUNTIME_PREVIOUS_REVISION
     )
@@ -318,6 +327,6 @@ def test_revision_files_have_unique_ids_and_form_one_connected_graph() -> None:
                     revisions.append(ast.literal_eval(node.value))
     assert len(revisions) == len(set(revisions)), "duplicate full Alembic revision ID"
     script = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini")))
-    assert script.get_heads() == [AI_RUNTIME_HEAD_REVISION]
+    assert script.get_heads() == [WALMART_MONITOR_PROJECTION_HEAD_REVISION]
     assert len(script.get_bases()) == 1
     assert {item.revision for item in script.walk_revisions()} == set(revisions)

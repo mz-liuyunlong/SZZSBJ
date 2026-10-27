@@ -37,6 +37,7 @@ export interface FollowUpRuleConfig {
 }
 
 export interface ListingGradeRuleConfig {
+  execution_time: string; // HH:mm in Asia/Shanghai; default 22:30
   short_days: number;
   medium_days: number;
   short_weight_percent: number;
@@ -57,7 +58,6 @@ export interface ListingGradeRuleRead {
   config: ListingGradeRuleConfig;
   protected: {
     execution_timezone: "Asia/Shanghai";
-    execution_time: "22:30";
     business_timezone: "America/Los_Angeles";
     closing_lag_days: 2;
     requires_complete_financial_inputs: true;

@@ -11,6 +11,7 @@ from app.modules.listing_rule_config.service import next_rating_time_utc
 
 def test_defaults_match_owner_approved_v1() -> None:
     rule = ListingGradeRuleConfig()
+    assert rule.execution_time == "22:30"
     assert (rule.short_days, rule.medium_days) == (7, 14)
     assert (rule.short_weight_percent, rule.medium_weight_percent) == (60, 40)
     assert (rule.short_min_valid_days, rule.medium_min_valid_days) == (4, 8)
@@ -30,6 +31,8 @@ def test_defaults_match_owner_approved_v1() -> None:
         {"included_stages": []},
         {"included_stages": ["打品期", "打品期"]},
         {"closing_lag_days": 1},
+        {"execution_time": "24:00"},
+        {"execution_time": "09:5"},
     ],
 )
 def test_rejects_invalid_or_protected_fields(patch: dict[str, object]) -> None:
@@ -58,3 +61,20 @@ def test_next_china_rating_boundary() -> None:
     assert next_rating_time_utc(datetime(2026, 10, 25, 14, 30, tzinfo=UTC)) == datetime(
         2026, 10, 26, 14, 30, tzinfo=UTC
     )
+
+
+def test_custom_china_rating_boundary_and_backward_compatible_json() -> None:
+    assert next_rating_time_utc(datetime(2026, 10, 25, 0, 0, tzinfo=UTC), "09:15") == datetime(
+        2026, 10, 25, 1, 15, tzinfo=UTC
+    )
+    assert next_rating_time_utc(datetime(2026, 10, 25, 1, 15, tzinfo=UTC), "09:15") == datetime(
+        2026, 10, 26, 1, 15, tzinfo=UTC
+    )
+    legacy = ListingGradeRuleConfig().model_dump(mode="json")
+    legacy.pop("execution_time")
+    assert ListingGradeRuleConfig.model_validate(legacy).execution_time == "22:30"
+
+
+def test_custom_schedule_rejects_naive_datetime() -> None:
+    with pytest.raises(ValueError):
+        next_rating_time_utc(datetime(2026, 10, 25, 8, 0), "09:15")

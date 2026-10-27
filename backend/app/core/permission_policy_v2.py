@@ -113,6 +113,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "/api/listings/walmart/",
         "action:products:listing-management:edit-analysis-link",
     ),
+    RequestPermissionRule(
+        "PATCH",
+        "/api/listings/evaluation-followups/",
+        "action:products:listing-management:manage-followups",
+        True,
+    ),
     RequestPermissionRule(None, "/api/listings/", "page:products:listing-management:view"),
     RequestPermissionRule(
         "GET",

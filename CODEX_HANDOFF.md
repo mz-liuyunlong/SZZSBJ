@@ -176,3 +176,13 @@ Navicat只读核对脚本：docs/delivery/local-iam-import-verification.sql，5�
 全部 62 个完整 revision：一根、一 head（20261022_0054_merge_walmart_identity_and_domestic_packing），无重复、缺失父节点、孤立或循环；国内仓 0047–0049 文件 Blob 与开始 HEAD 一致，未改历史 ID/版本表。完整文件清单、依赖链、20 表正式来源、命令、风险和生产申请前置项见 docs/delivery/domestic-chain-0054-validation.md。
 
 待负责人审核后自行决定提交/推送与 PR #242；本轮未发布修改，不能声称 GitHub PostgreSQL 16 已验证。生产实时版本/结构及 staging 已执行 0047–0049 Blob 尚未核实。若有非空 OWS 历史保持原版本，先审查业务归档/迁移方案，禁止清空/stamp 绕过。0054 仍是建议目标，不执行任何生产迁移或部署。
+
+## 2026-10-27 PR #260 Listing 监控 RAW 投影与预览修复
+
+负责人批准在现有 PR #260 分支中完成 Listing 计算修复与监控 RAW 消费。实现保持一个统一 RAW 事件模型：`raw_walmart_monitor_events` 经过不可变 L3 观察表 `std_walmart_monitor_listing_observations`，再投影为 L9 当前态 `mart_walmart_monitor_listing_current`。Listing 查询仅按 `source_account_ref + store_id + item_id` 覆盖标题、划线价、在售价、类目、购物车状态、Walmart 卖家、是否被跟卖、评分、评论数和品牌；监控值为空时回退原 Listing 值，显式 `false` 和 `0` 不会被当作空值。监控来源、图片、错误码、RAW 事件标识与原始类目不进入页面响应。
+
+一个页面结果对应多个稳定目标身份时会在同一事务内逐目标投影。最终失败事件保留 L3 证据，但不会覆盖最后一次成功的 L9 当前态。受控历史回放脚本默认回滚，生产提交还需要显式开关与确认令牌；本任务未执行数据库迁移、RAW 回放、同步、外部 API、部署或生产访问。
+
+PR #260 原有预览同时修复：批处理固定使用同一规则版本、UUID keyset 分页、所有排除生命周期清除等级候选、监控日观察作为生命周期证据，以及 Celery 调度 advisory lock 在物理连接上跨提交保持。财务证据完整性仍会阻止正式等级发布；本切片不启用正式发布或生产调度。
+
+验证：定向后端 `53 passed`；合入最新 main 后完整后端 `1825 passed, 127 skipped`；完整前端单 worker `61 files / 292 tests`、lint 和 build 通过（lint 保留 main 既有 1 条 Hook warning）；Ruff `659 files` format/lint、应用导入、回放 CLI help、Alembic 单 head `20261028_0066_walmart_monitor_listing_projection`、离线迁移检查、rule-pack 与 PR 净差异检查通过。集中 mypy 仍被仓库既有 repository/service 类型债务阻断，新增监控投影文件没有直接报告的新错误。所有验证使用合成数据，没有输出或提交商品标识、账号、Token 或 RAW payload。
