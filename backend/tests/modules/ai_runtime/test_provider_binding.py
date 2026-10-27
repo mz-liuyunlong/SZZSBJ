@@ -57,6 +57,33 @@ def test_skill_selection_is_scoped_to_connector() -> None:
 
 def test_missing_config_is_not_silently_replaced() -> None:
     session = MagicMock()
-    session.execute.return_value.mappings.return_value.first.return_value = None
+    session.execute.return_value.mappings.return_value.all.return_value = []
     with pytest.raises(AIUnavailable, match="AI_CONNECTOR_NOT_CONFIGURED"):
+        select_active_connector(session, "keyword_launch")
+
+
+def test_unpinned_selection_skips_services_without_requested_scene() -> None:
+    first = _connector("ai_assistant")
+    second = _connector("keyword_launch")
+    session = MagicMock()
+    session.execute.return_value.mappings.return_value.all.return_value = [first, second]
+
+    selected = select_active_connector(session, "keyword_launch")
+
+    assert selected == second
+    sql = str(session.execute.call_args.args[0])
+    assert "ORDER BY created_at, id" in sql
+
+
+def test_unpinned_selection_requires_a_matching_model_and_scene() -> None:
+    wrong_model = _connector("keyword_launch")
+    wrong_model["config"]["default_model"] = "gpt-4.1-mini"
+    right_model_wrong_scene = _connector("ai_assistant")
+    session = MagicMock()
+    session.execute.return_value.mappings.return_value.all.return_value = [
+        wrong_model,
+        right_model_wrong_scene,
+    ]
+
+    with pytest.raises(AIUnavailable, match="AI_MODEL_NOT_CONFIGURED"):
         select_active_connector(session, "keyword_launch")

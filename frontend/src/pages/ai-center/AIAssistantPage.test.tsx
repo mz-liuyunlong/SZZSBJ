@@ -92,3 +92,21 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     expect(screen.queryByText('demo.png')).not.toBeInTheDocument();
   });
 });
+
+it('persists the server chat id across page reloads', async () => {
+  const chatId = "00000000-0000-0000-0000-000000000001";
+  mount();
+  fireEvent.change(screen.getByRole('textbox', { name: '输入问题' }), { target: { value: '第一次提问' } });
+  fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+  await waitFor(() => expect(requestMock).toHaveBeenCalledTimes(1));
+  await screen.findByText('已连接模型服务，当前缺少真实利润数据。');
+  await waitFor(() => expect(localStorage.getItem('szzsbj:ai-v7-server-chats:ai-v7-test')).not.toBeNull());
+
+  cleanup();
+  mount();
+  fireEvent.change(screen.getByRole('textbox', { name: '输入问题' }), { target: { value: '继续追问' } });
+  fireEvent.click(screen.getByRole('button', { name: '发送消息' }));
+  await waitFor(() => expect(requestMock).toHaveBeenCalledTimes(2));
+  const request = requestMock.mock.calls[1][1] as { body: string };
+  expect(JSON.parse(request.body).chat_id).toBe(chatId);
+});

@@ -1,4 +1,4 @@
-/** V7 conversation workspace in the existing SZZSBJ MainLayout. UI preview only. */
+/** V7 conversation workspace in the existing SZZSBJ MainLayout. */
 import {
   ArrowUpOutlined, BarChartOutlined, DeleteOutlined, EditOutlined, FileImageOutlined,
   FileOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PaperClipOutlined,
@@ -34,6 +34,16 @@ function id() {
 }
 function fresh(): Thread { return { id: id(), title: '新聊天', note: '', draft: '', updatedAt: Date.now(), messages: [] }; }
 function key(scope: string) { return 'szzsbj:ai-v7:' + encodeURIComponent(scope); }
+function serverChatsKey(scope: string) { return 'szzsbj:ai-v7-server-chats:' + encodeURIComponent(scope); }
+function restoreServerChats(scope: string): Record<string,string> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(serverChatsKey(scope)) || 'null');
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.fromEntries(Object.entries(value).filter((entry): entry is [string,string] => typeof entry[1] === 'string'));
+    }
+  } catch { /* local storage can be unavailable */ }
+  return {};
+}
 function restore(scope: string): Thread[] {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(key(scope)) || 'null');
@@ -69,7 +79,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
   const [attachmentMenu,setAttachmentMenu] = useState(false);
   const [dragging,setDragging] = useState(false);
   const [sending,setSending] = useState(false);
-  const [serverChats,setServerChats] = useState<Record<string,string>>({});
+  const [serverChats,setServerChats] = useState<Record<string,string>>(() => restoreServerChats(preferenceScope));
   const images = useRef<HTMLInputElement>(null);
   const files = useRef<HTMLInputElement>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -79,6 +89,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
   const uploads = pending[chat.id] ?? [];
   const visible = useMemo(() => [...threads].sort((a,b) => b.updatedAt-a.updatedAt).filter(t => (t.title+' '+t.note).toLowerCase().includes(search.toLowerCase())),[threads,search]);
   useEffect(() => { try { localStorage.setItem(key(preferenceScope),JSON.stringify(threads)); } catch { /* optional persistence */ } },[preferenceScope,threads]);
+  useEffect(() => { try { localStorage.setItem(serverChatsKey(preferenceScope),JSON.stringify(serverChats)); } catch { /* optional persistence */ } },[preferenceScope,serverChats]);
   useEffect(() => { const map=urls.current;return () => { map.forEach(value => URL.revokeObjectURL(value)); }; },[]);
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; },[activeId,chat.messages.length]);
   const changeChat = (identifier:string, patch:Partial<Thread>) => setThreads(before => before.map(t => t.id===identifier ? {...t,...patch,updatedAt:Date.now()} : t));
@@ -155,6 +166,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
     const next=threads.filter(c=>c.id!==deleting);
     if(!next.length)next.push(fresh());
     setThreads(next);if(activeId===deleting)setActiveId(next[next.length-1].id);
+    setServerChats(before=>{const map={...before};delete map[deleting];return map;});
     setDeleting(null);
   };
   return <PageShell page={page}>
@@ -177,7 +189,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
             ]}}><Button type="text" icon={<MoreOutlined/>} size="small" aria-label={'聊天操作：'+t.title}/></Dropdown>
           </div>)}
         </div>
-        <p className="ai7-side-footer">演示会话仅保存在当前浏览器</p>
+        <p className="ai7-side-footer">聊天列表保存在当前浏览器，对话内容同步至服务端</p>
       </aside>
       <div className="ai7-main">
         <header className="ai7-toolbar"><Button type="text" icon={expanded?<MenuFoldOutlined/>:<MenuUnfoldOutlined/>} aria-label="切换聊天列表" onClick={()=>{setExpanded(!expanded);setMobileOpen(!mobileOpen);}}/><div className="ai7-thread-heading"><strong>{chat.title}</strong><small>{chat.note||'智能经营分析与连续追问'}</small></div></header>

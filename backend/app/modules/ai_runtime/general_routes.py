@@ -14,7 +14,7 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
 
-from .provider import SCENES, AIUnavailable, invoke
+from .provider import MAX_SKILL_INSTRUCTIONS, SCENES, AIUnavailable, invoke
 
 router = APIRouter(prefix="/api/ai-runtime", tags=["AI Runtime"])
 view_perm = Annotated[Principal, Depends(require_permission("page:ai-center:assistant:view"))]
@@ -103,7 +103,7 @@ async def ask(request: Request, body: AskBody, principal: view_perm):
 class SkillWrite(BaseModel):
     connector_id: UUID
     scene: str = Field(max_length=64)
-    instructions: str = Field(min_length=1, max_length=12000)
+    instructions: str = Field(min_length=1, max_length=MAX_SKILL_INSTRUCTIONS)
 
 
 class SkillItem(BaseModel):

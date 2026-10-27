@@ -17,6 +17,7 @@ from app.db.session import get_session_factory
 from app.integrations.llm.openai_provider import generate_text
 
 MODEL = "gpt-6-luna"
+MAX_SKILL_INSTRUCTIONS = 3000
 SCENES = frozenset(
     {
         "ai_assistant",
@@ -40,31 +41,59 @@ def _config(row):
 
 
 def select_active_connector(session, scene: str, connector_id: UUID | None = None):
-    """Resolve a single enabled service, with explicit identity when a job is pinned.
+    """Select an enabled OpenAI service that supports the requested scene.
 
-    Selecting the credential and published Skill from the same service prevents
-    cross-connector instruction leakage.
+    A pinned connector is validated exactly. Without a pin, skip earlier
+    services that do not enable this scene rather than failing on the first row.
     """
     if scene not in SCENES:
         raise AIUnavailable("AI_SCENE_INVALID")
-    if connector_id is None:
-        query = """SELECT * FROM biz_connectors WHERE kind='openai' AND enabled
-                   ORDER BY created_at, id LIMIT 1"""
-        params = {}
-    else:
-        query = """SELECT * FROM biz_connectors
-                   WHERE id=:connector AND kind='openai' AND enabled"""
-        params = {"connector": connector_id}
-    row = session.execute(text(query), params).mappings().first()
-    if row is None:
-        raise AIUnavailable("AI_CONNECTOR_NOT_CONFIGURED")
-    cfg = _config(row)
-    if cfg.get("default_model") != MODEL or MODEL not in cfg.get("model_allowlist", []):
-        raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
-    if scene not in cfg.get("application_scenes", []):
-        raise AIUnavailable("AI_SCENE_DISABLED")
-    return row
+    if connector_id is not None:
+        row = (
+            session.execute(
+                text("""SELECT * FROM biz_connectors
+                WHERE id=:connector AND kind='openai' AND enabled"""),
+                {"connector": connector_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise AIUnavailable("AI_CONNECTOR_NOT_CONFIGURED")
+        cfg = _config(row)
+        if cfg.get("default_model") != MODEL or MODEL not in cfg.get("model_allowlist", []):
+            raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
+        if scene not in cfg.get("application_scenes", []):
+            raise AIUnavailable("AI_SCENE_DISABLED")
+        return row
 
+    rows = (
+        session.execute(
+            text("""SELECT * FROM biz_connectors
+            WHERE kind='openai' AND enabled ORDER BY created_at, id""")
+        )
+        .mappings()
+        .all()
+    )
+    if not rows:
+        raise AIUnavailable("AI_CONNECTOR_NOT_CONFIGURED")
+
+    model_compatible = False
+    scene_compatible = False
+    for row in rows:
+        cfg = _config(row)
+        model_ok = cfg.get("default_model") == MODEL and MODEL in cfg.get("model_allowlist", [])
+        scene_ok = scene in cfg.get("application_scenes", [])
+        model_compatible = model_compatible or model_ok
+        scene_compatible = scene_compatible or scene_ok
+        if model_ok and scene_ok:
+            return row
+
+    if scene_compatible:
+        raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
+    if model_compatible:
+        raise AIUnavailable("AI_SCENE_DISABLED")
+    raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
 
 def select_published_skill(session, connector_id: UUID, scene: str):
     """Only load a published Skill belonging to the selected OpenAI connector."""
@@ -120,10 +149,13 @@ async def invoke(
         else:
             skill = None
         if skill is not None:
+            instructions = skill["instructions"]
+            if len(instructions) > MAX_SKILL_INSTRUCTIONS:
+                raise AIUnavailable("AI_SKILL_TOO_LONG")
             prompt = (
-                "Skill instructions (administrator approved):\\n"
-                + skill["instructions"][:3000]
-                + "\\n\\n"
+                "Skill instructions (administrator approved):\n"
+                + instructions
+                + "\n\n"
                 + prompt
             )
         from app.modules.business_connectors.router import _decrypt
