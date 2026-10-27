@@ -90,9 +90,7 @@ def load_unified_registry(
         imported = ContractRegistry.from_openapi(parsed, approved_keys=frozenset())
         for key, op in imported._operations.items():
             existing = merged.get(key)
-            if existing is not None and (
-                existing.method != op.method or existing.path != op.path
-            ):
+            if existing is not None and (existing.method != op.method or existing.path != op.path):
                 raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
             # Explicit approval must still be applied to the imported contract.
             merged[key] = Operation(
@@ -125,9 +123,7 @@ def capability_summary(registry: ContractRegistry | None = None) -> dict[str, An
     category_counts = Counter(str(row["category"]) for row in source)
     return {
         "source_capabilities": len(source),
-        "physical_endpoints": len(
-            {(str(row["method"]), str(row["path"])) for row in source}
-        ),
+        "physical_endpoints": len({(str(row["method"]), str(row["path"])) for row in source}),
         "historical_categories": dict(category_counts),
         "reviewed_contracts": len(declared.keys()),
         "approved_read_operations": sum(
@@ -150,9 +146,7 @@ class WalmartReadAPI:
     def prepare(
         self, store_code: str, operation: str, *, params: Mapping[str, Any] | None = None
     ) -> PreparedRequest:
-        request = self._client.prepare(
-            store_code, operation, params=params, allow_writes=False
-        )
+        request = self._client.prepare(store_code, operation, params=params, allow_writes=False)
         if request.is_write:
             raise WalmartIntegrationError("WALMART_WRITE_NOT_AUTHORIZED")
         return request
@@ -195,9 +189,9 @@ class WalmartReadAPI:
         config: CollectorConfig | None = None,
     ) -> dict[str, Any]:
         """Reuse the existing four-endpoint collector and its artifact checks."""
-        return WalmartReadCollector(
-            self._client, store_code=store_code, config=config
-        ).collect(
-            endpoints=endpoints, from_date=from_date,
-            to_date=to_date, gtin_items=gtin_items,
+        return WalmartReadCollector(self._client, store_code=store_code, config=config).collect(
+            endpoints=endpoints,
+            from_date=from_date,
+            to_date=to_date,
+            gtin_items=gtin_items,
         )

@@ -43,8 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         approved = frozenset(
-            key.strip() for key in
-            os.getenv("SZZSBJ_WALMART_APPROVED_READ_KEYS", "").split(",") if key.strip()
+            key.strip()
+            for key in os.getenv("SZZSBJ_WALMART_APPROVED_READ_KEYS", "").split(",")
+            if key.strip()
         )
         registry = load_unified_registry(
             approved,
@@ -65,15 +66,21 @@ def main(argv: list[str] | None = None) -> int:
                 allowed_stores=frozenset({args.store}),
                 configured_stores=frozenset({args.store}),
             )
-            planned = WalmartReadAPI(client).prepare(
-                args.store, args.operation, params=params
+            planned = WalmartReadAPI(client).prepare(args.store, args.operation, params=params)
+            print(
+                json.dumps(
+                    {
+                        "mode": "offline",
+                        "status": "PREPARED_NO_NETWORK",
+                        "store": args.store,
+                        "operation": planned.key,
+                        "method": planned.method,
+                        "path": planned.path,
+                        "query_keys": sorted(planned.query),
+                    },
+                    sort_keys=True,
+                )
             )
-            print(json.dumps({
-                "mode": "offline", "status": "PREPARED_NO_NETWORK",
-                "store": args.store, "operation": planned.key,
-                "method": planned.method, "path": planned.path,
-                "query_keys": sorted(planned.query),
-            }, sort_keys=True))
             return 0
         if (
             os.getenv("SZZSBJ_WALMART_LIVE_MODE") != "owner-approved-read-only"
@@ -90,18 +97,26 @@ def main(argv: list[str] | None = None) -> int:
             function_by_store=functions,
             cloud_api=TencentApiClient(TemporaryTencentIdentity.from_environment()),
         )
-        result = WalmartReadAPI(client).call(
-            args.store, args.operation, params=params
-        )
+        result = WalmartReadAPI(client).call(args.store, args.operation, params=params)
         # Deliberately never print response body, provider errors or credentials.
-        print(json.dumps({
-            "mode": "live", "status": "HTTP_SUCCESS",
-            "operation": args.operation, "store": args.store,
-            "http_status": result.status_code,
-        }, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "mode": "live",
+                    "status": "HTTP_SUCCESS",
+                    "operation": args.operation,
+                    "store": args.store,
+                    "http_status": result.status_code,
+                },
+                sort_keys=True,
+            )
+        )
         return 0
     except Exception:
-        print("WALMART_PROBE_REJECTED: check approvals, contracts and isolated gateway", file=sys.stderr)
+        print(
+            "WALMART_PROBE_REJECTED: check approvals, contracts and isolated gateway",
+            file=sys.stderr,
+        )
         return 2
 
 

@@ -37,18 +37,15 @@ uv run python -m app.integrations.walmart.server_probe
 检查指定已批准接口（参数写入本机访问受限的 JSON 文件；不会在日志中回显）：
 
 ```bash
-SZZSBJ_WALMART_APPROVED_READ_KEYS=wfs_inventory \
+# 在可信运行环境中先配置已批准的只读 operation key（具体变量名见 server_probe.py）
 uv run python -m app.integrations.walmart.server_probe \
   --store HK2615 --operation wfs_inventory
 ```
 
-只在负责人确认云端环境后，设置 `SZZSBJ_WALMART_LIVE_MODE=owner-approved-read-only`、
-`SZZSBJ_WALMART_ALLOW_PROBE=1`、`SZZSBJ_WALMART_TEST_STORE`、
-`SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE`（**仅一个店铺**）、临时腾讯云身份和审批的 read keys，再追加 `--live`。
+只在负责人确认云端环境后，配置已批准的只读运行模式、显式测试开关、目标测试店铺、仅一个店铺的 SCF 映射、临时腾讯云身份和审批的 operation key，再追加 `--live`。所有环境变量的准确名称和校验逻辑以 `server_probe.py` 与 `scf_runtime.py` 为准。
 该命令仅返回 HTTP 状态，不打印响应体、密钥或令牌。**不能用本命令跳过既有真实访问审批、SSM 凭据隔离、固定出口和业务 RAW 审批。**
 
-扩展官方契约：设置 `SZZSBJ_WALMART_CONTRACT_FILE` 和
-`SZZSBJ_WALMART_CONTRACT_SHA256`，然后按批准的 `operationId` 设置 read keys。
+扩展官方契约：按 `server_probe.py` 中定义的本地契约文件路径变量及 SHA256 校验变量配置，然后按批准的 `operationId` 配置只读 operation key。
 不能把原始 `app.js` 目录直接当作 OpenAPI 契约。
 
 ## 测试

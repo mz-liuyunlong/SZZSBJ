@@ -23,7 +23,9 @@ class FakeGateway:
 
     def execute(self, *, store_code: str, request: object, approval_ref: str | None):
         self.calls.append(request.key)
-        return WalmartResult(status_code=200, data={"payload": {"inventory": []}, "headers": {"totalCount": 0}})
+        return WalmartResult(
+            status_code=200, data={"payload": {"inventory": []}, "headers": {"totalCount": 0}}
+        )
 
 
 def test_catalog_is_not_an_approval() -> None:
@@ -47,8 +49,10 @@ def test_approved_contract_executes_via_fake_gateway() -> None:
     assert api.call("HK2615", "wfs_inventory").status_code == 200
     assert fake.calls == ["wfs_inventory"]
     result = api.original_worker(
-        "HK2615", endpoints=("wfs_inventory",),
-        from_date=date(2026, 10, 1), to_date=date(2026, 10, 2),
+        "HK2615",
+        endpoints=("wfs_inventory",),
+        from_date=date(2026, 10, 1),
+        to_date=date(2026, 10, 2),
     )
     assert result["manifest"]["status"] == "SUCCESS"
     assert "SHA256SUMS" in result["artifacts"]
@@ -56,17 +60,29 @@ def test_approved_contract_executes_via_fake_gateway() -> None:
 
 def test_custom_reviewed_openapi_is_hash_pinned(tmp_path) -> None:
     file = tmp_path / "official.json"
-    file.write_text(json.dumps({
-        "openapi": "3.0.3",
-        "paths": {"/v3/test/read": {"get": {
-            "operationId": "officialRead",
-            "parameters": [{"name": "cursor", "in": "query", "schema": {"type": "string"}}],
-        }}},
-    }), encoding="utf-8")
+    file.write_text(
+        json.dumps(
+            {
+                "openapi": "3.0.3",
+                "paths": {
+                    "/v3/test/read": {
+                        "get": {
+                            "operationId": "officialRead",
+                            "parameters": [
+                                {"name": "cursor", "in": "query", "schema": {"type": "string"}}
+                            ],
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     digest = hashlib.sha256(file.read_bytes()).hexdigest()
     registry = load_unified_registry(
         frozenset({"officialRead"}),
-        contract_file=str(file), contract_sha256=digest,
+        contract_file=str(file),
+        contract_sha256=digest,
     )
     client = WalmartClient(registry, allowed_stores=frozenset({"HK2615"}))
     assert WalmartReadAPI(client).prepare(
@@ -76,20 +92,27 @@ def test_custom_reviewed_openapi_is_hash_pinned(tmp_path) -> None:
         WalmartReadAPI(client).prepare("HK2615", "officialRead", params={"unreviewed": "x"})
     with pytest.raises(WalmartIntegrationError, match="CONTRACT_SNAPSHOT_CHANGED"):
         load_unified_registry(
-            frozenset({"officialRead"}), contract_file=str(file),
+            frozenset({"officialRead"}),
+            contract_file=str(file),
             contract_sha256="0" * 64,
         )
 
 
 def test_snapshot_write_cannot_be_approved(tmp_path) -> None:
     file = tmp_path / "official.json"
-    file.write_text(json.dumps({
-        "openapi": "3.0.3",
-        "paths": {"/v3/items": {"post": {"operationId": "upsertItems"}}},
-    }), encoding="utf-8")
+    file.write_text(
+        json.dumps(
+            {
+                "openapi": "3.0.3",
+                "paths": {"/v3/items": {"post": {"operationId": "upsertItems"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(WalmartIntegrationError, match="WALMART_WRITE_NOT_AUTHORIZED"):
         load_unified_registry(
-            frozenset({"upsertItems"}), contract_file=str(file),
+            frozenset({"upsertItems"}),
+            contract_file=str(file),
             contract_sha256=hashlib.sha256(file.read_bytes()).hexdigest(),
         )
 
