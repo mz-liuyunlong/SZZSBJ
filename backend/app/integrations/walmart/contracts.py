@@ -3,6 +3,7 @@
 Request preparation is offline. A protected executor must independently
 authorize the caller, store, endpoint, and any write approval.
 """
+
 from __future__ import annotations
 
 import json
@@ -74,7 +75,9 @@ def _path_valid(path: str) -> bool:
     return bool(_PATH.fullmatch(path) and ".." not in path and "//" not in path)
 
 
-def _resolve_local_refs(value: Any, document: Mapping[str, Any], stack: tuple[str, ...] = ()) -> Any:
+def _resolve_local_refs(
+    value: Any, document: Mapping[str, Any], stack: tuple[str, ...] = ()
+) -> Any:
     """Resolve only local component references; reject external refs and cycles."""
     if isinstance(value, list):
         return [_resolve_local_refs(item, document, stack) for item in value]
@@ -139,7 +142,9 @@ def _validate_schema(value: Any, schema: Mapping[str, Any], depth: int = 0) -> A
     if kind == "string":
         if not isinstance(value, str):
             raise ContractError("WALMART_FIELD_INVALID")
-        if len(value) < schema.get("minLength", 0) or len(value) > schema.get("maxLength", 1_000_000):
+        if len(value) < schema.get("minLength", 0) or len(value) > schema.get(
+            "maxLength", 1_000_000
+        ):
             raise ContractError("WALMART_FIELD_INVALID")
         if any(ord(char) < 32 for char in value):
             raise ContractError("WALMART_FIELD_INVALID")
@@ -182,7 +187,9 @@ def _validate_schema(value: Any, schema: Mapping[str, Any], depth: int = 0) -> A
             raise ContractError("WALMART_SCHEMA_INVALID")
         if any(name not in value for name in required):
             raise ContractError("WALMART_BODY_REQUIRED_FIELD")
-        if len(value) < schema.get("minProperties", 0) or len(value) > schema.get("maxProperties", 10000):
+        if len(value) < schema.get("minProperties", 0) or len(value) > schema.get(
+            "maxProperties", 10000
+        ):
             raise ContractError("WALMART_FIELD_INVALID")
         extra = schema.get("additionalProperties", True)
         for name, child in value.items():
@@ -235,7 +242,9 @@ class ContractRegistry:
             declared = {field.name for field in operation.fields if field.location == "path"}
             if path_names != declared:
                 raise ContractError("WALMART_CONTRACT_INVALID")
-            if len(operation.fields) != len({(field.location, field.name) for field in operation.fields}):
+            if len(operation.fields) != len(
+                {(field.location, field.name) for field in operation.fields}
+            ):
                 raise ContractError("WALMART_CONTRACT_INVALID")
             self._operations[operation.key] = operation
 
@@ -276,13 +285,22 @@ class ContractRegistry:
         if operation.body_required and body is None:
             raise ContractError("WALMART_BODY_REQUIRED")
         if body is not None:
-            if not isinstance(body, (dict, list, str)) or len(json.dumps(body, ensure_ascii=False).encode()) > 2_000_000:
+            if (
+                not isinstance(body, (dict, list, str))
+                or len(json.dumps(body, ensure_ascii=False).encode()) > 2_000_000
+            ):
                 raise ContractError("WALMART_BODY_INVALID")
             if operation.request_schema is not None:
                 _validate_schema(body, operation.request_schema)
-            elif operation.request_content_type in {"application/json", "application/x-www-form-urlencoded"} and not isinstance(body, (dict, list)):
+            elif operation.request_content_type in {
+                "application/json",
+                "application/x-www-form-urlencoded",
+            } and not isinstance(body, (dict, list)):
                 raise ContractError("WALMART_BODY_INVALID")
-            elif operation.request_content_type in {"application/xml", "text/xml"} and not isinstance(body, str):
+            elif operation.request_content_type in {
+                "application/xml",
+                "text/xml",
+            } and not isinstance(body, str):
                 raise ContractError("WALMART_BODY_INVALID")
         path = operation.path
         query: dict[str, Any] = {}
@@ -300,8 +318,13 @@ class ContractRegistry:
         if _VAR.search(path) or not path.startswith("/v3/") or ".." in path or "//" in path:
             raise ContractError("WALMART_PATH_INVALID")
         return PreparedRequest(
-            key=key, method=operation.method, path=path, query=query, body=body,
-            is_write=operation.is_write, content_type=operation.request_content_type,
+            key=key,
+            method=operation.method,
+            path=path,
+            query=query,
+            body=body,
+            is_write=operation.is_write,
+            content_type=operation.request_content_type,
         )
 
     @classmethod
@@ -319,7 +342,11 @@ class ContractRegistry:
             raise ContractError("WALMART_CONTRACT_INVALID")
         operations: list[Operation] = []
         for path, raw_verbs in paths.items():
-            if not isinstance(path, str) or not _path_valid(path) or not isinstance(raw_verbs, dict):
+            if (
+                not isinstance(path, str)
+                or not _path_valid(path)
+                or not isinstance(raw_verbs, dict)
+            ):
                 raise ContractError("WALMART_CONTRACT_INVALID")
             verbs = _resolve_local_refs(raw_verbs, document)
             base_params = verbs.get("parameters", [])
@@ -352,20 +379,36 @@ class ContractRegistry:
                     kind = schema.get("type", "string")
                     if isinstance(kind, list):
                         kind = "union"
-                    if kind not in {"string", "integer", "number", "boolean", "array", "object", "null", "union"}:
+                    if kind not in {
+                        "string",
+                        "integer",
+                        "number",
+                        "boolean",
+                        "array",
+                        "object",
+                        "null",
+                        "union",
+                    }:
                         raise ContractError("WALMART_SCHEMA_UNSUPPORTED")
                     style = param.get("style", "form")
                     explode = bool(param.get("explode", style == "form"))
                     fields_by_name[(name, location)] = Field(
-                        name=name, location=location,
+                        name=name,
+                        location=location,
                         required=bool(param.get("required", False) or location == "path"),
-                        kind=kind, enum=tuple(str(item) for item in schema.get("enum", [])),
-                        maximum=schema.get("maximum"), schema=schema, style=style, explode=explode,
+                        kind=kind,
+                        enum=tuple(str(item) for item in schema.get("enum", [])),
+                        maximum=schema.get("maximum"),
+                        schema=schema,
+                        style=style,
+                        explode=explode,
                     )
                 fields = tuple(fields_by_name.values())
                 body = _resolve_local_refs(endpoint.get("requestBody"), document)
                 has_body = body is not None
-                body_required = bool(body.get("required", False)) if isinstance(body, dict) else False
+                body_required = (
+                    bool(body.get("required", False)) if isinstance(body, dict) else False
+                )
                 body_schema: Mapping[str, Any] | None = None
                 content_type = "application/json"
                 media_supported = True
