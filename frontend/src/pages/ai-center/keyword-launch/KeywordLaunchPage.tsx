@@ -668,6 +668,10 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
          owner_initials:initials,
          confirmation:'确认无误，开始生成',
          template_version:'V1-24',
+         manual_bid:facts.manualBid,
+         auto_bid:facts.autoBid,
+         manual_budget:facts.manualBudget,
+         auto_budget:facts.autoBudget,
          ...(date?{start_date:date}:{}),
        });
      },
