@@ -34,7 +34,7 @@
 |---|---|
 | Module name | WFS Fee Anomaly Auto Detection V1 |
 | Module key | `wfs-fee-anomaly-auto-detection-v1` |
-| Status | `approved_for_implementation`；PR #257 Owner-review hardening 已完成本地验证、待 CI/评审，未合并、未部署或生产启用 |
+| Status | `approved_for_implementation`；PR #257 最新 HEAD `7780322b` 独立复审及 required checks 已通过，待正式 Reviewer/Owner approval；未合并、未部署或生产启用 |
 | Purpose | 完成 Lingxing WFS 结算 RAW-first 采集、订单次数众数、动态标准费/销量、三类异常金额、只读预览、幂等案件候选和默认关闭的每日调度 |
 | Reused modules | Lingxing Token/client、Integration Sync run/work item/lease/RAW、Product Management pricing、Daily Sales MART、现有 WFS case/service/router/page |
 | Backend files | `backend/app/modules/warehouse_wfs/`、`backend/app/modules/integration_sync/`、Lingxing client 最小扩展、一个 additive Alembic revision、scoped tests |
@@ -45,7 +45,7 @@
 | API | 保持现有 WFS API；新增 `POST /api/warehouse/wfs-fee-alerts/detection-preview`，只读、无 provider、无案件写入 |
 | Scheduler | 复用现有 Celery Integration Sync task/queue；catalog、outbound、sync config、检测和建案多重门禁默认关闭 |
 | Migration | `20261026_0061_wfs_fee_detection_evidence` 接当前单一 `0060` head；隔离 PostgreSQL 16 已完成带历史合成数据的 upgrade/downgrade/re-upgrade；生产未执行且索引重建锁风险需单独审批 |
-| Validation | Backend compileall/Ruff/Alembic PASS；WFS + Integration Sync `658 passed, 23 skipped`，full pytest `1775 passed, 127 skipped`；12 changed executable modules focused mypy PASS；isolated PostgreSQL auto-case `9 passed`；frontend Node 24 lint、`60 files / 281 tests`、typecheck/build PASS；real-provider/production validation not executed |
+| Validation | Backend compileall/Ruff/Alembic PASS；WFS + Integration Sync `658 passed, 23 skipped`，full pytest `1775 passed, 127 skipped`；final focused recheck `159 passed, 9 skipped`；12 changed executable modules focused mypy PASS；isolated PostgreSQL auto-case `9 passed`；frontend Node 24 lint、`60 files / 281 tests`、typecheck/build PASS；GitHub latest-HEAD checks all success；real-provider/production validation not executed |
 | Documentation | `docs/api/wfs-fee-anomaly-auto-detection.md`; `docs/sop/warehouse-wfs-fee-anomaly-auto-detection.md` |
 | PRP / Decision | `PRPs/wfs-fee-anomaly-auto-detection-v1.md`; `docs/data-sources/decisions/wfs-fee-anomaly-auto-detection-decision.md` |
 | PR | `#257`；merge commit TBD |

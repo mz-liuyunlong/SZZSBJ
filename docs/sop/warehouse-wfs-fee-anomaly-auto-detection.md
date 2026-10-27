@@ -69,3 +69,39 @@
 ## 10. 版本记录
 
 - 2026-10-26：PR #257 Owner-review hardening：店铺级 collection、销量覆盖水位、真实检测时效、append-only detection evidence、分页拆分和批量读取；当前代码待评审，未部署。
+
+## 11. Owner 标准费用确认清单
+
+解除单个范围的标准费阻断前，Owner 必须留存以下字段；缺一项继续 `REVIEW_REQUIRED`：
+
+| 字段 | 必须确认的内容 |
+|---|---|
+| `rule_key` / `rule_version` | 规则身份与不可变版本 |
+| `source_account_ref` | 适用来源账号 |
+| `store_scope` / `item_scope` | 是账号全量还是明确店铺、Item、MSKU；当前模型不支持的窄范围不得口头放宽 |
+| `effective_from` / `effective_to` | 生效窗口及历史订单处理方式 |
+| `standard_fee_source` | 官方费率来源、Product Management 公式版本 |
+| measurement evidence | 重量、包装尺寸的来源、观测时间与是否可用于历史窗口 |
+| `approved_by` / `approved_at` | Owner 身份与批准时间 |
+
+当前已知 MSKU 的 $6.55 是当前默认公式结果，`ACTIVE_RULE_COUNT=0`，不是已批准业务规则。本 SOP 不授权创建或修改规则记录。
+
+## 12. 生产启用顺序
+
+1. **代码合并**：仅在正式 Review 与 checks 通过后；三个 WFS 开关保持关闭。
+2. **数据库准备**：验证可恢复备份、锁风险和低峰窗口后，单独授权 0061；不同时启用采集。
+3. **单店 Provider 验证**：一个账号、一个领星多平台店铺 `store_id`、一个 MSKU、最多 3 页、零数据库/RAW/案件写入。确认 WFS 专用字段与非 WFS 排除规则。
+4. **单店 collection/detection dry-run**：仅在 Provider scope、标准规则和 0061 均批准后；检查 store/window 守恒、销量覆盖、时效和身份，不建案。
+5. **多店 dry-run**：逐店输出成功/失败/候选/复核/跳过，不允许部分成功掩盖失败。
+6. **受控自动建案**：限定账号、店铺和批次；验证 insert-only、幂等及人工状态保护后再扩大。
+7. **Celery 调度**：最后单独批准；核对 T-2/60 天、洛杉矶日期/DST、租约、重试、监控和急停。
+
+任一阶段发现分页不完整、未知费用类型、默认未确认标准、销量覆盖不足、证据过期、身份冲突、锁等待、备份不可恢复或旧案件被改变，立即停止并保持/恢复对应开关为 `false`。数据库回滚仅在 0061 新表为空时可用；有证据数据后必须保留数据并走前向修复。
+
+## 13. 当前验收结论
+
+- 代码：最新 HEAD `7780322b66e68e41aba952f3b723c63da590de73` 独立复审通过，GitHub 当前 HEAD checks 全绿；仍待正式 Reviewer/Owner approval。
+- Provider：未真实调用；合同仅离线/Mock 验证，WFS scope 未确认。
+- 标准费：默认公式可计算，但 Owner 规则/范围/历史适用未批准。
+- Migration：隔离 PostgreSQL 16 往返通过；生产备份、锁预检和执行授权未完成。
+- 生产：未迁移、未采集、未建案、未启用调度、未部署。

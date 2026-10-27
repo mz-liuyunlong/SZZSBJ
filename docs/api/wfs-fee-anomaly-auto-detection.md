@@ -107,3 +107,20 @@ Lingxing WFS settlement（受控、默认关闭）
 - `product_management_default_unconfirmed` / `fee_scope_status=unverified`：仅人工复核，禁止自动立案。
 
 错误响应与日志只使用安全错误码，不包含 RAW payload、认证参数或商品字段值。
+
+## Provider 合同与上线前状态（2026-10-27）
+
+- 官方离线契约：`LX-DB6D62E9EE37`，`POST /basicOpen/multiplatform/profit/report/order`，请求体为 JSON。
+- `sids` 是“查询多平台店铺信息”的领星 `store_id` 字符串（多值时逗号分隔），不是 Walmart 外部店铺号或店名。运行时必须从已授权账号下的 Walmart 店铺维度精确取得并核对。
+- 当前 client 固定 `platformCodeS=["10008"]`、`transactionTypeS=[0]`、`currencyCode="USD"`、`searchDateType="2"`，`offset/length` 由受控分页器生成，`length <= 20`。
+- 官方摘要把 `platformLogisticsAmount` 定义为通用“平台物流费”，并单列 `wfsShipmentFee` 等 WFS 字段。尚无证据证明两者在 Walmart 销售行上恒等，也未完成 Seller Fulfilled/调整/退款排除验证。
+- 因此 `API_CONTRACT_VALIDATED=PARTIAL`、`PAGINATION_VERIFIED=MOCK_ONLY`、`REAL_API_TEST_EXECUTED=NO`、`WFS_SCOPE_STATUS=UNVERIFIED`。不得开启 `WFS_SETTLEMENT_SCOPE_VERIFIED`。
+
+后续最小真实验证必须另获授权，并硬限制为一个账号、一个经核对的领星多平台店铺 `store_id`、MSKU `YC00115-1A`、2026-09-01 至 2026-09-30、每页 20、最多 3 页。验证期间不得写数据库、RAW 或案件；只允许输出脱敏字段/类型/计数。`total > 60`、店铺或 MSKU 不一致、分页变化、字段语义不明、出现非销售交易时立即停止。
+
+## 标准费边界
+
+- 已知 $6.55 是当前 Product Management 公式结果：当前 SKU product-info 中 1000g、36.5×20.5×17cm → 6lb 计费重 → `$4.15 + $0.40 × 6`。
+- `ACTIVE_RULE_COUNT=0` 时来源为 `product_management_default_unconfirmed`，只作人工比较，不具备自动立案资格。
+- 当前规则按来源账号及有效期生效，没有 SKU/Item/store 级 WFS override；产品重量和尺寸也是当前值，不是订单历史快照。Owner 未确认目标窗口的历史适用策略前，不能把 $6.55 当作历史权威标准。
+- 规则变化不会覆盖 append-only detection evidence；每条证据保存当次 `standard_fee_source`、`rule_version`、业务日期和检测时间。

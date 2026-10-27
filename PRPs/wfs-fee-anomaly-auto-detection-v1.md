@@ -71,6 +71,55 @@
 - 合成纯计算基线（本机、非生产）：1 店/100 SKU 为 collection `1.88 ms`、detection `15.61 ms`、峰值 `0.31 MiB`；9 店/1,000 SKU 为 `18.56 ms`、`164.09 ms`、`2.90 MiB`；20 店/10,000 SKU 为 `241.77 ms`、`1804.87 ms`、`28.98 MiB`。
 - 上述是合成 parser/detection 资源基线，不是数据库或真实 provider SLA；生产容量仍需受控观测。
 
+## Final independent acceptance record（2026-10-27）
+
+- Reviewed HEAD: `7780322b66e68e41aba952f3b723c63da590de73`；PR #257 为 Open、非 Draft、mergeable，当前 HEAD 的 12 个 GitHub checks 全部成功，但尚无正式 Reviewer approval。
+- 默认门禁与实际执行路径一致：`WFS_AUTO_DETECT_ENABLED=false`、`WFS_AUTO_CASE_CREATE_ENABLED=false`、`WFS_SETTLEMENT_SCOPE_VERIFIED=false`。正式出站还同时要求 interface/config/outbound/real-call 门禁；案件写入还要求 verified collection、唯一身份、完整销量覆盖、已确认标准费、未过期证据和 `verified_wfs`。
+- Dry-run preview 不请求 provider、不持久化 detection evidence、不创建或更新案件。正式案件写入仍为 insert-only，冲突时保留既有人工状态。
+- Code merge readiness：`READY_FOR_OWNER_REVIEW`。真实 Provider、标准费用、Migration、生产采集、自动检测、自动建案和 Celery schedule 均不是代码合并的隐式授权。
+
+### Provider contract and controlled validation plan
+
+- 仓库官方离线契约 `LX-DB6D62E9EE37` 规定 `sids` 是字符串，取自“查询多平台店铺信息”的 `store_id`；不得把 Walmart 外部店铺号、店名或 `dim_lingxing_stores.sid` 猜作该值。
+- `platformLogisticsAmount` 的官方摘要仅称“平台物流费”；同一响应契约另列 `wfsShipmentFee`、`platformWfsStorageAmount` 等 WFS 专用字段。因此非零 `platformLogisticsAmount` 本身不能解除 WFS scope 门禁。
+- 后续受控验证限定：`primary`、一个已核对的领星多平台店铺 `store_id`、MSKU `YC00115-1A`、2026-09-01 至 2026-09-30、`length=20`、最多 3 个请求页。若 `total > 60`、店铺/MSKU 不一致、分页不稳定、字段语义不明或出现非销售交易，立即停止。
+- 验证只允许记录字段存在性、类型、分页计数、脱敏聚合和错误码；不得输出凭据、完整响应、订单号或商品明细。Database writes、RAW writes、case writes 均为 0。
+- 当前状态：`REAL_API_TEST_EXECUTED=NO`，`WFS_SCOPE_STATUS=UNVERIFIED`。
+
+### Product Management standard fee decision
+
+- 已知 $6.55 来自当前 Product Management 代码公式：1000g 与 36.5×20.5×17cm 形成 6lb 向上取整计费重，`$4.15 + $0.40 × 6 = $6.55`。重量与包装尺寸来自当前 Lingxing SKU product-info projection，不是结算订单历史快照。
+- `ACTIVE_RULE_COUNT=0` 时使用 `sku-pricing-defaults-v1`，来源为 `product_management_default_unconfirmed`，必须继续阻断自动建案。
+- 当前有效 `ProductPricingRuleVersion` 按 `source_account_ref + effective period` 读取；没有 SKU/Item/store 级 WFS override。标准读取器明确标记 `historical_applicability=current_only`，因此 Owner 还必须决定当前尺寸/公式能否应用于目标历史窗口；不能把当前标准直接写成历史事实或确认索赔额。
+- Owner 决策记录至少包含：`rule_key`、`rule_version`、`source_account_ref`、`store_scope`、`item_scope`、`effective_from`、`effective_to`、`standard_fee_source`、尺寸/重量证据版本、历史适用策略、`approved_by`、`approved_at`。本 PR 不创建该记录。
+
+### Migration 0061 production plan
+
+| Stage | Required action | Stop condition / recovery |
+|---|---|---|
+| PRECHECK | 核对生产当前 revision 为 `0060`、0061 单一 head、目标表/索引存在性、表大小、活动长事务、锁等待、重复索引键与磁盘余量 | revision/schema 不符、重复冲突、长事务或容量不足即停止 |
+| BACKUP_VERIFICATION | 使用受控机制生成一致性备份，校验文件并在隔离 PostgreSQL 完成恢复演练 | 无可恢复证据即禁止迁移 |
+| LOCK_RISK_ASSESSMENT | `DROP/CREATE INDEX uq_gov_sync_work_offset`、普通 `CREATE INDEX`、外键校验和多个 `ALTER TABLE` 都可能持锁或扫描；选择低峰窗口并设置受控 lock/statement timeout | 无法取得锁或预计超出窗口时让事务失败并停止，不手工拆改 schema |
+| MIGRATION_EXECUTION_PLAN | 单独授权后从已合并 main 的固定 release 执行一次 `alembic upgrade 20261026_0061_wfs_fee_detection_evidence`；所有功能开关保持关闭 | 非预期 SQL、锁等待、错误或 revision 不一致即停止 |
+| POST_MIGRATION_VALIDATION | 核对 revision、约束、索引、两张新表为空、服务 import/health；不采集、不建案 | 任一结构或健康检查失败则停止发布 |
+| ROLLBACK_PLAN | 在新 collection/evidence 仍为空时可使用已验证 downgrade；一旦新表有数据，downgrade 会 fail closed，只能保留 schema、关闭功能并走单独的数据保全/前向修复方案 | 不得删除证据或强制降级 |
+
+当前 `BACKUP_READY=NO`，`ROLLBACK_READY=CONDITIONAL`，生产 Migration 保持 `PENDING OWNER APPROVAL`。
+
+### Production gates
+
+| Gate | Status | Evidence required before change |
+|---|---|---|
+| CODE_MERGE_APPROVAL | `PENDING` | Owner/Reviewer approval；本 PR 不自动合并 |
+| PROVIDER_READ_APPROVAL | `PENDING` | 单店、单 SKU、最多 3 页、零写入的独立授权 |
+| WFS_SCOPE_APPROVAL | `BLOCKED` | 官方/真实响应证明确切 WFS 字段、交易类型及非 WFS 排除规则 |
+| STANDARD_FEE_APPROVAL | `BLOCKED` | Owner 完成上述规则、范围、有效期和历史适用决策 |
+| MIGRATION_APPROVAL | `BLOCKED` | 可恢复备份、锁风险预检和执行窗口 |
+| PRODUCTION_COLLECTION_APPROVAL | `BLOCKED` | Provider 与 Migration 门禁均通过；首次仍限单店单 SKU |
+| AUTO_DETECTION_APPROVAL | `BLOCKED` | collection、标准、销量、时效、身份及 WFS scope 全部验证 |
+| AUTO_CASE_APPROVAL | `BLOCKED` | dry-run 对账通过后单独批准，限定账号/店铺/批次 |
+| CELERY_SCHEDULE_APPROVAL | `BLOCKED` | 手工阶段稳定、监控/急停/重试/租约验收后单独批准 |
+
 ## Explicitly not implemented in production
 
 - 未调用真实 Lingxing、未请求真实 Token、未连接或修改生产数据库。
