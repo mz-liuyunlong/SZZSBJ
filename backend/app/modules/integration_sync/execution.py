@@ -392,6 +392,14 @@ class SyncRunExecutionService:
                     if active_run is None or active_run.status != "running":
                         return
                     mart_failures.append(error)
+                    self.repository.record_business_anomaly(
+                        run_id=active_run.id,
+                        account=active_run.source_account_ref,
+                        interface_key=active_run.interface_key,
+                        business_date=error.business_date or business_date,
+                        error_code=error.code,
+                        details={"phase": "financial_validation", "financial_status": "pending"},
+                    )
                     self._event(
                         active_run.id,
                         "running",
@@ -424,26 +432,23 @@ class SyncRunExecutionService:
         if completed is None:
             return
         from_status = completed.status
-        completed.status = "failed" if mart_failures else "succeeded"
+        # A financial MART invariant must not undo completed source ingestion.
+        # Its exception is tracked independently and invalid MART writes stay rolled back.
+        completed.status = "succeeded"
         completed.finished_at = utc_now()
-        completed.work_items_succeeded = len(days) - len(mart_failures)
-        completed.work_items_failed = len(mart_failures)
+        completed.work_items_succeeded = len(days)
+        completed.work_items_failed = 0
         completed.records_seen = records_seen
         completed.records_written = records_written
-        completed.error_code = mart_failures[0].code if mart_failures else None
-        completed.error_message = (
-            "退款事实已保存，但历史利润校验失败"
-            if mart_failures and run.interface_key == "walmartReturnOrderList"
-            else "同步业务日校验失败"
-            if mart_failures
-            else None
-        )
+        completed.error_code = None
+        completed.error_message = None
         self._event(
             completed.id,
             from_status,
             completed.status,
-            mart_failures[0].code if mart_failures else "SYNC_RUN_SUCCEEDED",
-            safe_details=({"failed_business_dates": len(mart_failures)} if mart_failures else None),
+            "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
+            if mart_failures else "SYNC_RUN_SUCCEEDED",
+            safe_details=({"pending_financial_dates": len(mart_failures)} if mart_failures else None),
         )
         self.session.commit()
 
@@ -590,6 +595,10 @@ class SyncRunExecutionService:
         else:
             raise ValueError("unsupported Data Pages interface")
 
+        # Commit provider facts before financial MART validation. Financial failures
+        # then roll back only the MART transaction, never already-captured facts.
+        # An incomplete provider request still rolls back via the outer exception path.
+        self.session.commit()
         heartbeat()
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()
