@@ -38,8 +38,8 @@ def wfs_registry(*, approved_keys: frozenset[str] = frozenset()) -> ContractRegi
             fields=(
                 field("limit", "integer"),
                 field("offset", "integer"),
-                field("fromCreateDate"),
-                field("toCreateDate"),
+                field("fromCreatedDate", required=True),
+                field("toCreatedDate", required=True),
                 field("shipmentId"),
                 field("inboundOrderId"),
                 field("status"),
@@ -65,8 +65,8 @@ def wfs_registry(*, approved_keys: frozenset[str] = frozenset()) -> ContractRegi
             path="/v3/fulfillment/inventory-log",
             fields=(
                 field("gtin", required=True),
-                field("startDate"),
-                field("endDate"),
+                field("fromDate", required=True),
+                field("toDate", required=True),
                 field("shipmentId"),
                 field("transactionType"),
                 field("transactionLocation"),
