@@ -46,11 +46,14 @@ def test_refund_source_commit_survives_financial_rollback() -> None:
     engine = create_engine(_dedicated_test_url(), hide_parameters=True)
     try:
         with engine.connect() as connection:
-            assert connection.execute(
-                text("select current_database(), current_user")
-            ).one() == ("wfs_auto_case_ci", "wfs_auto_case_ci")
+            assert connection.execute(text("select current_database(), current_user")).one() == (
+                "wfs_auto_case_ci",
+                "wfs_auto_case_ci",
+            )
             # TEMP tables are session-local and cannot alter real financial tables.
-            connection.execute(text("create temporary table sync_source_capture (qty int not null)"))
+            connection.execute(
+                text("create temporary table sync_source_capture (qty int not null)")
+            )
             connection.execute(
                 text("create temporary table sync_validated_daily (amount numeric not null)")
             )
