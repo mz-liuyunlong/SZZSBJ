@@ -463,20 +463,27 @@ def list_sync_anomalies(
         predicate.append(IntegrationSyncAnomaly.business_date == business_date)
     if keyword and keyword.strip():
         pattern = "%" + keyword.strip().replace("%", r"\\%").replace("_", r"\\_") + "%"
-        predicate.append(or_(
-            IntegrationSyncAnomaly.local_sku.ilike(pattern, escape="\\"),
-            IntegrationSyncAnomaly.msku.ilike(pattern, escape="\\"),
-            IntegrationSyncAnomaly.item_id.ilike(pattern, escape="\\"),
-            IntegrationSyncAnomaly.platform_order_no.ilike(pattern, escape="\\"),
-            IntegrationSyncAnomaly.campaign_name.ilike(pattern, escape="\\"),
-            IntegrationSyncAnomaly.store_id.ilike(pattern, escape="\\"),
-            IntegrationSyncAnomaly.error_code.ilike(pattern, escape="\\"),
-        ))
-    total = session.scalar(select(func.count()).select_from(IntegrationSyncAnomaly).where(*predicate)) or 0
+        predicate.append(
+            or_(
+                IntegrationSyncAnomaly.local_sku.ilike(pattern, escape="\\"),
+                IntegrationSyncAnomaly.msku.ilike(pattern, escape="\\"),
+                IntegrationSyncAnomaly.item_id.ilike(pattern, escape="\\"),
+                IntegrationSyncAnomaly.platform_order_no.ilike(pattern, escape="\\"),
+                IntegrationSyncAnomaly.campaign_name.ilike(pattern, escape="\\"),
+                IntegrationSyncAnomaly.store_id.ilike(pattern, escape="\\"),
+                IntegrationSyncAnomaly.error_code.ilike(pattern, escape="\\"),
+            )
+        )
+    total = (
+        session.scalar(select(func.count()).select_from(IntegrationSyncAnomaly).where(*predicate))
+        or 0
+    )
     rows = session.scalars(
-        select(IntegrationSyncAnomaly).where(*predicate)
+        select(IntegrationSyncAnomaly)
+        .where(*predicate)
         .order_by(IntegrationSyncAnomaly.last_seen_at.desc(), IntegrationSyncAnomaly.id.desc())
-        .offset((page - 1) * page_size).limit(page_size)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     ).all()
     return success_response(
         request,
@@ -502,8 +509,12 @@ def update_sync_anomaly(
     from app.core.api import ApiError
 
     if payload.status not in {
-        "pending", "investigating", "fix_pending", "review_pending",
-        "resolved", "dismissed",
+        "pending",
+        "investigating",
+        "fix_pending",
+        "review_pending",
+        "resolved",
+        "dismissed",
     }:
         raise ApiError(code="SYNC_ANOMALY_STATUS_INVALID", status_code=422)
     row = session.scalar(
@@ -511,19 +522,22 @@ def update_sync_anomaly(
         .where(
             IntegrationSyncAnomaly.id == anomaly_id,
             IntegrationSyncAnomaly.source_account_ref.in_(account_refs),
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     if row is None:
         raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
     previous_status = row.status
-    session.add(IntegrationSyncAnomalyAudit(
-        id=uuid4(),
-        anomaly_id=row.id,
-        actor_ref=principal.user_id,
-        from_status=previous_status,
-        to_status=payload.status,
-        note=payload.note,
-    ))
+    session.add(
+        IntegrationSyncAnomalyAudit(
+            id=uuid4(),
+            anomaly_id=row.id,
+            actor_ref=principal.user_id,
+            from_status=previous_status,
+            to_status=payload.status,
+            note=payload.note,
+        )
+    )
     row.status = payload.status
     row.owner_note = payload.note
     row.updated_by = principal.user_id

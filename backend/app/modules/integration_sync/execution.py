@@ -412,9 +412,7 @@ class SyncRunExecutionService:
                     active_run = self.repository.get_run_for_update(run.id)
                     if active_run is None or active_run.status != "running":
                         return
-                    source_committed = bool(
-                        getattr(runner, "_source_fact_commit_completed", False)
-                    )
+                    source_committed = bool(getattr(runner, "_source_fact_commit_completed", False))
                     if source_committed:
                         mart_failures.append(error)
                     else:
@@ -426,7 +424,9 @@ class SyncRunExecutionService:
                         business_date=error.business_date or business_date,
                         error_code=error.code,
                         details={
-                            "phase": "financial_validation" if source_committed else "source_processing",
+                            "phase": "financial_validation"
+                            if source_committed
+                            else "source_processing",
                             "financial_status": "pending" if source_committed else "not_ready",
                         },
                     )
@@ -479,20 +479,24 @@ class SyncRunExecutionService:
         completed.records_written = records_written
         completed.error_code = capture_failures[0].code if capture_failures else None
         completed.error_message = (
-            "source processing failed; capture not confirmed"
-            if capture_failures else None
+            "source processing failed; capture not confirmed" if capture_failures else None
         )
         self._event(
             completed.id,
             from_status,
             completed.status,
-            capture_failures[0].code if capture_failures else
-            "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
-            if mart_failures else "SYNC_RUN_SUCCEEDED",
+            capture_failures[0].code
+            if capture_failures
+            else "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
+            if mart_failures
+            else "SYNC_RUN_SUCCEEDED",
             safe_details=(
-                {"failed_capture_dates": len(capture_failures),
-                 "pending_financial_dates": len(mart_failures)}
-                if capture_failures or mart_failures else None
+                {
+                    "failed_capture_dates": len(capture_failures),
+                    "pending_financial_dates": len(mart_failures),
+                }
+                if capture_failures or mart_failures
+                else None
             ),
         )
         self.session.commit()

@@ -3,6 +3,7 @@
 This query previously emitted SELECT DISTINCT ... ORDER BY two separately bound
 JSON keys, rejected by PostgreSQL even when both keys are "business_date".
 """
+
 from datetime import date
 from unittest.mock import Mock
 from uuid import uuid4
@@ -49,9 +50,7 @@ def test_refund_retry_dates_are_empty_when_capture_events_absent() -> None:
     session = Mock()
     session.scalars.return_value.all.return_value = []
 
-    result = IntegrationSyncRepository(session).refund_capture_business_dates(
-        uuid4(), "account-a"
-    )
+    result = IntegrationSyncRepository(session).refund_capture_business_dates(uuid4(), "account-a")
 
     assert result == ()
 
@@ -60,9 +59,7 @@ def test_refund_retry_uses_requested_account_scope() -> None:
     session = Mock()
     session.scalars.return_value.all.return_value = ["2026-10-25"]
 
-    IntegrationSyncRepository(session).refund_capture_business_dates(
-        uuid4(), "account-b"
-    )
+    IntegrationSyncRepository(session).refund_capture_business_dates(uuid4(), "account-b")
 
     statement = session.scalars.call_args.args[0]
     compiled = statement.compile(dialect=postgresql.dialect())

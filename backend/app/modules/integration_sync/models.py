@@ -559,12 +559,17 @@ class IntegrationSyncAnomaly(Base):
     __tablename__ = "gov_integration_sync_anomalies"
     __table_args__ = (
         UniqueConstraint(
-            "source_account_ref", "interface_key", "business_date", "error_code",
-            "subject_key", name="uq_gov_sync_anomaly_identity",
+            "source_account_ref",
+            "interface_key",
+            "business_date",
+            "error_code",
+            "subject_key",
+            name="uq_gov_sync_anomaly_identity",
         ),
         CheckConstraint(
             "status IN ('pending','investigating','fix_pending','review_pending',"
-            "'resolved','dismissed')", name="ck_gov_sync_anomaly_status",
+            "'resolved','dismissed')",
+            name="ck_gov_sync_anomaly_status",
         ),
         Index("ix_gov_sync_anomaly_scope_status", "source_account_ref", "status", "last_seen_at"),
     )
@@ -602,9 +607,7 @@ class IntegrationSyncAnomalyAudit(Base):
     """Append-only operator review trail for a synchronization anomaly."""
 
     __tablename__ = "gov_integration_sync_anomaly_audit"
-    __table_args__ = (
-        Index("ix_gov_sync_anomaly_audit_history", "anomaly_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_gov_sync_anomaly_audit_history", "anomaly_id", "created_at"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     anomaly_id: Mapped[UUID] = mapped_column(

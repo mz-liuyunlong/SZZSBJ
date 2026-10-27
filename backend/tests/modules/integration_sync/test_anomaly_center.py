@@ -1,4 +1,5 @@
 """Anomaly center scopes, identity and evidence tests (synthetic, no production I/O)."""
+
 from datetime import date
 from unittest.mock import MagicMock
 from uuid import uuid4

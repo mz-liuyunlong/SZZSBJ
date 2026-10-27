@@ -21,7 +21,12 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("source_account_ref", sa.String(128), nullable=False),
         sa.Column("interface_key", sa.String(128), nullable=False),
-        sa.Column("run_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("gov_integration_sync_runs.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column(
+            "run_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("gov_integration_sync_runs.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
         sa.Column("business_date", sa.Date(), nullable=False),
         sa.Column("error_code", sa.String(128), nullable=False),
         sa.Column("subject_key", sa.String(64), nullable=False),
@@ -32,32 +37,74 @@ def upgrade() -> None:
         sa.Column("platform_order_no", sa.Text()),
         sa.Column("campaign_name", sa.Text()),
         sa.Column("status", sa.String(32), nullable=False, server_default="pending"),
-        sa.Column("details", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "details", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")
+        ),
         sa.Column("occurrence_count", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("owner_note", sa.Text()),
         sa.Column("updated_by", sa.String(128)),
-        sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "first_seen_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "last_seen_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("resolved_at", sa.DateTime(timezone=True)),
-        sa.UniqueConstraint("source_account_ref", "interface_key", "business_date", "error_code", "subject_key", name="uq_gov_sync_anomaly_identity"),
-        sa.CheckConstraint("status IN ('pending','investigating','fix_pending','review_pending','resolved','dismissed')", name="ck_gov_sync_anomaly_status"),
+        sa.UniqueConstraint(
+            "source_account_ref",
+            "interface_key",
+            "business_date",
+            "error_code",
+            "subject_key",
+            name="uq_gov_sync_anomaly_identity",
+        ),
+        sa.CheckConstraint(
+            "status IN ('pending','investigating','fix_pending','review_pending','resolved','dismissed')",
+            name="ck_gov_sync_anomaly_status",
+        ),
     )
-    op.create_index("ix_gov_sync_anomaly_scope_status", "gov_integration_sync_anomalies", ["source_account_ref", "status", "last_seen_at"])
+    op.create_index(
+        "ix_gov_sync_anomaly_scope_status",
+        "gov_integration_sync_anomalies",
+        ["source_account_ref", "status", "last_seen_at"],
+    )
     op.create_table(
         "gov_integration_sync_anomaly_audit",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column("anomaly_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("gov_integration_sync_anomalies.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column(
+            "anomaly_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("gov_integration_sync_anomalies.id", ondelete="RESTRICT"),
+            nullable=False,
+        ),
         sa.Column("actor_ref", sa.String(128), nullable=False),
         sa.Column("from_status", sa.String(32), nullable=False),
         sa.Column("to_status", sa.String(32), nullable=False),
         sa.Column("note", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
     )
-    op.create_index("ix_gov_sync_anomaly_audit_history", "gov_integration_sync_anomaly_audit", ["anomaly_id", "created_at"])
+    op.create_index(
+        "ix_gov_sync_anomaly_audit_history",
+        "gov_integration_sync_anomaly_audit",
+        ["anomaly_id", "created_at"],
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_gov_sync_anomaly_audit_history", table_name="gov_integration_sync_anomaly_audit")
+    op.drop_index(
+        "ix_gov_sync_anomaly_audit_history", table_name="gov_integration_sync_anomaly_audit"
+    )
     op.drop_table("gov_integration_sync_anomaly_audit")
     op.drop_index("ix_gov_sync_anomaly_scope_status", table_name="gov_integration_sync_anomalies")
     op.drop_table("gov_integration_sync_anomalies")
