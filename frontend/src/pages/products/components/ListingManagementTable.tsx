@@ -58,7 +58,7 @@ const minColumnWidths: Record<string, number> = {
   gtin: 160,
   productGrade: 120,
   archiveReason: 180,
-  actions: 148,
+  actions: 190,
 };
 
 const statusColorMap: Record<string, string> = {
@@ -87,6 +87,7 @@ interface ListingManagementTableProps {
   onSelectionChange: (keys: Key[]) => void;
   onOpenDetail: (row: ListingManagementRow) => void;
   onOpenGptAnalysis?: (row: ListingManagementRow) => void;
+  onOpenEvaluation?: (row: ListingManagementRow) => void;
   onArchiveListing?: (row: ListingManagementRow) => void;
   onRestoreListing?: (row: ListingManagementRow) => void;
   onBatchSetTags: () => void;
@@ -111,6 +112,7 @@ function ListingManagementTable({
   onSelectionChange,
   onOpenDetail,
   onOpenGptAnalysis,
+  onOpenEvaluation,
   onArchiveListing,
   onRestoreListing,
   onBatchSetTags,
@@ -518,6 +520,7 @@ function ListingManagementTable({
       onHeaderCell: headerCell,
       render: (_, row) => (
         <Space size={2}>
+          <Button type="link" onClick={() => onOpenEvaluation?.(row)}>试算</Button>
           <Tooltip title="打开 Listing 详情">
             <Button type="link" onClick={() => onOpenDetail(row)}>详情</Button>
           </Tooltip>

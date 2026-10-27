@@ -27,6 +27,7 @@ import ListingManagementSummaryCards, {
 } from "@/pages/products/components/ListingManagementSummaryCards";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingRuleConfigDrawer from "@/pages/products/components/ListingRuleConfigDrawer";
+import ListingEvaluationPreviewModal from "@/pages/products/components/ListingEvaluationPreviewModal";
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
@@ -228,6 +229,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [ruleConfigOpen, setRuleConfigOpen] = useState(false);
+  const [evaluationListing, setEvaluationListing] = useState<ListingManagementRow | null>(null);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
   const pageStateKey = "listing-management";
   const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
@@ -855,6 +857,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     <PageShell page={page}>
       {messageContextHolder}
       <ListingRuleConfigDrawer open={ruleConfigOpen} onClose={() => setRuleConfigOpen(false)} />
+      <ListingEvaluationPreviewModal listing={evaluationListing} onClose={() => setEvaluationListing(null)} />
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
@@ -922,6 +925,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onSelectionChange={setSelectedRowKeys}
               onOpenDetail={openListingAnalysis}
               onOpenGptAnalysis={openGptAnalysisModal}
+              onOpenEvaluation={setEvaluationListing}
               onArchiveListing={(row) => void handleArchiveListing(row)}
               onRestoreListing={(row) => void handleRestoreListing(row)}
               onBatchArchive={handleBatchArchiveListings}
