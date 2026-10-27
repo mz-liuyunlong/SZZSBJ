@@ -97,12 +97,6 @@ export default function BusinessConfigServiceEditor({
     finally{setSkillBusy(false);}
   };
   const [messageApi, context] = message.useMessage();
-  useEffect(()=>{
-    if(!open){setPendingSkillTexts({});setSkillText("");setSkillList([]);}
-  },[open]);
-  useEffect(()=>{
-    setSkillText(pendingSkillTexts[skillScene]??"");
-  },[skillScene,pendingSkillTexts]);
   const choice = Form.useWatch("choice", form);
   const draftCategory = Form.useWatch("draft_category", form);
   const metering = Form.useWatch("metering", form);
@@ -138,6 +132,7 @@ export default function BusinessConfigServiceEditor({
   }, [open, connector, draft, preferredCategory, form]);
 
   const close = () => {
+    setPendingSkillTexts({});setSkillText("");setSkillList([]);setSkillScene("keyword_launch");
     form.setFieldsValue({ credential: "", signing_secret: "", endpoint: "" });
     onClose();
   };
@@ -310,7 +305,7 @@ export default function BusinessConfigServiceEditor({
           {<div style={{paddingTop:12,borderTop:"1px solid #eef1f5"}}>
             <strong>AI Skills · 版本管理</strong>
             <div style={{fontSize:12,color:"#98a2b3",margin:"8px 0"}}>{connector?.id ? "已连接服务：草稿支持保存及发布；正在执行的任务保持其已选版本。" : "首次创建：可编辑并暂存 Skill，保存 OpenAI 服务后自动尝试同步；未保存时不会发布或调用 AI。"}</div>
-            <Select value={skillScene} onChange={next=>{setPendingSkillTexts(old=>({...old,[skillScene]:skillText}));setSkillScene(next)}} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
+            <Select value={skillScene} onChange={next=>{setPendingSkillTexts(old=>({...old,[skillScene]:skillText}));setSkillText(pendingSkillTexts[next]??"");setSkillScene(next)}} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
             <Input.TextArea rows={4} value={skillText} onChange={ev=>{setSkillText(ev.target.value);setPendingSkillTexts(old=>({...old,[skillScene]:ev.target.value}))}}
               placeholder="填写对应场景的 AI 工作说明；商品事实与关键词硬规则仍由后端校验" maxLength={12000}/>
             <Button size="small" style={{marginTop:8}} disabled={!skillText.trim()} loading={skillBusy}
