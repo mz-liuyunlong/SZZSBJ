@@ -176,6 +176,7 @@ def test_synthetic_collection_and_detection_scale(
             unit_fee=Decimal("6.55"),
             source="product_management_rule",
             rule_version="synthetic-v1",
+            historical_applicability="historical_confirmed",
         )
         for item in actual
     ]

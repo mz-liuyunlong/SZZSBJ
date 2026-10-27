@@ -175,7 +175,10 @@ def detect_wfs_anomalies(
         future_evidence = evidence_age_days is not None and evidence_age_days < 0
         stale = evidence_age_days is None or evidence_age_days > max_stale_days
         sales_complete = sales is not None and sales.coverage_status == "complete"
-        standard_confirmed = matched_standard.source != "product_management_default_unconfirmed"
+        standard_confirmed = (
+            matched_standard.source != "product_management_default_unconfirmed"
+            and matched_standard.historical_applicability == "historical_confirmed"
+        )
         evidence_status = (
             "STALE"
             if stale

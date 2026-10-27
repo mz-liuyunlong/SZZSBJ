@@ -215,7 +215,9 @@ class LingxingWfsSettlementSyncHandler:
                     self.session.commit()
                     failed += 1
 
-        run.status = "succeeded" if completed else "failed"
+        # A partially collected run is not complete evidence and must not be
+        # persisted as successful even when another store finished normally.
+        run.status = "succeeded" if completed and not failed else "failed"
         run.finished_at = utc_now()
         if failed and completed:
             run.error_code = "SYNC_WFS_STORE_PARTIAL"

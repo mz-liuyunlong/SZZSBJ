@@ -310,7 +310,7 @@ def test_partial_store_failure_marks_run_failed_and_never_detects_failed_store(
     assert result.status == "completed_with_warnings"
     assert result.stores_completed == 1
     assert result.stores_failed == 1
-    assert selected_run.status == "succeeded"
+    assert selected_run.status == "failed"
     assert selected_run.error_code == "SYNC_WFS_STORE_PARTIAL"
     assert detect.call_count == 1
     assert detect.call_args.kwargs["store_id"] == "1"

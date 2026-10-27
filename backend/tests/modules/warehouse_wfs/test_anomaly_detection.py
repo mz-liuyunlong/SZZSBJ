@@ -32,7 +32,12 @@ def actual(
     )
 
 
-def standard(store="store-a", fee="4.65"):
+def standard(
+    store="store-a",
+    fee="4.65",
+    *,
+    historical_applicability="historical_confirmed",
+):
     return WfsStandardFee(
         source_account_ref="account-a",
         store_id=store,
@@ -40,6 +45,7 @@ def standard(store="store-a", fee="4.65"):
         unit_fee=Decimal(fee),
         source="product_management",
         rule_version="test-v1",
+        historical_applicability=historical_applicability,
     )
 
 
@@ -193,6 +199,25 @@ def test_unconfirmed_default_standard_requires_review() -> None:
 
     assert result.candidates[0].evidence_status == "REVIEW_REQUIRED"
     assert result.candidates[0].case_eligible is False
+
+
+def test_current_only_standard_keeps_theoretical_amount_but_blocks_case() -> None:
+    result = detect_wfs_anomalies(
+        [
+            actual(
+                latest_settlement_date=date(2026, 10, 17),
+                fee_scope_status="verified_wfs",
+            )
+        ],
+        [standard(historical_applicability="current_only")],
+        {("account-a", "store-a", "SKU-TEST"): complete_sales()},
+        as_of=date(2026, 10, 17),
+    )
+
+    candidate = result.candidates[0]
+    assert candidate.evidence_status == "REVIEW_REQUIRED"
+    assert candidate.case_eligible is False
+    assert candidate.theoretical_overcharge == Decimal("5.30")
 
 
 def complete_sales() -> WfsSalesEvidence:
