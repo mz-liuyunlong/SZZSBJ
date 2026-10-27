@@ -69,6 +69,7 @@
 ## 10. 版本记录
 
 - 2026-10-26：PR #257 Owner-review hardening：店铺级 collection、销量覆盖水位、真实检测时效、append-only detection evidence、分页拆分和批量读取；当前代码待评审，未部署。
+- 2026-10-27：本地最终补修 `064bad82`：`current_only` 标准费阻断建案、部分店铺失败令 run 失败、增加固定范围 Provider probe 与只读 0061 preflight；未推送、未连接 Provider/数据库，远端 CI 尚未覆盖该提交。
 
 ## 11. Owner 标准费用确认清单
 
@@ -89,8 +90,8 @@
 ## 12. 生产启用顺序
 
 1. **代码合并**：仅在正式 Review 与 checks 通过后；三个 WFS 开关保持关闭。
-2. **数据库准备**：验证可恢复备份、锁风险和低峰窗口后，单独授权 0061；不同时启用采集。
-3. **单店 Provider 验证**：一个账号、一个领星多平台店铺 `store_id`、一个 MSKU、最多 3 页、零数据库/RAW/案件写入。确认 WFS 专用字段与非 WFS 排除规则。
+2. **数据库准备**：验证可恢复备份、锁风险和低峰窗口后，单独授权 0061；不同时启用采集。只读预检工具为 `backend/scripts/preflight_wfs_0061.py`，默认拒绝且不执行 DDL/DML。
+3. **单店 Provider 验证**：一个账号、一个领星多平台店铺 `store_id`、一个 MSKU、最多 3 页、零数据库/RAW/案件写入。使用默认拒绝的 `backend/scripts/wfs_settlement_probe.py`，确认 WFS 专用字段与非 WFS 排除规则。
 4. **单店 collection/detection dry-run**：仅在 Provider scope、标准规则和 0061 均批准后；检查 store/window 守恒、销量覆盖、时效和身份，不建案。
 5. **多店 dry-run**：逐店输出成功/失败/候选/复核/跳过，不允许部分成功掩盖失败。
 6. **受控自动建案**：限定账号、店铺和批次；验证 insert-only、幂等及人工状态保护后再扩大。
@@ -100,8 +101,8 @@
 
 ## 13. 当前验收结论
 
-- 代码：最新 HEAD `7780322b66e68e41aba952f3b723c63da590de73` 独立复审通过，GitHub 当前 HEAD checks 全绿；仍待正式 Reviewer/Owner approval。
+- 代码：远端 PR HEAD `6695114a8594ad585e0556e6491a3b0f7e1f430e` 的 12 个 GitHub checks 全绿；本地补修提交 `064bad82d356077c9c9f43a6645040d489b6cbf4` 已通过 Ruff、WFS `157 passed, 9 skipped`、全后端 `1783 passed, 127 skipped`、应用导入和 Alembic heads，但尚未推送，远端 CI 尚未覆盖，仍待正式 Reviewer/Owner approval。
 - Provider：未真实调用；合同仅离线/Mock 验证，WFS scope 未确认。
-- 标准费：默认公式可计算，但 Owner 规则/范围/历史适用未批准。
-- Migration：隔离 PostgreSQL 16 往返通过；生产备份、锁预检和执行授权未完成。
+- 标准费：默认公式可计算；`current_only` 已在代码层阻断建案，但 Owner 规则/范围/历史适用仍未批准。
+- Migration：隔离 PostgreSQL 16 往返通过；只读 preflight 已准备但未连接任何数据库，生产备份、锁预检和执行授权未完成。
 - 生产：未迁移、未采集、未建案、未启用调度、未部署。

@@ -34,18 +34,18 @@
 |---|---|
 | Module name | WFS Fee Anomaly Auto Detection V1 |
 | Module key | `wfs-fee-anomaly-auto-detection-v1` |
-| Status | `approved_for_implementation`；PR #257 最新 HEAD `7780322b` 独立复审及 required checks 已通过，待正式 Reviewer/Owner approval；未合并、未部署或生产启用 |
+| Status | `approved_for_implementation`；PR #257 远端 HEAD `6695114a` 的 12 个 checks 全部成功；本地补修 `064bad82` 尚未推送且未被远端 CI 覆盖，待正式 Reviewer/Owner approval；未合并、未部署或生产启用 |
 | Purpose | 完成 Lingxing WFS 结算 RAW-first 采集、订单次数众数、动态标准费/销量、三类异常金额、只读预览、幂等案件候选和默认关闭的每日调度 |
 | Reused modules | Lingxing Token/client、Integration Sync run/work item/lease/RAW、Product Management pricing、Daily Sales MART、现有 WFS case/service/router/page |
 | Backend files | `backend/app/modules/warehouse_wfs/`、`backend/app/modules/integration_sync/`、Lingxing client 最小扩展、一个 additive Alembic revision、scoped tests |
 | Identity | `source_account_ref + store_id + msku + platform_order_no`；来源事实行另以稳定 `source_line_ref` 幂等；缺失或冲突 fail closed |
 | Detection | America/Los_Angeles T-2/60 天；每个有效订单贡献一次众数；并列按最新结算日后确定性金额；`Decimal` + `ROUND_HALF_UP` |
-| Evidence | RAW blob/request ref → exact store/window `gov_wfs_settlement_collections` → bound `fact_walmart_wfs_fee_actual` → append-only `ops_wfs_fee_detection_evidence`；销量完整性由 Listing 生命周期与连续成功同步窗口证明；标准费复用 Product Management；默认未确认规则和未验证 WFS 范围只进入人工复核 |
+| Evidence | RAW blob/request ref → exact store/window `gov_wfs_settlement_collections` → bound `fact_walmart_wfs_fee_actual` → append-only `ops_wfs_fee_detection_evidence`；销量完整性由 Listing 生命周期与连续成功同步窗口证明；标准费复用 Product Management；默认未确认、`current_only` 历史适用性和未验证 WFS 范围只进入人工复核 |
 | Case write | 复用 `ops_wfs_fee_anomaly_cases`；`INSERT ... ON CONFLICT DO NOTHING`；不更新人工/跟进/归档/追回案件；自动建案独立默认关闭 |
 | API | 保持现有 WFS API；新增 `POST /api/warehouse/wfs-fee-alerts/detection-preview`，只读、无 provider、无案件写入 |
 | Scheduler | 复用现有 Celery Integration Sync task/queue；catalog、outbound、sync config、检测和建案多重门禁默认关闭 |
 | Migration | `20261026_0061_wfs_fee_detection_evidence` 接当前单一 `0060` head；隔离 PostgreSQL 16 已完成带历史合成数据的 upgrade/downgrade/re-upgrade；生产未执行且索引重建锁风险需单独审批 |
-| Validation | Backend compileall/Ruff/Alembic PASS；WFS + Integration Sync `658 passed, 23 skipped`，full pytest `1775 passed, 127 skipped`；final focused recheck `159 passed, 9 skipped`；12 changed executable modules focused mypy PASS；isolated PostgreSQL auto-case `9 passed`；frontend Node 24 lint、`60 files / 281 tests`、typecheck/build PASS；GitHub latest-HEAD checks all success；real-provider/production validation not executed |
+| Validation | 本地补修：Ruff format/check、应用 import、Alembic 0061 单一 head PASS；WFS `157 passed, 9 skipped`；full pytest `1783 passed, 127 skipped`；新增脚本 focused mypy PASS；既有隔离 PostgreSQL auto-case `9 passed`；frontend 未改动，Node 24 单 worker lint、`60 files / 281 tests`、build PASS；远端 `6695114a` checks 12/12 success，但未覆盖未推送的 `064bad82`；real-provider/database/production validation not executed |
 | Documentation | `docs/api/wfs-fee-anomaly-auto-detection.md`; `docs/sop/warehouse-wfs-fee-anomaly-auto-detection.md` |
 | PRP / Decision | `PRPs/wfs-fee-anomaly-auto-detection-v1.md`; `docs/data-sources/decisions/wfs-fee-anomaly-auto-detection-decision.md` |
 | PR | `#257`；merge commit TBD |

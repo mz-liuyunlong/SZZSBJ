@@ -62,6 +62,8 @@
 - 销量存在不等于生命周期完整。只有 Listing 生命周期起点与连续成功的 `saleStatPageList` 同步窗口共同覆盖所需日期，才标记 `complete`；否则为 `partial`、`missing` 或 `unknown` 并阻断自动立案。
 - `storeId` 是请求范围内的稳定店铺身份；`storeName` 仅作描述。`CS*` 是可计数的业务排除项，不等同于异常行。
 - 仓库证据尚不能证明 profit-order 每个物流费行都属于 WFS，因此 `WFS_SETTLEMENT_SCOPE_VERIFIED=false` 默认保持 fail closed。只有后续受控合同证据与 Owner 授权才能开启。
+- 标准费除来源必须已确认外，`historical_applicability` 还必须为 `historical_confirmed`；`current_only` 仅保留理论估算并进入 `REVIEW_REQUIRED`，不得自动建案。
+- 多店采集中任一店铺失败都会令本次 run 为 `failed`；返回可以说明部分店铺完成，但不得把不完整 run 持久化为成功。
 - 案件主体仍为 insert-only；每次新的 verified collection 可追加独立检测证据，历史人工字段、跟进、审批、归档、索赔和追回状态不被自动覆盖。
 - 0061 在隔离 PostgreSQL 16 上完成带历史合成事实/人工案件的 0060→0061、案件并发/回滚测试、0061→0060→0061。生产索引重建仍存在锁风险，需单独低峰变更计划和生产授权。
 
@@ -73,7 +75,9 @@
 
 ## Final independent acceptance record（2026-10-27）
 
-- Reviewed HEAD: `7780322b66e68e41aba952f3b723c63da590de73`；PR #257 为 Open、非 Draft、mergeable，当前 HEAD 的 12 个 GitHub checks 全部成功，但尚无正式 Reviewer approval。
+- GitHub PR HEAD: `6695114a8594ad585e0556e6491a3b0f7e1f430e`；PR #257 为 Open、非 Draft、mergeable，该远端 HEAD 的 12 个 GitHub checks 全部成功，但尚无正式 Reviewer approval。
+- 本地最终补修提交：`064bad82d356077c9c9f43a6645040d489b6cbf4`，包含历史适用性门禁、部分店铺失败状态修复、受控 Provider probe 和只读 0061 preflight。该提交尚未推送，因此 GitHub 12/12 不能作为此本地提交的 CI 证据。
+- 本地补修验证：Ruff format/check PASS；WFS `157 passed, 9 skipped`；全后端 `1783 passed, 127 skipped`；应用导入 PASS；Alembic 单一 head 为 0061。Frontend 未改动，Node 24 单 worker 全量 `60 files / 281 tests`、lint、build PASS。
 - 默认门禁与实际执行路径一致：`WFS_AUTO_DETECT_ENABLED=false`、`WFS_AUTO_CASE_CREATE_ENABLED=false`、`WFS_SETTLEMENT_SCOPE_VERIFIED=false`。正式出站还同时要求 interface/config/outbound/real-call 门禁；案件写入还要求 verified collection、唯一身份、完整销量覆盖、已确认标准费、未过期证据和 `verified_wfs`。
 - Dry-run preview 不请求 provider、不持久化 detection evidence、不创建或更新案件。正式案件写入仍为 insert-only，冲突时保留既有人工状态。
 - Code merge readiness：`READY_FOR_OWNER_REVIEW`。真实 Provider、标准费用、Migration、生产采集、自动检测、自动建案和 Celery schedule 均不是代码合并的隐式授权。
@@ -85,6 +89,25 @@
 - 后续受控验证限定：`primary`、一个已核对的领星多平台店铺 `store_id`、MSKU `YC00115-1A`、2026-09-01 至 2026-09-30、`length=20`、最多 3 个请求页。若 `total > 60`、店铺/MSKU 不一致、分页不稳定、字段语义不明或出现非销售交易，立即停止。
 - 验证只允许记录字段存在性、类型、分页计数、脱敏聚合和错误码；不得输出凭据、完整响应、订单号或商品明细。Database writes、RAW writes、case writes 均为 0。
 - 当前状态：`REAL_API_TEST_EXECUTED=NO`，`WFS_SCOPE_STATUS=UNVERIFIED`。
+
+Owner 后续单独批准真实只读验证后，才可在受控环境注入 secret refs 并执行以下固定范围命令；本次未执行：
+
+```bash
+cd backend
+WFS_PROBE_ALLOW_READ=YES \
+WFS_PROBE_SOURCE_ACCOUNT_REF=primary \
+WFS_PROBE_STORE_ID=110704872940532224 \
+WFS_PROBE_MSKU=YC00115-1A \
+WFS_PROBE_START_DATE=2026-09-01 \
+WFS_PROBE_END_DATE=2026-09-30 \
+WFS_PROBE_PAGE_SIZE=20 \
+WFS_PROBE_MAX_PAGES=3 \
+LINGXING_ENABLE_REAL_CALLS=true \
+LINGXING_ENABLE_TOKEN_REQUESTS=true \
+uv run python scripts/wfs_settlement_probe.py
+```
+
+脚本硬限制上述账号/店铺/MSKU/日期/分页，先做 dry-run contract 检查；只输出计数、字段存在性和安全错误码，不写数据库、RAW 或案件。
 
 ### Product Management standard fee decision
 
@@ -106,11 +129,20 @@
 
 当前 `BACKUP_READY=NO`，`ROLLBACK_READY=CONDITIONAL`，生产 Migration 保持 `PENDING OWNER APPROVAL`。
 
+Owner/DBA 后续批准对目标数据库进行只读预检后，可通过受控 secret injection 执行；本次未连接任何数据库：
+
+```bash
+cd backend
+WFS_0061_PREFLIGHT_ALLOW_DB_READ=YES uv run python scripts/preflight_wfs_0061.py
+```
+
+该脚本仅在 read-only transaction 中检查 revision、schema、表大小估算、重复组、索引、目标锁和长事务；可恢复备份、磁盘容量、迁移窗口和实际 upgrade 仍必须由 Owner/DBA 独立确认。
+
 ### Production gates
 
 | Gate | Status | Evidence required before change |
 |---|---|---|
-| CODE_MERGE_APPROVAL | `PENDING` | Owner/Reviewer approval；本 PR 不自动合并 |
+| CODE_MERGE_APPROVAL | `PENDING` | 推送本地补修、补修 HEAD CI 全绿及 Owner/Reviewer approval；本 PR 不自动合并 |
 | PROVIDER_READ_APPROVAL | `PENDING` | 单店、单 SKU、最多 3 页、零写入的独立授权 |
 | WFS_SCOPE_APPROVAL | `BLOCKED` | 官方/真实响应证明确切 WFS 字段、交易类型及非 WFS 排除规则 |
 | STANDARD_FEE_APPROVAL | `BLOCKED` | Owner 完成上述规则、范围、有效期和历史适用决策 |
