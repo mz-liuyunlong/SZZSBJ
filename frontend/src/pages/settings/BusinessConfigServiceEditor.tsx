@@ -78,9 +78,8 @@ export default function BusinessConfigServiceEditor({
   useEffect(()=>{
     if(open && skillConnectorId && openAiSelected){
       let active=true;
-      setSkillError("");
       void backendRequest<SkillVersion[]>(`/api/ai-runtime/skills?connector_id=${encodeURIComponent(skillConnectorId)}`)
-        .then(result=>{if(active)setSkillList(result.data)})
+        .then(result=>{if(active){setSkillList(result.data);setSkillError("")}})
         .catch(()=>{if(active){setSkillList([]);setSkillError("Skill 加载失败，请检查数据库迁移、管理员权限或后端日志。")}});
       return()=>{active=false};
     }
