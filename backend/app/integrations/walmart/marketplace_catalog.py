@@ -91,9 +91,7 @@ _MARKETPLACE = (
 )
 
 
-def marketplace_read_registry(
-    *, approved_keys: frozenset[str] = frozenset()
-) -> ContractRegistry:
+def marketplace_read_registry(*, approved_keys: frozenset[str] = frozenset()) -> ContractRegistry:
     known = frozenset(operation.key for operation in _MARKETPLACE)
     if approved_keys - known:
         raise ContractError("WALMART_APPROVED_OPERATION_UNKNOWN")
