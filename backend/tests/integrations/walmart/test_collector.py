@@ -111,3 +111,19 @@ def test_no_gtin_does_not_call_walmart_and_write_keys_are_rejected() -> None:
         collector.collect(
             endpoints=["orders_cancel"], from_date=date(2026, 10, 1), to_date=date(2026, 10, 2)
         )
+
+
+def test_inbound_shipment_date_filters_use_worker_epoch_milliseconds() -> None:
+    client = FakeClient({
+        "inbound_shipments": [
+            (200, {"inboundShipments": [], "headers": {"totalCount": 0}})
+        ]
+    })
+    WalmartReadCollector(client, store_code="HK2615").collect(
+        endpoints=["inbound_shipments"],
+        from_date=date(2026, 10, 1),
+        to_date=date(2026, 10, 2),
+    )
+    params = client.calls[0][1]
+    assert params["fromCreatedDate"] == 1790812800000
+    assert params["toCreatedDate"] == 1791071999999
