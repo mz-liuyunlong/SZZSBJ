@@ -76,6 +76,7 @@ def test_ssm_resolves_exact_store_secret_only() -> None:
             )
         }
     )
+    resolver = TencentSsmResolver(api, approved_stores=frozenset({"HK2615"}), version="v1")
     secret = resolver.get_store_credentials("HK2615")
     assert secret.client_id == "synthetic-id"
     assert "synthetic-secret" not in repr(secret)
@@ -93,6 +94,7 @@ def test_scf_invokes_with_client_context() -> None:
             }
         }
     )
+    invoker = TencentScfInvoker(api, function_name="szzsbj-walmart-prod-executor")
     assert invoker.invoke({"operation": "health"})["success"] is True
     service, payload = api.requests[0]
     assert service == "scf"

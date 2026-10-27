@@ -8,7 +8,6 @@ Live transports and approval policies must be injected by the security owner.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from typing import Any, Protocol
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry
