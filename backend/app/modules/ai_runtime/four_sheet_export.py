@@ -28,8 +28,8 @@ def generate_four_sheet_review(*, run, keyword_rows: list[tuple[object, str]]) -
     only the internal preview sheet without altering source judgments.
     """
     from io import BytesIO
-    from zipfile import ZipFile
     from xml.etree import ElementTree as ET
+    from zipfile import ZipFile
 
     if run.status not in ("succeeded", "blocked"):
         raise ValueError("ANALYSIS_NOT_FINALIZED")
