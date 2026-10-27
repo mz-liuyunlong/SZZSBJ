@@ -26,8 +26,8 @@ BUSINESS_CONNECTOR_HEAD_REVISION = "20261025_0059_business_connector_control"
 LISTING_INTEGRATION_HEAD_REVISION = "20261026_0060_merge_listing_business_heads"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
 SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
-AI_RUNTIME_PREVIOUS_REVISION = "20261026_0060_ai_runtime"
-AI_RUNTIME_HEAD_REVISION = "20261027_0061_ai_runtime_skill_context"
+AI_RUNTIME_PREVIOUS_REVISION = "20261027_0063_ai_runtime"
+AI_RUNTIME_HEAD_REVISION = "20261027_0064_ai_runtime_skill_context"
 
 
 @pytest.fixture(autouse=True)

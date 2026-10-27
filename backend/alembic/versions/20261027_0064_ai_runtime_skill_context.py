@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "20261027_0061_ai_runtime_skill_context"
-down_revision: str | Sequence[str] | None = "20261026_0060_ai_runtime"
+revision: str = "20261027_0064_ai_runtime_skill_context"
+down_revision: str | Sequence[str] | None = "20261027_0063_ai_runtime"
 branch_labels = None
 depends_on = None
 

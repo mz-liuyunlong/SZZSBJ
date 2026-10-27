@@ -70,7 +70,7 @@ def test_new_migrations_and_skill_connector_isolation(db) -> None:
     from sqlalchemy import inspect
 
     assert db.scalar(text("SELECT version_num FROM alembic_version")) == (
-        "20261027_0061_ai_runtime_skill_context"
+        "20261027_0064_ai_runtime_skill_context"
     )
     inspector = inspect(db.bind)
     assert "runtime_instructions" in {

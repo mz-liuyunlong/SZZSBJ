@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision: str = "20261026_0060_ai_runtime"
+revision: str = "20261027_0063_ai_runtime"
 down_revision: str | Sequence[str] | None = "20261027_0062_sync_anomaly_center"
 branch_labels = None
 depends_on = None

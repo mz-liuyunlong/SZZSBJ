@@ -75,7 +75,7 @@ jobs:
           uv sync --frozen
           uv run alembic upgrade head
           uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
-          uv run alembic downgrade 20261026_0060_ai_runtime
+          uv run alembic downgrade 20261027_0063_ai_runtime
           uv run alembic upgrade head
 
   frontend-if-present:
