@@ -25,6 +25,7 @@ KEYWORD_HEAD_REVISION = "20261025_0058_keyword_internal_default"
 BUSINESS_CONNECTOR_HEAD_REVISION = "20261025_0059_business_connector_control"
 LISTING_INTEGRATION_HEAD_REVISION = "20261026_0060_merge_listing_business_heads"
 WFS_DETECTION_HEAD_REVISION = "20261026_0061_wfs_fee_detection_evidence"
+SYNC_ANOMALY_HEAD_REVISION = "20261027_0062_sync_anomaly_center"
 AI_RUNTIME_PREVIOUS_REVISION = "20261026_0060_ai_runtime"
 AI_RUNTIME_HEAD_REVISION = "20261027_0061_ai_runtime_skill_context"
 
@@ -61,6 +62,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     )
     assert (
         script.get_revision(AI_RUNTIME_PREVIOUS_REVISION).down_revision
+        == SYNC_ANOMALY_HEAD_REVISION
+    )
+    assert (
+        script.get_revision(SYNC_ANOMALY_HEAD_REVISION).down_revision
         == WFS_DETECTION_HEAD_REVISION
     )
     assert (

@@ -227,19 +227,19 @@ jobs:
                      now(), now(), false)
               """))
           PY
-          # Verify the WFS-specific revision independently of subsequent AI schema.
-          uv run alembic upgrade 20261026_0061_wfs_fee_detection_evidence
+          uv run alembic upgrade head
       - name: Verify real PostgreSQL auto-case safety and migration rollback
         working-directory: backend
         run: |
           uv run pytest -q -s tests/modules/warehouse_wfs/test_auto_case_postgresql.py
+          uv run pytest -q -s tests/modules/integration_sync/test_financial_transaction_postgresql.py
           uv run python - <<'PY'
           from sqlalchemy import create_engine, inspect, text
           from app.core.config import get_database_url
 
           engine = create_engine(get_database_url(), hide_parameters=True)
           with engine.connect() as conn:
-              assert conn.scalar(text("select version_num from alembic_version")) == "20261026_0061_wfs_fee_detection_evidence"
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261027_0062_sync_anomaly_center"
               assert conn.scalar(text("select count(*) from fact_walmart_wfs_fee_actual where source_account_ref='wfs-migration-seed'")) == 1
               assert conn.scalar(text("select count(*) from ops_wfs_fee_anomaly_cases where source_account_ref='wfs-migration-seed'")) == 1
               assert conn.scalar(text("select to_regclass('public.ops_wfs_fee_detection_evidence')")) is not None
