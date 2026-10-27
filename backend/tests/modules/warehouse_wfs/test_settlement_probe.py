@@ -75,6 +75,11 @@ def test_probe_parses_only_successful_bounded_shape() -> None:
                     {
                         "storeId": "110704872940532224",
                         "msku": "YC00115-1A",
+                        "platformOrderNo": "order-1",
+                        "salesNum": "1",
+                        "settlementDate": "2026-09-01",
+                        "uniqueId": "line-1",
+                        "rowIndex": 0,
                         "currencyCode": "USD",
                         "platformCode": "10008",
                         "transactionTypes": 0,
@@ -111,6 +116,11 @@ def test_probe_rejects_non_sales_and_non_numeric_fee_fields() -> None:
     base_row = {
         "storeId": "110704872940532224",
         "msku": "YC00115-1A",
+        "platformOrderNo": "order-1",
+        "salesNum": "1",
+        "settlementDate": "2026-09-01",
+        "uniqueId": "line-1",
+        "rowIndex": 0,
         "currencyCode": "USD",
         "platformCode": "10008",
         "transactionTypes": 0,
@@ -120,5 +130,23 @@ def test_probe_rejects_non_sales_and_non_numeric_fee_fields() -> None:
     with pytest.raises(ProbeError, match="WFS_PROBE_FEE_FIELD_TYPE_INVALID"):
         _validate_scope(
             [{**base_row, "platformLogisticsAmount": "not-a-number"}],
+            config=config(),
+        )
+
+
+def test_probe_rejects_missing_settlement_evidence() -> None:
+    with pytest.raises(ProbeError, match="WFS_PROBE_REQUIRED_FIELD_MISSING"):
+        _validate_scope(
+            [{
+                "storeId": "110704872940532224",
+                "msku": "YC00115-1A",
+                "platformOrderNo": "order-1",
+                "salesNum": "1",
+                "uniqueId": "line-1",
+                "rowIndex": 0,
+                "currencyCode": "USD",
+                "platformCode": "10008",
+                "transactionTypes": 0,
+            }],
             config=config(),
         )
