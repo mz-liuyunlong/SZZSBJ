@@ -13,9 +13,7 @@ from __future__ import annotations
 from app.integrations.walmart.contracts import ContractError, ContractRegistry, Field, Operation
 
 
-def feed_monitor_registry(
-    *, approved_keys: frozenset[str] = frozenset()
-) -> ContractRegistry:
+def feed_monitor_registry(*, approved_keys: frozenset[str] = frozenset()) -> ContractRegistry:
     """Return approved feed monitoring operations; default denies all outbound."""
     known = frozenset({"feed_status_list", "feed_item_status"})
     if approved_keys - known:
@@ -33,10 +31,7 @@ def feed_monitor_registry(
                 key="feed_status_list",
                 method="GET",
                 path="/v3/feeds",
-                fields=(
-                    Field("feedId", "query"),
-                    *pagination,
-                ),
+                fields=(Field("feedId", "query"), *pagination),
                 source="walmart-us-marketplace-feed-status-2026-10",
                 enabled="feed_status_list" in approved_keys,
             ),
