@@ -1,5 +1,9 @@
 # PMC-PURCHASE-UNIFIED-SYNC 交接
 
+## 本地初始化补充
+
+负责人随后确认截图对应本地开发环境，并继续授权处理入口不可见问题。已通过严格环境检查，仅连接 `127.0.0.1:55432/szzsbj_dev`，登记统一任务，验证默认 cron 为 `0 */3 * * *`、任务和自动调度均关闭，原三个来源配置保留。写入前配置快照保存在本地 `.planning/current/pmc-purchase-local-config-before.json`，执行脚本为同目录 `register-local-purchase-sync.py`。未调用领星、未修改环境文件或生产数据。用户当前浏览器显示尚待刷新确认；下文“未执行bootstrap/未连接真实数据库”描述的是开发验证结束时状态，本次本地登记已补齐该步骤，生产仍未执行。
+
 日期2026-10-27。主执行角色后端工程师。Worktree为当前项目目录，branch develop，base `99a25c93c211cbe5fd3b7be9bfde472791abde7a`。负责人明确要求当前分支开发、不新建分支，并明确要求保留其他会话的采购/国内仓改动。未暂存、提交、推送或创建PR。
 
 ## Implemented

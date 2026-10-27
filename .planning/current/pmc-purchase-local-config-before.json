@@ -1,0 +1,23 @@
+[
+  {
+    "id": "b82eb148-2944-4529-b4cc-717571d189b3",
+    "interface_key": "purchasePlanList",
+    "is_enabled": false,
+    "schedule_enabled": false,
+    "next_run_at": "None"
+  },
+  {
+    "id": "9c74da63-cc7b-40ff-960d-5bf6dc4b1fcb",
+    "interface_key": "purchaseOrderList",
+    "is_enabled": false,
+    "schedule_enabled": false,
+    "next_run_at": "None"
+  },
+  {
+    "id": "aa60c874-fe1e-4d85-a4eb-5a0a645d4b87",
+    "interface_key": "purchaseReceiptOrderList",
+    "is_enabled": false,
+    "schedule_enabled": false,
+    "next_run_at": "None"
+  }
+]
