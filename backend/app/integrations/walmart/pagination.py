@@ -4,6 +4,7 @@ No network, queue or database coupling is introduced. A configured WalmartClient
 does the protected SCF dispatch; results are returned only if pagination ends
 cleanly. This prevents publishing silently truncated pages.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
