@@ -171,3 +171,15 @@ uv run python -c "import app.main"
 新增 `returns_catalog.py`，并接入受保护 SCF 默认 registry；官方来源为 [Returns API reference](https://developer.walmart.com/us-marketplace/reference/getreturns) 与 [Returns and Refunds API overview](https://developer.walmart.com/us-marketplace/docs/returns-and-refunds-api-overview)。支持候选只读操作 `GET /v3/returns`、`GET /v3/returns/{returnOrderId}`，仅明确批准的 operation key 才可执行。新增 `test_returns_catalog.py` 覆盖筛选、枚举、limit、路径编码与未知写接口拒绝。
 
 **不包含**退货审批/拒绝、退款、shipping label、广告、定价、Feeds 上传等写或独立业务流程；这些需各自官方契约与单独授权。
+
+
+### 2026-10-27：扩展库存、价格激励、设置、Shipping 与报告状态读取
+
+新增 `operations_catalog.py` 并并入默认 SCF registry，候选只读操作包括：
+- `GET /v3/inventory?sku=...`：单 SKU 库存；官方 [Inventory](https://developer.walmart.com/us-marketplace/reference/getinventory)。
+- `GET /v3/inventories?nextCursor=...`：多 SKU/多 Ship Node 库存，游标必须顺序推进；官方 [Multi-node inventory](https://developer.walmart.com/us-marketplace/reference/getmultinodeinventoryforallskuandallshipnodes)。
+- `GET /v3/price/incentives`：价格激励；官方 [Price incentives](https://developer.walmart.com/us-marketplace/reference/get_v3-price-incentives)。
+- `GET /v3/settings/partnerprofile`、`GET /v3/settings/shipping`、`GET /v3/shipping/labels/carriers`：设置与承运商；分别依据 Walmart 官方设置/Shipping 参考。
+- `GET /v3/reports/reportRequests`、`GET /v3/reports/reportRequests/{requestId}`：报告请求列表和状态；官方 [Get all report requests](https://developer.walmart.com/us-marketplace/reference/getrequestsstatus)、[Report request status](https://developer.walmart.com/global-marketplace/reference/getsinglerequeststatus)。
+
+这些 operation key 默认全部禁用，需由受保护运行环境按店铺批准。新增 `test_operations_catalog.py`、`test_shipping_catalog.py`。本次仍未实现完整的价格管理/促销、库存更新、订单写入、退货退款写入、Feed 提交与文件下载、广告/Connect、完整报告文件下载；不能将当前目录称为全部官方 API。
