@@ -254,9 +254,7 @@ def _make_xlsx(
         ET.SubElement(f, f"{{{X}}}name", {"val": "Microsoft YaHei"})
         f = ET.SubElement(fonts, f"{{{X}}}font")
         ET.SubElement(f, f"{{{X}}}b")
-        ET.SubElement(
-            f, f"{{{X}}}color", {"rgb": "FFFFFFFF" if header_fill else "FF222222"}
-        )
+        ET.SubElement(f, f"{{{X}}}color", {"rgb": "FFFFFFFF" if header_fill else "FF222222"})
         ET.SubElement(f, f"{{{X}}}sz", {"val": "10"})
         fills = ET.SubElement(styles, f"{{{X}}}fills", {"count": "3"})
         ET.SubElement(
