@@ -2,6 +2,7 @@
 
 This is an internal review. Do not publish generated copy or re-score ads.
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -182,6 +183,7 @@ def create_listing_actions(
         def field(name: str) -> str:
             value = row[columns[name]]
             return str(value) if value is not None else ""
+
         keyword = field("关键词")
         if not keyword:
             continue
