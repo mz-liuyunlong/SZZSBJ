@@ -1,8 +1,10 @@
+import json
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
+from uuid import uuid4
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, func, select, text
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.models import (
@@ -258,6 +260,38 @@ class IntegrationSyncRepository:
         self.session.add(run)
         self.session.flush()
         return run
+
+
+    def record_business_anomaly(
+        self,
+        *,
+        run_id: UUID,
+        account: str,
+        interface_key: str,
+        business_date: date,
+        error_code: str,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        """Upsert one scoped exception; never create guessed SKU/order identities."""
+        self.session.execute(
+            text(
+                "insert into gov_integration_sync_anomalies "
+                "(id,run_id,source_account_ref,interface_key,business_date,error_code,"
+                "subject_key,details,first_seen_at,last_seen_at,occurrence_count,status) "
+                "values (:id,:run_id,:account,:interface_key,:day,:code,'date-scope',"
+                "cast(:details as jsonb),now(),now(),1,'pending') "
+                "on conflict on constraint uq_gov_sync_anomaly_identity do update set "
+                "run_id=excluded.run_id,last_seen_at=now(),"
+                "occurrence_count=gov_integration_sync_anomalies.occurrence_count+1,"
+                "status=case when gov_integration_sync_anomalies.status in ('resolved','dismissed') "
+                "then 'pending' else gov_integration_sync_anomalies.status end"
+            ),
+            {
+                "id": uuid4(), "run_id": run_id, "account": account,
+                "interface_key": interface_key, "day": business_date,
+                "code": error_code, "details": json.dumps(details or {}),
+            },
+        )
 
     def refund_capture_business_dates(
         self, source_run_id: UUID, source_account_ref: str
