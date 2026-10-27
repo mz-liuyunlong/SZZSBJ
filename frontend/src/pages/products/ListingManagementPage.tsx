@@ -27,6 +27,7 @@ import ListingManagementSummaryCards, {
 } from "@/pages/products/components/ListingManagementSummaryCards";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
 import ListingRuleConfigDrawer from "@/pages/products/components/ListingRuleConfigDrawer";
+import ListingEvaluationMonitor from "@/pages/products/components/ListingEvaluationMonitor";
 import ListingEvaluationPreviewModal from "@/pages/products/components/ListingEvaluationPreviewModal";
 import ListingManagementToolbar, {
   type ListingManagementFilters,
@@ -229,6 +230,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [ruleConfigOpen, setRuleConfigOpen] = useState(false);
+  const [evaluationMonitorOpen, setEvaluationMonitorOpen] = useState(false);
   const [evaluationListing, setEvaluationListing] = useState<ListingManagementRow | null>(null);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
   const pageStateKey = "listing-management";
@@ -857,6 +859,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     <PageShell page={page}>
       {messageContextHolder}
       <ListingRuleConfigDrawer open={ruleConfigOpen} onClose={() => setRuleConfigOpen(false)} />
+      <ListingEvaluationMonitor open={evaluationMonitorOpen} onClose={() => setEvaluationMonitorOpen(false)} />
       <ListingEvaluationPreviewModal listing={evaluationListing} onClose={() => setEvaluationListing(null)} />
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
@@ -866,6 +869,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               <h1>Listing管理</h1>
               <p>覆盖店铺、负责人、状态、价格、库存、购物车、跟卖与检查信息。</p>
             </div>
+            <Button onClick={() => setEvaluationMonitorOpen(true)}>计算记录 / C·D跟进</Button>
           </div>
 
           <Card size="small" className="listing-management__toolbar-card">
