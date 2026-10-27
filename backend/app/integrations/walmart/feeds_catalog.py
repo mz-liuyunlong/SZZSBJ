@@ -35,6 +35,7 @@ def feed_monitor_registry(
                 fields=(
                     Field("feedId", "query"),
                     Field("feedType", "query"),
+                    Field("feedStatus", "query", enum=("RECEIVED", "INPROGRESS", "PROCESSED", "ERROR")),
                     *pagination,
                 ),
                 source="walmart-us-marketplace-feed-status-2026-10",
