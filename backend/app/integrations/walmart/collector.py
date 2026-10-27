@@ -10,12 +10,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Mapping, Sequence
+from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 
 from app.integrations.walmart.client import WalmartClient
-from app.integrations.walmart.planner import WalmartPlanError
 
 READ_ENDPOINTS = (
     "wfs_inventory",
@@ -184,11 +184,11 @@ class WalmartReadCollector:
         client: WalmartClient,
         *,
         store_code: str,
-        config: CollectorConfig = CollectorConfig(),
+        config: CollectorConfig | None = None,
     ) -> None:
         self._client = client
         self._store = store_code
-        self._config = config
+        self._config = config if config is not None else CollectorConfig()
         self._calls = 0
         self._redactions = 0
         self._request_log: list[dict[str, Any]] = []
@@ -229,13 +229,13 @@ class WalmartReadCollector:
                         {
                             "fromCreatedDate": int(
                                 datetime.combine(
-                                    from_date, time.min, tzinfo=timezone.utc
+                                    from_date, time.min, tzinfo=UTC
                                 ).timestamp()
                                 * 1000
                             ),
                             "toCreatedDate": int(
                                 datetime.combine(
-                                    to_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+                                    to_date + timedelta(days=1), time.min, tzinfo=UTC
                                 ).timestamp()
                                 * 1000
                             )

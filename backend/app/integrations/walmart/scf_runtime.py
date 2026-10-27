@@ -20,8 +20,8 @@ from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
-from app.integrations.walmart.returns_catalog import returns_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
+from app.integrations.walmart.returns_catalog import returns_read_registry
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
 from app.integrations.walmart.wfs_catalog import wfs_registry

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry, Field, Operation
 
-
 _OPERATIONS = (
     Operation(
         key="inventory_get",
