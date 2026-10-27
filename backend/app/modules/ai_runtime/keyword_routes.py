@@ -60,6 +60,13 @@ def _check(account: str, accounts: frozenset[str], principal: Principal) -> None
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
 
 
+def _assert_job_owner(requested_by: str, principal: Principal) -> None:
+    if requested_by != principal.user_id and not has_permission(
+        principal, "business-rules:write"
+    ):
+        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+
+
 def _job(session: Session, job_id: UUID, account: str, principal: Principal):
     row = (
         session.execute(
@@ -71,10 +78,7 @@ def _job(session: Session, job_id: UUID, account: str, principal: Principal):
     )
     if row is None:
         raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
-    if row["requested_by"] != principal.user_id and not has_permission(
-        principal, "business-rules:write"
-    ):
-        raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+    _assert_job_owner(row["requested_by"], principal)
     return row
 
 
@@ -111,10 +115,7 @@ def create_keyword_ai_job(
             .first()
         )
         if existing is not None:
-            if existing["requested_by"] != principal.user_id and not has_permission(
-                principal, "business-rules:write"
-            ):
-                raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
+            _assert_job_owner(existing["requested_by"], principal)
             stored = {k: existing["input_json"].get(k) for k in payload}
             if hashlib.sha256(json.dumps(stored, sort_keys=True).encode()).hexdigest() != digest:
                 raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
