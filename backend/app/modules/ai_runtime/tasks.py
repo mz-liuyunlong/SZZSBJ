@@ -138,6 +138,7 @@ def execute_keyword_ai_job(job_id: str) -> None:
                             actor=_requested_by(identifier),
                             prompt_version="keyword-semantic-v1",
                             skill_version_id=p.get("skill_version_id"),
+                            connector_id=UUID(p["connector_id"]),
                         )
                     )
                     parsed = json.loads(output)

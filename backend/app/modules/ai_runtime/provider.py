@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
@@ -39,46 +39,78 @@ def _config(row):
     return cfg if isinstance(cfg, dict) else __import__("json").loads(cfg)
 
 
+def select_active_connector(session, scene: str, connector_id: UUID | None = None):
+    """Resolve a single enabled service, with explicit identity when a job is pinned.
+
+    Selecting the credential and published Skill from the same service prevents
+    cross-connector instruction leakage.
+    """
+    if scene not in SCENES:
+        raise AIUnavailable("AI_SCENE_INVALID")
+    if connector_id is None:
+        query = """SELECT * FROM biz_connectors WHERE kind='openai' AND enabled
+                   ORDER BY created_at, id LIMIT 1"""
+        params = {}
+    else:
+        query = """SELECT * FROM biz_connectors
+                   WHERE id=:connector AND kind='openai' AND enabled"""
+        params = {"connector": connector_id}
+    row = session.execute(text(query), params).mappings().first()
+    if row is None:
+        raise AIUnavailable("AI_CONNECTOR_NOT_CONFIGURED")
+    cfg = _config(row)
+    if cfg.get("default_model") != MODEL or MODEL not in cfg.get("model_allowlist", []):
+        raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
+    if scene not in cfg.get("application_scenes", []):
+        raise AIUnavailable("AI_SCENE_DISABLED")
+    return row
+
+
+def select_published_skill(session, connector_id: UUID, scene: str):
+    """Only load a published Skill belonging to the selected OpenAI connector."""
+    return session.execute(
+        text("""SELECT id, instructions FROM ai_runtime_skill_versions
+            WHERE connector_id=:connector AND scene=:scene AND status='published'
+            ORDER BY version DESC LIMIT 1"""),
+        {"connector": connector_id, "scene": scene},
+    ).mappings().first()
+
+
 async def invoke(
-    *, scene: str, prompt: str, actor: str, prompt_version: str, skill_version_id: str | None = None
+    *, scene: str, prompt: str, actor: str, prompt_version: str,
+    skill_version_id: str | None = None, connector_id: UUID | None = None
 ) -> tuple[str, int, int]:
     if scene not in SCENES or not prompt.strip() or len(prompt) > 10000:
         raise AIUnavailable("AI_REQUEST_INVALID")
     started = time.monotonic()
     charge_id = uuid4()
     with get_session_factory()() as session:
-        # Prefer the oldest active connector for stable billing and model selection.
-        row = (
-            session.execute(
-                text("""SELECT * FROM biz_connectors WHERE kind='openai' AND enabled
-          ORDER BY created_at LIMIT 1""")
-            )
-            .mappings()
-            .first()
-        )
-        if row is None:
-            raise AIUnavailable("AI_CONNECTOR_NOT_CONFIGURED")
+        row = select_active_connector(session, scene, connector_id)
         cfg = _config(row)
-        if cfg.get("default_model") != MODEL or MODEL not in cfg.get("model_allowlist", []):
-            raise AIUnavailable("AI_MODEL_NOT_CONFIGURED")
-        if scene not in cfg.get("application_scenes", []):
-            raise AIUnavailable("AI_SCENE_DISABLED")
+        # A queued keyword job pins its service and Skill version at enqueue time.
+        # Other interactive scenes select the published Skill for this same service.
         if skill_version_id is not None:
-            skill = (
-                session.execute(
-                    text("""SELECT instructions, scene, connector_id
-                FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),
-                    {"id": skill_version_id},
-                )
-                .mappings()
-                .first()
-            )
-            if skill is None or skill["scene"] != scene or skill["connector_id"] != row["id"]:
+            skill = session.execute(
+                text("""SELECT instructions, scene, connector_id, status
+                  FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),
+                {"id": skill_version_id},
+            ).mappings().first()
+            if (
+                skill is None
+                or skill["scene"] != scene
+                or skill["connector_id"] != row["id"]
+                or skill["status"] not in ("published", "retired")
+            ):
                 raise AIUnavailable("AI_SKILL_VERSION_INVALID")
+        elif connector_id is None:
+            skill = select_published_skill(session, row["id"], scene)
+        else:
+            skill = None
+        if skill is not None:
             prompt = (
-                "Skill instructions (administrator approved):\n"
+                "Skill instructions (administrator approved):\\n"
                 + skill["instructions"][:3000]
-                + "\n\n"
+                + "\\n\\n"
                 + prompt
             )
         from app.modules.business_connectors.router import _decrypt

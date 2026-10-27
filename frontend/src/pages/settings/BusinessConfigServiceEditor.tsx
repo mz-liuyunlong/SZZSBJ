@@ -52,6 +52,7 @@ export default function BusinessConfigServiceEditor({
   const [saving, setSaving] = useState(false);
   const [skillScene,setSkillScene]=useState<string>("keyword_launch");
   const [skillText,setSkillText]=useState("");
+  const [pendingSkillTexts,setPendingSkillTexts]=useState<Record<string,string>>({});
   const [skillList,setSkillList]=useState<SkillVersion[]>([]);
   const [skillBusy,setSkillBusy]=useState(false);
   const loadSkills=async(id:string)=>{
@@ -68,7 +69,12 @@ export default function BusinessConfigServiceEditor({
     }
   },[open,connector?.id,connector?.kind]);
   const saveSkillDraft=async()=>{
-    if(!connector || !skillText.trim())return;
+    if(!skillText.trim())return;
+    if(!connector){
+      setPendingSkillTexts(old=>({...old,[skillScene]:skillText.trim()}));
+      messageApi.info("Skill 已暂存于当前编辑窗口；创建 OpenAI 服务后才能保存到服务器并发布");
+      return;
+    }
     setSkillBusy(true);
     try{
       await backendRequest('/api/ai-runtime/skills/drafts',{method:'POST',body:JSON.stringify({
@@ -91,6 +97,12 @@ export default function BusinessConfigServiceEditor({
     finally{setSkillBusy(false);}
   };
   const [messageApi, context] = message.useMessage();
+  useEffect(()=>{
+    if(!open){setPendingSkillTexts({});setSkillText("");setSkillList([]);}
+  },[open]);
+  useEffect(()=>{
+    setSkillText(pendingSkillTexts[skillScene]??"");
+  },[skillScene,pendingSkillTexts]);
   const choice = Form.useWatch("choice", form);
   const draftCategory = Form.useWatch("draft_category", form);
   const metering = Form.useWatch("metering", form);
@@ -183,7 +195,22 @@ export default function BusinessConfigServiceEditor({
           input_price_per_million: data.input_price_per_million ?? 0,
           output_price_per_million: data.output_price_per_million ?? 0,
         };
-        await saveBusinessConnector(payload, connector?.id);
+        const savedConnector = await saveBusinessConnector(payload, connector?.id);
+        if(data.choice==="openai" && Object.keys(pendingSkillTexts).length){
+          let savedCount=0;
+          for(const [scene,instructions] of Object.entries(pendingSkillTexts)){
+            if(!instructions.trim())continue;
+            try{
+              await backendRequest('/api/ai-runtime/skills/drafts',{method:'POST',body:JSON.stringify({
+                connector_id:savedConnector.id,scene,instructions,
+              })});
+              savedCount++;
+            }catch{
+              messageApi.warning("OpenAI 服务已保存，但有 Skill 草稿未同步；请重新打开服务详情检查");
+            }
+          }
+          if(savedCount)messageApi.success(`已保存 ${savedCount} 个 Skill 草稿`);
+        }
         messageApi.success("服务端配置已保存，密钥不会回显");
       }
       close();
@@ -280,14 +307,14 @@ export default function BusinessConfigServiceEditor({
           <Form.Item name="output_price_per_million" label="每百万输出 Token 单价 USD">
             <InputNumber min={0} precision={6} style={{ width: "100%" }} />
           </Form.Item>
-          {connector?.id ? <div style={{paddingTop:12,borderTop:"1px solid #eef1f5"}}>
+          {<div style={{paddingTop:12,borderTop:"1px solid #eef1f5"}}>
             <strong>AI Skills · 版本管理</strong>
-            <div style={{fontSize:12,color:"#98a2b3",margin:"8px 0"}}>在现有服务详情内编辑；草稿不会影响正在执行的任务。</div>
-            <Select value={skillScene} onChange={setSkillScene} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
-            <Input.TextArea rows={4} value={skillText} onChange={ev=>setSkillText(ev.target.value)}
+            <div style={{fontSize:12,color:"#98a2b3",margin:"8px 0"}}>{connector?.id ? "已连接服务：草稿支持保存及发布；正在执行的任务保持其已选版本。" : "首次创建：可编辑并暂存 Skill，保存 OpenAI 服务后自动尝试同步；未保存时不会发布或调用 AI。"}</div>
+            <Select value={skillScene} onChange={next=>{setPendingSkillTexts(old=>({...old,[skillScene]:skillText}));setSkillScene(next)}} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
+            <Input.TextArea rows={4} value={skillText} onChange={ev=>{setSkillText(ev.target.value);setPendingSkillTexts(old=>({...old,[skillScene]:ev.target.value}))}}
               placeholder="填写对应场景的 AI 工作说明；商品事实与关键词硬规则仍由后端校验" maxLength={12000}/>
             <Button size="small" style={{marginTop:8}} disabled={!skillText.trim()} loading={skillBusy}
-              onClick={()=>void saveSkillDraft()}>保存 Skill 草稿</Button>
+              onClick={()=>void saveSkillDraft()}>{connector?.id?"保存 Skill 草稿":"暂存 Skill 草稿"}</Button>
             {skillList.filter(s=>s.scene===skillScene).map(s=><div key={s.id}
               style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
               <span>V{s.version} · {s.status}</span>
@@ -297,7 +324,7 @@ export default function BusinessConfigServiceEditor({
                   onClick={()=>void publishSkill(s.id)}>发布</Button> : null}
               </Space>
             </div>)}
-          </div> : null}
+          </div>}
         </> : null}
         {choice !== "draft" && <>
           <Form.Item name="daily_limit" label="每日请求上限">

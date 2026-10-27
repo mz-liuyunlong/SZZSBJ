@@ -66,18 +66,12 @@ async def ask(request: Request, body: AskBody, principal: view_perm):
         + body.message
         + "\nassistant:"
     )
-    with get_session_factory()() as session:
-        skill = session.execute(
-            text("""SELECT id FROM ai_runtime_skill_versions WHERE scene='ai_assistant'
-           AND status='published' ORDER BY created_at DESC LIMIT 1""")
-        ).scalar_one_or_none()
     try:
         answer, inp, out = await invoke(
             scene="ai_assistant",
             prompt=prompt,
             actor=principal.user_id,
             prompt_version="ai-assistant-v1",
-            skill_version_id=str(skill) if skill else None,
         )
     except AIUnavailable as exc:
         raise ApiError(code=exc.code, status_code=503) from None

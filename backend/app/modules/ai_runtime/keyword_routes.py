@@ -18,6 +18,8 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.ai_runtime.provider import AIUnavailable, select_active_connector, select_published_skill
+from app.db.session import get_session_factory
 from app.modules.keyword_planning.analysis_routes import CreateRunRequest, _require_opted_in_writes
 
 router = APIRouter(prefix="/ai-tasks", tags=["AI keyword jobs"])
@@ -81,7 +83,6 @@ def _read(row) -> JobResponse:
 def create_keyword_ai_job(
     request: Request,
     body: CreateRunRequest,
-    session: Annotated[Session, Depends(get_db_session)],
     accounts: scope_dep,
     principal: write_perm,
 ):
@@ -89,7 +90,9 @@ def create_keyword_ai_job(
     _require_opted_in_writes()
     payload = body.model_dump(mode="json")
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-    with session.begin():
+    # The source-account dependency already queried its own Session; use a new
+    # transaction so SQLAlchemy autobegin cannot conflict with our advisory lock.
+    with get_session_factory()() as session, session.begin():
         session.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
             {"key": body.source_account_ref + ":" + body.request_key},
@@ -110,12 +113,13 @@ def create_keyword_ai_job(
                 raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
             data = _read(existing)
         else:
-            skill = session.execute(
-                text("""SELECT id FROM ai_runtime_skill_versions
-              WHERE scene='keyword_launch' AND status='published'
-              ORDER BY created_at DESC LIMIT 1""")
-            ).scalar_one_or_none()
-            payload["skill_version_id"] = str(skill) if skill else None
+            try:
+                connector = select_active_connector(session, "keyword_launch")
+            except AIUnavailable as exc:
+                raise ApiError(code=exc.code, status_code=409) from None
+            skill = select_published_skill(session, connector["id"], "keyword_launch")
+            payload["connector_id"] = str(connector["id"])
+            payload["skill_version_id"] = str(skill["id"]) if skill else None
             job_id = uuid4()
             session.execute(
                 text("""INSERT INTO ai_runtime_jobs(id,source_account_ref,product_id,requested_by,request_key,input_json)

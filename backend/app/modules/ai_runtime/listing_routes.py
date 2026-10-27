@@ -73,11 +73,6 @@ async def draft(
             if isinstance(v, dict)
             and k in ("title", "item_type", "material", "color", "pack", "size", "structure", "use")
         }
-        skill = session.execute(
-            text("""SELECT id FROM ai_runtime_skill_versions
-          WHERE scene='listing_optimization' AND status='published'
-          ORDER BY created_at DESC LIMIT 1""")
-        ).scalar_one_or_none()
     prompt = (
         "You write ONE Walmart US listing draft. Only confirmed product facts are reliable. "
         "Competitor products are not evidence of this item's specifications. "
@@ -93,7 +88,6 @@ async def draft(
             prompt=prompt,
             actor=principal.user_id,
             prompt_version="listing-v1",
-            skill_version_id=str(skill) if skill else None,
         )
         parsed = json.loads(raw)
         features = parsed.get("features")
