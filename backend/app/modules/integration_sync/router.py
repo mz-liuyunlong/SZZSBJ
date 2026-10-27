@@ -1,6 +1,6 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -35,7 +35,7 @@ from app.modules.integration_sync.schemas import (
     WorkItemListQuery,
 )
 from app.modules.integration_sync.service import IntegrationSyncService
-from app.modules.integration_sync.models import IntegrationSyncAnomaly
+from app.modules.integration_sync.models import IntegrationSyncAnomaly, IntegrationSyncAnomalyAudit
 from app.modules.integration_sync.tasks import TaskDispatchError, dispatch_sync_run
 
 router = APIRouter(prefix="/api/integrations", tags=["Integration Sync Governance"])
@@ -503,14 +503,77 @@ def update_sync_anomaly(
     )
     if row is None:
         raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
+    previous_status = row.status
+    session.add(IntegrationSyncAnomalyAudit(
+        id=uuid4(),
+        anomaly_id=row.id,
+        actor_ref=principal.user_id,
+        from_status=previous_status,
+        to_status=payload.status,
+        note=payload.note,
+    ))
     row.status = payload.status
     row.owner_note = payload.note
     row.updated_by = principal.user_id
-    row.resolved_at = datetime.now().astimezone() if payload.status in {"resolved", "dismissed"} else None
+    row.resolved_at = datetime.now(UTC) if payload.status in {"resolved", "dismissed"} else None
     session.commit()
     session.refresh(row)
     return success_response(
         request,
         data=SyncAnomalyRead.model_validate(row),
         meta=_meta("gov_integration_sync_anomalies", freshness_at=row.last_seen_at),
+    )
+
+
+class SyncAnomalyAuditRead(BaseModel):
+    id: UUID
+    anomaly_id: UUID
+    actor_ref: str
+    from_status: str
+    to_status: str
+    note: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SyncAnomalyAuditListData(BaseModel):
+    items: list[SyncAnomalyAuditRead]
+
+
+@router.get(
+    "/sync-anomalies/{anomaly_id}/history",
+    response_model=SuccessEnvelope[SyncAnomalyAuditListData, ReadMeta],
+    responses=READ_ERRORS,
+    operation_id="listIntegrationSyncAnomalyHistory",
+)
+def list_sync_anomaly_history(
+    request: Request,
+    anomaly_id: UUID,
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[SyncAnomalyAuditListData, ReadMeta]:
+    from app.core.api import ApiError
+
+    valid = session.scalar(
+        select(IntegrationSyncAnomaly.id).where(
+            IntegrationSyncAnomaly.id == anomaly_id,
+            IntegrationSyncAnomaly.source_account_ref.in_(account_refs),
+        )
+    )
+    if valid is None:
+        raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
+    rows = session.scalars(
+        select(IntegrationSyncAnomalyAudit)
+        .where(IntegrationSyncAnomalyAudit.anomaly_id == anomaly_id)
+        .order_by(IntegrationSyncAnomalyAudit.created_at.desc())
+        .limit(200)
+    ).all()
+    return success_response(
+        request,
+        data=SyncAnomalyAuditListData(
+            items=[SyncAnomalyAuditRead.model_validate(row) for row in rows]
+        ),
+        meta=_meta("gov_integration_sync_anomaly_audit"),
     )
