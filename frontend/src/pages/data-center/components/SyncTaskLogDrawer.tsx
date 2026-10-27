@@ -14,6 +14,9 @@ import {
   type TableColumnsType,
 } from "antd";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { listIntegrationSyncRunLogPage, listRefundMartPendingDays } from "@/pages/data-center/integrationSyncTaskApi";
+import dayjs, { type Dayjs } from "dayjs";
 import {
   useIntegrationSyncRunRawRequestRefsQuery,
   useIntegrationSyncRunWorkItemsQuery,
@@ -32,6 +35,7 @@ interface SyncTaskLogDrawerProps {
   open: boolean;
   task?: SyncTaskRow;
   logs: SyncTaskLog[];
+  todayTotals?: { success: number; failed: number; runs: number };
   onClose: () => void;
 }
 
@@ -42,6 +46,7 @@ const statusColors: Record<SyncTaskStatus, string> = {
   部分成功: "warning",
   超时: "orange",
   已停用: "default",
+  未执行: "default",
 };
 
 const workStatusLabels: Record<string, SyncTaskStatus> = {
@@ -57,8 +62,6 @@ const logStatuses: SyncTaskStatus[] = [
   "成功",
   "失败",
   "运行中",
-  "部分成功",
-  "超时",
   "已停用",
 ];
 
@@ -247,12 +250,57 @@ function SyncTaskLogDrawer({
   open,
   task,
   logs,
+  todayTotals,
   onClose,
 }: SyncTaskLogDrawerProps) {
   const [status, setStatus] = useState<SyncTaskStatus>();
   const [triggerType, setTriggerType] = useState<SyncTaskTriggerType>();
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>(null);
   const [detailLog, setDetailLog] = useState<SyncTaskLog>();
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+  const logQuery = useQuery({
+    queryKey: ["integration-sync-log-page", task?.interfaceKey, task?.source, page, status, triggerType, dateRange?.map((d) => d.format("YYYY-MM-DD"))],
+    queryFn: () => listIntegrationSyncRunLogPage({
+      page,
+      pageSize,
+      sourceAccount: task?.source,
+      interfaceKey: task?.interfaceKey,
+      includeProductDetail: task?.interfaceKey === "productList" && Boolean(task.source),
+      status: status ? ({ "成功": "succeeded", "失败": "failed", "运行中": "running", "已停用": "canceled" } as Record<string, string>)[status] : undefined,
+      triggerType: triggerType ? ({ "自动": "schedule", "手动": "manual", "重试": "retry" } as Record<string, string>)[triggerType] : undefined,
+      createdFrom: dateRange?.[0].startOf("day").format("YYYY-MM-DDTHH:mm:ssZ"),
+      createdTo: dateRange?.[1].endOf("day").format("YYYY-MM-DDTHH:mm:ssZ"),
+    }),
+    enabled: open,
+  });
 
+  const latestSuccessQuery = useQuery({
+    queryKey: [
+      "integration-sync-latest-success",
+      task?.interfaceKey,
+      task?.source,
+    ],
+    queryFn: () => listIntegrationSyncRunLogPage({
+      page: 1,
+      pageSize: 1,
+      sourceAccount: task?.source,
+      interfaceKey: task?.interfaceKey,
+      includeProductDetail: task?.interfaceKey === "productList" && Boolean(task.source),
+      status: "succeeded",
+    }),
+    enabled: open,
+    staleTime: 30_000,
+  });
+  const refundPendingQuery = useQuery({
+    queryKey: ["integration-refund-mart-pending"],
+    queryFn: listRefundMartPendingDays,
+    enabled: open && task?.interfaceKey === "walmartReturnOrderList",
+    staleTime: 30_000,
+  });
+  const pendingDays = (refundPendingQuery.data ?? []).filter(
+    (item) => !task?.source || item.source_account_ref === task.source,
+  );
   const detailRunId = detailLog?.id;
   const workItemsQuery = useIntegrationSyncRunWorkItemsQuery(
     detailRunId,
@@ -268,22 +316,14 @@ function SyncTaskLogDrawer({
   const workItemError = errorText(workItemsQuery.error);
   const rawRefError = errorText(rawRefsQuery.error);
 
-  const taskLogs = useMemo(
-    () => logs.filter((log) => !task || log.taskId === task.id),
-    [logs, task],
-  );
+  const taskLogs = logQuery.data?.items ?? (open ? [] : logs);
+  const errorMessage = logQuery.error instanceof Error ? logQuery.error.message : null;
 
-  const filteredLogs = useMemo(
-    () =>
-      taskLogs.filter(
-        (log) =>
-          (!status || log.status === status) &&
-          (!triggerType || log.triggerType === triggerType),
-      ),
-    [status, taskLogs, triggerType],
-  );
+  const filteredLogs = taskLogs;
 
   const logStats = useMemo(() => {
+    const today = dayjs().format("YYYY-MM-DD");
+    const todayLogs = taskLogs.filter((log) => dayjs(log.runAt).format("YYYY-MM-DD") === today);
     const successLogs = taskLogs.filter((log) => log.status === "成功");
     const failedLogs = taskLogs.filter((log) => log.status === "失败");
     const autoFailedLogs = taskLogs.filter(
@@ -295,20 +335,22 @@ function SyncTaskLogDrawer({
         log.status === "成功",
     );
     return {
-      total: taskLogs.length,
-      success: successLogs.length,
-      failed: failedLogs.length,
+      total: todayTotals?.runs ?? todayLogs.length,
+      success: todayTotals?.success ?? todayLogs.filter((log) => log.status === "成功").length,
+      failed: todayTotals?.failed ?? todayLogs.filter((log) => log.status === "失败").length,
       autoFailed: autoFailedLogs.length,
       latestSuccess: successLogs[0],
       latestFailed: failedLogs[0],
       autoFailureButManualSuccess:
         autoFailedLogs.length > 0 && manualOrRetrySuccess,
     };
-  }, [taskLogs]);
+  }, [taskLogs, todayTotals]);
 
   const resetFilters = () => {
     setStatus(undefined);
     setTriggerType(undefined);
+    setDateRange(null);
+    setPage(1);
   };
 
   const openDetailLog = (log: SyncTaskLog) => {
@@ -513,6 +555,18 @@ function SyncTaskLogDrawer({
           </Button>
         }
       >
+        {task?.interfaceKey === "walmartReturnOrderList" && pendingDays.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`待完成财务重算：${pendingDays.length} 个业务日`}
+            description={`已采集的退款事实不代表历史利润已重新校验。待重算日期：${pendingDays.slice(0, 12).map((day) => day.business_date).join("、")}${pendingDays.length > 12 ? " 等" : ""}。请审核数据归集异常后通过受控流程重算。`}
+          />
+        )}
+        {refundPendingQuery.error && task?.interfaceKey === "walmartReturnOrderList" && (
+          <Alert type="warning" showIcon message="财务待重算状态暂不可用" />
+        )}
         <div className="sync-task__log-summary-grid">
           <div className="sync-task__log-summary-card">
             <span>今日执行</span>
@@ -528,7 +582,7 @@ function SyncTaskLogDrawer({
           </div>
           <div className="sync-task__log-summary-card">
             <span>最近成功</span>
-            <strong>{latestRunTime(logStats.latestSuccess)}</strong>
+            <strong>{latestRunTime(latestSuccessQuery.data?.items[0])}</strong>
           </div>
         </div>
 
@@ -539,7 +593,7 @@ function SyncTaskLogDrawer({
             placeholder="全部状态"
             value={status}
             options={logStatuses.map((value) => ({ label: value, value }))}
-            onChange={setStatus}
+            onChange={(value) => { setStatus(value); setPage(1); }}
           />
           <Select
             allowClear
@@ -547,19 +601,21 @@ function SyncTaskLogDrawer({
             placeholder="全部触发方式"
             value={triggerType}
             options={triggerTypes.map((value) => ({ label: value, value }))}
-            onChange={setTriggerType}
+            onChange={(value) => { setTriggerType(value); setPage(1); }}
           />
-          <DatePicker.RangePicker className="sync-task__log-range" />
-          <Button onClick={() => setStatus("失败")}>只看异常</Button>
+          <DatePicker.RangePicker className="sync-task__log-range" value={dateRange} onChange={(values) => { setDateRange(values && values[0] && values[1] ? [values[0], values[1]] : null); setPage(1); }} />
+          <Button onClick={() => { setStatus("失败"); setPage(1); }}>只看异常</Button>
           <Button onClick={resetFilters}>重置</Button>
         </Space>
 
+        {errorMessage && <Alert type="error" showIcon message="日志分页加载失败" description={errorMessage} />}
         <Table<SyncTaskLog>
           size="small"
           rowKey="id"
           columns={logColumns}
           dataSource={filteredLogs}
-          pagination={{ pageSize: 8, showTotal: (total) => `共 ${total} 条` }}
+          loading={logQuery.isFetching}
+          pagination={{ current: page, pageSize, total: logQuery.data?.total ?? 0, onChange: setPage, showTotal: (total) => `共 ${total} 条` }}
           scroll={{ x: "max-content", y: 420 }}
         />
       </Modal>

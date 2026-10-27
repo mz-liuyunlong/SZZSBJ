@@ -1,8 +1,8 @@
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.models import (
@@ -34,6 +34,7 @@ RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
     "saleStatPageList",
     "walmartReturnOrderList",
     "walmartAdItemSpList",
+    "wfsProfitOrder",
 )
 
 
@@ -259,6 +260,114 @@ class IntegrationSyncRepository:
         self.session.flush()
         return run
 
+    def refund_capture_business_dates(
+        self, source_run_id: UUID, source_account_ref: str
+    ) -> tuple[date, ...]:
+        """Recover exact refund-event days from durable, account-scoped capture events."""
+        rows = self.session.scalars(
+            select(IntegrationSyncRunEvent.safe_details["business_date"].astext)
+            .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
+            .where(
+                IntegrationSyncRun.id == source_run_id,
+                IntegrationSyncRun.source_account_ref == source_account_ref,
+                IntegrationSyncRun.interface_key == "walmartReturnOrderList",
+                IntegrationSyncRunEvent.message_code == "SYNC_REFUND_FACTS_COMMITTED",
+            )
+            .distinct()
+            .order_by(IntegrationSyncRunEvent.safe_details["business_date"].astext)
+        ).all()
+        return tuple(sorted({date.fromisoformat(value) for value in rows if value}))
+
+    def refund_mart_pending_days(self, account_refs: frozenset[str]) -> list[tuple[str, str, UUID]]:
+        """Latest pending/validated state per scoped purchase day; no data writes."""
+        date_expr = IntegrationSyncRunEvent.safe_details["business_date"].astext
+        statuses = (
+            select(
+                IntegrationSyncRun.source_account_ref.label("account"),
+                date_expr.label("business_date"),
+                IntegrationSyncRunEvent.run_id.label("run_id"),
+                IntegrationSyncRunEvent.message_code.label("state"),
+                func.row_number()
+                .over(
+                    partition_by=(IntegrationSyncRun.source_account_ref, date_expr),
+                    order_by=(
+                        IntegrationSyncRunEvent.occurred_at.desc(),
+                        IntegrationSyncRunEvent.id.desc(),
+                    ),
+                )
+                .label("rank"),
+            )
+            .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
+            .where(
+                IntegrationSyncRun.source_account_ref.in_(account_refs),
+                IntegrationSyncRun.interface_key == "walmartReturnOrderList",
+                IntegrationSyncRunEvent.message_code.in_(
+                    (
+                        "SYNC_REFUND_MART_PENDING",
+                        "SYNC_REFUND_MART_VALIDATED",
+                    )
+                ),
+                date_expr.is_not(None),
+            )
+            .subquery()
+        )
+        rows = self.session.execute(
+            select(statuses.c.account, statuses.c.business_date, statuses.c.run_id)
+            .where(
+                statuses.c.rank == 1,
+                statuses.c.state == "SYNC_REFUND_MART_PENDING",
+            )
+            .order_by(statuses.c.business_date.desc(), statuses.c.account)
+            .limit(200)
+        ).all()
+        return [(str(a), str(d), r) for a, d, r in rows]
+
+    def task_dashboard(
+        self, account_refs: frozenset[str], today_start: datetime, tomorrow_start: datetime
+    ) -> tuple[list[IntegrationSyncRun], list[tuple[UUID, str, int, int, int]]]:
+        """One latest Run per scoped interface/account, and today's Run status counts."""
+        ranked = (
+            select(
+                IntegrationSyncRun.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        IntegrationSyncRun.interface_id,
+                        IntegrationSyncRun.source_account_ref,
+                    ),
+                    order_by=(IntegrationSyncRun.created_at.desc(), IntegrationSyncRun.id.desc()),
+                )
+                .label("rank"),
+            )
+            .where(IntegrationSyncRun.source_account_ref.in_(account_refs))
+            .subquery()
+        )
+        latest = list(
+            self.session.scalars(
+                select(IntegrationSyncRun)
+                .join(ranked, IntegrationSyncRun.id == ranked.c.id)
+                .where(ranked.c.rank == 1)
+            ).all()
+        )
+        counts = self.session.execute(
+            select(
+                IntegrationSyncRun.interface_id,
+                IntegrationSyncRun.source_account_ref,
+                func.count(),
+                func.sum(case((IntegrationSyncRun.status == "succeeded", 1), else_=0)),
+                func.sum(case((IntegrationSyncRun.status == "failed", 1), else_=0)),
+            )
+            .where(
+                IntegrationSyncRun.source_account_ref.in_(account_refs),
+                func.coalesce(IntegrationSyncRun.started_at, IntegrationSyncRun.queued_at)
+                >= today_start,
+                func.coalesce(IntegrationSyncRun.started_at, IntegrationSyncRun.queued_at)
+                < tomorrow_start,
+            )
+            .group_by(IntegrationSyncRun.interface_id, IntegrationSyncRun.source_account_ref)
+        ).all()
+        return latest, [(row[0], row[1], int(row[2]), int(row[3]), int(row[4])) for row in counts]
+
     def list_runs(
         self,
         *,
@@ -271,19 +380,28 @@ class IntegrationSyncRepository:
         created_to: datetime | None,
         page: int,
         page_size: int,
+        source_account_ref: str | None = None,
+        include_product_detail: bool = False,
     ) -> tuple[list[IntegrationSyncRun], int]:
         statement = select(IntegrationSyncRun).where(
             IntegrationSyncRun.source_account_ref.in_(account_refs)
         )
         filters = (
+            (IntegrationSyncRun.source_account_ref, source_account_ref),
             (IntegrationSyncRun.provider, provider),
-            (IntegrationSyncRun.interface_key, interface_key),
+            (IntegrationSyncRun.interface_key, None if include_product_detail else interface_key),
             (IntegrationSyncRun.status, status),
             (IntegrationSyncRun.trigger_type, trigger_type),
         )
         for column, value in filters:
             if value is not None:
                 statement = statement.where(column == value)
+        if include_product_detail:
+            if interface_key != "productList" or source_account_ref is None:
+                raise ValueError("Product detail merged logs require account and ProductList")
+            statement = statement.where(
+                IntegrationSyncRun.interface_key.in_(("productList", "batchGetProductInfo"))
+            )
         if created_from is not None:
             statement = statement.where(IntegrationSyncRun.created_at >= created_from)
         if created_to is not None:

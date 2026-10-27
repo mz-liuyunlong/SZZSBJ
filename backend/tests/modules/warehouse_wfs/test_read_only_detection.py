@@ -20,6 +20,10 @@ def sample_rows():
         base = {
             "uniqueId": f"u{n}",
             "storeName": "Test Store",
+            "storeId": STORE.store_id,
+            "platformCode": "10008",
+            "transactionTypes": 0,
+            "currencyCode": "USD",
             "msku": "YC00115-1A",
             "platformOrderNo": f"order{n}",
             "settlementDate": "2026-10-01",
@@ -35,19 +39,22 @@ def sample_rows():
 
 def test_full_detection_with_dynamic_standard(monkeypatch):
     session = MagicMock()
-    session.scalars.return_value.all.return_value = ["20500114893"]
+    session.execute.return_value.all.return_value = [("YC00115-1A", "20500114893")]
 
-    def standard(_session, **kwargs):
-        return WfsStandardFee(
-            source_account_ref=kwargs["source_account_ref"],
-            store_id=kwargs["store_id"],
-            msku=kwargs["msku"],
-            unit_fee=Decimal("6.55"),
-            source="product_management_live",
-            rule_version="current",
-        )
+    def standards(_session, *, identities):
+        return {
+            identity: WfsStandardFee(
+                source_account_ref=identity[0],
+                store_id=identity[1],
+                msku=identity[3],
+                unit_fee=Decimal("6.55"),
+                source="product_management_live",
+                rule_version="current",
+            )
+            for identity in identities
+        }
 
-    monkeypatch.setattr(module, "read_product_management_wfs_fee", standard)
+    monkeypatch.setattr(module, "read_product_management_wfs_fees", standards)
 
     def fetch(_interface, params):
         rows = sample_rows()
@@ -77,7 +84,7 @@ def test_full_detection_with_dynamic_standard(monkeypatch):
 
 def test_unmapped_product_never_creates_candidate():
     session = MagicMock()
-    session.scalars.return_value.all.return_value = []
+    session.execute.return_value.all.return_value = []
 
     result = module.run_wfs_read_only_detection(
         session,

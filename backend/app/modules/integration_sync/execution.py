@@ -1,5 +1,5 @@
 import hashlib
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -34,6 +34,10 @@ from app.modules.integration_sync.handlers.lingxing_product_info_executor import
 )
 from app.modules.integration_sync.handlers.lingxing_product_list_sync import (
     LingxingProductListSyncHandler,
+)
+from app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync import (
+    LingxingWfsSettlementSyncHandler,
+    WfsSettlementSyncError,
 )
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
@@ -82,6 +86,11 @@ class SyncRunExecutionService:
             and interface.method == "POST"
         )
         is_productlist = run.provider == "lingxing" and run.interface_key == "productList"
+        is_wfs = (
+            run.provider == "lingxing"
+            and run.interface_key == "wfsProfitOrder"
+            and interface.handler_key == LingxingWfsSettlementSyncHandler.handler_key
+        )
 
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
         if (
@@ -127,7 +136,7 @@ class SyncRunExecutionService:
                 self._fail(run, "SYNC_CONFIG_DISABLED")
                 return
 
-        if is_data_pages:
+        if is_data_pages or is_wfs:
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -201,6 +210,13 @@ class SyncRunExecutionService:
                 self._execute_data_pages_run(run)
                 return
 
+            if is_wfs:
+                LingxingWfsSettlementSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
             if is_productlist:
                 result = LingxingProductListSyncHandler(
                     self.session,
@@ -229,7 +245,11 @@ class SyncRunExecutionService:
                     run=run,
                     plan=plan,
                 )
-        except (DataPagesRealSyncError, ProductInfoOneTimeRunError) as error:
+        except (
+            DataPagesRealSyncError,
+            ProductInfoOneTimeRunError,
+            WfsSettlementSyncError,
+        ) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)
             if recovered is not None and recovered.status == "running":
@@ -353,6 +373,16 @@ class SyncRunExecutionService:
             self._fail(run, "DATA_PAGES_PAGE_SIZE_INVALID")
             return
 
+        # Freeze the original refund-event dates before execution. A retry must
+        # repeat the failed historical dates, not drift to the current last 7 days.
+        if (
+            run.interface_key == "walmartReturnOrderList"
+            and run.window_start is None
+            and run.window_end is None
+            and len(days) == (days[-1] - days[0]).days + 1
+        ):
+            run.window_start = datetime.combine(days[0], time.min, tzinfo=DATA_PAGES_LA_TZ)
+            run.window_end = datetime.combine(days[-1], time.max, tzinfo=DATA_PAGES_LA_TZ)
         run.work_items_total = len(days)
         self.session.commit()
 
@@ -373,7 +403,9 @@ class SyncRunExecutionService:
                     heartbeat=lambda: self._heartbeat_data_pages_lock(run.id),
                 )
                 try:
-                    summary = self._execute_data_pages_interface(run.interface_key, runner)
+                    summary = self._execute_data_pages_interface(
+                        run.interface_key, runner, run_id=run.id
+                    )
                 except DataPagesMartInvariantError as error:
                     self.session.rollback()
                     active_run = self.repository.get_run_for_update(run.id)
@@ -419,7 +451,13 @@ class SyncRunExecutionService:
         completed.records_seen = records_seen
         completed.records_written = records_written
         completed.error_code = mart_failures[0].code if mart_failures else None
-        completed.error_message = "同步业务日校验失败" if mart_failures else None
+        completed.error_message = (
+            "退款事实已保存，但历史利润校验失败"
+            if mart_failures and run.interface_key == "walmartReturnOrderList"
+            else "同步业务日校验失败"
+            if mart_failures
+            else None
+        )
         self._event(
             completed.id,
             from_status,
@@ -433,6 +471,8 @@ class SyncRunExecutionService:
         self,
         interface_key: str,
         runner: DataPagesRealSyncRunner,
+        *,
+        run_id: UUID | None = None,
     ) -> DataPagesRealSyncSummary:
         """Run only the dataset represented by the configured task."""
 
@@ -491,12 +531,55 @@ class SyncRunExecutionService:
 
         elif interface_key == "walmartReturnOrderList":
             refunds = runner._fetch_return_all()
+            if getattr(runner.summary, "return_permission_403", False):
+                # A denied provider request must not masquerade as an empty, successful day.
+                raise DataPagesRealSyncError("DATA_PAGES_REFUND_PERMISSION_DENIED")
             heartbeat()
             runner.summary.refund_rows = runner._write_refunds(refunds)
             heartbeat()
             runner.summary.refund_unresolved_rows = runner._resolve_refund_items()
             heartbeat()
             runner._reprice_refunds()
+
+            # Refund facts and their source-store scope are a durable ingestion phase.
+            # Do not roll back the facts when an affected purchase day's financial
+            # MART fails its independent SEM, sample, or replay invariants.
+            if run_id is not None:
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "SYNC_REFUND_FACTS_COMMITTED",
+                    safe_details={
+                        "business_date": runner.business_date.isoformat(),
+                        "refund_rows": runner.summary.refund_rows,
+                        "refund_unresolved_rows": runner.summary.refund_unresolved_rows,
+                        "affected_purchase_days": len(
+                            getattr(runner, "_refund_affected_business_dates", ())
+                        ),
+                        "purchase_dates": [
+                            day.isoformat()
+                            for day in getattr(runner, "_refund_affected_business_dates", ())
+                        ],
+                    },
+                )
+            if run_id is not None:
+                for purchase_day in sorted(
+                    set(
+                        (
+                            runner.business_date,
+                            *getattr(runner, "_refund_affected_business_dates", ()),
+                        )
+                    )
+                ):
+                    self._event(
+                        run_id,
+                        "running",
+                        "running",
+                        "SYNC_REFUND_MART_PENDING",
+                        safe_details={"business_date": purchase_day.isoformat()},
+                    )
+            self.session.commit()
 
         elif interface_key == "walmartAdItemSpList":
             advertisers = runner._fetch_page_all(
@@ -531,6 +614,22 @@ class SyncRunExecutionService:
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()
         runner.summary.mart_order_profit_rows = runner._refresh_order_profit_mart()
+        if interface_key == "walmartReturnOrderList" and run_id is not None:
+            for purchase_day in sorted(
+                set(
+                    (
+                        runner.business_date,
+                        *getattr(runner, "_refund_affected_business_dates", ()),
+                    )
+                )
+            ):
+                self._event(
+                    run_id,
+                    "running",
+                    "running",
+                    "SYNC_REFUND_MART_VALIDATED",
+                    safe_details={"business_date": purchase_day.isoformat()},
+                )
         self.session.commit()
         return runner.summary
 
@@ -599,6 +698,24 @@ class SyncRunExecutionService:
         run: IntegrationSyncRun,
         config: IntegrationSyncConfig | None = None,
     ) -> tuple[date, ...]:
+        # Legacy refund runs did not freeze their date window. Recover only
+        # dates proven by durable refund capture events on the original Run.
+        if (
+            run.interface_key == "walmartReturnOrderList"
+            and run.retry_of_run_id is not None
+            and run.window_start is None
+            and run.window_end is None
+        ):
+            persisted_days = self.repository.refund_capture_business_dates(
+                run.retry_of_run_id, run.source_account_ref
+            )
+            if persisted_days:
+                if len(persisted_days) > DATA_PAGES_MAX_BACKFILL_DAYS + 1:
+                    return ()
+                return persisted_days
+            # No trusted date evidence: fail closed rather than silently
+            # replaying today's unrelated last-seven-day window.
+            return ()
         if run.window_start is not None or run.window_end is not None:
             if run.window_start is None or run.window_end is None:
                 return ()

@@ -1,5 +1,5 @@
 import { CalendarOutlined } from "@ant-design/icons";
-import { Button, Input, Modal, Spin, Typography, message } from "antd";
+import { Button, Input, Modal, Select, Spin, Typography, message } from "antd";
 import { useEffect, useMemo, useRef, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
@@ -25,6 +25,7 @@ import {
 } from "@/pages/data-center/syncTaskOperationGuards";
 import { formatSyncTaskOperationError } from "@/pages/data-center/syncTaskOperationMessages";
 import { formatSyncTaskFrequency } from "@/pages/data-center/syncTaskDisplayFormatters";
+import { buildSyncScheduleViews } from "@/pages/data-center/syncTaskScheduleViews";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { useElementScrollRestoration } from "@/shared/page-state/useElementScrollRestoration";
 import type {
@@ -215,7 +216,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   const syncTaskOverview = tasksQuery.data ?? emptySyncTaskOverview;
   const rows: SyncTaskRow[] = syncTaskOverview.rows;
   const logs = syncTaskOverview.logs;
-  const scheduleItems = syncTaskOverview.schedules;
+  const scheduleViews = useMemo(() => buildSyncScheduleViews(rows), [rows]);
 
   useEffect(() => {
     messageApiRef.current = messageApi;
@@ -243,6 +244,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
     "部分成功",
     "超时",
     "已停用",
+    "未执行",
   ];
 
   const filteredRows = useMemo(() => {
@@ -545,9 +547,96 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
   };
 
   const bulkAction = () => {
-    void messageApi.info(
-      selectedRowKeys.length > 0 ? "批量操作接口待接入" : "请先勾选任务",
-    );
+    const selected = rows.filter((row) => selectedRowKeys.includes(row.id));
+    if (selected.length === 0) {
+      void messageApi.warning("请先勾选任务");
+      return;
+    }
+    type BulkAction = "enable" | "disable" | "manual" | "retry";
+    let action: BulkAction = "disable";
+    modalApi.confirm({
+      title: "批量任务操作",
+      width: 560,
+      content: (
+        <div>
+          <Typography.Paragraph>
+            已选择 {selected.length} 项。所有操作均逐项进行后端权限校验并留下审计记录；
+            立即同步及失败重试会创建真实 Worker 任务，每次最多 10 项。
+          </Typography.Paragraph>
+          <Select
+            defaultValue="disable"
+            style={{ width: "100%" }}
+            options={[
+              { label: "关闭自动同步", value: "disable" },
+              { label: "开启自动同步（要求合法的 Cron）", value: "enable" },
+              { label: "立即同步（真实执行，最多 10 项）", value: "manual" },
+              { label: "重试失败任务（真实执行，最多 10 项）", value: "retry" },
+            ]}
+            onChange={(value: BulkAction) => { action = value; }}
+          />
+        </div>
+      ),
+      okText: "确认执行所选操作",
+      cancelText: "取消",
+      onOk: async () => {
+        if ((action === "manual" || action === "retry") && selected.length > 10) {
+          void messageApi.warning("真实同步和重试每次最多选择 10 个任务，请减少选择数量");
+          return;
+        }
+        const checked = selected.map((task) => ({
+          task,
+          guard: action === "manual" ? getManualSyncGuard(task)
+            : action === "retry" ? getRetryGuard(task)
+              : getAutoSyncGuard(task, action === "enable"),
+        }));
+        const blocked = checked.filter(({ guard }) => !guard.allowed);
+        const executable = checked.filter(({ guard }) => guard.allowed);
+        if (executable.length === 0) {
+          void messageApi.warning(`没有可执行的任务；${blocked.length} 项被权限或配置校验阻止`);
+          return;
+        }
+        let succeeded = 0;
+        const failed: string[] = [];
+        const failedIds: string[] = blocked.map(({ task }) => task.id);
+        for (const { task } of executable) {
+          try {
+            if (action === "manual") {
+              await manualRunMutation.mutateAsync({
+                configId: task.configId!,
+                reason: `批量手动同步：${task.taskName}`,
+              });
+            } else if (action === "retry") {
+              await retryRunMutation.mutateAsync({
+                runId: task.latestRunId!,
+                reason: `批量重试失败 Run：${task.taskName}`,
+              });
+            } else {
+              await updateConfigMutation.mutateAsync({
+                configId: task.configId!,
+                payload: action === "enable"
+                  ? { is_enabled: true, schedule_enabled: true, schedule_cron: task.scheduleCron }
+                  : { schedule_enabled: false },
+              });
+            }
+            succeeded += 1;
+          } catch (error) {
+            failedIds.push(task.id);
+            failed.push(`${task.taskName}：${formatSyncTaskOperationError(error)}`);
+          }
+        }
+        setSelectedRowKeys(failedIds);
+        void tasksQuery.refetch();
+        if (failed.length || blocked.length) {
+          void modalApi.info({
+            title: "批量操作完成（存在未成功项）",
+            content: `成功 ${succeeded}，执行失败 ${failed.length}，校验阻止 ${blocked.length}。\n${failed.slice(0, 8).join("\n")}`,
+            width: 600,
+          });
+        } else {
+          void messageApi.success(`已完成 ${succeeded} 项批量操作`);
+        }
+      },
+    });
   };
 
   return (
@@ -641,13 +730,21 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
         open={logOpen}
         task={logTask}
         logs={logs}
+        todayTotals={logTask
+          ? { success: logTask.todaySuccess, failed: logTask.todayFailed, runs: logTask.todayRuns ?? 0 }
+          : { success: rows.reduce((sum, row) => sum + row.todaySuccess, 0),
+              failed: rows.reduce((sum, row) => sum + row.todayFailed, 0),
+              runs: rows.reduce((sum, row) => sum + (row.todayRuns ?? 0), 0) }}
         onClose={() => setLogOpen(false)}
       />
       <SyncTaskScheduleDrawer
         open={scheduleOpen}
         initialTab={scheduleInitialTab}
-        dayItems={scheduleItems}
-        weekItems={scheduleItems}
+        dayItems={scheduleViews.day}
+        weekItems={scheduleViews.week}
+        weeklyItems={scheduleViews.weekly}
+        truncated={scheduleViews.dayTruncated}
+        unsupportedCount={scheduleViews.unsupported.length}
         onClose={() => setScheduleOpen(false)}
         onOpenGlobalLog={() => {
           setScheduleOpen(false);
