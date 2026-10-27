@@ -4,6 +4,7 @@ Only explicitly approved operation keys can execute. This is not the complete
 Walmart API catalog; it intentionally excludes all writes, feeds submission,
 multipart upload and Walmart Connect advertising.
 """
+
 from __future__ import annotations
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry, Field, Operation
