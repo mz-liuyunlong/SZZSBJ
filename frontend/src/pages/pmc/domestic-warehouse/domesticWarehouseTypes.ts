@@ -26,7 +26,7 @@ export interface DomesticBatch {
   batch_details: BatchComponent[]; history_complete: boolean; source_kind: "inventory_statement" | "batch_backfill";
   /** Optional until identity enrichment is published; missing values stay explicit in the table. */
   item_identities?: { item_id: string; gtin: string | null }[];
-  identity_status?: "resolved" | "missing" | "partial" | "conflict";
+  identity_status?: "resolved" | "missing" | "partial" | "conflict" | "multiple";
   owner?: { uid: string | null; name: string | null; status: "resolved" | "missing" | "conflict" };
 }
 export interface DomesticMeta {

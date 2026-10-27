@@ -320,6 +320,8 @@ function SyncTaskLogDrawer({
   };
 
   const logColumns: TableColumnsType<SyncTaskLog> = [
+    { title: "任务阶段", dataIndex: "stageName", key: "stageName", width: 130,
+      hidden: task?.interfaceKey !== "pmcPurchaseBoardSync" },
     {
       title: "执行时间",
       dataIndex: "runAt",
@@ -383,6 +385,20 @@ function SyncTaskLogDrawer({
   ];
 
   const workItemColumns: TableColumnsType<SyncTaskWorkItem> = [
+    {
+      title: "阶段",
+      key: "purchaseStage",
+      width: 150,
+      render: (_, item) => {
+        const names: Record<string, string> = {
+          purchasePlanList: "采购计划采集", purchaseOrderList: "采购单采集",
+          purchaseReceiptOrderList: "收货单采集", publish_dwd: "采购数据清洗", refresh_dws: "看板刷新",
+        };
+        const stage = item.requestSafeParams.stage;
+        return typeof stage === "string" ? names[stage] ?? stage : "—";
+      },
+      hidden: task?.interfaceKey !== "pmcPurchaseBoardSync",
+    },
     { title: "批次", dataIndex: "ordinal", key: "ordinal", width: 70 },
     {
       title: "请求类型",

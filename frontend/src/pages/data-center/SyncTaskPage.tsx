@@ -90,6 +90,7 @@ const buildScheduleCron = (values: SyncTaskConfigFormValues) => {
   if (values.frequencyPreset === "30m") return "*/30 * * * *";
   if (values.frequencyPreset === "1h") return "0 * * * *";
   if (values.frequencyPreset === "2h") return "0 */2 * * *";
+  if (values.frequencyPreset === "3h") return "0 */3 * * *";
 
   if (values.frequencyPreset === "hourly_minutes") {
     const minutes = Array.from(new Set(values.hourlyMinutes ?? []))

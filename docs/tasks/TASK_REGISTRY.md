@@ -52,3 +52,7 @@ Registry Status: `draft; approved only after owner review and merge`
 - [ ] 未合并任务不得标记 `implemented`。
 - [ ] PR 和 merge commit 仅在真实存在后填写。
 - [ ] 未写入账号、密钥、连接串或生产数据。
+
+## PMC-PURCHASE-UNIFIED-SYNC (2026-10-27)
+
+状态 approved / locally validated；负责人当前会话确认；主执行角色后端工程师。Worktree 当前仓库，branch develop，base 99a25c93c211cbe5fd3b7be9bfde472791abde7a。负责人明确要求不新建分支。PRP: PRPs/pmc-purchase-unified-sync.md。Allowlist: integration_sync 采购编排/执行入口/子任务保护、现有任务页面采购入口及 3h 配置、采购 bootstrap、相关测试/文档/登记；不改变其他业务执行逻辑、权限、数据库结构或生产配置。后端160项、前端28项、E2E 1项通过，静态检查及构建通过。交接：docs/delivery/pmc-purchase-unified-sync/CODEX_HANDOFF.md。PR/commit 未创建，未暂存推送。真实初始化及生产调度另行授权。

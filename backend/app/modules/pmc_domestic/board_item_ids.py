@@ -10,7 +10,10 @@ from sqlalchemy import bindparam, inspect, text
 from sqlalchemy.orm import Session
 
 from app.modules.pmc_domestic.inbound_schemas import ItemIdentity
-from app.modules.pmc_purchase.calculations import BARE_ITEMID_PATTERN, ITEMID_REMARK_PATTERN
+from app.modules.pmc_purchase.remark_item_ids import (
+    extract_remark_item_ids,
+    validated_remark_item_ids,
+)
 
 LINE_TABLE = "ods_lingxing_purchase_order_items"
 PLAN_TABLE = "ods_lingxing_purchase_plans"
@@ -25,23 +28,6 @@ class BoardItemRow(Protocol):
     purchase_order_sns: list[str]
     item_identities: list
     identity_status: str
-
-
-def extract_remark_item_ids(texts: Sequence[str | None]) -> list[str]:
-    """Every standalone 11-digit ItemID.
-
-    ``ITEMID:`` matches come first. A 14-digit GTIN does not count.
-    """
-
-    blobs = [text for text in texts if isinstance(text, str) and text.strip()]
-    seen: list[str] = []
-    for blob in blobs:
-        for match in ITEMID_REMARK_PATTERN.finditer(blob):
-            _append(seen, match.group(1))
-    for blob in blobs:
-        for match in BARE_ITEMID_PATTERN.finditer(blob):
-            _append(seen, match.group(1))
-    return seen
 
 
 def resolve_store_item_ids(
@@ -65,8 +51,20 @@ def resolve_store_item_ids(
     same_sku = [item for item in listings if (item[2] or "").strip() == sku]
     remark_ids = _remark_ids(row_store, lines, plans)
     if row_store:
-        matched = [item_id for item_id in remark_ids if _listed(same_sku, row_store, item_id)]
-        chosen = matched or _ids_for_store(same_sku, row_store)
+        remark_ids = validated_remark_item_ids(
+            [], remark_ids, _ids_for_store(same_sku, row_store)
+        )
+        if remark_ids:
+            return [
+                (
+                    item_id,
+                    _gtin(same_sku, row_store, item_id)
+                    if _listed(same_sku, row_store, item_id)
+                    else None,
+                )
+                for item_id in remark_ids
+            ]
+        chosen = _ids_for_store(same_sku, row_store)
         return [(item_id, _gtin(same_sku, row_store, item_id)) for item_id in chosen]
     remark_hits = [item for item_id in remark_ids for item in same_sku if item[1] == item_id]
     if remark_hits:
@@ -107,7 +105,7 @@ def attach_board_item_ids(
                     if item_id not in {item for item, _gtin in found}:
                         found.append((item_id, gtin))
         row.item_identities = [ItemIdentity(item_id=item_id, gtin=gtin) for item_id, gtin in found]
-        row.identity_status = "resolved" if len(found) == 1 else "conflict" if found else "missing"
+        row.identity_status = "resolved" if len(found) == 1 else "multiple" if found else "missing"
 
 
 def _remark_ids(

@@ -1,10 +1,20 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from celery.schedules import ParseException, crontab
 from sqlalchemy.orm import Session
 
-from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
+from app.modules.integration_sync.models import (
+    IntegrationSyncConfig,
+    IntegrationSyncRun,
+    IntegrationSyncRunEvent,
+)
+from app.modules.integration_sync.pmc_purchase_pipeline_catalog import (
+    PURCHASE_PIPELINE_KEY,
+    PURCHASE_SOURCE_KEYS,
+)
+from app.modules.integration_sync.pmc_purchase_pipeline_repository import PurchasePipelineRepository
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 CRON_SEARCH_DAYS = 40 * 366
@@ -113,6 +123,15 @@ class IntegrationSchedulerService:
             raise ValueError("scheduler expired-run batch limit is invalid")
         current = (now or datetime.now(UTC)).astimezone(UTC)
         recovered: list[UUID] = []
+        bind = self.session.get_bind()
+        if bind.dialect.name == "postgresql":
+            from app.modules.integration_sync.pmc_purchase_pipeline import recover_purchase_pipeline
+
+            try:
+                recovered.extend(recover_purchase_pipeline(bind.engine))
+            except Exception:
+                # An optional purchase recovery failure must not stop other schedules.
+                logging.getLogger(__name__).warning("purchase_pipeline_recovery_deferred")
         for lock in self.repository.list_expired_locks_for_update(current, limit=limit):
             run = self.repository.get_run_for_update(lock.run_id)
             if run is not None and run.status == "running":
@@ -186,6 +205,15 @@ class IntegrationSchedulerService:
                     continue
 
                 interface = self.repository.get_interface(config.interface_id)
+                if interface is not None and interface.interface_key in PURCHASE_SOURCE_KEYS:
+                    parent = PurchasePipelineRepository(self.session).config_for(
+                        PURCHASE_PIPELINE_KEY,
+                        config.source_account_ref,
+                    )
+                    if isinstance(parent, IntegrationSyncConfig):
+                        config.schedule_enabled = False
+                        config.next_run_at = None
+                        continue
                 # Product Management is now schedulable from Sync Task settings.
                 schedule_cron = config.schedule_cron
                 if config.schedule_timezone != "UTC" or not schedule_cron:

@@ -38,6 +38,11 @@ from app.modules.pmc_purchase.calculations import (
     parse_itemid_remark,
     parse_provider_date,
 )
+from app.modules.pmc_purchase.remark_item_ids import (
+    line_texts_from_ods_item,
+    plan_texts_from_ods_plan,
+    single_remark_item_id,
+)
 
 DWD_BUILDER_VERSION = "pmc_purchase.dwd_builder.v1"
 
@@ -392,10 +397,26 @@ def _line(
     )
 
 
+def _remark_item_id_for_line(
+    item: OdsOrderItemLike,
+    plan_sn: str | None,
+    ods_plans_by_sn: Mapping[tuple[str, str], OdsPlanLike],
+) -> str | None:
+    line_texts = line_texts_from_ods_item(item)
+    plan_texts: list[str | None] = []
+    if plan_sn:
+        ods_plan = ods_plans_by_sn.get((item.source_account_ref, plan_sn))
+        if ods_plan is not None:
+            plan_texts = plan_texts_from_ods_plan(ods_plan)
+    return single_remark_item_id(plan_texts, line_texts)
+
+
 def build_orders(
     ods_orders: Sequence[OdsOrderLike],
     ods_items: Sequence[OdsOrderItemLike],
     plans_by_sn: Mapping[str, DwdPlanRow],
+    *,
+    ods_plans_by_sn: Mapping[tuple[str, str], OdsPlanLike],
 ) -> tuple[list[DwdOrderRow], list[DwdOrderLineRow], dict[str, int]]:
     chosen_orders, orders_superseded = latest_versions(ods_orders, lambda r: r.order_sn)
     # Lines belong to the header version they were delivered with: keep the lines of
@@ -440,7 +461,7 @@ def build_orders(
                     ratio=Decimal("1.0000"),
                     quantity=quantity,
                     amount=item.amount,
-                    remark_item_id=parse_itemid_remark(item.remark),
+                    remark_item_id=_remark_item_id_for_line(item, None, ods_plans_by_sn),
                     draft_no=draft_no,
                     plan_found=False,
                 )
@@ -468,10 +489,8 @@ def build_orders(
                     ratio=allocation.ratio,
                     quantity=allocation.quantity,
                     amount=allocation.amount,
-                    remark_item_id=(
-                        plan.remark_item_id
-                        if plan is not None
-                        else parse_itemid_remark(item.remark)
+                    remark_item_id=_remark_item_id_for_line(
+                        item, allocation.plan_sn, ods_plans_by_sn
                     ),
                     draft_no=draft_no,
                     plan_found=plan is not None,
@@ -597,7 +616,13 @@ def build_dwd(
 ) -> DwdBuildResult:
     plans, plan_counts = build_plans(ods_plans)
     plans_by_sn = {p.plan_sn: p for p in plans}
-    orders, lines, order_counts = build_orders(ods_orders, ods_items, plans_by_sn)
+    chosen_ods_plans, _ = latest_versions(ods_plans, lambda r: r.plan_sn)
+    orders, lines, order_counts = build_orders(
+        ods_orders,
+        ods_items,
+        plans_by_sn,
+        ods_plans_by_sn=chosen_ods_plans,
+    )
     receipt_lines, receipt_counts = build_receipt_lines(
         ods_receipts, ods_receipt_items, {ln.order_item_id for ln in lines}
     )

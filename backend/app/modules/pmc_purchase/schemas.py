@@ -135,12 +135,20 @@ class OwnerRef(StrictSchema):
     name: str | None
 
 
+class ItemIdIdentity(StrictSchema):
+    item_id: str
+    msku: str | None = None
+    gtin: str | None = None
+    fulfillment_type: str | None = None
+
+
 class ItemIdRef(StrictSchema):
+    identities: list[ItemIdIdentity] = Field(default_factory=list)
     item_id: str | None
     source: ItemIdSourceFilter
     source_ref: str | None
     matched_at: datetime | None
-    match_status: Literal["matched", "pending", "unresolved"]
+    match_status: Literal["matched", "pending", "conflict", "unresolved"]
     msku: str | None
     gtin: str | None
     fulfillment_type: str | None

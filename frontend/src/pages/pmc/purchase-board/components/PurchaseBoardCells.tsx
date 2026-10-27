@@ -1,6 +1,6 @@
 /** Purchase-board cell components shared by the table and the detail Modal. */
 import { Tag, Tooltip, Typography } from "antd";
-import { WalmartItemLink } from "@/components/report-table/cells";
+import { CopyableTextCell, WalmartItemLink } from "@/components/report-table/cells";
 import StatusTag from "@/shared/status/StatusTag";
 import {
   EMPTY,
@@ -94,6 +94,15 @@ export function SkuCycleBriefCell({ cycle }: { cycle: SkuCycleBrief }) {
 
 export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
   const { itemId } = row;
+  if (itemId.identities && itemId.identities.length > 1) {
+    return <span className="purchase-board__itemid-cell">
+      <Tag color="warning">多 listing（{itemId.identities.length}）</Tag>
+      <Tag color={itemIdSourceColors[itemId.source]}>{itemIdSourceLabels[itemId.source]}</Tag>
+      {itemId.identities.map((identity) => <span className="purchase-board__itemid-line" key={identity.itemId}>
+        <WalmartItemLink itemId={identity.itemId} />{identity.msku ? <span>{identity.msku}</span> : null}
+      </span>)}
+    </span>;
+  }
   if (!itemId.itemId) {
     return (
       <Tag color={itemIdSourceColors[itemId.source]}>
@@ -114,5 +123,15 @@ export function ItemIdCell({ row }: { row: PurchaseBoardRow }) {
       ) : null}
     </span>
   );
+}
+
+export function ItemGtinCell({ row }: { row: PurchaseBoardRow }) {
+  const identities = row.itemId.identities ?? [];
+  if (identities.length > 1) return <span className="purchase-board__itemid-cell">
+    {identities.map((item) => <Tooltip key={item.itemId} title={`ItemID：${item.itemId}`}>
+      <span>{item.gtin ? <CopyableTextCell text={item.gtin} label="GTIN" /> : EMPTY}</span>
+    </Tooltip>)}
+  </span>;
+  return row.itemId.gtin ? <CopyableTextCell text={row.itemId.gtin} label="GTIN" /> : EMPTY;
 }
 

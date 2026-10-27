@@ -76,6 +76,20 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+test("item column shows one item id link and msku without duplicating the id", () => {
+  render(
+    <PackingWarehouseTable
+      {...base}
+      rows={[row({ item_id: "20472717870", msku: "YC00364-1A" })]}
+      can={() => true}
+      onCustomsChange={vi.fn()}
+    />,
+  );
+  expect(screen.getAllByText("20472717870")).toHaveLength(1);
+  expect(screen.getByText("YC00364-1A")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "复制商品ID：20472717870" })).toBeInTheDocument();
+});
+
 test("customs column switches in place and the action button is gone", () => {
   const onCustomsChange = vi.fn();
   render(<PackingWarehouseTable {...base} rows={[row({ draft_nos: ["CG261017-039"] })]} can={() => true} onCustomsChange={onCustomsChange} />);

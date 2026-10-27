@@ -195,7 +195,7 @@ const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
     return "商品";
   }
 
-  if (pmcPurchaseInterfaceKeys.has(item.interface_key)) return "仓库";
+  if (pmcPurchaseInterfaceKeys.has(item.interface_key) || item.interface_key === "pmcPurchaseBoardSync") return "仓库";
   if (pmcDomesticInterfaceKeys.has(item.interface_key)) return "国内仓";
   if (item.interface_key === "productList" || productDetailDependencyKeys.has(item.interface_key)) return "商品";
 
@@ -204,6 +204,7 @@ const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
 
 
 const chineseTaskNames: Record<string, string> = {
+  pmcPurchaseBoardSync: "采购看板同步",
   getSellerList: "店铺列表同步",
   walmartListingList: "Listing 管理同步",
   saleStatPageList: "每日销售同步",
@@ -224,6 +225,7 @@ const chineseTaskNames: Record<string, string> = {
 };
 
 const chineseInterfaceNames: Record<string, string> = {
+  pmcPurchaseBoardSync: "采购计划、采购单、收货单及看板刷新",
   getSellerList: "领星店铺列表接口",
   walmartListingList: "沃尔玛 Listing 列表接口",
   saleStatPageList: "沃尔玛销售统计接口",
@@ -244,6 +246,9 @@ const chineseInterfaceNames: Record<string, string> = {
 };
 
 const descriptionForInterface = (item: InterfaceDto) => {
+  if (item.interface_key === "pmcPurchaseBoardSync") {
+    return "统一采集采购计划、采购单、收货单，清洗并刷新采购看板；默认每 3 小时，可立即同步。";
+  }
   if (item.interface_key === "productList") {
     return "前端只显示一个产品管理同步任务：同步 ProductList、ProductInfo，并刷新产品管理当前数据。";
   }
@@ -450,10 +455,19 @@ export async function listIntegrationSyncTasks() {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
     rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
   }
-  const visibleRows = foldProductDetailDependencyRows(rows).filter(shouldDisplayTaskRow);
+  // Preserve other accounts' tasks until their own unified configuration exists.
+  const purchaseParents = rows.filter((task) => task.interfaceKey === "pmcPurchaseBoardSync" && task.configId);
+  const visibleRows = foldProductDetailDependencyRows(rows).filter(shouldDisplayTaskRow).filter(
+    (task) => !pmcPurchaseInterfaceKeys.has(task.interfaceKey)
+      || !purchaseParents.some((parent) => parent.source === task.source),
+  );
   const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
+    stageName: run.interface_key === "pmcPurchaseBoardSync" ? "完整流程"
+      : pmcPurchaseInterfaceKeys.has(run.interface_key) ? chineseTaskNames[run.interface_key] : undefined,
     id: run.id,
-    taskId: run.config_id ?? run.id,
+    taskId: pmcPurchaseInterfaceKeys.has(run.interface_key)
+      ? purchaseParents.find((parent) => parent.source === run.source_account_ref)?.id ?? run.config_id ?? run.id
+      : run.config_id ?? run.id,
     runAt: run.started_at ?? run.queued_at,
     triggerType: trigger(run.trigger_type),
     status: status[run.status] ?? "失败",

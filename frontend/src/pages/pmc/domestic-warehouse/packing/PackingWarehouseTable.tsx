@@ -3,7 +3,7 @@ import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Pagination, Select, Space, Tag, Tooltip, Typography } from "antd";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
-import { CopyableTextCell, WalmartItemLink } from "@/components/report-table/cells";
+import { CopyableTextCell, WalmartProductIdCell } from "@/components/report-table/cells";
 import { packingWarehouseFields, type PackingWarehouseRow, type PackingWarehouseSort } from "./packingWarehouseTypes";
 import { warehouseSyncLabel } from "./packingWarehouseApi";
 export type WarehouseDialogKind = "boxes" | "done" | "notes" | "unpacked" | "rebox" | "supplemental-inbound" | "supplemental-sync" | "detail";
@@ -31,7 +31,7 @@ export default function PackingWarehouseTable(p: Props) {
       case "purchase": return <Space direction="vertical" size={0}>{row.purchase_order_sns.map((sn) => <CopyableTextCell key={sn} text={sn} label="采购单号" />)}</Space>;
       case "sku": return <Space direction="vertical" size={0}>{copy(row.sku, "SKU")}<Typography.Text type="secondary">{row.product_name ?? "—"}</Typography.Text></Space>;
       case "store": return row.store_name ?? row.store_id ?? "—";
-      case "item": return <Space direction="vertical" size={0}>{row.item_id ? <><WalmartItemLink itemId={row.item_id} />{copy(row.item_id, "ItemID")}</> : "—"}<small>{row.msku ?? "—"}</small></Space>;
+      case "item": return <Space direction="vertical" size={0}>{row.item_id ? <WalmartProductIdCell productId={row.item_id} /> : "—"}<small>{row.msku ?? "—"}</small></Space>;
       case "gtin": return copy(row.gtin, "GTIN");
       case "quantity": return <Tooltip title="审批量 / 本单装箱量 / 来源批次当前余额；同来源余额不能跨PK累加">{row.approved_quantity} / {row.box_set?.total_qty ?? "—"} / {row.stock_balance ?? "未知"}</Tooltip>;
       case "boxes": return row.box_set ? <Space direction="vertical" size={0}>{row.box_set.lines.map((line) => <span key={line.id}>{line.box_type}箱 {line.boxes}×{line.units_per_box}件 · {line.gross_weight_kg}kg/箱</span>)}{row.box_set.variance_qty !== 0 && <Tag color="warning">{row.box_set.variance_qty < 0 ? `未装 ${Math.abs(row.box_set.variance_qty)} 件${row.variance_case?.state === "pending" ? " · 待中台处理" : row.variance_case?.state === "released" ? " · 已回可发池" : row.variance_case?.state === "voided" ? " · 已作废未装" : ""}` : `超出 ${row.box_set.variance_qty} 件`}</Tag>}</Space> : "未填装箱";

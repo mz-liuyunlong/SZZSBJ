@@ -37,7 +37,10 @@ def test_store_row_uses_its_own_remark_then_listing_gtin():
     found = resolve_store_item_ids(
         store_id="S1", sku="YC1", lines=lines, plans=plans, listings=listings
     )
-    assert found == [("20403609913", "00465313943732"), ("20347351964", None)]
+    assert found == [
+        ("20403609913", "00465313943732"),
+        ("20347351964", None),
+    ]
 
 
 def test_same_purchase_order_keeps_each_store_on_its_own_row():
@@ -138,5 +141,5 @@ def test_attach_reads_current_remarks_for_the_row_store():
         "22222222222",
     ]
     assert row.item_identities[0].gtin == "004"
-    assert row.identity_status == "conflict"
+    assert row.identity_status == "multiple"
     engine.dispose()

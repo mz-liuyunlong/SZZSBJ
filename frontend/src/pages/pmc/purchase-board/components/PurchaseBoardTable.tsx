@@ -7,6 +7,7 @@ import { CopyableTextCell, MoneyCell } from "@/components/report-table/cells";
 import EmptyState from "@/shared/states/EmptyState";
 import {
   ItemIdCell,
+  ItemGtinCell,
   OverdueCell,
   SkuCycleBriefCell,
   StageCell,
@@ -137,7 +138,7 @@ function PurchaseBoardTable({
       title: title("gtin", fieldTitle.gtin),
       width: width("gtin"),
       onHeaderCell: headerCell,
-      render: (_, row) => (row.itemId.gtin ? <CopyableTextCell text={row.itemId.gtin} label="GTIN" /> : EMPTY),
+      render: (_, row) => <ItemGtinCell row={row} />,
     },
     itemId: {
       key: "itemId",

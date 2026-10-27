@@ -66,6 +66,7 @@ export interface SyncTaskRow {
 }
 
 export interface SyncTaskLog {
+  stageName?: string;
   id: string;
   taskId: string;
   runAt: string;

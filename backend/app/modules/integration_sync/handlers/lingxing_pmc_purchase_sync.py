@@ -177,11 +177,18 @@ class LingxingPmcPurchaseSyncHandler:
     handler_key: str
     request_kind = "offset_page"
 
-    def __init__(self, session: Session, *, client: PmcPurchasePageClient | None = None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        client: PmcPurchasePageClient | None = None,
+        pipeline_parent_id: UUID | None = None,
+    ) -> None:
         register_productlist_sync_models()
         self.session = session
         self.repository = IntegrationSyncRepository(session)
         self._client = client
+        self._pipeline_parent_id = pipeline_parent_id
 
     # --- entry ------------------------------------------------------------------------
 
@@ -244,7 +251,36 @@ class LingxingPmcPurchaseSyncHandler:
         policy = self.repository.get_retention_policy(spec.retention_policy_key)
         if config is None or policy is None:
             raise PmcPurchaseSyncError("SYNC_PURCHASE_METADATA_MISSING")
-        if not config.is_enabled or config.schedule_enabled:
+        # The registered parent owns configuration; child records retain source
+        # identity/retention and can only run inside an active same-account parent.
+        from app.modules.integration_sync.models import IntegrationSyncConfig
+        from app.modules.integration_sync.pmc_purchase_pipeline_catalog import PURCHASE_PIPELINE_KEY
+        from app.modules.integration_sync.pmc_purchase_pipeline_repository import (
+            PurchasePipelineRepository,
+        )
+
+        parent_config = PurchasePipelineRepository(self.session).config_for(
+            PURCHASE_PIPELINE_KEY,
+            run.source_account_ref,
+        )
+        if isinstance(parent_config, IntegrationSyncConfig):
+            parent = (
+                self.repository.get_run_for_update(run.parent_run_id) if run.parent_run_id else None
+            )
+            if (
+                self._pipeline_parent_id is None
+                or run.parent_run_id != self._pipeline_parent_id
+                or parent is None
+                or parent.interface_key != PURCHASE_PIPELINE_KEY
+                or parent.provider != "lingxing"
+                or parent.status != "running"
+                or parent.config_id != parent_config.id
+                or parent.source_account_ref != run.source_account_ref
+                or not parent_config.is_enabled
+            ):
+                raise PmcPurchaseSyncError("SYNC_PURCHASE_USE_UNIFIED_TASK")
+            config = parent_config
+        elif not config.is_enabled or config.schedule_enabled:
             raise PmcPurchaseSyncError("SYNC_PURCHASE_MANUAL_ONLY")
         if run.window_start is None or run.window_end is None:
             raise PmcPurchaseSyncError("SYNC_PURCHASE_WINDOW_REQUIRED")

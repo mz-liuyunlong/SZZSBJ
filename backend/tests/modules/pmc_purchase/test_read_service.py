@@ -155,7 +155,7 @@ def test_summary_cards(seeded: Session) -> None:
         m.currency_code == "CNY" for m in data.month_purchase_amount
     )
     assert data.itemid_pending_lines == 1 and data.unattributed_store_lines == 1
-    assert data.wfs_not_ready_lines == 2  # PO1 and PO3 share the SKU-A listing (fulfillment 0)
+    assert data.wfs_not_ready_lines == 3  # Unverified remarks now fall back to the SKU-A listing too.
     assert data.unstable_sku_count == 0
 
 

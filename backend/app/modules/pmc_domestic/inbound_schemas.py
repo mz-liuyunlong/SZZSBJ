@@ -103,7 +103,7 @@ class InboundRow(BaseModel):
     purchase_order_sns: list[str]
     draft_nos: list[str] = Field(default_factory=list)
     item_identities: list[ItemIdentity] = Field(default_factory=list)
-    identity_status: Literal["resolved", "missing", "partial", "conflict"] = "missing"
+    identity_status: Literal["resolved", "missing", "partial", "conflict", "multiple"] = "missing"
     owner: ProductOwner = Field(default_factory=ProductOwner)
     inbound_at_raw: str | None
     inbound_at: datetime | None

@@ -17,6 +17,7 @@ describe("domestic sync task display", () => {
     vi.mocked(backendRequest).mockImplementation(async (path: string) => {
       if (path.startsWith("/api/integrations/interfaces")) {
         return {
+          success: true, error: null, meta: {}, request_id: "synthetic-domestic-test",
           data: {
             items: Object.keys(domesticNames).map((interfaceKey) => ({
               id: interfaceKey,
@@ -29,7 +30,7 @@ describe("domestic sync task display", () => {
           },
         };
       }
-      return { data: { items: [] } };
+      return { success: true, error: null, meta: {}, request_id: "synthetic-domestic-test", data: { items: [] } };
     });
   });
 

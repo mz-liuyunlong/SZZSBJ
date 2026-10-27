@@ -314,7 +314,7 @@ def test_republish_applies_remark_parse_without_duplicate_lineage(session: Sessi
     line = session.scalar(select(DwdPurchaseOrderLineItem))
     assert published is not None and line is not None
     assert published.remark_item_id == "20400862776"
-    assert line.remark_item_id == "20400862776"
+    assert line.remark_item_id is None  # Mixed source remarks cannot fit in one scalar.
 
 
 def test_republish_is_idempotent_and_newer_version_rewrites_continued(session: Session) -> None:

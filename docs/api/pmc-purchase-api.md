@@ -173,3 +173,10 @@ envelope/meta, validation) and `test_read_service.py` (filters, sorting, batch s
 summary, detail, SKU cycles, pending plans on DWS rows produced by the refresh), and
 `test_overrides.py` (exclude / restore / arrival_date / baseline end-to-end with the DWS
 rebuild, idempotent replay, validation, permission and OpenAPI).
+# 2026年10月27日 ItemID多值兼容补充
+
+负责人选择对齐旧采购备注行为：合并采购计划与采购明细备注，校验同账号同店铺本地SKU的Listing，保留全部有效ItemID，来源仍为from_plan_remark（页面中文采购备注）。多值不是冲突，不拆数量或金额。
+
+既有列表与订单详情的item_id增加identities数组，每项为item_id字符串、msku/gtin/fulfillment_type可空字符串。旧快照默认[]；唯一值继续填item_id.item_id，多值该标量为null而match_status=matched，不能仅按标量null判断未归属。GTIN保留前导零。集合支持ItemID、GTIN、MSKU检索；待处理统计排除已匹配多值行。无有效备注时保留同店铺SKU的Listing候选集合，来源from_listing。
+
+集合和备注校验证据随DWS source_lineage_json保存，无新表或迁移；现有数据须通过原刷新流程重建才产生集合，本次代码修改不运行真实刷新。账号权限与现有API路径不变。

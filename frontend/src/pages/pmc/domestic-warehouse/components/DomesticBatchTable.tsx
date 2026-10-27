@@ -56,6 +56,7 @@ function renderCell(key: string, row: DomesticBatch) {
         : <Tooltip title="这家店的备注和 Listing 都没有对上 ItemID"><Tag>待归属</Tag></Tooltip>}
       {row.identity_status === "conflict" && <Tag color="warning">归属冲突</Tag>}
       {row.identity_status === "partial" && <Tag color="warning">归属不完整</Tag>}
+      {row.identity_status === "multiple" && <Tag color="warning">多 listing（{row.item_identities?.length ?? 0}）</Tag>}
     </Space>;
     case "gtin": return row.item_identities?.length ? <Space direction="vertical" size={0}>
       {row.item_identities.map((identity, index) => <Tooltip key={`${identity.item_id}:${index}`} title={`对应 ItemID：${identity.item_id}`}>

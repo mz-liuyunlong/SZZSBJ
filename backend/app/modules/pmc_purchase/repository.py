@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, Text, and_, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import LingxingStoreDimension
@@ -102,7 +102,18 @@ class PmcPurchaseReadRepository:
             clauses.append(or_(*options))
         values = query.normalized_search_values()
         if values and query.search_type:
-            clauses.append(_SEARCH_COLUMNS[query.search_type].in_(values))
+            scalar_match = _SEARCH_COLUMNS[query.search_type].in_(values)
+            if query.search_type in ("item_id", "gtin", "msku"):
+                # Search only the dedicated identity list, never arbitrary lineage evidence.
+                from json import dumps
+                collection = cast(
+                    b.source_lineage_json[f"identity_search_{query.search_type}"], Text
+                )
+                clauses.append(or_(scalar_match, *[
+                    collection.contains(dumps(value), autoescape=True) for value in values
+                ]))
+            else:
+                clauses.append(scalar_match)
         if query.item_id_source:
             clauses.append(b.item_id_source.in_(query.item_id_source))
         if query.order_date_from:
@@ -143,6 +154,7 @@ class PmcPurchaseReadRepository:
             clauses.append(b.sku_cycle_unstable.is_(True))
         elif summary_filter == "itemid_pending":
             clauses.append(b.item_id.is_(None))
+            clauses.append(b.item_id_match_status != "matched")
             clauses.append(b.stage_code != "S0")
         return clauses
 

@@ -13,8 +13,10 @@ from sqlalchemy import func, select
 
 from app.modules.data_pages.models import LingxingStoreDimension as Store
 from app.modules.data_pages.models import WalmartListingDimension as Listing
+from app.modules.pmc_domestic.board_item_ids import attach_board_item_ids
 from app.modules.pmc_domestic.inbound_models import DomesticBoardPublication as Pub
 from app.modules.pmc_domestic.inbound_models import DomesticInboundBoard as Board
+from app.modules.pmc_domestic.inbound_schemas import ItemIdentity
 from app.modules.pmc_domestic.packing_customs_rules import candidate_customs
 from app.modules.pmc_domestic.packing_models import PackingAllocation, PackingOrder
 from app.modules.pmc_domestic.packing_rules import fingerprint
@@ -71,6 +73,20 @@ def matches(row, q):
     return not q.keyword or any(q.keyword.casefold() in (v or "").casefold() for v in words)
 
 
+class _PackingBoardRow:
+    """Adapter so packing candidates reuse the inbound board ItemID resolver."""
+
+    def __init__(self, board: Board) -> None:
+        payload = board.payload_json if isinstance(board.payload_json, dict) else {}
+        sns = payload.get("purchase_order_sns")
+        self.source_account_ref = board.source_account_ref
+        self.sku = board.sku
+        self.store_id = board.store_id
+        self.purchase_order_sns = list(sns) if isinstance(sns, list) else []
+        self.item_identities: list[ItemIdentity] = []
+        self.identity_status = "missing"
+
+
 class PackingRepository:
     def __init__(self, session):
         self.session = session
@@ -108,7 +124,7 @@ class PackingRepository:
             ).all()
         )
         skus = {b.sku for b, _ in sources}
-        listings = defaultdict(list)
+        listing_by_item: dict[tuple[str, str, str], Listing] = {}
         if skus:
             for listing in s.scalars(
                 select(Listing).where(
@@ -118,9 +134,14 @@ class PackingRepository:
                     Listing.fulfillment_type.in_(["0", "1"]),
                 )
             ):
-                listings[(listing.source_account_ref, listing.local_sku, listing.store_id)].append(
-                    listing
-                )
+                listing_by_item[
+                    (listing.source_account_ref, listing.store_id, listing.item_id)
+                ] = listing
+        board_rows = [_PackingBoardRow(b) for b, _ in sources]
+        attach_board_item_ids(s, board_rows, frozenset(accounts))
+        identities_by_board = {
+            str(b.id): row for (b, _), row in zip(sources, board_rows, strict=True)
+        }
         used = {
             (a, w, str(b)): q
             for a, w, b, q in s.execute(
@@ -192,8 +213,17 @@ class PackingRepository:
         today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
         result = []
         for b, pub in sources:
-            payload = b.payload_json
-            options = listings.get((b.source_account_ref, b.sku, b.store_id), []) or [None]
+            payload = b.payload_json if isinstance(b.payload_json, dict) else {}
+            board_identities = identities_by_board[str(b.id)].item_identities
+            if board_identities:
+                options: list[tuple[ItemIdentity | None, Listing | None]] = []
+                for identity in board_identities:
+                    listing = listing_by_item.get(
+                        (b.source_account_ref, b.store_id or "", identity.item_id)
+                    )
+                    options.append((identity, listing))
+            else:
+                options = [(None, None)]
             qty = payload.get("available_good_num")
             if not isinstance(qty, int) or isinstance(qty, bool) or qty < 0:
                 qty = None
@@ -225,8 +255,8 @@ class PackingRepository:
                 and all(purchase.get((b.source_account_ref, sn, b.sku)) for sn in purchases)
                 else None
             )
-            for listing in options:
-                item = listing.item_id if listing else None
+            for identity, listing in options:
+                item = identity.item_id if identity else None
                 ident = uuid5(
                     NAMESPACE_URL,
                     f"szzsbj:packing:{b.source_account_ref}:{b.source_warehouse_id}:"
@@ -267,7 +297,8 @@ class PackingRepository:
                     "source_store_id": b.store_id,
                     "store_name": stores.get((b.source_account_ref, b.store_id)),
                     "item_id": item,
-                    "gtin": listing.gtin if listing else None,
+                    "gtin": (listing.gtin if listing else None)
+                    or (identity.gtin if identity else None),
                     "msku": listing.msku if listing else None,
                     "product_name": payload.get("product_name"),
                     "purchase_order_sns": purchases,
@@ -278,7 +309,9 @@ class PackingRepository:
                     else None,
                     "stock_balance": b.balance_num,
                     "available_quantity": available,
-                    "default_quantity": available if len(options) == 1 else None,
+                    "default_quantity": available
+                    if len(board_identities) == 1 and len(options) == 1
+                    else None,
                     "can_approve": not blocked,
                     "blocked_reasons": blocked,
                     "source_observed_at": pub.source_observed_at,

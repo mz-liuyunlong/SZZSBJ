@@ -120,11 +120,12 @@ export interface PurchaseOwnerRef {
 }
 
 export interface PurchaseItemIdRef {
+  identities?: { itemId: string; msku: string | null; gtin: string | null; fulfillmentType: string | null }[];
   itemId: string | null;
   source: PurchaseBoardItemIdSource;
   sourceRef: string | null;
   matchedAt: string | null;
-  matchStatus: "matched" | "pending" | "unresolved";
+  matchStatus: "matched" | "pending" | "conflict" | "unresolved";
   msku: string | null;
   gtin: string | null;
   fulfillmentType: string | null;

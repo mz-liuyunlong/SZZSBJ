@@ -266,3 +266,10 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 
 
 > 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。
+# 2026年10月27日 采购与批次ItemID集合契约补充
+
+范围：既有PMC采购列表/订单详情ItemIdRef.identities与国内仓入库批次item_identities。权威输入为现有采购计划/明细ODS及同账号店铺SKU的Listing DIM；采购DWS刷新物化集合、检索索引及证据至既有JSON，采购GET仅映射DWS；批次沿用既有来源加载位置。多值不重复数量，采购标量仅唯一时填写；批次multiple表示多值关联，不表示错误。权限不变，无迁移和新同步任务。决策与回滚见docs/delivery/pmc-itemid-legacy-alignment-20261027.md，SOP见docs/sop/pmc-itemid-multiple.md。
+
+## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
+
+内部任务 `pmcPurchaseBoardSync`；复用既有接口 `/api/integrations/sync-configs/{id}/run`、配置PATCH、retry及work-items。Source Decision: `docs/data-sources/decisions/pmc-purchase-board-decision.md`（READY_FOR_PRP / REBUILD_SYNC）；PRP: `PRPs/pmc-purchase-unified-sync.md`。来源purchasePlanList/purchaseOrderList/purchaseReceiptOrderList的RAW/ODS → 既有DWD/DWS；治理写入沿用gov_integration_*，无新增表/字段。仅成功父运行window_end推进水位，内部子记录保留原来源血缘。integrations:read/update/execute，可信source_account scope。状态testing（离线验证，未生产注册/启用）；详见采购统一同步API及handoff。不影响其他业务调度配置，不改变业务计算口径。

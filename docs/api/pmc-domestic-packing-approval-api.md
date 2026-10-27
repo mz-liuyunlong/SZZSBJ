@@ -30,7 +30,7 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 | publication_id、board_id | UUID | 当前MART复合来源主键；审批保留历史引用 |
 | inbound_order_sn、sku | string | 入库单与SKU，不使用空收货DWD替代 |
 | product_name、store_id/name | string/null | 发布资料及DIM，未知归属保留null |
-| item_id、gtin、msku | string/null | 同账号+店铺+SKU的PUBLISHED且履约类型0/1的DIM记录；不转数字丢前导零 |
+| item_id、gtin、msku | string/null | 与批次看板同一套 ItemID 解析（采购备注+Listing）；每个 ItemID 一行候选。GTIN/MSKU 来自该店该 ItemID 的 PUBLISHED 且履约类型 0/1 的 Listing；审批仍要求 14 位 GTIN |
 | purchase_order_sns | string[] | 入库来源采购关联，不猜测 |
 | draft_nos | string[] | 采购看板同一账号、采购单号、SKU 上的草稿号。只读展示，不参与候选版本，不新发号 |
 | arrival_purchased | int/null | DWD原采购行order_item_id去重后汇总quantity_real；关联不完整为null |

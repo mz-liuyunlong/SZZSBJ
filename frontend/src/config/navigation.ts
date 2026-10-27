@@ -331,6 +331,7 @@ export const navigation: NavigationGroup[] = [
         tabs: [{ key: 'tasks', title: '导出任务' }, { key: 'history', title: '导出历史' }],
       }),
       page('data_center', 'task_center', '任务中心', '/data-center/task-center', {
+        help: { enabled: true, title: '任务中心采购同步说明', helpUrl: '/help/purchase-sync.html', openInNewTab: true },
         tabs: [{ key: 'sync', title: '同步任务' }, { key: 'schedule', title: '定时任务' }, { key: 'history', title: '历史记录' }, { key: 'failed', title: '失败记录' }],
       }),
       page('data_center', 'api_docs', 'API文档', '/data-center/api-docs', {
