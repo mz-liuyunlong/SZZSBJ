@@ -17,10 +17,10 @@ def config() -> ProbeConfig:
         source_account_ref="primary",
         store_id="110704872940532224",
         msku="YC00115-1A",
-        start_date=date(2026, 9, 1),
-        end_date=date(2026, 9, 30),
+        start_date=date(2026, 8, 19),
+        end_date=date(2026, 10, 17),
         page_size=20,
-        max_pages=3,
+        max_pages=20,
     )
 
 
@@ -30,10 +30,10 @@ def test_probe_config_is_exactly_bounded() -> None:
             "WFS_PROBE_SOURCE_ACCOUNT_REF": "primary",
             "WFS_PROBE_STORE_ID": "110704872940532224",
             "WFS_PROBE_MSKU": "YC00115-1A",
-            "WFS_PROBE_START_DATE": "2026-09-01",
-            "WFS_PROBE_END_DATE": "2026-09-30",
+            "WFS_PROBE_START_DATE": "2026-08-19",
+            "WFS_PROBE_END_DATE": "2026-10-17",
             "WFS_PROBE_PAGE_SIZE": "20",
-            "WFS_PROBE_MAX_PAGES": "3",
+            "WFS_PROBE_MAX_PAGES": "20",
         }
     )
 
@@ -48,17 +48,17 @@ def test_probe_config_is_exactly_bounded() -> None:
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("WFS_PROBE_PAGE_SIZE", "21"), ("WFS_PROBE_MAX_PAGES", "4")],
+    [("WFS_PROBE_PAGE_SIZE", "21"), ("WFS_PROBE_MAX_PAGES", "21")],
 )
 def test_probe_rejects_expanded_pagination(field: str, value: str) -> None:
     environ = {
         "WFS_PROBE_SOURCE_ACCOUNT_REF": "primary",
         "WFS_PROBE_STORE_ID": "110704872940532224",
         "WFS_PROBE_MSKU": "YC00115-1A",
-        "WFS_PROBE_START_DATE": "2026-09-01",
-        "WFS_PROBE_END_DATE": "2026-09-30",
+        "WFS_PROBE_START_DATE": "2026-08-19",
+        "WFS_PROBE_END_DATE": "2026-10-17",
         "WFS_PROBE_PAGE_SIZE": "20",
-        "WFS_PROBE_MAX_PAGES": "3",
+        "WFS_PROBE_MAX_PAGES": "20",
     }
     environ[field] = value
 
