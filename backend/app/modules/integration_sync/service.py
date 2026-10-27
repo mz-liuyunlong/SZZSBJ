@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from typing import Literal, cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -245,6 +245,10 @@ class IntegrationSyncService:
                 actor_ref=actor_ref,
                 request_id=request_id,
             )
+        retry_window_start = source.window_start
+        retry_window_end = source.window_end
+        if source.provider == "lingxing" and source.interface_key == "walmartReturnOrderList":
+            retry_window_start, retry_window_end = self._refund_retry_window(source, account_refs)
         run = self._new_run(
             config_id=source.config_id,
             interface_id=source.interface_id,
@@ -257,10 +261,62 @@ class IntegrationSyncService:
             request_id=request_id,
             parent_run_id=source.id,
             retry_of_run_id=source.id,
-            window_start=source.window_start,
-            window_end=source.window_end,
+            window_start=retry_window_start,
+            window_end=retry_window_end,
         )
         return self._persist_queued_run(run, actor_ref)
+
+    def _refund_retry_window(
+        self,
+        source: IntegrationSyncRun,
+        account_refs: frozenset[str],
+    ) -> tuple[datetime, datetime]:
+        """Resolve a bounded, evidenced refund retry window; never use today's default."""
+        from app.modules.integration_sync.execution import (
+            DATA_PAGES_LA_TZ,
+            DATA_PAGES_MAX_BACKFILL_DAYS,
+        )
+
+        visited: set[UUID] = set()
+        current: IntegrationSyncRun | None = source
+        for _ in range(32):
+            if current is None or current.id in visited:
+                break
+            visited.add(current.id)
+            if (
+                current.source_account_ref != source.source_account_ref
+                or current.provider != source.provider
+                or current.interface_key != source.interface_key
+            ):
+                break
+            start, end = current.window_start, current.window_end
+            if start is not None and end is not None:
+                if start.tzinfo is None or end.tzinfo is None:
+                    break
+                day_start = start.astimezone(DATA_PAGES_LA_TZ).date()
+                day_end = end.astimezone(DATA_PAGES_LA_TZ).date()
+                if 0 <= (day_end - day_start).days <= DATA_PAGES_MAX_BACKFILL_DAYS:
+                    return start, end
+                break
+            if start is not None or end is not None:
+                break
+            evidence = self.repository.refund_capture_business_dates(
+                current.id, current.source_account_ref
+            )
+            if evidence:
+                if (
+                    len(evidence) == (evidence[-1] - evidence[0]).days + 1
+                    and (evidence[-1] - evidence[0]).days <= DATA_PAGES_MAX_BACKFILL_DAYS
+                ):
+                    return (
+                        datetime.combine(evidence[0], time.min, tzinfo=DATA_PAGES_LA_TZ),
+                        datetime.combine(evidence[-1], time.max, tzinfo=DATA_PAGES_LA_TZ),
+                    )
+                break
+            if current.retry_of_run_id is None:
+                break
+            current = self.repository.get_run(current.retry_of_run_id, account_refs)
+        raise ApiError(code="SYNC_REFUND_RETRY_DATE_EVIDENCE_MISSING", status_code=409)
 
     def _create_productinfo_retry_run(
         self,
