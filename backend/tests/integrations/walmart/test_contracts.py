@@ -57,9 +57,7 @@ def test_approved_read_contract() -> None:
     )
     req = registry.prepare("listItems", params={"limit": 50})
     assert (req.method, req.path, req.query) == ("GET", "/v3/items", {"limit": 50})
-    assert registry.prepare("getOrder", params={"orderId": "a/b"}).path == (
-        "/v3/orders/a%2Fb"
-    )
+    assert registry.prepare("getOrder", params={"orderId": "a/b"}).path == ("/v3/orders/a%2Fb")
 
 
 def test_writes_require_second_gate() -> None:
@@ -133,9 +131,7 @@ def test_validates_nested_request_body_schema() -> None:
                     "requestBody": {
                         "required": True,
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Item"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Item"}}
                         },
                     },
                 }
