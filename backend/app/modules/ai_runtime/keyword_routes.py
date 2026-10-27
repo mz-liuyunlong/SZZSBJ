@@ -365,7 +365,9 @@ def download_keyword_ai_four_sheet(
     ).scalar_one_or_none()
     try:
         content = generate_four_sheet_review(
-            run=run, keyword_rows=rows, ai_items=ai_items,
+            run=run,
+            keyword_rows=rows,
+            ai_items=ai_items,
             listing_draft=draft if isinstance(draft, dict) else None,
         )
     except ValueError:
