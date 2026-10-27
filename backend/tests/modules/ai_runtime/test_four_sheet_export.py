@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 from zipfile import ZipFile
 
+import pytest
+
 from app.modules.ai_runtime.four_sheet_export import SHEET_NAMES, generate_four_sheet_review
 
 
@@ -26,7 +28,5 @@ def test_four_sheet_workbook_contains_only_requested_review_sheets() -> None:
 
 def test_four_sheet_rejects_unfinished_runs() -> None:
     run = SimpleNamespace(id=uuid4(), status="running", source_account_ref="synthetic")
-    import pytest
-
     with pytest.raises(ValueError, match="ANALYSIS_NOT_FINALIZED"):
         generate_four_sheet_review(run=run, keyword_rows=[])
