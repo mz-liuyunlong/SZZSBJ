@@ -97,14 +97,12 @@ def test_wfs_case_projection_qualifies_overlapping_evidence_columns() -> None:
     for column in (
         "actual_unit_fee",
         "unit_fee_diff",
+        "mode_count",
         "latest_settlement_date",
         "standard_fee_source",
         "detected_at",
     ):
-        assert (
-            f"latest_evidence.{column}, ops_wfs_fee_anomaly_cases.{column}"
-            in projection
-        )
+        assert f"latest_evidence.{column}, ops_wfs_fee_anomaly_cases.{column}" in projection
 
 
 def test_recovered_amount_must_be_positive_and_cents_precision() -> None:
