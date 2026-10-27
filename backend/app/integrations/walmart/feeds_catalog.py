@@ -21,6 +21,7 @@ def feed_monitor_registry(
     if approved_keys - known:
         raise ContractError("WALMART_APPROVED_OPERATION_UNKNOWN")
 
+    # Feed type/status are response filters, not supported query parameters.
     pagination = (
         Field("limit", "query", kind="integer", maximum=50),
         Field("offset", "query", kind="integer"),
@@ -34,8 +35,6 @@ def feed_monitor_registry(
                 path="/v3/feeds",
                 fields=(
                     Field("feedId", "query"),
-                    Field("feedType", "query"),
-                    Field("feedStatus", "query", enum=("RECEIVED", "INPROGRESS", "PROCESSED", "ERROR")),
                     *pagination,
                 ),
                 source="walmart-us-marketplace-feed-status-2026-10",
