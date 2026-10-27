@@ -61,9 +61,7 @@ def _check(account: str, accounts: frozenset[str], principal: Principal) -> None
 
 
 def _assert_job_owner(requested_by: str, principal: Principal) -> None:
-    if requested_by != principal.user_id and not has_permission(
-        principal, "business-rules:write"
-    ):
+    if requested_by != principal.user_id and not has_permission(principal, "business-rules:write"):
         raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
 
 
