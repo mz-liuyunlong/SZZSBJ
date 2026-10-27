@@ -23,6 +23,7 @@ import WfsFeeAlertTable from "@/pages/warehouse/components/WfsFeeAlertTable";
 import WfsFeeAlertToolbar from "@/pages/warehouse/components/WfsFeeAlertToolbar";
 import {
   fetchWfsFeeAlerts,
+  markWfsFeeCaseRecovered,
   previewWfsFeeDetection,
   updateWfsFeeAlertCase,
 } from "@/pages/warehouse/wfsFeeAlertApi";
@@ -34,6 +35,7 @@ import {
   wfsFeeAlertColumnFields,
   type WfsFeeAlertFilters,
   type WfsFeeAlertFollowFormValues,
+  type WfsFeeRecoveredFormValues,
   type WfsFeeAlertRow,
 } from "@/pages/warehouse/wfsFeeAlertTypes";
 import "@/pages/warehouse/WfsFeeAlertPage.css";
@@ -84,6 +86,7 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
   const requestedRangeKey = JSON.stringify([rangeStart, rangeEnd]);
   const loading = settledRangeKey !== requestedRangeKey;
   const canFollow = hasPermission(permissions, "action:warehouse:wfs-fee-alert:follow");
+  const canMarkRecovered = hasPermission(permissions, "action:warehouse:wfs-fee-alert:mark-recovered");
   const canArchiveRequest = hasPermission(
     permissions,
     "action:warehouse:wfs-fee-alert:archive-request",
@@ -209,6 +212,22 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
     }
   };
 
+
+  const handleMarkRecovered = async (values: WfsFeeRecoveredFormValues): Promise<void> => {
+    if (!detailRow || !canMarkRecovered) {
+      throw new Error("当前无追回确认权限或未选择记录");
+    }
+    try {
+      await markWfsFeeCaseRecovered(detailRow.id, values);
+    } catch {
+      void messageApi.error("标记已追回失败，请核对案件状态和追回金额");
+      throw new Error("标记已追回失败");
+    }
+    void messageApi.success("已登记追回金额，案件状态已更新为已追回");
+    setDetailRow(undefined);
+    await reloadRows();
+  };
+
   const headerActions = (
     <>
       {canPreviewDetection && (
@@ -320,7 +339,9 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
         currency={filters.currency}
         onClose={() => setDetailRow(undefined)}
         onSubmit={handleSaveFollow}
+        onMarkRecovered={handleMarkRecovered}
         canFollow={canFollow}
+        canMarkRecovered={canMarkRecovered}
         canArchiveRequest={canArchiveRequest}
         onOpenAbandon={(row) => { setDetailRow(undefined); setAbandonRow(row); }}
       />
