@@ -17,7 +17,10 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import text
 
 from app.db.session import get_session_factory
-from app.modules.business_connectors.encryption_key import EncryptionKeyUnavailable, get_business_fernet
+from app.modules.business_connectors.encryption_key import (
+    EncryptionKeyUnavailable,
+    get_business_fernet,
+)
 from app.modules.decodo import local_test
 from app.modules.decodo.schemas import DecodoConfigRead, DecodoUsageRead, DecodoUsageRow
 
