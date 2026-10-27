@@ -544,26 +544,44 @@ def test_data_pages_mart_failure_rolls_back_day_and_continues(
     client_context.__enter__.return_value = object()
     client_context.__exit__.return_value = False
     monkeypatch.setattr(execution_module, "data_pages_client", lambda: client_context)
+    committed_runner = MagicMock()
+    committed_runner._source_fact_commit_completed = True
+    committed_runner.summary = SimpleNamespace(
+        store_rows=1,
+        listing_rows=0,
+        advertiser_rows=0,
+        sales_rows=5,
+        order_rows=2,
+        refund_rows=0,
+        ad_rows=0,
+    )
     monkeypatch.setattr(
         execution_module,
         "DataPagesRealSyncRunner",
-        MagicMock(side_effect=[MagicMock(), MagicMock()]),
+        MagicMock(side_effect=[committed_runner, MagicMock()]),
     )
 
     service._execute_data_pages_run(run)
 
     assert service._execute_data_pages_interface.call_count == 2
     session.rollback.assert_called_once_with()
-    assert run.status == "failed"
-    assert run.work_items_succeeded == 1
-    assert run.work_items_failed == 1
-    assert run.error_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
-    assert run.records_written == 3
+    assert run.status == "succeeded"
+    assert run.work_items_succeeded == 2
+    assert run.work_items_failed == 0
+    assert run.error_code is None
+    assert run.records_seen == 12  # 8 committed on anomalous day + 4 on validated day
+    assert run.records_written == 3  # Only validated MART rows are published
     assert service._heartbeat_data_pages_lock.call_count == 1
     events = [call.args[0] for call in repository.add_event.call_args_list]
     assert events[0].message_code == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
     assert events[0].safe_details == {"business_date": first_day.isoformat()}
-    assert events[1].safe_details == {"failed_business_dates": 1}
+    assert events[1].message_code == "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
+    assert events[1].safe_details == {"failed_capture_dates": 0, "pending_financial_dates": 1}
+    repository.record_business_anomaly.assert_called_once()
+    assert (
+        repository.record_business_anomaly.call_args.kwargs["error_code"]
+        == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
+    )
 
 
 def test_listing_management_path_does_not_write_sales_profit_marts() -> None:
