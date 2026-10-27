@@ -111,6 +111,10 @@ def create_keyword_ai_job(
             .first()
         )
         if existing is not None:
+            if existing["requested_by"] != principal.user_id and not has_permission(
+                principal, "business-rules:write"
+            ):
+                raise ApiError(code=ErrorCode.FORBIDDEN, status_code=403)
             stored = {k: existing["input_json"].get(k) for k in payload}
             if hashlib.sha256(json.dumps(stored, sort_keys=True).encode()).hexdigest() != digest:
                 raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
