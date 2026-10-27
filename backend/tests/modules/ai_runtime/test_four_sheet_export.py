@@ -28,3 +28,19 @@ def test_four_sheet_rejects_unfinished_runs() -> None:
     run = SimpleNamespace(id=uuid4(), status="running", source_account_ref="synthetic")
     with pytest.raises(ValueError, match="ANALYSIS_NOT_FINALIZED"):
         generate_four_sheet_review(run=run, keyword_rows=[])
+
+
+def test_ai_annotations_do_not_change_scoring_or_export_structure() -> None:
+    run = SimpleNamespace(id=uuid4(), status="succeeded", source_account_ref="synthetic")
+    content = generate_four_sheet_review(
+        run=run,
+        keyword_rows=[],
+        ai_items=[
+            {"keyword": "unmatched", "relevance": "low", "reason": "Review evidence"},
+            {"keyword": "unmatched", "relevance": "high", "reason": "Duplicate"},
+        ],
+    )
+    with ZipFile(BytesIO(content)) as workbook:
+        names = workbook.read("xl/workbook.xml").decode("utf-8")
+        assert len([name for name in SHEET_NAMES if name in names]) == 4
+        assert len([name for name in workbook.namelist() if name.startswith("xl/worksheets/sheet")]) == 4
