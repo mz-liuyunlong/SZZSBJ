@@ -53,7 +53,7 @@ class FakeClient:
         self.calls.append((method, url, kwargs))
         if url.endswith("/v3/token"):
             return FakeStream(200, b'{"access_token":"synthetic-token"}')
-        return FakeStream(200, b'{"items":[]}' )
+        return FakeStream(200, b'{"items":[]}')
 
 
 class FakeStream:
