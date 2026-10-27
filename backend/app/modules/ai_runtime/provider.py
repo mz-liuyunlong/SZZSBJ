@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 
 from app.db.session import get_session_factory
-from app.integrations.llm.openai_provider import generate_text
+from app.integrations.llm.openai_provider import failed_call_reservation, generate_text
 
 MODEL = "gpt-6-luna"
 MAX_SKILL_INSTRUCTIONS = 150000
@@ -227,15 +227,23 @@ async def invoke(
         result, inp, out = await generate_text(
             api_key=credential, model=MODEL, prompt=prompt, max_output_tokens=max_out
         )
-    except Exception:
+    except Exception as exc:
+        failed_cost, failure_code = failed_call_reservation(
+            reservation, getattr(exc, "status_code", None)
+        )
         with get_session_factory()() as session:
             session.execute(
-                text("""UPDATE biz_ai_usage SET status='failed',
-              error_code='AI_PROVIDER_FAILURE',duration_ms=:duration WHERE id=:id"""),
-                {"id": charge_id, "duration": int((time.monotonic() - started) * 1000)},
+                text("""UPDATE biz_ai_usage SET status='failed',cost_usd=:cost,
+              error_code=:error,duration_ms=:duration WHERE id=:id"""),
+                {
+                    "id": charge_id,
+                    "cost": failed_cost,
+                    "error": failure_code,
+                    "duration": int((time.monotonic() - started) * 1000),
+                },
             )
             session.commit()
-        raise AIUnavailable("AI_PROVIDER_FAILURE") from None
+        raise AIUnavailable(failure_code) from None
     actual = (Decimal(inp) * in_rate + Decimal(out) * out_rate) / Decimal(1000000)
     with get_session_factory()() as session:
         session.execute(
