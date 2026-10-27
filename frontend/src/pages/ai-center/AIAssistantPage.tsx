@@ -128,8 +128,8 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
       void msgApi.warning('附件最多 10 个，单个 2MB、总计 6MB；请移除超限附件');
       return;
     }
-    let attachments:{name:string;content_base64:string}[];
-    try {
+    let attachments:{name:string;content_base64:string}[]=[];
+    if(uploads.length)try {
       attachments=await Promise.all(uploads.map(async u=>{
         const bytes=new Uint8Array(await u.file.arrayBuffer());
         let binary='';
