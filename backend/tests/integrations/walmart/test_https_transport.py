@@ -49,9 +49,26 @@ class FakeClient:
         self.calls.append(("POST", url, kwargs))
         return FakeResponse(200, {"access_token": "synthetic-token"})
 
-    def request(self, method: str, url: str, **kwargs: Any) -> FakeResponse:
+    def stream(self, method: str, url: str, **kwargs: Any) -> FakeStream:
         self.calls.append((method, url, kwargs))
-        return FakeResponse(200, {"items": []})
+        if url.endswith("/v3/token"):
+            return FakeStream(200, b'{"access_token":"synthetic-token"}')
+        return FakeStream(200, b'{"items":[]}' )
+
+
+class FakeStream:
+    def __init__(self, status: int, body: bytes) -> None:
+        self.status_code = status
+        self.body = body
+
+    def __enter__(self) -> FakeStream:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def iter_bytes(self) -> list[bytes]:
+        return [self.body]
 
 
 def fake_request() -> PreparedRequest:
@@ -138,3 +155,19 @@ def test_credentials_repr_is_redacted() -> None:
     assert "fake-secret" not in repr(
         ClientCredentials(client_id="fake-id", client_secret="fake-secret")
     )
+
+
+def test_oversize_provider_response_rejected_before_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    class OversizeClient(FakeClient):
+        def stream(self, method: str, url: str, **kwargs: Any) -> FakeStream:
+            if url.endswith("/v3/token"):
+                return FakeStream(200, b'{"access_token":"synthetic-token"}')
+            return FakeStream(200, b"x" * (1024 * 1024 + 1))
+
+    monkeypatch.setattr(httpx, "Client", OversizeClient)
+    transport = WalmartHttpsTransport(
+        proxy_by_store={"HK2615": "http://10.3.4.5:3128"},
+        secret_resolver=FakeSecretResolver(),
+    )
+    with pytest.raises(TransportRejected, match="WALMART_RESPONSE_TOO_LARGE"):
+        transport.execute(store_code="HK2615", request=fake_request())
