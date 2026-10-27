@@ -1,4 +1,5 @@
 """Walmart feed monitoring contracts: offline only, no seller credentials."""
+
 from __future__ import annotations
 
 import pytest
@@ -16,10 +17,7 @@ def test_feed_monitoring_disabled_by_default() -> None:
 
 def test_feed_status_list_filters() -> None:
     registry = feed_monitor_registry(approved_keys=frozenset({"feed_status_list"}))
-    req = registry.prepare(
-        "feed_status_list",
-        params={"limit": 50, "offset": 0},
-    )
+    req = registry.prepare("feed_status_list", params={"limit": 50, "offset": 0})
     assert req.method == "GET"
     assert req.path == "/v3/feeds"
     assert req.query == {"limit": 50, "offset": 0}
