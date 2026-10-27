@@ -1,6 +1,6 @@
 /** Read-only monitoring for Listing evaluation runs and published C/D follow-ups. */
 import { useEffect, useState } from "react";
-import { Alert, Descriptions, Drawer, Empty, Spin, Table, Tag, Typography } from "antd";
+import { Alert, Button, Descriptions, Drawer, Empty, Input, Modal, Spin, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { backendRequest } from "@/api/backendApi";
 
@@ -29,6 +29,7 @@ interface FollowUp {
   due_date_cn: string;
   owner_ref: string | null;
   status: string;
+  resolution_note: string | null;
 }
 interface Props { open: boolean; onClose: () => void; }
 
@@ -56,6 +57,9 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [activeFollowUp, setActiveFollowUp] = useState<FollowUp | null>(null);
+  const [resolutionNote, setResolutionNote] = useState("");
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +86,24 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
     return () => { active = false; };
   }, [open]);
 
+  const completeFollowUp = async () => {
+    if (!activeFollowUp || resolutionNote.trim().length < 3) return;
+    setSavingFollowUp(true);
+    try {
+      const result = await backendRequest<FollowUp>(
+        "/api/listings/evaluation-followups/" + encodeURIComponent(activeFollowUp.id),
+        { method: "PATCH", body: JSON.stringify({ status: "completed", resolution_note: resolutionNote.trim() }) },
+      );
+      setFollowUps((current) => current.map((item) => item.id === result.data.id ? result.data : item));
+      setActiveFollowUp(null);
+      setResolutionNote("");
+    } catch {
+      setError("保存跟进结果失败，请确认权限和服务状态。");
+    } finally {
+      setSavingFollowUp(false);
+    }
+  };
+
   return (
     <Drawer title="Listing 计算记录与C/D跟进" open={open} onClose={onClose} width={1080}>
       <Alert type="warning" showIcon style={{ marginBottom: 16 }}
@@ -97,9 +119,25 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
           <Descriptions.Item label="生成条件">仅从已正式发布、证据完整的C/D级快照生成</Descriptions.Item>
           <Descriptions.Item label="当前状态">没有已发布评级，因此不会创建或虚构跟进任务</Descriptions.Item>
         </Descriptions>
-        {followUps.length ? <Table<FollowUp> rowKey="id" size="small" columns={followUpColumns}
-          dataSource={followUps} pagination={{ pageSize: 10 }} scroll={{ x: 850 }} /> : <Empty description="暂无正式C/D跟进任务" />}
+        {followUps.length ? <Table<FollowUp> rowKey="id" size="small" columns={[
+          ...followUpColumns,
+          { title: "操作", key: "action", width: 100, render: (_, row) => (
+            <Button size="small" disabled={row.status === "completed" || row.status === "canceled"}
+              onClick={() => { setActiveFollowUp(row); setResolutionNote(""); }}>完成检查</Button>
+          ) },
+        ]} dataSource={followUps} pagination={{ pageSize: 10 }} scroll={{ x: 950 }} /> : <Empty description="暂无正式C/D跟进任务" />}
       </Spin>
+      <Modal title="完成C/D每日检查" open={activeFollowUp !== null}
+        confirmLoading={savingFollowUp} okText="保存完成记录" cancelText="取消"
+        onCancel={() => setActiveFollowUp(null)} onOk={() => void completeFollowUp()}
+      >
+        <Typography.Paragraph type="secondary">
+          {activeFollowUp?.item_id} / {activeFollowUp?.msku ?? "-"} · {activeFollowUp?.grade}级
+        </Typography.Paragraph>
+        <Input.TextArea rows={4} maxLength={1000} value={resolutionNote}
+          onChange={(event) => setResolutionNote(event.target.value)}
+          placeholder="填写今天检查了什么、采取了什么措施及结果（至少3个字符）" />
+      </Modal>
     </Drawer>
   );
 }

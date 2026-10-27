@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -12,6 +12,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_response
+from app.core.auth import Principal
 from app.core.config import get_settings
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/api/listings", tags=["Listing Evaluation Preview"])
 DB = Annotated[Session, Depends(get_db_session)]
 scope = Annotated[frozenset[str], Depends(require_source_account_scope)]
 view = Depends(require_permission("page:products:listing-management:view"))
+follow_up_writer = Annotated[Principal, Depends(require_permission("action:products:listing-management:manage-followups"))]
 
 
 @router.get(
@@ -253,5 +255,53 @@ def list_evaluation_followups(
             items=[ListingFollowUpItem.model_validate(row) for row in rows],
             total=count,
         ),
+        meta={"source": "published_grade_followups"},
+    )
+
+
+class ListingFollowUpUpdateRequest(BaseModel):
+    status: Literal["in_progress", "completed", "canceled"]
+    resolution_note: str | None = Field(default=None, max_length=1000)
+
+
+@router.patch(
+    "/evaluation-followups/{task_id}",
+    response_model=SuccessEnvelope[ListingFollowUpItem, dict[str, str]],
+    responses={403: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope}},
+)
+def update_evaluation_followup(
+    request: Request,
+    task_id: UUID,
+    payload: ListingFollowUpUpdateRequest,
+    session: DB,
+    account_refs: scope,
+    principal: follow_up_writer,
+):
+    """Update a scoped C/D task with an auditable completion note."""
+    task = session.scalar(
+        select(ListingGradeFollowUpTask).where(
+            ListingGradeFollowUpTask.id == task_id,
+            ListingGradeFollowUpTask.source_account_ref.in_(account_refs),
+        )
+    )
+    if task is None:
+        raise ApiError(code="LISTING_FOLLOWUP_NOT_FOUND", status_code=404)
+    note = (payload.resolution_note or "").strip()
+    if payload.status == "completed" and len(note) < 3:
+        raise ApiError(
+            code="LISTING_FOLLOWUP_RESOLUTION_NOTE_REQUIRED",
+            status_code=422,
+            message="完成C/D检查前必须填写处理说明",
+        )
+    task.status = payload.status
+    task.resolution_note = note or None
+    task.resolved_at = datetime.now(UTC) if payload.status in {"completed", "canceled"} else None
+    task.resolved_by = principal.user_id if task.resolved_at is not None else None
+    task.updated_at = datetime.now(UTC)
+    session.commit()
+    session.refresh(task)
+    return success_response(
+        request,
+        data=ListingFollowUpItem.model_validate(task),
         meta={"source": "published_grade_followups"},
     )
