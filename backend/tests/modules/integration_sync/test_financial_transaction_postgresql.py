@@ -105,8 +105,12 @@ def test_refund_source_commit_survives_financial_rollback() -> None:
                 # Match the rollback path in _execute_data_pages_run.
                 session.rollback()
                 assert session.scalar(text("select sum(qty) from sync_source_capture")) == 2
-                assert session.scalar(text("select amount from sync_validated_daily")) == Decimal("25.98")
-                assert session.scalar(text("select amount from sync_validated_profit")) == Decimal("6.12")
+                assert session.scalar(text("select amount from sync_validated_daily")) == Decimal(
+                    "25.98"
+                )
+                assert session.scalar(text("select amount from sync_validated_profit")) == Decimal(
+                    "6.12"
+                )
                 runner._refresh_order_profit_mart.assert_not_called()
     finally:
         engine.dispose()
