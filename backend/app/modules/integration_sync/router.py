@@ -3,7 +3,7 @@ from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
@@ -452,6 +452,7 @@ def list_sync_anomalies(
     status_filter: str | None = Query(default=None, alias="status"),
     interface_key: str | None = None,
     business_date: date | None = None,
+    keyword: str | None = Query(default=None, max_length=128),
 ) -> SuccessEnvelope[SyncAnomalyListData, ReadMeta]:
     predicate = [IntegrationSyncAnomaly.source_account_ref.in_(account_refs)]
     if status_filter:
@@ -460,6 +461,17 @@ def list_sync_anomalies(
         predicate.append(IntegrationSyncAnomaly.interface_key == interface_key)
     if business_date:
         predicate.append(IntegrationSyncAnomaly.business_date == business_date)
+    if keyword and keyword.strip():
+        pattern = "%" + keyword.strip().replace("%", r"\\%").replace("_", r"\\_") + "%"
+        predicate.append(or_(
+            IntegrationSyncAnomaly.local_sku.ilike(pattern, escape="\\"),
+            IntegrationSyncAnomaly.msku.ilike(pattern, escape="\\"),
+            IntegrationSyncAnomaly.item_id.ilike(pattern, escape="\\"),
+            IntegrationSyncAnomaly.platform_order_no.ilike(pattern, escape="\\"),
+            IntegrationSyncAnomaly.campaign_name.ilike(pattern, escape="\\"),
+            IntegrationSyncAnomaly.store_id.ilike(pattern, escape="\\"),
+            IntegrationSyncAnomaly.error_code.ilike(pattern, escape="\\"),
+        ))
     total = session.scalar(select(func.count()).select_from(IntegrationSyncAnomaly).where(*predicate)) or 0
     rows = session.scalars(
         select(IntegrationSyncAnomaly).where(*predicate)
