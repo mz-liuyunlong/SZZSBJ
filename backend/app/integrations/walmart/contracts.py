@@ -421,10 +421,15 @@ class ContractRegistry:
                         media_supported = False
                     else:
                         candidates = (
-                            "application/json", "application/xml", "text/xml",
-                            "application/x-www-form-urlencoded", "multipart/form-data",
+                            "application/json",
+                            "application/xml",
+                            "text/xml",
+                            "application/x-www-form-urlencoded",
+                            "multipart/form-data",
                         )
-                        content_type = next((item for item in candidates if item in content), next(iter(content)))
+                        content_type = next(
+                            (item for item in candidates if item in content), next(iter(content))
+                        )
                         media_supported = content_type in _SUPPORTED_BODY_TYPES
                         media = content.get(content_type)
                         if isinstance(media, dict) and media.get("schema") is not None:
@@ -432,13 +437,22 @@ class ContractRegistry:
                             if not isinstance(schema, dict):
                                 raise ContractError("WALMART_CONTRACT_INVALID")
                             body_schema = schema
-                operations.append(Operation(
-                    key=key, method=method.upper(), path=path, fields=fields,
-                    has_body=has_body, source="imported-openapi-3", enabled=key in approved_keys,
-                    request_schema=body_schema, request_content_type=content_type,
-                    body_required=body_required, media_supported=media_supported,
-                    mutating=None,
-                ))
+                operations.append(
+                    Operation(
+                        key=key,
+                        method=method.upper(),
+                        path=path,
+                        fields=fields,
+                        has_body=has_body,
+                        source="imported-openapi-3",
+                        enabled=key in approved_keys,
+                        request_schema=body_schema,
+                        request_content_type=content_type,
+                        body_required=body_required,
+                        media_supported=media_supported,
+                        mutating=None,
+                    )
+                )
         if approved_keys.difference({operation.key for operation in operations}):
             raise ContractError("WALMART_APPROVED_OPERATION_UNKNOWN")
         return cls(tuple(operations))
