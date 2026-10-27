@@ -196,6 +196,7 @@ jobs:
         working-directory: backend
         run: |
           uv run pytest -q -s tests/modules/warehouse_wfs/test_auto_case_postgresql.py
+          uv run pytest -q -s tests/modules/integration_sync/test_financial_transaction_postgresql.py
           uv run python - <<'PY'
           from sqlalchemy import create_engine, inspect, text
           from app.core.config import get_database_url

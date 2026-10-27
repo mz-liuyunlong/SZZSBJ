@@ -415,6 +415,9 @@ class SyncRunExecutionService:
                     source_committed = bool(getattr(runner, "_source_fact_commit_completed", False))
                     if source_committed:
                         mart_failures.append(error)
+                        # Capture is durable even when the financial MART is rolled back.
+                        # Count those source rows exactly once; do not count failed MART writes.
+                        records_seen += self._data_pages_source_row_count(runner.summary)
                     else:
                         capture_failures.append(error)
                     self.repository.record_business_anomaly(
@@ -449,15 +452,7 @@ class SyncRunExecutionService:
                     self.session.commit()
                     continue
 
-                records_seen += (
-                    summary.store_rows
-                    + summary.listing_rows
-                    + summary.advertiser_rows
-                    + summary.sales_rows
-                    + summary.order_rows
-                    + summary.refund_rows
-                    + summary.ad_rows
-                )
+                records_seen += self._data_pages_source_row_count(summary)
                 records_written += (
                     summary.mart_daily_sales_rows
                     + summary.mart_order_profit_rows
@@ -500,6 +495,19 @@ class SyncRunExecutionService:
             ),
         )
         self.session.commit()
+
+    @staticmethod
+    def _data_pages_source_row_count(summary: DataPagesRealSyncSummary) -> int:
+        """Count durable source rows, independent of financial MART publication."""
+        return (
+            summary.store_rows
+            + summary.listing_rows
+            + summary.advertiser_rows
+            + summary.sales_rows
+            + summary.order_rows
+            + summary.refund_rows
+            + summary.ad_rows
+        )
 
     def _execute_data_pages_interface(
         self,
