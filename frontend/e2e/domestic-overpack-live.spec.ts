@@ -40,8 +40,6 @@ test("overpack shortage, IB mock sync, manual reconfirmation and source audit", 
   expect(body.data.box_set.completed_at).toBeNull();
   await expect(dialog).not.toBeVisible();
   await expect(row).toContainText("超发 8 件 · 待补入库单");
-  await page.goto("/#/pmc/domestic/batches");
-  await expect(page.locator(".ant-alert-message").filter({ hasText: /^超发待补入库 1 张$/ })).toBeVisible();
   await page.goto("/#/pmc/domestic/packing-warehouse");
   await row.getByRole("button", { name: "已补入库单", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "已补入库单", exact: true });

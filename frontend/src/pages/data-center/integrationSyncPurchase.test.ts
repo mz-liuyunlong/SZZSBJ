@@ -16,12 +16,14 @@ const config = (key: string, account = "fixture") => ({ id: `${key}:${account}`,
   next_run_at: null, updated_at: "2026-10-27T00:00:00Z" });
 const envelope = (items: unknown[]) => ({ success: true, data: { items }, error: null,
   meta: {}, request_id: "synthetic" });
+const dashboard = (latest_runs: unknown[]) => ({ success: true,
+  data: { latest_runs, today_stats: [] }, error: null, meta: {}, request_id: "synthetic" });
 
 it("shows one purchase task, preserves other businesses and folds historical source logs", async () => {
   vi.mocked(backendRequest)
     .mockResolvedValueOnce(envelope(interfaces))
     .mockResolvedValueOnce(envelope(keys.map((key) => config(key))))
-    .mockResolvedValueOnce(envelope([{ id: "historic", config_id: "purchasePlanList:fixture",
+    .mockResolvedValueOnce(dashboard([{ id: "historic", config_id: "purchasePlanList:fixture",
       interface_id: "purchasePlanList", interface_key: "purchasePlanList", source_account_ref: "fixture",
       trigger_type: "manual", status: "succeeded", queued_at: "2026-10-26T00:00:00Z",
       started_at: null, finished_at: null, records_seen: 3, work_items_succeeded: 1,
@@ -36,7 +38,7 @@ it("does not hide another account's source tasks", async () => {
   vi.mocked(backendRequest)
     .mockResolvedValueOnce(envelope(interfaces))
     .mockResolvedValueOnce(envelope([...keys.map((key) => config(key)), config("purchasePlanList", "other")]))
-    .mockResolvedValueOnce(envelope([]));
+    .mockResolvedValueOnce(dashboard([]));
   const result = await listIntegrationSyncTasks();
   expect(result.rows.find((row) => row.source === "other")).toMatchObject({ interfaceKey: "purchasePlanList" });
 });
@@ -45,6 +47,26 @@ it("preserves legacy source rows when the unified task is not registered", async
   vi.mocked(backendRequest)
     .mockResolvedValueOnce(envelope(interfaces.slice(1)))
     .mockResolvedValueOnce(envelope(keys.slice(1).map((key) => config(key))))
-    .mockResolvedValueOnce(envelope([]));
+    .mockResolvedValueOnce(dashboard([]));
   expect((await listIntegrationSyncTasks()).rows).toHaveLength(4);
+});
+
+it("still lists interface tasks when dashboard is unavailable but sync-runs works", async () => {
+  vi.mocked(backendRequest)
+    .mockResolvedValueOnce(envelope(interfaces))
+    .mockResolvedValueOnce(envelope([config("walmartListingList")]))
+    .mockRejectedValueOnce(new Error("NOT_FOUND"))
+    .mockResolvedValueOnce(envelope([]));
+  const result = await listIntegrationSyncTasks();
+  expect(result.rows.some((row) => row.interfaceKey === "walmartListingList")).toBe(true);
+});
+
+it("still lists interfaces when scoped config and dashboard calls fail", async () => {
+  vi.mocked(backendRequest)
+    .mockResolvedValueOnce(envelope(interfaces))
+    .mockRejectedValueOnce(new Error("DATA_SCOPE_DENIED"))
+    .mockRejectedValueOnce(new Error("DATA_SCOPE_DENIED"));
+  const result = await listIntegrationSyncTasks();
+  expect(result.rows.length).toBeGreaterThan(0);
+  expect(result.rows.every((row) => row.lastStatus === "未执行" || row.lastStatus === "已停用")).toBe(true);
 });

@@ -446,36 +446,71 @@ function row(
   };
 }
 
-export async function listIntegrationSyncTasks() {
-  async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
-    const items: T[] = [];
-    for (let page = 1; page <= 1000; page += 1) {
-      const response = await backendRequest<{ items: T[] }>(
-        `${endpoint}?page=${page}&page_size=100`,
-      );
-      items.push(...response.data.items);
-      if (response.data.items.length < 100) return items;
-    }
-    throw new Error("SYNC_TASK_CONFIG_LIST_TOO_LARGE");
+type SyncTaskTodayStat = {
+  interface_id: string;
+  source_account_ref: string;
+  runs: number;
+  success: number;
+  failed: number;
+};
+
+async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
+  const items: T[] = [];
+  for (let page = 1; page <= 1000; page += 1) {
+    const response = await backendRequest<{ items: T[] }>(
+      `${endpoint}?page=${page}&page_size=100`,
+    );
+    const pageItems = response.data.items ?? [];
+    items.push(...pageItems);
+    if (pageItems.length < 100) return items;
   }
-  const [interfacesList, configsList, dashboard] = await Promise.all([
-    fetchAllPages<InterfaceDto>("/api/integrations/interfaces"),
-    fetchAllPages<ConfigDto>("/api/integrations/sync-configs"),
-    backendRequest<{ latest_runs: RunDto[]; today_stats: Array<{
-      interface_id: string; source_account_ref: string;
-      runs: number; success: number; failed: number;
-    }> }>("/api/integrations/sync-tasks/dashboard"),
+  throw new Error("SYNC_TASK_CONFIG_LIST_TOO_LARGE");
+}
+
+async function fetchAllPagesOptional<T>(endpoint: string): Promise<T[]> {
+  try {
+    return await fetchAllPages<T>(endpoint);
+  } catch {
+    return [];
+  }
+}
+
+async function loadRunSnapshots(): Promise<{ latestRuns: RunDto[]; todayStats: SyncTaskTodayStat[] }> {
+  try {
+    const dashboard = await backendRequest<{
+      latest_runs: RunDto[];
+      today_stats: SyncTaskTodayStat[];
+    }>("/api/integrations/sync-tasks/dashboard");
+    return {
+      latestRuns: dashboard.data.latest_runs ?? [],
+      todayStats: dashboard.data.today_stats ?? [],
+    };
+  } catch {
+    try {
+      const runs = await backendRequest<{ items: RunDto[] }>(
+        "/api/integrations/sync-runs?page=1&page_size=100",
+      );
+      return { latestRuns: runs.data.items ?? [], todayStats: [] };
+    } catch {
+      return { latestRuns: [], todayStats: [] };
+    }
+  }
+}
+
+export async function listIntegrationSyncTasks() {
+  const interfacesList = await fetchAllPages<InterfaceDto>("/api/integrations/interfaces");
+  const [configsList, { latestRuns: runItems, todayStats }] = await Promise.all([
+    fetchAllPagesOptional<ConfigDto>("/api/integrations/sync-configs"),
+    loadRunSnapshots(),
   ]);
-  const runs = { data: { items: dashboard.data.latest_runs } };
-  const todayStats = dashboard.data.today_stats;
   const interfaceById = new Map(interfacesList.map((item) => [item.id, item]));
   const rows = configsList.flatMap((config) => {
     const item = interfaceById.get(config.interface_id);
-    return item ? [row(item, config, newestRun(runs.data.items, item.id, config.source_account_ref))] : [];
+    return item ? [row(item, config, newestRun(runItems, item.id, config.source_account_ref))] : [];
   });
   for (const item of interfacesList) {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
-    rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
+    rows.push(row(item, undefined, newestRun(runItems, item.id)));
   }
   const purchaseParents = rows.filter((task) => task.interfaceKey === "pmcPurchaseBoardSync" && task.configId);
   const todayTotals = new Map(todayStats.map((stat) => [
@@ -491,7 +526,7 @@ export async function listIntegrationSyncTasks() {
     (task) => !pmcPurchaseInterfaceKeys.has(task.interfaceKey)
       || !purchaseParents.some((parent) => parent.source === task.source),
   );
-  const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
+  const logs: SyncTaskLog[] = runItems.map((run) => ({
     stageName: run.interface_key === "pmcPurchaseBoardSync" ? "完整流程"
       : pmcPurchaseInterfaceKeys.has(run.interface_key) ? chineseTaskNames[run.interface_key] : undefined,
     id: run.id,

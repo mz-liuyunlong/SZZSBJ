@@ -7,7 +7,6 @@ import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnCo
 import type { NavigationPage } from "@/config/navigation";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
 import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
-import DomesticPackingRiskCard from "./components/DomesticPackingRiskCard";
 import DomesticToolbar from "./components/DomesticToolbar";
 import DomesticSummaryCards from "./components/DomesticSummaryCards";
 import DomesticBatchTable from "./components/DomesticBatchTable";
@@ -86,7 +85,6 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
           {noPublication && <Alert showIcon type="info" message="尚未发布入库数据" description="接口已接入；当前范围没有成功发布版本。" />}
           {error && <Alert type="error" showIcon message={domesticErrorText(error)} action={<Button size="small" onClick={retry}>重试</Button>} />}
           {versionMismatch && <Alert type="warning" showIcon message="列表与统计版本不同，请刷新后核对" action={<Button onClick={retry}>刷新版本</Button>} />}
-          <DomesticPackingRiskCard scope={preferenceScope} />
           {showStats && <DomesticSummaryCards summary={stats} active={filters.inventoryStatus} onUnknown={() => commitFilters({ ...filters, inventoryStatus: filters.inventoryStatus === "unknown" ? undefined : "unknown" })} />}
           <Typography.Paragraph type="secondary" className="domestic-board__hint">一行 = 入库单 × SKU × 店铺。入库总量属于 IB×SKU，跨店铺不可直接相加；统计已去重。“—”表示未知。{stats && ` 统计日期 ${stats.as_of}。`}</Typography.Paragraph>
           <div className="domestic-board__table-wrap"><DomesticBatchTable rows={rows} total={total}

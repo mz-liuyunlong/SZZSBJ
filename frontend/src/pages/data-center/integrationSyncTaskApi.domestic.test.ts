@@ -15,6 +15,10 @@ const domesticNames: Record<string, string> = {
 describe("domestic sync task display", () => {
   beforeEach(() => {
     vi.mocked(backendRequest).mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/integrations/sync-tasks/dashboard")) {
+        return { success: true, error: null, meta: {}, request_id: "synthetic-domestic-test",
+          data: { latest_runs: [], today_stats: [] } };
+      }
       if (path.startsWith("/api/integrations/interfaces")) {
         return {
           success: true, error: null, meta: {}, request_id: "synthetic-domestic-test",
