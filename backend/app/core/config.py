@@ -48,6 +48,9 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="TEST_DATABASE_URL",
     )
+    listing_evaluation_preview_enabled: bool = Field(
+        default=False, validation_alias="LISTING_EVALUATION_PREVIEW_ENABLED"
+    )
     product_management_preview_auth_enabled: bool = Field(
         default=False,
         validation_alias="PRODUCT_MANAGEMENT_PREVIEW_AUTH_ENABLED",
