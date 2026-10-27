@@ -21,6 +21,7 @@ from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.returns_catalog import returns_read_registry
+from app.integrations.walmart.operations_catalog import operations_read_registry
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
 from app.integrations.walmart.wfs_catalog import wfs_registry
@@ -53,24 +54,16 @@ def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
         feed_keys = set(feed_monitor_registry().keys())
         marketplace_keys = set(marketplace_read_registry().keys())
         returns_keys = set(returns_read_registry().keys())
-        known_keys = wfs_keys | feed_keys | marketplace_keys | returns_keys
+        operations_keys = set(operations_read_registry().keys())
+        known_keys = wfs_keys | feed_keys | marketplace_keys | returns_keys | operations_keys
         if approved_keys - known_keys:
             raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
         combined = (
-            tuple(
-                wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values()
-            )
-            + tuple(
-                feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values()
-            )
-            + tuple(
-                marketplace_read_registry(
-                    approved_keys=approved_keys & marketplace_keys
-                )._operations.values()
-            )
-            + tuple(
-                returns_read_registry(approved_keys=approved_keys & returns_keys)._operations.values()
-            )
+            tuple(wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values())
+            + tuple(feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values())
+            + tuple(marketplace_read_registry(approved_keys=approved_keys & marketplace_keys)._operations.values())
+            + tuple(returns_read_registry(approved_keys=approved_keys & returns_keys)._operations.values())
+            + tuple(operations_read_registry(approved_keys=approved_keys & operations_keys)._operations.values())
         )
         return ContractRegistry(combined)
     path = Path(source)
