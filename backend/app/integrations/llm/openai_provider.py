@@ -17,11 +17,25 @@ def failed_call_reservation(reserved_cost: Decimal, status_code: int | None) -> 
 
 
 async def generate_text(
-    *, api_key: str, model: str, prompt: str, max_output_tokens: int,\n    visual_parts: list[dict[str, str]] | None = None,
+    *,
+    api_key: str,
+    model: str,
+    prompt: str,
+    max_output_tokens: int,
+    visual_parts: list[dict[str, str]] | None = None,
 ) -> tuple[str, int, int]:
+    if visual_parts:
+        model_input = [
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}, *visual_parts],
+            }
+        ]
+    else:
+        model_input = prompt
     async with AsyncOpenAI(api_key=api_key, timeout=30.0, max_retries=0) as client:
         result = await client.responses.create(
-            model=model,\n            input=([{\n                "role": "user",\n                "content": [{"type": "input_text", "text": prompt}, *(visual_parts or [])],\n            }] if visual_parts else prompt),\n            max_output_tokens=max_output_tokens
+            model=model, input=model_input, max_output_tokens=max_output_tokens
         )
     return (
         result.output_text,
