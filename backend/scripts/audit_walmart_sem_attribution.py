@@ -55,32 +55,39 @@ def _report(rows: list[dict[str, Any]], limit: int) -> dict[str, object]:
         entry["campaign_rows"] = int(entry["campaign_rows"]) + 1
         entry["spend_usd"] = Decimal(str(entry["spend_usd"])) + spend
         if status != "ONE_LISTING_MATCH" and len(findings) < limit:
-            findings.append({
-                "business_date": row["business_date"].isoformat(),
-                "scope_hash": _hash(row["store_id"]),
-                "campaign_hash": _hash(row["campaign_id"], row["campaign_name"]),
-                "status": status,
-                "spend_usd": str(spend),
-                "listing_matches": int(row["listing_matches"]),
-            })
+            findings.append(
+                {
+                    "business_date": row["business_date"].isoformat(),
+                    "scope_hash": _hash(row["store_id"]),
+                    "campaign_hash": _hash(row["campaign_id"], row["campaign_name"]),
+                    "status": status,
+                    "spend_usd": str(spend),
+                    "listing_matches": int(row["listing_matches"]),
+                }
+            )
     total_spend = sum((Decimal(str(r["spend_usd"])) for r in rows), Decimal("0"))
-    unallocated = sum((
-        Decimal(str(r["spend_usd"])) for r in rows
-        if r["attribution_status"] != "ONE_LISTING_MATCH"
-    ), Decimal("0"))
+    unallocated = sum(
+        (
+            Decimal(str(r["spend_usd"]))
+            for r in rows
+            if r["attribution_status"] != "ONE_LISTING_MATCH"
+        ),
+        Decimal("0"),
+    )
     return {
         "campaign_rows": len(rows),
         "total_spend_usd": str(total_spend),
         "unallocated_spend_usd": str(unallocated),
         "by_status": {
-            key: {"campaign_rows": int(value["campaign_rows"]),
-                  "spend_usd": str(value["spend_usd"])}
+            key: {
+                "campaign_rows": int(value["campaign_rows"]),
+                "spend_usd": str(value["spend_usd"]),
+            }
             for key, value in sorted(totals.items())
         },
         "findings": findings,
-        "truncated": sum(
-            1 for row in rows if row["attribution_status"] != "ONE_LISTING_MATCH"
-        ) > len(findings),
+        "truncated": sum(1 for row in rows if row["attribution_status"] != "ONE_LISTING_MATCH")
+        > len(findings),
         "ownership_verification": "NOT_PROVEN_BY_CSV",
         "disclaimer": (
             "The mirror lacks trusted source-account ownership. Verify store ownership, "
@@ -183,7 +190,9 @@ def main() -> None:
                             "account": args.account,
                             "store": args.store,
                         },
-                    ).mappings().all()
+                    )
+                    .mappings()
+                    .all()
                 ]
         print(json.dumps(_report(rows, args.limit), ensure_ascii=False, indent=2))
     finally:
