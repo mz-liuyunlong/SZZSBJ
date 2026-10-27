@@ -7,9 +7,9 @@ from pydantic import ValidationError
 
 from app.modules.ai_runtime.general_routes import SkillWrite
 from app.modules.ai_runtime.provider import (
-    AIUnavailable,
     MAX_SKILL_INSTRUCTIONS,
     MAX_SKILL_RUNTIME_INSTRUCTIONS,
+    AIUnavailable,
     resolve_runtime_instructions,
 )
 
