@@ -1,7 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -109,3 +110,53 @@ def test_refund_mart_success_writes_validated_events_after_pending() -> None:
         "SYNC_REFUND_MART_VALIDATED",
         "SYNC_REFUND_MART_VALIDATED",
     ]
+
+
+def test_legacy_refund_retry_reuses_captured_days_not_current_window() -> None:
+    service = SyncRunExecutionService(MagicMock())
+    source_run_id = uuid4()
+    service.repository.refund_capture_business_dates.return_value = (
+        date(2026, 8, 4),
+        date(2026, 9, 13),
+    )
+    run = SimpleNamespace(
+        interface_key="walmartReturnOrderList",
+        retry_of_run_id=source_run_id,
+        source_account_ref="synthetic-account",
+        window_start=None,
+        window_end=None,
+    )
+    assert service._data_pages_business_dates_for_run(run) == (
+        date(2026, 8, 4),
+        date(2026, 9, 13),
+    )
+    service.repository.refund_capture_business_dates.assert_called_once_with(
+        source_run_id, "synthetic-account"
+    )
+
+
+def test_legacy_refund_retry_without_capture_evidence_fails_closed() -> None:
+    service = SyncRunExecutionService(MagicMock())
+    service.repository.refund_capture_business_dates.return_value = ()
+    run = SimpleNamespace(
+        interface_key="walmartReturnOrderList",
+        retry_of_run_id=uuid4(),
+        source_account_ref="synthetic-account",
+        window_start=None,
+        window_end=None,
+    )
+    assert service._data_pages_business_dates_for_run(run) == ()
+
+
+def test_refund_retry_with_frozen_window_preserves_original_business_date() -> None:
+    service = SyncRunExecutionService(MagicMock())
+    la = ZoneInfo("America/Los_Angeles")
+    run = SimpleNamespace(
+        interface_key="walmartReturnOrderList",
+        retry_of_run_id=uuid4(),
+        source_account_ref="synthetic-account",
+        window_start=datetime(2026, 8, 4, 0, 0, tzinfo=la),
+        window_end=datetime(2026, 8, 4, 23, 59, tzinfo=la),
+    )
+    assert service._data_pages_business_dates_for_run(run) == (date(2026, 8, 4),)
+    service.repository.refund_capture_business_dates.assert_not_called()

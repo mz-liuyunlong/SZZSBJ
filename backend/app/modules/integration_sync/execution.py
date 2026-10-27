@@ -1,5 +1,5 @@
 import hashlib
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -353,6 +353,15 @@ class SyncRunExecutionService:
             self._fail(run, "DATA_PAGES_PAGE_SIZE_INVALID")
             return
 
+        # Freeze the original refund-event dates before execution. A retry must
+        # repeat the failed historical dates, not drift to the current last 7 days.
+        if (
+            run.interface_key == "walmartReturnOrderList"
+            and run.window_start is None
+            and run.window_end is None
+        ):
+            run.window_start = datetime.combine(days[0], time.min, tzinfo=DATA_PAGES_LA_TZ)
+            run.window_end = datetime.combine(days[-1], time.max, tzinfo=DATA_PAGES_LA_TZ)
         run.work_items_total = len(days)
         self.session.commit()
 
@@ -668,6 +677,24 @@ class SyncRunExecutionService:
         run: IntegrationSyncRun,
         config: IntegrationSyncConfig | None = None,
     ) -> tuple[date, ...]:
+        # Legacy refund runs did not freeze their date window. Recover only
+        # dates proven by durable refund capture events on the original Run.
+        if (
+            run.interface_key == "walmartReturnOrderList"
+            and run.retry_of_run_id is not None
+            and run.window_start is None
+            and run.window_end is None
+        ):
+            persisted_days = self.repository.refund_capture_business_dates(
+                run.retry_of_run_id, run.source_account_ref
+            )
+            if persisted_days:
+                if len(persisted_days) > DATA_PAGES_MAX_BACKFILL_DAYS + 1:
+                    return ()
+                return persisted_days
+            # No trusted date evidence: fail closed rather than silently
+            # replaying today's unrelated last-seven-day window.
+            return ()
         if run.window_start is not None or run.window_end is not None:
             if run.window_start is None or run.window_end is None:
                 return ()

@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import Select, case, func, select
@@ -258,6 +258,24 @@ class IntegrationSyncRepository:
         self.session.add(run)
         self.session.flush()
         return run
+
+    def refund_capture_business_dates(
+        self, source_run_id: UUID, source_account_ref: str
+    ) -> tuple[date, ...]:
+        """Recover exact refund-event days from durable, account-scoped capture events."""
+        rows = self.session.scalars(
+            select(IntegrationSyncRunEvent.safe_details["business_date"].astext)
+            .join(IntegrationSyncRun, IntegrationSyncRun.id == IntegrationSyncRunEvent.run_id)
+            .where(
+                IntegrationSyncRun.id == source_run_id,
+                IntegrationSyncRun.source_account_ref == source_account_ref,
+                IntegrationSyncRun.interface_key == "walmartReturnOrderList",
+                IntegrationSyncRunEvent.message_code == "SYNC_REFUND_FACTS_COMMITTED",
+            )
+            .distinct()
+            .order_by(IntegrationSyncRunEvent.safe_details["business_date"].astext)
+        ).all()
+        return tuple(sorted({date.fromisoformat(value) for value in rows if value}))
 
     def refund_mart_pending_days(self, account_refs: frozenset[str]) -> list[tuple[str, str, UUID]]:
         """Latest pending/validated state per scoped purchase day; no data writes."""
