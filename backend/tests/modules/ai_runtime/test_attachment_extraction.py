@@ -53,6 +53,24 @@ def test_xlsx_text_is_extracted_without_external_service() -> None:
     assert "coasters" in extract_attachments([_attachment("keywords.xlsx", buf.getvalue())])
 
 
+def test_xlsx_numeric_and_shared_string_cells_preserved() -> None:
+    buf = BytesIO()
+    with ZipFile(buf, "w") as archive:
+        archive.writestr(
+            "xl/sharedStrings.xml",
+            '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            "<si><t>coasters</t></si></sst>",
+        )
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<sheetData><row><c t="s"><v>0</v></c><c><v>9916</v></c></row></sheetData>'
+            "</worksheet>",
+        )
+    output = extract_attachments([_attachment("market.xlsx", buf.getvalue())])
+    assert "coasters | 9916" in output
+
+
 def test_empty_attachment_rejected() -> None:
     with pytest.raises(AttachmentError, match="ATTACHMENT_EMPTY_CONTENT"):
         extract_attachments([_attachment("empty.txt", b"")])
