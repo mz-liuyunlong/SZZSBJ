@@ -351,8 +351,16 @@ def download_keyword_ai_four_sheet(
         for item in batch.get("items", [])
         if isinstance(item, dict)
     ]
+    draft = session.execute(
+        text("""SELECT output_json FROM ai_runtime_results
+        WHERE job_id=:job AND batch_index=-1 AND status='succeeded'"""),
+        {"job": job_id},
+    ).scalar_one_or_none()
     try:
-        content = generate_four_sheet_review(run=run, keyword_rows=rows, ai_items=ai_items)
+        content = generate_four_sheet_review(
+            run=run, keyword_rows=rows, ai_items=ai_items,
+            listing_draft=draft if isinstance(draft, dict) else None,
+        )
     except ValueError:
         raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409) from None
     return StreamingResponse(
