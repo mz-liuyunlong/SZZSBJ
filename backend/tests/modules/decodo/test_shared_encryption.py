@@ -1,4 +1,5 @@
 """Decodo uses the central protected key without breaking legacy ciphertext."""
+
 from pathlib import Path
 
 import pytest
@@ -45,9 +46,7 @@ def test_decodo_fail_closed_without_key(monkeypatch: pytest.MonkeyPatch) -> None
     assert raised.value.status == 503
 
 
-def test_decodo_accepts_shared_protected_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_decodo_accepts_shared_protected_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     key = Fernet.generate_key()
     path = tmp_path / "business.key"
     path.write_bytes(key)
