@@ -1,4 +1,5 @@
 """Mock-only SCF bridge tests: no network, secrets or production execution."""
+
 import pytest
 
 from app.integrations.walmart.contracts import PreparedRequest
@@ -27,10 +28,15 @@ def request(*, write: bool = False) -> PreparedRequest:
 
 
 def test_mock_success_with_store_scope() -> None:
-    fake = FakeInvoker({
-        "success": True, "store_code": "HK2615", "api_key": "getInventory",
-        "status_code": 200, "data": {"items": []},
-    })
+    fake = FakeInvoker(
+        {
+            "success": True,
+            "store_code": "HK2615",
+            "api_key": "getInventory",
+            "status_code": 200,
+            "data": {"items": []},
+        }
+    )
     bridge = ProtectedScfBridge(fake)
     result = bridge.execute(store_code="HK2615", request=request(), approval_ref=None)
     assert result.status_code == 200
@@ -52,20 +58,21 @@ def test_rejects_wrong_store() -> None:
         "status_code": 200, "data": {},
     })
     with pytest.raises(GatewayRejected, match="WALMART_GATEWAY_SCOPE_MISMATCH"):
-        ProtectedScfBridge(fake).execute(
-            store_code="HK2615", request=request(), approval_ref=None
-        )
+        ProtectedScfBridge(fake).execute(store_code="HK2615", request=request(), approval_ref=None)
 
 
 def test_rejects_sensitive_response() -> None:
-    fake = FakeInvoker({
-        "success": True, "store_code": "HK2615", "api_key": "getInventory",
-        "status_code": 200, "data": {"AccessToken": "should_not_return"},
-    })
+    fake = FakeInvoker(
+        {
+            "success": True,
+            "store_code": "HK2615",
+            "api_key": "getInventory",
+            "status_code": 200,
+            "data": {"AccessToken": "should_not_return"},
+        }
+    )
     with pytest.raises(GatewayRejected, match="WALMART_GATEWAY_SECRET_RESPONSE"):
-        ProtectedScfBridge(fake).execute(
-            store_code="HK2615", request=request(), approval_ref=None
-        )
+        ProtectedScfBridge(fake).execute(store_code="HK2615", request=request(), approval_ref=None)
 
 
 def test_rejects_invoker_failure_without_leakage() -> None:
