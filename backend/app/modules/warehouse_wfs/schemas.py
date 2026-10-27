@@ -260,7 +260,7 @@ class WfsFeeArchiveReviewWrite(StrictSchema):
 
 
 class WfsFeeRecoveredWrite(StrictSchema):
-    recovered_amount: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    recovered_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     claim_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     latest_follow_note: Annotated[
         str, StringConstraints(strip_whitespace=True, max_length=4000)
