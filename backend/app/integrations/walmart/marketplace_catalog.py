@@ -70,7 +70,7 @@ _MARKETPLACE = (
         method="GET",
         path="/v3/orders/released",
         fields=(
-            Field("limit", "query", kind="integer", maximum=200),
+            Field("limit", "query", kind="integer", maximum=100),
             Field("productInfo", "query", kind="boolean"),
             Field("shipNodeType", "query"),
             Field("replacementInfo", "query", kind="boolean"),
