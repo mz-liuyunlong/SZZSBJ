@@ -149,6 +149,19 @@ def _validate_scope(
             or str(row.get("transactionTypes")) != "0"
         ):
             raise ProbeError("WFS_PROBE_BUSINESS_SCOPE_MISMATCH")
+        for field_name in ("platformOrderNo", "salesNum", "settlementDate", "uniqueId", "rowIndex"):
+            value = row.get(field_name)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                raise ProbeError("WFS_PROBE_REQUIRED_FIELD_MISSING")
+        try:
+            settlement_day = date.fromisoformat(str(row["settlementDate"])[:10])
+            sales_num = Decimal(str(row["salesNum"]))
+        except (InvalidOperation, TypeError, ValueError):
+            raise ProbeError("WFS_PROBE_REQUIRED_FIELD_INVALID") from None
+        if not config.start_date <= settlement_day <= config.end_date:
+            raise ProbeError("WFS_PROBE_SETTLEMENT_DATE_OUTSIDE_WINDOW")
+        if not sales_num.is_finite():
+            raise ProbeError("WFS_PROBE_REQUIRED_FIELD_INVALID")
         for field_name in FEE_SCOPE_FIELDS:
             value = row.get(field_name)
             if value is None:
