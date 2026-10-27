@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WfsFeeAlertDetailModal from "@/pages/warehouse/components/WfsFeeAlertDetailModal";
 import { wfsFeeAlertRows } from "@/pages/warehouse/wfsFeeAlertMockData";
@@ -37,6 +37,8 @@ describe("WFS automatic follow scheduling and timeline", () => {
         canArchiveRequest={false}
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMarkRecovered={vi.fn().mockResolvedValue(undefined)}
+        canMarkRecovered={false}
         onOpenAbandon={vi.fn()}
       />,
     );
@@ -138,5 +140,62 @@ describe("WfsFeeAlertDetailModal fee evidence", () => {
     expect(screen.getByText("2026-07-03 ～ 2026-10-17")).toBeInTheDocument();
     expect(screen.getByText("verified_wfs")).toBeInTheDocument();
     expect(screen.getByText("仅人工复核")).toBeInTheDocument();
+  });
+});
+
+describe("WFS recovered amount action", () => {
+  it("requires a positive recovered amount before submitting", async () => {
+    const onMarkRecovered = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WfsFeeAlertDetailModal
+        row={{ ...wfsFeeAlertRows[0], status: "跟进中" }}
+        currency="USD"
+        canFollow={false}
+        canMarkRecovered
+        canArchiveRequest={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMarkRecovered={onMarkRecovered}
+        onOpenAbandon={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "标记已追回" }));
+    expect(screen.getByText("实际追回金额（USD）")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "确认已追回" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("追回金额必须大于 0")).toBeInTheDocument();
+    });
+    expect(onMarkRecovered).not.toHaveBeenCalled();
+  });
+
+  it("does not show the recovery action without permission or outside following status", () => {
+    const common = {
+      currency: "USD" as const,
+      canFollow: false,
+      canArchiveRequest: false,
+      onClose: vi.fn(),
+      onSubmit: vi.fn().mockResolvedValue(undefined),
+      onMarkRecovered: vi.fn().mockResolvedValue(undefined),
+      onOpenAbandon: vi.fn(),
+    };
+    const { rerender } = render(
+      <WfsFeeAlertDetailModal
+        {...common}
+        row={{ ...wfsFeeAlertRows[0], status: "跟进中" }}
+        canMarkRecovered={false}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "标记已追回" })).not.toBeInTheDocument();
+
+    rerender(
+      <WfsFeeAlertDetailModal
+        {...common}
+        row={{ ...wfsFeeAlertRows[0], status: "未开Case" }}
+        canMarkRecovered
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "标记已追回" })).not.toBeInTheDocument();
   });
 });
