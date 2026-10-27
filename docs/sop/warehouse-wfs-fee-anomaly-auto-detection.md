@@ -91,7 +91,7 @@
 
 1. **代码合并**：仅在正式 Review 与 checks 通过后；三个 WFS 开关保持关闭。
 2. **数据库准备**：验证可恢复备份、锁风险和低峰窗口后，单独授权 0061；不同时启用采集。只读预检工具为 `backend/scripts/preflight_wfs_0061.py`，默认拒绝且不执行 DDL/DML。
-3. **单店 Provider 验证**：一个账号、一个领星多平台店铺 `store_id`、一个 MSKU、最多 3 页、零数据库/RAW/案件写入。使用默认拒绝的 `backend/scripts/wfs_settlement_probe.py`，确认 WFS 专用字段与非 WFS 排除规则。
+3. **单店 Provider 验证**：一个账号、一个领星多平台店铺 `store_id`、一个 MSKU、最多 20 页（每页 20 条，最多 400 条）、零数据库/RAW/案件写入。当前针对 2026-10-19 历史检测复现，固定查询 2026-08-19 至 2026-10-17；若 MSKU 总数超过 400 条，探针明确失败，不得视为完整采集。使用默认拒绝的 `backend/scripts/wfs_settlement_probe.py`，确认 WFS 专用字段与非 WFS 排除规则。
 4. **单店 collection/detection dry-run**：仅在 Provider scope、标准规则和 0061 均批准后；检查 store/window 守恒、销量覆盖、时效和身份，不建案。
 5. **多店 dry-run**：逐店输出成功/失败/候选/复核/跳过，不允许部分成功掩盖失败。
 6. **受控自动建案**：限定账号、店铺和批次；验证 insert-only、幂等及人工状态保护后再扩大。
