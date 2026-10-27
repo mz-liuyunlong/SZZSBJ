@@ -1,6 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 from uuid import UUID
+
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
@@ -32,6 +35,7 @@ from app.modules.integration_sync.schemas import (
     WorkItemListQuery,
 )
 from app.modules.integration_sync.service import IntegrationSyncService
+from app.modules.integration_sync.models import IntegrationSyncAnomaly
 from app.modules.integration_sync.tasks import TaskDispatchError, dispatch_sync_run
 
 router = APIRouter(prefix="/api/integrations", tags=["Integration Sync Governance"])
@@ -397,4 +401,116 @@ def list_raw_request_refs(
             page_size=query.page_size,
             total=total,
         ),
+    )
+
+
+class SyncAnomalyRead(BaseModel):
+    id: UUID
+    run_id: UUID
+    source_account_ref: str
+    interface_key: str
+    business_date: date
+    error_code: str
+    store_id: str | None
+    item_id: str | None
+    msku: str | None
+    local_sku: str | None
+    platform_order_no: str | None
+    campaign_name: str | None
+    status: str
+    details: dict[str, object]
+    occurrence_count: int
+    owner_note: str | None
+    first_seen_at: datetime
+    last_seen_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SyncAnomalyListData(BaseModel):
+    items: list[SyncAnomalyRead]
+
+
+class SyncAnomalyResolution(BaseModel):
+    status: str
+    note: str = Field(min_length=3, max_length=1000)
+
+
+@router.get(
+    "/sync-anomalies",
+    response_model=SuccessEnvelope[SyncAnomalyListData, ReadMeta],
+    responses=READ_ERRORS,
+    operation_id="listIntegrationSyncAnomalies",
+)
+def list_sync_anomalies(
+    request: Request,
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    status_filter: str | None = Query(default=None, alias="status"),
+    interface_key: str | None = None,
+    business_date: date | None = None,
+) -> SuccessEnvelope[SyncAnomalyListData, ReadMeta]:
+    predicate = [IntegrationSyncAnomaly.source_account_ref.in_(account_refs)]
+    if status_filter:
+        predicate.append(IntegrationSyncAnomaly.status == status_filter)
+    if interface_key:
+        predicate.append(IntegrationSyncAnomaly.interface_key == interface_key)
+    if business_date:
+        predicate.append(IntegrationSyncAnomaly.business_date == business_date)
+    total = session.scalar(select(func.count()).select_from(IntegrationSyncAnomaly).where(*predicate)) or 0
+    rows = session.scalars(
+        select(IntegrationSyncAnomaly).where(*predicate)
+        .order_by(IntegrationSyncAnomaly.last_seen_at.desc(), IntegrationSyncAnomaly.id.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    return success_response(
+        request,
+        data=SyncAnomalyListData(items=[SyncAnomalyRead.model_validate(row) for row in rows]),
+        meta=_meta("gov_integration_sync_anomalies", page=page, page_size=page_size, total=total),
+    )
+
+
+@router.patch(
+    "/sync-anomalies/{anomaly_id}",
+    response_model=SuccessEnvelope[SyncAnomalyRead, ReadMeta],
+    responses=WRITE_ERRORS,
+    operation_id="updateIntegrationSyncAnomaly",
+)
+def update_sync_anomaly(
+    request: Request,
+    anomaly_id: UUID,
+    payload: SyncAnomalyResolution,
+    session: db_session,
+    principal: update_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[SyncAnomalyRead, ReadMeta]:
+    from app.core.api import ApiError
+
+    if payload.status not in {
+        "pending", "investigating", "fix_pending", "review_pending",
+        "resolved", "dismissed",
+    }:
+        raise ApiError(code="SYNC_ANOMALY_STATUS_INVALID", status_code=422)
+    row = session.scalar(
+        select(IntegrationSyncAnomaly)
+        .where(
+            IntegrationSyncAnomaly.id == anomaly_id,
+            IntegrationSyncAnomaly.source_account_ref.in_(account_refs),
+        ).with_for_update()
+    )
+    if row is None:
+        raise ApiError(code="SYNC_ANOMALY_NOT_FOUND", status_code=404)
+    row.status = payload.status
+    row.owner_note = payload.note
+    row.updated_by = principal.user_id
+    row.resolved_at = datetime.now().astimezone() if payload.status in {"resolved", "dismissed"} else None
+    session.commit()
+    session.refresh(row)
+    return success_response(
+        request,
+        data=SyncAnomalyRead.model_validate(row),
+        meta=_meta("gov_integration_sync_anomalies", freshness_at=row.last_seen_at),
     )
