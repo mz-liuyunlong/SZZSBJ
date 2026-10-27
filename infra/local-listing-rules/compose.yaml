@@ -1,0 +1,21 @@
+# Isolated local-only PostgreSQL for rule-config acceptance.
+# Never change this port to 15432 (the user's production SSH tunnel).
+services:
+  listing-rules-db:
+    image: postgres:16
+    container_name: listing-rules-dev-acceptance
+    environment:
+      POSTGRES_USER: listing_rules_dev
+      POSTGRES_PASSWORD: local_testing_only
+      POSTGRES_DB: listing_rules_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - listing-rules-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U listing_rules_dev -d listing_rules_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  listing-rules-pgdata:

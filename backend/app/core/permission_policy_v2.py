@@ -70,6 +70,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         True,
     ),
     RequestPermissionRule(
+        "PUT",
+        "/api/listings/rule-config",
+        "action:products:listing-management:configure-rules",
+        True,
+    ),
+    RequestPermissionRule(
         "GET",
         "/api/listings/walmart/export",
         "action:products:listing-management:export",
@@ -201,6 +207,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "POST",
         "/api/integrations/sync-runs/",
         "action:data-center:task-center:execute",
+    ),
+    RequestPermissionRule(
+        "GET",
+        "/api/integrations/walmart-monitor/targets",
+        "integrations:walmart-monitor:read",
+        True,
     ),
     RequestPermissionRule(None, "/api/integrations/", "page:data-center:task-center:view"),
     RequestPermissionRule(

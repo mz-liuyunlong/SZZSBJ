@@ -2,7 +2,7 @@ export type SyncTaskModule =
   "商品" | "订单" | "广告" | "仓库" | "国内仓" | "财务" | "售后";
 
 export type SyncTaskStatus =
-  "成功" | "失败" | "运行中" | "部分成功" | "超时" | "已停用";
+  "成功" | "失败" | "运行中" | "部分成功" | "超时" | "已停用" | "未执行";
 
 export type SyncTaskCycle = "日任务" | "周任务" | "手动任务";
 
@@ -41,6 +41,7 @@ export interface SyncTaskRow {
   lastRunFinishedAt: string | null;
   todaySuccess: number;
   todayFailed: number;
+  todayRuns?: number;
   description: string;
   cycle: SyncTaskCycle;
   workItemsPlanned: number;

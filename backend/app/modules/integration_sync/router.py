@@ -17,6 +17,7 @@ from app.modules.integration_sync.schemas import (
     PageQuery,
     RawRequestMetadataListData,
     ReadMeta,
+    RefundMartPendingData,
     SyncConfigListData,
     SyncConfigListQuery,
     SyncConfigRead,
@@ -25,6 +26,7 @@ from app.modules.integration_sync.schemas import (
     SyncRunListData,
     SyncRunListQuery,
     SyncRunRead,
+    SyncTaskDashboardData,
     TriggerRequest,
     WorkItemListData,
     WorkItemListQuery,
@@ -239,6 +241,42 @@ def create_backfill_run(
         account_refs=account_refs,
     )
     _dispatch(data.run_id)
+    return success_response(request, data=data, meta=_meta("gov_integration_sync_runs"))
+
+
+@router.get(
+    "/sync-tasks/refund-mart-pending",
+    response_model=SuccessEnvelope[RefundMartPendingData, ReadMeta],
+    responses=READ_ERRORS,
+    operation_id="listRefundMartPendingDays",
+)
+def list_refund_mart_pending(
+    request: Request,
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[RefundMartPendingData, ReadMeta]:
+    data = IntegrationSyncService(session).refund_mart_pending_days(account_refs)
+    return success_response(
+        request,
+        data=data,
+        meta=_meta("gov_integration_sync_run_events", "gov_integration_sync_runs"),
+    )
+
+
+@router.get(
+    "/sync-tasks/dashboard",
+    response_model=SuccessEnvelope[SyncTaskDashboardData, ReadMeta],
+    responses=READ_ERRORS,
+    operation_id="getIntegrationSyncDashboard",
+)
+def get_sync_dashboard(
+    request: Request,
+    session: db_session,
+    _: read_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[SyncTaskDashboardData, ReadMeta]:
+    data = IntegrationSyncService(session).task_dashboard(account_refs)
     return success_response(request, data=data, meta=_meta("gov_integration_sync_runs"))
 
 

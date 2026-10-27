@@ -2,15 +2,17 @@
 
 Fresh environments: create tables, constraints and indexes from ORM metadata.
 Existing environments (e.g. production tables created from
-``docs/delivery/domestic-warehouse-ods-tables.sql``): verify column nullability and
-PostgreSQL data types match the ORM, then create any missing non-unique indexes only.
+``docs/delivery/domestic-warehouse-ods-tables.sql``): verify column nullability,
+varchar length, and PostgreSQL data types match the ORM. ``timestamp without
+time zone`` does not match ``timestamptz``. Constraints and ordered indexes must
+also match; partial table sets and missing indexes are refused without repairing
+business tables.
 Mismatch raises ``DomesticOdsSchemaMismatchError`` so Alembic stops instead of
 silently diverging.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Final
 
 from sqlalchemy import inspect, text
@@ -19,6 +21,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from app.db.base import Base
+from app.db.domestic_schema_contract import require_domestic_table
 from app.modules.pmc_domestic.models import PMC_DOMESTIC_ODS_TABLES
 
 TABLE_ORDER: Final[tuple[str, ...]] = (
@@ -30,18 +33,16 @@ TABLE_ORDER: Final[tuple[str, ...]] = (
 
 _DIALECT = postgresql.dialect()
 
-_TYPE_ALIASES: Final[Mapping[str, str]] = {
-    "character varying": "varchar",
-    "timestamp with time zone": "timestamptz",
-}
-
 
 class DomesticOdsSchemaMismatchError(RuntimeError):
     """Existing table shape does not match the registered ORM metadata."""
 
 
-def _normalize_pg_type(data_type: str, udt_name: str) -> str:
-    base = _TYPE_ALIASES.get(data_type, data_type)
+def _normalize_pg_type(
+    data_type: str,
+    udt_name: str,
+    character_maximum_length: int | None,
+) -> str:
     if udt_name == "uuid":
         return "uuid"
     if udt_name == "jsonb":
@@ -51,10 +52,12 @@ def _normalize_pg_type(data_type: str, udt_name: str) -> str:
     if udt_name == "text":
         return "text"
     if udt_name == "varchar":
-        return "varchar"
-    if "timestamp" in base:
+        if character_maximum_length is None:
+            return "varchar"
+        return f"varchar({character_maximum_length})"
+    if data_type == "timestamp with time zone":
         return "timestamptz"
-    return base
+    return data_type
 
 
 def _orm_column_types(table_name: str) -> dict[str, tuple[str, bool]]:
@@ -66,14 +69,16 @@ def _orm_column_types(table_name: str) -> dict[str, tuple[str, bool]]:
             token = "uuid"
         elif "jsonb" in compiled:
             token = "jsonb"
-        elif "integer" in compiled or compiled == "integer":
+        elif compiled == "integer":
             token = "integer"
-        elif "text" in compiled:
+        elif compiled == "text":
             token = "text"
-        elif "timestamp" in compiled:
+        elif "timestamp with time zone" in compiled:
             token = "timestamptz"
+        elif compiled.startswith("varchar(") or compiled == "varchar":
+            token = compiled
         else:
-            token = "varchar"
+            token = compiled
         out[column.name] = (token, not column.nullable)
     return out
 
@@ -82,7 +87,7 @@ def _load_db_columns(connection: Connection, table_name: str) -> dict[str, tuple
     rows = connection.execute(
         text(
             """
-            select column_name, data_type, udt_name, is_nullable
+            select column_name, data_type, udt_name, is_nullable, character_maximum_length
             from information_schema.columns
             where table_schema = 'public' and table_name = :table_name
             order by ordinal_position
@@ -92,7 +97,7 @@ def _load_db_columns(connection: Connection, table_name: str) -> dict[str, tuple
     ).all()
     return {
         row.column_name: (
-            _normalize_pg_type(row.data_type, row.udt_name),
+            _normalize_pg_type(row.data_type, row.udt_name, row.character_maximum_length),
             row.is_nullable == "NO",
         )
         for row in rows
@@ -119,33 +124,11 @@ def _verify_columns(table_name: str, db_columns: dict[str, tuple[str, bool]]) ->
             )
 
 
-def _existing_index_names(connection: Connection, table_name: str) -> set[str]:
-    rows = connection.execute(
-        text(
-            """
-            select indexname
-            from pg_indexes
-            where schemaname = 'public' and tablename = :table_name
-            """
-        ),
-        {"table_name": table_name},
-    ).all()
-    return {row.indexname for row in rows}
-
-
 def _create_table(connection: Connection, table_name: str) -> None:
     table = Base.metadata.tables[table_name]
     connection.execute(CreateTable(table))
     for index in table.indexes:
         if index.name:
-            connection.execute(CreateIndex(index))
-
-
-def _ensure_indexes(connection: Connection, table_name: str) -> None:
-    existing = _existing_index_names(connection, table_name)
-    table = Base.metadata.tables[table_name]
-    for index in table.indexes:
-        if index.name and index.name not in existing:
             connection.execute(CreateIndex(index))
 
 
@@ -162,6 +145,9 @@ def adopt_domestic_ods_tables(connection: Connection | Engine) -> None:
 
 def _adopt_on_connection(conn: Connection) -> None:
     inspector = inspect(conn)
+    present = {name for name in TABLE_ORDER if inspector.has_table(name, schema="public")}
+    if present and present != set(TABLE_ORDER):
+        raise DomesticOdsSchemaMismatchError("domestic ODS partial table set; refusing adoption")
     for table_name in TABLE_ORDER:
         if table_name not in PMC_DOMESTIC_ODS_TABLES:
             raise DomesticOdsSchemaMismatchError(f"unknown domestic ODS table {table_name}")
@@ -170,4 +156,6 @@ def _adopt_on_connection(conn: Connection) -> None:
             continue
         db_columns = _load_db_columns(conn, table_name)
         _verify_columns(table_name, db_columns)
-        _ensure_indexes(conn, table_name)
+        require_domestic_table(
+            conn, Base.metadata.tables[table_name], error_type=DomesticOdsSchemaMismatchError
+        )

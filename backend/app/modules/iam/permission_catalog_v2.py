@@ -207,6 +207,8 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("ai_center", "copywriting", "文案生成", 40),
             _page("ai_center", "product_research", "智能选品", 50),
             _page("ai_center", "competitor_analysis", "竞品分析", 60),
+            _page("ai_center", "keyword_rules", "关键词规则", 70),
+            _page("ai_center", "keyword_launch", "关键词投放", 80),
         ),
     ),
     ModuleDefinition(
@@ -254,6 +256,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
 )
 
 ACTIONS: tuple[ActionDefinition, ...] = (
+    ActionDefinition("ai_center_keyword_launch", "manage", "维护关键词来源与分析", 10),
+    ActionDefinition("ai_center_keyword_rules", "submit", "提交关键词规则裁决", 10, "high"),
+    ActionDefinition("ai_center_keyword_rules", "review", "复核关键词规则裁决", 20, "high"),
+    ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),
@@ -275,6 +281,9 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("products_listing_management", "archive", "归档Listing", 30, "high"),
     ActionDefinition("products_listing_management", "restore", "恢复Listing", 40),
     ActionDefinition("products_listing_management", "edit_analysis_link", "编辑分析链接", 50),
+    ActionDefinition(
+        "products_listing_management", "configure_rules", "配置Listing评级规则", 60, "high"
+    ),
     ActionDefinition("sales_daily_sales", "export", "导出每日销售", 10),
     ActionDefinition("sales_order_profit", "export", "导出订单利润", 10),
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),

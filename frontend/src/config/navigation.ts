@@ -155,6 +155,10 @@ export const navigation: NavigationGroup[] = [
     children: [
       page('products', 'product_management', '产品管理', '/products/management'),
       page('products', 'listing_management', 'Listing管理', '/products/listing-management'),
+      page('products', 'clearance_center', '清货中心', '/products/clearance-center', {
+        status: 'testing', readOnly: true, migrationMode: 'native',
+        viewPermissionKey: 'page:products:product-management:view',
+      }),
       page('products', 'claim_center', '认领中心', '/products/claim-center'),
       page('products', 'new_product_analysis', '新品分析', '/products/new-product-analysis'),
       page('products', 'lifecycle', '产品生命周期', '/products/lifecycle'),
@@ -304,6 +308,7 @@ export const navigation: NavigationGroup[] = [
     children: [
       page('ai_center', 'assistant', 'AI助手', '/ai-center/assistant'),
       page('ai_center', 'ads_optimization', '广告优化', '/ai-center/ads-optimization'),
+      page('ai_center', 'keyword_launch', '关键词投放', '/ai-center/keyword-launch', { status: 'testing', source: 'pending' }),
       page('ai_center', 'image_generation', '图片生成', '/ai-center/image-generation'),
       page('ai_center', 'copywriting', '文案生成', '/ai-center/copywriting'),
       page('ai_center', 'product_research', '智能选品', '/ai-center/product-research'),

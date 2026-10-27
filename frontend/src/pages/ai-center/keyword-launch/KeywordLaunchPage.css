@@ -1,0 +1,252 @@
+/* V2 feature-local layout. Existing PageShell, ProTable, Ant Design, and report-table components remain canonical. */
+.kw-v2-page { display:flex;flex-direction:column;gap:10px;padding:0 2px 18px;min-width:0;color:#344054;font-size:12px }
+.kw-v2-pageintro {display:flex;align-items:center;justify-content:space-between;gap:12px;color:#8491a3;font-size:11px;flex-wrap:wrap}
+.kw-v2-page .ant-card {border:1px solid #e6ebf3;border-radius:7px;box-shadow:none}
+.kw-v2-page .ant-card-head {min-height:42px;border-bottom:1px solid #eef1f5;padding:0 13px}
+.kw-v2-page .ant-card-body {padding:12px 13px}
+.kw-v2-page .ant-card-head-title {font-size:12px;font-weight:700}
+.kw-v2-flow .ant-card-body {display:flex;justify-content:space-between;gap:16px;align-items:center}
+.kw-v2-flow .ant-steps {max-width:780px}
+.kw-v2-flow .ant-steps-item-title {font-size:11px!important}
+.kw-v2-small {font-size:10px!important;color:#8290a2}
+.kw-v2-muted {font-size:10px;color:#8a98a8;line-height:1.6}
+.kw-v2-setup {display:grid;grid-template-columns:minmax(340px,.9fr) minmax(470px,1.15fr);gap:10px}
+.kw-v2-setup>.ant-card {min-width:0}
+.kw-v2-setup .ant-input {margin-top:7px}
+.kw-v2-block {width:100%;margin-top:5px}
+.kw-v2-snapshot {display:flex;align-items:center;gap:9px;padding:9px;background:#fcfdff;border:1px solid #e9eef5;border-radius:6px;margin:10px 0}
+.kw-v2-thumb {width:42px;height:42px;flex:none;border-radius:6px;display:grid;place-items:center;background:#eef4fb;color:#7f9abb;font-size:20px}
+.kw-v2-grow {flex:1;min-width:0}
+.kw-v2-inline {display:flex;align-items:end;justify-content:space-between;gap:9px;margin:9px 0;flex-wrap:wrap}
+.kw-v2-campaigns {display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.kw-v2-campaigns>div {background:#fbfcfe;border:1px solid #e9eef5;border-radius:5px;padding:8px 9px;min-width:0}
+.kw-v2-campaigns small {font-size:9px;color:#98a3b2;display:block}
+.kw-v2-campaigns strong {display:block;margin-top:3px;font-size:11px;color:#4a5c72;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kw-v2-quiet-alert {margin-top:10px;font-size:10px}
+.kw-v2-setup .ant-btn {font-size:11px}
+.kw-v2-section .ant-upload-drag {background:#f8fbff!important;border:1px dashed #c4d8f0!important}
+.kw-v2-upload-icon {font-size:22px;color:#5b95de}
+.kw-v2-filemeta {display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;margin-top:10px;margin-bottom:7px}
+.kw-v2-preflight .ant-card-body {display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.kw-v2-results {margin-top:2px;display:flex;flex-direction:column;gap:10px}
+.kw-v2-stats,.kw-v2-plan-stats {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.kw-v2-stat {height:76px;border:1px solid #e6ebf3;border-radius:7px;background:#fff;display:flex;align-items:center;gap:10px;padding:9px 12px}
+.kw-v2-stat-icon {display:grid;place-items:center;background:#edf5ff;color:#1677ff;width:35px;height:35px;border-radius:7px;font-size:17px;flex:none;font-weight:700}
+.kw-v2-stat:nth-child(2) .kw-v2-stat-icon {background:#eaf8f0;color:#16845b}
+.kw-v2-stat:nth-child(3) .kw-v2-stat-icon {background:#f3efff;color:#7754cb}
+.kw-v2-stat:nth-child(4) .kw-v2-stat-icon {background:#fff6e7;color:#b97816}
+.kw-v2-stat strong {display:block;color:#2d3c50;font-size:20px;line-height:1.15;margin:2px 0}
+.kw-v2-tabhead {display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #eef1f5}
+.kw-v2-tabhead .ant-tabs {flex:1;min-width:0}
+.kw-v2-tabhead .ant-tabs-nav {margin-bottom:0}
+.kw-v2-subtabs {display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;flex-wrap:wrap}
+.kw-v2-filters {display:flex;align-items:center;gap:7px;padding:0 0 10px;flex-wrap:wrap}
+.kw-v2-search {width:250px}
+.kw-v2-ellipsis {max-width:175px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:10px;color:#69809a}
+.kw-v2-page .ant-table-thead>tr>th {background:#f7f9fc!important;color:#637187!important;font-size:11px!important;font-weight:600}
+.kw-v2-page .ant-table-cell {font-size:11px}
+.kw-v2-plan-stats {margin:11px 0}
+.kw-v2-plan-layout {display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.kw-v2-plan-layout .ant-card-body>* {margin-bottom:6px}
+.kw-v2-exportbar {display:flex;justify-content:flex-end;gap:8px}
+.kw-v2-listing {display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:12px;margin-top:10px}
+.kw-v2-listing-main {display:flex;flex-direction:column;gap:9px}
+.kw-v2-listing>.ant-card {height:max-content}
+.kw-v2-listing .ant-btn-block {margin-top:8px}
+.kw-v2-factgrid {display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.kw-v2-factgrid>label {font-size:11px;font-weight:600;color:#596a81}
+.kw-v2-factgrid>label>span {display:block;margin-bottom:5px}
+@media (max-width:1180px) {.kw-v2-setup {grid-template-columns:1fr}.kw-v2-flow .ant-card-body {flex-wrap:wrap}}
+@media (max-width:830px) {.kw-v2-stats,.kw-v2-plan-stats {grid-template-columns:1fr 1fr}.kw-v2-listing,.kw-v2-plan-layout,.kw-v2-factgrid {grid-template-columns:1fr}}
+
+/* 页面内部标题操作区：不进入系统顶部导航 */
+.kw-v2-pagehead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 3px 0 8px;
+}
+.kw-v2-pagehead__title {
+  flex: 1 1 300px;
+  min-width: 260px;
+}
+.kw-v2-pagehead__title h2 {
+  font-size: 18px;
+  font-weight: 750;
+  margin: 0;
+  color: #263445;
+}
+.kw-v2-pagehead__subtitle {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #8290a2;
+}
+.kw-v2-pagehead__actions {
+  margin-left: auto;
+  max-width: 100%;
+}
+.kw-v2-pagehead__actions .ant-space {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+@media (max-width: 920px) {
+  .kw-v2-pagehead__actions {
+    margin-left: 0;
+  }
+}
+
+/* Local acceptance: after success, show result analytics only, with a clear return action. */
+.kw-v2-results-only > .kw-v2-flow,
+.kw-v2-results-only > .kw-v2-setup,
+.kw-v2-results-only > .kw-v2-section,
+.kw-v2-results-only > .kw-v2-preflight,
+.kw-v2-results-only > .kw-v2-pageintro {display:none!important}
+.kw-v2-results-toolbar {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 0 1px}
+.kw-v2-resume {display:flex;justify-content:flex-end;gap:8px}
+.kw-v2-results-only .kw-v2-results {margin-top:0}
+.kw-v2-results-only .kw-v2-pagehead__actions {display:none!important}
+
+/* KW_RESULT_TABLE_VISIBILITY_FIX_20261022 */
+
+.page-shell__content > .kw-v2-page {
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.kw-v2-page .kw-v2-resultcard {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.kw-v2-page .kw-v2-resultcard > .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.kw-v2-page .kw-v2-resultcard .report-table-shell {
+  height: 520px;
+  min-height: 520px;
+  flex: 0 0 520px;
+  width: 100%;
+}
+
+
+/* KW_COMPONENT_TABLE_LAYOUT_V3_20261022
+   Only keyword business pages. Shared ReportTableShell / ProTable remain unchanged. */
+.kw-v2-page .report-table-shell {
+  display: flex !important;
+  width: 100% !important;
+  height: min(58vh, 620px) !important;
+  min-height: 390px !important;
+  flex: 0 0 auto !important;
+  overflow: hidden;
+}
+.kw-v2-page .report-table-shell .ant-pro-table,
+.kw-v2-page .report-table-shell .ant-pro-card,
+.kw-v2-page .report-table-shell .ant-pro-card-body,
+.kw-v2-page .report-table-shell .ant-table-wrapper {
+  min-height: 0;
+}
+.kw-v2-page .report-table-shell .ant-pro-card-body { padding: 0 !important; }
+.kw-v2-page .ant-select { max-width: 100%; }
+.kw-v2-page .ant-select-selector { border-radius: 6px; }
+
+.kw-v2-page { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.kw-v2-resultcard { flex: 0 0 auto; }
+
+/* KW_SKU_LABEL_ITEMID_LAYOUT_20261022 */
+
+.kw-v2-page .kw-v2-itemid-section {
+  width: 100%;
+  min-width: 0;
+  margin: 9px 0;
+}
+
+.kw-v2-page .kw-v2-itemid-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kw-v2-page .kw-v2-itemid-picker {
+  width: 100%;
+  min-width: 0;
+}
+
+.kw-v2-page .kw-v2-itemid-picker > .ant-select,
+.kw-v2-page .kw-v2-itemid-picker > .ant-input {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+}
+
+.kw-v2-page .kw-v2-itemid-verify {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* KW_STEP_EQUAL_CARDS_20261022 */
+
+/* 第一步与第二步：各占一半，卡片等高 */
+.kw-v2-page .kw-v2-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.kw-v2-page .kw-v2-two > .ant-card {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+.kw-v2-page .kw-v2-two > .ant-card > .ant-card-body {
+  min-width: 0;
+  height: calc(100% - 56px);
+  box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .kw-v2-page .kw-v2-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kw-v2-page .kw-v2-two > .ant-card {
+    height: auto;
+  }
+
+  .kw-v2-page .kw-v2-two > .ant-card > .ant-card-body {
+    height: auto;
+  }
+}
+
+/* KW_ASIN_FIXED_TEXTAREA_20261022 */
+.kw-v2-page .kw-v2-two > .ant-card:nth-child(2) textarea.ant-input {
+  height: 140px !important;
+  min-height: 140px !important;
+  max-height: 140px !important;
+  resize: none !important;
+  overflow-y: auto !important;
+}
+
+/* ASIN input: fixed height, no manual resize */
+.kw-v2-page textarea.kw-v2-asin-input,
+.kw-v2-page .kw-v2-asin-input.ant-input {
+  display: block;
+  height: 140px !important;
+  min-height: 140px !important;
+  max-height: 140px !important;
+  resize: none !important;
+  overflow-y: auto !important;
+}

@@ -1,6 +1,7 @@
 /** Listing-management No-API acceptance data; replace it when a real API is approved. */
 export interface ListingManagementRow {
   id: string;
+  sourceAccountRef?: string;
   image: string;
   msku: string;
   productId: string;

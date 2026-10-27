@@ -1,8 +1,9 @@
 import logging
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal, cast
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -39,6 +40,8 @@ from app.modules.integration_sync.schemas import (
     InterfaceListQuery,
     RawRequestMetadataListData,
     RawRequestMetadataRead,
+    RefundMartPendingData,
+    RefundMartPendingDay,
     RequestKind,
     RunStatus,
     SyncConfigListData,
@@ -49,6 +52,8 @@ from app.modules.integration_sync.schemas import (
     SyncRunListData,
     SyncRunListQuery,
     SyncRunRead,
+    SyncTaskDashboardData,
+    SyncTaskTodayStat,
     TriggerRequest,
     TriggerType,
     WorkItemListData,
@@ -135,6 +140,17 @@ class IntegrationSyncService:
         config = self._require_config(config_id, account_refs)
         self._guard_purchase_source(config)
         values = payload.model_dump(exclude_unset=True)
+        # DATA-PAGES max_pages is a business-date window, not an API page limit.
+        # Reject unsupported windows before persisting an inert schedule.
+        if values.get("max_pages") is not None:
+            interface_for_window = self.repository.get_interface(config.interface_id)
+            if (
+                interface_for_window is not None
+                and interface_for_window.interface_key
+                in {"saleStatPageList", "walmartReturnOrderList", "walmartAdItemSpList"}
+                and not 1 <= values["max_pages"] <= 14
+            ):
+                raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422)
         schedule_enabled = values.get("schedule_enabled", config.schedule_enabled)
         schedule_cron = values.get("schedule_cron", config.schedule_cron)
         if schedule_enabled and not schedule_cron:
@@ -389,11 +405,41 @@ class IntegrationSyncService:
 
         return self._created(run)
 
+    def refund_mart_pending_days(self, account_refs: frozenset[str]) -> RefundMartPendingData:
+        return RefundMartPendingData(
+            items=[
+                RefundMartPendingDay(source_account_ref=account, business_date=day, run_id=run_id)
+                for account, day, run_id in self.repository.refund_mart_pending_days(account_refs)
+            ]
+        )
+
+    def task_dashboard(self, account_refs: frozenset[str]) -> SyncTaskDashboardData:
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        start = datetime(today.year, today.month, today.day, tzinfo=ZoneInfo("Asia/Shanghai"))
+        latest, counts = self.repository.task_dashboard(
+            account_refs, start, start + timedelta(days=1)
+        )
+        return SyncTaskDashboardData(
+            latest_runs=[SyncRunRead.model_validate(row) for row in latest],
+            today_stats=[
+                SyncTaskTodayStat(
+                    interface_id=interface_id,
+                    source_account_ref=account,
+                    runs=runs,
+                    success=success,
+                    failed=failed,
+                )
+                for interface_id, account, runs, success, failed in counts
+            ],
+        )
+
     def list_runs(
         self, query: SyncRunListQuery, account_refs: frozenset[str]
     ) -> tuple[SyncRunListData, int]:
         rows, total = self.repository.list_runs(
             account_refs=account_refs,
+            source_account_ref=query.source_account_ref,
+            include_product_detail=query.include_product_detail,
             provider=query.provider,
             interface_key=query.interface_key,
             status=query.status.value if query.status else None,

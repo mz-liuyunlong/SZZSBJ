@@ -187,6 +187,12 @@ class _ListingIndex:
 
 
 @dataclass(frozen=True, slots=True)
+class _ListingIndex:
+    by_item: dict[tuple[str, str], _Listing]
+    by_store_sku: dict[tuple[str, str], _Listing]
+
+
+@dataclass(frozen=True, slots=True)
 class _Product:
     owner_uid: str | None
     owner_name: str | None

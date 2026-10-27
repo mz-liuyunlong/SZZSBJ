@@ -1,4 +1,5 @@
 import logging
+import os
 import secrets
 from dataclasses import dataclass
 from typing import Annotated, Final
@@ -20,6 +21,12 @@ PUBLIC_AUTH_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset(
 PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset({"/api/media/image-assets/"})
 PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
+WALMART_MONITOR_INGEST_PATH: Final = "/api/integrations/walmart-monitor/raw-events"
+WALMART_MONITOR_PRINCIPAL_ID: Final = "walmart-monitor-service"
+WALMART_MONITOR_WRITE_PERMISSION: Final = "integrations:walmart-monitor:write"
+WALMART_MONITOR_TARGETS_PATH: Final = "/api/integrations/walmart-monitor/targets"
+WALMART_MONITOR_TARGETS_PRINCIPAL_ID: Final = "walmart-monitor-targets-service"
+WALMART_MONITOR_TARGETS_READ_PERMISSION: Final = "integrations:walmart-monitor:read"
 _PREVIEW_PERMISSIONS: Final = frozenset(
     {
         # Read-only page grants are explicit because canonical request-policy
@@ -124,6 +131,40 @@ class Principal:
 def get_optional_principal(request: Request) -> Principal | None:
     """Return the temporary preview principal or fail closed."""
     authorization = request.headers.get("Authorization")
+    path = request.scope.get("path")
+    is_monitor_ingest = request.method == "POST" and path == WALMART_MONITOR_INGEST_PATH
+    is_monitor_targets = request.method == "GET" and path == WALMART_MONITOR_TARGETS_PATH
+    if is_monitor_ingest or is_monitor_targets:
+        if not authorization or not authorization.startswith("Bearer "):
+            return None
+        supplied_token = authorization.removeprefix("Bearer ").strip()
+        if not supplied_token:
+            return None
+        try:
+            settings = get_settings()
+        except SettingsError:
+            return None
+        if is_monitor_ingest:
+            configured_token = settings.walmart_monitor_ingest_token
+            configured = settings.walmart_monitor_ingest_configured
+            principal_id = WALMART_MONITOR_PRINCIPAL_ID
+            permission = WALMART_MONITOR_WRITE_PERMISSION
+        else:
+            configured_token = settings.walmart_monitor_targets_token
+            configured = settings.walmart_monitor_targets_configured
+            principal_id = WALMART_MONITOR_TARGETS_PRINCIPAL_ID
+            permission = WALMART_MONITOR_TARGETS_READ_PERMISSION
+        if (
+            not configured
+            or configured_token is None
+            or not _constant_time_ascii_equals(supplied_token, configured_token)
+        ):
+            return None
+        return Principal(
+            user_id=principal_id,
+            permissions=frozenset({permission}),
+        )
+
     if authorization and authorization.startswith("Bearer "):
         access_token = authorization.removeprefix("Bearer ").strip()
         if access_token:
@@ -145,10 +186,22 @@ def get_optional_principal(request: Request) -> Principal | None:
             if token_principal is not None:
                 return token_principal
 
-    path = request.scope.get("path")
     path_allowed = isinstance(path, str) and (
         any(path.startswith(prefix) for prefix in _PREVIEW_PATH_PREFIXES)
         or path in _PREVIEW_READ_PATHS
+    )
+    # Explicit local Decodo research opt-in. Preview credentials remain mandatory.
+    # The special-case is unavailable in production and does not grant broad writes.
+    decodo_local_preview_write_allowed = (
+        request.method == "POST"
+        and path
+        in {
+            "/api/keyword-planning/products/confirm",
+            "/api/keyword-planning/amazon/research",
+        }
+        and os.getenv("APP_ENV", "").strip().lower() == "local"
+        and os.getenv("DECODO_LOCAL_TEST_MODE", "").strip() == "1"
+        and os.getenv("DECODO_LOCAL_TEST_ENABLE_REAL_CALLS", "").strip() == "1"
     )
     write_allowed = (
         request.method in _PREVIEW_WRITE_METHODS
@@ -156,6 +209,7 @@ def get_optional_principal(request: Request) -> Principal | None:
         and (
             path in _PREVIEW_WRITE_PATHS
             or any(path.startswith(prefix) for prefix in _PREVIEW_WRITE_PATH_PREFIXES)
+            or decodo_local_preview_write_allowed
         )
     )
     operation_plan_mutation_allowed = (

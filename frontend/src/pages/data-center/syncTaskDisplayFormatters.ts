@@ -4,7 +4,7 @@ const toChinaHour = (hour: number) => (hour + CHINA_UTC_OFFSET_HOURS) % 24;
 
 export type SyncTaskSchedulePreset = "30m" | "1h" | "2h" | "daily_fixed";
 
-const supportedBackfillDays = new Set([1, 2, 3, 5, 7, 10, 14, 30]);
+const supportedBackfillDays = new Set([1, 2, 3, 5, 7, 10, 14]);
 
 export const normalizeSyncTaskBackfillDays = (
   value: number | null | undefined,

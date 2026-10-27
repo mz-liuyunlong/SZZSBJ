@@ -11,12 +11,21 @@ from app.core.local_scoped_writes import install_local_scoped_write_guard
 from app.db.session import dispose_engine
 from app.modules.after_sales.router import router as after_sales_router
 from app.modules.approvals.router import router as approvals_router
+from app.modules.business_connectors.router import router as business_connectors_router
 from app.modules.business_rules.router import router as business_rules_router
 from app.modules.data_pages.router import router as data_pages_router
+from app.modules.decodo.router import (
+    research_router as decodo_research_router,
+)
+from app.modules.decodo.router import (
+    settings_router as decodo_settings_router,
+)
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
 from app.modules.integration_sync.router import router as integration_sync_router
+from app.modules.keyword_planning.router import router as keyword_planning_router
+from app.modules.listing_rule_config.router import router as listing_rule_config_router
 from app.modules.media_assets.router import router as media_assets_router
 from app.modules.operation_logs.router import router as operation_logs_router
 from app.modules.operation_logs.rows_router import router as operation_logs_rows_router
@@ -33,6 +42,8 @@ from app.modules.pmc_purchase.router import router as pmc_purchase_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
 from app.modules.sku_detail.router import router as sku_detail_router
+from app.modules.walmart_monitor.router import router as walmart_monitor_router
+from app.modules.walmart_monitor_targets.router import router as walmart_monitor_targets_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
 
 
@@ -60,12 +71,17 @@ def create_app() -> FastAPI:
     application.include_router(after_sales_router)
     application.include_router(approvals_router)
     application.include_router(business_rules_router)
+    application.include_router(business_connectors_router)
+    application.include_router(decodo_settings_router)
+    application.include_router(decodo_research_router)
     application.include_router(data_pages_router)
     application.include_router(iam_router)
     application.include_router(rbac_router)
     application.include_router(integration_sync_router)
+    application.include_router(keyword_planning_router)
     application.include_router(password_reset_router)
     application.include_router(media_assets_router)
+    application.include_router(listing_rule_config_router)
     application.include_router(operation_logs_rows_router)
     application.include_router(operation_logs_router)
     application.include_router(operation_plans_router)
@@ -78,6 +94,8 @@ def create_app() -> FastAPI:
     application.include_router(products_router)
     application.include_router(sku_detail_router)
     application.include_router(warehouse_wfs_router)
+    application.include_router(walmart_monitor_router)
+    application.include_router(walmart_monitor_targets_router)
 
     @application.get("/health", response_model=SuccessEnvelope[HealthData, None])
     def health_check(request: Request) -> SuccessEnvelope[HealthData, None]:
