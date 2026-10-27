@@ -134,17 +134,27 @@ def _row(
             "只做广告测试，不补页面",
         )
     pos, action, priority = (
-        ("标题", "补到标题前半段", "P0 必须补") if grade == "P0"
-        else ("五点", "补到五点", "P1 建议补") if grade == "P1"
+        ("标题", "补到标题前半段", "P0 必须补")
+        if grade == "P0"
+        else ("五点", "补到五点", "P1 建议补")
+        if grade == "P1"
         else ("详情描述", "补到详情描述", "P2 可选补")
     )
     return (
-        pos, keyword, translation, state, "是",
+        pos,
+        keyword,
+        translation,
+        state,
+        "是",
         f"仅在确认本品能承接后，把“{keyword}”自然加入{pos}；先核对页面与包装事实",
         f"可使用已核实的“{keyword}”表达，补齐真实商品信息后由运营审稿",
         "禁止把竞品属性、未认证功能或不存在的配件写入页面",
-        "当前页面尚未明确表达此已通过规则的关键词", "",
-        "改善页面与已确认搜索意图的文本对应", str(order), priority, action,
+        "当前页面尚未明确表达此已通过规则的关键词",
+        "",
+        "改善页面与已确认搜索意图的文本对应",
+        str(order),
+        priority,
+        action,
     )
 
 
