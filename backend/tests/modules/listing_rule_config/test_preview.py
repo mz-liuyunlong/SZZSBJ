@@ -64,6 +64,7 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
     assert result == ("断货期", 7, 7)
     for kwargs in (
         {"prior_effective_stock": True, "fulfillment_type": "2", "currently_archived": False},
+        {"prior_effective_stock": True, "fulfillment_type": "0", "currently_archived": False},
         {"prior_effective_stock": False, "fulfillment_type": "1", "currently_archived": False},
         {"prior_effective_stock": True, "fulfillment_type": "1", "currently_archived": True},
     ):

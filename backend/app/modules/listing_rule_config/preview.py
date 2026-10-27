@@ -136,7 +136,7 @@ def stockout_candidate(
     candidate = (
         "断货期"
         if (
-            fulfillment_type in {"0", "1"}
+            fulfillment_type == "1"
             and not currently_archived
             and prior_effective_stock
             and observed == consecutive_days
@@ -230,7 +230,8 @@ class ListingEvaluationPreviewService:
         archive = self.session.scalar(
             select(ListingArchiveState).where(ListingArchiveState.listing_id == listing.id)
         )
-        archived = archive is not None and archive.is_archived
+        archive_state_known = archive is not None
+        archived = archive_state_known and archive.is_archived
         grade, n_short, n_medium, margin = basic_financial_candidate(
             sales, cutoff=cutoff, config=config
         )
@@ -296,9 +297,15 @@ class ListingEvaluationPreviewService:
             missing.append("SALES_TREND_VALID_STOCK_DAYS_INSUFFICIENT")
         if listing.lifecycle_status not in known_stages:
             missing.append("PREVIOUS_LIFECYCLE_STAGE_UNVERIFIED")
+        if not archive_state_known:
+            missing.append("ARCHIVE_STATE_UNVERIFIED")
         if version is None:
             missing.append("RULE_VERSION_NOT_PUBLISHED")
-        if grade is None:
+        if listing.lifecycle_status in {"清货期", "已归档"} or archived:
+            grade = None
+            margin = None
+            missing.append("LIFECYCLE_EXCLUDED_FROM_GRADING")
+        if grade is None and "LIFECYCLE_EXCLUDED_FROM_GRADING" not in missing:
             missing.append("BASIC_FINANCIAL_SAMPLE_INSUFFICIENT_OR_UNCALCULABLE")
         if observed < 7:
             missing.append("LATEST_WFS_SNAPSHOT_INCOMPLETE")
