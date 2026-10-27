@@ -130,7 +130,7 @@ class ListingGradeRuleConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    execution_time: str = Field(default="22:30", pattern=r"^([01]\\d|2[0-3]):[0-5]\\d$")
+    execution_time: str = Field(default="22:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
     short_days: int = Field(default=7, ge=1, le=90)
     medium_days: int = Field(default=14, ge=2, le=180)
