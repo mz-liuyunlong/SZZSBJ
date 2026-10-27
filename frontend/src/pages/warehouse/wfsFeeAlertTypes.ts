@@ -92,6 +92,11 @@ export interface WfsFeeAlertFollowFormValues {
   latestFollow: string;
 }
 
+export interface WfsFeeRecoveredFormValues {
+  recoveredAmount: number;
+  latestFollowNote?: string;
+}
+
 export interface WfsFeeAlertColumnField {
   key: string;
   title: string;
