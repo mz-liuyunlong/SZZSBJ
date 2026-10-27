@@ -120,7 +120,9 @@ def stockout_candidate(
 ) -> tuple[str | None, int, int]:
     """Never infer WFS stockout from seller-fulfilled or missing snapshots."""
     since = cutoff - timedelta(days=6)
-    recent = {row.snapshot_date_la: row for row in inventory if since <= row.snapshot_date_la <= cutoff}
+    recent = {
+        row.snapshot_date_la: row for row in inventory if since <= row.snapshot_date_la <= cutoff
+    }
     observed = sum(row.wfs_available_quantity is not None for row in recent.values())
     low = sum(
         row.wfs_available_quantity is not None and row.wfs_available_quantity <= low_limit

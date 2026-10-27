@@ -1,4 +1,5 @@
 """Explicitly gated read-only Listing evidence preview."""
+
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, UTC
@@ -28,8 +29,11 @@ view = Depends(require_permission("page:products:listing-management:view"))
 @router.get(
     "/evaluation-preview",
     response_model=SuccessEnvelope[ListingEvaluationPreview, dict[str, str]],
-    responses={403: {"model": ErrorEnvelope}, 404: {"model": ErrorEnvelope},
-               503: {"model": ErrorEnvelope}},
+    responses={
+        403: {"model": ErrorEnvelope},
+        404: {"model": ErrorEnvelope},
+        503: {"model": ErrorEnvelope},
+    },
     dependencies=[view],
 )
 def get_evaluation_preview(

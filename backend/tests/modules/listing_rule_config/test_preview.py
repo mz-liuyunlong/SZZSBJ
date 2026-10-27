@@ -1,4 +1,5 @@
 """Safety checks for the provisional financial and stockout candidates."""
+
 from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -47,25 +48,24 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
         SimpleNamespace(
             snapshot_date_la=CUTOFF - timedelta(days=i),
             wfs_available_quantity=Decimal("0"),
-        ) for i in range(7)
+        )
+        for i in range(7)
     ]
     result = stockout_candidate(
-        rows, cutoff=CUTOFF, low_limit=5,
-        prior_effective_stock=True, fulfillment_type="1", currently_archived=False
+        rows,
+        cutoff=CUTOFF,
+        low_limit=5,
+        prior_effective_stock=True,
+        fulfillment_type="1",
+        currently_archived=False,
     )
     assert result == ("断货期", 7, 7)
-    assert stockout_candidate(
-        rows, cutoff=CUTOFF, low_limit=5,
-        prior_effective_stock=True, fulfillment_type="2", currently_archived=False
-    )[0] is None
-    assert stockout_candidate(
-        rows, cutoff=CUTOFF, low_limit=5,
-        prior_effective_stock=False, fulfillment_type="1", currently_archived=False
-    )[0] is None
-    assert stockout_candidate(
-        rows, cutoff=CUTOFF, low_limit=5,
-        prior_effective_stock=True, fulfillment_type="1", currently_archived=True
-    )[0] is None
+    for kwargs in (
+        {"prior_effective_stock": True, "fulfillment_type": "2", "currently_archived": False},
+        {"prior_effective_stock": False, "fulfillment_type": "1", "currently_archived": False},
+        {"prior_effective_stock": True, "fulfillment_type": "1", "currently_archived": True},
+    ):
+        assert stockout_candidate(rows, cutoff=CUTOFF, low_limit=5, **kwargs)[0] is None
 
 
 def test_openapi_contains_preview_route():
