@@ -7,10 +7,9 @@ unverified template, unconfirmed product facts and quota violations.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
-from datetime import datetime
 
 from app.modules.ai_runtime.listing_recommendations import create_listing_actions
 from app.modules.keyword_planning.internal_export import HEADERS_01, _make_xlsx
@@ -49,10 +48,16 @@ class V1ConfirmedConfig:
     start_date: str | None = None
 
     def validate(self) -> None:
-        if not all((self.product_facts_confirmed, self.rule_version_published,
-                    self.user_confirmed_generation, self.walmart_template_verified)):
+        if not all(
+            (
+                self.product_facts_confirmed,
+                self.rule_version_published,
+                self.user_confirmed_generation,
+                self.walmart_template_verified,
+            )
+        ):
             raise ValueError("V1_GENERATION_NOT_AUTHORIZED")
-        if not self.item_id.isdigit() or not self.sku.strip() or not self.owner_initials.strip():
+        if not all((self.item_id.isdigit(), self.sku.strip(), self.owner_initials.strip())):
             raise ValueError("V1_PRODUCT_IDENTITY_INVALID")
         if not self.owner_initials.isascii() or len(self.owner_initials) > 8:
             raise ValueError("V1_OWNER_INVALID")
@@ -143,7 +148,9 @@ def create_v1_workbook(
         raise ValueError("V1_P2_BEFORE_PRIORITY_SELECTION")
     if len({root.casefold().strip() for root, _ in broad if root}) > 5:
         raise ValueError("V1_BROAD_ROOT_QUOTA_EXCEEDED")
-    start = config.start_date or datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m/%d/%Y")
+    start = config.start_date or datetime.now(ZoneInfo("America/Los_Angeles")).strftime(
+        "%m/%d/%Y"
+    )
     manual = f"{config.sku}-手动-{config.owner_initials}"
     automatic = f"{config.sku}-自动-{config.owner_initials}"
     rows04 = [
