@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
 from alembic import op
 
 revision: str = "20261027_0062_sync_anomaly_center"
@@ -65,7 +66,9 @@ def upgrade() -> None:
             name="uq_gov_sync_anomaly_identity",
         ),
         sa.CheckConstraint(
-            "status IN ('pending','investigating','fix_pending','review_pending','resolved','dismissed')",
+            "status IN ("
+            "'pending','investigating','fix_pending',"
+            "'review_pending','resolved','dismissed')",
             name="ck_gov_sync_anomaly_status",
         ),
     )

@@ -2,10 +2,9 @@ from datetime import UTC, date, datetime
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
-
-from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, get_request_id, success_response
@@ -13,6 +12,7 @@ from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.integration_sync.models import IntegrationSyncAnomaly, IntegrationSyncAnomalyAudit
 from app.modules.integration_sync.schemas import (
     BackfillRequest,
     InterfaceListData,
@@ -35,7 +35,6 @@ from app.modules.integration_sync.schemas import (
     WorkItemListQuery,
 )
 from app.modules.integration_sync.service import IntegrationSyncService
-from app.modules.integration_sync.models import IntegrationSyncAnomaly, IntegrationSyncAnomalyAudit
 from app.modules.integration_sync.tasks import TaskDispatchError, dispatch_sync_run
 
 router = APIRouter(prefix="/api/integrations", tags=["Integration Sync Governance"])

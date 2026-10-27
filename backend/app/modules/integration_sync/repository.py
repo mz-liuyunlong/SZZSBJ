@@ -2,8 +2,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
-from uuid import uuid4
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import Select, case, func, select, text
 from sqlalchemy.orm import Session
@@ -292,7 +291,8 @@ class IntegrationSyncRepository:
                 "on conflict on constraint uq_gov_sync_anomaly_identity do update set "
                 "run_id=excluded.run_id,last_seen_at=now(),"
                 "occurrence_count=gov_integration_sync_anomalies.occurrence_count+1,"
-                "status=case when gov_integration_sync_anomalies.status in ('resolved','dismissed') "
+                "status=case when gov_integration_sync_anomalies.status "
+                "in ('resolved','dismissed') "
                 "then 'pending' else gov_integration_sync_anomalies.status end"
             ),
             {
