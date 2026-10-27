@@ -143,7 +143,7 @@ export default function SyncTaskAnomalyCenter() {
         onClose={() => setSelected(null)}>
         {selected && <>
           <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-            title="异常不代表源接口同步失败；财务结果需独立校验" />
+            message="异常不代表源接口同步失败；财务结果需独立校验" />
           <Descriptions column={1} bordered size="small" items={[
             { key: "date", label: "美国业务日期", children: selected.business_date },
             { key: "account", label: "来源账号", children: selected.source_account_ref },
