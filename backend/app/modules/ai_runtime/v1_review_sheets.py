@@ -92,15 +92,11 @@ def project_v1_review_sheets(
         kind = str(row[col["关键词类型"]])
         grade = str(row[col["投放等级"]])
         confirmed_brand = (
-            kind == "品牌/竞品词"
-            and grade == "品牌等级"
-            and not row[col["未上传原因"]]
+            kind == "品牌/竞品词" and grade == "品牌等级" and not row[col["未上传原因"]]
         )
         risky_type = kind in RISK_LABELS and not confirmed_brand
         if risky_type or grade in ("不投放", "候选复查") or row[col["未上传原因"]]:
-            label = RISK_LABELS.get(
-                kind, "页面无法证明" if grade == "候选复查" else "人工确认风险"
-            )
+            label = RISK_LABELS.get(kind, "页面无法证明" if grade == "候选复查" else "人工确认风险")
             risks.append(
                 (
                     keyword,
