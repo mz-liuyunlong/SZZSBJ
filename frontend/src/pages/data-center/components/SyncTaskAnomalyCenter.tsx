@@ -60,6 +60,7 @@ export default function SyncTaskAnomalyCenter() {
   const [selected, setSelected] = useState<Anomaly | null>(null);
   const [status, setStatus] = useState<string>("all");
   const [keyword, setKeyword] = useState("");
+  const [searchText, setSearchText] = useState("");
   const [note, setNote] = useState("");
   const [nextStatus, setNextStatus] = useState("investigating");
   const [saving, setSaving] = useState(false);
@@ -73,6 +74,7 @@ export default function SyncTaskAnomalyCenter() {
     try {
       const query = new URLSearchParams({ page: String(page), page_size: "20" });
       if (status !== "all") query.set("status", status);
+      if (searchText.trim()) query.set("keyword", searchText.trim());
       const result = await backendRequest<{ items: Anomaly[] }, { total?: number }>(
         `/api/integrations/sync-anomalies?${query.toString()}`
       );
@@ -85,7 +87,7 @@ export default function SyncTaskAnomalyCenter() {
     }
   };
 
-  useEffect(() => { void refresh(); }, [page, status]);
+  useEffect(() => { void refresh(); }, [page, status, searchText]);
 
   useEffect(() => {
     if (!selected) { setHistory([]); return; }
@@ -121,18 +123,16 @@ export default function SyncTaskAnomalyCenter() {
       setSaving(false);
     }
   };
-  const visible = items.filter(item =>
-    [item.local_sku, item.msku, item.item_id, item.platform_order_no,
-      item.store_id, item.campaign_name, item.error_code, item.business_date]
-      .some(value => value?.toLowerCase().includes(keyword.toLowerCase()))
-  );
+  const visible = items;
 
   return (
     <section className="sync-task__card" aria-label="同步异常中心">
       {contextHolder}
       <Space wrap style={{ marginBottom: 16 }}>
         <Input.Search placeholder="搜索 SKU / Item ID / 订单号 / 店铺 / 日期" value={keyword}
-          onChange={event => setKeyword(event.target.value)} style={{ width: 340 }} allowClear />
+          onChange={event => setKeyword(event.target.value)}
+          onSearch={value => { setPage(1); setSearchText(value); }}
+          style={{ width: 340 }} allowClear />
         <Select value={status} onChange={value => { setStatus(value); setPage(1); }}
           style={{ width: 140 }}
           options={[{ value: "all", label: "全部状态" },
