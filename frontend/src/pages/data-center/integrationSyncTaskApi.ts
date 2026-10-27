@@ -585,6 +585,8 @@ export async function listIntegrationSyncRunLogPage(params: {
   return {
     total: response.meta.total ?? response.data.items.length,
     items: response.data.items.map((run): SyncTaskLog => ({
+      stageName: run.interface_key === "pmcPurchaseBoardSync" ? "完整流程"
+        : pmcPurchaseInterfaceKeys.has(run.interface_key) ? chineseTaskNames[run.interface_key] : undefined,
       id: run.id,
       taskId: run.config_id ?? run.id,
       runAt: run.started_at ?? run.queued_at,

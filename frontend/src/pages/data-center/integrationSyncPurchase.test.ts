@@ -1,10 +1,22 @@
 /** Purchase folding must not change the other business tasks or account boundaries. */
 import { afterEach, expect, it, vi } from "vitest";
 import { backendRequest } from "@/api/backendApi";
-import { listIntegrationSyncTasks } from "./integrationSyncTaskApi";
+import { listIntegrationSyncRunLogPage, listIntegrationSyncTasks } from "./integrationSyncTaskApi";
 
 vi.mock("@/api/backendApi", () => ({ backendRequest: vi.fn() }));
 afterEach(() => vi.resetAllMocks());
+
+it("preserves purchase stage names when fetching paginated drawer logs", async () => {
+  vi.mocked(backendRequest).mockResolvedValueOnce(envelope([
+    { id: "parent", interface_key: "pmcPurchaseBoardSync", status: "failed" },
+    { id: "child", interface_key: "purchasePlanList", status: "succeeded" },
+  ]));
+  const result = await listIntegrationSyncRunLogPage({ page: 1, pageSize: 20 });
+  expect(result.items).toEqual([
+    expect.objectContaining({ id: "parent", stageName: "完整流程" }),
+    expect.objectContaining({ id: "child", stageName: "采购计划同步" }),
+  ]);
+});
 
 const keys = ["pmcPurchaseBoardSync", "purchasePlanList", "purchaseOrderList", "purchaseReceiptOrderList", "walmartListingList"];
 const interfaces = keys.map((key) => ({ id: key, interface_key: key, display_name: key,
