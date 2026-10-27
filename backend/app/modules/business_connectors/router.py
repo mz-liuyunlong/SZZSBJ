@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 import httpx
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -25,6 +25,8 @@ from app.core.auth import Principal
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
 from app.integrations.llm.openai_provider import failed_call_reservation, generate_text
+
+from .encryption_key import EncryptionKeyUnavailable, get_business_fernet
 
 router = APIRouter(prefix="/api/business-rules/connectors", tags=["Business connectors"])
 read_perm = Annotated[Principal, Depends(require_permission("business-rules:read"))]
@@ -99,12 +101,11 @@ def _fail(exc: ConfigError) -> ApiError:
     return ApiError(code=exc.code, status_code=exc.status)
 
 
-def _key() -> Fernet:
-    value = os.getenv("BUSINESS_CONFIG_ENCRYPTION_KEY", "")
+def _key():
     try:
-        return Fernet(value.encode("ascii"))
-    except (ValueError, TypeError):
-        raise ConfigError("BUSINESS_ENCRYPTION_KEY_MISSING", 503) from None
+        return get_business_fernet()
+    except EncryptionKeyUnavailable as exc:
+        raise ConfigError(str(exc), 503) from None
 
 
 def _encrypt(value: str | None) -> str | None:
