@@ -1,6 +1,7 @@
 import { backendRequest } from "@/api/backendApi";
 import type {
   WfsFeeAlertFollowFormValues,
+  WfsFeeRecoveredFormValues,
   WfsFeeAlertRow,
 } from "@/pages/warehouse/wfsFeeAlertTypes";
 
@@ -252,6 +253,22 @@ export async function updateWfsFeeAlertCase(
       body: JSON.stringify({
         case_nos: values.caseNo,
         latest_follow_note: values.latestFollow,
+      }),
+    },
+  );
+}
+
+export async function markWfsFeeCaseRecovered(
+  id: string,
+  values: WfsFeeRecoveredFormValues,
+): Promise<void> {
+  await backendRequest<{ updated: boolean }, null>(
+    `/api/warehouse/wfs-fee-cases/${encodeURIComponent(id)}/mark-recovered`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        recovered_amount: values.recoveredAmount,
+        latest_follow_note: values.latestFollowNote?.trim() ?? "",
       }),
     },
   );
