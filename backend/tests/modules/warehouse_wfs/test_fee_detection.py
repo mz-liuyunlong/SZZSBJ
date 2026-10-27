@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -98,3 +99,69 @@ def test_duplicate_source_line_rejected():
                 make_row(qty="5", line="same"),
             ]
         )
+
+
+def test_missing_order_identity_is_rejected_instead_of_grouping_by_line():
+    with pytest.raises(ValueError, match="WFS_MISSING_ORDER_IDENTITY"):
+        resolve_wfs_fees([make_row(order="", qty="10", fee="-40")])
+
+
+def test_mode_counts_orders_not_units() -> None:
+    result = resolve_wfs_fees(
+        [
+            make_row(order="large", qty="20", fee="-125.20", line="large"),
+            make_row(order="small-a", qty="1", fee="-6.95", line="small-a"),
+            make_row(order="small-b", qty="1", fee="-6.95", line="small-b"),
+        ]
+    )[0]
+
+    assert result.unit_fee == Decimal("6.95")
+    assert result.mode_count == 2
+    assert result.sample_units == Decimal("22")
+    assert result.fee_orders == 3
+
+
+def test_units_from_zero_fee_or_unpaired_orders_are_not_valid_samples() -> None:
+    result = resolve_wfs_fees(
+        [
+            make_row(order="zero-fee", qty="100", fee="0", line="zero"),
+            make_row(order="valid", qty="10", fee="-69.50", line="valid"),
+        ]
+    )[0]
+
+    assert result.sample_units == Decimal("10")
+    assert result.fee_orders == 1
+
+
+def test_verified_sixty_day_regression_uses_order_mode_not_unit_weight() -> None:
+    rows = []
+    for index in range(32):
+        units = 2 if index < 6 else 1
+        rows.append(
+            make_row(
+                order=f"high-{index}",
+                qty=str(units),
+                fee=str(Decimal("-6.95") * units),
+                date="2026-09-23",
+                line=f"high-{index}",
+            )
+        )
+    for index in range(22):
+        units = 2 if index < 2 else 1
+        rows.append(
+            make_row(
+                order=f"low-{index}",
+                qty=str(units),
+                fee=str(Decimal("-6.26") * units),
+                date="2026-08-24",
+                line=f"low-{index}",
+            )
+        )
+
+    result = resolve_wfs_fees(rows)[0]
+
+    assert result.sample_units == Decimal("62")
+    assert result.fee_orders == 54
+    assert result.mode_count == 32
+    assert result.unit_fee == Decimal("6.95")
+    assert result.latest_settlement_date == date(2026, 9, 23)

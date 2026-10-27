@@ -19,7 +19,7 @@ from app.modules.warehouse_wfs.settlement_collector import (
     collect_wfs_settlements,
 )
 from app.modules.warehouse_wfs.standard_fee_reader import (
-    read_product_management_wfs_fee,
+    read_product_management_wfs_fees,
 )
 from app.modules.warehouse_wfs.store_discovery import WfsSettlementStore
 
@@ -63,37 +63,28 @@ def run_wfs_read_only_detection(
         if isinstance(row, dict) and row.get("msku")
     }
 
-    standards = []
-    unresolved = 0
-
-    for code in sorted(observed):
-        if code.upper().startswith("CS"):
-            continue
-
-        item_ids = session.scalars(
-            select(WalmartListingDimension.item_id).where(
-                WalmartListingDimension.source_account_ref == store.source_account_ref,
-                WalmartListingDimension.store_id == store.store_id,
-                WalmartListingDimension.msku == code,
-            )
-        ).all()
-
-        if len(item_ids) != 1:
-            unresolved += 1
-            continue
-
-        standard = read_product_management_wfs_fee(
-            session,
-            source_account_ref=store.source_account_ref,
-            store_id=store.store_id,
-            item_id=item_ids[0],
-            msku=code,
+    eligible_codes = {code for code in observed if not code.upper().startswith("CS")}
+    listing_rows = session.execute(
+        select(WalmartListingDimension.msku, WalmartListingDimension.item_id).where(
+            WalmartListingDimension.source_account_ref == store.source_account_ref,
+            WalmartListingDimension.store_id == store.store_id,
+            WalmartListingDimension.msku.in_(eligible_codes),
         )
-        if standard is None:
-            unresolved += 1
-            continue
-
-        standards.append(standard)
+    ).all()
+    item_ids_by_msku: dict[str, list[str]] = {}
+    for code, item_id in listing_rows:
+        item_ids_by_msku.setdefault(code, []).append(item_id)
+    identity_values = frozenset(
+        (store.source_account_ref, store.store_id, item_ids[0], code)
+        for code, item_ids in item_ids_by_msku.items()
+        if len(item_ids) == 1
+    )
+    standards_by_identity = read_product_management_wfs_fees(
+        session,
+        identities=identity_values,
+    )
+    standards = list(standards_by_identity.values())
+    unresolved = len(eligible_codes) - len(standards)
 
     result = evaluate_wfs_settlements(
         source_account_ref=store.source_account_ref,

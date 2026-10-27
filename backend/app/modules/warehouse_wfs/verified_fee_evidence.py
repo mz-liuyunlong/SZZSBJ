@@ -5,14 +5,18 @@ Pure calculation layer. No database writes or provider requests.
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
-CENT = Decimal("0.01")
+from app.modules.warehouse_wfs.fee_detection import (
+    SettlementFeeRow,
+    calculate_wfs_amounts,
+    decimal_value,
+    resolve_wfs_fees,
+)
 
 
 @dataclass(frozen=True)
@@ -30,18 +34,6 @@ class FeeEvidence:
     evidenced_net_difference: Decimal
     status: str
     warnings: tuple[str, ...]
-
-
-def decimal_value(value: Any) -> Decimal:
-    if value is None or value == "":
-        return Decimal("0")
-    try:
-        result = Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError) as exc:
-        raise ValueError("INVALID_NUMERIC_VALUE") from exc
-    if not result.is_finite():
-        raise ValueError("NONFINITE_NUMERIC_VALUE")
-    return result
 
 
 def settlement_date(value: Any) -> date | None:
@@ -66,7 +58,7 @@ def analyze_wfs_evidence(
     as_of: date | None = None,
     max_age_days: int = 14,
     min_sample_units: int = 10,
-    recent_window_days: int = 30,
+    recent_window_days: int = 60,
 ) -> FeeEvidence:
     """Evaluate WFS fee evidence without writing any data."""
     if standard_fee < 0:
@@ -77,7 +69,7 @@ def analyze_wfs_evidence(
         raise ValueError("INVALID_WINDOW")
 
     today = as_of or date.today()
-    groups: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    groups: dict[str, list[tuple[Mapping[str, Any], str]]] = {}
     seen: set[tuple[str, str]] = set()
     warnings: set[str] = set()
 
@@ -99,22 +91,22 @@ def analyze_wfs_evidence(
             continue
 
         seen.add(line_key)
-        groups[order].append(row)
+        groups.setdefault(order, []).append((row, f"{uid}:{index}"))
 
-    order_evidence = []
+    normalized_rows: list[SettlementFeeRow] = []
 
-    for group in groups.values():
+    for order, group in groups.items():
         try:
             sales = sum(
                 (
                     decimal_value(row.get("salesNum"))
-                    for row in group
+                    for row, _ in group
                     if decimal_value(row.get("salesNum")) > 0
                 ),
                 Decimal("0"),
             )
             fee = sum(
-                (decimal_value(row.get("platformLogisticsAmount")) for row in group),
+                (decimal_value(row.get("platformLogisticsAmount")) for row, _ in group),
                 Decimal("0"),
             )
         except ValueError:
@@ -129,18 +121,32 @@ def analyze_wfs_evidence(
             warnings.add("NONINTEGER_SALES_QUANTITY")
             continue
 
-        dates = [day for row in group if (day := settlement_date(row.get("settlementDate")))]
+        dates = [
+            parsed_day
+            for row, _ in group
+            if (parsed_day := settlement_date(row.get("settlementDate")))
+        ]
         if not dates:
             warnings.add("MISSING_SETTLEMENT_DATE")
             continue
 
-        day = max(dates)
-        units = int(sales)
-        rate = (abs(fee) / sales).quantize(CENT, rounding=ROUND_HALF_UP)
+        settlement_day = max(dates).isoformat()
+        for row, source_line_ref in group:
+            normalized_rows.append(
+                SettlementFeeRow(
+                    source_account_ref="verified-evidence",
+                    store_id="verified-evidence",
+                    msku=msku,
+                    platform_order_no=order,
+                    sales_num=decimal_value(row.get("salesNum")),
+                    platform_logistics_amount=decimal_value(row.get("platformLogisticsAmount")),
+                    settlement_date=settlement_day,
+                    source_line_ref=source_line_ref,
+                    fee_scope_status="verified_wfs",
+                )
+            )
 
-        order_evidence.append((day, rate, units))
-
-    if not order_evidence:
+    if not normalized_rows:
         return FeeEvidence(
             actual_fee=None,
             standard_fee=standard_fee,
@@ -157,31 +163,22 @@ def analyze_wfs_evidence(
             warnings=tuple(sorted(warnings)),
         )
 
-    latest = max(day for day, _, _ in order_evidence)
+    all_resolved = resolve_wfs_fees(normalized_rows, min_sample_units=1)[0]
+    latest = all_resolved.latest_settlement_date
+    if latest is None:
+        raise ValueError("MISSING_SETTLEMENT_DATE")
     cutoff = latest - timedelta(days=recent_window_days - 1)
-
-    recent = [(day, rate, units) for day, rate, units in order_evidence if cutoff <= day <= latest]
-
-    distribution = Counter()
-    latest_for_rate: dict[Decimal, date] = {}
-
-    for day, rate, units in recent:
-        distribution[rate] += units
-        latest_for_rate[rate] = max(day, latest_for_rate.get(rate, day))
-
-    recent_units = sum(distribution.values())
-    actual_fee = None
-
-    if recent_units >= min_sample_units:
-        actual_fee = max(
-            distribution,
-            key=lambda rate: (
-                distribution[rate],
-                latest_for_rate[rate],
-                rate,
-            ),
-        )
-    else:
+    recent_rows = [
+        row
+        for row in normalized_rows
+        if cutoff <= date.fromisoformat(row.settlement_date) <= latest
+    ]
+    recent_resolved = resolve_wfs_fees(
+        recent_rows,
+        min_sample_units=min_sample_units,
+    )[0]
+    actual_fee = recent_resolved.unit_fee
+    if actual_fee is None:
         warnings.add("INSUFFICIENT_RECENT_SAMPLE")
 
     if latest > today:
@@ -189,7 +186,11 @@ def analyze_wfs_evidence(
     elif (today - latest).days > max_age_days:
         warnings.add("STALE_SETTLEMENT_DATA")
 
-    if len(distribution) > 1:
+    fee_distribution: dict[str, int] = {}
+    for sample in recent_resolved.order_samples:
+        key = str(sample.unit_fee)
+        fee_distribution[key] = fee_distribution.get(key, 0) + int(sample.sales_units)
+    if len(fee_distribution) > 1:
         warnings.add("MULTIPLE_ACTUAL_FEE_RATES")
 
     legacy_estimate = None
@@ -197,18 +198,18 @@ def analyze_wfs_evidence(
 
     if actual_fee is not None:
         difference = actual_fee - standard_fee
-        if historical_units is not None:
-            legacy_estimate = (max(difference, Decimal("0")) * historical_units).quantize(CENT)
-
-    evidenced_overcharge = sum(
-        (max(rate - standard_fee, Decimal("0")) * units for _, rate, units in order_evidence),
-        Decimal("0"),
-    ).quantize(CENT)
-
-    net_difference = sum(
-        ((rate - standard_fee) * units for _, rate, units in order_evidence),
-        Decimal("0"),
-    ).quantize(CENT)
+        amounts = calculate_wfs_amounts(
+            all_resolved.order_samples,
+            standard_unit_fee=standard_fee,
+            actual_unit_fee=actual_fee,
+            historical_units=historical_units,
+        )
+        legacy_estimate = amounts.legacy_estimate
+        evidenced_overcharge = amounts.theoretical_overcharge
+        net_difference = amounts.net_sample_difference
+    else:
+        evidenced_overcharge = Decimal("0")
+        net_difference = Decimal("0")
 
     if actual_fee is None:
         status = "INSUFFICIENT_EVIDENCE"
@@ -237,9 +238,9 @@ def analyze_wfs_evidence(
         standard_fee=standard_fee,
         unit_difference=difference,
         historical_units=historical_units,
-        settlement_units=sum(units for _, _, units in order_evidence),
-        settlement_orders=len(order_evidence),
-        fee_distribution={str(rate): units for rate, units in sorted(distribution.items())},
+        settlement_units=int(all_resolved.sample_units),
+        settlement_orders=all_resolved.fee_orders,
+        fee_distribution=dict(sorted(fee_distribution.items())),
         latest_settlement_date=latest,
         legacy_estimate=legacy_estimate,
         evidenced_overcharge=evidenced_overcharge,

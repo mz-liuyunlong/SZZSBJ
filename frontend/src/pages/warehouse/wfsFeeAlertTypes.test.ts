@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { wfsFeeAlertRows } from "@/pages/warehouse/wfsFeeAlertMockData";
 import {
   createWfsFeeAlertInitialFilters,
+  defaultWfsDetectionWindow,
   filterWfsFeeAlertRows,
   getPendingWfsAmount,
   getWfsFeeAlertSummary,
@@ -10,6 +11,12 @@ import {
 } from "@/pages/warehouse/wfsFeeAlertTypes";
 
 describe("wfsFeeAlertTypes", () => {
+  it("builds the default T-2 60-day window from Los Angeles business time", () => {
+    expect(defaultWfsDetectionWindow(new Date("2026-10-20T06:30:00Z"))).toEqual([
+      "2026-08-19",
+      "2026-10-17",
+    ]);
+  });
   it("combines SKU and MSKU into one fixed table column", () => {
     const keys = wfsFeeAlertColumnFields.map((field) => field.key);
     expect(keys.slice(0, 3)).toEqual([

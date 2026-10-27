@@ -17,6 +17,7 @@
 | Walmart Monitor RAW Ingestion V1 | `backend/app/modules/walmart_monitor/` | 接收一个统一 logical-check 事件，校验压缩 RAW 完整性并幂等写入独立 L2 RAW 表；不写 Listing/ODS/MART |
 | Lingxing Token Manager | `backend/app/integrations/lingxing/token_manager.py` | 已合并的后端内部 Token client、单进程内存缓存与安全刷新边界；implementation PR #48，merge commit `a78af4d` |
 | Integration Sync Governance + Lingxing SKU Detail Foundation V1 | `backend/app/modules/integration_sync/` and `backend/app/modules/sku_detail/` | 当前实现分支已准备可复用同步治理、RAW/ODS、Lingxing SKU DWD/DWS、local RAW importer、任务骨架与受保护 API contract；合并前仍为 `approved_for_implementation` |
+| WFS Fee Anomaly Auto Detection V1 | `backend/app/modules/warehouse_wfs/`, `backend/app/modules/integration_sync/handlers/lingxing_wfs_settlement_sync.py` | 复用 Integration Sync、Product Management、Daily Sales 与既有 WFS 案件，提供默认关闭的多店结算采集、订单费率、异常检测、dry-run 和 insert-only 案件候选 |
 | Media Image Assets M1 | `backend/app/modules/media_assets/` | 第三方商品图登记、异步安全缓存、128/512 WebP 派生图、签名同源读取和 Product Management 图片加速；受控 backfill 同时承担 pending/retryable-failed/stale-processing reconciliation；生产 migration/backfill 需独立授权 |
 | Logging | `backend/app/core/logging.py` | 日志配置 |
 | Pagination | `backend/app/schemas/pagination.py` | 分页请求和响应 |
@@ -26,6 +27,29 @@
 | External Client Base | `backend/app/integrations/base.py` | 第三方 API 基类 |
 
 新增通用后端模块后，AI 必须更新本文件。
+
+## WFS Fee Anomaly Auto Detection V1
+
+| 项目 | 内容 |
+|---|---|
+| Module name | WFS Fee Anomaly Auto Detection V1 |
+| Module key | `wfs-fee-anomaly-auto-detection-v1` |
+| Status | `approved_for_implementation`；PR #257 远端 HEAD `6695114a` 的 13 个 checks 全部成功，`mergeStateStatus=BLOCKED`；本地补修 `064bad82` 尚未推送且未被远端 CI 覆盖，待正式 Reviewer/Owner approval；未合并、未部署或生产启用 |
+| Purpose | 完成 Lingxing WFS 结算 RAW-first 采集、订单次数众数、动态标准费/销量、三类异常金额、只读预览、幂等案件候选和默认关闭的每日调度 |
+| Reused modules | Lingxing Token/client、Integration Sync run/work item/lease/RAW、Product Management pricing、Daily Sales MART、现有 WFS case/service/router/page |
+| Backend files | `backend/app/modules/warehouse_wfs/`、`backend/app/modules/integration_sync/`、Lingxing client 最小扩展、一个 additive Alembic revision、scoped tests |
+| Identity | `source_account_ref + store_id + msku + platform_order_no`；来源事实行另以稳定 `source_line_ref` 幂等；缺失或冲突 fail closed |
+| Detection | America/Los_Angeles T-2/60 天；每个有效订单贡献一次众数；并列按最新结算日后确定性金额；`Decimal` + `ROUND_HALF_UP` |
+| Evidence | RAW blob/request ref → exact store/window `gov_wfs_settlement_collections` → bound `fact_walmart_wfs_fee_actual` → append-only `ops_wfs_fee_detection_evidence`；销量完整性由 Listing 生命周期与连续成功同步窗口证明；标准费复用 Product Management；默认未确认、`current_only` 历史适用性和未验证 WFS 范围只进入人工复核 |
+| Case write | 复用 `ops_wfs_fee_anomaly_cases`；`INSERT ... ON CONFLICT DO NOTHING`；不更新人工/跟进/归档/追回案件；自动建案独立默认关闭 |
+| API | 保持现有 WFS API；新增 `POST /api/warehouse/wfs-fee-alerts/detection-preview`，只读、无 provider、无案件写入 |
+| Scheduler | 复用现有 Celery Integration Sync task/queue；catalog、outbound、sync config、检测和建案多重门禁默认关闭 |
+| Migration | `20261026_0061_wfs_fee_detection_evidence` 接当前单一 `0060` head；隔离 PostgreSQL 16 已完成带历史合成数据的 upgrade/downgrade/re-upgrade；生产未执行且索引重建锁风险需单独审批 |
+| Validation | 本地补修：Ruff format/check、应用 import、Alembic 0061 单一 head PASS；WFS `157 passed, 9 skipped`；full pytest `1783 passed, 127 skipped`；新增脚本 focused mypy PASS；既有隔离 PostgreSQL auto-case `9 passed`；frontend 未改动，Node 24 单 worker lint、`60 files / 281 tests`、build PASS；远端 `6695114a` checks 13/13 success，但未覆盖未推送的 `064bad82`；real-provider/database/production validation not executed |
+| Documentation | `docs/api/wfs-fee-anomaly-auto-detection.md`; `docs/sop/warehouse-wfs-fee-anomaly-auto-detection.md` |
+| PRP / Decision | `PRPs/wfs-fee-anomaly-auto-detection-v1.md`; `docs/data-sources/decisions/wfs-fee-anomaly-auto-detection-decision.md` |
+| PR | `#257`；merge commit TBD |
+| Not in scope | 真实 Lingxing/Token、生产 DB/migration/collection/case write/schedule/deploy/restart、自动确认索赔、旧系统修改、临时 JSONL 正式依赖 |
 
 ## Backend API Foundation
 

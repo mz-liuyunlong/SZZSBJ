@@ -196,6 +196,22 @@ const createColumns = (
     render: (_, row) => <span className="wfs-fee-alert__danger-money">{formatWfsMoney(row.unitOverFee, currency)}</span>,
   },
   {
+    title: "最新结算",
+    dataIndex: "latestSettlementDate",
+    key: "latestSettlementDate",
+    width: 112,
+  },
+  {
+    title: "检测状态",
+    key: "detectionStatus",
+    width: 132,
+    render: (_, row) => (
+      <Tag color={row.freshnessStatus === "stale" ? "warning" : "processing"}>
+        {row.detectionStatus ?? "历史案件"}
+      </Tag>
+    ),
+  },
+  {
     title: "异常原因",
     dataIndex: "reason",
     key: "reason",

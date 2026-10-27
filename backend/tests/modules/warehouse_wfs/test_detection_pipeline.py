@@ -34,6 +34,10 @@ def settlement_rows():
     for n in (1, 2):
         common = {
             "storeName": NAME,
+            "storeId": STORE,
+            "platformCode": "10008",
+            "transactionTypes": 0,
+            "currencyCode": "USD",
             "msku": MSKU,
             "platformOrderNo": f"order-{n}",
             "settlementDate": "2026-10-01",
@@ -105,7 +109,7 @@ def test_product_management_standard_is_dynamic():
 
 def test_rejects_wrong_store_instead_of_partial_detection():
     rows = settlement_rows()
-    rows[0]["storeName"] = "Unknown Store"
+    rows[0]["storeId"] = "999999999999999999"
 
     with pytest.raises(
         WfsDetectionError,
