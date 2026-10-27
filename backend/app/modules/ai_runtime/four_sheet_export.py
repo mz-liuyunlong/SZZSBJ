@@ -39,6 +39,7 @@ def generate_four_sheet_review(*, run, keyword_rows: list[tuple[object, str]]) -
         # Decode typed cell values from the existing validated workbook, preserving
         # the exact row order and content, not deriving scoring in a second engine.
         from app.modules.keyword_planning.internal_export import SHEET_NAMES as ORIGINAL
+
         sheets = []
         positions = (0, 1, 2, 4)
         for position, name in zip(positions, SHEET_NAMES, strict=True):
