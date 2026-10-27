@@ -40,7 +40,12 @@ def _target() -> MonitorTarget:
     )
 
 
-def _raw_event(*, target_count: int = 1, outcome: str = "SUCCESS") -> RawWalmartMonitorEvent:
+def _raw_event(
+    *,
+    target_count: int = 1,
+    outcome: str = "SUCCESS",
+    parsed_result: dict[str, object] | None = None,
+) -> RawWalmartMonitorEvent:
     targets = [
         {
             "source_account_ref": f"synthetic-account-{index}",
@@ -73,7 +78,9 @@ def _raw_event(*, target_count: int = 1, outcome: str = "SUCCESS") -> RawWalmart
                 "data_source": "SYNTHETIC",
                 "error_code": None if outcome == "SUCCESS" else "SYNTHETIC_FAILURE",
                 "duration_ms": 1,
-                "parsed_result": {"productTitle": "Observed title"},
+                "parsed_result": (
+                    {"productTitle": "Observed title"} if parsed_result is None else parsed_result
+                ),
             },
         },
     )
@@ -138,6 +145,28 @@ def test_projection_expands_one_item_observation_to_every_stable_target() -> Non
     assert session.execute.call_count == 2
 
 
+def test_check_ok_observation_publishes_monitor_values() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = uuid4()
+
+    projected = WalmartMonitorProjectionService(session).project(_raw_event(outcome="CHECK_OK"))
+
+    assert projected == 1
+    session.execute.assert_called_once()
+
+
+def test_success_without_parsed_result_remains_evidence_only() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = uuid4()
+
+    projected = WalmartMonitorProjectionService(session).project(
+        _raw_event(outcome="CHECK_OK", parsed_result={})
+    )
+
+    assert projected == 1
+    session.execute.assert_not_called()
+
+
 def test_failed_observation_does_not_publish_stale_business_values() -> None:
     session = MagicMock(spec=Session)
     session.scalar.return_value = uuid4()
@@ -148,6 +177,15 @@ def test_failed_observation_does_not_publish_stale_business_values() -> None:
     statement = session.scalar.call_args.args[0]
     assert statement.compile().params["title"] is None
     session.execute.assert_not_called()
+
+
+def test_parser_maps_monitor_not_reseller_to_explicit_false() -> None:
+    values = parse_monitor_listing_values(
+        {"resellerStatus": "NOT_RESELLER"},
+        target=_target(),
+    )
+
+    assert values.is_hijacked is False
 
 
 def test_listing_projection_uses_effective_monitor_values_and_keeps_fallbacks() -> None:
