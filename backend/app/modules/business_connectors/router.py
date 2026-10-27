@@ -53,6 +53,7 @@ class ConnectorWrite(BaseModel):
     default_model: str | None = None
     backup_model: str | None = None
     model_allowlist: list[str] = Field(default_factory=list, max_length=30)
+    application_scenes: list[str] = Field(default_factory=list, max_length=12)
     daily_limit: int = Field(default=100, ge=1, le=100000)
     monthly_budget_usd: Decimal = Field(default=Decimal("0"), ge=0, le=1000000)
     max_output_tokens: int = Field(default=1024, ge=1, le=16384)
@@ -150,6 +151,24 @@ def _config(value: ConnectorWrite) -> dict[str, Any]:
         _endpoint(value.kind, value.endpoint) if value.kind == "openai" or value.endpoint else None
     )
     if value.kind == "openai":
+        if (
+            value.default_model != "gpt-6-luna"
+            or value.model_allowlist != ["gpt-6-luna"]
+            or value.backup_model
+        ):
+            raise ConfigError("AI_MODEL_MUST_BE_GPT_6_LUNA")
+        if len(set(value.application_scenes)) != len(value.application_scenes) or any(
+            x
+            not in {
+                "keyword_launch",
+                "ai_assistant",
+                "listing_optimization",
+                "ads_optimization",
+                "product_research",
+            }
+            for x in value.application_scenes
+        ):
+            raise ConfigError("AI_SCENES_INVALID")
         models = [value.default_model, value.backup_model, *value.model_allowlist]
         if any(v and not VALID_MODELS.fullmatch(v) for v in models):
             raise ConfigError("AI_MODEL_INVALID")
@@ -162,6 +181,7 @@ def _config(value: ConnectorWrite) -> dict[str, Any]:
         "default_model": value.default_model if value.kind == "openai" else None,
         "backup_model": value.backup_model if value.kind == "openai" else None,
         "model_allowlist": value.model_allowlist if value.kind == "openai" else [],
+        "application_scenes": value.application_scenes if value.kind == "openai" else [],
         "daily_limit": value.daily_limit,
         "monthly_budget_usd": str(value.monthly_budget_usd),
         "max_output_tokens": value.max_output_tokens,
@@ -856,7 +876,7 @@ async def ai_generate(
                     "id": reservation_id,
                     "input": input_tokens,
                     "output": output_tokens,
-                    "cost": max(actual_cost, reserved_cost),
+                    "cost": actual_cost,
                     "duration": int((time.monotonic() - started) * 1000),
                 },
             )

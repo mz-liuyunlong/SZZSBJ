@@ -423,3 +423,37 @@ export const updateKeywordTranslation = async (
       }),
     },
   )).data;
+
+/** Independently persisted async AI jobs. Existing run/result types stay unchanged. */
+export interface KeywordAiJob {
+  id: string;
+  source_account_ref: string;
+  product_id: string;
+  requested_by: string;
+  status: 'queued'|'running'|'succeeded'|'partial_success'|'failed'|'cancelled';
+  phase: string;
+  progress: number;
+  total: number;
+  completed: number;
+  failed: number;
+  run_id: string|null;
+  error_code: string|null;
+}
+export const submitKeywordAiJob=async(input:CreateKeywordAnalysisRequest):Promise<KeywordAiJob>=>
+  (await backendRequest<KeywordAiJob>(`${API}/ai-tasks`,{method:'POST',body:JSON.stringify(input)})).data;
+export const listKeywordAiJobs=async(account:string):Promise<KeywordAiJob[]> =>
+  (await backendRequest<{items:KeywordAiJob[];total:number}>(`${API}/ai-tasks?${query(account)}`)).data.items;
+export const cancelKeywordAiJob=async(id:string,account:string):Promise<KeywordAiJob>=>
+  (await backendRequest<KeywordAiJob>(`${API}/ai-tasks/${id}/cancel?${query(account)}`,{method:'POST'})).data;
+export const retryKeywordAiJob=async(id:string,account:string):Promise<KeywordAiJob>=>
+  (await backendRequest<KeywordAiJob>(`${API}/ai-tasks/${id}/retry?${query(account)}`,{method:'POST'})).data;
+
+export interface KeywordAiSuggestion {
+  keyword:string;
+  relevance:'high'|'medium'|'low'|'review';
+  risk:string;
+  reason:string;
+}
+export const readKeywordAiSuggestions=async(jobId:string,account:string):Promise<KeywordAiSuggestion[]>=>
+  (await backendRequest<{items:KeywordAiSuggestion[];total:number;advisory_only:boolean}>(
+    `${API}/ai-tasks/${jobId}/results?${query(account)}`)).data.items;

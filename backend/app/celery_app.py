@@ -15,18 +15,21 @@ MEDIA_QUEUE = "media"
 INTEGRATION_QUEUE = "integration"
 OPERATION_LOG_QUEUE = "operation-logs"
 NOTIFICATION_QUEUE = "notifications"
+AI_QUEUE = "ai-keyword"
 
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
+    "app.modules.ai_runtime.tasks",
 )
 
 TASK_ROUTES = {
     "media_assets.*": {"queue": MEDIA_QUEUE, "routing_key": MEDIA_QUEUE},
     "operation_logs.*": {"queue": OPERATION_LOG_QUEUE, "routing_key": OPERATION_LOG_QUEUE},
     "business_connectors.*": {"queue": NOTIFICATION_QUEUE, "routing_key": NOTIFICATION_QUEUE},
+    "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -76,6 +79,7 @@ def create_celery_app(
             Queue(INTEGRATION_QUEUE, exchange, routing_key=INTEGRATION_QUEUE),
             Queue(OPERATION_LOG_QUEUE, exchange, routing_key=OPERATION_LOG_QUEUE),
             Queue(NOTIFICATION_QUEUE, exchange, routing_key=NOTIFICATION_QUEUE),
+            Queue(AI_QUEUE, exchange, routing_key=AI_QUEUE),
         ),
         task_routes=TASK_ROUTES,
         task_default_queue=INTEGRATION_QUEUE,
@@ -100,6 +104,10 @@ def create_celery_app(
             },
             "business-notifications-retry": {
                 "task": "business_connectors.notification_tick",
+                "schedule": 60.0,
+            },
+            "ai-keyword-recovery": {
+                "task": "ai_runtime.recover_keyword_jobs",
                 "schedule": 60.0,
             },
             "integration-sync-scheduler": {
