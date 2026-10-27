@@ -68,17 +68,26 @@ def select_active_connector(session, scene: str, connector_id: UUID | None = Non
 
 def select_published_skill(session, connector_id: UUID, scene: str):
     """Only load a published Skill belonging to the selected OpenAI connector."""
-    return session.execute(
-        text("""SELECT id, instructions FROM ai_runtime_skill_versions
+    return (
+        session.execute(
+            text("""SELECT id, instructions FROM ai_runtime_skill_versions
             WHERE connector_id=:connector AND scene=:scene AND status='published'
             ORDER BY version DESC LIMIT 1"""),
-        {"connector": connector_id, "scene": scene},
-    ).mappings().first()
+            {"connector": connector_id, "scene": scene},
+        )
+        .mappings()
+        .first()
+    )
 
 
 async def invoke(
-    *, scene: str, prompt: str, actor: str, prompt_version: str,
-    skill_version_id: str | None = None, connector_id: UUID | None = None
+    *,
+    scene: str,
+    prompt: str,
+    actor: str,
+    prompt_version: str,
+    skill_version_id: str | None = None,
+    connector_id: UUID | None = None,
 ) -> tuple[str, int, int]:
     if scene not in SCENES or not prompt.strip() or len(prompt) > 10000:
         raise AIUnavailable("AI_REQUEST_INVALID")
@@ -90,11 +99,15 @@ async def invoke(
         # A queued keyword job pins its service and Skill version at enqueue time.
         # Other interactive scenes select the published Skill for this same service.
         if skill_version_id is not None:
-            skill = session.execute(
-                text("""SELECT instructions, scene, connector_id, status
+            skill = (
+                session.execute(
+                    text("""SELECT instructions, scene, connector_id, status
                   FROM ai_runtime_skill_versions WHERE id=CAST(:id AS uuid)"""),
-                {"id": skill_version_id},
-            ).mappings().first()
+                    {"id": skill_version_id},
+                )
+                .mappings()
+                .first()
+            )
             if (
                 skill is None
                 or skill["scene"] != scene

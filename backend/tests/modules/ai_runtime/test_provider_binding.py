@@ -1,4 +1,5 @@
 """AI runtime merge gates: pinned service and Skill, no UI/table mutation."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
