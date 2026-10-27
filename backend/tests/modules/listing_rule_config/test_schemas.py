@@ -64,12 +64,12 @@ def test_next_china_rating_boundary() -> None:
 
 
 def test_custom_china_rating_boundary_and_backward_compatible_json() -> None:
-    assert next_rating_time_utc(
-        datetime(2026, 10, 25, 0, 0, tzinfo=UTC), "09:15"
-    ) == datetime(2026, 10, 25, 1, 15, tzinfo=UTC)
-    assert next_rating_time_utc(
-        datetime(2026, 10, 25, 1, 15, tzinfo=UTC), "09:15"
-    ) == datetime(2026, 10, 26, 1, 15, tzinfo=UTC)
+    assert next_rating_time_utc(datetime(2026, 10, 25, 0, 0, tzinfo=UTC), "09:15") == datetime(
+        2026, 10, 25, 1, 15, tzinfo=UTC
+    )
+    assert next_rating_time_utc(datetime(2026, 10, 25, 1, 15, tzinfo=UTC), "09:15") == datetime(
+        2026, 10, 26, 1, 15, tzinfo=UTC
+    )
     legacy = ListingGradeRuleConfig().model_dump(mode="json")
     legacy.pop("execution_time")
     assert ListingGradeRuleConfig.model_validate(legacy).execution_time == "22:30"

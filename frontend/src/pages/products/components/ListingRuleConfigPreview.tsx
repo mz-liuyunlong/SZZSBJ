@@ -11,6 +11,7 @@ import ListingRuleConfigDrawer, {
 } from "@/pages/products/components/ListingRuleConfigDrawer";
 
 const DEFAULT_CONFIG: ListingGradeRuleConfig = {
+  execution_time: "22:30",
   short_days: 7,
   medium_days: 14,
   short_weight_percent: 60,
@@ -48,7 +49,6 @@ const DEFAULT_CONFIG: ListingGradeRuleConfig = {
 
 const PROTECTED = {
   execution_timezone: "Asia/Shanghai",
-  execution_time: "22:30",
   business_timezone: "America/Los_Angeles",
   closing_lag_days: 2,
   requires_complete_financial_inputs: true,

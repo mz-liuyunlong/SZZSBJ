@@ -102,6 +102,4 @@ def test_save_custom_time_creates_next_configured_boundary() -> None:
     )
     assert result.config.execution_time == "09:15"
     assert result.effective_from is not None
-    assert result.effective_from == next_rating_time_utc(
-        result.created_at, "09:15"
-    )
+    assert result.effective_from == next_rating_time_utc(result.created_at, "09:15")
