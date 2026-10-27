@@ -84,7 +84,10 @@ def test_new_migrations_and_skill_connector_isolation(db) -> None:
         db.execute(
             text("""INSERT INTO ai_runtime_skill_versions
                 (id,connector_id,scene,version,status,instructions,runtime_instructions,created_by)
-                VALUES (:id,:connector,'keyword_launch',1,'published',:reference,:runtime,'synthetic')"""),
+                VALUES (
+                    :id,:connector,'keyword_launch',1,'published',
+                    :reference,:runtime,'synthetic'
+                )"""),
             {
                 "id": uuid4(),
                 "connector": connector,
