@@ -4,6 +4,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
+
 from app.modules.listing_rule_config.preview import (
     basic_financial_candidate,
     stockout_candidate,
@@ -72,3 +74,23 @@ def test_openapi_contains_preview_route():
     from app.main import create_app
 
     assert "/api/listings/evaluation-preview" in create_app().openapi()["paths"]
+
+
+def test_batch_input_limits_and_duplicates() -> None:
+    from uuid import UUID
+    from pydantic import ValidationError
+
+    from app.modules.listing_rule_config.preview_router import ListingEvaluationBatchRequest
+
+    listing_id = UUID("00000000-0000-0000-0000-000000000001")
+    assert ListingEvaluationBatchRequest(listing_ids=[listing_id]).listing_ids == [listing_id]
+    with pytest.raises(ValidationError):
+        ListingEvaluationBatchRequest(listing_ids=[])
+    with pytest.raises(ValidationError):
+        ListingEvaluationBatchRequest(listing_ids=[listing_id] * 51)
+
+
+def test_openapi_contains_batch_preview_route() -> None:
+    from app.main import create_app
+
+    assert "/api/listings/evaluation-preview/batch" in create_app().openapi()["paths"]
