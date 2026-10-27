@@ -159,12 +159,13 @@ def test_live_probe_verifies_nonempty_wfs_data_without_exposing_records(
     monkeypatch.setenv("SZZSBJ_WALMART_LIVE_MODE", "owner-approved-read-only")
     monkeypatch.setenv("SZZSBJ_WALMART_ALLOW_PROBE", "1")
     monkeypatch.setenv("SZZSBJ_WALMART_TEST_STORE", "HK2615")
-    monkeypatch.setenv(
-        "SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE", '{"HK2615":"synthetic-function"}'
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE", '{"HK2615":"synthetic-function"}')
+    assert (
+        server_probe.main(
+            ["--store", "HK2615", "--operation", "wfs_inventory", "--live", "--require-data"]
+        )
+        == 0
     )
-    assert server_probe.main(
-        ["--store", "HK2615", "--operation", "wfs_inventory", "--live", "--require-data"]
-    ) == 0
     output = capsys.readouterr().out
     assert '"token_exchange": "VERIFIED_BY_SUCCESSFUL_GET"' in output
     assert '"data_status": "NONEMPTY"' in output
@@ -186,12 +187,13 @@ def test_live_probe_empty_list_is_not_data_success(monkeypatch, capsys) -> None:
     monkeypatch.setenv("SZZSBJ_WALMART_LIVE_MODE", "owner-approved-read-only")
     monkeypatch.setenv("SZZSBJ_WALMART_ALLOW_PROBE", "1")
     monkeypatch.setenv("SZZSBJ_WALMART_TEST_STORE", "HK2615")
-    monkeypatch.setenv(
-        "SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE", '{"HK2615":"synthetic-function"}'
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE", '{"HK2615":"synthetic-function"}')
+    assert (
+        server_probe.main(
+            ["--store", "HK2615", "--operation", "wfs_inventory", "--live", "--require-data"]
+        )
+        == 3
     )
-    assert server_probe.main(
-        ["--store", "HK2615", "--operation", "wfs_inventory", "--live", "--require-data"]
-    ) == 3
     output = capsys.readouterr().out
     assert '"status": "DATA_NOT_VERIFIED"' in output
     assert '"data_status": "EMPTY"' in output

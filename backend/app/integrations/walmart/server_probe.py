@@ -34,7 +34,6 @@ def _params(path: str | None) -> dict[str, Any]:
     return value
 
 
-
 def _response_record_count(payload: Any) -> int | None:
     """Count known list envelopes, never print provider records or identifiers."""
     if isinstance(payload, list):
@@ -78,7 +77,6 @@ def _response_record_count(payload: Any) -> int | None:
                     return len(rows)
                 return None
     return None
-
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,11 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         result = WalmartReadAPI(client).call(args.store, args.operation, params=params)
         record_count = _response_record_count(result.data)
         data_status = (
-            "UNVERIFIED"
-            if record_count is None
-            else "NONEMPTY"
-            if record_count > 0
-            else "EMPTY"
+            "UNVERIFIED" if record_count is None else "NONEMPTY" if record_count > 0 else "EMPTY"
         )
         passed = not args.require_data or record_count is not None and record_count > 0
         # A successful GET demonstrates that the cloud runtime obtained and used
