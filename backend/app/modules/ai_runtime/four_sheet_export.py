@@ -20,7 +20,9 @@ SHEET_NAMES = (
 )
 
 
-def generate_four_sheet_review(*, run, keyword_rows: list[tuple[object, str]]) -> bytes:
+def generate_four_sheet_review(
+    *, run, keyword_rows: list[tuple[object, str]], ai_items: list[dict] | None = None
+) -> bytes:
     """Project the existing immutable analysis; never recalculate or invent scores.
 
     The source generator already enforces account boundaries, size limits,
@@ -71,4 +73,26 @@ def generate_four_sheet_review(*, run, keyword_rows: list[tuple[object, str]]) -
             sheets.append((name, tuple(rows[0]), rows[1:]))
     assert ORIGINAL[0] == SHEET_NAMES[0]
     assert sheets[0][1] == HEADERS_01
+    # Semantic annotations inform manual review but never change immutable scores,
+    # P-grades, advertising eligibility, bids, or the source keyword vocabulary.
+    advisory = {}
+    for item in ai_items or []:
+        keyword = str(item.get("keyword") or "").casefold().strip()
+        if keyword and keyword not in advisory:
+            advisory[keyword] = item
+    if advisory:
+        columns = {name: i for i, name in enumerate(HEADERS_01)}
+        updated = []
+        for row in sheets[0][2]:
+            cells = list(row)
+            match = advisory.get(str(cells[columns["关键词"]]).casefold().strip())
+            if match:
+                relevance = str(match.get("relevance") or "review")[:24]
+                reason = str(match.get("reason") or "")[:180].replace("\\n", " ")
+                prefix = "AI语义复核（非投放依据）: " + relevance
+                note = prefix + ("；" + reason if reason else "")
+                index = columns["词质说明"]
+                cells[index] = (str(cells[index] or "") + "；" + note)[:800]
+            updated.append(tuple(cells))
+        sheets[0] = (sheets[0][0], sheets[0][1], updated)
     return _make_xlsx(sheets, header_fill=False)
