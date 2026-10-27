@@ -280,6 +280,11 @@ class WalmartReadCollector:
             for key in endpoints
             if key in collected
         }
+        item_statuses = getattr(self, "_gtin_item_statuses", None)
+        if "inventory_log" in endpoints and item_statuses is not None:
+            raw_files["raw/inventory_log_items.jsonl"] = self._jsonl(item_statuses)
+            if "inventory_log" in endpoint_results:
+                endpoint_results["inventory_log"]["item_gtin_mapping"] = "raw/inventory_log_items.jsonl"
         files: dict[str, dict[str, Any]] = {}
         for name, content in raw_files.items():
             files[name] = {
@@ -461,8 +466,8 @@ class WalmartReadCollector:
                     "inventory_log",
                     {
                         "gtin": gtin,
-                        "fromDate": from_date.isoformat(),
-                        "toDate": to_date.isoformat(),
+                        "fromDate": from_date.isoformat() + "T00:00:00Z",
+                        "toDate": to_date.isoformat() + "T23:59:59Z",
                     },
                 )
                 all_rows.extend(rows)
