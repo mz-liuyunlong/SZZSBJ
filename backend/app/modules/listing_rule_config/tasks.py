@@ -38,11 +38,14 @@ def scheduler_tick() -> None:
         )
         if local.strftime("%H:%M") < config.execution_time:
             return
-        if session.scalar(
-            select(ListingEvaluationRun.id).where(
-                ListingEvaluationRun.schedule_date_cn == local.date()
+        if (
+            session.scalar(
+                select(ListingEvaluationRun.id).where(
+                    ListingEvaluationRun.schedule_date_cn == local.date()
+                )
             )
-        ) is not None:
+            is not None
+        ):
             return
         # The run has a unique China date; only diagnostic snapshots are written.
         ListingEvaluationBatchService(session).run_daily_diagnostic(

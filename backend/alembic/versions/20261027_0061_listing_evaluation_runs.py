@@ -74,11 +74,20 @@ def upgrade() -> None:
         sa.Column("valid_stock_days_30", sa.Integer(), server_default="0", nullable=False),
         sa.Column("observed_stock_days_7", sa.Integer(), server_default="0", nullable=False),
         sa.Column("low_stock_days_7", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("prior_effective_stock", sa.Boolean(), server_default=sa.text("false"), nullable=False),
-        sa.Column("currently_archived", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column(
+            "prior_effective_stock", sa.Boolean(), server_default=sa.text("false"), nullable=False
+        ),
+        sa.Column(
+            "currently_archived", sa.Boolean(), server_default=sa.text("false"), nullable=False
+        ),
         sa.Column("rule_version", sa.Integer(), server_default="0", nullable=False),
         sa.Column("rule_source", sa.String(32), server_default="default", nullable=False),
-        sa.Column("evidence_json", postgresql.JSONB(), server_default=sa.text("'[]'::jsonb"), nullable=False),
+        sa.Column(
+            "evidence_json",
+            postgresql.JSONB(),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("publication_status", sa.String(64), server_default="blocked", nullable=False),
         sa.Column("published", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -134,7 +143,9 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("snapshot_id", name="uq_listing_grade_follow_up_snapshot"),
-        sa.CheckConstraint("grade IN ('C', 'D')", name="ck_biz_listing_grade_follow_up_tasks_grade_cd_only"),
+        sa.CheckConstraint(
+            "grade IN ('C', 'D')", name="ck_biz_listing_grade_follow_up_tasks_grade_cd_only"
+        ),
         sa.CheckConstraint(
             "status IN ('pending', 'in_progress', 'completed', 'canceled')",
             name="ck_biz_listing_grade_follow_up_tasks_status",
@@ -153,12 +164,23 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_listing_grade_follow_up_scope", table_name="biz_listing_grade_follow_up_tasks")
-    op.drop_index("ix_listing_grade_follow_up_owner_status_due", table_name="biz_listing_grade_follow_up_tasks")
+    op.drop_index(
+        "ix_listing_grade_follow_up_scope", table_name="biz_listing_grade_follow_up_tasks"
+    )
+    op.drop_index(
+        "ix_listing_grade_follow_up_owner_status_due",
+        table_name="biz_listing_grade_follow_up_tasks",
+    )
     op.drop_table("biz_listing_grade_follow_up_tasks")
-    op.drop_index("ix_listing_evaluation_snapshot_scope", table_name="biz_listing_evaluation_snapshots")
-    op.drop_index("ix_listing_evaluation_snapshot_grade", table_name="biz_listing_evaluation_snapshots")
+    op.drop_index(
+        "ix_listing_evaluation_snapshot_scope", table_name="biz_listing_evaluation_snapshots"
+    )
+    op.drop_index(
+        "ix_listing_evaluation_snapshot_grade", table_name="biz_listing_evaluation_snapshots"
+    )
     op.drop_index("ix_listing_evaluation_snapshot_listing_cutoff", table_name="biz_listing_evaluation_snapshots")
     op.drop_table("biz_listing_evaluation_snapshots")
-    op.drop_index("ix_listing_evaluation_runs_status_created", table_name="biz_listing_evaluation_runs")
+    op.drop_index(
+        "ix_listing_evaluation_runs_status_created", table_name="biz_listing_evaluation_runs"
+    )
     op.drop_table("biz_listing_evaluation_runs")

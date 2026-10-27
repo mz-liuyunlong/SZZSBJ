@@ -47,9 +47,12 @@ class ListingEvaluationBatchService:
         retry_existing = existing is not None
         if existing is None:
             latest_rule_version = self._latest_effective_rule_version()
-            total = self.session.scalar(
-                select(func.count()).select_from(ListingManagementCurrentMart)
-            ) or 0
+            total = (
+                self.session.scalar(
+                    select(func.count()).select_from(ListingManagementCurrentMart)
+                )
+                or 0
+            )
             run = ListingEvaluationRun(
                 schedule_date_cn=schedule_date_cn,
                 cutoff_date_la=cutoff_date_la,
@@ -81,9 +84,7 @@ class ListingEvaluationBatchService:
 
         if retry_existing:
             self.session.execute(
-                delete(ListingEvaluationSnapshot).where(
-                    ListingEvaluationSnapshot.run_id == run.id
-                )
+                delete(ListingEvaluationSnapshot).where(ListingEvaluationSnapshot.run_id == run.id)
             )
             run.processed_listings = 0
             run.grade_candidate_count = 0

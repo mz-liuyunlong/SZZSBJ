@@ -1,4 +1,5 @@
 """Tests for the opt-in Listing evaluation scheduler."""
+
 from types import SimpleNamespace
 
 from app.modules.listing_rule_config import tasks

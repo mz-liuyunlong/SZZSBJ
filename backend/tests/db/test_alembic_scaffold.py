@@ -54,7 +54,10 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
 
     assert config.get_main_option("sqlalchemy.url") is None
     assert script.get_heads() == [LISTING_EVALUATION_HEAD_REVISION]
-    assert script.get_revision(LISTING_EVALUATION_HEAD_REVISION).down_revision == LISTING_INTEGRATION_HEAD_REVISION
+    assert (
+        script.get_revision(LISTING_EVALUATION_HEAD_REVISION).down_revision
+        == LISTING_INTEGRATION_HEAD_REVISION
+    )
     assert set(script.get_revision(LISTING_INTEGRATION_HEAD_REVISION).down_revision) == {
         "20261025_0055_listing_grade_rule_versions",
         BUSINESS_CONNECTOR_HEAD_REVISION,

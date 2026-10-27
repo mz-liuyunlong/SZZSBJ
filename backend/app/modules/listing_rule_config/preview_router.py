@@ -204,11 +204,12 @@ def list_evaluation_runs(
             .limit(limit)
         ).all()
     )
-    count = session.scalar(
-        select(func.count())
-        .select_from(ListingEvaluationRun)
-        .where(scoped)
-    ) or 0
+    count = (
+        session.scalar(
+            select(func.count()).select_from(ListingEvaluationRun).where(scoped)
+        )
+        or 0
+    )
     return success_response(
         request,
         data=ListingEvaluationRunList(
@@ -241,11 +242,14 @@ def list_evaluation_followups(
             .limit(limit)
         ).all()
     )
-    count = session.scalar(
-        select(__import__("sqlalchemy").func.count())
-        .select_from(ListingGradeFollowUpTask)
-        .where(ListingGradeFollowUpTask.source_account_ref.in_(account_refs))
-    ) or 0
+    count = (
+        session.scalar(
+            select(func.count())
+            .select_from(ListingGradeFollowUpTask)
+            .where(ListingGradeFollowUpTask.source_account_ref.in_(account_refs))
+        )
+        or 0
+    )
     return success_response(
         request,
         data=ListingFollowUpList(
