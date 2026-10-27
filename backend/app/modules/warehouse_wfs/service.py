@@ -1096,9 +1096,9 @@ class WfsFeeAlertService:
           owner_name_snapshot,
           currency_code,
           coalesce(latest_evidence.standard_unit_fee, manual_unit_fee) manual_unit_fee,
-          coalesce(latest_evidence.actual_unit_fee, actual_unit_fee) actual_unit_fee,
+          coalesce(latest_evidence.actual_unit_fee, ops_wfs_fee_anomaly_cases.actual_unit_fee) actual_unit_fee,
           null::numeric product_management_unit_wfs_fee,
-          coalesce(latest_evidence.unit_fee_diff, unit_fee_diff) unit_fee_diff,
+          coalesce(latest_evidence.unit_fee_diff, ops_wfs_fee_anomaly_cases.unit_fee_diff) unit_fee_diff,
           case when latest_evidence.detected_at is null then fee_source
             else 'lingxing_profit_order' end fee_source,
           fee_source_ref,
@@ -1125,7 +1125,7 @@ class WfsFeeAlertService:
             theoretical_overcharge_amount,
           coalesce(latest_evidence.net_sample_difference, net_sample_difference_amount)
             net_sample_difference_amount,
-          coalesce(latest_evidence.latest_settlement_date, latest_settlement_date)
+          coalesce(latest_evidence.latest_settlement_date, ops_wfs_fee_anomaly_cases.latest_settlement_date)
             latest_settlement_date,
           coalesce(latest_evidence.evidence_status, detection_status) detection_status,
           case
@@ -1135,9 +1135,9 @@ class WfsFeeAlertService:
             when latest_evidence.detected_at is not null then 'review_required'
             else data_freshness_status
           end data_freshness_status,
-          coalesce(latest_evidence.standard_fee_source, standard_fee_source)
+          coalesce(latest_evidence.standard_fee_source, ops_wfs_fee_anomaly_cases.standard_fee_source)
             standard_fee_source,
-          coalesce(latest_evidence.detected_at, detected_at) detected_at,
+          coalesce(latest_evidence.detected_at, ops_wfs_fee_anomaly_cases.detected_at) detected_at,
           latest_evidence.sales_coverage_status,
           latest_evidence.sales_coverage_reason,
           latest_evidence.sales_coverage_start_date,
