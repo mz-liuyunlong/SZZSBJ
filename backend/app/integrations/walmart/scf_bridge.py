@@ -3,6 +3,7 @@
 The cloud invoker is injected by the approved runtime.  Its deployment,
 identity, signing, retry and SSM access are independently owner controlled.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -74,8 +75,13 @@ def _contains_secret_key(value: Any, depth: int = 0) -> bool:
         for key, item in value.items():
             normalized = "".join(x for x in str(key).lower() if x.isalnum())
             if normalized in {
-                "accesstoken", "refreshtoken", "clientsecret", "clientid",
-                "authorization", "password", "secretkey",
+                "accesstoken",
+                "refreshtoken",
+                "clientsecret",
+                "clientid",
+                "authorization",
+                "password",
+                "secretkey",
             }:
                 return True
             if _contains_secret_key(item, depth + 1):
