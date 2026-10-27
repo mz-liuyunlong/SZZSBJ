@@ -164,3 +164,10 @@ uv run python -c "import app.main"
 - 订单列表、已释放订单、单订单：Walmart US Marketplace [Retrieve orders](https://developer.walmart.com/us-marketplace/docs/retrieve-and-acknowledge-orders) 与 [All released orders](https://developer.walmart.com/us-marketplace/docs/get-all-released-orders)；基础端点为 `GET /v3/orders`、`GET /v3/orders/released`、`GET /v3/orders/{purchaseOrderId}`。
 - 六项操作全部默认 disabled，只有 SCF 运行配置中明确加入 operation key 才能执行；新增 `test_marketplace_catalog.py` 覆盖参数上限、必填、枚举、路径编码与未知操作拒绝。
 - 此目录仅为已核对的只读起步清单，不是全量接口；未包含订单写操作、退货、价格、WFS 报表、广告、复杂 Feed、全部响应 schema 和各接口分页自动化。实际账号授权与 US market scope 仍须云端验收。
+
+
+### 2026-10-27：Returns 只读目录
+
+新增 `returns_catalog.py`，并接入受保护 SCF 默认 registry；官方来源为 [Returns API reference](https://developer.walmart.com/us-marketplace/reference/getreturns) 与 [Returns and Refunds API overview](https://developer.walmart.com/us-marketplace/docs/returns-and-refunds-api-overview)。支持候选只读操作 `GET /v3/returns`、`GET /v3/returns/{returnOrderId}`，仅明确批准的 operation key 才可执行。新增 `test_returns_catalog.py` 覆盖筛选、枚举、limit、路径编码与未知写接口拒绝。
+
+**不包含**退货审批/拒绝、退款、shipping label、广告、定价、Feeds 上传等写或独立业务流程；这些需各自官方契约与单独授权。
