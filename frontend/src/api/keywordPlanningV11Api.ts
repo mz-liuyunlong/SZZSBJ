@@ -130,6 +130,10 @@ export interface V1WorkbookConfirmation {
   confirmation: '确认无误，开始生成';
   template_version: 'V1-24';
   start_date?: string;
+  manual_bid?: number;
+  auto_bid?: number;
+  manual_budget?: number;
+  auto_budget?: number;
 }
 export const downloadKeywordConfirmedV1Workbook = async (
   jobId: string, confirmation: V1WorkbookConfirmation,
