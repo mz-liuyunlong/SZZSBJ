@@ -300,7 +300,6 @@ def get_keyword_ai_suggestions(
     )
 
 
-
 @router.get("/{job_id}/four-sheet-workbook")
 def download_keyword_ai_four_sheet(
     job_id: UUID,
