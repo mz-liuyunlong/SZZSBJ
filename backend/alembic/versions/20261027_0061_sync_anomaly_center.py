@@ -43,8 +43,21 @@ def upgrade() -> None:
         sa.CheckConstraint("status IN ('pending','investigating','fix_pending','review_pending','resolved','dismissed')", name="ck_gov_sync_anomaly_status"),
     )
     op.create_index("ix_gov_sync_anomaly_scope_status", "gov_integration_sync_anomalies", ["source_account_ref", "status", "last_seen_at"])
+    op.create_table(
+        "gov_integration_sync_anomaly_audit",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("anomaly_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("gov_integration_sync_anomalies.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("actor_ref", sa.String(128), nullable=False),
+        sa.Column("from_status", sa.String(32), nullable=False),
+        sa.Column("to_status", sa.String(32), nullable=False),
+        sa.Column("note", sa.Text(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+    )
+    op.create_index("ix_gov_sync_anomaly_audit_history", "gov_integration_sync_anomaly_audit", ["anomaly_id", "created_at"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_gov_sync_anomaly_audit_history", table_name="gov_integration_sync_anomaly_audit")
+    op.drop_table("gov_integration_sync_anomaly_audit")
     op.drop_index("ix_gov_sync_anomaly_scope_status", table_name="gov_integration_sync_anomalies")
     op.drop_table("gov_integration_sync_anomalies")
