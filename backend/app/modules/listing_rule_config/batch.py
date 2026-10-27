@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -42,6 +42,7 @@ class ListingEvaluationBatchService:
         )
         if existing is not None and existing.status in {"succeeded", "partial"}:
             return existing.id
+        retry_existing = existing is not None
         if existing is None:
             latest_rule_version = self._latest_effective_rule_version()
             total = self.session.scalar(
@@ -70,11 +71,22 @@ class ListingEvaluationBatchService:
                 if existing.status in {"succeeded", "partial"}:
                     return existing.id
                 run = existing
+                retry_existing = True
         else:
             run = existing
             run.attempt_count += 1
             run.error_code = None
 
+        if retry_existing:
+            self.session.execute(
+                delete(ListingEvaluationSnapshot).where(
+                    ListingEvaluationSnapshot.run_id == run.id
+                )
+            )
+            run.processed_listings = 0
+            run.grade_candidate_count = 0
+            run.lifecycle_candidate_count = 0
+            run.blocked_count = 0
         run.status = "running"
         run.started_at = datetime.now(UTC)
         self.session.commit()
