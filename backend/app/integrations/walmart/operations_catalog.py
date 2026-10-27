@@ -24,9 +24,7 @@ _OPERATIONS = (
         key="inventories_list",
         method="GET",
         path="/v3/inventories",
-        fields=(
-            Field("nextCursor", "query"),
-        ),
+        fields=(Field("nextCursor", "query"),),
         source="https://developer.walmart.com/us-marketplace/reference/getmultinodeinventoryforallskuandallshipnodes",
     ),
     Operation(
@@ -87,9 +85,7 @@ _OPERATIONS = (
 )
 
 
-def operations_read_registry(
-    *, approved_keys: frozenset[str] = frozenset()
-) -> ContractRegistry:
+def operations_read_registry(*, approved_keys: frozenset[str] = frozenset()) -> ContractRegistry:
     known = frozenset(operation.key for operation in _OPERATIONS)
     if approved_keys - known:
         raise ContractError("WALMART_APPROVED_OPERATION_UNKNOWN")
