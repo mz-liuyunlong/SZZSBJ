@@ -13,6 +13,7 @@ const operationCodeMessages: Record<string, string> = {
   TASK_DISPATCH_UNAVAILABLE: "后台任务派发服务暂不可用，请检查 Celery / Redis / Worker 后再试。",
   SYNC_CONFIG_DISABLED: "同步配置未启用，请先确认后端治理配置。",
   SYNC_INTERFACE_DISABLED: "接口未启用，不能执行真实同步。",
+  SYNC_REFUND_RETRY_DATE_EVIDENCE_MISSING: "退款旧任务缺少可信业务日期，已阻止无效重试。请使用指定业务日期补采，不要重复点击重试。",
   SYNC_EXECUTION_FAILED: "后台执行失败，请查看同步日志。",
   SYNC_LOCK_LEASE_EXPIRED: "同步锁租约已过期，可能是任务运行过久或 Worker 中断。",
   SYNC_PRODUCTLIST_RESPONSE_FAILED: "ProductList 接口返回失败，请查看执行日志。",
@@ -43,6 +44,10 @@ export function formatSyncTaskOperationError(reason: unknown) {
     || code === "INSUFFICIENT_PERMISSION"
   ) {
     return "当前账号没有同步任务操作权限，请完成授权后再试。";
+  }
+
+  if (code && operationCodeMessages[code]) {
+    return operationCodeMessages[code];
   }
 
   if (status === 409 || code === "IDEMPOTENCY_CONFLICT") {
