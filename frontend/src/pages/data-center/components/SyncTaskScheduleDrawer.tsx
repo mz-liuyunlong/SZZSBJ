@@ -8,6 +8,9 @@ interface SyncTaskScheduleDrawerProps {
   initialTab: SyncScheduleTab;
   dayItems: SyncScheduleItem[];
   weekItems: SyncScheduleItem[];
+  weeklyItems: SyncScheduleItem[];
+  truncated: boolean;
+  unsupportedCount: number;
   onClose: () => void;
   onOpenGlobalLog: () => void;
 }
@@ -22,6 +25,7 @@ const statusColors: Record<SyncTaskStatus, string> = {
   部分成功: "warning",
   超时: "orange",
   已停用: "default",
+  未执行: "default",
 };
 
 function ScheduleTimeline({ items }: { items: SyncScheduleItem[] }) {
@@ -63,6 +67,9 @@ function SyncTaskScheduleDrawer({
   initialTab,
   dayItems,
   weekItems,
+  weeklyItems,
+  truncated,
+  unsupportedCount,
   onClose,
   onOpenGlobalLog,
 }: SyncTaskScheduleDrawerProps) {
@@ -114,11 +121,15 @@ function SyncTaskScheduleDrawer({
             activeTab: event.target.value as SyncScheduleTab,
           })}
         />
-        <Typography.Text type="secondary">展示所有同步任务的计划触发时间</Typography.Text>
+        <Typography.Text type="secondary">按调度器 UTC Cron 计算中国时区的本周和今日安排；周视图每任务每天只显示首个触发。</Typography.Text>
+        {unsupportedCount > 0 && <Typography.Text type="warning">有 {unsupportedCount} 个复杂 Cron 暂不能预览，请以调度器下次执行时间为准。</Typography.Text>}
       </div>
-      {activeTab === "day" && <ScheduleTimeline items={dayItems} />}
+      {activeTab === "day" && <>
+        {truncated && <Typography.Text type="warning">今日计划超过 500 项，仅展示前 500 项。</Typography.Text>}
+        <ScheduleTimeline items={dayItems} />
+      </>}
       {activeTab === "week" && <WeeklyList items={weekItems} />}
-      {activeTab === "weeklyOnly" && <WeeklyList items={weekItems} weeklyOnly />}
+      {activeTab === "weeklyOnly" && <WeeklyList items={weeklyItems} weeklyOnly />}
     </Drawer>
   );
 }
