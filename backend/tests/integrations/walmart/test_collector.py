@@ -1,4 +1,5 @@
 """Tests for the migrated four-endpoint collector; all transport calls are fake."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -61,14 +62,18 @@ def test_incomplete_paging_is_failed_not_success() -> None:
         client, store_code="HK2615", config=CollectorConfig(page_size=1, max_pages=5)
     ).collect(endpoints=["wfs_inventory"], from_date=date(2026, 10, 1), to_date=date(2026, 10, 2))
     assert result["manifest"]["status"] == "PARTIAL"
-    assert result["manifest"]["endpoints"]["wfs_inventory"]["error_code"] == "WALMART_INCOMPLETE_PAGING"
+    assert (
+        result["manifest"]["endpoints"]["wfs_inventory"]["error_code"]
+        == "WALMART_INCOMPLETE_PAGING"
+    )
 
 
 def test_auth_failure_skips_remaining_selected_endpoints() -> None:
     client = FakeClient({"wfs_inventory": [(401, {"error": "secret must not be logged"})]})
     result = WalmartReadCollector(client, store_code="HK2615").collect(
         endpoints=["wfs_inventory", "inbound_shipments"],
-        from_date=date(2026, 10, 1), to_date=date(2026, 10, 2),
+        from_date=date(2026, 10, 1),
+        to_date=date(2026, 10, 2),
     )
     assert result["manifest"]["status"] == "AUTH_FAILED"
     assert result["manifest"]["endpoints"]["wfs_inventory"]["status"] == "AUTH_FAILED"
