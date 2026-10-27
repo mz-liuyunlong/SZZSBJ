@@ -98,3 +98,87 @@ def test_rejects_external_refs() -> None:
     operation["parameters"] = [{"$ref": "https://not-trusted/param.yaml"}]
     with pytest.raises(ContractError, match="WALMART_SPEC_REFERENCE_UNSUPPORTED"):
         ContractRegistry.from_openapi(doc)
+
+
+def test_validates_nested_request_body_schema() -> None:
+    spec = {
+        "openapi": "3.0.3",
+        "components": {
+            "schemas": {
+                "Item": {
+                    "type": "object",
+                    "required": ["sku", "price"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "sku": {"type": "string", "minLength": 1, "maxLength": 20},
+                        "price": {
+                            "type": "object",
+                            "required": ["amount", "currency"],
+                            "additionalProperties": False,
+                            "properties": {
+                                "amount": {"type": "number", "minimum": 0},
+                                "currency": {"type": "string", "enum": ["USD"]},
+                            },
+                        },
+                    },
+                }
+            }
+        },
+        "paths": {
+            "/v3/items": {
+                "post": {
+                    "operationId": "createItem",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Item"}
+                            }
+                        },
+                    },
+                }
+            }
+        },
+    }
+    registry = ContractRegistry.from_openapi(
+        spec, approved_keys=frozenset({"createItem"})
+    )
+    valid = {"sku": "SKU-1", "price": {"amount": 1.5, "currency": "USD"}}
+    assert registry.prepare(
+        "createItem", body=valid, allow_writes=True
+    ).body == valid
+    with pytest.raises(ContractError, match="WALMART_BODY_REQUIRED_FIELD"):
+        registry.prepare(
+            "createItem", body={"sku": "SKU-1"}, allow_writes=True
+        )
+    with pytest.raises(ContractError, match="WALMART_BODY_FIELD_NOT_ALLOWED"):
+        registry.prepare(
+            "createItem",
+            body={**valid, "unexpected": True},
+            allow_writes=True,
+        )
+
+
+def test_rejects_recursive_or_external_component_refs() -> None:
+    spec = {
+        "openapi": "3.0.3",
+        "components": {
+            "schemas": {"Loop": {"$ref": "#/components/schemas/Loop"}}
+        },
+        "paths": {
+            "/v3/items": {
+                "post": {
+                    "operationId": "createItem",
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Loop"}
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+    with pytest.raises(ContractError, match="WALMART_SPEC_REFERENCE_UNSUPPORTED"):
+        ContractRegistry.from_openapi(spec)
