@@ -92,6 +92,10 @@ def generate_four_sheet_review(
             cells = list(row)
             match = advisory.get(str(cells[columns["关键词"]]).casefold().strip())
             if match:
+                translation = str(match.get("translation") or "").strip()
+                translation_index = columns["关键词中文意思"]
+                if translation and len(translation) <= 100:
+                    cells[translation_index] = translation
                 relevance = str(match.get("relevance") or "review")[:24]
                 reason = str(match.get("reason") or "")[:180].replace("\\n", " ")
                 prefix = "AI语义复核（非投放依据）: " + relevance
