@@ -126,4 +126,4 @@ def test_inbound_shipment_date_filters_use_worker_epoch_milliseconds() -> None:
     )
     params = client.calls[0][1]
     assert params["fromCreatedDate"] == 1790812800000
-    assert params["toCreatedDate"] == 1791071999999
+    assert params["toCreatedDate"] == 1790985599999
