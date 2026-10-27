@@ -126,9 +126,11 @@ class FollowUpRuleConfig(BaseModel):
 
 
 class ListingGradeRuleConfig(BaseModel):
-    """Only adjustable grade rules belong here; financial safeguards are immutable."""
+    """Adjustable Listing rules including the daily rating execution time."""
 
     model_config = ConfigDict(extra="forbid")
+
+    execution_time: str = Field(default="22:30", pattern=r"^([01]\\d|2[0-3]):[0-5]\\d$")
 
     short_days: int = Field(default=7, ge=1, le=90)
     medium_days: int = Field(default=14, ge=2, le=180)
@@ -173,7 +175,6 @@ class ListingGradeRuleUpdate(BaseModel):
 
 class ProtectedListingRuleSettings(BaseModel):
     execution_timezone: Literal["Asia/Shanghai"] = "Asia/Shanghai"
-    execution_time: Literal["22:30"] = "22:30"
     business_timezone: Literal["America/Los_Angeles"] = "America/Los_Angeles"
     closing_lag_days: Literal[2] = 2
     requires_complete_financial_inputs: Literal[True] = True

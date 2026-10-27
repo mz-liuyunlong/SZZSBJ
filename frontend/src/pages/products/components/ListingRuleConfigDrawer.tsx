@@ -1,6 +1,8 @@
 /** Listing rule configuration: grade, lifecycle, inventory/repair and follow-up. */
 import { useEffect, useState } from "react";
-import { Alert, Button, Checkbox, Drawer, Empty, Form, Input, InputNumber, Modal, Skeleton, Space, Tabs, Tag, Typography, message } from "antd";
+import { Alert, Button, Checkbox, Drawer, Empty, Form, Input, InputNumber, Modal, Skeleton, Space, Tabs, Tag, TimePicker, Typography, message } from "antd";
+import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
 import type { GradeStage, ListingGradeRuleConfig, ListingGradeRuleHistory, ListingGradeRuleRead } from "@/pages/products/listingRuleConfigApi";
 import { fetchListingGradeRule, fetchListingGradeRuleHistory, saveListingGradeRule } from "@/pages/products/listingRuleConfigApi";
 import { BackendRequestError } from "@/api/backendApi";
@@ -41,6 +43,7 @@ const toForm = (config: ListingGradeRuleConfig): Partial<FormValues> => ({
 const toConfig = (values: FormValues, previous: ListingGradeRuleConfig): ListingGradeRuleConfig => ({
   ...previous,
   short_days: values.short_days,
+  execution_time: values.execution_time,
   medium_days: values.medium_days,
   short_weight_percent: values.short_weight_percent,
   medium_weight_percent: values.medium_weight_percent,
@@ -306,8 +309,20 @@ export default function ListingRuleConfigDrawer({
         <Checkbox.Group options={stages.map((s) => ({ label: s, value: s }))} />
       </Form.Item>
       <Typography.Paragraph type="secondary">清货期与已归档永久不参与，无法配置开启。</Typography.Paragraph>
-      <Typography.Title level={5}>生效规则（受保护）</Typography.Title>
-      <Alert type="info" showIcon message="每天北京时间22:30评级；洛杉矶业务日期T-2截止。销售、广告、成本必须完整，缺失不得当作0。" style={{ marginBottom: 16 }} />
+      <Typography.Title level={5}>自动计算计划</Typography.Title>
+      <Form.Item name="execution_time" label="每日自动计算时间（北京时间）"
+        getValueProps={(value: string | undefined) => ({
+          value: value ? dayjs(`2000-01-01T${value}:00`) : null,
+        })}
+        getValueFromEvent={(value: Dayjs | null) => value?.format("HH:mm") ?? ""}
+        rules={[{ required: true, message: "请选择每日计算时间" }]}
+      >
+        <TimePicker format="HH:mm" allowClear={false} style={{ width: 190 }} />
+      </Form.Item>
+      <Alert type="info" showIcon
+        message="默认每天北京时间22:30；保存后在下一次配置时间点生效。"
+        description="中国时区与洛杉矶业务日期T-2仍受保护；销售、广告、成本缺失不得视为0。目前仅保存执行计划，自动计算任务尚未接入，不会因修改时间而自动运行。"
+        style={{ marginBottom: 16 }} />
       {record?.can_edit && (
         <>
           <Form.Item name="change_reason" label="本次变更原因" rules={[{ required: true, min: 3, message: "至少填写3个字符的修改原因" }]}>

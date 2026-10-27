@@ -82,3 +82,26 @@ def test_no_change_does_not_create_duplicate_version() -> None:
         )
     assert error.value.code == "LISTING_RULE_NO_CHANGES"
     assert len(repo.rows) == 1
+
+
+def test_save_custom_time_creates_next_configured_boundary() -> None:
+    from app.modules.listing_rule_config.service import next_rating_time_utc
+
+    session = FakeSession()
+    service = ListingGradeRuleService(session)  # type: ignore[arg-type]
+    repo = FakeRepo()
+    service.repo = repo  # type: ignore[assignment]
+    config = ListingGradeRuleConfig(execution_time="09:15")
+    result = service.update(
+        request=ListingGradeRuleUpdate(
+            expected_version=0,
+            change_reason="将评级计算调整到上午",
+            config=config,
+        ),
+        actor="operator",
+    )
+    assert result.config.execution_time == "09:15"
+    assert result.effective_from is not None
+    assert result.effective_from == next_rating_time_utc(
+        result.created_at, "09:15"
+    )

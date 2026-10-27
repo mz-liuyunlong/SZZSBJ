@@ -6,6 +6,7 @@ vi.mock("@/api/backendApi", () => ({ backendRequest: backendRequestMock }));
 import { fetchListingGradeRule, fetchListingGradeRuleHistory, saveListingGradeRule } from "@/pages/products/listingRuleConfigApi";
 
 const config = {
+  execution_time: "22:30",
   short_days: 7, medium_days: 14,
   short_weight_percent: 60, medium_weight_percent: 40,
   short_min_valid_days: 4, medium_min_valid_days: 8,
@@ -40,6 +41,19 @@ describe("Listing 评级配置 API", () => {
     await saveListingGradeRule(config, 0, "变更参数");
     expect(backendRequestMock).toHaveBeenCalledWith("/api/listings/rule-config", {
       method: "PUT", body: JSON.stringify({ config, expected_version: 0, change_reason: "变更参数" }),
+    });
+  });
+
+  it("persists an edited daily schedule time without changing timezone", async () => {
+    backendRequestMock.mockResolvedValue({ data: { version: 2, config } });
+    await saveListingGradeRule({ ...config, execution_time: "09:15" }, 1, "调整执行时间");
+    expect(backendRequestMock).toHaveBeenCalledWith("/api/listings/rule-config", {
+      method: "PUT",
+      body: JSON.stringify({
+        config: { ...config, execution_time: "09:15" },
+        expected_version: 1,
+        change_reason: "调整执行时间",
+      }),
     });
   });
 

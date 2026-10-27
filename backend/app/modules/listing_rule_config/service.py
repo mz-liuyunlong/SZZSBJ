@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, time
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import DBAPIError
@@ -32,10 +32,19 @@ def _rule_table_missing(error: DBAPIError) -> bool:
     return getattr(orig, "sqlstate", getattr(orig, "pgcode", None)) == "42P01"
 
 
-def next_rating_time_utc(now: datetime) -> datetime:
-    """Apply changes only at the next 22:30 China-time rating boundary."""
+def next_rating_time_utc(now: datetime, execution_time: str = "22:30") -> datetime:
+    """Next China-time boundary for the configured HH:mm (default 22:30).
+
+    The function calculates a future configuration effective time; it does not
+    enqueue or execute Listing evaluation tasks.
+    """
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    hour, minute = map(int, execution_time.split(":"))
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ValueError("execution_time must be HH:mm in the 24-hour clock")
     local = now.astimezone(CHINA_TZ)
-    scheduled = local.replace(hour=22, minute=30, second=0, microsecond=0)
+    scheduled = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if local >= scheduled:
         scheduled += timedelta(days=1)
     return scheduled.astimezone(UTC)
@@ -109,7 +118,7 @@ class ListingGradeRuleService:
             row = ListingGradeRuleVersion(
                 version=current_version + 1,
                 config_json=request.config.model_dump(mode="json"),
-                effective_from=next_rating_time_utc(now),
+                effective_from=next_rating_time_utc(now, request.config.execution_time),
                 created_at=now,
                 created_by=actor,
                 change_reason=request.change_reason.strip(),
