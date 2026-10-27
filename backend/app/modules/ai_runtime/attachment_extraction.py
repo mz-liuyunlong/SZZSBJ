@@ -52,7 +52,7 @@ def _xlsx_text(archive: ZipFile, paths: list[str]) -> str:
     lines = []
     sheet_paths = [
         path for path in paths
-        if re.fullmatch(r"xl/worksheets/sheet[0-9]+\\.xml", path)
+        if re.fullmatch(r"xl/worksheets/sheet[0-9]+\.xml", path)
     ][:8]
     if not sheet_paths:
         raise AttachmentError("ATTACHMENT_INVALID_OFFICE")
@@ -78,8 +78,8 @@ def _xlsx_text(archive: ZipFile, paths: list[str]) -> str:
             if values:
                 lines.append(" | ".join(values))
             if sum(len(line) for line in lines) >= MAX_ATTACHMENT_CONTEXT:
-                return "\\n".join(lines)[:MAX_ATTACHMENT_CONTEXT]
-    return "\\n".join(lines)[:MAX_ATTACHMENT_CONTEXT]
+                return "\n".join(lines)[:MAX_ATTACHMENT_CONTEXT]
+    return "\n".join(lines)[:MAX_ATTACHMENT_CONTEXT]
 
 
 def _office_text(data: bytes, suffix: str) -> str:
