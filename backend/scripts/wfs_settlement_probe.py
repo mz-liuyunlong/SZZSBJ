@@ -22,10 +22,10 @@ INTERFACE_ID = "LX-DB6D62E9EE37"
 APPROVED_SOURCE_ACCOUNT_REF = "primary"
 APPROVED_STORE_ID = "110704872940532224"
 APPROVED_MSKU = "YC00115-1A"
-APPROVED_START_DATE = date(2026, 9, 1)
-APPROVED_END_DATE = date(2026, 9, 30)
+APPROVED_START_DATE = date(2026, 8, 19)
+APPROVED_END_DATE = date(2026, 10, 17)
 APPROVED_PAGE_SIZE = 20
-APPROVED_MAX_PAGES = 3
+APPROVED_MAX_PAGES = 20
 REQUIRED_FIELDS = (
     "msku",
     "storeId",
@@ -67,7 +67,7 @@ def _load_config(environ: Mapping[str, str]) -> ProbeConfig:
         start_date = date.fromisoformat(environ["WFS_PROBE_START_DATE"])
         end_date = date.fromisoformat(environ["WFS_PROBE_END_DATE"])
         page_size = int(environ.get("WFS_PROBE_PAGE_SIZE", "20"))
-        max_pages = int(environ.get("WFS_PROBE_MAX_PAGES", "3"))
+        max_pages = int(environ.get("WFS_PROBE_MAX_PAGES", "20"))
     except (KeyError, TypeError, ValueError) as exc:
         raise ProbeError("WFS_PROBE_CONFIG_INVALID") from exc
 
@@ -226,6 +226,7 @@ def main() -> int:
             raise ProbeError("WFS_PROBE_MAX_PAGES_REACHED")
 
         print("API_REQUESTS_ATTEMPTED:", attempted)
+        print("MAX_ROWS_ALLOWED:", config.page_size * config.max_pages)
         print("EXPECTED_TOTAL:", expected_total)
         print("CAPTURED_TOTAL:", captured)
         print("REQUIRED_FIELD_PRESENCE:")
