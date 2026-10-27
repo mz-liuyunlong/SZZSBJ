@@ -23,8 +23,8 @@ import type {ProductManagementRow} from '@/pages/products/productManagementTypes
 import type {ListingCandidate} from '@/features/keyword-planning/keywordProductLookup';
 import {canonicalSku,getProductFacts,preloadProductSkuOptions,searchListingsForSku,searchProductsBySku} from '@/features/keyword-planning/keywordProductLookup';
 import {confirmWalmartFacts,researchAmazonAsins,type AmazonEvidence,type WalmartFacts} from "@/api/decodoApi";
-import {confirmStoredKeywordFacts,createKeywordAnalysis,downloadKeywordInternalWorkbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun} from '@/api/keywordPlanningV11Api';
-import {BackendRequestError} from '@/api/backendApi';
+import {confirmStoredKeywordFacts,submitKeywordAiJob,listKeywordAiJobs,cancelKeywordAiJob,retryKeywordAiJob,readKeywordAiSuggestions,downloadKeywordInternalWorkbook,downloadKeywordAiReviewWorkbook,downloadKeywordConfirmedV1Workbook,getKeywordRun,getKeywordSourceState,importStoredAsin,listKeywordRuns,loadAllRunKeywords,preflightKeywordAnalysis,updateKeywordTranslation,uploadKeywordSourceXlsx,type KeywordRun,type KeywordAiJob,type KeywordAiSuggestion} from '@/api/keywordPlanningV11Api';
+import {BackendRequestError,backendRequest} from '@/api/backendApi';
 import './KeywordLaunchPage.css';
 import {KeywordRulesPanel} from '@/pages/ai-center/keyword-rules/KeywordRulesPage';
 
@@ -146,6 +146,10 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
  const [detail,setDetail]=useState<KeywordRow|null>(null);
  const [compare,setCompare]=useState<MarketKeyword|null>(null);
  const [historyOpen,setHistoryOpen]=useState(false);
+ const [aiTasksOpen,setAiTasksOpen]=useState(false);
+ const [aiTasks,setAiTasks]=useState<KeywordAiJob[]>([]);
+ const [aiTasksLoading,setAiTasksLoading]=useState(false);
+ const [aiSuggestions,setAiSuggestions]=useState<Record<string,KeywordAiSuggestion>>({});
  const [draft,setDraft]=useState<{title:string;features:string;description:string}|null>(null);
  const sku=skus.find(x=>x.id===skuId)||{id:'',sku:'',name:'',material:'',uses:[],storeIds:[],hasLibrary:false};
  const skuEntries=useMemo(()=>entries.filter(e=>e.skuId===sku.id),[entries,sku.id]);
@@ -478,6 +482,52 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    }
  };
 
+ const reloadAiTasks=async()=>{
+   if(!sourceAccountRef)return;
+   setAiTasksLoading(true);
+   try{setAiTasks(await listKeywordAiJobs(sourceAccountRef));}
+   catch{message.error('任务状态读取失败，请检查权限和连接');}
+   finally{setAiTasksLoading(false);}
+ };
+ useEffect(()=>{
+   if(!sourceAccountRef||!aiTasksOpen)return;
+   let active=true;
+   const refresh=()=>{void listKeywordAiJobs(sourceAccountRef)
+     .then(rows=>{if(active)setAiTasks(rows)}).catch(()=>{})};
+   refresh();
+   const timer=window.setInterval(refresh,4000);
+   return()=>{active=false;window.clearInterval(timer)};
+ },[sourceAccountRef,aiTasksOpen]);
+ const openAiTaskResult=async(job:KeywordAiJob,target:'keywords'|'plan'|'listing')=>{
+   if(!job.run_id||!sourceAccountRef){message.warning('分析结果尚未生成');return;}
+   try{
+     if(job.product_id!==sku.id){
+       const known=skus.find(x=>x.id===job.product_id);
+       if(!known){message.warning('请先搜索并选择该 SKU，再打开结果');return;}
+       const candidates=await searchProductsBySku(known.sku);
+       const product=candidates.find(x=>x.id===job.product_id);
+       if(!product){message.warning('无法读取对应 SKU 的产品资料');return;}
+       await pickProduct(product.id,product);
+     }
+     const run=await getKeywordRun(job.run_id,sourceAccountRef);
+     const result=await loadAllRunKeywords(job.run_id,sourceAccountRef);
+     installServerRun(job.product_id,run,result);setActiveRunId(run.run_id);
+     setEditing(false);setResultsTab(target);setAiTasksOpen(false);
+   }catch{message.error('读取任务结果失败');}
+ };
+ useEffect(()=>{
+   if(!detail?.keyword.term||!activeRunId||!sourceAccountRef)return;
+   let active=true;
+   const lookup=async()=>{
+     const jobs=aiTasks.length?aiTasks:await listKeywordAiJobs(sourceAccountRef);
+     const target=jobs.find(x=>x.run_id===activeRunId);
+     if(!target)return;
+     const notes=await readKeywordAiSuggestions(target.id,sourceAccountRef);
+     if(active)setAiSuggestions(Object.fromEntries(notes.map(x=>[x.keyword,x])));
+   };
+   void lookup().catch(()=>{});
+   return()=>{active=false};
+ },[detail?.keyword.term,activeRunId,sourceAccountRef,aiTasks]);
  const openFacts=()=>{if(!productConfirmed)return message.warning('请先在步骤 01 点击确认商品');if(!ready)return message.warning('请先上传 Excel 并满足 ASIN 数量要求');setConsent(false);setFactOpen(true)};
  const confirmParameters=async()=>{
    if(!ready||!consent||!parametersComplete||!sourceAccountRef){
@@ -570,16 +620,11 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
        upload_file_id:storedUpload.id,selected_asins:asinsForRun};
      const preflight=await preflightKeywordAnalysis(input);
      if(!preflight.can_create_review_run)throw new Error(preflight.review_reason_codes.join('、'));
-     const receipt=await createKeywordAnalysis({...input,request_key:crypto.randomUUID()});
-     const run=await getKeywordRun(receipt.run_id,sourceAccountRef);
-     const results=await loadAllRunKeywords(receipt.run_id,sourceAccountRef);
+     await submitKeywordAiJob({...input,request_key:crypto.randomUUID()});
      if(ticket!==confirmationSeq.current)return;
-     installServerRun(targetSku,run,results);setActiveRunId(receipt.run_id);
-     setServerRuns(old=>[run,...old]);setHistoryTotal(old=>old+1);
-     setEditing(false);setResultsTab('keywords');setFactOpen(false);
-     window.scrollTo({top:0,behavior:'smooth'});
-     if(run.status==='succeeded')message.success(`已保存 ${results.length} 条后端分析结果`);
-     else message.warning(`已保存 ${results.length} 条分析记录，批次状态为${run.status}；待复核词不能作为正式投放结果`);
+     setFactOpen(false);setAiTasksOpen(true);
+     message.success('AI 分析任务已提交，可以继续操作其他 SKU');
+     void reloadAiTasks();
    }catch(error){if(ticket===confirmationSeq.current)message.error(error instanceof Error?error.message:'分析未完成，请检查来源、规则与权限');}
    finally{if(ticket===confirmationSeq.current)setBusy(false);}
  };
@@ -591,6 +636,47 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    }catch(error){message.error(error instanceof Error?error.message:'翻译保存失败');throw error;}
  }})};
 
+ const downloadFourSheet=()=>{
+   if(!sourceAccountRef)return message.warning('请先选择账户');
+   const job=aiTasks.find(t=>t.run_id===activeRunId&&t.status==='succeeded');
+   if(!job)return message.warning('请先等待对应 AI 任务完成');
+   void downloadKeywordAiReviewWorkbook(job.id,sourceAccountRef)
+     .catch(()=>message.error('四表分析下载失败，请检查任务状态及权限'));
+ };
+ const downloadConfirmedV1=()=>{
+   if(!sourceAccountRef||!activeRunId||!confirmed)return message.warning('请先确认商品事实并完成分析');
+   const job=aiTasks.find(t=>t.run_id===activeRunId&&t.status==='succeeded');
+   if(!job)return message.warning('请先等待对应的关键词 AI 任务成功完成');
+   let initials=/^[A-Za-z]{1,8}$/.test(facts.owner.trim())?facts.owner.trim().toUpperCase():'';
+   Modal.confirm({
+     title:'V1.0 五表正式生成确认',
+     content:<div>
+       <p>请确认：商品事实、SKU、负责人、词库、评分及 Walmart V1-24 上传模板均已核对。</p>
+       <p>缺少确认或关键词证据时，后端将拒绝生成，不会执行广告投放。</p>
+       <Input placeholder="运营负责人拼音首字母，例如 LYL" defaultValue={initials}
+         maxLength={8} onChange={e=>{initials=e.target.value.trim().toUpperCase()}} />
+     </div>,
+     okText:'确认无误，开始生成',
+     onOk:async()=>{
+       if(!/^[A-Z]{1,8}$/.test(initials))throw new Error('请输入1-8位负责人拼音首字母');
+       const rawDate=facts.startDate||rulesDate||'';
+       const parts=/^(\d{4})[-/](\d{2})[-/](\d{2})$/.exec(rawDate);
+       const date=parts?`${parts[2]}/${parts[3]}/${parts[1]}`:rawDate;
+       await downloadKeywordConfirmedV1Workbook(job.id,{
+         source_account_ref:sourceAccountRef,
+         sku:sku.sku,
+         owner_initials:initials,
+         confirmation:'确认无误，开始生成',
+         template_version:'V1-24',
+         manual_bid:facts.manualBid,
+         auto_bid:facts.autoBid,
+         manual_budget:facts.manualBudget,
+         auto_budget:facts.autoBudget,
+         ...(date?{start_date:date}:{}),
+       });
+     },
+   });
+ };
  const downloadAll=()=>{
    if(!activeRunId||!sourceAccountRef)return message.warning('请先加载已保存的分析批次');
    void downloadKeywordInternalWorkbook(activeRunId,sourceAccountRef).catch(()=>message.error('五表下载失败，请检查分析批次和权限'));
@@ -613,7 +699,16 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
      setHistoryError('');
    }catch(error){if(ticket===confirmationSeq.current)setHistoryError(keywordReadError('history',error));}
  };
- const makeListing=()=>{if(!analyzed)return message.warning('请先完成关键词分析');const title=`${facts.title}, ${facts.pack} ${facts.material} for ${facts.use}`.replace(/\s+/g,' ').slice(0,180);const features=[`Organization: ${facts.itemType} for ${facts.use}.`,`Material: Made with ${facts.material}, ${facts.color}.`,`Pack: ${facts.pack}, ${facts.structure}.`,`Size: ${facts.size}; check dimensions before purchase.`,`Review compatibility, package contents and product details before ordering.`].join('\n');setDraft({title,features,description:`${facts.title}. ${facts.itemType}. Material: ${facts.material}; pack: ${facts.pack}; purpose: ${facts.use}. Verify all facts before publishing.`});message.info('仅生成待人工核对的模板草稿，非 AI 生成内容；请人工校对英语和商品事实')};
+ const makeListing=async()=>{
+   if(!analyzed||!activeRunId||!sourceAccountRef)return message.warning('请先加载已保存的分析结果');
+   try{
+     const response=await backendRequest<{title:string;features:string;description:string}>('/api/ai-runtime/listing/draft',{
+       method:'POST',body:JSON.stringify({source_account_ref:sourceAccountRef,run_id:activeRunId}),
+     });
+     setDraft(response.data);
+     message.success('GPT-6 Luna 已生成 Listing 草稿，请核对商品事实后再使用');
+   }catch{message.error('AI Listing 生成失败，请检查服务配置、模型额度和该分析版本');}
+ };
  const keywordCol:ProColumns<KeywordRow>={title:'关键词 / 中文翻译',key:'term',width:260,render:(_,r)=><><KeywordTextCell keyword={r.keyword} onEdit={openTranslation}/><div className="kw-v2-muted">{r.keyword.source==='excel'?'Excel':'人工新增'} · {r.keyword.root}</div></>};
 
  const suggestedBid=(r:KeywordRow):string=>r.entry.suggestedBid?`$${r.entry.suggestedBid}`:'—';
@@ -798,7 +893,7 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
       先选 SKU；已有分析结果可直接查看词库。新品按商品事实、竞品文案及市场数据进行筛选。
     </div>
   </div>
-  <div className="kw-v2-pagehead__actions">{panel==='rules'?<Button onClick={()=>setPanel('workspace')}>返回关键词投放</Button>:(<Space size={6} wrap><Tag color="blue">生效规则 V{rules.version}.0</Tag><Button icon={<HistoryOutlined/>} onClick={()=>setHistoryOpen(true)}>分析历史</Button><Button onClick={()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','相关ASIN']]),'Keyword');XLSX.writeFile(wb,'关键词导入模板.xlsx')}}>下载关键词模板</Button><Button icon={<SettingOutlined/>} onClick={()=>setPanel('rules')}>规则配置</Button></Space>)}</div>
+  <div className="kw-v2-pagehead__actions">{panel==='rules'?<Button onClick={()=>setPanel('workspace')}>返回关键词投放</Button>:(<Space size={6} wrap><Tag color="blue">生效规则 V{rules.version}.0</Tag><Button onClick={()=>setAiTasksOpen(true)}>AI 任务</Button><Button icon={<HistoryOutlined/>} onClick={()=>setHistoryOpen(true)}>分析历史</Button><Button onClick={()=>{const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['关键词','关键词翻译','月搜索量','月购买量','购买率','PPC竞价','相关ASIN']]),'Keyword');XLSX.writeFile(wb,'关键词导入模板.xlsx')}}>下载关键词模板</Button><Button icon={<SettingOutlined/>} onClick={()=>setPanel('rules')}>规则配置</Button></Space>)}</div>
 </div>
 
    {panel==='rules'?<KeywordRulesPanel sourceAccountRef={sourceAccountRef}/>:<>
@@ -892,9 +987,9 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
       <Alert type="warning" showIcon message="下面是已保存分析的内部投放候选；不是 Walmart 官方出价，也不会执行广告。"/>
       <div className="kw-v2-plan-stats"><Metric symbol="E" label="Exact 计划词" value={rows.filter(r=>r.entry.exact).length} hint="已保存分析"/><Metric symbol="B" label="Broad 计划词" value={rows.filter(r=>r.entry.broad).length} hint="已保存分析"/><Metric symbol="$" label="手动 Bid" value={dollarText(rules.bid.exact)} hint="本地规则参数"/><Metric symbol="$" label="自动 Bid" value={dollarText(rules.bid.auto)} hint="本地规则参数"/></div>
       <div className="kw-v2-plan-layout"><Card size="small" title="本次广告执行目标"><Text strong>店铺 / 账号</Text><Select className="kw-v2-block" value={selectedListing?.listing.store} disabled options={selectedListing?[{label:selectedListing.listing.store,value:selectedListing.listing.store}]:[]}/><div className="kw-v2-muted">当前已选择 Item ID：{itemId||'未选择'}{selectedListing?` · ${selectedListing.listing.store}`:''}</div><Divider/><Text strong>手动 Campaign</Text><div>{sku.sku?sku.sku+'-Manual':'—'}</div><Text strong>自动 Campaign</Text><div>{sku.sku?sku.sku+'-Auto':'—'}</div></Card><Card size="small" title="本地广告参数建议（未执行）"><Descriptions size="small" bordered column={1} items={[{key:'bid',label:'手动 Bid',children:currentRuleVersionId&&rules.bid.exact>0?dollarText(rules.bid.exact):'未配置'},{key:'auto',label:'自动 Bid',children:currentRuleVersionId&&rules.bid.auto>0?dollarText(rules.bid.auto):'未配置'},{key:'budget',label:'手动 / 自动每日预算',children:currentRuleVersionId&&rules.bid.dailyBudget>0?`$${rules.bid.dailyBudget} / $${rules.bid.dailyBudget}`:'未配置'},{key:'start',label:'美国开始日期',children:currentRuleVersionId?rulesDate||'未配置':'未加载'},{key:'rule',label:'分析规则版本',children:lastAnalysis?.ruleVersionId||currentRuleVersionId||'未加载'} ]}/></Card></div>
-      <div className="kw-v2-exportbar"><Button onClick={()=>csvDownload(`${sku.sku}_分析报告.csv`,['关键词','中文','得分','等级','Exact','Broad','市场搜索量'],filtered.map(({entry:e,keyword:k})=>[k.term,k.translation||'',e.score,e.grade,e.exact?'Y':'N',e.broad?'Y':'N',k.monthlySearches]))}>下载分析报告 CSV</Button><Button type="primary" onClick={downloadAll}>下载五表分析 Excel</Button></div>
+      <div className="kw-v2-exportbar"><Button onClick={()=>csvDownload(`${sku.sku}_分析报告.csv`,['关键词','中文','得分','等级','Exact','Broad','市场搜索量'],filtered.map(({entry:e,keyword:k})=>[k.term,k.translation||'',e.score,e.grade,e.exact?'Y':'N',e.broad?'Y':'N',k.monthlySearches]))}>下载分析报告 CSV</Button><Button onClick={downloadFourSheet}>下载四表 AI 审阅 Excel</Button><Button onClick={downloadConfirmedV1}>生成 V1.0 正式五表</Button><Button type="primary" onClick={downloadAll}>下载五表分析 Excel</Button></div>
      </>:null}
-     {resultsTab==='listing'?<div className="kw-v2-listing"><div className="kw-v2-listing-main"><Card size="small" title={`Title · ${effectiveDraft.title.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.title)}>复制</Button>}><Input.TextArea rows={3} value={effectiveDraft.title} onChange={e=>setDraft({...effectiveDraft,title:e.target.value})}/></Card><Card size="small" title={`Key Features · ${effectiveDraft.features.split('\n').filter(Boolean).length} / 5 条`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.features)}>复制</Button>}><Input.TextArea rows={6} value={effectiveDraft.features} onChange={e=>setDraft({...effectiveDraft,features:e.target.value})}/></Card><Card size="small" title={`Description · ${effectiveDraft.description.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.description)}>复制</Button>}><Input.TextArea rows={5} value={effectiveDraft.description} onChange={e=>setDraft({...effectiveDraft,description:e.target.value})}/></Card></div><Card size="small" title="Listing 生成依据"><p className="kw-v2-muted">已核对的商品事实、风险词和当前候选关键词。仅根据人工填写的商品资料生成模板，未调用 AI 文案 API。</p><Alert type="warning" message="模板英文文案必须人工核对，不能直接作为正式 Listing 发布"/><Divider/><Space wrap>{rows.filter(x=>x.entry.exact).slice(0,7).map(x=><Tag key={x.keyword.id}>{x.keyword.term}</Tag>)}</Space><Divider/><Button type="primary" block onClick={makeListing}>生成文案草稿</Button><Button block onClick={()=>{saveListing(sku.id,effectiveDraft);message.success('草稿已保存到当前浏览器会话')}}>保存当前草稿</Button><Button block onClick={()=>csvDownload(`${sku.sku}_Listing.csv`,['字段','文案'],[['Title',effectiveDraft.title],['Key Features',effectiveDraft.features],['Description',effectiveDraft.description]])}>导出 Listing 文案 CSV</Button></Card></div>:null}
+     {resultsTab==='listing'?<div className="kw-v2-listing"><div className="kw-v2-listing-main"><Card size="small" title={`Title · ${effectiveDraft.title.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.title)}>复制</Button>}><Input.TextArea rows={3} value={effectiveDraft.title} onChange={e=>setDraft({...effectiveDraft,title:e.target.value})}/></Card><Card size="small" title={`Key Features · ${effectiveDraft.features.split('\n').filter(Boolean).length} / 5 条`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.features)}>复制</Button>}><Input.TextArea rows={6} value={effectiveDraft.features} onChange={e=>setDraft({...effectiveDraft,features:e.target.value})}/></Card><Card size="small" title={`Description · ${effectiveDraft.description.length} 字符`} extra={<Button type="link" onClick={()=>void navigator.clipboard.writeText(effectiveDraft.description)}>复制</Button>}><Input.TextArea rows={5} value={effectiveDraft.description} onChange={e=>setDraft({...effectiveDraft,description:e.target.value})}/></Card></div><Card size="small" title="Listing 生成依据"><p className="kw-v2-muted">已核对的商品事实、风险词和当前候选关键词。根据已保存商品事实和关键词由 GPT-6 Luna 生成；输出需人工核对，不会自动发布。</p><Alert type="warning" message="模板英文文案必须人工核对，不能直接作为正式 Listing 发布"/><Divider/><Space wrap>{rows.filter(x=>x.entry.exact).slice(0,7).map(x=><Tag key={x.keyword.id}>{x.keyword.term}</Tag>)}</Space><Divider/><Button type="primary" block onClick={makeListing}>生成文案草稿</Button><Button block onClick={()=>{saveListing(sku.id,effectiveDraft);message.success('草稿已保存到当前浏览器会话')}}>保存当前草稿</Button><Button block onClick={()=>csvDownload(`${sku.sku}_Listing.csv`,['字段','文案'],[['Title',effectiveDraft.title],['Key Features',effectiveDraft.features],['Description',effectiveDraft.description]])}>导出 Listing 文案 CSV</Button></Card></div>:null}
     </Card>
    </div>:null}
    {!analyzed&&existing?<Empty description="该 SKU 已收录关键词。若需重新分析，请在词库中操作；本页按新品流程设计。"/>:null}
@@ -1021,8 +1116,29 @@ export default function KeywordLaunchPage({page}:{page:NavigationPage}){
    <Checkbox checked={consent} onChange={e=>setConsent(e.target.checked)} style={{marginTop:14}}>我已核对 SKU、商品资料和至少 {rules.asin.min} 个 ASIN 编号；了解开始分析后会采集真实 Amazon 文案，规则评分仍需人工复核。</Checkbox>
   </Modal>
 
-  <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="分数与等级来自已保存的后端分析；缺少可验证证据时保持待复核，不推断广告表现。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'后端分析分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/></Drawer>
+  <Drawer open={!!detail} title={`分析依据 · ${detail?.keyword.term||''}`} width={540} onClose={()=>setDetail(null)}><Alert type="warning" showIcon message="分数与等级来自已保存的后端分析；缺少可验证证据时保持待复核，不推断广告表现。"/><Descriptions bordered column={1} size="small" style={{marginTop:12}} items={detail?[{key:'score',label:'后端分析分数',children:detail.entry.score??'—'},{key:'grade',label:'投放等级',children:detail.entry.grade},{key:'reason',label:'商品匹配判断',children:detail.entry.reason},{key:'ppc',label:'Amazon PPC',children:dollarText(detail.keyword.amazonPpc)},{key:'purchase',label:'市场购买量',children:countText(detail.keyword.monthlyPurchases)},{key:'source',label:'来源',children:detail.keyword.source},{key:'root',label:'词根',children:detail.keyword.root},{key:'asins',label:'关联 ASIN（表格）',children:detail.keyword.relatedAsins.join('、')||'—'}]:[]}/>{detail&&aiSuggestions[detail.keyword.term]?<Alert type="info" showIcon style={{marginTop:12}}
+    message={`AI 语义建议 · ${aiSuggestions[detail.keyword.term].relevance}`}
+    description={`${aiSuggestions[detail.keyword.term].reason||'—'} · 风险：${aiSuggestions[detail.keyword.term].risk||'无具体风险说明'}（仅供人工参考，不改变现有投放分数）`}/>:null}</Drawer>
   <Drawer open={!!compare} title={`跨 SKU 关键词 · ${compare?.term||''}`} width={620} onClose={()=>setCompare(null)}><Alert type="info" message="每个 SKU 独立分析；这里只比较已加载的后端结果。"/><ProTable rowKey="skuId" pagination={false} search={false} options={false} toolBarRender={false} columns={[{title:'SKU',dataIndex:'skuId',render:(_,r)=>skus.find(s=>s.id===r.skuId)?.sku},{title:'得分',dataIndex:'score'},{title:'等级',dataIndex:'grade'},{title:'Exact',dataIndex:'exact',render:(_,r)=>r.exact?'✓':'—'},{title:'Broad',dataIndex:'broad',render:(_,r)=>r.broad?'✓':'—'}]} dataSource={compare?allAssoc(compare.id):[]}/></Drawer>
   <Drawer open={historyOpen} title="分析历史" width={600} onClose={()=>setHistoryOpen(false)}><Alert type="info" message="分析历史读取已保存批次；点击一行可恢复当时冻结的分析结果。"/><ProTable<KeywordRun> rowKey="run_id" pagination={{current:historyPage,pageSize:20,total:historyTotal,onChange:pageNumber=>{void loadHistoryPage(pageNumber)}}} search={false} options={false} toolBarRender={false} dataSource={serverRuns} onRow={run=>({onClick:()=>{void openRun(run)}})} columns={[{title:'SKU',dataIndex:'product_id',render:()=>sku.sku},{title:'日期',dataIndex:'created_at'},{title:'规则版本',dataIndex:'rule_version_id'},{title:'关键词数',dataIndex:'keyword_count'},{title:'来源文件',render:()=> '已保存来源'}]}/></Drawer>
+  <Drawer open={aiTasksOpen} title="AI 分析任务" width={760} onClose={()=>setAiTasksOpen(false)}
+    extra={<Button loading={aiTasksLoading} onClick={()=>void reloadAiTasks()}>刷新状态</Button>}>
+    <Alert type="info" showIcon message="后台持续分析，无需保持当前 SKU 页面打开；AI 语义结果独立保存，不会改写原有表格评分。"/>
+    <ProTable<KeywordAiJob> rowKey="id" search={false} options={false} toolBarRender={false}
+      dataSource={aiTasks} pagination={{pageSize:8}} columns={[
+        {title:'SKU',dataIndex:'product_id',render:(_,r)=>skus.find(x=>x.id===r.product_id)?.sku||r.product_id.slice(0,8)},
+        {title:'提交人',dataIndex:'requested_by'},
+        {title:'状态',dataIndex:'status',render:(_,r)=><Tag color={r.status==='succeeded'?'green':r.status==='running'?'blue':r.status==='failed'?'red':'default'}>{r.status}</Tag>},
+        {title:'当前阶段',dataIndex:'phase'},
+        {title:'AI 进度',render:(_,r)=>r.total?`${r.completed}/${r.total} 批 · ${r.progress}%`:`${r.progress}%`},
+        {title:'操作',render:(_,r)=><Space size={4}>
+          {r.run_id?<><Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'keywords')}>关键词筛选</Button>
+            <Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'plan')}>投放方案</Button>
+            <Button type="link" size="small" onClick={()=>void openAiTaskResult(r,'listing')}>Listing 文案</Button></>:null}
+          {['queued','running'].includes(r.status)?<Button danger size="small" onClick={()=>void cancelKeywordAiJob(r.id,r.source_account_ref).then(()=>reloadAiTasks())}>取消</Button>:null}
+          {['failed','partial_success'].includes(r.status)?<Button size="small" onClick={()=>void retryKeywordAiJob(r.id,r.source_account_ref).then(()=>reloadAiTasks())}>重试失败部分</Button>:null}
+        </Space>},
+      ]}/>
+  </Drawer>
  </PageShell>;
 }

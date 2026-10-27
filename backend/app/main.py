@@ -10,6 +10,8 @@ from app.core.auth import enforce_protected_by_default
 from app.core.local_scoped_writes import install_local_scoped_write_guard
 from app.db.session import dispose_engine
 from app.modules.after_sales.router import router as after_sales_router
+from app.modules.ai_runtime.general_routes import router as ai_runtime_router
+from app.modules.ai_runtime.listing_routes import router as ai_listing_router
 from app.modules.approvals.router import router as approvals_router
 from app.modules.business_connectors.router import router as business_connectors_router
 from app.modules.business_rules.router import router as business_rules_router
@@ -69,6 +71,8 @@ def create_app() -> FastAPI:
     install_api_foundation(application)
     install_local_scoped_write_guard(application)
     application.include_router(after_sales_router)
+    application.include_router(ai_runtime_router)
+    application.include_router(ai_listing_router)
     application.include_router(approvals_router)
     application.include_router(business_rules_router)
     application.include_router(business_connectors_router)

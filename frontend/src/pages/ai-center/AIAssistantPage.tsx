@@ -1,4 +1,4 @@
-/** V7 conversation workspace in the existing SZZSBJ MainLayout. UI preview only. */
+/** V7 conversation workspace in the existing SZZSBJ MainLayout. */
 import {
   ArrowUpOutlined, BarChartOutlined, DeleteOutlined, EditOutlined, FileImageOutlined,
   FileOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PaperClipOutlined,
@@ -10,6 +10,7 @@ import {
   type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent,
 } from 'react';
 import PageShell from '@/components/page/PageShell';
+import { backendRequest } from '@/api/backendApi';
 import type { NavigationPage } from '@/config/navigation';
 import './AIAssistantPage.css';
 
@@ -19,8 +20,9 @@ type Thread = { id: string; title: string; note: string; draft: string; updatedA
 type UploadItem = Attachment & { file: File; url?: string };
 type Props = { page: NavigationPage; preferenceScope?: string };
 const MAX_FILES = 10;
-const MAX_BYTES = 20 * 1024 * 1024;
-const EXT = new Set('png jpg jpeg webp gif bmp heic heif pdf doc docx xls xlsx csv txt md json ppt pptx xml yaml yml zip html sql py js ts'.split(' '));
+const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 6 * 1024 * 1024;
+const EXT = new Set('pdf png jpg jpeg webp gif docx xlsx csv txt md json pptx xml yaml yml html sql py js ts'.split(' '));
 const QUESTIONS = [
   ['产品利润分析', '分析一个 SKU 最近 7 天的利润变化'],
   ['异常产品定位', '哪些 SKU 利润下降最严重？'],
@@ -33,6 +35,16 @@ function id() {
 }
 function fresh(): Thread { return { id: id(), title: '新聊天', note: '', draft: '', updatedAt: Date.now(), messages: [] }; }
 function key(scope: string) { return 'szzsbj:ai-v7:' + encodeURIComponent(scope); }
+function serverChatsKey(scope: string) { return 'szzsbj:ai-v7-server-chats:' + encodeURIComponent(scope); }
+function restoreServerChats(scope: string): Record<string,string> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(serverChatsKey(scope)) || 'null');
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.fromEntries(Object.entries(value).filter((entry): entry is [string,string] => typeof entry[1] === 'string'));
+    }
+  } catch { /* local storage can be unavailable */ }
+  return {};
+}
 function restore(scope: string): Thread[] {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(key(scope)) || 'null');
@@ -46,24 +58,6 @@ function restore(scope: string): Thread[] {
   return [fresh()];
 }
 function sizeText(n: number) { return n < 1024 ? n + ' B' : n < 1048576 ? Math.ceil(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
-function DemoReply({ question, followup }: { question: string; followup: (text: string) => void }) {
-  const isManager = /整体|公司|店铺|管理/.test(question);
-  const isAds = /广告|ACOS|ROAS/.test(question);
-  const title = isManager ? '整体经营变化分析' : isAds ? '广告投入与订单分析' : /哪些|排名|最严重/.test(question) ? '异常 SKU 排查' : 'SKU 经营诊断';
-  const metrics = isManager
-    ? [['销售额','$28,560','-6.2%'],['订单利润','$3,410','-12.8%'],['广告费用','$4,820','+9.4%']]
-    : isAds ? [['广告费用','$726','+14.2%'],['广告订单','52 单','-5.5%'],['广告占比','18.6%','+3.1pp']]
-    : [['销售额','$1,240','-8.2%'],['订单利润','$186','-27.4%'],['退款损失','$42','+$19']];
-  return <div className="ai7-answer">
-    <div className="ai7-demo-label">演示分析 · 模拟数据，尚未接入真实业务接口和 OpenAI</div>
-    <h3>{title}</h3>
-    <p>从销售、利润、广告和退款变化中定位经营异常。此处为界面预览，所有指标仅用于演示，不能据此作出真实经营决策。</p>
-    <div className="ai7-card"><h4>关键指标对比</h4><div className="ai7-metrics">{metrics.map(m => <div key={m[0]}><small>{m[0]}</small><strong>{m[1]}</strong><em>{m[2]} 较上期</em></div>)}</div></div>
-    <div className="ai7-card"><h4>{isManager ? '店铺经营明细' : '需要关注的 SKU'}</h4><div className="ai7-table-wrap"><table><thead><tr><th>{isManager ? '店铺' : 'SKU'}</th><th>销售额</th><th>订单利润</th><th>利润变化</th></tr></thead><tbody>{(isManager ? [['Store A','$12,100','$1,420','-$270'],['Store B','$9,260','$1,180','-$142'],['Store C','$7,200','$810','+$30']] : [['SKU-1082','$1,240','$186','-$70'],['SKU-3106','$986','$94','-$63'],['SKU-4210','$876','$128','-$51']]).map(row => <tr key={row[0]}>{row.map((cell,i) => <td key={i}>{i===0 ? <button type="button" className="ai7-textlink" onClick={() => followup('继续分析 ' + cell)}>{cell}</button> : cell}</td>)}</tr>)}</tbody></table></div></div>
-    <div className="ai7-card"><h4>分析与建议</h4><ol><li>核对利润变化与费用变化的金额，不将相关性当作因果关系。</li><li>如果广告或退款明细缺失，应标注数据不足并优先核实。</li></ol></div>
-    <div className="ai7-followups"><button type="button" onClick={() => followup(isManager ? '按负责人继续分析' : '分析 SKU-1082 的广告费用')}>进一步下钻 ↗</button><button type="button" onClick={() => followup('列出利润下降最严重的 SKU')}>查看异常产品 ↗</button></div>
-  </div>;
-}
 function FileCard({ file, url, remove }: { file: Attachment; url?: string; remove?: () => void }) {
   return <div className="ai7-file">{file.image && url ? <img src={url} alt={file.name} /> : file.image ? <FileImageOutlined /> : <FileOutlined />}
     <div className="ai7-file-name"><strong title={file.name}>{file.name}</strong><small>{sizeText(file.size)}</small></div>
@@ -85,6 +79,8 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
   const [imageUrls,setImageUrls] = useState<Record<string,string>>({});
   const [attachmentMenu,setAttachmentMenu] = useState(false);
   const [dragging,setDragging] = useState(false);
+  const [sending,setSending] = useState(false);
+  const [serverChats,setServerChats] = useState<Record<string,string>>(() => restoreServerChats(preferenceScope));
   const images = useRef<HTMLInputElement>(null);
   const files = useRef<HTMLInputElement>(null);
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -94,6 +90,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
   const uploads = pending[chat.id] ?? [];
   const visible = useMemo(() => [...threads].sort((a,b) => b.updatedAt-a.updatedAt).filter(t => (t.title+' '+t.note).toLowerCase().includes(search.toLowerCase())),[threads,search]);
   useEffect(() => { try { localStorage.setItem(key(preferenceScope),JSON.stringify(threads)); } catch { /* optional persistence */ } },[preferenceScope,threads]);
+  useEffect(() => { try { localStorage.setItem(serverChatsKey(preferenceScope),JSON.stringify(serverChats)); } catch { /* optional persistence */ } },[preferenceScope,serverChats]);
   useEffect(() => { const map=urls.current;return () => { map.forEach(value => URL.revokeObjectURL(value)); }; },[]);
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; },[activeId,chat.messages.length]);
   const changeChat = (identifier:string, patch:Partial<Thread>) => setThreads(before => before.map(t => t.id===identifier ? {...t,...patch,updatedAt:Date.now()} : t));
@@ -119,21 +116,48 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
       next.push({id:identifier,name:file.name,size:file.size,image,file,url});
     }
     setPending(before=>({...before,[chat.id]:next}));
-    if(rejected)void msgApi.warning(rejected+' 个附件不符合格式、20MB 或 10 个的限制');
+    if(rejected)void msgApi.warning(rejected+' 个附件不符合格式、2MB 或 10 个的限制；当前支持 PDF（最多6页）、常见图片、文本与 Office 文件；无法识别的文件将被拒绝');
     setAttachmentMenu(false);
   };
-  const send = (preset?:string) => {
-    const text=(preset??chat.draft).trim();
+  const send = async (preset?:string) => {
+    const text=(preset??chat.draft).trim() || (uploads.length ? '请分析附件内容并总结重点' : '');
     if(!text && !uploads.length)return;
-    const added:Attachment[]=uploads.map(f=>({id:f.id,name:f.name,size:f.size,image:f.image}));
-    setThreads(before=>before.map(t=>{
-      if(t.id!==chat.id)return t;
-      return {...t,title:t.messages.length===0 && t.title==='新聊天'?(text||'附件：'+added[0].name).slice(0,40):t.title,
-        draft:'',updatedAt:Date.now(),messages:[...t.messages,
-          {id:id(),role:'user',text,files:added},
-          {id:id(),role:'assistant',text:text?'':'文件已添加至本地演示会话。尚未上传服务器或供 OpenAI 解析。',analysis:!!text}]};
-    }));
-    setPending(before=>({...before,[chat.id]:[]}));
+    if(sending)return;
+    if(uploads.some(u=>u.size>MAX_BYTES)
+      || uploads.reduce((total,u)=>total+u.size,0)>MAX_TOTAL_BYTES) {
+      void msgApi.warning('附件最多 10 个，单个 2MB、总计 6MB；请移除超限附件');
+      return;
+    }
+    let attachments:{name:string;content_base64:string}[]=[];
+    if(uploads.length)try {
+      attachments=await Promise.all(uploads.map(async u=>{
+        const bytes=new Uint8Array(await u.file.arrayBuffer());
+        let binary='';
+        for(let i=0;i<bytes.length;i+=32768){
+          binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
+        }
+        return {name:u.name,content_base64:btoa(binary)};
+      }));
+    } catch {
+      void msgApi.error('附件读取失败，请检查文件是否可访问');
+      return;
+    }
+    const target=chat.id;
+    setSending(true);
+    setThreads(before=>before.map(t=>t.id!==target?t:{...t,
+      title:t.messages.length===0 && t.title==='新聊天'?text.slice(0,40):t.title,
+      draft:'',updatedAt:Date.now(),messages:[...t.messages,{id:id(),role:'user',text}]}));
+    void backendRequest<{chat_id:string;response:string}>('/api/ai-runtime/assistant/ask',{
+      method:'POST',body:JSON.stringify({chat_id:serverChats[target]??null,message:text,attachments}),
+    }).then(({data})=>{
+      setServerChats(before=>({...before,[target]:data.chat_id}));
+      setThreads(before=>before.map(t=>t.id!==target?t:{...t,updatedAt:Date.now(),
+        messages:[...t.messages,{id:id(),role:'assistant',text:data.response}]}));
+    }).catch(()=>{
+      void msgApi.error('AI 服务暂时无法回应，请检查模型服务、账户权限和额度');
+      setThreads(before=>before.map(t=>t.id!==target?t:{...t,
+        messages:[...t.messages,{id:id(),role:'assistant',text:'AI 请求失败；没有生成模拟经营数据。请在业务配置中检查 OpenAI 服务。'}]}));
+    }).finally(()=>setSending(false));
     setAttachmentMenu(false);
   };
   const onKeys=(e:KeyboardEvent<HTMLTextAreaElement>)=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send();}};
@@ -161,6 +185,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
     const next=threads.filter(c=>c.id!==deleting);
     if(!next.length)next.push(fresh());
     setThreads(next);if(activeId===deleting)setActiveId(next[next.length-1].id);
+    setServerChats(before=>{const map={...before};delete map[deleting];return map;});
     setDeleting(null);
   };
   return <PageShell page={page}>
@@ -183,13 +208,13 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
             ]}}><Button type="text" icon={<MoreOutlined/>} size="small" aria-label={'聊天操作：'+t.title}/></Dropdown>
           </div>)}
         </div>
-        <p className="ai7-side-footer">演示会话仅保存在当前浏览器</p>
+        <p className="ai7-side-footer">聊天列表保存在当前浏览器，对话内容同步至服务端</p>
       </aside>
       <div className="ai7-main">
         <header className="ai7-toolbar"><Button type="text" icon={expanded?<MenuFoldOutlined/>:<MenuUnfoldOutlined/>} aria-label="切换聊天列表" onClick={()=>{setExpanded(!expanded);setMobileOpen(!mobileOpen);}}/><div className="ai7-thread-heading"><strong>{chat.title}</strong><small>{chat.note||'智能经营分析与连续追问'}</small></div></header>
         <div className="ai7-scroll" ref={scroller}>
           {!chat.messages.length?<div className="ai7-welcome"><div className="ai7-hero"><RobotOutlined/></div><h1>今天想分析什么？</h1><p>从单个 SKU 到整体经营，直接提问。<br/>分析数据与结论只在对话中按需显示。</p><div className="ai7-suggestions">{QUESTIONS.map(q=><button type="button" key={q[0]} onClick={()=>send(q[1])}><span><BarChartOutlined/></span><strong>{q[0]}</strong><small>{q[1]}</small></button>)}</div></div>:
-          <div className="ai7-messages">{chat.messages.map(m=>m.role==='user'?<div className="ai7-user-row" key={m.id}><div>{!!m.files?.length&&<div className="ai7-file-list">{m.files?.map(f=><FileCard key={f.id} file={f} url={imageUrls[f.id]}/>)}</div>}{m.text&&<p>{m.text}</p>}</div></div>:<div className="ai7-assistant-row" key={m.id}><div className="ai7-bot"><RobotOutlined/></div>{m.analysis?<DemoReply question={chat.messages[chat.messages.findIndex(x=>x.id===m.id)-1]?.text??''} followup={send}/>:<p>{m.text}</p>}</div>)}</div>}
+          <div className="ai7-messages">{chat.messages.map(m=>m.role==='user'?<div className="ai7-user-row" key={m.id}><div>{!!m.files?.length&&<div className="ai7-file-list">{m.files?.map(f=><FileCard key={f.id} file={f} url={imageUrls[f.id]}/>)}</div>}{m.text&&<p>{m.text}</p>}</div></div>:<div className="ai7-assistant-row" key={m.id}><div className="ai7-bot"><RobotOutlined/></div><p>{m.text}</p></div>)}</div>}
         </div>
         <footer className="ai7-bottom"><div className={'ai7-composer'+(dragging?' ai7-dragging':'')}
           onDragEnter={e=>{e.preventDefault();setDragging(true);}}
@@ -205,7 +230,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
               {key:'images',label:'上传图片',icon:<FileImageOutlined/>,onClick:()=>images.current?.click()},
               {key:'files',label:'上传文件（PDF、Excel、Word 等）',icon:<PaperClipOutlined/>,onClick:()=>files.current?.click()},
             ]}}><Tooltip title="添加图片或文件"><Button type="text" className="ai7-attach-btn" icon={<PlusOutlined/>} aria-label="添加附件"/></Tooltip></Dropdown>
-            <Button type="primary" shape="circle" className="ai7-send" icon={<ArrowUpOutlined/>} aria-label="发送消息" disabled={!chat.draft.trim()&&!uploads.length} onClick={()=>send()}/>
+            <Button type="primary" shape="circle" className="ai7-send" icon={<ArrowUpOutlined/>} aria-label="发送消息" disabled={sending||(!chat.draft.trim()&&!uploads.length)} loading={sending} onClick={()=>send()}/>
           </div>
           <input ref={images} type="file" accept="image/*" multiple hidden onChange={onSelect} aria-label="选择图片"/>
           <input ref={files} type="file" multiple hidden onChange={onSelect} aria-label="选择文件"/>
