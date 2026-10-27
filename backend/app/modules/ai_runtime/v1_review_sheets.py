@@ -7,16 +7,37 @@ from collections.abc import Mapping, Sequence
 from statistics import mean
 
 ROOT_HEADERS = (
-    "核心词根", "词根中文意思", "词根等级", "词根处理类型",
-    "词根判断类型", "关联关键词数量", "代表关键词", "平均潜力分",
-    "最高潜力分", "页面承接情况", "是否已进入Exact", "是否进入Broad广告组",
-    "Broad投放角色", "Broad扩词风险", "Broad准入判断", "Broad风险说明",
-    "不进Broad原因", "后续处理建议",
+    "核心词根",
+    "词根中文意思",
+    "词根等级",
+    "词根处理类型",
+    "词根判断类型",
+    "关联关键词数量",
+    "代表关键词",
+    "平均潜力分",
+    "最高潜力分",
+    "页面承接情况",
+    "是否已进入Exact",
+    "是否进入Broad广告组",
+    "Broad投放角色",
+    "Broad扩词风险",
+    "Broad准入判断",
+    "Broad风险说明",
+    "不进Broad原因",
+    "后续处理建议",
 )
 RISK_HEADERS = (
-    "关键词", "关键词中文意思", "核心词根", "冷启动投放潜力分",
-    "风险类型", "不投放原因", "是否结构冲突", "是否规格冲突",
-    "是否品牌词", "是否进入上传表", "后续处理建议",
+    "关键词",
+    "关键词中文意思",
+    "核心词根",
+    "冷启动投放潜力分",
+    "风险类型",
+    "不投放原因",
+    "是否结构冲突",
+    "是否规格冲突",
+    "是否品牌词",
+    "是否进入上传表",
+    "后续处理建议",
 )
 RISK_LABELS = {
     "合规/认证风险词": "合规/认证风险",
@@ -46,11 +67,21 @@ def project_v1_review_sheets(
     rows: Sequence[Sequence[object]],
     metadata: Mapping[str, Mapping[str, object]],
 ) -> tuple[list[tuple], list[tuple]]:
-    col = {key: headers.index(key) for key in (
-        "关键词", "关键词中文意思", "关键词类型", "核心词根",
-        "页面承接情况", "冷启动投放潜力分", "投放等级",
-        "未上传原因", "是否进入手动Exact", "是否进入手动Broad",
-    )}
+    col = {
+        key: headers.index(key)
+        for key in (
+            "关键词",
+            "关键词中文意思",
+            "关键词类型",
+            "核心词根",
+            "页面承接情况",
+            "冷启动投放潜力分",
+            "投放等级",
+            "未上传原因",
+            "是否进入手动Exact",
+            "是否进入手动Broad",
+        )
+    }
     groups: OrderedDict[str, list[Sequence[object]]] = OrderedDict()
     risks: list[tuple] = []
     for row in rows:
@@ -81,8 +112,10 @@ def project_v1_review_sheets(
                     "是" if kind == "结构冲突词" else "否",
                     "是" if kind in ("规格/尺寸不符词", "Pack/数量不符词") else "否",
                     "是" if kind == "品牌/竞品词" or grade == "品牌等级" else "否",
-                    "是" if row[col["是否进入手动Exact"]] == "是"
-                             or row[col["是否进入手动Broad"]] == "是" else "否",
+                    "是"
+                    if row[col["是否进入手动Exact"]] == "是"
+                    or row[col["是否进入手动Broad"]] == "是"
+                    else "否",
                     "人工确认再决定，不自动作为否定关键词上传",
                 )
             )
@@ -99,10 +132,15 @@ def project_v1_review_sheets(
         selected = any(row[col["是否进入手动Broad"]] == "是" for row in records)
         roles = {
             str(metadata.get(str(row[col["关键词"]]).casefold(), {}).get("broad_role") or "")
-            for row in records if row[col["是否进入手动Broad"]] == "是"
+            for row in records
+            if row[col["是否进入手动Broad"]] == "是"
         }
-        grade = str(metadata.get(str(representative[col["关键词"]]).casefold(), {}).get("root_grade") or "")
-        broad_role = "词根" if "root" in roles else "安全精准长尾" if "long_tail" in roles else "未入选"
+        grade = str(
+            metadata.get(str(representative[col["关键词"]]).casefold(), {}).get("root_grade") or ""
+        )
+        broad_role = (
+            "词根" if "root" in roles else "安全精准长尾" if "long_tail" in roles else "未入选"
+        )
         row_meta = metadata.get(str(representative[col["关键词"]]).casefold(), {})
         reason = str(row_meta.get("broad_reason") or "")
         roots.append(
