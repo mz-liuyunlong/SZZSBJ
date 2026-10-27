@@ -14,13 +14,13 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.schemas import (
     InterfaceListData,
     RawRequestMetadataListData,
     RawRequestMetadataRead,
     RequestKind,
 )
-from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.service import IntegrationSyncService
 from app.modules.integration_sync.tasks import TaskDispatchError, execute_sync_run, scheduler_tick
 from app.modules.products.dependencies import get_product_scope_provider
