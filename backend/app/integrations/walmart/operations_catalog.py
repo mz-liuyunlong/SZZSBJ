@@ -4,6 +4,7 @@ Only GET operations are included. Report creation, feed submission, pricing,
 inventory updates, orders acknowledgement/shipping, refunds and Connect ads
 are deliberately excluded from this read-only catalog.
 """
+
 from __future__ import annotations
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry, Field, Operation
