@@ -26,6 +26,7 @@ import ListingManagementSummaryCards, {
   type ListingManagementSummaryCardKey,
 } from "@/pages/products/components/ListingManagementSummaryCards";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
+import ListingRuleConfigDrawer from "@/pages/products/components/ListingRuleConfigDrawer";
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
@@ -226,6 +227,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [ruleConfigOpen, setRuleConfigOpen] = useState(false);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
   const pageStateKey = "listing-management";
   const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
@@ -852,6 +854,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   return (
     <PageShell page={page}>
       {messageContextHolder}
+      <ListingRuleConfigDrawer open={ruleConfigOpen} onClose={() => setRuleConfigOpen(false)} />
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
@@ -877,6 +880,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
               onMessage={(content) => void messageApi.info(content)}
               onToggleStatistics={() => setStatisticsVisible((visible) => !visible)}
               onOpenTagManager={() => setTagManagerOpen(true)}
+              onOpenRuleConfig={() => setRuleConfigOpen(true)}
               onOpenColumnConfig={() => setColumnConfigOpen(true)}
               onDownload={openExportModal}
               downloadDisabled={isExporting}
