@@ -48,9 +48,7 @@ class ListingEvaluationBatchService:
         if existing is None:
             latest_rule_version = self._latest_effective_rule_version()
             total = (
-                self.session.scalar(
-                    select(func.count()).select_from(ListingManagementCurrentMart)
-                )
+                self.session.scalar(select(func.count()).select_from(ListingManagementCurrentMart))
                 or 0
             )
             run = ListingEvaluationRun(

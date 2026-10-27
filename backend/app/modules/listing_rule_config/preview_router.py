@@ -205,10 +205,7 @@ def list_evaluation_runs(
         ).all()
     )
     count = (
-        session.scalar(
-            select(func.count()).select_from(ListingEvaluationRun).where(scoped)
-        )
-        or 0
+        session.scalar(select(func.count()).select_from(ListingEvaluationRun).where(scoped)) or 0
     )
     return success_response(
         request,

@@ -146,12 +146,22 @@ class ListingEvaluationSnapshot(Base):
     currently_archived: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
-    rule_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    rule_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     rule_source: Mapped[str] = mapped_column(String(32), nullable=False, default="default")
-    evidence_json: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
-    publication_status: Mapped[str] = mapped_column(String(64), nullable=False, default="blocked", server_default="blocked")
-    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    evidence_json: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    publication_status: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="blocked", server_default="blocked"
+    )
+    published: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
 
 
 class ListingGradeFollowUpTask(Base):
@@ -182,11 +192,15 @@ class ListingGradeFollowUpTask(Base):
     cutoff_date_la: Mapped[date] = mapped_column(Date, nullable=False)
     due_date_cn: Mapped[date] = mapped_column(Date, nullable=False)
     owner_ref: Mapped[str | None] = mapped_column(String(255))
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", server_default="pending")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending", server_default="pending"
+    )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_by: Mapped[str | None] = mapped_column(String(255))
     resolution_note: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
