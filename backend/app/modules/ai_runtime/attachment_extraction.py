@@ -63,10 +63,9 @@ def _xlsx_text(archive: ZipFile, paths: list[str]) -> str:
         for entry in root.iter(namespace + "si"):
             strings.append("".join(node.text or "" for node in entry.iter(namespace + "t")))
     lines = []
-    sheet_paths = [
-        path for path in paths
-        if re.fullmatch(r"xl/worksheets/sheet[0-9]+\.xml", path)
-    ][:8]
+    sheet_paths = [path for path in paths if re.fullmatch(r"xl/worksheets/sheet[0-9]+\.xml", path)][
+        :8
+    ]
     if not sheet_paths:
         raise AttachmentError("ATTACHMENT_INVALID_OFFICE")
     for path in sheet_paths:
