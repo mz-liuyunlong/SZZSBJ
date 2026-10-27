@@ -77,7 +77,7 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     fireEvent.click(screen.getByRole('button',{name:/^新聊天\s*暂无消息$/}));
     expect(screen.getByRole('textbox',{name:'输入问题'})).toHaveValue('第二个聊天的草稿');
   });
-  it('sends parsed text attachments to the backend and rejects unsupported images',async()=>{
+  it('sends parsed text attachments and accepts image/PDF files for multimodal analysis',async()=>{
     mount();
     const report=new File(['sample'],'report.csv',{type:'text/csv'});
     Object.defineProperty(report,'arrayBuffer',{
@@ -97,7 +97,10 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     expect(payload.message).toContain('附件');
     const picture=new File(['mock'],'demo.png',{type:'image/png'});
     fireEvent.change(screen.getByLabelText('选择图片'),{target:{files:[picture]}});
-    expect(screen.queryByText('demo.png')).not.toBeInTheDocument();
+    expect(screen.getByText('demo.png')).toBeInTheDocument();
+    const pdf=new File(['%PDF-1.4'],'manual.pdf',{type:'application/pdf'});
+    fireEvent.change(screen.getByLabelText('选择文件'),{target:{files:[pdf]}});
+    expect(screen.getByText('manual.pdf')).toBeInTheDocument();
   });
 });
 
