@@ -183,3 +183,16 @@ uv run python -c "import app.main"
 - `GET /v3/reports/reportRequests`、`GET /v3/reports/reportRequests/{requestId}`：报告请求列表和状态；官方 [Get all report requests](https://developer.walmart.com/us-marketplace/reference/getrequestsstatus)、[Report request status](https://developer.walmart.com/global-marketplace/reference/getsinglerequeststatus)。
 
 这些 operation key 默认全部禁用，需由受保护运行环境按店铺批准。新增 `test_operations_catalog.py`、`test_shipping_catalog.py`。本次仍未实现完整的价格管理/促销、库存更新、订单写入、退货退款写入、Feed 提交与文件下载、广告/Connect、完整报告文件下载；不能将当前目录称为全部官方 API。
+
+
+### 2026-10-27：迁移原始 Worker 的已验证四接口采集行为
+
+新增 `collector.py`，把同事 `run_worker.py` 已有的四个只读能力的执行语义迁入 SZZSBJ，并通过注入的 `WalmartClient` 运行，不读取任何凭据、不自行联网：
+- WFS 库存识别真实响应的 `payload.inventory` 包装结构。
+- Offset 分页检查 `headers.totalCount`，不足或空页提前结束会失败，不把截断数据报成功。
+- 入库货件使用源 Worker 的 UTC epoch 毫秒 `fromCreatedDate/toCreatedDate`，入库货件明细依赖成功取得的 shipment IDs。
+- 库存流水仅使用显式传入的 GTIN 列表，或当前 run 已明确请求的 WFS 库存；GTIN 去重、空值/非法值分类、单项失败隔离。
+- 生成脱敏 JSONL、manifest、summary、请求日志及 SHA256SUMS；商品级 GTIN 映射独立落在 `raw/inventory_log_items.jsonl`。
+- 新增 `test_collector.py` 覆盖分页完整性、401/403 停止后续接口、GTIN 去重、缺 GTIN 不发请求、拒绝非只读 key 与日期参数。测试均为 fake client，不触发真实 Walmart 网络调用。
+
+原始代码包 `run_tests.sh` 的测试在当前隔离环境执行超时，故不能将原始整套测试标记为通过。迁移后的 collector 专项测试正在由本 PR 的 GitHub CI 验证；真实账号与固定出口仍未联调。
