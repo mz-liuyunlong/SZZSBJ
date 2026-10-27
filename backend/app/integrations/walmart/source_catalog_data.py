@@ -16,7 +16,18 @@ import hashlib
 import json
 from collections import Counter
 
-COLUMNS = ('domain','endpoint_key','capability_key','method','path','category','status','selectable','auth','path_verified',)
+COLUMNS = (
+    "domain",
+    "endpoint_key",
+    "capability_key",
+    "method",
+    "path",
+    "category",
+    "status",
+    "selectable",
+    "auth",
+    "path_verified",
+)
 _CATALOG_SHA256 = "59baa1b5043b96247b9d896a025a1902e0310e9964a68da32f34869784cffac4"
 _CATALOG_GZIP_B64 = (
     "H4sIAAAAAAAC/9VdW2/jxhX+K4Yf8rQqN708GoYs0TYb3ZaidrsIggEtjWVmKZHLi13XWKApCiQBEqAvbVMgLZI+"

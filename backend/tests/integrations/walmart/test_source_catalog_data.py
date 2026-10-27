@@ -23,4 +23,3 @@ def test_source_catalog_snapshot_is_deterministic_and_independent() -> None:
     assert first == second
     assert first is not second
     assert len({json.dumps(record, sort_keys=True, ensure_ascii=False) for record in first}) == 192
-
