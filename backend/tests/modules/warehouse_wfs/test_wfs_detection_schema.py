@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import cast
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -92,7 +93,7 @@ def test_latest_evidence_projection_does_not_label_review_states_current() -> No
 
 
 def test_recovered_amount_must_be_positive_and_cents_precision() -> None:
-    assert WfsFeeRecoveredWrite(recovered_amount="0.01").recovered_amount == 0.01
+    assert WfsFeeRecoveredWrite(recovered_amount="0.01").recovered_amount == Decimal("0.01")
     with pytest.raises(ValidationError):
         WfsFeeRecoveredWrite(recovered_amount="0")
     with pytest.raises(ValidationError):
