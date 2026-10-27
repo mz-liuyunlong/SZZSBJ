@@ -8,6 +8,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -23,6 +24,10 @@ from app.modules.ai_runtime.provider import (
     select_published_skill,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.keyword_planning.models import AiKwAnalysisRun, AiKwRunKeyword, DimKwTerm
+from app.modules.ai_runtime.four_sheet_export import generate_four_sheet_review
+from sqlalchemy import select
+from io import BytesIO
 from app.modules.keyword_planning.analysis_routes import CreateRunRequest, _require_opted_in_writes
 
 router = APIRouter(prefix="/ai-tasks", tags=["AI keyword jobs"])
@@ -293,4 +298,55 @@ def get_keyword_ai_suggestions(
             )
     return success_response(
         request, data={"items": items, "total": len(items), "advisory_only": True}
+    )
+
+
+
+@router.get("/{job_id}/four-sheet-workbook")
+def download_keyword_ai_four_sheet(
+    job_id: UUID,
+    source_account_ref: Annotated[str, Query(min_length=1)],
+    session: Annotated[Session, Depends(get_db_session)],
+    accounts: scope_dep,
+    principal: read_perm,
+) -> StreamingResponse:
+    """Four-sheet INTERNAL review from the run bound to an authorized AI job."""
+    _check(source_account_ref, accounts, principal)
+    job = _job(session, job_id, source_account_ref, principal)
+    if job["status"] not in ("succeeded", "partial_success") or not job["run_id"]:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+    run = session.scalar(
+        select(AiKwAnalysisRun).where(
+            AiKwAnalysisRun.id == job["run_id"],
+            AiKwAnalysisRun.source_account_ref == source_account_ref,
+        )
+    )
+    if run is None:
+        raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
+    rows = list(
+        session.execute(
+            select(AiKwRunKeyword, DimKwTerm.canonical_keyword)
+            .join(DimKwTerm, DimKwTerm.id == AiKwRunKeyword.term_id)
+            .where(
+                AiKwRunKeyword.run_id == run.id,
+                AiKwRunKeyword.source_account_ref == source_account_ref,
+            )
+            .order_by(AiKwRunKeyword.rank_index.asc().nulls_last(), AiKwRunKeyword.term_id.asc())
+            .limit(20001)
+        )
+    )
+    if len(rows) > 20000:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+    try:
+        content = generate_four_sheet_review(run=run, keyword_rows=rows)
+    except ValueError:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409) from None
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="kw_ai_review_{job_id}.xlsx"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
