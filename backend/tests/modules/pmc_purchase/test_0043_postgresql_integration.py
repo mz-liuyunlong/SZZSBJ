@@ -14,9 +14,10 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import Engine, create_engine, func, select, text
+from sqlalchemy import Engine, create_engine, func, insert, select, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -165,11 +166,34 @@ def test_0042_to_0043_reads_all_sources_and_647_synthetic_rows(
     with pytest.raises(ValidationError):
         BoardListQuery.model_validate({"item_id_source": ["unknown_source"]})
 
+    # Historical revisions cannot be queried through today's ORM, which also
+    # requires columns added by 0055. Core INSERT omits those nullable columns.
+    old_rows = [_board_row(10_000 + index, source) for index, source in enumerate(OLD_SOURCES)]
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            insert(DwsPurchaseBoard.__table__),
+            [
+                {key: value for key, value in vars(row).items() if not key.startswith("_")}
+                for row in old_rows
+            ],
+        )
+    # Only old-source synthetic rows exist during this historical downgrade.
+    command.downgrade(config, REVISION_0042)
+    assert _revision(postgres_engine) == REVISION_0042
+    assert "from_listing" not in _source_constraint(postgres_engine)
+    command.upgrade(config, REVISION_0043)
+    assert _revision(postgres_engine) == REVISION_0043
+    assert "from_listing" in _source_constraint(postgres_engine)
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(select(func.count()).select_from(DwsPurchaseBoard)) == len(
+            OLD_SOURCES
+        )
+
+    # Exercise the current API only after applying its actual migration dependencies.
+    command.upgrade(config, "head")
+    assert _revision(postgres_engine) == ScriptDirectory.from_config(config).get_current_head()
     with Session(postgres_engine) as session:
         session.add_all(_board_row(index, "from_listing") for index in range(647))
-        session.add_all(
-            _board_row(10_000 + index, source) for index, source in enumerate(OLD_SOURCES)
-        )
         session.commit()
 
     client = _api(postgres_engine)
@@ -220,14 +244,6 @@ def test_0042_to_0043_reads_all_sources_and_647_synthetic_rows(
             .where(DwsPurchaseBoard.source_account_ref == ACCOUNT)
         )
         assert remaining == len(OLD_SOURCES)
-
-    # Downgrade is tested only after all new-source rows are gone. Production currently
-    # has such rows, so this does not authorize or imply a safe production downgrade.
-    command.downgrade(config, REVISION_0042)
-    assert _revision(postgres_engine) == REVISION_0042
-    assert "from_listing" not in _source_constraint(postgres_engine)
-    command.upgrade(config, REVISION_0043)
-    assert _revision(postgres_engine) == REVISION_0043
 
     with postgres_engine.begin() as connection:
         connection.execute(
