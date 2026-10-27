@@ -49,7 +49,7 @@ class AttachmentError(ValueError):
 
 class AttachmentBody(BaseModel):
     name: str = Field(min_length=1, max_length=255)
-    content_base64: str = Field(min_length=1, max_length=3_000_000)
+    content_base64: str = Field(max_length=3_000_000)
 
 
 def _xlsx_text(archive: ZipFile, paths: list[str]) -> str:
