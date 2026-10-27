@@ -4,6 +4,7 @@ The collector never reads credentials or performs network I/O itself. It calls
 an injected, scope-bound WalmartClient and returns only bounded, sanitized
 artifacts. All 4 original capabilities remain read-only.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -221,9 +222,7 @@ class WalmartReadCollector:
                 continue
             try:
                 if endpoint == "wfs_inventory":
-                    rows, pages = self._collect_offset(
-                        endpoint, {}, ("payload", "inventory")
-                    )
+                    rows, pages = self._collect_offset(endpoint, {}, ("payload", "inventory"))
                 elif endpoint == "inbound_shipments":
                     rows, pages = self._collect_offset(endpoint, {
                         "fromCreatedDate": int(datetime.combine(from_date, time.min, tzinfo=timezone.utc).timestamp() * 1000),
@@ -235,8 +234,10 @@ class WalmartReadCollector:
                         raise CollectorError("WALMART_DEPENDENCY_MISSING")
                     rows, pages = self._collect_by_shipment(shipments)
                 else:
-                    source = list(gtin_items) if gtin_items is not None else self._gtin_items_from_wfs(
-                        collected.get("wfs_inventory")
+                    source = (
+                        list(gtin_items)
+                        if gtin_items is not None
+                        else self._gtin_items_from_wfs(collected.get("wfs_inventory"))
                     )
                     rows, pages, resolution = self._collect_inventory_log(
                         source, from_date=from_date, to_date=to_date
@@ -284,7 +285,9 @@ class WalmartReadCollector:
         if "inventory_log" in endpoints and item_statuses is not None:
             raw_files["raw/inventory_log_items.jsonl"] = self._jsonl(item_statuses)
             if "inventory_log" in endpoint_results:
-                endpoint_results["inventory_log"]["item_gtin_mapping"] = "raw/inventory_log_items.jsonl"
+                endpoint_results["inventory_log"]["item_gtin_mapping"] = (
+                    "raw/inventory_log_items.jsonl"
+                )
         files: dict[str, dict[str, Any]] = {}
         for name, content in raw_files.items():
             files[name] = {
@@ -309,9 +312,7 @@ class WalmartReadCollector:
         summary = {
             "store_code": self._store,
             "status": overall,
-            "endpoints": {
-                key: value["status"] for key, value in safe_endpoints.items()
-            },
+            "endpoints": {key: value["status"] for key, value in safe_endpoints.items()},
             "rows": {key: value["rows"] for key, value in safe_endpoints.items()},
             "http_calls": self._calls,
         }
@@ -338,7 +339,10 @@ class WalmartReadCollector:
     ) -> list[dict[str, Any]]:
         if rows is None:
             return []
-        return [{"item_id": item_id, "gtin": gtin} for item_id, gtin in map(_gtin_from_record, rows)]
+        return [
+            {"item_id": item_id, "gtin": gtin}
+            for item_id, gtin in map(_gtin_from_record, rows)
+        ]
 
     def _collect_offset(
         self,
@@ -401,9 +405,7 @@ class WalmartReadCollector:
         if not ids:
             raise CollectorError("WALMART_DEPENDENCY_MISSING")
         for shipment_id in ids:
-            rows, used = self._collect_offset(
-                "inbound_shipment_items", {"shipmentId": shipment_id}
-            )
+            rows, used = self._collect_offset("inbound_shipment_items", {"shipmentId": shipment_id})
             output.extend(rows)
             pages += used
             if len(output) > self._config.max_records:
