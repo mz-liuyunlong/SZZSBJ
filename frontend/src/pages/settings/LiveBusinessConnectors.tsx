@@ -1,9 +1,10 @@
 import { Alert, Button, Drawer, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tag, message } from "antd";
+import BusinessConfigServiceEditor from "./BusinessConfigServiceEditor";
 import { useCallback, useEffect, useState } from "react";
 import {
   disableBusinessConnector, listAIUsage, listBusinessConnectors, listBusinessUsage, listFeishuRoutes, listNotificationDeliveries,
-  listNotificationTemplates, saveBusinessConnector, saveFeishuRoute, saveNotificationTemplate, testBusinessConnector,
-  type AIUsageRow, type BusinessConnector, type ConnectorWrite, type FeishuRoute, type NotificationDelivery,
+  listNotificationTemplates, saveFeishuRoute, saveNotificationTemplate, testBusinessConnector,
+  type AIUsageRow, type BusinessConnector, type FeishuRoute, type NotificationDelivery,
   type NotificationTemplate,
 } from "@/api/businessConnectorsApi";
 
@@ -15,8 +16,6 @@ const events = [
   { value: "ai_completed", label: "AI 任务完成" },
   { value: "finance_completed", label: "财务任务完成" },
 ];
-
-type FormConnector = ConnectorWrite;
 
 export default function LiveBusinessConnectors({ canManage, category, keyword, status, section = "all" }: {
   canManage: boolean;
@@ -38,10 +37,8 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
   const [drawer, setDrawer] = useState<"connector" | "route" | "template" | null>(null);
   const [editing, setEditing] = useState<BusinessConnector | null>(null);
   const [saving, setSaving] = useState(false);
-  const [form] = Form.useForm<FormConnector>();
   const [routeForm] = Form.useForm<Omit<FeishuRoute, "id">>();
   const [templateForm] = Form.useForm<Omit<NotificationTemplate, "id">>();
-  const kind = Form.useWatch("kind", form);
   const showFeishu = category === "all" || category === "bots";
   const showAI = category === "all" || category === "ai";
   const shownItems = items.filter((item) => (
@@ -76,39 +73,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
   }, []);
   const openConnector = (item?: BusinessConnector) => {
     setEditing(item ?? null);
-    form.resetFields();
-    form.setFieldsValue({
-      kind: item?.kind ?? "feishu_webhook",
-      name: item?.name ?? "", enabled: item?.enabled ?? false,
-      endpoint: "", credential: "", signing_secret: "",
-      default_model: item?.config.default_model ?? "gpt-4.1-mini",
-      backup_model: item?.config.backup_model ?? "",
-      model_allowlist: item?.config.model_allowlist ?? ["gpt-4.1-mini"],
-      daily_limit: item?.config.daily_limit ?? 100,
-      monthly_budget_usd: Number(item?.config.monthly_budget_usd ?? 0),
-      max_output_tokens: item?.config.max_output_tokens ?? 1024,
-      input_price_per_million: Number(item?.config.input_price_per_million ?? 0),
-      output_price_per_million: Number(item?.config.output_price_per_million ?? 0),
-    });
     setDrawer("connector");
-  };
-  const submitConnector = async () => {
-    let values: FormConnector;
-    try { values = await form.validateFields(); } catch { return; }
-    setSaving(true);
-    try {
-      const payload = { ...values,
-        endpoint: values.endpoint?.trim() || undefined,
-        credential: values.credential?.trim() || undefined,
-        signing_secret: values.signing_secret?.trim() || undefined,
-      };
-      await saveBusinessConnector(payload, editing?.id);
-      form.setFieldsValue({ credential: "", signing_secret: "", endpoint: "" });
-      setDrawer(null);
-      messageApi.success("配置已保存；密钥不会回显");
-      await refresh();
-    } catch { messageApi.error("保存失败，请检查权限、密钥配置或服务端迁移状态"); }
-    finally { setSaving(false); }
   };
   const submitRoute = async () => {
     try { setSaving(true); const values = await routeForm.validateFields(); await saveFeishuRoute(values);
@@ -147,7 +112,7 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
                 else messageApi.error("连接检查失败");
                 void refresh();
               }).catch(() => messageApi.error("连接检查未执行或未通过，请检查服务端授权"));
-            });
+            }, () => {});
           }}>测试连接</Button>
           {row.enabled && <Button danger type="link" size="small" onClick={() => void disableBusinessConnector(row.id)
             .then(refresh).catch(() => messageApi.error("停用失败"))}>停用</Button>}
@@ -201,33 +166,13 @@ export default function LiveBusinessConnectors({ canManage, category, keyword, s
           {title: "错误码", dataIndex: "error_code"},
         ]}/>
     </>}
-    <Drawer title={editing ? "编辑正式连接" : "新增正式连接"} open={drawer === "connector"} width={540}
-      onClose={() => { form.setFieldsValue({credential:"",signing_secret:"",endpoint:""}); setDrawer(null); }}
-      extra={<Space><Button onClick={() => setDrawer(null)}>取消</Button><Button type="primary" loading={saving} onClick={() => void submitConnector()}>保存配置</Button></Space>}>
-      <Alert showIcon type="warning" message="请仅在受控环境中填写凭据" description="密钥发送到本系统后端加密存储，不在接口响应中回显。新连接默认停用；保存不会自动发送通知或调用 AI。" />
-      <Form<FormConnector> form={form} layout="vertical" style={{ marginTop: 18 }}>
-        <Form.Item name="kind" label="连接类型" rules={[{required:true}]}><Select disabled={Boolean(editing)} options={[
-          {value:"feishu_webhook",label:"飞书群 Webhook"}, {value:"openai",label:"OpenAI"}]} /></Form.Item>
-        <Form.Item name="name" label="连接名称" rules={[{required:true}]}><Input maxLength={100} /></Form.Item>
-        {kind === "feishu_webhook" ? <>
-          <Form.Item name="endpoint" label="群机器人 Webhook 地址" extra={editing ? "留空则保留原地址" : "仅允许飞书官方 Webhook 地址"}>
-            <Input.Password autoComplete="new-password" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." />
-          </Form.Item>
-          <Form.Item name="signing_secret" label="签名密钥（可选）"><Input.Password autoComplete="new-password" placeholder="留空保留原签名密钥" /></Form.Item>
-        </> : <>
-          <Form.Item name="credential" label="OpenAI API Key"><Input.Password autoComplete="new-password" placeholder="留空保留原 API Key" /></Form.Item>
-          <Form.Item name="default_model" label="默认模型" rules={[{required:true}]}><Input maxLength={100} /></Form.Item>
-          <Form.Item name="backup_model" label="备用模型"><Input maxLength={100} /></Form.Item>
-          <Form.Item name="model_allowlist" label="模型白名单" rules={[{required:true}]}><Select mode="tags" tokenSeparators={[","]} /></Form.Item>
-          <Form.Item name="max_output_tokens" label="最大输出 Token"><InputNumber min={1} max={16384}/></Form.Item>
-          <Form.Item name="input_price_per_million" label="每百万输入 Token 单价（USD）" extra="需根据供应商当前价格手工核准，未配置时禁止实际调用"><InputNumber min={0} precision={6} style={{width:"100%"}}/></Form.Item>
-          <Form.Item name="output_price_per_million" label="每百万输出 Token 单价（USD）"><InputNumber min={0} precision={6} style={{width:"100%"}}/></Form.Item>
-        </>}
-        <Form.Item name="daily_limit" label="每日次数上限"><InputNumber min={1} max={100000}/></Form.Item>
-        <Form.Item name="monthly_budget_usd" label="月度美元预算（仅 AI 适用）"><InputNumber min={0} max={1000000} precision={2}/></Form.Item>
-        <Form.Item name="enabled" label="是否启用" valuePropName="checked"><Switch /></Form.Item>
-      </Form>
-    </Drawer>
+    <BusinessConfigServiceEditor
+      open={drawer === "connector"}
+      connector={editing}
+      preferredCategory={category === "ai" ? "ai" : undefined}
+      onClose={() => setDrawer(null)}
+      onSaved={() => { setDrawer(null); void refresh(); }}
+    />
     <Drawer title="飞书通知路由" width={520} open={drawer === "route"} onClose={() => setDrawer(null)}
       extra={<Button type="primary" loading={saving} onClick={() => void submitRoute()}>保存路由</Button>}>
       <Form form={routeForm} layout="vertical">
