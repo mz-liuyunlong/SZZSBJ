@@ -7,8 +7,8 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
-from sqlalchemy import exists, select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_response
@@ -133,6 +133,8 @@ def get_evaluation_preview_batch(
 
 
 class ListingEvaluationRunItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     schedule_date_cn: date
     cutoff_date_la: date
@@ -155,6 +157,8 @@ class ListingEvaluationRunList(BaseModel):
 
 
 class ListingFollowUpItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     snapshot_id: UUID
     listing_id: UUID
@@ -201,7 +205,7 @@ def list_evaluation_runs(
         ).all()
     )
     count = session.scalar(
-        select(__import__("sqlalchemy").func.count())
+        select(func.count())
         .select_from(ListingEvaluationRun)
         .where(scoped)
     ) or 0
