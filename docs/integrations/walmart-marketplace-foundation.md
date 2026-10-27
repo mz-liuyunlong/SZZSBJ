@@ -148,3 +148,10 @@ uv run python -c "import app.main"
 - `pagination.py` 提供单操作、只读、全有或全无的 offset/cursor 分页助手。受 `max_pages`、`max_items` 约束，重复游标、结构漂移、分页不完整时拒绝返回成功数据。
 - 此助手不自动推断每个 Walmart 接口的列表位置、总数或 nextCursor，需要逐接口根据官方文档配置 `PageContract`；未配置的 API 不可宣称已完整分页。
 - 不含跨实例速率限制、分布式重试、RAW 发布或 Celery 调度，不代表生产可用。
+
+
+### Feed 状态查询候选（2026-10-27）
+
+- `feeds_catalog.py` 定义两项官方只读接口：`GET /v3/feeds`、`GET /v3/feeds/{feedId}`，通过 `approved_keys` 控制启用。`test_feeds_catalog.py` 覆盖未知字段、必填 `feedId`、上限、特殊字符编码。
+- 核对资料：Walmart US Marketplace 官方 [List all feed statuses](https://developer.walmart.com/us-marketplace/docs/list-all-feed-statuses) 与 [Feed item status API](https://developer.walmart.com/us-marketplace/docs/feed-item-status-api)。
+- 这两项**仅为读取处理状态**，不包括上传 Feed 文件、提交 Feed、复杂 XML/JSON schema、异步轮询任务、下载错误报告。尚未生产联调及正式执行授权。
