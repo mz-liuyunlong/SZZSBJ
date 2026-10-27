@@ -39,12 +39,57 @@ class AttachmentBody(BaseModel):
     content_base64: str = Field(min_length=1, max_length=3_000_000)
 
 
+def _xlsx_text(archive: ZipFile, paths: list[str]) -> str:
+    namespace = XML_NS
+    strings = []
+    if "xl/sharedStrings.xml" in paths:
+        shared = archive.getinfo("xl/sharedStrings.xml")
+        if shared.file_size > 3 * 1024 * 1024:
+            raise AttachmentError("ATTACHMENT_TOO_LARGE")
+        root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+        for entry in root.iter(namespace + "si"):
+            strings.append("".join(node.text or "" for node in entry.iter(namespace + "t")))
+    lines = []
+    sheet_paths = [
+        path for path in paths
+        if re.fullmatch(r"xl/worksheets/sheet[0-9]+\\.xml", path)
+    ][:8]
+    if not sheet_paths:
+        raise AttachmentError("ATTACHMENT_INVALID_OFFICE")
+    for path in sheet_paths:
+        info = archive.getinfo(path)
+        if info.file_size > 3 * 1024 * 1024:
+            raise AttachmentError("ATTACHMENT_TOO_LARGE")
+        root = ET.fromstring(archive.read(path))
+        for row in root.iter(namespace + "row"):
+            values = []
+            for cell in row.findall(namespace + "c"):
+                value_node = cell.find(namespace + "v")
+                if cell.get("t") == "s" and value_node is not None:
+                    try:
+                        value = strings[int(value_node.text or "0")]
+                    except (ValueError, IndexError):
+                        value = ""
+                elif cell.get("t") == "inlineStr":
+                    value = "".join(n.text or "" for n in cell.iter(namespace + "t"))
+                else:
+                    value = value_node.text if value_node is not None else ""
+                values.append(value or "")
+            if values:
+                lines.append(" | ".join(values))
+            if sum(len(line) for line in lines) >= MAX_ATTACHMENT_CONTEXT:
+                return "\\n".join(lines)[:MAX_ATTACHMENT_CONTEXT]
+    return "\\n".join(lines)[:MAX_ATTACHMENT_CONTEXT]
+
+
 def _office_text(data: bytes, suffix: str) -> str:
     try:
         with ZipFile(io.BytesIO(data)) as archive:
             paths = archive.namelist()
             if len(paths) > 500:
                 raise AttachmentError("ATTACHMENT_COMPLEX_ARCHIVE")
+            if suffix == ".xlsx":
+                return _xlsx_text(archive, paths)
             if suffix == ".docx":
                 selected = ["word/document.xml"]
                 tag = DOC_NS + "t"
