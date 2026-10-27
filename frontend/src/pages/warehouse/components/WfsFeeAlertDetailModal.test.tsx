@@ -70,6 +70,8 @@ describe("WfsFeeAlertDetailModal authorization controls", () => {
         canArchiveRequest={false}
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMarkRecovered={vi.fn().mockResolvedValue(undefined)}
+        canMarkRecovered={false}
         onOpenAbandon={vi.fn()}
       />,
     );
@@ -88,6 +90,8 @@ describe("WfsFeeAlertDetailModal authorization controls", () => {
         canArchiveRequest
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMarkRecovered={vi.fn().mockResolvedValue(undefined)}
+        canMarkRecovered={false}
         onOpenAbandon={vi.fn()}
       />,
     );
@@ -125,6 +129,8 @@ describe("WfsFeeAlertDetailModal fee evidence", () => {
         canArchiveRequest={false}
         onClose={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMarkRecovered={vi.fn().mockResolvedValue(undefined)}
+        canMarkRecovered={false}
         onOpenAbandon={vi.fn()}
       />,
     );
