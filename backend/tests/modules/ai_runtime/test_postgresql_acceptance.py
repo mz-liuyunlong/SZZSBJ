@@ -92,10 +92,13 @@ def test_new_migrations_and_skill_connector_isolation(db) -> None:
                 "runtime": instructions,
             },
         )
-    assert resolve_runtime_instructions(
-        select_published_skill(db, one, "keyword_launch")["instructions"],
-        select_published_skill(db, one, "keyword_launch")["runtime_instructions"],
-    ) == "run A"
+    assert (
+        resolve_runtime_instructions(
+            select_published_skill(db, one, "keyword_launch")["instructions"],
+            select_published_skill(db, one, "keyword_launch")["runtime_instructions"],
+        )
+        == "run A"
+    )
     assert select_published_skill(db, two, "keyword_launch")["runtime_instructions"] == "run B"
     assert select_published_skill(db, one, "ai_assistant") is None
 
