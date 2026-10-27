@@ -24,7 +24,15 @@ from app.modules.walmart_monitor.schemas import MonitorTarget, WalmartMonitorRaw
 
 PARSER_VERSION = "walmart-monitor-listing-v1"
 _TRUE_HIJACK = {"hijacked", "reseller_detected", "external_seller", "abnormal"}
-_FALSE_HIJACK = {"clear", "no_reseller", "normal", "owned_only", "recovered"}
+_FALSE_HIJACK = {
+    "clear",
+    "no_reseller",
+    "not_reseller",
+    "normal",
+    "owned_only",
+    "recovered",
+}
+_SUCCESS_OUTCOMES = {"success", "check_ok"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +93,10 @@ class WalmartMonitorProjectionService:
         payload = WalmartMonitorRawEventRequest.model_validate(raw_event.payload_json)
         parsed = (
             payload.final_observation.parsed_result
-            if payload.final_observation.outcome.casefold() == "success"
+            if _is_publishable_observation(
+                payload.final_observation.outcome,
+                payload.final_observation.parsed_result,
+            )
             else {}
         )
         return sum(
@@ -129,7 +140,10 @@ class WalmartMonitorProjectionService:
         )
         if not isinstance(observation_id, UUID):
             return 0
-        if payload.final_observation.outcome.casefold() != "success":
+        if not _is_publishable_observation(
+            payload.final_observation.outcome,
+            payload.final_observation.parsed_result,
+        ):
             # Failure evidence belongs in immutable L3, but must not replace the
             # last successful monitor-owned values exposed to Listing Management.
             return 1
@@ -181,6 +195,10 @@ class WalmartMonitorProjectionService:
             .limit(limit)
         ).all()
         return sum(self.project(row) for row in rows)
+
+
+def _is_publishable_observation(outcome: str, parsed: dict[str, Any]) -> bool:
+    return outcome.casefold() in _SUCCESS_OUTCOMES and bool(parsed)
 
 
 def _text(value: object) -> str | None:
