@@ -204,7 +204,11 @@ class ListingEvaluationPreviewService:
                     WalmartListingInventoryDailyFact.item_id == listing.item_id,
                     WalmartListingInventoryDailyFact.msku.is_not_distinct_from(listing.msku),
                     WalmartListingInventoryDailyFact.snapshot_date_la.between(
-                        cutoff - timedelta(days=max(30, config.inventory_repair.stockout_consecutive_days) - 1), cutoff
+                        cutoff
+                        - timedelta(
+                            days=max(30, config.inventory_repair.stockout_consecutive_days) - 1
+                        ),
+                        cutoff,
                     ),
                 )
             ).all()
@@ -242,10 +246,22 @@ class ListingEvaluationPreviewService:
         lifecycle_reason = None
         stock_valid30 = 0
         known_stages = {
-            "测品期", "打品期", "启动期", "上升期", "稳定期",
-            "下滑期", "断货期", "修复期", "清货期", "已归档",
+            "测品期",
+            "打品期",
+            "启动期",
+            "上升期",
+            "稳定期",
+            "下滑期",
+            "断货期",
+            "修复期",
+            "清货期",
+            "已归档",
         }
-        if listing.fulfillment_type == "1" and not archived and listing.lifecycle_status in known_stages:
+        if (
+            listing.fulfillment_type == "1"
+            and not archived
+            and listing.lifecycle_status in known_stages
+        ):
             sales_by_day = {row.business_date_la: row for row in sales}
             business_days = [
                 BusinessDay(
