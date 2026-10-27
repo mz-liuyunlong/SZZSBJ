@@ -56,8 +56,7 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     assert config.get_main_option("sqlalchemy.url") is None
     assert script.get_heads() == [AI_RUNTIME_HEAD_REVISION]
     assert (
-        script.get_revision(AI_RUNTIME_HEAD_REVISION).down_revision
-        == AI_RUNTIME_PREVIOUS_REVISION
+        script.get_revision(AI_RUNTIME_HEAD_REVISION).down_revision == AI_RUNTIME_PREVIOUS_REVISION
     )
     assert (
         script.get_revision(AI_RUNTIME_PREVIOUS_REVISION).down_revision
