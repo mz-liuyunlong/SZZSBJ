@@ -132,6 +132,8 @@ async def invoke(
     prompt_version: str,
     skill_version_id: str | None = None,
     connector_id: UUID | None = None,
+    visual_parts: list[dict[str, str]] | None = None,
+    visual_token_reserve: int = 0,
 ) -> tuple[str, int, int]:
     if scene not in SCENES or not prompt.strip() or len(prompt) > 10000:
         raise AIUnavailable("AI_REQUEST_INVALID")
@@ -195,7 +197,8 @@ async def invoke(
         if len(prompt) > 10000:
             raise AIUnavailable("AI_CONTEXT_TOO_LONG")
         reservation = (
-            Decimal(len(prompt.encode("utf8"))) * in_rate + Decimal(max_out) * out_rate
+            Decimal(len(prompt.encode("utf8")) + visual_token_reserve) * in_rate
+            + Decimal(max_out) * out_rate
         ) / Decimal(1000000)
         spent = Decimal(
             str(
@@ -224,7 +227,7 @@ async def invoke(
         session.commit()
     try:
         result, inp, out = await generate_text(
-            api_key=credential, model=MODEL, prompt=prompt, max_output_tokens=max_out
+            api_key=credential, model=MODEL, prompt=prompt, max_output_tokens=max_out,\n            visual_parts=visual_parts
         )
     except Exception as exc:
         failed_cost, failure_code = failed_call_reservation(
