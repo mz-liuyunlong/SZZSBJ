@@ -43,7 +43,7 @@ def _cipher() -> Fernet:
             raise DecodoError("DECODO_ENCRYPTION_KEY_INVALID", 503) from None
     try:
         return get_business_fernet()
-    except EncryptionKeyUnavailable as exc:
+    except EncryptionKeyUnavailable:
         raise DecodoError("DECODO_SHARED_ENCRYPTION_KEY_UNAVAILABLE", 503) from None
 
 
