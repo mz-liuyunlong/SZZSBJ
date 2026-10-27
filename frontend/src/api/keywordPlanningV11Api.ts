@@ -115,6 +115,14 @@ export const downloadKeywordInternalWorkbook = async (
   `kw_internal_${runId}.xlsx`,
 );
 
+/** Read-only four-sheet review. Does not authorize Walmart Bulk upload. */
+export const downloadKeywordAiReviewWorkbook = async (
+  jobId: string, account: string,
+): Promise<void> => backendDownload(
+  `${API}/ai-tasks/${encodeURIComponent(jobId)}/four-sheet-workbook?${query(account)}`,
+  `kw_ai_review_${jobId}.xlsx`,
+);
+
 /** Strictly do not enable an official-upload button based on this API. */
 export const canOfficiallyUploadV11 = (): false => false;
 
