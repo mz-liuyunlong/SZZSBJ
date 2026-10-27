@@ -54,10 +54,11 @@ class Operation:
     request_content_type: str = "application/json"
     body_required: bool = False
     media_supported: bool = True
+    mutating: bool | None = None
 
     @property
     def is_write(self) -> bool:
-        return self.method != "GET"
+        return self.method != "GET" if self.mutating is None else self.mutating
 
 
 @dataclass(frozen=True, slots=True)
@@ -436,6 +437,7 @@ class ContractRegistry:
                     has_body=has_body, source="imported-openapi-3", enabled=key in approved_keys,
                     request_schema=body_schema, request_content_type=content_type,
                     body_required=body_required, media_supported=media_supported,
+                    mutating=None,
                 ))
         if approved_keys.difference({operation.key for operation in operations}):
             raise ContractError("WALMART_APPROVED_OPERATION_UNKNOWN")
