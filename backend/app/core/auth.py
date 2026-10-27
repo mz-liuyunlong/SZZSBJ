@@ -21,6 +21,9 @@ PUBLIC_AUTH_ENDPOINT_PATHS: Final[frozenset[str]] = frozenset(
 PUBLIC_GET_ENDPOINT_PREFIXES: Final[frozenset[str]] = frozenset({"/api/media/image-assets/"})
 PREVIEW_AUTH_HEADER: Final = "X-Product-Management-Preview-Token"
 PREVIEW_PRINCIPAL_ID: Final = "frontend-preview"
+WALMART_MONITOR_INGEST_PATH: Final = "/api/integrations/walmart-monitor/raw-events"
+WALMART_MONITOR_PRINCIPAL_ID: Final = "walmart-monitor-service"
+WALMART_MONITOR_WRITE_PERMISSION: Final = "integrations:walmart-monitor:write"
 WALMART_MONITOR_TARGETS_PATH: Final = "/api/integrations/walmart-monitor/targets"
 WALMART_MONITOR_TARGETS_PRINCIPAL_ID: Final = "walmart-monitor-targets-service"
 WALMART_MONITOR_TARGETS_READ_PERMISSION: Final = "integrations:walmart-monitor:read"
@@ -129,7 +132,9 @@ def get_optional_principal(request: Request) -> Principal | None:
     """Return the temporary preview principal or fail closed."""
     authorization = request.headers.get("Authorization")
     path = request.scope.get("path")
-    if request.method == "GET" and path == WALMART_MONITOR_TARGETS_PATH:
+    is_monitor_ingest = request.method == "POST" and path == WALMART_MONITOR_INGEST_PATH
+    is_monitor_targets = request.method == "GET" and path == WALMART_MONITOR_TARGETS_PATH
+    if is_monitor_ingest or is_monitor_targets:
         if not authorization or not authorization.startswith("Bearer "):
             return None
         supplied_token = authorization.removeprefix("Bearer ").strip()
@@ -139,16 +144,25 @@ def get_optional_principal(request: Request) -> Principal | None:
             settings = get_settings()
         except SettingsError:
             return None
-        configured_token = settings.walmart_monitor_targets_token
+        if is_monitor_ingest:
+            configured_token = settings.walmart_monitor_ingest_token
+            configured = settings.walmart_monitor_ingest_configured
+            principal_id = WALMART_MONITOR_PRINCIPAL_ID
+            permission = WALMART_MONITOR_WRITE_PERMISSION
+        else:
+            configured_token = settings.walmart_monitor_targets_token
+            configured = settings.walmart_monitor_targets_configured
+            principal_id = WALMART_MONITOR_TARGETS_PRINCIPAL_ID
+            permission = WALMART_MONITOR_TARGETS_READ_PERMISSION
         if (
-            not settings.walmart_monitor_targets_configured
+            not configured
             or configured_token is None
             or not _constant_time_ascii_equals(supplied_token, configured_token)
         ):
             return None
         return Principal(
-            user_id=WALMART_MONITOR_TARGETS_PRINCIPAL_ID,
-            permissions=frozenset({WALMART_MONITOR_TARGETS_READ_PERMISSION}),
+            user_id=principal_id,
+            permissions=frozenset({permission}),
         )
 
     if authorization and authorization.startswith("Bearer "):
