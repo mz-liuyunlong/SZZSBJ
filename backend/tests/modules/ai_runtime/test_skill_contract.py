@@ -23,9 +23,10 @@ def test_long_skill_reference_requires_compact_runtime_instructions() -> None:
         runtime_instructions="compact rules",
     )
     assert len(valid.instructions) == 118_322
-    assert resolve_runtime_instructions(
-        valid.instructions, valid.runtime_instructions
-    ) == "compact rules"
+    assert (
+        resolve_runtime_instructions(valid.instructions, valid.runtime_instructions)
+        == "compact rules"
+    )
 
 
 def test_short_skill_remains_backward_compatible() -> None:
