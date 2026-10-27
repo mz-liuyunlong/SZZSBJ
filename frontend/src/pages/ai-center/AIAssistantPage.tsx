@@ -20,8 +20,9 @@ type Thread = { id: string; title: string; note: string; draft: string; updatedA
 type UploadItem = Attachment & { file: File; url?: string };
 type Props = { page: NavigationPage; preferenceScope?: string };
 const MAX_FILES = 10;
-const MAX_BYTES = 20 * 1024 * 1024;
-const EXT = new Set('png jpg jpeg webp gif bmp heic heif pdf doc docx xls xlsx csv txt md json ppt pptx xml yaml yml zip html sql py js ts'.split(' '));
+const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 6 * 1024 * 1024;
+const EXT = new Set('docx xlsx csv txt md json pptx xml yaml yml html sql py js ts'.split(' '));
 const QUESTIONS = [
   ['产品利润分析', '分析一个 SKU 最近 7 天的利润变化'],
   ['异常产品定位', '哪些 SKU 利润下降最严重？'],
@@ -115,21 +116,39 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
       next.push({id:identifier,name:file.name,size:file.size,image,file,url});
     }
     setPending(before=>({...before,[chat.id]:next}));
-    if(rejected)void msgApi.warning(rejected+' 个附件不符合格式、20MB 或 10 个的限制');
+    if(rejected)void msgApi.warning(rejected+' 个附件不符合格式、2MB 或 10 个的限制；当前支持文本、CSV、JSON 和 Office 文件，不支持图片或 PDF 解析');
     setAttachmentMenu(false);
   };
-  const send = (preset?:string) => {
-    const text=(preset??chat.draft).trim();
+  const send = async (preset?:string) => {
+    const text=(preset??chat.draft).trim() || (uploads.length ? '请分析附件内容并总结重点' : '');
     if(!text && !uploads.length)return;
-    if(uploads.length){void msgApi.warning('附件解析尚未接通真实后端，请移除附件后发送文字');return;}
     if(sending)return;
+    if(uploads.some(u=>u.size>MAX_BYTES)
+      || uploads.reduce((total,u)=>total+u.size,0)>MAX_TOTAL_BYTES) {
+      void msgApi.warning('附件最多 10 个，单个 2MB、总计 6MB；请移除超限附件');
+      return;
+    }
+    let attachments:{name:string;content_base64:string}[]=[];
+    try {
+      attachments=await Promise.all(uploads.map(async u=>{
+        const bytes=new Uint8Array(await u.file.arrayBuffer());
+        let binary='';
+        for(let i=0;i<bytes.length;i+=32768){
+          binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
+        }
+        return {name:u.name,content_base64:btoa(binary)};
+      }));
+    } catch {
+      void msgApi.error('附件读取失败，请检查文件是否可访问');
+      return;
+    }
     const target=chat.id;
     setSending(true);
     setThreads(before=>before.map(t=>t.id!==target?t:{...t,
       title:t.messages.length===0 && t.title==='新聊天'?text.slice(0,40):t.title,
       draft:'',updatedAt:Date.now(),messages:[...t.messages,{id:id(),role:'user',text}]}));
     void backendRequest<{chat_id:string;response:string}>('/api/ai-runtime/assistant/ask',{
-      method:'POST',body:JSON.stringify({chat_id:serverChats[target]??null,message:text}),
+      method:'POST',body:JSON.stringify({chat_id:serverChats[target]??null,message:text,attachments}),
     }).then(({data})=>{
       setServerChats(before=>({...before,[target]:data.chat_id}));
       setThreads(before=>before.map(t=>t.id!==target?t:{...t,updatedAt:Date.now(),
