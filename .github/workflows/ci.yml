@@ -227,7 +227,7 @@ jobs:
                      now(), now(), false)
               """))
           PY
-          uv run alembic upgrade head
+          uv run alembic upgrade 20261027_0062_sync_anomaly_center
       - name: Verify real PostgreSQL auto-case safety and migration rollback
         working-directory: backend
         run: |
