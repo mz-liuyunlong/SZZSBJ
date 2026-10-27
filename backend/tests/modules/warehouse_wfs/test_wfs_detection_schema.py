@@ -91,6 +91,22 @@ def test_latest_evidence_projection_does_not_label_review_states_current() -> No
     assert "detected_at is not null then 'review_required'" in projection
 
 
+def test_wfs_case_projection_qualifies_overlapping_evidence_columns() -> None:
+    projection = " ".join(WfsFeeAlertService(MagicMock())._case_select_sql().split())
+
+    for column in (
+        "actual_unit_fee",
+        "unit_fee_diff",
+        "latest_settlement_date",
+        "standard_fee_source",
+        "detected_at",
+    ):
+        assert (
+            f"latest_evidence.{column}, ops_wfs_fee_anomaly_cases.{column}"
+            in projection
+        )
+
+
 def test_recovered_amount_must_be_positive_and_cents_precision() -> None:
     assert WfsFeeRecoveredWrite(recovered_amount="0.01").recovered_amount == Decimal("0.01")
     with pytest.raises(ValidationError):
