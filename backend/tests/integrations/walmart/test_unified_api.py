@@ -132,3 +132,76 @@ def test_offline_probe_never_needs_cloud_identity(monkeypatch, capsys) -> None:
     assert main(["--store", "HK2615", "--operation", "wfs_inventory"]) == 0
     assert "PREPARED_NO_NETWORK" in capsys.readouterr().out
     assert main(["--store", "HK2615", "--operation", "wfs_inventory", "--live"]) == 2
+
+
+def test_live_probe_verifies_nonempty_wfs_data_without_exposing_records(
+    monkeypatch, capsys
+) -> None:
+    from app.integrations.walmart import server_probe
+
+    class NonemptyGateway:
+        def execute(self, *, store_code, request, approval_ref):
+            assert store_code == "HK2615"
+            assert request.key == "wfs_inventory"
+            return WalmartResult(
+                status_code=200,
+                data={"payload": {"inventory": [{"sku": "private-fixture-SKU"}]}},
+            )
+
+    registry = load_unified_registry(frozenset({"wfs_inventory"}))
+    client = WalmartClient(
+        registry,
+        allowed_stores=frozenset({"HK2615"}),
+        gateway=NonemptyGateway(),
+    )
+    monkeypatch.setattr(server_probe, "create_scoped_client", lambda *args, **kwargs: client)
+    monkeypatch.setenv("SZZSBJ_WALMART_APPROVED_READ_KEYS", "wfs_inventory")
+    monkeypatch.setenv("SZZSBJ_WALMART_LIVE_MODE", "owner-approved-read-only")
+    monkeypatch.setenv("SZZSBJ_WALMART_ALLOW_PROBE", "1")
+    monkeypatch.setenv("SZZSBJ_WALMART_TEST_STORE", "HK2615")
+    monkeypatch.setenv(
+        "SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE", '{"HK2615":"synthetic-function"}'
+    )
+    assert server_probe.main(
+        ["--store", "HK2615", "--operation", "wfs_inventory", "--live", "--require-data"]
+    ) == 0
+    output = capsys.readouterr().out
+    assert '"token_exchange": "VERIFIED_BY_SUCCESSFUL_GET"' in output
+    assert '"data_status": "NONEMPTY"' in output
+    assert '"record_count": 1' in output
+    assert "private-fixture-SKU" not in output
+
+
+def test_live_probe_empty_list_is_not_data_success(monkeypatch, capsys) -> None:
+    from app.integrations.walmart import server_probe
+
+    registry = load_unified_registry(frozenset({"wfs_inventory"}))
+    client = WalmartClient(
+        registry,
+        allowed_stores=frozenset({"HK2615"}),
+        gateway=FakeGateway(),
+    )
+    monkeypatch.setattr(server_probe, "create_scoped_client", lambda *args, **kwargs: client)
+    monkeypatch.setenv("SZZSBJ_WALMART_APPROVED_READ_KEYS", "wfs_inventory")
+    monkeypatch.setenv("SZZSBJ_WALMART_LIVE_MODE", "owner-approved-read-only")
+    monkeypatch.setenv("SZZSBJ_WALMART_ALLOW_PROBE", "1")
+    monkeypatch.setenv("SZZSBJ_WALMART_TEST_STORE", "HK2615")
+    monkeypatch.setenv(
+        "SZZSBJ_WALMART_SCF_FUNCTION_BY_STORE", '{"HK2615":"synthetic-function"}'
+    )
+    assert server_probe.main(
+        ["--store", "HK2615", "--operation", "wfs_inventory", "--live", "--require-data"]
+    ) == 3
+    output = capsys.readouterr().out
+    assert '"status": "DATA_NOT_VERIFIED"' in output
+    assert '"data_status": "EMPTY"' in output
+    assert '"record_count": 0' in output
+
+
+def test_response_count_does_not_treat_unknown_shape_as_verified() -> None:
+    from app.integrations.walmart.server_probe import _response_record_count
+
+    assert _response_record_count({"payload": {"inventory": [{"sku": "fixture"}]}}) == 1
+    assert _response_record_count({"payload": {"inventory": []}}) == 0
+    assert _response_record_count({"metadata": {"total": 10}}) is None
+    assert _response_record_count({"data": ["unverified-scalar"]}) is None

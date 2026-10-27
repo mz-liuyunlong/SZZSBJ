@@ -48,6 +48,22 @@ uv run python -m app.integrations.walmart.server_probe \
 扩展官方契约：按 `server_probe.py` 中定义的本地契约文件路径变量及 SHA256 校验变量配置，然后按批准的 `operationId` 配置只读 operation key。
 不能把原始 `app.js` 目录直接当作 OpenAPI 契约。
 
+
+## 验证 Access Token 与真实数据
+
+服务器已有单店 SCF / SSM、固定出口、短期腾讯云凭据和明确的只读授权后，使用同一预检入口执行一次真实请求：
+
+```bash
+cd backend
+uv run python -m app.integrations.walmart.server_probe \
+  --store HK2615 --operation wfs_inventory --live --require-data
+```
+
+运行环境必须先按本文件前述要求配置好安全参数。该命令**不能单独拿到 Walmart Client Secret**：长期 Walmart 凭据仍仅由受保护的云函数读取。
+
+通过条件：HTTP 2xx、`token_exchange=VERIFIED_BY_SUCCESSFUL_GET`、`data_status=NONEMPTY` 且 `record_count > 0`。输出只有状态与条数，不含 Access Token、SKU、订单内容或响应正文。返回码 `3` 表示 API 请求成功但数据为空或结构不能被当前只读统计器确认，**不等于凭据失败**。没有 WFS 库存的店铺需要选择一个已知有数据、且已核实响应结构的只读接口，不能用空库存证明授权错误。失败时查看云端安全状态码而不是打印原始请求或密钥。
+
+
 ## 测试
 
 ```bash

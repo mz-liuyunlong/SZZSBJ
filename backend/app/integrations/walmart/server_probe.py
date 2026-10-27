@@ -34,12 +34,64 @@ def _params(path: str | None) -> dict[str, Any]:
     return value
 
 
+
+def _response_record_count(payload: Any) -> int | None:
+    """Count known list envelopes, never print provider records or identifiers."""
+    if isinstance(payload, list):
+        return len(payload) if all(isinstance(item, dict) for item in payload) else None
+    if not isinstance(payload, dict):
+        return None
+    for key in (
+        "payload",
+        "inboundShipments",
+        "shipmentItems",
+        "inventory",
+        "inventoryData",
+        "inventoryLog",
+        "items",
+        "orders",
+        "returns",
+        "list",
+        "data",
+    ):
+        value = payload.get(key)
+        if isinstance(value, list):
+            if all(isinstance(item, dict) for item in value):
+                return len(value)
+            return None
+        if not isinstance(value, dict):
+            continue
+        for nested_key in (
+            "inventory",
+            "inventoryLog",
+            "records",
+            "items",
+            "orders",
+            "returns",
+            "list",
+            "inboundShipments",
+            "shipmentItems",
+        ):
+            rows = value.get(nested_key)
+            if isinstance(rows, list):
+                if all(isinstance(item, dict) for item in rows):
+                    return len(rows)
+                return None
+    return None
+
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Walmart read-only gateway preflight")
     parser.add_argument("--store", help="One store code; required for prepare/live")
     parser.add_argument("--operation", help="Reviewed operation key; required for prepare/live")
     parser.add_argument("--params-file", help="Local JSON file; values never printed")
     parser.add_argument("--live", action="store_true", help="Explicit opt-in to SCF invocation")
+    parser.add_argument(
+        "--require-data",
+        action="store_true",
+        help="Fail unless a known response list contains at least one record",
+    )
     args = parser.parse_args(argv)
     try:
         approved = frozenset(
@@ -57,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if not args.store or not args.operation:
             raise ValueError("WALMART_PROBE_ARGUMENTS_REQUIRED")
+        if args.require_data and not args.live:
+            raise ValueError("WALMART_REQUIRE_DATA_NEEDS_LIVE")
         params = _params(args.params_file)
         if not args.live:
             from app.integrations.walmart.client import WalmartClient
@@ -98,20 +152,33 @@ def main(argv: list[str] | None = None) -> int:
             cloud_api=TencentApiClient(TemporaryTencentIdentity.from_environment()),
         )
         result = WalmartReadAPI(client).call(args.store, args.operation, params=params)
-        # Deliberately never print response body, provider errors or credentials.
+        record_count = _response_record_count(result.data)
+        data_status = (
+            "UNVERIFIED"
+            if record_count is None
+            else "NONEMPTY"
+            if record_count > 0
+            else "EMPTY"
+        )
+        passed = not args.require_data or record_count is not None and record_count > 0
+        # A successful GET demonstrates that the cloud runtime obtained and used
+        # an access token. Never output that token, the response body, or SKU data.
         print(
             json.dumps(
                 {
                     "mode": "live",
-                    "status": "HTTP_SUCCESS",
+                    "status": "HTTP_SUCCESS" if passed else "DATA_NOT_VERIFIED",
                     "operation": args.operation,
                     "store": args.store,
                     "http_status": result.status_code,
+                    "token_exchange": "VERIFIED_BY_SUCCESSFUL_GET",
+                    "data_status": data_status,
+                    "record_count": record_count,
                 },
                 sort_keys=True,
             )
         )
-        return 0
+        return 0 if passed else 3
     except Exception:
         print(
             "WALMART_PROBE_REJECTED: check approvals, contracts and isolated gateway",
