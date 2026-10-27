@@ -4,6 +4,7 @@ All generated snapshots are unpublished candidates. This service never mutates
 mart_listing_management_current and never creates C/D follow-up work before
 publication has an explicit, trusted financial-completeness contract.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
