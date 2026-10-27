@@ -17,6 +17,7 @@ from typing import Any
 
 from app.integrations.walmart.cloud_executor import WalmartCloudExecutor
 from app.integrations.walmart.contracts import ContractRegistry
+from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
@@ -46,7 +47,15 @@ def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
     # Snapshot-only OpenAPI loading; arbitrary URLs and remote $ref are forbidden.
     source = os.environ.get("SZZSBJ_WALMART_CONTRACT_FILE", "")
     if not source:
-        return wfs_registry(approved_keys=approved_keys)
+        wfs_keys = set(wfs_registry().keys())
+        feed_keys = set(feed_monitor_registry().keys())
+        if approved_keys - (wfs_keys | feed_keys):
+            raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
+        combined = (
+            tuple(wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values())
+            + tuple(feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values())
+        )
+        return ContractRegistry(combined)
     path = Path(source)
     expected = os.environ.get("SZZSBJ_WALMART_CONTRACT_SHA256", "").lower()
     if not re.fullmatch(r"[0-9a-f]{64}", expected) or not path.is_file():
