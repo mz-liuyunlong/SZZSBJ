@@ -77,18 +77,26 @@ describe('AI assistant V7 inside existing MainLayout',()=>{
     fireEvent.click(screen.getByRole('button',{name:/^新聊天\s*暂无消息$/}));
     expect(screen.getByRole('textbox',{name:'输入问题'})).toHaveValue('第二个聊天的草稿');
   });
-  it('does not send unparsed attachments to the AI provider',()=>{
+  it('sends parsed text attachments to the backend and rejects unsupported images',async()=>{
     mount();
     const report=new File(['sample'],'report.csv',{type:'text/csv'});
+    Object.defineProperty(report,'arrayBuffer',{
+      value:async()=>new TextEncoder().encode('sample').buffer,
+    });
     fireEvent.change(screen.getByLabelText('选择文件'),{target:{files:[report]}});
     expect(screen.getByText('report.csv')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
-    expect(requestMock).not.toHaveBeenCalled();
-    expect(screen.getByText('report.csv')).toBeInTheDocument();
+    await waitFor(()=>expect(requestMock).toHaveBeenCalledTimes(1));
+    const request=requestMock.mock.calls[0][1] as {body:string};
+    const payload=JSON.parse(request.body) as {
+      message:string;attachments:Array<{name:string;content_base64:string}>
+    };
+    expect(payload.attachments[0]).toEqual({
+      name:'report.csv',content_base64:btoa('sample'),
+    });
+    expect(payload.message).toContain('附件');
     const picture=new File(['mock'],'demo.png',{type:'image/png'});
     fireEvent.change(screen.getByLabelText('选择图片'),{target:{files:[picture]}});
-    expect(screen.getByText('demo.png')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button',{name:'移除 demo.png'}));
     expect(screen.queryByText('demo.png')).not.toBeInTheDocument();
   });
 });
