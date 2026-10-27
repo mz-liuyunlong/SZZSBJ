@@ -566,7 +566,10 @@ def test_data_pages_mart_failure_rolls_back_day_and_continues(
     assert events[1].message_code == "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
     assert events[1].safe_details == {"failed_capture_dates": 0, "pending_financial_dates": 1}
     repository.record_business_anomaly.assert_called_once()
-    assert repository.record_business_anomaly.call_args.kwargs["error_code"] == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
+    assert (
+        repository.record_business_anomaly.call_args.kwargs["error_code"]
+        == "DATA_PAGES_MART_PROFIT_INVARIANT_FAILED"
+    )
 
 
 def test_listing_management_path_does_not_write_sales_profit_marts() -> None:
