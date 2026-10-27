@@ -24,13 +24,31 @@ from app.modules.ai_runtime.v1_review_sheets import (
 from app.modules.keyword_planning.internal_export import HEADERS_01, _make_xlsx
 
 HEADERS_04 = (
-    "前台相关度检查提示", "Record Type", "Operation", "Campaign Id", "Ad Group Id",
-    "Campaign Name", "Ad Group Name", "Start Date", "End Date",
-    "Campaign Targeting Type", "Total Budget", "Daily Budget", "Bid",
-    "Suggested Bid", "Item Id", "Item Name", "Keyword", "Keyword Id",
-    "Match Type", "Status", "Placement Inclusion Type",
-    "Placement Bid Multiplier Type", "Placement Bid Multiplier",
-    "Platform Bid Multiplier Type", "Platform Bid Multiplier",
+    "前台相关度检查提示",
+    "Record Type",
+    "Operation",
+    "Campaign Id",
+    "Ad Group Id",
+    "Campaign Name",
+    "Ad Group Name",
+    "Start Date",
+    "End Date",
+    "Campaign Targeting Type",
+    "Total Budget",
+    "Daily Budget",
+    "Bid",
+    "Suggested Bid",
+    "Item Id",
+    "Item Name",
+    "Keyword",
+    "Keyword Id",
+    "Match Type",
+    "Status",
+    "Placement Inclusion Type",
+    "Placement Bid Multiplier Type",
+    "Placement Bid Multiplier",
+    "Platform Bid Multiplier Type",
+    "Platform Bid Multiplier",
 )
 SHEET_NAMES = (
     "01_最终投放总表",
@@ -78,18 +96,37 @@ class V1ConfirmedConfig:
 
 
 def _structure(
-    hint: str, record: str, campaign: str, group: str, *,
-    keyword: str = "", match: str = "", bid: str = "", item: str = "",
-    budget: str = "", start: str = "", targeting: str = "",
+    hint: str,
+    record: str,
+    campaign: str,
+    group: str,
+    *,
+    keyword: str = "",
+    match: str = "",
+    bid: str = "",
+    item: str = "",
+    budget: str = "",
+    start: str = "",
+    targeting: str = "",
 ) -> tuple[str, ...]:
     values = dict.fromkeys(HEADERS_04, "")
-    values.update({
-        "前台相关度检查提示": hint, "Record Type": record, "Operation": "Create",
-        "Campaign Name": campaign, "Ad Group Name": group,
-        "Start Date": start, "Campaign Targeting Type": targeting,
-        "Daily Budget": budget, "Bid": bid, "Item Id": item,
-        "Keyword": keyword, "Match Type": match, "Status": "Enabled",
-    })
+    values.update(
+        {
+            "前台相关度检查提示": hint,
+            "Record Type": record,
+            "Operation": "Create",
+            "Campaign Name": campaign,
+            "Ad Group Name": group,
+            "Start Date": start,
+            "Campaign Targeting Type": targeting,
+            "Daily Budget": budget,
+            "Bid": bid,
+            "Item Id": item,
+            "Keyword": keyword,
+            "Match Type": match,
+            "Status": "Enabled",
+        }
+    )
     return tuple(values[key] for key in HEADERS_04)
 
 
@@ -156,41 +193,72 @@ def create_v1_workbook(
         raise ValueError("V1_INCONSISTENT_SELECTION")
     if any(grade == "P2" for grade, _ in exact) and (
         sum(grade in ("P0", "P1") for grade, _ in exact)
-        + sum(row[col["投放等级"]] in ("P0", "P1") and
-              row[col["是否进入手动Exact"]] != "是" for row in rows_01)
+        + sum(
+            row[col["投放等级"]] in ("P0", "P1") and row[col["是否进入手动Exact"]] != "是"
+            for row in rows_01
+        )
         > 20
     ):
         raise ValueError("V1_P2_BEFORE_PRIORITY_SELECTION")
     if root_count > 5 or tail_count > 15:
         raise ValueError("V1_BROAD_ROLE_QUOTA_EXCEEDED")
-    start = config.start_date or datetime.now(ZoneInfo("America/Los_Angeles")).strftime(
-        "%m/%d/%Y"
-    )
+    start = config.start_date or datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m/%d/%Y")
     manual = f"{config.sku}-手动-{config.owner_initials}"
     automatic = f"{config.sku}-自动-{config.owner_initials}"
     rows04 = [
-        _structure("【结构行】检查Campaign、日期、预算", "Campaign", manual, "",
-                   budget=str(config.manual_budget), start=start, targeting="Manual"),
+        _structure(
+            "【结构行】检查Campaign、日期、预算",
+            "Campaign",
+            manual,
+            "",
+            budget=str(config.manual_budget),
+            start=start,
+            targeting="Manual",
+        ),
         _structure("【结构行】检查Campaign、Ad Group命名", "Ad Group", manual, "Exact"),
     ]
     for grade, kw in exact:
-        rows04.append(_structure(
-            f"【{grade} Exact】上传前在Walmart前台确认同类商品", "Keyword",
-            manual, "Exact", keyword=kw, match="exact", bid=str(config.manual_bid),
-            item=config.item_id,
-        ))
+        rows04.append(
+            _structure(
+                f"【{grade} Exact】上传前在Walmart前台确认同类商品",
+                "Keyword",
+                manual,
+                "Exact",
+                keyword=kw,
+                match="exact",
+                bid=str(config.manual_bid),
+                item=config.item_id,
+            )
+        )
     rows04.append(_structure("【结构行】检查Campaign、Ad Group命名", "Ad Group", manual, "Broad"))
     for recorded_role, kw in broad:
         role = "Broad词根" if recorded_role == "root" else "Broad长尾"
-        rows04.append(_structure(
-            f"【{role}】前台检查相关度及跑偏风险", "Keyword", manual, "Broad",
-            keyword=kw, match="broad", bid=str(config.manual_bid), item=config.item_id,
-        ))
-    rows04.extend([
-        _structure("【auto】检查Item ID与预算", "Campaign", automatic, "",
-                   budget=str(config.auto_budget), start=start, targeting="auto"),
-        _structure("【auto】检查Item ID与预算", "Ad Group", automatic, "auto"),
-    ])
+        rows04.append(
+            _structure(
+                f"【{role}】前台检查相关度及跑偏风险",
+                "Keyword",
+                manual,
+                "Broad",
+                keyword=kw,
+                match="broad",
+                bid=str(config.manual_bid),
+                item=config.item_id,
+            )
+        )
+    rows04.extend(
+        [
+            _structure(
+                "【auto】检查Item ID与预算",
+                "Campaign",
+                automatic,
+                "",
+                budget=str(config.auto_budget),
+                start=start,
+                targeting="auto",
+            ),
+            _structure("【auto】检查Item ID与预算", "Ad Group", automatic, "auto"),
+        ]
+    )
     rows04.append(
         _structure(
             "【auto】检查Item ID与默认竞价",
