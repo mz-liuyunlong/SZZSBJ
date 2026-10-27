@@ -170,6 +170,35 @@ describe("WFS recovered amount action", () => {
     expect(onMarkRecovered).not.toHaveBeenCalled();
   });
 
+  it("submits the actual recovered amount and optional note", async () => {
+    const onMarkRecovered = vi.fn().mockResolvedValue(undefined);
+    render(
+      <WfsFeeAlertDetailModal
+        row={{ ...wfsFeeAlertRows[0], status: "跟进中" }}
+        currency="USD"
+        canFollow={false}
+        canMarkRecovered
+        canArchiveRequest={false}
+        onClose={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMarkRecovered={onMarkRecovered}
+        onOpenAbandon={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "标记已追回" }));
+    fireEvent.change(screen.getByLabelText("实际追回金额（USD）"), { target: { value: "12.34" } });
+    fireEvent.change(screen.getByLabelText("追回说明（选填）"), { target: { value: "沃尔玛已赔付" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认已追回" }));
+
+    await waitFor(() => {
+      expect(onMarkRecovered).toHaveBeenCalledWith({
+        recoveredAmount: 12.34,
+        latestFollowNote: "沃尔玛已赔付",
+      });
+    });
+  });
+
   it("does not show the recovery action without permission or outside following status", () => {
     const common = {
       currency: "USD" as const,
