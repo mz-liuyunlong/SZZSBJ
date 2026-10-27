@@ -53,10 +53,15 @@ def test_write_stops_before_invocation_without_approval() -> None:
 
 
 def test_rejects_wrong_store() -> None:
-    fake = FakeInvoker({
-        "success": True, "store_code": "HK2614", "api_key": "getInventory",
-        "status_code": 200, "data": {},
-    })
+    fake = FakeInvoker(
+        {
+            "success": True,
+            "store_code": "HK2614",
+            "api_key": "getInventory",
+            "status_code": 200,
+            "data": {},
+        }
+    )
     with pytest.raises(GatewayRejected, match="WALMART_GATEWAY_SCOPE_MISMATCH"):
         ProtectedScfBridge(fake).execute(store_code="HK2615", request=request(), approval_ref=None)
 
