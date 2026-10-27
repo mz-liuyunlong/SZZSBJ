@@ -177,9 +177,11 @@ def test_wfs_case_projection_executes_on_postgresql(engine: Engine) -> None:
     projection = WfsFeeAlertService(Session(engine))._case_select_sql()
     with engine.connect() as connection:
         connection.execute(
-            text(projection + " where false order by case status "
-                 "when 'following' then 1 else 2 end, "
-                 "estimated_recover_amount desc, updated_at desc limit 0")
+            text(
+                projection + " where false order by case status "
+                "when 'following' then 1 else 2 end, "
+                "estimated_recover_amount desc, updated_at desc limit 0"
+            )
         ).all()
         connection.execute(
             text(projection + " where false and id=:case_id"),
