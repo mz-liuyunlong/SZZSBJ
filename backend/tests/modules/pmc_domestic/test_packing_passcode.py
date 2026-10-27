@@ -4,7 +4,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.api import ApiError
-from app.modules.pmc_domestic.packing_passcode import reset_passcode_failures, verify_domestic_passcode
+from app.modules.pmc_domestic.packing_passcode import (
+    reset_passcode_failures,
+    verify_domestic_passcode,
+)
 
 PASSPHRASE = "sample-passphrase"
 DIGEST = hashlib.sha256(PASSPHRASE.encode("utf-8")).hexdigest()
@@ -15,7 +18,9 @@ def _configured(monkeypatch):
     reset_passcode_failures()
     monkeypatch.setattr(
         "app.modules.pmc_domestic.packing_passcode.get_settings",
-        lambda: SimpleNamespace(pmc_domestic_passcode_sha256=SimpleNamespace(get_secret_value=lambda: DIGEST)),
+        lambda: SimpleNamespace(
+            pmc_domestic_passcode_sha256=SimpleNamespace(get_secret_value=lambda: DIGEST)
+        ),
     )
     yield
     reset_passcode_failures()

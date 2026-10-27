@@ -1,3 +1,13 @@
+# Develop CI 修复交接（2026-10-27）
+
+本轮基准 aa7637b，负责人授权复用 develop、提交和推送、创建 develop → main 草稿 PR。禁止合并、部署或生产数据库操作。
+
+修复内容：局部 Ruff 格式和导入排序、React 组件模块导出及 hooks 依赖、文档占位名称；develop push 加入现有 CI。采购备注和国内仓草稿号的表结构检查复用 Session 事务连接，避免单连接池中意外回滚。历史 Gate 3 测试合并已有 0055 加列结果再对照当前 ORM；不修改历史迁移语义或 revision ID。
+
+本地已运行：前端 lint、TypeScript/Vite 构建通过，Vitest 68 文件 / 304 tests passed；后端 Ruff lint/format 通过，采购覆盖、迁移对照和备注回归 15 passed，规则检查通过。首次 Windows 全量后端为 1769 passed / 13 failed / 118 skipped：4 项真实问题已修复，9 项涉及 POSIX 文件权限，保留断言等待 Linux CI。远端结果须以本轮提交对应的实际 Actions 记录为准，不能将本地结果替代远端验收。
+
+以下为历史交接：
+
 # 国内仓入库批次看板 M1 交接
 
 日期：2026-10-20。目标分支：dev（用户明确要求，不创建新分支/worktree）。基准46894605564da0ab0823dc0abe31ea12b32f4641。

@@ -91,13 +91,15 @@ class InboundReadService:
         attach_draft_numbers(self.repository.session, items, accounts)
         attach_board_item_ids(self.repository.session, items, accounts)
         attach_board_owners(self.repository.session, items, accounts)
-        return InboundList(items=items, total=total), self._with_owners(self._meta(
-            accounts,
-            query,
-            page=query.page,
-            page_size=query.page_size,
-            total=total,
-        ))
+        return InboundList(items=items, total=total), self._with_owners(
+            self._meta(
+                accounts,
+                query,
+                page=query.page,
+                page_size=query.page_size,
+                total=total,
+            )
+        )
 
     def summary(self, query: InboundFilter, accounts: frozenset[str]):
         rows = self.repository.all(query, accounts)
@@ -141,9 +143,9 @@ class InboundReadService:
         attach_draft_numbers(self.repository.session, [item], accounts)
         attach_board_item_ids(self.repository.session, [item], accounts)
         attach_board_owners(self.repository.session, [item], accounts)
-        return item, self._with_owners(self._meta(
-            accounts, InboundFilter(warehouse_id=[row.source_warehouse_id])
-        ))
+        return item, self._with_owners(
+            self._meta(accounts, InboundFilter(warehouse_id=[row.source_warehouse_id]))
+        )
 
     def trace(self, identity: UUID, accounts: frozenset[str]):
         row = self.repository.detail(identity, accounts)
@@ -155,7 +157,9 @@ class InboundReadService:
         attach_board_owners(self.repository.session, [batch], accounts)
         return InboundTrace(
             batch=batch, inbound_events=row.payload_json["inbound_events"]
-        ), self._with_owners(self._meta(
-            accounts,
-            InboundFilter(warehouse_id=[row.source_warehouse_id]),
-        ))
+        ), self._with_owners(
+            self._meta(
+                accounts,
+                InboundFilter(warehouse_id=[row.source_warehouse_id]),
+            )
+        )

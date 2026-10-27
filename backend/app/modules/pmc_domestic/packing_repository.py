@@ -134,9 +134,9 @@ class PackingRepository:
                     Listing.fulfillment_type.in_(["0", "1"]),
                 )
             ):
-                listing_by_item[
-                    (listing.source_account_ref, listing.store_id, listing.item_id)
-                ] = listing
+                listing_by_item[(listing.source_account_ref, listing.store_id, listing.item_id)] = (
+                    listing
+                )
         board_rows = [_PackingBoardRow(b) for b, _ in sources]
         attach_board_item_ids(s, board_rows, frozenset(accounts))
         identities_by_board = {
@@ -325,7 +325,8 @@ class PackingRepository:
                 token = {
                     k: v
                     for k, v in raw.items()
-                    if k not in ("overdue", "store_name", "waiting_days", "warehouse_name", "draft_nos")
+                    if k
+                    not in ("overdue", "store_name", "waiting_days", "warehouse_name", "draft_nos")
                 }
                 token["listing_hash"] = listing.business_hash if listing else None
                 raw["candidate_version"] = fingerprint(token)

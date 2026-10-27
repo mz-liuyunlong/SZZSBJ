@@ -640,14 +640,19 @@ class PmcPurchaseDwsRefresher:
         line_texts = line_texts_for(ods_remarks, line, fallback_item_id=line.remark_item_id)
         store_id = line.store_id or (plan.store_id if plan else None)
         verified = {
-            item: value for (store, item), value in listings.by_item.items()
-            if store == store_id and (value.local_sku or '').strip() == (line.sku or '').strip()
+            item: value
+            for (store, item), value in listings.by_item.items()
+            if store == store_id and (value.local_sku or "").strip() == (line.sku or "").strip()
         }
         remark_ids = validated_remark_item_ids(plan_texts, line_texts, list(verified))
         selected_ids = remark_ids or list(verified)
         identities = [
-            {"item_id": item, "msku": verified[item].msku, "gtin": verified[item].gtin,
-             "fulfillment_type": verified[item].fulfillment_type}
+            {
+                "item_id": item,
+                "msku": verified[item].msku,
+                "gtin": verified[item].gtin,
+                "fulfillment_type": verified[item].fulfillment_type,
+            }
             for item in selected_ids
         ]
         if identities:
@@ -662,7 +667,7 @@ class PmcPurchaseDwsRefresher:
         wfs_flag = wfs_not_ready(attribution.source, listing.fulfillment_type if listing else None)
         if identities:
             wfs_flag = any(
-                wfs_not_ready(attribution.source, item['fulfillment_type']) is True
+                wfs_not_ready(attribution.source, item["fulfillment_type"]) is True
                 for item in identities
             )
         if remark_conflict:
@@ -684,14 +689,21 @@ class PmcPurchaseDwsRefresher:
             "listing_matched": listing is not None,
             "product_matched": product is not None,
             "item_identities": identities,
-            **{f"identity_search_{field}": [item[field] for item in identities if item[field]]
-               for field in ("item_id", "gtin", "msku")},
-            "item_id_evidence": {"rule": "purchase.remark.merge.v1", "plan_sn": line.plan_sn,
-                                 "order_sn": line.order_sn, "order_item_id": line.order_item_id,
-                                 "unverified_ids": [
-                                     item for item in extract_remark_item_ids(
-                                         [*line_texts, *plan_texts]
-                                     ) if item not in verified]},
+            **{
+                f"identity_search_{field}": [item[field] for item in identities if item[field]]
+                for field in ("item_id", "gtin", "msku")
+            },
+            "item_id_evidence": {
+                "rule": "purchase.remark.merge.v1",
+                "plan_sn": line.plan_sn,
+                "order_sn": line.order_sn,
+                "order_item_id": line.order_item_id,
+                "unverified_ids": [
+                    item
+                    for item in extract_remark_item_ids([*line_texts, *plan_texts])
+                    if item not in verified
+                ],
+            },
         }
         row = DwsPurchaseBoard(
             id=uuid4(),

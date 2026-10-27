@@ -84,6 +84,7 @@ def _scheduled_statement_window(today: date) -> tuple[datetime, datetime]:
         datetime.combine(end_date, time.min, tzinfo=DOMESTIC_SCHEDULE_ZONE),
     )
 
+
 ODS_MODELS: dict[str, tuple[type[DomesticOdsRow], str]] = {
     "domesticWarehouseStatement": (DomesticWarehouseStatement, "statement_id"),
     "domesticWarehouseList": (LingxingDomesticWarehouseOds, "source_warehouse_id"),

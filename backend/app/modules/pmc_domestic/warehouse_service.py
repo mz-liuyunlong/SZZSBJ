@@ -264,7 +264,9 @@ class WarehouseService:
                     completion_blocked_reasons=reasons,
                 )
             )
-        attach_draft_numbers(self.session, result, frozenset(order.source_account_ref for order in orders))
+        attach_draft_numbers(
+            self.session, result, frozenset(order.source_account_ref for order in orders)
+        )
         return result
 
     def list(self, q, accounts):

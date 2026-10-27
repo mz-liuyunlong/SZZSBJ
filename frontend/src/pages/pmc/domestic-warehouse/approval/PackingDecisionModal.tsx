@@ -3,7 +3,7 @@ import PackingCustomsSelect from "./PackingCustomsSelect";
 import { Alert, Button, Descriptions, Form, Input, InputNumber, Modal, Select, Typography } from "antd";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DOMESTIC_APPROVER_NAMES } from "./PackingApproveConfirmModal";
+import { DOMESTIC_APPROVER_NAMES } from "./packingApproveConfirm";
 import { getPackingEditOptions, approvalErrorText, type ApprovalCandidate, type DecisionKind, type ListingChoice } from "./packingApprovalApi";
 export interface DecisionValues { qty?: number; customs: "default" | "declare" | "skip"; rwh?: string; note?: string; target?: string; edit_reason?: string; operatorName?: string; passcode?: string }
 const choiceKey = (r: ListingChoice) => JSON.stringify([r.store_id, r.item_id, r.listing_version]);

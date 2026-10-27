@@ -18,30 +18,38 @@ def test_one_owner_resolves_and_several_identities_conflict():
 def test_attach_reads_the_current_owner_for_the_row_sku():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as conn:
-        conn.execute(text(
-            "create table dwd_lingxing_sku_identity_index ("
-            "id varchar, provider varchar, source_account_ref varchar, "
-            "lingxing_sku_id varchar, lingxing_sku_code varchar, is_active integer)"
-        ))
-        conn.execute(text(
-            "create table dwd_lingxing_sku_product_info_current ("
-            "identity_id varchar, provider varchar, source_account_ref varchar, "
-            "lingxing_sku_id varchar, owner_uid varchar, owner_name varchar)"
-        ))
-        conn.execute(text(
-            "insert into dwd_lingxing_sku_identity_index values "
-            "('i1','lingxing','primary','sku-1','YC00347',1),"
-            "('i2','lingxing','primary','sku-2','YC00999',1),"
-            "('i3','lingxing','primary','sku-3','YC00999',1),"
-            "('i4','lingxing','other','sku-4','YC00347',1)"
-        ))
-        conn.execute(text(
-            "insert into dwd_lingxing_sku_product_info_current values "
-            "('i1','lingxing','primary','sku-1','u1','曾洁茹'),"
-            "('i2','lingxing','primary','sku-2','u2','甲'),"
-            "('i3','lingxing','primary','sku-3','u3','乙'),"
-            "('i4','lingxing','other','sku-4','u9','别人')"
-        ))
+        conn.execute(
+            text(
+                "create table dwd_lingxing_sku_identity_index ("
+                "id varchar, provider varchar, source_account_ref varchar, "
+                "lingxing_sku_id varchar, lingxing_sku_code varchar, is_active integer)"
+            )
+        )
+        conn.execute(
+            text(
+                "create table dwd_lingxing_sku_product_info_current ("
+                "identity_id varchar, provider varchar, source_account_ref varchar, "
+                "lingxing_sku_id varchar, owner_uid varchar, owner_name varchar)"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into dwd_lingxing_sku_identity_index values "
+                "('i1','lingxing','primary','sku-1','YC00347',1),"
+                "('i2','lingxing','primary','sku-2','YC00999',1),"
+                "('i3','lingxing','primary','sku-3','YC00999',1),"
+                "('i4','lingxing','other','sku-4','YC00347',1)"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into dwd_lingxing_sku_product_info_current values "
+                "('i1','lingxing','primary','sku-1','u1','曾洁茹'),"
+                "('i2','lingxing','primary','sku-2','u2','甲'),"
+                "('i3','lingxing','primary','sku-3','u3','乙'),"
+                "('i4','lingxing','other','sku-4','u9','别人')"
+            )
+        )
     known = _row("primary", "YC00347")
     conflict = _row("primary", "YC00999")
     missing = _row("primary", "YC00000")

@@ -20,7 +20,9 @@ def reset_passcode_failures() -> None:
         _failures.clear()
 
 
-def verify_domestic_passcode(operator_name: str | None, passcode: str | None, actor_id: str) -> None:
+def verify_domestic_passcode(
+    operator_name: str | None, passcode: str | None, actor_id: str
+) -> None:
     now = time.monotonic()
     with _lock:
         recent = [stamp for stamp in _failures.get(actor_id, []) if now - stamp < _WINDOW_SECONDS]

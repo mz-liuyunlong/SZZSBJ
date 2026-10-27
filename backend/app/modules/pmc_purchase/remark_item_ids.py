@@ -97,8 +97,9 @@ class OdsRemarkTexts:
 def load_ods_remark_texts(session: Session, account: str) -> OdsRemarkTexts | None:
     """Latest ODS remark texts for one account, or ``None`` when ODS tables are absent."""
 
-    bind = session.get_bind()
-    inspector = inspect(bind)
+    # Reuse the transaction connection: an engine-level inspector can roll back
+    # pending writes when a single-connection pool returns the same connection.
+    inspector = inspect(session.connection())
     if not inspector.has_table(LingxingPurchasePlanOds.__tablename__):
         return None
     if not inspector.has_table(LingxingPurchaseOrderItemOds.__tablename__):

@@ -51,9 +51,7 @@ def resolve_store_item_ids(
     same_sku = [item for item in listings if (item[2] or "").strip() == sku]
     remark_ids = _remark_ids(row_store, lines, plans)
     if row_store:
-        remark_ids = validated_remark_item_ids(
-            [], remark_ids, _ids_for_store(same_sku, row_store)
-        )
+        remark_ids = validated_remark_item_ids([], remark_ids, _ids_for_store(same_sku, row_store))
         if remark_ids:
             return [
                 (

@@ -83,49 +83,63 @@ def test_blank_store_uses_a_listing_only_when_the_sku_has_one_store():
 def test_attach_reads_current_remarks_for_the_row_store():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as conn:
-        conn.execute(text(
-            "create table ods_lingxing_purchase_order_items ("
-            "source_account_ref varchar, order_sn varchar, sku varchar, item_id varchar, "
-            "plan_sn varchar, sid varchar, remark varchar, payload_json varchar, "
-            "is_delete integer, observed_at varchar, id varchar)"
-        ))
-        conn.execute(text(
-            "create table ods_lingxing_purchase_plans ("
-            "source_account_ref varchar, plan_sn varchar, sid varchar, remark varchar, "
-            "plan_remark varchar, payload_json varchar, observed_at varchar, id varchar)"
-        ))
-        conn.execute(text(
-            "create table dim_walmart_listings ("
-            "source_account_ref varchar, store_id varchar, item_id varchar, "
-            "local_sku varchar, gtin varchar)"
-        ))
+        conn.execute(
+            text(
+                "create table ods_lingxing_purchase_order_items ("
+                "source_account_ref varchar, order_sn varchar, sku varchar, item_id varchar, "
+                "plan_sn varchar, sid varchar, remark varchar, payload_json varchar, "
+                "is_delete integer, observed_at varchar, id varchar)"
+            )
+        )
+        conn.execute(
+            text(
+                "create table ods_lingxing_purchase_plans ("
+                "source_account_ref varchar, plan_sn varchar, sid varchar, remark varchar, "
+                "plan_remark varchar, payload_json varchar, observed_at varchar, id varchar)"
+            )
+        )
+        conn.execute(
+            text(
+                "create table dim_walmart_listings ("
+                "source_account_ref varchar, store_id varchar, item_id varchar, "
+                "local_sku varchar, gtin varchar)"
+            )
+        )
         old_payload = json.dumps(
             {"update_time": "2026-01-01", "item_purchase_remark": "ITEMID:11111111111"}
         )
-        new_payload = json.dumps({
-            "update_time": "2026-02-01",
-            "item_purchase_remark": "20347351964",
-            "relation_purchase_plan": ["PP1"],
-        })
+        new_payload = json.dumps(
+            {
+                "update_time": "2026-02-01",
+                "item_purchase_remark": "20347351964",
+                "relation_purchase_plan": ["PP1"],
+            }
+        )
         conn.execute(
-            text("insert into ods_lingxing_purchase_order_items values "
-                 "('primary','PO1','YC1','L1','PP1','S1',:old,:payload,0,'2026-01-01','old'),"
-                 "('primary','PO1','YC1','L1','PP1','S1','ITEMID:20403609913',:new_payload,0,'2026-02-01','new'),"
-                 "('primary','PO1','YC1','L2','PP2','S2',null,null,0,'2026-02-01','hk'),"
-                 "('other','PO1','YC1','L9',null,'S1','12345678901',null,0,'2026-02-01','other')"),
+            text(
+                "insert into ods_lingxing_purchase_order_items values "
+                "('primary','PO1','YC1','L1','PP1','S1',:old,:payload,0,'2026-01-01','old'),"
+                "('primary','PO1','YC1','L1','PP1','S1','ITEMID:20403609913',:new_payload,0,'2026-02-01','new'),"
+                "('primary','PO1','YC1','L2','PP2','S2',null,null,0,'2026-02-01','hk'),"
+                "('other','PO1','YC1','L9',null,'S1','12345678901',null,0,'2026-02-01','other')"
+            ),
             {"old": "old", "payload": old_payload, "new_payload": new_payload},
         )
-        conn.execute(text(
-            "insert into ods_lingxing_purchase_plans values "
-            "('primary','PP1','S1',null,'22222222222',null,'2026-02-01','p1')"
-        ))
-        conn.execute(text(
-            "insert into dim_walmart_listings values "
-            "('primary','S1','20403609913','YC1','004'),"
-            "('primary','S1','20347351964','YC1',null),"
-            "('primary','S1','22222222222','YC1','005'),"
-            "('primary','S2','20067107122','YC1','006')"
-        ))
+        conn.execute(
+            text(
+                "insert into ods_lingxing_purchase_plans values "
+                "('primary','PP1','S1',null,'22222222222',null,'2026-02-01','p1')"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into dim_walmart_listings values "
+                "('primary','S1','20403609913','YC1','004'),"
+                "('primary','S1','20347351964','YC1',null),"
+                "('primary','S1','22222222222','YC1','005'),"
+                "('primary','S2','20067107122','YC1','006')"
+            )
+        )
     row = type("Row", (), {})()
     row.source_account_ref = "primary"
     row.sku = "YC1"

@@ -106,12 +106,16 @@ class PmcPurchaseReadRepository:
             if query.search_type in ("item_id", "gtin", "msku"):
                 # Search only the dedicated identity list, never arbitrary lineage evidence.
                 from json import dumps
+
                 collection = cast(
                     b.source_lineage_json[f"identity_search_{query.search_type}"], Text
                 )
-                clauses.append(or_(scalar_match, *[
-                    collection.contains(dumps(value), autoescape=True) for value in values
-                ]))
+                clauses.append(
+                    or_(
+                        scalar_match,
+                        *[collection.contains(dumps(value), autoescape=True) for value in values],
+                    )
+                )
             else:
                 clauses.append(scalar_match)
         if query.item_id_source:

@@ -10,9 +10,9 @@
 
 - SSH 已连通，主机名 VM-0-6-ubuntu。
 - 8443 的 API 由 Nginx 转发到 127.0.0.1:8010。
-- 后端服务 szzsbj-backend，进程核查时 PID 11318。
-- 实际工作目录：`/opt/szzsbj/releases/1a9a44778effd4c8e4960b7b8d4f55aaa74e1314/source/backend`。
-- 使用进程已加载的环境，不输出凭据；数据库目标为服务器 127.0.0.1:5432/szzsbj_app，schema public，应用角色 szzsbj_app_user。
+- 后端服务 <project>-backend，进程核查时 PID 11318。
+- 实际工作目录：`/opt/<project>/releases/1a9a44778effd4c8e4960b7b8d4f55aaa74e1314/source/backend`。
+- 使用进程已加载的环境，不输出凭据；数据库目标为服务器 127.0.0.1:5432/<project>_app，schema public，应用角色 <project>_app_user。
 - GET `/api/pmc/domestic/inbound-batches` 查询 gov_domestic_board_publications 当前 published 版本及 mart_domestic_inbound_batch_board。
 - W1 写 ods_lingxing_domestic_batches，W3 写 ods_lingxing_domestic_warehouse_statements。采集后还需发布，不是采集成功即页面可见。
 
@@ -34,7 +34,7 @@
 
 ## 备份与结果
 
-同步前全库备份：`/opt/szzsbj/backups/pmc-inbound-sync-20261023T120110Z/before-sync.dump`，3551385597 字节，SHA256 `ad546833d5817511f801af0838ec5a020ed765415d8046bccc4546530f0ecd06`。目录权限 700、备份文件权限 600。pg_restore 目录校验通过；未做全库恢复演练。备份留在服务器，没有下载到本地。
+同步前全库备份：`/opt/<project>/backups/pmc-inbound-sync-20261023T120110Z/before-sync.dump`，3551385597 字节，SHA256 `ad546833d5817511f801af0838ec5a020ed765415d8046bccc4546530f0ecd06`。目录权限 700、备份文件权限 600。pg_restore 目录校验通过；未做全库恢复演练。备份留在服务器，没有下载到本地。
 
 原一次性 runner 实际执行于 2026-10-23 20:17:31 至 20:18:00（Asia/Shanghai），未修改部署代码：
 

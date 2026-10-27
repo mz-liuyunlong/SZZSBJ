@@ -316,7 +316,10 @@ function SyncTaskLogDrawer({
   const workItemError = errorText(workItemsQuery.error);
   const rawRefError = errorText(rawRefsQuery.error);
 
-  const taskLogs = logQuery.data?.items ?? (open ? [] : logs);
+  const taskLogs = useMemo(
+    () => logQuery.data?.items ?? (open ? [] : logs),
+    [logQuery.data?.items, open, logs],
+  );
   const errorMessage = logQuery.error instanceof Error ? logQuery.error.message : null;
 
   const filteredLogs = taskLogs;

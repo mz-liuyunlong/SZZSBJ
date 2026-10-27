@@ -70,7 +70,7 @@ const normalizeColumnKeys = (keys: string[]) => {
 
 /** Insert newly shipped default columns into saved layouts (e.g. 草稿号 after 采购单号). */
 const mergeNewDefaultColumns = (keys: string[]) => {
-  let merged = normalizeColumnKeys(keys);
+  const merged = normalizeColumnKeys(keys);
   if (!merged.includes("draftNo")) {
     const orderSnIndex = merged.indexOf("purchaseOrderSn");
     merged.splice(orderSnIndex >= 0 ? orderSnIndex + 1 : 0, 0, "draftNo");

@@ -10,14 +10,13 @@ from app.modules.pmc_purchase.remark_item_ids import (
 
 def test_both_remarks_are_kept_in_legacy_line_first_order() -> None:
     assert item_ids_plan_then_line(["ITEMID:11111111111"], ["ITEMID:22222222222"]) == [
-        "22222222222", "11111111111"
+        "22222222222",
+        "11111111111",
     ]
 
 
 def test_line_remark_is_used_when_plan_has_no_eleven_digit_id() -> None:
-    assert item_ids_plan_then_line(["00465313943732"], ["ITEMID:20347351964"]) == [
-        "20347351964"
-    ]
+    assert item_ids_plan_then_line(["00465313943732"], ["ITEMID:20347351964"]) == ["20347351964"]
 
 
 def test_multiple_remark_ids_are_a_conflict_on_the_purchase_board() -> None:

@@ -186,7 +186,9 @@ def test_order_line_parses_draft_no_from_purchase_remark() -> None:
     )
     assert len(lines) == 1
     assert lines[0].draft_no == "CG261017-039"
-    assert lines[0].remark_item_id is None  # Both remarks are retained for DWS; scalar cannot pick one.
+    assert (
+        lines[0].remark_item_id is None
+    )  # Both remarks are retained for DWS; scalar cannot pick one.
 
 
 def test_merged_line_is_split_across_plans_by_plan_quantity() -> None:

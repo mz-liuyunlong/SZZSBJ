@@ -121,6 +121,23 @@ def test_migration_matches_orm_metadata() -> None:
     sql = _render_upgrade_sql()
     created = _parse_create_tables(sql)
     assert set(created) == EXPECTED_TABLES
+    # Compare the original schema plus the later additive migration with today's ORM.
+    config = Config(str(BACKEND_ROOT / "alembic.ini"))
+    buffer = io.StringIO()
+    config.output_buffer = buffer
+    command.upgrade(
+        config,
+        "20261022_0054_merge_walmart_identity_and_domestic_packing:"
+        "20261026_0055_purchase_board_draft_no",
+        sql=True,
+    )
+    added_columns = re.findall(r"ALTER TABLE (\w+) ADD COLUMN (\w+) ", buffer.getvalue())
+    assert set(added_columns) == {
+        ("dwd_purchase_order_line_item", "draft_no"),
+        ("dws_purchase_board", "draft_no"),
+    }
+    for table, column in added_columns:
+        created[table].add(column)
     for table in EXPECTED_TABLES:
         assert created[table] == set(Base.metadata.tables[table].columns.keys()), table
     orm_indexes = {

@@ -1,13 +1,13 @@
 # 采购看板本地最新数据更新记录
 
-2026-10-26。状态：本地更新完成，页面已核验918条明细。用户明确选择“服务器先重新采集领星，再将新快照更新到本地（涉及服务器同步写入）”。目标为 localhost:5173 对应的 local 127.0.0.1:55432/szzsbj_dev；来源账号 primary，不新增分支、不提交或改Git版本。
+2026-10-26。状态：本地更新完成，页面已核验918条明细。用户明确选择“服务器先重新采集领星，再将新快照更新到本地（涉及服务器同步写入）”。目标为 localhost:5173 对应的 local 127.0.0.1:55432/<project>_dev；来源账号 primary，不新增分支、不提交或改Git版本。
 
 ## 实际预检
 
 - 本地采购源数据观察时间 2026-10-17 18:00:43（Asia/Shanghai），DWS 计算时间 2026-10-20 18:25，主表867行。
 - 本地 ODS：计划1861、采购单1399、采购明细1519、收货单1263、收货明细1353；DWD：计划1119、采购单784、采购明细867。
 - 本地三项采购同步配置全部关闭，不允许把 APP_ENV 冒充 production 绕过原采集门禁。
-- 服务器实际后端为 /opt/szzsbj/releases/4c8f67156ae960a2f7397f4c957c1a5b91814d1d/source/backend，核查时PID948524，连接127.0.0.1:5432/szzsbj_app/public。
+- 服务器实际后端为 /opt/<project>/releases/4c8f67156ae960a2f7397f4c957c1a5b91814d1d/source/backend，核查时PID948524，连接127.0.0.1:5432/<project>_app/public。
 - 服务器采购三项最后成功时间也是2026-10-17，DWS867行；无排队/运行中的领星任务。
 - 来源接口 outbound_enabled 均 false；采购计划/收货配置 schedule_enabled=true，max_attempts=3。一次性 runner 要求手动配置，需先保存原值，单项临时开启、取消该次调度、重试限定1，最终恢复原值。不停止服务或清理已有队列。
 
@@ -62,7 +62,7 @@
 | local-before.dump | 8,385,436字节 | 57893bb9844783a0815ce8dfacce75b3613bc99d9c5d599f6ab9fb1da87614c4 |
 | purchase-new-source-snapshot.json.gz | 207,326字节 | 9c7d16afbdeb7de3d755ce6c035fdb78f0b24ef79637d4bfd328cc65868541be |
 
-服务器目录 `/opt/szzsbj/backups/pmc-purchase-local-refresh-20261026-run1`，定向备份45,318,516字节，SHA256 `02739db1f0109204010590152e41177ad9a1e425fd00f081e458ae1778081bab`。备份恢复目录已检查，未进行完整恢复演练，不能称为已验证完整恢复。
+服务器目录 `/opt/<project>/backups/pmc-purchase-local-refresh-20261026-run1`，定向备份45,318,516字节，SHA256 `02739db1f0109204010590152e41177ad9a1e425fd00f081e458ae1778081bab`。备份恢复目录已检查，未进行完整恢复演练，不能称为已验证完整恢复。
 
 证据包括 `sync-result-final.json`（服务器）、`snapshot-manifest.json`、`local-rehearsal.json`、`local-applied.json`、`local-purchase-board.png`；操作脚本 `import_and_refresh.py` 保留在上述本机证据目录，不加入应用运行依赖。回滚不能直接对正在使用的数据库执行整库覆盖；应先确认恢复目标和保留后续业务写入，再使用迁移前备份恢复到隔离库验收。
 

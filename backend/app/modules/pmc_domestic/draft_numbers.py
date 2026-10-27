@@ -18,7 +18,9 @@ class DraftRow(Protocol):
     draft_nos: list[str]
 
 
-def attach_draft_numbers(session: Session, rows: Sequence[DraftRow], accounts: frozenset[str]) -> None:
+def attach_draft_numbers(
+    session: Session, rows: Sequence[DraftRow], accounts: frozenset[str]
+) -> None:
     """Fill ``draft_nos`` from ``dws_purchase_board.draft_no`` (采购备注 ``草稿:CG…``)."""
 
     pairs: set[tuple[str, str, str]] = set()
@@ -38,8 +40,10 @@ def attach_draft_numbers(session: Session, rows: Sequence[DraftRow], accounts: f
         row.draft_nos = seen
 
 
-def _load(session: Session, pairs: set[tuple[str, str, str]]) -> dict[tuple[str, str, str], list[str]]:
-    if not pairs or not inspect(session.get_bind()).has_table(DwsPurchaseBoard.__tablename__):
+def _load(
+    session: Session, pairs: set[tuple[str, str, str]]
+) -> dict[tuple[str, str, str], list[str]]:
+    if not pairs or not inspect(session.connection()).has_table(DwsPurchaseBoard.__tablename__):
         return {}
     accounts = {account for account, _, _ in pairs}
     order_sns = {sn for _, sn, _ in pairs}
