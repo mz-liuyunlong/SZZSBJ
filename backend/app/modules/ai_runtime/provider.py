@@ -227,7 +227,11 @@ async def invoke(
         session.commit()
     try:
         result, inp, out = await generate_text(
-            api_key=credential, model=MODEL, prompt=prompt, max_output_tokens=max_out,\n            visual_parts=visual_parts
+            api_key=credential,
+            model=MODEL,
+            prompt=prompt,
+            max_output_tokens=max_out,
+            visual_parts=visual_parts,
         )
     except Exception as exc:
         failed_cost, failure_code = failed_call_reservation(
