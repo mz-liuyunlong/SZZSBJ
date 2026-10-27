@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
@@ -69,8 +72,12 @@ def _connector(db, name: str):
 def test_new_migrations_and_skill_connector_isolation(db) -> None:
     from sqlalchemy import inspect
 
-    assert db.scalar(text("SELECT version_num FROM alembic_version")) == (
-        "20261027_0064_ai_runtime_skill_context"
+    expected_head = ScriptDirectory.from_config(
+        Config(str(Path(__file__).resolve().parents[3] / "alembic.ini"))
+    )
+    assert (
+        db.scalar(text("SELECT version_num FROM alembic_version"))
+        == expected_head.get_current_head()
     )
     inspector = inspect(db.bind)
     assert "runtime_instructions" in {
