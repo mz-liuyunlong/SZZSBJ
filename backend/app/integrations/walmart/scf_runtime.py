@@ -60,10 +60,24 @@ def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
             raise ValueError("WALMART_APPROVED_OPERATION_UNKNOWN")
         combined = (
             tuple(wfs_registry(approved_keys=approved_keys & wfs_keys)._operations.values())
-            + tuple(feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values())
-            + tuple(marketplace_read_registry(approved_keys=approved_keys & marketplace_keys)._operations.values())
-            + tuple(returns_read_registry(approved_keys=approved_keys & returns_keys)._operations.values())
-            + tuple(operations_read_registry(approved_keys=approved_keys & operations_keys)._operations.values())
+            + tuple(
+                feed_monitor_registry(approved_keys=approved_keys & feed_keys)._operations.values()
+            )
+            + tuple(
+                marketplace_read_registry(
+                    approved_keys=approved_keys & marketplace_keys
+                )._operations.values()
+            )
+            + tuple(
+                returns_read_registry(
+                    approved_keys=approved_keys & returns_keys
+                )._operations.values()
+            )
+            + tuple(
+                operations_read_registry(
+                    approved_keys=approved_keys & operations_keys
+                )._operations.values()
+            )
         )
         return ContractRegistry(combined)
     path = Path(source)
