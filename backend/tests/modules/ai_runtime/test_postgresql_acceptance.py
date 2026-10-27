@@ -137,15 +137,18 @@ def test_job_account_and_owner_isolation_and_idempotency(db, monkeypatch) -> Non
     with pytest.raises(ApiError):
         keyword_routes._job(db, job_id, account, SimpleNamespace(user_id="operator-b"))
     with pytest.raises(ApiError):
-        keyword_routes._job(db, job_id, "synthetic-account-B", SimpleNamespace(user_id="operator-a"))
+        keyword_routes._job(
+            db, job_id, "synthetic-account-B", SimpleNamespace(user_id="operator-a")
+        )
 
     db.execute(
         text("""UPDATE ai_runtime_jobs SET status='cancelled',phase='cancelled'
                 WHERE id=:id AND status='queued'"""),
         {"id": job_id},
     )
-    assert db.scalar(text("SELECT status FROM ai_runtime_jobs WHERE id=:id"), {"id": job_id}) == (
-        "cancelled"
+    assert (
+        db.scalar(text("SELECT status FROM ai_runtime_jobs WHERE id=:id"), {"id": job_id})
+        == "cancelled"
     )
     db.execute(
         text("""UPDATE ai_runtime_jobs SET status='queued',phase='queued'
