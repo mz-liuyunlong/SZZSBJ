@@ -65,7 +65,7 @@ function renderCell(key: string, row: DomesticBatch) {
     case "owner": return row.owner?.status === "conflict" ? <Tag color="warning">负责人冲突</Tag>
       : row.owner?.status === "resolved" && (row.owner.name?.trim() || row.owner.uid?.trim())
         ? <Tooltip title="当前产品负责人">{row.owner.name?.trim() || row.owner.uid}</Tooltip>
-        : <Tooltip title="当前入库记录尚未提供产品负责人"><Tag>未知</Tag></Tooltip>;
+        : <Tooltip title="当前产品资料没有这个 SKU 的唯一负责人"><Tag>未知</Tag></Tooltip>;
     case "age": return row.days_in_warehouse === null ? "—" : `${row.days_in_warehouse} 天`;
     case "quantity": return <Tooltip title="该数量属于整个 IB×SKU，可能在多个店铺行重复展示；请以去重统计为准，不能直接累加此列。">{formatQuantity(row.parent_inbound_qty)}</Tooltip>;
     case "balance": return formatQuantity(row.balance_num);

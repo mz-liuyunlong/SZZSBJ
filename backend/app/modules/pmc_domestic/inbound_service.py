@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.modules.pmc_domestic.board_item_ids import attach_board_item_ids
+from app.modules.pmc_domestic.board_owners import attach_board_owners
 from app.modules.pmc_domestic.draft_numbers import attach_draft_numbers
 from app.modules.pmc_domestic.filter_sources import OWNER_OBJECTS
 from app.modules.pmc_domestic.inbound_builder import with_request_days
@@ -59,6 +60,12 @@ class InboundReadService:
             **values,
         )
 
+    def _with_owners(self, meta: InboundMeta) -> InboundMeta:
+        for name in OWNER_OBJECTS:
+            if name not in meta.source_objects:
+                meta.source_objects.append(name)
+        return meta
+
     def filter_options(self, query: InboundOptionsQuery, accounts: frozenset[str]):
         values = self.repository.filter_options(accounts, query.warehouse_id)
         # These are capability declarations, never business classifications inferred from stock.
@@ -83,13 +90,14 @@ class InboundReadService:
         items = [self._row(r) for r in rows]
         attach_draft_numbers(self.repository.session, items, accounts)
         attach_board_item_ids(self.repository.session, items, accounts)
-        return InboundList(items=items, total=total), self._meta(
+        attach_board_owners(self.repository.session, items, accounts)
+        return InboundList(items=items, total=total), self._with_owners(self._meta(
             accounts,
             query,
             page=query.page,
             page_size=query.page_size,
             total=total,
-        )
+        ))
 
     def summary(self, query: InboundFilter, accounts: frozenset[str]):
         rows = self.repository.all(query, accounts)
@@ -132,9 +140,10 @@ class InboundReadService:
         item = self._row(row)
         attach_draft_numbers(self.repository.session, [item], accounts)
         attach_board_item_ids(self.repository.session, [item], accounts)
-        return item, self._meta(
+        attach_board_owners(self.repository.session, [item], accounts)
+        return item, self._with_owners(self._meta(
             accounts, InboundFilter(warehouse_id=[row.source_warehouse_id])
-        )
+        ))
 
     def trace(self, identity: UUID, accounts: frozenset[str]):
         row = self.repository.detail(identity, accounts)
@@ -143,9 +152,10 @@ class InboundReadService:
         batch = self._row(row)
         attach_draft_numbers(self.repository.session, [batch], accounts)
         attach_board_item_ids(self.repository.session, [batch], accounts)
+        attach_board_owners(self.repository.session, [batch], accounts)
         return InboundTrace(
             batch=batch, inbound_events=row.payload_json["inbound_events"]
-        ), self._meta(
+        ), self._with_owners(self._meta(
             accounts,
             InboundFilter(warehouse_id=[row.source_warehouse_id]),
-        )
+        ))
