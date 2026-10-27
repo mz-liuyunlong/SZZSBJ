@@ -24,7 +24,17 @@ API_SPECS: dict[str, tuple[str, frozenset[str]]] = {
     "wfs_inventory": ("/v3/wfs/inventory", frozenset({"limit", "offset"})),
     "inbound_shipments": (
         "/v3/fulfillment/inbound-shipments",
-        frozenset({"limit", "offset", "fromCreateDate", "toCreateDate", "shipmentId", "inboundOrderId", "status"}),
+        frozenset(
+            {
+                "limit",
+                "offset",
+                "fromCreateDate",
+                "toCreateDate",
+                "shipmentId",
+                "inboundOrderId",
+                "status",
+            }
+        ),
     ),
     "inbound_shipment_items": (
         "/v3/fulfillment/inbound-shipment-items",
@@ -32,7 +42,20 @@ API_SPECS: dict[str, tuple[str, frozenset[str]]] = {
     ),
     "inventory_log": (
         "/v3/fulfillment/inventory-log",
-        frozenset({"limit", "offset", "gtin", "startDate", "endDate", "shipmentId", "transactionType", "transactionLocation", "sort_by", "sort_order"}),
+        frozenset(
+            {
+                "limit",
+                "offset",
+                "gtin",
+                "startDate",
+                "endDate",
+                "shipmentId",
+                "transactionType",
+                "transactionLocation",
+                "sort_by",
+                "sort_order",
+            }
+        ),
     ),
 }
 

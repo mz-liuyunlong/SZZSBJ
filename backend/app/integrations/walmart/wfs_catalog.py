@@ -3,6 +3,7 @@
 These are source-derived GET candidates, not blanket Walmart entitlement.
 Only explicitly owner-approved keys are enabled, all others fail closed.
 """
+
 from __future__ import annotations
 
 from app.integrations.walmart.contracts import ContractError, ContractRegistry, Field, Operation

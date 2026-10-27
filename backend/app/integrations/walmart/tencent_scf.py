@@ -3,6 +3,7 @@
 Only Invoke is allowed; the main server has no SSM permissions and never
 receives Walmart credentials. Cloud authorization still executes independently.
 """
+
 from __future__ import annotations
 
 import json

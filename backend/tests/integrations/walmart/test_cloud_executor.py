@@ -1,4 +1,5 @@
 """Cloud executor tests: independent authorization, no external I/O."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -15,8 +16,7 @@ class FakePolicy:
         self.calls: list[tuple[str, str, bool, str | None]] = []
 
     def authorize(
-        self, *, store_code: str, operation_key: str,
-        is_write: bool, approval_ref: str | None
+        self, *, store_code: str, operation_key: str, is_write: bool, approval_ref: str | None
     ) -> bool:
         self.calls.append((store_code, operation_key, is_write, approval_ref))
         return self.allow
@@ -91,9 +91,7 @@ def test_safe_get_uses_cloud_policy() -> None:
         ({"version": 99}, "WALMART_EVENT_INVALID"),
     ],
 )
-def test_rejects_untrusted_main_server_events(
-    change: dict[str, object], code: str
-) -> None:
+def test_rejects_untrusted_main_server_events(change: dict[str, object], code: str) -> None:
     transport = FakeTransport()
     executor = WalmartCloudExecutor(
         registry=registry(),

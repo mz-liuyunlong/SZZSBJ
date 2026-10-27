@@ -3,6 +3,7 @@
 Reads only owner-approved, store-scoped secret names. The result is never
 serialized in SDK/SCF responses, task payloads, RAW, or application logs.
 """
+
 from __future__ import annotations
 
 import json

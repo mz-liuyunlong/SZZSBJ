@@ -3,6 +3,7 @@
 Runtime credentials are injected by the owner-controlled environment. No static
 keys, logging of headers, arbitrary API host, or action escalation is permitted.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -74,10 +75,12 @@ def tc3_headers(
         + hashlib.sha256(body).hexdigest()
     )
     to_sign = (
-        f"TC3-HMAC-SHA256\n{timestamp}\n{scope}\n"
-        + hashlib.sha256(request.encode()).hexdigest()
+        f"TC3-HMAC-SHA256\n{timestamp}\n{scope}\n" + hashlib.sha256(request.encode()).hexdigest()
     )
-    secret = _hmac(_hmac(_hmac(("TC3" + identity.secret_key).encode(), day), service), "tc3_request")
+    secret = _hmac(
+        _hmac(_hmac(("TC3" + identity.secret_key).encode(), day), service), "tc3_request"
+    )
+
     signature = hmac.new(secret, to_sign.encode(), hashlib.sha256).hexdigest()
     return {
         "Content-Type": content_type,

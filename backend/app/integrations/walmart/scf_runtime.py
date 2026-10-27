@@ -5,6 +5,7 @@ module does not grant access to SSM, install a proxy, or enable live mode.
 All writes are disabled in this runtime until a durable approval/replay system
 is separately reviewed and installed.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -38,11 +39,7 @@ class ReadOnlyStorePolicy:
         is_write: bool,
         approval_ref: str | None,
     ) -> bool:
-        return (
-            store_code == self._store_code
-            and operation_key in self._keys
-            and not is_write
-        )
+        return store_code == self._store_code and operation_key in self._keys and not is_write
 
 
 def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
@@ -91,9 +88,7 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
             approved_stores=frozenset({store}),
             version=os.environ.get("SZZSBJ_WALMART_SECRET_VERSION", "v1"),
         )
-        transport = WalmartHttpsTransport(
-            proxy_by_store=mapping, secret_resolver=secrets
-        )
+        transport = WalmartHttpsTransport(proxy_by_store=mapping, secret_resolver=secrets)
         policy = ReadOnlyStorePolicy(store, approved)
         executor = WalmartCloudExecutor(
             registry=registry,

@@ -4,6 +4,7 @@ The API registry, store scope, and owner decision are checked again inside the
 protected execution boundary. The main-server envelope is NEVER trusted.
 Live transports and approval policies must be injected by the security owner.
 """
+
 from __future__ import annotations
 
 import json
@@ -58,8 +59,15 @@ class WalmartCloudExecutor:
         if not isinstance(event, dict):
             raise ContractError("WALMART_EVENT_INVALID")
         allowed_fields = {
-            "version", "operation", "store_code", "api_key",
-            "method", "path", "query", "body", "approval_ref",
+            "version",
+            "operation",
+            "store_code",
+            "api_key",
+            "method",
+            "path",
+            "query",
+            "body",
+            "approval_ref",
         }
         if set(event) - allowed_fields or event.get("version") != 1:
             raise ContractError("WALMART_EVENT_INVALID")

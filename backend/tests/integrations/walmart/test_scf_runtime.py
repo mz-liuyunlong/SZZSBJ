@@ -1,4 +1,5 @@
 """SCF runtime setup tests; never invoke SSM or Walmart."""
+
 from __future__ import annotations
 
 import json
@@ -17,9 +18,7 @@ def test_default_runtime_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_health_needs_no_credentials() -> None:
-    assert main_handler({"operation": "health"}, None)["status"] == (
-        "SAFE_RUNTIME_AVAILABLE"
-    )
+    assert main_handler({"operation": "health"}, None)["status"] == ("SAFE_RUNTIME_AVAILABLE")
 
 
 def test_missing_store_binding_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

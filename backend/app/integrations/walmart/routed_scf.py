@@ -3,6 +3,7 @@
 Each store must have its own protected SCF function and isolated SSM role.
 No fallback to another store's function, no shared generic function default.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping

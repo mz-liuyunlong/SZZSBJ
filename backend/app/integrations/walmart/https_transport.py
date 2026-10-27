@@ -5,6 +5,7 @@ by an owner-controlled secret resolver inside the protected SCF runtime.
 All network traffic requires a dedicated private CONNECT proxy. No direct
 network fallback, redirect following, arbitrary host or local proxy discovery.
 """
+
 from __future__ import annotations
 
 import base64
@@ -24,8 +25,7 @@ from app.integrations.walmart.contracts import PreparedRequest
 WALMART_HOST = "https://marketplace.walmartapis.com"
 MAX_RESPONSE_BYTES = 1024 * 1024
 _PRIVATE_NETS = tuple(
-    ipaddress.ip_network(network)
-    for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+    ipaddress.ip_network(network) for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
 )
 
 
@@ -129,9 +129,7 @@ class WalmartHttpsTransport:
                 }
                 if request.body is not None:
                     kwargs["json"] = request.body
-                response = client.request(
-                    request.method, WALMART_HOST + request.path, **kwargs
-                )
+                response = client.request(request.method, WALMART_HOST + request.path, **kwargs)
                 if response.status_code < 200 or response.status_code >= 300:
                     raise TransportRejected("WALMART_HTTP_ERROR")
                 if len(response.content) > MAX_RESPONSE_BYTES:

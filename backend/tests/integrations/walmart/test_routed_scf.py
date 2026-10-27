@@ -1,4 +1,5 @@
 """Per-store SCF routing tests, using a synthetic cloud invoker."""
+
 from __future__ import annotations
 
 import json
