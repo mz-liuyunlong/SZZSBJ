@@ -197,12 +197,15 @@ jobs:
         run: |
           uv run pytest -q -s tests/modules/warehouse_wfs/test_auto_case_postgresql.py
           uv run python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
           from sqlalchemy import create_engine, inspect, text
           from app.core.config import get_database_url
 
+          expected_head = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
           engine = create_engine(get_database_url(), hide_parameters=True)
           with engine.connect() as conn:
-              assert conn.scalar(text("select version_num from alembic_version")) == "20261026_0061_wfs_fee_detection_evidence"
+              assert conn.scalar(text("select version_num from alembic_version")) == expected_head
               assert conn.scalar(text("select count(*) from fact_walmart_wfs_fee_actual where source_account_ref='wfs-migration-seed'")) == 1
               assert conn.scalar(text("select count(*) from ops_wfs_fee_anomaly_cases where source_account_ref='wfs-migration-seed'")) == 1
               assert conn.scalar(text("select to_regclass('public.ops_wfs_fee_detection_evidence')")) is not None
