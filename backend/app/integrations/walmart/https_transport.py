@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import json
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from app.integrations.walmart.contracts import PreparedRequest
 
 WALMART_HOST = "https://marketplace.walmartapis.com"
 MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_TOKEN_RESPONSE_BYTES = 16 * 1024
 _PRIVATE_NETS = tuple(
     ipaddress.ip_network(network) for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
 )
@@ -100,7 +102,8 @@ class WalmartHttpsTransport:
             with httpx.Client(
                 proxy=proxy, timeout=self._timeout, follow_redirects=False, trust_env=False
             ) as client:
-                token_response = client.post(
+                with client.stream(
+                    "POST",
                     WALMART_HOST + "/v3/token",
                     data={"grant_type": "client_credentials"},
                     headers={
@@ -109,10 +112,10 @@ class WalmartHttpsTransport:
                         "WM_SVC.NAME": "Walmart Marketplace",
                         "WM_QOS.CORRELATION_ID": str(uuid4()),
                     },
-                )
-                if token_response.status_code != 200:
-                    raise TransportRejected("WALMART_TOKEN_REJECTED")
-                token_data = token_response.json()
+                ) as token_response:
+                    if token_response.status_code != 200:
+                        raise TransportRejected("WALMART_TOKEN_REJECTED")
+                    token_data = _bounded_json(token_response, MAX_TOKEN_RESPONSE_BYTES)
                 token = token_data.get("access_token")
                 if not isinstance(token, str) or not token:
                     raise TransportRejected("WALMART_TOKEN_INVALID")
@@ -128,12 +131,12 @@ class WalmartHttpsTransport:
                 }
                 if request.body is not None:
                     kwargs["json"] = request.body
-                response = client.request(request.method, WALMART_HOST + request.path, **kwargs)
-                if response.status_code < 200 or response.status_code >= 300:
-                    raise TransportRejected("WALMART_HTTP_ERROR")
-                if len(response.content) > MAX_RESPONSE_BYTES:
-                    raise TransportRejected("WALMART_RESPONSE_TOO_LARGE")
-                result = response.json()
+                with client.stream(
+                    request.method, WALMART_HOST + request.path, **kwargs
+                ) as response:
+                    if response.status_code < 200 or response.status_code >= 300:
+                        raise TransportRejected("WALMART_HTTP_ERROR")
+                    result = _bounded_json(response, MAX_RESPONSE_BYTES)
                 if not isinstance(result, (dict, list)):
                     raise TransportRejected("WALMART_RESPONSE_INVALID")
                 if _has_sensitive_keys(result):
@@ -143,6 +146,21 @@ class WalmartHttpsTransport:
             raise
         except Exception:
             raise TransportRejected("WALMART_TRANSPORT_FAILURE") from None
+
+
+def _bounded_json(response: httpx.Response, limit: int) -> Any:
+    """Bound in-memory JSON before parsing; never expose provider response text."""
+    size = 0
+    chunks: list[bytes] = []
+    for chunk in response.iter_bytes():
+        size += len(chunk)
+        if size > limit:
+            raise TransportRejected("WALMART_RESPONSE_TOO_LARGE")
+        chunks.append(chunk)
+    try:
+        return json.loads(b"".join(chunks))
+    except (ValueError, UnicodeDecodeError):
+        raise TransportRejected("WALMART_RESPONSE_INVALID") from None
 
 
 def _has_sensitive_keys(value: Any, depth: int = 0) -> bool:
