@@ -147,11 +147,17 @@ def parse_settlement_rows(
             if line_ref in seen:
                 duplicate_lines += 1
                 continue
-            seen.add(line_ref)
 
             sales = decimal_value(item.get("salesNum"))
             logistics = decimal_value(item.get("platformLogisticsAmount"))
+            # An order may pair a positive sales row with a zero-unit fee row,
+            # but negative or fractional sold units are invalid.
+            if sales < 0 or sales != sales.to_integral_value():
+                invalid += 1
+                continue
 
+            # Only valid normalized rows may reserve the source line identity.
+            seen.add(line_ref)
             rows.append(
                 SettlementFeeRow(
                     source_account_ref=source_account_ref,
