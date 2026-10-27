@@ -116,10 +116,10 @@ sdk = create_scoped_client(
 
 ### SCF 部署前置条件（当前未证实满足）
 
-- SCF 各函数独立绑定 `SZZSBJ_WALMART_BOUND_STORE`；例如 CN2502 的函数只可绑定 CN2502。CN2502 未配置专属代理前照样拒绝实际执行，不会降级使用其他出口。
+- SCF 各函数独立绑定 `PROJECT_WALMART_BOUND_STORE`；例如 CN2502 的函数只可绑定 CN2502。CN2502 未配置专属代理前照样拒绝实际执行，不会降级使用其他出口。
 - 各函数必须各自拥有受限的 SSM 读取身份，主服务器身份只能执行必要的 SCF Invoke，不能读取 SSM。角色配置、云函数版本发布、固定出口代理与私网安全组不在本 PR 的自动部署范围。
-- 需要安全负责人设置 `SZZSBJ_WALMART_PRIVATE_PROXIES`（只含本店私网 CONNECT 地址）、`SZZSBJ_WALMART_APPROVED_READ_KEYS`、`SZZSBJ_WALMART_SECRET_VERSION`；人工审查后才可启用 `SZZSBJ_WALMART_LIVE_MODE=owner-approved-read-only`。
-- `SZZSBJ_WALMART_CONTRACT_FILE` 与 `SZZSBJ_WALMART_CONTRACT_SHA256` 可指定已经审核的 OpenAPI 3.x 快照；快照不等于接口权限获批。
+- 需要安全负责人设置 `PROJECT_WALMART_PRIVATE_PROXIES`（只含本店私网 CONNECT 地址）、`PROJECT_WALMART_APPROVED_READ_KEYS`、`PROJECT_WALMART_SECRET_VERSION`；人工审查后才可启用 `PROJECT_WALMART_LIVE_MODE=owner-approved-read-only`。
+- `PROJECT_WALMART_CONTRACT_FILE` 与 `PROJECT_WALMART_CONTRACT_SHA256` 可指定已经审核的 OpenAPI 3.x 快照；快照不等于接口权限获批。
 - 代理必须由安全负责人实施私网接入认证、只允许 CONNECT 到 Walmart:443、出口 IP 绑定、日志脱敏；单纯配置一个私有 IP 并不能证明所有这些措施已生效。
 - Walmart API Token 只应在受保护 SCF 内存中使用，不得回传 SDK 或作为 SSH stdin 发送给普通开发人员可管理的机器。
 
@@ -139,7 +139,7 @@ uv run python -c "import app.main"
 
 **生产调用、密钥配置、数据库迁移、部署和真实写接口都没有在本 PR 中执行。**
 
-以上环境变量仅是部署配置名，绝不在 PR 中填写真实凭据；具体键以 `scf_runtime.py` 为准。
+以上 `PROJECT_WALMART_` 为占位标识，实际变量名请以 `scf_runtime.py` 为准；不能直接复制占位名配置生产环境，不在 PR 中填写真实凭据。
 
 
 ### 2026-10-27 安全分页与响应限额补充
