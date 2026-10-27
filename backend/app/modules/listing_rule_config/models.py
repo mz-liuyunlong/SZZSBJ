@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from uuid import UUID, uuid4
+from decimal import Decimal
 from typing import Any
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,

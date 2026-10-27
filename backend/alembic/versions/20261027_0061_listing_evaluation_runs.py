@@ -2,8 +2,8 @@
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision: str = "20261027_0061_listing_evaluation_runs"
