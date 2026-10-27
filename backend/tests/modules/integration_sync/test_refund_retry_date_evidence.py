@@ -35,11 +35,13 @@ def test_refund_retry_recovers_exact_ancestor_window() -> None:
     source = _run(parent=parent.id)
     service.repository = MagicMock()
     service.repository.get_run.side_effect = lambda uid, scope: {
-        parent.id: parent, original.id: original
+        parent.id: parent,
+        original.id: original,
     }.get(uid)
     service.repository.refund_capture_business_dates.return_value = ()
     assert service._refund_retry_window(source, frozenset({"account-a"})) == (
-        original.window_start, original.window_end
+        original.window_start,
+        original.window_end,
     )
 
 
@@ -69,7 +71,8 @@ def test_refund_retry_rejects_sparse_evidence() -> None:
     source = _run()
     service.repository = MagicMock()
     service.repository.refund_capture_business_dates.return_value = (
-        date(2026, 10, 20), date(2026, 10, 22)
+        date(2026, 10, 20),
+        date(2026, 10, 22),
     )
     with pytest.raises(ApiError):
         service._refund_retry_window(source, frozenset({"account-a"}))
@@ -80,7 +83,8 @@ def test_refund_retry_accepts_contiguous_capture_evidence() -> None:
     source = _run()
     service.repository = MagicMock()
     service.repository.refund_capture_business_dates.return_value = (
-        date(2026, 10, 20), date(2026, 10, 21)
+        date(2026, 10, 20),
+        date(2026, 10, 21),
     )
     start, end = service._refund_retry_window(source, frozenset({"account-a"}))
     assert start.date() == date(2026, 10, 20)
