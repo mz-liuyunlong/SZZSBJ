@@ -10,7 +10,11 @@ import {
 } from "./businessConfigDrafts";
 
 type Choice = ConnectorKind | "draft";
-type SkillVersion = {id:string;connector_id:string;scene:string;version:number;status:string;instructions:string};
+type SkillVersion = {
+  id: string; connector_id: string; scene: string; version: number;
+  status: string; instructions: string; runtime_instructions: string | null;
+};
+type PendingSkillText = { instructions: string; runtime_instructions: string };
 const SKILL_SCENES = [
   {value:"keyword_launch",label:"关键词投放"},
   {value:"ai_assistant",label:"AI 助手"},
@@ -54,7 +58,8 @@ export default function BusinessConfigServiceEditor({
   const [saving, setSaving] = useState(false);
   const [skillScene,setSkillScene]=useState<string>("keyword_launch");
   const [skillText,setSkillText]=useState("");
-  const [pendingSkillTexts,setPendingSkillTexts]=useState<Record<string,string>>({});
+  const [runtimeSkillText,setRuntimeSkillText]=useState("");
+  const [pendingSkillTexts,setPendingSkillTexts]=useState<Record<string,PendingSkillText>>({});
   const [skillList,setSkillList]=useState<SkillVersion[]>([]);
   const [skillBusy,setSkillBusy]=useState(false);
   const [skillError,setSkillError]=useState("");
@@ -86,9 +91,12 @@ export default function BusinessConfigServiceEditor({
   },[open,skillConnectorId,openAiSelected]);
   const saveSkillDraft=async()=>{
     if(!skillText.trim())return;
-    if(skillText.trim().length>3000){messageApi.warning("Skill 最多 3000 个字符");return;}
+    if(skillText.length>150000){messageApi.warning("完整 Skill 文档最多 150,000 个字符");return;}
+    if(runtimeSkillText.length>3000){messageApi.warning("运行时精简指令最多 3,000 个字符");return;}
     if(!skillConnectorId){
-      setPendingSkillTexts(old=>({...old,[skillScene]:skillText.trim()}));
+      setPendingSkillTexts(old=>({...old,[skillScene]:{
+        instructions:skillText.trim(),runtime_instructions:runtimeSkillText.trim(),
+      }}));
       messageApi.info("Skill 已暂存于当前编辑窗口；保存 OpenAI 服务后才能同步并发布");
       return;
     }
@@ -96,9 +104,11 @@ export default function BusinessConfigServiceEditor({
     try{
       await backendRequest('/api/ai-runtime/skills/drafts',{method:'POST',body:JSON.stringify({
         connector_id:skillConnectorId,scene:skillScene,instructions:skillText.trim(),
+        runtime_instructions:runtimeSkillText.trim()||null,
       })});
       setPendingSkillTexts(old=>{const next={...old};delete next[skillScene];return next;});
       setSkillText("");
+      setRuntimeSkillText("");
       await loadSkills(skillConnectorId);
       messageApi.success("Skill 草稿已保存");
     }catch{messageApi.error("Skill 草稿保存失败");}
@@ -147,7 +157,7 @@ export default function BusinessConfigServiceEditor({
   }, [open, connector, draft, preferredCategory, form]);
 
   const close = () => {
-    setPendingSkillTexts({});setSkillText("");setSkillList([]);setSkillScene("keyword_launch");setSkillError("");setSavedConnectorId(undefined);
+    setPendingSkillTexts({});setSkillText("");setRuntimeSkillText("");setSkillList([]);setSkillScene("keyword_launch");setSkillError("");setSavedConnectorId(undefined);
     form.setFieldsValue({ credential: "", signing_secret: "", endpoint: "" });
     onClose();
   };
@@ -209,16 +219,18 @@ export default function BusinessConfigServiceEditor({
         if(!connector?.id && !savedConnectorId)setSavedConnectorId(savedConnector.id);
         if(data.choice==="openai" && Object.keys(pendingSkillTexts).length){
           let savedCount=0;
-          const failedSkills:Record<string,string>={};
-          for(const [scene,instructions] of Object.entries(pendingSkillTexts)){
-            if(!instructions.trim())continue;
+          const failedSkills:Record<string,PendingSkillText>={};
+          for(const [scene,skill] of Object.entries(pendingSkillTexts)){
+            if(!skill.instructions.trim())continue;
             try{
               await backendRequest('/api/ai-runtime/skills/drafts',{method:'POST',body:JSON.stringify({
-                connector_id:savedConnector.id,scene,instructions,
+                connector_id:savedConnector.id,scene,
+                instructions:skill.instructions,
+                runtime_instructions:skill.runtime_instructions.trim()||null,
               })});
               savedCount++;
             }catch{
-              failedSkills[scene]=instructions;
+              failedSkills[scene]=skill;
             }
           }
           setPendingSkillTexts(failedSkills);
@@ -329,16 +341,43 @@ export default function BusinessConfigServiceEditor({
             <strong>AI Skills · 版本管理</strong>
             <div style={{fontSize:12,color:"#98a2b3",margin:"8px 0"}}>{skillConnectorId ? "已连接服务：草稿支持保存及发布；正在执行的任务保持其已选版本。" : "首次创建：可编辑并暂存 Skill，保存 OpenAI 服务后自动尝试同步；未保存时不会发布或调用 AI。"}</div>
             {skillError ? <Alert type="error" showIcon message={skillError} style={{marginBottom:8}} /> : null}
-            <Select value={skillScene} onChange={next=>{setPendingSkillTexts(old=>({...old,[skillScene]:skillText}));setSkillText(pendingSkillTexts[next]??"");setSkillScene(next)}} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
-            <Input.TextArea rows={4} value={skillText} onChange={ev=>{setSkillText(ev.target.value);setPendingSkillTexts(old=>({...old,[skillScene]:ev.target.value}))}}
-              placeholder="填写对应场景的 AI 工作说明；商品事实与关键词硬规则仍由后端校验" maxLength={3000}/>
+            <Select value={skillScene} onChange={next=>{
+              setPendingSkillTexts(old=>({...old,[skillScene]:{
+                instructions:skillText,runtime_instructions:runtimeSkillText,
+              }}));
+              setSkillText(pendingSkillTexts[next]?.instructions??"");
+              setRuntimeSkillText(pendingSkillTexts[next]?.runtime_instructions??"");
+              setSkillScene(next);
+            }} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
+            <div style={{fontSize:12,color:"#667085",marginBottom:6}}>
+              完整规则文档用于版本留档，不会每次全部发送给模型；长文档必须填写精简运行指令。
+            </div>
+            <Input.TextArea rows={6} value={skillText} onChange={ev=>{
+              setSkillText(ev.target.value);
+              setPendingSkillTexts(old=>({...old,[skillScene]:{
+                instructions:ev.target.value,runtime_instructions:runtimeSkillText,
+              }}));
+            }} placeholder="完整 Skill / 规则参考文档（最多 150,000 字符）" maxLength={150000}/>
+            <div style={{fontSize:12,color:"#98a2b3",textAlign:"right",marginTop:2}}>
+              {skillText.length.toLocaleString()} / 150,000 字符
+            </div>
+            <div style={{fontSize:12,fontWeight:600,margin:"12px 0 6px"}}>精简运行指令（最多 3,000 字符）</div>
+            <Input.TextArea rows={3} value={runtimeSkillText} onChange={ev=>{
+              setRuntimeSkillText(ev.target.value);
+              setPendingSkillTexts(old=>({...old,[skillScene]:{
+                instructions:skillText,runtime_instructions:ev.target.value,
+              }}));
+            }} placeholder="每次模型调用必须遵守的简短指令；硬性评分和名额规则仍由后端执行" maxLength={3000}/>
+            <div style={{fontSize:12,color:"#98a2b3",textAlign:"right",marginTop:2}}>
+              {runtimeSkillText.length.toLocaleString()} / 3,000 字符
+            </div>
             <Button size="small" style={{marginTop:8}} disabled={!skillText.trim()||skillBusy} loading={skillBusy}
               onClick={()=>void saveSkillDraft()}>{skillConnectorId?"保存 Skill 草稿":"暂存 Skill 草稿"}</Button>
             {skillList.filter(s=>s.scene===skillScene).map(s=><div key={s.id}
               style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
               <span>V{s.version} · {s.status}</span>
               <Space size={4}>
-                <Button size="small" onClick={()=>setSkillText(s.instructions)}>查看 / 复制配置</Button>
+                <Button size="small" onClick={()=>{setSkillText(s.instructions);setRuntimeSkillText(s.runtime_instructions??"")}}>查看 / 复制配置</Button>
                 {s.status!=="published" ? <Button size="small" disabled={s.status==="retired"} loading={skillBusy}
                   onClick={()=>void publishSkill(s.id)}>发布</Button> : null}
               </Space>
