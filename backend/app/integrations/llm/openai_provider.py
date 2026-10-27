@@ -6,7 +6,6 @@ from decimal import Decimal
 
 from openai import AsyncOpenAI
 
-
 NON_BILLABLE_HTTP_STATUS_CODES = frozenset({400, 401, 403, 404, 409, 422, 429})
 
 
