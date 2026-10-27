@@ -100,9 +100,7 @@ class ListingEvaluationBatchService:
             self.session.refresh(run)
             run.finished_at = datetime.now(UTC)
             run.status = (
-                "succeeded"
-                if run.processed_listings == run.total_listings
-                else "partial"
+                "succeeded" if run.processed_listings == run.total_listings else "partial"
             )
             self.session.commit()
         except Exception:

@@ -49,7 +49,10 @@ def scheduler_tick() -> None:
                 )
             )
             if existing_run is not None and existing_run.status in {
-                "queued", "running", "succeeded", "partial"
+                "queued",
+                "running",
+                "succeeded",
+                "partial",
             }:
                 return
             if existing_run is not None:
