@@ -335,11 +335,15 @@ def download_keyword_ai_four_sheet(
     )
     if len(rows) > 20000:
         raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
-    batches = session.execute(
-        text("""SELECT output_json FROM ai_runtime_results
+    batches = (
+        session.execute(
+            text("""SELECT output_json FROM ai_runtime_results
         WHERE job_id=:job AND status='succeeded' ORDER BY batch_index"""),
-        {"job": job_id},
-    ).scalars().all()
+            {"job": job_id},
+        )
+        .scalars()
+        .all()
+    )
     ai_items = [
         item
         for batch in batches
