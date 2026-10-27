@@ -369,6 +369,7 @@ class SyncRunExecutionService:
         records_seen = 0
         records_written = 0
         mart_failures: list[DataPagesMartInvariantError] = []
+        capture_failures: list[DataPagesMartInvariantError] = []
 
         with data_pages_client() as client:
             for business_date in days:
@@ -391,14 +392,23 @@ class SyncRunExecutionService:
                     active_run = self.repository.get_run_for_update(run.id)
                     if active_run is None or active_run.status != "running":
                         return
-                    mart_failures.append(error)
+                    source_committed = bool(
+                        getattr(runner, "_source_fact_commit_completed", False)
+                    )
+                    if source_committed:
+                        mart_failures.append(error)
+                    else:
+                        capture_failures.append(error)
                     self.repository.record_business_anomaly(
                         run_id=active_run.id,
                         account=active_run.source_account_ref,
                         interface_key=active_run.interface_key,
                         business_date=error.business_date or business_date,
                         error_code=error.code,
-                        details={"phase": "financial_validation", "financial_status": "pending"},
+                        details={
+                            "phase": "financial_validation" if source_committed else "source_processing",
+                            "financial_status": "pending" if source_committed else "not_ready",
+                        },
                     )
                     self._event(
                         active_run.id,
@@ -434,21 +444,29 @@ class SyncRunExecutionService:
         from_status = completed.status
         # A financial MART invariant must not undo completed source ingestion.
         # Its exception is tracked independently and invalid MART writes stay rolled back.
-        completed.status = "succeeded"
+        completed.status = "failed" if capture_failures else "succeeded"
         completed.finished_at = utc_now()
-        completed.work_items_succeeded = len(days)
-        completed.work_items_failed = 0
+        completed.work_items_succeeded = len(days) - len(capture_failures)
+        completed.work_items_failed = len(capture_failures)
         completed.records_seen = records_seen
         completed.records_written = records_written
-        completed.error_code = None
-        completed.error_message = None
+        completed.error_code = capture_failures[0].code if capture_failures else None
+        completed.error_message = (
+            "source processing failed; capture not confirmed"
+            if capture_failures else None
+        )
         self._event(
             completed.id,
             from_status,
             completed.status,
+            capture_failures[0].code if capture_failures else
             "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
             if mart_failures else "SYNC_RUN_SUCCEEDED",
-            safe_details=({"pending_financial_dates": len(mart_failures)} if mart_failures else None),
+            safe_details=(
+                {"failed_capture_dates": len(capture_failures),
+                 "pending_financial_dates": len(mart_failures)}
+                if capture_failures or mart_failures else None
+            ),
         )
         self.session.commit()
 
@@ -599,6 +617,7 @@ class SyncRunExecutionService:
         # then roll back only the MART transaction, never already-captured facts.
         # An incomplete provider request still rolls back via the outer exception path.
         self.session.commit()
+        runner._source_fact_commit_completed = True
         heartbeat()
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()
