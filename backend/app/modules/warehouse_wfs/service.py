@@ -1120,7 +1120,7 @@ class WfsFeeAlertService:
           ) pending_recover_amount,
           coalesce(latest_evidence.sample_units, valid_sample_units) valid_sample_units,
           coalesce(latest_evidence.sample_orders, valid_fee_orders) valid_fee_orders,
-          coalesce(latest_evidence.mode_count, mode_count) mode_count,
+          coalesce(latest_evidence.mode_count, ops_wfs_fee_anomaly_cases.mode_count) mode_count,
           coalesce(latest_evidence.theoretical_overcharge, theoretical_overcharge_amount)
             theoretical_overcharge_amount,
           coalesce(latest_evidence.net_sample_difference, net_sample_difference_amount)
