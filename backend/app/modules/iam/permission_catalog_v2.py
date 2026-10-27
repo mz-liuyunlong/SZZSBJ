@@ -286,6 +286,7 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ),
     ActionDefinition("sales_daily_sales", "export", "导出每日销售", 10),
     ActionDefinition("sales_order_profit", "export", "导出订单利润", 10),
+    ActionDefinition("warehouse_wfs_fee_alert", "mark-recovered", "确认WFS费用已追回", 30, "high"),
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),
     ActionDefinition("operations_plan", "edit", "编辑运营计划", 20),
     ActionDefinition("operations_plan", "import", "导入运营计划", 30),
