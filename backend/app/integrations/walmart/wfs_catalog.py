@@ -38,8 +38,8 @@ def wfs_registry(*, approved_keys: frozenset[str] = frozenset()) -> ContractRegi
             fields=(
                 field("limit", "integer"),
                 field("offset", "integer"),
-                field("fromCreatedDate", required=True),
-                field("toCreatedDate", required=True),
+                field("fromCreatedDate", "integer", required=True),
+                field("toCreatedDate", "integer", required=True),
                 field("shipmentId"),
                 field("inboundOrderId"),
                 field("status"),
