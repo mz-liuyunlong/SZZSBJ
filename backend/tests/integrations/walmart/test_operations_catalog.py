@@ -14,6 +14,8 @@ def test_operations_catalog_is_closed_by_default() -> None:
         "inventories_list",
         "partner_profile_get",
         "price_incentives_list",
+        "shipping_settings_get",
+        "shipping_carriers_list",
         "report_requests_list",
         "report_request_status_get",
     }
