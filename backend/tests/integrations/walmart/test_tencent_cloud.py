@@ -92,7 +92,6 @@ def test_scf_invokes_with_client_context() -> None:
                 "RetMsg": json.dumps({"success": True, "store_code": "HK2615"}),
             }
         }
-
     )
     assert invoker.invoke({"operation": "health"})["success"] is True
     service, payload = api.requests[0]
