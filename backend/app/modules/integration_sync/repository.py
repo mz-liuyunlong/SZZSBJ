@@ -312,7 +312,6 @@ class IntegrationSyncRepository:
             },
         )
 
-
     def record_sample_exceedance_details(
         self, *, run_id: UUID, account: str, interface_key: str, business_date: date
     ) -> int:

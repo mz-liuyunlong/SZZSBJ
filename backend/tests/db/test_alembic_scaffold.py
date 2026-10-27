@@ -55,7 +55,9 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
 
     assert config.get_main_option("sqlalchemy.url") is None
     assert script.get_heads() == [SYNC_ANOMALY_HEAD_REVISION]
-    assert script.get_revision(SYNC_ANOMALY_HEAD_REVISION).down_revision == WFS_DETECTION_HEAD_REVISION
+    assert (
+        script.get_revision(SYNC_ANOMALY_HEAD_REVISION).down_revision == WFS_DETECTION_HEAD_REVISION
+    )
     assert (
         script.get_revision(WFS_DETECTION_HEAD_REVISION).down_revision
         == LISTING_INTEGRATION_HEAD_REVISION
