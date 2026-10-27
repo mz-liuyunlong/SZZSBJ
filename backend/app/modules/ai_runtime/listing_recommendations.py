@@ -67,37 +67,71 @@ def _row(
     )
     if prohibited:
         return (
-            "暂不建议埋", keyword, translation, state, "否",
-            "禁止把该词写入标题、五点、详情、图片或属性", "",
+            "暂不建议埋",
+            keyword,
+            translation,
+            state,
+            "否",
+            "禁止把该词写入标题、五点、详情、图片或属性",
+            "",
             "不得写竞品品牌或与实际材质、规格、结构、配件不符的声明",
-            "仅使用已确认的真实商品事实", reason or primary,
-            "避免误导买家及错配流量", str(order), "不建议补", "加入禁用埋词",
+            "仅使用已确认的真实商品事实",
+            reason or primary,
+            "避免误导买家及错配流量",
+            str(order),
+            "不建议补",
+            "加入禁用埋词",
         )
-    if grade not in ("P0", "P1", "P2") or coverage in (
-        "页面看不出来", "页面埋得弱，先验证"
-    ):
+    if grade not in ("P0", "P1", "P2") or coverage in ("页面看不出来", "页面埋得弱，先验证"):
         return (
-            "暂不建议埋", keyword, translation, state, "用户确认后再补",
-            "先核实商品事实、真实 Walmart 页面和该关键词的对应关系", "",
+            "暂不建议埋",
+            keyword,
+            translation,
+            state,
+            "用户确认后再补",
+            "先核实商品事实、真实 Walmart 页面和该关键词的对应关系",
+            "",
             "不得凭竞品标题推断本品的功能或规格",
-            "目前证据不足，不能直接写入 Listing", reason or "承接待复核",
-            "确认事实后再决定是否优化", str(order), "确认后再补", "先问用户确认",
+            "目前证据不足，不能直接写入 Listing",
+            reason or "承接待复核",
+            "确认事实后再决定是否优化",
+            str(order),
+            "确认后再补",
+            "先问用户确认",
         )
     if coverage in ("标题已埋词", "标题意思已覆盖"):
         return (
-            "标题", keyword, translation, state, "否",
-            "检查标题已有表达是否准确，不要重复堆砌相同关键词", "",
+            "标题",
+            keyword,
+            translation,
+            state,
+            "否",
+            "检查标题已有表达是否准确，不要重复堆砌相同关键词",
+            "",
             "禁止重复关键词及不实功能描述",
-            "现有标题已经承接，不需要为了广告重复埋词", "",
-            "保持页面自然可读", str(order), "不建议补", "只做广告测试，不补页面",
+            "现有标题已经承接，不需要为了广告重复埋词",
+            "",
+            "保持页面自然可读",
+            str(order),
+            "不建议补",
+            "只做广告测试，不补页面",
         )
     if coverage in ("详情/属性已埋词", "场景/用途能接住"):
         return (
-            "五点", keyword, translation, state, "否",
-            "检查五点或详情中的现有表达是否对应商品事实", "",
+            "五点",
+            keyword,
+            translation,
+            state,
+            "否",
+            "检查五点或详情中的现有表达是否对应商品事实",
+            "",
             "禁止增加未经确认的功能、材质或适用场景",
-            "页面已有文本承接，暂不重复扩写", "",
-            "保留既有准确承接", str(order), "不建议补", "只做广告测试，不补页面",
+            "页面已有文本承接，暂不重复扩写",
+            "",
+            "保留既有准确承接",
+            str(order),
+            "不建议补",
+            "只做广告测试，不补页面",
         )
     pos, action, priority = (
         ("标题", "补到标题前半段", "P0 必须补") if grade == "P0"
@@ -121,12 +155,20 @@ def create_listing_actions(
     draft: dict | None = None,
 ) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
     """Only project the 01 sheet; no independently generated grades or eligibility."""
-    columns = {key: headers_01.index(key) for key in (
-        "关键词", "关键词中文意思", "关键词类型", "页面承接情况", "投放等级",
-        "未上传原因",
-    )}
+    columns = {
+        key: headers_01.index(key)
+        for key in (
+            "关键词",
+            "关键词中文意思",
+            "关键词类型",
+            "页面承接情况",
+            "投放等级",
+            "未上传原因",
+        )
+    }
     actions: list[tuple[str, ...]] = []
     for order, row in enumerate(rows_01, 1):
+
         def field(name: str) -> str:
             value = row[columns[name]]
             return str(value) if value is not None else ""
@@ -135,9 +177,13 @@ def create_listing_actions(
             continue
         actions.append(
             _row(
-                keyword, field("关键词中文意思"), field("关键词类型"),
-                field("页面承接情况"), field("投放等级"),
-                field("未上传原因"), order=order,
+                keyword,
+                field("关键词中文意思"),
+                field("关键词类型"),
+                field("页面承接情况"),
+                field("投放等级"),
+                field("未上传原因"),
+                order=order,
             )
         )
     if draft is not None:
@@ -145,23 +191,37 @@ def create_listing_actions(
         features = draft.get("features")
         description = draft.get("description")
         if (
-            isinstance(title, str) and title.strip()
-            and isinstance(description, str) and description.strip()
-            and isinstance(features, list) and len(features) == 5
+            isinstance(title, str)
+            and title.strip()
+            and isinstance(description, str)
+            and description.strip()
+            and isinstance(features, list)
+            and len(features) == 5
             and all(isinstance(item, str) and item.strip() for item in features)
         ):
             # Exactly ONE saved listing draft. Mark every line as human-review only.
-            copy_rows = [("标题", title)] + [
-                (f"五点", item) for item in features
-            ] + [("详情描述", description)]
+            copy_rows = (
+                [("标题", title)]
+                + [(f"五点", item) for item in features]
+                + [("详情描述", description)]
+            )
             for pos, content in copy_rows:
                 actions.append(
                     (
-                        pos, "", "", "页面看不出来", "用户确认后再补",
+                        pos,
+                        "",
+                        "",
+                        "页面看不出来",
+                        "用户确认后再补",
                         "根据已确认的商品事实逐句审稿，再决定是否发布",
-                        content, "不得发布未经核实的 AI 商品描述",
-                        "这是同一份 AI Listing 草稿，并非已发布页面事实", "",
-                        "经人工核实后改善表达", "0", "确认后再补", "先问用户确认",
+                        content,
+                        "不得发布未经核实的 AI 商品描述",
+                        "这是同一份 AI Listing 草稿，并非已发布页面事实",
+                        "",
+                        "经人工核实后改善表达",
+                        "0",
+                        "确认后再补",
+                        "先问用户确认",
                     )
                 )
     return HEADERS_05, actions
