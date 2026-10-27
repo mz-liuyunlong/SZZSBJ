@@ -302,9 +302,9 @@ class WalmartReadCollector:
         files: dict[str, dict[str, Any]] = {}
         for name, content in raw_files.items():
             files[name] = {
-                "sha256": hashlib.sha256(content).hexdigest(),
-                "bytes": len(content),
-                "records": len(collected[name[4:-6]]),
+                "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                "bytes": len(content.encode("utf-8")),
+                "records": len(content.splitlines()),
             }
         safe_endpoints, count = _sanitize(endpoint_results)
         self._redactions += count
@@ -331,7 +331,7 @@ class WalmartReadCollector:
             **raw_files,
             "summary.json": self._json_bytes(summary),
             "manifest.json": manifest_bytes,
-            "requests_log.md": self._json_bytes(self._request_log).decode("utf-8"),
+            "requests_log.md": self._json_bytes(self._request_log),
         }
         sums = [
             f"{hashlib.sha256(value.encode('utf-8')).hexdigest()}  {name}"
