@@ -7,6 +7,7 @@ publication has an explicit, trusted financial-completeness contract.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
@@ -14,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.data_pages.models import ListingManagementCurrentMart
+from app.modules.listing_rule_config.models import ListingGradeFollowUpTask
 from app.modules.listing_rule_config.models import (
     ListingEvaluationRun,
     ListingEvaluationSnapshot,
@@ -186,3 +188,50 @@ class ListingEvaluationBatchService:
             run.error_code = "LISTING_COUNT_CHANGED_DURING_EVALUATION"
             run.blocked_count += abs(run.total_listings - run.processed_listings)
         self.session.commit()
+
+
+    def create_followups_for_published_run(self, *, run_id: UUID) -> int:
+        """Idempotently create daily C/D tasks only for explicitly published snapshots."""
+        from app.modules.listing_rule_config.models import ListingEvaluationSnapshot
+
+        today_cn = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        rows = self.session.execute(
+            select(ListingEvaluationSnapshot, ListingManagementCurrentMart.owner_ref)
+            .join(
+                ListingManagementCurrentMart,
+                ListingManagementCurrentMart.id == ListingEvaluationSnapshot.listing_id,
+            )
+            .where(
+                ListingEvaluationSnapshot.run_id == run_id,
+                ListingEvaluationSnapshot.published.is_(True),
+                ListingEvaluationSnapshot.grade_candidate.in_(("C", "D")),
+            )
+        ).all()
+        created = 0
+        for snapshot, owner_ref in rows:
+            existing = self.session.scalar(
+                select(ListingGradeFollowUpTask.id).where(
+                    ListingGradeFollowUpTask.snapshot_id == snapshot.id
+                )
+            )
+            if existing is not None:
+                continue
+            self.session.add(
+                ListingGradeFollowUpTask(
+                    snapshot_id=snapshot.id,
+                    listing_id=snapshot.listing_id,
+                    source_account_ref=snapshot.source_account_ref,
+                    store_id=snapshot.store_id,
+                    item_id=snapshot.item_id,
+                    msku=snapshot.msku,
+                    grade=snapshot.grade_candidate,
+                    cutoff_date_la=snapshot.cutoff_date_la,
+                    due_date_cn=today_cn,
+                    owner_ref=owner_ref,
+                    status="pending",
+                )
+            )
+            created += 1
+        if created:
+            self.session.commit()
+        return created

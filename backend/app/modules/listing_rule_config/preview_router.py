@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_response
@@ -16,6 +17,11 @@ from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.listing_rule_config.evaluation import rating_cutoff_la
+from app.modules.listing_rule_config.models import (
+    ListingEvaluationRun,
+    ListingEvaluationSnapshot,
+    ListingGradeFollowUpTask,
+)
 from app.modules.listing_rule_config.preview import (
     ListingEvaluationPreview,
     ListingEvaluationPreviewService,
@@ -123,4 +129,124 @@ def get_evaluation_preview_batch(
         request,
         data=ListingEvaluationBatchData(items=items, total=len(items)),
         meta={"source": "read_only_diagnostic"},
+    )
+
+
+class ListingEvaluationRunItem(BaseModel):
+    id: UUID
+    schedule_date_cn: date
+    cutoff_date_la: date
+    status: str
+    rule_version: int
+    total_listings: int
+    processed_listings: int
+    grade_candidate_count: int
+    lifecycle_candidate_count: int
+    blocked_count: int
+    attempt_count: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    error_code: str | None
+
+
+class ListingEvaluationRunList(BaseModel):
+    items: list[ListingEvaluationRunItem]
+    total: int
+
+
+class ListingFollowUpItem(BaseModel):
+    id: UUID
+    snapshot_id: UUID
+    listing_id: UUID
+    store_id: str
+    item_id: str
+    msku: str | None
+    grade: str
+    cutoff_date_la: date
+    due_date_cn: date
+    owner_ref: str | None
+    status: str
+    resolved_at: datetime | None
+    resolution_note: str | None
+
+
+class ListingFollowUpList(BaseModel):
+    items: list[ListingFollowUpItem]
+    total: int
+
+
+@router.get(
+    "/evaluation-runs",
+    response_model=SuccessEnvelope[ListingEvaluationRunList, dict[str, str]],
+    dependencies=[view],
+)
+def list_evaluation_runs(
+    request: Request,
+    session: DB,
+    account_refs: scope,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    scoped = exists(
+        select(ListingEvaluationSnapshot.id).where(
+            ListingEvaluationSnapshot.run_id == ListingEvaluationRun.id,
+            ListingEvaluationSnapshot.source_account_ref.in_(account_refs),
+        )
+    )
+    rows = list(
+        session.scalars(
+            select(ListingEvaluationRun)
+            .where(scoped)
+            .order_by(ListingEvaluationRun.schedule_date_cn.desc())
+            .limit(limit)
+        ).all()
+    )
+    count = session.scalar(
+        select(__import__("sqlalchemy").func.count())
+        .select_from(ListingEvaluationRun)
+        .where(scoped)
+    ) or 0
+    return success_response(
+        request,
+        data=ListingEvaluationRunList(
+            items=[ListingEvaluationRunItem.model_validate(row) for row in rows],
+            total=count,
+        ),
+        meta={"source": "read_only_diagnostic"},
+    )
+
+
+@router.get(
+    "/evaluation-followups",
+    response_model=SuccessEnvelope[ListingFollowUpList, dict[str, str]],
+    dependencies=[view],
+)
+def list_evaluation_followups(
+    request: Request,
+    session: DB,
+    account_refs: scope,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+):
+    rows = list(
+        session.scalars(
+            select(ListingGradeFollowUpTask)
+            .where(ListingGradeFollowUpTask.source_account_ref.in_(account_refs))
+            .order_by(
+                ListingGradeFollowUpTask.due_date_cn.asc(),
+                ListingGradeFollowUpTask.created_at.desc(),
+            )
+            .limit(limit)
+        ).all()
+    )
+    count = session.scalar(
+        select(__import__("sqlalchemy").func.count())
+        .select_from(ListingGradeFollowUpTask)
+        .where(ListingGradeFollowUpTask.source_account_ref.in_(account_refs))
+    ) or 0
+    return success_response(
+        request,
+        data=ListingFollowUpList(
+            items=[ListingFollowUpItem.model_validate(row) for row in rows],
+            total=count,
+        ),
+        meta={"source": "published_grade_followups"},
     )
