@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.celery_app import celery_app
 from app.core.config import get_settings
@@ -25,31 +25,37 @@ def scheduler_tick() -> None:
     now = datetime.now(UTC)
     local = now.astimezone(CHINA_TZ)
     with get_session_factory()() as session:
-        row = session.scalar(
-            select(ListingGradeRuleVersion)
-            .where(ListingGradeRuleVersion.effective_from <= now)
-            .order_by(ListingGradeRuleVersion.version.desc())
-            .limit(1)
-        )
-        config = (
-            ListingGradeRuleConfig.model_validate(row.config_json)
-            if row is not None
-            else ListingGradeRuleConfig()
-        )
-        if local.strftime("%H:%M") < config.execution_time:
+        locked = session.scalar(text("SELECT pg_try_advisory_lock(2406251026)"))
+        if not locked:
             return
-        if (
-            session.scalar(
-                select(ListingEvaluationRun.id).where(
-                    ListingEvaluationRun.schedule_date_cn == local.date()
-                )
+        try:
+            row = session.scalar(
+                select(ListingGradeRuleVersion)
+                .where(ListingGradeRuleVersion.effective_from <= now)
+                .order_by(ListingGradeRuleVersion.version.desc())
+                .limit(1)
             )
-            is not None
-        ):
-            return
-        # The run has a unique China date; only diagnostic snapshots are written.
-        ListingEvaluationBatchService(session).run_daily_diagnostic(
-            schedule_date_cn=local.date(),
-            cutoff_date_la=rating_cutoff_la(now),
-            batch_size=50,
-        )
+            config = (
+                ListingGradeRuleConfig.model_validate(row.config_json)
+                if row is not None
+                else ListingGradeRuleConfig()
+            )
+            if local.strftime("%H:%M") < config.execution_time:
+                return
+            if (
+                session.scalar(
+                    select(ListingEvaluationRun.id).where(
+                        ListingEvaluationRun.schedule_date_cn == local.date()
+                    )
+                )
+                is not None
+            ):
+                return
+            # The run has a unique China date; only diagnostic snapshots are written.
+            ListingEvaluationBatchService(session).run_daily_diagnostic(
+                schedule_date_cn=local.date(),
+                cutoff_date_la=rating_cutoff_la(now),
+                batch_size=50,
+            )
+        finally:
+            session.execute(text("SELECT pg_advisory_unlock(2406251026)"))
