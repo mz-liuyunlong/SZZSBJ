@@ -25,9 +25,16 @@ HEADERS_05 = (
 
 BLOCKED_TYPES = frozenset(
     {
-        "品牌/竞品词", "配件/替换词", "错货架词", "结构冲突词",
-        "材质不符词", "规格/尺寸不符词", "Pack/数量不符词",
-        "颜色/款式不符词", "合规/认证风险词", "机器设备词",
+        "品牌/竞品词",
+        "配件/替换词",
+        "错货架词",
+        "结构冲突词",
+        "材质不符词",
+        "规格/尺寸不符词",
+        "Pack/数量不符词",
+        "颜色/款式不符词",
+        "合规/认证风险词",
+        "机器设备词",
         "食材本身词",
     }
 )
@@ -45,14 +52,18 @@ COVERAGE_TO_STATE = {
 
 
 def _row(
-    keyword: str, translation: str, primary: str, coverage: str, grade: str, reason: str,
-    *, order: int,
+    keyword: str,
+    translation: str,
+    primary: str,
+    coverage: str,
+    grade: str,
+    reason: str,
+    *,
+    order: int,
 ) -> tuple[str, ...]:
     state = COVERAGE_TO_STATE.get(coverage, "页面看不出来")
     prohibited = (
-        primary in BLOCKED_TYPES
-        or grade in ("不投放", "品牌等级")
-        or coverage == "页面不建议埋"
+        primary in BLOCKED_TYPES or grade in ("不投放", "品牌等级") or coverage == "页面不建议埋"
     )
     if prohibited:
         return (
@@ -104,7 +115,9 @@ def _row(
 
 
 def create_listing_actions(
-    headers_01: Sequence[str], rows_01: Sequence[Sequence[object]], *,
+    headers_01: Sequence[str],
+    rows_01: Sequence[Sequence[object]],
+    *,
     draft: dict | None = None,
 ) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
     """Only project the 01 sheet; no independently generated grades or eligibility."""
