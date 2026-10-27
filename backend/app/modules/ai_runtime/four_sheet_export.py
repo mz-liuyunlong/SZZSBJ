@@ -104,8 +104,6 @@ def generate_four_sheet_review(
                 cells[index] = (str(cells[index] or "") + "；" + note)[:800]
             updated.append(tuple(cells))
         sheets[0] = (sheets[0][0], sheets[0][1], updated)
-    headers_05, rows_05 = create_listing_actions(
-        sheets[0][1], sheets[0][2], draft=listing_draft
-    )
+    headers_05, rows_05 = create_listing_actions(sheets[0][1], sheets[0][2], draft=listing_draft)
     sheets[3] = (SHEET_NAMES[3], headers_05, rows_05)
     return _make_xlsx(sheets, header_fill=False)
