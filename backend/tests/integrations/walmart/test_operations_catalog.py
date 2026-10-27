@@ -38,13 +38,17 @@ def test_multi_node_inventory_cursor_and_profile() -> None:
     registry = operations_read_registry(
         approved_keys=frozenset({"inventories_list", "partner_profile_get"})
     )
-    assert registry.prepare("inventories_list", params={"nextCursor": "cursor-1"}).path == "/v3/inventories"
+    assert registry.prepare(
+        "inventories_list", params={"nextCursor": "cursor-1"}
+    ).path == "/v3/inventories"
     assert registry.prepare("partner_profile_get").path == "/v3/settings/partnerprofile"
 
 
 def test_incentives_and_report_status_validation() -> None:
     registry = operations_read_registry(
-        approved_keys=frozenset({"price_incentives_list", "report_requests_list", "report_request_status_get"})
+        approved_keys=frozenset(
+            {"price_incentives_list", "report_requests_list", "report_request_status_get"}
+        )
     )
     with pytest.raises(ContractError, match="WALMART_FIELD_INVALID"):
         registry.prepare("price_incentives_list", params={"limit": 101})
@@ -54,7 +58,9 @@ def test_incentives_and_report_status_validation() -> None:
     )
     assert request.query["reportType"] == "ITEM"
     with pytest.raises(ContractError, match="WALMART_FIELD_INVALID"):
-        registry.prepare("report_requests_list", params={"reportType": "ITEM", "requestStatus": "DONE"})
+        registry.prepare(
+            "report_requests_list", params={"reportType": "ITEM", "requestStatus": "DONE"}
+        )
     status = registry.prepare("report_request_status_get", params={"requestId": "REQ/1"})
     assert status.path == "/v3/reports/reportRequests/REQ%2F1"
 
