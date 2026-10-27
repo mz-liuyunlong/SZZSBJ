@@ -115,6 +115,7 @@ def test_refund_mart_success_writes_validated_events_after_pending() -> None:
 def test_legacy_refund_retry_reuses_captured_days_not_current_window() -> None:
     service = SyncRunExecutionService(MagicMock())
     source_run_id = uuid4()
+    service.repository = MagicMock()
     service.repository.refund_capture_business_dates.return_value = (
         date(2026, 8, 4),
         date(2026, 9, 13),
@@ -137,6 +138,7 @@ def test_legacy_refund_retry_reuses_captured_days_not_current_window() -> None:
 
 def test_legacy_refund_retry_without_capture_evidence_fails_closed() -> None:
     service = SyncRunExecutionService(MagicMock())
+    service.repository = MagicMock()
     service.repository.refund_capture_business_dates.return_value = ()
     run = SimpleNamespace(
         interface_key="walmartReturnOrderList",
@@ -150,6 +152,7 @@ def test_legacy_refund_retry_without_capture_evidence_fails_closed() -> None:
 
 def test_refund_retry_with_frozen_window_preserves_original_business_date() -> None:
     service = SyncRunExecutionService(MagicMock())
+    service.repository = MagicMock()
     la = ZoneInfo("America/Los_Angeles")
     run = SimpleNamespace(
         interface_key="walmartReturnOrderList",
