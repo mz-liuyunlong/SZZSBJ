@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, UTC
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -11,15 +11,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_response
-from app.core.permissions import require_permission
 from app.core.config import get_settings
+from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.listing_rule_config.evaluation import rating_cutoff_la
 from app.modules.listing_rule_config.preview import (
     ListingEvaluationPreview,
     ListingEvaluationPreviewService,
 )
-from app.modules.listing_rule_config.evaluation import rating_cutoff_la
 
 router = APIRouter(prefix="/api/listings", tags=["Listing Evaluation Preview"])
 DB = Annotated[Session, Depends(get_db_session)]

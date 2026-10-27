@@ -78,6 +78,7 @@ def test_openapi_contains_preview_route():
 
 def test_batch_input_limits_and_duplicates() -> None:
     from uuid import UUID
+
     from pydantic import ValidationError
 
     from app.modules.listing_rule_config.preview_router import ListingEvaluationBatchRequest
