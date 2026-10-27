@@ -359,6 +359,7 @@ class SyncRunExecutionService:
             run.interface_key == "walmartReturnOrderList"
             and run.window_start is None
             and run.window_end is None
+            and len(days) == (days[-1] - days[0]).days + 1
         ):
             run.window_start = datetime.combine(days[0], time.min, tzinfo=DATA_PAGES_LA_TZ)
             run.window_end = datetime.combine(days[-1], time.max, tzinfo=DATA_PAGES_LA_TZ)
