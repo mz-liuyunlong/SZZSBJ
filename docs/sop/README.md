@@ -33,3 +33,7 @@
 ```
 
 没有 SOP 的页面，不允许标记 `ready`。
+
+已登记页面 SOP：
+
+- `warehouse-wfs-fee-anomaly-auto-detection.md`（WFS 费用证据、检测预览和生产门禁）

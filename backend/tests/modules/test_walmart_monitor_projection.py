@@ -238,7 +238,7 @@ def test_projection_migration_is_additive_and_does_not_update_listing_mart(
     config.output_buffer = buffer
     command.upgrade(
         config,
-        "20261027_0061_listing_evaluation_runs:20261027_0062_walmart_monitor_listing_projection",
+        "20261027_0062_listing_evaluation_runs:20261027_0063_walmart_monitor_listing_projection",
         sql=True,
     )
     sql = buffer.getvalue()

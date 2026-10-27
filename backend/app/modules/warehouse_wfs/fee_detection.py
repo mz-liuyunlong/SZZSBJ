@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 CENT = Decimal("0.01")
@@ -21,6 +22,15 @@ class SettlementFeeRow:
     platform_logistics_amount: Decimal
     settlement_date: str
     source_line_ref: str
+    fee_scope_status: str = "unverified"
+
+
+@dataclass(frozen=True)
+class ResolvedOrderFeeSample:
+    platform_order_no: str
+    unit_fee: Decimal
+    sales_units: Decimal
+    settlement_date: date
 
 
 @dataclass(frozen=True)
@@ -33,6 +43,48 @@ class ResolvedWfsFee:
     fee_orders: int
     mode_count: int
     skipped_no_qty: int
+    order_samples: tuple[ResolvedOrderFeeSample, ...] = ()
+    latest_settlement_date: date | None = None
+    fee_scope_status: str = "unverified"
+
+
+@dataclass(frozen=True)
+class WfsCalculatedAmounts:
+    legacy_estimate: Decimal | None
+    theoretical_overcharge: Decimal
+    net_sample_difference: Decimal
+
+
+def calculate_wfs_amounts(
+    samples: tuple[ResolvedOrderFeeSample, ...],
+    *,
+    standard_unit_fee: Decimal,
+    actual_unit_fee: Decimal,
+    historical_units: Decimal | int | None,
+) -> WfsCalculatedAmounts:
+    """Authoritative three-metric calculation shared by all WFS readers."""
+
+    difference = actual_unit_fee - standard_unit_fee
+    legacy = (
+        (max(difference, Decimal("0")) * Decimal(historical_units)).quantize(
+            CENT,
+            rounding=ROUND_HALF_UP,
+        )
+        if historical_units is not None
+        else None
+    )
+    theoretical = sum(
+        (
+            max(sample.unit_fee - standard_unit_fee, Decimal("0")) * sample.sales_units
+            for sample in samples
+        ),
+        Decimal("0"),
+    ).quantize(CENT, rounding=ROUND_HALF_UP)
+    net = sum(
+        ((sample.unit_fee - standard_unit_fee) * sample.sales_units for sample in samples),
+        Decimal("0"),
+    ).quantize(CENT, rounding=ROUND_HALF_UP)
+    return WfsCalculatedAmounts(legacy, theoretical, net)
 
 
 def decimal_value(value: object) -> Decimal:
@@ -77,18 +129,15 @@ def resolve_wfs_fees(
                 raise ValueError("WFS_DUPLICATE_SOURCE_LINE_REF")
             seen_lines.add(row.source_line_ref)
 
-            order_key = row.platform_order_no or f"line:{row.source_line_ref}"
+            if not row.platform_order_no:
+                raise ValueError("WFS_MISSING_ORDER_IDENTITY")
+            order_key = row.platform_order_no
             by_order[order_key].append(row)
 
-        sample_units = sum(
-            (row.sales_num for row in group),
-            Decimal("0"),
-        )
-
-        samples: list[tuple[Decimal, str]] = []
+        samples: list[ResolvedOrderFeeSample] = []
         skipped_no_qty = 0
 
-        for order_rows in by_order.values():
+        for order_no, order_rows in by_order.items():
             quantity = sum(
                 (row.sales_num for row in order_rows),
                 Decimal("0"),
@@ -109,16 +158,28 @@ def resolve_wfs_fees(
                 CENT,
                 rounding=ROUND_HALF_UP,
             )
-            latest_date = max(row.settlement_date for row in order_rows)
-            samples.append((fee, latest_date))
+            try:
+                latest_date = max(date.fromisoformat(row.settlement_date) for row in order_rows)
+            except ValueError as exc:
+                raise ValueError("WFS_INVALID_SETTLEMENT_DATE") from exc
+            samples.append(
+                ResolvedOrderFeeSample(
+                    platform_order_no=order_no,
+                    unit_fee=fee,
+                    sales_units=quantity,
+                    settlement_date=latest_date,
+                )
+            )
+
+        sample_units = sum((sample.sales_units for sample in samples), Decimal("0"))
 
         unit_fee: Decimal | None = None
         mode_count = 0
 
         if sample_units >= min_sample_units and samples:
-            counts = Counter(fee for fee, _ in samples)
+            counts = Counter(sample.unit_fee for sample in samples)
             latest = {
-                fee: max(date for sample_fee, date in samples if sample_fee == fee)
+                fee: max(sample.settlement_date for sample in samples if sample.unit_fee == fee)
                 for fee in counts
             }
 
@@ -141,6 +202,16 @@ def resolve_wfs_fees(
                 fee_orders=len(samples),
                 mode_count=mode_count,
                 skipped_no_qty=skipped_no_qty,
+                order_samples=tuple(samples),
+                latest_settlement_date=max(
+                    (sample.settlement_date for sample in samples),
+                    default=None,
+                ),
+                fee_scope_status=(
+                    "verified_wfs"
+                    if group and all(row.fee_scope_status == "verified_wfs" for row in group)
+                    else "unverified"
+                ),
             )
         )
 

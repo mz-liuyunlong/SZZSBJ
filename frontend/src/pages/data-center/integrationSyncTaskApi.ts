@@ -304,11 +304,12 @@ const latestDate = (...values: Array<string | null | undefined>) => (
 
 const statusPriority: Record<SyncTaskStatus, number> = {
   已停用: 0,
-  成功: 1,
-  运行中: 2,
-  部分成功: 3,
-  超时: 4,
-  失败: 5,
+  未执行: 1,
+  成功: 2,
+  运行中: 3,
+  部分成功: 4,
+  超时: 5,
+  失败: 6,
 };
 
 const worseStatus = (left: SyncTaskStatus, right: SyncTaskStatus) => (
@@ -321,6 +322,7 @@ const mergeProductDetailDependency = (
 ): SyncTaskRow => ({
   ...parent,
   todaySuccess: parent.todaySuccess + dependency.todaySuccess,
+  todayRuns: (parent.todayRuns ?? 0) + (dependency.todayRuns ?? 0),
   todayFailed: parent.todayFailed + dependency.todayFailed,
   workItemsPlanned: parent.workItemsPlanned + dependency.workItemsPlanned,
   workItemsSucceeded: parent.workItemsSucceeded + dependency.workItemsSucceeded,
@@ -328,32 +330,35 @@ const mergeProductDetailDependency = (
   recordsSeen: parent.recordsSeen + dependency.recordsSeen,
   recordsWritten: parent.recordsWritten + dependency.recordsWritten,
   lastStatus: worseStatus(parent.lastStatus, dependency.lastStatus),
+  latestRunId: statusPriority[dependency.lastStatus] > statusPriority[parent.lastStatus]
+    ? dependency.latestRunId : parent.latestRunId,
+  configId: parent.configId,
   lastRunAt: latestDate(parent.lastRunAt, dependency.lastRunAt),
   lastRunFinishedAt: latestDate(parent.lastRunFinishedAt, dependency.lastRunFinishedAt),
   updatedAt: latestDate(parent.updatedAt, dependency.updatedAt),
-  errorCode: parent.errorCode ?? dependency.errorCode,
+  errorCode: statusPriority[dependency.lastStatus] > statusPriority[parent.lastStatus]
+    ? dependency.errorCode : parent.errorCode,
   description: "ProductList 与 ProductInfo 合并展示为一个产品管理同步任务。",
 });
 
-const foldProductDetailDependencyRows = (rows: SyncTaskRow[]): SyncTaskRow[] => {
+export const foldProductDetailDependencyRows = (rows: SyncTaskRow[]): SyncTaskRow[] => {
   const dependencies = rows.filter(isProductDetailDependencyTask);
   if (dependencies.length === 0) return rows;
-
-  const productList = rows.find(isProductListTask);
-  if (!productList) {
-    return rows.filter((task) => !isProductDetailDependencyTask(task));
-  }
-
-  const mergedProductList = dependencies.reduce(
-    mergeProductDetailDependency,
-    productList,
-  );
-
+  const parents = rows.filter(isProductListTask);
   return rows.flatMap((task) => {
     if (isProductDetailDependencyTask(task)) return [];
-    if (task === productList) return [mergedProductList];
-    return [task];
-  });
+    if (!isProductListTask(task)) return [task];
+    return dependencies
+      .filter((dependency) => dependency.source === task.source)
+      .reduce(mergeProductDetailDependency, task);
+  }).concat(
+    dependencies
+      .filter((dependency) => !parents.some((parent) => parent.source === dependency.source))
+      .map((dependency) => ({
+        ...dependency,
+        description: "未找到同数据源账号的 ProductList 父任务，单独展示以防漏报。",
+      })),
+  );
 };
 
 function row(
@@ -361,9 +366,9 @@ function row(
   config: ConfigDto | undefined,
   run: RunDto | undefined,
 ): SyncTaskRow {
-  const lastStatus = run ? status[run.status] ?? "失败" : config?.is_enabled === false
-    ? "已停用"
-    : "已停用";
+  const lastStatus = run
+    ? status[run.status] ?? "失败"
+    : config?.is_enabled === false ? "已停用" : "未执行";
   return {
     id: config?.id ?? run?.id ?? item.id,
     configId: config?.id ?? run?.config_id ?? null,
@@ -385,8 +390,9 @@ function row(
     lastStatus,
     lastRunAt: run?.started_at ?? run?.queued_at ?? null,
     lastRunFinishedAt: run?.finished_at ?? null,
-    todaySuccess: run?.work_items_succeeded ?? 0,
-    todayFailed: run?.work_items_failed ?? 0,
+    todaySuccess: 0,
+    todayFailed: 0,
+    todayRuns: 0,
     workItemsPlanned: run?.work_items_total ?? 0,
     workItemsSucceeded: run?.work_items_succeeded ?? 0,
     workItemsFailed: run?.work_items_failed ?? 0,
@@ -413,21 +419,45 @@ function row(
 }
 
 export async function listIntegrationSyncTasks() {
-  const [interfaces, configs, runs] = await Promise.all([
-    backendRequest<{ items: InterfaceDto[] }>("/api/integrations/interfaces?page_size=100"),
-    backendRequest<{ items: ConfigDto[] }>("/api/integrations/sync-configs?page_size=100"),
-    backendRequest<{ items: RunDto[] }>("/api/integrations/sync-runs?page_size=100"),
+  async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
+    const items: T[] = [];
+    for (let page = 1; page <= 1000; page += 1) {
+      const response = await backendRequest<{ items: T[] }>(
+        `${endpoint}?page=${page}&page_size=100`,
+      );
+      items.push(...response.data.items);
+      if (response.data.items.length < 100) return items;
+    }
+    throw new Error("SYNC_TASK_CONFIG_LIST_TOO_LARGE");
+  }
+  const [interfacesList, configsList, dashboard] = await Promise.all([
+    fetchAllPages<InterfaceDto>("/api/integrations/interfaces"),
+    fetchAllPages<ConfigDto>("/api/integrations/sync-configs"),
+    backendRequest<{ latest_runs: RunDto[]; today_stats: Array<{
+      interface_id: string; source_account_ref: string;
+      runs: number; success: number; failed: number;
+    }> }>("/api/integrations/sync-tasks/dashboard"),
   ]);
-  const interfaceById = new Map(interfaces.data.items.map((item) => [item.id, item]));
-  const rows = configs.data.items.flatMap((config) => {
+  const runs = { data: { items: dashboard.data.latest_runs } };
+  const todayStats = dashboard.data.today_stats;
+  const interfaceById = new Map(interfacesList.map((item) => [item.id, item]));
+  const rows = configsList.flatMap((config) => {
     const item = interfaceById.get(config.interface_id);
     return item ? [row(item, config, newestRun(runs.data.items, item.id, config.source_account_ref))] : [];
   });
-  for (const item of interfaces.data.items) {
+  for (const item of interfacesList) {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
     rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
   }
-  const visibleRows = foldProductDetailDependencyRows(rows).filter(shouldDisplayTaskRow);
+  const todayTotals = new Map(todayStats.map((stat) => [
+    `${stat.interface_id}:${stat.source_account_ref}`,
+    { success: stat.success, failed: stat.failed, runs: stat.runs },
+  ]));
+  const withTodayCounts = rows.map((task) => {
+    const counts = todayTotals.get(`${task.interfaceId}:${task.source ?? ""}`);
+    return { ...task, todaySuccess: counts?.success ?? 0, todayFailed: counts?.failed ?? 0, todayRuns: counts?.runs ?? 0 };
+  });
+  const visibleRows = foldProductDetailDependencyRows(withTodayCounts).filter(shouldDisplayTaskRow);
   const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
     id: run.id,
     taskId: run.config_id ?? run.id,
@@ -443,7 +473,7 @@ export async function listIntegrationSyncTasks() {
     requestId: run.request_id,
     errorSummary: run.error_code,
   }));
-  const schedules: SyncScheduleItem[] = visibleRows.flatMap((task) => task.nextRunAt ? [{
+  const schedules: SyncScheduleItem[] = visibleRows.flatMap((task) => task.autoSync && task.nextRunAt ? [{
     id: task.id,
     time: task.nextRunAt,
     taskName: task.taskName,
@@ -454,6 +484,51 @@ export async function listIntegrationSyncTasks() {
   return { rows: visibleRows, logs, schedules };
 }
 
+
+export async function listIntegrationSyncRunLogPage(params: {
+  page: number;
+  pageSize: number;
+  sourceAccount?: string | null;
+  interfaceKey?: string;
+  includeProductDetail?: boolean;
+  createdFrom?: string;
+  createdTo?: string;
+  status?: string;
+  triggerType?: string;
+}): Promise<{ items: SyncTaskLog[]; total: number }> {
+  const query = new URLSearchParams({
+    page: String(params.page),
+    page_size: String(params.pageSize),
+  });
+  if (params.sourceAccount) query.set("source_account_ref", params.sourceAccount);
+  if (params.interfaceKey) query.set("interface_key", params.interfaceKey);
+  if (params.includeProductDetail) query.set("include_product_detail", "true");
+  if (params.createdFrom) query.set("created_from", params.createdFrom);
+  if (params.createdTo) query.set("created_to", params.createdTo);
+  if (params.status) query.set("status", params.status);
+  if (params.triggerType) query.set("trigger_type", params.triggerType);
+  const response = await backendRequest<{ items: RunDto[] }, { total?: number }>(
+    `/api/integrations/sync-runs?${query}`,
+  );
+  return {
+    total: response.meta.total ?? response.data.items.length,
+    items: response.data.items.map((run): SyncTaskLog => ({
+      id: run.id,
+      taskId: run.config_id ?? run.id,
+      runAt: run.started_at ?? run.queued_at,
+      triggerType: trigger(run.trigger_type),
+      status: status[run.status] ?? "失败",
+      duration: run.finished_at && run.started_at
+        ? `${Math.max(Date.parse(run.finished_at) - Date.parse(run.started_at), 0)}ms`
+        : null,
+      total: run.records_seen,
+      success: run.work_items_succeeded,
+      failed: run.work_items_failed,
+      requestId: run.request_id,
+      errorSummary: run.error_code,
+    })),
+  };
+}
 
 function workItem(item: WorkItemDto): SyncTaskWorkItem {
   return {
@@ -553,4 +628,17 @@ export async function updateIntegrationSyncConfig(
     },
   );
   return response.data;
+}
+
+export interface RefundMartPendingDay {
+  source_account_ref: string;
+  business_date: string;
+  run_id: string;
+}
+
+export async function listRefundMartPendingDays(): Promise<RefundMartPendingDay[]> {
+  const response = await backendRequest<{ items: RefundMartPendingDay[] }>(
+    "/api/integrations/sync-tasks/refund-mart-pending",
+  );
+  return response.data.items;
 }

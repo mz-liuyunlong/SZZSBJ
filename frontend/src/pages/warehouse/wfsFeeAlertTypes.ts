@@ -17,12 +17,17 @@ export interface WfsFeeAlertRow {
   category: string;
   orders: number;
   units: number;
+  validFeeOrders?: number | null;
+  validSampleUnits?: number | null;
+  modeCount?: number | null;
   chargedFee: number;
   standardFee: number;
   productUnitWfsFee: number | null;
   unitCharged: number;
   unitStandard: number;
   overFee: number;
+  theoreticalOvercharge?: number | null;
+  netSampleDifference?: number | null;
   unitOverFee: number;
   recoveredAmount: number;
   status: WfsFeeAlertCaseStatus;
@@ -33,11 +38,39 @@ export interface WfsFeeAlertRow {
   nextFollowAt: string;
   level: WfsFeeAlertPriority;
   latestFollow: string;
+  latestSettlementDate?: string;
+  detectionStatus?: string;
+  freshnessStatus?: string;
+  standardFeeSource?: string;
+  detectedAt?: string;
+  salesCoverageStatus?: string;
+  salesCoverageReason?: string;
+  salesCoverageStartDate?: string;
+  salesCoverageEndDate?: string;
+  feeScopeStatus?: string;
+  automaticCaseEligible?: boolean | null;
   followLog?: string;
   followCount?: number;
   lastFollowBy?: string | null;
   lastFollowAt?: string | null;
 }
+
+export const defaultWfsDetectionWindow = (now = new Date()): [string, string] => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const businessDate = new Date(Date.UTC(value("year"), value("month") - 1, value("day")));
+  const end = new Date(businessDate);
+  end.setUTCDate(end.getUTCDate() - 2);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - 59);
+  return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)];
+};
 
 export interface WfsFeeAlertFilters {
   datePreset: WfsFeeAlertDatePreset;
@@ -57,6 +90,11 @@ export interface WfsFeeAlertFollowFormValues {
   recoveredAmount: number;
   nextFollowAt?: string;
   latestFollow: string;
+}
+
+export interface WfsFeeRecoveredFormValues {
+  recoveredAmount: number;
+  latestFollowNote?: string;
 }
 
 export interface WfsFeeAlertColumnField {
@@ -96,6 +134,8 @@ export const wfsFeeAlertColumnFields: WfsFeeAlertColumnField[] = [
   { key: "standardFee", title: "人工配送费测算" },
   { key: "overFee", title: "预计追回" },
   { key: "unitOverFee", title: "单件多收" },
+  { key: "latestSettlementDate", title: "最新结算" },
+  { key: "detectionStatus", title: "检测状态" },
   { key: "reason", title: "异常原因" },
   { key: "level", title: "优先级" },
   { key: "status", title: "Case状态" },

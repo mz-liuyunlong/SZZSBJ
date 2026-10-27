@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 Nonblank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 CaseStatus = Literal["pending_confirm", "following", "archive_pending", "archived", "recovered"]
@@ -68,6 +68,23 @@ class WfsFeeCaseRead(StrictSchema):
     affected_units_source: str | None
     estimated_recover_amount: Decimal
     pending_recover_amount: Decimal
+    valid_sample_units: Decimal | None = None
+    valid_fee_orders: int | None = None
+    mode_count: int | None = None
+    theoretical_overcharge_amount: Decimal | None = None
+    net_sample_difference_amount: Decimal | None = None
+    latest_settlement_date: date | None = None
+    detection_status: str | None = None
+    data_freshness_status: str | None = None
+    standard_fee_source: str | None = None
+    detected_at: datetime | None = None
+    sales_coverage_status: str | None = None
+    sales_coverage_reason: str | None = None
+    sales_coverage_start_date: date | None = None
+    sales_coverage_end_date: date | None = None
+    sales_source_watermark: str | None = None
+    fee_scope_status: str | None = None
+    automatic_case_eligible: bool | None = None
 
     claim_amount: Decimal | None
     recovered_amount: Decimal
@@ -177,6 +194,44 @@ class WfsFeeAlertMeta(StrictSchema):
     total: int
 
 
+class WfsFeeDetectionPreviewWrite(StrictSchema):
+    start_date: date
+    end_date: date
+    store_id: Nonblank | None = None
+
+    @model_validator(mode="after")
+    def validate_window(self) -> WfsFeeDetectionPreviewWrite:
+        if self.start_date > self.end_date or (self.end_date - self.start_date).days >= 366:
+            raise ValueError("WFS_PREVIEW_WINDOW_INVALID")
+        return self
+
+
+class WfsFeeDetectionStorePreviewRead(StrictSchema):
+    source_account_ref: str
+    store_id: str
+    scanned_skus: int
+    valid_samples: int
+    overcharge_candidates: int
+    would_create: int
+    already_exists: int
+    review_required: int
+    skipped: int
+
+
+class WfsFeeDetectionPreviewRead(StrictSchema):
+    scanned_accounts: int
+    scanned_stores: int
+    scanned_skus: int
+    valid_samples: int
+    overcharge_candidates: int
+    would_create: int
+    already_exists: int
+    review_required: int
+    skipped: int
+    failed: int
+    stores: list[WfsFeeDetectionStorePreviewRead]
+
+
 class WfsFeeCaseFollowWrite(StrictSchema):
     case_nos: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = ""
     latest_follow_note: Annotated[
@@ -205,7 +260,7 @@ class WfsFeeArchiveReviewWrite(StrictSchema):
 
 
 class WfsFeeRecoveredWrite(StrictSchema):
-    recovered_amount: Decimal = Field(ge=0, max_digits=14, decimal_places=2)
+    recovered_amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     claim_amount: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     latest_follow_note: Annotated[
         str, StringConstraints(strip_whitespace=True, max_length=4000)

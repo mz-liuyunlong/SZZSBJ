@@ -15,7 +15,7 @@ from app.modules.warehouse_wfs.anomaly_detection import (
     WfsStandardFee,
     detect_wfs_anomalies,
 )
-from app.modules.warehouse_wfs.fee_detection import resolve_wfs_fees
+from app.modules.warehouse_wfs.fee_detection import SettlementFeeRow, resolve_wfs_fees
 from app.modules.warehouse_wfs.settlement_parser import parse_settlement_rows
 from app.modules.warehouse_wfs.store_discovery import WfsSettlementStore
 
@@ -68,34 +68,38 @@ def evaluate_wfs_settlements(
     if not source_account_ref or not stores:
         raise WfsDetectionError("WFS_INVALID_SCOPE")
 
-    store_ids_by_name: dict[str, str] = {}
     seen_store_ids: set[str] = set()
 
     for store in stores:
         if (
             store.source_account_ref != source_account_ref
             or not store.store_id
-            or not store.store_name
             or store.store_id in seen_store_ids
-            or store.store_name in store_ids_by_name
         ):
             raise WfsDetectionError("WFS_AMBIGUOUS_STORE_SCOPE")
 
         seen_store_ids.add(store.store_id)
-        store_ids_by_name[store.store_name] = store.store_id
 
     if window.start > window.end:
         raise WfsDetectionError("WFS_INVALID_WINDOW")
 
-    parsed = parse_settlement_rows(
-        raw_rows,
-        source_account_ref=source_account_ref,
-        store_ids_by_name=store_ids_by_name,
-        window_start=window.start,
-        window_end=window.end,
-    )
+    parsed_rows: list[SettlementFeeRow] = []
+    excluded_rows = 0
+    for store_id in sorted(seen_store_ids):
+        store_rows = [row for row in raw_rows if str(row.get("storeId", "")).strip() == store_id]
+        parsed = parse_settlement_rows(
+            store_rows,
+            source_account_ref=source_account_ref,
+            expected_store_id=store_id,
+            window_start=window.start,
+            window_end=window.end,
+        )
+        if parsed.rejected_rows or parsed.duplicate_rows:
+            raise WfsDetectionError("WFS_INCOMPLETE_OR_INVALID_SETTLEMENT")
+        parsed_rows.extend(parsed.rows)
+        excluded_rows += parsed.business_excluded_rows
 
-    if parsed.rejected_rows or parsed.duplicate_lines:
+    if len(parsed_rows) + excluded_rows != len(raw_rows):
         raise WfsDetectionError("WFS_INCOMPLETE_OR_INVALID_SETTLEMENT")
 
     for standard in standards:
@@ -105,11 +109,11 @@ def evaluate_wfs_settlements(
         ):
             raise WfsDetectionError("WFS_STANDARD_SCOPE_MISMATCH")
 
-    actual_fees = resolve_wfs_fees(list(parsed.rows))
+    actual_fees = resolve_wfs_fees(parsed_rows)
     detection = detect_wfs_anomalies(actual_fees, standards)
 
     return WfsDetectionResult(
         window=window,
-        settlement_rows=len(parsed.rows),
+        settlement_rows=len(parsed_rows),
         detection=detection,
     )

@@ -556,6 +556,84 @@ class LingxingReadonlyClient:
         )
         return self._fetch_page(capture, page, contract)
 
+    def fetch_wfs_settlement_page(
+        self,
+        *,
+        store_id: str,
+        offset: int,
+        length: int,
+        page_no: int,
+        start_date: date,
+        end_date: date,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+        msku: str | None = None,
+    ) -> LingxingRawEnvelope:
+        """Fetch one governed WFS settlement page.
+
+        Pagination is intentionally controlled by the Integration Sync handler;
+        this method cannot issue unscoped or unbounded requests.
+        """
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if (
+            not source_account_ref
+            or source_account_ref != source_account_ref.strip()
+            or not store_id.isdigit()
+            or start_date > end_date
+        ):
+            raise LingxingClientError("Lingxing WFS scope is invalid")
+        _required_integer(offset, minimum=0)
+        _required_integer(page_no, minimum=1)
+        if _required_integer(length, minimum=1) > 20:
+            raise LingxingClientError("Lingxing WFS page size is invalid")
+
+        body: dict[str, JsonValue] = {
+            "offset": offset,
+            "length": length,
+            "sids": store_id,
+            "platformCodeS": ["10008"],
+            "transactionTypeS": [0],
+            "currencyCode": "USD",
+            "searchDateType": "2",
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+        }
+        if msku is not None:
+            normalized_msku = msku.strip()
+            if not normalized_msku:
+                raise LingxingClientError("Lingxing WFS MSKU is invalid")
+            body["searchField"] = "msku"
+            body["searchValue"] = normalized_msku
+
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no,
+            page_size=length,
+            params=None,
+            body=body,
+        )
+        capture = LingxingCaptureRequest(
+            api_path="/basicOpen/multiplatform/profit/report/order",
+            pages=(page,),
+            store_ids=(store_id,),
+            object_type="wfs_settlement_profit_order",
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+            data_date=end_date,
+            extra={"source_account_ref": source_account_ref},
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture,
+            page,
+            contract,
+            page_size_limit=20,
+            first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract)
+
     def fetch_pmc_purchase_page(
         self,
         *,
