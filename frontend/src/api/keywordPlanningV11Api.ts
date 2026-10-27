@@ -123,6 +123,22 @@ export const downloadKeywordAiReviewWorkbook = async (
   `kw_ai_review_${jobId}.xlsx`,
 );
 
+export interface V1WorkbookConfirmation {
+  source_account_ref: string;
+  sku: string;
+  owner_initials: string;
+  confirmation: '确认无误，开始生成';
+  template_version: 'V1-24';
+  start_date?: string;
+}
+export const downloadKeywordConfirmedV1Workbook = async (
+  jobId: string, confirmation: V1WorkbookConfirmation,
+): Promise<void> => backendDownload(
+  `${API}/ai-tasks/${encodeURIComponent(jobId)}/v1-workbook`,
+  `kw_v1_${jobId}.xlsx`,
+  {method: 'POST', body: JSON.stringify(confirmation)},
+);
+
 /** Strictly do not enable an official-upload button based on this API. */
 export const canOfficiallyUploadV11 = (): false => false;
 
