@@ -35,6 +35,10 @@ from app.modules.integration_sync.handlers.lingxing_product_info_executor import
 from app.modules.integration_sync.handlers.lingxing_product_list_sync import (
     LingxingProductListSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync import (
+    LingxingWfsSettlementSyncHandler,
+    WfsSettlementSyncError,
+)
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
     IntegrationSyncLock,
@@ -82,6 +86,11 @@ class SyncRunExecutionService:
             and interface.method == "POST"
         )
         is_productlist = run.provider == "lingxing" and run.interface_key == "productList"
+        is_wfs = (
+            run.provider == "lingxing"
+            and run.interface_key == "wfsProfitOrder"
+            and interface.handler_key == LingxingWfsSettlementSyncHandler.handler_key
+        )
 
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
         if (
@@ -127,7 +136,7 @@ class SyncRunExecutionService:
                 self._fail(run, "SYNC_CONFIG_DISABLED")
                 return
 
-        if is_data_pages:
+        if is_data_pages or is_wfs:
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -201,6 +210,13 @@ class SyncRunExecutionService:
                 self._execute_data_pages_run(run)
                 return
 
+            if is_wfs:
+                LingxingWfsSettlementSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
             if is_productlist:
                 result = LingxingProductListSyncHandler(
                     self.session,
@@ -229,7 +245,11 @@ class SyncRunExecutionService:
                     run=run,
                     plan=plan,
                 )
-        except (DataPagesRealSyncError, ProductInfoOneTimeRunError) as error:
+        except (
+            DataPagesRealSyncError,
+            ProductInfoOneTimeRunError,
+            WfsSettlementSyncError,
+        ) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)
             if recovered is not None and recovered.status == "running":

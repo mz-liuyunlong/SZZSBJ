@@ -314,6 +314,7 @@ class IntegrationSyncRunWorkItem(Base):
             "uq_gov_sync_work_offset",
             "run_id",
             "request_kind",
+            "scope_key",
             "offset_value",
             unique=True,
             postgresql_where=text("request_kind = 'offset_page'"),
@@ -334,6 +335,9 @@ class IntegrationSyncRunWorkItem(Base):
     )
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     request_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_key: Mapped[str] = mapped_column(
+        String(255), default="", server_default=text("''"), nullable=False
+    )
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     offset_value: Mapped[int | None] = mapped_column(Integer)

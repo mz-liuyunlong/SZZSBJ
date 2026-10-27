@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 import app.modules.integration_sync.service as service_module
 from app.core.api import ApiError
+from app.core.config import Settings
 from app.modules.integration_sync.scheduler import (
     IntegrationSchedulerService,
     ScheduleExpressionError,
@@ -264,6 +265,40 @@ def test_scheduler_enqueues_scheduled_productlist_and_advances_next_run() -> Non
     assert config.next_run_at == datetime(2026, 1, 1, 13, 0, tzinfo=UTC)
     assert config.last_scheduled_at == datetime(2026, 1, 1, 12, 34, tzinfo=UTC)
     session.commit.assert_called_once()
+
+
+def test_scheduler_adds_los_angeles_t_minus_two_window_for_wfs() -> None:
+    session = MagicMock(spec=Session)
+    settings = Settings.model_validate(
+        {
+            "APP_ENV": "test",
+            "TEST_DATABASE_URL": "postgresql+psycopg://synthetic@db.invalid/synthetic",
+            "WFS_DETECT_LOOKBACK_DAYS": 60,
+            "WFS_DETECT_SETTLEMENT_LAG_DAYS": 2,
+        }
+    )
+    scheduler = IntegrationSchedulerService(session, settings=settings)
+    repository = MagicMock()
+    scheduler.repository = repository
+    config = _config(
+        next_run_at=datetime(2026, 10, 20, 12, 0, tzinfo=UTC),
+    )
+    repository.list_due_configs.return_value = [config]
+    repository.get_interface.return_value = _interface("wfsProfitOrder")
+    repository.find_run_by_idempotency.return_value = None
+
+    def add_run(run: object) -> object:
+        run.id = UUID(int=201)  # type: ignore[attr-defined]
+        return run
+
+    repository.add_run.side_effect = add_run
+
+    run_ids = scheduler.create_due_runs(now=datetime(2026, 10, 20, 12, 34, tzinfo=UTC))
+
+    assert run_ids == [UUID(int=201)]
+    run = repository.add_run.call_args.args[0]
+    assert run.window_start == datetime(2026, 8, 20, tzinfo=UTC)
+    assert run.window_end == datetime(2026, 10, 18, tzinfo=UTC)
 
 
 def test_scheduler_recovery_applies_grace_window_to_queued_runs() -> None:

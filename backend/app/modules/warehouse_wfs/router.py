@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -6,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
+from app.core.config import get_settings
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_db_session
 from app.modules.approvals.service import ApprovalService
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.warehouse_wfs.automation_service import preview_persisted_wfs_detection
 from app.modules.warehouse_wfs.schemas import (
     WfsFeeAlertListData,
     WfsFeeAlertMeta,
@@ -22,6 +25,8 @@ from app.modules.warehouse_wfs.schemas import (
     WfsFeeCaseQuery,
     WfsFeeCaseRead,
     WfsFeeCaseWrite,
+    WfsFeeDetectionPreviewRead,
+    WfsFeeDetectionPreviewWrite,
     WfsFeeLegacyCompareResult,
     WfsFeeLegacySyncResult,
     WfsFeeRecoveredWrite,
@@ -100,6 +105,38 @@ def list_wfs_fee_alerts(
         request,
         data=data,
         meta=WfsFeeAlertMeta(page=query.page, page_size=query.page_size, total=total),
+    )
+
+
+@router.post(
+    "/api/warehouse/wfs-fee-alerts/detection-preview",
+    response_model=SuccessEnvelope[WfsFeeDetectionPreviewRead, None],
+    responses=ERRORS,
+)
+def preview_wfs_fee_detection(
+    request: Request,
+    payload: WfsFeeDetectionPreviewWrite,
+    session: db_session,
+    _: sync_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[WfsFeeDetectionPreviewRead, None]:
+    """Preview persisted evidence only; never calls providers or writes cases."""
+
+    try:
+        preview = preview_persisted_wfs_detection(
+            session,
+            settings=get_settings(),
+            source_account_refs=account_refs,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            store_id=payload.store_id,
+        )
+    except ValueError:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=422) from None
+    return success_response(
+        request,
+        data=WfsFeeDetectionPreviewRead(**asdict(preview)),
+        meta=None,
     )
 
 
