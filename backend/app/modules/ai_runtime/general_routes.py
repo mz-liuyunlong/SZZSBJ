@@ -14,7 +14,14 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_session_factory
 
-from .provider import MAX_SKILL_INSTRUCTIONS, SCENES, AIUnavailable, invoke
+from .provider import (
+    MAX_SKILL_INSTRUCTIONS,
+    MAX_SKILL_RUNTIME_INSTRUCTIONS,
+    SCENES,
+    AIUnavailable,
+    invoke,
+    resolve_runtime_instructions,
+)
 
 router = APIRouter(prefix="/api/ai-runtime", tags=["AI Runtime"])
 view_perm = Annotated[Principal, Depends(require_permission("page:ai-center:assistant:view"))]
@@ -104,6 +111,9 @@ class SkillWrite(BaseModel):
     connector_id: UUID
     scene: str = Field(max_length=64)
     instructions: str = Field(min_length=1, max_length=MAX_SKILL_INSTRUCTIONS)
+    runtime_instructions: str | None = Field(
+        default=None, max_length=MAX_SKILL_RUNTIME_INSTRUCTIONS
+    )
 
 
 class SkillItem(BaseModel):
@@ -113,6 +123,7 @@ class SkillItem(BaseModel):
     version: int
     status: str
     instructions: str
+    runtime_instructions: str | None = None
 
 
 @router.get("/skills", response_model=SuccessEnvelope[list[SkillItem], None])
@@ -120,7 +131,7 @@ def list_skills(request: Request, connector_id: UUID, principal: admin_perm):
     with get_session_factory()() as session:
         rows = (
             session.execute(
-                text("""SELECT id,connector_id,scene,version,status,instructions
+                text("""SELECT id,connector_id,scene,version,status,instructions,runtime_instructions
           FROM ai_runtime_skill_versions WHERE connector_id=:id ORDER BY scene,version DESC"""),
                 {"id": connector_id},
             )
@@ -153,14 +164,16 @@ def create_skill(request: Request, body: SkillWrite, principal: admin_perm):
         )
         uid = uuid4()
         session.execute(
-            text("""INSERT INTO ai_runtime_skill_versions(id,connector_id,scene,version,status,instructions,created_by)
-          VALUES (:id,:connector,:scene,:v,'draft',:instructions,:actor)"""),
+            text("""INSERT INTO ai_runtime_skill_versions
+          (id,connector_id,scene,version,status,instructions,runtime_instructions,created_by)
+          VALUES (:id,:connector,:scene,:v,'draft',:instructions,:runtime_instructions,:actor)"""),
             {
                 "id": uid,
                 "connector": body.connector_id,
                 "scene": body.scene,
                 "v": version,
                 "instructions": body.instructions,
+                "runtime_instructions": body.runtime_instructions,
                 "actor": principal.user_id,
             },
         )
@@ -174,6 +187,7 @@ def create_skill(request: Request, body: SkillWrite, principal: admin_perm):
             version=version,
             status="draft",
             instructions=body.instructions,
+            runtime_instructions=body.runtime_instructions,
         ),
     )
 
@@ -193,6 +207,10 @@ def publish_skill(skill_id: UUID, request: Request, principal: admin_perm):
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
         if row["status"] not in ("draft", "published"):
             raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+        try:
+            resolve_runtime_instructions(row["instructions"], row["runtime_instructions"])
+        except AIUnavailable:
+            raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=422) from None
         session.execute(
             text("""UPDATE ai_runtime_skill_versions SET status='retired'
             WHERE connector_id=:id AND scene=:scene AND status='published' AND id<>:skill"""),
@@ -212,5 +230,6 @@ def publish_skill(skill_id: UUID, request: Request, principal: admin_perm):
             version=row["version"],
             status="published",
             instructions=row["instructions"],
+            runtime_instructions=row["runtime_instructions"],
         ),
     )
