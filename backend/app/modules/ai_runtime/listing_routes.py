@@ -83,6 +83,7 @@ async def draft(
         "Confirmed facts: " + json.dumps(facts, ensure_ascii=False)[:2800] + "\n"
         "Candidate keywords: " + json.dumps(terms, ensure_ascii=False)[:1800]
     )
+    _require_opted_in_writes()
     try:
         raw, _, _ = await invoke(
             scene="listing_optimization",
@@ -107,7 +108,6 @@ async def draft(
     # Persist at most ONE review-only Listing draft per AI job. The -1 index is
     # outside keyword semantic batches (0..N-1), so retries never mix the records.
     # This does not publish or change Walmart listings.
-    _require_opted_in_writes()
     with get_session_factory()() as session:
         job = session.execute(
             text("""SELECT id FROM ai_runtime_jobs
