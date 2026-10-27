@@ -22,6 +22,7 @@ function candidate(overrides: Partial<ApprovalCandidate> = {}): ApprovalCandidat
     gtin: "00000000000000",
     msku: "YC00236-1A",
     purchase_order_sns: ["PO260001", "PO260002"],
+    draft_nos: ["CG261017-039"],
     arrival_purchased: null,
     arrival_received: null,
     arrival_pending: null,
@@ -60,7 +61,7 @@ describe("packing approval copy cells", () => {
         pagination={{ page: 1, pageSize: 20 }}
         widths={{}}
         sort="created_desc"
-        rows={[candidate({ draft_nos: ["CG261017-039"] })]}
+        rows={[candidate()]}
         total={1}
         canApprove
         canReject
@@ -91,7 +92,7 @@ describe("packing approval copy cells", () => {
         pagination={{ page: 1, pageSize: 20 }}
         widths={{}}
         sort="created_desc"
-        rows={[candidate({ gtin: null, item_id: null, purchase_order_sns: [] })]}
+        rows={[candidate({ gtin: null, item_id: null, purchase_order_sns: [], draft_nos: [] })]}
         total={1}
         canApprove
         canReject
