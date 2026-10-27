@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     listing_evaluation_preview_enabled: bool = Field(
         default=False, validation_alias="LISTING_EVALUATION_PREVIEW_ENABLED"
     )
+    listing_evaluation_scheduler_enabled: bool = Field(
+        default=False, validation_alias="LISTING_EVALUATION_SCHEDULER_ENABLED"
+    )
+    listing_evaluation_publish_enabled: bool = Field(
+        default=False, validation_alias="LISTING_EVALUATION_PUBLISH_ENABLED"
+    )
     product_management_preview_auth_enabled: bool = Field(
         default=False,
         validation_alias="PRODUCT_MANAGEMENT_PREVIEW_AUTH_ENABLED",
