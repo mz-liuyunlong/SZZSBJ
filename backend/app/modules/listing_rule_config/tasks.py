@@ -11,7 +11,7 @@ from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.modules.listing_rule_config.batch import ListingEvaluationBatchService
 from app.modules.listing_rule_config.evaluation import rating_cutoff_la
-from app.modules.listing_rule_config.models import ListingGradeRuleVersion
+from app.modules.listing_rule_config.models import ListingEvaluationRun, ListingGradeRuleVersion
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -36,7 +36,13 @@ def scheduler_tick() -> None:
             if row is not None
             else ListingGradeRuleConfig()
         )
-        if local.strftime("%H:%M") != config.execution_time:
+        if local.strftime("%H:%M") < config.execution_time:
+            return
+        if session.scalar(
+            select(ListingEvaluationRun.id).where(
+                ListingEvaluationRun.schedule_date_cn == local.date()
+            )
+        ) is not None:
             return
         # The run has a unique China date; only diagnostic snapshots are written.
         ListingEvaluationBatchService(session).run_daily_diagnostic(
