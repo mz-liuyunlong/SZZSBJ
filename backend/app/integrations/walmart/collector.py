@@ -224,10 +224,24 @@ class WalmartReadCollector:
                 if endpoint == "wfs_inventory":
                     rows, pages = self._collect_offset(endpoint, {}, ("payload", "inventory"))
                 elif endpoint == "inbound_shipments":
-                    rows, pages = self._collect_offset(endpoint, {
-                        "fromCreatedDate": int(datetime.combine(from_date, time.min, tzinfo=timezone.utc).timestamp() * 1000),
-                        "toCreatedDate": int(datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=timezone.utc).timestamp() * 1000) - 1,
-                    })
+                    rows, pages = self._collect_offset(
+                        endpoint,
+                        {
+                            "fromCreatedDate": int(
+                                datetime.combine(
+                                    from_date, time.min, tzinfo=timezone.utc
+                                ).timestamp()
+                                * 1000
+                            ),
+                            "toCreatedDate": int(
+                                datetime.combine(
+                                    to_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+                                ).timestamp()
+                                * 1000
+                            )
+                            - 1,
+                        },
+                    )
                 elif endpoint == "inbound_shipment_items":
                     shipments = collected.get("inbound_shipments")
                     if shipments is None:
@@ -340,8 +354,7 @@ class WalmartReadCollector:
         if rows is None:
             return []
         return [
-            {"item_id": item_id, "gtin": gtin}
-            for item_id, gtin in map(_gtin_from_record, rows)
+            {"item_id": item_id, "gtin": gtin} for item_id, gtin in map(_gtin_from_record, rows)
         ]
 
     def _collect_offset(
@@ -450,12 +463,14 @@ class WalmartReadCollector:
             counts["with_gtin"] += 1
             if gtin in unique:
                 counts["duplicate_gtin"] += 1
-                statuses.append({
-                    "item_id": item_id,
-                    "gtin": gtin,
-                    "status": "DUPLICATE_GTIN",
-                    "query_item_id": unique[gtin],
-                })
+                statuses.append(
+                    {
+                        "item_id": item_id,
+                        "gtin": gtin,
+                        "status": "DUPLICATE_GTIN",
+                        "query_item_id": unique[gtin],
+                    }
+                )
             else:
                 unique[gtin] = item_id
         counts["unique_gtins"] = len(unique)
@@ -475,23 +490,27 @@ class WalmartReadCollector:
                 all_rows.extend(rows)
                 pages += used
                 counts["inventory_log_success"] += 1
-                statuses.append({
-                    "item_id": item_id,
-                    "gtin": gtin,
-                    "status": "SUCCESS",
-                    "query_item_id": item_id,
-                })
+                statuses.append(
+                    {
+                        "item_id": item_id,
+                        "gtin": gtin,
+                        "status": "SUCCESS",
+                        "query_item_id": item_id,
+                    }
+                )
             except CollectorError as exc:
                 if str(exc) == "WALMART_AUTH_FAILED":
                     raise
                 counts["inventory_log_failed"] += 1
-                statuses.append({
-                    "item_id": item_id,
-                    "gtin": gtin,
-                    "status": "FAILED",
-                    "query_item_id": item_id,
-                    "error_code": str(exc),
-                })
+                statuses.append(
+                    {
+                        "item_id": item_id,
+                        "gtin": gtin,
+                        "status": "FAILED",
+                        "query_item_id": item_id,
+                        "error_code": str(exc),
+                    }
+                )
         if counts["with_gtin"] == 0 and counts["invalid_gtin"] > 0 and counts["without_gtin"] == 0:
             status = "INVALID_GTIN_INPUT"
         elif counts["queried_gtins"] == 0:
@@ -502,7 +521,11 @@ class WalmartReadCollector:
             status = "SUCCESS"
         # Do not expose item-level mappings in the manifest/summary.
         self._gtin_item_statuses = statuses
-        return all_rows, pages, {"source": "explicit_or_current_run", "status": status, "stats": counts}
+        return (
+            all_rows,
+            pages,
+            {"source": "explicit_or_current_run", "status": status, "stats": counts},
+        )
 
     def _request(self, endpoint: str, params: Mapping[str, Any]) -> Any:
         attempts = 0
@@ -520,13 +543,15 @@ class WalmartReadCollector:
                 )
             except Exception as exc:
                 code = str(exc)
-                self._request_log.append({
-                    "method": "GET",
-                    "endpoint": endpoint,
-                    "params": safe_params,
-                    "attempt": attempts,
-                    "error_code": code,
-                })
+                self._request_log.append(
+                    {
+                        "method": "GET",
+                        "endpoint": endpoint,
+                        "params": safe_params,
+                        "attempt": attempts,
+                        "error_code": code,
+                    }
+                )
                 if code == "WALMART_AUTH_FAILED":
                     raise CollectorError("WALMART_AUTH_FAILED") from None
                 if attempts <= self._config.retry_count:
@@ -535,23 +560,27 @@ class WalmartReadCollector:
             if result.status_code in (401, 403):
                 raise CollectorError("WALMART_AUTH_FAILED")
             if not 200 <= result.status_code < 300:
-                self._request_log.append({
+                self._request_log.append(
+                    {
+                        "method": "GET",
+                        "endpoint": endpoint,
+                        "params": safe_params,
+                        "attempt": attempts,
+                        "status_code": result.status_code,
+                    }
+                )
+                if attempts <= self._config.retry_count:
+                    continue
+                raise CollectorError("WALMART_REQUEST_FAILED")
+            self._request_log.append(
+                {
                     "method": "GET",
                     "endpoint": endpoint,
                     "params": safe_params,
                     "attempt": attempts,
                     "status_code": result.status_code,
-                })
-                if attempts <= self._config.retry_count:
-                    continue
-                raise CollectorError("WALMART_REQUEST_FAILED")
-            self._request_log.append({
-                "method": "GET",
-                "endpoint": endpoint,
-                "params": safe_params,
-                "attempt": attempts,
-                "status_code": result.status_code,
-            })
+                }
+            )
             safe_payload, redactions = _sanitize(result.data)
             self._redactions += redactions
             return safe_payload

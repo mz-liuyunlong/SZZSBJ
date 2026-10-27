@@ -1,4 +1,5 @@
 """Source-grounded US Marketplace item/order read contract tests."""
+
 from __future__ import annotations
 
 import pytest
@@ -10,8 +11,12 @@ from app.integrations.walmart.marketplace_catalog import marketplace_read_regist
 def test_catalog_has_only_registered_read_operations() -> None:
     registry = marketplace_read_registry()
     assert set(registry.keys()) == {
-        "items_list", "item_get", "items_search",
-        "orders_list", "orders_released", "order_get",
+        "items_list",
+        "item_get",
+        "items_search",
+        "orders_list",
+        "orders_released",
+        "order_get",
     }
     assert all(not registry.get(key).enabled for key in registry.keys())
     with pytest.raises(ContractError, match="WALMART_OPERATION_NOT_APPROVED"):
@@ -48,9 +53,7 @@ def test_orders_list_requires_start_date_and_bounds_limit() -> None:
     )
     assert request.path == "/v3/orders"
     with pytest.raises(ContractError, match="WALMART_FIELD_INVALID"):
-        registry.prepare(
-            "orders_list", params={"createdStartDate": "2026-10-01", "limit": 201}
-        )
+        registry.prepare("orders_list", params={"createdStartDate": "2026-10-01", "limit": 201})
 
 
 def test_released_orders_limit_and_write_rejection() -> None:

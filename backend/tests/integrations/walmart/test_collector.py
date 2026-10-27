@@ -32,12 +32,14 @@ class FakeClient:
 
 
 def test_wfs_nested_payload_pagination_and_hashes() -> None:
-    client = FakeClient({
-        "wfs_inventory": [
-            (200, {"payload": {"inventory": [{"sku": "SKU1"}]}, "headers": {"totalCount": 2}}),
-            (200, {"payload": {"inventory": [{"sku": "SKU2"}]}, "headers": {"totalCount": 2}}),
-        ]
-    })
+    client = FakeClient(
+        {
+            "wfs_inventory": [
+                (200, {"payload": {"inventory": [{"sku": "SKU1"}]}, "headers": {"totalCount": 2}}),
+                (200, {"payload": {"inventory": [{"sku": "SKU2"}]}, "headers": {"totalCount": 2}}),
+            ]
+        }
+    )
     collector = WalmartReadCollector(
         client, store_code="HK2615", config=CollectorConfig(page_size=1, max_pages=5)
     )
@@ -52,12 +54,14 @@ def test_wfs_nested_payload_pagination_and_hashes() -> None:
 
 
 def test_incomplete_paging_is_failed_not_success() -> None:
-    client = FakeClient({
-        "wfs_inventory": [
-            (200, {"payload": {"inventory": [{"sku": "SKU1"}]}, "headers": {"totalCount": 2}}),
-            (200, {"payload": {"inventory": []}, "headers": {"totalCount": 2}}),
-        ]
-    })
+    client = FakeClient(
+        {
+            "wfs_inventory": [
+                (200, {"payload": {"inventory": [{"sku": "SKU1"}]}, "headers": {"totalCount": 2}}),
+                (200, {"payload": {"inventory": []}, "headers": {"totalCount": 2}}),
+            ]
+        }
+    )
     result = WalmartReadCollector(
         client, store_code="HK2615", config=CollectorConfig(page_size=1, max_pages=5)
     ).collect(endpoints=["wfs_inventory"], from_date=date(2026, 10, 1), to_date=date(2026, 10, 2))
@@ -86,7 +90,9 @@ def test_inventory_log_requires_explicit_gtin_source_and_deduplicates() -> None:
     client = FakeClient({"inventory_log": [(200, {"inventoryLog": [{"id": 1}]})]})
     collector = WalmartReadCollector(client, store_code="HK2615")
     result = collector.collect(
-        endpoints=["inventory_log"], from_date=date(2026, 10, 1), to_date=date(2026, 10, 2),
+        endpoints=["inventory_log"],
+        from_date=date(2026, 10, 1),
+        to_date=date(2026, 10, 2),
         gtin_items=[
             {"item_id": "A", "gtin": "12345670"},
             {"item_id": "B", "gtin": "12345670"},
@@ -107,7 +113,9 @@ def test_no_gtin_does_not_call_walmart_and_write_keys_are_rejected() -> None:
     client = FakeClient({})
     collector = WalmartReadCollector(client, store_code="HK2615")
     result = collector.collect(
-        endpoints=["inventory_log"], from_date=date(2026, 10, 1), to_date=date(2026, 10, 2),
+        endpoints=["inventory_log"],
+        from_date=date(2026, 10, 1),
+        to_date=date(2026, 10, 2),
         gtin_items=[{"item_id": "A", "gtin": ""}],
     )
     assert client.calls == []
@@ -119,11 +127,9 @@ def test_no_gtin_does_not_call_walmart_and_write_keys_are_rejected() -> None:
 
 
 def test_inbound_shipment_date_filters_use_worker_epoch_milliseconds() -> None:
-    client = FakeClient({
-        "inbound_shipments": [
-            (200, {"inboundShipments": [], "headers": {"totalCount": 0}})
-        ]
-    })
+    client = FakeClient(
+        {"inbound_shipments": [(200, {"inboundShipments": [], "headers": {"totalCount": 0}})]}
+    )
     WalmartReadCollector(client, store_code="HK2615").collect(
         endpoints=["inbound_shipments"],
         from_date=date(2026, 10, 1),

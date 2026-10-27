@@ -1,4 +1,5 @@
 """US Marketplace inventory, settings and report read contracts."""
+
 from __future__ import annotations
 
 import pytest
@@ -38,9 +39,10 @@ def test_multi_node_inventory_cursor_and_profile() -> None:
     registry = operations_read_registry(
         approved_keys=frozenset({"inventories_list", "partner_profile_get"})
     )
-    assert registry.prepare(
-        "inventories_list", params={"nextCursor": "cursor-1"}
-    ).path == "/v3/inventories"
+    assert (
+        registry.prepare("inventories_list", params={"nextCursor": "cursor-1"}).path
+        == "/v3/inventories"
+    )
     assert registry.prepare("partner_profile_get").path == "/v3/settings/partnerprofile"
 
 

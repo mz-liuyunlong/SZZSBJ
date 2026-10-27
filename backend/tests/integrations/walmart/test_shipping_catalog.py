@@ -1,4 +1,5 @@
 """Additional read-only operations catalog tests."""
+
 from app.integrations.walmart.operations_catalog import operations_read_registry
 
 

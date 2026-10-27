@@ -187,7 +187,7 @@ uv run python -c "import app.main"
 
 ### 2026-10-27：迁移原始 Worker 的已验证四接口采集行为
 
-新增 `collector.py`，把同事 `run_worker.py` 已有的四个只读能力的执行语义迁入 SZZSBJ，并通过注入的 `WalmartClient` 运行，不读取任何凭据、不自行联网：
+新增 `collector.py`，把同事 `run_worker.py` 已有的四个只读能力的执行语义迁入当前代码库，并通过注入的 `WalmartClient` 运行，不读取任何凭据、不自行联网：
 - WFS 库存识别真实响应的 `payload.inventory` 包装结构。
 - Offset 分页检查 `headers.totalCount`，不足或空页提前结束会失败，不把截断数据报成功。
 - 入库货件使用源 Worker 的 UTC epoch 毫秒 `fromCreatedDate/toCreatedDate`，入库货件明细依赖成功取得的 shipment IDs。

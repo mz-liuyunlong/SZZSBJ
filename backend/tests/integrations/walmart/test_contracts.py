@@ -138,17 +138,11 @@ def test_validates_nested_request_body_schema() -> None:
             }
         },
     }
-    registry = ContractRegistry.from_openapi(
-        spec, approved_keys=frozenset({"createItem"})
-    )
+    registry = ContractRegistry.from_openapi(spec, approved_keys=frozenset({"createItem"}))
     valid = {"sku": "SKU-1", "price": {"amount": 1.5, "currency": "USD"}}
-    assert registry.prepare(
-        "createItem", body=valid, allow_writes=True
-    ).body == valid
+    assert registry.prepare("createItem", body=valid, allow_writes=True).body == valid
     with pytest.raises(ContractError, match="WALMART_BODY_REQUIRED_FIELD"):
-        registry.prepare(
-            "createItem", body={"sku": "SKU-1"}, allow_writes=True
-        )
+        registry.prepare("createItem", body={"sku": "SKU-1"}, allow_writes=True)
     with pytest.raises(ContractError, match="WALMART_BODY_FIELD_NOT_ALLOWED"):
         registry.prepare(
             "createItem",
@@ -160,18 +154,14 @@ def test_validates_nested_request_body_schema() -> None:
 def test_rejects_recursive_or_external_component_refs() -> None:
     spec = {
         "openapi": "3.0.3",
-        "components": {
-            "schemas": {"Loop": {"$ref": "#/components/schemas/Loop"}}
-        },
+        "components": {"schemas": {"Loop": {"$ref": "#/components/schemas/Loop"}}},
         "paths": {
             "/v3/items": {
                 "post": {
                     "operationId": "createItem",
                     "requestBody": {
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Loop"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Loop"}}
                         }
                     },
                 }

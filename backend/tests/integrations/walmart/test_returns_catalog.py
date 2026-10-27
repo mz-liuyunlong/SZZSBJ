@@ -1,4 +1,5 @@
 """Returns read contracts only; no approval/reject/refund requests."""
+
 from __future__ import annotations
 
 import pytest

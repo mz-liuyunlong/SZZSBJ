@@ -61,7 +61,6 @@ _OPERATIONS = (
         ),
         source="https://developer.walmart.com/us-marketplace/reference/getrequestsstatus",
     ),
-
     Operation(
         key="shipping_settings_get",
         method="GET",
