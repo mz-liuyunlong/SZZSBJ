@@ -305,7 +305,8 @@ class IntegrationSyncService:
             )
             if evidence:
                 if (
-                    len(evidence) == (evidence[-1] - evidence[0]).days + 1
+                    getattr(current, "work_items_total", 0) == len(evidence)
+                    and len(evidence) == (evidence[-1] - evidence[0]).days + 1
                     and (evidence[-1] - evidence[0]).days <= DATA_PAGES_MAX_BACKFILL_DAYS
                 ):
                     return (
