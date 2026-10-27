@@ -1,10 +1,11 @@
-import { Button, Descriptions, Form, Input, Modal, Space, Tag, Timeline, Typography } from "antd";
+import { Button, Descriptions, Form, Input, InputNumber, Modal, Space, Tag, Timeline, Typography } from "antd";
 import { useState } from "react";
 import {
   formatWfsMoney,
   getPendingWfsAmount,
   type WfsFeeAlertCurrency,
   type WfsFeeAlertFollowFormValues,
+  type WfsFeeRecoveredFormValues,
   type WfsFeeAlertRow,
 } from "@/pages/warehouse/wfsFeeAlertTypes";
 
@@ -13,8 +14,10 @@ interface WfsFeeAlertDetailModalProps {
   currency: WfsFeeAlertCurrency;
   onClose: () => void;
   onSubmit: (values: WfsFeeAlertFollowFormValues) => Promise<void>;
+  onMarkRecovered: (values: WfsFeeRecoveredFormValues) => Promise<void>;
   onOpenAbandon: (row: WfsFeeAlertRow) => void;
   canFollow: boolean;
+  canMarkRecovered: boolean;
   canArchiveRequest: boolean;
 }
 
@@ -95,6 +98,83 @@ function FollowEditor({
   );
 }
 
+
+interface RecoveryInput {
+  recoveredAmount?: number;
+  latestFollowNote?: string;
+}
+
+function RecoveryEditor({
+  row,
+  onSubmit,
+  onClose,
+}: {
+  row: WfsFeeAlertRow;
+  onSubmit: (values: WfsFeeRecoveredFormValues) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [form] = Form.useForm<RecoveryInput>();
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (values: RecoveryInput) => {
+    if (saving || typeof values.recoveredAmount !== "number" || !Number.isFinite(values.recoveredAmount) || values.recoveredAmount <= 0) return;
+    setSaving(true);
+    try {
+      await onSubmit({
+        recoveredAmount: Number(values.recoveredAmount.toFixed(2)),
+        latestFollowNote: values.latestFollowNote?.trim() ?? "",
+      });
+      form.resetFields();
+      onClose();
+    } catch {
+      // Keep entered values so the operator can retry.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      title="确认已追回"
+      okText="确认已追回"
+      cancelText="取消"
+      confirmLoading={saving}
+      onCancel={onClose}
+      onOk={() => void form.submit()}
+      destroyOnHidden
+    >
+      <Typography.Paragraph type="secondary">
+        商品：{row.productId} / {row.msku}。请填写平台实际已追回的金额，保存后案件状态将变为“已追回”。
+      </Typography.Paragraph>
+      <Form<RecoveryInput> form={form} layout="vertical" onFinish={(values) => void submit(values)}>
+        <Form.Item
+          label="实际追回金额（USD）"
+          name="recoveredAmount"
+          rules={[
+            { required: true, message: "请输入实际追回金额" },
+            {
+              validator: async (_, value: number | undefined) => {
+                if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+                  throw new Error("追回金额必须大于 0");
+                }
+                if (Math.round(value * 100) !== value * 100) {
+                  throw new Error("追回金额最多保留两位小数");
+                }
+              },
+            },
+          ]}
+        >
+          <InputNumber min={0.01} step={0.01} precision={2} stringMode={false} style={{ width: "100%" }} placeholder="请输入实际到账金额" />
+        </Form.Item>
+        <Form.Item label="追回说明（选填）" name="latestFollowNote">
+          <Input.TextArea rows={3} maxLength={4000} showCount placeholder="可填写沃尔玛赔付记录或到账说明" />
+        </Form.Item>
+      </Form>
+    </Modal>
+  );
+}
+
 const priorityColors = {
   高: "red",
   中: "orange",
@@ -106,10 +186,14 @@ function WfsFeeAlertDetailModal({
   currency,
   onClose,
   onSubmit,
+  onMarkRecovered,
   onOpenAbandon,
   canFollow,
+  canMarkRecovered,
   canArchiveRequest,
 }: WfsFeeAlertDetailModalProps) {
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+
   if (!row) return null;
 
   return (
@@ -128,8 +212,11 @@ function WfsFeeAlertDetailModal({
       onCancel={onClose}
       footer={(
         <Space>
+          {canMarkRecovered && row.status === "跟进中" && (
+            <Button type="primary" onClick={() => setRecoveryOpen(true)}>标记已追回</Button>
+          )}
           {canArchiveRequest && <Button danger disabled={row.status !== "未开Case" && row.status !== "跟进中"} onClick={() => onOpenAbandon(row)}>申请放弃跟进</Button>}
-           <Button type="primary" onClick={onClose}>关闭</Button>
+          <Button type="primary" onClick={onClose}>关闭</Button>
         </Space>
       )}
       destroyOnHidden
@@ -225,6 +312,13 @@ function WfsFeeAlertDetailModal({
           <FollowEditor key={row.id} row={row} onSubmit={onSubmit} />
         )}
       </section>
+      {recoveryOpen && (
+        <RecoveryEditor
+          row={row}
+          onSubmit={onMarkRecovered}
+          onClose={() => setRecoveryOpen(false)}
+        />
+      )}
     </Modal>
   );
 }
