@@ -20,6 +20,11 @@ from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import has_permission, require_permission
 from app.db.session import get_db_session, get_session_factory
 from app.modules.ai_runtime.four_sheet_export import generate_four_sheet_review
+from app.modules.ai_runtime.v1_bulk_workbook import (
+    V1ConfirmedConfig,
+    create_v1_workbook,
+    read_review_primary_sheet,
+)
 from app.modules.ai_runtime.provider import (
     AIUnavailable,
     select_active_connector,
@@ -28,6 +33,7 @@ from app.modules.ai_runtime.provider import (
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.keyword_planning.analysis_routes import CreateRunRequest, _require_opted_in_writes
 from app.modules.keyword_planning.models import AiKwAnalysisRun, AiKwRunKeyword, DimKwTerm
+from app.modules.keyword_planning.internal_export import HEADERS_01
 
 router = APIRouter(prefix="/ai-tasks", tags=["AI keyword jobs"])
 
@@ -368,6 +374,115 @@ def download_keyword_ai_four_sheet(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f'attachment; filename="kw_ai_review_{job_id}.xlsx"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+
+class V1GenerateRequest(BaseModel):
+    source_account_ref: str
+    sku: str
+    owner_initials: str
+    confirmation: str
+    template_version: str
+    start_date: str | None = None
+
+
+@router.post("/{job_id}/v1-workbook")
+def download_confirmed_v1_workbook(
+    job_id: UUID,
+    body: V1GenerateRequest,
+    session: Annotated[Session, Depends(get_db_session)],
+    accounts: scope_dep,
+    principal: read_perm,
+) -> StreamingResponse:
+    """Confirmed five-sheet V1.0 export, no external Walmart write."""
+    _check(body.source_account_ref, accounts, principal)
+    job = _job(session, job_id, body.source_account_ref, principal)
+    if job["status"] != "succeeded" or not job["run_id"]:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+    run = session.scalar(
+        select(AiKwAnalysisRun).where(
+            AiKwAnalysisRun.id == job["run_id"],
+            AiKwAnalysisRun.source_account_ref == body.source_account_ref,
+            AiKwAnalysisRun.status == "succeeded",
+        )
+    )
+    if run is None:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+    verified = session.execute(
+        text("""SELECT
+            (SELECT status FROM ai_kw_product_fact_snapshot
+              WHERE id=:fact AND source_account_ref=:account),
+            (SELECT status FROM ai_kw_rule_version WHERE id=:rule)"""),
+        {
+            "fact": run.product_fact_snapshot_id,
+            "account": body.source_account_ref,
+            "rule": run.rule_version_id,
+        },
+    ).one()
+    if verified != ("confirmed", "published"):
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+    if body.confirmation != "确认无误，开始生成" or body.template_version != "V1-24":
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=422)
+    rows = list(
+        session.execute(
+            select(AiKwRunKeyword, DimKwTerm.canonical_keyword)
+            .join(DimKwTerm, DimKwTerm.id == AiKwRunKeyword.term_id)
+            .where(
+                AiKwRunKeyword.run_id == run.id,
+                AiKwRunKeyword.source_account_ref == body.source_account_ref,
+            )
+            .order_by(AiKwRunKeyword.rank_index.asc().nulls_last(), AiKwRunKeyword.term_id.asc())
+            .limit(20001)
+        )
+    )
+    if not rows or len(rows) > 20000:
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409)
+    batches = (
+        session.execute(
+            text("""SELECT output_json FROM ai_runtime_results
+                 WHERE job_id=:job AND batch_index>=0
+                   AND status='succeeded' ORDER BY batch_index"""),
+            {"job": job_id},
+        )
+        .scalars()
+        .all()
+    )
+    ai_items = [
+        item
+        for batch in batches
+        if isinstance(batch, dict)
+        for item in batch.get("items", [])
+        if isinstance(item, dict)
+    ]
+    try:
+        reviewed = generate_four_sheet_review(run=run, keyword_rows=rows, ai_items=ai_items)
+        source_rows = read_review_primary_sheet(reviewed)
+        cfg = V1ConfirmedConfig(
+            item_id=run.item_id,
+            sku=body.sku,
+            owner_initials=body.owner_initials,
+            product_facts_confirmed=True,
+            rule_version_published=True,
+            user_confirmed_generation=True,
+            walmart_template_verified=True,
+            start_date=body.start_date,
+        )
+        content = create_v1_workbook(
+            tuple(HEADERS_01),
+            source_rows,
+            cfg,
+        )
+    except (ValueError, KeyError, TypeError):
+        raise ApiError(code=ErrorCode.INVALID_REQUEST, status_code=409) from None
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="kw_v1_{job_id}.xlsx"',
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
         },
