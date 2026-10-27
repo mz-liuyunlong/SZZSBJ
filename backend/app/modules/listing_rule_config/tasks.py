@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, text
@@ -43,16 +43,24 @@ def scheduler_tick() -> None:
             )
             if local.strftime("%H:%M") < config.execution_time:
                 return
-            if (
-                session.scalar(
-                    select(ListingEvaluationRun.id).where(
-                        ListingEvaluationRun.schedule_date_cn == local.date()
-                    )
+            existing_run = session.scalar(
+                select(ListingEvaluationRun).where(
+                    ListingEvaluationRun.schedule_date_cn == local.date()
                 )
-                is not None
-            ):
+            )
+            if existing_run is not None and existing_run.status in {
+                "queued", "running", "succeeded", "partial"
+            }:
                 return
-            # The run has a unique China date; only diagnostic snapshots are written.
+            if existing_run is not None:
+                if existing_run.attempt_count >= 3:
+                    return
+                if (
+                    existing_run.last_dispatch_at is not None
+                    and existing_run.last_dispatch_at > now - timedelta(minutes=15)
+                ):
+                    return
+            # The run has a unique China date; failed attempts are rate-limited.
             ListingEvaluationBatchService(session).run_daily_diagnostic(
                 schedule_date_cn=local.date(),
                 cutoff_date_la=rating_cutoff_la(now),

@@ -59,6 +59,7 @@ class ListingEvaluationBatchService:
                 rule_version=latest_rule_version,
                 total_listings=total,
                 attempt_count=1,
+                last_dispatch_at=datetime.now(UTC),
             )
             self.session.add(run)
             try:
@@ -79,6 +80,7 @@ class ListingEvaluationBatchService:
         else:
             run = existing
             run.attempt_count += 1
+            run.last_dispatch_at = datetime.now(UTC)
             run.error_code = None
 
         if retry_existing:
@@ -97,7 +99,11 @@ class ListingEvaluationBatchService:
             self._evaluate_pages(run_id=run_id, cutoff=cutoff_date_la, batch_size=batch_size)
             self.session.refresh(run)
             run.finished_at = datetime.now(UTC)
-            run.status = "partial" if run.blocked_count else "succeeded"
+            run.status = (
+                "succeeded"
+                if run.processed_listings == run.total_listings
+                else "partial"
+            )
             self.session.commit()
         except Exception:
             self.session.rollback()
