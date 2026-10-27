@@ -170,6 +170,25 @@ def _seed_existing_case(
     return row
 
 
+def test_wfs_case_projection_executes_on_postgresql(engine: Engine) -> None:
+    """Compile list and detail projections against real PostgreSQL, without case reads."""
+    from app.modules.warehouse_wfs.service import WfsFeeAlertService
+
+    projection = WfsFeeAlertService(Session(engine))._case_select_sql()
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                projection + " where false order by case status "
+                "when 'following' then 1 else 2 end, "
+                "estimated_recover_amount desc, updated_at desc limit 0"
+            )
+        ).all()
+        connection.execute(
+            text(projection + " where false and id=:case_id"),
+            {"case_id": "00000000-0000-0000-0000-000000000000"},
+        ).all()
+
+
 def test_postgresql_schema_has_0061_columns_and_unique_case_identity(engine: Engine) -> None:
     schema = inspect(engine)
     assert {
