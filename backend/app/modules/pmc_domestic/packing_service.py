@@ -27,7 +27,11 @@ from app.modules.pmc_domestic.packing_repository import (
     matches,
     order_read,
 )
-from app.modules.pmc_domestic.packing_rules import fingerprint, listing_version
+from app.modules.pmc_domestic.packing_rules import (
+    fingerprint,
+    listing_blocked_reasons,
+    listing_version,
+)
 from app.modules.pmc_domestic.packing_schemas import (
     ApproveCommand,
     Candidate,
@@ -305,10 +309,11 @@ class PackingService:
                     response_json=result.model_dump(mode="json"),
                 )
             )
-            if kind == "approve":
-                pending_edit = s.get(PackingPendingEdit, ident)
-                if pending_edit is not None:
-                    s.delete(pending_edit)
+            # Both terminal decisions invalidate the editable draft. The order
+            # snapshots and event remain the immutable record in this transaction.
+            pending_edit = s.get(PackingPendingEdit, ident)
+            if pending_edit is not None:
+                s.delete(pending_edit)
             s.commit()
             return result
         except Exception:
@@ -393,10 +398,7 @@ class PackingService:
                 "STORE_UNKNOWN",
             )
         ]
-        if not listing.gtin or not listing.gtin.isdigit() or len(listing.gtin) != 14:
-            blocked.append("GTIN_INVALID")
-        if not listing.msku:
-            blocked.append("MSKU_MISSING")
+        blocked.extend(listing_blocked_reasons(listing))
         names = set(
             self.session.scalars(
                 select(Store.store_name).where(

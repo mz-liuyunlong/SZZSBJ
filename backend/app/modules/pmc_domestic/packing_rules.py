@@ -58,3 +58,19 @@ def listing_version(row):
             row.business_hash,
         ]
     )
+
+
+def listing_blocked_reasons(row):
+    """Candidate projection and final decisions require the same Listing proof."""
+    blocked = []
+    if row is None:
+        return ["ELIGIBLE_LISTING_MISSING"]
+    if row.standard_status != "PUBLISHED" or not (row.item_url or "").strip():
+        blocked.append("ELIGIBLE_LISTING_MISSING")
+    if row.fulfillment_type != "1":
+        blocked.append("WFS_NOT_CONVERTED")
+    if not row.gtin or not row.gtin.isdigit() or len(row.gtin) != 14:
+        blocked.append("GTIN_INVALID")
+    if not row.msku:
+        blocked.append("MSKU_MISSING")
+    return blocked

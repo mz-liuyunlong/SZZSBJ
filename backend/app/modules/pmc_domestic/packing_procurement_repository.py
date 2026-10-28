@@ -3,7 +3,7 @@
 from collections import defaultdict
 from fractions import Fraction
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 
 from app.modules.integration_sync.models import IntegrationSyncRun
 from app.modules.pmc_domestic.packing_suggestions import arrival_metrics
@@ -15,24 +15,29 @@ from app.modules.sku_detail.models import LingxingSkuProductInfoCurrent as Produ
 
 
 class PackingProcurementRepository:
-    def __init__(self, session, accounts, skus, lines):
-        self.lines = lines
+    def __init__(self, session, accounts, skus, lines, *, plan_totals=None):
+        self.lines_by_key = defaultdict(list)
         self.by_key = defaultdict(dict)
         self.plan_totals = defaultdict(int)
         for line in lines:
+            self.lines_by_key[
+                (line.source_account_ref, line.sku, line.store_id, line.order_sn)
+            ].append(line)
             self.by_key[(line.source_account_ref, line.order_sn, line.sku)][line.order_item_id] = (
                 line.quantity_real
             )
             if line.plan_sn:
                 self.plan_totals[(line.source_account_ref, line.plan_sn)] += line.quantity_allocated
+        if plan_totals is not None:
+            self.plan_totals.update(plan_totals)
         succeeded = select(IntegrationSyncRun.id).where(IntegrationSyncRun.status == "succeeded")
-        orders = {line.order_sn for line in lines}
+        orders = {(line.source_account_ref, line.order_sn) for line in lines}
         items = (
             list(
                 session.scalars(
                     select(Item).where(
                         Item.source_account_ref.in_(accounts),
-                        Item.order_sn.in_(orders),
+                        tuple_(Item.source_account_ref, Item.order_sn).in_(orders),
                         Item.run_id.in_(succeeded),
                     )
                 )
@@ -41,13 +46,13 @@ class PackingProcurementRepository:
             else []
         )
         self.items, _ = latest_versions(items, lambda r: (r.order_sn, r.item_id))
-        plans = {line.plan_sn for line in lines if line.plan_sn}
+        plans = {(line.source_account_ref, line.plan_sn) for line in lines if line.plan_sn}
         rows = (
             list(
                 session.scalars(
                     select(Plan).where(
                         Plan.source_account_ref.in_(accounts),
-                        Plan.plan_sn.in_(plans),
+                        tuple_(Plan.source_account_ref, Plan.plan_sn).in_(plans),
                         Plan.run_id.in_(succeeded),
                     )
                 )
@@ -112,12 +117,7 @@ class PackingProcurementRepository:
 
     def weights(self, account, sku, store, order_sns, identities, store_listing_ids):
         selected = [
-            r
-            for r in self.lines
-            if r.source_account_ref == account
-            and r.sku == sku
-            and r.order_sn in order_sns
-            and r.store_id == store
+            r for sn in set(order_sns) for r in self.lines_by_key.get((account, sku, store, sn), ())
         ]
         weights = defaultdict(Fraction)
         refs = []

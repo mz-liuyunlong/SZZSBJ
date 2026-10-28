@@ -207,7 +207,8 @@ def test_wfs_guard_revalidates_even_when_listings_are_injected():
     assert error.value.details["reason"] == "WFS_NOT_CONVERTED"
 
 
-def test_candidate_keeps_unconverted_row_blocked(monkeypatch):
+@pytest.mark.parametrize("item_url", [None, "", "   ", "https://www.walmart.com/ip/synthetic"])
+def test_candidate_and_final_decision_share_listing_link_rules(monkeypatch, item_url):
     from app.modules.data_pages.models import WalmartListingDimension as Listing
     from app.modules.pmc_domestic import packing_repository as module
     from app.modules.pmc_domestic.inbound_models import DomesticInboundBoard as Board
@@ -227,11 +228,13 @@ def test_candidate_keeps_unconverted_row_blocked(monkeypatch):
     )
     pub = Row(id=uuid4(), source_observed_at=datetime.now(UTC))
     listing = Row(
+        id=uuid4(),
         source_account_ref="primary",
         local_sku="SKU",
         store_id="S1",
         item_id=A,
         standard_status="PUBLISHED",
+        item_url=item_url,
         fulfillment_type="0",
         gtin="00000000000000",
         msku="M1",
@@ -263,9 +266,27 @@ def test_candidate_keeps_unconverted_row_blocked(monkeypatch):
     repo = PackingRepository(CandidateSession({Listing: [listing], Line: [], Board: [board]}))
     candidate = repo.candidates({"primary"})[0]
     assert candidate.item_id == A and candidate.can_approve is False
-    assert candidate.blocked_reasons == ["WFS_NOT_CONVERTED"]
+    missing_link = ["ELIGIBLE_LISTING_MISSING"] if not (item_url or "").strip() else []
+    assert candidate.blocked_reasons == missing_link + ["WFS_NOT_CONVERTED"]
     listing.fulfillment_type = "1"
-    assert repo.candidates({"primary"})[0].can_approve is True
+    candidate = repo.candidates({"primary"})[0]
+    assert candidate.can_approve is bool(not missing_link)
+    assert candidate.blocked_reasons == missing_link
+    service = PackingService(repo.session)
+    service.listing_rows = lambda _: [listing]
+    from app.modules.pmc_domestic.packing_schemas import ApproveCommand
+
+    final = service.final_candidate(
+        candidate,
+        ApproveCommand(
+            source_account_ref="primary",
+            candidate_version=candidate.candidate_version,
+            idempotency_key=uuid4(),
+            qty=1,
+        ),
+    )
+    assert final.can_approve == candidate.can_approve
+    assert final.blocked_reasons == missing_link
     candidate.split_arrival = True
     assert matches(candidate, PackingQuery(split_arrival="yes"))
     assert not matches(candidate, PackingQuery(split_arrival="no"))

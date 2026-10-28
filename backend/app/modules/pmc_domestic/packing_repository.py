@@ -10,7 +10,7 @@ from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 
 from app.modules.data_pages.models import LingxingStoreDimension as Store
 from app.modules.data_pages.models import WalmartListingDimension as Listing
@@ -21,7 +21,7 @@ from app.modules.pmc_domestic.inbound_schemas import ItemIdentity
 from app.modules.pmc_domestic.packing_customs_rules import candidate_customs
 from app.modules.pmc_domestic.packing_models import PackingAllocation, PackingOrder
 from app.modules.pmc_domestic.packing_procurement_repository import PackingProcurementRepository
-from app.modules.pmc_domestic.packing_rules import fingerprint
+from app.modules.pmc_domestic.packing_rules import fingerprint, listing_blocked_reasons
 from app.modules.pmc_domestic.packing_schemas import Candidate, OrderRead
 from app.modules.pmc_domestic.packing_stock_models import PackingExtraAllocation
 from app.modules.pmc_domestic.packing_stock_repository import PackingStockRepository
@@ -113,7 +113,6 @@ class PackingRepository:
                 .order_by(PackingOrder.created_at.desc(), PackingOrder.id)
             )
         )
-
         return rows
 
     def candidates(self, accounts, include_decided=False):
@@ -133,6 +132,9 @@ class PackingRepository:
                 )
             ).all()
         )
+        if not sources:
+            return []
+        board_ids = {b.id for b, _ in sources}
         skus = {b.sku for b, _ in sources}
         listing_by_item: dict[tuple[str, str, str, str], Listing] = {}
         store_listing_ids = defaultdict(set)
@@ -173,6 +175,7 @@ class PackingRepository:
                     PackingOrder.status == "approved",
                     PackingAllocation.released_at.is_(None),
                     PackingAllocation.source_account_ref.in_(accounts),
+                    PackingAllocation.source_board_id.in_(board_ids),
                 )
                 .group_by(
                     PackingAllocation.source_account_ref,
@@ -192,6 +195,7 @@ class PackingRepository:
             .where(
                 PackingOrder.status == "approved",
                 PackingExtraAllocation.source_account_ref.in_(accounts),
+                PackingExtraAllocation.source_board_id.in_(board_ids),
             )
             .group_by(
                 PackingExtraAllocation.source_account_ref,
@@ -205,7 +209,22 @@ class PackingRepository:
         budgets = stock.budgets(
             {(b.source_account_ref, b.source_warehouse_id, b.sku) for b, _ in sources}
         )
-        orders = [r for r in self.orders(accounts) if r.status != "voided"]
+        # Identity exclusion needs no historical snapshots or unrelated SKU orders.
+        orders = list(
+            s.execute(
+                select(
+                    PackingOrder.source_account_ref,
+                    PackingOrder.candidate_id,
+                    PackingOrder.source_board_id,
+                    PackingOrder.store_id,
+                    PackingOrder.item_id,
+                ).where(
+                    PackingOrder.source_account_ref.in_(accounts),
+                    PackingOrder.source_board_id.in_(board_ids),
+                    PackingOrder.status != "voided",
+                )
+            )
+        )
         decided = {(r.source_account_ref, str(r.candidate_id)) for r in orders}
         final_decided = {
             (r.source_account_ref, str(r.source_board_id), r.store_id, r.item_id) for r in orders
@@ -216,16 +235,53 @@ class PackingRepository:
         }
         # DWD repeats original quantity_real when a line is split by plans. Deduplicate
         # by original order_item_id before summing purchase quantities per order+SKU.
+        purchase_keys = {
+            (b.source_account_ref, sn, b.sku)
+            for (b, _), source_row in zip(sources, board_rows, strict=True)
+            for sn in source_row.purchase_order_sns
+            if isinstance(sn, str) and sn
+        }
         purchase_lines = []
-        if skus:
-            for p in s.scalars(
-                select(DwdPurchaseOrderLineItem).where(
-                    DwdPurchaseOrderLineItem.source_account_ref.in_(accounts),
-                    DwdPurchaseOrderLineItem.sku.in_(skus),
+        plan_totals = {}
+        if purchase_keys:
+            purchase_lines = list(
+                s.scalars(
+                    select(DwdPurchaseOrderLineItem).where(
+                        tuple_(
+                            DwdPurchaseOrderLineItem.source_account_ref,
+                            DwdPurchaseOrderLineItem.order_sn,
+                            DwdPurchaseOrderLineItem.sku,
+                        ).in_(purchase_keys),
+                    )
                 )
-            ):
-                purchase_lines.append(p)
-        procurement = PackingProcurementRepository(s, accounts, skus, purchase_lines)
+            )
+            plans = {(p.source_account_ref, p.plan_sn) for p in purchase_lines if p.plan_sn}
+            if plans:
+                # A plan may span orders absent from the current board. Aggregate
+                # its full denominator in SQL rather than loading every SKU line.
+                plan_totals = {
+                    (account, plan): total
+                    for account, plan, total in s.execute(
+                        select(
+                            DwdPurchaseOrderLineItem.source_account_ref,
+                            DwdPurchaseOrderLineItem.plan_sn,
+                            func.sum(DwdPurchaseOrderLineItem.quantity_allocated),
+                        )
+                        .where(
+                            tuple_(
+                                DwdPurchaseOrderLineItem.source_account_ref,
+                                DwdPurchaseOrderLineItem.plan_sn,
+                            ).in_(plans)
+                        )
+                        .group_by(
+                            DwdPurchaseOrderLineItem.source_account_ref,
+                            DwdPurchaseOrderLineItem.plan_sn,
+                        )
+                    )
+                }
+        procurement = PackingProcurementRepository(
+            s, accounts, skus, purchase_lines, plan_totals=plan_totals
+        )
         # Include depleted batches and deduplicate store-split rows; pending alone
         # cannot prove how many times a purchase order arrived.
         batch_orders = defaultdict(dict)
@@ -259,6 +315,7 @@ class PackingRepository:
                 PackingOrder.status == "approved",
                 PackingAllocation.released_at.is_(None),
                 PackingAllocation.source_account_ref.in_(accounts),
+                PackingAllocation.source_board_id.in_(board_ids),
             )
             .group_by(
                 PackingAllocation.source_account_ref,
@@ -278,6 +335,7 @@ class PackingRepository:
             .where(
                 PackingOrder.status == "approved",
                 PackingExtraAllocation.source_account_ref.in_(accounts),
+                PackingExtraAllocation.source_board_id.in_(board_ids),
             )
             .group_by(
                 PackingExtraAllocation.source_account_ref,
@@ -376,16 +434,7 @@ class PackingRepository:
                 blocked = []
                 if not b.store_id:
                     blocked.append("STORE_UNKNOWN")
-                if listing is None or listing.standard_status != "PUBLISHED":
-                    blocked.append("ELIGIBLE_LISTING_MISSING")
-                if listing and listing.fulfillment_type != "1":
-                    blocked.append("WFS_NOT_CONVERTED")
-                if listing and (
-                    not listing.gtin or not listing.gtin.isdigit() or len(listing.gtin) != 14
-                ):
-                    blocked.append("GTIN_INVALID")
-                if listing and not listing.msku:
-                    blocked.append("MSKU_MISSING")
+                blocked.extend(listing_blocked_reasons(listing))
                 if available is None:
                     blocked.append("STOCK_PROOF_UNKNOWN")
                 elif available <= 0:

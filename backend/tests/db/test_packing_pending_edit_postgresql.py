@@ -117,6 +117,7 @@ def _exercise_draft_decision(engine):
             gtin=candidate.gtin,
             msku=candidate.msku,
             standard_status="PUBLISHED",
+            item_url="https://www.walmart.com/ip/synthetic",
             fulfillment_type="1",
             business_hash="b" * 64,
         )
@@ -189,14 +190,35 @@ def _exercise_draft_decision(engine):
             assert session.scalar(sa.select(sa.func.count()).select_from(model)) == 1
         candidate.id = uuid4()
         candidate.item_id = "22222222222"
+        listing.item_id = candidate.item_id
+        command.target_item_id = candidate.item_id
+        command.listing_version = listing_version(listing)
+        service.save_pending_edit(candidate.id, command, "synthetic-user", accounts)
+        assert session.get(PackingPendingEdit, candidate.id) is not None
         rejection = RejectCommand(
             source_account_ref=candidate.source_account_ref,
             candidate_version=candidate.candidate_version,
             idempotency_key=uuid4(),
             note="Synthetic rejected packing request",
         )
+        sa.event.listen(session, "before_commit", reject_commit)
+        try:
+            with pytest.raises(RuntimeError, match="synthetic-commit-failure"):
+                service.decide(candidate.id, rejection, "reject", "synthetic-user", accounts)
+        finally:
+            sa.event.remove(session, "before_commit", reject_commit)
+        assert session.get(PackingPendingEdit, candidate.id) is not None
+        assert session.scalar(sa.select(sa.func.count()).select_from(PackingOrder)) == 1
+        assert session.scalar(sa.select(sa.func.count()).select_from(PackingEvent)) == 1
         rejected = service.decide(candidate.id, rejection, "reject", "synthetic-user", accounts)
         assert rejected.pk is None and rejected.qty is None and rejected.status == "rejected"
+        assert rejected.snapshot.default_quantity == 4
+        assert rejected.note == rejection.note
+        assert session.get(PackingPendingEdit, candidate.id) is None
+        replay = service.decide(candidate.id, rejection, "reject", "synthetic-user", accounts)
+        assert replay.id == rejected.id
+        assert session.scalar(sa.select(sa.func.count()).select_from(PackingOrder)) == 2
+        assert session.scalar(sa.select(sa.func.count()).select_from(PackingEvent)) == 2
         assert session.scalar(sa.select(sa.func.sum(PackingAllocation.qty))) == 4
         assert session.scalar(sa.select(sa.func.count()).select_from(PackingAllocation)) == 1
         assert set(session.scalars(sa.select(PackingEvent.event_kind))) == {"approve", "reject"}

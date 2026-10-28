@@ -55,6 +55,8 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 
 2026-10-28 页面调整：按负责人最新要求，待审批列表隐藏“审批通过”“驳回”按钮，仅保留“修改”用于保存草稿；历史审批记录和审计仍可查看。此调整不删除后端审批/驳回接口或改变权限、口令、库存事务校验。页面不再提供这两个列表操作入口；对应后端与弹窗测试保留。
 
+候选列表与保存/审批统一要求：Listing 已发布、WFS 类型、非空链接、有效的 14 位数字 GTIN 和 MSKU；缺少或空白链接按 `ELIGIBLE_LISTING_MISSING` 阻断，不显示为可审批。Listing 等来源变化仍会触发版本重校验。审批通过和驳回成功后，均在保存正式审批记录、来源快照和审计事件的同一事务中删除对应修改草稿；事务失败则全部回滚，重复请求复用原记录，不重复生成审批记录或库存占用。
+
 响应data：id、candidate_id、pk(null仅驳回)、status(approved/rejected)、qty、version=1、is_test、customs_value(bool/null)、customs_src(default/product_remark/purchase_remark/manual；旧unknown保留)、rwh、actor_uid、note、created_at、snapshot(完整Candidate)。自动报关结果按已发布customs_proof计算，无明确备注时默认不报关；人工选择与默认来源分开保存，旧历史不重算。
 
 ## 事务、幂等与错误
