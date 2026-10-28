@@ -8,16 +8,13 @@
 from app.integrations.walmart.scf_read_factory import make_walmart_read_api
 
 api = make_walmart_read_api(
-    allowed_stores=frozenset({"HK2613"}),   # 必须由服务端鉴权确定
+    allowed_stores=frozenset({"HK2613"}),  # 必须由服务端鉴权确定
     approved_read_keys=frozenset({"wfs_inventory"}),
     function_by_store={
         "HK2613": "szzsbj-walmart-hk2613-executor",
     },
     cvm_role="SZZSBJ-CVM-SCF-Invoker",
-    target_role_arn=(
-        "qcs::cam::uin/100013426561:"
-        "roleName/SZZSBJ-CrossAccount-SCF-Invoker"
-    ),
+    target_role_arn=("qcs::cam::uin/100013426561:roleName/SZZSBJ-CrossAccount-SCF-Invoker"),
     function_qualifier="stable",
 )
 result = api.call("HK2613", "wfs_inventory", params={"limit": 1})
