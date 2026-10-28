@@ -21,6 +21,7 @@ from app.modules.integration_sync.models import (
 from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SPECS_BY_INTERFACE_KEY,
 )
+from app.modules.integration_sync.refund_window import refund_window
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.scheduler import (
     ScheduleExpressionError,
@@ -599,6 +600,14 @@ class IntegrationSyncService:
                 code=SYNC_PRODUCTINFO_BACKFILL_NOT_SUPPORTED,
                 status_code=409,
             )
+        # Freeze new manual refund date windows before the queue write, so
+        # retries cannot drift when worker execution fails or is delayed.
+        if (
+            trigger is TriggerType.MANUAL
+            and interface.provider == "lingxing"
+            and interface.interface_key == "walmartReturnOrderList"
+        ):
+            window_start, window_end = refund_window(utc_now(), config.max_pages)
         run = self._new_run(
             config_id=config.id,
             interface_id=interface.id,

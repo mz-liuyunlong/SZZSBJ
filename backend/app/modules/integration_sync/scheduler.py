@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
+from app.modules.integration_sync.refund_window import refund_window
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 CRON_SEARCH_DAYS = 40 * 366
@@ -227,6 +228,11 @@ class IntegrationSchedulerService:
                         )
                         window_start = datetime.combine(start_date, datetime.min.time(), UTC)
                         window_end = datetime.combine(end_date, datetime.min.time(), UTC)
+                    if (
+                        interface.interface_key == "walmartReturnOrderList"
+                        and interface.provider == "lingxing"
+                    ):
+                        window_start, window_end = refund_window(current, config.max_pages)
                     run = IntegrationSyncRun(
                         config_id=config.id,
                         interface_id=interface.id,
