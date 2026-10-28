@@ -228,7 +228,10 @@ class IntegrationSchedulerService:
                         )
                         window_start = datetime.combine(start_date, datetime.min.time(), UTC)
                         window_end = datetime.combine(end_date, datetime.min.time(), UTC)
-                    if interface.interface_key == "walmartReturnOrderList" and interface.provider == "lingxing":
+                    if (
+                        interface.interface_key == "walmartReturnOrderList"
+                        and interface.provider == "lingxing"
+                    ):
                         window_start, window_end = refund_window(current, config.max_pages)
                     run = IntegrationSyncRun(
                         config_id=config.id,
