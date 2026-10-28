@@ -12,7 +12,17 @@
 - 0062 的完整 revision 为 `20261028_0062_packing_pending_edit`，依赖 `20261027_0061_merge_purchase_main`。本轮没有新增迁移、重编号或修改历史迁移。
 - 本地后端 Ruff 检查与格式检查通过，建议规则与静态迁移回归 33 passed；新增 PostgreSQL 用例已完成收集，必须以本轮远端实际执行结果验收，不能以本地 skip 代替通过。
 
-远端全量 CI 将针对本轮修复提交运行。运行链接及最终数量以 PR #262 的对应提交为准；旧运行 `40626269042` 的失败属于修复前记录。本节未把尚未结束的远端任务标为通过。
+修复提交 `e01051828e813082828fd6e633cc542134d75364` 的全量 CI（运行 `40642011374`，可在 PR #262 的 Checks 中查看）已完成，10/10 jobs success，0 failure。旧运行 `40626269042` 的三项失败已在本次修复提交验证通过，保留为历史。
+
+| 本轮远端验收 | 实际结果 |
+|---|---|
+| Linux 后端全量 | 1802 passed、121 skipped、1 warning；Ruff lint/format、应用导入通过 |
+| 国内仓 PostgreSQL 16 专项 | 59 passed、0 failed、0 skipped；包含原 56 项和新增 3 项 0062 升级/草稿事务场景 |
+| 前端 | 69 文件、308 Vitest tests passed；lint、TypeScript/Vite 构建通过 |
+| 浏览器 Playwright | 28 passed、7 skipped；包含新增 PUT 草稿保存和刷新恢复用例 |
+| 其他数据库任务 | IAM、Walmart、PMC PostgreSQL 14、WFS、审批、操作日志全部成功 |
+
+普通后端套件中的 3 项新 PostgreSQL 用例依赖显式隔离库配置，已由上述独立 PostgreSQL job 全部实际执行；其他 opt-in 跳过用例及 7 项需专用 API/bridge 的 E2E 不得笼统记作通过。本轮没有执行真实生产数据或外部提供商联调，也没有处理全项目既有 mypy 诊断和此前独立审查发现的采购备注版本选择问题。
 
 ## 授权范围与结果
 

@@ -14,6 +14,8 @@
 
 本轮只修三个文件的格式、保存按钮测试和历史 0054 表清单测试；新增隔离 PostgreSQL 的 0062 升级/草稿事务验收及前端保存不审批的浏览器契约。迁移文件、业务规则和 approve 入口保持原实现。详见 `docs/delivery/pmc-packing-approval-allocation-arrival-handoff-20261028.md` 本轮章节，远端最终结果以修复提交对应的 Actions 为准。
 
+已执行：代码修复 e010518 的 CI 40642011374 全部 10 项通过；后端 1802 passed / 121 skipped，前端 308 passed，Playwright 28 passed / 7 skipped，独立 PostgreSQL 16 专项 59 passed / 0 skipped。文档收尾只补实际证据，不更改代码或迁移。生产升级、部署和 PR 合并均未执行。
+
 # Develop CI 修复交接（2026-10-27）
 
 本轮基准 aa7637b，负责人授权复用 develop、提交和推送、创建 develop → main 草稿 PR。禁止合并、部署或生产数据库操作。
