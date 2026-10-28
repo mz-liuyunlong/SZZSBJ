@@ -21,8 +21,8 @@ from app.modules.integration_sync.models import (
 from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SPECS_BY_INTERFACE_KEY,
 )
-from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.refund_window import refund_window
+from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.scheduler import (
     ScheduleExpressionError,
     next_cron_instant,
