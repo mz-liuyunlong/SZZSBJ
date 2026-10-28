@@ -57,6 +57,12 @@ Registry Status: `draft; approved only after owner review and merge`
 - [ ] PR 和 merge commit 仅在真实存在后填写。
 - [ ] 未写入账号、密钥、连接串或生产数据。
 
+| domestic-chain-0054-safety-review | Harden domestic schema adoption and isolated PostgreSQL acceptance for PR 242 | Backend Engineer | implemented | existing project checkout | dev (explicit Owner authorization) | c76208c | N/A — Owner-authorized migration defect repair; no new table design or revision | domestic ODS validator, existing 0053/0054 validation, PostgreSQL tests/CI, delivery evidence | #242 | TBD | PostgreSQL 14.24: 56 passed, 0 failed/errors/skipped; Ruff lint/format 532 files PASS; 62 revisions, single 0054 head; report docs/delivery/domestic-chain-0054-validation.md | no new branch/worktree | Production access/deployment, 0055, historical 0047–0049 changes, stamp/version rewrites, provider calls, commit/push/merge | Owner review and final-commit GitHub PostgreSQL 16 CI | Owner confirms old 0054 was never applied; current 0054 remains final target; production deployed blobs/live version not verified |
+
 ## PMC-PURCHASE-UNIFIED-SYNC (2026-10-27)
 
 状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。
+
+## PMC-PACKING-PR262-FINAL-REVIEW（2026-10-28）
+
+状态：in_review，未合并。当前分支 develop，PR #262；负责人明确要求沿用现有分支。范围：PMC 候选 Listing 资格一致、驳回后清理修改草稿、采购/库存查询范围优化及对应测试；列表审批通过/驳回入口隐藏。业务修复已推送提交 `9ddca54a5cb588b7c8d7a4b9a493ab434afd1b48` 的 push/PR CI 均为 12/12 任务通过。公共边界复核仅恢复 main 启动脚本、全局忽略规则、PR #242 原登记记录，删除 API 索引重复项，并重新整理本 PR 说明；这轮本地修正尚未提交/push，不沿用前一提交的 CI 结论。公共 CI 改动单独列出供负责人审核。没有修改业务代码、统一调度、其他模块或迁移版本，没有生产数据库或部署操作。证据见 `docs/delivery/pmc-packing-final-review-20261028.md`。提交/push 需负责人另行明确确认。

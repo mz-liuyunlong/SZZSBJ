@@ -31,3 +31,27 @@ cd backend
 核对 SQLAlchemy 2.0 的联合键 IN 用法：[官方操作符文档](https://docs.sqlalchemy.org/en/20/core/operators.html#tuple-in-expressions)。没有增加依赖或索引。当前最终迁移仍为 `20261028_0067_merge_pmc_main`，本轮迁移目录无 Diff，等待统一审核。
 
 剩余限制：候选列表仍需遍历授权范围内的当前发布候选以得到准确过滤与汇总；相关采购单的 ODS 历史版本仍按既有最新成功版本规则读取。此次没有改写去重口径，也不承诺任意数据量下固定加载耗时。后续如隔离 PostgreSQL 执行计划发现需要新增索引，应另提方案交数据库负责人审核，不擅自增加迁移。
+
+## 公共边界复核（2026-10-28，业务修复提交之后）
+
+业务修复已提交为 `9ddca54a5cb588b7c8d7a4b9a493ab434afd1b48`，对应 push CI run `40662612594`、PR CI run `40662618946` 均为 12/12 任务通过，包含隔离 PostgreSQL 专项。此前“尚未提交/未运行”的描述是本地修复阶段记录，不再代表该提交的远端状态；不将任务成功数量当作测试用例数量。
+
+负责人本轮要求仅清理公共文件边界和说明。最新 main 为 `2ef4fd1d6606a85017046f75b796a1dfdbe28e19`；Git fetch 连接重置后，通过 GitHub Contents API 按该完整 SHA 读取以下五份文件，并校验 Git Blob SHA。未合并 main、未覆盖其他业务文件。
+
+| 文件 | main Blob | 本轮处理 |
+|---|---|---|
+| `backend/scripts/start-local-api.ps1` | `aae17b8cbb6eddc91ef052e9fc9851c53cece18e` | 逐字节恢复 main，包括原有 8011 端口；未运行启动脚本 |
+| `.gitignore` | `cf88229091e961e9e5976e571a0aa43f632d8d9a` | 逐字节恢复 main；个人 `.planning/` 仅写入本地 Git exclude，不提交全局忽略规则 |
+| `docs/tasks/TASK_REGISTRY.md` | `a2df47fd07aabfa93bd01a7cb456c902ef6d3011` | 原始 main 内容及 `domestic-chain-0054-safety-review` 整行恢复；本 PR 在独立小节登记，不改原验收结论 |
+| `docs/api/README.md` | `6144a3c532a0125e5b2536b1341d7f4ea7290aa2` | 仅删除本分支新增的 Walmart Monitor 重复条目，保留 main 原条目与 PMC 条目 |
+| `.github/workflows/ci.yml` | `0c322d019cf00d55ac90f73ac1d7e83c4e3699b5` | 当前差异单独列出如下，处理方式等待负责人明确审核 |
+
+现有公共 CI 差异：
+
+1. push 分支列表增加 develop；pull_request 仍以 dev/main 为目标。
+2. 仅国内仓 PostgreSQL job 增加 Redis 7 service，映射 6379 及健康检查，用于跨进程口令失败预算测试，不是业务调度配置。
+3. 国内仓步骤名称更新，并在既有 pytest 命令加入 `tests/db/test_packing_pending_edit_postgresql.py` 与 `tests/db/test_packing_passcode_redis.py`；保留 JUnit 不允许专项 skip 的检查。
+
+本轮不再修改工作流，除非负责人明确选择撤回；不以 PMC 业务修改授权代替公共 CI 审核。新增测试可以保留，是否由公共工作流接入由负责人决定。
+
+本轮没有更改迁移、PMC 业务实现、统一任务中心或调度器；没有运行启动脚本、读取真实环境配置或接触生产。当前文件修正尚未提交/push，新提交的远端 CI 需要另行确认后执行，旧提交绿色结果不覆盖本轮边界修正。

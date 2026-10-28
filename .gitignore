@@ -25,6 +25,3 @@ backend/.local-celery.env
 
 # Read-only legacy archive (local reference only)
 old-walmar-flie/
-
-# Local AI planning, merge backups, debug caches (see docs/delivery/planning-with-files-standard.md)
-.planning/
