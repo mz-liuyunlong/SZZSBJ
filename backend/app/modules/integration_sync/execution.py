@@ -36,6 +36,10 @@ from app.modules.integration_sync.handlers.lingxing_product_info_executor import
 from app.modules.integration_sync.handlers.lingxing_product_list_sync import (
     LingxingProductListSyncHandler,
 )
+from app.modules.integration_sync.handlers.lingxing_wfs_settlement_sync import (
+    LingxingWfsSettlementSyncHandler,
+    WfsSettlementSyncError,
+)
 from app.modules.integration_sync.models import (
     IntegrationSyncConfig,
     IntegrationSyncLock,
@@ -83,6 +87,11 @@ class SyncRunExecutionService:
             and interface.method == "POST"
         )
         is_productlist = run.provider == "lingxing" and run.interface_key == "productList"
+        is_wfs = (
+            run.provider == "lingxing"
+            and run.interface_key == "wfsProfitOrder"
+            and interface.handler_key == LingxingWfsSettlementSyncHandler.handler_key
+        )
 
         if run.provider == "lingxing" and run.interface_key == "pmcPurchaseBoardSync":
             from app.modules.integration_sync.pmc_purchase_pipeline import execute_purchase_pipeline
@@ -140,7 +149,7 @@ class SyncRunExecutionService:
                 self._fail(run, "SYNC_CONFIG_DISABLED")
                 return
 
-        if is_data_pages:
+        if is_data_pages or is_wfs:
             if run.trigger_type not in {"manual", "schedule", "retry", "backfill"}:
                 self._fail(run, "SYNC_TRIGGER_NOT_EXECUTABLE")
                 return
@@ -214,6 +223,13 @@ class SyncRunExecutionService:
                 self._execute_data_pages_run(run)
                 return
 
+            if is_wfs:
+                LingxingWfsSettlementSyncHandler(
+                    self.session,
+                    heartbeat=lambda: self._heartbeat_lock(run.id),
+                ).execute(run, interface)
+                return
+
             if is_productlist:
                 result = LingxingProductListSyncHandler(
                     self.session,
@@ -242,7 +258,11 @@ class SyncRunExecutionService:
                     run=run,
                     plan=plan,
                 )
-        except (DataPagesRealSyncError, ProductInfoOneTimeRunError) as error:
+        except (
+            DataPagesRealSyncError,
+            ProductInfoOneTimeRunError,
+            WfsSettlementSyncError,
+        ) as error:
             self.session.rollback()
             recovered = self.repository.get_run_for_update(run_id)
             if recovered is not None and recovered.status == "running":
@@ -382,6 +402,7 @@ class SyncRunExecutionService:
         records_seen = 0
         records_written = 0
         mart_failures: list[DataPagesMartInvariantError] = []
+        capture_failures: list[DataPagesMartInvariantError] = []
 
         with data_pages_client() as client:
             for business_date in days:
@@ -404,7 +425,34 @@ class SyncRunExecutionService:
                     active_run = self.repository.get_run_for_update(run.id)
                     if active_run is None or active_run.status != "running":
                         return
-                    mart_failures.append(error)
+                    source_committed = bool(getattr(runner, "_source_fact_commit_completed", False))
+                    if source_committed:
+                        mart_failures.append(error)
+                        # Capture is durable even when the financial MART is rolled back.
+                        # Count those source rows exactly once; do not count failed MART writes.
+                        records_seen += self._data_pages_source_row_count(runner.summary)
+                    else:
+                        capture_failures.append(error)
+                    self.repository.record_business_anomaly(
+                        run_id=active_run.id,
+                        account=active_run.source_account_ref,
+                        interface_key=active_run.interface_key,
+                        business_date=error.business_date or business_date,
+                        error_code=error.code,
+                        details={
+                            "phase": "financial_validation"
+                            if source_committed
+                            else "source_processing",
+                            "financial_status": "pending" if source_committed else "not_ready",
+                        },
+                    )
+                    if error.code == "DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT":
+                        self.repository.record_sample_exceedance_details(
+                            run_id=active_run.id,
+                            account=active_run.source_account_ref,
+                            interface_key=active_run.interface_key,
+                            business_date=error.business_date or business_date,
+                        )
                     self._event(
                         active_run.id,
                         "running",
@@ -417,15 +465,7 @@ class SyncRunExecutionService:
                     self.session.commit()
                     continue
 
-                records_seen += (
-                    summary.store_rows
-                    + summary.listing_rows
-                    + summary.advertiser_rows
-                    + summary.sales_rows
-                    + summary.order_rows
-                    + summary.refund_rows
-                    + summary.ad_rows
-                )
+                records_seen += self._data_pages_source_row_count(summary)
                 records_written += (
                     summary.mart_daily_sales_rows
                     + summary.mart_order_profit_rows
@@ -437,28 +477,50 @@ class SyncRunExecutionService:
         if completed is None:
             return
         from_status = completed.status
-        completed.status = "failed" if mart_failures else "succeeded"
+        # A financial MART invariant must not undo completed source ingestion.
+        # Its exception is tracked independently and invalid MART writes stay rolled back.
+        completed.status = "failed" if capture_failures else "succeeded"
         completed.finished_at = utc_now()
-        completed.work_items_succeeded = len(days) - len(mart_failures)
-        completed.work_items_failed = len(mart_failures)
+        completed.work_items_succeeded = len(days) - len(capture_failures)
+        completed.work_items_failed = len(capture_failures)
         completed.records_seen = records_seen
         completed.records_written = records_written
-        completed.error_code = mart_failures[0].code if mart_failures else None
+        completed.error_code = capture_failures[0].code if capture_failures else None
         completed.error_message = (
-            "退款事实已保存，但历史利润校验失败"
-            if mart_failures and run.interface_key == "walmartReturnOrderList"
-            else "同步业务日校验失败"
-            if mart_failures
-            else None
+            "source processing failed; capture not confirmed" if capture_failures else None
         )
         self._event(
             completed.id,
             from_status,
             completed.status,
-            mart_failures[0].code if mart_failures else "SYNC_RUN_SUCCEEDED",
-            safe_details=({"failed_business_dates": len(mart_failures)} if mart_failures else None),
+            capture_failures[0].code
+            if capture_failures
+            else "SYNC_CAPTURE_SUCCEEDED_WITH_FINANCIAL_ANOMALIES"
+            if mart_failures
+            else "SYNC_RUN_SUCCEEDED",
+            safe_details=(
+                {
+                    "failed_capture_dates": len(capture_failures),
+                    "pending_financial_dates": len(mart_failures),
+                }
+                if capture_failures or mart_failures
+                else None
+            ),
         )
         self.session.commit()
+
+    @staticmethod
+    def _data_pages_source_row_count(summary: DataPagesRealSyncSummary) -> int:
+        """Count durable source rows, independent of financial MART publication."""
+        return (
+            summary.store_rows
+            + summary.listing_rows
+            + summary.advertiser_rows
+            + summary.sales_rows
+            + summary.order_rows
+            + summary.refund_rows
+            + summary.ad_rows
+        )
 
     def _execute_data_pages_interface(
         self,
@@ -603,6 +665,11 @@ class SyncRunExecutionService:
         else:
             raise ValueError("unsupported Data Pages interface")
 
+        # Commit provider facts before financial MART validation. Financial failures
+        # then roll back only the MART transaction, never already-captured facts.
+        # An incomplete provider request still rolls back via the outer exception path.
+        self.session.commit()
+        runner._source_fact_commit_completed = True
         heartbeat()
         runner.summary.mart_daily_sales_rows = runner._refresh_daily_sales_mart()
         heartbeat()

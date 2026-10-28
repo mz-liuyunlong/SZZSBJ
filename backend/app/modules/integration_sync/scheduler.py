@@ -1,12 +1,13 @@
 import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from celery.schedules import ParseException, crontab
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings, get_settings
 from app.modules.integration_sync.models import (
-    IntegrationSyncConfig,
     IntegrationSyncRun,
     IntegrationSyncRunEvent,
 )
@@ -90,9 +91,10 @@ def _parse_cron(expression: str) -> crontab:
 class IntegrationSchedulerService:
     "Bounded UTC scheduler with durable next-run advancement."
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, settings: Settings | None = None) -> None:
         self.session = session
         self.repository = IntegrationSyncRepository(session)
+        self.settings = settings
 
     def recoverable_queued_run_ids(
         self,
@@ -207,12 +209,10 @@ class IntegrationSchedulerService:
                 interface = self.repository.get_interface(config.interface_id)
                 if interface is not None and interface.interface_key in PURCHASE_SOURCE_KEYS:
                     parent = PurchasePipelineRepository(self.session).config_for(
-                        PURCHASE_PIPELINE_KEY,
-                        config.source_account_ref,
+                        PURCHASE_PIPELINE_KEY, config.source_account_ref
                     )
-                    if isinstance(parent, IntegrationSyncConfig):
-                        config.schedule_enabled = False
-                        config.next_run_at = None
+                    if parent is not None and parent.is_enabled and parent.schedule_enabled:
+                        # Avoid duplicate dispatch while retaining the owner's legacy settings.
                         continue
                 # Product Management is now schedulable from Sync Task settings.
                 schedule_cron = config.schedule_cron
@@ -239,6 +239,19 @@ class IntegrationSchedulerService:
                 key = f"schedule:{config.id}:{scheduled_for.astimezone(UTC).isoformat()}"
                 existing = self.repository.find_run_by_idempotency(key)
                 if existing is None:
+                    window_start: datetime | None = None
+                    window_end: datetime | None = None
+                    if interface.interface_key == "wfsProfitOrder":
+                        settings = self.settings or get_settings()
+                        business_date = current.astimezone(ZoneInfo("America/Los_Angeles")).date()
+                        end_date = business_date - timedelta(
+                            days=settings.wfs_detect_settlement_lag_days
+                        )
+                        start_date = end_date - timedelta(
+                            days=settings.wfs_detect_lookback_days - 1
+                        )
+                        window_start = datetime.combine(start_date, datetime.min.time(), UTC)
+                        window_end = datetime.combine(end_date, datetime.min.time(), UTC)
                     run = IntegrationSyncRun(
                         config_id=config.id,
                         interface_id=interface.id,
@@ -249,6 +262,8 @@ class IntegrationSchedulerService:
                         status="queued",
                         idempotency_key=key,
                         reason="scheduled_sync",
+                        window_start=window_start,
+                        window_end=window_end,
                         queued_at=current,
                         work_items_total=0,
                         work_items_succeeded=0,

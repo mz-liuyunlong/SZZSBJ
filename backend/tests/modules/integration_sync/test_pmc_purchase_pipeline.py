@@ -252,6 +252,17 @@ def test_registration_idempotent_and_scoped(session):
     assert repo.watermark("another") is None
 
 
+def test_registration_preserves_legacy_schedule(session):
+    repo = PurchasePipelineRepository(session)
+    child = repo.config_for("purchasePlanList", "fixture")
+    child.schedule_enabled = True
+    child.schedule_cron = "0 */3 * * *"
+    child.next_run_at = NOW
+    session.commit()
+    repo.register("fixture")
+    assert child.schedule_enabled and child.next_run_at.replace(tzinfo=UTC) == NOW
+
+
 def test_scheduler_dispatches_parent_and_ignores_child(session):
     repo = PurchasePipelineRepository(session)
     parent = repo.config_for(PURCHASE_PIPELINE_KEY, "fixture")
@@ -265,7 +276,9 @@ def test_scheduler_dispatches_parent_and_ignores_child(session):
     runs = IntegrationSchedulerService(session).create_due_runs(now=NOW)
     assert len(runs) == 1
     assert session.get(IntegrationSyncRun, runs[0]).interface_key == PURCHASE_PIPELINE_KEY
-    assert not child.schedule_enabled and child.next_run_at is None
+    assert child.schedule_enabled and child.next_run_at.replace(tzinfo=UTC) == NOW - timedelta(
+        hours=1
+    )
     assert parent.next_run_at.replace(tzinfo=UTC) == next_cron_instant("0 */3 * * *", NOW)
 
 

@@ -1,6 +1,6 @@
 import { CalendarOutlined } from "@ant-design/icons";
 import { Button, Input, Modal, Select, Spin, Typography, message } from "antd";
-import { useEffect, useMemo, useRef, type Key } from "react";
+import { useEffect, useMemo, useRef, useState, type Key } from "react";
 import PageShell from "@/components/page/PageShell";
 import type { NavigationPage } from "@/config/navigation";
 import SyncTaskConfigDrawer, {
@@ -10,6 +10,7 @@ import SyncTaskLogDrawer from "@/pages/data-center/components/SyncTaskLogDrawer"
 import SyncTaskScheduleDrawer from "@/pages/data-center/components/SyncTaskScheduleDrawer";
 import SyncTaskSummaryCards from "@/pages/data-center/components/SyncTaskSummaryCards";
 import SyncTaskTable from "@/pages/data-center/components/SyncTaskTable";
+import SyncTaskAnomalyCenter from "@/pages/data-center/components/SyncTaskAnomalyCenter";
 import SyncTaskToolbar from "@/pages/data-center/components/SyncTaskToolbar";
 import {
   useCreateIntegrationSyncManualRunMutation,
@@ -640,6 +641,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
     });
   };
 
+  const [activeTab, setActiveTab] = useState<"tasks" | "anomalies">("tasks");
   return (
     <PageShell page={page}>
       {messageContextHolder}
@@ -668,7 +670,13 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
           </div>
         </section>
 
-        <section className="sync-task__card">
+        <nav aria-label="同步任务页面标签" style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <Button type={activeTab === "tasks" ? "primary" : "default"}
+            onClick={() => setActiveTab("tasks")}>同步任务</Button>
+          <Button type={activeTab === "anomalies" ? "primary" : "default"}
+            onClick={() => setActiveTab("anomalies")}>异常中心</Button>
+        </nav>
+        {activeTab === "anomalies" ? <SyncTaskAnomalyCenter /> : <section className="sync-task__card">
           <div className="sync-task__card-head">
             <div>
               <span className="sync-task__card-title">任务总控</span>
@@ -717,7 +725,7 @@ function SyncTaskPage({ page }: SyncTaskPageProps) {
             onToggleAutoSync={toggleAutoSync}
             onBulkAction={bulkAction}
           />
-        </section>
+        </section>}
       </div>
 
       <SyncTaskConfigDrawer

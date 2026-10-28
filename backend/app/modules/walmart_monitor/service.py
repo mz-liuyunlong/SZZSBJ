@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
 from app.modules.walmart_monitor.models import RawWalmartMonitorEvent
+from app.modules.walmart_monitor.projection import WalmartMonitorProjectionService
 from app.modules.walmart_monitor.repository import (
     RawEventWriteResult,
     WalmartMonitorEventRepository,
@@ -32,6 +33,10 @@ class RawEventRepository(Protocol):
     def insert_or_get(self, values: dict[str, object]) -> RawEventWriteResult: ...
 
 
+class RawEventProjector(Protocol):
+    def project(self, raw_event: RawWalmartMonitorEvent) -> int: ...
+
+
 @dataclass(frozen=True, slots=True)
 class WalmartMonitorIngestionResult:
     id: UUID
@@ -46,9 +51,17 @@ class WalmartMonitorIngestionService:
         session: Session,
         *,
         repository: RawEventRepository | None = None,
+        projector: RawEventProjector | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or WalmartMonitorEventRepository(session)
+        self.projector = (
+            projector
+            if projector is not None
+            else WalmartMonitorProjectionService(session)
+            if repository is None
+            else None
+        )
 
     def ingest(
         self,
@@ -101,6 +114,8 @@ class WalmartMonitorIngestionService:
             ):
                 self.session.rollback()
                 raise ApiError(code="MONITOR_EVENT_CONFLICT", status_code=409)
+            if write_result.created and self.projector is not None:
+                self.projector.project(write_result.event)
             self.session.commit()
         except Exception:
             self.session.rollback()

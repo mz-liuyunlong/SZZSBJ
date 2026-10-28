@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal
+from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import (
@@ -37,6 +39,7 @@ from app.modules.data_pages.models import (
     WalmartListingDimension,
     WalmartListingInventoryDailyFact,
 )
+from app.modules.walmart_monitor.models import WalmartMonitorListingCurrent
 
 DAILY_SALES_SEARCH_COLUMNS: dict[str, ColumnElement[str | None]] = {
     "sku": DailySalesItemDayMart.local_sku,
@@ -82,9 +85,64 @@ class ListingManagementRowProjection:
     product_developer_name: str | None
     launch_date_cn: date | None = None
     first_wfs_seen_at_utc: datetime | None = None
+    effective_title: str | None = None
+    effective_strike_price_amount: Decimal | None = None
+    effective_strike_price_currency_code: str | None = None
+    effective_sale_price_amount: Decimal | None = None
+    effective_sale_price_currency_code: str | None = None
+    effective_category: str | None = None
+    effective_buybox_status: str | None = None
+    effective_walmart_seller: str | None = None
+    effective_is_hijacked: bool | None = None
+    effective_average_rating: Decimal | None = None
+    effective_review_count: int | None = None
+    effective_brand: str | None = None
 
     def __getattr__(self, name: str) -> object:
+        effective = f"effective_{name}"
+        if effective in self.__dataclass_fields__:
+            return object.__getattribute__(self, effective)
         return getattr(self.listing, name)
+
+    @property
+    def id(self) -> UUID:
+        return type_cast(UUID, self.listing.id)
+
+    @property
+    def source_account_ref(self) -> str:
+        return type_cast(str, self.listing.source_account_ref)
+
+    @property
+    def item_id(self) -> str:
+        return type_cast(str, self.listing.item_id)
+
+
+def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection:
+    listing = row[0]
+    if not isinstance(listing, ListingManagementCurrentMart):
+        raise TypeError("Listing projection row is missing its MART entity")
+    return ListingManagementRowProjection(
+        listing=listing,
+        listing_start_source_raw=row[1],  # type: ignore[arg-type]
+        launch_date_cn=row[2],  # type: ignore[arg-type]
+        first_wfs_seen_at_utc=row[3],  # type: ignore[arg-type]
+        owner_uid=row[4],  # type: ignore[arg-type]
+        owner_name=row[5],  # type: ignore[arg-type]
+        product_developer_uid=row[6],  # type: ignore[arg-type]
+        product_developer_name=row[7],  # type: ignore[arg-type]
+        effective_title=row[8],  # type: ignore[arg-type]
+        effective_strike_price_amount=row[9],  # type: ignore[arg-type]
+        effective_strike_price_currency_code=row[10],  # type: ignore[arg-type]
+        effective_sale_price_amount=row[11],  # type: ignore[arg-type]
+        effective_sale_price_currency_code=row[12],  # type: ignore[arg-type]
+        effective_category=row[13],  # type: ignore[arg-type]
+        effective_buybox_status=row[14],  # type: ignore[arg-type]
+        effective_walmart_seller=row[15],  # type: ignore[arg-type]
+        effective_is_hijacked=row[16],  # type: ignore[arg-type]
+        effective_average_rating=row[17],  # type: ignore[arg-type]
+        effective_review_count=row[18],  # type: ignore[arg-type]
+        effective_brand=row[19],  # type: ignore[arg-type]
+    )
 
 
 def _csv_values(value: str | None) -> list[str]:
@@ -847,28 +905,7 @@ class ListingManagementRepository:
         ).all()
 
         return (
-            [
-                ListingManagementRowProjection(
-                    listing=listing,
-                    listing_start_source_raw=listing_start_source_raw,
-                    launch_date_cn=launch_date_cn,
-                    first_wfs_seen_at_utc=first_wfs_seen_at_utc,
-                    owner_uid=owner_uid,
-                    owner_name=owner_name,
-                    product_developer_uid=product_developer_uid,
-                    product_developer_name=product_developer_name,
-                )
-                for (
-                    listing,
-                    listing_start_source_raw,
-                    launch_date_cn,
-                    first_wfs_seen_at_utc,
-                    owner_uid,
-                    owner_name,
-                    product_developer_uid,
-                    product_developer_name,
-                ) in rows
-            ],
+            [_listing_projection(row) for row in rows],
             int(total or 0),
             latest_calculated_at,
         )
@@ -912,28 +949,7 @@ class ListingManagementRepository:
             ).limit(max_rows)
         ).all()
 
-        return [
-            ListingManagementRowProjection(
-                listing=listing,
-                listing_start_source_raw=listing_start_source_raw,
-                launch_date_cn=launch_date_cn,
-                first_wfs_seen_at_utc=first_wfs_seen_at_utc,
-                owner_uid=owner_uid,
-                owner_name=owner_name,
-                product_developer_uid=product_developer_uid,
-                product_developer_name=product_developer_name,
-            )
-            for (
-                listing,
-                listing_start_source_raw,
-                launch_date_cn,
-                first_wfs_seen_at_utc,
-                owner_uid,
-                owner_name,
-                product_developer_uid,
-                product_developer_name,
-            ) in rows
-        ]
+        return [_listing_projection(row) for row in rows]
 
     def listing_summary(
         self,
@@ -965,20 +981,20 @@ class ListingManagementRepository:
         base = statement.order_by(None).subquery()
 
         online_condition = func.coalesce(base.c.wfs_available_quantity, 0) > 0
-        buybox_exception_condition = base.c.buybox_status.in_(
+        buybox_exception_condition = base.c.effective_buybox_status.in_(
             ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
         )
         rating_warning_condition = and_(
-            base.c.average_rating.is_not(None),
-            base.c.average_rating > 0,
-            base.c.average_rating < 4,
+            base.c.effective_average_rating.is_not(None),
+            base.c.effective_average_rating > 0,
+            base.c.effective_average_rating < 4,
         )
-        resold_warning_condition = base.c.is_hijacked.is_(True)
+        resold_warning_condition = base.c.effective_is_hijacked.is_(True)
         strike_price_exception_condition = and_(
-            base.c.sale_price_amount.is_not(None),
-            base.c.sale_price_amount > 0,
-            base.c.strike_price_amount.is_not(None),
-            base.c.strike_price_amount <= base.c.sale_price_amount,
+            base.c.effective_sale_price_amount.is_not(None),
+            base.c.effective_sale_price_amount > 0,
+            base.c.effective_strike_price_amount.is_not(None),
+            base.c.effective_strike_price_amount <= base.c.effective_sale_price_amount,
         )
 
         row = self.session.execute(
@@ -1022,7 +1038,7 @@ class ListingManagementRepository:
 
         store_value = func.coalesce(base.c.store_name, base.c.store_id)
         owner_value = func.coalesce(base.c.owner_name, base.c.owner_ref, base.c.owner_uid)
-        product_type_value = base.c.category
+        product_type_value = base.c.effective_category
 
         store_rows = self.session.execute(
             select(store_value.label("value"), func.count().label("count"))
@@ -1126,6 +1142,54 @@ class ListingManagementRepository:
         batch_values: str,
     ):
         owner_lookup = self._owner_lookup()
+        effective_title = func.coalesce(
+            WalmartMonitorListingCurrent.title,
+            ListingManagementCurrentMart.title,
+        )
+        effective_strike_price = func.coalesce(
+            WalmartMonitorListingCurrent.strike_price_amount,
+            ListingManagementCurrentMart.strike_price_amount,
+        )
+        effective_strike_currency = func.coalesce(
+            WalmartMonitorListingCurrent.strike_price_currency_code,
+            ListingManagementCurrentMart.strike_price_currency_code,
+        )
+        effective_sale_price = func.coalesce(
+            WalmartMonitorListingCurrent.sale_price_amount,
+            ListingManagementCurrentMart.sale_price_amount,
+        )
+        effective_sale_currency = func.coalesce(
+            WalmartMonitorListingCurrent.sale_price_currency_code,
+            ListingManagementCurrentMart.sale_price_currency_code,
+        )
+        effective_category = func.coalesce(
+            WalmartMonitorListingCurrent.category,
+            ListingManagementCurrentMart.category,
+        )
+        effective_buybox = func.coalesce(
+            WalmartMonitorListingCurrent.buybox_status,
+            ListingManagementCurrentMart.buybox_status,
+        )
+        effective_seller = func.coalesce(
+            WalmartMonitorListingCurrent.walmart_seller,
+            ListingManagementCurrentMart.walmart_seller,
+        )
+        effective_hijacked = func.coalesce(
+            WalmartMonitorListingCurrent.is_hijacked,
+            ListingManagementCurrentMart.is_hijacked,
+        )
+        effective_rating = func.coalesce(
+            WalmartMonitorListingCurrent.average_rating,
+            ListingManagementCurrentMart.average_rating,
+        )
+        effective_review_count = func.coalesce(
+            WalmartMonitorListingCurrent.review_count,
+            ListingManagementCurrentMart.review_count,
+        )
+        effective_brand = func.coalesce(
+            WalmartMonitorListingCurrent.brand,
+            ListingManagementCurrentMart.brand,
+        )
         statement = (
             select(
                 ListingManagementCurrentMart,
@@ -1136,6 +1200,18 @@ class ListingManagementRepository:
                 owner_lookup.c.owner_name,
                 owner_lookup.c.product_developer_uid,
                 owner_lookup.c.product_developer_name,
+                effective_title.label("effective_title"),
+                effective_strike_price.label("effective_strike_price_amount"),
+                effective_strike_currency.label("effective_strike_price_currency_code"),
+                effective_sale_price.label("effective_sale_price_amount"),
+                effective_sale_currency.label("effective_sale_price_currency_code"),
+                effective_category.label("effective_category"),
+                effective_buybox.label("effective_buybox_status"),
+                effective_seller.label("effective_walmart_seller"),
+                effective_hijacked.label("effective_is_hijacked"),
+                effective_rating.label("effective_average_rating"),
+                effective_review_count.label("effective_review_count"),
+                effective_brand.label("effective_brand"),
             )
             .outerjoin(
                 WalmartListingDimension,
@@ -1162,6 +1238,15 @@ class ListingManagementRepository:
                     owner_lookup.c.source_account_ref
                     == ListingManagementCurrentMart.source_account_ref,
                     owner_lookup.c.lingxing_sku_code == ListingManagementCurrentMart.local_sku,
+                ),
+            )
+            .outerjoin(
+                WalmartMonitorListingCurrent,
+                and_(
+                    WalmartMonitorListingCurrent.source_account_ref
+                    == ListingManagementCurrentMart.source_account_ref,
+                    WalmartMonitorListingCurrent.store_id == ListingManagementCurrentMart.store_id,
+                    WalmartMonitorListingCurrent.item_id == ListingManagementCurrentMart.item_id,
                 ),
             )
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
@@ -1215,9 +1300,7 @@ class ListingManagementRepository:
 
         product_type_values = _csv_values(product_type)
         if product_type_values:
-            statement = statement.where(
-                ListingManagementCurrentMart.category.in_(product_type_values)
-            )
+            statement = statement.where(effective_category.in_(product_type_values))
 
         status_values = _csv_values(status)
         if status_values:
@@ -1243,15 +1326,11 @@ class ListingManagementRepository:
                     )
                 elif item == "拥有":
                     status_conditions.append(
-                        ListingManagementCurrentMart.buybox_status.in_(
-                            ["拥有", "PRIMARY", "primary", "WON", "WINNING"]
-                        )
+                        effective_buybox.in_(["拥有", "PRIMARY", "primary", "WON", "WINNING"])
                     )
                 elif item == "未拥有":
                     status_conditions.append(
-                        ListingManagementCurrentMart.buybox_status.in_(
-                            ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
-                        )
+                        effective_buybox.in_(["未拥有", "LOST", "NOT_OWNED", "secondary", "other"])
                     )
             if status_conditions:
                 statement = statement.where(or_(*status_conditions))
@@ -1289,25 +1368,22 @@ class ListingManagementRepository:
             )
         elif summary_filter == "buybox":
             statement = statement.where(
-                ListingManagementCurrentMart.buybox_status.in_(
-                    ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
-                )
+                effective_buybox.in_(["未拥有", "LOST", "NOT_OWNED", "secondary", "other"])
             )
         elif summary_filter == "rating":
             statement = statement.where(
-                ListingManagementCurrentMart.average_rating.is_not(None),
-                ListingManagementCurrentMart.average_rating > 0,
-                ListingManagementCurrentMart.average_rating < 4,
+                effective_rating.is_not(None),
+                effective_rating > 0,
+                effective_rating < 4,
             )
         elif summary_filter == "resold":
-            statement = statement.where(ListingManagementCurrentMart.is_hijacked.is_(True))
+            statement = statement.where(effective_hijacked.is_(True))
         elif summary_filter == "strike":
             statement = statement.where(
-                ListingManagementCurrentMart.sale_price_amount.is_not(None),
-                ListingManagementCurrentMart.sale_price_amount > 0,
-                ListingManagementCurrentMart.strike_price_amount.is_not(None),
-                ListingManagementCurrentMart.strike_price_amount
-                <= ListingManagementCurrentMart.sale_price_amount,
+                effective_sale_price.is_not(None),
+                effective_sale_price > 0,
+                effective_strike_price.is_not(None),
+                effective_strike_price <= effective_sale_price,
             )
         elif summary_filter == "disabled":
             statement = statement.where(ListingManagementCurrentMart.disabled_reason.is_not(None))
@@ -1322,7 +1398,7 @@ class ListingManagementRepository:
                 statement = statement.where(
                     or_(
                         ListingManagementCurrentMart.local_name.ilike(like_value),
-                        ListingManagementCurrentMart.title.ilike(like_value),
+                        effective_title.ilike(like_value),
                     )
                 )
             else:
@@ -1464,7 +1540,8 @@ class ListingManagementRepository:
         ]
 
     def archive_states_for_listing_rows(
-        self, rows: Sequence[ListingManagementCurrentMart]
+        self,
+        rows: Sequence[ListingManagementCurrentMart | ListingManagementRowProjection],
     ) -> dict[str, ListingArchiveState]:
         listing_ids = [row.id for row in rows]
         if not listing_ids:

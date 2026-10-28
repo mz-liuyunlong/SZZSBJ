@@ -1,5 +1,6 @@
 import { Alert, Button, Drawer, Form, Input, InputNumber, Select, Space, Switch, message } from "antd";
 import { useEffect, useState } from "react";
+import { backendRequest } from "@/api/backendApi";
 import {
   saveBusinessConnector, type BusinessConnector, type ConnectorKind, type ConnectorWrite,
 } from "@/api/businessConnectorsApi";
@@ -9,6 +10,18 @@ import {
 } from "./businessConfigDrafts";
 
 type Choice = ConnectorKind | "draft";
+type SkillVersion = {
+  id: string; connector_id: string; scene: string; version: number;
+  status: string; instructions: string; runtime_instructions: string | null;
+};
+type PendingSkillText = { instructions: string; runtime_instructions: string };
+const SKILL_SCENES = [
+  {value:"keyword_launch",label:"关键词投放"},
+  {value:"ai_assistant",label:"AI 助手"},
+  {value:"listing_optimization",label:"Listing 优化"},
+  {value:"ads_optimization",label:"广告优化（预留）"},
+  {value:"product_research",label:"智能选品（预留）"},
+] as const;
 type ServiceForm = ConnectorWrite & {
   choice: Choice;
   draft_category: DraftCategory;
@@ -43,10 +56,75 @@ export default function BusinessConfigServiceEditor({
 }: Props) {
   const [form] = Form.useForm<ServiceForm>();
   const [saving, setSaving] = useState(false);
-  const [messageApi, context] = message.useMessage();
+  const [skillScene,setSkillScene]=useState<string>("keyword_launch");
+  const [skillText,setSkillText]=useState("");
+  const [runtimeSkillText,setRuntimeSkillText]=useState("");
+  const [pendingSkillTexts,setPendingSkillTexts]=useState<Record<string,PendingSkillText>>({});
+  const [skillList,setSkillList]=useState<SkillVersion[]>([]);
+  const [skillBusy,setSkillBusy]=useState(false);
+  const [skillError,setSkillError]=useState("");
+  const [savedConnectorId,setSavedConnectorId]=useState<string>();
   const choice = Form.useWatch("choice", form);
   const draftCategory = Form.useWatch("draft_category", form);
   const metering = Form.useWatch("metering", form);
+  const skillConnectorId=connector?.id ?? savedConnectorId;
+  const openAiSelected=connector?.kind==="openai" || choice==="openai";
+  const loadSkills=async(id:string)=>{
+    setSkillError("");
+    try{
+      const result=await backendRequest<SkillVersion[]>(`/api/ai-runtime/skills?connector_id=${encodeURIComponent(id)}`);
+      setSkillList(result.data);
+      return true;
+    }catch{
+      setSkillError("Skill 加载失败，请检查数据库迁移、管理员权限或后端日志。");
+      return false;
+    }
+  };
+  useEffect(()=>{
+    if(open && skillConnectorId && openAiSelected){
+      let active=true;
+      void backendRequest<SkillVersion[]>(`/api/ai-runtime/skills?connector_id=${encodeURIComponent(skillConnectorId)}`)
+        .then(result=>{if(active){setSkillList(result.data);setSkillError("")}})
+        .catch(()=>{if(active){setSkillList([]);setSkillError("Skill 加载失败，请检查数据库迁移、管理员权限或后端日志。")}});
+      return()=>{active=false};
+    }
+  },[open,skillConnectorId,openAiSelected]);
+  const saveSkillDraft=async()=>{
+    if(!skillText.trim())return;
+    if(skillText.length>150000){messageApi.warning("完整 Skill 文档最多 150,000 个字符");return;}
+    if(runtimeSkillText.length>3000){messageApi.warning("运行时精简指令最多 3,000 个字符");return;}
+    if(!skillConnectorId){
+      setPendingSkillTexts(old=>({...old,[skillScene]:{
+        instructions:skillText.trim(),runtime_instructions:runtimeSkillText.trim(),
+      }}));
+      messageApi.info("Skill 已暂存于当前编辑窗口；保存 OpenAI 服务后才能同步并发布");
+      return;
+    }
+    setSkillBusy(true);
+    try{
+      await backendRequest('/api/ai-runtime/skills/drafts',{method:'POST',body:JSON.stringify({
+        connector_id:skillConnectorId,scene:skillScene,instructions:skillText.trim(),
+        runtime_instructions:runtimeSkillText.trim()||null,
+      })});
+      setPendingSkillTexts(old=>{const next={...old};delete next[skillScene];return next;});
+      setSkillText("");
+      setRuntimeSkillText("");
+      await loadSkills(skillConnectorId);
+      messageApi.success("Skill 草稿已保存");
+    }catch{messageApi.error("Skill 草稿保存失败");}
+    finally{setSkillBusy(false);}
+  };
+  const publishSkill=async(id:string)=>{
+    if(!skillConnectorId)return;
+    setSkillBusy(true);
+    try{
+      await backendRequest(`/api/ai-runtime/skills/${id}/publish`,{method:'POST'});
+      await loadSkills(skillConnectorId);
+      messageApi.success("Skill 已发布，新任务将使用该版本");
+    }catch{messageApi.error("Skill 发布失败");}
+    finally{setSkillBusy(false);}
+  };
+  const [messageApi, context] = message.useMessage();
 
   useEffect(() => {
     if (!open) return;
@@ -58,9 +136,10 @@ export default function BusinessConfigServiceEditor({
       endpoint: "",
       credential: "",
       signing_secret: "",
-      default_model: connector?.config.default_model ?? "gpt-4.1-mini",
-      backup_model: connector?.config.backup_model ?? "",
-      model_allowlist: connector?.config.model_allowlist ?? ["gpt-4.1-mini"],
+      default_model: "gpt-6-luna",
+      backup_model: "",
+      model_allowlist: ["gpt-6-luna"],
+      application_scenes: connector?.config.application_scenes ?? ["keyword_launch", "ai_assistant", "listing_optimization"],
       daily_limit: connector?.config.daily_limit ?? 100,
       monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 0),
       max_output_tokens: connector?.config.max_output_tokens ?? 1024,
@@ -78,6 +157,7 @@ export default function BusinessConfigServiceEditor({
   }, [open, connector, draft, preferredCategory, form]);
 
   const close = () => {
+    setPendingSkillTexts({});setSkillText("");setRuntimeSkillText("");setSkillList([]);setSkillScene("keyword_launch");setSkillError("");setSavedConnectorId(undefined);
     form.setFieldsValue({ credential: "", signing_secret: "", endpoint: "" });
     onClose();
   };
@@ -127,14 +207,40 @@ export default function BusinessConfigServiceEditor({
           signing_secret: data.signing_secret?.trim() || undefined,
           default_model: data.choice === "openai" ? data.default_model : undefined,
           backup_model: data.choice === "openai" ? data.backup_model : undefined,
-          model_allowlist: data.choice === "openai" ? data.model_allowlist : [],
+          model_allowlist: data.choice === "openai" ? ["gpt-6-luna"] : [],
+          application_scenes: data.choice === "openai" ? data.application_scenes ?? [] : [],
           daily_limit: data.daily_limit,
           monthly_budget_usd: data.monthly_budget_usd ?? 0,
           max_output_tokens: data.max_output_tokens,
           input_price_per_million: data.input_price_per_million ?? 0,
           output_price_per_million: data.output_price_per_million ?? 0,
         };
-        await saveBusinessConnector(payload, connector?.id);
+        const savedConnector = await saveBusinessConnector(payload, connector?.id ?? savedConnectorId);
+        if(!connector?.id && !savedConnectorId)setSavedConnectorId(savedConnector.id);
+        if(data.choice==="openai" && Object.keys(pendingSkillTexts).length){
+          let savedCount=0;
+          const failedSkills:Record<string,PendingSkillText>={};
+          for(const [scene,skill] of Object.entries(pendingSkillTexts)){
+            if(!skill.instructions.trim())continue;
+            try{
+              await backendRequest('/api/ai-runtime/skills/drafts',{method:'POST',body:JSON.stringify({
+                connector_id:savedConnector.id,scene,
+                instructions:skill.instructions,
+                runtime_instructions:skill.runtime_instructions.trim()||null,
+              })});
+              savedCount++;
+            }catch{
+              failedSkills[scene]=skill;
+            }
+          }
+          setPendingSkillTexts(failedSkills);
+          if(Object.keys(failedSkills).length){
+            setSkillError("OpenAI 服务已保存，但部分 Skill 草稿未同步。请检查错误后重试；服务不会重复创建。");
+            messageApi.warning("OpenAI 服务已保存，但有 Skill 草稿未同步；可在此重试");
+            return;
+          }
+          if(savedCount)messageApi.success(`已保存 ${savedCount} 个 Skill 草稿`);
+        }
         messageApi.success("服务端配置已保存，密钥不会回显");
       }
       close();
@@ -209,12 +315,19 @@ export default function BusinessConfigServiceEditor({
             <Input.Password autoComplete="new-password" placeholder="已配置时可留空，保持原密钥" />
           </Form.Item>
           <Form.Item name="default_model" label="默认模型" rules={[{ required: true }]}>
-            <Input maxLength={100} />
+            <Input readOnly />
           </Form.Item>
-          <Form.Item name="backup_model" label="备用模型"><Input maxLength={100} /></Form.Item>
-          <Form.Item name="model_allowlist" label="模型白名单" rules={[{ required: true }]}>
-            <Select mode="tags" tokenSeparators={[","]} />
+          <Form.Item name="application_scenes" label="应用场景（多选）">
+            <Select mode="multiple" options={[
+              { value: "keyword_launch", label: "关键词投放" },
+              { value: "ai_assistant", label: "AI 助手" },
+              { value: "listing_optimization", label: "Listing 优化" },
+              { value: "ads_optimization", label: "广告优化（预留）" },
+              { value: "product_research", label: "智能选品（预留）" },
+            ]} />
           </Form.Item>
+          <Form.Item name="backup_model" hidden><Input /></Form.Item>
+          <Form.Item name="model_allowlist" hidden><Select mode="tags" /></Form.Item>
           <Form.Item name="max_output_tokens" label="最大输出 Token">
             <InputNumber min={1} max={16384} style={{ width: "100%" }} />
           </Form.Item>
@@ -224,6 +337,52 @@ export default function BusinessConfigServiceEditor({
           <Form.Item name="output_price_per_million" label="每百万输出 Token 单价 USD">
             <InputNumber min={0} precision={6} style={{ width: "100%" }} />
           </Form.Item>
+          {<div style={{paddingTop:12,borderTop:"1px solid #eef1f5"}}>
+            <strong>AI Skills · 版本管理</strong>
+            <div style={{fontSize:12,color:"#98a2b3",margin:"8px 0"}}>{skillConnectorId ? "已连接服务：草稿支持保存及发布；正在执行的任务保持其已选版本。" : "首次创建：可编辑并暂存 Skill，保存 OpenAI 服务后自动尝试同步；未保存时不会发布或调用 AI。"}</div>
+            {skillError ? <Alert type="error" showIcon message={skillError} style={{marginBottom:8}} /> : null}
+            <Select value={skillScene} onChange={next=>{
+              setPendingSkillTexts(old=>({...old,[skillScene]:{
+                instructions:skillText,runtime_instructions:runtimeSkillText,
+              }}));
+              setSkillText(pendingSkillTexts[next]?.instructions??"");
+              setRuntimeSkillText(pendingSkillTexts[next]?.runtime_instructions??"");
+              setSkillScene(next);
+            }} options={[...SKILL_SCENES]} style={{width:"100%",marginBottom:8}} />
+            <div style={{fontSize:12,color:"#667085",marginBottom:6}}>
+              完整规则文档用于版本留档，不会每次全部发送给模型；长文档必须填写精简运行指令。
+            </div>
+            <Input.TextArea rows={6} value={skillText} onChange={ev=>{
+              setSkillText(ev.target.value);
+              setPendingSkillTexts(old=>({...old,[skillScene]:{
+                instructions:ev.target.value,runtime_instructions:runtimeSkillText,
+              }}));
+            }} placeholder="完整 Skill / 规则参考文档（最多 150,000 字符）" maxLength={150000}/>
+            <div style={{fontSize:12,color:"#98a2b3",textAlign:"right",marginTop:2}}>
+              {skillText.length.toLocaleString()} / 150,000 字符
+            </div>
+            <div style={{fontSize:12,fontWeight:600,margin:"12px 0 6px"}}>精简运行指令（最多 3,000 字符）</div>
+            <Input.TextArea rows={3} value={runtimeSkillText} onChange={ev=>{
+              setRuntimeSkillText(ev.target.value);
+              setPendingSkillTexts(old=>({...old,[skillScene]:{
+                instructions:skillText,runtime_instructions:ev.target.value,
+              }}));
+            }} placeholder="每次模型调用必须遵守的简短指令；硬性评分和名额规则仍由后端执行" maxLength={3000}/>
+            <div style={{fontSize:12,color:"#98a2b3",textAlign:"right",marginTop:2}}>
+              {runtimeSkillText.length.toLocaleString()} / 3,000 字符
+            </div>
+            <Button size="small" style={{marginTop:8}} disabled={!skillText.trim()||skillBusy} loading={skillBusy}
+              onClick={()=>void saveSkillDraft()}>{skillConnectorId?"保存 Skill 草稿":"暂存 Skill 草稿"}</Button>
+            {skillList.filter(s=>s.scene===skillScene).map(s=><div key={s.id}
+              style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f0f0f0"}}>
+              <span>V{s.version} · {s.status}</span>
+              <Space size={4}>
+                <Button size="small" onClick={()=>{setSkillText(s.instructions);setRuntimeSkillText(s.runtime_instructions??"")}}>查看 / 复制配置</Button>
+                {s.status!=="published" ? <Button size="small" disabled={s.status==="retired"} loading={skillBusy}
+                  onClick={()=>void publishSkill(s.id)}>发布</Button> : null}
+              </Space>
+            </div>)}
+          </div>}
         </> : null}
         {choice !== "draft" && <>
           <Form.Item name="daily_limit" label="每日请求上限">

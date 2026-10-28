@@ -73,12 +73,19 @@ it("still lists interface tasks when dashboard is unavailable but sync-runs work
   expect(result.rows.some((row) => row.interfaceKey === "walmartListingList")).toBe(true);
 });
 
-it("still lists interfaces when scoped config and dashboard calls fail", async () => {
+it("rejects task loading when configuration access fails instead of inventing empty state", async () => {
   vi.mocked(backendRequest)
     .mockResolvedValueOnce(envelope(interfaces))
     .mockRejectedValueOnce(new Error("DATA_SCOPE_DENIED"))
     .mockRejectedValueOnce(new Error("DATA_SCOPE_DENIED"));
-  const result = await listIntegrationSyncTasks();
-  expect(result.rows.length).toBeGreaterThan(0);
-  expect(result.rows.every((row) => row.lastStatus === "未执行" || row.lastStatus === "已停用")).toBe(true);
+  await expect(listIntegrationSyncTasks()).rejects.toThrow("DATA_SCOPE_DENIED");
+});
+
+it("surfaces an error when both dashboard and run fallback fail", async () => {
+  vi.mocked(backendRequest)
+    .mockResolvedValueOnce(envelope(interfaces))
+    .mockResolvedValueOnce(envelope(keys.map((key) => config(key))))
+    .mockRejectedValueOnce(new Error("DASHBOARD_DOWN"))
+    .mockRejectedValueOnce(new Error("RUNS_DOWN"));
+  await expect(listIntegrationSyncTasks()).rejects.toThrow("RUNS_DOWN");
 });

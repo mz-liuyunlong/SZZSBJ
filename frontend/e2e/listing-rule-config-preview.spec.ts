@@ -24,7 +24,8 @@ test("four rule groups and protected settings render without database requests",
   const { drawer, apiRequests } = await openPreview(page);
 
   await expect(drawer.getByText("统计窗口与权重")).toBeVisible();
-  await expect(drawer.getByText("每天北京时间22:30评级", { exact: false })).toBeVisible();
+  await expect(drawer.getByLabel("每日自动计算时间（北京时间）")).toBeVisible();
+  await expect(drawer.getByText("默认每天北京时间22:30；保存后在下一次配置时间点生效。", { exact: false })).toBeVisible();
   await drawer.getByRole("tab", { name: "生命周期" }).click();
   await expect(drawer.getByText("上升期增长幅度", { exact: false })).toBeVisible();
   await expect(drawer.getByText("稳定期允许波动", { exact: false })).toBeVisible();

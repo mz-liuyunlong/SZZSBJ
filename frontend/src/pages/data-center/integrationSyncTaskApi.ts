@@ -468,11 +468,7 @@ async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
 }
 
 async function fetchAllPagesOptional<T>(endpoint: string): Promise<T[]> {
-  try {
-    return await fetchAllPages<T>(endpoint);
-  } catch {
-    return [];
-  }
+  return fetchAllPages<T>(endpoint);
 }
 
 async function loadRunSnapshots(): Promise<{ latestRuns: RunDto[]; todayStats: SyncTaskTodayStat[] }> {
@@ -486,14 +482,10 @@ async function loadRunSnapshots(): Promise<{ latestRuns: RunDto[]; todayStats: S
       todayStats: dashboard.data.today_stats ?? [],
     };
   } catch {
-    try {
-      const runs = await backendRequest<{ items: RunDto[] }>(
-        "/api/integrations/sync-runs?page=1&page_size=100",
-      );
-      return { latestRuns: runs.data.items ?? [], todayStats: [] };
-    } catch {
-      return { latestRuns: [], todayStats: [] };
-    }
+    const runs = await backendRequest<{ items: RunDto[] }>(
+      "/api/integrations/sync-runs?page=1&page_size=100",
+    );
+    return { latestRuns: runs.data.items ?? [], todayStats: [] };
   }
 }
 
@@ -524,7 +516,7 @@ export async function listIntegrationSyncTasks() {
   // Preserve other accounts' tasks until their own unified configuration exists.
   const visibleRows = foldProductDetailDependencyRows(withTodayCounts).filter(shouldDisplayTaskRow).filter(
     (task) => !pmcPurchaseInterfaceKeys.has(task.interfaceKey)
-      || !purchaseParents.some((parent) => parent.source === task.source),
+      || !purchaseParents.some((parent) => parent.source === task.source && parent.autoSync && parent.status === "enabled"),
   );
   const logs: SyncTaskLog[] = runItems.map((run) => ({
     stageName: run.interface_key === "pmcPurchaseBoardSync" ? "完整流程"

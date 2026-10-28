@@ -10,6 +10,8 @@ from app.core.auth import enforce_protected_by_default
 from app.core.local_scoped_writes import install_local_scoped_write_guard
 from app.db.session import dispose_engine
 from app.modules.after_sales.router import router as after_sales_router
+from app.modules.ai_runtime.general_routes import router as ai_runtime_router
+from app.modules.ai_runtime.listing_routes import router as ai_listing_router
 from app.modules.approvals.router import router as approvals_router
 from app.modules.business_connectors.router import router as business_connectors_router
 from app.modules.business_rules.router import router as business_rules_router
@@ -25,6 +27,7 @@ from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
 from app.modules.integration_sync.router import router as integration_sync_router
 from app.modules.keyword_planning.router import router as keyword_planning_router
+from app.modules.listing_rule_config.preview_router import router as listing_preview_router
 from app.modules.listing_rule_config.router import router as listing_rule_config_router
 from app.modules.media_assets.router import router as media_assets_router
 from app.modules.operation_logs.router import router as operation_logs_router
@@ -69,6 +72,8 @@ def create_app() -> FastAPI:
     install_api_foundation(application)
     install_local_scoped_write_guard(application)
     application.include_router(after_sales_router)
+    application.include_router(ai_runtime_router)
+    application.include_router(ai_listing_router)
     application.include_router(approvals_router)
     application.include_router(business_rules_router)
     application.include_router(business_connectors_router)
@@ -82,6 +87,7 @@ def create_app() -> FastAPI:
     application.include_router(password_reset_router)
     application.include_router(media_assets_router)
     application.include_router(listing_rule_config_router)
+    application.include_router(listing_preview_router)
     application.include_router(operation_logs_rows_router)
     application.include_router(operation_logs_router)
     application.include_router(operation_plans_router)

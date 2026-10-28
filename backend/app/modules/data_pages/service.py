@@ -16,6 +16,7 @@ from app.modules.data_pages.models import (
 from app.modules.data_pages.repository import (
     DailySalesRepository,
     ListingManagementRepository,
+    ListingManagementRowProjection,
     ListingTagRepository,
     OrderProfitRepository,
 )
@@ -1045,64 +1046,121 @@ class ListingManagementService:
 
     def _to_read(
         self,
-        row: ListingManagementCurrentMart,
+        row: ListingManagementCurrentMart | ListingManagementRowProjection,
         custom_tags: list[str] | None = None,
         is_archived: bool = False,
         archive_reason: str | None = None,
     ) -> ListingManagementItemRead:
+        listing = row.listing if isinstance(row, ListingManagementRowProjection) else row
+        title = (
+            row.effective_title if isinstance(row, ListingManagementRowProjection) else row.title
+        )
+        strike_price_amount = (
+            row.effective_strike_price_amount
+            if isinstance(row, ListingManagementRowProjection)
+            else row.strike_price_amount
+        )
+        strike_price_currency_code = (
+            row.effective_strike_price_currency_code
+            if isinstance(row, ListingManagementRowProjection)
+            else row.strike_price_currency_code
+        )
+        sale_price_amount = (
+            row.effective_sale_price_amount
+            if isinstance(row, ListingManagementRowProjection)
+            else row.sale_price_amount
+        )
+        sale_price_currency_code = (
+            row.effective_sale_price_currency_code
+            if isinstance(row, ListingManagementRowProjection)
+            else row.sale_price_currency_code
+        )
+        category = (
+            row.effective_category
+            if isinstance(row, ListingManagementRowProjection)
+            else row.category
+        )
+        buybox_status = (
+            row.effective_buybox_status
+            if isinstance(row, ListingManagementRowProjection)
+            else row.buybox_status
+        )
+        walmart_seller = (
+            row.effective_walmart_seller
+            if isinstance(row, ListingManagementRowProjection)
+            else row.walmart_seller
+        )
+        is_hijacked = (
+            row.effective_is_hijacked
+            if isinstance(row, ListingManagementRowProjection)
+            else row.is_hijacked
+        )
+        average_rating = (
+            row.effective_average_rating
+            if isinstance(row, ListingManagementRowProjection)
+            else row.average_rating
+        )
+        review_count = (
+            row.effective_review_count
+            if isinstance(row, ListingManagementRowProjection)
+            else row.review_count
+        )
+        brand = (
+            row.effective_brand if isinstance(row, ListingManagementRowProjection) else row.brand
+        )
         return ListingManagementItemRead(
-            id=str(row.id),
-            source_account_ref=row.source_account_ref,
-            platform_code=row.platform_code,
-            store_id=row.store_id,
-            store_name=row.store_name,
-            item_id=row.item_id,
-            msku=row.msku,
-            local_sku=row.local_sku,
-            local_name=row.local_name,
-            title=row.title,
-            picture_url=row.picture_url,
-            item_url=row.item_url,
-            owner_ref=row.owner_ref,
+            id=str(listing.id),
+            source_account_ref=listing.source_account_ref,
+            platform_code=listing.platform_code,
+            store_id=listing.store_id,
+            store_name=listing.store_name,
+            item_id=listing.item_id,
+            msku=listing.msku,
+            local_sku=listing.local_sku,
+            local_name=listing.local_name,
+            title=title,
+            picture_url=listing.picture_url,
+            item_url=listing.item_url,
+            owner_ref=listing.owner_ref,
             owner_uid=getattr(row, "owner_uid", None),
             owner_name=getattr(row, "owner_name", None),
             product_developer_uid=getattr(row, "product_developer_uid", None),
             product_developer_name=getattr(row, "product_developer_name", None),
-            product_grade=row.product_grade,
-            tags=custom_tags if custom_tags is not None else _tag_list(row.tags_json),
-            strike_price_amount=row.strike_price_amount,
-            strike_price_currency_code=row.strike_price_currency_code,
-            sale_price_amount=row.sale_price_amount,
-            sale_price_currency_code=row.sale_price_currency_code,
-            listing_status=row.listing_status,
-            lifecycle_status=row.lifecycle_status,
-            fulfillment_type=getattr(row, "fulfillment_type", None),
-            fulfillment_type_name=getattr(row, "fulfillment_type_name", None),
-            listing_start_at_utc=row.listing_start_at_utc,
-            listing_start_source_raw=None,
-            launch_date_cn=None,
+            product_grade=listing.product_grade,
+            tags=custom_tags if custom_tags is not None else _tag_list(listing.tags_json),
+            strike_price_amount=strike_price_amount,
+            strike_price_currency_code=strike_price_currency_code,
+            sale_price_amount=sale_price_amount,
+            sale_price_currency_code=sale_price_currency_code,
+            listing_status=listing.listing_status,
+            lifecycle_status=listing.lifecycle_status,
+            fulfillment_type=listing.fulfillment_type,
+            fulfillment_type_name=listing.fulfillment_type_name,
+            listing_start_at_utc=listing.listing_start_at_utc,
+            listing_start_source_raw=getattr(row, "listing_start_source_raw", None),
+            launch_date_cn=getattr(row, "launch_date_cn", None),
             first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
-            category=row.category,
-            wfs_available_quantity=row.wfs_available_quantity,
-            available_quantity=row.available_quantity,
-            inbound_quantity=row.inbound_quantity,
-            sales_7d=_decimal(row.sales_7d),
-            sales_14d=_decimal(row.sales_14d),
-            sales_30d=_decimal(row.sales_30d),
-            ad_spend_30d_amount=row.ad_spend_30d_amount,
-            ad_spend_currency_code=row.ad_spend_currency_code,
-            buybox_status=row.buybox_status,
-            walmart_seller=row.walmart_seller,
-            is_hijacked=row.is_hijacked,
-            average_rating=row.average_rating,
-            review_count=row.review_count,
-            brand=row.brand,
-            disabled_reason=row.disabled_reason,
-            wfs_fee_amount=row.wfs_fee_amount,
-            wfs_fee_currency_code=row.wfs_fee_currency_code,
-            gtin=row.gtin,
-            upc=row.upc,
-            calculated_at=row.calculated_at,
+            category=category,
+            wfs_available_quantity=listing.wfs_available_quantity,
+            available_quantity=listing.available_quantity,
+            inbound_quantity=listing.inbound_quantity,
+            sales_7d=_decimal(listing.sales_7d),
+            sales_14d=_decimal(listing.sales_14d),
+            sales_30d=_decimal(listing.sales_30d),
+            ad_spend_30d_amount=listing.ad_spend_30d_amount,
+            ad_spend_currency_code=listing.ad_spend_currency_code,
+            buybox_status=buybox_status,
+            walmart_seller=walmart_seller,
+            is_hijacked=is_hijacked,
+            average_rating=average_rating,
+            review_count=review_count,
+            brand=brand,
+            disabled_reason=listing.disabled_reason,
+            wfs_fee_amount=listing.wfs_fee_amount,
+            wfs_fee_currency_code=listing.wfs_fee_currency_code,
+            gtin=listing.gtin,
+            upc=listing.upc,
+            calculated_at=listing.calculated_at,
             is_archived=is_archived,
             archive_reason=archive_reason,
         )

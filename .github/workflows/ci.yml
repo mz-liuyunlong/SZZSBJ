@@ -42,6 +42,42 @@ jobs:
             --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=old-system || \
             (echo "Potential secret detected" >&2; exit 1)
 
+  ai-runtime-postgresql:
+    name: AI runtime PostgreSQL 0060/0061 acceptance
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ai_runtime_ci
+          POSTGRES_USER: ai_runtime_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_runtime_ci -d ai_runtime_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      AI_RUNTIME_PG_TESTS: "1"
+      TEST_DATABASE_URL: postgresql+psycopg://ai_runtime_ci:local_ci_only@127.0.0.1:5432/ai_runtime_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate isolated PostgreSQL to 0061 and validate AI runtime
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -rs tests/modules/ai_runtime/test_postgresql_acceptance.py
+          uv run alembic downgrade 20261027_0063_ai_runtime
+          uv run alembic upgrade head
+
   frontend-if-present:
     runs-on: ubuntu-latest
     steps:
@@ -128,6 +164,91 @@ jobs:
           uv run pytest -q -s \
             tests/modules/iam/test_auth_query_performance.py \
             tests/modules/iam/test_auth_postgresql_integration.py
+
+  wfs-auto-case-postgresql:
+    name: WFS 0061 migration and auto-case PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: wfs_auto_case_ci
+          POSTGRES_USER: wfs_auto_case_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wfs_auto_case_ci -d wfs_auto_case_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://wfs_auto_case_ci:local_ci_only@127.0.0.1:5432/wfs_auto_case_ci
+      WFS_AUTO_CASE_POSTGRES_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Upgrade populated 0060 database to WFS 0061
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade 20261026_0060_merge_listing_business_heads
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, text
+          from app.core.config import get_database_url
+
+          with create_engine(get_database_url(), hide_parameters=True).begin() as conn:
+              conn.execute(text("""
+                  insert into fact_walmart_wfs_fee_actual
+                    (id, source_account_ref, business_date_la, store_id, item_id, msku,
+                     source_line_ref, actual_fee_amount, currency_code, source_type,
+                     created_at, updated_at)
+                  values
+                    ('10000000-0000-4000-8000-000000000001', 'wfs-migration-seed',
+                     '2026-10-17', 'store-seed', 'item-seed', 'MSKU-SEED',
+                     'line-seed', 6.95, 'USD', 'synthetic_migration_seed', now(), now())
+              """))
+              conn.execute(text("""
+                  insert into ops_wfs_fee_anomaly_cases
+                    (id, source_kind, platform, source_account_ref, store_id, item_id, msku,
+                     currency_code, manual_unit_fee, actual_unit_fee, unit_fee_diff,
+                     fee_source, affected_units, estimated_recover_amount, recovered_amount,
+                     status, priority, severity, reopen_count, case_numbers_json, follow_count,
+                     archive_review_status, created_at, updated_at, is_deleted)
+                  values
+                    ('20000000-0000-4000-8000-000000000001', 'manual', 'walmart',
+                     'wfs-migration-seed', 'store-seed', 'item-seed', 'MSKU-SEED', 'USD',
+                     6.55, 6.95, 0.40, 'synthetic_migration_seed', 1, 0.40, 0,
+                     'following', 'medium', 'medium', 0, '[]'::jsonb, 0, 'none',
+                     now(), now(), false)
+              """))
+          PY
+          uv run alembic upgrade 20261027_0062_sync_anomaly_center
+      - name: Verify real PostgreSQL auto-case safety and migration rollback
+        working-directory: backend
+        run: |
+          uv run pytest -q -s tests/modules/warehouse_wfs/test_auto_case_postgresql.py
+          uv run pytest -q -s tests/modules/integration_sync/test_financial_transaction_postgresql.py
+          uv run python - <<'PY'
+          from sqlalchemy import create_engine, inspect, text
+          from app.core.config import get_database_url
+
+          engine = create_engine(get_database_url(), hide_parameters=True)
+          with engine.connect() as conn:
+              assert conn.scalar(text("select version_num from alembic_version")) == "20261027_0062_sync_anomaly_center"
+              assert conn.scalar(text("select count(*) from fact_walmart_wfs_fee_actual where source_account_ref='wfs-migration-seed'")) == 1
+              assert conn.scalar(text("select count(*) from ops_wfs_fee_anomaly_cases where source_account_ref='wfs-migration-seed'")) == 1
+              assert conn.scalar(text("select to_regclass('public.ops_wfs_fee_detection_evidence')")) is not None
+          indexes = {index["name"] for index in inspect(engine).get_indexes("gov_integration_sync_run_work_items")}
+          assert "uq_gov_sync_work_offset" in indexes
+          engine.dispose()
+          PY
+          uv run alembic downgrade 20261026_0060_merge_listing_business_heads
+          uv run alembic upgrade head
 
   domestic-chain-postgresql:
     name: Domestic chain PostgreSQL upgrade from empty and 0049

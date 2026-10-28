@@ -1,8 +1,10 @@
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, case, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.models import (
@@ -35,6 +37,7 @@ RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
     "saleStatPageList",
     "walmartReturnOrderList",
     "walmartAdItemSpList",
+    "wfsProfitOrder",
 )
 
 
@@ -260,6 +263,133 @@ class IntegrationSyncRepository:
         self.session.flush()
         return run
 
+    def record_business_anomaly(
+        self,
+        *,
+        run_id: UUID,
+        account: str,
+        interface_key: str,
+        business_date: date,
+        error_code: str,
+        details: dict[str, object] | None = None,
+        subject_key: str = "date-scope",
+        store_id: str | None = None,
+        item_id: str | None = None,
+        msku: str | None = None,
+        local_sku: str | None = None,
+        platform_order_no: str | None = None,
+    ) -> None:
+        """Upsert one scoped exception; never create guessed SKU/order identities."""
+        self.session.execute(
+            text(
+                "insert into gov_integration_sync_anomalies "
+                "(id,run_id,source_account_ref,interface_key,business_date,error_code,"
+                "subject_key,store_id,item_id,msku,local_sku,platform_order_no,"
+                "details,first_seen_at,last_seen_at,occurrence_count,status) "
+                "values (:id,:run_id,:account,:interface_key,:day,:code,:subject_key,"
+                ":store_id,:item_id,:msku,:local_sku,:platform_order_no,"
+                "cast(:details as jsonb),now(),now(),1,'pending') "
+                "on conflict on constraint uq_gov_sync_anomaly_identity do update set "
+                "run_id=excluded.run_id,last_seen_at=now(),"
+                "occurrence_count=gov_integration_sync_anomalies.occurrence_count+1,"
+                "status=case when gov_integration_sync_anomalies.status "
+                "in ('resolved','dismissed') "
+                "then 'pending' else gov_integration_sync_anomalies.status end"
+            ),
+            {
+                "id": uuid4(),
+                "run_id": run_id,
+                "account": account,
+                "interface_key": interface_key,
+                "day": business_date,
+                "code": error_code,
+                "details": json.dumps(details or {}),
+                "subject_key": subject_key,
+                "store_id": store_id,
+                "item_id": item_id,
+                "msku": msku,
+                "local_sku": local_sku,
+                "platform_order_no": platform_order_no,
+            },
+        )
+
+    def record_sample_exceedance_details(
+        self, *, run_id: UUID, account: str, interface_key: str, business_date: date
+    ) -> int:
+        """Materialize item/order evidence for verified sample > direct SaleStat."""
+        rows = (
+            self.session.execute(
+                text(
+                    "with gross as ("
+                    "select store_id,item_id,trim(msku) msku,"
+                    "sum(coalesce(sales_qty,0)) sales_qty,"
+                    "sum(coalesce(sales_amount,0)) sales_amount "
+                    "from fact_walmart_sales_item_daily "
+                    "where source_account_ref=:account and business_date_la=:day "
+                    "and allocation_status='direct' group by 1,2,3),"
+                    "sample as (select store_id,item_id,trim(msku) msku,"
+                    "sum(coalesce(quantity,0)) sample_qty,"
+                    "sum(coalesce(unit_price_amount,0)*coalesce(quantity,0)) sample_amount "
+                    "from fact_walmart_sample_order_items "
+                    "where source_account_ref=:account and business_date_utc_minus_7=:day "
+                    "and is_valid_sample=true and is_cancelled=false "
+                    "group by 1,2,3),"
+                    "bad as (select s.store_id,s.item_id,s.msku,s.sample_qty,s.sample_amount,"
+                    "g.sales_qty,g.sales_amount from sample s join gross g "
+                    "on g.store_id=s.store_id and g.item_id=s.item_id and g.msku=s.msku "
+                    "where s.sample_qty>g.sales_qty or s.sample_amount>g.sales_amount) "
+                    "select f.store_id,f.item_id,f.msku,f.local_sku,f.platform_order_no,"
+                    "f.source_order_line_id,f.quantity,f.unit_price_amount,f.order_total_amount,"
+                    "b.sample_qty,b.sample_amount,b.sales_qty,b.sales_amount "
+                    "from fact_walmart_sample_order_items f join bad b "
+                    "on b.store_id=f.store_id and b.item_id=f.item_id "
+                    "and b.msku=trim(f.msku) "
+                    "where f.source_account_ref=:account "
+                    "and f.business_date_utc_minus_7=:day and f.is_valid_sample=true "
+                    "and f.is_cancelled=false "
+                    "order by f.store_id,f.item_id,f.platform_order_no "
+                    "limit 200"
+                ),
+                {"account": account, "day": business_date},
+            )
+            .mappings()
+            .all()
+        )
+        for row in rows:
+            identity = "|".join(
+                str(row[key] or "")
+                for key in (
+                    "store_id",
+                    "item_id",
+                    "msku",
+                    "platform_order_no",
+                    "source_order_line_id",
+                )
+            )
+            self.record_business_anomaly(
+                run_id=run_id,
+                account=account,
+                interface_key=interface_key,
+                business_date=business_date,
+                error_code="DATA_PAGES_CONFIRMED_SAMPLE_EXCEEDS_SALESTAT",
+                subject_key=hashlib.sha256(identity.encode()).hexdigest(),
+                store_id=row["store_id"],
+                item_id=row["item_id"],
+                msku=row["msku"],
+                local_sku=row["local_sku"],
+                platform_order_no=row["platform_order_no"],
+                details={
+                    "sample_line_quantity": str(row["quantity"]),
+                    "sample_unit_price": str(row["unit_price_amount"]),
+                    "sample_order_total": str(row["order_total_amount"]),
+                    "sku_day_sample_qty": str(row["sample_qty"]),
+                    "sku_day_sample_reference_amount": str(row["sample_amount"]),
+                    "sku_day_salestat_qty": str(row["sales_qty"]),
+                    "sku_day_salestat_sales": str(row["sales_amount"]),
+                },
+            )
+        return len(rows)
+
     def refund_capture_business_dates(
         self, source_run_id: UUID, source_account_ref: str
     ) -> tuple[date, ...]:
@@ -273,8 +403,6 @@ class IntegrationSyncRepository:
                 IntegrationSyncRun.interface_key == "walmartReturnOrderList",
                 IntegrationSyncRunEvent.message_code == "SYNC_REFUND_FACTS_COMMITTED",
             )
-            .distinct()
-            .order_by(IntegrationSyncRunEvent.safe_details["business_date"].astext)
         ).all()
         return tuple(sorted({date.fromisoformat(value) for value in rows if value}))
 

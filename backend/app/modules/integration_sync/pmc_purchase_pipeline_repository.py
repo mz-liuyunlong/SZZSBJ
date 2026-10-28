@@ -193,9 +193,6 @@ class PurchasePipelineRepository:
                 max_attempts=3,
             )
             self.session.add(config)
-        # Keep source metadata/history and outbound authorization; parent owns scheduling.
-        for source in sources:
-            if source is not None:
-                source.schedule_enabled = False
-                source.next_run_at = None
+        # Registration is not authorization to take over existing schedules.
+        # Enabling the parent and retiring legacy schedules must be explicit.
         return config

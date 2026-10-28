@@ -4,16 +4,18 @@
 
 This endpoint receives one complete `walmart-monitor.raw.v1` logical-check event and appends
 it to the isolated L2 RAW table `raw_walmart_monitor_events`. One event may contain Decodo,
-Chrome Extension, and fallback attempts. It does not parse or write Listing, Product, GPT,
-archive, ODS, MART, or any existing business table.
+Chrome Extension, and fallback attempts. Every stable target identity is also parsed into an
+immutable L3 observation and isolated monitor-owned L9 current projection in the same transaction. It
+never writes `mart_listing_management_current`, Product, GPT or archive data.
 
 - Method: `POST`
 - URL: `/api/integrations/walmart-monitor/raw-events`
 - OpenAPI operation: `ingestWalmartMonitorRawEvent`
 - Source: Walmart Product Status monitor producer outbox
 - Source table: none on the receiving side
-- Target table: `raw_walmart_monitor_events`
-- Read/write: append-only RAW write
+- Target tables: `raw_walmart_monitor_events`, `std_walmart_monitor_listing_observations`,
+  `mart_walmart_monitor_listing_current`
+- Read/write: append-only RAW/L3 observation plus latest monitor projection
 - Audit: event envelope, canonical payload hash, received time; API errors carry the common request ID
 - Risk: high-sensitivity ingestion; there is no RAW read endpoint in this version
 
@@ -56,7 +58,7 @@ Content-Type: application/json
 | `producer` | `instance_id`, `check_id`, optional `run_id` |
 | `targets` | 1–100; stable opaque keys plus optional source descriptors and category |
 | `attempts` | 1–20 with unique `attempt_no`; each attempt keeps provider/outcome/artifacts |
-| `final_observation` | final outcome and parsed snapshot; stored as RAW evidence only |
+| `final_observation` | final outcome and parsed snapshot; RAW is preserved and approved fields are typed for Listing use |
 
 Each `source_payloads[]` item contains `kind`, `content_type`, `compression="gzip"`,
 `sha256`, uncompressed `byte_size`, compressed `stored_byte_size`, and `data_base64`.
@@ -65,19 +67,24 @@ writing any row. One compressed artifact is limited to 10 MiB and one uncompress
 to 25 MiB; one attempt accepts at most 10 artifacts.
 
 Optional target descriptors include `store_name`, `sku`, `msku`, `owner`, `product_name`,
-`product_category`, and `wfs_inventory`. They remain inside RAW and are not promoted to
-Listing fields by this endpoint. `monitoring_eligible` records the source-system value captured with the observation; both `true` and `false` are accepted so a late result is not discarded when eligibility changes after it was queued.
+`product_category`, and `wfs_inventory`. Source category is retained only as lineage; Walmart page
+category comes from `parsed_result.walmartCategory`. `monitoring_eligible` records the source-system
+value captured with the observation; both `true` and `false` are accepted so a late result is not
+discarded when eligibility changes after it was queued.
 
 ## 4. Idempotency and transaction behavior
 
 The service canonicalizes the validated JSON and computes SHA-256. PostgreSQL uses an atomic
 `ON CONFLICT (event_id) DO NOTHING` boundary:
 
-- first valid event: one row is committed and `duplicate=false`;
+- first valid event: RAW and every target-key projection commit atomically and
+  `duplicate=false`;
 - same `event_id` and same canonical hash: no new row, `duplicate=true`;
 - same `event_id` and different hash: `409 MONITOR_EVENT_CONFLICT`;
-- any artifact or database failure: the request transaction rolls back and no partial event is
-  saved.
+- failed final observations remain immutable L3 evidence but do not replace the latest successful
+  monitor-owned Listing values;
+- any artifact, parsing or database failure: the request transaction rolls back and no partial
+  RAW/projection state is saved.
 
 ## 5. Response
 
@@ -116,11 +123,11 @@ payloads, or credentials.
 
 All failures use `{ success, data, error, meta, request_id }` and do not echo rejected values.
 
-## 7. Deferred work
+## 7. Projection and replay boundary
 
-The product-source target GET API and monitor producer/outbox have local implementations in
-separate worktrees, but they are not part of this RAW receiver PR and have not been merged,
-deployed, or connected to this endpoint. Live delivery and historical replay remain separate
-production authorizations. RAW parser, ODS/current/history projections, Listing fields, Celery
-reprocessing, retention automation, and object storage require separate Source Decisions/PRPs
-and approvals.
+The Listing API overlays approved monitor fields from the current projection and falls back to the
+existing Listing value when the latest successful monitor field is absent. Monitor outcome/source,
+image URLs, error code, source category and RAW identifiers stay below the page boundary. The controlled
+`scripts/project_walmart_monitor_raw.py` CLI can replay previously accepted RAW; it defaults to
+rollback and requires explicit production confirmation for commit. Production migration,
+deployment and replay remain separate owner authorizations.

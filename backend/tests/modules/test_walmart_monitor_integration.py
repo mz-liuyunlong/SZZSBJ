@@ -135,6 +135,15 @@ class MemoryRepository:
         return RawEventWriteResult(event=event, created=True)
 
 
+class MemoryProjector:
+    def __init__(self) -> None:
+        self.events: list[RawWalmartMonitorEvent] = []
+
+    def project(self, raw_event: RawWalmartMonitorEvent) -> int:
+        self.events.append(raw_event)
+        return 1
+
+
 def test_schema_requires_offset_unique_attempts_and_forbids_unknown_fields() -> None:
     naive = _payload()
     naive["captured_at"] = "2026-01-15T01:02:03"
@@ -165,7 +174,12 @@ def test_service_saves_one_unified_event_and_exact_replay_is_idempotent() -> Non
     payload = WalmartMonitorRawEventRequest.model_validate(_payload())
     session = MagicMock(spec=Session)
     repository = MemoryRepository()
-    service = WalmartMonitorIngestionService(session, repository=repository)
+    projector = MemoryProjector()
+    service = WalmartMonitorIngestionService(
+        session,
+        repository=repository,
+        projector=projector,
+    )
 
     first = service.ingest(payload, idempotency_key=payload.event_id)
     replay = service.ingest(payload, idempotency_key=payload.event_id)
@@ -174,6 +188,7 @@ def test_service_saves_one_unified_event_and_exact_replay_is_idempotent() -> Non
     assert replay.duplicate is True
     assert first.id == replay.id
     assert len(repository.events) == 1
+    assert [event.event_id for event in projector.events] == [payload.event_id]
     saved = repository.events[payload.event_id]
     assert saved.target_count == 1
     assert saved.attempt_count == 2

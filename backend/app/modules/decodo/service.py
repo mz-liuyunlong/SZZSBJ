@@ -17,6 +17,10 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import text
 
 from app.db.session import get_session_factory
+from app.modules.business_connectors.encryption_key import (
+    EncryptionKeyUnavailable,
+    get_business_fernet,
+)
 from app.modules.decodo import local_test
 from app.modules.decodo.schemas import DecodoConfigRead, DecodoUsageRead, DecodoUsageRow
 
@@ -32,13 +36,18 @@ class DecodoError(Exception):
 
 
 def _cipher() -> Fernet:
+    # Legacy Decodo ciphertext is tied to its original dedicated key.
+    # Never switch to the shared key when a dedicated key is configured.
     key = os.getenv("DECODO_CONFIG_ENCRYPTION_KEY", "")
-    if not key:
-        raise DecodoError("DECODO_ENCRYPTION_KEY_NOT_CONFIGURED", 503)
+    if key:
+        try:
+            return Fernet(key.encode("ascii"))
+        except (ValueError, TypeError):
+            raise DecodoError("DECODO_ENCRYPTION_KEY_INVALID", 503) from None
     try:
-        return Fernet(key.encode("ascii"))
-    except (ValueError, TypeError):
-        raise DecodoError("DECODO_ENCRYPTION_KEY_INVALID", 503) from None
+        return get_business_fernet()
+    except EncryptionKeyUnavailable:
+        raise DecodoError("DECODO_SHARED_ENCRYPTION_KEY_UNAVAILABLE", 503) from None
 
 
 def _validate_basic(value: str) -> str:

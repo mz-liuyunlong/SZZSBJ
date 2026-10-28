@@ -10,31 +10,12 @@ const mocks = vi.hoisted(() => ({
   fetchUsage: vi.fn(),
   saveConfig: vi.fn(),
   currentUser: vi.fn(),
-  listConnectors: vi.fn(),
-  listFeishuRoutes: vi.fn(),
-  listNotificationTemplates: vi.fn(),
-  listNotificationDeliveries: vi.fn(),
-  listBusinessUsage: vi.fn(),
-  listAIUsage: vi.fn(),
 }));
 
 vi.mock("@/api/decodoApi", () => ({
   fetchDecodoConfig: mocks.fetchConfig,
   fetchDecodoUsage: mocks.fetchUsage,
   updateDecodoConfig: mocks.saveConfig,
-}));
-vi.mock("@/api/businessConnectorsApi", () => ({
-  listBusinessConnectors: mocks.listConnectors,
-  listFeishuRoutes: mocks.listFeishuRoutes,
-  listNotificationTemplates: mocks.listNotificationTemplates,
-  listNotificationDeliveries: mocks.listNotificationDeliveries,
-  listBusinessUsage: mocks.listBusinessUsage,
-  listAIUsage: mocks.listAIUsage,
-  saveBusinessConnector: vi.fn(),
-  saveFeishuRoute: vi.fn(),
-  saveNotificationTemplate: vi.fn(),
-  disableBusinessConnector: vi.fn(),
-  testBusinessConnector: vi.fn(),
 }));
 vi.mock("@/pages/auth/authApi", () => ({
   fetchCurrentUser: mocks.currentUser,
@@ -74,12 +55,6 @@ beforeEach(() => {
     dispatchEvent: vi.fn(),
   }));
   mocks.fetchConfig.mockReset().mockResolvedValue(config);
-  mocks.listConnectors.mockReset().mockResolvedValue([]);
-  mocks.listFeishuRoutes.mockReset().mockResolvedValue([]);
-  mocks.listNotificationTemplates.mockReset().mockResolvedValue([]);
-  mocks.listNotificationDeliveries.mockReset().mockResolvedValue([]);
-  mocks.listBusinessUsage.mockReset().mockResolvedValue({ notifications: [], ai: [] });
-  mocks.listAIUsage.mockReset().mockResolvedValue([]);
   mocks.fetchUsage.mockReset().mockResolvedValue({
     timezone: "America/New_York",
     today: "2026-10-25",
@@ -99,7 +74,7 @@ describe("business configuration V2", () => {
     expect(screen.getAllByText("未配置计价").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /AI 服务/ }));
     expect(screen.queryByText("Decodo Scraper API")).not.toBeInTheDocument();
-    expect(await screen.findByText("该分类暂无服务配置")).toBeInTheDocument();
+    expect(screen.getByText("该分类暂无服务配置")).toBeInTheDocument();
     expect(mocks.fetchConfig).toHaveBeenCalledTimes(1);
   });
 
