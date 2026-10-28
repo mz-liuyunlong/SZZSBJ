@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ApprovalCandidate } from "./packingApprovalApi";
 import PackingDecisionModal from "./PackingDecisionModal";
@@ -55,16 +56,18 @@ test("empty reject reason shows a Chinese message", async () => {
 test("edit dialog does not ask for warehouse, name, or passcode", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <QueryClientProvider client={client}>
-      <PackingDecisionModal
-        row={{ inbound_order_sn: "IB261020003", sku: "YC00364", pk: "PK260915043" } as ApprovalCandidate}
-        kind="approve"
-        busy={false}
-        scope="test"
-        onCancel={vi.fn()}
-        onSubmit={vi.fn()}
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <PackingDecisionModal
+          row={{ inbound_order_sn: "IB261020003", sku: "YC00364", pk: "PK260915043" } as ApprovalCandidate}
+          kind="approve"
+          busy={false}
+          scope="test"
+          onCancel={vi.fn()}
+          onSubmit={vi.fn()}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 
   expect(screen.getByText("修改打包单 PK260915043")).toBeInTheDocument();

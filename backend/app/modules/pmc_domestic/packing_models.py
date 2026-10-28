@@ -210,3 +210,27 @@ class PackingManualRequest(Base):
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now, nullable=False
     )
+
+
+class PackingPendingEdit(Base):
+    """Saved modify form for an automatic pending candidate; not an approval decision."""
+
+    __tablename__ = "ops_domestic_packing_pending_edits"
+    __table_args__ = (
+        CheckConstraint("requested_qty BETWEEN 1 AND 1000000", name="pending_edit_quantity"),
+        CheckConstraint(
+            "customs IN ('default','declare','skip')",
+            name="pending_edit_customs",
+        ),
+    )
+    candidate_id: Mapped[UUID] = mapped_column(primary_key=True)
+    source_account_ref: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    base_candidate_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    requested_qty: Mapped[int] = mapped_column(Integer, nullable=False)
+    customs: Mapped[str] = mapped_column(String(16), nullable=False)
+    edit_reason: Mapped[str | None] = mapped_column(String(500))
+    draft_snapshot_json: Mapped[dict] = mapped_column(J, nullable=False)
+    actor_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now, nullable=False
+    )

@@ -1,0 +1,76 @@
+# 打包单审批功能交接：WFS、比例建议与到货
+
+日期：2026-10-28。状态：功能代码已修改；验收未完成，负责人要求暂停测试。当前分支 develop，开始时工作区干净；未新建分支、未提交、未推送、未部署。此记录不替代实际验收。
+
+## 授权范围与结果
+
+| 确认项 | 当前改动 |
+|---|---|
+| 商品完成 WFS 转换才能通过 | 自动候选仍可展示履约类型 0，但标 WFS_NOT_CONVERTED；目标选择与最终审批要求类型 1 |
+| blocked 保留待审 | 保持待补资料及具体原因，不自动驳回 |
+| ItemID 来源 | 保持批次采购备注＋Listing 共享解析；未迁移历史货件追溯或人工对照表 |
+| 多 ItemID 自动预填、人工可改 | 计划数量权重、整箱取整、尾差提示；证据不足保留人工填写；原共享库存上限不变 |
+| 采购已到、未到 | 采购 DWD 原明细去重，关联成功同步采购明细 ODS：已到取 payload_json.quantity_entry，未到取 quantity_receive；缺失和版本不一致保持未知 |
+| 部分、分批到货 | 到货状态不再固定 unknown；独立分批标记、观测批数／序号和 split_arrival 筛选 |
+| 历史领星人工单 | 本轮未接入 |
+| PK／OWS 关联 | 继续只生成系统 PK；本轮未增加 OWS 回填或建单 |
+
+## 代码位置
+
+均相对于仓库根目录。
+
+- `backend/app/modules/pmc_domestic/packing_suggestions.py`：纯到货状态、观测分批与建议数量计算。
+- `backend/app/modules/pmc_domestic/packing_procurement_repository.py`：成功同步 ODS 最新版本、采购计划权重、原采购行去重、唯一产品箱规投影；只读，不创建 Session，不提交事务。
+- `backend/app/modules/pmc_domestic/packing_repository.py`：组合候选、受阻原因、共享库存、累计到货及数量建议；修正过时的“GET 不访问 ODS”说明。
+- `backend/app/modules/pmc_domestic/packing_schemas.py`：到货枚举、新增兼容响应字段及 split_arrival 查询。
+- `backend/app/modules/pmc_domestic/packing_service.py`、`packing_manual_service.py`：目标 WFS 校验及手工来源到货信息重验；原库存、幂等与审批事务保留。
+- `frontend/src/pages/pmc/domestic-warehouse/approval/`：API/类型、Toolbar 分批筛选、Table 到货／分批／建议展示、DecisionModal 建议及人工修改提示。
+- `backend/tests/modules/pmc_domestic/test_packing_suggestions.py`：合成数据规则／投影测试，不连接配置数据库。
+- 同前端目录 `PackingApprovalTable.test.tsx`、`PackingQuantitySuggestion.test.tsx`，以及 `frontend/e2e/domestic-packing-allocation-arrival.spec.ts`：相关合成验收场景。
+- `frontend/playwright.packing.config.ts`：专项 E2E 配置，复用原配置，以当前 Node 直接启动 Vite，避免当前机器没有 npm 可执行文件导致无法启动；未更改依赖或全局配置。
+
+## 数据库与数据源
+
+**没有新增／修改物理表、物理字段、约束、索引或 Alembic revision。没有执行迁移或任何真实数据库读写。** 本轮测试使用合成对象；原需真实数据库的 fixture 未启用。
+
+只读依赖：当前 published 入库 MART／publication、Listing DIM、采购行 DWD、成功同步的采购计划／采购明细 ODS、产品资料当前 DWD。审批命令将新增说明保存在原订单 JSON 快照中，沿用 PostgreSQL 订单、库存分配、审批快照和审计事件。用户实际执行审批时会走原写入流程，本轮并未代用户审批。
+
+引用：
+
+- [数据源决策](../data-sources/decisions/pmc-packing-approval-allocation-arrival-decision.md)
+- [实施 PRP](../../PRPs/pmc-packing-approval-allocation-arrival.md)
+- [接口与完整字段说明](../api/pmc-domestic-packing-approval-allocation-arrival-api.md)
+- [操作说明](../sop/pmc-domestic-packing-approval.md)
+
+## 重要口径和限制
+
+1. 一张采购计划不能唯一确定 ItemID、候选缺少计划份额或数量无效时，不凭空等分。一个计划关联多采购行时分摊权重，避免重复计计划总量。
+2. 产品 box_pcs 必须在同账号同 SKU 下唯一且为正整数，才用于整箱建议；否则按件数建议并提示。人工可修改，最终仍由库存校验决定能否审批。
+3. 建议数量不是自动审批结果。建议为 0 时不能直接提交；尾差需人工确认。已审批份额不自动重新分配给其他身份。
+4. 采购已到量来自最新成功采购明细 payload_json.quantity_entry（到货入库量），未到取同版本 quantity_receive（待到货量）；不是 30 天内事件求和，不使用当前库存或差值替代。DWD 与 ODS 原采购数量不一致时不拼出假精确值。上轮将 quantity_receive 当已到的实现与说明已纠正；此次修复未运行测试。
+5. 观测分批以当前已发布入库单为范围，跨店重复行去重，包含零余额单。缺完整历史覆盖时，单张单据不能证明“不是分批”。当前代码仅在历史覆盖完整且到齐时给 false，其余可能仍为 null。
+6. 候选仍会随当前采购备注、Listing 和证据重新计算；没有新增身份冻结版本表。当前候选版本校验保留。审批旧快照保持原值，不补写历史。
+7. 商品资料和采购数据是否已在实际本地数据库同步完整，尚未验证；文档不得把字段实现写成真实数据已联调。
+
+## 已执行检查与暂停状态
+
+**后续字段纠错记录：**负责人明确要求修复 quantity_receive。仅调整上述两个读取／计算文件、对应合成用例及说明；原始字段依据为领星 LX-D332F931885E 和旧项目339行。未执行测试或迁移，不能把下表纠错前的通过结果当作此次修复验收。当前工作区存在其他审批编辑和迁移改动，不属于此次字段修复，未回退或执行。
+
+以下检查发生在负责人提出“暂时不要测试”之前；之后没有继续启动测试。
+
+| 检查 | 实际结果 |
+|---|---|
+| 后端 scoped pytest（建议规则、批次 ItemID、审批、手工、生命周期、报关） | 46 passed、19 skipped；跳过的是需要显式真实本地数据库授权的集成场景 |
+| 前端审批目录 Vitest，串行 | 7 文件、13 tests passed |
+| TypeScript `tsc -b --pretty false` | 当时检查通过；后续新增专项 E2E 配置未再次执行该命令 |
+| 修改后端文件 scoped Ruff | 当时通过；最后补充的测试 fixture 随后改动未再跑 lint |
+| Playwright 首轮专项与原审批结构场景 | 原审批结构 2 项通过；新增场景在 Select 输入被展示层遮挡的点击定位处超时，前面的到货、建议与 blocked 展示断言已通过 |
+| E2E 定位修正 | 已改为点击可见选项标题；**尚未重跑**，不能记为通过 |
+| E2E / 测试进程 | 已按负责人要求中断仍在等待的 E2E 运行；早先并行 Vitest 运行已中断，后续串行结果如上 |
+| 真实本地数据库、真实接口联调、生产验证 | 未执行 |
+
+主要命令：`python -m pytest -p no:cacheprovider ... -q`；`node node_modules/vitest/vitest.mjs run src/pages/pmc/domestic-warehouse/approval --maxWorkers=1 --no-file-parallelism`；`node node_modules/typescript/bin/tsc -b --pretty false`；`python -m ruff check/format <本轮后端文件>`；`node node_modules/@playwright/test/cli.js test --config=playwright.packing.config.ts ... --workers=1`。使用本地现有运行时，没有安装依赖。
+
+## 回滚与后续
+
+仅回退本轮精确代码与文档 diff 即可，不需要数据库结构回滚。不要用 reset/clean 覆盖后续其他修改。后续由负责人明确恢复验收后，再重跑新增 E2E、实际本地接口联调及必要的最终检查；在此之前不标记 ready，不提交、推送、部署或同步生产数据。

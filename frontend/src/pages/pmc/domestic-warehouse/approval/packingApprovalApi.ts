@@ -6,11 +6,16 @@ export interface ApprovalCandidate {
   publication_id: string; board_id: string; inbound_order_sn: string; sku: string; product_name: string | null;
   store_id: string | null; store_name: string | null; item_id: string | null; gtin: string | null; msku: string | null;
   purchase_order_sns: string[]; draft_nos?: string[]; arrival_purchased: number | null; arrival_received: number | null; arrival_pending: number | null;
-  arrival_status: "unknown"; candidate_created_on: string | null; overdue: boolean | null;
+  arrival_status: "full" | "partial" | "none" | "unknown"; candidate_created_on: string | null; overdue: boolean | null;
+  split_arrival?: boolean | null; arrival_batch_count?: number | null; arrival_batch_index?: number | null;
+  arrival_source_refs?: string[];
+  quantity_suggestion?: { rule: "single" | "plan_ratio" | "manual"; plan_weights: Record<string, number>; box_pcs: number | null; tail_quantity: number | null; notes: string[]; source_refs: string[] } | null;
   stock_balance: number | null; available_quantity: number | null; default_quantity: number | null;
   can_approve: boolean; blocked_reasons: string[]; source_observed_at: string;
   origin?: "automatic" | "manual"; manual_reason?: string | null; source_store_id?: string | null; manual_customs?: "default" | "declare" | "skip" | null; manual_rwh?: string | null; pk?: string | null;
   customs_default?: boolean; customs_default_src?: "default" | "product_remark" | "purchase_remark" | "purchase_order"; customs_proof?: { value: boolean; source: string; rule: string; field: string | null; remark: string | null; ref: string | null; observed_at: string | null } | null; waiting_days?: number | null; history_complete?: boolean;
+  edit_draft_pending?: boolean;
+  edit_draft_stale?: boolean;
 }
 export interface PackingOrder {
   id: string; candidate_id: string; pk: string | null; status: "approved" | "rejected" | "voided"; qty: number | null;
@@ -32,6 +37,7 @@ export function approvalQuery(filters: PackingApprovalFilters, page?: number, pa
   const q = new URLSearchParams();
   filters.storeIds.forEach((v) => q.append("store_id", v));
   q.set("overdue", filters.overdue); q.set("arrival", filters.arrival); q.set("keyword", filters.search);
+  q.set("split_arrival", filters.splitArrival ?? "all");
   if (filters.createdFrom) q.set("created_from", filters.createdFrom);
   if (filters.createdTo) q.set("created_to", filters.createdTo);
   if (page !== undefined) { q.set("page", String(page)); q.set("page_size", String(pageSize ?? 50)); q.set("sort", filters.sort); }
@@ -43,7 +49,7 @@ export const getApprovalOptions = (signal?: AbortSignal) => backendRequest<{ sto
 export const listPackingOrders = (f: PackingApprovalFilters, page: number, signal?: AbortSignal) => backendRequest<{ items: PackingOrder[]; total: number }>(`${prefix}/orders?${approvalQuery(f, page, 20)}`, { signal });
 export const getPackingEvents = (id: string, signal?: AbortSignal) => backendRequest<{ items: PackingEvent[] }>(`${prefix}/orders/${encodeURIComponent(id)}/events`, { signal });
 export const decidePacking = (id: string, kind: DecisionKind, body: DecisionPayload) => backendRequest<PackingOrder>(`${prefix}/pending/${encodeURIComponent(id)}/${kind}`, { method: "POST", body: JSON.stringify(body) });
-const reasons: Record<string, string> = { STORE_UNKNOWN: "店铺归属未知", ELIGIBLE_LISTING_MISSING: "无符合条件的在线商品", GTIN_INVALID: "GTIN缺失或格式无效", MSKU_MISSING: "MSKU缺失", STOCK_PROOF_UNKNOWN: "良品或锁定量未知", STOCK_FULLY_ALLOCATED: "可用库存已分配完" };
+const reasons: Record<string, string> = { STORE_UNKNOWN: "店铺归属未知", ELIGIBLE_LISTING_MISSING: "无符合条件的在线商品", WFS_NOT_CONVERTED: "尚未完成 WFS 转换", GTIN_INVALID: "GTIN缺失或格式无效", MSKU_MISSING: "MSKU缺失", STOCK_PROOF_UNKNOWN: "良品或锁定量未知", STOCK_FULLY_ALLOCATED: "可用库存已分配完", EDIT_DRAFT_STALE: "来源已变化，请重新打开修改并保存" };
 export const approvalBlockedText = (codes: string[]) => codes.map((code) => reasons[code] ?? code).join("；");
 export function approvalErrorText(error: unknown) {
   if (error instanceof BackendRequestError) {
@@ -62,6 +68,23 @@ export function approvalErrorText(error: unknown) {
 export interface ListingChoice { store_id: string; store_name: string | null; item_id: string; gtin: string | null; msku: string | null; listing_version: string; cross_store: boolean }
 export interface PackingEditOptions { candidate: ApprovalCandidate; listings: ListingChoice[]; cross_store_proof_available: boolean }
 export const getPackingEditOptions = (row: ApprovalCandidate, signal?: AbortSignal) => backendRequest<PackingEditOptions>(`${prefix}/pending/${encodeURIComponent(row.id)}/edit-options?${new URLSearchParams({ source_account_ref: row.source_account_ref })}`, { signal });
+
+export interface EditDraftPayload {
+  source_account_ref: string;
+  warehouse_id: string;
+  candidate_version: string;
+  target_store_id: string;
+  target_item_id: string;
+  listing_version: string;
+  qty: number;
+  customs: "default" | "declare" | "skip";
+  edit_reason?: string;
+}
+export const savePendingEdit = (candidateId: string, body: EditDraftPayload) =>
+  backendRequest<{ candidate_id: string; edit_draft_pending: boolean; snapshot: ApprovalCandidate }>(
+    `${prefix}/pending/${encodeURIComponent(candidateId)}/draft`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
 
 export interface ManualPackingPayload { source_account_ref: string; warehouse_id: "16168"; board_id: string; source_version: string; target_store_id: string; target_item_id: string; listing_version: string; qty: number; customs: "default" | "declare" | "skip"; rwh?: string; reason: string; idempotency_key: string }
 export const listManualPackingSources = (keyword: string, signal?: AbortSignal) => backendRequest<{ items: ApprovalCandidate[]; total: number }>(`${prefix}/manual/sources?${new URLSearchParams({ keyword, page: "1", page_size: "50" })}`, { signal });

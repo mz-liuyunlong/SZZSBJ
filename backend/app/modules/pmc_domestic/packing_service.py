@@ -6,10 +6,11 @@ production writes formal records on the production database only.
 """
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import get_settings
@@ -19,6 +20,7 @@ from app.modules.pmc_domestic.packing_models import (
     PackingAllocation,
     PackingEvent,
     PackingOrder,
+    PackingPendingEdit,
 )
 from app.modules.pmc_domestic.packing_repository import (
     PackingRepository,
@@ -27,7 +29,10 @@ from app.modules.pmc_domestic.packing_repository import (
 )
 from app.modules.pmc_domestic.packing_rules import fingerprint, listing_version
 from app.modules.pmc_domestic.packing_schemas import (
+    ApproveCommand,
+    Candidate,
     CandidateList,
+    EditDraftSaved,
     EditOptions,
     ListingChoice,
     OrderList,
@@ -300,6 +305,10 @@ class PackingService:
                     response_json=result.model_dump(mode="json"),
                 )
             )
+            if kind == "approve":
+                pending_edit = s.get(PackingPendingEdit, ident)
+                if pending_edit is not None:
+                    s.delete(pending_edit)
             s.commit()
             return result
         except Exception:
@@ -307,13 +316,16 @@ class PackingService:
             raise
 
     def listing_rows(self, candidate):
+        """Same eligibility as Listing 管理: published WFS rows with a product link."""
         return list(
             self.session.scalars(
                 select(Listing).where(
                     Listing.source_account_ref == candidate.source_account_ref,
                     Listing.local_sku == candidate.sku,
                     Listing.standard_status == "PUBLISHED",
-                    Listing.fulfillment_type.in_(["0", "1"]),
+                    Listing.fulfillment_type == "1",
+                    Listing.item_url.isnot(None),
+                    func.length(func.trim(Listing.item_url)) > 0,
                 )
             )
         )
@@ -363,6 +375,8 @@ class PackingService:
         if len(rows) != 1:
             conflict("LISTING_MISSING_OR_AMBIGUOUS")
         listing = rows[0]
+        if listing.fulfillment_type != "1":
+            conflict("WFS_NOT_CONVERTED")
         if (edited and not cmd.listing_version) or (
             cmd.listing_version and cmd.listing_version != listing_version(listing)
         ):
@@ -371,7 +385,13 @@ class PackingService:
             r
             for r in candidate.blocked_reasons
             if r
-            not in ("ELIGIBLE_LISTING_MISSING", "GTIN_INVALID", "MSKU_MISSING", "STORE_UNKNOWN")
+            not in (
+                "ELIGIBLE_LISTING_MISSING",
+                "WFS_NOT_CONVERTED",
+                "GTIN_INVALID",
+                "MSKU_MISSING",
+                "STORE_UNKNOWN",
+            )
         ]
         if not listing.gtin or not listing.gtin.isdigit() or len(listing.gtin) != 14:
             blocked.append("GTIN_INVALID")
@@ -398,10 +418,116 @@ class PackingService:
             }
         )
 
-    def all_candidates(self, accounts):
+    def _base_candidates(self, accounts):
         from app.modules.pmc_domestic.draft_numbers import attach_draft_numbers
         from app.modules.pmc_domestic.packing_manual_service import ManualPackingService
 
         rows = self.repo.candidates(accounts) + ManualPackingService(self).pending(accounts)
         attach_draft_numbers(self.session, rows, accounts)
         return rows
+
+    def _apply_pending_edits(self, rows, accounts):
+        if not accounts:
+            return rows
+        auto_ids = [r.id for r in rows if r.origin != "manual"]
+        if not auto_ids:
+            return rows
+        drafts = {
+            d.candidate_id: d
+            for d in self.session.scalars(
+                select(PackingPendingEdit).where(
+                    PackingPendingEdit.source_account_ref.in_(accounts),
+                    PackingPendingEdit.candidate_id.in_(auto_ids),
+                )
+            )
+        }
+        merged: list[Candidate] = []
+        for row in rows:
+            draft = drafts.get(row.id)
+            if draft is None or row.origin == "manual":
+                merged.append(row)
+                continue
+            if draft.base_candidate_version != row.candidate_version:
+                blocked = list(row.blocked_reasons)
+                if "EDIT_DRAFT_STALE" not in blocked:
+                    blocked.append("EDIT_DRAFT_STALE")
+                merged.append(
+                    row.model_copy(
+                        update={
+                            "edit_draft_stale": True,
+                            "can_approve": False,
+                            "blocked_reasons": blocked,
+                        }
+                    )
+                )
+                continue
+            snap = Candidate.model_validate(draft.draft_snapshot_json)
+            merged.append(
+                snap.model_copy(
+                    update={
+                        "default_quantity": draft.requested_qty,
+                        "manual_customs": draft.customs,
+                        "edit_draft_pending": True,
+                    }
+                )
+            )
+        return merged
+
+    def save_pending_edit(self, ident, cmd, actor, accounts):
+        if cmd.source_account_ref not in accounts:
+            raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+        self.guard_local()
+        candidate = next(
+            (r for r in self._base_candidates(frozenset({cmd.source_account_ref})) if r.id == ident),
+            None,
+        )
+        if candidate is None:
+            missing()
+        if candidate.origin == "manual":
+            conflict("MANUAL_DRAFT_UNSUPPORTED")
+        if candidate.candidate_version != cmd.candidate_version:
+            conflict("SOURCE_CHANGED")
+        merged = self.final_candidate(
+            candidate,
+            ApproveCommand(
+                source_account_ref=cmd.source_account_ref,
+                warehouse_id=cmd.warehouse_id,
+                candidate_version=cmd.candidate_version,
+                idempotency_key=uuid4(),
+                qty=cmd.qty,
+                customs=cmd.customs,
+                target_store_id=cmd.target_store_id,
+                target_item_id=cmd.target_item_id,
+                listing_version=cmd.listing_version,
+                edit_reason=cmd.edit_reason,
+            ),
+        )
+        if not merged.can_approve:
+            conflict("CANDIDATE_BLOCKED")
+        if merged.available_quantity is None or cmd.qty > merged.available_quantity:
+            conflict("INSUFFICIENT_STOCK")
+        s = self.session
+        row = s.get(PackingPendingEdit, ident) or PackingPendingEdit(
+            candidate_id=ident,
+            source_account_ref=cmd.source_account_ref,
+        )
+        row.base_candidate_version = candidate.candidate_version
+        row.requested_qty = cmd.qty
+        row.customs = cmd.customs
+        row.edit_reason = cmd.edit_reason
+        row.draft_snapshot_json = merged.model_dump(mode="json")
+        row.actor_uid = actor
+        row.updated_at = datetime.now(UTC)
+        s.add(row)
+        s.commit()
+        snapshot = merged.model_copy(
+            update={
+                "default_quantity": cmd.qty,
+                "manual_customs": cmd.customs,
+                "edit_draft_pending": True,
+            }
+        )
+        return EditDraftSaved(candidate_id=ident, snapshot=snapshot)
+
+    def all_candidates(self, accounts):
+        return self._apply_pending_edits(self._base_candidates(accounts), accounts)

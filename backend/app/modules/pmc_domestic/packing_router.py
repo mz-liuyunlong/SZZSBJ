@@ -18,6 +18,8 @@ from app.modules.pmc_domestic.packing_repository import order_read
 from app.modules.pmc_domestic.packing_schemas import (
     ApproveCommand,
     CandidateList,
+    EditDraftCommand,
+    EditDraftSaved,
     EditOptions,
     EventList,
     EventRead,
@@ -224,6 +226,28 @@ def edit_options(
     return success_response(
         request,
         data=PackingService(session).edit_options(candidate_id, source_account_ref, accounts),
+        meta={"local_verification_only": True},
+    )
+
+
+@router.put(
+    "/pending/{candidate_id}/draft",
+    response_model=SuccessEnvelope[EditDraftSaved, dict],
+    responses=ERRORS,
+)
+def save_pending_edit(
+    request: Request,
+    candidate_id: UUID,
+    body: EditDraftCommand,
+    session: DB,
+    actor: Approve,
+    accounts: Scope,
+):
+    return success_response(
+        request,
+        data=PackingService(session).save_pending_edit(
+            candidate_id, body, actor.user_id, accounts
+        ),
         meta={"local_verification_only": True},
     )
 

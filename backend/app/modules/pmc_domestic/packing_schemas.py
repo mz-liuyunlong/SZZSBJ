@@ -15,6 +15,7 @@ class PackingFilter(Strict):
     store_id: list[str] = Field(default_factory=list, max_length=50)
     overdue: Literal["all", "overdue", "not_overdue"] = "all"
     arrival: Literal["all", "full", "partial", "none", "unknown"] = "all"
+    split_arrival: Literal["all", "yes", "no", "unknown"] = "all"
     keyword: str = Field(default="", max_length=200)
     created_from: date | None = None
     created_to: date | None = None
@@ -30,6 +31,15 @@ class PackingQuery(PackingFilter):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=50, ge=1, le=200)
     sort: Literal["created_desc", "created_asc"] = "created_desc"
+
+
+class QuantitySuggestion(Strict):
+    rule: Literal["single", "plan_ratio", "manual"]
+    plan_weights: dict[str, float] = Field(default_factory=dict)
+    box_pcs: int | None = None
+    tail_quantity: int | None = None
+    notes: list[str] = Field(default_factory=list)
+    source_refs: list[str] = Field(default_factory=list)
 
 
 class Candidate(Strict):
@@ -53,7 +63,12 @@ class Candidate(Strict):
     arrival_purchased: int | None
     arrival_received: int | None = None
     arrival_pending: int | None = None
-    arrival_status: Literal["unknown"] = "unknown"
+    arrival_status: Literal["full", "partial", "none", "unknown"] = "unknown"
+    arrival_source_refs: list[str] = Field(default_factory=list)
+    split_arrival: bool | None = None
+    arrival_batch_count: int | None = None
+    arrival_batch_index: int | None = None
+    quantity_suggestion: QuantitySuggestion | None = None
     customs_default: bool = False
     customs_default_src: Literal[
         "default", "product_remark", "purchase_remark", "purchase_order"
@@ -74,6 +89,8 @@ class Candidate(Strict):
     can_approve: bool
     blocked_reasons: list[str]
     source_observed_at: datetime
+    edit_draft_pending: bool = False
+    edit_draft_stale: bool = False
 
 
 class CandidateList(Strict):
@@ -184,6 +201,30 @@ class EditOptions(Strict):
     candidate: Candidate
     listings: list[ListingChoice]
     cross_store_proof_available: bool = False
+
+
+class EditDraftCommand(Strict):
+    source_account_ref: str = Field(min_length=1, max_length=128)
+    warehouse_id: Literal["16168"] = "16168"
+    candidate_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    target_store_id: str = Field(min_length=1, max_length=64)
+    target_item_id: str = Field(min_length=1, max_length=64)
+    listing_version: str = Field(pattern=r"^[a-f0-9]{64}$")
+    qty: int = Field(strict=True, ge=1, le=1000000)
+    customs: Literal["default", "declare", "skip"] = "default"
+    edit_reason: str | None = Field(default=None, min_length=2, max_length=500)
+
+    @model_validator(mode="after")
+    def trim_reason(self):
+        if self.edit_reason is not None:
+            self.edit_reason = self.edit_reason.strip() or None
+        return self
+
+
+class EditDraftSaved(Strict):
+    candidate_id: UUID
+    edit_draft_pending: bool = True
+    snapshot: Candidate
 
 
 class ManualCommand(Strict):

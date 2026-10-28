@@ -1,5 +1,7 @@
 # 国内仓打包单审批 API（本地 M1）
 
+> 2026-10-28 更新：WFS 仅允许 1、比例预填、采购累计到货及分批筛选，以[当前接口补充](pmc-domestic-packing-approval-allocation-arrival-api.md)为准。本文件以下 M1 历史说明中的 0/1 准入、多身份仅手填、到货固定 unknown 已被覆盖。代码已修改，验收暂停，未部署。
+
 2026-10-20；状态testing、本地已实现，不代表已部署或允许生产审批。来源决策/PRP：pmc-domestic-packing-approval-decision.md、pmc-domestic-packing-approval-backend.md。复用统一SuccessEnvelope，OpenAPI已注册，数据中心API目录同步。
 
 ## 范围和权限

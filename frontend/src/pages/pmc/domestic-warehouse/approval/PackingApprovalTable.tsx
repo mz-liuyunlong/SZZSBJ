@@ -6,7 +6,7 @@ import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import { Button, Empty, Pagination, Space, Tag, Tooltip, Typography } from "antd";
 import ReportTableShell from "@/components/report-table/ReportTableShell";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
-import { CopyableTextCell } from "@/components/report-table/cells";
+import { CopyableTextCell, WalmartItemLink } from "@/components/report-table/cells";
 import { packingApprovalFields, type PackingApprovalSort } from "./packingApprovalTypes";
 import { approvalBlockedText, type ApprovalCandidate, type DecisionKind } from "./packingApprovalApi";
 
@@ -41,14 +41,16 @@ export default function PackingApprovalTable(p: Props) {
   const withChoice = (row: ApprovalCandidate): ApprovalCandidate => ({ ...row, manual_customs: choiceOf(row) });
   const show = (key: string, row: ApprovalCandidate) => {
     const values: Record<string, string | number | null> = { msku: row.msku, store: row.store_name ?? row.store_id, qty: row.available_quantity };
-    if (key === "number") return <Space direction="vertical" size={0}><Typography.Text type="secondary">{row.origin === "manual" ? "手工待审批（未发PK）" : "待审批（未发PK）"}</Typography.Text><small>{row.candidate_created_on ?? "日期未知"}</small></Space>;
+    if (key === "number") return <Space direction="vertical" size={0}><Typography.Text type="secondary">{row.origin === "manual" ? "手工待审批（未发PK）" : "待审批（未发PK）"}</Typography.Text>{row.edit_draft_pending && <Tag color="gold">已修改未审批</Tag>}<small>{row.candidate_created_on ?? "日期未知"}</small></Space>;
     if (key === "draft") return purchaseCopies(row.draft_nos ?? [], "草稿号");
     if (key === "inbound") return copyOrDash(row.inbound_order_sn, "入库单号");
     if (key === "purchase") return purchaseCopies(row.purchase_order_sns);
     if (key === "sku") return copyOrDash(row.sku, "SKU");
     if (key === "gtin") return copyOrDash(row.gtin, "GTIN");
-    if (key === "item") return copyOrDash(row.item_id, "ItemID");
-    if (key === "arrival") return <Tooltip title="收货明细尚未标准化，已到/未到保持未知">{row.arrival_purchased ?? "—"} / {row.arrival_received ?? "—"} / {row.arrival_pending ?? "—"}</Tooltip>;
+    if (key === "item") return <WalmartItemLink itemId={row.item_id} />;
+    if (key === "arrival") return <Space direction="vertical" size={0}><Tooltip title="采购单明细累计数量；跨 ItemID 重复展示，不可累加；当前可打包库存另列">{row.arrival_purchased ?? "—"} / {row.arrival_received ?? "—"} / {row.arrival_pending ?? "—"}</Tooltip><Tag>{({ full: "已全部到货", partial: "部分到货", none: "未到货", unknown: "到货明细未知" })[row.arrival_status]}</Tag></Space>;
+    if (key === "batches") return <Tooltip title="仅按当前发布入库单识别；不代表完整历史"><Space direction="vertical" size={0}><Tag>{row.split_arrival === true ? "已观测分批" : row.split_arrival === false ? "单批已到齐" : "分批情况未知"}</Tag>{row.arrival_batch_count ? <small>{row.arrival_batch_index ? `第 ${row.arrival_batch_index} 批 / ` : "已观测 "}{row.arrival_batch_count} 批</small> : null}</Space></Tooltip>;
+    if (key === "qty") return <Tooltip title={[row.quantity_suggestion?.rule === "plan_ratio" ? "按采购计划比例预填，可人工修改" : "人工确认数量后审批", ...(row.quantity_suggestion?.notes ?? [])].join("；")}><Space direction="vertical" size={0}><span>{row.default_quantity ?? "待填写"} / {row.available_quantity ?? "—"}</span><small>{row.quantity_suggestion?.rule === "plan_ratio" ? "计划比例建议" : "人工确认"}</small></Space></Tooltip>;
     if (key === "customs") {
       const choice = choiceOf(row);
       return <Space className="domestic-approval__customs-cell" direction="vertical" size={0}><PackingCustomsSelect row={row} size="small" aria-label={`是否报关 ${row.inbound_order_sn} ${row.item_id ?? row.id}`} value={choice} disabled={!p.canApprove || p.busy}

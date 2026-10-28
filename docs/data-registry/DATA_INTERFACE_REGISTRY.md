@@ -2,6 +2,16 @@
 
 Registry Status: `draft; approved only after owner review and merge`
 
+## 2026-10-28 打包审批增量登记（验收暂停）
+
+字段纠错（负责人已批准）：arrival_received ← 同版本采购明细 ODS payload_json.quantity_entry（到货入库量）；arrival_pending ← quantity_receive（待到货量）。分别汇总原明细，不累加计划拆行或采集快照；缺字段不按差值推算。未新增物理字段，未运行修复后测试；前序测试结果不能代替此次验收。
+
+| 接口／数据集 | 来源与粒度 | 本轮变更及边界 | 状态／文档 |
+|---|---|---|---|
+| `/api/pmc/domestic/packing-approval` 既有 pending、summary、orders、manual、edit-options、approve | 当前 published 入库 MART＋Listing DIM＋采购原明细 DWD＋成功同步采购明细／计划 ODS＋产品资料当前 DWD；账号、惠州仓16168、入库单、SKU、店铺、ItemID | 仅履约类型1可审批；数量比例建议；累计已到／未到；独立 split_arrival 筛选；受阻继续待审。无新端点、物理字段或迁移，无真实数据库操作，无外部调用 | 代码已修改，未合并验收；[接口](../api/pmc-domestic-packing-approval-allocation-arrival-api.md)、[决策](../data-sources/decisions/pmc-packing-approval-allocation-arrival-decision.md)、[交接](../delivery/pmc-packing-approval-allocation-arrival-handoff-20261028.md) |
+
+上述本轮条目覆盖历史记录中“GET 不查 ODS”“类型0/1均可审批”“到货固定 unknown”的对应说明。历史执行记录保留，不表示本轮已执行同步或生产变更。
+
 ## Registry Rules Summary
 
 - GitHub 中本文件是真源；外部表格仅是只读镜像。

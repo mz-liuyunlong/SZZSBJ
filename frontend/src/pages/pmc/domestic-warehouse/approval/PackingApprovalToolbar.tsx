@@ -27,6 +27,9 @@ export default function PackingApprovalToolbar({ filters, storeOptions, optionsL
     <Select<PackingApprovalArrivalFilter> aria-label="到货情况" className="domestic-board__facet" value={filters.arrival}
       options={[{ value: "all", label: "到货情况（全部）" }, { value: "full", label: "已全部到货" }, { value: "partial", label: "部分到货" }, { value: "none", label: "未到货" }, { value: "unknown", label: "到货明细未知" }]}
       onChange={(arrival) => onChange({ ...filters, arrival })} />
+    <Select aria-label="分批到货" className="domestic-board__facet" value={filters.splitArrival ?? "all"}
+      options={[{ value: "all", label: "分批到货（全部）" }, { value: "yes", label: "已观测分批" }, { value: "no", label: "单批已到齐" }, { value: "unknown", label: "分批情况未知" }]}
+      onChange={(splitArrival: "all" | "yes" | "no" | "unknown") => onChange({ ...filters, splitArrival })} />
     <CommittedSearch key={filters.search} className="domestic-board__search"
       typeAriaLabel="审批搜索类型" typeValue="all" typeOptions={[{ value: "all", label: "SKU / 单号" }]}
       inputAriaLabel="搜索待审批打包单" inputValue={filters.search}

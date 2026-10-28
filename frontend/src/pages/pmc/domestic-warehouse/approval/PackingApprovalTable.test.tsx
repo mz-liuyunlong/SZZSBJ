@@ -55,7 +55,24 @@ beforeEach(() => {
 });
 
 describe("packing approval copy cells", () => {
-  it("copies inbound, each purchase order, sku, gtin and item id", () => {
+  it("shows cumulative receipts, observed batches and editable advice", () => {
+    render(<PackingApprovalTable pagination={{ page: 1, pageSize: 20 }} widths={{}} sort="created_desc"
+      rows={[candidate({ arrival_purchased: 100, arrival_received: 60, arrival_pending: 40,
+        arrival_status: "partial", split_arrival: true, arrival_batch_count: 2, arrival_batch_index: 2,
+        default_quantity: 30, available_quantity: 50, can_approve: false,
+        blocked_reasons: ["WFS_NOT_CONVERTED"], quantity_suggestion: { rule: "plan_ratio",
+          plan_weights: { "20394207859": 60 }, box_pcs: 10, tail_quantity: 0, notes: [], source_refs: [] } })]}
+      total={1} canApprove canReject busy={false} onDecision={vi.fn()} onApprove={vi.fn()}
+      onPagination={vi.fn()} onResize={vi.fn()} onSort={vi.fn()} />);
+    expect(screen.getByText("100 / 60 / 40")).toBeInTheDocument();
+    expect(screen.getByText("部分到货")).toBeInTheDocument();
+    expect(screen.getByText("已观测分批")).toBeInTheDocument();
+    expect(screen.getByText("第 2 批 / 2 批")).toBeInTheDocument();
+    expect(screen.getByText("30 / 50")).toBeInTheDocument();
+    expect(screen.getByText("计划比例建议")).toBeInTheDocument();
+    expect(screen.getByText("待补资料")).toBeInTheDocument();
+  });
+  it("copies source fields and links item id to Walmart", () => {
     render(
       <PackingApprovalTable
         pagination={{ page: 1, pageSize: 20 }}
@@ -80,7 +97,10 @@ describe("packing approval copy cells", () => {
     expect(screen.getByRole("button", { name: "复制采购单号：PO260002" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制SKU：YC00236" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制GTIN：00000000000000" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制ItemID：20394207859" })).toBeInTheDocument();
+    const itemLink = screen.getByRole("link", { name: "Walmart 商品页：20394207859（新标签页打开）" });
+    expect(itemLink).toHaveAttribute("href", "https://www.walmart.com/ip/20394207859");
+    expect(itemLink).toHaveAttribute("target", "_blank");
+    expect(itemLink).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByRole("button", { name: /修\s*改/ })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "审批通过" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "驳回" })).not.toBeInTheDocument();
@@ -106,6 +126,7 @@ describe("packing approval copy cells", () => {
     );
     expect(screen.queryByRole("button", { name: /复制GTIN/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /复制ItemID/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Walmart 商品页/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /复制采购单号/ })).not.toBeInTheDocument();
   });
 });

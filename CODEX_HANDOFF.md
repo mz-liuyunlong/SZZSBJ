@@ -1,3 +1,13 @@
+# 当前任务交接：打包单审批（2026-10-28）
+
+后续字段纠错：负责人已授权修复 quantity_receive 语义。当前打包审批已到取采购明细 ODS payload_json.quantity_entry，未到取 quantity_receive；缺失保留未知，不按差值补值。此次只修改到货投影／纯函数、合成用例和文档，未运行测试、未操作数据库、未修改表结构。工作区其他审批编辑、0062迁移等改动不属于此次修复，保留不动。
+
+负责人确认在当前 develop 修改 WFS 准入、计划比例数量预填、采购到货计数及分批筛选；代码已修改。随后要求“暂时不要测试”，现仅补齐文档；不继续测试，不标 ready。
+
+详细记录：[打包审批交接](docs/delivery/pmc-packing-approval-allocation-arrival-handoff-20261028.md)；接口：[当前字段契约](docs/api/pmc-domestic-packing-approval-allocation-arrival-api.md)。没有新物理表／字段／迁移，没有真实数据库操作、外部采集、分支创建、Git提交推送或部署。
+
+暂停前 scoped 后端 46 passed / 19 skipped、前端审批目录 13 passed。新增 E2E 首轮失败在 Select 点击定位，已修正但未重跑；原结构场景2项通过。真实数据联调未执行。不要把旧交接中的全量测试、生产采集或授权套用到本轮。
+
 # Develop CI 修复交接（2026-10-27）
 
 本轮基准 aa7637b，负责人授权复用 develop、提交和推送、创建 develop → main 草稿 PR。禁止合并、部署或生产数据库操作。

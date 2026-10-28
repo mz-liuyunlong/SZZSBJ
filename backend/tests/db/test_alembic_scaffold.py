@@ -24,7 +24,7 @@ KEYWORD_MERGE_REVISION = "20261023_0056_merge_decodo_keyword_heads"
 KEYWORD_HEAD_REVISION = "20261025_0058_keyword_internal_default"
 BUSINESS_CONNECTOR_HEAD_REVISION = "20261025_0059_business_connector_control"
 LISTING_INTEGRATION_HEAD_REVISION = "20261026_0060_merge_listing_business_heads"
-PURCHASE_MERGED_HEAD_REVISION = "20261027_0061_merge_purchase_main"
+PURCHASE_MERGED_HEAD_REVISION = "20261028_0062_packing_pending_edit"
 
 
 @pytest.fixture(autouse=True)
@@ -54,10 +54,9 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
 
     assert config.get_main_option("sqlalchemy.url") is None
     assert script.get_heads() == [PURCHASE_MERGED_HEAD_REVISION]
-    assert set(script.get_revision(PURCHASE_MERGED_HEAD_REVISION).down_revision) == {
-        "20261026_0055_purchase_board_draft_no",
-        LISTING_INTEGRATION_HEAD_REVISION,
-    }
+    assert script.get_revision(PURCHASE_MERGED_HEAD_REVISION).down_revision == (
+        "20261027_0061_merge_purchase_main"
+    )
     assert set(script.get_revision(LISTING_INTEGRATION_HEAD_REVISION).down_revision) == {
         "20261025_0055_listing_grade_rule_versions",
         BUSINESS_CONNECTOR_HEAD_REVISION,

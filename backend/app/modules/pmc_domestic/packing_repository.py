@@ -1,7 +1,8 @@
-"""Current published candidates and local decisions; GETs never touch provider ODS.
+"""Current published candidates, synchronized purchase evidence and local decisions.
 
 Only positive-balance Huizhou sources participate. SKU/store/ItemID are explicit;
-missing mappings stay blocked. Receipt facts absent in DWD remain unknown.
+missing mappings stay blocked. Purchase remarks and cumulative receipt counters
+are projected from local ODS; GET never calls the provider or freezes an identity.
 """
 
 from collections import defaultdict
@@ -19,10 +20,12 @@ from app.modules.pmc_domestic.inbound_models import DomesticInboundBoard as Boar
 from app.modules.pmc_domestic.inbound_schemas import ItemIdentity
 from app.modules.pmc_domestic.packing_customs_rules import candidate_customs
 from app.modules.pmc_domestic.packing_models import PackingAllocation, PackingOrder
+from app.modules.pmc_domestic.packing_procurement_repository import PackingProcurementRepository
 from app.modules.pmc_domestic.packing_rules import fingerprint
 from app.modules.pmc_domestic.packing_schemas import Candidate, OrderRead
 from app.modules.pmc_domestic.packing_stock_models import PackingExtraAllocation
 from app.modules.pmc_domestic.packing_stock_repository import PackingStockRepository
+from app.modules.pmc_domestic.packing_suggestions import batch_metrics, suggest_quantities
 from app.modules.pmc_purchase.gate3_models import DwdPurchaseOrderLineItem
 
 
@@ -56,6 +59,12 @@ def matches(row, q):
     if q.overdue != "all" and row.overdue is not (q.overdue == "overdue"):
         return False
     if q.arrival != "all" and row.arrival_status != q.arrival:
+        return False
+    split = getattr(q, "split_arrival", "all")
+    if (
+        split != "all"
+        and row.split_arrival is not {"yes": True, "no": False, "unknown": None}[split]
+    ):
         return False
     if q.created_from and (
         not row.candidate_created_on or row.candidate_created_on < q.created_from
@@ -117,6 +126,7 @@ class PackingRepository:
                 .join(Pub, Pub.id == Board.publication_id)
                 .where(
                     Pub.is_current.is_(True),
+                    Pub.status == "published",
                     Board.source_account_ref.in_(accounts),
                     Board.source_warehouse_id == "16168",
                     Board.balance_num > 0,
@@ -124,19 +134,26 @@ class PackingRepository:
             ).all()
         )
         skus = {b.sku for b, _ in sources}
-        listing_by_item: dict[tuple[str, str, str], Listing] = {}
+        listing_by_item: dict[tuple[str, str, str, str], Listing] = {}
+        store_listing_ids = defaultdict(set)
         if skus:
             for listing in s.scalars(
                 select(Listing).where(
                     Listing.source_account_ref.in_(accounts),
                     Listing.local_sku.in_(skus),
-                    Listing.standard_status == "PUBLISHED",
-                    Listing.fulfillment_type.in_(["0", "1"]),
                 )
             ):
-                listing_by_item[(listing.source_account_ref, listing.store_id, listing.item_id)] = (
-                    listing
-                )
+                store_listing_ids[
+                    (listing.source_account_ref, listing.store_id, listing.local_sku)
+                ].add(listing.item_id)
+                listing_by_item[
+                    (
+                        listing.source_account_ref,
+                        listing.store_id,
+                        listing.local_sku,
+                        listing.item_id,
+                    )
+                ] = listing
         board_rows = [_PackingBoardRow(b) for b, _ in sources]
         attach_board_item_ids(s, board_rows, frozenset(accounts))
         identities_by_board = {
@@ -199,7 +216,7 @@ class PackingRepository:
         }
         # DWD repeats original quantity_real when a line is split by plans. Deduplicate
         # by original order_item_id before summing purchase quantities per order+SKU.
-        purchase = defaultdict(dict)
+        purchase_lines = []
         if skus:
             for p in s.scalars(
                 select(DwdPurchaseOrderLineItem).where(
@@ -207,9 +224,68 @@ class PackingRepository:
                     DwdPurchaseOrderLineItem.sku.in_(skus),
                 )
             ):
-                purchase[(p.source_account_ref, p.order_sn, p.sku)][p.order_item_id] = (
-                    p.quantity_real
+                purchase_lines.append(p)
+        procurement = PackingProcurementRepository(s, accounts, skus, purchase_lines)
+        # Include depleted batches and deduplicate store-split rows; pending alone
+        # cannot prove how many times a purchase order arrived.
+        batch_orders = defaultdict(dict)
+        if skus:
+            for batch in s.scalars(
+                select(Board)
+                .join(Pub, Pub.id == Board.publication_id)
+                .where(
+                    Pub.is_current.is_(True),
+                    Pub.status == "published",
+                    Board.source_account_ref.in_(accounts),
+                    Board.source_warehouse_id == "16168",
+                    Board.sku.in_(skus),
                 )
+            ):
+                data = batch.payload_json if isinstance(batch.payload_json, dict) else {}
+                for sn in data.get("purchase_order_sns", []):
+                    batch_orders[(batch.source_account_ref, sn, batch.sku)][
+                        batch.inbound_order_sn
+                    ] = batch.arrival_business_date
+        consumed_by_board = defaultdict(lambda: defaultdict(int))
+        for account, board_id, item_id, quantity in s.execute(
+            select(
+                PackingAllocation.source_account_ref,
+                PackingAllocation.source_board_id,
+                PackingOrder.item_id,
+                func.sum(PackingAllocation.qty),
+            )
+            .join(PackingOrder, PackingOrder.id == PackingAllocation.order_id)
+            .where(
+                PackingOrder.status == "approved",
+                PackingAllocation.released_at.is_(None),
+                PackingAllocation.source_account_ref.in_(accounts),
+            )
+            .group_by(
+                PackingAllocation.source_account_ref,
+                PackingAllocation.source_board_id,
+                PackingOrder.item_id,
+            )
+        ):
+            consumed_by_board[(account, str(board_id))][item_id] += quantity
+        for account, board_id, item_id, quantity in s.execute(
+            select(
+                PackingExtraAllocation.source_account_ref,
+                PackingExtraAllocation.source_board_id,
+                PackingOrder.item_id,
+                func.sum(PackingExtraAllocation.qty),
+            )
+            .join(PackingOrder, PackingOrder.id == PackingExtraAllocation.order_id)
+            .where(
+                PackingOrder.status == "approved",
+                PackingExtraAllocation.source_account_ref.in_(accounts),
+            )
+            .group_by(
+                PackingExtraAllocation.source_account_ref,
+                PackingExtraAllocation.source_board_id,
+                PackingOrder.item_id,
+            )
+        ):
+            consumed_by_board[(account, str(board_id))][item_id] += quantity
         today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
         result = []
         for b, pub in sources:
@@ -219,7 +295,7 @@ class PackingRepository:
                 options: list[tuple[ItemIdentity | None, Listing | None]] = []
                 for identity in board_identities:
                     listing = listing_by_item.get(
-                        (b.source_account_ref, b.store_id or "", identity.item_id)
+                        (b.source_account_ref, b.store_id or "", b.sku, identity.item_id)
                     )
                     options.append((identity, listing))
             else:
@@ -243,18 +319,48 @@ class PackingRepository:
                 else None
             )
             purchases = payload.get("purchase_order_sns", [])
-            values = [
-                v
-                for sn in purchases
-                for v in purchase.get((b.source_account_ref, sn, b.sku), {}).values()
-            ]
-            purchased = (
-                sum(values)
-                if values
-                and all(v is not None for v in values)
-                and all(purchase.get((b.source_account_ref, sn, b.sku)) for sn in purchases)
-                else None
+            arrival = procurement.arrival(b.source_account_ref, b.sku, purchases)
+            batches = {}
+            for sn in purchases:
+                batches.update(batch_orders.get((b.source_account_ref, sn, b.sku), {}))
+            batch_info = batch_metrics(
+                batches,
+                b.inbound_order_sn,
+                arrival["arrival_status"],
+                bool(payload.get("history_complete", False)),
             )
+            weights, refs = procurement.weights(
+                b.source_account_ref,
+                b.sku,
+                b.store_id,
+                purchases,
+                {identity.item_id for identity in board_identities},
+                store_listing_ids[(b.source_account_ref, b.store_id, b.sku)],
+            )
+            box_pcs, box_ref = procurement.box(b.source_account_ref, b.sku)
+            suggestions, tail = suggest_quantities(
+                qty,
+                available,
+                weights,
+                consumed_by_board[(b.source_account_ref, str(b.id))],
+                box_pcs,
+            )
+            single = len(board_identities) == 1
+            notes = []
+            if not single and not weights:
+                notes.append("采购计划比例依据不足，请人工填写")
+            if not box_pcs:
+                notes.append("箱规缺失或不唯一，未按箱规取整")
+            if tail:
+                notes.append(f"不足整箱尾差 {tail} 件，请人工确认")
+            suggestion = {
+                "rule": "single" if single else "plan_ratio" if weights else "manual",
+                "plan_weights": {k: float(v) for k, v in weights.items()},
+                "box_pcs": box_pcs,
+                "tail_quantity": tail,
+                "notes": notes,
+                "source_refs": refs + ([box_ref] if box_ref else []),
+            }
             for identity, listing in options:
                 item = identity.item_id if identity else None
                 ident = uuid5(
@@ -270,8 +376,10 @@ class PackingRepository:
                 blocked = []
                 if not b.store_id:
                     blocked.append("STORE_UNKNOWN")
-                if listing is None:
+                if listing is None or listing.standard_status != "PUBLISHED":
                     blocked.append("ELIGIBLE_LISTING_MISSING")
+                if listing and listing.fulfillment_type != "1":
+                    blocked.append("WFS_NOT_CONVERTED")
                 if listing and (
                     not listing.gtin or not listing.gtin.isdigit() or len(listing.gtin) != 14
                 ):
@@ -302,16 +410,16 @@ class PackingRepository:
                     "msku": listing.msku if listing else None,
                     "product_name": payload.get("product_name"),
                     "purchase_order_sns": purchases,
-                    "arrival_purchased": purchased,
+                    **arrival,
+                    **batch_info,
+                    "quantity_suggestion": suggestion,
                     "candidate_created_on": b.arrival_business_date,
                     "overdue": (today - b.arrival_business_date).days >= 1
                     if b.arrival_business_date
                     else None,
                     "stock_balance": b.balance_num,
                     "available_quantity": available,
-                    "default_quantity": available
-                    if len(board_identities) == 1 and len(options) == 1
-                    else None,
+                    "default_quantity": available if single else suggestions.get(item),
                     "can_approve": not blocked,
                     "blocked_reasons": blocked,
                     "source_observed_at": pub.source_observed_at,
