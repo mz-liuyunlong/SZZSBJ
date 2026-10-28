@@ -46,9 +46,7 @@ def test_factory_scopes_store_operation_and_function(monkeypatch) -> None:
         approved_read_keys=frozenset({"wfs_inventory"}),
         function_by_store={"HK2613": "szzsbj-walmart-hk2613-executor"},
         cvm_role="SZZSBJ-CVM-SCF-Invoker",
-        target_role_arn=(
-            "qcs::cam::uin/100013426561:roleName/SZZSBJ-CrossAccount-SCF-Invoker"
-        ),
+        target_role_arn=("qcs::cam::uin/100013426561:roleName/SZZSBJ-CrossAccount-SCF-Invoker"),
         identity_provider=Provider(),
     )
     assert api.call("HK2613", "wfs_inventory", params={"limit": 1}).status_code == 200
@@ -67,9 +65,7 @@ def test_factory_rejects_latest_qualifier() -> None:
             approved_read_keys=frozenset({"wfs_inventory"}),
             function_by_store={"HK2613": "szzsbj-walmart-hk2613-executor"},
             cvm_role="SZZSBJ-CVM-SCF-Invoker",
-            target_role_arn=(
-                "qcs::cam::uin/100013426561:roleName/SZZSBJ-CrossAccount-SCF-Invoker"
-            ),
+            target_role_arn=("qcs::cam::uin/100013426561:roleName/SZZSBJ-CrossAccount-SCF-Invoker"),
             function_qualifier="$LATEST",
             identity_provider=Provider(),
         )
