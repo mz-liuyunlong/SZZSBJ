@@ -32,7 +32,8 @@ test("prefills ratio advice and submits a manually changed quantity", async () =
   </QueryClientProvider>);
   const input = await screen.findByRole("spinbutton");
   await waitFor(() => expect(input).toHaveValue("60"));
-  expect(screen.getByText("已按采购计划比例预填，数量可修改")).toBeInTheDocument();
+  expect(screen.queryByText("已按采购计划比例预填，数量可修改")).not.toBeInTheDocument();
+  expect(screen.queryByText(/请人工确认备货数量/)).not.toBeInTheDocument();
   fireEvent.change(input, { target: { value: "25" } });
   await waitFor(() => expect(screen.getByText("店铺 / 11111111111")).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: /^保\s*存$/ }));

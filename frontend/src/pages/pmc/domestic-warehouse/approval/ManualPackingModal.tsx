@@ -36,7 +36,6 @@ export default function ManualPackingModal({ open, scope, onCancel, onSubmitted 
     onCancel={() => { if (!mutation.isPending) onCancel(); }} closable={!mutation.isPending} cancelButtonProps={{ disabled: mutation.isPending }}
     okButtonProps={{ disabled: !basis || !target || options.isFetching || !!error }} onOk={() => { void submit().catch(() => undefined); }}>
     {context}
-    <Alert type="info" showIcon message="先选择入库单×SKU。提交仅新增待审批申请，不发PK、不占用库存；通过审批时重新校验并分配原入库库存。" />
     {error && <Alert type="error" message={approvalErrorText(error)} action={<Button onClick={() => { void sources.refetch(); if (source) void options.refetch(); }}>重试</Button>} />}
     <Form form={form} layout="vertical" initialValues={{ customs: "default" }}>
       <Form.Item name="source" label="入库单 × SKU" rules={[{ required: true, message: "请先选择来源入库单与SKU" }]}>
@@ -51,7 +50,7 @@ export default function ManualPackingModal({ open, scope, onCancel, onSubmitted 
       </Form.Item>
       <Descriptions size="small" column={2} items={[{ key: "gtin", label: "GTIN", children: target?.gtin ?? "—" }, { key: "msku", label: "MSKU", children: target?.msku ?? "—" }]} />
       {target?.cross_store && <Alert type="warning" message="目标店铺与来源店铺不同。以所选入库单为分配依据，保留两者快照，不改写领星库存归属。" />}
-      <Form.Item name="qty" label="备货数量" rules={[{ required: true, message: "请填写备货数量" }, { type: "integer", min: 1, max: Math.min(basis?.available_quantity ?? 0, 1000000), message: "填写可用范围内的正整数" }]}><InputNumber min={1} precision={0} max={basis?.available_quantity ?? 0} /></Form.Item>
+      <Form.Item name="qty" label="备货数量" rules={[{ required: true, message: "请填写备货数量" }, { type: "integer", min: 1, max: Math.min(basis?.available_quantity ?? 0, 1000000), message: "填写可用范围内的正整数" }]}><InputNumber style={{ width: 190 }} min={1} precision={0} max={basis?.available_quantity ?? 0} /></Form.Item>
       <Form.Item name="customs" label="是否报关"><PackingCustomsSelect row={basis} /></Form.Item>
       <Form.Item name="reason" label="添加原因（必填）" rules={[{ required: true, whitespace: true, message: "请填写添加原因" }, { min: 2, max: 500, message: "添加原因请填写 2 到 500 个字" }]}><Input.TextArea maxLength={500} rows={3} /></Form.Item>
     </Form>

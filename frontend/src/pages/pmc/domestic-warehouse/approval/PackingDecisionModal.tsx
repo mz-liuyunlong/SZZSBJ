@@ -43,16 +43,12 @@ export default function PackingDecisionModal({ row, kind, busy, scope, onCancel,
       <Link to={DEFAULT_BUSINESS_PATH}>Listing 管理</Link> 补全链接并完成 WFS 转换后再选目标商品。
     </>
   );
-  return <Modal title={kind === "approve" ? approveTitle : rejectTitle} open={!!row} confirmLoading={busy}
+  return <Modal title={kind === "approve" ? approveTitle : rejectTitle} open={!!row} width={kind === "approve" ? 680 : undefined} confirmLoading={busy}
     okText={kind === "approve" ? "保存" : "提交"} cancelText="取消"
     okButtonProps={{ disabled: kind === "approve" && (options.isFetching || !!options.error || choices.length === 0) }}
     cancelButtonProps={{ disabled: busy }} closable={!busy} maskClosable={!busy} onCancel={onCancel}
     onOk={() => { void form.validateFields().then(onSubmit).catch(() => undefined); }} destroyOnHidden>
-    {kind === "approve" && <Alert type="info" showIcon message="写入本系统打包单，不创建领星海外仓备货单，不回写箱规" />}
-    {kind === "approve" && <Typography.Paragraph>{row?.inbound_order_sn} / SKU：{row?.sku}（固定不可修改）</Typography.Paragraph>}
-    {kind === "approve" && row?.quantity_suggestion && <Alert type="info" showIcon
-      message={row.quantity_suggestion.rule === "plan_ratio" ? "已按采购计划比例预填，数量可修改" : "请人工确认备货数量"}
-      description={[row.quantity_suggestion.rule === "plan_ratio" ? `计划权重：${Object.entries(row.quantity_suggestion.plan_weights).map(([id, qty]) => `${id}：${qty}`).join("；")}` : "", row.quantity_suggestion.box_pcs ? `箱规 ${row.quantity_suggestion.box_pcs} 件/箱` : "", ...row.quantity_suggestion.notes].filter(Boolean).join("；")} />}
+    {kind === "approve" && <Typography.Paragraph>{row?.inbound_order_sn} / SKU：{row?.sku}</Typography.Paragraph>}
     {kind === "approve" && options.error && <Alert type="error" message={approvalErrorText(options.error)} action={<Button onClick={() => void options.refetch()}>重试</Button>} />}
     {kind === "approve" && !options.isFetching && !options.error && choices.length === 0 && (
       <Alert type="warning" showIcon message="暂无可选目标商品" description={listingHint} />
@@ -70,7 +66,7 @@ export default function PackingDecisionModal({ row, kind, busy, scope, onCancel,
         <Form.Item label="修改原因" name="edit_reason" rules={[{ required: edited, whitespace: true, min: 2, max: 500, message: "修改目标商品须填写至少2字原因" }]}>
           <Input.TextArea maxLength={500} rows={3} placeholder="例：客户要求分两批 / 换店铺发" />
         </Form.Item>
-        <Form.Item label={`备货数量（可用 ${row?.available_quantity ?? "未知"}）`} name="qty" rules={[{ required: true, message: "请填写备货数量" }, { type: "integer", min: 1, max: Math.min(row?.available_quantity ?? 0, 1000000), message: "数量必须为可用范围内的正整数" }]}><InputNumber min={1} precision={0} max={row?.available_quantity ?? 0} /></Form.Item>
+        <Form.Item label={`备货数量（可用 ${row?.available_quantity ?? "未知"}）`} name="qty" rules={[{ required: true, message: "请填写备货数量" }, { type: "integer", min: 1, max: Math.min(row?.available_quantity ?? 0, 1000000), message: "数量必须为可用范围内的正整数" }]}><InputNumber style={{ width: 190 }} min={1} precision={0} max={row?.available_quantity ?? 0} /></Form.Item>
         <Form.Item label="是否报关" name="customs"><PackingCustomsSelect row={row} /></Form.Item>
       </> : <>
         <Form.Item label="姓名" name="operatorName" initialValue={DOMESTIC_APPROVER_NAMES[0]} rules={[{ required: true, message: "请选择姓名" }]}><Select options={DOMESTIC_APPROVER_NAMES.map((name) => ({ value: name, label: name }))} /></Form.Item>
