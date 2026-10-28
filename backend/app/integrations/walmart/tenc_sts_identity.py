@@ -13,7 +13,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -110,7 +110,7 @@ class CachedScfAssumeRoleIdentity:
 
     def _assume_role(self, cvm: TemporaryTencentIdentity) -> tuple[TemporaryTencentIdentity, int]:
         timestamp = int(self._clock())
-        day = datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d")
+        day = datetime.fromtimestamp(timestamp, UTC).strftime("%Y-%m-%d")
         scope = f"{day}/sts/tc3_request"
         body = json.dumps(
             {
