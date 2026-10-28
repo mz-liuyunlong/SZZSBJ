@@ -3,6 +3,7 @@
 Legacy DATA-PAGES max_pages currently denotes a day count; retain it until a
 separate lookback-days migration has been reviewed.
 """
+
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
