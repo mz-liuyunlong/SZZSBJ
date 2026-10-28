@@ -108,9 +108,7 @@ class CachedScfAssumeRoleIdentity:
         except Exception:
             raise TencentStsIdentityError("CVM_IDENTITY_UNAVAILABLE") from None
 
-    def _assume_role(
-        self, cvm: TemporaryTencentIdentity
-    ) -> tuple[TemporaryTencentIdentity, int]:
+    def _assume_role(self, cvm: TemporaryTencentIdentity) -> tuple[TemporaryTencentIdentity, int]:
         timestamp = int(self._clock())
         day = datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d")
         scope = f"{day}/sts/tc3_request"
@@ -127,8 +125,7 @@ class CachedScfAssumeRoleIdentity:
             "POST\n/\n\n"
             f"content-type:{content_type}\n"
             "host:sts.tencentcloudapi.com\n\n"
-            "content-type;host\n"
-            + hashlib.sha256(body).hexdigest()
+            "content-type;host\n" + hashlib.sha256(body).hexdigest()
         )
         to_sign = (
             f"TC3-HMAC-SHA256\n{timestamp}\n{scope}\n"
