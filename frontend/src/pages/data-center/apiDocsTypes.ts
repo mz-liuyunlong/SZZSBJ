@@ -1,4 +1,4 @@
-export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+export type ApiMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface ApiFieldSpec {
   name: string;
@@ -76,7 +76,6 @@ export const getMethodColor = (method: ApiMethod) => {
     GET: "blue",
     POST: "green",
     PUT: "orange",
-    PATCH: "orange",
     DELETE: "red",
   };
   return colors[method];

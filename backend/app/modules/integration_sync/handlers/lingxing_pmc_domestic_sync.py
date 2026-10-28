@@ -7,11 +7,10 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime
 from time import sleep
 from typing import Protocol
 from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
 
 from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +22,6 @@ from app.integrations.lingxing.client import LingxingRawEnvelope, LingxingReadon
 from app.integrations.lingxing.pmc_domestic_contracts import (
     PmcDomesticContractError,
     build_pmc_domestic_page_body,
-    default_statement_window_end,
     pmc_domestic_provider_code,
     pmc_domestic_response_items,
     pmc_domestic_response_succeeded,
@@ -73,17 +71,6 @@ DomesticOdsRow = (
 )
 
 DEFAULT_MAX_PAGES = 1000
-DOMESTIC_SCHEDULE_ZONE = ZoneInfo("Asia/Shanghai")
-DOMESTIC_TRIGGER_TYPES = frozenset({"manual", "schedule", "retry"})
-
-
-def _scheduled_statement_window(today: date) -> tuple[datetime, datetime]:
-    start_date, end_date = default_statement_window_end(today)
-    return (
-        datetime.combine(start_date, time.min, tzinfo=DOMESTIC_SCHEDULE_ZONE),
-        datetime.combine(end_date, time.min, tzinfo=DOMESTIC_SCHEDULE_ZONE),
-    )
-
 
 ODS_MODELS: dict[str, tuple[type[DomesticOdsRow], str]] = {
     "domesticWarehouseStatement": (DomesticWarehouseStatement, "statement_id"),
@@ -208,7 +195,7 @@ class LingxingPmcDomesticSyncHandler:
     ) -> tuple[IntegrationSyncConfig, RawRetentionPolicy, tuple[date | None, date | None]]:
         spec = self.spec
         if (
-            run.trigger_type not in DOMESTIC_TRIGGER_TYPES
+            run.trigger_type != "manual"
             or run.provider != "lingxing"
             or run.interface_key != spec.interface_key
             or interface.handler_key != spec.handler_key
@@ -218,17 +205,12 @@ class LingxingPmcDomesticSyncHandler:
             raise PmcDomesticSyncError("SYNC_DOMESTIC_EXECUTION_NOT_AUTHORIZED")
         config = self.repository.get_config(run.config_id, frozenset({run.source_account_ref}))
         policy = self.repository.get_retention_policy(spec.retention_policy_key)
-        if config is None or policy is None or not config.is_enabled:
+        if config is None or policy is None or not config.is_enabled or config.schedule_enabled:
             raise PmcDomesticSyncError("SYNC_DOMESTIC_MANUAL_ONLY")
         window: tuple[date | None, date | None] = (None, None)
         if spec.requires_date_window:
             if run.window_start is None or run.window_end is None:
-                if run.trigger_type == "manual":
-                    raise PmcDomesticSyncError("SYNC_DOMESTIC_WINDOW_REQUIRED")
-                # Scheduler does not send a date window. Statement feeds use the
-                # existing 90-day Shanghai window so a saved cron can execute.
-                today = datetime.now(DOMESTIC_SCHEDULE_ZONE).date()
-                run.window_start, run.window_end = _scheduled_statement_window(today)
+                raise PmcDomesticSyncError("SYNC_DOMESTIC_WINDOW_REQUIRED")
             window = (run.window_start.date(), run.window_end.date())
             try:
                 validate_pmc_domestic_window(*window)

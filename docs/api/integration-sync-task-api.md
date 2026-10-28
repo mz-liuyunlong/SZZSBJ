@@ -1,9 +1,5 @@
 # Integration Sync Task API
 
-> 2026-10-27 采购同步补充：以下早期只读描述不代表采购统一任务的当前能力。
-> 采购父任务复用配置、运行、重试及工作项接口，权限和账号范围不变；
-> 完整契约见 [采购看板统一同步](pmc-purchase-unified-sync.md)。其他业务行为不由本补充修改。
-
 ## 1. Boundary
 
 The Sync Task page is a read-only governance view over persisted new-system metadata. Its frontend

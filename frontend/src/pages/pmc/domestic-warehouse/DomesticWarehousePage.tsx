@@ -1,3 +1,4 @@
+import DomesticPackingRiskCard from "./components/DomesticPackingRiskCard";
 /** Inbound batch board — published API data only. */
 import { Alert, Button, Card, Drawer, Input, Select, Space, Typography, message, theme } from "antd";
 import { useState, type CSSProperties } from "react";
@@ -76,6 +77,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
           : activeTab === "approval" ? <PackingApprovalPanel preferenceScope={preferenceScope}
             storeOptions={options.data?.data?.stores ?? []} optionsLoading={options.isFetching} onListFetching={setApprovalFetching} />
           : <>
+          <DomesticPackingRiskCard scope={preferenceScope} />
           <Card size="small" className="domestic-board__toolbar-card"><DomesticToolbar filters={filters}
             filterOptions={options.data?.data} optionsLoading={options.isFetching}
             onChange={commitFilters} onReset={() => commitFilters(initialDomesticFilters())} showStats={showStats} onToggleStats={() => setShowStats(!showStats)}

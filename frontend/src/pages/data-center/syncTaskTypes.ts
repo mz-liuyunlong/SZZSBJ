@@ -1,5 +1,5 @@
 export type SyncTaskModule =
-  "商品" | "订单" | "广告" | "仓库" | "国内仓" | "财务" | "售后";
+  "商品" | "订单" | "广告" | "仓库" | "财务" | "售后";
 
 export type SyncTaskStatus =
   "成功" | "失败" | "运行中" | "部分成功" | "超时" | "已停用" | "未执行";
@@ -67,7 +67,6 @@ export interface SyncTaskRow {
 }
 
 export interface SyncTaskLog {
-  stageName?: string;
   id: string;
   taskId: string;
   runAt: string;

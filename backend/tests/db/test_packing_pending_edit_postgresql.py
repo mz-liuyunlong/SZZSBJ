@@ -18,7 +18,12 @@ from app.modules.pmc_domestic.packing_models import (
     PackingPendingEdit,
 )
 from app.modules.pmc_domestic.packing_rules import listing_version
-from app.modules.pmc_domestic.packing_schemas import ApproveCommand, Candidate, EditDraftCommand
+from app.modules.pmc_domestic.packing_schemas import (
+    ApproveCommand,
+    Candidate,
+    EditDraftCommand,
+    RejectCommand,
+)
 from app.modules.pmc_domestic.packing_service import PackingService
 from tests.db.domestic_postgresql_support import admin_url, create_database, drop_database
 from tests.db.test_domestic_chain_postgresql import (
@@ -66,7 +71,7 @@ def test_0062_preserves_data_and_supports_atomic_draft_approval(start):
         assert repeated.returncode == 0, repeated.stderr
         assert "Running upgrade" not in repeated.stdout + repeated.stderr
         with Session(engine) as session:
-            assert session.scalar(sa.select(sa.func.count()).select_from(PackingOrder)) == 1
+            assert session.scalar(sa.select(sa.func.count()).select_from(PackingOrder)) == 2
             assert session.scalar(sa.select(sa.func.count()).select_from(PackingPendingEdit)) == 0
     finally:
         if engine is not None:
@@ -182,3 +187,16 @@ def _exercise_draft_decision(engine):
         assert replay.id == result.id
         for model in (PackingOrder, PackingAllocation, PackingEvent):
             assert session.scalar(sa.select(sa.func.count()).select_from(model)) == 1
+        candidate.id = uuid4()
+        candidate.item_id = "22222222222"
+        rejection = RejectCommand(
+            source_account_ref=candidate.source_account_ref,
+            candidate_version=candidate.candidate_version,
+            idempotency_key=uuid4(),
+            note="Synthetic rejected packing request",
+        )
+        rejected = service.decide(candidate.id, rejection, "reject", "synthetic-user", accounts)
+        assert rejected.pk is None and rejected.qty is None and rejected.status == "rejected"
+        assert session.scalar(sa.select(sa.func.sum(PackingAllocation.qty))) == 4
+        assert session.scalar(sa.select(sa.func.count()).select_from(PackingAllocation)) == 1
+        assert set(session.scalars(sa.select(PackingEvent.event_kind))) == {"approve", "reject"}

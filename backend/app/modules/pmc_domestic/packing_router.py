@@ -180,8 +180,7 @@ def approve(
     actor: Approve,
     accounts: Scope,
 ):
-    if (body.passcode or "").strip():
-        verify_domestic_passcode(body.operator_name, body.passcode, actor.user_id)
+    verify_domestic_passcode(body.operator_name, body.passcode, actor.user_id)
     return success_response(
         request,
         data=PackingService(session).decide(candidate_id, body, "approve", actor.user_id, accounts),

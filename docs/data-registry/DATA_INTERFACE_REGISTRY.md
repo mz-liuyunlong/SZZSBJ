@@ -289,4 +289,4 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 
 ## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
 
-内部任务 `pmcPurchaseBoardSync`；复用既有接口 `/api/integrations/sync-configs/{id}/run`、配置PATCH、retry及work-items。Source Decision: `docs/data-sources/decisions/pmc-purchase-board-decision.md`（READY_FOR_PRP / REBUILD_SYNC）；PRP: `PRPs/pmc-purchase-unified-sync.md`。来源purchasePlanList/purchaseOrderList/purchaseReceiptOrderList的RAW/ODS → 既有DWD/DWS；治理写入沿用gov_integration_*，无新增表/字段。仅成功父运行window_end推进水位，内部子记录保留原来源血缘。integrations:read/update/execute，可信source_account scope。状态testing（离线验证，未生产注册/启用）；详见采购统一同步API及handoff。不影响其他业务调度配置，不改变业务计算口径。
+状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。

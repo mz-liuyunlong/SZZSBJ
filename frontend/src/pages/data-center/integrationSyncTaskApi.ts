@@ -164,14 +164,6 @@ const pmcPurchaseInterfaceKeys = new Set([
   "purchaseReceiptOrderList",
 ]);
 
-const pmcDomesticInterfaceKeys = new Set([
-  "domesticWarehouseList",
-  "domesticInventoryDetails",
-  "domesticBatchDetailList",
-  "domesticBatchStatementList",
-  "domesticWarehouseStatement",
-]);
-
 const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
   if (dataPagesInterfaceKeys.has(item.interface_key)) {
     if (
@@ -195,8 +187,7 @@ const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
     return "商品";
   }
 
-  if (pmcPurchaseInterfaceKeys.has(item.interface_key) || item.interface_key === "pmcPurchaseBoardSync") return "仓库";
-  if (pmcDomesticInterfaceKeys.has(item.interface_key)) return "国内仓";
+  if (pmcPurchaseInterfaceKeys.has(item.interface_key)) return "仓库";
   if (item.interface_key === "productList" || productDetailDependencyKeys.has(item.interface_key)) return "商品";
 
   return "商品";
@@ -204,7 +195,6 @@ const moduleForInterface = (item: InterfaceDto): SyncTaskRow["module"] => {
 
 
 const chineseTaskNames: Record<string, string> = {
-  pmcPurchaseBoardSync: "采购看板同步",
   getSellerList: "店铺列表同步",
   walmartListingList: "Listing 管理同步",
   saleStatPageList: "每日销售同步",
@@ -217,15 +207,9 @@ const chineseTaskNames: Record<string, string> = {
   purchasePlanList: "采购计划同步",
   purchaseOrderList: "采购单同步",
   purchaseReceiptOrderList: "采购入库同步",
-  domesticWarehouseStatement: "批次看板－入库流水同步",
-  domesticBatchDetailList: "批次看板－批次库存同步",
-  domesticBatchStatementList: "国内仓－批次流水同步",
-  domesticInventoryDetails: "国内仓－库存明细同步",
-  domesticWarehouseList: "国内仓－仓库资料同步",
 };
 
 const chineseInterfaceNames: Record<string, string> = {
-  pmcPurchaseBoardSync: "采购计划、采购单、收货单及看板刷新",
   getSellerList: "领星店铺列表接口",
   walmartListingList: "沃尔玛 Listing 列表接口",
   saleStatPageList: "沃尔玛销售统计接口",
@@ -238,17 +222,9 @@ const chineseInterfaceNames: Record<string, string> = {
   purchasePlanList: "领星采购计划接口",
   purchaseOrderList: "领星采购单接口",
   purchaseReceiptOrderList: "领星采购入库接口",
-  domesticWarehouseStatement: "领星国内仓库存中心流水接口",
-  domesticBatchDetailList: "领星国内仓批次明细接口",
-  domesticBatchStatementList: "领星国内仓批次流水接口",
-  domesticInventoryDetails: "领星国内仓库存明细接口",
-  domesticWarehouseList: "领星国内仓仓库列表接口",
 };
 
 const descriptionForInterface = (item: InterfaceDto) => {
-  if (item.interface_key === "pmcPurchaseBoardSync") {
-    return "统一采集采购计划、采购单、收货单，清洗并刷新采购看板；默认每 3 小时，可立即同步。";
-  }
   if (item.interface_key === "productList") {
     return "前端只显示一个产品管理同步任务：同步 ProductList、ProductInfo，并刷新产品管理当前数据。";
   }
@@ -283,10 +259,6 @@ const descriptionForInterface = (item: InterfaceDto) => {
 
   if (pmcPurchaseInterfaceKeys.has(item.interface_key)) {
     return "PMC 采购接口需后端治理配置启用后才能执行。";
-  }
-
-  if (pmcDomesticInterfaceKeys.has(item.interface_key)) {
-    return `${chineseTaskNames[item.interface_key]}。可开启定时同步；入库流水和批次流水未指定日期时，按上海日期同步最近 90 天。`;
   }
 
   return item.display_name;
@@ -446,65 +418,37 @@ function row(
   };
 }
 
-type SyncTaskTodayStat = {
-  interface_id: string;
-  source_account_ref: string;
-  runs: number;
-  success: number;
-  failed: number;
-};
-
-async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
-  const items: T[] = [];
-  for (let page = 1; page <= 1000; page += 1) {
-    const response = await backendRequest<{ items: T[] }>(
-      `${endpoint}?page=${page}&page_size=100`,
-    );
-    const pageItems = response.data.items ?? [];
-    items.push(...pageItems);
-    if (pageItems.length < 100) return items;
-  }
-  throw new Error("SYNC_TASK_CONFIG_LIST_TOO_LARGE");
-}
-
-async function fetchAllPagesOptional<T>(endpoint: string): Promise<T[]> {
-  return fetchAllPages<T>(endpoint);
-}
-
-async function loadRunSnapshots(): Promise<{ latestRuns: RunDto[]; todayStats: SyncTaskTodayStat[] }> {
-  try {
-    const dashboard = await backendRequest<{
-      latest_runs: RunDto[];
-      today_stats: SyncTaskTodayStat[];
-    }>("/api/integrations/sync-tasks/dashboard");
-    return {
-      latestRuns: dashboard.data.latest_runs ?? [],
-      todayStats: dashboard.data.today_stats ?? [],
-    };
-  } catch {
-    const runs = await backendRequest<{ items: RunDto[] }>(
-      "/api/integrations/sync-runs?page=1&page_size=100",
-    );
-    return { latestRuns: runs.data.items ?? [], todayStats: [] };
-  }
-}
-
 export async function listIntegrationSyncTasks() {
-  const interfacesList = await fetchAllPages<InterfaceDto>("/api/integrations/interfaces");
-  const [configsList, { latestRuns: runItems, todayStats }] = await Promise.all([
-    fetchAllPagesOptional<ConfigDto>("/api/integrations/sync-configs"),
-    loadRunSnapshots(),
+  async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
+    const items: T[] = [];
+    for (let page = 1; page <= 1000; page += 1) {
+      const response = await backendRequest<{ items: T[] }>(
+        `${endpoint}?page=${page}&page_size=100`,
+      );
+      items.push(...response.data.items);
+      if (response.data.items.length < 100) return items;
+    }
+    throw new Error("SYNC_TASK_CONFIG_LIST_TOO_LARGE");
+  }
+  const [interfacesList, configsList, dashboard] = await Promise.all([
+    fetchAllPages<InterfaceDto>("/api/integrations/interfaces"),
+    fetchAllPages<ConfigDto>("/api/integrations/sync-configs"),
+    backendRequest<{ latest_runs: RunDto[]; today_stats: Array<{
+      interface_id: string; source_account_ref: string;
+      runs: number; success: number; failed: number;
+    }> }>("/api/integrations/sync-tasks/dashboard"),
   ]);
+  const runs = { data: { items: dashboard.data.latest_runs } };
+  const todayStats = dashboard.data.today_stats;
   const interfaceById = new Map(interfacesList.map((item) => [item.id, item]));
   const rows = configsList.flatMap((config) => {
     const item = interfaceById.get(config.interface_id);
-    return item ? [row(item, config, newestRun(runItems, item.id, config.source_account_ref))] : [];
+    return item ? [row(item, config, newestRun(runs.data.items, item.id, config.source_account_ref))] : [];
   });
   for (const item of interfacesList) {
     if (rows.some((candidate) => candidate.interfaceId === item.id)) continue;
-    rows.push(row(item, undefined, newestRun(runItems, item.id)));
+    rows.push(row(item, undefined, newestRun(runs.data.items, item.id)));
   }
-  const purchaseParents = rows.filter((task) => task.interfaceKey === "pmcPurchaseBoardSync" && task.configId);
   const todayTotals = new Map(todayStats.map((stat) => [
     `${stat.interface_id}:${stat.source_account_ref}`,
     { success: stat.success, failed: stat.failed, runs: stat.runs },
@@ -513,18 +457,10 @@ export async function listIntegrationSyncTasks() {
     const counts = todayTotals.get(`${task.interfaceId}:${task.source ?? ""}`);
     return { ...task, todaySuccess: counts?.success ?? 0, todayFailed: counts?.failed ?? 0, todayRuns: counts?.runs ?? 0 };
   });
-  // Preserve other accounts' tasks until their own unified configuration exists.
-  const visibleRows = foldProductDetailDependencyRows(withTodayCounts).filter(shouldDisplayTaskRow).filter(
-    (task) => !pmcPurchaseInterfaceKeys.has(task.interfaceKey)
-      || !purchaseParents.some((parent) => parent.source === task.source && parent.autoSync && parent.status === "enabled"),
-  );
-  const logs: SyncTaskLog[] = runItems.map((run) => ({
-    stageName: run.interface_key === "pmcPurchaseBoardSync" ? "完整流程"
-      : pmcPurchaseInterfaceKeys.has(run.interface_key) ? chineseTaskNames[run.interface_key] : undefined,
+  const visibleRows = foldProductDetailDependencyRows(withTodayCounts).filter(shouldDisplayTaskRow);
+  const logs: SyncTaskLog[] = runs.data.items.map((run) => ({
     id: run.id,
-    taskId: pmcPurchaseInterfaceKeys.has(run.interface_key)
-      ? purchaseParents.find((parent) => parent.source === run.source_account_ref)?.id ?? run.config_id ?? run.id
-      : run.config_id ?? run.id,
+    taskId: run.config_id ?? run.id,
     runAt: run.started_at ?? run.queued_at,
     triggerType: trigger(run.trigger_type),
     status: status[run.status] ?? "失败",
@@ -577,8 +513,6 @@ export async function listIntegrationSyncRunLogPage(params: {
   return {
     total: response.meta.total ?? response.data.items.length,
     items: response.data.items.map((run): SyncTaskLog => ({
-      stageName: run.interface_key === "pmcPurchaseBoardSync" ? "完整流程"
-        : pmcPurchaseInterfaceKeys.has(run.interface_key) ? chineseTaskNames[run.interface_key] : undefined,
       id: run.id,
       taskId: run.config_id ?? run.id,
       runAt: run.started_at ?? run.queued_at,

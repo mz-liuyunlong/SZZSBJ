@@ -33,7 +33,6 @@ export type SyncTaskFrequencyPreset =
   | "30m"
   | "1h"
   | "2h"
-  | "3h"
   | "hourly_minutes"
   | "daily_fixed"
   | "advanced_cron";
@@ -74,7 +73,6 @@ const frequencyOptions = [
   { label: "每 30 分钟", value: "30m" },
   { label: "每 1 小时", value: "1h" },
   { label: "每 2 小时", value: "2h" },
-  { label: "每 3 小时", value: "3h" },
   { label: "每小时指定分钟", value: "hourly_minutes" },
   { label: "每天固定时间", value: "daily_fixed" },
   { label: "高级 Cron", value: "advanced_cron" },
@@ -130,7 +128,6 @@ const defaultHourlyMinutesForTask = (task: SyncTaskRow) => {
 const defaultFrequencyForTask = (
   task: SyncTaskRow,
 ): SyncTaskFrequencyPreset => {
-  if (task.interfaceKey === "pmcPurchaseBoardSync") return "3h";
   if (task.interfaceKey === "productList") return "hourly_minutes";
   if (task.interfaceKey === "walmartListingList") return "hourly_minutes";
   if (task.interfaceKey === "saleStatPageList") return "hourly_minutes";
@@ -146,15 +143,6 @@ const defaultFixedRunTimesForTask = (task: SyncTaskRow) => {
 
 const parseCronToFormValues = (task: SyncTaskRow) => {
   const cron = task.scheduleCron?.trim();
-
-  if (cron === "0 */3 * * *") {
-    return {
-      frequencyPreset: "3h" as const,
-      hourlyMinutes: [0],
-      fixedRunTimes: defaultFixedRunTimesForTask(task),
-      customCron: "",
-    };
-  }
 
   if (!cron) {
     return {

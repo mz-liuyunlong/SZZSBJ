@@ -19,7 +19,7 @@ test("approve confirm asks for a name and passphrase in Chinese", async () => {
   const onSubmit = vi.fn();
   render(<PackingApproveConfirmModal row={row} busy={false} onCancel={vi.fn()} onSubmit={onSubmit} />);
   expect(screen.getByText("审批通过 · PK261007123 · YC00217")).toBeInTheDocument();
-  expect(screen.getByText("吴贤玲")).toBeInTheDocument();
+  expect(screen.getByText("当前登录用户")).toBeInTheDocument();
   expect(screen.getByText(/入库单 IB261007008/)).toBeInTheDocument();
   expect(screen.queryByText(/采购单/)).not.toBeInTheDocument();
   expect(screen.queryByText(/备货数量/)).not.toBeInTheDocument();

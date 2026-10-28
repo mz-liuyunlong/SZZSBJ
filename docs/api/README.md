@@ -25,7 +25,6 @@ settings.md
 - `pmc-purchase-api.md`（PMC 采购看板只读 API，Gate 3）
 - `pmc-domestic-batch-board-api.md`（PMC 国内仓批次看板只读 API）
 
-- [采购看板统一同步](pmc-purchase-unified-sync.md)：现有治理API的单入口、3h调度、父子任务和上线边界。
 - `walmart-monitor-integration.md`（Walmart Monitor 统一 RAW 事件接收；无 RAW 读取或 Listing 写入）
 - `walmart-monitor-integration.md`（Walmart Monitor 统一 RAW 接收、标准化投影与 Listing 只读覆盖；无 RAW 读取接口）
 - `walmart-monitor-target-source.md`（Walmart 监控目标只读来源接口）

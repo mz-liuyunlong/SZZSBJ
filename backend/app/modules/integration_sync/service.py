@@ -21,12 +21,6 @@ from app.modules.integration_sync.models import (
 from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SPECS_BY_INTERFACE_KEY,
 )
-from app.modules.integration_sync.pmc_purchase_pipeline_catalog import (
-    PURCHASE_PIPELINE_HANDLER,
-    PURCHASE_PIPELINE_KEY,
-    PURCHASE_SOURCE_KEYS,
-)
-from app.modules.integration_sync.pmc_purchase_pipeline_repository import PurchasePipelineRepository
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.scheduler import (
     ScheduleExpressionError,
@@ -82,24 +76,6 @@ audit_logger = logging.getLogger("app.audit.integration_sync")
 
 
 class IntegrationSyncService:
-    def _guard_purchase_source(self, config: IntegrationSyncConfig) -> None:
-        """Registered purchase children are controlled only by the parent task."""
-        if getattr(config, "interface_id", None) is None:
-            return
-        interface = self.repository.get_interface(config.interface_id)
-        if interface is None or interface.interface_key not in PURCHASE_SOURCE_KEYS:
-            return
-        parent = PurchasePipelineRepository(self.session).config_for(
-            PURCHASE_PIPELINE_KEY,
-            config.source_account_ref,
-        )
-        if (
-            isinstance(parent, IntegrationSyncConfig)
-            and parent.is_enabled
-            and parent.schedule_enabled
-        ):
-            raise ApiError(code="SYNC_PURCHASE_USE_UNIFIED_TASK", status_code=409)
-
     def __init__(self, session: Session) -> None:
         self.session = session
         self.repository = IntegrationSyncRepository(session)
@@ -142,7 +118,6 @@ class IntegrationSyncService:
         request_id: str,
     ) -> SyncConfigRead:
         config = self._require_config(config_id, account_refs)
-        self._guard_purchase_source(config)
         values = payload.model_dump(exclude_unset=True)
         # DATA-PAGES max_pages is a business-date window, not an API page limit.
         # Reject unsupported windows before persisting an inert schedule.
@@ -258,8 +233,6 @@ class IntegrationSyncService:
         account_refs: frozenset[str],
     ) -> SyncRunCreated:
         source = self._require_run(source_run_id, account_refs)
-        if source.interface_key in PURCHASE_SOURCE_KEYS and source.config_id:
-            self._guard_purchase_source(self._require_config(source.config_id, account_refs))
         # Product Management retry is allowed from the Sync Task page.
         if source.status not in {RunStatus.FAILED, RunStatus.CANCELED}:
             raise ApiError(code=SYNC_RUN_NOT_RETRYABLE, status_code=409)
@@ -581,7 +554,6 @@ class IntegrationSyncService:
         productlist_only: bool = False,
     ) -> SyncRunCreated:
         config = self._require_config(config_id, account_refs)
-        self._guard_purchase_source(config)
         interface = self.repository.get_interface(config.interface_id)
         if interface is None:
             raise ApiError(code=ErrorCode.NOT_FOUND, status_code=404)
@@ -617,15 +589,7 @@ class IntegrationSyncService:
             and interface.handler_key == purchase_spec.handler_key
         )
         if productlist_only and not (
-            is_productlist
-            or is_productinfo
-            or is_pmc_purchase
-            or is_data_pages
-            or (
-                interface.provider == "lingxing"
-                and interface.interface_key == PURCHASE_PIPELINE_KEY
-                and interface.handler_key == PURCHASE_PIPELINE_HANDLER
-            )
+            is_productlist or is_productinfo or is_pmc_purchase or is_data_pages
         ):
             raise ApiError(code=SYNC_PRODUCTLIST_ONLY, status_code=409)
         if is_pmc_purchase and (trigger is not TriggerType.MANUAL or config.schedule_enabled):

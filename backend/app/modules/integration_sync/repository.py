@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, case, func, or_, select, text
+from sqlalchemy import Select, case, func, select, text
 from sqlalchemy.orm import Session
 
 from app.modules.integration_sync.models import (
@@ -27,7 +27,6 @@ from app.modules.sku_detail.models import LingxingSkuIdentity
 
 # Only handlers this worker can dispatch (execution.py) may be recovered from "queued".
 RECOVERABLE_INTERFACE_KEYS: tuple[str, ...] = (
-    "pmcPurchaseBoardSync",
     "productList",
     "batchGetProductInfo",
     "purchasePlanList",
@@ -874,17 +873,6 @@ class IntegrationSyncRepository:
                     IntegrationSyncRun.status == "queued",
                     IntegrationSyncRun.provider == "lingxing",
                     IntegrationSyncRun.interface_key.in_(RECOVERABLE_INTERFACE_KEYS),
-                    or_(
-                        IntegrationSyncRun.reason.is_(None),
-                        IntegrationSyncRun.reason != "purchase_board_pipeline",
-                        IntegrationSyncRun.interface_key.not_in(
-                            (
-                                "purchasePlanList",
-                                "purchaseOrderList",
-                                "purchaseReceiptOrderList",
-                            )
-                        ),
-                    ),
                     IntegrationSyncRun.queued_at <= queued_before,
                 )
                 .order_by(IntegrationSyncRun.queued_at, IntegrationSyncRun.id)

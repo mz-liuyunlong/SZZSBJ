@@ -49,7 +49,9 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 阻断码：STORE_UNKNOWN、ELIGIBLE_LISTING_MISSING、GTIN_INVALID、MSKU_MISSING、STOCK_PROOF_UNKNOWN、STOCK_FULLY_ALLOCATED。
 
 ## 写请求与响应
-共同body：source_account_ref(string<=128)、warehouse_id='16168'、candidate_version、idempotency_key(UUID)。approve增加qty（严格整数1..1000000且不超过来源可用量）、customs(default/declare/skip，default按当前备注自动结果)、rwh(可选，取候选 warehouse_name，没有名称则省略)、is_test=true。修改打包单不提交姓名和口令；请求里带了非空 passcode 时仍校验口令。reject增加note（trim后非空，<=500），并必须校验姓名和口令。客户端不传actor、PK或订单状态。
+共同body：source_account_ref(string<=128)、warehouse_id='16168'、candidate_version、idempotency_key(UUID)。approve增加qty（严格整数1..1000000且不超过来源可用量）、customs(default/declare/skip，default按当前备注自动结果)、rwh(可选，取候选 warehouse_name，没有名称则省略)、is_test=true。修改打包单不提交姓名和口令；审批通过和驳回均必须提交非空 passcode，缺失返回 PASSCODE_REQUIRED。reject增加note（trim后非空，<=500）。审批权限由登录用户的动作权限和数据范围决定，operator_name 不作为授权来源；审计主体来自服务端登录用户。客户端不传actor、PK或订单状态。
+
+口令错误预算由 Redis 在多个 worker 间共享，每个用户每个固定十分钟窗口最多十次失败；超过返回 PASSCODE_LOCKED。口令配置缺失返回 PASSCODE_UNSET，计数服务不可用返回 PASSCODE_LIMITER_UNAVAILABLE（503），均拒绝操作。具体配置边界与待验收项见 `../delivery/pmc-scope-rectification-20261028.md`。不记录或回显口令。
 
 响应data：id、candidate_id、pk(null仅驳回)、status(approved/rejected)、qty、version=1、is_test、customs_value(bool/null)、customs_src(default/product_remark/purchase_remark/manual；旧unknown保留)、rwh、actor_uid、note、created_at、snapshot(完整Candidate)。自动报关结果按已发布customs_proof计算，无明确备注时默认不报关；人工选择与默认来源分开保存，旧历史不重算。
 

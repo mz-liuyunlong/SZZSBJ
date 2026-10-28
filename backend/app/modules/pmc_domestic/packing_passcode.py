@@ -1,63 +1,56 @@
-"""Domestic packing passphrase check. The hash stays in server settings, never in the client."""
+"""Required confirmation; route permissions and authenticated actor govern access."""
 
 import hashlib
 import hmac
+import os
 import time
-from threading import Lock
+from urllib.parse import urlsplit
+
+from redis import Redis
+from redis.exceptions import RedisError
 
 from app.core.api import ApiError
-from app.core.config import get_settings
 
-APPROVER_NAMES = frozenset({"吴贤玲"})
-_WINDOW_SECONDS = 600
-_FAILURE_LIMIT = 10
-_failures: dict[str, list[float]] = {}
-_lock = Lock()
+_RESERVE = """
+local n = tonumber(redis.call('GET', KEYS[1]) or '0')
+if n >= 10 then return 0 end
+local value = redis.call('INCR', KEYS[1])
+if value == 1 then redis.call('EXPIRE', KEYS[1], 1200) end
+return 1
+"""
+_RELEASE = """
+if tonumber(redis.call('GET', KEYS[1]) or '0') > 0 then
+  return redis.call('DECR', KEYS[1])
+end
+return 0
+"""
 
 
-def reset_passcode_failures() -> None:
-    with _lock:
-        _failures.clear()
+def _limiter():
+    url = os.environ.get("CELERY_BROKER_URL", "")
+    if urlsplit(url).scheme not in {"redis", "rediss"}:
+        raise ApiError(code="PASSCODE_LIMITER_UNAVAILABLE", status_code=503)
+    return Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
 
 
-def verify_domestic_passcode(
-    operator_name: str | None, passcode: str | None, actor_id: str
-) -> None:
-    now = time.monotonic()
-    with _lock:
-        recent = [stamp for stamp in _failures.get(actor_id, []) if now - stamp < _WINDOW_SECONDS]
-        _failures[actor_id] = recent
-        if len(recent) >= _FAILURE_LIMIT:
-            raise ApiError(
-                code="PASSCODE_LOCKED",
-                status_code=429,
-                message="口令错误次数过多，请 10 分钟后再试",
-                details={"reason": "PASSCODE_LOCKED"},
-            )
-    configured = get_settings().pmc_domestic_passcode_sha256
-    expected = configured.get_secret_value().split()[0].strip().lower() if configured else ""
-    if len(expected) != 64:
-        raise ApiError(
-            code="PASSCODE_UNSET",
-            status_code=503,
-            message="服务器尚未设置国内仓口令",
-            details={"reason": "PASSCODE_UNSET"},
-        )
-    digest = hashlib.sha256((passcode or "").encode("utf-8")).hexdigest()
-    if not hmac.compare_digest(digest, expected):
-        with _lock:
-            _failures.setdefault(actor_id, []).append(now)
-        raise ApiError(
-            code="PASSCODE_REJECTED",
-            status_code=403,
-            message="口令不对",
-            details={"reason": "PASSCODE_REJECTED"},
-        )
-    name = (operator_name or "").strip()
-    if name not in APPROVER_NAMES:
-        raise ApiError(
-            code="OPERATOR_NOT_ALLOWED",
-            status_code=403,
-            message="国内仓打包单目前只能由吴贤玲提交",
-            details={"reason": "OPERATOR_NOT_ALLOWED"},
-        )
+def verify_domestic_passcode(operator_name, passcode, actor_id):
+    if not (passcode or "").strip():
+        raise ApiError(code="PASSCODE_REQUIRED", status_code=422)
+    # Keep PMC-only confirmation configuration out of the shared Settings schema.
+    expected = os.environ.get("PMC_DOMESTIC_PASSCODE_SHA256", "").strip().lower()
+    if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+        raise ApiError(code="PASSCODE_UNSET", status_code=503)
+    actor_key = hashlib.sha256(str(actor_id).encode()).hexdigest()
+    key = f"pmc:packing:passcode:{actor_key}:{int(time.time()) // 600}"
+    try:
+        client = _limiter()
+        # Reserve atomically before verification across all workers. Successful
+        # confirmations release their reservation; failed attempts remain counted.
+        if not client.eval(_RESERVE, 1, key):
+            raise ApiError(code="PASSCODE_LOCKED", status_code=429)
+        digest = hashlib.sha256(passcode.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(digest, expected):
+            raise ApiError(code="PASSCODE_REJECTED", status_code=403, message="口令不对")
+        client.eval(_RELEASE, 1, key)
+    except RedisError:
+        raise ApiError(code="PASSCODE_LIMITER_UNAVAILABLE", status_code=503) from None

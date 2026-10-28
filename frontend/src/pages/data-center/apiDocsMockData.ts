@@ -1,6 +1,5 @@
 import type { ApiDocItem, ApiDocModule } from "@/pages/data-center/apiDocsTypes";
 import { domesticWarehouseApiDocs } from "./pmcDomesticApiDocs";
-import { purchaseSyncApiDocs } from "./pmcPurchaseSyncApiDocs";
 import { keywordPlanningApiDocs } from "./keywordPlanningApiDocs";
 
 const makeApi = ({
@@ -268,5 +267,4 @@ export const apiDocModules: ApiDocModule[] = [
     ],
   },
   domesticWarehouseApiDocs,
-  purchaseSyncApiDocs,
 ];

@@ -1,7 +1,8 @@
 /** Shared approval confirmation copy and the existing operator options. */
 import type { ApprovalCandidate } from "./packingApprovalApi";
 
-export const DOMESTIC_APPROVER_NAMES = ["吴贤玲"];
+// Authority and audit identity come from the authenticated backend principal.
+export const DOMESTIC_APPROVER_NAMES = ["当前登录用户"];
 
 function dash(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") return "—";

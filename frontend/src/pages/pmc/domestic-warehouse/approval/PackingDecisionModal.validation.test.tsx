@@ -45,7 +45,7 @@ test("empty reject reason shows a Chinese message", async () => {
   fireEvent.submit(document.querySelector("form")!);
 
   expect(screen.getByText("驳回 · PK261015120 · YC01280")).toBeInTheDocument();
-  expect(screen.getByText("吴贤玲")).toBeInTheDocument();
+  expect(screen.getByText("当前登录用户")).toBeInTheDocument();
   await waitFor(() => {
     expect(screen.getByText("请填写驳回原因")).toBeInTheDocument();
   });

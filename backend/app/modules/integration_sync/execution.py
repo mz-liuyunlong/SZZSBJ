@@ -4,7 +4,6 @@ from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -93,24 +92,12 @@ class SyncRunExecutionService:
             and interface.handler_key == LingxingWfsSettlementSyncHandler.handler_key
         )
 
-        if run.provider == "lingxing" and run.interface_key == "pmcPurchaseBoardSync":
-            from app.modules.integration_sync.pmc_purchase_pipeline import execute_purchase_pipeline
-
-            engine = self.session.get_bind()
-            self.session.rollback()  # Release the read lock before opening the pinned connection.
-            execute_purchase_pipeline(
-                engine if isinstance(engine, Engine) else engine.engine, run_id
-            )
-            return
-
         purchase_handler = PMC_PURCHASE_HANDLERS.get(run.interface_key)
         if (
             run.provider == "lingxing"
             and purchase_handler is not None
             and interface.handler_key == purchase_handler.handler_key
         ):
-            if run.parent_run_id is not None and run.reason == "purchase_board_pipeline":
-                return  # Internal child is owned by the pinned parent, never another worker.
             purchase_handler(self.session).execute(run, interface)
             return
 
