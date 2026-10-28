@@ -14,6 +14,7 @@ def test_walmart_scf_requires_execute_permission():
 
 
 def test_other_task_center_reads_unchanged():
-    assert permission_for_request(
-        "GET", "/api/integrations/sync-runs", "integrations:read"
-    ) == "page:data-center:task-center:view"
+    assert (
+        permission_for_request("GET", "/api/integrations/sync-runs", "integrations:read")
+        == "page:data-center:task-center:view"
+    )
