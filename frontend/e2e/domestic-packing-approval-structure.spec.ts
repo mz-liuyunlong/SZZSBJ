@@ -18,8 +18,8 @@ test("read-only role sees candidate and blocked reason without write controls", 
   await expect(page.getByRole("heading", { name: "打包单审批", exact: true })).toBeVisible();
   await expect(page.getByText("FIXTURE-SKU", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /修\s*改/ }).first()).toBeDisabled();
-  await expect(page.getByRole("button", { name: "审批通过", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: /^驳\s*回$/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "审批通过", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^驳\s*回$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "手工添加打包单", exact: true })).toBeDisabled();
 });
 test("list errors are actionable and never shown as empty success", async ({ page }) => {

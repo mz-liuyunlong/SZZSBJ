@@ -62,8 +62,6 @@ export default function PackingApprovalTable(p: Props) {
     if (key === "status") return <Tooltip title={approvalBlockedText(row.blocked_reasons)}><Tag color={row.can_approve ? "processing" : "warning"}>{row.can_approve ? "待审批" : "待补资料"}</Tag>{row.overdue && <Tag color="red">超时</Tag>}</Tooltip>;
     if (key === "actions") return <Space className="domestic-approval__row-actions" size={12} wrap>
       <Button size="small" disabled={!p.canApprove || p.busy} onClick={() => p.onDecision(withChoice(row), "approve")}>修改</Button>
-      <Button size="small" disabled={!p.canApprove || p.busy || !row.can_approve} onClick={() => p.onApprove(withChoice(row))}>审批通过</Button>
-      <Button size="small" danger disabled={!p.canReject || p.busy} onClick={() => p.onDecision(withChoice(row), "reject")}>驳回</Button>
     </Space>;
     return values[key] ?? "—";
   };

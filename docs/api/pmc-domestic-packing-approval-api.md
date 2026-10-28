@@ -53,6 +53,8 @@ pending/orders：page>=1，page_size=50且<=200，sort=created_desc/created_asc�
 
 口令错误预算由 Redis 在多个 worker 间共享，每个用户每个固定十分钟窗口最多十次失败；超过返回 PASSCODE_LOCKED。口令配置缺失返回 PASSCODE_UNSET，计数服务不可用返回 PASSCODE_LIMITER_UNAVAILABLE（503），均拒绝操作。具体配置边界与待验收项见 `../delivery/pmc-scope-rectification-20261028.md`。不记录或回显口令。
 
+2026-10-28 页面调整：按负责人最新要求，待审批列表隐藏“审批通过”“驳回”按钮，仅保留“修改”用于保存草稿；历史审批记录和审计仍可查看。此调整不删除后端审批/驳回接口或改变权限、口令、库存事务校验。页面不再提供这两个列表操作入口；对应后端与弹窗测试保留。
+
 响应data：id、candidate_id、pk(null仅驳回)、status(approved/rejected)、qty、version=1、is_test、customs_value(bool/null)、customs_src(default/product_remark/purchase_remark/manual；旧unknown保留)、rwh、actor_uid、note、created_at、snapshot(完整Candidate)。自动报关结果按已发布customs_proof计算，无明确备注时默认不报关；人工选择与默认来源分开保存，旧历史不重算。
 
 ## 事务、幂等与错误

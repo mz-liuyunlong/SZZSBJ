@@ -2,15 +2,21 @@
 import { expect, test } from "@playwright/test";
 test.use({ channel: process.env.PLAYWRIGHT_CHANNEL });
 
-test("modify, approve, reject, generate PK and read audit from visible controls", async ({ page }) => {
+test("list hides decisions, saves edits and reads existing approval audit", async ({ page }) => {
   const base = { candidate_version: "a".repeat(64), source_account_ref: "fixture",
     warehouse_id: "16168", publication_id: "pub", board_id: "board", inbound_order_sn: "IB-SYN",
     sku: "SYN-SKU", store_id: "S1", store_name: "测试店铺", item_id: "11111111111",
     gtin: "00000000000000", msku: "SYN-MSKU", purchase_order_sns: [], arrival_purchased: 100,
     available_quantity: 100, default_quantity: 60, can_approve: true, blocked_reasons: [] };
-  let pending = [{ ...base, id: "candidate-a", edit_draft_pending: false },
+  const pending = [{ ...base, id: "candidate-a", edit_draft_pending: false },
     { ...base, id: "candidate-b", edit_draft_pending: false }];
-  const orders: Record<string, unknown>[] = [];
+  // Historical decisions remain readable; this page no longer exposes decision actions.
+  const orders = [
+    { id: "approved-order", pk: "PK261028-001", status: "approved", qty: 25 },
+    { id: "rejected-order", pk: null, status: "rejected", qty: null },
+  ].map(order => ({ ...order, snapshot: base, source_snapshot: base,
+    actor_uid: "synthetic-user", created_at: "2026-10-28T00:00:00Z",
+    customs_value: false, customs_src: "default", is_test: true, version: 1 }));
   const writes: { method: string; path: string; body: Record<string, unknown> }[] = [];
   await page.addInitScript(() => localStorage.setItem("szzsbj_auth_token", "synthetic-contract"));
   await page.route("**/api/**", async route => {
@@ -36,24 +42,15 @@ test("modify, approve, reject, generate PK and read audit from visible controls"
       row.edit_draft_pending = true;
       data = { candidate_id: row.id, edit_draft_pending: true, snapshot: row };
     }
-    else if (/\/(approve|reject)$/.test(path) && request.method() === "POST") {
-      const row = pending.find(row => path.includes(row.id))!;
-      const body = request.postDataJSON();
-      expect(body.passcode).toBe("synthetic-confirmation");
-      const approved = path.endsWith("/approve");
-      data = { id: `order-${row.id}`, pk: approved ? "PK261028-001" : null,
-        status: approved ? "approved" : "rejected", qty: approved ? body.qty : null,
-        snapshot: row, source_snapshot: row, actor_uid: "synthetic-user", created_at: "2026-10-28T00:00:00Z",
-        customs_value: false, customs_src: "default", note: body.note, is_test: true, version: 1 };
-      orders.push(data as Record<string, unknown>);
-      pending = pending.filter(candidate => candidate.id !== row.id);
-    }
     else if (path.endsWith("/events")) data = { items: [{ id: "evt", event_kind: "approve", actor_uid: "synthetic-user", occurred_at: "2026-10-28T00:00:00Z" }] };
     else if (path.endsWith("/packing-approval/orders")) data = { items: orders, total: orders.length };
     else if (path.endsWith("/packing-approval/pending")) data = { items: pending, total: pending.length };
     await route.fulfill({ status: 200, contentType: "application/json", body: envelope(data) });
   });
   await page.goto("/#/pmc/domestic/packing-approval");
+  await expect(page.getByRole("button", { name: /^修\s*改$/ }).first()).toBeEnabled();
+  await expect(page.getByRole("button", { name: "审批通过", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^驳\s*回$/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^修\s*改$/ }).first().click();
   const edit = page.getByRole("dialog", { name: "修改打包单", exact: true });
   await expect(edit.getByText("测试店铺 / 11111111111", { exact: true })).toBeVisible();
@@ -62,18 +59,6 @@ test("modify, approve, reject, generate PK and read audit from visible controls"
   await expect(page.getByText("已修改未审批", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(1);
   expect(writes[0].method).toBe("PUT");
-  await page.getByRole("button", { name: "审批通过", exact: true }).first().click();
-  const approve = page.getByRole("dialog", { name: /^审批通过/ });
-  await approve.getByLabel("口令").fill("synthetic-confirmation");
-  await approve.getByRole("button", { name: /^提\s*交$/ }).click();
-  await expect(page.getByText("已生成本地打包单 PK261028-001", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /^驳\s*回$/ }).click();
-  const reject = page.getByRole("dialog", { name: /^驳回/ });
-  await reject.getByLabel("驳回原因").fill("合成测试：数量不符");
-  await reject.getByLabel("口令").fill("synthetic-confirmation");
-  await reject.getByRole("button", { name: /^提\s*交$/ }).click();
-  await expect(page.getByText("已记录驳回原因", { exact: true })).toBeVisible();
-  expect(orders.map(order => [order.status, order.qty])).toEqual([["approved", 25], ["rejected", null]]);
   await page.getByRole("button", { name: "审批记录", exact: true }).click();
   const history = page.getByRole("dialog", { name: "打包审批记录（本地验证）" });
   await expect(history.getByText("PK261028-001", { exact: true })).toBeVisible();
@@ -81,4 +66,6 @@ test("modify, approve, reject, generate PK and read audit from visible controls"
   await history.getByRole("row").filter({ hasText: "PK261028-001" }).getByRole("button", { name: "查看审计" }).click();
   const audit = page.getByRole("dialog", { name: "审批审计", exact: true });
   await expect(audit.getByRole("cell", { name: "approve", exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0].path).toMatch(/\/draft$/);
 });

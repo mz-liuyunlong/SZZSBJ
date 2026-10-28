@@ -102,8 +102,8 @@ describe("packing approval copy cells", () => {
     expect(itemLink).toHaveAttribute("target", "_blank");
     expect(itemLink).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByRole("button", { name: /修\s*改/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "审批通过" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /^驳\s*回$/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "审批通过" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^驳\s*回$/ })).not.toBeInTheDocument();
   });
 
   it("leaves a dash when gtin and item id are missing", () => {
