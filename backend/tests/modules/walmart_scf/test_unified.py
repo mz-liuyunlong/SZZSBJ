@@ -86,9 +86,7 @@ def test_secret_response_blocked(monkeypatch):
 
 def test_offset_paging(monkeypatch):
     setup(monkeypatch)
-    client = Gateway(
-        [{"inventory": [{"id": "1"}, {"id": "2"}]}, {"inventory": [{"id": "3"}]}]
-    )
+    client = Gateway([{"inventory": [{"id": "1"}, {"id": "2"}]}, {"inventory": [{"id": "3"}]}])
     records = paging.collect_offset_pages(
         source_account_ref="account-a",
         verified_source_account_scope=frozenset({"account-a"}),
