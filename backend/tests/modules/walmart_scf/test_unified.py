@@ -115,3 +115,49 @@ def test_no_partial_pages(monkeypatch):
             max_pages=1,
             gateway=client,
         )
+
+
+def test_cursor_paging(monkeypatch):
+    setup(monkeypatch)
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS", "orders_list")
+    client = Gateway(
+        [
+            {"rows": [{"id": "1"}], "next": "cursor-1"},
+            {"rows": [{"id": "2"}], "next": None},
+        ]
+    )
+    rows = paging.collect_cursor_pages(
+        source_account_ref="account-a",
+        verified_source_account_scope=frozenset({"account-a"}),
+        operation="orders_list",
+        items_path=("rows",),
+        cursor_path=("next",),
+        cursor_field="cursor",
+        params={"createdStartDate": "2026-10-01"},
+        page_size=2,
+        gateway=client,
+    )
+    assert len(rows) == 2
+    assert client.calls[1][2]["cursor"] == "cursor-1"
+
+
+def test_cursor_loop_fails_closed(monkeypatch):
+    setup(monkeypatch)
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS", "orders_list")
+    client = Gateway(
+        [
+            {"rows": [{"id": "1"}], "next": "same"},
+            {"rows": [{"id": "2"}], "next": "same"},
+        ]
+    )
+    with pytest.raises(ApiError, match="WALMART_PAGE_CURSOR_INVALID"):
+        paging.collect_cursor_pages(
+            source_account_ref="account-a",
+            verified_source_account_scope=frozenset({"account-a"}),
+            operation="orders_list",
+            items_path=("rows",),
+            cursor_path=("next",),
+            cursor_field="cursor",
+            params={"createdStartDate": "2026-10-01"},
+            gateway=client,
+        )
