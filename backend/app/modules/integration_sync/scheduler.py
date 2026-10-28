@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
-from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.refund_window import refund_window
+from app.modules.integration_sync.repository import IntegrationSyncRepository
 
 CRON_SEARCH_DAYS = 40 * 366
 QUEUED_RECOVERY_GRACE = timedelta(minutes=1)
