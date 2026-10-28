@@ -1,4 +1,5 @@
 """Date-window regression coverage, including UTC/LA boundary and DST."""
+
 from datetime import UTC, date, datetime
 
 import pytest
