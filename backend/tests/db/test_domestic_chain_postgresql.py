@@ -732,11 +732,14 @@ def _assert_orm_tables(url, database):
     from app.db.model_registry import register_productlist_sync_models
 
     register_productlist_sync_models()
-    tables = {name for name in Base.metadata.tables if "_domestic_" in name}
-    assert tables == set(DOMESTIC_TABLES)
+    # This database is deliberately at 0054, not today's ORM head. Later tables
+    # belong to their own migration acceptance tests (for example pending edits).
+    tables = set(DOMESTIC_TABLES)
     engine = sa.create_engine(url.set(database=database), hide_parameters=True)
     try:
         with engine.connect() as conn:
+            actual = {name for name in sa.inspect(conn).get_table_names() if "_domestic_" in name}
+            assert actual == tables
             for name in sorted(tables):
                 conn.execute(sa.select(Base.metadata.tables[name]).limit(0)).all()
             _migration("0054")._require_current_shape(conn)

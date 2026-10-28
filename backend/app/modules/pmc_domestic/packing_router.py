@@ -245,9 +245,7 @@ def save_pending_edit(
 ):
     return success_response(
         request,
-        data=PackingService(session).save_pending_edit(
-            candidate_id, body, actor.user_id, accounts
-        ),
+        data=PackingService(session).save_pending_edit(candidate_id, body, actor.user_id, accounts),
         meta={"local_verification_only": True},
     )
 

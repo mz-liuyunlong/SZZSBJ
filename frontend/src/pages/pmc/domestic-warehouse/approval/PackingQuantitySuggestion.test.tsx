@@ -35,7 +35,7 @@ test("prefills ratio advice and submits a manually changed quantity", async () =
   expect(screen.getByText("已按采购计划比例预填，数量可修改")).toBeInTheDocument();
   fireEvent.change(input, { target: { value: "25" } });
   await waitFor(() => expect(screen.getByText("店铺 / 11111111111")).toBeInTheDocument());
-  fireEvent.click(screen.getByRole("button", { name: /^(OK|确\s*定)$/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^保\s*存$/ }));
   await waitFor(() => expect(submit).toHaveBeenCalledWith(expect.objectContaining({ qty: 25 })));
 });
 

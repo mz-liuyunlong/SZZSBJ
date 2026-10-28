@@ -478,7 +478,11 @@ class PackingService:
             raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
         self.guard_local()
         candidate = next(
-            (r for r in self._base_candidates(frozenset({cmd.source_account_ref})) if r.id == ident),
+            (
+                r
+                for r in self._base_candidates(frozenset({cmd.source_account_ref}))
+                if r.id == ident
+            ),
             None,
         )
         if candidate is None:

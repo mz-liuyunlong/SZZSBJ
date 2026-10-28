@@ -166,10 +166,15 @@ def test_original_purchase_line_not_duplicated_by_plan_splits():
 
 def test_plan_ambiguity_and_box_conflict_require_manual_input():
     p = plan("P1", f"{A} {B}", 100)
-    session = Session({Plan: [p], Product: [
-        Row(source_account_ref="primary", lingxing_sku_code="SKU", box_pcs=10),
-        Row(source_account_ref="primary", lingxing_sku_code="SKU", box_pcs=20),
-    ]})
+    session = Session(
+        {
+            Plan: [p],
+            Product: [
+                Row(source_account_ref="primary", lingxing_sku_code="SKU", box_pcs=10),
+                Row(source_account_ref="primary", lingxing_sku_code="SKU", box_pcs=20),
+            ],
+        }
+    )
     repo = PackingProcurementRepository(session, {"primary"}, {"SKU"}, [line("P1", 100)])
     assert repo.weights("primary", "SKU", "S1", ["PO1"], {A, B}, {A, B}) == ({}, [])
     assert repo.box("primary", "SKU") == (None, None)
