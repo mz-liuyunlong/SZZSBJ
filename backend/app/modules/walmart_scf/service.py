@@ -23,9 +23,7 @@ _TARGET_ROLE_ENV = "SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN"
 
 
 class ReadGateway(Protocol):
-    def call(
-        self, store_code: str, operation: str, *, params: dict[str, Any]
-    ) -> WalmartResult: ...
+    def call(self, store_code: str, operation: str, *, params: dict[str, Any]) -> WalmartResult: ...
 
 
 def _approved_stores() -> frozenset[str]:
