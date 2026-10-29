@@ -6,6 +6,7 @@ is ever put in a task payload, result, database or log.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from datetime import UTC, datetime
@@ -15,6 +16,7 @@ from uuid import uuid4
 from app.integrations.walmart.gtin_input import GtinSourceRejected, build_gtin_input
 from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
 from app.integrations.walmart.remote_daily import convert_verified_run
+from app.integrations.walmart.remote_recovery import cleanup_verified_run
 from app.integrations.walmart.remote_dispatch import (
     ALLOWED_KEYS,
     STORES,
@@ -97,6 +99,16 @@ def collect_store_read_only(
         run_id=rid,
         store_id=store_id,
     )
+    manifest = json.loads(
+        (archive_root / store_code / rid / "manifest.json").read_text(encoding="utf-8")
+    )
+    cleaned = cleanup_verified_run(
+        route=routes[store_code],
+        store_id=store_id,
+        run_id=rid,
+        archive_root=archive_root,
+        manifest=manifest,
+    )
     # Never return raw data or tokens to the calling task.
     return {
         "store_code": store_code,
@@ -104,4 +116,5 @@ def collect_store_read_only(
         "status": "verified",
         "files_verified": verified["files_verified"],
         "files_converted": conversion["files"],
+        "remote_cleaned": cleaned,
     }
