@@ -48,6 +48,7 @@ from app.modules.sku_detail.router import router as sku_detail_router
 from app.modules.walmart_monitor.router import router as walmart_monitor_router
 from app.modules.walmart_monitor_targets.router import router as walmart_monitor_targets_router
 from app.modules.walmart_scf.router import router as walmart_scf_router
+from app.modules.walmart_remote.router import router as walmart_remote_router
 from app.modules.warehouse_wfs.router import router as warehouse_wfs_router
 
 
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     application.include_router(walmart_monitor_router)
     application.include_router(walmart_monitor_targets_router)
     application.include_router(walmart_scf_router)
+    application.include_router(walmart_remote_router)
 
     @application.get("/health", response_model=SuccessEnvelope[HealthData, None])
     def health_check(request: Request) -> SuccessEnvelope[HealthData, None]:
