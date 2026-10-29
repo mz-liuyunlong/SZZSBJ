@@ -11,7 +11,8 @@ from sqlalchemy import select
 
 from app.celery_app import INTEGRATION_QUEUE, celery_app
 from app.db.session import get_session_factory
-from app.integrations.walmart.remote_dispatch import DispatchRejected
+from app.integrations.walmart.remote_dispatch import DispatchRejected, parse_routes
+from app.integrations.walmart.remote_recovery import recover_completed_run
 from app.integrations.walmart.remote_pipeline import collect_store_read_only
 from app.modules.walmart_remote.models import WalmartRemoteJob
 from app.modules.walmart_remote.schedule import queue_due_stores
@@ -96,3 +97,48 @@ def scheduler_tick() -> None:
             queue=INTEGRATION_QUEUE,
             routing_key=INTEGRATION_QUEUE,
         )
+
+
+@celery_app.task(name="walmart_remote.recover", ignore_result=True)  # type: ignore[misc]
+def recover_remote_job(job_id: str) -> None:
+    """Only recover an existing run; never request a token or restart Worker."""
+    if os.getenv("SZZSBJ_WALMART_REMOTE_COLLECTION_ENABLED") != "1":
+        return
+    with get_session_factory()() as session:
+        job = session.scalar(
+            select(WalmartRemoteJob).where(
+                WalmartRemoteJob.id == UUID(job_id)
+            ).with_for_update()
+        )
+        if job is None or job.status != "needs_review" or not job.run_id:
+            return
+        store_code = job.store_code
+        store_id = job.store_id
+        operations = tuple(job.operations)
+        run_id = job.run_id
+    try:
+        routes = parse_routes(os.getenv("SZZSBJ_WALMART_REMOTE_ROUTES", ""))
+        archive_root = Path(os.environ["SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT"])
+        result = recover_completed_run(
+            route=routes[store_code],
+            store_id=store_id,
+            run_id=run_id,
+            operations=operations,
+            archive_root=archive_root,
+        )
+    except Exception:
+        # No guessing, no worker restart. Preserve remote artifacts and status.
+        return
+    with get_session_factory()() as session:
+        job = session.scalar(
+            select(WalmartRemoteJob).where(
+                WalmartRemoteJob.id == UUID(job_id)
+            ).with_for_update()
+        )
+        if job is None or job.status != "needs_review" or job.run_id != run_id:
+            return
+        job.status = "succeeded"
+        job.error_code = None
+        job.files_verified = int(result["files_verified"])
+        job.finished_at = datetime.now(UTC)
+        session.commit()
