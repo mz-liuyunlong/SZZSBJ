@@ -193,6 +193,25 @@ def recovery_tick() -> None:
         return
     cutoff = datetime.now(UTC) - timedelta(minutes=20)
     with get_session_factory()() as session:
+        # After an executor crash, an old RUNNING/RECOVERING state must not
+        # permanently occupy a concurrency slot. Recover only the same run.
+        session.execute(text("SELECT pg_advisory_xact_lock(98261029)"))
+        stale = session.scalars(
+            select(WalmartRemoteJob)
+            .where(
+                WalmartRemoteJob.status.in_(("running", "recovering")),
+                WalmartRemoteJob.started_at < cutoff,
+                WalmartRemoteJob.run_id.is_not(None),
+            )
+            .with_for_update(skip_locked=True)
+            .limit(20)
+        ).all()
+        for item in stale:
+            item.status = "needs_review"
+            item.error_code = "REMOTE_EXECUTOR_TIMEOUT_REVIEW"
+            item.finished_at = datetime.now(UTC) - timedelta(minutes=21)
+        session.commit()
+    with get_session_factory()() as session:
         ids = session.scalars(
             select(WalmartRemoteJob.id)
             .where(
