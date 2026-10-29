@@ -1,4 +1,5 @@
 """Offline tests for strict store mapping and checksum verification."""
+
 from __future__ import annotations
 
 import hashlib
@@ -16,7 +17,10 @@ from app.integrations.walmart.remote_dispatch import (
 
 def test_all_nine_routes_including_cn2502():
     raw = {
-        store: {"ssh_host": "worker-" + store.lower(), "worker_path": "/opt/szzsbj/walmart/run_worker.py"}
+        store: {
+            "ssh_host": "worker-" + store.lower(),
+            "worker_path": "/opt/szzsbj/walmart/run_worker.py",
+        }
         for store in STORES
     }
     assert set(parse_routes(json.dumps(raw))) == STORES
@@ -25,7 +29,10 @@ def test_all_nine_routes_including_cn2502():
 
 def test_no_missing_or_shared_routes():
     raw = {
-        store: {"ssh_host": "worker-" + store.lower(), "worker_path": "/opt/szzsbj/walmart/run_worker.py"}
+        store: {
+            "ssh_host": "worker-" + store.lower(),
+            "worker_path": "/opt/szzsbj/walmart/run_worker.py",
+        }
         for store in STORES
     }
     raw.pop("CN2502")
