@@ -1,4 +1,5 @@
 """Durable Walmart remote collection jobs; never persist tokens or client secrets."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -14,7 +15,9 @@ from app.db.base import Base
 class WalmartRemoteJob(Base):
     __tablename__ = "walmart_remote_jobs"
     __table_args__ = (
-        UniqueConstraint("source_account_ref", "store_id", "request_key", name="uq_walmart_remote_job_key"),
+        UniqueConstraint(
+            "source_account_ref", "store_id", "request_key", name="uq_walmart_remote_job_key"
+        ),
         CheckConstraint(
             "status IN ('queued','running','succeeded','failed')",
             name="ck_walmart_remote_job_status",
