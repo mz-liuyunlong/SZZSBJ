@@ -155,3 +155,25 @@ AI 参与范围：
 ```bash
 git revert <commit-id>
 ```
+
+---
+
+## AI CI First 提交证据（所有 PR）
+
+- [ ] 已读取 `docs/delivery/ai-ci-first-standard.md`。
+- [ ] 已在 push 前执行适用的 `bash scripts/ci-preflight.sh all` 检查（或列出具体子命令）。
+- [ ] 已确认无未处理的 Ruff / TypeScript / pytest 收集冲突 / E2E 失败。
+- [ ] 最新 head SHA 的 CI 检查完成且成功，未成功时 PR 保持 Draft。
+- [ ] 没有绕过 CI、删除断言、滥用 skip、修改无关文件。
+
+预检命令 / 环境 / 结果（PASS、FAIL、NOT RUN）：
+
+```text
+
+```
+
+GitHub Actions Run URL：
+
+未执行项与原因 / 首个失败根因 / 修复后复测证据：
+
+生产与合并权限：未修改 / 如涉及请说明已获得的单独批准。

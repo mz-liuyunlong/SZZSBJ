@@ -12,6 +12,13 @@
 - 禁止用 “should pass” 冒充 “passed”，禁止删除断言、`.only`、`.skip` 或扩大 timeout 掩盖问题。
 - `git diff --check`、精确 scope/status 检查是所有 PR 的基础要求。
 
+## AI CI First Gate
+
+- 规范入口：`docs/delivery/ai-ci-first-standard.md`。
+- 统一检查入口：仓库根目录执行 `bash scripts/ci-preflight.sh all`，或按任务执行 `rules`、`backend`、`frontend`，未执行的项目必须如实记录。
+- 代码格式、导入排序、测试模块命名冲突必须在 push 前发现；失败后先定位原始日志根因、修复当前任务范围、重新验证，禁止靠频繁 push 试错。
+- CI 绿色必须属于当前最新 SHA；CI 未通过、测试未执行和环境阻塞时不允许声明完成。
+
 ## Task-Type Minimums
 
 | Task | Minimum validation |

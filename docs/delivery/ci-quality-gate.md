@@ -75,3 +75,9 @@ PR 必须写清：
 测试结果
 回滚方式
 ```
+
+
+## 5. AI 开发预检与失败修复
+
+所有 AI 工具的 PR 提交前检查、失败分类与复测、最新提交 SHA 的验收要求，统一以 `docs/delivery/ai-ci-first-standard.md` 为准。
+执行入口：`bash scripts/ci-preflight.sh all`（根据任务选择适用项）。脚本只做验证，不自动修复或降低原有质量门禁。完整 PostgreSQL/Redis 集成测试仍按工作流执行。

@@ -128,6 +128,8 @@ This index lists the files included in the rule pack.
 - `docs/delivery/acceptance-checklist.md`
 - `docs/delivery/api-documentation-standard.md`
 - `docs/delivery/ci-quality-gate.md`
+- `docs/delivery/ai-ci-first-standard.md`
+- `scripts/ci-preflight.sh`
 - `docs/delivery/codex-task-standard.md`
 - `docs/delivery/context-engineering-prp-standard.md`
 - `docs/delivery/context7-doc-lookup-standard.md`
