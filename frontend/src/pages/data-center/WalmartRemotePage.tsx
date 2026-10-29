@@ -51,6 +51,25 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
     return () => { mounted = false; };
   }, []);
 
+  const reloadJobs = async () => {
+    try {
+      const response = await backendRequest<RemoteJob[]>(
+        "/api/integrations/walmart-remote/jobs?limit=50&offset=0",
+      );
+      setJobs(response.data);
+    } catch (error) {
+      void messageApi.error(error instanceof Error ? error.message : "任务列表加载失败");
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    void backendRequest<RemoteJob[]>("/api/integrations/walmart-remote/jobs?limit=50")
+      .then((response) => { if (mounted) setJobs(response.data); })
+      .catch(() => { /* Page may be disabled before server-side rollout. */ });
+    return () => { mounted = false; };
+  }, []);
+
   const create = async (values: { store: string; operations: string[]; requestKey: string }) => {
     const chosen = stores.find((store) => store.store_id === values.store && store.route_ready);
     if (!chosen) return;
@@ -111,7 +130,7 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
           </Form.Item>
         </Form>
       </Card>
-      <Card title="本页任务记录" extra={<Typography.Text type="secondary">仅显示本页已创建的任务，点击刷新读取服务器状态</Typography.Text>}>
+      <Card title="采集任务历史" extra={<Button size="small" onClick={() => void reloadJobs()}>刷新列表</Button>}>
         <Table dataSource={jobs} rowKey="id" pagination={{ pageSize: 10 }} scroll={{ x: 900 }}
           columns={[
             { title: "店铺", dataIndex: "store_code", width: 100 },
