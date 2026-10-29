@@ -4,6 +4,7 @@ No Walmart HTTP calls and no credentials on remote disks. Requires the owner to
 install the reviewed original run_worker.py as an immutable local artifact.
 Tokens enter the subprocess via stdin only. No fallback destination.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -48,11 +49,21 @@ def _exec(
         return 255, ""
 
 
-def _ssh(host: str, argv: list[str], *, data: str | None = None, timeout: int = 120) -> tuple[int, str]:
+def _ssh(
+    host: str, argv: list[str], *, data: str | None = None, timeout: int = 120
+) -> tuple[int, str]:
     return _exec(
         [
-            "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-            "-o", "ConnectTimeout=10", "--", host, build_ssh_command(argv)
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=yes",
+            "-o",
+            "ConnectTimeout=10",
+            "--",
+            host,
+            build_ssh_command(argv)
         ],
         data=data, timeout=timeout,
     )
@@ -144,8 +155,14 @@ def collect_with_legacy_worker(
             raise DispatchRejected("REMOTE_RUN_DIR_FAILED")
         rc, _ = _exec(
             [
-                "scp", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-                "--", route.worker_path, host + ":" + run_dir + "/run_worker.py"
+                "scp",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=yes",
+                "--",
+                route.worker_path,
+                host + ":" + run_dir + "/run_worker.py"
             ],
             timeout=120,
         )
@@ -162,8 +179,14 @@ def collect_with_legacy_worker(
             gtin_digest = hashlib.sha256(gtin_csv.read_bytes()).hexdigest()
             rc, _ = _exec(
                 [
-                    "scp", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-                    "--", str(gtin_csv), host + ":" + run_dir + "/input/gtins.csv"
+                    "scp",
+                    "-o",
+                    "BatchMode=yes",
+                    "-o",
+                    "StrictHostKeyChecking=yes",
+                    "--",
+                    str(gtin_csv),
+                    host + ":" + run_dir + "/input/gtins.csv"
                 ],
                 timeout=120,
             )
