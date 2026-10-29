@@ -93,6 +93,22 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
     }
   };
 
+  const recover = async (job: RemoteJob) => {
+    setLoading(true);
+    try {
+      await backendRequest<RemoteJob>(
+        `/api/integrations/walmart-remote/jobs/${encodeURIComponent(job.id)}/recover`,
+        { method: "POST" },
+      );
+      void messageApi.success("只回收任务已提交，不会重新调用 Walmart");
+      await reloadJobs();
+    } catch (error) {
+      void messageApi.error(error instanceof Error ? error.message : "只回收提交失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const refresh = async (job: RemoteJob) => {
     try {
       const response = await backendRequest<RemoteJob>(
@@ -140,7 +156,7 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
             { title: "校验文件", dataIndex: "files_verified", width: 90, render: (v: number | null) => v ?? "—" },
             { title: "错误码", dataIndex: "error_code", width: 190, render: (v: string | null) => v ?? "—" },
             { title: "创建时间", dataIndex: "created_at", width: 190 },
-            { title: "操作", width: 100, render: (_: unknown, record: RemoteJob) => <Space><Button size="small" onClick={() => void refresh(record)}>刷新</Button></Space> },
+            { title: "操作", width: 100, render: (_: unknown, record: RemoteJob) => <Space><Button size="small" onClick={() => void refresh(record)}>刷新</Button>{record.status === "needs_review" && <Button size="small" disabled={loading} onClick={() => void recover(record)}>只回收</Button>}</Space> },
           ]}
         />
       </Card>
