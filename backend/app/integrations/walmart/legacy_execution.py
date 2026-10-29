@@ -29,9 +29,7 @@ from app.integrations.walmart.remote_dispatch import (
 from app.integrations.walmart.remote_transfer import fetch_verified_run
 
 
-def _exec(
-    args: list[str], *, data: str | None = None, timeout: int = 120
-) -> tuple[int, str]:
+def _exec(args: list[str], *, data: str | None = None, timeout: int = 120) -> tuple[int, str]:
     """Never disclose stderr or remote stdout outside this protected process."""
     try:
         result = subprocess.run(
@@ -63,9 +61,10 @@ def _ssh(
             "ConnectTimeout=10",
             "--",
             host,
-            build_ssh_command(argv)
+            build_ssh_command(argv),
         ],
-        data=data, timeout=timeout,
+        data=data,
+        timeout=timeout,
     )
 
 
@@ -99,11 +98,7 @@ def _checked_worker(path: str, expected_hash: str) -> str:
     if not re.fullmatch(r"[a-f0-9]{64}", expected_hash):
         raise DispatchRejected("REMOTE_WORKER_HASH_REQUIRED")
     local = Path(path)
-    if (
-        path != "/opt/szzsbj/walmart/run_worker.py"
-        or local.is_symlink()
-        or not local.is_file()
-    ):
+    if path != "/opt/szzsbj/walmart/run_worker.py" or local.is_symlink() or not local.is_file():
         raise DispatchRejected("REMOTE_WORKER_ARTIFACT_MISSING")
     hash_value = hashlib.sha256(local.read_bytes()).hexdigest()
     if hash_value != expected_hash:
@@ -162,7 +157,7 @@ def collect_with_legacy_worker(
                 "StrictHostKeyChecking=yes",
                 "--",
                 route.worker_path,
-                host + ":" + run_dir + "/run_worker.py"
+                host + ":" + run_dir + "/run_worker.py",
             ],
             timeout=120,
         )
@@ -186,7 +181,7 @@ def collect_with_legacy_worker(
                     "StrictHostKeyChecking=yes",
                     "--",
                     str(gtin_csv),
-                    host + ":" + run_dir + "/input/gtins.csv"
+                    host + ":" + run_dir + "/input/gtins.csv",
                 ],
                 timeout=120,
             )
