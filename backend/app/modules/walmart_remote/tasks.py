@@ -119,6 +119,8 @@ def recover_remote_job(job_id: str) -> None:
         store_id = job.store_id
         operations = tuple(job.operations)
         run_id = job.run_id
+        job.status = "recovering"
+        session.commit()
     try:
         routes = parse_routes(os.getenv("SZZSBJ_WALMART_REMOTE_ROUTES", ""))
         archive_root = Path(os.environ["SZZSBJ_WALMART_REMOTE_ARCHIVE_ROOT"])
@@ -131,12 +133,21 @@ def recover_remote_job(job_id: str) -> None:
         )
     except Exception:
         # No guessing, no worker restart. Preserve remote artifacts and status.
+        with get_session_factory()() as session:
+            job = session.scalar(
+                select(WalmartRemoteJob)
+                .where(WalmartRemoteJob.id == UUID(job_id))
+                .with_for_update()
+            )
+            if job is not None and job.status == "recovering" and job.run_id == run_id:
+                job.status = "needs_review"
+                session.commit()
         return
     with get_session_factory()() as session:
         job = session.scalar(
             select(WalmartRemoteJob).where(WalmartRemoteJob.id == UUID(job_id)).with_for_update()
         )
-        if job is None or job.status != "needs_review" or job.run_id != run_id:
+        if job is None or job.status != "recovering" or job.run_id != run_id:
             return
         job.status = "succeeded"
         job.error_code = None
