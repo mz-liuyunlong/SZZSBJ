@@ -110,3 +110,14 @@ def test_main_client_token_not_printed():
     token = request_store_token("CN2502", invoker=gateway, authorized_stores=frozenset({"CN2502"}))
     assert token.access_token == "dummy-sensitive-token"
     assert "dummy-sensitive-token" not in repr(token)
+
+
+def test_no_private_proxy_rejected_before_secret_read():
+    secrets = Secrets()
+    with pytest.raises(TokenBrokerRejected, match="TOKEN_APPROVED_EGRESS_REQUIRED"):
+        issue_store_token(
+            {"version": 1, "operation": "issue_store_token", "store_code": "CN2502"},
+            bound_store="CN2502",
+            secret_resolver=secrets,
+        )
+    assert secrets.calls == []
