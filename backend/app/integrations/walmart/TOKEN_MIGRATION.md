@@ -53,11 +53,24 @@ owner-controlled deployed entrypoint only after IAM and invocation review.
 - `token_client.py`: main-server typed response validation and isolated SCF invocation.
 - `test_token_broker_migration.py`: offline cross-store, forged result, sensitive repr tests.
 
+## Implemented in branch (requires integration acceptance)
+
+- Cloud-bound Token Broker and typed STS/SCF client.
+- Nine-store strict SSH route parsing (CN2502 required) and token-only-in-stdin process adapter.
+- SCP retrieval with SHA256SUMS and manifest verification; server cleanup is intentionally not automatic.
+- Durable PostgreSQL job model, Alembic migration (NOT APPLIED), gated Celery dispatch and scoped FastAPI endpoints.
+- A data-center Walmart collection page for manual read-only task creation and job status refresh.
+
 ## Not yet implemented or enabled
 
-- Real Mac scheduler source port, SSH transport, worker execution, SHA256
-  manifest validation, durable task state / DB and UI.
+- Faithful port of colleague Mac scheduler and remote worker: their full original source
+  and exact worker CLI/output schema were not supplied. The new adapter assumes
+  a documented run-id/operations CLI and fixed run directory; it requires
+  validation against the real installed worker before dispatch is safe.
 - CN2502 child server address and its Walmart allowlist verification.
+- Automatic schedule/recovery rules and data conversion into SZZSBJ business tables.
+- Backfill and cleanup behavior pending original scheduler source and owner approval.
+- Migration must be reviewed against the production DB revision graph before applying.
 - Production CAM permission checks and safe SCF deployment.
 - End-to-end tests and production cutover.
 
