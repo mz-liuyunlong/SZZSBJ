@@ -20,7 +20,7 @@ from app.integrations.walmart.scf_read_factory import make_walmart_read_api
 from app.integrations.walmart.unified_api import load_unified_registry
 
 _ENABLED = "SZZSBJ_WALMART_SCF_READ_ENABLED"
-_MAPPING = "SZZSBJ_WALMART_SCF_ACCOUNT_STORE_MAP"
+_MAPPING = "SZZSBJ_WALMART_SCF_STORE_ID_MAP"
 _KEYS = "SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS"
 _ROLE = "SZZSBJ_WALMART_SCF_CVM_ROLE"
 _ARN = "SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN"
@@ -88,18 +88,22 @@ def _gateway() -> ScfGateway:
 def approved_read(
     *,
     source_account_ref: str,
+    store_id: str,
+    verified_store_scope: frozenset[str],
     verified_source_account_scope: frozenset[str],
     operation: str,
     params: Mapping[str, Any] | None = None,
     gateway: ScfGateway | None = None,
 ) -> WalmartResult:
-    """Execute one explicitly approved GET on a verified account/store mapping."""
+    """Execute an approved GET after upstream persisted store identity checks."""
     if os.getenv(_ENABLED) != "1":
         raise ApiError(code="WALMART_SCF_READ_DISABLED", status_code=503)
     if source_account_ref not in verified_source_account_scope:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    if store_id not in verified_store_scope and "*" not in verified_store_scope:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     mapping, approved = _configuration()
-    if source_account_ref not in mapping:
+    if store_id not in mapping:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
     if operation not in approved:
         raise ApiError(code="WALMART_OPERATION_NOT_APPROVED", status_code=403)
@@ -109,7 +113,7 @@ def approved_read(
     except Exception:
         raise ApiError(code=ErrorCode.VALIDATION_ERROR, status_code=422) from None
     try:
-        result = (gateway or _gateway()).call(mapping[source_account_ref], operation, params=params)
+        result = (gateway or _gateway()).call(mapping[store_id], operation, params=params)
         if (
             type(result.status_code) is not int
             or not 200 <= result.status_code < 300
