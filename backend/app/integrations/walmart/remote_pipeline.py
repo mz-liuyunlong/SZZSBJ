@@ -16,7 +16,11 @@ from uuid import UUID, uuid4
 from app.db.session import get_session_factory
 from app.integrations.walmart.remote_ingest import ingest_verified_archive
 
-from app.integrations.walmart.gtin_input import GtinSourceRejected, build_gtin_input
+from app.integrations.walmart.gtin_input import (
+    GtinSourceRejected,
+    build_gtin_input,
+    build_system_gtin_input,
+)
 from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
 from app.integrations.walmart.remote_daily import convert_verified_run
 from app.integrations.walmart.remote_recovery import cleanup_verified_run
@@ -80,11 +84,22 @@ def collect_store_read_only(
         gtin_csv = None
         if "inventory_log" in operations:
             try:
-                gtin_csv = build_gtin_input(
-                    store_code=store_code,
-                    store_id=store_id,
-                    directory=Path(temporary_dir),
-                )
+                if os.getenv("SZZSBJ_WALMART_GTIN_SOURCE_MODE", "system") == "system":
+                    if not source_account_ref:
+                        raise GtinSourceRejected("GTIN_SOURCE_ACCOUNT_REQUIRED")
+                    with get_session_factory()() as session:
+                        gtin_csv = build_system_gtin_input(
+                            session=session,
+                            source_account_ref=source_account_ref,
+                            store_id=store_id,
+                            directory=Path(temporary_dir),
+                        )
+                else:
+                    gtin_csv = build_gtin_input(
+                        store_code=store_code,
+                        store_id=store_id,
+                        directory=Path(temporary_dir),
+                    )
             except GtinSourceRejected as exc:
                 raise DispatchRejected(str(exc)) from None
         verified = collect_with_legacy_worker(
