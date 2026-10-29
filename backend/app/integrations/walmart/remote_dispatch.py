@@ -116,7 +116,11 @@ def verify_result(run_dir: Path, *, run_id: str) -> dict[str, Any]:
         requested = manifest.get("endpoints_requested")
         outcomes = manifest.get("endpoints")
         files = manifest.get("files")
-        if not isinstance(requested, list) or not requested or len(set(requested)) != len(requested):
+        if (
+            not isinstance(requested, list)
+            or not requested
+            or len(set(requested)) != len(requested)
+        ):
             raise ValueError
         if not set(requested) <= ALLOWED_KEYS or not isinstance(outcomes, dict):
             raise ValueError
