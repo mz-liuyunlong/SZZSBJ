@@ -20,34 +20,44 @@ from app.integrations.walmart.remote_dispatch import DispatchRejected, verify_re
 
 COLUMNS = {
     "wfs_inventory": (
-        "itemInformation.itemName, itemInformation.gtin, itemInformation.sku, itemInformation.itemID, "
+        "itemInformation.itemName, itemInformation.gtin, itemInformation.sku, "
+        "itemInformation.itemID, "
         "itemInformation.offerID, itemInformation.brand, itemInformation.itemCondition, "
         "inventoryData.publishingStatus, inventoryData.itemLifecycle, inventoryData.stockStatus, "
         "inventoryData.availableUnits, inventoryData.reservedUnits, inventoryData.inboundUnits, "
-        "inventoryData.unavailableUnits.inventoryReviewUnits, inventoryData.unavailableUnits.inventoryMovementUnits, "
-        "inventoryData.onhandUnits, inventoryData.inventoryAge.0To90days, inventoryData.inventoryAge.91To180days, "
+        "inventoryData.unavailableUnits.inventoryReviewUnits, "
+        "inventoryData.unavailableUnits.inventoryMovementUnits, "
+        "inventoryData.onhandUnits, inventoryData.inventoryAge.0To90days, "
+        "inventoryData.inventoryAge.91To180days, "
         "inventoryData.inventoryAge.181To270days, inventoryData.inventoryAge.271To365days, "
         "inventoryData.inventoryAge.365PlusDays, inventoryData.inventoryAge.365To450days, "
         "inventoryData.inventoryAge.450PlusDays, inventoryData.firstInStockDate, "
         "inventoryInsights.salesForecastWeek1to4, inventoryInsights.salesForecastWeek5to8, "
         "inventoryInsights.salesForecastWeek9to12, inventoryInsights.sellThroughRate, "
         "inventoryInsights.daysOfSupply, inventoryInsights.outOfStockDate, "
-        "inventoryInsights.suggestedUnits, inventoryInsights.surplusUnits, inventoryInsights.customerFavorite"
+        "inventoryInsights.suggestedUnits, inventoryInsights.surplusUnits, "
+        "inventoryInsights.customerFavorite"
     ),
     "inbound_shipments": (
         "inboundOrderId, shipmentId, shipToAddress.fcName, shipToAddress.addressLine1, "
-        "shipToAddress.city, shipToAddress.stateCode, shipToAddress.countryCode, shipToAddress.postalCode, "
-        "returnAddress.addressLine1, returnAddress.city, returnAddress.stateCode, returnAddress.countryCode, "
-        "returnAddress.postalCode, status, createdDate, shipmentUnits, receivedUnits, expectedDeliveryDate, "
-        "updatedExpectedDeliveryDate, actualDeliveryDate, returnAddress.addressLine2, trackingNo, carrierName"
+        "shipToAddress.city, shipToAddress.stateCode, shipToAddress.countryCode, "
+        "shipToAddress.postalCode, "
+        "returnAddress.addressLine1, returnAddress.city, returnAddress.stateCode, "
+        "returnAddress.countryCode, "
+        "returnAddress.postalCode, status, createdDate, shipmentUnits, receivedUnits, "
+        "expectedDeliveryDate, "
+        "updatedExpectedDeliveryDate, actualDeliveryDate, returnAddress.addressLine2, "
+        "trackingNo, carrierName"
     ),
     "inbound_shipment_items": (
         "inboundOrderId, shipmentId, gtin, sku, itemQty, vendorPackQty, innerPackQty, receivedQty, "
-        "damagedQty, fillRate, expectedDeliveryDate, updatedExpectedDeliveryDate, shipNodeName, itemDesc"
+        "damagedQty, fillRate, expectedDeliveryDate, updatedExpectedDeliveryDate, "
+        "shipNodeName, itemDesc"
     ),
     "inventory_log": (
         "id, gtin, fcId, fcName, changedUnits, transactionTime, transactionLocation, "
-        "transactionReasonCode, transactionReasonDesc, transactionType, shipmentId, gtin_query, raw_json"
+        "transactionReasonCode, transactionReasonDesc, transactionType, shipmentId, "
+        "gtin_query, raw_json"
     ),
 }
 OUT_NAMES = {
