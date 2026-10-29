@@ -8,8 +8,8 @@ store-specific SSH stdin worker only, and never write to Celery payloads/logs.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.integrations.walmart.tencent_scf import TencentScfInvoker
