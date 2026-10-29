@@ -135,7 +135,7 @@ def recover_completed_run(
             raise
         if local.exists() or local.is_symlink():
             if local.is_symlink():
-                raise DispatchRejected("REMOTE_RECOVERY_LOCAL_SYMLINK")
+                raise DispatchRejected("REMOTE_RECOVERY_LOCAL_SYMLINK") from exc
             partial = local.with_name(run_id + ".partial-" + uuid4().hex[:12])
             local.rename(partial)  # Keep failed download for forensics.
         verified = fetch_verified_run(
