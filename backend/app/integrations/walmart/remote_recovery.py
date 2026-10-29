@@ -108,7 +108,9 @@ def recover_completed_run(
     local = archive_root / route.store_code / run_id
     try:
         verified = verify_result(local, run_id=run_id)
-    except DispatchRejected:
+    except DispatchRejected as exc:
+        if str(exc) not in {"REMOTE_RESULT_MISSING", "REMOTE_RESULT_INCOMPLETE", "REMOTE_RESULT_VERIFICATION_FAILED"}:
+            raise
         if local.exists() or local.is_symlink():
             if local.is_symlink():
                 raise DispatchRejected("REMOTE_RECOVERY_LOCAL_SYMLINK")
