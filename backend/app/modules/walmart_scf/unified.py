@@ -63,6 +63,14 @@ def _configuration() -> tuple[dict[str, str], frozenset[str]]:
     return raw, approved
 
 
+def store_code_for(store_id: str) -> str:
+    """Resolve an operator-reviewed store ID without falling back to source account."""
+    mapping, _ = _configuration()
+    if store_id not in mapping:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+    return mapping[store_id]
+
+
 @lru_cache(maxsize=1)
 def _gateway() -> ScfGateway:
     mapping, approved = _configuration()
