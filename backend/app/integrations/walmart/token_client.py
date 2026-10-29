@@ -55,9 +55,7 @@ def request_store_token(
             or len(token) > 8192
             or type(expiry) is not int
             or not 1 <= expiry <= 900
-            or set(result) != {
-                "success", "operation", "store_code", "access_token", "expires_in"
-            }
+            or set(result) != {"success", "operation", "store_code", "access_token", "expires_in"}
         ):
             raise ValueError
         return StoreToken(store_code, token, expiry)
@@ -76,6 +74,4 @@ def store_token_invoker(
         function_name="szzsbj-walmart-" + store_code.lower() + "-executor",
         qualifier="stable",
     )
-    return request_store_token(
-        store_code, invoker=invoker, authorized_stores=authorized_stores
-    )
+    return request_store_token(store_code, invoker=invoker, authorized_stores=authorized_stores)
