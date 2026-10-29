@@ -6,16 +6,16 @@ the original run ID and fetch verified files; never start the worker again.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import os
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from app.db.session import get_session_factory
 from app.integrations.walmart.legacy_execution import _ssh
 from app.integrations.walmart.legacy_worker_contract import DEFAULT_REMOTE_TMP_DIR
-from app.integrations.walmart.remote_daily import convert_verified_run
+from app.integrations.walmart.remote_daily import OUT_NAMES, convert_verified_run
 from app.integrations.walmart.remote_dispatch import (
     ALLOWED_KEYS,
     RUN_PATTERN,
@@ -23,7 +23,6 @@ from app.integrations.walmart.remote_dispatch import (
     WorkerRoute,
     verify_result,
 )
-from app.integrations.walmart.remote_ingest import ingest_verified_archive
 from app.integrations.walmart.remote_transfer import fetch_verified_run
 
 
@@ -84,27 +83,37 @@ def _converted_files(
         raise DispatchRejected("REMOTE_RECOVERY_OUTPUT_INVALID")
     try:
         meta = json.loads((target / "_convert_manifest.json").read_text(encoding="utf-8"))
-        if meta.get("run_id") != run_id or meta.get("store_id") != store_id:
+        if (
+            meta.get("run_id") != run_id
+            or meta.get("store_id") != store_id
+            or meta.get("date") != day
+        ):
             raise ValueError
         written = meta["written"]
-        if not isinstance(written, list) or not written:
+        expected = {OUT_NAMES[name] + ".csv" for name in manifest["endpoints_requested"]}
+        if not isinstance(written, list) or len(written) != len(expected):
+            raise ValueError
+        if {item["file"] for item in written} != expected:
             raise ValueError
         for item in written:
             name = item["file"]
-            if name not in (
-                "wfs_inventory.csv",
-                "shipments.csv",
-                "items.csv",
-                "inventory_log.csv",
+            path = target / name
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or path.stat().st_size > 50 * 1024 * 1024
+                or hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]
             ):
                 raise ValueError
-            path = target / name
-            if path.is_symlink() or not path.is_file():
-                raise ValueError
-            if hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
+            with path.open(encoding="utf-8-sig", newline="") as handle:
+                reader = csv.reader(handle)
+                if not next(reader, None):
+                    raise ValueError
+                actual_rows = sum(1 for _ in reader)
+            if type(item["rows"]) is not int or actual_rows != item["rows"]:
                 raise ValueError
         return len(written)
-    except (OSError, KeyError, TypeError, ValueError):
+    except (OSError, KeyError, TypeError, ValueError, AttributeError, UnicodeError, csv.Error):
         raise DispatchRejected("REMOTE_RECOVERY_OUTPUT_INVALID") from None
 
 
@@ -115,8 +124,6 @@ def recover_completed_run(
     run_id: str,
     operations: tuple[str, ...],
     archive_root: Path,
-    job_id: UUID,
-    source_account_ref: str,
 ) -> dict[str, object]:
     """Return only after verified artifacts and original-compatible CSVs exist."""
     manifest = _completed_manifest(route, run_id, store_id, operations)
@@ -152,17 +159,6 @@ def recover_completed_run(
             store_id=store_id,
         )
         count = int(result["files"])
-    with get_session_factory()() as session:
-        ingest_verified_archive(
-            session,
-            job_id=job_id,
-            source_account_ref=source_account_ref,
-            store_code=route.store_code,
-            store_id=store_id,
-            run_id=run_id,
-            archive_root=archive_root,
-        )
-        session.commit()
     cleaned = cleanup_verified_run(
         route=route,
         store_id=store_id,

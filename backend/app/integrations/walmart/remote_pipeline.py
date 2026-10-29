@@ -6,12 +6,11 @@ is ever put in a task payload, result, database or log.
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.db.session import get_session_factory
 from app.integrations.walmart.gtin_input import (
@@ -27,7 +26,6 @@ from app.integrations.walmart.remote_dispatch import (
     DispatchRejected,
     parse_routes,
 )
-from app.integrations.walmart.remote_ingest import ingest_verified_archive
 from app.integrations.walmart.remote_recovery import cleanup_verified_run
 from app.integrations.walmart.scf_read_factory import RefreshingScfApi
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
@@ -41,7 +39,6 @@ def collect_store_read_only(
     archive_root: Path,
     run_id: str | None = None,
     store_id: str | None = None,
-    job_id: UUID | None = None,
     source_account_ref: str | None = None,
 ) -> dict[str, object]:
     """Fail closed on missing config, unauthorized store or unverified results.
@@ -123,22 +120,8 @@ def collect_store_read_only(
         run_id=rid,
         store_id=store_id,
     )
-    manifest = json.loads(
-        (archive_root / store_code / rid / "manifest.json").read_text(encoding="utf-8")
-    )
-    if job_id is None or not source_account_ref:
-        raise DispatchRejected("REMOTE_INGEST_CONTEXT_REQUIRED")
-    with get_session_factory()() as session:
-        ingest_verified_archive(
-            session,
-            job_id=job_id,
-            source_account_ref=source_account_ref,
-            store_code=store_code,
-            store_id=store_id,
-            run_id=rid,
-            archive_root=archive_root,
-        )
-        session.commit()
+    manifest_path = archive_root / store_code / rid / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     cleaned = cleanup_verified_run(
         route=routes[store_code],
         store_id=store_id,
@@ -146,6 +129,7 @@ def collect_store_read_only(
         archive_root=archive_root,
         manifest=manifest,
     )
+    # Task status points to verified JSONL/CSV artifacts; no business-data SQL writes.
     # Never return raw data or tokens to the calling task.
     return {
         "store_code": store_code,
