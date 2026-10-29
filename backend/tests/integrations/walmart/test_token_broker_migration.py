@@ -1,4 +1,5 @@
 """Pure offline tests. No SSM, SCF, Walmart or SSH connections."""
+
 from __future__ import annotations
 
 from unittest.mock import Mock
