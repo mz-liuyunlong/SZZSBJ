@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.celery_app import INTEGRATION_QUEUE, celery_app
 from app.db.session import get_session_factory
+from app.integrations.walmart.remote_dispatch import DispatchRejected
 from app.integrations.walmart.remote_pipeline import collect_store_read_only
 from app.modules.walmart_remote.models import WalmartRemoteJob
 from app.modules.walmart_remote.schedule import queue_due_stores
@@ -48,6 +49,9 @@ def execute_remote_job(job_id: str) -> None:
             run_id=run_id,
         )
         error_code = None
+    except DispatchRejected as exc:
+        result = None
+        error_code = str(exc)
     except Exception:
         result = None
         error_code = "WALMART_REMOTE_EXECUTION_FAILED"
@@ -57,7 +61,8 @@ def execute_remote_job(job_id: str) -> None:
         )
         if job is None or job.status != "running" or job.run_id != run_id:
             return
-        job.status = "succeeded" if result else "failed"
+        uncertain = error_code in {"REMOTE_WORKER_UNCONFIRMED", "REMOTE_ALREADY_UNKNOWN", "REMOTE_ALREADY_RUNNING"}
+        job.status = "succeeded" if result else "needs_review" if uncertain else "failed"
         job.error_code = error_code
         job.files_verified = result["files_verified"] if result else None
         job.finished_at = datetime.now(UTC)
