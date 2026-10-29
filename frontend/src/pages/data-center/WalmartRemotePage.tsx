@@ -1,19 +1,15 @@
 import { Button, Card, Form, Input, Select, Space, Table, Tag, Typography, message } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { backendRequest } from "@/api/backendApi";
 import type { NavigationPage } from "@/config/navigation";
 
-const stores = [
-  { code: "HK2612", id: "110704872940532224" },
-  { code: "HK2613", id: "110711149541688320" },
-  { code: "HK2614", id: "110711149920800256" },
-  { code: "HK2615", id: "110711146247224320" },
-  { code: "CN2501", id: "110687427724845056" },
-  { code: "CN2502", id: "110687428693128704" },
-  { code: "CN2601", id: "110687423514268160" },
-  { code: "CN2602", id: "110689966555011584" },
-  { code: "CN2603", id: "110704863834580480" },
-] as const;
+interface StoreChoice {
+  source_account_ref: string;
+  store_id: string;
+  store_code: string;
+  display_name: string;
+  route_ready: boolean;
+}
 
 type JobStatus = "queued" | "running" | "succeeded" | "failed";
 
@@ -43,18 +39,28 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
   const [form] = Form.useForm<{ store: string; operations: string[]; requestKey: string }>();
   const [jobs, setJobs] = useState<RemoteJob[]>([]);
   const [loading, setLoading] = useState(false);
+  const [stores, setStores] = useState<StoreChoice[]>([]);
+  const [storesError, setStoresError] = useState<string>();
   const [messageApi, holder] = message.useMessage();
 
+  useEffect(() => {
+    let mounted = true;
+    void backendRequest<StoreChoice[]>("/api/integrations/walmart-remote/stores")
+      .then((response) => { if (mounted) setStores(response.data); })
+      .catch((error: unknown) => { if (mounted) setStoresError(error instanceof Error ? error.message : "店铺列表不可用"); });
+    return () => { mounted = false; };
+  }, []);
+
   const create = async (values: { store: string; operations: string[]; requestKey: string }) => {
-    const chosen = stores.find((store) => store.code === values.store);
+    const chosen = stores.find((store) => store.store_id === values.store && store.route_ready);
     if (!chosen) return;
     setLoading(true);
     try {
       const response = await backendRequest<RemoteJob>("/api/integrations/walmart-remote/jobs", {
         method: "POST",
         body: JSON.stringify({
-          source_account_ref: "primary",
-          store_id: chosen.id,
+          source_account_ref: chosen.source_account_ref,
+          store_id: chosen.store_id,
           operations: values.operations,
           request_key: values.requestKey,
         }),
@@ -86,11 +92,12 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
       <Typography.Paragraph type="secondary">
         九店固定路由采集 · 腾讯云保管长期密钥 · 子服务器执行只读 API。任务状态和错误码不包含凭证。
       </Typography.Paragraph>
+      {storesError && <Typography.Text type="danger">{storesError}</Typography.Text>}
       <Card title="创建手动采集任务" style={{ marginBottom: 16 }}>
         <Form form={form} layout="inline" onFinish={(values) => void create(values)}
-          initialValues={{ store: "HK2613", operations: ["wfs_inventory"] }}>
+          initialValues={{ operations: ["wfs_inventory"] }}>
           <Form.Item name="store" label="店铺" rules={[{ required: true }]}>
-            <Select style={{ width: 145 }} options={stores.map((s) => ({ value: s.code, label: s.code }))} />
+            <Select style={{ width: 145 }} options={stores.map((s) => ({ value: s.store_id, label: s.store_code, disabled: !s.route_ready }))} />
           </Form.Item>
           <Form.Item name="operations" label="只读接口" rules={[{ required: true }]}>
             <Select mode="multiple" style={{ minWidth: 250 }} options={operations} />
@@ -100,7 +107,7 @@ export default function WalmartRemotePage({ page }: { page: NavigationPage }) {
             <Input style={{ width: 195 }} placeholder="自定义唯一任务编号" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading}>提交任务</Button>
+            <Button type="primary" htmlType="submit" loading={loading} disabled={!stores.some((s) => s.route_ready)}>提交任务</Button>
           </Form.Item>
         </Form>
       </Card>
