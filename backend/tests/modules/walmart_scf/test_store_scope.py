@@ -1,4 +1,5 @@
 """Store authorization is independent of the shared Lingxing account."""
+
 from types import SimpleNamespace
 
 import pytest
