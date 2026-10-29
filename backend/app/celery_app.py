@@ -20,6 +20,7 @@ AI_QUEUE = "ai-keyword"
 TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
+    "app.modules.walmart_scf.tasks",
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
@@ -32,6 +33,7 @@ TASK_ROUTES = {
     "business_connectors.*": {"queue": NOTIFICATION_QUEUE, "routing_key": NOTIFICATION_QUEUE},
     "listing_evaluation.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
+    "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
