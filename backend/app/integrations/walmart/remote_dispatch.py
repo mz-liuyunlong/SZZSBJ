@@ -3,6 +3,7 @@
 Run only from a protected, isolated scheduler process. SSH identities, routes,
 worker source and outputs are provided by the deployment owner; no fallbacks.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,15 +15,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-STORES = frozenset({
-    "HK2612", "HK2613", "HK2614", "HK2615", "CN2501",
-    "CN2502", "CN2601", "CN2602", "CN2603"
-})
+STORES = frozenset(
+    {"HK2612", "HK2613", "HK2614", "HK2615", "CN2501", "CN2502", "CN2601", "CN2602", "CN2603"}
+)
 RUN_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{8,80}$")
 HOST_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9.-]{0,127}$")
-ALLOWED_KEYS = frozenset({
-    "wfs_inventory", "inbound_shipments", "inbound_shipment_items", "inventory_log"
-})
+ALLOWED_KEYS = frozenset(
+    {"wfs_inventory", "inbound_shipments", "inbound_shipment_items", "inventory_log"}
+)
 
 
 class DispatchRejected(RuntimeError):
@@ -132,19 +132,36 @@ def run_existing_worker(
         raise DispatchRejected("REMOTE_TIMEOUT_INVALID")
     # No arbitrary command parameters, no password-based fallback.
     command = [
-        "ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-        "-o", "ConnectTimeout=10", "--", route.ssh_host,
-        "python3", route.worker_path, "--run-id", run_id,
-        "--operations", ",".join(operations),
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "--",
+        route.ssh_host,
+        "python3",
+        route.worker_path,
+        "--run-id",
+        run_id,
+        "--operations",
+        ",".join(operations),
     ]
     try:
         result = subprocess.run(
-            command, input=token + "\n", text=True, encoding="utf-8",
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            timeout=timeout_seconds, check=False, env={
+            command,
+            input=token + "\n",
+            text=True,
+            encoding="utf-8",
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout_seconds,
+            check=False,
+            env={
                 "HOME": os.environ.get("HOME", "/nonexistent"),
                 "PATH": "/usr/bin:/bin",
-            }
+            },
         )
         if result.returncode != 0:
             raise DispatchRejected("REMOTE_EXECUTION_FAILED")
