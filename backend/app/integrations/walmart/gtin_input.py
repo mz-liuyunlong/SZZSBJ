@@ -10,6 +10,10 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class GtinSourceRejected(ValueError):
@@ -69,6 +73,58 @@ def build_gtin_input(*, store_code: str, store_id: str, directory: Path) -> Path
                     raise GtinSourceRejected("GTIN_ROW_LIMIT")
             if count == 0:
                 raise GtinSourceRejected("GTIN_SOURCE_EMPTY")
+        return Path(output.name)
+    except Exception:
+        Path(output.name).unlink(missing_ok=True)
+        raise
+
+
+def build_system_gtin_input(
+    *, session: "Session", source_account_ref: str, store_id: str, directory: Path
+) -> Path:
+    """Create worker input from the authoritative scoped listing dimension.
+
+    Do not silently mix data from different source accounts or stores.
+    Empty GTIN is retained for the original worker fallback behavior.
+    """
+    from sqlalchemy import select
+
+    from app.modules.data_pages.models import WalmartListingDimension
+
+    if not store_id.isdecimal() or not source_account_ref:
+        raise GtinSourceRejected("GTIN_STORE_INVALID")
+    rows = session.execute(
+        select(
+            WalmartListingDimension.item_id,
+            WalmartListingDimension.gtin,
+        )
+        .where(
+            WalmartListingDimension.source_account_ref == source_account_ref,
+            WalmartListingDimension.store_id == store_id,
+            WalmartListingDimension.platform_code == "walmart",
+        )
+        .order_by(WalmartListingDimension.item_id)
+        .limit(100001)
+    ).all()
+    if not rows:
+        raise GtinSourceRejected("GTIN_SYSTEM_SOURCE_EMPTY")
+    if len(rows) > 100000:
+        raise GtinSourceRejected("GTIN_ROW_LIMIT")
+    if directory.is_symlink():
+        raise GtinSourceRejected("GTIN_OUTPUT_INVALID")
+    directory.mkdir(parents=True, exist_ok=True)
+    output = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", newline="", prefix="gtins-", suffix=".csv",
+        dir=directory, delete=False,
+    )
+    try:
+        with output as handle:
+            writer = csv.writer(handle)
+            writer.writerow(("store_id", "item_id", "gtin"))
+            for item_id, gtin in rows:
+                if not item_id or len(item_id) > 64 or len(gtin or "") > 64:
+                    raise GtinSourceRejected("GTIN_VALUE_INVALID")
+                writer.writerow((store_id, item_id, (gtin or "").strip()))
         return Path(output.name)
     except Exception:
         Path(output.name).unlink(missing_ok=True)
