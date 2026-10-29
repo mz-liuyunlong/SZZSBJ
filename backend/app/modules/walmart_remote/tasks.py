@@ -12,8 +12,8 @@ from sqlalchemy import select
 from app.celery_app import INTEGRATION_QUEUE, celery_app
 from app.db.session import get_session_factory
 from app.integrations.walmart.remote_dispatch import DispatchRejected, parse_routes
-from app.integrations.walmart.remote_recovery import recover_completed_run
 from app.integrations.walmart.remote_pipeline import collect_store_read_only
+from app.integrations.walmart.remote_recovery import recover_completed_run
 from app.modules.walmart_remote.models import WalmartRemoteJob
 from app.modules.walmart_remote.schedule import queue_due_stores
 
