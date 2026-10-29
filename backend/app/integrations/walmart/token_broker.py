@@ -49,6 +49,14 @@ def issue_store_token(
         raise TokenBrokerRejected("TOKEN_REQUEST_INVALID")
     if event["store_code"] != bound_store:
         raise TokenBrokerRejected("TOKEN_CROSS_STORE_DENIED")
+    # Reject missing or non-private egress BEFORE reading the store secret.
+    if post is None:
+        if not isinstance(proxy, str) or not proxy:
+            raise TokenBrokerRejected("TOKEN_APPROVED_EGRESS_REQUIRED")
+        try:
+            proxy = _private_proxy(proxy)
+        except Exception:
+            raise TokenBrokerRejected("TOKEN_APPROVED_EGRESS_REQUIRED") from None
     credentials: ClientCredentials = secret_resolver.get_store_credentials(bound_store)
     authorization = base64.b64encode(
         (credentials.client_id + ":" + credentials.client_secret).encode("utf-8")
@@ -60,11 +68,8 @@ def issue_store_token(
     }
     try:
         if post is None:
-            if not isinstance(proxy, str) or not proxy:
-                raise TokenBrokerRejected("TOKEN_APPROVED_EGRESS_REQUIRED")
-            approved_proxy = _private_proxy(proxy)
             with httpx.Client(
-                proxy=approved_proxy, timeout=12.0, trust_env=False, follow_redirects=False
+                proxy=proxy, timeout=12.0, trust_env=False, follow_redirects=False
             ) as client:
                 response = client.post(
                     _TOKEN_URL, data={"grant_type": "client_credentials"}, headers=headers
