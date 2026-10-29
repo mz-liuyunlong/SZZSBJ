@@ -6,7 +6,6 @@ matching active Walmart store dimension row before dispatch.
 """
 from __future__ import annotations
 
-import os
 from typing import Annotated
 
 from fastapi import Depends
