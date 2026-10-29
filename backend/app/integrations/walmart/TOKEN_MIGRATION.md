@@ -106,3 +106,28 @@ keys into Git.
 
 Do **not** turn on `SZZSBJ_WALMART_SCF_READ_ENABLED` or
 `SZZSBJ_WALMART_SCF_TASKS_ENABLED` for this migration.
+
+
+## Token-free recovery and optional cleanup (2026-10-29)
+
+Implemented `remote_recovery.py` and `walmart_remote.recover`, callable only for
+a persisted `needs_review` run through the RBAC-scoped
+`POST /api/integrations/walmart-remote/jobs/{job_id}/recover` endpoint.
+This path does **not** request Token Broker credentials, generate a new run ID
+or start the worker; it must find an existing manifest v2 with exact store,
+run ID, and endpoints. An incomplete prior local download is moved to a
+unique `.partial-*` location for inspection, then the same remote run is
+downloaded and checksum-verified. Existing converted output is checked by
+SHA256 instead of overwritten. The frontend exposes **只回收** on
+`needs_review` rows.
+
+Successful output conversion invokes `cleanup_verified_run` only when
+`SZZSBJ_WALMART_REMOTE_CLEANUP_ENABLED=1`; disabled by default. It
+verifies the archived manifest hash against the remote before deleting
+the particular run directory and **never** deletes `.runs/<run_id>`
+state/lock evidence. Enable only after owner approval and real host tests.
+
+**Not yet production-accepted:** multi-store concurrency, recovery after
+Celery worker process death, nine-store end-to-end mocks and real API
+runs, and writes into product/inventory business tables. No changes to
+production credentials, live jobs, or database were performed.
