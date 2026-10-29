@@ -1,4 +1,4 @@
-# Load backend/.env into this process, then start the local API on port 8011.
+# Load backend/.env into this process, then start the local API on port 8010.
 # Secrets stay in .env (gitignored); this script never prints variable values.
 
 $ErrorActionPreference = "Stop"
@@ -46,5 +46,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "Local startup requires APP_ENV=local and database 127.0.0.1:55432/szzsbj_dev."
 }
 
-Write-Host "Starting local uvicorn at http://127.0.0.1:8011"
-& $Python -m uvicorn app.main:app --host 127.0.0.1 --port 8011 --reload
+Write-Host "Starting local uvicorn at http://127.0.0.1:8010"
+& $Python -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --reload

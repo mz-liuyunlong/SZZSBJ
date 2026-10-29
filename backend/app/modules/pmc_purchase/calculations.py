@@ -46,6 +46,8 @@ def median_days(values: Sequence[int]) -> Decimal | None:
 # Longer numbers such as a 14-digit GTIN are not an ItemID.
 ITEMID_REMARK_PATTERN: Final = re.compile(r"ITEMID:\s*(\d{11})(?!\d)", re.IGNORECASE)
 BARE_ITEMID_PATTERN: Final = re.compile(r"(?<!\d)(\d{11})(?!\d)")
+# Purchase order line remark: ``草稿:CG261017-039`` (also full-width colon).
+DRAFT_REMARK_PATTERN: Final = re.compile(r"草稿[:：]\s*([^\s|]+)", re.IGNORECASE)
 
 # Provider status codes (contract docs + §2 table).
 PLAN_STATUS_PENDING_APPROVAL: Final = 121
@@ -163,6 +165,18 @@ def days_between(start: date | None, end: date | None) -> int | None:
 
 
 # --- ItemID attribution (§5.1) -------------------------------------------------------
+
+
+def parse_draft_remark(remark: object) -> str | None:
+    """Extract the draft number from a purchase order line remark (采购备注)."""
+
+    if not isinstance(remark, str):
+        return None
+    matched = DRAFT_REMARK_PATTERN.search(remark)
+    if not matched:
+        return None
+    token = matched.group(1).strip()
+    return token or None
 
 
 def parse_itemid_remark(remark: object) -> str | None:

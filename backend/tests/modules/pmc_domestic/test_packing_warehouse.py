@@ -230,18 +230,30 @@ def test_customs_notes_versions_and_immutable_history(db, order):
             expected_version=row.version,
             idempotency_key=uuid4(),
             value=True,
-            reason="按发货方式调整",
         ),
         "fixture",
         scope,
     )
     assert changed.customs_value is True and changed.customs_src == "manual"
+    cleared = svc.command(
+        row.id,
+        "customs",
+        CustomsCommand(
+            source_account_ref=account,
+            expected_version=changed.version,
+            idempotency_key=uuid4(),
+            value=None,
+        ),
+        "fixture",
+        scope,
+    )
+    assert cleared.customs_value is None and cleared.customs_src == "manual"
     noted = svc.command(
         row.id,
         "note",
         NoteCommand(
             source_account_ref=account,
-            expected_version=changed.version,
+            expected_version=cleared.version,
             idempotency_key=uuid4(),
             category="other",
             text="等待补标签",
@@ -264,7 +276,9 @@ def test_customs_notes_versions_and_immutable_history(db, order):
     )
     assert resolved.current_note.resolved
     events = svc.events(row.id, scope, 1, 20)
-    assert [r.kind for r in events.items] == ["note", "note", "customs", "approve"]
+    assert [r.kind for r in events.items] == ["note", "note", "customs", "customs", "approve"]
+    assert events.items[2].reason is None
+    assert events.items[3].reason is None
     assert events.items[0].before["current_note"]["text"] == "等待补标签"
     with pytest.raises(DBAPIError):
         db.execute(

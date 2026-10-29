@@ -74,6 +74,19 @@ class InboundQuery(InboundFilter):
     sort: Literal["inbound_date_desc", "inbound_date_asc", "balance_desc"] = "inbound_date_desc"
 
 
+class ItemIdentity(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    item_id: str
+    gtin: str | None = None
+
+
+class ProductOwner(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    uid: str | None = None
+    name: str | None = None
+    status: Literal["resolved", "missing", "conflict"] = "missing"
+
+
 class InboundRow(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: UUID
@@ -88,6 +101,10 @@ class InboundRow(BaseModel):
     store_name: str | None
     attribution_status: Literal["known", "unknown"]
     purchase_order_sns: list[str]
+    draft_nos: list[str] = Field(default_factory=list)
+    item_identities: list[ItemIdentity] = Field(default_factory=list)
+    identity_status: Literal["resolved", "missing", "partial", "conflict", "multiple"] = "missing"
+    owner: ProductOwner = Field(default_factory=ProductOwner)
     inbound_at_raw: str | None
     inbound_at: datetime | None
     arrival_business_date: date | None

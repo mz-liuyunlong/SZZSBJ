@@ -14,12 +14,13 @@ async function openWarehouse(page: import("@playwright/test").Page, writable: bo
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, data, error: null, meta: { freshness_at: null, data_status: "not_published", publication_ids: [] }, request_id: "synthetic-warehouse-ui" }) });
   });
   await page.goto("/#/pmc/domestic/packing-warehouse");
-  await expect(page.getByText("仓库打包单已接通本地数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新仓库列表", exact: true })).toBeVisible();
 }
 test("read-only role sees approved PK with unavailable write actions", async ({ page }) => {
   await openWarehouse(page, false);
   await expect(page.getByRole("button", { name: "填装箱", exact: true }).first()).toBeDisabled();
   await expect(page.getByRole("button", { name: "改报关", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: /是否报关/ }).first()).toBeDisabled();
   await expect(page.getByRole("button", { name: "延迟备注", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^详\s*情$/ }).first()).toBeEnabled();
   await expect(page.getByRole("columnheader", { name: /实际收货日/ })).toBeAttached();
@@ -64,16 +65,14 @@ test("draft, package completion, customs and notes use real local endpoints", as
   expect((await response).status()).toBe(200);
   await expect(modal).not.toBeVisible();
   await expect(row).not.toContainText("待中台处理");
-  await row.getByRole("button", { name: "改报关", exact: true }).click();
-  modal = page.getByRole("dialog", { name: "修改是否报关", exact: true });
-  await modal.getByRole("combobox", { name: "是否报关" }).focus();
-  await modal.getByRole("combobox", { name: "是否报关" }).press("ArrowDown");
+  await expect(row.getByRole("button", { name: "改报关", exact: true })).toHaveCount(0);
+  const customsResponse = page.waitForResponse((r) => r.url().endsWith("/customs") && r.request().method() === "POST");
+  await row.getByRole("combobox", { name: /是否报关/ }).click();
   await page.locator('.ant-select-item-option[title="报关"]').click();
-  await modal.getByRole("textbox", { name: "修改原因" }).fill("按物流方式报关");
-  response = page.waitForResponse((r) => r.url().endsWith("/customs") && r.request().method() === "POST");
-  await modal.getByRole("button", { name: /^保\s*存$/ }).click();
-  expect((await response).status()).toBe(200);
-  await expect(modal).not.toBeVisible();
+  const customsSaved = await customsResponse;
+  expect(customsSaved.status()).toBe(200);
+  expect(customsSaved.request().postDataJSON()).toMatchObject({ value: true });
+  expect(customsSaved.request().postDataJSON().reason).toBeUndefined();
   await row.getByRole("button", { name: "延迟备注", exact: true }).click();
   modal = page.getByRole("dialog", { name: "填写延迟备注", exact: true });
   await modal.getByRole("combobox", { name: "原因分类" }).focus();

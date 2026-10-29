@@ -7,6 +7,7 @@ import { CopyableTextCell, MoneyCell } from "@/components/report-table/cells";
 import EmptyState from "@/shared/states/EmptyState";
 import {
   ItemIdCell,
+  ItemGtinCell,
   OverdueCell,
   SkuCycleBriefCell,
   StageCell,
@@ -96,6 +97,14 @@ function PurchaseBoardTable({
         <CopyableTextCell text={row.purchaseOrderSn} label="采购单号" link onOpen={() => onOpenDetail(row)} />
       ),
     },
+    draftNo: {
+      key: "draftNo",
+      title: title("draftNo", fieldTitle.draftNo),
+      width: width("draftNo"),
+      onHeaderCell: headerCell,
+      render: (_, row) =>
+        row.draftNo ? <CopyableTextCell text={row.draftNo} label="草稿号" /> : EMPTY,
+    },
     sku: {
       key: "sku",
       title: title("sku", fieldTitle.sku),
@@ -129,7 +138,7 @@ function PurchaseBoardTable({
       title: title("gtin", fieldTitle.gtin),
       width: width("gtin"),
       onHeaderCell: headerCell,
-      render: (_, row) => (row.itemId.gtin ? <CopyableTextCell text={row.itemId.gtin} label="GTIN" /> : EMPTY),
+      render: (_, row) => <ItemGtinCell row={row} />,
     },
     itemId: {
       key: "itemId",

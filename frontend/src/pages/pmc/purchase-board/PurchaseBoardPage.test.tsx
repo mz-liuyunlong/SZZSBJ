@@ -78,6 +78,7 @@ const page = navigation
 const row: PurchaseBoardRow = {
   id: "PO1::L1::P1",
   purchaseOrderSn: "PO1",
+  draftNo: "CG261017-039",
   orderItemId: "L1",
   planSn: "P1",
   planSns: ["P1"],
@@ -241,6 +242,22 @@ beforeEach(() => {
   });
 });
 
+it("shows every verified remark identity without calling multiple values a conflict", async () => {
+  vi.mocked(listPurchaseBoard).mockResolvedValue({
+    rows: [{ ...row, itemId: { ...row.itemId, itemId: null, matchStatus: "matched",
+      identities: [
+        { itemId: "19051502014", msku: "SKU-A", gtin: "00012345678905", fulfillmentType: "1" },
+        { itemId: "33333333333", msku: "SKU-B", gtin: "00012345678906", fulfillmentType: "1" },
+      ] } }], total: 1, meta: { freshnessAt: "2026-10-27T00:00:00Z", ruleVersion: 1, total: 1 },
+  });
+  await renderPage();
+  expect(await screen.findByText("多 listing（2）")).toBeInTheDocument();
+  const table = screen.getByTestId("board-row");
+  expect(within(table).getByRole("link", { name: /33333333333/ })).toBeInTheDocument();
+  expect(within(table).getByText("00012345678906")).toBeInTheDocument();
+  expect(within(table).queryByText("归属冲突")).not.toBeInTheDocument();
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -273,6 +290,7 @@ describe("PurchaseBoardPage", () => {
     const headers = within(screen.getByTestId("pro-table")).getAllByRole("columnheader").map((cell) => cell.textContent);
     expect(headers).toEqual([
       "采购单号",
+      "草稿号",
       "SKU / 产品",
       "店铺",
       "ItemID 归属",

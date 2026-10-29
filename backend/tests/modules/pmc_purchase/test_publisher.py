@@ -234,7 +234,12 @@ def _seed_first_window(session: Session) -> dict[str, tuple[UUID, UUID]]:
     runs = {k: _run(session, k) for k in ("purchasePlanList", "purchaseOrderList", "receipt")}
     session.add(_plan(*runs["purchasePlanList"]))
     session.add(_order(*runs["purchaseOrderList"]))
-    session.add(_item(*runs["purchaseOrderList"]))
+    session.add(
+        _item(
+            *runs["purchaseOrderList"],
+            remark="ITEMID:19051502014 | 草稿:CG261017-039",
+        )
+    )
     session.add_all(_receipt(*runs["receipt"]))
     session.commit()
     return runs
@@ -260,6 +265,7 @@ def test_first_publish_inserts_dwd_rows_parse_jobs_and_lineage(session: Session)
     assert line is not None
     assert (line.plan_key, line.plan_found, line.quantity_allocated) == ("P1", True, 100)
     assert line.remark_item_id == "19051502014" and line.store_matched
+    assert line.draft_no == "CG261017-039"
 
     jobs = list(session.scalars(select(ParseJob)))
     assert {j.raw_request_ref_id for j in jobs} == {
@@ -308,7 +314,7 @@ def test_republish_applies_remark_parse_without_duplicate_lineage(session: Sessi
     line = session.scalar(select(DwdPurchaseOrderLineItem))
     assert published is not None and line is not None
     assert published.remark_item_id == "20400862776"
-    assert line.remark_item_id == "20400862776"
+    assert line.remark_item_id is None  # Mixed source remarks cannot fit in one scalar.
 
 
 def test_republish_is_idempotent_and_newer_version_rewrites_continued(session: Session) -> None:

@@ -46,7 +46,7 @@ import { readUserPreference, writeUserPreference } from "@/shared/preferences/us
 import "@/pages/pmc/purchase-board/PurchaseBoardPage.css";
 
 const COLUMN_PREFERENCE_KEY = "pmc-purchase-board:columns";
-const COLUMN_PREFERENCE_VERSION = 2;
+const COLUMN_PREFERENCE_VERSION = 3;
 const DEFAULT_PAGE_SIZE = 50;
 
 interface ColumnPreference {
@@ -65,6 +65,16 @@ const normalizeColumnKeys = (keys: string[]) => {
   const allowed = new Set(allowedColumnKeys);
   const merged = keys.filter((key) => allowed.has(key));
   for (const key of fixedPurchaseBoardColumnKeys) if (!merged.includes(key)) merged.unshift(key);
+  return merged;
+};
+
+/** Insert newly shipped default columns into saved layouts (e.g. 草稿号 after 采购单号). */
+const mergeNewDefaultColumns = (keys: string[]) => {
+  const merged = normalizeColumnKeys(keys);
+  if (!merged.includes("draftNo")) {
+    const orderSnIndex = merged.indexOf("purchaseOrderSn");
+    merged.splice(orderSnIndex >= 0 ? orderSnIndex + 1 : 0, 0, "draftNo");
+  }
   return merged;
 };
 
@@ -94,11 +104,11 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
   const initialColumns = useMemo(() => {
     const stored = readUserPreference<ColumnPreference>(preferenceScope, COLUMN_PREFERENCE_KEY, COLUMN_PREFERENCE_VERSION);
     return {
-      appliedColumnKeys: normalizeColumnKeys(stored?.appliedColumnKeys ?? purchaseBoardDefaultColumnKeys),
+      appliedColumnKeys: mergeNewDefaultColumns(stored?.appliedColumnKeys ?? purchaseBoardDefaultColumnKeys),
       columnWidths: { ...purchaseBoardDefaultColumnWidths, ...stored?.columnWidths },
     } satisfies ColumnPreference;
   }, [preferenceScope]);
-  const [columnPreference, setColumnPreference] = usePageStateCache<ColumnPreference>(`${stateKey}:columns:v2`, initialColumns);
+  const [columnPreference, setColumnPreference] = usePageStateCache<ColumnPreference>(`${stateKey}:columns:v3`, initialColumns);
 
   const listQuery = usePurchaseBoardListQuery(filters, currentPage, pageSize, activeCard, cardRequest);
   const summaryQuery = usePurchaseBoardSummaryQuery(filters);
@@ -244,7 +254,7 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
           fixedKeys={fixedPurchaseBoardColumnKeys}
           defaultKeys={purchaseBoardDefaultColumnKeys}
           appliedKeys={columnPreference.appliedColumnKeys}
-          onApply={(keys) => persistColumns({ ...columnPreference, appliedColumnKeys: normalizeColumnKeys(keys) })}
+          onApply={(keys) => persistColumns({ ...columnPreference, appliedColumnKeys: mergeNewDefaultColumns(keys) })}
           onClose={() => setColumnConfigOpen(false)}
           onSaveTemplate={() => void messageApi.info("列模板暂未开放；当前列配置仅保存在本浏览器")}
         />

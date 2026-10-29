@@ -48,11 +48,12 @@ interface BackendOwnerRef {
 }
 
 interface BackendItemIdRef {
+  identities?: { item_id: string; msku: string | null; gtin: string | null; fulfillment_type: string | null }[];
   item_id: string | null;
   source: PurchaseBoardItemIdSource;
   source_ref: string | null;
   matched_at: string | null;
-  match_status: "matched" | "pending" | "unresolved";
+  match_status: "matched" | "pending" | "conflict" | "unresolved";
   msku: string | null;
   gtin: string | null;
   fulfillment_type: string | null;
@@ -103,6 +104,7 @@ interface BackendSkuCycle {
 
 interface BackendBoardRow {
   purchase_order_sn: string;
+  draft_no: string | null;
   order_item_id: string;
   plan_sn: string | null;
   plan_sns: string[];
@@ -255,6 +257,7 @@ const mapStore = (store: BackendStoreRef): PurchaseStoreRef => ({
 const mapOwner = (owner: BackendOwnerRef): PurchaseOwnerRef => ({ uid: owner.uid, name: owner.name });
 
 const mapItemId = (item: BackendItemIdRef): PurchaseItemIdRef => ({
+  identities: item.identities?.map((value) => ({ itemId: value.item_id, msku: value.msku, gtin: value.gtin, fulfillmentType: value.fulfillment_type })),
   itemId: item.item_id,
   source: item.source,
   sourceRef: item.source_ref,
@@ -315,6 +318,7 @@ export const purchaseBoardRowId = (
 const mapRow = (row: BackendBoardRow): PurchaseBoardRow => ({
   id: purchaseBoardRowId(row),
   purchaseOrderSn: row.purchase_order_sn,
+  draftNo: row.draft_no,
   orderItemId: row.order_item_id,
   planSn: row.plan_sn,
   planSns: row.plan_sns,

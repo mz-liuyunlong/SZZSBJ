@@ -2,6 +2,16 @@
 
 Registry Status: `draft; approved only after owner review and merge`
 
+## 2026-10-28 打包审批增量登记（验收暂停）
+
+字段纠错（负责人已批准）：arrival_received ← 同版本采购明细 ODS payload_json.quantity_entry（到货入库量）；arrival_pending ← quantity_receive（待到货量）。分别汇总原明细，不累加计划拆行或采集快照；缺字段不按差值推算。未新增物理字段，未运行修复后测试；前序测试结果不能代替此次验收。
+
+| 接口／数据集 | 来源与粒度 | 本轮变更及边界 | 状态／文档 |
+|---|---|---|---|
+| `/api/pmc/domestic/packing-approval` 既有 pending、summary、orders、manual、edit-options、approve | 当前 published 入库 MART＋Listing DIM＋采购原明细 DWD＋成功同步采购明细／计划 ODS＋产品资料当前 DWD；账号、惠州仓16168、入库单、SKU、店铺、ItemID | 仅履约类型1可审批；数量比例建议；累计已到／未到；独立 split_arrival 筛选；受阻继续待审。无新端点、物理字段或迁移，无真实数据库操作，无外部调用 | 代码已修改，未合并验收；[接口](../api/pmc-domestic-packing-approval-allocation-arrival-api.md)、[决策](../data-sources/decisions/pmc-packing-approval-allocation-arrival-decision.md)、[交接](../delivery/pmc-packing-approval-allocation-arrival-handoff-20261028.md) |
+
+上述本轮条目覆盖历史记录中“GET 不查 ODS”“类型0/1均可审批”“到货固定 unknown”的对应说明。历史执行记录保留，不表示本轮已执行同步或生产变更。
+
 ## Registry Rules Summary
 
 - GitHub 中本文件是真源；外部表格仅是只读镜像。
@@ -273,3 +283,10 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 
 
 > 占位名称说明：`LOCAL_DATABASE_NAME` 与 `ISOLATED_TEST_DATABASE_NAME` 分别表示负责人已批准的本地开发库和隔离测试库；执行前必须与获批本地配置中的实际数据库名逐字核对，并同时核对环境、host、port及连接后数据库身份。占位名称不是可直接执行的数据库名，也不授权其他本地库或生产库。历史数量、指纹及备份哈希保持原记录。
+# 2026年10月27日 采购与批次ItemID集合契约补充
+
+范围：既有PMC采购列表/订单详情ItemIdRef.identities与国内仓入库批次item_identities。权威输入为现有采购计划/明细ODS及同账号店铺SKU的Listing DIM；采购DWS刷新物化集合、检索索引及证据至既有JSON，采购GET仅映射DWS；批次沿用既有来源加载位置。多值不重复数量，采购标量仅唯一时填写；批次multiple表示多值关联，不表示错误。权限不变，无迁移和新同步任务。决策与回滚见docs/delivery/pmc-itemid-legacy-alignment-20261027.md，SOP见docs/sop/pmc-itemid-multiple.md。
+
+## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
+
+状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。

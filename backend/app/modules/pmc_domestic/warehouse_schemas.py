@@ -144,11 +144,13 @@ class UnpackedDispositionCommand(WarehouseCommand):
 
 
 class CustomsCommand(WarehouseCommand):
-    value: bool = Field(strict=True)
-    reason: str = Field(min_length=2, max_length=500)
+    value: bool | None = Field(strict=True)
+    reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def reason_text(self):
+        if self.reason is None:
+            return self
         self.reason = self.reason.strip()
         if len(self.reason) < 2:
             raise ValueError("reason required")
@@ -243,6 +245,7 @@ class WarehouseOrderRead(Strict):
     received_dates: list[date] = Field(default_factory=list)
     receipt_order_sns: list[str] = Field(default_factory=list)
     purchase_order_sns: list[str]
+    draft_nos: list[str] = Field(default_factory=list)
     sku: str
     product_name: str | None
     store_id: str | None

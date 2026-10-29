@@ -1,3 +1,31 @@
+# 当前任务交接：打包单审批（2026-10-28）
+
+后续字段纠错：负责人已授权修复 quantity_receive 语义。当前打包审批已到取采购明细 ODS payload_json.quantity_entry，未到取 quantity_receive；缺失保留未知，不按差值补值。此次只修改到货投影／纯函数、合成用例和文档，未运行测试、未操作数据库、未修改表结构。工作区其他审批编辑、0062迁移等改动不属于此次修复，保留不动。
+
+负责人确认在当前 develop 修改 WFS 准入、计划比例数量预填、采购到货计数及分批筛选；代码已修改。随后要求“暂时不要测试”，现仅补齐文档；不继续测试，不标 ready。
+
+详细记录：[打包审批交接](docs/delivery/pmc-packing-approval-allocation-arrival-handoff-20261028.md)；接口：[当前字段契约](docs/api/pmc-domestic-packing-approval-allocation-arrival-api.md)。没有新物理表／字段／迁移，没有真实数据库操作、外部采集、分支创建、Git提交推送或部署。
+
+暂停前 scoped 后端 46 passed / 19 skipped、前端审批目录 13 passed。新增 E2E 首轮失败在 Select 点击定位，已修正但未重跑；原结构场景2项通过。真实数据联调未执行。不要把旧交接中的全量测试、生产采集或授权套用到本轮。
+
+# 打包审批草稿 CI 修复（2026-10-28）
+
+负责人授权继续 develop，同步测试文档、修复失败项、提交推送并重跑全量 CI；不新建分支、不合并 main、不部署或迁移生产。基准 b190a61，工作区开始时干净。
+
+本轮只修三个文件的格式、保存按钮测试和历史 0054 表清单测试；新增隔离 PostgreSQL 的 0062 升级/草稿事务验收及前端保存不审批的浏览器契约。迁移文件、业务规则和 approve 入口保持原实现。详见 `docs/delivery/pmc-packing-approval-allocation-arrival-handoff-20261028.md` 本轮章节，远端最终结果以修复提交对应的 Actions 为准。
+
+已执行：代码修复 e010518 的 CI 40642011374 全部 10 项通过；后端 1802 passed / 121 skipped，前端 308 passed，Playwright 28 passed / 7 skipped，独立 PostgreSQL 16 专项 59 passed / 0 skipped。文档收尾只补实际证据，不更改代码或迁移。生产升级、部署和 PR 合并均未执行。
+
+# Develop CI 修复交接（2026-10-27）
+
+本轮基准 aa7637b，负责人授权复用 develop、提交和推送、创建 develop → main 草稿 PR。禁止合并、部署或生产数据库操作。
+
+修复内容：局部 Ruff 格式和导入排序、React 组件模块导出及 hooks 依赖、文档占位名称；develop push 加入现有 CI。采购备注和国内仓草稿号的表结构检查复用 Session 事务连接，避免单连接池中意外回滚。历史 Gate 3 测试合并已有 0055 加列结果再对照当前 ORM；不修改历史迁移语义或 revision ID。
+
+本地已运行：前端 lint、TypeScript/Vite 构建通过，Vitest 68 文件 / 304 tests passed；后端 Ruff lint/format 通过，采购覆盖、迁移对照和备注回归 15 passed，规则检查通过。首次 Windows 全量后端为 1769 passed / 13 failed / 118 skipped：4 项真实问题已修复，9 项涉及 POSIX 文件权限，保留断言等待 Linux CI。远端结果须以本轮提交对应的实际 Actions 记录为准，不能将本地结果替代远端验收。
+
+以下为历史交接：
+
 # 国内仓入库批次看板 M1 交接
 
 日期：2026-10-20。目标分支：dev（用户明确要求，不创建新分支/worktree）。基准46894605564da0ab0823dc0abe31ea12b32f4641。

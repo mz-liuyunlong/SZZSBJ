@@ -210,6 +210,8 @@ class DwdPurchaseOrderLineItem(DwdSourceMixin, Base):
     unit_price: Mapped[Decimal | None] = mapped_column(MONEY)
     expect_arrive_date: Mapped[date | None] = mapped_column(Date)
     remark_item_id: Mapped[str | None] = mapped_column(ITEM_ID)
+    # Parsed from purchase order line remark (``草稿:…``).
+    draft_no: Mapped[str | None] = mapped_column(PROVIDER_ID)
 
 
 # --- DWS ------------------------------------------------------------------------------------
@@ -240,6 +242,7 @@ class DwsPurchaseBoard(DwsCalcMixin, Base):
 
     order_sn: Mapped[str] = mapped_column(PROVIDER_ID, nullable=False)
     order_item_id: Mapped[str] = mapped_column(PROVIDER_ID, nullable=False)
+    draft_no: Mapped[str | None] = mapped_column(PROVIDER_ID)
     plan_key: Mapped[str] = mapped_column(PROVIDER_ID, nullable=False, server_default=text("''"))
     plan_sn: Mapped[str | None] = mapped_column(PROVIDER_ID)
     plan_sns_json: Mapped[list[str]] = mapped_column(JSONB, nullable=False)

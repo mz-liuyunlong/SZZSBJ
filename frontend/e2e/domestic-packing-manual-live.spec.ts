@@ -2,7 +2,7 @@
 import { expect, test } from "@playwright/test";
 test.use({ channel: process.env.PLAYWRIGHT_CHANNEL });
 test.skip(process.env.PACKING_LIVE_E2E !== "1", "requires isolated local fixture bridge");
-test("manual source selection, submission and approval share the inbound inventory", async ({ page }, testInfo) => {
+test("manual source selection and submission leave edit without row approve or reject", async ({ page }, testInfo) => {
   page.on("pageerror", (error) => console.log("PAGE_ERROR", error.message));
   await page.addInitScript(() => localStorage.setItem("szzsbj_auth_token", "synthetic-local-test"));
   await page.route("**/api/**", async (route) => {
@@ -45,18 +45,7 @@ test("manual source selection, submission and approval share the inbound invento
   await page.locator('.ant-select-item-option[title="不报关"]').click();
   await expect(row).toContainText("人工");
   await page.screenshot({ path: testInfo.outputPath("customs-actions.png"), fullPage: true });
-  await row.getByRole("button", { name: "审批通过", exact: true }).click();
-  const decision = page.getByRole("dialog", { name: "修改并审批通过", exact: true });
-  await expect(decision.getByRole("spinbutton")).toHaveValue("2");
-  const approved = page.waitForResponse((r) => r.url().endsWith("/approve") && r.request().method() === "POST");
-  await decision.getByRole("button", { name: /^确\s*定$/ }).click();
-  const approval = await approved;
-  expect(approval.status()).toBe(200);
-  const approvedData = (await approval.json()).data;
-  expect(approvedData.customs_value).toBe(false);
-  expect(approvedData.customs_src).toBe("manual");
-  expect(approvedData.snapshot.customs_default).toBe(true);
-  await expect(row).toHaveCount(0);
-  await page.getByRole("button", { name: "审批记录", exact: true }).click();
-  await expect(page.getByRole("dialog").last()).toContainText("PK");
+  await expect(row.getByRole("button", { name: /修\s*改/ })).toBeVisible();
+  await expect(row.getByRole("button", { name: "审批通过", exact: true })).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "驳回", exact: true })).toHaveCount(0);
 });

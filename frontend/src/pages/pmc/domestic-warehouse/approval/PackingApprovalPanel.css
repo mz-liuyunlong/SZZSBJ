@@ -1,5 +1,5 @@
 .domestic-approval { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; min-height: 0; }
-.domestic-approval__summary-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.domestic-approval__summary-row { position: relative; z-index: 90; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .domestic-approval__created-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .domestic-approval__created-range > .ant-picker { width: 270px; }
 .domestic-approval__full-width { width: 100%; }
@@ -18,3 +18,4 @@
 .domestic-approval__row-actions .ant-btn { height: 28px; padding-inline: 10px; border-radius: 6px; }
 .domestic-approval__row-edit, .domestic-approval__row-reject { min-width: 56px; }
 .domestic-approval__row-approve { min-width: 92px; }
+.domestic-approval__confirm-copy { white-space: pre-wrap; }

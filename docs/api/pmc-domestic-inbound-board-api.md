@@ -33,7 +33,7 @@
 
 返回 envelope：`{success,data,error,meta,request_id}`；`data={items,total}`。
 
-行字段：id、publication_id、source_account_ref、source_warehouse_id、warehouse_name、inbound_order_sn、sku、product_name、store_id、store_name、attribution_status、purchase_order_sns[]、inbound_at_raw、inbound_at、arrival_business_date、arrival_source、arrival_date_status、days_in_warehouse、total_inbound_qty、parent_inbound_qty、quantity_scope、balance_num、inventory_status、batch_nos[]、batch_details[]、history_complete、source_kind。
+行字段：id、publication_id、source_account_ref、source_warehouse_id、warehouse_name、inbound_order_sn、sku、product_name、store_id、store_name、attribution_status、purchase_order_sns[]、draft_nos[]（按采购单号+SKU 读取采购看板 `dws_purchase_board.draft_no`，即采购备注中的草稿号；没有则为空数组，不新发号）、item_identities[]（item_id、gtin。按本行店铺、采购单号和 SKU 现算，不落新表。从采购明细 remark、payload 的 item_purchase_remark，以及关联计划的 remark、plan_remark、item_purchase_remark 取出全部独立 11 位，`ITEMID:` 优先，14 位 GTIN 不算。只保留这一行店铺的备注；备注里的 11 位 ItemID 先展示（与采购看板同一套提取规则），Listing 仅补 GTIN，无备注时用这一行店铺加 SKU 的 Listing 兜底。店铺为空时，仅当该 SKU 只在一个店铺上架才自动归属。一个号码为 resolved 并带上 Listing 的 GTIN，多个为 conflict，没有为 missing）、owner（uid、name、status。按账号+SKU 读取当前产品资料 `dwd_lingxing_sku_product_info_current`。一个有效身份且一个负责人 UID 时 status=resolved 并显示姓名；没有资料为 missing；多个身份或多个负责人 UID 为 conflict。不使用开发人、店铺负责人或入库创建人）、identity_status、inbound_at_raw、inbound_at、arrival_business_date、arrival_source、arrival_date_status、days_in_warehouse、total_inbound_qty、parent_inbound_qty、quantity_scope、balance_num、inventory_status、batch_nos[]、batch_details[]、history_complete、source_kind。
 
 - `id` 为逻辑行稳定UUID，`publication_id` 为发布版本。每次请求固定版本；后续请求才看到新发布。
 - `total_inbound_qty` 暂为null：没有直接店铺级分摊证据，不把父IB×SKU数量复制到各店铺行。
@@ -83,3 +83,6 @@ list/summary 共同支持重复 owner_uid 最多50项；字符串保留前导零
 选项依赖 mart/gov、dim_lingxing_stores、dwd_lingxing_sku_identity_index、dwd_lingxing_sku_product_info_current；owner筛选的list/summary metadata增加两个负责人表。批次采集时间并不代表负责人维表同时间快照。权限、401/403/422/500、账号范围、request_id沿用既有入库接口；无审计业务写入、无队列、无外部调用。
 
 六项状态为 in_stock/approved/packed/overdue/shipped/other_out；当前 disabled=true，reason说明尚无发布打包发货关联，不返回虚构状态数量。此期不接受 business_status 参数（422），后续方案批准并发布状态事实后再启用。
+# 2026年10月27日 ItemID多值状态补充
+
+采购计划与采购明细备注合并提取并经同账号店铺SKU的Listing校验后，item_identities保留全部有效值；多值identity_status=multiple，页面显示多listing（N），不再仅因多个有效值报告conflict。resolved仍表示唯一值，missing表示无匹配；partial和conflict保留兼容旧契约。此变更不拆分入库数量、库存或审批分配，也不修改已审批快照。

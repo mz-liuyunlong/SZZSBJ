@@ -15,7 +15,7 @@
 | POST /orders/{id}/supplemental-inbound | 中台登记IB；packing-supplement-ib |
 | POST /orders/{id}/supplemental-sync | 中台同步核验；packing-supplement-sync |
 | POST /orders/{id}/unpacked | 中台未装处置；packing-unpacked-dispose |
-| POST /orders/{id}/customs | 独立授权改报关；packing-customs |
+| POST /orders/{id}/customs | 是否报关列直接切换；packing-customs。value 为 true/false/null，对应报关、不报关、未知。不要求修改原因，新值须与当前值不同 |
 | POST /orders/{id}/notes | 中台延迟备注；packing-note |
 
 动作权限前缀 `action:pmc:domestic-warehouse-board:`。仓库仅授予页面查看、boxes-save、done、rebox；中台处置/备注单独授予，不使用共享口令或用户输入姓名。
@@ -24,6 +24,7 @@
 
 | 返回字段 | 页面中文含义 |
 |---|---|
+| draft_nos | 草稿号。来自采购看板同一账号、采购单号、SKU，没有则为空 |
 | approved_quantity | 原审批数量Q |
 | box_set.total_qty | 实际装箱T |
 | box_set.variance_qty | T-Q，负数未装、正数超出 |

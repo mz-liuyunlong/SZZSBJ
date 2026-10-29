@@ -5,6 +5,7 @@ import { MoneyCell } from "@/components/report-table/cells";
 import EmptyState from "@/shared/states/EmptyState";
 import {
   ItemIdCell,
+  ItemGtinCell,
   SkuCycleSamplesTooltip,
   StageCell,
 } from "@/pages/pmc/purchase-board/components/PurchaseBoardCells";
@@ -39,7 +40,7 @@ const lineColumns: ColumnsType<PurchaseBoardRow> = [
     render: (_, row) => (row.store.attributed ? row.store.name ?? row.store.id ?? EMPTY : <Typography.Text type="warning">未归属店铺</Typography.Text>),
   },
   { key: "itemId", title: "ItemID", render: (_, row) => <ItemIdCell row={row} /> },
-  { key: "gtin", title: "GTIN", render: (_, row) => row.itemId.gtin ?? EMPTY },
+  { key: "gtin", title: "GTIN", render: (_, row) => <ItemGtinCell row={row} /> },
   { key: "plan", title: "计划号", render: (_, row) => (row.planSns.length > 0 ? row.planSns.join(" / ") : EMPTY) },
   { key: "qty", title: "分配量 / 单总量", render: (_, row) => `${row.quantityAllocated} / ${row.quantityTotal ?? "—"}` },
   { key: "progress", title: "收货进度", render: (_, row) => progressText(row) },

@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [dev, main]
   push:
-    branches: [dev, main]
+    branches: [dev, main, develop]
 
 jobs:
   rule-pack-check:
@@ -254,6 +254,15 @@ jobs:
     name: Domestic chain PostgreSQL upgrade from empty and 0049
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
       postgres:
         image: postgres:16
         env:
@@ -277,11 +286,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: .python-version
-      - name: Verify empty and 0049 databases reach revision 0054
+      - name: Verify historical 0054 and current packing draft migrations
         working-directory: backend
         run: |
           uv sync --frozen
-          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
+          uv run pytest -q -s tests/db/test_domestic_chain_postgresql.py tests/db/test_packing_pending_edit_postgresql.py tests/db/test_packing_passcode_redis.py tests/db/test_domestic_database_safety.py tests/modules/pmc_domestic/test_domestic_ods_adopt.py tests/db/test_alembic_scaffold.py --junitxml=domestic-chain-results.xml
           uv run python -c "import xml.etree.ElementTree as E; r=E.parse('domestic-chain-results.xml'); assert r.findall('.//testcase') and not r.findall('.//skipped'), 'Domestic PostgreSQL acceptance must execute without skipped cases'"
 
   walmart-order-identity-postgresql:

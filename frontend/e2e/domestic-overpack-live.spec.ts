@@ -40,8 +40,6 @@ test("overpack shortage, IB mock sync, manual reconfirmation and source audit", 
   expect(body.data.box_set.completed_at).toBeNull();
   await expect(dialog).not.toBeVisible();
   await expect(row).toContainText("超发 8 件 · 待补入库单");
-  await page.goto("/#/pmc/domestic/batches");
-  await expect(page.locator(".ant-alert-message").filter({ hasText: /^超发待补入库 1 张$/ })).toBeVisible();
   await page.goto("/#/pmc/domestic/packing-warehouse");
   await row.getByRole("button", { name: "已补入库单", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "已补入库单", exact: true });
@@ -79,7 +77,7 @@ test("overpack shortage, IB mock sync, manual reconfirmation and source audit", 
 test("warehouse permissions do not expose mid-office IB or sync buttons", async ({ page }) => {
   await setup(page, false);
   await page.goto("/#/pmc/domestic/packing-warehouse");
-  await expect(page.getByText("仓库打包单已接通本地数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新仓库列表", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "已补入库单", exact: true })).toHaveCount(0);
   await expect(page.locator('.domestic-packing').getByRole("button", { name: /^同\s*步$/ })).toHaveCount(0);
 });

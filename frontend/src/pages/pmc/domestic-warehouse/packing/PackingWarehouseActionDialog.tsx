@@ -6,9 +6,10 @@ import PackingOverpackFields from "./PackingOverpackFields";
 import PackingPackageFields from "./PackingPackageFields";
 import { getWarehouseOrder, warehouseError, warehouseReason, warehouseSyncLabel } from "./packingWarehouseApi";
 import { noteCategories, type BoxInput, type PackageData, type PackingWarehouseRow, type WarehouseAction, type WarehouseFields } from "./packingWarehouseTypes";
-interface Values { inbound_order_sn?: string; confirm_extra?: boolean; action?: "resend" | "void"; reason_category?: "shortage" | "damage" | "box_capacity" | "other"; lines: BoxInput[]; reason?: string; measure_package?: boolean; package?: PackageData; value?: "declare" | "skip"; category?: WarehouseFields["category"]; text?: string }
-interface Props { id: string; kind: WarehouseAction; scope: string; busy: boolean; onCancel: () => void; onSubmit: (row: PackingWarehouseRow, action: WarehouseAction, fields: WarehouseFields) => Promise<void> }
-const titles = { boxes: "填写装箱数据", done: "确认打包完成", customs: "修改是否报关", notes: "填写延迟备注", unpacked: "处置未装数量", rebox: "改装箱（已完成单）", "supplemental-inbound": "已补入库单", "supplemental-sync": "同步校验补入库单" };
+interface Values { inbound_order_sn?: string; confirm_extra?: boolean; action?: "resend" | "void"; reason_category?: "shortage" | "damage" | "box_capacity" | "other"; lines: BoxInput[]; reason?: string; measure_package?: boolean; package?: PackageData; category?: WarehouseFields["category"]; text?: string }
+type DialogAction = Exclude<WarehouseAction, "customs">;
+interface Props { id: string; kind: DialogAction; scope: string; busy: boolean; onCancel: () => void; onSubmit: (row: PackingWarehouseRow, action: WarehouseAction, fields: WarehouseFields) => Promise<void> }
+const titles: Record<DialogAction, string> = { boxes: "填写装箱数据", done: "确认打包完成", notes: "填写延迟备注", unpacked: "处置未装数量", rebox: "改装箱（已完成单）", "supplemental-inbound": "已补入库单", "supplemental-sync": "同步校验补入库单" };
 function ActionForm({ row, kind, busy, onCancel, onSubmit }: Omit<Props, "id" | "scope"> & { row: PackingWarehouseRow }) {
   const [form] = Form.useForm<Values>();
   const watchedLines = Form.useWatch("lines", form) as BoxInput[] | undefined;
@@ -23,7 +24,6 @@ function ActionForm({ row, kind, busy, onCancel, onSubmit }: Omit<Props, "id" | 
     else if (kind === "supplemental-inbound") fields = { inbound_order_sn: values.inbound_order_sn?.trim().toUpperCase() };
     else if (kind === "supplemental-sync") fields = {};
     else if (kind === "unpacked") fields = { action: values.action, reason: values.reason?.trim() };
-    else if (kind === "customs") fields = { value: values.value === "declare", reason: values.reason?.trim() };
     else fields = { category: values.category, text: values.text?.trim() ?? "" };
     await onSubmit(row, kind, fields);
   };
@@ -32,7 +32,7 @@ function ActionForm({ row, kind, busy, onCancel, onSubmit }: Omit<Props, "id" | 
     okButtonProps={{ disabled: kind === "done" && reasons.length > 0 }} onOk={() => { void submit().catch(() => undefined); }}>
     <Descriptions size="small" column={2} items={[{ key: "pk", label: "打包单", children: row.pk }, { key: "sku", label: "SKU", children: row.sku }, { key: "qty", label: "审批数量", children: row.approved_quantity }, { key: "v", label: "版本", children: row.version }]} />
     {kind === "done" && reasons.length > 0 && <Alert type="warning" message={reasons.map(warehouseReason).join("；")} />}
-    <Form form={form} layout="vertical" initialValues={{ inbound_order_sn: row.variance_case?.supplemental_ib ?? undefined, lines: (kind === "rebox" && row.variance_case?.proposed_lines ? row.variance_case.proposed_lines : row.box_set?.lines)?.map((line) => ({ ...line, gross_weight_kg: Number(line.gross_weight_kg), length_cm: Number(line.length_cm), width_cm: Number(line.width_cm), height_cm: Number(line.height_cm) })) ?? [{ box_type: "A", boxes: 1, units_per_box: Math.min(row.approved_quantity, 100000) }], reason: kind === "boxes" ? row.box_set?.variance_reason ?? undefined : undefined, measure_package: measured, package: row.box_set?.package_snapshot?.values ? Object.fromEntries(Object.entries(row.box_set.package_snapshot.values).map(([k, v]) => [k, v === null ? undefined : Number(v)])) : undefined, value: row.customs_value ? "declare" : "skip" }}>
+    <Form form={form} layout="vertical" initialValues={{ inbound_order_sn: row.variance_case?.supplemental_ib ?? undefined, lines: (kind === "rebox" && row.variance_case?.proposed_lines ? row.variance_case.proposed_lines : row.box_set?.lines)?.map((line) => ({ ...line, gross_weight_kg: Number(line.gross_weight_kg), length_cm: Number(line.length_cm), width_cm: Number(line.width_cm), height_cm: Number(line.height_cm) })) ?? [{ box_type: "A", boxes: 1, units_per_box: Math.min(row.approved_quantity, 100000) }], reason: kind === "boxes" ? row.box_set?.variance_reason ?? undefined : undefined, measure_package: measured, package: row.box_set?.package_snapshot?.values ? Object.fromEntries(Object.entries(row.box_set.package_snapshot.values).map(([k, v]) => [k, v === null ? undefined : Number(v)])) : undefined }}>
       {(kind === "boxes" || kind === "rebox") && <PackingWarehouseBoxForm row={row} form={form} hideReason={kind === "rebox"} />}
       {kind === "rebox" && <><Alert type="warning" message="将重新校验装箱，保留原完成时间并记录修改前后明细；不会再次完成本 PK。" />
         <Form.Item name="reason" label="改装箱原因" rules={[{ required: true, whitespace: true, min: 2, max: 500 }]}><Input.TextArea rows={2} maxLength={500} /></Form.Item>
@@ -52,7 +52,6 @@ function ActionForm({ row, kind, busy, onCancel, onSubmit }: Omit<Props, "id" | 
         <Form.Item name="action" label="处置方式" rules={[{ required: true }]}><Select options={[{ value: "resend", label: "下次再发" }, { value: "void", label: "作废未装" }]} /></Form.Item>
         <Form.Item noStyle shouldUpdate={(a, b) => a.action !== b.action}>{({ getFieldValue }) => <Form.Item name="reason" label="处置原因" rules={[{ required: getFieldValue("action") === "void", whitespace: true, min: getFieldValue("action") === "void" ? 2 : undefined, max: 500 }]}><Input.TextArea rows={2} maxLength={500} /></Form.Item>}</Form.Item>
       </>}
-      {kind === "customs" && <><Form.Item name="value" label="是否报关" rules={[{ required: true }]}><Select options={[{ value: "declare", label: "报关" }, { value: "skip", label: "不报关" }]} /></Form.Item><Form.Item name="reason" label="修改原因" rules={[{ required: true, whitespace: true, min: 2, max: 500 }]}><Input.TextArea rows={3} maxLength={500} /></Form.Item></>}
       {kind === "notes" && <><Form.Item name="category" label="原因分类" rules={[{ required: true }]}><Select options={noteCategories.map((item) => ({ ...item, disabled: item.value === "resolved" && (!row.current_note || row.current_note.resolved) }))} /></Form.Item><Form.Item noStyle shouldUpdate={(before, after) => before.category !== after.category}>{({ getFieldValue }) => <Form.Item name="text" label="说明" rules={[{ required: getFieldValue("category") === "other", whitespace: true, min: getFieldValue("category") === "other" ? 2 : undefined, max: 500 }]}><Input.TextArea rows={3} maxLength={500} /></Form.Item>}</Form.Item></>}
     </Form>
   </Modal>;

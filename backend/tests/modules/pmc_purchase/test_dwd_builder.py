@@ -23,6 +23,11 @@ T1 = datetime(2026, 9, 21, 4, 0, tzinfo=UTC)
 T2 = datetime(2026, 9, 21, 5, 0, tzinfo=UTC)
 
 
+def _ods_plans(*rows: Plan) -> dict[tuple[str, str], Plan]:
+    chosen, _ = latest_versions(list(rows), lambda row: row.plan_sn)
+    return chosen
+
+
 @dataclass
 class _Row:
     run_id: UUID
@@ -150,7 +155,13 @@ def test_single_plan_line_keeps_quantity_and_amount_and_inherits_plan_itemid() -
     plans_by_sn = {
         p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19051502014")])[0]
     }
-    orders, lines, counts = build_orders([Order(RUN_1, T1)], [Item(RUN_1, T1)], plans_by_sn)
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014")
+    orders, lines, counts = build_orders(
+        [Order(RUN_1, T1)],
+        [Item(RUN_1, T1)],
+        plans_by_sn,
+        ods_plans_by_sn=_ods_plans(plan_row),
+    )
     [order], [line] = orders, lines
     assert order.order_date.isoformat() == "2026-08-05"  # type: ignore[union-attr]
     assert order.line_count == 1
@@ -159,6 +170,25 @@ def test_single_plan_line_keeps_quantity_and_amount_and_inherits_plan_itemid() -
     assert line.allocation_ratio == Decimal("1.0000")
     assert line.remark_item_id == "19051502014" and line.plan_found
     assert counts["lines_split_from_merged"] == 0
+
+
+def test_order_line_parses_draft_no_from_purchase_remark() -> None:
+    remark = "ITEMID:20540519308 | 草稿:CG261017-039"
+    plans_by_sn = {
+        p.plan_sn: p for p in build_plans([Plan(RUN_1, T1, remark="ITEMID:19051502014")])[0]
+    }
+    plan_row = Plan(RUN_1, T1, remark="ITEMID:19051502014")
+    _, lines, _ = build_orders(
+        [Order(RUN_1, T1)],
+        [Item(RUN_1, T1, remark=remark)],
+        plans_by_sn,
+        ods_plans_by_sn=_ods_plans(plan_row),
+    )
+    assert len(lines) == 1
+    assert lines[0].draft_no == "CG261017-039"
+    assert (
+        lines[0].remark_item_id is None
+    )  # Both remarks are retained for DWS; scalar cannot pick one.
 
 
 def test_merged_line_is_split_across_plans_by_plan_quantity() -> None:
@@ -176,7 +206,16 @@ def test_merged_line_is_split_across_plans_by_plan_quantity() -> None:
         amount=Decimal("400.0000"),
         payload_json={"relation_purchase_plan": [{"plan_sn": "P2"}, {"plan_sn": "P1"}]},
     )
-    _, lines, counts = build_orders([Order(RUN_1, T1)], [item], {p.plan_sn: p for p in plans})
+    plan_rows = [
+        Plan(RUN_1, T1, plan_sn="P1", quantity_plan=60, remark="ITEMID:11111111111"),
+        Plan(RUN_1, T1, plan_sn="P2", quantity_plan=40, remark="ITEMID:22222222222"),
+    ]
+    _, lines, counts = build_orders(
+        [Order(RUN_1, T1)],
+        [item],
+        {p.plan_sn: p for p in plans},
+        ods_plans_by_sn=_ods_plans(*plan_rows),
+    )
     assert [(ln.plan_sn, ln.quantity_allocated, ln.amount_allocated) for ln in lines] == [
         ("P1", 48, Decimal("240.0000")),
         ("P2", 32, Decimal("160.0000")),
@@ -188,7 +227,7 @@ def test_merged_line_is_split_across_plans_by_plan_quantity() -> None:
 
 def test_line_referencing_unknown_plan_is_kept_and_counted() -> None:
     item = Item(RUN_1, T1, plan_sn="P-MISSING", remark="ITEMID:33333333333")
-    _, [line], counts = build_orders([Order(RUN_1, T1)], [item], {})
+    _, [line], counts = build_orders([Order(RUN_1, T1)], [item], {}, ods_plans_by_sn={})
     assert line.plan_sn == "P-MISSING" and line.plan_found is False
     assert line.remark_item_id == "33333333333"  # line remark as a fallback
     assert counts["lines_plan_missing"] == 1
@@ -199,7 +238,7 @@ def test_line_without_any_plan_and_deleted_line_and_sid_zero() -> None:
         Item(RUN_1, T1, item_id="L1", plan_sn=None, sid="0"),
         Item(RUN_1, T1, item_id="L2", line_ordinal=1, is_delete=1),
     ]
-    _, lines, counts = build_orders([Order(RUN_1, T1)], items, {})
+    _, lines, counts = build_orders([Order(RUN_1, T1)], items, {}, ods_plans_by_sn={})
     [line] = lines
     assert line.plan_sn is None and line.plan_count == 0 and not line.store_attributed
     assert counts["lines_without_plan"] == 1
@@ -218,7 +257,7 @@ def test_lines_follow_the_chosen_header_version() -> None:
         Item(RUN_1, T1, item_id="L2", line_ordinal=1),
         Item(RUN_2, T2, item_id="L1", quantity_real=90),
     ]
-    [order], lines, counts = build_orders(orders, items, {})
+    [order], lines, counts = build_orders(orders, items, {}, ods_plans_by_sn={})
     assert order.status == 9 and order.source.run_id == RUN_2
     assert [(ln.order_item_id, ln.quantity_real) for ln in lines] == [("L1", 90)]
     assert counts["orders_superseded"] == 1 and counts["lines_superseded"] == 2

@@ -11,7 +11,7 @@ export interface BoxLine extends BoxInput { id: string; line_no: number }
 export interface PackingWarehouseRow {
   id: string; source_account_ref: string; version: number; pk: string; is_test: boolean; approved_at: string; approved_date: string;
   inbound_order_sn: string; inbound_date: string | null; arrival_date: string | null; arrival_status: "inbound_date" | "unknown";
-  warehouse_days: number | null; received_dates: string[]; receipt_order_sns: string[]; purchase_order_sns: string[];
+  warehouse_days: number | null; received_dates: string[]; receipt_order_sns: string[]; purchase_order_sns: string[]; draft_nos?: string[];
   sku: string; product_name: string | null; store_id: string | null; store_name: string | null; item_id: string | null; gtin: string | null; msku: string | null;
   approved_quantity: number; stock_balance: number | null; balance_publication_id: string | null; balance_observed_at: string | null;
   status: "todo" | "packed"; packing_days: number; customs_value: boolean | null; customs_src: string;
@@ -25,9 +25,10 @@ export interface PackingWarehouseRow {
 }
 export interface WarehouseBase { source_account_ref: string; expected_version: number; idempotency_key: string }
 export type WarehouseAction = "boxes" | "done" | "customs" | "notes" | "unpacked" | "rebox" | "supplemental-inbound" | "supplemental-sync";
-export interface WarehouseFields { inbound_order_sn?: string; action?: "resend" | "void"; lines?: BoxInput[]; reason?: string; package?: PackageData; value?: boolean; category?: NoteCategory; text?: string; reason_category?: "shortage" | "damage" | "box_capacity" | "other"; confirm_extra?: boolean; expected_box_version?: number; requirement_version?: string }
+export interface WarehouseFields { inbound_order_sn?: string; action?: "resend" | "void"; lines?: BoxInput[]; reason?: string; package?: PackageData; value?: boolean | null; category?: NoteCategory; text?: string; reason_category?: "shortage" | "damage" | "box_capacity" | "other"; confirm_extra?: boolean; expected_box_version?: number; requirement_version?: string }
 export interface WarehouseEvent { id: string; kind: string; actor_uid: string; order_version: number; occurred_at: string; reason: string | null; before: Record<string, unknown> | null; result: Record<string, unknown> }
 export const packingWarehouseFields = [
+  { key: "draft", title: "草稿号", width: 160 },
   { key: "approved", title: "审批日期", width: 120 }, { key: "number", title: "打包单", width: 160 },
   { key: "arrival", title: "到仓日期（入库日）", width: 150 }, { key: "received", title: "实际收货日", width: 140 },
   { key: "inbound", title: "入库单号", width: 150 }, { key: "purchase", title: "采购单号", width: 150 },
@@ -35,7 +36,7 @@ export const packingWarehouseFields = [
   { key: "item", title: "ItemID / MSKU", width: 180 }, { key: "gtin", title: "GTIN", width: 170 },
   { key: "quantity", title: "审批 / 装箱 / 余额", width: 150 }, { key: "boxes", title: "装箱数据", width: 240 },
   { key: "status", title: "状态", width: 130 }, { key: "days", title: "打包 / 在仓天数", width: 130 },
-  { key: "customs", title: "是否报关", width: 110 }, { key: "package", title: "单品包装 / 毛重", width: 190 },
+  { key: "customs", title: "是否报关", width: 140 }, { key: "package", title: "单品包装 / 毛重", width: 190 },
   { key: "note", title: "延迟备注", width: 180 }, { key: "labels", title: "产品标签", width: 100 },
   { key: "actions", title: "操作", width: 340 },
 ] as const;

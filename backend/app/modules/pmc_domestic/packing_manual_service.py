@@ -114,11 +114,19 @@ class ManualPackingService:
                 x
                 for x in source.blocked_reasons
                 if x
-                not in ("ELIGIBLE_LISTING_MISSING", "GTIN_INVALID", "MSKU_MISSING", "STORE_UNKNOWN")
+                not in (
+                    "ELIGIBLE_LISTING_MISSING",
+                    "WFS_NOT_CONVERTED",
+                    "GTIN_INVALID",
+                    "MSKU_MISSING",
+                    "STORE_UNKNOWN",
+                )
             ]
             if target is None:
                 blocked.append("ELIGIBLE_LISTING_MISSING")
             else:
+                if target.fulfillment_type != "1":
+                    blocked.append("WFS_NOT_CONVERTED")
                 if not target.gtin or not target.gtin.isdigit() or len(target.gtin) != 14:
                     blocked.append("GTIN_INVALID")
                 if not target.msku:
@@ -137,6 +145,14 @@ class ManualPackingService:
                     "customs_default",
                     "customs_default_src",
                     "customs_proof",
+                    "arrival_purchased",
+                    "arrival_received",
+                    "arrival_pending",
+                    "arrival_status",
+                    "arrival_source_refs",
+                    "split_arrival",
+                    "arrival_batch_count",
+                    "arrival_batch_index",
                 )
             }
             update.update(

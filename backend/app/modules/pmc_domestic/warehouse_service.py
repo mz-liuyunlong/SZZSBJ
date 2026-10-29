@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy import delete, func, select, text
 
 from app.core.api import ApiError, ErrorCode
+from app.modules.pmc_domestic.draft_numbers import attach_draft_numbers
 from app.modules.pmc_domestic.inbound_models import DomesticInboundBoard
 from app.modules.pmc_domestic.packing_models import (
     PackingAllocation,
@@ -263,6 +264,9 @@ class WarehouseService:
                     completion_blocked_reasons=reasons,
                 )
             )
+        attach_draft_numbers(
+            self.session, result, frozenset(order.source_account_ref for order in orders)
+        )
         return result
 
     def list(self, q, accounts):

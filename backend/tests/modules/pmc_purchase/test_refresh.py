@@ -582,7 +582,9 @@ def test_listing_item_id_is_used_when_plan_remark_is_missing(session: Session) -
     assert "itemid_pending" not in _pending(session)
 
 
-def test_listing_item_id_is_not_guessed_when_store_sku_has_several(session: Session) -> None:
+def test_listing_multi_values_are_preserved_without_guessing_a_single_item(
+    session: Session,
+) -> None:
     session.add(
         WalmartListingDimension(
             id=uuid4(),
@@ -602,10 +604,28 @@ def test_listing_item_id_is_not_guessed_when_store_sku_has_several(session: Sess
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "")]
-    assert (row.item_id, row.item_id_source) == (None, "pending_packing_slip")
+    assert (row.item_id, row.item_id_source) == (None, "from_listing")
+    assert row.item_id_match_status == "matched"
+    assert {item["item_id"] for item in row.source_lineage_json["item_identities"]} == {
+        "19051502014",
+        "20425456045",
+    }
 
 
-def test_plan_remark_wins_over_listing_item_id(session: Session) -> None:
+def test_verified_plan_remark_wins_over_listing_fallback(session: Session) -> None:
+    session.add(
+        WalmartListingDimension(
+            id=uuid4(),
+            source_account_ref=ACCOUNT,
+            store_id=STORE,
+            item_id="33333333333",
+            local_sku="SKU-A",
+            msku="B",
+            gtin="00012345678906",
+            fulfillment_type="1",
+            synced_at=NOW,
+        )
+    )
     _plan(session, "P1", remark_item_id="33333333333", remark="ITEMID:33333333333")
     _order(session, "PO1")
     _line(session, "PO1", "L1")
@@ -616,8 +636,54 @@ def test_plan_remark_wins_over_listing_item_id(session: Session) -> None:
     assert (row.item_id, row.item_id_source) == ("33333333333", "from_plan_remark")
 
 
-def test_resolved_item_id_does_not_borrow_a_different_listing(session: Session) -> None:
-    """Remark ItemID A must not take MSKU, GTIN, or fulfillment from store+SKU listing B."""
+def test_legacy_multiple_verified_remarks_keep_one_quantity_and_no_pending(
+    session: Session,
+) -> None:
+    session.add(
+        WalmartListingDimension(
+            id=uuid4(),
+            source_account_ref=ACCOUNT,
+            store_id=STORE,
+            item_id="33333333333",
+            local_sku="SKU-A",
+            msku="MSKU-B",
+            gtin="00012345678906",
+            fulfillment_type="1",
+            synced_at=NOW,
+        )
+    )
+    _plan(session, "P1", remark="ITEMID:33333333333")
+    _order(session, "PO1")
+    _line(session, "PO1", "L1", remark_item_id="19051502014")
+    session.commit()
+    PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
+    row = _board(session)[("PO1", "L1", "P1")]
+    assert row.item_id is None and row.item_id_match_status == "matched"
+    assert row.item_id_source == "from_plan_remark"
+    assert [item["item_id"] for item in row.source_lineage_json["item_identities"]] == [
+        "19051502014",
+        "33333333333",
+    ]
+    assert row.quantity_allocated == 100
+    assert "itemid_pending" not in _pending(session)
+    from app.modules.pmc_purchase.schemas import BoardListQuery
+    from app.modules.pmc_purchase.service import PmcPurchaseReadService
+
+    reader = PmcPurchaseReadService(session, today=TODAY)
+    for field, value in (
+        ("item_id", "33333333333"),
+        ("gtin", "00012345678906"),
+        ("msku", "MSKU-B"),
+    ):
+        data, *_ = reader.list_board(
+            BoardListQuery(search_type=field, search_values=[value]), frozenset({ACCOUNT})
+        )
+        assert data.total == 1
+        assert len(data.items[0].item_id.identities) == 2
+
+
+def test_unverified_remark_falls_back_without_claiming_remark_attribution(session: Session) -> None:
+    """Unverified A stays in evidence; unique listing B is explicitly a fallback."""
 
     _plan(session, "P1", remark_item_id="33333333333", remark="ITEMID:33333333333")
     _order(session, "PO1")
@@ -626,8 +692,8 @@ def test_resolved_item_id_does_not_borrow_a_different_listing(session: Session) 
 
     PmcPurchaseDwsRefresher(session, now=NOW).refresh(source_account_ref=ACCOUNT, today=TODAY)
     row = _board(session)[("PO1", "L1", "P1")]
-    assert (row.item_id, row.item_id_source) == ("33333333333", "from_plan_remark")
-    assert (row.msku, row.gtin, row.fulfillment_type, row.wfs_not_ready) == (None, None, None, None)
+    assert (row.item_id, row.item_id_source) == ("19051502014", "from_listing")
+    assert row.source_lineage_json["item_id_evidence"]["unverified_ids"] == ["33333333333"]
 
 
 def test_resolved_item_id_uses_the_listing_with_the_same_item_id(session: Session) -> None:

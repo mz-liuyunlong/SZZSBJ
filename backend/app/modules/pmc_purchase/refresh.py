@@ -18,10 +18,9 @@ Scope (rules v4, PRP §7, gate3-plan G3-D, Rocky 2026-09-23 "按之前的来"):
   ``quantity_total × arrival_ratio`` (§3.2, ratio from the rule table, default 0.5).
 * Two overdue notions stay apart through ``stage_code``: ``S2`` = purchase overdue
   (order still 待下单), ``S3``/``S4`` = arrival overdue (ordered, not arrived).
-* ItemID: ``from_system_plan`` > ``from_plan_remark`` > ``from_listing`` >
-  ``from_packing_slip`` > ``pending_packing_slip``. Listing uses the Walmart item
-  id on ``dim_walmart_listings`` for the same store and local SKU, and only when
-  that pair has one item id. Packing slip remains the fallback. No manual ItemID.
+* ItemID: merge plan and line remarks and verify against same-account/store/SKU listings.
+  Keep every verified identity. Multiple values do not duplicate quantities or imply conflict.
+  Without verified remarks, show same-store/SKU listings; preserve existing packing fallback.
 * ``sid = 0`` rows keep ``store_attributed = False``: no overdue, no cycle sample.
 * Manual layer is read, never written; DWD is never written.
 
@@ -59,7 +58,6 @@ from app.modules.pmc_purchase.calculations import (
     compute_sku_cycle,
     cycle_threshold_days,
     days_between,
-    resolve_item_id,
     wfs_not_ready,
 )
 from app.modules.pmc_purchase.dwd_builder import build_receipt_lines
@@ -77,6 +75,15 @@ from app.modules.pmc_purchase.models import (
     LingxingReceiptOrderItemOds,
     LingxingReceiptOrderOds,
 )
+from app.modules.pmc_purchase.remark_item_ids import (
+    OdsRemarkTexts,
+    extract_remark_item_ids,
+    line_texts_for,
+    load_ods_remark_texts,
+    plan_texts_for,
+    resolve_purchase_board_item_id,
+    validated_remark_item_ids,
+)
 from app.modules.sku_detail.models import LingxingSkuProductInfoCurrent
 
 DWS_CALC_VERSION: Final = "pmc_purchase.dws.v1"
@@ -84,6 +91,7 @@ RULE_KEY: Final = "pmc_purchase_thresholds"
 
 MATCH_STATUS_MATCHED: Final = "matched"
 MATCH_STATUS_PENDING: Final = "pending"
+MATCH_STATUS_CONFLICT: Final = "conflict"
 MATCH_STATUS_UNRESOLVED: Final = "unresolved"
 
 PENDING_ITEMID: Final = "itemid_pending"
@@ -169,6 +177,13 @@ class _Listing:
     msku: str | None
     gtin: str | None
     fulfillment_type: str | None
+    local_sku: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ListingIndex:
+    by_item: dict[tuple[str, str], _Listing]
+    by_store_sku: dict[tuple[str, str], _Listing]
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +306,7 @@ class PmcPurchaseDwsRefresher:
 
         stores = self._stores(account)
         listings = self._listings(account)
+        ods_remarks = load_ods_remark_texts(self.session, account)
         products = self._products(account)
         overrides, override_count = self._overrides(account)
         result.overrides_active = override_count
@@ -337,6 +353,7 @@ class PmcPurchaseDwsRefresher:
                 sku_threshold=thresholds_by_sku.get(line.sku or ""),
                 stores=stores,
                 listings=listings,
+                ods_remarks=ods_remarks,
                 products=products,
                 overrides=overrides.get(line.sku or ""),
                 thresholds=thresholds,
@@ -424,7 +441,7 @@ class PmcPurchaseDwsRefresher:
             item_id = row.item_id.strip()
             if not item_id:
                 continue
-            listing = _Listing(item_id, row.msku, row.gtin, row.fulfillment_type)
+            listing = _Listing(item_id, row.msku, row.gtin, row.fulfillment_type, row.local_sku)
             by_item[(row.store_id, item_id)] = listing
             local_sku = (row.local_sku or "").strip()
             if local_sku:
@@ -595,6 +612,7 @@ class PmcPurchaseDwsRefresher:
         sku_threshold: int | None,
         stores: dict[str, str | None],
         listings: _ListingIndex,
+        ods_remarks: OdsRemarkTexts | None,
         products: dict[str, _Product],
         overrides: _SkuOverrides | None,
         thresholds: PurchaseThresholds,
@@ -613,11 +631,48 @@ class PmcPurchaseDwsRefresher:
             today=today,
             thresholds=thresholds,
         )
-        attribution, source_ref, matched_at = self._attribute_item_id(line, plan, listings)
+        attribution, source_ref, matched_at, remark_conflict = self._attribute_item_id(
+            line, plan, listings, ods_remarks
+        )
+        plan_texts = plan_texts_for(
+            ods_remarks, plan, fallback_remark=plan.remark if plan else None
+        )
+        line_texts = line_texts_for(ods_remarks, line, fallback_item_id=line.remark_item_id)
+        store_id = line.store_id or (plan.store_id if plan else None)
+        verified = {
+            item: value
+            for (store, item), value in listings.by_item.items()
+            if store == store_id and (value.local_sku or "").strip() == (line.sku or "").strip()
+        }
+        remark_ids = validated_remark_item_ids(plan_texts, line_texts, list(verified))
+        selected_ids = remark_ids or list(verified)
+        identities = [
+            {
+                "item_id": item,
+                "msku": verified[item].msku,
+                "gtin": verified[item].gtin,
+                "fulfillment_type": verified[item].fulfillment_type,
+            }
+            for item in selected_ids
+        ]
+        if identities:
+            attribution = ItemIdAttribution(
+                selected_ids[0] if len(selected_ids) == 1 else None,
+                "from_plan_remark" if remark_ids else "from_listing",
+            )
+            source_ref = line.plan_sn if remark_ids else None
+            matched_at, remark_conflict = self.now, False
         listing = self._listing_for(line, attribution.item_id, listings)
         product = products.get(line.sku or "")
         wfs_flag = wfs_not_ready(attribution.source, listing.fulfillment_type if listing else None)
-        if attribution.item_id is not None:
+        if identities:
+            wfs_flag = any(
+                wfs_not_ready(attribution.source, item["fulfillment_type"]) is True
+                for item in identities
+            )
+        if remark_conflict:
+            match_status = MATCH_STATUS_CONFLICT
+        elif attribution.item_id is not None or identities:
             match_status = MATCH_STATUS_MATCHED
         elif attribution.source == "pending_packing_slip":
             match_status = MATCH_STATUS_PENDING
@@ -633,6 +688,22 @@ class PmcPurchaseDwsRefresher:
             "override_ids": overrides.ids() if overrides else [],
             "listing_matched": listing is not None,
             "product_matched": product is not None,
+            "item_identities": identities,
+            **{
+                f"identity_search_{field}": [item[field] for item in identities if item[field]]
+                for field in ("item_id", "gtin", "msku")
+            },
+            "item_id_evidence": {
+                "rule": "purchase.remark.merge.v1",
+                "plan_sn": line.plan_sn,
+                "order_sn": line.order_sn,
+                "order_item_id": line.order_item_id,
+                "unverified_ids": [
+                    item
+                    for item in extract_remark_item_ids([*line_texts, *plan_texts])
+                    if item not in verified
+                ],
+            },
         }
         row = DwsPurchaseBoard(
             id=uuid4(),
@@ -643,6 +714,7 @@ class PmcPurchaseDwsRefresher:
             source_lineage_json=lineage,
             order_sn=line.order_sn,
             order_item_id=line.order_item_id,
+            draft_no=line.draft_no,
             plan_key=line.plan_key,
             plan_sn=line.plan_sn,
             plan_sns_json=[line.plan_sn] if line.plan_sn else [],
@@ -721,7 +793,7 @@ class PmcPurchaseDwsRefresher:
                 )
             )
 
-        if attribution.item_id is None and stage.stage_code not in ("S0",):
+        if attribution.item_id is None and not identities and stage.stage_code not in ("S0",):
             _pending(
                 PENDING_ITEMID,
                 {
@@ -780,32 +852,33 @@ class PmcPurchaseDwsRefresher:
         line: DwdPurchaseOrderLineItem,
         plan: DwdPurchasePlan | None,
         listings: _ListingIndex,
-    ) -> tuple[ItemIdAttribution, str | None, datetime | None]:
-        remark_item_id = line.remark_item_id or (plan.remark_item_id if plan else None)
-        sku_listing = None
+        ods_remarks: OdsRemarkTexts | None,
+    ) -> tuple[ItemIdAttribution, str | None, datetime | None, bool]:
         sku = (line.sku or "").strip()
-        if line.store_id and sku:
-            sku_listing = listings.by_store_sku.get((line.store_id, sku))
+        store_id = line.store_id or (plan.store_id if plan else None)
+        sku_listing = None
+        if store_id and sku:
+            sku_listing = listings.by_store_sku.get((store_id, sku))
         slip = self.packing_slips.lookup(
             order_sn=line.order_sn,
             order_item_id=line.order_item_id,
             sku=line.sku,
             store_id=line.store_id,
         )
-        attribution = resolve_item_id(
-            system_plan_item_id=None,  # reserved: plans created by this system (not built yet)
-            plan_remark_item_id=remark_item_id,
+        attribution = resolve_purchase_board_item_id(
+            plan_texts=[],
+            line_texts=[],
             listing_item_id=sku_listing.item_id if sku_listing else None,
             packing_slip_item_id=slip.item_id if slip else None,
             packing_slip_pending=slip is None,
         )
         if attribution.source == "from_plan_remark":
-            return attribution, line.plan_sn, self.now
+            return attribution, line.plan_sn, self.now, False
         if attribution.source == "from_listing":
-            return attribution, None, self.now
+            return attribution, None, self.now, False
         if attribution.source == "from_packing_slip" and slip is not None:
-            return attribution, slip.packing_slip_no, slip.matched_at
-        return attribution, None, None
+            return attribution, slip.packing_slip_no, slip.matched_at, False
+        return attribution, None, None, False
 
     def _cycle_row(
         self,

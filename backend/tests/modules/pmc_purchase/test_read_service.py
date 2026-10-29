@@ -56,7 +56,7 @@ def seeded(session: Session) -> Session:  # noqa: F811
     )
     # PO1: arrived this month, SKU-A with ItemID
     _order(session, "PO1", order_date=TODAY - timedelta(days=15))
-    _line(session, "PO1", "L1")
+    _line(session, "PO1", "L1", draft_no="CG261017-039")
     _receipt(session, run, "R1", "L1", f"{TODAY - timedelta(days=5)} 10:00:00", 100)
     # PO2: S3 arrival overdue, SKU-B, no ItemID
     _order(session, "PO2", order_date=TODAY - timedelta(days=30), amount_total=Decimal("900"))
@@ -87,6 +87,8 @@ def test_board_filters_sorting_and_scope(seeded: Session) -> None:
     assert total == 4 and rule == 1 and freshness is not None
     # default sort: order_date desc with NULL (PO3) last
     assert [i.purchase_order_sn for i in data.items] == ["PO1", "PO2", "PO4", "PO3"]
+    po1 = next(i for i in data.items if i.purchase_order_sn == "PO1")
+    assert po1.draft_no == "CG261017-039"
 
     data, total, *_ = svc.list_board(BoardListQuery(status=["overdue"]), SCOPE)
     assert {i.purchase_order_sn for i in data.items} == {"PO2", "PO3"}
@@ -153,7 +155,9 @@ def test_summary_cards(seeded: Session) -> None:
         m.currency_code == "CNY" for m in data.month_purchase_amount
     )
     assert data.itemid_pending_lines == 1 and data.unattributed_store_lines == 1
-    assert data.wfs_not_ready_lines == 2  # PO1 and PO3 share the SKU-A listing (fulfillment 0)
+    assert (
+        data.wfs_not_ready_lines == 3
+    )  # Unverified remarks now fall back to the SKU-A listing too.
     assert data.unstable_sku_count == 0
 
 

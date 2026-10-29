@@ -120,7 +120,13 @@ class PmcPurchaseReadService:
             unstable_sku_count=len(
                 {(r.source_account_ref, r.sku) for r in rows if r.sku_cycle_unstable and r.sku}
             ),
-            itemid_pending_lines=sum(1 for r in rows if r.item_id is None and r.stage_code != "S0"),
+            itemid_pending_lines=sum(
+                1
+                for r in rows
+                if r.item_id is None
+                and r.item_id_match_status != "matched"
+                and r.stage_code != "S0"
+            ),
             wfs_not_ready_lines=sum(1 for r in rows if r.wfs_not_ready is True),
             unattributed_store_lines=sum(1 for r in rows if not r.store_attributed),
             as_of=self.today,
@@ -252,6 +258,7 @@ def _stage(row: DwsPurchaseBoard) -> StageRef:
 def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
     return BoardRowRead(
         purchase_order_sn=row.order_sn,
+        draft_no=row.draft_no,
         order_item_id=row.order_item_id,
         plan_sn=row.plan_sn,
         plan_sns=list(row.plan_sns_json or []),
@@ -261,6 +268,7 @@ def _board_row(row: DwsPurchaseBoard) -> BoardRowRead:
         sku=row.sku,
         product_name=row.product_name,
         item_id=ItemIdRef(
+            identities=(row.source_lineage_json or {}).get("item_identities", []),
             item_id=row.item_id,
             source=row.item_id_source,  # type: ignore[arg-type]
             source_ref=row.item_id_source_ref,

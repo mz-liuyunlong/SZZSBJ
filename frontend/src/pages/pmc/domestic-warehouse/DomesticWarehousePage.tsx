@@ -1,3 +1,4 @@
+import DomesticPackingRiskCard from "./components/DomesticPackingRiskCard";
 /** Inbound batch board — published API data only. */
 import { Alert, Button, Card, Drawer, Input, Select, Space, Typography, message, theme } from "antd";
 import { useState, type CSSProperties } from "react";
@@ -6,8 +7,7 @@ import RequestLoadingOverlay from "@/components/page/RequestLoadingOverlay";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import type { NavigationPage } from "@/config/navigation";
 import { usePageStateCache } from "@/shared/page-state/pageStateCache";
-import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
-import DomesticPackingRiskCard from "./components/DomesticPackingRiskCard";
+import { writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import DomesticToolbar from "./components/DomesticToolbar";
 import DomesticSummaryCards from "./components/DomesticSummaryCards";
 import DomesticBatchTable from "./components/DomesticBatchTable";
@@ -16,11 +16,10 @@ import PackingApprovalPanel from "./approval/PackingApprovalPanel";
 import PackingWarehousePanel from "./packing/PackingWarehousePanel";
 import { domesticErrorText } from "./domesticWarehouseApi";
 import { useDomesticBoard, useDomesticFilterOptions } from "./domesticWarehouseQueries";
-import { defaultColumnKeys, defaultColumnWidths, domesticColumns, initialDomesticFilters, type DomesticFilters, type BatchSort, type InventoryStatus } from "./domesticWarehouseTypes";
+import { defaultColumnKeys, domesticColumns, initialDomesticFilters, type DomesticFilters, type BatchSort, type InventoryStatus } from "./domesticWarehouseTypes";
+import { readDomesticColumns, domesticColumnPreferenceKey, domesticColumnPreferenceVersion, type DomesticColumnSettings } from "./domesticColumnPreferences";
 import "./DomesticWarehousePage.css";
 
-interface ColumnSettings { keys: string[]; widths: Record<string, number> }
-const preferenceKey = "pmc-domestic-inbound-board:columns";
 const columnGroups = [{ title: "入库批次字段", fields: domesticColumns.map(({ key, title }) => ({ key, title })) }];
 
 export default function DomesticWarehousePage({ page, preferenceScope = "anonymous", view = "batches" }: { page: NavigationPage; preferenceScope?: string; view?: "batches" | "approval" | "packing" }) {
@@ -30,11 +29,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
   const [filters, setFilters] = usePageStateCache<DomesticFilters>(`${scope}:inbound-filters-v2`, initialDomesticFilters);
   const [pagination, setPagination] = usePageStateCache(`${scope}:inbound-pagination-v1`, { page: 1, pageSize: 50 });
   const [showStats, setShowStats] = usePageStateCache(`${scope}:stats`, true);
-  const [settings, setSettings] = useState<ColumnSettings>(() => {
-    const stored = readUserPreference<ColumnSettings>(preferenceScope, preferenceKey, 1);
-    const allowed = new Set(defaultColumnKeys);
-    return { keys: ["arrival", ...(stored?.keys ?? defaultColumnKeys).filter((key) => key !== "arrival" && allowed.has(key))], widths: { ...defaultColumnWidths, ...stored?.widths } };
-  });
+  const [settings, setSettings] = useState<DomesticColumnSettings>(() => readDomesticColumns(preferenceScope));
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [warehouseText, setWarehouseText] = useState("");
@@ -60,7 +55,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
     if (next.inboundFrom && next.inboundTo && next.inboundFrom > next.inboundTo) { void messageApi.warning("开始日期不能晚于结束日期"); return; }
     setDetail(undefined); setFilters(next); setPagination({ ...pagination, page: 1 });
   };
-  const persistColumns = (next: ColumnSettings) => { setSettings(next); writeUserPreference(preferenceScope, preferenceKey, 1, next); };
+  const persistColumns = (next: DomesticColumnSettings) => { setSettings(next); writeUserPreference(preferenceScope, domesticColumnPreferenceKey, domesticColumnPreferenceVersion, next); };
   const retry = () => { void list.refetch(); void summary.refetch(); void options.refetch(); };
   const noPublication = meta?.data_status === "not_published";
   const emptyTitle = error ? "数据加载失败" : noPublication ? "尚无已发布入库数据" : "暂无入库批次";
@@ -82,6 +77,7 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
           : activeTab === "approval" ? <PackingApprovalPanel preferenceScope={preferenceScope}
             storeOptions={options.data?.data?.stores ?? []} optionsLoading={options.isFetching} onListFetching={setApprovalFetching} />
           : <>
+          <DomesticPackingRiskCard scope={preferenceScope} />
           <Card size="small" className="domestic-board__toolbar-card"><DomesticToolbar filters={filters}
             filterOptions={options.data?.data} optionsLoading={options.isFetching}
             onChange={commitFilters} onReset={() => commitFilters(initialDomesticFilters())} showStats={showStats} onToggleStats={() => setShowStats(!showStats)}
@@ -91,7 +87,6 @@ export default function DomesticWarehousePage({ page, preferenceScope = "anonymo
           {noPublication && <Alert showIcon type="info" message="尚未发布入库数据" description="接口已接入；当前范围没有成功发布版本。" />}
           {error && <Alert type="error" showIcon message={domesticErrorText(error)} action={<Button size="small" onClick={retry}>重试</Button>} />}
           {versionMismatch && <Alert type="warning" showIcon message="列表与统计版本不同，请刷新后核对" action={<Button onClick={retry}>刷新版本</Button>} />}
-          <DomesticPackingRiskCard scope={preferenceScope} />
           {showStats && <DomesticSummaryCards summary={stats} active={filters.inventoryStatus} onUnknown={() => commitFilters({ ...filters, inventoryStatus: filters.inventoryStatus === "unknown" ? undefined : "unknown" })} />}
           <Typography.Paragraph type="secondary" className="domestic-board__hint">一行 = 入库单 × SKU × 店铺。入库总量属于 IB×SKU，跨店铺不可直接相加；统计已去重。“—”表示未知。{stats && ` 统计日期 ${stats.as_of}。`}</Typography.Paragraph>
           <div className="domestic-board__table-wrap"><DomesticBatchTable rows={rows} total={total}

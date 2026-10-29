@@ -23,6 +23,7 @@ const envelope = (data: unknown, meta: Record<string, unknown> = {}) => ({
 
 const backendRow = {
   purchase_order_sn: "PO1",
+  draft_no: "CG261017-039",
   order_item_id: "L1",
   plan_sn: "P1",
   plan_sns: ["P1"],
@@ -169,6 +170,7 @@ describe("purchaseBoardApi mapping", () => {
     expect(result.meta).toEqual({ freshnessAt: "2026-09-23T03:00:00Z", ruleVersion: 1, total: 1 });
     const row = result.rows[0];
     expect(row.id).toBe("PO1::L1::P1");
+    expect(row.draftNo).toBe("CG261017-039");
     expect(row.stage.overdueKind).toBe("arrival");
     expect(row.itemId.itemId).toBe("19051502014");
     expect(row.itemId.source).toBe("from_listing");
