@@ -127,7 +127,7 @@ def verify_result(run_dir: Path, *, run_id: str) -> dict[str, Any]:
             for key in requested
         ):
             raise ValueError
-        expected_hashes = dict(line.split("  ", 1) for line in lines)
+        expected_hashes = {name: digest for digest, name in (line.split("  ", 1) for line in lines)}
         for name, info in files.items():
             if (
                 not isinstance(name, str)
