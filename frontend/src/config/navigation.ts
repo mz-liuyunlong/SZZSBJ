@@ -136,7 +136,11 @@ export const navigation: NavigationGroup[] = [
     title: '工作台',
     icon: createElement(DashboardOutlined, { 'aria-hidden': true }),
     children: [
-      page('dashboard', 'today_sales', '今日销售', '/dashboard/today-sales'),
+      page('dashboard', 'today_sales', '工作台', '/dashboard', {
+        status: 'testing',
+        readOnly: true,
+        migrationMode: 'native',
+      }),
       page('dashboard', 'today_profit', '今日利润', '/dashboard/today-profit'),
       page('dashboard', 'ad_spend', '广告花费', '/dashboard/ad-spend'),
       page('dashboard', 'refund_rate', '退款率', '/dashboard/refund-rate'),
@@ -160,7 +164,7 @@ export const navigation: NavigationGroup[] = [
         viewPermissionKey: 'page:products:product-management:view',
       }),
       page('products', 'claim_center', '认领中心', '/products/claim-center'),
-      page('products', 'new_product_analysis', '新品分析', '/products/new-product-analysis'),
+      page('products', 'new_product_analysis', '新品表现', '/products/new-product-analysis'),
       page('products', 'lifecycle', '产品生命周期', '/products/lifecycle'),
       page('products', 'grade', '产品等级', '/products/grade'),
     ],
@@ -393,5 +397,6 @@ export const navigation: NavigationGroup[] = [
 
 /** Old container URLs redirect without registering a page or restoring a legacy top tab. */
 export const navigationRedirects: Readonly<Record<string, string>> = {
+  '/dashboard/today-sales': '/dashboard',
   '/pmc/domestic-warehouse-board': '/pmc/domestic/batches',
 };

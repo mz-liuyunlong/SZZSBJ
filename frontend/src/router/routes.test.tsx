@@ -26,6 +26,17 @@ vi.mock("@/pages/auth/ForgotPasswordPage", () => ({
   default: () => <h1>模拟忘记密码页</h1>,
 }));
 
+vi.mock("@/pages/dashboard/DashboardHomePage", () => ({
+  default: ({ page }: {
+    page: { key: string; title: string };
+  }) => (
+    <section aria-label="工作台页面壳">
+      <h1 aria-label="当前页面">{page.title}</h1>
+      <span>{page.key}</span>
+    </section>
+  ),
+}));
+
 vi.mock("@/pages/ComingSoonPage", () => ({
   default: ({ page }: { page: { status: string; title: string } }) => (
     <section aria-label="统一占位页">
@@ -213,29 +224,42 @@ describe("AppRoutes", () => {
     expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
   });
 
-  it("keeps mock auth in memory while restoring the path-only workspace after login", async () => {
-  const restoredPath = "/sales/daily-sales";
-  sessionStorage.setItem(
-    TAB_WORKSPACE_STORAGE_KEY,
-    JSON.stringify({
-      version: TAB_WORKSPACE_VERSION,
-      openPaths: [DEFAULT_BUSINESS_PATH, restoredPath],
-      activePath: restoredPath,
-    }),
-  );
-  renderRoutes(restoredPath);
+  it("opens the dashboard after login instead of restoring the previous page", async () => {
+    const previousPath = "/sales/daily-sales";
 
-  expect(await screen.findByRole("button", { name: "模拟登录" })).toBeVisible();
-  expect(screen.getByLabelText("当前路径")).toHaveTextContent("/login");
+    sessionStorage.setItem(
+      TAB_WORKSPACE_STORAGE_KEY,
+      JSON.stringify({
+        version: TAB_WORKSPACE_VERSION,
+        openPaths: [DEFAULT_BUSINESS_PATH, previousPath],
+        activePath: previousPath,
+      }),
+    );
 
-  fireEvent.click(screen.getByRole("button", { name: "模拟登录" }));
-  await waitFor(() => {
-    expect(screen.getByLabelText("当前路径")).toHaveTextContent(restoredPath);
+    renderRoutes(previousPath);
+
+    expect(
+      await screen.findByRole("button", { name: "模拟登录" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "模拟登录" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("当前路径")).toHaveTextContent(
+        DEFAULT_BUSINESS_PATH,
+      );
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "当前页面" }),
+    ).toHaveTextContent("工作台");
+
+    expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY))
+      .toBeNull();
   });
-  expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-    "每日销售",
-  );
-});
+
 
 it("redirects unauthenticated business visits to login", async () => {
     renderRoutes("/finance/ad-bill");
@@ -258,20 +282,20 @@ it("redirects unauthenticated business visits to login", async () => {
   const { unmount } = renderRoutes(DEFAULT_BUSINESS_PATH, true);
   expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-    "Listing管理",
+    "工作台",
   );
-  expect(screen.getByText("products_listing_management")).toBeVisible();
+  expect(screen.getByText("dashboard_today_sales")).toBeVisible();
 
   unmount();
   renderRoutes("/data-center/documentation", true);
   await waitFor(() => {
     expect(screen.getByLabelText("当前路径")).toHaveTextContent(
-      "/dashboard/today-sales",
+      "/dashboard",
     );
   });
   expect(screen.getByRole("main", { name: "业务布局" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-    "今日销售",
+    "工作台",
   );
   expect(screen.queryByLabelText("页面状态：hidden")).not.toBeInTheDocument();
 });

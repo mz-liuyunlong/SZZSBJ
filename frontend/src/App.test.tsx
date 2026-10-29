@@ -98,9 +98,9 @@ describe("App", () => {
 
     await logIn();
 
-    expect(screen.getByRole("region", { name: "Listing管理" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "工作台" })).toBeVisible();
     expect(screen.getByRole("navigation", { name: "面包屑" })).toHaveTextContent(
-      "产品",
+      "工作台",
     );
     expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     expect(localStorage.length).toBe(0);
@@ -112,10 +112,7 @@ describe("App", () => {
     expect(sessionStorage.getItem(TAB_WORKSPACE_STORAGE_KEY)).not.toMatch(
       /title|permission|role|user|token|auth|state/i,
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/api/listings/walmart"),
-      expect.objectContaining({ credentials: "same-origin" }),
-    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps login when logout is dismissed and routes confirmed logout to login", async () => {
@@ -123,12 +120,8 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderApp();
     await logIn(true);
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining("/api/listings/walmart?page=1&page_size=50"),
-        expect.objectContaining({ credentials: "same-origin" }),
-      );
-    });
+    expect(await screen.findByRole("region", { name: "工作台" })).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
     fetchMock.mockClear();
 
     await openLogoutDialog();

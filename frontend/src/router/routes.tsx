@@ -8,8 +8,9 @@ import {
 import type { ReactNode } from "react";
 import AuthLayout from "@/layouts/auth/AuthLayout";
 import MainLayout from "@/layouts/MainLayout";
-import { readTabWorkspace } from "@/layouts/useTabWorkspace";
+import { clearTabWorkspaceStorage } from "@/layouts/useTabWorkspace";
 import ComingSoonPage from "@/pages/ComingSoonPage";
+import DashboardHomePage from "@/pages/dashboard/DashboardHomePage";
 import ForgotPasswordPage from "@/pages/auth/ForgotPasswordPage";
 import PasswordSetupPage from "@/pages/auth/PasswordSetupPage";
 import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
@@ -101,25 +102,18 @@ function LoginRoute({
     <AuthRoute mockLoggedIn={mockLoggedIn}>
       <LoginPage
         onLogin={(user) => {
-          const { activePath } = readTabWorkspace();
           const shouldOpenOnboarding = shouldShowOnboardingAfterLogin();
-          const resolution = resolveRoute(activePath);
-          const canRestore = resolution.kind === "allowed" &&
-            isMockPageAccessibleForRole(
-              user.role,
-              resolution.route.page,
-              user.permissions,
-            );
 
+          // 登录后开启新的页面标签会话，不恢复旧的 Listing 等标签。
+          // 仅清除标签记录，不清除身份凭证或业务数据。
+          clearTabWorkspaceStorage();
           onLogin(user);
           clearShowOnboardingAfterLogin();
 
           navigate(
             shouldOpenOnboarding
               ? "/help/onboarding"
-              : canRestore
-                ? activePath
-                : firstAccessibleBusinessPath(user),
+              : firstAccessibleBusinessPath(user),
             { replace: true },
           );
         }}
@@ -177,7 +171,9 @@ function BusinessRoute({
         navigate("/login", { replace: true });
       }}
       renderPage={(page) =>
-        page.key === "products_product_management" ? (
+        page.key === "dashboard_today_sales" ? (
+          <DashboardHomePage page={page} user={activeUser} />
+        ) : page.key === "products_product_management" ? (
           <ProductManagementPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
