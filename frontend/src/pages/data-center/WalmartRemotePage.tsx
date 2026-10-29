@@ -11,7 +11,7 @@ interface StoreChoice {
   route_ready: boolean;
 }
 
-type JobStatus = "queued" | "running" | "succeeded" | "failed";
+type JobStatus = "queued" | "running" | "succeeded" | "failed" | "needs_review";
 
 interface RemoteJob {
   id: string;
