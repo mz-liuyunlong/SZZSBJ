@@ -1,4 +1,5 @@
 """Offline contract tests against the 2026-10-26 original worker CLI."""
+
 from __future__ import annotations
 
 import pytest
