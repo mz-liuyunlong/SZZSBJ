@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime
 from typing import Annotated
@@ -16,13 +17,13 @@ from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_respo
 from app.core.auth import Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
+from app.integrations.walmart.planner import STORE_ROUTES
 from app.integrations.walmart.remote_dispatch import ALLOWED_KEYS, STORES, parse_routes
+from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.walmart_remote.models import WalmartRemoteJob
-from app.modules.data_pages.models import LingxingStoreDimension
-from app.modules.walmart_scf.store_scope import verify_store_grant
 from app.modules.walmart_remote.tasks import dispatch_remote_job
-from app.modules.walmart_scf.store_scope import verify_http_store
+from app.modules.walmart_scf.store_scope import verify_http_store, verify_store_grant
 from app.modules.walmart_scf.unified import store_code_for
 
 router = APIRouter(prefix="/api/integrations/walmart-remote", tags=["Walmart Remote"])
@@ -74,10 +75,6 @@ def list_remote_stores(
     account_scope: scope,
 ) -> SuccessEnvelope[list[StoreChoice], None]:
     """Return persisted, scoped store identities; never guess Walmart store IDs."""
-    import json
-
-    from app.integrations.walmart.planner import STORE_ROUTES
-
     try:
         mapping = json.loads(os.getenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", "{}"))
         if not isinstance(mapping, dict):
