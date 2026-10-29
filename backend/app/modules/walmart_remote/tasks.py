@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
@@ -154,3 +154,30 @@ def recover_remote_job(job_id: str) -> None:
         job.files_verified = int(result["files_verified"])
         job.finished_at = datetime.now(UTC)
         session.commit()
+
+
+@celery_app.task(name="walmart_remote.recovery_tick", ignore_result=True)  # type: ignore[misc]
+def recovery_tick() -> None:
+    """Inspect a bounded number of uncertain runs; no worker restarts or tokens."""
+    if os.getenv("SZZSBJ_WALMART_REMOTE_COLLECTION_ENABLED") != "1":
+        return
+    if os.getenv("SZZSBJ_WALMART_REMOTE_RECOVERY_ENABLED") != "1":
+        return
+    cutoff = datetime.now(UTC) - timedelta(minutes=20)
+    with get_session_factory()() as session:
+        ids = session.scalars(
+            select(WalmartRemoteJob.id)
+            .where(
+                WalmartRemoteJob.status == "needs_review",
+                WalmartRemoteJob.finished_at < cutoff,
+                WalmartRemoteJob.run_id.is_not(None),
+            )
+            .order_by(WalmartRemoteJob.finished_at)
+            .limit(20)
+        ).all()
+    for job_id in ids:
+        recover_remote_job.apply_async(
+            args=(str(job_id),),
+            queue=INTEGRATION_QUEUE,
+            routing_key=INTEGRATION_QUEUE,
+        )
