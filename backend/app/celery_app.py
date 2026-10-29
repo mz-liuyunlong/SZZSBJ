@@ -120,6 +120,10 @@ def create_celery_app(
                 "task": "ai_runtime.recover_keyword_jobs",
                 "schedule": 60.0,
             },
+            "walmart-remote-scheduler": {
+                "task": "walmart_remote.scheduler_tick",
+                "schedule": 600.0,
+            },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
                 "schedule": 60.0,
