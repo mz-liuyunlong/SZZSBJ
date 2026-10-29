@@ -23,7 +23,7 @@ from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.walmart_remote.models import WalmartRemoteJob
 from app.modules.walmart_remote.store_mapping import remote_store_code_for, remote_store_mapping
-from app.modules.walmart_remote.tasks import dispatch_remote_job
+from app.modules.walmart_remote.tasks import dispatch_remote_job, recover_remote_job
 from app.modules.walmart_scf.store_scope import verify_http_store, verify_store_grant
 
 router = APIRouter(prefix="/api/integrations/walmart-remote", tags=["Walmart Remote"])
@@ -249,4 +249,42 @@ def get_job(
         verified_source_account_scope=account_scope,
         store_code=store,
     )
+    return success_response(request, data=job_view(item))
+
+
+@router.post(
+    "/jobs/{job_id}/recover",
+    response_model=SuccessEnvelope[JobView, None],
+    responses={403: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}},
+)
+def request_remote_recovery(
+    job_id: UUID,
+    request: Request,
+    session: db,
+    principal: executor,
+    account_scope: scope,
+) -> SuccessEnvelope[JobView, None]:
+    """Queue a token-free collect-only attempt for the identical existing run."""
+    item = session.get(WalmartRemoteJob, job_id)
+    if item is None:
+        raise ApiError(code="REMOTE_JOB_NOT_FOUND", status_code=404)
+    code = remote_store_code_for(item.store_id)
+    verify_http_store(
+        principal=principal,
+        session=session,
+        source_account_ref=item.source_account_ref,
+        store_id=item.store_id,
+        verified_source_account_scope=account_scope,
+        store_code=code,
+    )
+    if item.status != "needs_review" or not item.run_id:
+        raise ApiError(code="REMOTE_RECOVERY_NOT_ALLOWED", status_code=409)
+    try:
+        recover_remote_job.apply_async(
+            args=(str(item.id),),
+            queue="integration_sync",
+            routing_key="integration_sync",
+        )
+    except Exception:
+        raise ApiError(code="REMOTE_RECOVERY_DISPATCH_UNAVAILABLE", status_code=503) from None
     return success_response(request, data=job_view(item))
