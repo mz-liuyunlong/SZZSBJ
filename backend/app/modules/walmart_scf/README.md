@@ -7,7 +7,7 @@ verification is not an approval for all marketplace operations.
 ## Configuration (all absent by default)
 
 - `SZZSBJ_WALMART_SCF_READ_ENABLED=1`: explicit API feature gate.
-- `SZZSBJ_WALMART_SCF_ACCOUNT_STORE_MAP`: reviewed JSON map from a **persisted IAM source_account_ref** to one Walmart store code, e.g. `{"approved-internal-account":"HK2613"}`. Do not infer this mapping from display names or user input. Values must be unique.
+- `SZZSBJ_WALMART_SCF_STORE_ID_MAP`: reviewed JSON map from a verified **Lingxing store_id** to one Walmart store code, e.g. `{"110711149541688320":"HK2613"}`. Do not infer this mapping from display names or user input. Values must be unique.
 - `SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS`: explicit comma-separated **reviewed** GET operation IDs. Default none. Both the main server and each cloud SCF must independently approve a key. The existing cloud SCF approval documented so far is `wfs_inventory`; do not enable other keys yet.
 - `SZZSBJ_WALMART_SCF_CVM_ROLE`: approved CVM runtime identity role.
 - `SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN`: approved cross-account Invoke role ARN.
@@ -18,10 +18,10 @@ verification is not an approval for all marketplace operations.
 
 ## HTTP endpoints
 
-- `POST /api/integrations/walmart-scf/read` accepts `source_account_ref`, `operation`, `params`. This is **only a request envelope**; outbound contracts are GET-only.
-- `GET /api/integrations/walmart-scf/wfs-inventory?source_account_ref=...&limit=1`
+- `POST /api/integrations/walmart-scf/read` accepts `source_account_ref`, `store_id`, `operation`, `params`. This is **only a request envelope**; outbound contracts are GET-only.
+- `GET /api/integrations/walmart-scf/wfs-inventory?source_account_ref=...&store_id=...&limit=1`
 
-Both require `integrations:execute` and verified `require_source_account_scope`. Unknown or absent mappings, disabled switches, unapproved operations or cross-account access fail without dispatch.
+Both require `integrations:execute`, verified `require_source_account_scope`, explicit RBAC `store` grant, and an active matching Walmart store in `dim_lingxing_stores`. Unknown or absent mappings, disabled switches, unapproved operations or cross-account access fail without dispatch.
 
 ## Pagination
 
@@ -38,3 +38,5 @@ Both require `integrations:execute` and verified `require_source_account_scope`.
 3. Review returned data for PII handling and least-privilege endpoint access.
 4. Run CI (Ruff, tests), ensure no secret logging and cross-store negative cases.
 5. Do not deploy `main` solely to enable this feature: any deployment requires a separate production change approval.
+
+The Lingxing source account `primary` is shared across nine Walmart stores: it must not be substituted for a unique store identity. SCF routing is keyed by store_id and verifies the approved code matches the persisted store-name prefix. Existing production store grants are absent, so the new interface intentionally denies every store until an audited operator grants the appropriate RBAC scopes. The Celery task also requires `SZZSBJ_WALMART_SCF_TASK_STORE_SCOPE`; the schedule remains disabled.
