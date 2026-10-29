@@ -10,7 +10,6 @@ import pytest
 from app.integrations.walmart import remote_recovery
 from app.integrations.walmart.remote_dispatch import DispatchRejected, WorkerRoute
 
-
 ROUTE = WorkerRoute(
     store_code="CN2502",
     ssh_host="worker-cn2502",
