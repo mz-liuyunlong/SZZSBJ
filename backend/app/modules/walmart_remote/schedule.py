@@ -52,7 +52,6 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
         or len(mapping) != 9
     ):
         return []
-    by_store = {code: sid for sid, code in mapping.items()}
     existing = session.scalars(
         select(LingxingStoreDimension).where(
             LingxingStoreDimension.store_id.in_(list(mapping)),
