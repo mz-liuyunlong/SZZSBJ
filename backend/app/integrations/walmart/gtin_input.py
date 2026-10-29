@@ -2,6 +2,7 @@
 
 Source is a provisioned local CSV, not a caller-controlled path. Never log rows.
 """
+
 from __future__ import annotations
 
 import csv
@@ -36,8 +37,13 @@ def build_gtin_input(*, store_code: str, store_id: str, directory: Path) -> Path
     if directory.is_symlink():
         raise GtinSourceRejected("GTIN_OUTPUT_INVALID")
     output = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", newline="", prefix="gtins-", suffix=".csv",
-        dir=directory, delete=False
+        mode="w",
+        encoding="utf-8",
+        newline="",
+        prefix="gtins-",
+        suffix=".csv",
+        dir=directory,
+        delete=False,
     )
     try:
         with output as handle, source.open(encoding="utf-8-sig", newline="") as incoming:
