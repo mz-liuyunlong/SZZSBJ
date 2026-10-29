@@ -8,6 +8,7 @@ The Walmart client secret never crosses the SCF boundary.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import re
 from collections.abc import Callable
@@ -15,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from app.integrations.walmart.https_transport import ClientCredentials
+from app.integrations.walmart.https_transport import ClientCredentials, _private_proxy
 
 _STORE = re.compile(r"^(?:HK|CN)[0-9]{4}$")
 _TOKEN_URL = "https://marketplace.walmartapis.com/v3/token"
@@ -31,6 +32,7 @@ def issue_store_token(
     *,
     bound_store: str,
     secret_resolver: Any,
+    proxy: str | None = None,
     post: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """Issue only the bound store's short-lived token to a trusted SCF invoker.
@@ -58,7 +60,12 @@ def issue_store_token(
     }
     try:
         if post is None:
-            with httpx.Client(timeout=12.0, trust_env=False, follow_redirects=False) as client:
+            if not isinstance(proxy, str) or not proxy:
+                raise TokenBrokerRejected("TOKEN_APPROVED_EGRESS_REQUIRED")
+            approved_proxy = _private_proxy(proxy)
+            with httpx.Client(
+                proxy=approved_proxy, timeout=12.0, trust_env=False, follow_redirects=False
+            ) as client:
                 response = client.post(
                     _TOKEN_URL, data={"grant_type": "client_credentials"}, headers=headers
                 )
@@ -106,6 +113,11 @@ def scf_token_handler(event: object, context: object) -> dict[str, Any]:
             approved_stores=frozenset({store}),
             version=os.getenv("SZZSBJ_WALMART_SECRET_VERSION", "v1"),
         )
-        return issue_store_token(event, bound_store=store, secret_resolver=resolver)
+        routes = json.loads(os.getenv("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
+        if not isinstance(routes, dict) or set(routes) != {store}:
+            raise TokenBrokerRejected("TOKEN_APPROVED_EGRESS_REQUIRED")
+        return issue_store_token(
+            event, bound_store=store, secret_resolver=resolver, proxy=routes[store]
+        )
     except Exception:
         return {"success": False, "status": "TOKEN_BROKER_UNAVAILABLE"}
