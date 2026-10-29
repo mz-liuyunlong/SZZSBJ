@@ -70,7 +70,9 @@ def prepare_verified_csv(
             raise ValueError
         if not set(endpoints) <= ALLOWED_KEYS:
             raise ValueError
-        destination = archive_root / "daily" / day.strftime("%Y%m%d") / "walmart" / store_id / run_id
+        destination = (
+            archive_root / "daily" / day.strftime("%Y%m%d") / "walmart" / store_id / run_id
+        )
         if destination.is_symlink() or not destination.is_dir():
             raise ValueError
         manifest_file = destination / "_convert_manifest.json"
