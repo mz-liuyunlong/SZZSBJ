@@ -94,7 +94,7 @@ def build_gtin_input(*, store_code: str, store_id: str, directory: Path) -> Path
 
 
 def build_system_gtin_input(
-    *, session: "Session", source_account_ref: str, store_id: str, directory: Path
+    *, session: Session, source_account_ref: str, store_id: str, directory: Path
 ) -> Path:
     """Create worker input from the authoritative scoped listing dimension.
 
