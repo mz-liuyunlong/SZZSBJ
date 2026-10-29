@@ -40,7 +40,7 @@ def upgrade() -> None:
             name="uq_walmart_remote_job_key",
         ),
         sa.CheckConstraint(
-            "status IN ('queued','running','succeeded','failed')",
+            "status IN ('queued','running','succeeded','failed','needs_review')",
             name="ck_walmart_remote_job_status",
         ),
     )
