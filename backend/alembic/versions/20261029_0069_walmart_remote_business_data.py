@@ -70,9 +70,7 @@ def upgrade() -> None:
             table,
             ["source_account_ref", "store_id", "snapshot_date"],
         )
-        op.create_index(
-            "ix_" + table + "_identity", table, ["store_id", "item_id", "sku"]
-        )
+        op.create_index("ix_" + table + "_identity", table, ["store_id", "item_id", "sku"])
 
 
 def downgrade() -> None:

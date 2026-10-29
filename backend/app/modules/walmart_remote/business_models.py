@@ -3,6 +3,7 @@
 Raw CSV fields are retained as JSONB with searchable identity columns. A run
 is committed atomically with its batch receipt, making recovery idempotent.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -22,9 +23,7 @@ def utc_now() -> datetime:
 
 class WalmartRemoteIngestBatch(Base):
     __tablename__ = "walmart_remote_ingest_batches"
-    __table_args__ = (
-        UniqueConstraint("store_id", "run_id", name="uq_walmart_remote_ingest_run"),
-    )
+    __table_args__ = (UniqueConstraint("store_id", "run_id", name="uq_walmart_remote_ingest_run"),)
 
     id: Mapped[UUID] = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid4)
     job_id: Mapped[UUID] = mapped_column(
