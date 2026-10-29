@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
-from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal, require_principal
+from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.db.session import get_db_session
 from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.iam.rbac_repository import RbacRepository
