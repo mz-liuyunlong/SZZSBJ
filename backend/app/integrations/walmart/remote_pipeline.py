@@ -7,10 +7,12 @@ is ever put in a task payload, result, database or log.
 from __future__ import annotations
 
 import os
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from app.integrations.walmart.gtin_input import GtinSourceRejected, build_gtin_input
 from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
 from app.integrations.walmart.remote_daily import convert_verified_run
 from app.integrations.walmart.remote_dispatch import (
@@ -66,16 +68,29 @@ def collect_store_read_only(
         )
         return token.access_token
 
-    verified = collect_with_legacy_worker(
-        route=routes[store_code],
-        store_id=store_id,
-        run_id=rid,
-        operations=operations,
-        archive_root=archive_root,
-        date_iso=datetime.now(UTC).date().isoformat(),
-        expected_worker_hash=os.getenv("SZZSBJ_WALMART_LEGACY_WORKER_SHA256", ""),
-        token_supplier=obtain_token,
-    )
+    # GTIN input is an ephemeral per-run file, never placed in task messages.
+    with tempfile.TemporaryDirectory(prefix="walmart-gtin-") as temporary_dir:
+        gtin_csv = None
+        if "inventory_log" in operations:
+            try:
+                gtin_csv = build_gtin_input(
+                    store_code=store_code,
+                    store_id=store_id,
+                    directory=Path(temporary_dir),
+                )
+            except GtinSourceRejected as exc:
+                raise DispatchRejected(str(exc)) from None
+        verified = collect_with_legacy_worker(
+            route=routes[store_code],
+            store_id=store_id,
+            run_id=rid,
+            operations=operations,
+            archive_root=archive_root,
+            date_iso=datetime.now(UTC).date().isoformat(),
+            expected_worker_hash=os.getenv("SZZSBJ_WALMART_LEGACY_WORKER_SHA256", ""),
+            token_supplier=obtain_token,
+            gtin_csv=gtin_csv,
+        )
     conversion = convert_verified_run(
         run_dir=archive_root / store_code / rid,
         output_root=archive_root / "daily",
