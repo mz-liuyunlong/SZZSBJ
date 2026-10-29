@@ -10,10 +10,10 @@ import os
 
 from app.celery_app import celery_app
 from app.core.api import ApiError
-from app.modules.walmart_scf.paging import collect_offset_pages
-from app.modules.walmart_scf.unified import store_code_for
-from app.modules.walmart_scf.store_scope import verify_store
 from app.db.session import get_session_factory
+from app.modules.walmart_scf.paging import collect_offset_pages
+from app.modules.walmart_scf.store_scope import verify_store
+from app.modules.walmart_scf.unified import store_code_for
 
 
 @celery_app.task(name="walmart_scf.read_inventory_count", ignore_result=True)  # type: ignore[misc]
