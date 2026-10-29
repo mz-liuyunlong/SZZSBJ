@@ -13,6 +13,7 @@ from app.celery_app import INTEGRATION_QUEUE, celery_app
 from app.db.session import get_session_factory
 from app.integrations.walmart.remote_pipeline import collect_store_read_only
 from app.modules.walmart_remote.models import WalmartRemoteJob
+from app.modules.walmart_remote.schedule import queue_due_stores
 
 
 @celery_app.task(name="walmart_remote.execute", ignore_result=True)  # type: ignore[misc]
@@ -70,3 +71,19 @@ def dispatch_remote_job(job_id: UUID) -> None:
     execute_remote_job.apply_async(
         args=(str(job_id),), queue=INTEGRATION_QUEUE, routing_key=INTEGRATION_QUEUE
     )
+
+
+@celery_app.task(name="walmart_remote.scheduler_tick", ignore_result=True)  # type: ignore[misc]
+def scheduler_tick() -> None:
+    """Periodic scheduling; never passes Walmart credentials into Celery."""
+    if os.getenv("SZZSBJ_WALMART_REMOTE_SCHEDULE_ENABLED") != "1":
+        return
+    with get_session_factory()() as session:
+        job_ids = queue_due_stores(session, now=datetime.now(UTC))
+        session.commit()
+    for job_id in job_ids:
+        execute_remote_job.apply_async(
+            args=(job_id,),
+            queue=INTEGRATION_QUEUE,
+            routing_key=INTEGRATION_QUEUE,
+        )
