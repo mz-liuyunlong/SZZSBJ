@@ -25,6 +25,8 @@ def _path(data: Any, parts: tuple[str, ...]) -> Any:
 def collect_offset_pages(
     *,
     source_account_ref: str,
+    store_id: str,
+    verified_store_scope: frozenset[str],
     verified_source_account_scope: frozenset[str],
     operation: str,
     items_path: tuple[str, ...],
@@ -54,6 +56,8 @@ def collect_offset_pages(
         query = {**base, "limit": page_size, "offset": offset}
         result = approved_read(
             source_account_ref=source_account_ref,
+            store_id=store_id,
+            verified_store_scope=verified_store_scope,
             verified_source_account_scope=verified_source_account_scope,
             operation=operation,
             params=query,
@@ -78,6 +82,8 @@ def collect_offset_pages(
 def collect_cursor_pages(
     *,
     source_account_ref: str,
+    store_id: str,
+    verified_store_scope: frozenset[str],
     verified_source_account_scope: frozenset[str],
     operation: str,
     items_path: tuple[str, ...],
@@ -115,6 +121,8 @@ def collect_cursor_pages(
             query[cursor_field] = cursor
         result = approved_read(
             source_account_ref=source_account_ref,
+            store_id=store_id,
+            verified_store_scope=verified_store_scope,
             verified_source_account_scope=verified_source_account_scope,
             operation=operation,
             params=query,
