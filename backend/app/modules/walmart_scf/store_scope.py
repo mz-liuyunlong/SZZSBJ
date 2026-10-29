@@ -4,6 +4,7 @@ The Lingxing source account (typically primary) is NOT a store identity.
 Require an explicit store RBAC grant, an approved store-code mapping, and a
 matching active Walmart store dimension row before dispatch.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -59,9 +60,7 @@ def verify_store_grant(
         user_id = int(principal.user_id)
     except (TypeError, ValueError):
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403) from None
-    grants = RbacRepository(session).resolve_user_data_scope(
-        user_id=user_id, scope_type="store"
-    )
+    grants = RbacRepository(session).resolve_user_data_scope(user_id=user_id, scope_type="store")
     if store_id not in grants and "*" not in grants:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
 
