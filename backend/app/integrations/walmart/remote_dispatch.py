@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.integrations.walmart.legacy_worker_contract import build_legacy_worker_argv, build_ssh_command
+
 STORES = frozenset(
     {"HK2612", "HK2613", "HK2614", "HK2615", "CN2501", "CN2502", "CN2601", "CN2602", "CN2603"}
 )
@@ -116,6 +118,8 @@ def run_existing_worker(
     operations: tuple[str, ...],
     token: str,
     timeout_seconds: int = 600,
+    store_id: str | None = None,
+    date_iso: str | None = None,
 ) -> None:
     """Invoke an owner-installed worker. Token ONLY in SSH stdin, never argv/logs.
 
@@ -131,6 +135,20 @@ def run_existing_worker(
     if not 1 <= timeout_seconds <= 900:
         raise DispatchRejected("REMOTE_TIMEOUT_INVALID")
     # No arbitrary command parameters, no password-based fallback.
+    if store_id is None or date_iso is None:
+        raise DispatchRejected("REMOTE_WORKER_PARAMETERS_MISSING")
+    if route.worker_path != "/opt/szzsbj/walmart/run_worker.py":
+        raise DispatchRejected("REMOTE_WORKER_UNVERIFIED")
+    try:
+        worker_args = build_legacy_worker_argv(
+            store_id=store_id,
+            run_id=run_id,
+            endpoints=operations,
+            date_iso=date_iso,
+        )
+        remote_command = build_ssh_command(worker_args)
+    except ValueError:
+        raise DispatchRejected("REMOTE_WORKER_PARAMETERS_INVALID") from None
     command = [
         "ssh",
         "-o",
@@ -141,12 +159,7 @@ def run_existing_worker(
         "ConnectTimeout=10",
         "--",
         route.ssh_host,
-        "python3",
-        route.worker_path,
-        "--run-id",
-        run_id,
-        "--operations",
-        ",".join(operations),
+        remote_command,
     ]
     try:
         result = subprocess.run(
