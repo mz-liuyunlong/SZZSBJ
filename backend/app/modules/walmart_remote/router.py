@@ -19,6 +19,8 @@ from app.db.session import get_db_session
 from app.integrations.walmart.remote_dispatch import ALLOWED_KEYS, STORES, parse_routes
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.walmart_remote.models import WalmartRemoteJob
+from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.walmart_scf.store_scope import verify_store_grant
 from app.modules.walmart_remote.tasks import dispatch_remote_job
 from app.modules.walmart_scf.store_scope import verify_http_store
 from app.modules.walmart_scf.unified import store_code_for
@@ -54,6 +56,72 @@ class JobView(BaseModel):
 
 def job_view(item: WalmartRemoteJob) -> JobView:
     return JobView.model_validate({name: getattr(item, name) for name in JobView.model_fields})
+
+
+class StoreChoice(BaseModel):
+    source_account_ref: str
+    store_id: str
+    store_code: str
+    display_name: str
+    route_ready: bool
+
+
+@router.get("/stores", response_model=SuccessEnvelope[list[StoreChoice], None])
+def list_remote_stores(
+    request: Request,
+    session: db,
+    principal: reader,
+    account_scope: scope,
+) -> SuccessEnvelope[list[StoreChoice], None]:
+    """Return persisted, scoped store identities; never guess Walmart store IDs."""
+    import json
+
+    from app.integrations.walmart.planner import STORE_ROUTES
+
+    try:
+        mapping = json.loads(os.getenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", "{}"))
+        if not isinstance(mapping, dict):
+            mapping = {}
+    except ValueError:
+        mapping = {}
+    try:
+        routes = parse_routes(os.getenv("SZZSBJ_WALMART_REMOTE_ROUTES", ""))
+    except Exception:
+        routes = {}
+    approved = frozenset(
+        item.strip()
+        for item in os.getenv("SZZSBJ_WALMART_REMOTE_APPROVED_STORES", "").split(",")
+        if item.strip()
+    )
+    rows = session.scalars(
+        select(LingxingStoreDimension).where(
+            LingxingStoreDimension.platform_code == "walmart",
+            LingxingStoreDimension.is_sync.is_(True),
+            LingxingStoreDimension.source_account_ref.in_(account_scope),
+        )
+    ).all()
+    choices: list[StoreChoice] = []
+    for item in rows:
+        code = mapping.get(item.store_id)
+        if code not in STORES or code not in STORE_ROUTES:
+            continue
+        if not (item.store_name or "").startswith(code + "-"):
+            continue
+        try:
+            verify_store_grant(principal=principal, session=session, store_id=item.store_id)
+        except ApiError:
+            continue
+        choices.append(
+            StoreChoice(
+                source_account_ref=item.source_account_ref,
+                store_id=item.store_id,
+                store_code=code,
+                display_name=item.store_name or code,
+                route_ready=code in routes and code in approved,
+            )
+        )
+    choices.sort(key=lambda item: item.store_code)
+    return success_response(request, data=choices)
 
 
 @router.post(
