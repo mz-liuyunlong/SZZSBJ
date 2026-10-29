@@ -3,6 +3,7 @@
 Any production cleanup is deliberately separate and owner-authorized. This
 module does not infer SSH destinations or permit alternate hosts on failure.
 """
+
 from __future__ import annotations
 
 import os
@@ -46,9 +47,17 @@ def fetch_verified_run(
     try:
         result = subprocess.run(
             [
-                "scp", "-r", "-p", "-o", "BatchMode=yes",
-                "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10",
-                source, str(store_root),
+                "scp",
+                "-r",
+                "-p",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "StrictHostKeyChecking=yes",
+                "-o",
+                "ConnectTimeout=10",
+                source,
+                str(store_root),
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
