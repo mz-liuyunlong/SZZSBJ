@@ -4,6 +4,7 @@ No client credentials or SSM GetSecretValue permissions are held here. The
 returned token is sensitive: keep it in process memory, pass to the existing
 store-specific SSH stdin worker only, and never write to Celery payloads/logs.
 """
+
 from __future__ import annotations
 
 import re
