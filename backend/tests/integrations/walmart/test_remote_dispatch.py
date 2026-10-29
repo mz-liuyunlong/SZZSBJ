@@ -8,8 +8,8 @@ import json
 import pytest
 
 from app.integrations.walmart.remote_dispatch import (
-    DispatchRejected,
     STORES,
+    DispatchRejected,
     parse_routes,
     verify_result,
 )
