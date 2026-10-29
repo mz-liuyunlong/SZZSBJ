@@ -18,7 +18,7 @@ from app.integrations.walmart.remote_dispatch import (
     verify_result,
 )
 
-_ROOT = re.compile(r"^/opt/szzsbj/walmart/runs$")
+_ROOT = re.compile(r"^/tmp/pmc-walmart-worker$")
 _MAX_TIMEOUT = 120
 
 
@@ -27,7 +27,7 @@ def fetch_verified_run(
     route: WorkerRoute,
     run_id: str,
     archive_root: Path,
-    remote_root: str = "/opt/szzsbj/walmart/runs",
+    remote_root: str = "/tmp/pmc-walmart-worker",
 ) -> dict[str, object]:
     """Fetch a single run; reject bad paths, incomplete or changed checksums.
 
