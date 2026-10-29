@@ -106,9 +106,7 @@ def recover_remote_job(job_id: str) -> None:
         return
     with get_session_factory()() as session:
         job = session.scalar(
-            select(WalmartRemoteJob).where(
-                WalmartRemoteJob.id == UUID(job_id)
-            ).with_for_update()
+            select(WalmartRemoteJob).where(WalmartRemoteJob.id == UUID(job_id)).with_for_update()
         )
         if job is None or job.status != "needs_review" or not job.run_id:
             return
@@ -131,9 +129,7 @@ def recover_remote_job(job_id: str) -> None:
         return
     with get_session_factory()() as session:
         job = session.scalar(
-            select(WalmartRemoteJob).where(
-                WalmartRemoteJob.id == UUID(job_id)
-            ).with_for_update()
+            select(WalmartRemoteJob).where(WalmartRemoteJob.id == UUID(job_id)).with_for_update()
         )
         if job is None or job.status != "needs_review" or job.run_id != run_id:
             return
