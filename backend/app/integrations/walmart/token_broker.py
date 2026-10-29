@@ -4,6 +4,7 @@ This module MUST run only inside the protected SCF role. It must never be
 imported into the SZZSBJ public API server or a developer-controlled worker.
 The Walmart client secret never crosses the SCF boundary.
 """
+
 from __future__ import annotations
 
 import base64
