@@ -23,13 +23,13 @@ from app.integrations.walmart.gtin_input import (
 )
 from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
 from app.integrations.walmart.remote_daily import convert_verified_run
-from app.integrations.walmart.remote_recovery import cleanup_verified_run
 from app.integrations.walmart.remote_dispatch import (
     ALLOWED_KEYS,
     STORES,
     DispatchRejected,
     parse_routes,
 )
+from app.integrations.walmart.remote_recovery import cleanup_verified_run
 from app.integrations.walmart.scf_read_factory import RefreshingScfApi
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
 from app.integrations.walmart.token_client import store_token_invoker
