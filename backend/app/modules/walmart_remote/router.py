@@ -216,15 +216,11 @@ def list_jobs(
     )
     if not store_scope or not account_scope:
         return success_response(request, data=[])
-    query = select(WalmartRemoteJob).where(
-        WalmartRemoteJob.source_account_ref.in_(account_scope)
-    )
+    query = select(WalmartRemoteJob).where(WalmartRemoteJob.source_account_ref.in_(account_scope))
     if "*" not in store_scope:
         query = query.where(WalmartRemoteJob.store_id.in_(store_scope))
     rows = session.scalars(
-        query.order_by(WalmartRemoteJob.created_at.desc())
-        .offset(offset)
-        .limit(limit)
+        query.order_by(WalmartRemoteJob.created_at.desc()).offset(offset).limit(limit)
     ).all()
     return success_response(request, data=[job_view(item) for item in rows])
 
