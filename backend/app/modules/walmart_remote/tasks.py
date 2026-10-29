@@ -66,6 +66,11 @@ def execute_remote_job(job_id: str) -> None:
             "REMOTE_WORKER_UNCONFIRMED",
             "REMOTE_ALREADY_UNKNOWN",
             "REMOTE_ALREADY_RUNNING",
+            "REMOTE_FETCH_TIMEOUT",
+            "REMOTE_FETCH_FAILED",
+            "REMOTE_FETCH_UNAVAILABLE",
+            "REMOTE_ARCHIVE_ALREADY_EXISTS",
+            "REMOTE_CLEANUP_UNCONFIRMED",
         }
         job.status = "succeeded" if result else "needs_review" if uncertain else "failed"
         job.error_code = error_code
