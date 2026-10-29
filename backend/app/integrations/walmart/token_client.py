@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from collections.abc import Mapping
+from typing import Any, Protocol
 
 from app.integrations.walmart.tencent_scf import TencentScfInvoker
 
