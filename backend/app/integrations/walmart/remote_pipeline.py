@@ -16,9 +16,8 @@ from app.integrations.walmart.remote_dispatch import (
     STORES,
     DispatchRejected,
     parse_routes,
-    run_existing_worker,
 )
-from app.integrations.walmart.remote_transfer import fetch_verified_run
+from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
 from app.integrations.walmart.scf_read_factory import RefreshingScfApi
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
 from app.integrations.walmart.token_client import store_token_invoker
@@ -56,27 +55,25 @@ def collect_store_read_only(
     target_role = os.getenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", "")
     if not cvm_role or not target_role:
         raise DispatchRejected("REMOTE_CLOUD_IDENTITY_MISSING")
-    try:
+    def obtain_token() -> str:
         cloud_api = RefreshingScfApi(
             CachedScfAssumeRoleIdentity(cvm_role=cvm_role, target_role_arn=target_role)
         )
         token = store_token_invoker(
             cloud_api=cloud_api, store_code=store_code, authorized_stores=allowed
         )
-    except Exception:
-        raise DispatchRejected("REMOTE_TOKEN_UNAVAILABLE") from None
-    try:
-        run_existing_worker(
-            route=routes[store_code],
-            run_id=rid,
-            operations=operations,
-            token=token.access_token,
-            store_id=store_id,
-            date_iso=datetime.now(UTC).date().isoformat(),
-        )
-    finally:
-        del token
-    verified = fetch_verified_run(route=routes[store_code], run_id=rid, archive_root=archive_root)
+        return token.access_token
+
+    verified = collect_with_legacy_worker(
+        route=routes[store_code],
+        store_id=store_id,
+        run_id=rid,
+        operations=operations,
+        archive_root=archive_root,
+        date_iso=datetime.now(UTC).date().isoformat(),
+        expected_worker_hash=os.getenv("SZZSBJ_WALMART_LEGACY_WORKER_SHA256", ""),
+        token_supplier=obtain_token,
+    )
     # Never return raw data or tokens to the calling task.
     return {
         "store_code": store_code,
