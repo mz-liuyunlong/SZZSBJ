@@ -3,6 +3,7 @@
 Worker credentials are only used in the protected scheduler process. No token
 is ever put in a task payload, result, database or log.
 """
+
 from __future__ import annotations
 
 import os
@@ -69,9 +70,7 @@ def collect_store_read_only(
         )
     finally:
         del token
-    verified = fetch_verified_run(
-        route=routes[store_code], run_id=rid, archive_root=archive_root
-    )
+    verified = fetch_verified_run(route=routes[store_code], run_id=rid, archive_root=archive_root)
     # Never return raw data or tokens to the calling task.
     return {
         "store_code": store_code,
