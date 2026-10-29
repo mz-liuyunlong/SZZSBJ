@@ -83,7 +83,7 @@ def verify_result(run_dir: Path, *, run_id: str) -> dict[str, Any]:
         raise DispatchRejected("REMOTE_RESULT_INCOMPLETE")
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict) or manifest.get("status") not in ("success", "succeeded"):
+        if not isinstance(manifest, dict) or manifest.get("status") != "SUCCESS":
             raise ValueError
         if manifest.get("run_id") != run_id:
             raise ValueError
@@ -109,6 +109,33 @@ def verify_result(run_dir: Path, *, run_id: str) -> dict[str, Any]:
             checked.add(name)
         if "manifest.json" not in checked:
             raise ValueError
+        if manifest.get("manifest_version") != 2:
+            raise ValueError
+        if manifest.get("credential_files_read") != 0 or manifest.get("auth_failed") is not False:
+            raise ValueError
+        requested = manifest.get("endpoints_requested")
+        outcomes = manifest.get("endpoints")
+        files = manifest.get("files")
+        if not isinstance(requested, list) or not requested or len(set(requested)) != len(requested):
+            raise ValueError
+        if not set(requested) <= ALLOWED_KEYS or not isinstance(outcomes, dict):
+            raise ValueError
+        if set(outcomes) != set(requested) or not isinstance(files, dict):
+            raise ValueError
+        if any(
+            not isinstance(outcomes[key], dict) or outcomes[key].get("status") != "SUCCESS"
+            for key in requested
+        ):
+            raise ValueError
+        expected_hashes = dict(line.split("  ", 1) for line in lines)
+        for name, info in files.items():
+            if (
+                not isinstance(name, str)
+                or name not in checked
+                or not isinstance(info, dict)
+                or expected_hashes[name] != info.get("sha256")
+            ):
+                raise ValueError
         return {"status": "verified", "run_id": run_id, "files_verified": len(checked)}
     except (OSError, UnicodeError, ValueError):
         raise DispatchRejected("REMOTE_RESULT_VERIFICATION_FAILED") from None
