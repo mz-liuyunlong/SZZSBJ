@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.celery_app import INTEGRATION_QUEUE
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import require_permission
@@ -282,8 +283,8 @@ def request_remote_recovery(
     try:
         recover_remote_job.apply_async(
             args=(str(item.id),),
-            queue="integration_sync",
-            routing_key="integration_sync",
+            queue=INTEGRATION_QUEUE,
+            routing_key=INTEGRATION_QUEUE,
         )
     except Exception:
         raise ApiError(code="REMOTE_RECOVERY_DISPATCH_UNAVAILABLE", status_code=503) from None
