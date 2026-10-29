@@ -1,0 +1,33 @@
+/* V3 per-business mock detail only. Does not style the real WFS drawer. */
+.approval-demo{display:flex;flex-direction:column;min-height:100%;color:#293a52;font-size:12px}
+.approval-demo__header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 24px 16px;border-bottom:1px solid #e6ebf2;background:#fff}
+.approval-demo__header small{display:block;font-size:11px;color:#899ab0}
+.approval-demo__header h2{margin:7px 0 10px;font-size:18px;line-height:1.35;color:#253d5a}
+.approval-demo__header-id{font-size:11px;color:#9ba8ba}
+.approval-demo__layout{display:grid;grid-template-columns:minmax(0,1fr) 266px;gap:14px;align-items:start;padding:16px 20px;background:#f8fafd}
+.approval-demo__main,.approval-demo__side{display:flex;min-width:0;flex-direction:column;gap:12px}
+.approval-demo__section{min-width:0;padding:14px 15px;background:#fff;border:1px solid #e5ecf4;border-radius:8px}
+.approval-demo__section>header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.approval-demo__section>header strong{font-size:12px;font-weight:750;color:#31506f}
+.approval-demo__section>header span{font-size:10px;color:#97a6b8}
+.approval-demo__tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.approval-demo__tile{min-width:0;min-height:92px;padding:13px;border:1px solid #e6edf6;border-radius:8px;background:#fff}
+.approval-demo__tile span{display:block;font-size:11px;color:#8b9aab}
+.approval-demo__tile strong{display:block;margin:8px 0;font-size:19px;color:#2e4662;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.approval-demo__tile small{font-size:10px;color:#96a7bc}
+.approval-demo__section .ant-descriptions-item-label,.approval-demo__section .ant-descriptions-item-content{font-size:11px;word-break:break-word}
+.approval-demo__section .ant-table{font-size:11px}
+.approval-demo__subject>.ant-btn{padding:0;height:auto;max-width:100%;text-align:left;white-space:normal;font-weight:650}
+.approval-demo__subject small,.approval-demo__subline{display:block;color:#9ba9ba;font-size:10px;margin-top:3px}
+.approval-demo__sku-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.approval-demo__sku-summary{padding:10px 12px;margin-bottom:12px;border:1px solid #e0eafb;background:#f5f9ff;border-radius:6px;font-size:11px;color:#536d8c;line-height:1.7}
+.approval-demo__sku-summary p{margin:4px 0 0;color:#8192a8}
+.approval-demo__bottom-facts{margin-top:13px}
+.approval-demo__copy{margin:0 0 11px;color:#4c6581;font-size:11px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
+.approval-demo__timeline{padding:0 0 0 14px;border-left:2px solid #dce9fa;font-size:11px;color:#465c78}
+.approval-demo__timeline small{display:block;margin:6px 0;color:#96a6ba}
+.approval-demo__timeline p{margin:8px 0;color:#71839c}
+.approval-demo__footer{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:11px 20px;border-top:1px solid #e8edf4;background:#fff}
+@media(max-width:950px){.approval-demo__layout{grid-template-columns:1fr}.approval-demo__side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.approval-demo__tiles{grid-template-columns:1fr}.approval-demo__side{display:flex}.approval-demo__layout{padding:10px}.approval-demo__header{padding:13px}}
+

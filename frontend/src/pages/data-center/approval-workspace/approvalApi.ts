@@ -5,10 +5,12 @@ export async function fetchApprovals(filters: ApprovalFilters) {
  // The simplified workbench merges pending-for-review and created applications.
  // The server excludes formal applications already linked to WFS Cases.
  const params = new URLSearchParams({
-  tab: filters.tab, view: "all", page: String(filters.page),
+  tab: filters.tab, view: filters.view ?? "all", page: String(filters.page),
   page_size: String(filters.page_size),
  });
  if (filters.risk_level) params.set("risk_level", filters.risk_level);
+ if (filters.approval_type) params.set("approval_type",filters.approval_type);
+ if (filters.keyword?.trim()) params.set("keyword",filters.keyword.trim());
  return backendRequest<ApprovalListData, ApprovalMeta>("/api/approvals?" + params.toString());
 }
 export async function fetchApprovalSummary(): Promise<ApprovalSummary> {

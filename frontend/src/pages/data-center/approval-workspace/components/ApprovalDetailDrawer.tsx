@@ -31,7 +31,7 @@ import {
 } from "../approvalApi";
 import { riskNames, statusNames } from "../approvalTypes";
 import { WfsCaseApprovalDetail } from "./WfsCaseApprovalDetail";
-import GenericApprovalDetail from "./GenericApprovalDetail";
+import BusinessApprovalDetail from "./BusinessApprovalDetail";
 
 type ReviewAction = Decision | "resubmit";
 
@@ -241,7 +241,7 @@ function ApprovalDetailDrawerInner({
             <div className="approval-review__center"><Spin tip="正在读取审批详情"><div className="approval-review__spin-placeholder" /></Spin></div> : null}
           {shown ? <>
             {isWfs ? <WfsCaseApprovalDetail detail={shown} /> :
-              <div className="approval-review__generic"><GenericApprovalDetail detail={shown} /></div>}
+              <div className="approval-review__generic"><BusinessApprovalDetail detail={shown} /></div>}
           </> : null}
         </div>
       </div>

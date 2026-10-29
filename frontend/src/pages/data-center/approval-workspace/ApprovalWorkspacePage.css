@@ -515,3 +515,841 @@
     grid-column: 1;
   }
 }
+
+
+/* V3 unified business selector; WFS review drawer styles remain untouched. */
+.approval-workspace__v3-toolbar .ant-card-body { display:flex;flex-direction:column;gap:12px;padding:12px 14px; }
+.approval-workspace__v3-businesses { display:flex;align-items:center;gap:7px;flex-wrap:wrap; }
+.approval-workspace__v3-businesses .ant-btn { font-size:12px;height:31px;border-radius:7px; }
+.approval-workspace__v3-badge { color:#8d97a8;font-weight:400;font-size:10px;margin-left:5px; }
+.approval-workspace__v3-businesses .ant-btn-primary .approval-workspace__v3-badge { color:#fff; }
+.approval-workspace__v3-filters { display:flex;gap:10px;align-items:center;flex-wrap:wrap; }
+.approval-workspace__v3-status-hint { color:#8794a9;font-size:11px;margin-left:auto; }
+.approval-workspace__v3-alert { flex:0 0 auto; }
+
+/* V3业务分类数量：仅调整视觉，不涉及审批逻辑 */
+.approval-workspace__v3-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #edf2f8;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.approval-workspace__v3-businesses
+.ant-btn-primary .approval-workspace__v3-count {
+  background: rgba(255, 255, 255, .23);
+  color: #fff;
+}
+
+/* APPROVAL_V3_TOOLBAR_REDESIGN_START */
+
+/* 仅作用于审批工作台 V3 顶部筛选模块 */
+.approval-workspace__v3-toolbar.ant-card {
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid #e5eaf2;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(30, 59, 99, 0.035);
+}
+
+.approval-workspace__v3-toolbar .ant-card-body {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-areas:
+    "status filters"
+    "business business";
+  align-items: center;
+  column-gap: 24px;
+  row-gap: 16px;
+  padding: 18px 20px 17px;
+}
+
+/* 第一排左侧：审批状态 */
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs.ant-segmented {
+  grid-area: status;
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+  background: #f3f6fa !important;
+  box-shadow: none;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs .ant-segmented-item {
+  min-width: 102px;
+  border-radius: 7px;
+  color: #70839b;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-item-label {
+  min-height: 38px;
+  line-height: 38px;
+  padding: 0 17px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-item-selected {
+  color: #176df1 !important;
+  font-weight: 750;
+  background: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(31, 69, 112, 0.10);
+}
+
+/* 第一排右侧：搜索与筛选 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters {
+  grid-area: filters;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-input-search {
+  width: 320px;
+  max-width: 100%;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-input-affix-wrapper,
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-input-group-addon .ant-btn,
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-select-selector,
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters > .ant-btn {
+  min-height: 38px;
+  border-color: #e0e7f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters .ant-input {
+  font-size: 12px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters .ant-input::placeholder {
+  color: #a2afbf;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters > .ant-btn {
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5e718b;
+}
+
+/* 原“状态筛选”仅为重复文字，视觉上隐藏 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-status-hint {
+  display: none;
+}
+
+/* 第二排：业务分类 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses {
+  grid-area: business;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 15px;
+  border-top: 1px solid #edf1f6;
+}
+
+/* 增加清晰的分区标识 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses::before {
+  content: "业务分类";
+  flex-shrink: 0;
+  margin-right: 7px;
+  color: #8796aa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e1e7f0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #4c5e77;
+  font-size: 12px;
+  font-weight: 650;
+  box-shadow: none;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses
+.ant-btn:not(.ant-btn-primary):hover {
+  border-color: #97bdf5;
+  background: #f4f8ff;
+  color: #176df1;
+}
+
+/* 已选中业务 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses .ant-btn-primary {
+  border-color: #2375f7;
+  background: #2375f7;
+  color: #ffffff;
+  font-weight: 750;
+  box-shadow: 0 3px 8px rgba(35, 117, 247, 0.18);
+}
+
+/* 业务数量徽标 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 21px;
+  height: 21px;
+  margin-left: 7px;
+  padding: 0 6px;
+  border-radius: 7px;
+  background: #edf2f8;
+  color: #647992;
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses
+.ant-btn-primary .approval-workspace__v3-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+/* 未接入业务：状态与数量分开表达 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #e6ebf2;
+  color: #9aa7b7;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses
+.ant-btn-primary .approval-workspace__v3-badge {
+  border-left-color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 窄屏：恢复为分层布局 */
+@media (max-width: 1350px) {
+  .approval-workspace__v3-toolbar .ant-card-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "status"
+      "business"
+      "filters";
+    row-gap: 13px;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__v3-filters {
+    justify-content: flex-start;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__v3-businesses {
+    padding-top: 13px;
+  }
+}
+
+@media (max-width: 640px) {
+  .approval-workspace__v3-toolbar .ant-card-body {
+    padding: 12px;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__primary-tabs {
+    width: 100% !important;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__primary-tabs .ant-segmented-item {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__v3-filters
+  .ant-input-search {
+    width: 100%;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__v3-businesses::before {
+    width: 100%;
+    margin-bottom: 2px;
+  }
+}
+
+/* APPROVAL_V3_TOOLBAR_REDESIGN_END */
+
+
+/* APPROVAL_REFERENCE_UI_V5 */
+
+/* 整体工具栏 */
+.approval-workspace__v3-toolbar.ant-card {
+  border: 1px solid #e5ebf4;
+  border-radius: 19px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 6px 22px rgba(30,60,100,.035);
+}
+
+.approval-workspace__v3-toolbar .ant-card-body {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) auto !important;
+  grid-template-areas:
+    "status filters"
+    "business business" !important;
+  align-items: center;
+  gap: 22px 18px !important;
+  padding: 28px 30px 26px !important;
+}
+
+/* 顶部三个状态 */
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs.ant-segmented {
+  grid-area: status;
+  display: inline-flex;
+  width: max-content !important;
+  max-width: 100%;
+  padding: 0 !important;
+  margin: 0;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-group {
+  display: flex;
+  gap: 9px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs .ant-segmented-item {
+  min-width: 166px;
+  height: 59px;
+  background: #f3f5f9;
+  border: 1px solid transparent;
+  border-radius: 12px !important;
+  color: #71839d;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-item-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 57px;
+  padding: 0 19px;
+}
+
+.approval-ref-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.approval-ref-status-label .anticon {
+  font-size: 21px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-item-selected {
+  background: #fff !important;
+  border-color: #c8dcff !important;
+  color: #1677ff !important;
+  box-shadow: 0 4px 14px rgba(22,119,255,.15) !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-thumb {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 右侧风险等级和刷新 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters {
+  grid-area: filters;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 17px;
+  margin: 0;
+}
+
+.approval-ref-risk-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  color: #6b809e;
+  font-size: 21px;
+  pointer-events: none;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters .ant-select {
+  width: 185px !important;
+  height: 53px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-select-selector {
+  height: 53px !important;
+  padding-left: 48px !important;
+  border: 1px solid #dfe7f1 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-select-selection-placeholder,
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-select-selection-item {
+  line-height: 51px !important;
+  color: #74859e;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.approval-ref-divider {
+  width: 1px;
+  height: 34px;
+  background: #e6ebf3;
+}
+
+.approval-ref-refresh.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 53px;
+  min-width: 115px;
+  padding: 0 20px;
+  border: 1px solid #bad6ff;
+  border-radius: 11px;
+  background: #fff;
+  color: #1677ff;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.approval-ref-refresh .anticon {
+  font-size: 20px;
+}
+
+/* 业务分类 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses {
+  grid-area: business;
+  display: flex !important;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px !important;
+  margin: 0;
+  padding-top: 22px !important;
+  border-top: 1px solid #e7edf5;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses::before {
+  content: "业务分类";
+  margin-right: 13px;
+  color: #6c809a;
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses .ant-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 53px !important;
+  min-height: 53px !important;
+  padding: 0 18px !important;
+  border: 1px solid #dde5f0;
+  border-radius: 11px !important;
+  background: #fff;
+  color: #536782;
+  font-size: 14px !important;
+  font-weight: 750 !important;
+  box-shadow: none;
+}
+
+.approval-ref-business-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #7184a2;
+  font-size: 20px;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses
+.ant-btn-primary {
+  background: linear-gradient(110deg,#4898ff,#1871ff) !important;
+  border-color: #3985ff !important;
+  color: #fff !important;
+  box-shadow: 0 5px 14px rgba(30,111,255,.17) !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses
+.ant-btn-primary .approval-ref-business-icon {
+  color: #fff;
+}
+
+/* 业务数量 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 27px;
+  height: 26px;
+  margin-left: 2px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: #eef2f8;
+  color: #6e819b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.approval-workspace__v3-toolbar
+.ant-btn-primary .approval-workspace__v3-count {
+  background: #fff;
+  color: #277cf4;
+}
+
+/* 清除旧版重复分区标题 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-status-hint,
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-badge {
+  display: none !important;
+}
+
+@media (max-width: 1250px) {
+  .approval-workspace__v3-toolbar .ant-card-body {
+    grid-template-columns: 1fr !important;
+    grid-template-areas:
+      "status"
+      "filters"
+      "business" !important;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__v3-filters {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 650px) {
+  .approval-workspace__v3-toolbar .ant-card-body {
+    padding: 15px !important;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__primary-tabs.ant-segmented {
+    width: 100% !important;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__primary-tabs .ant-segmented-item {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .approval-ref-status-label {
+    gap: 6px;
+  }
+}
+
+/* APPROVAL_SYSTEM_FONT_START */
+
+/* 工具栏：恢复系统原有的紧凑密度 */
+.approval-workspace__v3-toolbar .ant-card-body {
+  padding: 16px 20px !important;
+  gap: 14px 16px !important;
+}
+
+/* 顶部状态按钮 */
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs .ant-segmented-item {
+  min-width: 116px !important;
+  height: 42px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__primary-tabs
+.ant-segmented-item-label {
+  min-height: 40px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+  padding: 0 13px !important;
+}
+
+.approval-ref-status-label {
+  gap: 8px !important;
+  font-size: 13px !important;
+}
+
+.approval-ref-status-label .anticon {
+  font-size: 16px !important;
+}
+
+/* 右侧风险筛选 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters {
+  gap: 10px !important;
+}
+
+.approval-ref-risk-icon {
+  left: 12px !important;
+  font-size: 16px !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters .ant-select {
+  width: 144px !important;
+  height: 38px !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters .ant-select-selector {
+  height: 38px !important;
+  padding-left: 35px !important;
+  border-radius: 8px !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-select-selection-placeholder,
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-filters
+.ant-select-selection-item {
+  font-size: 12px !important;
+  line-height: 36px !important;
+  font-weight: 500 !important;
+}
+
+.approval-ref-divider {
+  height: 24px !important;
+}
+
+/* 刷新按钮 */
+.approval-ref-refresh.ant-btn {
+  height: 38px !important;
+  min-width: 76px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.approval-ref-refresh .anticon {
+  font-size: 15px !important;
+}
+
+/* 第二排业务分类 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses {
+  gap: 8px !important;
+  margin-top: 0 !important;
+  padding-top: 14px !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses::before {
+  margin-right: 6px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-businesses .ant-btn {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 11px !important;
+  border-radius: 8px !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+.approval-ref-business-icon {
+  font-size: 16px !important;
+}
+
+/* 数量徽标 */
+.approval-workspace__v3-toolbar
+.approval-workspace__v3-count {
+  min-width: 20px !important;
+  height: 20px !important;
+  margin-left: 1px !important;
+  padding: 0 5px !important;
+  border-radius: 7px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+/* 小屏幕保持布局兼容 */
+@media (max-width: 650px) {
+  .approval-workspace__v3-toolbar .ant-card-body {
+    padding: 12px !important;
+  }
+
+  .approval-workspace__v3-toolbar
+  .approval-workspace__primary-tabs .ant-segmented-item {
+    min-width: 0 !important;
+  }
+}
+
+/* APPROVAL_SYSTEM_FONT_END */
+
+/* APPROVAL_HEADER_INLINE_START */
+
+.approval-workspace__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 34px;
+}
+
+.approval-workspace__heading > div:first-child {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 13px;
+  white-space: nowrap;
+}
+
+.approval-workspace__heading h3 {
+  flex-shrink: 0;
+  margin: 0 !important;
+  color: #1f2937;
+  font-size: 18px !important;
+  font-weight: 650;
+  line-height: 28px;
+}
+
+.approval-workspace__heading p {
+  min-width: 0;
+  margin: 0 !important;
+  padding-left: 13px;
+  border-left: 1px solid #d9e1ed;
+  color: #8997ab;
+  font-size: 12px !important;
+  font-weight: 400;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approval-workspace__heading > .ant-space {
+  flex-shrink: 0;
+}
+
+.approval-workspace__heading > .ant-space:empty {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .approval-workspace__heading > div:first-child {
+    gap: 9px;
+  }
+
+  .approval-workspace__heading h3 {
+    font-size: 16px !important;
+  }
+
+  .approval-workspace__heading p {
+    padding-left: 9px;
+    font-size: 11px !important;
+  }
+}
+
+/* APPROVAL_HEADER_INLINE_END */

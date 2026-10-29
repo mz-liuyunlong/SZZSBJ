@@ -335,7 +335,9 @@ function MainLayout({
                 ),
               },
               ...(activePage.sidebarSection ? [{ title: activePageGroup.sidebarSections?.find((s) => s.key === activePage.sidebarSection)?.title }] : []),
-              { title: activePage.title },
+              ...(activePage.key === "dashboard_today_sales"
+                ? []
+                : [{ title: activePage.title }]),
             ]}
           />
           <div className="main-layout__topbar-fixed-actions" aria-label="固定页面信息">
@@ -390,7 +392,21 @@ function MainLayout({
             mode="inline"
             inlineCollapsed={collapsed}
             selectedKeys={[activeGroup.key]}
-            onClick={({ key }) => selectGroup(key)}
+            onClick={({ key }) => {
+              // DASHBOARD_DIRECT_NAV_V1
+              if (key === "dashboard") {
+                const dashboardGroup = visibleNavigation.find(
+                  (group) => group.key === "dashboard",
+                );
+                const target = dashboardGroup?.children.find(
+                  (page) => page.key === "dashboard_today_sales",
+                ) ?? dashboardGroup?.children[0];
+
+                if (target) openPageByKey(target.key);
+                return;
+              }
+              selectGroup(key);
+            }}
             items={visibleNavigation.map((group) => ({
               key: group.key,
               icon: group.icon,
@@ -398,7 +414,9 @@ function MainLayout({
                 <span className="main-layout__primary-label">{group.title}</span>
               ),
               title: group.title,
-              onMouseEnter: () => scheduleSecondaryGroupHover(group.key),
+              onMouseEnter: group.key === "dashboard"
+                ? closeSecondaryMenu
+                : () => scheduleSecondaryGroupHover(group.key),
               onMouseLeave: clearPendingSecondaryHover,
             }))}
           />

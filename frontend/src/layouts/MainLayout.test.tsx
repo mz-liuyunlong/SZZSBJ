@@ -124,7 +124,32 @@ function StatefulPageFixture({ page }: { page: NavigationPage }) {
 }
 
 describe("MainLayout", () => {
-  it("starts on listing management with the complete topbar and sidebar structure", () => {
+
+  it("opens dashboard directly without a secondary menu", () => {
+    renderLayout();
+
+    const primary = screen.getByRole("menu", {
+      name: "一级导航",
+    });
+
+    fireEvent.click(
+      within(primary).getByRole("menuitem", {
+        name: "工作台",
+      }),
+    );
+
+    expectSecondaryClosed();
+    expect(window.location.hash).toBe(
+      "#/dashboard",
+    );
+    expect(getTab("工作台")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+
+  it("starts on the dashboard with the complete topbar and sidebar structure", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
@@ -135,8 +160,8 @@ describe("MainLayout", () => {
     const content = screen.getByRole("main", { name: "内容区" });
     const currentPage = screen.getByRole("heading", { name: "当前页面" });
     const breadcrumb = screen.getByRole("navigation", { name: "面包屑" });
-    const productsGroup = requiredGroup("products");
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const productsGroup = requiredGroup("dashboard");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const primaryMenuItems = within(primaryNavigation).getAllByRole("menuitem");
     expect(primaryMenuItems).toHaveLength(navigation.length);
@@ -158,7 +183,7 @@ describe("MainLayout", () => {
     expect(within(breadcrumb).getByText(listingManagement.title)).toBeVisible();
     expect(getTab(listingManagement.title)).toHaveAttribute("aria-selected", "true");
     expect(
-      within(topbar).getByRole("button", { name: "回到Listing管理首页" }),
+      within(topbar).getByRole("button", { name: "回到工作台首页" }),
     ).toBeInTheDocument();
     expect(
       within(topbar).queryByRole("button", { name: "折叠侧边栏" }),
@@ -170,7 +195,7 @@ describe("MainLayout", () => {
     expect(within(topbar).getByRole("navigation", { name: "面包屑" })).toBeInTheDocument();
     expect(
       within(primarySidebar).queryByRole("button", {
-        name: "回到Listing管理首页",
+        name: "回到工作台首页",
       }),
     ).not.toBeInTheDocument();
     expect(document.querySelector(".main-layout__body")).toBeInTheDocument();
@@ -227,8 +252,8 @@ describe("MainLayout", () => {
     const content = screen.getByRole("main", { name: "内容区" });
     const currentPage = screen.getByRole("heading", { name: "当前页面" });
     const breadcrumb = screen.getByRole("navigation", { name: "面包屑" });
-    const productsGroup = requiredGroup("products");
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const productsGroup = requiredGroup("dashboard");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
@@ -306,8 +331,8 @@ describe("MainLayout", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
-    const productsGroup = requiredGroup("products");
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const productsGroup = requiredGroup("dashboard");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
@@ -353,7 +378,7 @@ describe("MainLayout", () => {
     renderLayout();
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const adsGroup = requiredGroup("ads");
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
@@ -377,7 +402,7 @@ describe("MainLayout", () => {
 
   it("reopens a closed active tab when browser Back restores its URL", async () => {
     const adsGroup = requiredGroup("ads");
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
     renderLayout(DEFAULT_BUSINESS_PATH, (page) => (
@@ -437,7 +462,7 @@ describe("MainLayout", () => {
 
   it("keeps open tab pages mounted on tab switches and remounts them on refresh", async () => {
     const adsGroup = requiredGroup("ads");
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const keywordLibrary = requiredPage("ads", "ads_keyword_library");
     const renderPage = (page: NavigationPage) => (
@@ -554,7 +579,7 @@ describe("MainLayout", () => {
     await waitFor(() => {
       expect(window.location.hash).toBe(`#${DEFAULT_BUSINESS_PATH}`);
     });
-    expect(getTab(requiredPage("products", "products_listing_management").title)).toHaveAttribute(
+    expect(getTab(requiredPage("dashboard", "dashboard_today_sales").title)).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -592,7 +617,7 @@ describe("MainLayout", () => {
 
     expectSecondaryClosed();
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
-      requiredPage("products", "products_listing_management").title,
+      requiredPage("dashboard", "dashboard_today_sales").title,
     );
   });
 
@@ -601,14 +626,15 @@ describe("MainLayout", () => {
 
     const primaryNavigation = screen.getByRole("menu", { name: "一级导航" });
     const productsGroup = requiredGroup("products");
+    const homeGroup = requiredGroup("dashboard");
     const productGroup = requiredGroup("products");
-    const listingManagement = requiredPage("products", "products_listing_management");
+    const listingManagement = requiredPage("dashboard", "dashboard_today_sales");
     void listingManagement;
     const primaryTitle = within(primaryNavigation).getByText(
       productsGroup.title,
     );
     const salesGroupItem = within(primaryNavigation).getByRole("menuitem", {
-      name: productsGroup.title,
+      name: homeGroup.title,
     });
     fireEvent.click(
       within(primaryNavigation).getByRole("menuitem", {
@@ -635,7 +661,7 @@ describe("MainLayout", () => {
     expectSecondaryOpen();
     expect(screen.getByRole("button", { name: "关闭二级菜单" })).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "回到Listing管理首页" }));
+    fireEvent.click(screen.getByRole("button", { name: "回到工作台首页" }));
 
     expect(salesGroupItem).toHaveClass("ant-menu-item-selected");
     expect(screen.getByRole("heading", { name: "当前页面" })).toHaveTextContent(
