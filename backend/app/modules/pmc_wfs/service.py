@@ -5,7 +5,7 @@ from datetime import datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.api import ApiError, ErrorCode
@@ -27,6 +27,7 @@ from app.modules.pmc_domestic.warehouse_models import (
     PackingVarianceCase,
 )
 from app.modules.pmc_domestic.warehouse_service import WarehouseService
+from app.modules.pmc_wfs.creation_models import WfsBoxHold
 from app.modules.pmc_wfs.models import WfsBoxAllocation, WfsDraft, WfsDraftItem, WfsEvent
 from app.modules.pmc_wfs.repository import WfsRepository, assert_not_occupied
 from app.modules.pmc_wfs.schemas import (
@@ -67,7 +68,15 @@ class WfsService:
         return row
 
     def rows(self, orders):
+        from app.modules.pmc_wfs.repository import require_creation_schema
+
+        require_creation_schema(self.session)
         occupied = self.repo.occupied([o.id for o in orders])
+        held = list(self.session.scalars(select(WfsBoxHold).where(
+            WfsBoxHold.order_id.in_([o.id for o in orders]))))
+        held_boxes = defaultdict(set)
+        for hold in held:
+            held_boxes[hold.box_line_id].add(hold.box_ordinal)
         result = []
         for raw, order in zip(orders, self.warehouse.read_rows(orders), strict=True):
             box = order.box_set
@@ -84,8 +93,10 @@ class WfsService:
             ):
                 reasons.append("GTIN_INVALID")
             lines = box.lines if box else []
-            used = [r.id for r in lines if r.id in occupied]
-            available = [r.id for r in lines if r.id not in occupied] if not reasons else []
+            used = [r.id for r in lines if r.id in occupied or held_boxes[r.id]]
+            available = [r.id for r in lines if r.id not in used] if not reasons else []
+            counts = {r.id: 0 if r.id in occupied else max(0, r.boxes - len(held_boxes[r.id]))
+                      for r in lines}
             if not lines:
                 reasons.append("BOXES_REQUIRED")
             result.append(
@@ -96,19 +107,65 @@ class WfsService:
                     available_line_ids=available,
                     blocked_reasons=reasons,
                     can_edit=not used and bool(box and box.completed_at),
+                    total_boxes=sum(r.boxes for r in lines),
+                    occupied_boxes=sum(r.boxes - counts[r.id] for r in lines),
+                    available_boxes=sum(counts.values()) if not reasons else 0,
+                    available_units=sum(counts[r.id] * r.units_per_box for r in lines)
+                    if not reasons else 0,
                 )
             )
         return result
 
+    @staticmethod
+    def _arrangement(row: PendingRow, kind: str) -> bool:
+        if kind == "ready":
+            return row.available_boxes > 0 and row.occupied_boxes == 0
+        if kind == "partial":
+            return row.available_boxes > 0 and row.occupied_boxes > 0
+        if kind == "done":
+            return row.available_boxes == 0 and row.occupied_boxes > 0
+        return True
+
+    @staticmethod
+    def _creation_result(state: str | None, kind: str) -> bool:
+        if kind == "all":
+            return True
+        if kind == "none":
+            return state is None
+        if kind == "in_progress":
+            return state in {"QUEUED", "RUNNING"}
+        mapping = {
+            "succeeded": "SUCCEEDED",
+            "failed": "FAILED",
+            "partial": "PARTIAL",
+            "unknown": "UNKNOWN",
+        }
+        return state == mapping.get(kind)
+
+    def _filter_rows(self, query, orders):
+        rows = self.rows(orders)
+        states = self.repo.latest_creation_states([order.id for order in orders])
+        return [
+            row
+            for row in rows
+            if self._arrangement(row, query.arrangement)
+            and self._creation_result(states.get(row.order.id), query.creation_result)
+        ]
+
     def list(self, query):
         stmt = self.repo.query(query, self.accounts, self.stores)
-        total = self.repo.count(stmt)
-        orders = list(
-            self.session.scalars(
-                stmt.offset((query.page - 1) * query.page_size).limit(query.page_size)
+        if query.arrangement == "all" and query.creation_result == "all":
+            total = self.repo.count(stmt)
+            orders = list(
+                self.session.scalars(
+                    stmt.offset((query.page - 1) * query.page_size).limit(query.page_size)
+                )
             )
-        )
-        return PendingList(items=self.rows(orders), total=total)
+            return PendingList(items=self.rows(orders), total=total)
+        rows = self._filter_rows(query, list(self.session.scalars(stmt)))
+        start = (query.page - 1) * query.page_size
+        end = start + query.page_size
+        return PendingList(items=rows[start:end], total=len(rows))
 
     def detail(self, ident):
         row = self.rows([self.order(ident)])[0]
@@ -119,7 +176,11 @@ class WfsService:
     def summary(self, query):
         # Summary aggregates all matching completed PKs, never only the current page.
         orders = list(self.session.scalars(self.repo.query(query, self.accounts, self.stores)))
-        rows = self.rows(orders)
+        rows = (
+            self._filter_rows(query, orders)
+            if query.arrangement != "all" or query.creation_result != "all"
+            else self.rows(orders)
+        )
         all_orders = list(
             self.session.scalars(
                 self.repo.query(query, self.accounts, self.stores, completed=False)
@@ -127,27 +188,45 @@ class WfsService:
         )
         sets, *_ = self.warehouse.repo.context(all_orders) if all_orders else ({},)
         waiting = [o for o in all_orders if o.id not in sets or not sets[o.id].completed_at]
-        lines = [
-            line for r in rows for line in r.order.box_set.lines if line.id in r.available_line_ids
-        ]
         return PendingSummary(
             completed=len(rows),
-            ready=sum(bool(r.available_line_ids) for r in rows),
+            ready=sum(r.available_boxes > 0 for r in rows),
             test=sum(r.business_test for r in rows),
             waiting=len(waiting),
             no_box=sum(o.id not in sets for o in waiting),
             filled_not_done=sum(o.id in sets for o in waiting),
-            available_boxes=sum(r.boxes for r in lines),
-            available_units=sum(r.boxes * r.units_per_box for r in lines),
+            available_boxes=sum(r.available_boxes for r in rows),
+            available_units=sum(r.available_units for r in rows),
         )
 
     def options(self):
-        orders = self.session.scalars(self.repo.query(PendingFilter(), self.accounts, self.stores))
+        # Same store dimension as PMC domestic filter-options (dim_lingxing_stores), not only
+        # stores that already appear on completed packing rows.
+        name = func.nullif(func.trim(Store.store_name), "")
+        stmt = (
+            select(Store.store_id, func.count(func.distinct(name)), func.max(name))
+            .where(
+                Store.source_account_ref.in_(self.accounts),
+                func.trim(Store.store_id) != "",
+            )
+            .group_by(Store.store_id)
+            .order_by(Store.store_id)
+        )
+        if self.stores is not None:
+            stmt = stmt.where(Store.store_id.in_(self.stores))
         values = {
-            r.store_id: r.snapshot_json.get("store_name") or r.store_id
-            for r in orders
-            if r.store_id
+            store_id: (label if count == 1 and label else store_id)
+            for store_id, count, label in self.session.execute(stmt).all()
         }
+        orders = self.session.scalars(
+            self.repo.query(PendingFilter(), self.accounts, self.stores)
+        )
+        for row in orders:
+            if row.store_id:
+                values.setdefault(
+                    row.store_id,
+                    row.snapshot_json.get("store_name") or row.store_id,
+                )
         return PendingOptions(
             stores=[StoreOption(value=k, label=v) for k, v in sorted(values.items())]
         )

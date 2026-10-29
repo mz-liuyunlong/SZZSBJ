@@ -218,3 +218,8 @@ Navicat只读核对脚本：docs/delivery/local-iam-import-verification.sql，5�
 PR #260 原有预览同时修复：批处理固定使用同一规则版本、UUID keyset 分页、所有排除生命周期清除等级候选、监控日观察作为生命周期证据，以及 Celery 调度 advisory lock 在物理连接上跨提交保持。财务证据完整性仍会阻止正式等级发布；本切片不启用正式发布或生产调度。
 
 验证：定向后端 `53 passed`；合入最新 main 后完整后端 `1825 passed, 127 skipped`；完整前端单 worker `61 files / 292 tests`、lint 和 build 通过（lint 保留 main 既有 1 条 Hook warning）；Ruff `659 files` format/lint、应用导入、回放 CLI help、Alembic 单 head `20261028_0066_walmart_monitor_listing_projection`、离线迁移检查、rule-pack 与 PR 净差异检查通过。集中 mypy 仍被仓库既有 repository/service 类型债务阻断，新增监控投影文件没有直接报告的新错误。所有验证使用合成数据，没有输出或提交商品标识、账号、Token 或 RAW payload。
+
+
+## WFS 待发货 V2 增量（2026-10-29）
+
+当前 develop_backup 实现按箱数分票、多 PK 合并、自动审批和创建记录；本地测试与外部能力边界见 docs/delivery/pmc-wfs-pending-packing-v2-handoff.md。历史交接保留；不再按历史待人工审批草稿作为当前页面流程。未提交、推送、部署或迁移业务库。

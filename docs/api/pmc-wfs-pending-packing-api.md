@@ -12,9 +12,9 @@
 
 | 方法 / 后缀 | 请求 | 响应 data |
 |---|---|---|
-| GET /orders | store_id、keyword、only_test；page>=1，page_size默认20最大200 | items:PendingRow[]、total |
-| GET /summary | 同上筛选，不含分页 | completed、ready、test、waiting、no_box、filled_not_done、available_boxes、available_units |
-| GET /filter-options | 无 | stores:[{value,label}]，完整已完成单范围 |
+| GET /orders | store_id、keyword、only_test、arrangement（all/ready/partial/done）、creation_result（all/none/in_progress/succeeded/failed/partial/unknown）、completed_from/completed_to（Asia/Taipei 日历日）；page>=1，page_size默认20最大200 | items:PendingRow[]、total |
+| GET /summary | 同上筛选（含 arrangement 与 creation_result），不含分页 | completed、ready、test、waiting、no_box、filled_not_done、available_boxes、available_units |
+| GET /filter-options | 无 | stores:[{value,label}]；来源为当前账号/店铺数据范围内的 `dim_lingxing_stores`，并补充已完成待发货 PK 上出现过的店铺名称 |
 | GET /orders/{UUID} | 无 | 最新PendingRow；未完成/不可见404 |
 | GET /orders/{UUID}/identity-options | 无 | 同账号同SKU、当前可见有效Listing，含listing_version |
 | POST /orders/{UUID}/identity | source_account_ref、idempotency_key、expected_version、expected_box_version、target_store_id、target_item_id、listing_version、reason | 新PK对应PendingRow |
@@ -64,3 +64,35 @@ order复用仓库WarehouseOrderRead（含原Q、实装T、UUID行、尺寸cm/重
 本阶段有效占用持续保留，不提供批准、撤回、释放、外部计划取消/改数量/箱唛接口。下一阶段需单独状态机及结构升级，不能以删除草稿/审计释放。
 
 本地结构由负责人批准的专用加法脚本创建；不改变现有Alembic版本。正式部署需另外整理Alembic迁移，不可只部署代码。
+
+
+## V2 按箱数创建接口（2026-10-29）
+
+本节是当前页面契约；上文 drafts 接口仅保留历史兼容，页面不再提交待人工审批草稿。
+基路径 `/api/pmc/wfs/pending-packing`。统一 JSON envelope；文件下载例外。
+
+| 方法 | 路径 | 功能 / 动作权限后缀 |
+|---|---|---|
+| GET | /capabilities | 创建/探测能力及禁用原因 |
+| POST | /allocation-preview | 整箱分票核对 / create |
+| POST | /creation-operations | 幂等提交、自动审批、异步创建 / create |
+| GET | /creation-operations?order_id=UUID&page=1&page_size=10 | PK 创建记录，含合并来源 PK；分页最大100 |
+| GET | /creation-operations/{ident} | 逐票状态、实际货件与箱唛状态 |
+| POST | /creation-operations/{ident}/reconcile | 核实结果 / reconcile |
+| POST | /creation-operations/{ident}/labels/retry | 仅补取箱唛 / label-retry |
+| GET | /creation-operations/{ident}/labels/{shipment_id} | PDF附件，application/octet-stream，no-store |
+| POST | /optional-previews | 可选探测、不占用 / preview |
+
+动作权限前缀 `action:pmc:wfs-pending-packing:`；所有接口验证 `page:pmc:wfs:view` 和来源账号/店铺范围。旧 draft-submit 权限不自动授予 create。
+
+分箱请求：`order_id`、`expected_version`、`expected_box_version`；其他 PK 放 `additional_selections`，每项同样三个字段；`shipping_boxes`、`shipment_count`、`shipment_boxes` 为严格正整数，票数匹配数组长度，箱数和必须一致，上限9999。所有 PK 账号、店铺、测试标记一致；相同 SKU 身份一致。响应返回 `tickets`、每票 `ranges` 的 PK/SKU/行/箱序/实际件数，以及 `preview_hash`、可用和剩余箱数。
+创建在上述字段基础增加 `source_account_ref`、`preview_hash`、UUID `idempotency_key`、`return_address`、`its`、带时区 `expected_delivery_at`。地址详细结构沿用原 ReturnAddress schema，精确必填项以 OpenAPI 为准。不传 OWS。表单重试复用同键；改变请求不得复用。
+
+创建响应包含 `id`、`order_id`、`state`、`created_at`、`approval_mode=automatic`、`automatically_approved_at`、`tickets`。票包含 allocation、state、error_code、shipments；shipment 包含 shipment_id 和 label_state。标签二进制和凭据不出现在 JSON。自动审批和创建结果分别表达。
+
+状态：QUEUED/RUNNING/SUCCEEDED/FAILED/UNKNOWN/PARTIAL；票不使用PARTIAL。标签 PENDING/READY/FAILED。超时视 UNKNOWN，禁止盲目重发。按已知货件补标签不会重建。未启用平台适配器返回503 WFS_EXECUTION_DISABLED且不占用；403权限/环境，404不可见，409版本/占用/幂等冲突，422字段校验。
+
+新增四表：ops_wfs_creation_operations、ops_wfs_creation_tickets、ops_wfs_box_holds、evt_wfs_creation_events。事件禁止更新/删除；占用具有箱行+版本+箱序唯一约束；失败不自动释放。只在隔离测试库执行新增迁移；尚未迁移的业务环境不能宣称本页可用。
+Worker 复用既有 Celery，显式加载 app.modules.pmc_wfs.tasks、消费 integration 队列；任务名 integration_sync.wfs_creation。本次未改变公共调度，真实 Gateway 默认禁用。
+
+缺少V2表时返回503 `WFS_SCHEMA_NOT_READY`；页面显示数据库结构尚未更新，不再以通用服务错误或空列表掩盖。

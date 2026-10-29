@@ -7,6 +7,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { navigation } from "@/config/navigation";
 import PendingPackingPage from "./PendingPackingPage";
 import * as api from "./pendingPackingApi";
+import * as creation from "./creationApi";
+vi.mock("./creationApi", async (original) => ({ ...await original<typeof creation>(), getCreationCapabilities: vi.fn(), createShipments: vi.fn() }));
 import type { PendingRow } from "./pendingPackingTypes";
 
 vi.mock("./pendingPackingApi", async (original) => ({ ...await original<typeof api>(), listPending: vi.fn(), pendingOptions: vi.fn(), pendingSummary: vi.fn(), submitDrafts: vi.fn() }));
@@ -18,7 +20,7 @@ const row = {
     gtin: "00000000000001", product_name: "测试商品", approved_quantity: 10, customs_value: false,
     box_set: { id: "box", version: 1, total_qty: 10, completed_at: "2026-10-23T00:00:00Z", completed_by: "仓库",
       lines: [{ id: "00000000-0000-4000-8000-000000000002", line_no: 1, boxes: 2, units_per_box: 5 }] } },
-  business_test: true, occupied_line_ids: [], available_line_ids: ["00000000-0000-4000-8000-000000000002"], blocked_reasons: [], can_edit: true,
+  total_boxes: 2, occupied_boxes: 0, available_boxes: 2, available_units: 10, business_test: true, occupied_line_ids: [], available_line_ids: ["00000000-0000-4000-8000-000000000002"], blocked_reasons: [], can_edit: true,
 } as unknown as PendingRow;
 function mount(permissions = ["*"]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -26,6 +28,7 @@ function mount(permissions = ["*"]) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(creation.getCreationCapabilities).mockResolvedValue(envelope({ creation_enabled: true, preview_enabled: true, reason: null }));
   window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   Object.defineProperty(window, "matchMedia", { configurable: true, value: vi.fn(() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} })) });
   vi.mocked(api.listPending).mockResolvedValue(envelope({ items: [row], total: 1 }));
@@ -44,18 +47,15 @@ it("covers the page with the shared loading overlay while the list is fetching",
   expect(screen.getByText("当前条件下暂无已打包完成单据")).toBeInTheDocument();
 });
 
-it("loads real rows and submits a pending snapshot with stable box selection", async () => {
-  vi.mocked(api.submitDrafts).mockResolvedValue(envelope({ drafts: [{ id: "draft", number: "WS-FIXTURE", status: "pending", store_id: "fixture-store", business_test: true, actor_uid: "fixture", created_at: "2026-10-23T00:00:00Z", payload: { items: [] } }] }));
+it("opens count-based creation without OWS or a manual approval button and cancels without writes", async () => {
   mount();
   fireEvent.click(await screen.findByRole("checkbox", { name: "选择PK-FIXTURE" }));
-  fireEvent.click(screen.getByRole("button", { name: /生成货件草稿/ }));
-  fireEvent.change(screen.getByLabelText("退货街道地址"), { target: { value: "Test street" } });
-  fireEvent.change(screen.getByLabelText("城市"), { target: { value: "Katy" } });
-  fireEvent.change(screen.getByLabelText("州代码"), { target: { value: "TX" } });
-  fireEvent.change(screen.getByLabelText("邮编"), { target: { value: "77449" } });
-  fireEvent.click(screen.getByRole("button", { name: "保存为待审批草稿" }));
-  await screen.findByText(/WS-FIXTURE/);
-  expect(api.submitDrafts).toHaveBeenCalledWith(expect.objectContaining({ source_account_ref: "fixture", selections: [expect.objectContaining({ order_id: row.order.id, expected_version: 1, expected_box_version: 1, box_line_ids: row.available_line_ids })] }));
+  fireEvent.click(screen.getByRole("button", { name: "创建 WFS 货件" }));
+  expect(await screen.findByRole("spinbutton", { name: "本次发货箱数" })).toHaveValue("2");
+  expect(screen.queryByLabelText("OWS")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /^(提交审批|批准|驳回)$/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^取\s*消$/ }));
+  expect(creation.createShipments).not.toHaveBeenCalled();
 });
 
 it("keeps errors visible and never replaces failed reads with samples", async () => {
@@ -69,7 +69,7 @@ it("keeps errors visible and never replaces failed reads with samples", async ()
 it("filters on test flag and hides mutations without action permission", async () => {
   mount(["page:pmc:wfs:view"]);
   await screen.findByText("PK-FIXTURE");
-  expect(screen.queryByRole("button", { name: /生成货件草稿/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "创建 WFS 货件" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox", { name: "只看测试单" }));
   await waitFor(() => expect(api.listPending).toHaveBeenLastCalledWith(expect.objectContaining({ only_test: true }), 1, 20, expect.any(AbortSignal)));
 });

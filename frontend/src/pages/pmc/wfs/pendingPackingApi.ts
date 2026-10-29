@@ -2,7 +2,15 @@
 import { backendRequest, BackendRequestError } from "@/api/backendApi";
 import type { DraftCommand, DraftRead, IdentityChoice, IdentityFields, PendingFilters, PendingRow, PendingSummary } from "./pendingPackingTypes";
 export const pendingPrefix = "/api/pmc/wfs/pending-packing";
-const query = (f: PendingFilters) => new URLSearchParams({ keyword: f.keyword, only_test: String(f.only_test), ...(f.store_id ? { store_id: f.store_id } : {}) });
+const query = (f: PendingFilters) => new URLSearchParams({
+  keyword: f.keyword,
+  only_test: String(f.only_test),
+  arrangement: f.arrangement ?? "all",
+  creation_result: f.creation_result ?? "all",
+  ...(f.store_id ? { store_id: f.store_id } : {}),
+  ...(f.completed_from ? { completed_from: f.completed_from } : {}),
+  ...(f.completed_to ? { completed_to: f.completed_to } : {}),
+});
 export const listPending = (f: PendingFilters, page: number, size: number, signal?: AbortSignal) => backendRequest<{ items: PendingRow[]; total: number }>(`${pendingPrefix}/orders?${query(f)}&page=${page}&page_size=${size}`, { signal });
 export const pendingSummary = (f: PendingFilters, signal?: AbortSignal) => backendRequest<PendingSummary>(`${pendingPrefix}/summary?${query(f)}`, { signal });
 export const pendingOptions = (signal?: AbortSignal) => backendRequest<{ stores: { value: string; label: string }[] }>(`${pendingPrefix}/filter-options`, { signal });
@@ -12,11 +20,14 @@ export const submitDrafts = (body: DraftCommand) => backendRequest<{ drafts: Dra
 export const switchIdentity = (row: PendingRow, fields: IdentityFields, key: string) => backendRequest<PendingRow>(`${pendingPrefix}/orders/${row.order.id}/identity`, { method: "POST", body: JSON.stringify({ ...fields, source_account_ref: row.order.source_account_ref, expected_version: row.order.version, expected_box_version: row.order.box_set!.version, idempotency_key: key }) });
 export function pendingError(error: unknown): string {
   if (error instanceof BackendRequestError) {
+    if (error.code === "WFS_SCHEMA_NOT_READY") return "WFS 数据库结构尚未更新，请先完成本地迁移后重试";
+    if (error.code === "WFS_EXECUTION_DISABLED") return "Walmart 创建能力尚未启用；未创建货件，也未占用箱子";
+    if (error.code === "WFS_DISPATCH_FAILED") return "后台派发失败，记录已保留，请在创建记录中核实";
     if (error.status === 401) return "登录已失效，请重新登录";
     if (error.status === 403) return "没有操作权限、来源账号或店铺数据权限";
     if (error.status === 404) return "单据已变化或不在当前权限范围，请刷新";
     if (error.status === 409) return "单据版本、装箱占用或商品身份已变化，请刷新核对";
-    if (error.status === 422) return "请检查退货地址、装箱选择及必填原因";
+    if (error.status === 422) return "请检查箱数分配、地址、预计到仓日期及必填原因";
   }
   return "待发货服务请求失败，请重试；本页不会使用示例数据替代";
 }

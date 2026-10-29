@@ -250,6 +250,51 @@ def command(account, order, box, lines):
     )
 
 
+def test_store_options_use_lingxing_store_dimension(db):
+    account, order, box, _ = seed(db)
+    from app.modules.data_pages.models import LingxingStoreDimension
+
+    db.add(
+        LingxingStoreDimension(
+            source_account_ref=account,
+            platform_code_raw="walmart",
+            platform_code="walmart",
+            store_id="dim-only-store",
+            store_name="维度店铺",
+            synced_at=now(),
+        )
+    )
+    db.flush()
+    stores = WfsService(db, frozenset({account}), None).options().stores
+    assert any(s.value == "dim-only-store" and s.label == "维度店铺" for s in stores)
+    assert any(s.value == "fixture-store" for s in stores)
+
+
+def test_creation_result_filter(db):
+    from app.modules.pmc_wfs.creation_models import WfsCreation
+
+    account, order, box, _ = seed(db)
+    svc = WfsService(db, frozenset({account}), None)
+    assert svc.list(PendingQuery(creation_result="none")).total == 1
+    db.add(
+        WfsCreation(
+            order_id=order.id,
+            source_account_ref=account,
+            store_id=order.store_id,
+            idempotency_key=uuid4(),
+            request_hash="fixture-hash",
+            snapshot={"order_id": str(order.id)},
+            actor_uid="fixture",
+            state="FAILED",
+        )
+    )
+    db.flush()
+    assert svc.list(PendingQuery(creation_result="failed")).total == 1
+    assert svc.list(PendingQuery(creation_result="none")).total == 0
+    assert svc.list(PendingQuery(creation_result="in_progress")).total == 0
+    assert svc.summary(PendingFilter(creation_result="failed")).completed == 1
+
+
 def test_query_counts_and_unknown_identity(db):
     account, order, box, _ = seed(db)
     svc = WfsService(db, frozenset({account}), None)
@@ -328,7 +373,8 @@ def test_identity_switch_transfers_not_duplicates_stock(db):
         gtin="00000000000002",
         standard_status="PUBLISHED",
         raw_status="PUBLISHED",
-        fulfillment_type="0",
+        fulfillment_type="1",
+        item_url="https://example.com/wfs-listing/999999",
         business_hash="b" * 64,
         source_observed_at=now(),
         synced_at=now(),

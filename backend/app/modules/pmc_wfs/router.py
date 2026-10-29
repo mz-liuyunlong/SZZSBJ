@@ -37,7 +37,7 @@ Submit = Annotated[
 Switch = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:identity-switch"))
 ]
-ERRORS = {code: {"model": ErrorEnvelope} for code in (401, 403, 404, 409, 422, 500)}
+ERRORS = {code: {"model": ErrorEnvelope} for code in (401, 403, 404, 409, 422, 500, 503)}
 
 
 def service(session: DB, accounts: Accounts, actor: Read):
@@ -89,7 +89,15 @@ def summary(request: Request, query: Annotated[PendingFilter, Query()], svc: Ser
     "/filter-options", response_model=SuccessEnvelope[PendingOptions, dict], responses=ERRORS
 )
 def options(request: Request, svc: Service):
-    return response(request, svc.options())
+    return success_response(
+        request,
+        data=svc.options(),
+        meta={
+            "source": "new_system_postgresql",
+            "execution_enabled": False,
+            "source_tables": ["dim_lingxing_stores", "ops_domestic_packing_orders"],
+        },
+    )
 
 
 @router.get("/orders/{ident}", response_model=SuccessEnvelope[PendingRow, dict], responses=ERRORS)

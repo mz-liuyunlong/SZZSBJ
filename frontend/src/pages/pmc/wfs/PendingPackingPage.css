@@ -121,3 +121,67 @@
 .wfs-pending__sku {
   font-weight: 600;
 }
+
+/* WFS 货件看板：货件/产品维度（连体分段，对齐旧 WFS 看板参考） */
+.wfs-board__view-segment.ant-segmented {
+  display: inline-flex;
+  padding: 2px;
+  background: #fff !important;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.wfs-board__view-segment .ant-segmented-group {
+  gap: 0;
+  background: transparent !important;
+}
+
+.wfs-board__view-segment .ant-segmented-thumb {
+  background: #1677ff !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.wfs-board__view-segment .ant-segmented-item {
+  position: relative;
+  flex: 1 1 auto;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent !important;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.wfs-board__view-segment .ant-segmented-item:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 0;
+  width: 1px;
+  height: 14px;
+  background: #e4e7ec;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.wfs-board__view-segment .ant-segmented-item-label {
+  position: relative;
+  z-index: 1;
+  min-height: 32px;
+  line-height: 32px;
+  padding: 0 16px;
+}
+
+.wfs-board__view-segment .ant-segmented-item-selected,
+.wfs-board__view-segment .ant-segmented-item-selected .ant-segmented-item-label {
+  color: #fff !important;
+  background: #1677ff !important;
+  background: #1677ff !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+}

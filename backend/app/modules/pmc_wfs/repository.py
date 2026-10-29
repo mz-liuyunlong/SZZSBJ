@@ -29,6 +29,16 @@ class WfsRepository:
             stmt = stmt.where(PackingOrder.store_id == q.store_id)
         if q.only_test:
             stmt = stmt.where(PackingOrder.business_test.is_(True))
+        if q.completed_from is not None:
+            stmt = stmt.where(
+                PackingBoxSet.completed_at.is_not(None),
+                func.date(PackingBoxSet.completed_at) >= q.completed_from,
+            )
+        if q.completed_to is not None:
+            stmt = stmt.where(
+                PackingBoxSet.completed_at.is_not(None),
+                func.date(PackingBoxSet.completed_at) <= q.completed_to,
+            )
         if q.keyword:
             word = q.keyword.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             pattern = f"%{word}%"
@@ -58,6 +68,19 @@ class WfsRepository:
             )
         )
 
+    def latest_creation_states(self, order_ids):
+        if not order_ids:
+            return {}
+        from app.modules.pmc_wfs.creation_models import WfsCreation
+
+        rows = self.session.execute(
+            select(WfsCreation.order_id, WfsCreation.state)
+            .where(WfsCreation.order_id.in_(order_ids))
+            .distinct(WfsCreation.order_id)
+            .order_by(WfsCreation.order_id, WfsCreation.created_at.desc())
+        ).all()
+        return {order_id: state for order_id, state in rows}
+
     def prior(self, account, key):
         return self.session.scalar(
             select(WfsEvent).where(
@@ -77,6 +100,11 @@ class WfsRepository:
 def assert_not_occupied(session, order_id):
     """All domestic mutation entry points must use this under the shared PK lock."""
     from app.modules.pmc_domestic.packing_service import conflict
+    from app.modules.pmc_wfs.creation_models import WfsBoxHold
+
+    if session.scalar(text("SELECT to_regclass('ops_wfs_box_holds') IS NOT NULL")):
+        if session.scalar(select(WfsBoxHold.id).where(WfsBoxHold.order_id == order_id).limit(1)):
+            conflict("WFS_BOXES_OCCUPIED")
 
     # Domestic-only installations cannot contain a WFS hold before this module's
     # additive schema is installed. Do not require a WFS rollout for unrelated PK edits.
@@ -94,3 +122,37 @@ WFS_TABLES = (
     WfsBoxAllocation.__table__,
     WfsEvent.__table__,
 )
+
+
+def require_exception_schema(session):
+    from app.core.api import ApiError
+
+    names = (
+        "ops_wfs_exception_cases",
+        "evt_wfs_exception_detections",
+        "evt_wfs_exception_actions",
+    )
+    if not all(session.scalar(text("SELECT to_regclass(:name)"), {"name": n}) for n in names):
+        raise ApiError(
+            code="WFS_EXCEPTION_SCHEMA_NOT_READY",
+            status_code=503,
+            message="WFS 异常中心数据库结构尚未更新，请先完成本地迁移后重试",
+        )
+
+
+def require_creation_schema(session):
+    """Fail explicitly before querying V2 facts in an environment not yet migrated."""
+    from app.core.api import ApiError
+
+    names = (
+        "ops_wfs_creation_operations",
+        "ops_wfs_creation_tickets",
+        "ops_wfs_box_holds",
+        "evt_wfs_creation_events",
+    )
+    if not all(session.scalar(text("SELECT to_regclass(:name)"), {"name": n}) for n in names):
+        raise ApiError(
+            code="WFS_SCHEMA_NOT_READY",
+            status_code=503,
+            message="WFS 数据库结构尚未更新，请先完成本地迁移后重试",
+        )

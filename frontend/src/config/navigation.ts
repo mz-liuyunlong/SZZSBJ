@@ -296,30 +296,15 @@ export const navigation: NavigationGroup[] = [
         viewPermissionKey: 'page:pmc:wfs:view',
         help: { enabled: true, title: '待发货打包单使用说明', helpUrl: '/help/pmc-wfs-pending-packing.html', openInNewTab: true },
       }),
-      page('pmc', 'wfs_shipments', '系统货件', '/pmc/wfs/shipments', {
-        sidebarSection: 'pmc-wfs', description: '写入 Walmart', status: 'building', readOnly: true,
-        viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 货件使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
-      }),
-      page('pmc', 'wfs_probe', '探测货件列表', '/pmc/wfs/probe', {
-        sidebarSection: 'pmc-wfs', description: '演示', status: 'building', readOnly: true,
-        viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 货件使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
-      }),
-      page('pmc', 'wfs_create_board', '货件创建看板', '/pmc/wfs/create-board', {
-        sidebarSection: 'pmc-wfs', description: '演示', status: 'building', readOnly: true,
-        viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 货件使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
-      }),
       page('pmc', 'wfs_board', 'WFS 货件看板', '/pmc/wfs/board', {
         sidebarSection: 'pmc-wfs', status: 'building', readOnly: true,
         viewPermissionKey: 'page:pmc:wfs:view',
         help: { enabled: true, title: 'WFS 货件使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
       }),
       page('pmc', 'wfs_exceptions', '异常中心', '/pmc/wfs/exceptions', {
-        sidebarSection: 'pmc-wfs', status: 'building', readOnly: true,
+        sidebarSection: 'pmc-wfs', status: 'building', readOnly: false,
         viewPermissionKey: 'page:pmc:wfs:view',
-        help: { enabled: true, title: 'WFS 货件使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
+        help: { enabled: true, title: 'WFS 异常中心使用说明', helpUrl: '/help/pmc-wfs.html', openInNewTab: true },
       }),
       page('pmc', 'wfs_settings', '设置', '/pmc/wfs/settings', {
         sidebarSection: 'pmc-wfs', status: 'building', readOnly: true,

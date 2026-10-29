@@ -3,8 +3,21 @@ import type { PackingWarehouseRow } from "../domestic-warehouse/packing/packingW
 export interface PendingRow {
   order: PackingWarehouseRow; business_test: boolean; occupied_line_ids: string[];
   available_line_ids: string[]; blocked_reasons: string[]; can_edit: boolean;
+  total_boxes: number; occupied_boxes: number; available_boxes: number; available_units: number;
 }
-export interface PendingFilters { store_id?: string; keyword: string; only_test: boolean }
+export interface PendingFilters {
+  store_id?: string; keyword: string; only_test: boolean;
+  arrangement?: "all" | "ready" | "partial" | "done";
+  creation_result?:
+    | "all"
+    | "none"
+    | "in_progress"
+    | "succeeded"
+    | "failed"
+    | "partial"
+    | "unknown";
+  completed_from?: string; completed_to?: string;
+}
 export interface PendingSummary {
   completed: number; ready: number; test: number; waiting: number; no_box: number;
   filled_not_done: number; available_boxes: number; available_units: number;

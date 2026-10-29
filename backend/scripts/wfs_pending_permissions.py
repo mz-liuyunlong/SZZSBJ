@@ -15,7 +15,13 @@ from scripts.wfs_pending_local_schema import local_url  # noqa: E402
 def main():
     engine = create_engine(local_url(), hide_parameters=True)
     definitions = [asdict(d) for d in PERMISSION_DEFINITIONS
-                   if d.page_key in {"pmc_wfs", "pmc_wfs_pending_packing"}]
+                   if d.page_key in {
+                       "pmc_wfs",
+                       "pmc_wfs_pending_packing",
+                       "pmc_wfs_board",
+                       "pmc_wfs_exceptions",
+                       "pmc_wfs_settings",
+                   }]
     with engine.begin() as conn:
         columns = {c["name"] for c in inspect(conn).get_columns("app_permissions")}
         for definition in definitions:

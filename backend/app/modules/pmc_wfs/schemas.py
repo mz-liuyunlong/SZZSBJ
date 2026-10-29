@@ -1,6 +1,6 @@
 """Typed WFS preparation contracts. No approval or external execution fields are accepted."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -14,6 +14,26 @@ class PendingFilter(Strict):
     store_id: str | None = Field(default=None, max_length=64)
     keyword: str = Field(default="", max_length=200)
     only_test: bool = False
+    arrangement: Literal["all", "ready", "partial", "done"] = "all"
+    creation_result: Literal[
+        "all",
+        "none",
+        "in_progress",
+        "succeeded",
+        "failed",
+        "partial",
+        "unknown",
+    ] = "all"
+    completed_from: date | None = None
+    completed_to: date | None = None
+
+    @field_validator("completed_to")
+    @classmethod
+    def completed_range(cls, value, info):
+        start = info.data.get("completed_from")
+        if value is not None and start is not None and value < start:
+            raise ValueError("completed_to must be on or after completed_from")
+        return value
 
 
 class PendingQuery(PendingFilter):
@@ -28,6 +48,10 @@ class PendingRow(Strict):
     available_line_ids: list[UUID]
     blocked_reasons: list[str]
     can_edit: bool
+    total_boxes: int = 0
+    occupied_boxes: int = 0
+    available_boxes: int = 0
+    available_units: int = 0
 
 
 class PendingList(Strict):
