@@ -5,10 +5,8 @@ is ever put in a task payload, result, database or log.
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from typing import Any
 from uuid import uuid4
 
 from app.integrations.walmart.remote_dispatch import (
