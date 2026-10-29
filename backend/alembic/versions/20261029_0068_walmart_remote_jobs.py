@@ -1,4 +1,5 @@
 """Durable Walmart remote job state; does not enable execution or touch secrets."""
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
@@ -24,11 +25,18 @@ def upgrade() -> None:
         sa.Column("run_id", sa.String(80)),
         sa.Column("files_verified", sa.Integer()),
         sa.Column("error_code", sa.String(128)),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("started_at", sa.DateTime(timezone=True)),
         sa.Column("finished_at", sa.DateTime(timezone=True)),
         sa.UniqueConstraint(
-            "source_account_ref", "store_id", "request_key",
+            "source_account_ref",
+            "store_id",
+            "request_key",
             name="uq_walmart_remote_job_key",
         ),
         sa.CheckConstraint(
