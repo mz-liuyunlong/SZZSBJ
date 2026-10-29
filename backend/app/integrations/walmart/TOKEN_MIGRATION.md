@@ -15,7 +15,7 @@ Status: **code foundation only; production disabled. No live Walmart calls perfo
 
 The 2026-10-23 handoff describes `features/tools/walmart_remote_pull/scheduler.py`,
 `run_worker.py`, `batch_state.py` and `convert.py`. Their **full sources are
-not currently present in the SZZSBJ repository** and must be obtained before
+supplied separately by the user but not committed to the SZZSBJ repository** and must be obtained before
 a faithful SSH scheduler/data-conversion port can be completed.
 
 The existing `scf_runtime.py` / `https_transport.py` perform the *wrong*
@@ -52,6 +52,36 @@ owner-controlled deployed entrypoint only after IAM and invocation review.
 - `token_broker.py`: SCF-only, store-bound, opt-in token issuance, no long-term secret return.
 - `token_client.py`: main-server typed response validation and isolated SCF invocation.
 - `test_token_broker_migration.py`: offline cross-store, forged result, sensitive repr tests.
+
+
+## Original 2026-10-26 code package (confirmed available)
+
+The user has supplied `walmart-remote-pull-it-pack-20261026.tar(3).gz`.
+It contains original `features/tools/walmart_remote_pull/scheduler.py`
+(v1.3.0), `run_worker.py` (v1.3.2), `batch_state.py`, 2 mock test
+modules, and `features/tools/walmart_to_daily/convert.py`. This supersedes
+earlier statements that the original source was unavailable.
+
+The original worker expects `--collect --store-id --run-id
+--remote-tmp-dir --endpoints --date --window-days --output-mode
+--min-interval-ms`, with optional `--gtin-file`; short-lived token on
+stdin only. The legacy scheduler also creates an atomic remote
+`.runs/<run_id>` lock **before token acquisition**, uploads
+`run_worker.py` to `<remote_tmp_dir>/<run_id>/run_worker.py`,
+transfers/hash-checks optional GTIN input, recovers ambiguous SSH
+outcomes by inspecting remote status (never blindly retries), retrieves
+artifacts, validates manifest and hashes, and cleans the remote run only
+after verified success. It does not place credentials on workers.
+
+**Important safety boundary:** The current `remote_dispatch.py` now uses
+the original worker argv, and `remote_pipeline.py` passes the persisted
+`store_id`, but the full original scheduler/worker source has **NOT**
+been committed into this repository and the protected worker upload /
+lock / GTIN handshake is not complete. Do not enable remote collection
+until these source-level steps are ported and tested, or the process may
+fail after receiving a short-lived token. CN2502's dedicated route is
+still unverified. Do not copy any `.secrets/` values or SSH private
+keys into Git.
 
 ## Implemented in branch (requires integration acceptance)
 
