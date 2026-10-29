@@ -29,14 +29,10 @@ def test_recovery_rejects_wrong_store_without_fetch(monkeypatch):
         "auth_failed": False,
     }
     fetch = Mock()
-    monkeypatch.setattr(
-        remote_recovery, "_ssh", lambda *a, **k: (0, json.dumps(remote))
-    )
+    monkeypatch.setattr(remote_recovery, "_ssh", lambda *a, **k: (0, json.dumps(remote)))
     monkeypatch.setattr(remote_recovery, "fetch_verified_run", fetch)
     with pytest.raises(DispatchRejected, match="REMOTE_RECOVERY_MANIFEST_INVALID"):
-        remote_recovery._completed_manifest(
-            ROUTE, "wmt-12345678", "11111111", ("wfs_inventory",)
-        )
+        remote_recovery._completed_manifest(ROUTE, "wmt-12345678", "11111111", ("wfs_inventory",))
     fetch.assert_not_called()
 
 
@@ -59,7 +55,5 @@ def test_recovery_unconfirmed_does_not_fetch(monkeypatch):
     monkeypatch.setattr(remote_recovery, "_ssh", lambda *a, **k: (255, ""))
     monkeypatch.setattr(remote_recovery, "fetch_verified_run", fetch)
     with pytest.raises(DispatchRejected, match="REMOTE_RECOVERY_UNCONFIRMED"):
-        remote_recovery._completed_manifest(
-            ROUTE, "wmt-12345678", "11111111", ("wfs_inventory",)
-        )
+        remote_recovery._completed_manifest(ROUTE, "wmt-12345678", "11111111", ("wfs_inventory",))
     fetch.assert_not_called()
