@@ -28,6 +28,7 @@ def response(token="dummy-short-token", seconds=900):
 def test_issue_only_bound_store():
     secrets = Secrets()
     calls = []
+
     def post(url, **kwargs):
         calls.append(url)
         assert kwargs["headers"]["Authorization"].startswith("Basic ")
