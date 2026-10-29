@@ -42,6 +42,7 @@ from app.modules.pmc_domestic.warehouse_router import (
     router as domestic_packing_warehouse_router,
 )
 from app.modules.pmc_purchase.router import router as pmc_purchase_router
+from app.modules.pmc_wfs.router import router as pmc_wfs_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router
 from app.modules.sku_detail.router import router as sku_detail_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     application.include_router(domestic_inbound_router)
     application.include_router(domestic_packing_approval_router)
     application.include_router(domestic_packing_warehouse_router)
+    application.include_router(pmc_wfs_router)
     application.include_router(product_management_router)
     application.include_router(products_router)
     application.include_router(sku_detail_router)

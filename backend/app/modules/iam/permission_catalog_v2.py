@@ -194,6 +194,8 @@ MODULES: tuple[ModuleDefinition, ...] = (
         (
             _page("pmc", "purchase_board", "采购看板", 10),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
+            _page("pmc", "wfs", "WFS", 30),
+            _page("pmc", "wfs_pending_packing", "待发货打包单", 31),
         ),
     ),
     ModuleDefinition(
@@ -260,6 +262,8 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_rules", "submit", "提交关键词规则裁决", 10, "high"),
     ActionDefinition("ai_center_keyword_rules", "review", "复核关键词规则裁决", 20, "high"),
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
+    ActionDefinition("pmc_wfs_pending_packing", "draft-submit", "生成待审批货件草稿", 10),
+    ActionDefinition("pmc_wfs_pending_packing", "identity-switch", "换店铺或商品链接", 20),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-approve", "通过打包审批", 10),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-reject", "驳回打包审批", 20),
     ActionDefinition("products_product_management", "view-sync-history", "查看同步历史", 8),

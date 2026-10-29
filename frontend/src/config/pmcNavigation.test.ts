@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { navigation, navigationRedirects } from "./navigation";
 import { resolveRoute } from "@/router/routeResolver";
 import { restoreTabWorkspace, TAB_WORKSPACE_VERSION } from "@/layouts/useTabWorkspace";
-import { getPagePermissionKey, isMockPageAccessibleForRole, isMockPageVisibleForRole } from "@/shared/permissions/mockAccess";
+import { getPagePermissionKey, isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
 
 const pmc = navigation.find((g) => g.key === "pmc")!;
 const grants = ["page:pmc:domestic-warehouse-board:view"];
@@ -16,14 +16,18 @@ describe("PMC navigation contract", () => {
       expect(isMockPageAccessibleForRole("user", page, [])).toBe(false);
     }
   });
-  it("shows planned leaves only to authorized users and never makes them routable", () => {
-    const planned = pmc.children.filter((p) => p.status === "disabled");
-    expect(planned).toHaveLength(2);
-    for (const page of planned) {
-      expect(isMockPageVisibleForRole("user", page, ["*"])).toBe(true);
-      expect(isMockPageVisibleForRole("user", page, [])).toBe(false);
-      expect(isMockPageAccessibleForRole("user", page, ["*"])).toBe(false);
-      expect(resolveRoute(page.path).kind).toBe("disabled");
+  it("opens each WFS leaf from the sidebar with one shared page permission", () => {
+    const pages = pmc.children.filter((p) => p.sidebarSection === "pmc-wfs");
+    expect(pages.map((p) => p.title)).toEqual([
+      "待发货打包单", "系统货件", "探测货件列表", "货件创建看板", "WFS 货件看板", "异常中心", "设置",
+    ]);
+    expect(pmc.children.filter((p) => p.status === "disabled")).toHaveLength(0);
+    for (const page of pages) {
+      expect(page.status).toBe("building");
+      expect(getPagePermissionKey(page)).toBe("page:pmc:wfs:view");
+      expect(isMockPageAccessibleForRole("user", page, ["page:pmc:wfs:view"])).toBe(true);
+      expect(isMockPageAccessibleForRole("user", page, [])).toBe(false);
+      expect(resolveRoute(page.path).kind).toBe("allowed");
     }
   });
   it("does not restore removed container tabs or register navigable groups", () => {

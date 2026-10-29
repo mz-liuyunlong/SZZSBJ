@@ -24,6 +24,10 @@
 
 本地已运行：前端 lint、TypeScript/Vite 构建通过，Vitest 68 文件 / 304 tests passed；后端 Ruff lint/format 通过，采购覆盖、迁移对照和备注回归 15 passed，规则检查通过。首次 Windows 全量后端为 1769 passed / 13 failed / 118 skipped：4 项真实问题已修复，9 项涉及 POSIX 文件权限，保留断言等待 Linux CI。远端结果须以本轮提交对应的实际 Actions 记录为准，不能将本地结果替代远端验收。
 
+# 最新交接：待发货打包单（2026-10-23，dev_wfs 合入）
+
+已批准本地开发完成。具体范围、数据保护、验证和后续限制见 `docs/delivery/pmc-wfs-pending-packing-handoff.md`。本地待发货0张、待装箱4张；真实流程已通过隔离PostgreSQL与浏览器模拟接口验证，未往现有业务表灌样例。审批/Walmart/箱唛/取消改量仍属下一阶段。
+
 以下为历史交接：
 
 # 国内仓入库批次看板 M1 交接
