@@ -3,6 +3,7 @@
 Derived from the owner's 2026-10-26 source package, not the older handoff.
 This is an offline argument builder: no secrets, SSH or Walmart calls.
 """
+
 from __future__ import annotations
 
 import re
@@ -43,7 +44,11 @@ def build_legacy_worker_argv(
         or remote_tmp_dir.endswith("/")
     ):
         raise LegacyWorkerContractError("WORKER_REMOTE_PATH_INVALID")
-    if not endpoints or len(set(endpoints)) != len(endpoints) or not set(endpoints) <= ALLOWED_ENDPOINTS:
+    if (
+        not endpoints
+        or len(set(endpoints)) != len(endpoints)
+        or not set(endpoints) <= ALLOWED_ENDPOINTS
+    ):
         raise LegacyWorkerContractError("WORKER_ENDPOINT_INVALID")
     try:
         date.fromisoformat(date_iso)
