@@ -61,9 +61,7 @@ def issue_store_token(
                     _TOKEN_URL, data={"grant_type": "client_credentials"}, headers=headers
                 )
         else:
-            response = post(
-                _TOKEN_URL, data={"grant_type": "client_credentials"}, headers=headers
-            )
+            response = post(_TOKEN_URL, data={"grant_type": "client_credentials"}, headers=headers)
         if response.status_code != 200 or len(response.content) > _MAX_TOKEN_BYTES:
             raise TokenBrokerRejected("TOKEN_PROVIDER_UNAVAILABLE")
         data = response.json()
