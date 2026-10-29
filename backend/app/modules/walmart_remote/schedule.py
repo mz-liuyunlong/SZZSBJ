@@ -66,16 +66,19 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
     ):
         return []
     jobs: list[WalmartRemoteJob] = []
+    queued_ids: list[str] = []
     for row in existing:
         key = "scheduled-" + date_key + "-" + mapping[row.store_id]
         prior = session.scalar(
-            select(WalmartRemoteJob.id).where(
+            select(WalmartRemoteJob).where(
                 WalmartRemoteJob.source_account_ref == row.source_account_ref,
                 WalmartRemoteJob.store_id == row.store_id,
                 WalmartRemoteJob.request_key == key,
             )
         )
         if prior is not None:
+            if prior.status == "queued":
+                queued_ids.append(str(prior.id))
             continue
         jobs.append(
             WalmartRemoteJob(
@@ -95,4 +98,4 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
         )
     session.add_all(jobs)
     session.flush()
-    return [str(job.id) for job in jobs]
+    return queued_ids + [str(job.id) for job in jobs]
