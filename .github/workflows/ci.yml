@@ -15,9 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check required rule files
+      - name: Rule pack preflight
         run: |
-          bash scripts/check-rule-pack.sh
+          bash scripts/ci-preflight.sh rules
 
       - name: Protect old-system from normal PR changes
         if: github.event_name == 'pull_request'
@@ -92,19 +92,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Frontend checks
         if: hashFiles('frontend/package.json') != ''
-        working-directory: frontend
+        working-directory: .
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
-          npm run lint --if-present
-          npm run typecheck --if-present
-          npm run test --if-present -- --run
-          npm run build --if-present
-          if node -e "const p=require('./package.json'); process.exit(p.scripts && p.scripts['test:e2e'] ? 0 : 1)"; then
-            npx playwright install --with-deps
-            npm run test:e2e
-          else
-            echo "No test:e2e script yet; skipping Playwright E2E."
-          fi
+          bash scripts/ci-preflight.sh frontend
 
   backend-if-present:
     runs-on: ubuntu-latest
@@ -121,13 +111,8 @@ jobs:
           python-version-file: .python-version
       - name: Backend checks
         if: hashFiles('backend/pyproject.toml') != ''
-        working-directory: backend
         run: |
-          uv sync
-          uv run ruff format --check .
-          uv run ruff check .
-          uv run pytest
-          uv run python -c "import app.main"
+          bash scripts/ci-preflight.sh backend
 
   iam-auth-postgresql:
     name: IAM auth PostgreSQL integration
