@@ -76,17 +76,17 @@ def test_file_only_recovery_validates_all_endpoint_csvs(tmp_path):
     (folder / "wfs_inventory.csv").write_bytes(raw)
     expected_hash = hashlib.sha256(raw).hexdigest()
     (folder / "_convert_manifest.json").write_text(
-        json.dumps({
-            "run_id": "wmt-12345678",
-            "store_id": "11111111",
-            "date": "20261029",
-            "written": [{"file": "wfs_inventory.csv", "rows": 1, "sha256": expected_hash}],
-        })
+        json.dumps(
+            {
+                "run_id": "wmt-12345678",
+                "store_id": "11111111",
+                "date": "20261029",
+                "written": [{"file": "wfs_inventory.csv", "rows": 1, "sha256": expected_hash}],
+            }
+        )
     )
     manifest = {"date": "2026-10-29", "endpoints_requested": ["wfs_inventory"]}
-    assert remote_recovery._converted_files(
-        output, manifest, "11111111", "wmt-12345678"
-    ) == 1
+    assert remote_recovery._converted_files(output, manifest, "11111111", "wmt-12345678") == 1
     manifest["endpoints_requested"].append("inventory_log")
     with pytest.raises(DispatchRejected, match="REMOTE_RECOVERY_OUTPUT_INVALID"):
         remote_recovery._converted_files(output, manifest, "11111111", "wmt-12345678")
