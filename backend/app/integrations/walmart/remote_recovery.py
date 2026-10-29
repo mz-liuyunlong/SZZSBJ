@@ -10,7 +10,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
+
+from app.db.session import get_session_factory
+from app.integrations.walmart.remote_ingest import ingest_verified_archive
 
 from app.integrations.walmart.legacy_execution import _ssh
 from app.integrations.walmart.legacy_worker_contract import DEFAULT_REMOTE_TMP_DIR
@@ -101,6 +104,8 @@ def recover_completed_run(
     run_id: str,
     operations: tuple[str, ...],
     archive_root: Path,
+    job_id: UUID,
+    source_account_ref: str,
 ) -> dict[str, object]:
     """Return only after verified artifacts and original-compatible CSVs exist."""
     manifest = _completed_manifest(route, run_id, store_id, operations)
@@ -136,6 +141,13 @@ def recover_completed_run(
             store_id=store_id,
         )
         count = int(result["files"])
+    with get_session_factory()() as session:
+        ingest_verified_archive(
+            session, job_id=job_id, source_account_ref=source_account_ref,
+            store_code=route.store_code, store_id=store_id, run_id=run_id,
+            archive_root=archive_root,
+        )
+        session.commit()
     cleaned = cleanup_verified_run(
         route=route,
         store_id=store_id,

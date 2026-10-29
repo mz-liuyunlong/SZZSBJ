@@ -31,6 +31,7 @@ def execute_remote_job(job_id: str) -> None:
         if job is None or job.status != "queued":
             return
         store_code = job.store_code
+        source_account_ref = job.source_account_ref
         store_id = job.store_id
         operations = tuple(job.operations)
         run_id = "wmt-" + job.id.hex
@@ -48,6 +49,8 @@ def execute_remote_job(job_id: str) -> None:
             operations=operations,
             archive_root=Path(archive_path),
             run_id=run_id,
+            job_id=job_uuid,
+            source_account_ref=source_account_ref,
         )
         error_code = None
     except DispatchRejected as exc:
@@ -71,6 +74,9 @@ def execute_remote_job(job_id: str) -> None:
             "REMOTE_FETCH_UNAVAILABLE",
             "REMOTE_ARCHIVE_ALREADY_EXISTS",
             "REMOTE_CLEANUP_UNCONFIRMED",
+            "REMOTE_CONVERSION_ALREADY_EXISTS",
+            "REMOTE_INGEST_RECEIPT_CONFLICT",
+            "REMOTE_INGEST_VERIFICATION_FAILED",
         }
         job.status = "succeeded" if result else "needs_review" if uncertain else "failed"
         job.error_code = error_code
@@ -130,6 +136,8 @@ def recover_remote_job(job_id: str) -> None:
             run_id=run_id,
             operations=operations,
             archive_root=archive_root,
+            job_id=UUID(job_id),
+            source_account_ref=source_account_ref,
         )
     except Exception:
         # No guessing, no worker restart. Preserve remote artifacts and status.

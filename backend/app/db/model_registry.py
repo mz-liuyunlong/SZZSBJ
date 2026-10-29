@@ -13,5 +13,6 @@ def register_productlist_sync_models() -> None:
     import app.modules.product_management.models
     import app.modules.products.models
     import app.modules.sku_detail.models
+    import app.modules.walmart_remote.business_models  # noqa: F401
     import app.modules.walmart_remote.models
     import app.modules.warehouse_wfs.models  # noqa: F401
