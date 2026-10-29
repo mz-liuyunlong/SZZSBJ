@@ -36,6 +36,18 @@ def _completed_manifest(
         raise DispatchRejected("REMOTE_RECOVERY_ID_INVALID")
     if not operations or not set(operations) <= ALLOWED_KEYS:
         raise DispatchRejected("REMOTE_RECOVERY_ENDPOINT_INVALID")
+    state_path = DEFAULT_REMOTE_TMP_DIR + "/.runs/" + run_id + "/state.json"
+    code, state_raw = _ssh(route.ssh_host, ["cat", state_path], timeout=30)
+    if code != 0:
+        raise DispatchRejected("REMOTE_RECOVERY_UNCONFIRMED")
+    try:
+        state = json.loads(state_raw)
+        if state.get("run_id") != run_id or state.get("store_id") != store_id:
+            raise ValueError
+        if state.get("state") not in {"RUNNING", "SUCCESS"}:
+            raise DispatchRejected("REMOTE_RECOVERY_NOT_COMPLETE")
+    except (TypeError, ValueError, AttributeError):
+        raise DispatchRejected("REMOTE_RECOVERY_STATE_INVALID") from None
     remote_path = DEFAULT_REMOTE_TMP_DIR + "/" + run_id + "/manifest.json"
     code, output = _ssh(route.ssh_host, ["cat", remote_path], timeout=30)
     if code != 0:
