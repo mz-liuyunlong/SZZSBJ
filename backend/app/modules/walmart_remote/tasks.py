@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 
 from app.celery_app import INTEGRATION_QUEUE, celery_app
 from app.db.session import get_session_factory
@@ -29,6 +29,15 @@ def execute_remote_job(job_id: str) -> None:
             select(WalmartRemoteJob).where(WalmartRemoteJob.id == job_uuid).with_for_update()
         )
         if job is None or job.status != "queued":
+            return
+        # Global PostgreSQL transaction lock serializes slot acquisition across workers.
+        session.execute(text("SELECT pg_advisory_xact_lock(98261029)"))
+        active = session.scalar(
+            select(func.count(WalmartRemoteJob.id)).where(
+                WalmartRemoteJob.status.in_(("running", "recovering"))
+            )
+        )
+        if active is None or active >= 3:
             return
         store_code = job.store_code
         source_account_ref = job.source_account_ref
@@ -105,6 +114,14 @@ def scheduler_tick() -> None:
     with get_session_factory()() as session:
         job_ids = queue_due_stores(session, now=datetime.now(UTC))
         session.commit()
+        # Retry only queued (never running/uncertain) jobs to repair broker loss.
+        pending = session.scalars(
+            select(WalmartRemoteJob.id)
+            .where(WalmartRemoteJob.status == "queued")
+            .order_by(WalmartRemoteJob.created_at)
+            .limit(30)
+        ).all()
+        job_ids = list(dict.fromkeys([*job_ids, *(str(value) for value in pending)]))
     for job_id in job_ids:
         execute_remote_job.apply_async(
             args=(job_id,),

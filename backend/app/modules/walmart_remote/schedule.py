@@ -22,7 +22,8 @@ def eligible_schedule(now: datetime) -> str | None:
     if now.tzinfo is None:
         raise ValueError("SCHEDULE_TIMEZONE_REQUIRED")
     local = now.astimezone(PACIFIC)
-    if local.weekday() not in (2, 5) or local.hour != 9:
+    # Reconciliation ticks can arrive late; the date key prevents reruns.
+    if local.weekday() not in (2, 5) or local.hour < 9:
         return None
     return local.strftime("%Y%m%d")
 

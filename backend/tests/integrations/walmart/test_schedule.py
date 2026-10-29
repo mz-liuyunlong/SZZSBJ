@@ -10,3 +10,4 @@ def test_twice_weekly_pacific_schedule():
     assert eligible_schedule(datetime(2026, 10, 31, 16, 0, tzinfo=UTC)) == "20261031"
     assert eligible_schedule(datetime(2026, 10, 29, 16, 0, tzinfo=UTC)) is None
     assert eligible_schedule(datetime(2026, 10, 28, 15, 0, tzinfo=UTC)) is None
+    assert eligible_schedule(datetime(2026, 10, 28, 18, 0, tzinfo=UTC)) == "20261028"
