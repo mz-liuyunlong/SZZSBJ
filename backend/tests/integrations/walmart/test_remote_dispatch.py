@@ -46,7 +46,16 @@ def test_no_missing_or_shared_routes():
 def test_verifies_manifest_hash_and_detects_tamper(tmp_path):
     path = tmp_path / "run-123456"
     path.mkdir()
-    manifest = {"run_id": "run-123456", "status": "success"}
+    manifest = {
+        "run_id": "run-123456",
+        "status": "SUCCESS",
+        "manifest_version": 2,
+        "credential_files_read": 0,
+        "auth_failed": False,
+        "endpoints_requested": ["wfs_inventory"],
+        "endpoints": {"wfs_inventory": {"status": "SUCCESS"}},
+        "files": {},
+    }
     raw = json.dumps(manifest).encode()
     (path / "manifest.json").write_bytes(raw)
     (path / "SHA256SUMS").write_text(
