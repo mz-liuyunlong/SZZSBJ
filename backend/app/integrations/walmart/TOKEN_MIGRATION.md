@@ -98,7 +98,7 @@ keys into Git.
   a documented run-id/operations CLI and fixed run directory; it requires
   validation against the real installed worker before dispatch is safe.
 - CN2502 child server address and its Walmart allowlist verification.
-- Automatic schedule/recovery rules and data conversion into SZZSBJ business tables.
+- Original Worker file-only archive validation and multi-store end-to-end acceptance; no business-table ingestion is in scope.
 - Backfill and cleanup behavior pending original scheduler source and owner approval.
 - Migration must be reviewed against the production DB revision graph before applying.
 - Production CAM permission checks and safe SCF deployment.
@@ -129,5 +129,14 @@ state/lock evidence. Enable only after owner approval and real host tests.
 
 **Not yet production-accepted:** multi-store concurrency, recovery after
 Celery worker process death, nine-store end-to-end mocks and real API
-runs, and writes into product/inventory business tables. No changes to
+runs, and verified file-only archives. No writes into product/inventory business tables. No changes to
 production credentials, live jobs, or database were performed.
+
+
+## 2026-10-29 owner decision: file-only persistence (Scheme B)
+
+- Preserve Alembic 0068 `walmart_remote_jobs` for job status, scoped store identity, run ID, timestamps, verified-file count and error code.
+- Remove proposed Alembic 0069 and its four collection business tables plus separate ingestion batch table. No CSV/JSONL rows are inserted into PostgreSQL.
+- Preserve immutable per-run original JSONL, `manifest.json`, `SHA256SUMS`, converted UTF-8-BOM CSV and `_convert_manifest.json` on the configured archive filesystem. Run-scoped paths prevent same-day overwrite.
+- Initial collection and token-free recovery require verified original run and full converted CSV manifest/file hashes/row counts before marking the job successful. If verification fails, keep the task as failed/needs_review and preserve artifacts for review.
+- Optional remote cleanup remains off by default and must not run before original+converted files are verified and safely archived. Production migration and collection stay disabled pending separate authorization.
