@@ -61,7 +61,11 @@ def execute_remote_job(job_id: str) -> None:
         )
         if job is None or job.status != "running" or job.run_id != run_id:
             return
-        uncertain = error_code in {"REMOTE_WORKER_UNCONFIRMED", "REMOTE_ALREADY_UNKNOWN", "REMOTE_ALREADY_RUNNING"}
+        uncertain = error_code in {
+            "REMOTE_WORKER_UNCONFIRMED",
+            "REMOTE_ALREADY_UNKNOWN",
+            "REMOTE_ALREADY_RUNNING",
+        }
         job.status = "succeeded" if result else "needs_review" if uncertain else "failed"
         job.error_code = error_code
         job.files_verified = result["files_verified"] if result else None
