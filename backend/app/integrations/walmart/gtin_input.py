@@ -29,6 +29,9 @@ def build_gtin_input(*, store_code: str, store_id: str, directory: Path) -> Path
     if not isinstance(location, str) or not location.startswith("/opt/szzsbj/walmart/gtin/"):
         raise GtinSourceRejected("GTIN_SOURCE_UNCONFIGURED")
     source = Path(location)
+    approved = Path("/opt/szzsbj/walmart/gtin")
+    if not source.resolve().is_relative_to(approved.resolve()):
+        raise GtinSourceRejected("GTIN_SOURCE_INVALID")
     if source.suffix.lower() != ".csv" or source.is_symlink() or not source.is_file():
         raise GtinSourceRejected("GTIN_SOURCE_INVALID")
     if source.stat().st_size > 20 * 1024 * 1024:
