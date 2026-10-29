@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.integrations.walmart.legacy_worker_contract import build_legacy_worker_argv, build_ssh_command
+from app.integrations.walmart.legacy_worker_contract import (
+    build_legacy_worker_argv,
+    build_ssh_command,
+)
 
 STORES = frozenset(
     {"HK2612", "HK2613", "HK2614", "HK2615", "CN2501", "CN2502", "CN2601", "CN2602", "CN2603"}
