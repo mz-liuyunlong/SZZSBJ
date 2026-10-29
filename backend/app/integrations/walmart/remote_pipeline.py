@@ -7,6 +7,7 @@ is ever put in a task payload, result, database or log.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -29,6 +30,7 @@ def collect_store_read_only(
     operations: tuple[str, ...],
     archive_root: Path,
     run_id: str | None = None,
+    store_id: str | None = None,
 ) -> dict[str, object]:
     """Fail closed on missing config, unauthorized store or unverified results.
 
@@ -48,6 +50,8 @@ def collect_store_read_only(
     if not operations or not set(operations) <= ALLOWED_KEYS:
         raise DispatchRejected("REMOTE_OPERATION_DENIED")
     rid = run_id or ("wmt-" + uuid4().hex)
+    if not store_id:
+        raise DispatchRejected("REMOTE_STORE_ID_REQUIRED")
     cvm_role = os.getenv("SZZSBJ_WALMART_SCF_CVM_ROLE", "")
     target_role = os.getenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", "")
     if not cvm_role or not target_role:
@@ -67,6 +71,8 @@ def collect_store_read_only(
             run_id=rid,
             operations=operations,
             token=token.access_token,
+            store_id=store_id,
+            date_iso=datetime.now(UTC).date().isoformat(),
         )
     finally:
         del token
