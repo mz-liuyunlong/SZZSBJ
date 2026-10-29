@@ -12,6 +12,7 @@ from app.integrations.walmart.gtin_input import (
     GtinSourceRejected,
     build_gtin_input,
     build_system_gtin_input,
+    ensure_worker_gtin_limit,
 )
 
 
@@ -61,3 +62,10 @@ def test_system_gtin_empty_source_denied(tmp_path):
             session=session, source_account_ref="acct-a",
             store_id="123456789", directory=tmp_path,
         )
+
+
+def test_worker_gtin_limit_does_not_silently_truncate():
+    gtins = [str(i).zfill(12) for i in range(1001)]
+    with pytest.raises(GtinSourceRejected, match="GTIN_WORKER_LIMIT_EXCEEDED"):
+        ensure_worker_gtin_limit(gtins)
+    ensure_worker_gtin_limit(gtins[:1000] + ["", "INVALID", gtins[0]])

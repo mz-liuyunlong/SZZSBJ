@@ -50,6 +50,11 @@ def build_legacy_worker_argv(
         or not set(endpoints) <= ALLOWED_ENDPOINTS
     ):
         raise LegacyWorkerContractError("WORKER_ENDPOINT_INVALID")
+    if "inbound_shipment_items" in endpoints and (
+        "inbound_shipments" not in endpoints
+        or endpoints.index("inbound_shipments") > endpoints.index("inbound_shipment_items")
+    ):
+        raise LegacyWorkerContractError("WORKER_SHIPMENT_DEPENDENCY_INVALID")
     try:
         date.fromisoformat(date_iso)
     except (ValueError, TypeError):

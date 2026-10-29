@@ -62,6 +62,11 @@ def collect_store_read_only(
         raise DispatchRejected("REMOTE_STORE_NOT_APPROVED")
     if not operations or not set(operations) <= ALLOWED_KEYS:
         raise DispatchRejected("REMOTE_OPERATION_DENIED")
+    if "inbound_shipment_items" in operations and (
+        "inbound_shipments" not in operations
+        or operations.index("inbound_shipments") > operations.index("inbound_shipment_items")
+    ):
+        raise DispatchRejected("REMOTE_SHIPMENT_DEPENDENCY_INVALID")
     rid = run_id or ("wmt-" + uuid4().hex)
     if not store_id:
         raise DispatchRejected("REMOTE_STORE_ID_REQUIRED")

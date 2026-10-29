@@ -162,6 +162,11 @@ def create_job(
         raise ApiError(code="REMOTE_OPERATION_INVALID", status_code=422)
     if not set(payload.operations) <= ALLOWED_KEYS:
         raise ApiError(code="REMOTE_OPERATION_INVALID", status_code=422)
+    if "inbound_shipment_items" in payload.operations and (
+        "inbound_shipments" not in payload.operations
+        or payload.operations.index("inbound_shipments") > payload.operations.index("inbound_shipment_items")
+    ):
+        raise ApiError(code="REMOTE_SHIPMENT_DEPENDENCY_INVALID", status_code=422)
     current = session.scalar(
         select(WalmartRemoteJob).where(
             WalmartRemoteJob.source_account_ref == payload.source_account_ref,

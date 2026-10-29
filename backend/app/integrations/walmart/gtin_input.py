@@ -8,12 +8,23 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+
+WORKER_MAX_GTINS = 1000
+GTIN_RE = re.compile(r"^(?:[0-9]{8}|[0-9]{12,14})$")
+
+
+def ensure_worker_gtin_limit(values: list[str]) -> None:
+    valid = {v.strip() for v in values if GTIN_RE.fullmatch(v.strip())}
+    if len(valid) > WORKER_MAX_GTINS:
+        raise GtinSourceRejected("GTIN_WORKER_LIMIT_EXCEEDED")
 
 
 class GtinSourceRejected(ValueError):
@@ -60,6 +71,7 @@ def build_gtin_input(*, store_code: str, store_id: str, directory: Path) -> Path
             writer = csv.writer(handle)
             writer.writerow(("store_id", "item_id", "gtin"))
             count = 0
+            gtins: list[str] = []
             for row in reader:
                 if row.get("store_id") not in (None, "", store_id):
                     raise GtinSourceRejected("GTIN_STORE_MISMATCH")
@@ -68,11 +80,13 @@ def build_gtin_input(*, store_code: str, store_id: str, directory: Path) -> Path
                 if len(gtin) > 64 or len(item_id) > 64:
                     raise GtinSourceRejected("GTIN_VALUE_INVALID")
                 writer.writerow((store_id, item_id, gtin))
+                gtins.append(gtin)
                 count += 1
                 if count > 100000:
                     raise GtinSourceRejected("GTIN_ROW_LIMIT")
             if count == 0:
                 raise GtinSourceRejected("GTIN_SOURCE_EMPTY")
+            ensure_worker_gtin_limit(gtins)
         return Path(output.name)
     except Exception:
         Path(output.name).unlink(missing_ok=True)
@@ -110,12 +124,18 @@ def build_system_gtin_input(
         raise GtinSourceRejected("GTIN_SYSTEM_SOURCE_EMPTY")
     if len(rows) > 100000:
         raise GtinSourceRejected("GTIN_ROW_LIMIT")
+    ensure_worker_gtin_limit([(gtin or "") for _, gtin in rows])
     if directory.is_symlink():
         raise GtinSourceRejected("GTIN_OUTPUT_INVALID")
     directory.mkdir(parents=True, exist_ok=True)
     output = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", newline="", prefix="gtins-", suffix=".csv",
-        dir=directory, delete=False,
+        mode="w",
+        encoding="utf-8",
+        newline="",
+        prefix="gtins-",
+        suffix=".csv",
+        dir=directory,
+        delete=False,
     )
     try:
         with output as handle:
