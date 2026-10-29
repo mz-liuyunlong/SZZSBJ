@@ -74,3 +74,25 @@ def test_path_traversal_denied(tmp_path):
     (path / "SHA256SUMS").write_text("0" * 64 + "  ../outside\n")
     with pytest.raises(DispatchRejected, match="REMOTE_RESULT_VERIFICATION_FAILED"):
         verify_result(path, run_id="run-123456")
+
+
+def test_missing_endpoint_result_denied(tmp_path):
+    path = tmp_path / "run-123456"
+    path.mkdir()
+    manifest = {
+        "run_id": "run-123456",
+        "status": "SUCCESS",
+        "manifest_version": 2,
+        "credential_files_read": 0,
+        "auth_failed": False,
+        "endpoints_requested": ["wfs_inventory"],
+        "endpoints": {},
+        "files": {},
+    }
+    raw = json.dumps(manifest).encode()
+    (path / "manifest.json").write_bytes(raw)
+    (path / "SHA256SUMS").write_text(
+        hashlib.sha256(raw).hexdigest() + "  manifest.json\\n", encoding="utf-8"
+    )
+    with pytest.raises(DispatchRejected, match="REMOTE_RESULT_VERIFICATION_FAILED"):
+        verify_result(path, run_id="run-123456")
