@@ -1,8 +1,9 @@
 """Four run-scoped Walmart business tables and an atomic ingestion receipt."""
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "20261029_0069_walmart_remote_business"
 down_revision = "20261029_0068_walmart_remote_jobs"
