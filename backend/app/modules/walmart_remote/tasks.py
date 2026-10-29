@@ -1,4 +1,5 @@
 """Opt-in, no-secret Celery dispatch for durable Walmart remote jobs."""
+
 from __future__ import annotations
 
 import os
