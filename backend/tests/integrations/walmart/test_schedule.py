@@ -1,4 +1,5 @@
 """Offline schedule gate tests. No database or external calls."""
+
 from datetime import UTC, datetime
 
 from app.modules.walmart_remote.schedule import eligible_schedule
