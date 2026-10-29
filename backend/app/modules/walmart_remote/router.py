@@ -21,9 +21,9 @@ from app.integrations.walmart.remote_dispatch import ALLOWED_KEYS, STORES, parse
 from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.walmart_remote.models import WalmartRemoteJob
+from app.modules.walmart_remote.store_mapping import remote_store_code_for, remote_store_mapping
 from app.modules.walmart_remote.tasks import dispatch_remote_job
 from app.modules.walmart_scf.store_scope import verify_http_store, verify_store_grant
-from app.modules.walmart_remote.store_mapping import remote_store_code_for, remote_store_mapping
 
 router = APIRouter(prefix="/api/integrations/walmart-remote", tags=["Walmart Remote"])
 db = Annotated[Session, Depends(get_db_session)]
@@ -207,7 +207,7 @@ def get_job(
     item = session.get(WalmartRemoteJob, job_id)
     if item is None:
         raise ApiError(code="REMOTE_JOB_NOT_FOUND", status_code=404)
-    store = store_code_for(item.store_id)
+    store = remote_store_code_for(item.store_id)
     verify_http_store(
         principal=principal,
         session=session,
