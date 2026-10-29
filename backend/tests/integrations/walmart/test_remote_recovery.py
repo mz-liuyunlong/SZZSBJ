@@ -29,10 +29,13 @@ def test_recovery_rejects_wrong_store_without_fetch(monkeypatch):
     }
     fetch = Mock()
     monkeypatch.setattr(
-        remote_recovery, "_ssh",
+        remote_recovery,
+        "_ssh",
         lambda host, argv, **k: (
-            0, json.dumps({"run_id": "wmt-12345678", "store_id": "11111111", "state": "SUCCESS"})
-            if ".runs/" in argv[-1] else json.dumps(remote)
+            0,
+            json.dumps({"run_id": "wmt-12345678", "store_id": "11111111", "state": "SUCCESS"})
+            if ".runs/" in argv[-1]
+            else json.dumps(remote),
         ),
     )
     monkeypatch.setattr(remote_recovery, "fetch_verified_run", fetch)

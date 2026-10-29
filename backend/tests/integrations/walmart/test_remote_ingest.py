@@ -1,4 +1,5 @@
 """Offline contract tests: reject tampering before database access."""
+
 from __future__ import annotations
 
 import hashlib
@@ -35,24 +36,35 @@ def test_ingest_verifies_manifest_csv_rows_and_hashes(tmp_path):
     data = json.dumps(manifest).encode()
     (run / "manifest.json").write_bytes(data)
     (run / "SHA256SUMS").write_text(
-        hashlib.sha256(data).hexdigest() + "  manifest.json\n"
-        + raw_hash + "  raw/wfs_inventory.jsonl\n"
+        hashlib.sha256(data).hexdigest()
+        + "  manifest.json\n"
+        + raw_hash
+        + "  raw/wfs_inventory.jsonl\n"
     )
     dest = tmp_path / "daily" / "20261029" / "walmart" / store_id / run_id
     dest.mkdir(parents=True)
     csv_bytes = b"itemInformation.itemID,itemInformation.sku\n123,DEMO\n"
     (dest / "wfs_inventory.csv").write_bytes(csv_bytes)
     (dest / "_convert_manifest.json").write_text(
-        json.dumps({
-            "run_id": run_id,
-            "store_id": store_id,
-            "written": [{"file": "wfs_inventory.csv", "rows": 1,
-                         "sha256": hashlib.sha256(csv_bytes).hexdigest()}],
-        })
+        json.dumps(
+            {
+                "run_id": run_id,
+                "store_id": store_id,
+                "written": [
+                    {
+                        "file": "wfs_inventory.csv",
+                        "rows": 1,
+                        "sha256": hashlib.sha256(csv_bytes).hexdigest(),
+                    }
+                ],
+            }
+        )
     )
     day, hashes, data = prepare_verified_csv(
-        archive_root=tmp_path, store_code=store_code,
-        store_id=store_id, run_id=run_id,
+        archive_root=tmp_path,
+        store_code=store_code,
+        store_id=store_id,
+        run_id=run_id,
     )
     assert day.isoformat() == "2026-10-29"
     assert data["wfs_inventory"][0]["item_id"] == "123"
@@ -60,14 +72,18 @@ def test_ingest_verifies_manifest_csv_rows_and_hashes(tmp_path):
     (dest / "wfs_inventory.csv").write_bytes(csv_bytes + b"TAMPER")
     with pytest.raises(DispatchRejected, match="REMOTE_INGEST_VERIFICATION_FAILED"):
         prepare_verified_csv(
-            archive_root=tmp_path, store_code=store_code,
-            store_id=store_id, run_id=run_id,
+            archive_root=tmp_path,
+            store_code=store_code,
+            store_id=store_id,
+            run_id=run_id,
         )
 
 
 def test_ingest_rejects_foreign_store_without_writes(tmp_path):
     with pytest.raises(DispatchRejected):
         prepare_verified_csv(
-            archive_root=tmp_path, store_code="CN2502",
-            store_id="not-numeric", run_id="wmt-12345678",
+            archive_root=tmp_path,
+            store_code="CN2502",
+            store_id="not-numeric",
+            run_id="wmt-12345678",
         )

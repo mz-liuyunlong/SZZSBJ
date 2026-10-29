@@ -62,7 +62,11 @@ def prepare_verified_csv(
             raise ValueError
         day = date.fromisoformat(manifest["date"])
         endpoints = manifest["endpoints_requested"]
-        if not isinstance(endpoints, list) or not endpoints or len(set(endpoints)) != len(endpoints):
+        if (
+            not isinstance(endpoints, list)
+            or not endpoints
+            or len(set(endpoints)) != len(endpoints)
+        ):
             raise ValueError
         if not set(endpoints) <= ALLOWED_KEYS:
             raise ValueError
@@ -108,7 +112,8 @@ def prepare_verified_csv(
                     if index > ROW_LIMIT or None in row:
                         raise ValueError
                     item_id = _field(
-                        row, "itemInformation.itemID" if endpoint == "wfs_inventory" else "item_id",
+                        row,
+                        "itemInformation.itemID" if endpoint == "wfs_inventory" else "item_id",
                         128,
                     )
                     sku = _field(
@@ -117,7 +122,8 @@ def prepare_verified_csv(
                         255,
                     )
                     gtin = _field(
-                        row, "itemInformation.gtin" if endpoint == "wfs_inventory" else "gtin",
+                        row,
+                        "itemInformation.gtin" if endpoint == "wfs_inventory" else "gtin",
                         128,
                     )
                     shipment = _field(row, "shipmentId", 128)

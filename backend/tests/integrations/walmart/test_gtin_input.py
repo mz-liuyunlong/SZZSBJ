@@ -35,12 +35,12 @@ def test_source_mapping_requires_approved_root(monkeypatch, tmp_path):
 
 def test_system_gtin_scoped_rows_and_worker_format(tmp_path):
     session = Mock()
-    session.execute.return_value.all.return_value = [
-        ("item-1", "00123456789012"), ("item-2", None)
-    ]
+    session.execute.return_value.all.return_value = [("item-1", "00123456789012"), ("item-2", None)]
     generated = build_system_gtin_input(
-        session=session, source_account_ref="acct-a",
-        store_id="123456789", directory=tmp_path,
+        session=session,
+        source_account_ref="acct-a",
+        store_id="123456789",
+        directory=tmp_path,
     )
     with generated.open(encoding="utf-8", newline="") as handle:
         assert list(csv.reader(handle)) == [
@@ -59,8 +59,10 @@ def test_system_gtin_empty_source_denied(tmp_path):
     session.execute.return_value.all.return_value = []
     with pytest.raises(GtinSourceRejected, match="GTIN_SYSTEM_SOURCE_EMPTY"):
         build_system_gtin_input(
-            session=session, source_account_ref="acct-a",
-            store_id="123456789", directory=tmp_path,
+            session=session,
+            source_account_ref="acct-a",
+            store_id="123456789",
+            directory=tmp_path,
         )
 
 

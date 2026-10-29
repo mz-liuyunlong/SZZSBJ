@@ -14,8 +14,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from app.db.session import get_session_factory
-from app.integrations.walmart.remote_ingest import ingest_verified_archive
-
 from app.integrations.walmart.gtin_input import (
     GtinSourceRejected,
     build_gtin_input,
@@ -29,6 +27,7 @@ from app.integrations.walmart.remote_dispatch import (
     DispatchRejected,
     parse_routes,
 )
+from app.integrations.walmart.remote_ingest import ingest_verified_archive
 from app.integrations.walmart.remote_recovery import cleanup_verified_run
 from app.integrations.walmart.scf_read_factory import RefreshingScfApi
 from app.integrations.walmart.tenc_sts_identity import CachedScfAssumeRoleIdentity
@@ -131,8 +130,13 @@ def collect_store_read_only(
         raise DispatchRejected("REMOTE_INGEST_CONTEXT_REQUIRED")
     with get_session_factory()() as session:
         ingest_verified_archive(
-            session, job_id=job_id, source_account_ref=source_account_ref,
-            store_code=store_code, store_id=store_id, run_id=rid, archive_root=archive_root,
+            session,
+            job_id=job_id,
+            source_account_ref=source_account_ref,
+            store_code=store_code,
+            store_id=store_id,
+            run_id=rid,
+            archive_root=archive_root,
         )
         session.commit()
     cleaned = cleanup_verified_run(

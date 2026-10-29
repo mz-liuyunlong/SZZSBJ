@@ -13,8 +13,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from app.db.session import get_session_factory
-from app.integrations.walmart.remote_ingest import ingest_verified_archive
-
 from app.integrations.walmart.legacy_execution import _ssh
 from app.integrations.walmart.legacy_worker_contract import DEFAULT_REMOTE_TMP_DIR
 from app.integrations.walmart.remote_daily import convert_verified_run
@@ -25,6 +23,7 @@ from app.integrations.walmart.remote_dispatch import (
     WorkerRoute,
     verify_result,
 )
+from app.integrations.walmart.remote_ingest import ingest_verified_archive
 from app.integrations.walmart.remote_transfer import fetch_verified_run
 
 
@@ -155,8 +154,12 @@ def recover_completed_run(
         count = int(result["files"])
     with get_session_factory()() as session:
         ingest_verified_archive(
-            session, job_id=job_id, source_account_ref=source_account_ref,
-            store_code=route.store_code, store_id=store_id, run_id=run_id,
+            session,
+            job_id=job_id,
+            source_account_ref=source_account_ref,
+            store_code=route.store_code,
+            store_id=store_id,
+            run_id=run_id,
             archive_root=archive_root,
         )
         session.commit()
