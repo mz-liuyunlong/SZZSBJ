@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 from typing import Annotated
@@ -24,7 +23,7 @@ from app.modules.integration_sync.dependencies import require_source_account_sco
 from app.modules.walmart_remote.models import WalmartRemoteJob
 from app.modules.walmart_remote.tasks import dispatch_remote_job
 from app.modules.walmart_scf.store_scope import verify_http_store, verify_store_grant
-from app.modules.walmart_scf.unified import store_code_for
+from app.modules.walmart_remote.store_mapping import remote_store_code_for, remote_store_mapping
 
 router = APIRouter(prefix="/api/integrations/walmart-remote", tags=["Walmart Remote"])
 db = Annotated[Session, Depends(get_db_session)]
@@ -76,10 +75,8 @@ def list_remote_stores(
 ) -> SuccessEnvelope[list[StoreChoice], None]:
     """Return persisted, scoped store identities; never guess Walmart store IDs."""
     try:
-        mapping = json.loads(os.getenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", "{}"))
-        if not isinstance(mapping, dict):
-            mapping = {}
-    except ValueError:
+        mapping = remote_store_mapping()
+    except ApiError:
         mapping = {}
     try:
         routes = parse_routes(os.getenv("SZZSBJ_WALMART_REMOTE_ROUTES", ""))
@@ -139,7 +136,7 @@ def create_job(
 ) -> SuccessEnvelope[JobView, None]:
     if os.getenv("SZZSBJ_WALMART_REMOTE_COLLECTION_ENABLED") != "1":
         raise ApiError(code="REMOTE_COLLECTION_DISABLED", status_code=503)
-    store = store_code_for(payload.store_id)
+    store = remote_store_code_for(payload.store_id)
     verify_http_store(
         principal=principal,
         session=session,
