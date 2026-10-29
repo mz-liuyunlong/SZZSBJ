@@ -55,6 +55,7 @@ def collect_store_read_only(
     target_role = os.getenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", "")
     if not cvm_role or not target_role:
         raise DispatchRejected("REMOTE_CLOUD_IDENTITY_MISSING")
+
     def obtain_token() -> str:
         cloud_api = RefreshingScfApi(
             CachedScfAssumeRoleIdentity(cvm_role=cvm_role, target_role_arn=target_role)
