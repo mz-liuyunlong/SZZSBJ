@@ -1,4 +1,5 @@
 """Explicitly gated twice-weekly nine-store scheduler, read-only jobs only."""
+
 from __future__ import annotations
 
 import json
@@ -62,8 +63,7 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
     if len(existing) != 9 or len({item.store_id for item in existing}) != 9:
         return []
     if any(
-        not (item.store_name or "").startswith(mapping[item.store_id] + "-")
-        for item in existing
+        not (item.store_name or "").startswith(mapping[item.store_id] + "-") for item in existing
     ):
         return []
     jobs: list[WalmartRemoteJob] = []
