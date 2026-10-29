@@ -7,14 +7,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from app.db.session import get_db_session
 
 from app.core.api import ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.permissions import require_permission
+from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
-from app.modules.walmart_scf.unified import approved_read, store_code_for
 from app.modules.walmart_scf.store_scope import verify_http_store
+from app.modules.walmart_scf.unified import approved_read, store_code_for
 
 router = APIRouter(prefix="/api/integrations/walmart-scf", tags=["Walmart SCF Read"])
 
@@ -55,8 +55,11 @@ def read_approved_operation(
 ) -> SuccessEnvelope[ReadResponse, None]:
     # POST is only a request envelope; the remote operation remains GET-only.
     verify_http_store(
-        principal=principal, session=session, source_account_ref=payload.source_account_ref,
-        store_id=payload.store_id, verified_source_account_scope=scope,
+        principal=principal,
+        session=session,
+        source_account_ref=payload.source_account_ref,
+        store_id=payload.store_id,
+        verified_source_account_scope=scope,
         store_code=store_code_for(payload.store_id),
     )
     result = approved_read(
@@ -97,12 +100,16 @@ def get_wfs_inventory(
     source_account_ref: Annotated[str, Query(min_length=1, max_length=128)],
     store_id: Annotated[str, Query(min_length=1, max_length=128)],
     scope: Annotated[frozenset[str], Depends(require_source_account_scope)],
-    _: Annotated[Principal, Depends(require_permission("integrations:execute"))],
+    principal: Annotated[Principal, Depends(require_permission("integrations:execute"))],
+    session: Annotated[Session, Depends(get_db_session)],
     limit: Annotated[int, Query(ge=1, le=100)] = 1,
 ) -> SuccessEnvelope[ReadResponse, None]:
     verify_http_store(
-        principal=principal, session=session, source_account_ref=source_account_ref,
-        store_id=store_id, verified_source_account_scope=scope,
+        principal=principal,
+        session=session,
+        source_account_ref=source_account_ref,
+        store_id=store_id,
+        verified_source_account_scope=scope,
         store_code=store_code_for(store_id),
     )
     result = approved_read(
