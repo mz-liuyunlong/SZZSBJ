@@ -1,4 +1,5 @@
 """Strict, independent nine-store identity mapping for remote collection."""
+
 from __future__ import annotations
 
 import json
