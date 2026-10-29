@@ -1,4 +1,5 @@
 """Offline conversion tests on original manifest v2 and WFS payload shape."""
+
 import hashlib
 import json
 
@@ -18,9 +19,7 @@ def test_wfs_verified_csv_and_no_overwrite(tmp_path):
         "params": {"limit": 100, "offset": 0},
         "body": {
             "payload": {
-                "inventory": [
-                    {"itemInformation": {"sku": "TEST-SKU", "gtin": "0123456789012"}}
-                ]
+                "inventory": [{"itemInformation": {"sku": "TEST-SKU", "gtin": "0123456789012"}}]
             }
         },
     }
