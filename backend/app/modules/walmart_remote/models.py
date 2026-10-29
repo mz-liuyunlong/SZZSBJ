@@ -20,7 +20,7 @@ class WalmartRemoteJob(Base):
             "source_account_ref", "store_id", "request_key", name="uq_walmart_remote_job_key"
         ),
         CheckConstraint(
-            "status IN ('queued','running','succeeded','failed')",
+            "status IN ('queued','running','succeeded','failed','needs_review')",
             name="ck_walmart_remote_job_status",
         ),
         Index("ix_walmart_remote_job_store", "store_id", "created_at"),
