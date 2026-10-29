@@ -3,6 +3,7 @@
 Derived from the supplied 2026-10-26 walmart_to_daily/convert.py.
 This is a file conversion stage, not an unapproved write into product tables.
 """
+
 from __future__ import annotations
 
 import csv
@@ -123,7 +124,9 @@ def convert_verified_run(
                     page = json.loads(line)
                     if not isinstance(page, dict):
                         raise ValueError
-                    rows.extend(_records(endpoint, page.get("params") or {}, page.get("body") or {}))
+                    rows.extend(
+                        _records(endpoint, page.get("params") or {}, page.get("body") or {})
+                    )
                 status = manifest["endpoints"][endpoint]
                 if status.get("rows") is not None and int(status["rows"]) != len(rows):
                     raise ValueError
@@ -146,16 +149,21 @@ def convert_verified_run(
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader()
                     for row in rows:
-                        writer.writerow({
-                            key: json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-                            if isinstance(value, (dict, list)) else value
-                            for key, value in row.items()
-                        })
-                written.append({
-                    "file": filename,
-                    "rows": len(rows),
-                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
-                })
+                        writer.writerow(
+                            {
+                                key: json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+                                if isinstance(value, (dict, list))
+                                else value
+                                for key, value in row.items()
+                            }
+                        )
+                written.append(
+                    {
+                        "file": filename,
+                        "rows": len(rows),
+                        "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                    }
+                )
             (stage / "_convert_manifest.json").write_text(
                 json.dumps(
                     {"run_id": run_id, "store_id": store_id, "date": day, "written": written},
