@@ -12,6 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
+from app.integrations.walmart.remote_daily import convert_verified_run
 from app.integrations.walmart.remote_dispatch import (
     ALLOWED_KEYS,
     STORES,
@@ -75,10 +76,17 @@ def collect_store_read_only(
         expected_worker_hash=os.getenv("SZZSBJ_WALMART_LEGACY_WORKER_SHA256", ""),
         token_supplier=obtain_token,
     )
+    conversion = convert_verified_run(
+        run_dir=archive_root / store_code / rid,
+        output_root=archive_root / "daily",
+        run_id=rid,
+        store_id=store_id,
+    )
     # Never return raw data or tokens to the calling task.
     return {
         "store_code": store_code,
         "run_id": rid,
         "status": "verified",
         "files_verified": verified["files_verified"],
+        "files_converted": conversion["files"],
     }
