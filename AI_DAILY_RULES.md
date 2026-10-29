@@ -22,6 +22,7 @@ AI 每次进入 本项目 项目前，必须先读本文件和 `AGENTS.md`。
 16. 复杂功能先写 PRP，确认后再开发；长任务按批准范围维护本地计划。
 17. 第三方库用法必须使用 Context7 或官方文档核对；ready 页面必须有 Playwright E2E。
 18. 功能无适用的 API 文档、SOP、测试和 registry 更新，不允许声称完成。
+19. AI 提交 PR 前必须按 `docs/delivery/ai-ci-first-standard.md` 真实执行 `bash scripts/ci-preflight.sh all` 的适用检查；失败则先修复、复测，禁止盲目重复 push。
 
 遇到以下边界必须停止：analysis → approval、read → write、planned → implemented、mock → real data、suggestion → execution、local → production、current scope → future scope。
 
