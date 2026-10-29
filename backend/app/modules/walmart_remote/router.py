@@ -1,4 +1,5 @@
 """Store-scoped task API; never exposes Walmart credentials or raw payloads."""
+
 from __future__ import annotations
 
 import os
@@ -52,16 +53,17 @@ class JobView(BaseModel):
 
 
 def job_view(item: WalmartRemoteJob) -> JobView:
-    return JobView.model_validate({
-        name: getattr(item, name)
-        for name in JobView.model_fields
-    })
+    return JobView.model_validate({name: getattr(item, name) for name in JobView.model_fields})
 
 
 @router.post(
     "/jobs",
     response_model=SuccessEnvelope[JobView, None],
-    responses={403: {"model": ErrorEnvelope}, 409: {"model": ErrorEnvelope}, 503: {"model": ErrorEnvelope}},
+    responses={
+        403: {"model": ErrorEnvelope},
+        409: {"model": ErrorEnvelope},
+        503: {"model": ErrorEnvelope},
+    },
 )
 def create_job(
     payload: CreateJob,
