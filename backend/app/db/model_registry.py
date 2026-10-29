@@ -1,7 +1,6 @@
 def register_productlist_sync_models() -> None:
     """Register ProductList ORM metadata; these imports are not business dependencies."""
     import app.modules.integration_sync.models
-    import app.modules.walmart_remote.models
     import app.modules.media_assets.models
     import app.modules.operation_plans.models
     import app.modules.pmc_domestic.inbound_models
@@ -14,4 +13,5 @@ def register_productlist_sync_models() -> None:
     import app.modules.product_management.models
     import app.modules.products.models
     import app.modules.sku_detail.models
+    import app.modules.walmart_remote.models
     import app.modules.warehouse_wfs.models  # noqa: F401
