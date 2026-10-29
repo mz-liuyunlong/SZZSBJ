@@ -6,6 +6,7 @@ is ever put in a task payload, result, database or log.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from datetime import UTC, datetime
