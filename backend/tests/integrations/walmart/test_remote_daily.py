@@ -52,7 +52,7 @@ def test_wfs_verified_csv_and_no_overwrite(tmp_path):
         run_dir=run_dir, output_root=destination, run_id=run_id, store_id=store_id
     )
     assert result["files"] == 1
-    csv_file = destination / "20261029" / "walmart" / store_id / "wfs_inventory.csv"
+    csv_file = destination / "20261029" / "walmart" / store_id / run_id / "wfs_inventory.csv"
     assert csv_file.exists()
     assert "TEST-SKU" in csv_file.read_text(encoding="utf-8-sig")
     with pytest.raises(DispatchRejected, match="REMOTE_CONVERSION_ALREADY_EXISTS"):

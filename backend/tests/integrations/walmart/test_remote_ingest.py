@@ -38,7 +38,7 @@ def test_ingest_verifies_manifest_csv_rows_and_hashes(tmp_path):
         hashlib.sha256(data).hexdigest() + "  manifest.json\n"
         + raw_hash + "  raw/wfs_inventory.jsonl\n"
     )
-    dest = tmp_path / "daily" / "20261029" / "walmart" / store_id
+    dest = tmp_path / "daily" / "20261029" / "walmart" / store_id / run_id
     dest.mkdir(parents=True)
     csv_bytes = b"itemInformation.itemID,itemInformation.sku\n123,DEMO\n"
     (dest / "wfs_inventory.csv").write_bytes(csv_bytes)

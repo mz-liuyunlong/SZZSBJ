@@ -116,7 +116,7 @@ def convert_verified_run(
         day = date.fromisoformat(manifest["date"]).strftime("%Y%m%d")
         if not store_id.isdecimal():
             raise ValueError
-        destination = output_root / day / "walmart" / store_id
+        destination = output_root / day / "walmart" / store_id / run_id
         if destination.exists() or destination.is_symlink():
             raise DispatchRejected("REMOTE_CONVERSION_ALREADY_EXISTS")
         output_root.mkdir(parents=True, exist_ok=True)

@@ -78,7 +78,7 @@ def _converted_files(
     day = str(manifest.get("date", "")).replace("-", "")
     if len(day) != 8 or not day.isdecimal():
         raise DispatchRejected("REMOTE_RECOVERY_DATE_INVALID")
-    target = output_root / day / "walmart" / store_id
+    target = output_root / day / "walmart" / store_id / run_id
     if not target.exists():
         return None
     if target.is_symlink() or not target.is_dir():

@@ -39,6 +39,14 @@ def execute_remote_job(job_id: str) -> None:
         )
         if active is None or active >= 3:
             return
+        same_store = session.scalar(
+            select(func.count(WalmartRemoteJob.id)).where(
+                WalmartRemoteJob.store_id == job.store_id,
+                WalmartRemoteJob.status.in_(("running", "recovering")),
+            )
+        )
+        if same_store:
+            return
         store_code = job.store_code
         source_account_ref = job.source_account_ref
         store_id = job.store_id
@@ -142,9 +150,11 @@ def recover_remote_job(job_id: str) -> None:
         if job is None or job.status != "needs_review" or not job.run_id:
             return
         store_code = job.store_code
+        source_account_ref = job.source_account_ref
         store_id = job.store_id
         operations = tuple(job.operations)
         run_id = job.run_id
+        job.started_at = datetime.now(UTC)
         job.status = "recovering"
         session.commit()
     try:
@@ -191,7 +201,7 @@ def recovery_tick() -> None:
         return
     if os.getenv("SZZSBJ_WALMART_REMOTE_RECOVERY_ENABLED") != "1":
         return
-    cutoff = datetime.now(UTC) - timedelta(minutes=20)
+    cutoff = datetime.now(UTC) - timedelta(minutes=45)
     with get_session_factory()() as session:
         # After an executor crash, an old RUNNING/RECOVERING state must not
         # permanently occupy a concurrency slot. Recover only the same run.
