@@ -39,11 +39,13 @@ export interface ApprovalDetail extends ApprovalItem {
  data_changed: boolean; can_supplement: boolean; events: ApprovalEvent[];
 }
 export interface ApprovalFilters {
- tab: ApprovalTab; risk_level?: ApprovalRisk; page: number; page_size: number;
+ tab: ApprovalTab; view?: ApprovalView; approval_type?: string; keyword?: string;
+ risk_level?: ApprovalRisk; page: number; page_size: number;
 }
 export const approvalColumnFields = [
  { key: "approval_type", title: "业务类型 / 编号" },
  { key: "title", title: "审批事项" },
+ { key: "business_ref", title: "业务单号 / 对象" },
  { key: "follow_log", title: "运营跟进记录" },
   { key: "case_opened_at", title: "立案时间" },
   { key: "follow_count", title: "跟进次数" },

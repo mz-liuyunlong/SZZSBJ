@@ -1,5 +1,5 @@
 /** Enterprise approval workbench. Reuses shared table, search and column components. */
-import { Button, Card, Popover, Segmented, Space, Spin, message } from "antd";
+import { Alert, Button, Card, Input, Popover, Segmented, Select, Space, Spin, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import {
   SettingOutlined,
@@ -27,6 +27,7 @@ import BulkApprovalModal from "./components/BulkApprovalModal";
 import type { ApprovalFilters, ApprovalItem, ApprovalSummary, ApprovalTab } from "./approvalTypes";
 import { approvalColumnFields, approvalTabs, riskNames, statusNames } from "./approvalTypes";
 import { parseFollowLog } from "./followLog";
+import { approvalBusinesses, approvalBusinessByKey, approvalBusinessLabel, type ApprovalBusinessKey } from "./approvalBusiness";
 import type { NavigationPage } from "@/config/navigation";
 import { hasPermission } from "@/shared/permissions/mockAccess";
 import "./ApprovalWorkspacePage.css";
@@ -38,11 +39,10 @@ type ApprovalStatKey =
   | "approved";
 
 const defaultFilters: ApprovalFilters = {
- tab: "pending", page: 1, page_size: 50,
+ tab: "pending", view: "mine", page: 1, page_size: 50,
 };
-const defaultKeys = approvalColumnFields.map((field) => field.key);
 const defaultWidths: Record<string, number> = {
-   title: 280, approval_type: 138, follow_log: 300, risk_level: 110, amount: 128,
+   title: 280, approval_type: 138, business_ref: 200, follow_log: 300, risk_level: 110, amount: 128,
  case_opened_at: 165, follow_count: 105,
  applicant_id: 135, submitted_at: 173, status: 120, action: 94,
 };
@@ -56,6 +56,10 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
 }) {
  const [messageApi, holder] = message.useMessage();
  const [filters, setFilters] = useState<ApprovalFilters>(defaultFilters);
+ const [business, setBusiness] = useState<ApprovalBusinessKey>("all");
+ const [workView, setWorkView] = useState<"todo"|"created"|"reviewed"|"all">("todo");
+ const [keywordDraft,setKeywordDraft]=useState("");
+ const [columnPrefs,setColumnPrefs]=useState<Partial<Record<ApprovalBusinessKey,string[]>>>({});
  const [rows, setRows] = useState<ApprovalItem[]>([]);
  const [count, setCount] = useState(0);
  const [summary, setSummary] = useState<ApprovalSummary>({ pending:0, high_risk:0, info_required:0, approved:0, legacy_unverified:0 });
@@ -74,7 +78,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   row.approval_type === "operations_plan_ack" && row.risk_level === "low" &&
   row.status === "submitted" && row.can_review && !row.case_review
  );
- const [columnKeys, setColumnKeys] = useState(defaultKeys);
+ const columnKeys = columnPrefs[business] ?? approvalBusinessByKey[business].columns;
+ const visibleFields = approvalColumnFields.filter(field => approvalBusinessByKey[business].columns.includes(field.key));
  const [widths, setWidths] = useState(defaultWidths);
  const change = useCallback((patch: Partial<ApprovalFilters>) => {
   setSelectedBulkKeys([]);
@@ -98,7 +103,8 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
  const reload = () => { setLoading(true); setReloadToken((current) => current + 1); };
  const columns = useMemo((): ProColumns<ApprovalItem>[] => {
   const map: Record<string, ProColumns<ApprovalItem>> = {
-   approval_type: { key:"approval_type", render:(_,r) => <div className="approval-list__type"><span className={`approval-list__category approval-list__category--${r.approval_type === "wfs_case_abandon" ? "wfs" : "other"}`}>{r.approval_type === "wfs_case_abandon" ? "WFS费用" : r.approval_type === "operations_plan_ack" ? "运营事项" : r.approval_type}</span><span className="approval-list__reference" title={r.id}>{r.id.slice(0,8)}</span></div> },
+   approval_type: { key:"approval_type", render:(_,r) => <div className="approval-list__type"><span className={`approval-list__category approval-list__category--${r.approval_type === "wfs_case_abandon" ? "wfs" : "other"}`}>{approvalBusinessLabel(r.approval_type)}</span><span className="approval-list__reference" title={r.id}>{r.id.slice(0,8)}</span></div> },
+   business_ref: { key:"business_ref", render:(_,r) => <span title={r.business_ref}>{r.business_ref || "—"}</span> },
    title: { key:"title", dataIndex:"title", render:(_,row) => <div className="approval-list__subject"><button type="button" onClick={() => setSelected(row)}>{row.title}</button><span title={row.reason}>{row.reason || "暂无申请说明"}</span></div> },
    follow_log: { key:"follow_log", render:(_,r) => {
     const logs = parseFollowLog(r.follow_log);
@@ -147,7 +153,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    applicant_id: { key:"applicant_id", render:(_,r) => <div className="approval-list__applicant"><span>{r.applicant_id || "申请人待核实"}</span></div> },
    submitted_at: { key:"submitted_at", render:(_,r) => <div className="approval-list__time"><span>{r.submitted_at ? new Date(r.submitted_at).toLocaleString("zh-CN", {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</span></div> },
    status: { key:"status", render:(_,r) => <StatusTag label={statusNames[r.status]} semantic={statusTone[r.status]}/> },
-   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && <><Button size="small" onClick={() => {
+   action: { key:"action", render:(_,r) => <div className="approval-list__actions"><Button size="small" type="text" onClick={() => setSelected(r)}>详情 <ArrowRightOutlined/></Button>{filters.tab === "pending" && r.can_review && (r.approval_type === "wfs_case_abandon" ? hasPermission(permissions,"action:warehouse:wfs-fee-alert:archive-review") : hasPermission(permissions,"*")) && <><Button size="small" onClick={() => {
           setDirectReviewAction("approved");
           setReviewOnly(true);
           setSelected(r);
@@ -169,7 +175,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
    return { ...base, title: <ResizableColumnTitle label={field?.title || key} minWidth={90} width={width}
     onWidthChange={(next) => setWidths((current) => ({...current,[key]:next}))} />, width };
   });
- }, [columnKeys, widths, filters.tab]);
+ }, [columnKeys, widths, filters.tab, permissions]);
 
  const statCards: ManagementStatCardItem<ApprovalStatKey>[] = [
   {
@@ -239,7 +245,35 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
      }
     }}
    />
-   <Card className="approval-workspace__toolbar-card" size="small">
+   <Card className="approval-workspace__toolbar-card approval-workspace__v3-toolbar" size="small">
+    <div className="approval-workspace__v3-views">
+      <Segmented block options={[
+        {label:"待我审批",value:"todo"},{label:"我发起的",value:"created"},
+        {label:"已审批记录",value:"reviewed"},{label:"全部记录",value:"all"},
+      ]} value={workView} onChange={(value)=>{
+        const next=value as "todo"|"created"|"reviewed"|"all";
+        setWorkView(next);
+        change({view:next==="todo"||next==="reviewed"?"mine":next==="created"?"created":"all",
+          tab:next==="reviewed"?"approved":"pending",risk_level:undefined});
+      }}/>
+    </div>
+    <div className="approval-workspace__v3-businesses" aria-label="审批业务分类">
+      {approvalBusinesses.map(item=><Button size="small" key={item.key}
+        type={business===item.key?"primary":"default"}
+        onClick={()=>{setBusiness(item.key);change({approval_type:item.type});}}>
+        {item.label}{!item.live?<span className="approval-workspace__v3-badge">待接入</span>:null}
+      </Button>)}
+    </div>
+    <div className="approval-workspace__v3-filters">
+      <Input.Search allowClear placeholder="搜索审批事项 / 申请原因" style={{maxWidth:320}}
+        value={keywordDraft} onChange={e=>setKeywordDraft(e.target.value)}
+        onSearch={value=>change({keyword:value.trim()})}/>
+      <Select allowClear placeholder="风险等级" style={{width:120}} value={filters.risk_level}
+        options={[{label:"高风险",value:"high"},{label:"中风险",value:"medium"},{label:"低风险",value:"low"}]}
+        onChange={value=>change({risk_level:value as ApprovalFilters["risk_level"]})}/>
+      <Button onClick={()=>{setKeywordDraft("");change({keyword:undefined,risk_level:undefined});}}>重置</Button>
+      <span className="approval-workspace__v3-status-hint">状态筛选</span>
+    </div>
     <Segmented
      className="approval-workspace__primary-tabs"
      options={approvalTabs}
@@ -247,6 +281,7 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
      onChange={(value) => change({ tab: value as ApprovalTab, risk_level: undefined })}
     />
    </Card>
+   {!approvalBusinessByKey[business].live?<Alert className="approval-workspace__v3-alert" showIcon type="info" message={approvalBusinessByKey[business].label+" · 待后端接入"} description="此处仅预留业务视图，不使用模拟申请，也不提供真实审批操作。"/>:null}
    <ReportTableShell label="审批任务列表" className="approval-workspace__table">
     {loading ? <Spin /> : loadError ? <EmptyState compact title="审批数据加载失败" description="请检查接口、权限或网络状态，点击刷新重试"/> : count === 0 ? <EmptyState compact title="暂无审批事项" description="当前状态下没有审批任务"/> :
      <ProTable<ApprovalItem> rowKey="id" columns={columns} dataSource={rows}
@@ -268,8 +303,9 @@ export default function ApprovalWorkspacePage({ page, permissions }: {
   <BulkApprovalModal rows={bulkRows} onCancel={() => setBulkRows([])}
    onUpdated={() => {setSelectedBulkKeys([]);reload();}}/>
   <RuntimeColumnConfigDrawer open={columnsOpen}
-   groups={[{title:"审批列表字段",fields:approvalColumnFields}]} fixedKeys={["title"]}
-   appliedKeys={columnKeys} defaultKeys={defaultKeys} onApply={setColumnKeys}
+   groups={[{title:approvalBusinessByKey[business].label+"字段",fields:visibleFields}]} fixedKeys={["title"]}
+   appliedKeys={[...columnKeys]} defaultKeys={[...approvalBusinessByKey[business].columns]}
+   onApply={(keys)=>setColumnPrefs(old=>({...old,[business]:keys}))}
    onClose={() => setColumnsOpen(false)} onSaveTemplate={() => void messageApi.info("列模板暂未接入")}/>
   <ApprovalDetailDrawer reviewOnly={reviewOnly} directReviewAction={directReviewAction}
    selected={selected}
