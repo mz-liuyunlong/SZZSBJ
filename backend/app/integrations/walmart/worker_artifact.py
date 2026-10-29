@@ -3,6 +3,7 @@
 Usage: python -m app.integrations.walmart.worker_artifact ARCHIVE
 No automatic deployment, no cloud calls, no credentials read.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -10,12 +11,9 @@ import hashlib
 import tarfile
 from pathlib import Path
 
-EXPECTED_WORKER_SHA256 = (
-    "1c510ae6a338fb5359b5007b1e26969cf594c2dd81adc4e162b31785fe29d004"
-)
+EXPECTED_WORKER_SHA256 = "1c510ae6a338fb5359b5007b1e26969cf594c2dd81adc4e162b31785fe29d004"
 WORKER_MEMBER = (
-    "walmart-remote-pull-it-pack-20261026/features/tools/"
-    "walmart_remote_pull/run_worker.py"
+    "walmart-remote-pull-it-pack-20261026/features/tools/walmart_remote_pull/run_worker.py"
 )
 
 
