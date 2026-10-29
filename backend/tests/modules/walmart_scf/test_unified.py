@@ -22,8 +22,8 @@ class Gateway:
 def setup(monkeypatch):
     monkeypatch.setenv("SZZSBJ_WALMART_SCF_READ_ENABLED", "1")
     monkeypatch.setenv(
-        "SZZSBJ_WALMART_SCF_ACCOUNT_STORE_MAP",
-        json.dumps({"account-a": "HK2613", "account-b": "HK2612"}),
+        "SZZSBJ_WALMART_SCF_STORE_ID_MAP",
+        json.dumps({"store-a": "HK2613", "store-b": "HK2612"}),
     )
     monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS", "wfs_inventory")
 
@@ -33,6 +33,8 @@ def test_off_by_default(monkeypatch):
     with pytest.raises(ApiError, match="WALMART_SCF_READ_DISABLED"):
         unified.approved_read(
             source_account_ref="account-a",
+            store_id="store-a",
+            verified_store_scope=frozenset({"store-a"}),
             verified_source_account_scope=frozenset({"account-a"}),
             operation="wfs_inventory",
         )
@@ -43,6 +45,8 @@ def test_account_mapping_and_scope(monkeypatch):
     client = Gateway()
     unified.approved_read(
         source_account_ref="account-a",
+        store_id="store-a",
+        verified_store_scope=frozenset({"store-a"}),
         verified_source_account_scope=frozenset({"account-a"}),
         operation="wfs_inventory",
         params={"limit": 1},
@@ -52,6 +56,8 @@ def test_account_mapping_and_scope(monkeypatch):
     with pytest.raises(ApiError, match="DATA_SCOPE_DENIED"):
         unified.approved_read(
             source_account_ref="account-b",
+            store_id="store-b",
+            verified_store_scope=frozenset({"store-b"}),
             verified_source_account_scope=frozenset({"account-a"}),
             operation="wfs_inventory",
             gateway=client,
@@ -65,6 +71,8 @@ def test_operation_denied(monkeypatch):
     with pytest.raises(ApiError, match="WALMART_OPERATION_NOT_APPROVED"):
         unified.approved_read(
             source_account_ref="account-a",
+            store_id="store-a",
+            verified_store_scope=frozenset({"store-a"}),
             verified_source_account_scope=frozenset({"account-a"}),
             operation="orders_list",
             gateway=client,
@@ -78,6 +86,8 @@ def test_secret_response_blocked(monkeypatch):
     with pytest.raises(ApiError, match="WALMART_SCF_READ_UNAVAILABLE"):
         unified.approved_read(
             source_account_ref="account-a",
+            store_id="store-a",
+            verified_store_scope=frozenset({"store-a"}),
             verified_source_account_scope=frozenset({"account-a"}),
             operation="wfs_inventory",
             gateway=client,
@@ -89,6 +99,8 @@ def test_offset_paging(monkeypatch):
     client = Gateway([{"inventory": [{"id": "1"}, {"id": "2"}]}, {"inventory": [{"id": "3"}]}])
     records = paging.collect_offset_pages(
         source_account_ref="account-a",
+        store_id="store-a",
+        verified_store_scope=frozenset({"store-a"}),
         verified_source_account_scope=frozenset({"account-a"}),
         operation="wfs_inventory",
         items_path=("inventory",),
@@ -108,6 +120,8 @@ def test_no_partial_pages(monkeypatch):
     with pytest.raises(ApiError, match="WALMART_PAGE_LIMIT_REACHED"):
         paging.collect_offset_pages(
             source_account_ref="account-a",
+            store_id="store-a",
+            verified_store_scope=frozenset({"store-a"}),
             verified_source_account_scope=frozenset({"account-a"}),
             operation="wfs_inventory",
             items_path=("inventory",),
@@ -128,6 +142,8 @@ def test_cursor_paging(monkeypatch):
     )
     rows = paging.collect_cursor_pages(
         source_account_ref="account-a",
+        store_id="store-a",
+        verified_store_scope=frozenset({"store-a"}),
         verified_source_account_scope=frozenset({"account-a"}),
         operation="orders_list",
         items_path=("rows",),
@@ -153,6 +169,8 @@ def test_cursor_loop_fails_closed(monkeypatch):
     with pytest.raises(ApiError, match="WALMART_PAGE_CURSOR_INVALID"):
         paging.collect_cursor_pages(
             source_account_ref="account-a",
+            store_id="store-a",
+            verified_store_scope=frozenset({"store-a"}),
             verified_source_account_scope=frozenset({"account-a"}),
             operation="orders_list",
             items_path=("rows",),
