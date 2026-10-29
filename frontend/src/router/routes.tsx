@@ -28,6 +28,7 @@ import KeywordLibraryPage from "@/pages/ads/keyword-library/KeywordLibraryPage";
 import OperationLogPage from "@/pages/operations/OperationLogPage";
 import OperationPlanPage from "@/pages/operations/OperationPlanPage";
 import SyncTaskPage from "@/pages/data-center/SyncTaskPage";
+import WalmartRemotePage from "@/pages/data-center/WalmartRemotePage";
 import ApprovalWorkspacePage from "@/pages/data-center/approval-workspace/ApprovalWorkspacePage";
 import ApiDocsPage from "@/pages/data-center/ApiDocsPage";
 import DataImportPage from "@/pages/data-center/DataImportPage";
@@ -214,6 +215,8 @@ function BusinessRoute({
           <DataImportPage page={page} />
         ) : page.key === "data_center_api_docs" ? (
           <ApiDocsPage page={page} />
+        ) : page.key === "data_center_walmart_remote" ? (
+          <WalmartRemotePage page={page} />
         ) : page.key === "data_center_task_center" ? (
           <SyncTaskPage page={page} />
         ) : page.key === "settings_user_management" ? (

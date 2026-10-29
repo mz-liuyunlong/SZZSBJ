@@ -335,6 +335,7 @@ export const navigation: NavigationGroup[] = [
       page('data_center', 'data_export', '数据导出', '/data-center/data-export', {
         tabs: [{ key: 'tasks', title: '导出任务' }, { key: 'history', title: '导出历史' }],
       }),
+      page('data_center', 'walmart_remote', '沃尔玛采集', '/data-center/walmart-remote'),
       page('data_center', 'task_center', '任务中心', '/data-center/task-center', {
         tabs: [{ key: 'sync', title: '同步任务' }, { key: 'schedule', title: '定时任务' }, { key: 'history', title: '历史记录' }, { key: 'failed', title: '失败记录' }],
       }),
