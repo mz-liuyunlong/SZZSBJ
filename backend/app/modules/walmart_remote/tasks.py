@@ -28,6 +28,7 @@ def execute_remote_job(job_id: str) -> None:
         if job is None or job.status != "queued":
             return
         store_code = job.store_code
+        store_id = job.store_id
         operations = tuple(job.operations)
         run_id = "wmt-" + job.id.hex
         job.run_id = run_id
@@ -40,6 +41,7 @@ def execute_remote_job(job_id: str) -> None:
             raise ValueError("REMOTE_ARCHIVE_NOT_CONFIGURED")
         result = collect_store_read_only(
             store_code=store_code,
+            store_id=store_id,
             operations=operations,
             archive_root=Path(archive_path),
             run_id=run_id,
