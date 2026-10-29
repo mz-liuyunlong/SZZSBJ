@@ -13,12 +13,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorEnvelope, SuccessEnvelope, success_response
-from app.core.auth import Principal
+from app.core.auth import PREVIEW_PRINCIPAL_ID, Principal
 from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.integrations.walmart.planner import STORE_ROUTES
 from app.integrations.walmart.remote_dispatch import ALLOWED_KEYS, STORES, parse_routes
 from app.modules.data_pages.models import LingxingStoreDimension
+from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.walmart_remote.models import WalmartRemoteJob
 from app.modules.walmart_remote.store_mapping import remote_store_code_for, remote_store_mapping
@@ -190,6 +191,42 @@ def create_job(
         # Reconcile manually; do not auto-dispatch a duplicate job.
         raise ApiError(code="REMOTE_DISPATCH_UNAVAILABLE", status_code=503) from None
     return success_response(request, data=job_view(job))
+
+
+@router.get("/jobs", response_model=SuccessEnvelope[list[JobView], None])
+def list_jobs(
+    request: Request,
+    session: db,
+    principal: reader,
+    account_scope: scope,
+    limit: int = 50,
+    offset: int = 0,
+) -> SuccessEnvelope[list[JobView], None]:
+    """Read persisted task history within exact source-account and store grants."""
+    if not 1 <= limit <= 100 or not 0 <= offset <= 10000:
+        raise ApiError(code="REMOTE_PAGE_INVALID", status_code=422)
+    if principal.user_id == PREVIEW_PRINCIPAL_ID:
+        raise ApiError(code="REMOTE_SCOPE_DENIED", status_code=403)
+    try:
+        user_id = int(principal.user_id)
+    except (TypeError, ValueError):
+        raise ApiError(code="REMOTE_SCOPE_DENIED", status_code=403) from None
+    store_scope = RbacRepository(session).resolve_user_data_scope(
+        user_id=user_id, scope_type="store"
+    )
+    if not store_scope or not account_scope:
+        return success_response(request, data=[])
+    query = select(WalmartRemoteJob).where(
+        WalmartRemoteJob.source_account_ref.in_(account_scope)
+    )
+    if "*" not in store_scope:
+        query = query.where(WalmartRemoteJob.store_id.in_(store_scope))
+    rows = session.scalars(
+        query.order_by(WalmartRemoteJob.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return success_response(request, data=[job_view(item) for item in rows])
 
 
 @router.get(
