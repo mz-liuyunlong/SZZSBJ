@@ -26,6 +26,7 @@ import ListingManagementSummaryCards, {
   type ListingManagementSummaryCardKey,
 } from "@/pages/products/components/ListingManagementSummaryCards";
 import ListingManagementTable from "@/pages/products/components/ListingManagementTable";
+import ListingDetailModal from "@/pages/products/components/ListingDetailModal";
 import ListingRuleConfigDrawer from "@/pages/products/components/ListingRuleConfigDrawer";
 import ListingEvaluationMonitor from "@/pages/products/components/ListingEvaluationMonitor";
 import ListingEvaluationPreviewModal from "@/pages/products/components/ListingEvaluationPreviewModal";
@@ -273,6 +274,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
   const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
+  const [detailListing, setDetailListing] = useState<ListingManagementRow | undefined>();
   const [gptAnalysisRow, setGptAnalysisRow] = useState<ListingManagementRow | null>(null);
   const [isGptAnalysisLoading, setIsGptAnalysisLoading] = useState(false);
   const [isGptAnalysisSaving, setIsGptAnalysisSaving] = useState(false);
@@ -948,7 +950,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                 resetPageAndSelection();
               }}
               onSelectionChange={setSelectedRowKeys}
-              onOpenDetail={openListingAnalysis}
+              onOpenDetail={setDetailListing}
               onOpenGptAnalysis={openGptAnalysisModal}
               onOpenEvaluation={setEvaluationListing}
               onArchiveListing={(row) => void handleArchiveListing(row)}
@@ -1028,6 +1030,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             </Form.Item>
           </Form>
         </Modal>
+        <ListingDetailModal
+          row={detailListing}
+          onClose={() => setDetailListing(undefined)}
+          onOpenAnalysis={openListingAnalysis}
+        />
         <ListingAnalysisModal
           open={analysisSource !== null}
           source={analysisSource ?? undefined}

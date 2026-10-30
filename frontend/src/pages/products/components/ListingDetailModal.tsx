@@ -5,6 +5,7 @@ import type { ListingManagementRow } from "@/pages/products/listingManagementDat
 interface ListingDetailModalProps {
   row?: ListingManagementRow;
   onClose: () => void;
+  onOpenAnalysis?: (row: ListingManagementRow) => void;
 }
 
 type ListingDetailSection = "basic" | "status" | "inventory" | "governance";
@@ -45,7 +46,7 @@ function ListingFieldGrid({ items }: { items: ListingFieldItem[] }) {
   );
 }
 
-function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
+function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModalProps) {
   const [sectionOverride, setSectionOverride] = useState<{
     rowId: string;
     section: ListingDetailSection;
@@ -159,6 +160,12 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
       destroyOnHidden
       footer={(
         <div className="listing-management__detail-footer">
+          {row && onOpenAnalysis && (
+            <Button onClick={() => {
+              closeModal();
+              onOpenAnalysis(row);
+            }}>经营分析</Button>
+          )}
           <Button onClick={closeModal}>关闭</Button>
         </div>
       )}
