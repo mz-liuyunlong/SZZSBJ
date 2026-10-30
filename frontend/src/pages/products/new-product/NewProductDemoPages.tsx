@@ -12,7 +12,7 @@ import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnCo
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import { ProductIdentityCell } from "@/components/report-table/cells";
 import type { NavigationPage } from "@/config/navigation";
-import { useNewProductDemoStore, completedScore, daysSince, gradePass, percentage, dimensions, systemDimensions,
+import { useNewProductDemoStore, completedScore, daysSince, gradePass, percentage, dimensions,
  type ProductSample, type DemoConfig, type Grade, type Dimension } from "./newProductDemoModel";
 import "./NewProductDemoPages.css";
 type Mode="performance"|"tracking";
