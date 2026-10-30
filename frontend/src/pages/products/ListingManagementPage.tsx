@@ -723,7 +723,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, messageApi, normalizedFilters, summaryFilterKey]);
+  }, [isExporting, messageApi, normalizedFilters, selectedRowKeys, summaryFilterKey]);
 
   const openExportModal = useCallback(() => {
     if (isExporting) return;

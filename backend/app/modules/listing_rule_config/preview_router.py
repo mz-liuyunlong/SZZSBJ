@@ -213,7 +213,13 @@ def list_evaluation_runs(
         session.scalar(select(func.count()).select_from(ListingEvaluationRun).where(scoped)) or 0
     )
     scoped_stats = {
-        run_id: (int(total or 0), int(grade_count or 0), int(stage_count or 0), int(blocked or 0), int(published or 0))
+        run_id: (
+            int(total or 0),
+            int(grade_count or 0),
+            int(stage_count or 0),
+            int(blocked or 0),
+            int(published or 0),
+        )
         for run_id, total, grade_count, stage_count, blocked, published in session.execute(
             select(
                 ListingEvaluationSnapshot.run_id,

@@ -196,11 +196,6 @@ export interface ListingManagementParams {
 
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 
-const toDateText = (value: string | null): string => {
-  if (!value) return "";
-  return value.slice(0, 10);
-};
-
 export const toListingStartText = (normalizedValue: string | null): string => {
   if (!normalizedValue) return "";
   // The API field is explicitly UTC. Normalize offset-aware timestamps to UTC;
