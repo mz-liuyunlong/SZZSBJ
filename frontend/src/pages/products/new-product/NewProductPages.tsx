@@ -19,6 +19,7 @@ import type { NavigationPage } from "@/config/navigation";
 import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions, getNewProductWorkflowTab, trackedProduct, trackingWorkflow, periodSales, getPeriodMetrics, evaluateTrack, productScore, type TrackingWorkflowTab, type TrackState, type ProductWorkflowTab,
  type ProductSample, type NewProductConfig, type Grade, type Dimension } from "./newProductModel";
 import "./NewProductPages.css";
+import NewProductLivePanel from "./NewProductLivePanel";
 type Mode="performance"|"tracking";
 type Filter={category:string[];developer:string[];operator:string[];field:"sku"|"name"|"itemId";query:string};
 const empty=():Filter=>({category:[],developer:[],operator:[],field:"sku",query:""});
@@ -217,8 +218,8 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <div className="npd-header"><div><Typography.Title level={4}>{mode==="performance"?"新品表现":"打品跟踪"}</Typography.Title>
  <Typography.Text type="secondary">{mode==="performance"?"测品评分 · 采购建议 · 开发人员表现":"采购后追踪 · 类目深挖 · 运营人员表现"}</Typography.Text></div>
  <Space><Typography.Text type="secondary">新品测评与采购跟踪</Typography.Text></Space></div>
- <Tabs activeKey={tab} onChange={setTab} items={[{key:"list",label:mode==="performance"?"新品表现":"打品跟踪"},{key:"board",label:mode==="performance"?"新品表现看板":"打品跟踪看板"}]}/>
- <div className="npd-toolbar">
+ <Tabs activeKey={tab} onChange={setTab} items={[{key:"list",label:mode==="performance"?"新品表现":"打品跟踪"},{key:"board",label:mode==="performance"?"新品表现看板":"打品跟踪看板"},{key:"live",label:"正式数据"}]}/>
+ {tab!=="live"&&<div className="npd-toolbar">
  <ReportFacetSelect mode="multiple" ariaLabel="类目" placeholder="全部类目" value={filter.category} options={opts(state.products.map(p=>p.category))} onChange={v=>setFilter(f=>({...f,category:Array.isArray(v)?v:[]}))}/>
  <ReportFacetSelect mode="multiple" ariaLabel="开发人员" placeholder="开发人员" value={filter.developer} options={opts(state.products.map(p=>p.developer))} onChange={v=>setFilter(f=>({...f,developer:Array.isArray(v)?v:[]}))}/>
  <ReportFacetSelect mode="multiple" ariaLabel="运营人员" placeholder="运营人员" value={filter.operator} options={opts(state.products.map(p=>p.operator))} onChange={v=>setFilter(f=>({...f,operator:Array.isArray(v)?v:[]}))}/>
@@ -227,8 +228,8 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  onSearch={()=>setFilter(f=>({...f,query:query.trim(),field}))}/></div>
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
  <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>{setCardKey("total");setWorkflowTab("all");setTrackingTab("all");setFilter(empty());setQuery("");api.success("已刷新当前筛选视图");}}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
- <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
- {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{if(!canScore)return;setMarket(p);setScore(null);setReason("");}}/>:
+ <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>}
+ {tab==="live"?<NewProductLivePanel canScore={canScore} canRequest={canRequest} canApprove={canManage} canReview={canReview}/>:tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{if(!canScore)return;setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={{...c,successWindow:period}} activeKey={cardKey} onSelect={setCardKey}/></div>
  {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
  {key:"all",label:"全部新品 ("+rows.length+")"},
