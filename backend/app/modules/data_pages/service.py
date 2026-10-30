@@ -850,7 +850,13 @@ class ListingManagementService:
             return value.isoformat()
         if isinstance(value, list):
             return "、".join(str(item) for item in value if item is not None)
-        return str(value)
+        result = str(value)
+        # Prevent spreadsheet formula execution in untrusted textual CSV fields.
+        if result.lstrip().startswith(("=", "+", "-", "@")) or (
+            result and result[0] in ("\t", "\r", "\n")
+        ):
+            return "'" + result
+        return result
 
     @staticmethod
     def _normalize_listing_archive_state_keys(archive_states):
