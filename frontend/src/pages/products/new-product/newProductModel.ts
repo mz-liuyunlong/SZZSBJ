@@ -74,6 +74,16 @@ export function completedScore(p: ProductSample, config: NewProductConfig) {
     Math.round(Math.max(rule.qtyMin, Math.min(rule.qtyMax, p.demand)));
   return { score, grade, suggested, rule };
 }
+/** Workflow status for the business tabs in the New Product performance page. */
+export type ProductWorkflowTab = "all" | "market" | "purchase" | "approval" | "approved" | "stopped";
+export function getNewProductWorkflowTab(p: ProductSample, config: NewProductConfig): Exclude<ProductWorkflowTab, "all"> {
+  if (p.approval === "pending") return "approval";
+  if (p.approval === "approved") return "approved";
+  if (p.market === null) return "market";
+  const result = completedScore(p, config);
+  if (!result || result.suggested <= 0) return "stopped";
+  return "purchase";
+}
 export function gradePass(grade: Grade | undefined) {
   return !!grade && ["S","A","B","C"].includes(grade);
 }
