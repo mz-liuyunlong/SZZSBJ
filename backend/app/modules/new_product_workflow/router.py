@@ -94,15 +94,19 @@ def _block(status: int, code: ErrorCode = ErrorCode.INVALID_REQUEST) -> None:
 
 
 def _identity(session: Session, sku_id: UUID, scope: frozenset[str]) -> dict[str, Any]:
-    identity = session.execute(
-        text("""
+    identity = (
+        session.execute(
+            text("""
             SELECT id, source_account_ref, lingxing_sku_code
             FROM dwd_lingxing_sku_identity_index
             WHERE id = :id AND source_account_ref = ANY(:accounts)
               AND is_active IS TRUE
         """),
-        {"id": sku_id, "accounts": sorted(scope)},
-    ).mappings().first()
+            {"id": sku_id, "accounts": sorted(scope)},
+        )
+        .mappings()
+        .first()
+    )
     if identity is None:
         _block(404, ErrorCode.NOT_FOUND)
     return dict(identity)
@@ -110,26 +114,44 @@ def _identity(session: Session, sku_id: UUID, scope: frozenset[str]) -> dict[str
 
 def _state(session: Session, sku_id: UUID, *, lock: bool) -> dict[str, Any]:
     suffix = " FOR UPDATE" if lock else ""
-    row = session.execute(
-        text("SELECT * FROM product_new_workflows WHERE sku_identity_id = :id" + suffix),
-        {"id": sku_id},
-    ).mappings().first()
+    row = (
+        session.execute(
+            text("SELECT * FROM product_new_workflows WHERE sku_identity_id = :id" + suffix),
+            {"id": sku_id},
+        )
+        .mappings()
+        .first()
+    )
     if row is None:
         return {
-            "id": None, "sku_identity_id": sku_id, "status": "pending_market",
-            "row_version": 0, "market_score": None, "market_reason": None,
-            "purchase_request_qty": None, "purchase_reason": None,
-            "purchase_review_by": None, "purchase_review_at": None,
-            "purchase_review_note": None, "review_result": None,
-            "review_reason": None, "review_due_at": None,
-            "reviewed_by": None, "reviewed_at": None, "score_snapshot_json": None,
+            "id": None,
+            "sku_identity_id": sku_id,
+            "status": "pending_market",
+            "row_version": 0,
+            "market_score": None,
+            "market_reason": None,
+            "purchase_request_qty": None,
+            "purchase_reason": None,
+            "purchase_review_by": None,
+            "purchase_review_at": None,
+            "purchase_review_note": None,
+            "review_result": None,
+            "review_reason": None,
+            "review_due_at": None,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "score_snapshot_json": None,
         }
     return dict(row)
 
 
 def _edit(
-    session: Session, sku_id: UUID, scope: frozenset[str],
-    principal: Principal, request: Request, payload: VersionedPayload,
+    session: Session,
+    sku_id: UUID,
+    scope: frozenset[str],
+    principal: Principal,
+    request: Request,
+    payload: VersionedPayload,
     action: str,
 ) -> dict[str, Any]:
     identity = _identity(session, sku_id, scope)
@@ -168,8 +190,10 @@ def _edit(
             _block(409)
         reason = payload.reason.strip()
         changes = {
-            "review_result": payload.result, "review_reason": reason,
-            "review_due_at": payload.next_review, "reviewed_by": principal.user_id,
+            "review_result": payload.result,
+            "review_reason": reason,
+            "review_due_at": payload.next_review,
+            "reviewed_by": principal.user_id,
         }
     else:
         _block(422)
@@ -186,8 +210,11 @@ def _edit(
                 ON CONFLICT (sku_identity_id) DO NOTHING
             """),
             {
-                "id": workflow_id, "sku_id": sku_id, "account": identity["source_account_ref"],
-                "status": changes["status"], "score": changes["market_score"],
+                "id": workflow_id,
+                "sku_id": sku_id,
+                "account": identity["source_account_ref"],
+                "status": changes["status"],
+                "score": changes["market_score"],
                 "reason": changes["market_reason"],
             },
         )
@@ -201,7 +228,9 @@ def _edit(
             now_fields.append("purchase_review_at = now()")
         if isinstance(payload, ReviewWrite):
             now_fields.append("reviewed_at = now()")
-        clause = ", ".join([assignments, *now_fields, "row_version = row_version + 1", "updated_at = now()"])
+        clause = ", ".join(
+            [assignments, *now_fields, "row_version = row_version + 1", "updated_at = now()"]
+        )
         session.execute(
             text(f"UPDATE product_new_workflows SET {clause} WHERE id = :id"),
             {"id": before["id"], **changes},
@@ -217,8 +246,11 @@ def _edit(
                CAST(:before_json AS jsonb), CAST(:after_json AS jsonb), :request_id)
         """),
         {
-            "id": uuid4(), "workflow_id": after["id"], "action": action,
-            "actor": principal.user_id, "reason": reason,
+            "id": uuid4(),
+            "workflow_id": after["id"],
+            "action": action,
+            "actor": principal.user_id,
+            "reason": reason,
             "before_json": json.dumps(before, default=str),
             "after_json": json.dumps(after, default=str),
             "request_id": get_request_id(request),
@@ -230,7 +262,10 @@ def _edit(
 
 @router.get("/workflows", response_model=SuccessEnvelope[dict[str, Any], None])
 def list_workflows(
-    request: Request, session: db_session, _: view_principal, accounts: account_scope,
+    request: Request,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
     source_account_ref: str = Query(min_length=1, max_length=128),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
@@ -238,11 +273,16 @@ def list_workflows(
     if source_account_ref not in accounts:
         _block(403, ErrorCode.DATA_SCOPE_DENIED)
     params = {"account": source_account_ref, "size": page_size, "skip": (page - 1) * page_size}
-    total = session.execute(text("""
+    total = session.execute(
+        text("""
         SELECT count(*) FROM dwd_lingxing_sku_identity_index
         WHERE source_account_ref = :account AND is_active IS TRUE
-    """), {"account": source_account_ref}).scalar_one()
-    rows = session.execute(text("""
+    """),
+        {"account": source_account_ref},
+    ).scalar_one()
+    rows = (
+        session.execute(
+            text("""
         SELECT identity.id AS sku_identity_id, identity.lingxing_sku_code AS sku,
                identity.source_account_ref, p.product_name, p.category,
                workflow.id AS workflow_id, workflow.status,
@@ -256,7 +296,12 @@ def list_workflows(
         LEFT JOIN product_new_workflows AS workflow ON workflow.sku_identity_id = identity.id
         WHERE identity.source_account_ref = :account AND identity.is_active IS TRUE
         ORDER BY identity.id LIMIT :size OFFSET :skip
-    """), params).mappings().all()
+    """),
+            params,
+        )
+        .mappings()
+        .all()
+    )
     return success_response(
         request, data={"items": [dict(row) for row in rows], "page": page, "total": int(total)}
     )
@@ -264,8 +309,11 @@ def list_workflows(
 
 @router.get("/workflows/{sku_id}", response_model=SuccessEnvelope[dict[str, Any], None])
 def get_workflow(
-    request: Request, sku_id: UUID, session: db_session,
-    _: view_principal, accounts: account_scope,
+    request: Request,
+    sku_id: UUID,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
     identity = _identity(session, sku_id, accounts)
     return success_response(request, data={**identity, **_state(session, sku_id, lock=False)})
@@ -276,7 +324,10 @@ def get_workflow(
     response_model=SuccessEnvelope[dict[str, Any], None],
 )
 def set_market(
-    request: Request, sku_id: UUID, payload: MarketWrite, session: db_session,
+    request: Request,
+    sku_id: UUID,
+    payload: MarketWrite,
+    session: db_session,
     principal: Annotated[Principal, Depends(require_permission(SCORE))],
     accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
@@ -290,7 +341,10 @@ def set_market(
     response_model=SuccessEnvelope[dict[str, Any], None],
 )
 def request_purchase(
-    request: Request, sku_id: UUID, payload: PurchaseWrite, session: db_session,
+    request: Request,
+    sku_id: UUID,
+    payload: PurchaseWrite,
+    session: db_session,
     principal: Annotated[Principal, Depends(require_permission(REQUEST))],
     accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
@@ -304,7 +358,10 @@ def request_purchase(
     response_model=SuccessEnvelope[dict[str, Any], None],
 )
 def decide_purchase(
-    request: Request, sku_id: UUID, payload: DecisionWrite, session: db_session,
+    request: Request,
+    sku_id: UUID,
+    payload: DecisionWrite,
+    session: db_session,
     principal: Annotated[Principal, Depends(require_permission(APPROVE))],
     accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
@@ -318,7 +375,10 @@ def decide_purchase(
     response_model=SuccessEnvelope[dict[str, Any], None],
 )
 def review_launch(
-    request: Request, sku_id: UUID, payload: ReviewWrite, session: db_session,
+    request: Request,
+    sku_id: UUID,
+    payload: ReviewWrite,
+    session: db_session,
     principal: Annotated[Principal, Depends(require_permission(REVIEW))],
     accounts: account_scope,
 ) -> SuccessEnvelope[dict[str, Any], None]:
@@ -329,36 +389,53 @@ def review_launch(
 
 @router.get("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
 def read_rules(
-    request: Request, session: db_session, _: view_principal,
+    request: Request,
+    session: db_session,
+    _: view_principal,
 ) -> SuccessEnvelope[dict[str, Any], None]:
-    row = session.execute(text("""
+    row = (
+        session.execute(
+            text("""
         SELECT version, rule_json, actor, reason, created_at
         FROM product_new_rule_versions ORDER BY version DESC LIMIT 1
-    """)).mappings().first()
+    """)
+        )
+        .mappings()
+        .first()
+    )
     return success_response(request, data=dict(row) if row else {"version": 0, "rule_json": None})
 
 
 @router.put("/rules", response_model=SuccessEnvelope[dict[str, Any], None])
 def write_rules(
-    request: Request, payload: RuleWrite, session: db_session,
+    request: Request,
+    payload: RuleWrite,
+    session: db_session,
     principal: Annotated[Principal, Depends(require_permission(CONFIGURE))],
 ) -> SuccessEnvelope[dict[str, Any], None]:
     session.execute(text("SELECT pg_advisory_xact_lock(92114470)"))
-    version = int(session.execute(text("""
+    version = int(
+        session.execute(
+            text("""
         SELECT COALESCE(MAX(version), 0) FROM product_new_rule_versions
-    """)).scalar_one())
+    """)
+        ).scalar_one()
+    )
     if version != payload.expected_version:
         _block(409)
     new_version = version + 1
     rules = payload.model_dump(exclude={"reason", "expected_version"})
-    session.execute(text("""
+    session.execute(
+        text("""
         INSERT INTO product_new_rule_versions (version, rule_json, actor, reason)
         VALUES (:version, CAST(:rule_json AS jsonb), :actor, :reason)
-    """), {
-        "version": new_version, "rule_json": json.dumps(rules),
-        "actor": principal.user_id, "reason": payload.reason.strip(),
-    })
-    session.commit()
-    return success_response(
-        request, data={"version": new_version, "rule_json": rules}
+    """),
+        {
+            "version": new_version,
+            "rule_json": json.dumps(rules),
+            "actor": principal.user_id,
+            "reason": payload.reason.strip(),
+        },
     )
+    session.commit()
+    return success_response(request, data={"version": new_version, "rule_json": rules})
