@@ -166,7 +166,7 @@ function ConfigPanel({mode,visible,onClose,canManage,username}:{mode:Mode;visibl
  </Drawer>;
 }
 
-export default function NewProductPages({page,mode,canManage=false,canConfigure=false,username="未知用户"}:{page:NavigationPage;mode:Mode;canManage?:boolean;canConfigure?:boolean;username?:string}){
+export default function NewProductPages({page,mode,canManage=false,canConfigure=false,canScore=false,canRequest=false,canReview=false,canViewCost=false,username="未知用户"}:{page:NavigationPage;mode:Mode;canManage?:boolean;canConfigure?:boolean;canScore?:boolean;canRequest?:boolean;canReview?:boolean;canViewCost?:boolean;username?:string}){
  const state=useNewProductStore(),c=state.config;
  const preferenceKey=mode==="performance"?"products:new-product:columns":"products:launch-tracking:columns";
  const stored=useMemo(()=>readUserPreference<{keys:string[];widths:Record<string,number>}>(username,preferenceKey,1),[username,preferenceKey]);
@@ -208,9 +208,9 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  {key:"actual",title:"实际采购",dataIndex:"actualPurchaseQty",width:110},
  {key:"inventory",title:"剩余库存",dataIndex:"inventory",width:110},
  {key:"action",title:"操作",fixed:"right",width:170,render:(_,p)=><Space size={4}><Button type="link" onClick={()=>setDetail(p)}>详情</Button>
- {mode==="performance"&&p.market===null&&<Button type="link" onClick={()=>{setMarket(p);setScore(null);setReason("");}}>市场评分</Button>}
- {mode==="tracking"&&<Button type="link" onClick={()=>{setReviewProduct(p);setReviewState(p.tracking);setReason(p.reviewReason??"");setReviewDate(p.reviewDueAt??"");}}>复盘</Button>}
- {mode==="performance"&&p.market!==null&&p.approval!=="approved"&&<Button type="link" onClick={()=>{setPurchase(p);setQuantity(completedScore(p,c)?.suggested??null);setReason("");}}>采购确认</Button>}</Space>}
+ {mode==="performance"&&canScore&&p.market===null&&<Button type="link" onClick={()=>{setMarket(p);setScore(null);setReason("");}}>市场评分</Button>}
+ {mode==="tracking"&&canReview&&<Button type="link" onClick={()=>{setReviewProduct(p);setReviewState(p.tracking);setReason(p.reviewReason??"");setReviewDate(p.reviewDueAt??"");}}>复盘</Button>}
+ {mode==="performance"&&canRequest&&p.market!==null&&p.approval!=="approved"&&<Button type="link" onClick={()=>{setPurchase(p);setQuantity(completedScore(p,c)?.suggested??null);setReason("");}}>采购确认</Button>}</Space>}
  ];
 
  return <PageShell page={page}>{holder}<div className="npd-page">
@@ -228,7 +228,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
  <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>{setCardKey("total");setWorkflowTab("all");setTrackingTab("all");setFilter(empty());setQuery("");api.success("已刷新当前筛选视图");}}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
- {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
+ {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{if(!canScore)return;setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={{...c,successWindow:period}} activeKey={cardKey} onSelect={setCardKey}/></div>
  {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
  {key:"all",label:"全部新品 ("+rows.length+")"},
@@ -250,19 +250,19 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  {key:"id",title:"申请编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
  {key:"dimension",title:"维度",render:(_,r)=>dimensions[r.dimension]},{key:"from",title:"原分",dataIndex:"from"},{key:"to",title:"申请分",dataIndex:"to"},
  {key:"reason",title:"申请原因",dataIndex:"reason",width:240},{key:"status",title:"状态",dataIndex:"status"},
- {key:"action",title:"操作",render:(_,r)=>r.status==="pending"?<Button type="link" onClick={()=>{setReview(r.id);setReason("");}}>审核</Button>:"—"}]}/>
+ {key:"action",title:"操作",render:(_,r)=>r.status==="pending"&&canManage?<Button type="link" onClick={()=>{setReview(r.id);setReason("");}}>审核</Button>:"—"}]}/>
  <DataTable title="新品采购审核" data={state.products.filter(p=>p.approval!=="none")} columns={[
  {key:"sku",title:"SKU",dataIndex:"sku"},{key:"requested",title:"申请数量",dataIndex:"requestQty"},
  {key:"suggestion",title:"建议数量",render:(_,p)=>completedScore(p,c)?.suggested??"—"},
- ...(canManage?[{key:"amount",title:"采购金额",render:(_:unknown,p:ProductSample)=>"¥"+((p.requestQty??0)*p.unitCost).toFixed(2)}]:[]),
+ ...(canViewCost?[{key:"amount",title:"采购金额",render:(_:unknown,p:ProductSample)=>"¥"+((p.requestQty??0)*p.unitCost).toFixed(2)}]:[]),
  {key:"status",title:"审批状态",dataIndex:"approval"},
- {key:"action",title:"操作",render:(_,p)=>p.approval==="pending"?<Button type="link" onClick={()=>{setApproval(p);setReason("");}}>审核</Button>:"—"}]}/>
+ {key:"action",title:"操作",render:(_,p)=>p.approval==="pending"&&canManage?<Button type="link" onClick={()=>{setApproval(p);setReason("");}}>审核</Button>:"—"}]}/>
  <DataTable title="正式采购计划" data={state.plans} columns={[
  {key:"id",title:"计划编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
  {key:"grade",title:"评级",dataIndex:"grade"},{key:"suggestedQty",title:"建议量",dataIndex:"suggestedQty"},
  {key:"approvedQty",title:"批准量",dataIndex:"approvedQty"}]}/></>}</>}
  <Drawer title={reviewProduct?"打品复盘 · "+reviewProduct.sku:"打品复盘"} width={680} open={!!reviewProduct} onClose={()=>setReviewProduct(null)}
- footer={<Space><Button onClick={()=>setReviewProduct(null)}>取消</Button><Button type="primary" onClick={()=>act(()=>state.updateTrack(reviewProduct!.id,reviewState,reason,reviewDate,period),()=>setReviewProduct(null))}>保存复盘</Button></Space>}>
+ footer={<Space><Button onClick={()=>setReviewProduct(null)}>取消</Button><Button type="primary" onClick={()=>act(()=>{if(!canReview)throw Error("无打品复盘权限");state.updateTrack(reviewProduct!.id,reviewState,reason,reviewDate,period);},()=>setReviewProduct(null))}>保存复盘</Button></Space>}>
  {reviewProduct&&<><Typography.Paragraph>{reviewProduct.name} · 运营：{reviewProduct.operator} · 初始评级：{completedScore(reviewProduct,c)?.grade??"—"}</Typography.Paragraph>
  <div className="npd-review-summary"><div>系统建议：{completedScore(reviewProduct,c)?.suggested??"—"} 件</div><div>运营申请：{reviewProduct.requestQty??"—"} 件</div><div>批准数量：{reviewProduct.approvedQty??"—"} 件</div>
  <div>{period}天销量：{periodSales(reviewProduct,period)}</div><div>点击：{getPeriodMetrics(reviewProduct,period).clicks}</div><div>订单：{getPeriodMetrics(reviewProduct,period).orders}</div><div>广告费：{getPeriodMetrics(reviewProduct,period).adSpend}</div><div>利润：{getPeriodMetrics(reviewProduct,period).profit}</div><div>利润率：{getPeriodMetrics(reviewProduct,period).margin.toFixed(1)}%</div><div>ACOS：{getPeriodMetrics(reviewProduct,period).acos.toFixed(1)}%</div><div>库存：{reviewProduct.inventory}</div></div>
@@ -282,8 +282,8 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  {d!=="market"&&detail.market!==null&&detail.approval!=="approved"&&<Button type="link" onClick={()=>{setCorrection({p:detail,d});setScore(detail.overrides[d]??detail.system[d]);setReason("");setDetail(null);}}>申请修正</Button>}</div>)}
  <Typography.Paragraph>最终得分：{productScore(detail,c)?.score??"待市场评分"} · 评级：{productScore(detail,c)?.grade??"—"}</Typography.Paragraph>
  <Typography.Paragraph>点击 {detail.clicks} · 订单 {detail.orders} · 利润率 {detail.margin}% · ACOS {detail.acos}%</Typography.Paragraph>
- {canManage&&<Typography.Paragraph>采购单价 ¥{detail.unitCost}</Typography.Paragraph>}</>}</Drawer>
- <Modal open={!!market} title="运营确认市场竞争评分" onCancel={()=>setMarket(null)} onOk={()=>act(()=>state.setMarket(market!.id,score!,reason),()=>setMarket(null))}>
+ {canViewCost&&<Typography.Paragraph>采购单价 ¥{detail.unitCost}</Typography.Paragraph>}</>}</Drawer>
+ <Modal open={!!market} title="运营确认市场竞争评分" onCancel={()=>setMarket(null)} onOk={()=>act(()=>{if(!canScore)throw Error("无市场评分权限");state.setMarket(market!.id,score!,reason);},()=>setMarket(null))}>
  <Typography.Paragraph>市场竞争确认后，系统才生成总分、评级与采购建议。</Typography.Paragraph>
  <InputNumber min={0} max={10} precision={0} value={score} onChange={setScore} style={{width:"100%",marginBottom:12}}/>
  <Input.TextArea rows={3} value={reason} placeholder="市场竞争评分依据" onChange={e=>setReason(e.target.value)}/></Modal>
@@ -296,7 +296,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <Button onClick={()=>act(()=>state.decideCorrection(review!,"rejected",reason,canManage,username),()=>setReview(null))}>驳回</Button>
  <Button type="primary" onClick={()=>act(()=>state.decideCorrection(review!,"approved",reason,canManage,username),()=>setReview(null))}>批准</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
  <Typography.Paragraph>申请编号：{review}</Typography.Paragraph><Input.TextArea rows={3} value={reason} onChange={e=>setReason(e.target.value)} placeholder="审批说明"/></Modal>
- <Modal open={!!purchase} title="确认采购数量" onCancel={()=>setPurchase(null)} onOk={()=>act(()=>state.applyPurchase(purchase!.id,quantity!,reason),()=>setPurchase(null))}>
+ <Modal open={!!purchase} title="确认采购数量" onCancel={()=>setPurchase(null)} onOk={()=>act(()=>{if(!canRequest)throw Error("无采购申请权限");state.applyPurchase(purchase!.id,quantity!,reason);},()=>setPurchase(null))}>
  <Typography.Paragraph>系统建议：{purchase?completedScore(purchase,c)?.suggested:"—"} 件</Typography.Paragraph>
  <InputNumber min={1} precision={0} value={quantity} onChange={setQuantity} style={{width:"100%",marginBottom:12}}/>
  {purchase&&quantity!==null&&quantity>(completedScore(purchase,c)?.rule?.qtyMax??0)&&<Tag color="warning">超出等级采购区间</Tag>}
@@ -306,7 +306,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <Button type="primary" onClick={()=>act(()=>state.decidePurchase(approval!.id,"approved",reason,canManage,username),()=>setApproval(null))}>审核通过并生成计划</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
  <Typography.Paragraph>商品：{approval?.sku} · 申请数量：{approval?.requestQty}</Typography.Paragraph>
  <Typography.Paragraph>原因：{approval?.requestReason}</Typography.Paragraph>
- {canManage&&approval&&<Typography.Paragraph>金额：¥{((approval.requestQty??0)*approval.unitCost).toFixed(2)}</Typography.Paragraph>}
+ {canViewCost&&approval&&<Typography.Paragraph>金额：¥{((approval.requestQty??0)*approval.unitCost).toFixed(2)}</Typography.Paragraph>}
  <Input.TextArea rows={3} value={reason} placeholder="审核理由" onChange={e=>setReason(e.target.value)}/></Modal>
  </div></PageShell>;
 }
