@@ -501,10 +501,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     };
   }, [currentPage, listingRefreshToken, normalizedFilters, pageSize, summaryFilterKey]);
 
-  const refreshListingData = () => {
+  const refreshListingData = useCallback(() => {
     clearResourceCache("listing-management:");
     setListingRefreshToken((current) => current + 1);
-  };
+  }, []);
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -653,6 +653,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     archiveReason,
     messageApi,
     runArchiveListing,
+    refreshListingData,
     setSelectedRowKeys,
   ]);
 
@@ -680,7 +681,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     } catch {
       void messageApi.error("恢复失败，请稍后重试");
     }
-  }, [messageApi]);
+  }, [messageApi, refreshListingData]);
 
   const handleExportListingRows = useCallback(async (columnKeys?: string[]) => {
     if (isExporting) return;
@@ -858,7 +859,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     } finally {
       setRestoreSubmitting(false);
     }
-  }, [messageApi, restoreDialog, setSelectedRowKeys]);
+  }, [messageApi, restoreDialog, refreshListingData, setSelectedRowKeys]);
 
 
   return (
