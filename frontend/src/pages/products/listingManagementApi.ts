@@ -200,8 +200,12 @@ const toDateText = (value: string | null): string => {
 };
 
 export const toListingStartText = (normalizedValue: string | null): string => {
-  if (normalizedValue) return toDateText(normalizedValue);
-  return "";
+  if (!normalizedValue) return "";
+  // The API field is explicitly UTC. Normalize offset-aware timestamps to UTC;
+  // preserve date-only payloads instead of guessing their original timezone.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) return normalizedValue;
+  const parsed = new Date(normalizedValue);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 };
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);

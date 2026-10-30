@@ -13,6 +13,8 @@ describe("toListingStartText", () => {
     expect(toListingStartText("2026-09-08T16:31:47Z")).toBe("2026-09-08");
     expect(toListingStartText("2026-09-08")).toBe("2026-09-08");
     expect(toListingStartText(null)).toBe("");
+    expect(toListingStartText("2026-09-09T00:31:47+08:00")).toBe("2026-09-08");
+    expect(toListingStartText("2026-09-08")).toBe("2026-09-08");
   });
 
   it("does not fall back to raw source dates or WFS launch dates", () => {
