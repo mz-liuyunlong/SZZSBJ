@@ -100,8 +100,8 @@ Worker 复用既有 Celery，显式加载 app.modules.pmc_wfs.tasks、消费 int
 
 ## Walmart 适配器（2026-10-31）
 
-`get_creation_gateway()` 按环境变量选择：`WFS_WALMART_GATEWAY=scf` 时启用 `WalmartScfCreationGateway`（需 `WALMART_SCF_STORES`、`WALMART_SCF_CVM_ROLE`、`WALMART_SCF_TARGET_ROLE_ARN`、`WALMART_WRITE_KEYS`，可选 `WALMART_READ_KEYS` / `WALMART_SCF_FUNCTION_PREFIX` / `_SUFFIX` / `_QUALIFIER`），否则仍为 Disabled（503 `WFS_EXECUTION_DISABLED`）。适配器只能在 company-ai 进程里真正发起调用（CVM 身份）。
+`get_creation_gateway()` 按环境变量选择，复用服务器已有的 `/etc/szzsbj/walmart-scf.env`（celery 服务已加载）：`SZZSBJ_WFS_CREATION_GATEWAY=scf` 时启用 `WalmartScfCreationGateway`，并要求 `SZZSBJ_WALMART_SCF_STORE_ID_MAP`（审核过的 store_id→店铺码）、`SZZSBJ_WALMART_SCF_CVM_ROLE`、`SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN`、`SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS` 含 `inbound_shipments,inbound_shipment_items`、新增 `SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS`；任一缺失 → 仍为 Disabled（503 `WFS_EXECUTION_DISABLED`）。适配器只能在 company-ai 进程里真正发起调用（CVM 身份）。
 
-店铺前置：`ops_wfs_store_settings`（迁移 0072）必须有该店铺行，`creation_enabled=true`，用 ITS 时 `its_enabled=true`。否则 409：`WFS_STORE_NOT_CONFIGURED` / `WFS_STORE_CREATION_DISABLED` / `WFS_ITS_NOT_AVAILABLE`；SKU 缺 14 位 GTIN → 409 `WFS_ITEM_IDENTITY_MISSING`。这些在「确认创建」前校验，不占用箱子。
+店铺前置：`ops_wfs_store_settings`（迁移 0072，维护入口见 pmc-wfs-settings-api.md）必须有该店铺行，`creation_enabled=true`，用 ITS 时 `its_enabled=true`，且与服务器审核映射一致。否则 409：`WFS_STORE_NOT_CONFIGURED` / `WFS_STORE_CREATION_DISABLED` / `WFS_ITS_NOT_AVAILABLE` / `WFS_STORE_MAPPING_CONFLICT`；SKU 缺 14 位 GTIN → 409 `WFS_ITEM_IDENTITY_MISSING`。这些在「确认创建」前校验，不占用箱子。
 
 执行：计划号 `PMC-[TEST-]<店铺码>-<票号前12位hex>`，建前按计划号回读查重（幂等）→ POST 建单 → 回读得 shipmentId → 每张货件取箱唛 PDF。Walmart 4xx 且回读无货件 → 票 FAILED（`WFS_PLATFORM_REJECTED`，Walmart 错误体记在 `walmart_call` 事件里）；5xx 或建成后回读为空 → 票 UNKNOWN，箱子保留，等「重新核对」（先到领星看是否已出现，再到 Seller Center 核对，不自动取消）。每次 Walmart 调用写一条 `evt_wfs_creation_events(kind=walmart_call)`：操作键、状态码、引用、去敏错误体；不含令牌和响应正文。

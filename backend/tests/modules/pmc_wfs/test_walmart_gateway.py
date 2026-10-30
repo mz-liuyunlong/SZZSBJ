@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -26,6 +27,7 @@ from app.modules.pmc_wfs.walmart_gateway import (
     build_gateway_from_env,
     expected_delivery,
     inbound_order_id,
+    reviewed_store_map,
 )
 
 ACCOUNT = "primary"
@@ -366,8 +368,34 @@ def test_preview_parses_plans(factory) -> None:
 
 
 def test_env_builder_defaults_to_disabled(monkeypatch: pytest.MonkeyPatch, factory) -> None:
-    monkeypatch.delenv("WFS_WALMART_GATEWAY", raising=False)
+    for name in (
+        "SZZSBJ_WFS_CREATION_GATEWAY",
+        "SZZSBJ_WALMART_SCF_STORE_ID_MAP",
+        "SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS",
+        "SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS",
+    ):
+        monkeypatch.delenv(name, raising=False)
     assert isinstance(build_gateway_from_env(factory), DisabledGateway)
-    monkeypatch.setenv("WFS_WALMART_GATEWAY", "scf")
-    monkeypatch.delenv("WALMART_SCF_STORES", raising=False)
+    monkeypatch.setenv("SZZSBJ_WFS_CREATION_GATEWAY", "scf")
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", json.dumps({STORE_ID: CODE}))
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_CVM_ROLE", "role")
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", "qcs::cam::uin/1:roleName/x")
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS", "wfs_inbound_shipment_create")
+    # Read keys missing the two WFS reads -> still disabled (adapter needs read-back).
+    monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS", "wfs_inventory")
     assert isinstance(build_gateway_from_env(factory), DisabledGateway)
+    assert reviewed_store_map() == {STORE_ID: CODE}
+
+
+def test_store_mapping_conflict_is_refused(factory) -> None:
+    _seed(factory)
+    gw = WalmartScfCreationGateway(
+        session_factory=factory,
+        read_api=FakeReadApi(),
+        write_api=FakeWriteApi(FakeReadApi()),
+        clock=lambda: T0,
+        sleeper=lambda _s: None,
+        store_code_map={STORE_ID: "HK2615"},
+    )
+    with pytest.raises(ApiError, match="WFS_STORE_MAPPING_CONFLICT"):
+        gw.validate(_snapshot())

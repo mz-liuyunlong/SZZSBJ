@@ -321,6 +321,7 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 ## PMC WFS 货件创建 · Walmart 适配器（2026-10-31，local）
 
 - 新表 `ops_wfs_store_settings`（Alembic `20261031_0072_wfs_store_settings`）：店铺 → Walmart 店铺码、ITS 可用、创建开关；由负责人维护（第四步设置页之前用 SQL 票据）。
-- 适配器 `pmc_wfs/walmart_gateway.py` 实现 IT 的 `CreationGateway`，走 `integrations/walmart` 的只读 API（`inbound_shipments` / `inbound_shipment_items`）与写 API（PR #283：`wfs_inbound_shipment_create` / `wfs_shipment_label` / `wfs_inbound_preview`）。默认 Disabled，`WFS_WALMART_GATEWAY=scf` 才启用；每次调用留 `walmart_call` 事件。
+- 设置接口 `/api/pmc/wfs/settings/stores`（GET/PUT，写需 `action:pmc:wfs-settings:manage`，见 docs/api/pmc-wfs-settings-api.md）；前端 WFS「设置」tab 换为店铺设置表（IT 的本地阈值占位卡片删除）。
+- 适配器 `pmc_wfs/walmart_gateway.py` 实现 IT 的 `CreationGateway`，走 `integrations/walmart` 的只读 API（`inbound_shipments` / `inbound_shipment_items`）与写 API（PR #283：`wfs_inbound_shipment_create` / `wfs_shipment_label` / `wfs_inbound_preview`）。默认 Disabled，`SZZSBJ_WFS_CREATION_GATEWAY=scf` 且复用 `SZZSBJ_WALMART_SCF_*` 变量才启用；每次调用留 `walmart_call` 事件。
 - 创建命令字段变更：`return_address`、`expected_delivery_at` 改为可选，`its` 默认 true（负责人 2026-10-31 决定）。
 - 未改 `integrations/walmart` 任何文件（那部分在 PR #283）；未改其他模块。真实调用需负责人逐次批准，用 `PMC-TEST-` 计划号建单后立即取消验收。

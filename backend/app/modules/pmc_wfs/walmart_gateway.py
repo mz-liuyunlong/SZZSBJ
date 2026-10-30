@@ -17,6 +17,7 @@ immutable ``walmart_call`` event with status code and sanitized provider error o
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -194,6 +195,7 @@ class WalmartScfCreationGateway:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         sleeper: Callable[[float], None] = time.sleep,
         pace_seconds: float = 1.3,
+        store_code_map: Mapping[str, str] | None = None,
     ) -> None:
         self._factory = session_factory
         self._read = read_api
@@ -201,6 +203,9 @@ class WalmartScfCreationGateway:
         self._clock = clock
         self._sleep = sleeper
         self._pace = pace_seconds
+        # Server-reviewed Lingxing store_id -> Walmart store code (SZZSBJ_WALMART_SCF_STORE_ID_MAP).
+        # When present it is authoritative; the settings row must agree with it.
+        self._store_code_map = dict(store_code_map or {})
 
     # ------------------------------------------------------------------ store context
 
@@ -220,6 +225,13 @@ class WalmartScfCreationGateway:
                 code="WFS_STORE_NOT_CONFIGURED",
                 status_code=409,
                 message="该店铺尚未配置 Walmart 店铺代码，请先在 WFS 设置中维护",
+            )
+        reviewed = self._store_code_map.get(store_id)
+        if reviewed is not None and reviewed != row.walmart_store_code:
+            raise ApiError(
+                code="WFS_STORE_MAPPING_CONFLICT",
+                status_code=409,
+                message="WFS 设置中的 Walmart 店铺代码与服务器审核映射不一致，请先核对",
             )
         return StoreContext(
             store_code=row.walmart_store_code,
@@ -458,31 +470,61 @@ def _env_set(name: str) -> frozenset[str]:
     return frozenset(x.strip() for x in os.environ.get(name, "").split(",") if x.strip())
 
 
+GATEWAY_SWITCH = "SZZSBJ_WFS_CREATION_GATEWAY"
+STORE_MAP = "SZZSBJ_WALMART_SCF_STORE_ID_MAP"
+CVM_ROLE = "SZZSBJ_WALMART_SCF_CVM_ROLE"
+TARGET_ARN = "SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN"
+READ_KEYS = "SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS"
+WRITE_KEYS = "SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS"
+REQUIRED_READ_KEYS = frozenset({"inbound_shipments", "inbound_shipment_items"})
+
+
+def reviewed_store_map() -> dict[str, str]:
+    """Lingxing store_id -> Walmart store code from the server-reviewed JSON map, or {}."""
+    try:
+        raw = json.loads(os.environ.get(STORE_MAP, "{}"))
+    except ValueError:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {
+        str(k): str(v)
+        for k, v in raw.items()
+        if isinstance(k, str) and isinstance(v, str) and STORE_CODE.fullmatch(v)
+    }
+    return out if len(set(out.values())) == len(out) else {}
+
+
 def build_gateway_from_env(session_factory: Callable[[], Any]) -> Any:
     """Select the adapter from environment; anything incomplete falls back to Disabled.
 
-    WFS_WALMART_GATEWAY=scf enables the real adapter. Required then:
-      WALMART_SCF_STORES=HK2612,HK2613,...      WALMART_SCF_CVM_ROLE=...
-      WALMART_SCF_TARGET_ROLE_ARN=qcs::cam::... WALMART_READ_KEYS=inbound_shipments,...
-      WALMART_WRITE_KEYS=wfs_inbound_shipment_create,wfs_shipment_label,...
-    Optional: WALMART_SCF_FUNCTION_PREFIX (szzsbj-walmart-), WALMART_SCF_FUNCTION_SUFFIX
-    (-executor), WALMART_SCF_QUALIFIER (stable).
+    Reuses the server's existing Walmart SCF variables (``/etc/szzsbj/walmart-scf.env``,
+    loaded by the celery service) instead of introducing a second set:
+
+      SZZSBJ_WFS_CREATION_GATEWAY=scf               the switch (anything else = disabled)
+      SZZSBJ_WALMART_SCF_STORE_ID_MAP               reviewed store_id -> store code JSON
+      SZZSBJ_WALMART_SCF_CVM_ROLE / _TARGET_ROLE_ARN identity (already present)
+      SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS         must include inbound_shipments,
+                                                    inbound_shipment_items
+      SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS        reviewed WFS write keys (new)
     """
-    if os.environ.get("WFS_WALMART_GATEWAY", "disabled").strip().lower() != "scf":
+    if os.environ.get(GATEWAY_SWITCH, "disabled").strip().lower() != "scf":
         return DisabledGateway()
-    stores = _env_set("WALMART_SCF_STORES")
-    read_keys = _env_set("WALMART_READ_KEYS") or frozenset(
-        {"inbound_shipments", "inbound_shipment_items"}
-    )
-    write_keys = _env_set("WALMART_WRITE_KEYS")
-    cvm_role = os.environ.get("WALMART_SCF_CVM_ROLE", "").strip()
-    role_arn = os.environ.get("WALMART_SCF_TARGET_ROLE_ARN", "").strip()
-    if not stores or not write_keys or not cvm_role or not role_arn:
+    store_map = reviewed_store_map()
+    read_keys = _env_set(READ_KEYS)
+    write_keys = _env_set(WRITE_KEYS)
+    cvm_role = os.environ.get(CVM_ROLE, "").strip()
+    role_arn = os.environ.get(TARGET_ARN, "").strip()
+    if (
+        not store_map
+        or not write_keys
+        or not REQUIRED_READ_KEYS <= read_keys
+        or not cvm_role
+        or not role_arn
+    ):
         return DisabledGateway()
-    prefix = os.environ.get("WALMART_SCF_FUNCTION_PREFIX", "szzsbj-walmart-")
-    suffix = os.environ.get("WALMART_SCF_FUNCTION_SUFFIX", "-executor")
-    qualifier = os.environ.get("WALMART_SCF_QUALIFIER", "stable")
-    functions = {store: f"{prefix}{store.lower()}{suffix}" for store in stores}
+    stores = frozenset(store_map.values())
+    functions = {store: f"szzsbj-walmart-{store.lower()}-executor" for store in stores}
     # Imported lazily: the Tencent identity helpers are only needed when the adapter is on.
     from app.integrations.walmart.scf_write_factory import make_walmart_write_api
 
@@ -494,7 +536,7 @@ def build_gateway_from_env(session_factory: Callable[[], Any]) -> Any:
         function_by_store=functions,
         cvm_role=cvm_role,
         target_role_arn=role_arn,
-        function_qualifier=qualifier,
+        function_qualifier="stable",
     )
     write_api = make_walmart_write_api(
         allowed_stores=stores,
@@ -502,8 +544,11 @@ def build_gateway_from_env(session_factory: Callable[[], Any]) -> Any:
         function_by_store=functions,
         cvm_role=cvm_role,
         target_role_arn=role_arn,
-        function_qualifier=qualifier,
+        function_qualifier="stable",
     )
     return WalmartScfCreationGateway(
-        session_factory=session_factory, read_api=read_api, write_api=write_api
+        session_factory=session_factory,
+        read_api=read_api,
+        write_api=write_api,
+        store_code_map=store_map,
     )
