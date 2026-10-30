@@ -211,10 +211,38 @@ def list_evaluation_runs(
     count = (
         session.scalar(select(func.count()).select_from(ListingEvaluationRun).where(scoped)) or 0
     )
+    scoped_stats = {
+        run_id: (int(total or 0), int(grade_count or 0), int(stage_count or 0), int(blocked or 0))
+        for run_id, total, grade_count, stage_count, blocked in session.execute(
+            select(
+                ListingEvaluationSnapshot.run_id,
+                func.count(),
+                func.count(ListingEvaluationSnapshot.grade_candidate),
+                func.count(ListingEvaluationSnapshot.lifecycle_candidate),
+                func.count().filter(ListingEvaluationSnapshot.publication_status == "blocked"),
+            )
+            .where(
+                ListingEvaluationSnapshot.run_id.in_([row.id for row in rows]),
+                ListingEvaluationSnapshot.source_account_ref.in_(account_refs),
+            )
+            .group_by(ListingEvaluationSnapshot.run_id)
+        ).all()
+    }
     return success_response(
         request,
         data=ListingEvaluationRunList(
-            items=[ListingEvaluationRunItem.model_validate(row) for row in rows],
+            items=[
+                ListingEvaluationRunItem.model_validate(row).model_copy(
+                    update={
+                        "total_listings": int(scoped_stats.get(row.id, (0, 0, 0, 0))[0]),
+                        "processed_listings": int(scoped_stats.get(row.id, (0, 0, 0, 0))[0]),
+                        "grade_candidate_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[1]),
+                        "lifecycle_candidate_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[2]),
+                        "blocked_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[3]),
+                    }
+                )
+                for row in rows
+            ],
             total=count,
         ),
         meta={"source": "read_only_diagnostic"},
