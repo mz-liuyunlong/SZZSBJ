@@ -345,7 +345,7 @@ class ListingManagementQuery(StrictSchema):
     keyword: Annotated[str, StringConstraints(strip_whitespace=True, max_length=128)] = ""
     batch_values: Annotated[
         str,
-        StringConstraints(strip_whitespace=True, max_length=32768),
+        StringConstraints(strip_whitespace=True, max_length=150000),
     ] = ""
     sort_field: str = Field(default="", max_length=48)
     sort_order: Literal["asc", "desc"] = "asc"
