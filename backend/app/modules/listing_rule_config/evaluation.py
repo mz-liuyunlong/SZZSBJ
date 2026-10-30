@@ -205,7 +205,6 @@ def lifecycle_listing(
     is_wfs = fulfillment_type == "1"
     by_day = {d.day: d for d in days if d.day <= cutoff}
     today = by_day.get(cutoff)
-    low = config.inventory_repair.low_stock_max_units
     consecutive = 0
     cursor = cutoff
     # Inventory strictly above zero is low-stock, not out-of-stock.
