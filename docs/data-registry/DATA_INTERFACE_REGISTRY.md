@@ -316,3 +316,11 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 - 存储（NEW_SYSTEM_OWNED，Alembic `20261030_0071_wfs_lingxing_board`，接 0070 合并头）：ODS append-only `ods_lingxing_wfs_cargos`、`ods_lingxing_wfs_cargo_goods`、`ods_lingxing_wfs_shipping_lists`（run_id / raw_request_ref_id / source_item_ordinal，RAW 复用 `ods_api_raw_*`）；发布 `gov_wfs_board_publications`（is_current 部分唯一）；MART `mart_wfs_shipment_board`（一行一张货件，商品与发货单聚合 + payload_json），builder `wfs_board.v1`，由 `scripts/publish_pmc_wfs_board.py` 或运行脚本 `PMC_WFS_PUBLISH_AFTER_RUN=true` 发布。
 - API：`/api/pmc/wfs/shipment-board` 改读当前 MART 版本，新增 `GET /products`；本系统创建但领星未出现的票以 `creation_only` / `PENDING` 显示；`meta.lingxing_sync_enabled=true`、`lingxing_sync_mode=manual_one_time_run`；返回 `freshness`。契约 docs/api/pmc-wfs-shipment-board-api.md，SOP docs/sop/pmc-wfs-shipment-board.md。
 - 共用文件改动（需单独告知合并人）：`integrations/lingxing/client.py`（Literal + 两条 contracts + `fetch_pmc_wfs_page`）、`integration_sync/catalog.py`（bootstrap 函数）、`integration_sync/execution.py`（dispatch）、`db/model_registry.py`（导入模型）。未改其他模块行为，不调 Walmart，不写领星。
+
+
+## PMC WFS 货件创建 · Walmart 适配器（2026-10-31，local）
+
+- 新表 `ops_wfs_store_settings`（Alembic `20261031_0072_wfs_store_settings`）：店铺 → Walmart 店铺码、ITS 可用、创建开关；由负责人维护（第四步设置页之前用 SQL 票据）。
+- 适配器 `pmc_wfs/walmart_gateway.py` 实现 IT 的 `CreationGateway`，走 `integrations/walmart` 的只读 API（`inbound_shipments` / `inbound_shipment_items`）与写 API（PR #283：`wfs_inbound_shipment_create` / `wfs_shipment_label` / `wfs_inbound_preview`）。默认 Disabled，`WFS_WALMART_GATEWAY=scf` 才启用；每次调用留 `walmart_call` 事件。
+- 创建命令字段变更：`return_address`、`expected_delivery_at` 改为可选，`its` 默认 true（负责人 2026-10-31 决定）。
+- 未改 `integrations/walmart` 任何文件（那部分在 PR #283）；未改其他模块。真实调用需负责人逐次批准，用 `PMC-TEST-` 计划号建单后立即取消验收。

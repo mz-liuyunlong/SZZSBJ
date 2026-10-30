@@ -1,12 +1,14 @@
 /** Count selection stays independent from editing warehouse packing facts. */
-import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Space, Table, Typography } from "antd";
+import { Alert, Button, Checkbox, Form, InputNumber, Modal, Space, Table, Typography } from "antd";
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { allocationPreview, createShipments, getCreationCapabilities, optionalPreview, type AllocationInput, type AllocationPreview, type CreationInput, type CreationOperation } from "./creationApi";
 import { pendingError } from "./pendingPackingApi";
-import type { PendingRow, ReturnAddress } from "./pendingPackingTypes";
+import type { PendingRow } from "./pendingPackingTypes";
 
-interface Values extends ReturnAddress { its: boolean; delivery_date: string }
+// Owner decisions 2026-10-31: return address = store default (not asked), expected delivery =
+// Beijing today + 30 days (server side), ITS on by default (store must be marked ITS-capable).
+interface Values { its: boolean }
 export default function CreationDialog({ rows, scope, canProbe, onCancel, onCreated }: {
   rows: PendingRow[]; scope: string; canProbe: boolean; onCancel: () => void;
   onCreated: (result: CreationOperation) => void;
@@ -31,8 +33,8 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
     finally { setBusy(false); }
   };
   const body = async (): Promise<CreationInput> => {
-    const { its, delivery_date, ...return_address } = await form.validateFields();
-    const data = { ...input(), source_account_ref: row.order.source_account_ref, preview_hash: preview!.preview_hash, return_address, its, expected_delivery_at: new Date(`${delivery_date}T00:00:00+08:00`).toISOString() };
+    const { its } = await form.validateFields();
+    const data = { ...input(), source_account_ref: row.order.source_account_ref, preview_hash: preview!.preview_hash, its };
     const signature = JSON.stringify(data);
     if (key.current?.signature !== signature) key.current = { signature, key: crypto.randomUUID() };
     return { ...data, idempotency_key: key.current.key };
@@ -57,17 +59,10 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
       { title: "实际箱范围及箱规", render: (_, r) => preview?.tickets[r.number - 1]?.ranges.map((range) => <div key={`${range.line_id}-${range.start}`}>{range.pk} · {range.sku} · 第{range.line_no}行，第{range.start}–{range.end}箱：{range.boxes}箱×{range.units_per_box}件；{range.length_cm}×{range.width_cm}×{range.height_cm} cm / {range.gross_weight_kg} kg</div>) ?? "待核对" },
     ]} />
     <Typography.Paragraph type={valid ? undefined : "danger"}>已分配 {counts.reduce((a, b) => a + b, 0)} / 本次 {boxes} 箱；当前可发 {availableBoxes} 箱{preview ? `，本次安排后剩余 ${preview.remaining_boxes} 箱` : ""}</Typography.Paragraph>
-    <Form form={form} layout="vertical" initialValues={{ country_code: "US", its: false }} disabled={busy} onValuesChange={() => setProbe(undefined)}>
-      <Form.Item name="address_line1" label="退货街道地址" rules={[{ required: true, whitespace: true, max: 200 }]}><Input maxLength={200} /></Form.Item>
-      <Space align="start" wrap>
-        <Form.Item name="city" label="城市" rules={[{ required: true, whitespace: true, max: 100 }]}><Input /></Form.Item>
-        <Form.Item name="state_code" label="州代码" normalize={(v: string) => v.toUpperCase()} rules={[{ required: true, pattern: /^[A-Z]{2}$/ }]}><Input maxLength={2} /></Form.Item>
-        <Form.Item name="postal_code" label="邮编" rules={[{ required: true, pattern: /^\d{5}(-\d{4})?$/ }]}><Input /></Form.Item>
-        <Form.Item name="country_code" label="国家"><Input disabled /></Form.Item>
-      </Space>
-      <Form.Item name="delivery_date" label="预计到仓日期（台北时间）" rules={[{ required: true }]}><Input type="date" /></Form.Item>
-      <Form.Item name="its" valuePropName="checked"><Checkbox>选择 ITS</Checkbox></Form.Item>
+    <Form form={form} layout="vertical" initialValues={{ its: true }} disabled={busy} onValuesChange={() => setProbe(undefined)}>
+      <Form.Item name="its" valuePropName="checked" extra="默认走 ITS（转运中心，一票一张货件）；店铺需已在 WFS 设置中确认 ITS 可用。取消勾选则由 Walmart 按仓拆成多张货件。"><Checkbox>使用 ITS</Checkbox></Form.Item>
     </Form>
+    <Typography.Paragraph type="secondary">退货地址使用店铺在 Walmart 的默认地址；预计到仓日期按北京时间今天 +30 天自动填写。</Typography.Paragraph>
     {probe && <Alert type="info" message="分仓预览，不保证最终仓库" description={probe} />}
     <Alert type="info" message="计划拆票数量与 Walmart 最终返回的实际货件数量可能不同。提交后结果未知时请在创建记录中核实，勿重复创建。" />
   </Modal>;

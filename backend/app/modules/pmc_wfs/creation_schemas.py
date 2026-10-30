@@ -77,9 +77,12 @@ class CreationCommand(AllocationCommand):
     source_account_ref: str = Field(min_length=1, max_length=128)
     preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     idempotency_key: UUID
-    return_address: ReturnAddress
-    expected_delivery_at: AwareDatetime
-    its: bool = Field(strict=True, default=False)
+    # Owner decisions 2026-10-31: return address defaults to the store's Walmart default
+    # (omitted from the request), expected delivery defaults to Beijing today + 30 days,
+    # ITS defaults to on (the store must be marked ITS-capable in WFS settings).
+    return_address: ReturnAddress | None = None
+    expected_delivery_at: AwareDatetime | None = None
+    its: bool = Field(strict=True, default=True)
 
 
 class ShipmentRead(Strict):

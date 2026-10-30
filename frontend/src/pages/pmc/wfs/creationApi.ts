@@ -20,7 +20,7 @@ export interface AllocationPreview {
 }
 export interface CreationInput extends AllocationInput {
   source_account_ref: string; preview_hash: string; idempotency_key: string;
-  return_address: ReturnAddress; its: boolean; expected_delivery_at: string;
+  return_address?: ReturnAddress; its: boolean; expected_delivery_at?: string;
 }
 export type CreationState = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "PARTIAL";
 export interface CreationOperation {
