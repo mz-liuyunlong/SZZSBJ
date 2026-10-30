@@ -17,7 +17,7 @@ import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
 import LoginPage from "@/pages/auth/LoginPage";
 import NotFoundPage from "@/pages/errors/NotFoundPage";
 import ListingManagementPage from "@/pages/products/ListingManagementPage";
-import NewProductDemoPages from "@/pages/products/new-product/NewProductDemoPages";
+import NewProductPages from "@/pages/products/new-product/NewProductPages";
 import ClearanceCenterPage from "@/pages/products/ClearanceCenterPage";
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
 import DailySalesPage from "@/pages/sales/DailySalesPage";
@@ -180,9 +180,9 @@ function BusinessRoute({
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
         ) : page.key === "products_new_product_analysis" ? (
-          <NewProductDemoPages page={page} mode="performance" />
+          <NewProductPages page={page} mode="performance" canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
         ) : page.key === "products_launch_tracking" ? (
-          <NewProductDemoPages page={page} mode="tracking" />
+          <NewProductPages page={page} mode="tracking" canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
