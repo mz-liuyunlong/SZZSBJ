@@ -183,7 +183,7 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  <DataTable title="新品采购审核" data={state.products.filter(p=>p.approval!=="none")} columns={[
  {key:"sku",title:"SKU",dataIndex:"sku"},{key:"requested",title:"申请数量",dataIndex:"requestQty"},
  {key:"suggestion",title:"建议数量",render:(_,p)=>completedScore(p,c)?.suggested??"—"},
- ...(true?[{key:"amount",title:"采购金额",render:(_:unknown,p:ProductSample)=>"¥"+((p.requestQty??0)*p.unitCost).toFixed(2)}]:[]),
+ ...(canManage?[{key:"amount",title:"采购金额",render:(_:unknown,p:ProductSample)=>"¥"+((p.requestQty??0)*p.unitCost).toFixed(2)}]:[]),
  {key:"status",title:"审批状态",dataIndex:"approval"},
  {key:"action",title:"操作",render:(_,p)=>p.approval==="pending"?<Button type="link" onClick={()=>{setApproval(p);setReason("");}}>审核</Button>:"—"}]}/>
  <DataTable title="正式采购计划" data={state.plans} columns={[
@@ -202,7 +202,7 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  {d!=="market"&&detail.market!==null&&detail.approval!=="approved"&&<Button type="link" onClick={()=>{setCorrection({p:detail,d});setScore(detail.overrides[d]??detail.system[d]);setReason("");setDetail(null);}}>申请修正</Button>}</div>)}
  <Typography.Paragraph>最终得分：{completedScore(detail,c)?.score??"待市场评分"} · 评级：{completedScore(detail,c)?.grade??"—"}</Typography.Paragraph>
  <Typography.Paragraph>点击 {detail.clicks} · 订单 {detail.orders} · 利润率 {detail.margin}% · ACOS {detail.acos}%</Typography.Paragraph>
- {true&&<Typography.Paragraph>采购单价 ¥{detail.unitCost}</Typography.Paragraph>}</>}</Drawer>
+ {canManage&&<Typography.Paragraph>采购单价 ¥{detail.unitCost}</Typography.Paragraph>}</>}</Drawer>
  <Modal open={!!market} title="运营确认市场竞争评分" onCancel={()=>setMarket(null)} onOk={()=>act(()=>state.setMarket(market!.id,score!,reason),()=>setMarket(null))}>
  <Typography.Paragraph>市场竞争确认后，系统才生成总分、评级与采购建议。</Typography.Paragraph>
  <InputNumber min={0} max={10} precision={0} value={score} onChange={setScore} style={{width:"100%",marginBottom:12}}/>
@@ -212,7 +212,7 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  <Typography.Paragraph>{correction?.p.sku} · {correction&&dimensions[correction.d]}</Typography.Paragraph>
  <InputNumber min={0} max={10} precision={0} value={score} onChange={setScore} style={{width:"100%",marginBottom:12}}/>
  <Input.TextArea value={reason} rows={3} placeholder="说明修正原因，至少5字" onChange={e=>setReason(e.target.value)}/></Modal>
- <Modal open={!!review} title="评分修正审核" onCancel={()=>setReview(null)} footer={true?<Space>
+ <Modal open={!!review} title="评分修正审核" onCancel={()=>setReview(null)} footer={canManage?<Space>
  <Button onClick={()=>act(()=>state.decideCorrection(review!,"rejected",reason,canManage),()=>setReview(null))}>驳回</Button>
  <Button type="primary" onClick={()=>act(()=>state.decideCorrection(review!,"approved",reason,canManage),()=>setReview(null))}>批准</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
  <Typography.Paragraph>申请编号：{review}</Typography.Paragraph><Input.TextArea rows={3} value={reason} onChange={e=>setReason(e.target.value)} placeholder="审批说明"/></Modal>
