@@ -22,7 +22,9 @@ interface BackendListingItem {
   product_grade: string | null;
   tags: string[];
   strike_price_amount: string | null;
+  strike_price_currency_code?: string | null;
   sale_price_amount: string | null;
+  sale_price_currency_code?: string | null;
   listing_status: string | null;
   lifecycle_status: string | null;
   fulfillment_type: string | null;
@@ -236,6 +238,10 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productType: item.category ?? "待分类",
   listPrice: numberValue(item.strike_price_amount),
   salePrice: numberValue(item.sale_price_amount),
+  listPriceKnown: item.strike_price_amount !== null,
+  salePriceKnown: item.sale_price_amount !== null,
+  listPriceCurrency: item.strike_price_currency_code ?? "",
+  salePriceCurrency: item.sale_price_currency_code ?? "",
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",

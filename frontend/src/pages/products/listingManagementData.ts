@@ -13,6 +13,10 @@ export interface ListingManagementRow {
   productType: string;
   listPrice: number;
   salePrice: number;
+  listPriceCurrency?: string;
+  salePriceCurrency?: string;
+  listPriceKnown?: boolean;
+  salePriceKnown?: boolean;
   productStatus: string;
   lifecycle: string;
   fulfillmentMethod: string;

@@ -291,7 +291,7 @@ function ListingManagementTable({
       width: columnWidths.listPrice,
       sorter: (a, b) => a.listPrice - b.listPrice,
       onHeaderCell: headerCell,
-      render: (_, row) => `$${row.listPrice.toFixed(2)}`,
+      render: (_, row) => row.listPriceKnown === false ? "-" : `${row.listPriceCurrency || "USD"} ${row.listPrice.toFixed(2)}`,
     },
     salePrice: {
       key: "salePrice",
@@ -300,7 +300,7 @@ function ListingManagementTable({
       width: columnWidths.salePrice,
       sorter: (a, b) => a.salePrice - b.salePrice,
       onHeaderCell: headerCell,
-      render: (_, row) => `$${row.salePrice.toFixed(2)}`,
+      render: (_, row) => row.salePriceKnown === false ? "-" : `${row.salePriceCurrency || "USD"} ${row.salePrice.toFixed(2)}`,
     },
     productStatus: {
       key: "productStatus",
