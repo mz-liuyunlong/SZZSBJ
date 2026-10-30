@@ -53,6 +53,13 @@ describe("new product rules with mock fixtures", () => {
     expect(p.reviewDueAt).toBe("2026-11-10");
     store.resetMockData();
   });
+  it("disallows final launch results before the observation window ends", () => {
+    const store=useNewProductStore.getState();
+    store.resetMockData();
+    const p=useNewProductStore.getState().products.find(x=>x.id==="YC00831")!;
+    expect(()=>store.updateTrack(p.id,"打品失败","观察期表现不佳")).toThrow("观察期未结束");
+    store.resetMockData();
+  });
   it("never treats unsellable products as completed launch evaluations", () => {
     expect(evaluatedTrack(mockProducts[1],defaultConfig)).toBe("未开始");
   });
