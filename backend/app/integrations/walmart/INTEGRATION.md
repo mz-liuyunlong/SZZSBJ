@@ -108,3 +108,30 @@ SZZSBJ Service / Celery
 4. 验收拒绝跨店调用、未批准操作、服务端用户无权店铺；确认日志中无 Token 和认证头。
 5. **在单独生产变更审批后**核对云端代码并发布不可变版本、设定 `stable`，再跑九店测试。
 6. 业务同步、分页、RAW/审计、DQ、幂等和 Celery 任务作为后续独立验收，不在本 PR 启用。
+
+## WFS 写操作（2026-10-31 新增，默认关闭）
+
+PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py`（全部 `mutating=True`，按 9–10 月真实执行过的请求体写 `request_schema`）：
+
+| key | 调用 | 备注 |
+|---|---|---|
+| `wfs_inbound_shipment_create` | POST /v3/fulfillment/inbound-shipments | 幂等键 = inboundOrderId（业务侧建前 GET 查重） |
+| `wfs_shipment_label` | POST /v3/fulfillment/shipment-label | 返回 PDF（`response_kind="pdf"`） |
+| `wfs_inbound_preview` | POST /v3/fulfillment/inbound-preview | 查询型，但仍按写审批 |
+| `wfs_inbound_shipment_cancel` | DELETE /v3/fulfillment/inbound-shipments/{inboundOrderId} | 临时 5xx/520 由业务侧重试 ≤3 |
+| `wfs_shipment_quantities` | PUT /v3/fulfillment/shipment-quantities | |
+| `wfs_shipment_tracking` | POST /v3/fulfillment/shipment-tracking | 追加语义 |
+
+入口：`scf_write_factory.make_walmart_write_api(..., approved_write_keys=...)` → `WalmartWriteAPI.call(store, key, approval_ref=<业务操作 UUID>, body=...)`。读 API 仍然不能发写；写 key 不能通过 `approved_keys`（读审批）启用；OpenAPI 快照不能启用写。
+
+链路差异（桥协议 v2，只有写工厂使用）：
+- 事件多一个 `accept`（`json` / `pdf`）。
+- Walmart 返回 4xx/5xx 时云函数**不再报 `WALMART_PROVIDER_ERROR`**，而是 `success=true, status_code=4xx, provider_error=<Walmart 错误体（去敏）>`，`WalmartResult.provider_error` 给业务侧展示原因。
+- 箱唛 PDF 以 base64 回传（≤5MB），桥解码并校验 `%PDF` 头，`WalmartResult.pdf` 是字节。
+- 协议 v1（现有只读路径）行为不变。
+
+云函数部署要求（由云端负责人发布到 `stable`）：
+- `SZZSBJ_WALMART_LIVE_MODE=owner-approved-read-write`（原值 `owner-approved-read-only` 继续只读）。
+- `SZZSBJ_WALMART_APPROVED_WRITE_KEYS=wfs_inbound_shipment_create,wfs_shipment_label,...`（只能是上表的 key）。
+- 读 key 仍走 `SZZSBJ_WALMART_APPROVED_READ_KEYS`；WFS 看板需要加 `inbound_shipments,inbound_shipment_items`（2026-10-31 实测当前只批了 `wfs_inventory`，调 `inbound_shipments` 返回 `WALMART_OPERATION_NOT_APPROVED`）。
+- 写模式下传输超时 90 秒、透传 Walmart 错误体；策略 `StoreWritePolicy` 要求写事件带 `approval_ref`。

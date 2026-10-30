@@ -23,6 +23,7 @@ class RoutedScfGateway:
         *,
         function_by_store: Mapping[str, str],
         function_qualifier: str = "stable",
+        bridge_version: int = 1,
     ) -> None:
         if not function_by_store or any(store not in STORE_ROUTES for store in function_by_store):
             raise WalmartPlanError("WALMART_ROUTE_CONFIG_INVALID")
@@ -34,7 +35,8 @@ class RoutedScfGateway:
                     cloud_api,
                     function_name=name,
                     qualifier=function_qualifier,
-                )
+                ),
+                version=bridge_version,
             )
             for store, name in function_by_store.items()
         }
@@ -54,7 +56,13 @@ class RoutedScfGateway:
             request=request,
             approval_ref=approval_ref,
         )
-        return WalmartResult(status_code=reply.status_code, data=reply.data)
+        return WalmartResult(
+            status_code=reply.status_code,
+            data=reply.data,
+            provider_error=reply.provider_error,
+            content_type=reply.content_type,
+            pdf=reply.pdf,
+        )
 
 
 def create_scoped_client(
@@ -64,12 +72,14 @@ def create_scoped_client(
     function_by_store: Mapping[str, str],
     cloud_api: TencentApiClient,
     function_qualifier: str = "stable",
+    bridge_version: int = 1,
 ) -> WalmartClient:
     """Caller must pass an independently verified trusted principal store scope."""
     gateway = RoutedScfGateway(
         cloud_api,
         function_by_store=function_by_store,
         function_qualifier=function_qualifier,
+        bridge_version=bridge_version,
     )
     return WalmartClient(
         registry,

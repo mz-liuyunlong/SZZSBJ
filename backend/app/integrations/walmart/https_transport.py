@@ -24,6 +24,8 @@ from app.integrations.walmart.contracts import PreparedRequest
 
 WALMART_HOST = "https://marketplace.walmartapis.com"
 MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_PDF_RESPONSE_BYTES = 5 * 1024 * 1024
+MAX_ERROR_RESPONSE_BYTES = 64 * 1024
 MAX_TOKEN_RESPONSE_BYTES = 16 * 1024
 _PRIVATE_NETS = tuple(
     ipaddress.ip_network(network) for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
@@ -78,10 +80,14 @@ class WalmartHttpsTransport:
         proxy_by_store: Mapping[str, str],
         secret_resolver: SecretResolver,
         timeout: float = 12.0,
+        pass_provider_errors: bool = False,
     ) -> None:
         self._proxies = {store: _private_proxy(url) for store, url in proxy_by_store.items()}
         self._secrets = secret_resolver
         self._timeout = timeout
+        # Write runtime: a Walmart 4xx/5xx is returned (status, sanitized JSON body) instead of
+        # being collapsed into WALMART_HTTP_ERROR, so the business side can show the reason.
+        self._pass_provider_errors = pass_provider_errors
         logging.getLogger("httpx").setLevel(logging.WARNING)
 
     def execute(self, *, store_code: str, request: PreparedRequest) -> tuple[int, Any]:
@@ -119,6 +125,7 @@ class WalmartHttpsTransport:
                 token = token_data.get("access_token")
                 if not isinstance(token, str) or not token:
                     raise TransportRejected("WALMART_TOKEN_INVALID")
+                wants_pdf = getattr(request, "response_kind", "json") == "pdf"
                 kwargs: dict[str, Any] = {
                     "params": dict(request.query),
                     "headers": {
@@ -126,7 +133,7 @@ class WalmartHttpsTransport:
                         "WM_SVC.NAME": "Walmart Marketplace",
                         "WM_QOS.CORRELATION_ID": str(uuid4()),
                         "WM_MARKET": "US",
-                        "Accept": "application/json",
+                        "Accept": "application/pdf" if wants_pdf else "application/json",
                     },
                 }
                 if request.body is not None:
@@ -135,7 +142,20 @@ class WalmartHttpsTransport:
                     request.method, WALMART_HOST + request.path, **kwargs
                 ) as response:
                     if response.status_code < 200 or response.status_code >= 300:
-                        raise TransportRejected("WALMART_HTTP_ERROR")
+                        if not self._pass_provider_errors:
+                            raise TransportRejected("WALMART_HTTP_ERROR")
+                        error_body = _bounded_json_or_text(response, MAX_ERROR_RESPONSE_BYTES)
+                        if _has_sensitive_keys(error_body):
+                            raise TransportRejected("WALMART_RESPONSE_SENSITIVE")
+                        return response.status_code, error_body
+                    if wants_pdf:
+                        pdf = _bounded_bytes(response, MAX_PDF_RESPONSE_BYTES)
+                        if not pdf.startswith(b"%PDF"):
+                            raise TransportRejected("WALMART_RESPONSE_INVALID")
+                        return response.status_code, {
+                            "content_type": "application/pdf",
+                            "data_base64": base64.b64encode(pdf).decode("ascii"),
+                        }
                     result = _bounded_json(response, MAX_RESPONSE_BYTES)
                 if not isinstance(result, (dict, list)):
                     raise TransportRejected("WALMART_RESPONSE_INVALID")
@@ -148,8 +168,7 @@ class WalmartHttpsTransport:
             raise TransportRejected("WALMART_TRANSPORT_FAILURE") from None
 
 
-def _bounded_json(response: httpx.Response, limit: int) -> Any:
-    """Bound in-memory JSON before parsing; never expose provider response text."""
+def _bounded_bytes(response: httpx.Response, limit: int) -> bytes:
     size = 0
     chunks: list[bytes] = []
     for chunk in response.iter_bytes():
@@ -157,10 +176,24 @@ def _bounded_json(response: httpx.Response, limit: int) -> Any:
         if size > limit:
             raise TransportRejected("WALMART_RESPONSE_TOO_LARGE")
         chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _bounded_json(response: httpx.Response, limit: int) -> Any:
+    """Bound in-memory JSON before parsing; never expose provider response text."""
     try:
-        return json.loads(b"".join(chunks))
+        return json.loads(_bounded_bytes(response, limit))
     except (ValueError, UnicodeDecodeError):
         raise TransportRejected("WALMART_RESPONSE_INVALID") from None
+
+
+def _bounded_json_or_text(response: httpx.Response, limit: int) -> Any:
+    """Provider error bodies: JSON when possible, otherwise a short text excerpt."""
+    raw = _bounded_bytes(response, limit)
+    try:
+        return json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return {"text": raw.decode("utf-8", errors="replace")[:2000]}
 
 
 def _has_sensitive_keys(value: Any, depth: int = 0) -> bool:

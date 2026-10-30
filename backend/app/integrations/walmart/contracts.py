@@ -55,6 +55,8 @@ class Operation:
     body_required: bool = False
     media_supported: bool = True
     mutating: bool | None = None
+    # "json" (default) or "pdf": how the provider answers a successful call.
+    response_kind: str = "json"
 
     @property
     def is_write(self) -> bool:
@@ -70,6 +72,7 @@ class PreparedRequest:
     body: Any
     is_write: bool
     content_type: str = "application/json"
+    response_kind: str = "json"
 
 
 def _path_valid(path: str) -> bool:
@@ -326,6 +329,7 @@ class ContractRegistry:
             body=body,
             is_write=operation.is_write,
             content_type=operation.request_content_type,
+            response_kind=operation.response_kind,
         )
 
     @classmethod

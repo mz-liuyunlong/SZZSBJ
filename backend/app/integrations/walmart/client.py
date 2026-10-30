@@ -18,6 +18,15 @@ from app.integrations.walmart.planner import STORE_ROUTES, WalmartPlanError
 class WalmartResult:
     status_code: int
     data: Any
+    # Write path (bridge protocol v2): Walmart's error body on a non-2xx answer, and the
+    # decoded PDF for label operations. Read callers never see these populated.
+    provider_error: Any = None
+    content_type: str = "application/json"
+    pdf: bytes | None = None
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 300
 
 
 class ProtectedGateway(Protocol):

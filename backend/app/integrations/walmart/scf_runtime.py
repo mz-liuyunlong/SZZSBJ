@@ -1,9 +1,11 @@
-"""Fail-closed per-store SCF entrypoint for approved Walmart read operations.
+"""Fail-closed per-store SCF entrypoint for approved Walmart operations.
 
 Owner must deploy *one bound function and restricted role per store*. This
 module does not grant access to SSM, install a proxy, or enable live mode.
-All writes are disabled in this runtime until a durable approval/replay system
-is separately reviewed and installed.
+Writes stay disabled unless the owner deploys the function with
+``SZZSBJ_WALMART_LIVE_MODE=owner-approved-read-write`` and lists the reviewed
+WFS write keys in ``SZZSBJ_WALMART_APPROVED_WRITE_KEYS``; every write event must
+also carry a non-empty ``approval_ref`` (the caller's audit reference).
 """
 
 from __future__ import annotations
@@ -25,9 +27,12 @@ from app.integrations.walmart.returns_catalog import returns_read_registry
 from app.integrations.walmart.tencent_api import TemporaryTencentIdentity, TencentApiClient
 from app.integrations.walmart.tencent_ssm import TencentSsmResolver
 from app.integrations.walmart.wfs_catalog import wfs_registry
+from app.integrations.walmart.wfs_write_catalog import WFS_WRITE_KEYS, wfs_write_registry
 
 MAX_CONTRACT_BYTES = 2 * 1024 * 1024
 _STORE_PATTERN = re.compile(r"^(?:HK|CN)[0-9]{4}$")
+LIVE_MODE_READ_ONLY = "owner-approved-read-only"
+LIVE_MODE_READ_WRITE = "owner-approved-read-write"
 
 
 class ReadOnlyStorePolicy:
@@ -46,8 +51,41 @@ class ReadOnlyStorePolicy:
         return store_code == self._store_code and operation_key in self._keys and not is_write
 
 
-def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
+class StoreWritePolicy:
+    """Read keys as before; a write needs its key in the write set *and* an approval_ref."""
+
+    def __init__(
+        self, store_code: str, read_keys: frozenset[str], write_keys: frozenset[str]
+    ) -> None:
+        self._store_code = store_code
+        self._read_keys = read_keys
+        self._write_keys = write_keys
+
+    def authorize(
+        self,
+        *,
+        store_code: str,
+        operation_key: str,
+        is_write: bool,
+        approval_ref: str | None,
+    ) -> bool:
+        if store_code != self._store_code:
+            return False
+        if not is_write:
+            return operation_key in self._read_keys
+        return (
+            operation_key in self._write_keys
+            and isinstance(approval_ref, str)
+            and 1 <= len(approval_ref) <= 128
+        )
+
+
+def _load_registry(
+    approved_keys: frozenset[str], approved_write_keys: frozenset[str] = frozenset()
+) -> ContractRegistry:
     # Snapshot-only OpenAPI loading; arbitrary URLs and remote $ref are forbidden.
+    if approved_write_keys - WFS_WRITE_KEYS or approved_keys & WFS_WRITE_KEYS:
+        raise ValueError("WALMART_WRITE_NOT_AUTHORIZED")
     source = os.environ.get("SZZSBJ_WALMART_CONTRACT_FILE", "")
     if not source:
         wfs_keys = set(wfs_registry().keys())
@@ -78,8 +116,12 @@ def _load_registry(approved_keys: frozenset[str]) -> ContractRegistry:
                     approved_keys=approved_keys & operations_keys
                 )._operations.values()
             )
+            + tuple(wfs_write_registry(approved_keys=approved_write_keys)._operations.values())
         )
         return ContractRegistry(combined)
+    if approved_write_keys:
+        # Writes are only reviewed as built-in contracts; a snapshot cannot enable them.
+        raise ValueError("WALMART_WRITE_NOT_AUTHORIZED")
     path = Path(source)
     expected = os.environ.get("SZZSBJ_WALMART_CONTRACT_SHA256", "").lower()
     if not re.fullmatch(r"[0-9a-f]{64}", expected) or not path.is_file():
@@ -99,8 +141,10 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
     """Tencent SCF handler; no raw error details, bodies, keys or tokens."""
     if isinstance(event, dict) and event.get("operation") == "health":
         return {"success": True, "status": "SAFE_RUNTIME_AVAILABLE"}
-    if os.environ.get("SZZSBJ_WALMART_LIVE_MODE") != "owner-approved-read-only":
+    live_mode = os.environ.get("SZZSBJ_WALMART_LIVE_MODE")
+    if live_mode not in (LIVE_MODE_READ_ONLY, LIVE_MODE_READ_WRITE):
         return {"success": False, "status": "WALMART_LIVE_DISABLED"}
+    write_mode = live_mode == LIVE_MODE_READ_WRITE
     store = os.environ.get("SZZSBJ_WALMART_BOUND_STORE", "")
     if not _STORE_PATTERN.fullmatch(store):
         return {"success": False, "status": "WALMART_STORE_BINDING_MISSING"}
@@ -112,17 +156,33 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
         )
         if not approved:
             raise ValueError("WALMART_APPROVAL_MISSING")
+        approved_write: frozenset[str] = frozenset()
+        if write_mode:
+            approved_write = frozenset(
+                item.strip()
+                for item in os.environ.get("SZZSBJ_WALMART_APPROVED_WRITE_KEYS", "").split(",")
+                if item.strip()
+            )
         mapping = json.loads(os.environ.get("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
         if not isinstance(mapping, dict) or set(mapping) != {store}:
             raise ValueError("WALMART_EGRESS_MISSING")
-        registry = _load_registry(approved)
+        registry = _load_registry(approved, approved_write)
         secrets = TencentSsmResolver(
             TencentApiClient(TemporaryTencentIdentity.from_environment()),
             approved_stores=frozenset({store}),
             version=os.environ.get("SZZSBJ_WALMART_SECRET_VERSION", "v1"),
         )
-        transport = WalmartHttpsTransport(proxy_by_store=mapping, secret_resolver=secrets)
-        policy = ReadOnlyStorePolicy(store, approved)
+        transport = WalmartHttpsTransport(
+            proxy_by_store=mapping,
+            secret_resolver=secrets,
+            timeout=90.0 if write_mode else 12.0,
+            pass_provider_errors=write_mode,
+        )
+        policy: ReadOnlyStorePolicy | StoreWritePolicy
+        if write_mode:
+            policy = StoreWritePolicy(store, approved, approved_write)
+        else:
+            policy = ReadOnlyStorePolicy(store, approved)
         executor = WalmartCloudExecutor(
             registry=registry,
             store_allowlist=frozenset({store}),

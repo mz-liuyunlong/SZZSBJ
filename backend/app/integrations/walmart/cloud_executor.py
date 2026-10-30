@@ -30,8 +30,18 @@ class CloudTransport(Protocol):
     def execute(self, *, store_code: str, request: Any) -> tuple[int, Any]: ...
 
 
+MAX_RESULT_BYTES_V1 = 1024 * 1024
+# Tencent SCF caps a synchronous response at 6 MB; leave headroom for the envelope.
+MAX_RESULT_BYTES_V2 = 5 * 1024 * 1024 + 512 * 1024
+
+
 class WalmartCloudExecutor:
-    """Runtime executor; never serialize credentials, tokens or raw exceptions."""
+    """Runtime executor; never serialize credentials, tokens or raw exceptions.
+
+    Event protocol v1: read-only contract (non-2xx is an error, JSON only).
+    Event protocol v2: adds ``accept`` ("json" | "pdf"); a provider 4xx/5xx comes back as
+    ``success=True`` with ``provider_error`` so the caller can show Walmart's reason.
+    """
 
     def __init__(
         self,
@@ -67,8 +77,15 @@ class WalmartCloudExecutor:
             "query",
             "body",
             "approval_ref",
+            "accept",
         }
-        if set(event) - allowed_fields or event.get("version") != 1:
+        version = event.get("version")
+        if set(event) - allowed_fields or version not in (1, 2):
+            raise ContractError("WALMART_EVENT_INVALID")
+        accept = event.get("accept", "json")
+        if version == 1 and "accept" in event:
+            raise ContractError("WALMART_EVENT_INVALID")
+        if accept not in ("json", "pdf"):
             raise ContractError("WALMART_EVENT_INVALID")
         if event.get("operation") != "marketplace_call":
             raise ContractError("WALMART_EVENT_INVALID")
@@ -88,6 +105,8 @@ class WalmartCloudExecutor:
         )
         if request.method != event.get("method") or request.path != event.get("path"):
             raise ContractError("WALMART_OPERATION_MISMATCH")
+        if accept != getattr(request, "response_kind", "json"):
+            raise ContractError("WALMART_OPERATION_MISMATCH")
         if request.is_write and not approval:
             raise ContractError("WALMART_WRITE_APPROVAL_REQUIRED")
         if not self._policy.authorize(
@@ -98,7 +117,10 @@ class WalmartCloudExecutor:
         ):
             raise ContractError("WALMART_OWNER_POLICY_DENIED")
         status, data = self._transport.execute(store_code=store, request=request)
-        if type(status) is not int or not 200 <= status < 300:
+        if type(status) is not int or not 100 <= status <= 599:
+            raise ContractError("WALMART_PROVIDER_ERROR")
+        provider_ok = 200 <= status < 300
+        if not provider_ok and version == 1:
             raise ContractError("WALMART_PROVIDER_ERROR")
         if _contains_secret_key(data):
             raise ContractError("WALMART_PROVIDER_SENSITIVE_RESPONSE")
@@ -106,8 +128,18 @@ class WalmartCloudExecutor:
             serialized = json.dumps(data, separators=(",", ":"))
         except (TypeError, ValueError):
             raise ContractError("WALMART_PROVIDER_RESPONSE_INVALID") from None
-        if len(serialized.encode("utf-8")) > 1024 * 1024:
+        limit = MAX_RESULT_BYTES_V2 if version == 2 else MAX_RESULT_BYTES_V1
+        if len(serialized.encode("utf-8")) > limit:
             raise ContractError("WALMART_PROVIDER_RESPONSE_TOO_LARGE")
+        if not provider_ok:
+            return {
+                "success": True,
+                "status_code": status,
+                "store_code": store,
+                "api_key": key,
+                "data": None,
+                "provider_error": data,
+            }
         return {
             "success": True,
             "status_code": status,
