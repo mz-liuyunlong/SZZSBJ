@@ -1130,24 +1130,44 @@ class ListingManagementRepository:
         }
 
     def _owner_lookup(self):
-        return (
+        # Select a single source record per account/SKU: independent MAX() on
+        # each field can combine a UID and name from different product rows.
+        ranked = (
             select(
                 PRODUCT_INFO_CURRENT.c.source_account_ref.label("source_account_ref"),
                 PRODUCT_INFO_CURRENT.c.lingxing_sku_code.label("lingxing_sku_code"),
-                func.max(PRODUCT_INFO_CURRENT.c.owner_uid).label("owner_uid"),
-                func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
-                func.max(PRODUCT_INFO_CURRENT.c.product_developer_uid).label(
-                    "product_developer_uid"
-                ),
-                func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label(
-                    "product_developer_name"
-                ),
+                PRODUCT_INFO_CURRENT.c.owner_uid.label("owner_uid"),
+                PRODUCT_INFO_CURRENT.c.owner_name.label("owner_name"),
+                PRODUCT_INFO_CURRENT.c.product_developer_uid.label("product_developer_uid"),
+                PRODUCT_INFO_CURRENT.c.product_developer_name.label("product_developer_name"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        PRODUCT_INFO_CURRENT.c.source_account_ref,
+                        PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+                    ),
+                    order_by=(
+                        PRODUCT_INFO_CURRENT.c.owner_uid.asc().nulls_last(),
+                        PRODUCT_INFO_CURRENT.c.owner_name.asc().nulls_last(),
+                        PRODUCT_INFO_CURRENT.c.product_developer_uid.asc().nulls_last(),
+                        PRODUCT_INFO_CURRENT.c.product_developer_name.asc().nulls_last(),
+                    ),
+                )
+                .label("row_rank"),
             )
             .where(PRODUCT_INFO_CURRENT.c.lingxing_sku_code.is_not(None))
-            .group_by(
-                PRODUCT_INFO_CURRENT.c.source_account_ref,
-                PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+            .subquery()
+        )
+        return (
+            select(
+                ranked.c.source_account_ref,
+                ranked.c.lingxing_sku_code,
+                ranked.c.owner_uid,
+                ranked.c.owner_name,
+                ranked.c.product_developer_uid,
+                ranked.c.product_developer_name,
             )
+            .where(ranked.c.row_rank == 1)
             .subquery()
         )
 
