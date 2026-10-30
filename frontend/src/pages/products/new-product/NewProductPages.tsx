@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { readUserPreference, writeUserPreference } from "@/shared/preferences/userPreferenceCache";
 import { CheckCircleOutlined, AppstoreOutlined, HourglassOutlined } from "@ant-design/icons";
 import { Button, Card, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
 import dayjs from "dayjs";
@@ -167,13 +168,15 @@ function ConfigPanel({mode,visible,onClose,canManage,username}:{mode:Mode;visibl
 
 export default function NewProductPages({page,mode,canManage=false,username="未知用户"}:{page:NavigationPage;mode:Mode;canManage?:boolean;username?:string}){
  const state=useNewProductStore(),c=state.config;
- const [widths,setWidths]=useState<Record<string,number>>({}),[cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
+ const preferenceKey=mode==="performance"?"products:new-product:columns":"products:launch-tracking:columns";
+ const stored=useMemo(()=>readUserPreference<{keys:string[];widths:Record<string,number>}>(username,preferenceKey,1),[username,preferenceKey]);
+ const [widths,setWidths]=useState<Record<string,number>>(stored?.widths??{}),[cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
  const [market,setMarket]=useState<ProductSample|null>(null),[purchase,setPurchase]=useState<ProductSample|null>(null);
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
  const [review,setReview]=useState<string|null>(null),[approval,setApproval]=useState<ProductSample|null>(null);
  const [score,setScore]=useState<number|null>(null),[quantity,setQuantity]=useState<number|null>(null),[reason,setReason]=useState("");
- const [keys,setKeys]=useState(["name","category","developer","operator","days","market","score","suggested","approval","tracking","salesWindow","orders","clicks","adSpend","acos","margin","profit","requested","approved","inventory","action"]);
+ const [keys,setKeys]=useState(stored?.keys??["name","category","developer","operator","days","market","score","suggested","approval","tracking","salesWindow","orders","clicks","adSpend","acos","margin","profit","requested","approved","inventory","action"]);
  const [api,holder]=message.useMessage();
  const act=(fn:()=>void,done:()=>void)=>{try{fn();done();api.success("操作已更新");}catch(e){api.error((e as Error).message);}};
  const rows=useMemo(()=>state.products.filter(p=>(!filter.category.length||filter.category.includes(p.category))&&
@@ -222,7 +225,7 @@ export default function NewProductPages({page,mode,canManage=false,username="未
  typeValue={field} inputValue={query} inputPlaceholder="SKU / Item ID / 品名" onTypeChange={v=>setField(v as Filter["field"])} onInputChange={setQuery}
  onSearch={()=>setFilter(f=>({...f,query:query.trim(),field}))}/></div>
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
- <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>api.info("页面已刷新")}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
+ <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>{setCardKey("total");setWorkflowTab("all");setTrackingTab("all");setFilter(empty());setQuery("");api.success("已刷新当前筛选视图");}}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
  {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={{...c,successWindow:period}} activeKey={cardKey} onSelect={setCardKey}/></div>
@@ -268,7 +271,7 @@ export default function NewProductPages({page,mode,canManage=false,username="未
  </Drawer>
  <ConfigPanel mode={mode} visible={setting} canManage={canManage} username={username} onClose={()=>setSetting(false)}/>
  <RuntimeColumnConfigDrawer open={columnsOpen} onClose={()=>setColumnsOpen(false)} fixedKeys={["name","action"]}
- appliedKeys={keys} defaultKeys={allCols.map(x=>String(x.key))} onApply={setKeys} onSaveTemplate={()=>api.info("列配置已应用，尚未接入服务端模板存储")}
+ appliedKeys={keys} defaultKeys={allCols.map(x=>String(x.key))} onApply={next=>{setKeys(next);writeUserPreference(username,preferenceKey,1,{keys:next,widths});}} onSaveTemplate={()=>{writeUserPreference(username,preferenceKey,1,{keys,widths});api.success("列模板已保存在当前浏览器的账号偏好中");}}
  groups={[{title:"新品明细",fields:allCols.map(x=>({key:String(x.key),title:String(x.title)}))}]}/>
  <Drawer title={detail?.name??"新品详情"} open={!!detail} onClose={()=>setDetail(null)} width={700}>{detail&&<>
  <Typography.Paragraph>SKU：{detail.sku} · 类目：{detail.category} · 运营：{detail.operator}</Typography.Paragraph>
