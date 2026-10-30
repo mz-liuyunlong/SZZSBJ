@@ -18,6 +18,8 @@ import app.modules.pmc_domestic.packing_stock_models  # noqa: F401
 import app.modules.pmc_domestic.warehouse_models  # noqa: F401
 import app.modules.pmc_purchase.gate3_models  # noqa: F401  # Register PMC purchase Gate 3.
 import app.modules.pmc_purchase.models  # noqa: F401  # Register PMC purchase ODS.
+import app.modules.pmc_wfs.creation_models  # noqa: F401  # V2 count-based operations.
+import app.modules.pmc_wfs.models  # noqa: F401  # Pending drafts; local additive setup approved.
 import app.modules.product_management.models  # noqa: F401  # Register product management BFF.
 import app.modules.products.models  # noqa: F401  # Register approved model metadata.
 import app.modules.sku_detail.models  # noqa: F401  # Register SKU DWD/DWS projections.

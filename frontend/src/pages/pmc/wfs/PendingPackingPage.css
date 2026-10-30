@@ -1,0 +1,187 @@
+.wfs-pending {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wfs-pending__flow {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 8px 12px;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #f8fafc;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+}
+
+.wfs-pending__flow b {
+  color: #98a2b3;
+  font-weight: 500;
+}
+
+.wfs-pending__toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+}
+
+.wfs-pending__toolbar .report-table-connected-search.wfs-pending__search {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  flex: 0 0 auto;
+}
+
+.wfs-pending__toolbar .report-table-connected-search.wfs-pending__search > .ant-input-affix-wrapper {
+  width: 360px;
+  flex: 0 0 360px;
+}
+
+.wfs-pending__table {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 280px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+}
+
+.wfs-pending__head,
+.wfs-pending__foot {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+}
+
+.wfs-pending__head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.wfs-pending__title {
+  min-width: 0;
+}
+
+.wfs-pending__title small {
+  display: block;
+  margin-top: 2px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.wfs-pending__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wfs-pending__body .ant-table-wrapper,
+.wfs-pending__body .ant-spin-nested-loading,
+.wfs-pending__body .ant-spin-container {
+  height: 100%;
+}
+
+.wfs-pending__foot {
+  max-height: 72px;
+  overflow: auto;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+  border-top: 1px solid #eef2f6;
+}
+
+.wfs-pending__sub {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.wfs-pending__sku {
+  font-weight: 600;
+}
+
+/* WFS 货件看板：货件/产品维度（连体分段，对齐旧 WFS 看板参考） */
+.wfs-board__view-segment.ant-segmented {
+  display: inline-flex;
+  padding: 2px;
+  background: #fff !important;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.wfs-board__view-segment .ant-segmented-group {
+  gap: 0;
+  background: transparent !important;
+}
+
+.wfs-board__view-segment .ant-segmented-thumb {
+  background: #1677ff !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+.wfs-board__view-segment .ant-segmented-item {
+  position: relative;
+  flex: 1 1 auto;
+  border: none !important;
+  border-radius: 4px;
+  background: transparent !important;
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.wfs-board__view-segment .ant-segmented-item:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  z-index: 0;
+  width: 1px;
+  height: 14px;
+  background: #e4e7ec;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.wfs-board__view-segment .ant-segmented-item-label {
+  position: relative;
+  z-index: 1;
+  min-height: 32px;
+  line-height: 32px;
+  padding: 0 16px;
+}
+
+.wfs-board__view-segment .ant-segmented-item-selected,
+.wfs-board__view-segment .ant-segmented-item-selected .ant-segmented-item-label {
+  color: #fff !important;
+  background: #1677ff !important;
+  background: #1677ff !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  font-weight: 500;
+}

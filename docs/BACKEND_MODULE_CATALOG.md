@@ -56,6 +56,7 @@
 | 项目 | 内容 |
 |---|---|
 | Module name | Backend API Foundation |
+| Related new business slice | `app/modules/pmc_wfs/`：待发货打包单读模型、pending草稿、装箱占用及身份换单；本地testing，契约见 `docs/api/pmc-wfs-pending-packing-api.md`，不包含Walmart执行 |
 | Module key | `backend-api-foundation` |
 | Purpose | 提供 request ID、统一响应和错误、默认关闭认证、权限入口及资源级 store scope |
 | Owned backend files | `backend/app/core/api.py`, `backend/app/core/auth.py`, `backend/app/core/permissions.py`, `backend/app/core/data_scope.py` |

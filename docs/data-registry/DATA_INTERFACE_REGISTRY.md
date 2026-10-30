@@ -1,5 +1,13 @@
 # Data Interface Registry
 
+## PMC WFS 待发货打包单（2026-10-23，本地testing）
+
+- 决策：`docs/data-sources/decisions/pmc-wfs-pending-packing-decision.md`；批准PRP：`PRPs/pmc-wfs-pending-packing.md`；契约：`docs/api/pmc-wfs-pending-packing-api.md`。
+- NEW_SYSTEM_OWNED：ops_pmc_wfs_drafts、ops_pmc_wfs_draft_items、ops_pmc_wfs_box_allocations、evt_pmc_wfs_draft_events；来源国内仓PK/已完成装箱，已发布身份资料，不读旧库/RAW/外部API。
+- 前缀 `/api/pmc/wfs/pending-packing`；GET orders/summary/filter-options/detail/identity-options/draft；POST identity/drafts。page:pmc:wfs:view＋独立动作＋来源账号/店铺范围；不自动授权用户。
+- 整行占用唯一、预期版本、幂等、共享事务锁和事件不可变；改箱/报关复用国内仓并增加占用守卫。业务测试与环境标记分开，Q/T分开。
+- 本地加法建四表，不改既有记录/迁移版本；当前真实读0待发货、4待装箱。pytest/Vitest/Playwright及类型/lint/build证据见专属handoff。页面testing；未开放审批/外部执行，生产迁移另行批准。
+
 Registry Status: `draft; approved only after owner review and merge`
 
 ## 2026-10-28 打包审批增量登记（验收暂停）
@@ -290,3 +298,21 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 ## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
 
 状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。
+
+
+## PMC WFS V2 待发货增量（2026-10-29，testing）
+
+来源为本系统已完成装箱；新增 ops_wfs_creation_operations / ops_wfs_creation_tickets / ops_wfs_box_holds / evt_wfs_creation_events，分别为创建操作、计划票、逐箱占用、不可变事件。详细字段与接口见 docs/api/pmc-wfs-pending-packing-api.md 的 V2 章节。四张历史草稿表保留，页面使用 V2 创建入口。多 PK 同账号/店铺/测试标记分票、程序自动审批；新增动作定义不授予用户权限。真实适配器默认禁用，测试仅任务专属 PostgreSQL；未迁移业务数据库，未调用 Walmart。PRP：PRPs/pmc-wfs-pending-packing-v2-local.md。
+
+## PMC WFS 货件看板 M1（2026-10-29，testing）
+
+只读前缀 `/api/pmc/wfs/shipment-board`：GET shipments、shipments/{row_id}、summary、filter-options。行来源 ticket.result.labels 中的 shipment_id；领星履约 M1 不读，meta.lingxing_sync_enabled=false。决策 docs/data-sources/decisions/pmc-wfs-shipment-board-decision.md；PRP PRPs/pmc-wfs-shipment-board-m1-local.md；契约 docs/api/pmc-wfs-shipment-board-api.md。
+
+前缀 `/api/pmc/wfs/exception-center`：GET cases、cases/{id}、summary、filter-options；POST cases/{id}/assign、cases/{id}/events。案件表 NEW_SYSTEM_OWNED；规则引擎 M1 STUB，meta.rule_engine=M1_STUB。决策 docs/data-sources/decisions/pmc-wfs-exception-center-decision.md；PRP PRPs/pmc-wfs-exception-center-m1-local.md；契约 docs/api/pmc-wfs-exception-center-api.md。
+
+## PMC WFS 货件看板 M2：领星 WFS 货件 / 发货单同步（2026-10-30，local）
+
+- 外部接口（只读、query-sign、默认关闭、不调度）：`ext-lingxing-wfs-cargo-page-v1` = LX-C95DBD64F2A9 `POST /cepf/warehouse/api/openApi/queryWFSCargoPage`（interface_key `wfsCargoPage`）；`ext-lingxing-wfs-shipping-list-page-v1` = LX-C99E2D00C76D `POST /cepf/warehouse/api/openApi/queryShippingListPage`（interface_key `wfsShippingListPage`，官方标记为导出类但本系统只做分页读取，不下载文件）。分页 ≤200（发货单默认 50/页，200 实测 30 秒超时），必须给 start_time/end_time 窗口（≤400 天），handler `lingxing.pmc_wfs.cargo_page.v1` / `lingxing.pmc_wfs.shipping_list_page.v1`，保留策略 `lingxing-pmc-wfs-cargo-page-v1` / `lingxing-pmc-wfs-shipping-list-page-v1`。治理行由 `scripts/bootstrap_pmc_wfs_board_governance.py` 以 disabled 创建；真实拉取只经 `scripts/run_pmc_wfs_board_once.py`（负责人逐次授权，APP_ENV production/local；领星 IP 白名单只放行 company-ai，开发库首次真实拉取 2026-10-30：971 货件 / 2827 商品行 / 494 发货单，发布版本 1 个）。
+- 存储（NEW_SYSTEM_OWNED，Alembic `20261030_0071_wfs_lingxing_board`，接 0070 合并头）：ODS append-only `ods_lingxing_wfs_cargos`、`ods_lingxing_wfs_cargo_goods`、`ods_lingxing_wfs_shipping_lists`（run_id / raw_request_ref_id / source_item_ordinal，RAW 复用 `ods_api_raw_*`）；发布 `gov_wfs_board_publications`（is_current 部分唯一）；MART `mart_wfs_shipment_board`（一行一张货件，商品与发货单聚合 + payload_json），builder `wfs_board.v1`，由 `scripts/publish_pmc_wfs_board.py` 或运行脚本 `PMC_WFS_PUBLISH_AFTER_RUN=true` 发布。
+- API：`/api/pmc/wfs/shipment-board` 改读当前 MART 版本，新增 `GET /products`；本系统创建但领星未出现的票以 `creation_only` / `PENDING` 显示；`meta.lingxing_sync_enabled=true`、`lingxing_sync_mode=manual_one_time_run`；返回 `freshness`。契约 docs/api/pmc-wfs-shipment-board-api.md，SOP docs/sop/pmc-wfs-shipment-board.md。
+- 共用文件改动（需单独告知合并人）：`integrations/lingxing/client.py`（Literal + 两条 contracts + `fetch_pmc_wfs_page`）、`integration_sync/catalog.py`（bootstrap 函数）、`integration_sync/execution.py`（dispatch）、`db/model_registry.py`（导入模型）。未改其他模块行为，不调 Walmart，不写领星。

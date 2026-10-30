@@ -27,6 +27,9 @@ from app.modules.integration_sync.handlers.lingxing_pmc_domestic_sync import (
 from app.modules.integration_sync.handlers.lingxing_pmc_purchase_sync import (
     PMC_PURCHASE_HANDLERS,
 )
+from app.modules.integration_sync.handlers.lingxing_pmc_wfs_board_sync import (
+    PMC_WFS_HANDLERS,
+)
 from app.modules.integration_sync.handlers.lingxing_product_info_executor import (
     PRODUCT_INFO_BATCH_SIZE,
     LingxingProductInfoExecutor,
@@ -108,6 +111,15 @@ class SyncRunExecutionService:
             and interface.handler_key == domestic_handler.handler_key
         ):
             domestic_handler(self.session).execute(run, interface)
+            return
+
+        wfs_board_handler = PMC_WFS_HANDLERS.get(run.interface_key)
+        if (
+            run.provider == "lingxing"
+            and wfs_board_handler is not None
+            and interface.handler_key == wfs_board_handler.handler_key
+        ):
+            wfs_board_handler(self.session).execute(run, interface)
             return
 
         is_productinfo = (

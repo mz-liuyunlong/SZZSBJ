@@ -24,6 +24,9 @@
 
 本地已运行：前端 lint、TypeScript/Vite 构建通过，Vitest 68 文件 / 304 tests passed；后端 Ruff lint/format 通过，采购覆盖、迁移对照和备注回归 15 passed，规则检查通过。首次 Windows 全量后端为 1769 passed / 13 failed / 118 skipped：4 项真实问题已修复，9 项涉及 POSIX 文件权限，保留断言等待 Linux CI。远端结果须以本轮提交对应的实际 Actions 记录为准，不能将本地结果替代远端验收。
 
+# 最新交接：待发货打包单（2026-10-23，dev_wfs 合入）
+
+已批准本地开发完成。具体范围、数据保护、验证和后续限制见 `docs/delivery/pmc-wfs-pending-packing-handoff.md`。本地待发货0张、待装箱4张；真实流程已通过隔离PostgreSQL与浏览器模拟接口验证，未往现有业务表灌样例。审批/Walmart/箱唛/取消改量仍属下一阶段。
 以下为历史交接：
 
 # 国内仓入库批次看板 M1 交接
@@ -214,3 +217,8 @@ Navicat只读核对脚本：docs/delivery/local-iam-import-verification.sql，5�
 PR #260 原有预览同时修复：批处理固定使用同一规则版本、UUID keyset 分页、所有排除生命周期清除等级候选、监控日观察作为生命周期证据，以及 Celery 调度 advisory lock 在物理连接上跨提交保持。财务证据完整性仍会阻止正式等级发布；本切片不启用正式发布或生产调度。
 
 验证：定向后端 `53 passed`；合入最新 main 后完整后端 `1825 passed, 127 skipped`；完整前端单 worker `61 files / 292 tests`、lint 和 build 通过（lint 保留 main 既有 1 条 Hook warning）；Ruff `659 files` format/lint、应用导入、回放 CLI help、Alembic 单 head `20261028_0066_walmart_monitor_listing_projection`、离线迁移检查、rule-pack 与 PR 净差异检查通过。集中 mypy 仍被仓库既有 repository/service 类型债务阻断，新增监控投影文件没有直接报告的新错误。所有验证使用合成数据，没有输出或提交商品标识、账号、Token 或 RAW payload。
+
+
+## WFS 待发货 V2 增量（2026-10-29）
+
+当前 develop_backup 实现按箱数分票、多 PK 合并、自动审批和创建记录；本地测试与外部能力边界见 docs/delivery/pmc-wfs-pending-packing-v2-handoff.md。历史交接保留；不再按历史待人工审批草稿作为当前页面流程。未提交、推送、部署或迁移业务库。
