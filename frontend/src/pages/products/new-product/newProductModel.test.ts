@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completedScore, defaultConfig, evaluatedTrack, trackingWorkflow, periodSales, useNewProductStore } from "./newProductModel";
+import { completedScore, getPeriodMetrics, evaluateTrack, defaultConfig, evaluatedTrack, trackingWorkflow, periodSales, useNewProductStore } from "./newProductModel";
 import { mockProducts } from "./newProductMockData";
 
 describe("new product rules with mock fixtures", () => {
@@ -19,7 +19,7 @@ describe("new product rules with mock fixtures", () => {
     store.submitCorrection("YC00806","ads",9,"测试规则同步不完整");
     expect(useNewProductStore.getState().products.find(p=>p.id==="YC00806")?.overrides.ads).toBeUndefined();
     const correction=useNewProductStore.getState().corrections[0];
-    useNewProductStore.getState().decideCorrection(correction.id,"approved","已复核",true);
+    useNewProductStore.getState().decideCorrection(correction.id,"approved","已复核",true,"主管A");
     expect(useNewProductStore.getState().products.find(p=>p.id==="YC00806")?.overrides.ads).toBe(9);
     useNewProductStore.getState().resetMockData();
   });
@@ -60,6 +60,7 @@ describe("new product rules with mock fixtures", () => {
     expect(()=>store.updateTrack(p.id,"打品失败","观察期表现不佳")).toThrow("观察期未结束");
     store.resetMockData();
   });
+  it("uses cumulative period metrics",()=>{const p=mockProducts.find(x=>x.id==="YC00901")!;expect(getPeriodMetrics(p,30).clicks).toBeLessThan(getPeriodMetrics(p,90).clicks);expect(evaluateTrack(p,defaultConfig,90)).toBe("达标");});
   it("never treats unsellable products as completed launch evaluations", () => {
     expect(evaluatedTrack(mockProducts[1],defaultConfig)).toBe("未开始");
   });
