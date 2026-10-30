@@ -94,3 +94,14 @@ def test_file_only_recovery_validates_all_endpoint_csvs(tmp_path):
     (folder / "wfs_inventory.csv").write_bytes(b"sku\nTEST\nEXTRA\n")
     with pytest.raises(DispatchRejected, match="REMOTE_RECOVERY_OUTPUT_INVALID"):
         remote_recovery._converted_files(output, manifest, "11111111", "wmt-12345678")
+
+
+def test_uncertain_conversion_and_checksum_errors_require_review():
+    from inspect import getsource
+
+    from app.modules.walmart_remote.tasks import execute_remote_job
+
+    source = getsource(execute_remote_job)
+    assert '"REMOTE_CONVERSION_FAILED"' in source
+    assert '"REMOTE_RESULT_VERIFICATION_FAILED"' in source
+    assert '"REMOTE_RESULT_INCOMPLETE"' in source
