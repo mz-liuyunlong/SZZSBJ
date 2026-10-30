@@ -86,11 +86,11 @@ function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:
  <div className="npd-two"><DataTable title={mode==="performance"?"类目测评表现":"类目打品表现与深挖建议"} data={group(products,c,"category",mode==="tracking")} columns={grouped}/>
  <DataTable title={mode==="performance"?"新品开发人员成功率":"运营人员打品成功率"} data={group(products,c,mode==="performance"?"developer":"operator",mode==="tracking")} columns={grouped}/></div>
  {mode==="performance"?<DataTable title="上架满30天待市场评分" data={products.filter(p=>p.market===null&&daysSince(p.listedAt)>=c.remindDays)} columns={[
- {key:"name",title:"商品",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
+ {key:"name",title:"商品",render:(_,p)=><Space><ImageCell image={p.image} label="商品图片"/><Space direction="vertical" size={0}><CopyableTextCell text={p.sku} label="SKU"/><CopyableTextCell text={p.name} label="品名"/></Space></Space>},
  {key:"operator",dataIndex:"operator",title:"运营"},{key:"listedAt",dataIndex:"listedAt",title:"上架日期"},{key:"days",title:"上架天数",render:(_,p)=>daysSince(p.listedAt)},
  {key:"action",title:"操作",render:(_,p)=><Button type="link" onClick={()=>onMarket(p)}>填写评分</Button>}]}/>:
  <DataTable title="采购进度与打品明细" data={pool} columns={[
- {key:"name",title:"商品",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
+ {key:"name",title:"商品",render:(_,p)=><Space><ImageCell image={p.image} label="商品图片"/><Space direction="vertical" size={0}><CopyableTextCell text={p.sku} label="SKU"/><CopyableTextCell text={p.name} label="品名"/></Space></Space>},
  {key:"grade",title:"初始评级",render:(_,p)=>completedScore(p,c)?.grade??"—"},{key:"approvedQty",dataIndex:"approvedQty",title:"批准量"},
  {key:"salesPeriod",title:c.successWindow+"天销量",render:(_,p)=>periodSales(p,c.successWindow)},{key:"inventory",dataIndex:"inventory",title:"库存"},
  {key:"tracking",dataIndex:"tracking",title:"打品结果"}]}/>}
