@@ -50,6 +50,7 @@ import {
   type ListingManagementSummary,
 } from "@/pages/products/listingManagementApi";
 import { backendDownloadErrorMessage } from "@/api/backendApi";
+import { clearResourceCache } from "@/shared/preload/resourceCache";
 import {
   fixedListingColumnKeys,
   listingColumnFields,
@@ -466,7 +467,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return () => {
       active = false;
     };
-  }, [normalizedFilters]);
+  }, [normalizedFilters, listingRefreshToken]);
 
   useEffect(() => {
     let active = true;
@@ -500,6 +501,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     };
   }, [currentPage, listingRefreshToken, normalizedFilters, pageSize, summaryFilterKey]);
 
+  const refreshListingData = () => {
+    clearResourceCache("listing-management:");
+    setListingRefreshToken((current) => current + 1);
+  };
+
   const resetPageAndSelection = () => {
     setCurrentPage(1);
     setSelectedRowKeys([]);
@@ -508,7 +514,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const updateFilters = (nextFilters: ListingManagementFilters) => {
     setFilters(nextFilters);
     setSummaryFilterKey(DEFAULT_LISTING_SUMMARY_FILTER_KEY);
-    setListingRefreshToken((current) => current + 1);
+    refreshListingData();
     resetPageAndSelection();
   };
 
@@ -625,7 +631,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         );
 
         setSelectedRowKeys([]);
-        setListingRefreshToken((current) => current + 1);
+        refreshListingData();
 
         const failed = results.length - succeededIds.size;
         if (failed > 0) {
@@ -669,7 +675,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       setRows((current) => current.map((item) => (
         item.id === row.id ? { ...item, isArchived: nextIsArchived } : item
       )));
-      setListingRefreshToken((current) => current + 1);
+      refreshListingData();
       void messageApi.success("已恢复");
     } catch {
       void messageApi.error("恢复失败，请稍后重试");
@@ -837,7 +843,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       );
 
       setSelectedRowKeys([]);
-      setListingRefreshToken((current) => current + 1);
+      refreshListingData();
 
       const failed = results.length - succeededIds.size;
       if (failed > 0) {
@@ -1034,7 +1040,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                 void messageApi.success(`已给 ${selectedRowKeys.length} 个商品添加标签`);
                 setBatchTagOpen(false);
                 setSelectedRowKeys([]);
-                setListingRefreshToken((current) => current + 1);
+                refreshListingData();
                 void reloadListingTags({ showError: false });
               })
               .catch(() => {
