@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { Alert, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Table, Tag, Typography, message } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Typography, message } from "antd";
+import { ProTable, type ProColumns } from "@ant-design/pro-components";
+import dayjs from "dayjs";
+import ReportTableShell from "@/components/report-table/ReportTableShell";
+import { StatusTagCell } from "@/components/report-table/cells";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
@@ -78,14 +81,17 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     }
   }
 
-  const columns: ColumnsType<NewProductWorkflowRecord> = [
+  const columns: ProColumns<NewProductWorkflowRecord>[] = [
     { title: "SKU", dataIndex: "sku", width: 150 },
     { title: "商品名称", dataIndex: "product_name", ellipsis: true },
     { title: "类目", dataIndex: "category", width: 125 },
+    { title: "开发人员", dataIndex: "developer", width: 125 },
+    { title: "运营人员", dataIndex: "operator", width: 125 },
+    { title: "数据更新时间", dataIndex: "product_observed_at", width: 185 },
     { title: "账户", dataIndex: "source_account_ref", width: 130 },
     { title: "市场评分", dataIndex: "market_score", width: 95, render: v => v ?? "待评分" },
     { title: "申请采购量", dataIndex: "purchase_request_qty", width: 110, render: v => v ?? "—" },
-    { title: "业务状态", dataIndex: "status", width: 130, render: v => <Tag>{({
+    { title: "业务状态", dataIndex: "status", width: 130, render: v => <StatusTagCell label={({
       pending_market: "待市场评分", scored: "已评分", pending_purchase: "待审核",
       approved_draft: "草稿已批准", rejected: "已驳回",
     } as Record<string, string>)[v || "pending_market"] ?? v}</Tag> },
@@ -108,9 +114,11 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         onChange={event => { setAccount(event.target.value); setData(null); setPage(1); }} />
       <Button type="primary" loading={busy} disabled={!account.trim()} onClick={() => void load(1)}>加载真实数据</Button>
     </Space>
-    <Table rowKey="sku_identity_id" dataSource={data?.items ?? []} columns={columns} loading={busy}
-      scroll={{ x: 1150 }} pagination={{ current: page, pageSize: 50, total: data?.total ?? 0,
-        onChange: next => void load(next), showSizeChanger: false }} />
+    <ReportTableShell label="真实新品工作流列表">
+      <ProTable<NewProductWorkflowRecord> rowKey="sku_identity_id" dataSource={data?.items ?? []} columns={columns} loading={busy}
+        options={false} search={false} tableAlertRender={false} scroll={{ x: 1450 }} pagination={{ current: page, pageSize: 50, total: data?.total ?? 0,
+          onChange: next => void load(next), showSizeChanger: false }} />
+    </ReportTableShell>
     <Modal title={action === "market" ? "市场评分" : action === "request" ? "申请采购" :
       action === "decision" ? "审批采购草稿" : "打品复盘"} open={!!record} confirmLoading={busy}
       onCancel={() => setRecord(null)} onOk={() => void submit()} okText="保存">
@@ -135,8 +143,8 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
               options={[{ label: "继续观察", value: "observe" }, { label: "需要优化", value: "optimize" }]} />
           </Form.Item>
           {draft.result === "optimize" && <Form.Item label="下次复核日期（YYYY-MM-DD）" required>
-            <Input value={draft.nextReview} placeholder="2026-11-30"
-              onChange={event => setDraft(s => ({ ...s, nextReview: event.target.value }))} />
+            <DatePicker style={{ width: "100%" }} value={draft.nextReview ? dayjs(draft.nextReview) : null}
+              onChange={value => setDraft(s => ({ ...s, nextReview: value?.format("YYYY-MM-DD") }))} />
           </Form.Item>}
         </>}
         <Form.Item label="理由（至少5字）" required>
