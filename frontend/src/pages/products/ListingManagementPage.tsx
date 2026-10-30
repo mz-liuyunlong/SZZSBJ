@@ -921,6 +921,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           >
             <ListingManagementTable
               rows={displayedRows}
+              tagColors={Object.fromEntries(managedTags.map((tag) => [tag.name, tag.color]))}
               virtualScrollY={virtualScrollY}
               total={totalRows}
               appliedColumnKeys={appliedColumnKeys}

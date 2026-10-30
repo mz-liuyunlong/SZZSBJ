@@ -80,6 +80,7 @@ const statusColorMap: Record<string, string> = {
 
 interface ListingManagementTableProps {
   rows: ListingManagementRow[];
+  tagColors?: Record<string, string>;
   total: number;
   appliedColumnKeys: string[];
   columnWidths: Record<string, number>;
@@ -105,6 +106,7 @@ interface ListingManagementTableProps {
 
 function ListingManagementTable({
   rows,
+  tagColors = {},
   total,
   appliedColumnKeys,
   columnWidths,
@@ -517,7 +519,7 @@ function ListingManagementTable({
       onHeaderCell: headerCell,
       render: (_, row) => (
         <Space size={4} wrap>
-          {row.tags.map((tag) => <Tag key={tag} color="blue">{tag}</Tag>)}
+          {row.tags.map((tag) => <Tag key={tag} color={tagColors[tag] || "blue"}>{tag}</Tag>)}
         </Space>
       ),
     },
