@@ -264,6 +264,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
 
   const [rows, setRows] = useState<ListingManagementRow[]>([]);
+  const seenListingRows = useRef(new Map<string, ListingManagementRow>());
   // Server response is authoritative; do not persist stale archive overrides.
   const displayedRows = rows;
 
@@ -482,6 +483,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     })
       .then(({ rows: nextRows, meta }) => {
         if (!active) return;
+        nextRows.forEach((row) => seenListingRows.current.set(row.id, row));
         setRows(nextRows);
         setTotalRows(meta.total);
         setListingLoadError(false);
@@ -790,7 +792,9 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
   const selectedListingRows = useMemo(() => {
     const selectedIds = new Set(selectedRowKeys.map(String));
-    return rows.filter((row) => selectedIds.has(row.id));
+    return Array.from(selectedIds, (id) => seenListingRows.current.get(id)).filter(
+      (row): row is ListingManagementRow => row !== undefined,
+    );
   }, [rows, selectedRowKeys]);
 
   const handleBatchArchiveListings = useCallback(() => {

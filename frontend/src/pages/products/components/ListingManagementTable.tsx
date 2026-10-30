@@ -635,6 +635,7 @@ function ListingManagementTable({
         tableLayout="fixed"
         rowSelection={{
           fixed: true,
+          preserveSelectedRowKeys: true,
           selectedRowKeys,
           columnWidth: 48,
           onChange: onSelectionChange,
