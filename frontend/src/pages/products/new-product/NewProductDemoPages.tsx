@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Drawer, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
+import { Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import ReactECharts from "echarts-for-react";
 import PageShell from "@/components/page/PageShell";
@@ -59,6 +59,73 @@ function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:
  {key:"tracking",dataIndex:"tracking",title:"打品结果"}]}/>}
  </div>;
 }
+
+function ConfigPanel({mode,visible,onClose}:{mode:Mode;visible:boolean;onClose:()=>void}){
+ const c=useNewProductDemoStore(s=>s.config);
+ const role=useNewProductDemoStore(s=>s.demoRole);
+ const version=useNewProductDemoStore(s=>s.ruleVersion);
+ const save=useNewProductDemoStore(s=>s.saveConfig);
+ const [form]=Form.useForm();
+ const [changeReason,setChangeReason]=useState("");
+ const [api,holder]=message.useMessage();
+ const initial={...c.weights,remindDays:c.remindDays,successWindow:c.successWindow,successSales:c.successSales,
+ minProfit:c.minProfit,maxAcos:c.maxAcos,...Object.fromEntries(c.rules.flatMap(g=>[
+ [g.grade+"_min",g.min],[g.grade+"_low",g.qtyMin],[g.grade+"_high",g.qtyMax]]))};
+ const submit=()=>{void form.validateFields().then((v:Record<string,number>)=>{
+ try{
+  if(changeReason.trim().length<5)throw Error("调整规则必须填写至少5字原因");
+  const next=structuredClone(c);
+  if(mode==="performance"){
+    next.remindDays=v.remindDays;
+    (Object.keys(dimensions) as Dimension[]).forEach(k=>{next.weights[k]=v[k];});
+    next.rules=next.rules.map(g=>({
+      ...g,min:v[g.grade+"_min"]??g.min,
+      qtyMin:v[g.grade+"_low"]??g.qtyMin,
+      qtyMax:v[g.grade+"_high"]??g.qtyMax,
+    }));
+  }else{
+    next.successWindow=v.successWindow as 30|60|90;
+    next.successSales=v.successSales;next.minProfit=v.minProfit;next.maxAcos=v.maxAcos;
+  }
+  save(next);api.success("演示规则已更新");onClose();
+ }catch(err){api.error((err as Error).message);}
+ }).catch(()=>undefined);};
+ return <Drawer title={mode==="performance"?"新品表现配置":"打品跟踪配置"} width={780} open={visible} onClose={onClose} destroyOnHidden
+  footer={<Space style={{justifyContent:"space-between",width:"100%"}}>
+   <Typography.Text type="secondary">配置版本 V{version} · 仅演示会话</Typography.Text>
+   <Space><Button onClick={onClose}>关闭</Button><Button type="primary" disabled={role!=="leader"} onClick={submit}>保存配置</Button></Space>
+  </Space>}>
+  {holder}<Typography.Paragraph type="secondary">复用系统 Drawer、Form、Tabs 和校验机制。运营不可修改全局规则；领导演示视角可修改。</Typography.Paragraph>
+  <Form form={form} layout="vertical" initialValues={initial}>
+  {mode==="performance"?<Tabs items={[
+   {key:"weight",label:"评分权重",children:<div className="npd-config-grid">
+    {(Object.keys(dimensions) as Dimension[]).map(k=><Form.Item key={k} name={k} label={dimensions[k]+"权重（%）"} rules={[{required:true}]}>
+      <InputNumber style={{width:"100%"}} min={0} max={100} precision={0}/></Form.Item>)}
+    <Typography.Text type="secondary">权重之和必须为100%。市场竞争提交前不生成正式评分。</Typography.Text>
+    </div>},
+   {key:"grades",label:"评级与采购数量",children:<div className="npd-config-grade">{c.rules.map(g=>
+    <div key={g.grade} className="npd-grade-rule"><strong>{g.grade} 级</strong>
+      <Form.Item label="最低分" name={g.grade+"_min"}><InputNumber min={-1} max={10} disabled={g.grade==="Pass"}/></Form.Item>
+      <Form.Item label="采购下限" name={g.grade+"_low"}><InputNumber min={0} precision={0}/></Form.Item>
+      <Form.Item label="采购上限" name={g.grade+"_high"}><InputNumber min={0} precision={0}/></Form.Item>
+    </div>)}</div>},
+   {key:"reminder",label:"评分提醒",children:<Form.Item label="Listing 上架后提醒天数" name="remindDays" rules={[{required:true}]}>
+      <InputNumber min={1} max={365} precision={0}/></Form.Item>},
+   {key:"rules",label:"扣分与修正",children:<Typography.Paragraph>系统评分项可申请修正且需说明原因，主管审核生效；审批中不覆盖原分。ROI 小于 0.5 或利润率低于 10%：Pass；ROI 小于0.8最高 B 级。正式版本将对接审批与版本快照。</Typography.Paragraph>},
+  ]}/>:<Tabs items={[
+   {key:"success",label:"打品成功标准",children:<div className="npd-config-grid">
+    <Form.Item label="观察周期" name="successWindow"><Select options={[30,60,90].map(x=>({label:x+"天",value:x}))}/></Form.Item>
+    <Form.Item label="最低销量" name="successSales"><InputNumber min={1} precision={0}/></Form.Item>
+    <Form.Item label="最低利润率（%）" name="minProfit"><InputNumber min={-100} max={100}/></Form.Item>
+    <Form.Item label="最高 ACOS（%）" name="maxAcos"><InputNumber min={0} max={100}/></Form.Item></div>},
+   {key:"samples",label:"有效样本",children:<Typography.Paragraph>观察期从到货且 Listing 可售后计算。周期未完成、缺货或数据不足不作为失败；成功率应同时展示有效评估样本。</Typography.Paragraph>},
+   {key:"review",label:"采购与复盘",children:<Typography.Paragraph>对比建议采购量、运营申请量、批准数量、实际采购量及30/60/90天经营结果。</Typography.Paragraph>},
+  ]}/>}
+  <Form.Item label="规则修改原因" required><Input.TextArea value={changeReason} onChange={e=>setChangeReason(e.target.value)} placeholder="请填写至少5字的修改原因" rows={3}/></Form.Item>
+  </Form>
+ </Drawer>;
+}
+
 export default function NewProductDemoPages({page,mode}:{page:NavigationPage;mode:Mode}){
  const state=useNewProductDemoStore(),c=state.config;
  const [tab,setTab]=useState("list"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
@@ -88,13 +155,7 @@ export default function NewProductDemoPages({page,mode}:{page:NavigationPage;mod
  {mode==="performance"&&p.market===null&&<Button type="link" onClick={()=>{setMarket(p);setScore(null);setReason("");}}>市场评分</Button>}
  {mode==="performance"&&p.market!==null&&p.approval!=="approved"&&<Button type="link" onClick={()=>{setPurchase(p);setQuantity(completedScore(p,c)?.suggested??null);setReason("");}}>采购确认</Button>}</Space>}
  ];
- const settings=()=>{const next=structuredClone(c);const min=mode==="performance"?c.remindDays:c.successSales;
- Modal.confirm({title:mode==="performance"?"新品表现配置":"打品跟踪配置",width:600,content:<div><Typography.Paragraph>配置仅在本次演示会话生效，需领导视角。</Typography.Paragraph>
- <Typography.Paragraph>{mode==="performance"?"上架提醒天数":"打品最低累计销量"}</Typography.Paragraph>
- <InputNumber defaultValue={min} min={1} onChange={n=>{if(mode==="performance")next.remindDays=n??30;else next.successSales=n??200;}}/>
- <Typography.Paragraph style={{marginTop:10}}>其他评分权重、评级采购范围和打品标准均保留在演示状态模型内；正式界面将按原配置抽屉扩展。</Typography.Paragraph></div>,
- onOk:()=>{if(state.demoRole!=="leader")throw Error("仅领导可改配置");state.saveConfig(next);api.success("配置已更新");}});
- };
+
  return <PageShell page={page}>{holder}<div className="npd-page">
  <div className="npd-header"><div><Typography.Title level={4}>{mode==="performance"?"新品表现":"打品跟踪"}</Typography.Title>
  <Typography.Text type="secondary">{mode==="performance"?"测品评分 · 采购建议 · 开发人员表现":"采购后追踪 · 类目深挖 · 运营人员表现"}</Typography.Text></div>
@@ -110,7 +171,7 @@ export default function NewProductDemoPages({page,mode}:{page:NavigationPage;mod
  onSearch={()=>setFilter(f=>({...f,query:query.trim(),field}))}/></div>
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
  <div className="npd-actions"><Space><Button onClick={()=>api.info("已刷新演示视图")}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
- <Button type="primary" onClick={settings}>配置</Button></Space></div></div>
+ <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
  {tab==="board"?<Board mode={mode} products={rows} c={c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={c}/></div>
  <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={allCols.filter(col=>keys.includes(String(col.key)))}/>
@@ -130,6 +191,7 @@ export default function NewProductDemoPages({page,mode}:{page:NavigationPage;mod
  {key:"id",title:"计划编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
  {key:"grade",title:"评级",dataIndex:"grade"},{key:"suggestedQty",title:"建议量",dataIndex:"suggestedQty"},
  {key:"approvedQty",title:"批准量",dataIndex:"approvedQty"}]}/></>}</>}
+ <ConfigPanel mode={mode} visible={setting} onClose={()=>setSetting(false)}/>
  <RuntimeColumnConfigDrawer open={columnsOpen} onClose={()=>setColumnsOpen(false)} fixedKeys={["name","action"]}
  appliedKeys={keys} defaultKeys={allCols.map(x=>String(x.key))} onApply={setKeys} onSaveTemplate={()=>api.info("列配置仅限演示会话")}
  groups={[{title:"新品明细",fields:allCols.map(x=>({key:String(x.key),title:String(x.title)}))}]}/>
