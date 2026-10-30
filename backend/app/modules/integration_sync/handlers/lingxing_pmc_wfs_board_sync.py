@@ -225,15 +225,20 @@ class LingxingPmcWfsBoardSyncHandler:
                         run_id=str(run.id),
                         work_item_id=str(work.id),
                     )
-                except Exception:
-                    return self._fail_run(run, work, "SYNC_WFS_TRANSPORT_FAILED")
+                except Exception as error:
+                    return self._fail_run(
+                        run, work, "SYNC_WFS_TRANSPORT_FAILED", type(error).__name__
+                    )
                 if envelope.response_json is not None:
                     self._persist_raw_response(run, work, policy, envelope)
                 else:
                     work.attempt_count = envelope.attempt_no
                 if not envelope.is_success or envelope.response_json is None:
+                    detail = envelope.error_message or ""
+                    if envelope.response_code is not None:
+                        detail = f"{detail} (http {envelope.response_code})".strip()
                     return self._fail_run(
-                        run, work, envelope.error_code or "SYNC_WFS_RESPONSE_FAILED"
+                        run, work, envelope.error_code or "SYNC_WFS_RESPONSE_FAILED", detail
                     )
                 try:
                     parsed = parse_wfs_page(self.spec.endpoint_path, envelope.response_json)
@@ -471,15 +476,21 @@ class LingxingPmcWfsBoardSyncHandler:
         run: IntegrationSyncRun,
         work: IntegrationSyncRunWorkItem | None,
         error_code: str,
+        error_message: str | None = None,
     ) -> PmcWfsSyncResult:
+        # error_message carries the client's stable category text only (no payload, no secret);
+        # two production failures on 2026-10-30 were slow to diagnose without it.
         now = utc_now()
+        safe_message = (error_message or "")[:500] or None
         if work is not None and work.status == "running":
             work.status = "failed"
             work.error_code = error_code
+            work.error_message = safe_message
             work.finished_at = now
             run.work_items_failed += 1
         run.status = "failed"
         run.error_code = error_code
+        run.error_message = safe_message
         run.finished_at = now
         self.session.commit()
         return PmcWfsSyncResult(

@@ -7,7 +7,7 @@ Environment (none printed):
   PMC_WFS_ONE_TIME_RUN_AUTHORIZED=true
   PMC_WFS_SOURCE_ACCOUNT_REF
   PMC_WFS_INTERFACE_KEY              wfsCargoPage | wfsShippingListPage | all   (default all)
-  PMC_WFS_WINDOW_START / _END        creation window, YYYY-MM-DD (default 2026-06-01 → today)
+  PMC_WFS_WINDOW_START / _END        creation window, YYYY-MM-DD (default 2026-05-01 → today)
   PMC_WFS_PUBLISH_AFTER_RUN          true → publish a board version when every run succeeds
   PMC_WFS_ONE_TIME_RUN_IDEMPOTENCY_KEY   optional prefix
   PMC_WFS_ONE_TIME_RUN_REASON        optional
@@ -64,7 +64,7 @@ from app.modules.pmc_wfs.board_publisher import WfsBoardPublisher  # noqa: E402
 PROVIDER = "lingxing"
 REQUESTED_BY = "owner-authorized-cli"
 DEFAULT_REASON = "Owner-authorized one-time PMC WFS shipment-board sync"
-DEFAULT_WINDOW_START = date(2026, 6, 1)
+DEFAULT_WINDOW_START = date(2026, 5, 1)
 FORBIDDEN_INPUT = re.compile(
     r"https?://|(?:^|[^a-z0-9])(?:app(?:_|[ -])?(?:id|secret)|authorization|bearer|"
     r"database(?:_|[ -])?url|access(?:_|[ -])?token|refresh(?:_|[ -])?token|secret|"

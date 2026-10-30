@@ -25,7 +25,7 @@
 
 ## 行字段
 
-领星侧：`shipment_id`（cargo_code）、`inbound_order_id`、`status` + `status_name` + `status_label`（0 待发货 / 1 在途 / 2 收货中 / 3 已关闭 / 4 已取消）、`cargo_sync_status`、`declared_units` / `shipped_units` / `received_units` / `damaged_units`、`sku_count`、`logistics_code`、`shipping_codes`、`shipping_status`、`warehouse_id`、`actual_delivery_date`、`arrival_date`、`expected_arrival_date`、`logistics_numbers`、`created_at`、`to_await_at` / `to_receive_at` / `to_closed_at` / `to_cancelled_at`。  
+领星侧：`shipment_id`（cargo_code）、`inbound_order_id`、`status` + `status_name` + `status_label`（0 待发货 / 1 在途 / 2 收货中 / 3 已关闭 / 4 已取消）、`cargo_sync_status`、`declared_units` / `shipped_units` / `received_units` / `damaged_units`、`sku_count`、`logistics_code`、`shipping_codes`、`shipping_status`、`warehouse_id`、`actual_delivery_date`（SP 实际发货时间）、`arrival_date`（SP「到货时间」= 领星 `arrival_time`，是计划到货日）、`expected_arrival_date`（SP 预计到港时间）、`logistics_numbers`、`created_at`、`to_await_at` / `to_receive_at` / `to_closed_at` / `to_cancelled_at`。  
 创建侧（可空）：`pk`、`its`、`business_test`、`operation_id`、`ticket_id`、`ticket_number`、`label_state`、`creation_state`、`ticket_state`。  
 `freshness`：`source_observed_at`（领星拉取时间）、`published_at`、`coverage_start/end`、`stale`（>24h）。
 

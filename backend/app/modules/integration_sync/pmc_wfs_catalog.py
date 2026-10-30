@@ -58,7 +58,9 @@ PMC_WFS_SYNC_INTERFACE_SPECS: Final[tuple[PmcWfsSyncInterfaceSpec, ...]] = (
         handler_key=f"{PMC_WFS_HANDLER_PREFIX}shipping_list_page.v1",
         target_tables=("ods_lingxing_wfs_shipping_lists",),
         retention_policy_key=f"{PMC_WFS_POLICY_PREFIX}shipping-list-page-v1",
-        default_page_size=200,
+        # 200/page timed out at 30 s against production data on 2026-10-30; 50/page finished
+        # 10 pages in 65 s.
+        default_page_size=50,
         default_max_pages=200,
         returns_total=True,
         requires_date_window=True,

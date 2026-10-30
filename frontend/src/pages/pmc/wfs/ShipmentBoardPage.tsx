@@ -149,7 +149,9 @@ export default function ShipmentBoardPage({ page, scope = "anonymous" }: { page:
     { title: "Received / 破损", width: 120, render: (_, r) => `${num(r.received_units)} / ${num(r.damaged_units)}` },
     { title: "物流", width: 160, render: (_, r) => <span>{r.logistics_code ?? "—"}<br /><span className="wfs-pending__sub">{r.shipping_codes[0] ?? "—"}{r.shipping_codes.length > 1 ? ` +${r.shipping_codes.length - 1}` : ""}</span></span> },
     { title: "实际发货", width: 100, render: (_, r) => r.actual_delivery_date ?? "—" },
-    { title: "到港 / 预计", width: 120, render: (_, r) => `${r.arrival_date ?? "—"} / ${r.expected_arrival_date ?? "—"}` },
+    // Lingxing SP field names (verified in the Lingxing UI 2026-10-30): arrival_time = 到货时间,
+    // expected_arrival_time = 预计到港时间.
+    { title: "到货 / 预计到港", width: 130, render: (_, r) => `${r.arrival_date ?? "—"} / ${r.expected_arrival_date ?? "—"}` },
     { title: "开始收货", width: 130, render: (_, r) => time(r.to_receive_at) },
     { title: "创建时间", width: 130, render: (_, r) => time(r.created_at) },
   ];

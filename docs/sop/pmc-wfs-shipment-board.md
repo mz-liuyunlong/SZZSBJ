@@ -14,7 +14,7 @@
 ## 数据刷新（手工，由负责人授权）
 
 1. 首次：`PMC_WFS_GOVERNANCE_BOOTSTRAP_AUTHORIZED=true PMC_WFS_SOURCE_ACCOUNT_REF=<账号> uv run python scripts/bootstrap_pmc_wfs_board_governance.py`，然后在治理表把两条接口的 `outbound_enabled` 和配置的 `is_enabled` 打开（不开 schedule）。
-2. 拉数 + 发布：`PMC_WFS_ONE_TIME_RUN_AUTHORIZED=true PMC_WFS_SOURCE_ACCOUNT_REF=<账号> PMC_WFS_PUBLISH_AFTER_RUN=true uv run python scripts/run_pmc_wfs_board_once.py`（默认窗口 2026-06-01 → 今天；需要 `LINGXING_ENABLE_REAL_CALLS=true` 等真实调用开关）。
+2. 拉数 + 发布（只能在 company-ai 上跑：领星按 IP 白名单放行；开发库用反向隧道，见交接册第 70 章）：`PMC_WFS_ONE_TIME_RUN_AUTHORIZED=true PMC_WFS_SOURCE_ACCOUNT_REF=<账号> PMC_WFS_PUBLISH_AFTER_RUN=true uv run python scripts/run_pmc_wfs_board_once.py`（默认窗口 2026-05-01 → 今天；需要 `LINGXING_ENABLE_REAL_CALLS=true` 等真实调用开关；`LINGXING_TIMEOUT_MS` 建议 120000，发货单接口 200/页会超时，配置默认 50/页）。
 3. 只重发布不拉数：`PMC_WFS_BOARD_PUBLISH_AUTHORIZED=true uv run python scripts/publish_pmc_wfs_board.py --source-account <账号> --latest`。
 
 ## 说明

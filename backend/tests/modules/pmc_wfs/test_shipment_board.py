@@ -333,3 +333,13 @@ def test_keyword_filter(db):
     q = ShipmentBoardQuery(keyword="WFS-TEST", keyword_field="shipment")
     assert svc.list(q).total == 1
     assert svc.list(ShipmentBoardQuery(keyword="no-match", keyword_field="shipment")).total == 0
+
+
+def test_products_skip_cancelled_cargos(db):
+    account, order = _seed_order(db)
+    _seed_board(db, account, order, cargo_code="CANCELLED1", store_id=order.store_id, status=4)
+    svc = ShipmentBoardService(db, frozenset({account}), None)
+
+    assert svc.list(ShipmentBoardQuery()).total == 1
+    assert svc.list(ShipmentBoardQuery()).items[0].status_label == "已取消"
+    assert svc.products(ShipmentBoardQuery()).total == 0

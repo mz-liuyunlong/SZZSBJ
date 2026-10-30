@@ -407,7 +407,8 @@ class ShipmentBoardService:
         agg: dict[tuple[str, str], dict[str, Any]] = {}
         for row in rows:
             mart = self._mart_by_id.get(row.id)
-            if mart is None:
+            if mart is None or row.status == 4:
+                # Cancelled cargos never ship; they would only inflate declared units.
                 continue
             for good in (mart.payload_json or {}).get("goods") or []:
                 key = (row.store_id, good.get("msku") or good.get("sku") or "")
@@ -425,7 +426,7 @@ class ShipmentBoardService:
                         "shipped_units": None,
                         "received_units": None,
                         "damaged_units": None,
-                        "in_transit_units": None,
+                        "in_transit_units": 0,
                     },
                 )
                 entry["shipments"] += 1
@@ -441,9 +442,7 @@ class ShipmentBoardService:
                 if row.status in (1, 2):
                     shipped = good.get("shipments_num") or good.get("declare_num") or 0
                     received = good.get("received_num") or 0
-                    entry["in_transit_units"] = (entry["in_transit_units"] or 0) + max(
-                        int(shipped) - int(received), 0
-                    )
+                    entry["in_transit_units"] += max(int(shipped) - int(received), 0)
         items = [
             ProductBoardRow(id=f"{k[0]}:{k[1]}", **v)
             for k, v in sorted(agg.items(), key=lambda kv: (kv[0][0], kv[0][1]))

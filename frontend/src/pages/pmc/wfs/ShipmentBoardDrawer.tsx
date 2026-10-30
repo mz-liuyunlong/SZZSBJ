@@ -102,7 +102,7 @@ export default function ShipmentBoardDrawer({ rowId, scope, onClose }: { rowId: 
 
         <Typography.Title level={5} style={{ marginTop: 16 }}>领星发货单（SP）</Typography.Title>
         {data.shipping_lists.length === 0 ? (
-          <Typography.Paragraph type="secondary">领星尚无关联发货单；发货仓 / 物流 / 到港以发货单为准。</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">领星尚无关联发货单；发货仓 / 物流 / 到货时间以发货单为准。</Typography.Paragraph>
         ) : (
           <List
             size="small"
@@ -117,8 +117,10 @@ export default function ShipmentBoardDrawer({ rowId, scope, onClose }: { rowId: 
                   { key: "num", label: "运单", children: Array.isArray(s.logistics_numbers) && s.logistics_numbers.length ? (s.logistics_numbers as string[]).join(", ") : "—" },
                   { key: "box", label: "箱 / 件", children: `${str(s.box_num_total)} / ${str(s.shipments_num_total)}` },
                   { key: "dep", label: "实际发货", children: str(s.actual_delivery_time) },
-                  { key: "arr", label: "到港", children: str(s.arrival_time) },
+                  { key: "sail", label: "开船", children: str(s.sail_time) },
                   { key: "eta", label: "预计到港", children: str(s.expected_arrival_time) },
+                  { key: "arr", label: "到货时间", children: str(s.arrival_time) },
+                  { key: "due", label: "实际受投", children: str(s.actual_due_time) },
                 ]} />
               </List.Item>
             )}
