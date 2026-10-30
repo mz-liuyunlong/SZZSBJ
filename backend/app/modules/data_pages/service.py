@@ -736,8 +736,10 @@ class ListingManagementService:
             search_field=query.search_field,
             keyword=query.keyword,
             batch_values=query.batch_values,
-            max_rows=10000,
+            max_rows=10001,
         )
+        if len(rows) > 10000:
+            raise ValueError("Listing导出超过10000条，请缩小筛选范围后重试，避免静默丢失数据")
         custom_tags = self.tag_repository.tags_for_listing_rows(rows)
         archive_states = self.repository.archive_states_for_listing_rows(rows)
         archive_states = self._normalize_listing_archive_state_keys(archive_states)
