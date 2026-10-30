@@ -265,7 +265,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
 
   const [rows, setRows] = useState<ListingManagementRow[]>([]);
-  const seenListingRows = useRef(new Map<string, ListingManagementRow>());
+  const [seenListingRows, setSeenListingRows] = useState<Record<string, ListingManagementRow>>({});
   // Server response is authoritative; do not persist stale archive overrides.
   const displayedRows = rows;
 
@@ -467,7 +467,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return () => {
       active = false;
     };
-  }, [normalizedFilters, listingRefreshToken]);
+  }, [messageApi, normalizedFilters, listingRefreshToken]);
 
   useEffect(() => {
     let active = true;
@@ -484,7 +484,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     })
       .then(({ rows: nextRows, meta }) => {
         if (!active) return;
-        nextRows.forEach((row) => seenListingRows.current.set(row.id, row));
+        setSeenListingRows((current) => ({
+          ...current,
+          ...Object.fromEntries(nextRows.map((row) => [row.id, row])),
+        }));
         setRows(nextRows);
         setTotalRows(meta.total);
         setListingLoadError(false);
@@ -501,7 +504,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return () => {
       active = false;
     };
-  }, [currentPage, listingRefreshToken, normalizedFilters, pageSize, summaryFilterKey]);
+  }, [currentPage, listingRefreshToken, messageApi, normalizedFilters, pageSize, summaryFilterKey]);
 
   const refreshListingData = useCallback(() => {
     clearResourceCache("listing-management:");
@@ -793,10 +796,10 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
 
   const selectedListingRows = useMemo(() => {
     const selectedIds = new Set(selectedRowKeys.map(String));
-    return Array.from(selectedIds, (id) => seenListingRows.current.get(id)).filter(
+    return Array.from(selectedIds, (id) => seenListingRows[id]).filter(
       (row): row is ListingManagementRow => row !== undefined,
     );
-  }, [rows, selectedRowKeys]);
+  }, [seenListingRows, selectedRowKeys]);
 
   const handleBatchArchiveListings = useCallback(() => {
     if (selectedListingRows.length === 0) {

@@ -1762,7 +1762,9 @@ class ListingTagRepository:
     def delete_tag(self, *, tag_id: str, account_refs: frozenset[str]) -> None:
         tag = self._get_tag_or_raise(tag_id)
         foreign_assignment_count = self.session.scalar(
-            select(func.count()).select_from(ProductCustomTagAssignment).where(
+            select(func.count())
+            .select_from(ProductCustomTagAssignment)
+            .where(
                 ProductCustomTagAssignment.tag_id == tag.id,
                 ProductCustomTagAssignment.source_account_ref.not_in(account_refs),
             )
