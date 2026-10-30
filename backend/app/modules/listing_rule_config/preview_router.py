@@ -149,6 +149,7 @@ class ListingEvaluationRunItem(BaseModel):
     grade_candidate_count: int
     lifecycle_candidate_count: int
     blocked_count: int
+    published_count: int = 0
     attempt_count: int
     started_at: datetime | None
     finished_at: datetime | None
@@ -212,14 +213,15 @@ def list_evaluation_runs(
         session.scalar(select(func.count()).select_from(ListingEvaluationRun).where(scoped)) or 0
     )
     scoped_stats = {
-        run_id: (int(total or 0), int(grade_count or 0), int(stage_count or 0), int(blocked or 0))
-        for run_id, total, grade_count, stage_count, blocked in session.execute(
+        run_id: (int(total or 0), int(grade_count or 0), int(stage_count or 0), int(blocked or 0), int(published or 0))
+        for run_id, total, grade_count, stage_count, blocked, published in session.execute(
             select(
                 ListingEvaluationSnapshot.run_id,
                 func.count(),
                 func.count(ListingEvaluationSnapshot.grade_candidate),
                 func.count(ListingEvaluationSnapshot.lifecycle_candidate),
                 func.count().filter(ListingEvaluationSnapshot.publication_status == "blocked"),
+                func.count().filter(ListingEvaluationSnapshot.published.is_(True)),
             )
             .where(
                 ListingEvaluationSnapshot.run_id.in_([row.id for row in rows]),
@@ -238,7 +240,8 @@ def list_evaluation_runs(
                         "processed_listings": int(scoped_stats.get(row.id, (0, 0, 0, 0))[0]),
                         "grade_candidate_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[1]),
                         "lifecycle_candidate_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[2]),
-                        "blocked_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[3]),
+                        "blocked_count": int(scoped_stats.get(row.id, (0, 0, 0, 0, 0))[3]),
+                        "published_count": int(scoped_stats.get(row.id, (0, 0, 0, 0, 0))[4]),
                     }
                 )
                 for row in rows

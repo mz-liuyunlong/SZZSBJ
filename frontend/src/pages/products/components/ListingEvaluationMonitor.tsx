@@ -15,6 +15,7 @@ interface EvaluationRun {
   grade_candidate_count: number;
   lifecycle_candidate_count: number;
   blocked_count: number;
+  published_count?: number;
   attempt_count: number;
   started_at: string | null;
   finished_at: string | null;
@@ -41,6 +42,7 @@ const runColumns: ColumnsType<EvaluationRun> = [
   { title: "等级候选", dataIndex: "grade_candidate_count", width: 90 },
   { title: "生命周期候选", dataIndex: "lifecycle_candidate_count", width: 105 },
   { title: "待核查", dataIndex: "blocked_count", width: 90 },
+  { title: "已正式发布", dataIndex: "published_count", width: 105, render: (value?: number) => value ?? 0 },
 ];
 const followUpColumns: ColumnsType<FollowUp> = [
   { title: "Item ID", dataIndex: "item_id", width: 150 },
