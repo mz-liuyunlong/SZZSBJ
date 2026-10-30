@@ -237,7 +237,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),
-  sales90Days: numberValue(item.sales_30d),
+  sales30Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
   disabledReason: item.disabled_reason ?? "",
   listingStatus: normalizeListingStatus(item.listing_status),
