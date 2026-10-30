@@ -239,9 +239,7 @@ def _edit(
             _block(409)
     else:
         assignments = ", ".join(
-            f"{key} = CAST(:{key} AS jsonb)"
-            if key == "score_snapshot_json"
-            else f"{key} = :{key}"
+            f"{key} = CAST(:{key} AS jsonb)" if key == "score_snapshot_json" else f"{key} = :{key}"
             for key in changes
         )
         now_fields = []
