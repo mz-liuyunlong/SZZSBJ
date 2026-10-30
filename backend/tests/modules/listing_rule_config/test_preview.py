@@ -106,3 +106,22 @@ def test_openapi_contains_batch_preview_route() -> None:
     from app.main import create_app
 
     assert "/api/listings/evaluation-preview/batch" in create_app().openapi()["paths"]
+
+
+def test_low_positive_stock_does_not_qualify_as_stockout() -> None:
+    rows = [
+        SimpleNamespace(
+            snapshot_date_la=CUTOFF - timedelta(days=i),
+            wfs_available_quantity=Decimal("3"),
+        )
+        for i in range(7)
+    ]
+    stage, observed, zero_days = stockout_candidate(
+        rows,
+        cutoff=CUTOFF,
+        low_limit=5,
+        prior_effective_stock=True,
+        fulfillment_type="1",
+        currently_archived=False,
+    )
+    assert (stage, observed, zero_days) == (None, 7, 0)
