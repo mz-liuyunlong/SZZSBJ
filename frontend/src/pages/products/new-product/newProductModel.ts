@@ -5,7 +5,7 @@ import { mockProducts } from "./newProductMockData";
 export type Dimension = "market" | "order" | "ads" | "profit" | "trust";
 export type Grade = "S" | "A" | "B" | "C" | "D" | "Pass";
 export type ApprovalState = "none" | "pending" | "approved" | "rejected";
-export type TrackState = "未进入打品池" | "等待到货" | "观察中" | "打品成功" | "打品失败";
+export type TrackState = "未进入打品池" | "等待到货" | "观察中" | "需要优化" | "打品成功" | "打品失败";
 export interface ProductSample {
   id: string; sku: string; itemId: string; name: string; category: string;
   developer: string; operator: string; listedAt: string;
@@ -18,6 +18,7 @@ export interface ProductSample {
   approval: ApprovalState; requestQty: number | null; requestReason: string;
   approvedQty: number | null; arrivedAt: string | null; sellableAt: string | null;
   tracking: TrackState; progress: string; failureReason: string;
+  reviewDueAt?: string | null; reviewedAt?: string | null; reviewReason?: string;
 }
 export interface GradeRule { grade: Grade; min: number; qtyMin: number; qtyMax: number }
 export interface NewProductConfig {
@@ -96,6 +97,20 @@ export function evaluatedTrack(p: ProductSample, c: NewProductConfig) {
   if (!Number.isFinite(sold)) return "数据不足";
   return sold >= c.successSales && p.margin >= c.minProfit && p.acos <= c.maxAcos ? "达标" : "未达标";
 }
+export type TrackingWorkflowTab = "all" | "ready" | "observe" | "review" | "optimize" | "done";
+export function trackedProduct(p: ProductSample): boolean {
+ return p.approval === "approved" || p.tracking !== "未进入打品池";
+}
+export function trackingWorkflow(p: ProductSample, config: NewProductConfig): Exclude<TrackingWorkflowTab,"all"> {
+ if (p.tracking==="打品成功" || p.tracking==="打品失败") return "done";
+ if (p.tracking==="需要优化") return "optimize";
+ if (!p.arrivedAt || !p.sellableAt) return "ready";
+ if (daysSince(p.arrivedAt>p.sellableAt?p.arrivedAt:p.sellableAt) >= config.successWindow) return "review";
+ return "observe";
+}
+export function periodSales(p: ProductSample, days: 30|60|90):number {
+ return days===30?p.sales30:days===60?p.sales60:p.sales90;
+}
 export function percentage(a: number, b: number): string { return b ? (100*a/b).toFixed(1)+"%" : "—"; }
 type SystemDimension = Exclude<Dimension, "market">;
 interface NewProductState {
@@ -107,7 +122,7 @@ interface NewProductState {
   submitCorrection: (id: string, dimension: SystemDimension, score: number, reason: string) => void;
   decideCorrection: (id: string, decision: "approved"|"rejected", note: string, canApprove: boolean) => void;
   saveConfig: (next: NewProductConfig, canConfigure: boolean) => void;
-  updateTrack: (id: string, tracking: TrackState, reason: string) => void;
+  updateTrack: (id: string, tracking: TrackState, reason: string, nextReview?: string) => void;
   resetMockData: () => void;
 }
 const initial = () => ({
@@ -182,7 +197,12 @@ export const useNewProductStore = create<NewProductState>((set,get) => ({
       next.maxAcos<0||next.maxAcos>100) throw Error("提醒及打品目标配置不合法");
     set(s=>({config:structuredClone(next),ruleVersion:s.ruleVersion+1}));
   },
-  updateTrack: (id,tracking,reason) => set(s=>({products:s.products.map(p=>p.id===id?
-    {...p,tracking,failureReason:reason} : p)})),
+  updateTrack: (id,tracking,reason,nextReview) => {
+    if (!get().products.some(p=>p.id===id&&trackedProduct(p))) throw Error("商品未进入打品跟踪");
+    if (reason.trim().length<5) throw Error("复盘原因至少填写5字");
+    if (tracking==="需要优化"&&!nextReview) throw Error("需要优化时必须填写下次复核日期");
+    set(s=>({products:s.products.map(p=>p.id===id?
+      {...p,tracking,failureReason:reason,reviewReason:reason,reviewedAt:new Date().toISOString(),reviewDueAt:nextReview??null}:p)}));
+  },
   resetMockData:()=>set(initial()),
 }));
