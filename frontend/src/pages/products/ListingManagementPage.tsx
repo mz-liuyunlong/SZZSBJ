@@ -262,6 +262,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths`, defaultColumnWidths);
   const [savedTemplateKeys, setSavedTemplateKeys] = usePageStateCache<string[]>(`${pageStateKey}:savedTemplateKeys`, []);
   const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
+  const [sortField, setSortField] = useState("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
 
@@ -483,6 +485,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
       page: currentPage,
       pageSize,
+      sortField,
+      sortOrder,
     })
       .then(({ rows: nextRows, meta }) => {
         if (!active) return;
@@ -506,7 +510,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return () => {
       active = false;
     };
-  }, [currentPage, listingRefreshToken, messageApi, normalizedFilters, pageSize, summaryFilterKey]);
+  }, [currentPage, listingRefreshToken, messageApi, normalizedFilters, pageSize, sortField, sortOrder, summaryFilterKey]);
 
   const refreshListingData = useCallback(() => {
     clearResourceCache("listing-management:");
@@ -950,6 +954,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
                 resetPageAndSelection();
               }}
               onSelectionChange={setSelectedRowKeys}
+              onSortChange={(key, order) => {
+                setSortField(order ? key : "");
+                setSortOrder(order ?? "asc");
+                resetPageAndSelection();
+              }}
               onOpenDetail={setDetailListing}
               onOpenGptAnalysis={openGptAnalysisModal}
               onOpenEvaluation={setEvaluationListing}

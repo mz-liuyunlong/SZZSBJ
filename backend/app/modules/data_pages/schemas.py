@@ -347,6 +347,8 @@ class ListingManagementQuery(StrictSchema):
         str,
         StringConstraints(strip_whitespace=True, max_length=32768),
     ] = ""
+    sort_field: str = Field(default="", max_length=48)
+    sort_order: Literal["asc", "desc"] = "asc"
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=50, ge=1, le=1000)
 

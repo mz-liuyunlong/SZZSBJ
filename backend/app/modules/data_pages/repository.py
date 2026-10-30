@@ -892,6 +892,8 @@ class ListingManagementRepository:
         batch_values: str = "",
         page: int,
         page_size: int,
+        sort_field: str = "",
+        sort_order: str = "asc",
     ) -> tuple[Sequence[ListingManagementRowProjection], int, datetime | None]:
         statement = self._filtered_listing_statement(
             account_refs=account_refs,
@@ -911,14 +913,36 @@ class ListingManagementRepository:
         total = self.session.scalar(select(func.count()).select_from(base))
         latest_calculated_at = self.session.scalar(select(func.max(base.c.calculated_at)))
 
-        rows = self.session.execute(
-            statement.order_by(
+        sort_columns = {
+            "skuMsku": ListingManagementCurrentMart.local_sku,
+            "productIdName": ListingManagementCurrentMart.item_id,
+            "sku": ListingManagementCurrentMart.local_sku,
+            "msku": ListingManagementCurrentMart.msku,
+            "productId": ListingManagementCurrentMart.item_id,
+            "sales30Days": ListingManagementCurrentMart.sales_30d,
+            "listPrice": ListingManagementCurrentMart.strike_price_amount,
+            "salePrice": ListingManagementCurrentMart.sale_price_amount,
+            "listedAt": ListingManagementCurrentMart.listing_start_at_utc,
+            "rating": ListingManagementCurrentMart.average_rating,
+            "wfsAvailableInventory": ListingManagementCurrentMart.wfs_available_quantity,
+            "checkedAt": ListingManagementCurrentMart.calculated_at,
+        }
+        selected_sort = sort_columns.get(sort_field)
+        if selected_sort is not None:
+            order_columns = [
+                selected_sort.desc().nulls_last()
+                if sort_order == "desc"
+                else selected_sort.asc().nulls_last()
+            ]
+        else:
+            order_columns = [
                 func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
-                ListingManagementCurrentMart.id.asc(),
-            )
+            ]
+        rows = self.session.execute(
+            statement.order_by(*order_columns, ListingManagementCurrentMart.id.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).all()

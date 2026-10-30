@@ -607,6 +607,8 @@ class ListingManagementService:
         account_refs: frozenset[str],
     ) -> tuple[ListingManagementListData, int, object | None]:
         rows, total, latest_calculated_at = self.repository.list_listings(
+            sort_field=query.sort_field,
+            sort_order=query.sort_order,
             account_refs=account_refs,
             store_id=query.store_id,
             owner_ref=query.owner_ref,

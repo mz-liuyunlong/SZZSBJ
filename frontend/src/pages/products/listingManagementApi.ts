@@ -190,6 +190,8 @@ export interface ListingManagementParams {
   summaryFilter?: string;
   page?: number;
   pageSize?: number;
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
 }
 
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
@@ -333,6 +335,10 @@ async function fetchListingManagementRowsFromApi(
   const search = new URLSearchParams();
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
+  if (params.sortField) {
+    search.set("sort_field", params.sortField);
+    search.set("sort_order", params.sortOrder ?? "asc");
+  }
   appendListingFilters(search, params);
 
   const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(

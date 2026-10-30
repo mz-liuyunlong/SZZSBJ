@@ -94,6 +94,7 @@ interface ListingManagementTableProps {
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
+  onSortChange?: (key: string, order: "asc" | "desc" | null) => void;
   onOpenDetail: (row: ListingManagementRow) => void;
   onOpenGptAnalysis?: (row: ListingManagementRow) => void;
   onOpenEvaluation?: (row: ListingManagementRow) => void;
@@ -120,6 +121,7 @@ function ListingManagementTable({
   onCurrentPageChange,
   onPageSizeChange,
   onSelectionChange,
+  onSortChange,
   onOpenDetail,
   onOpenGptAnalysis,
   onOpenEvaluation,
@@ -651,6 +653,11 @@ function ListingManagementTable({
     >
       <ProTable<ListingManagementRow>
         rowKey="id"
+        onChange={(_, __, sorter) => {
+          if (Array.isArray(sorter)) return;
+          const field = String(sorter.columnKey ?? "");
+          onSortChange?.(field, sorter.order === "ascend" ? "asc" : sorter.order === "descend" ? "desc" : null);
+        }}
         search={false}
         options={false}
         dataSource={rows}
