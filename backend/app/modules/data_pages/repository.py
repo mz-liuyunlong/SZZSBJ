@@ -97,6 +97,11 @@ class ListingManagementRowProjection:
     effective_average_rating: Decimal | None = None
     effective_review_count: int | None = None
     effective_brand: str | None = None
+    monitor_observed_at: datetime | None = None
+    monitor_source: str | None = None
+    monitor_outcome: str | None = None
+    monitor_error_code: str | None = None
+    monitor_image_urls: list[str] | None = None
 
     def __getattr__(self, name: str) -> object:
         effective = f"effective_{name}"
@@ -142,6 +147,11 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
         effective_average_rating=row[17],  # type: ignore[arg-type]
         effective_review_count=row[18],  # type: ignore[arg-type]
         effective_brand=row[19],  # type: ignore[arg-type]
+        monitor_observed_at=row[20],  # type: ignore[arg-type]
+        monitor_source=row[21],  # type: ignore[arg-type]
+        monitor_outcome=row[22],  # type: ignore[arg-type]
+        monitor_error_code=row[23],  # type: ignore[arg-type]
+        monitor_image_urls=row[24],  # type: ignore[arg-type]
     )
 
 
@@ -1222,6 +1232,11 @@ class ListingManagementRepository:
                 effective_rating.label("effective_average_rating"),
                 effective_review_count.label("effective_review_count"),
                 effective_brand.label("effective_brand"),
+                WalmartMonitorListingCurrent.observed_at.label("monitor_observed_at"),
+                WalmartMonitorListingCurrent.monitor_source.label("monitor_source"),
+                WalmartMonitorListingCurrent.monitor_outcome.label("monitor_outcome"),
+                WalmartMonitorListingCurrent.monitor_error_code.label("monitor_error_code"),
+                WalmartMonitorListingCurrent.image_urls_json.label("monitor_image_urls"),
             )
             .outerjoin(
                 WalmartListingDimension,

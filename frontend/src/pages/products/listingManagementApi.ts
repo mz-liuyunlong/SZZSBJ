@@ -30,6 +30,12 @@ interface BackendListingItem {
   listing_start_at_utc: string | null;
   listing_start_source_raw?: string | null;
   launch_date_cn?: string | null;
+  first_wfs_seen_at_utc?: string | null;
+  monitor_observed_at?: string | null;
+  monitor_source?: string | null;
+  monitor_outcome?: string | null;
+  monitor_error_code?: string | null;
+  monitor_image_urls?: string[];
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -219,7 +225,7 @@ const normalizeBuyBoxStatus = (value: string | null) => {
 const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
   sourceAccountRef: item.source_account_ref,
-  image: item.picture_url ?? "▤",
+  image: item.monitor_image_urls?.find((url) => /^https?:\/\//i.test(url)) ?? item.picture_url ?? "▤",
   msku: item.msku ?? "-",
   productId: item.item_id,
   store: item.store_name ?? item.store_id,
@@ -234,6 +240,10 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
   listedAt: toListingStartText(item.listing_start_at_utc),
+  listingDateSource: item.listing_start_at_utc ? "平台标准化日期" : item.listing_start_source_raw ? "原始日期待核实" : "未知",
+  listingStartRaw: item.listing_start_source_raw ?? "",
+  firstWfsAvailableAt: item.launch_date_cn ?? "",
+  firstWfsObservedAt: item.first_wfs_seen_at_utc ?? "",
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
   inboundInventory: numberValue(item.inbound_quantity),
@@ -243,8 +253,13 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   listingStatus: normalizeListingStatus(item.listing_status),
   buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
   walmartSeller: item.walmart_seller ?? "待确认",
-  resold: item.is_hijacked ? "是" : "否",
-  checkedAt: toCheckedText(item.calculated_at),
+  resold: item.is_hijacked == null ? "待确认" : item.is_hijacked ? "是" : "否",
+  checkedAt: item.monitor_observed_at ? toCheckedText(item.monitor_observed_at) : "未监控",
+  dataUpdatedAt: toCheckedText(item.calculated_at),
+  monitorSource: item.monitor_source ?? "未监控",
+  monitorStatus: item.monitor_outcome ?? "未监控",
+  monitorError: item.monitor_error_code ?? "",
+  monitorImageCount: item.monitor_image_urls?.length ?? 0,
   rating: numberValue(item.average_rating),
   reviewCount: item.review_count ?? 0,
   brand: item.brand ?? "-",

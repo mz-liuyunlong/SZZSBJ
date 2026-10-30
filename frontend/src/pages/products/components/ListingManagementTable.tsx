@@ -40,6 +40,7 @@ const minColumnWidths: Record<string, number> = {
   fulfillmentMethod: 120,
   gptAnalysis: 96,
   listedAt: 140,
+  firstWfsAvailableAt: 150,
   category: 120,
   wfsAvailableInventory: 140,
   inboundInventory: 130,
@@ -51,6 +52,11 @@ const minColumnWidths: Record<string, number> = {
   walmartSeller: 140,
   resold: 120,
   checkedAt: 160,
+  dataUpdatedAt: 160,
+  monitorSource: 140,
+  monitorStatus: 130,
+  monitorError: 150,
+  monitorImageCount: 120,
   rating: 100,
   reviewCount: 110,
   brand: 130,
@@ -343,6 +349,19 @@ function ListingManagementTable({
       width: columnWidths.listedAt,
       sorter: (a, b) => a.listedAt.localeCompare(b.listedAt),
       onHeaderCell: headerCell,
+      render: (_, row) => (
+        <Tooltip title={`日期来源：${row.listingDateSource || "未知"}${row.listingStartRaw ? `；ERP原始值：${row.listingStartRaw}` : ""}`}>
+          <span>{row.listedAt || "待核实"}</span>
+        </Tooltip>
+      ),
+    },
+    firstWfsAvailableAt: {
+      key: "firstWfsAvailableAt",
+      dataIndex: "firstWfsAvailableAt",
+      title: title("firstWfsAvailableAt", fieldTitle.firstWfsAvailableAt),
+      width: columnWidths.firstWfsAvailableAt,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.firstWfsAvailableAt || "-",
     },
     category: {
       key: "category",
@@ -429,6 +448,42 @@ function ListingManagementTable({
       title: title("checkedAt", fieldTitle.checkedAt),
       width: columnWidths.checkedAt,
       sorter: (a, b) => a.checkedAt.localeCompare(b.checkedAt),
+      onHeaderCell: headerCell,
+    },
+    dataUpdatedAt: {
+      key: "dataUpdatedAt",
+      dataIndex: "dataUpdatedAt",
+      title: title("dataUpdatedAt", fieldTitle.dataUpdatedAt),
+      width: columnWidths.dataUpdatedAt,
+      onHeaderCell: headerCell,
+    },
+    monitorSource: {
+      key: "monitorSource",
+      dataIndex: "monitorSource",
+      title: title("monitorSource", fieldTitle.monitorSource),
+      width: columnWidths.monitorSource,
+      onHeaderCell: headerCell,
+    },
+    monitorStatus: {
+      key: "monitorStatus",
+      dataIndex: "monitorStatus",
+      title: title("monitorStatus", fieldTitle.monitorStatus),
+      width: columnWidths.monitorStatus,
+      onHeaderCell: headerCell,
+    },
+    monitorError: {
+      key: "monitorError",
+      dataIndex: "monitorError",
+      title: title("monitorError", fieldTitle.monitorError),
+      width: columnWidths.monitorError,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.monitorError || "-",
+    },
+    monitorImageCount: {
+      key: "monitorImageCount",
+      dataIndex: "monitorImageCount",
+      title: title("monitorImageCount", fieldTitle.monitorImageCount),
+      width: columnWidths.monitorImageCount,
       onHeaderCell: headerCell,
     },
     rating: {

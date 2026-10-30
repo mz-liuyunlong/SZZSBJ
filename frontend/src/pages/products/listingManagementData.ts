@@ -17,6 +17,10 @@ export interface ListingManagementRow {
   lifecycle: string;
   fulfillmentMethod: string;
   listedAt: string;
+  listingDateSource?: string;
+  listingStartRaw?: string;
+  firstWfsAvailableAt?: string;
+  firstWfsObservedAt?: string;
   category: string;
   wfsAvailableInventory: number;
   inboundInventory: number;
@@ -28,6 +32,11 @@ export interface ListingManagementRow {
   walmartSeller: string;
   resold: string;
   checkedAt: string;
+  dataUpdatedAt?: string;
+  monitorSource?: string;
+  monitorStatus?: string;
+  monitorError?: string;
+  monitorImageCount?: number;
   rating: number;
   reviewCount: number;
   brand: string;
@@ -52,7 +61,8 @@ export const listingColumnFields = [
   { key: "lifecycle", title: "生命周期" },
   { key: "fulfillmentMethod", title: "发货方式" },
   { key: "gptAnalysis", title: "GPT分析" },
-  { key: "listedAt", title: "上架时间" },
+  { key: "listedAt", title: "平台上架时间" },
+  { key: "firstWfsAvailableAt", title: "首次WFS有货日" },
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },
   { key: "inboundInventory", title: "在途库存" },
@@ -63,7 +73,12 @@ export const listingColumnFields = [
   { key: "buyBoxStatus", title: "购物车状态" },
   { key: "walmartSeller", title: "Walmart卖家" },
   { key: "resold", title: "是否被跟卖" },
-  { key: "checkedAt", title: "检查时间" },
+  { key: "checkedAt", title: "监控检查时间" },
+  { key: "dataUpdatedAt", title: "数据更新时间" },
+  { key: "monitorSource", title: "监控来源" },
+  { key: "monitorStatus", title: "监控状态" },
+  { key: "monitorError", title: "监控错误码" },
+  { key: "monitorImageCount", title: "监控图片数" },
   { key: "rating", title: "评分" },
   { key: "reviewCount", title: "评论数" },
   { key: "brand", title: "品牌" },
