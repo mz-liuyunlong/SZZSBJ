@@ -284,7 +284,10 @@ def list_workflows(
         session.execute(
             text("""
         SELECT identity.id AS sku_identity_id, identity.lingxing_sku_code AS sku,
-               identity.source_account_ref, p.product_name, p.category,
+               identity.source_account_ref,
+               COALESCE(p.product_name, detail.product_name) AS product_name,
+               p.category, detail.product_developer_name AS developer,
+               detail.owner_name AS operator, detail.source_observed_at AS product_observed_at,
                workflow.id AS workflow_id, workflow.status,
                workflow.row_version, workflow.market_score, workflow.market_reason,
                workflow.purchase_request_qty, workflow.purchase_reason,
@@ -293,7 +296,12 @@ def list_workflows(
                workflow.review_due_at, workflow.reviewed_by, workflow.reviewed_at
         FROM dwd_lingxing_sku_identity_index AS identity
         LEFT JOIN products AS p ON p.id = identity.product_id AND p.deleted_at IS NULL
-        LEFT JOIN product_new_workflows AS workflow ON workflow.sku_identity_id = identity.id
+        LEFT JOIN dwd_lingxing_sku_product_info_current AS detail
+          ON detail.identity_id = identity.id
+         AND detail.source_account_ref = identity.source_account_ref
+        LEFT JOIN product_new_workflows AS workflow
+          ON workflow.sku_identity_id = identity.id
+         AND workflow.source_account_ref = identity.source_account_ref
         WHERE identity.source_account_ref = :account AND identity.is_active IS TRUE
         ORDER BY identity.id LIMIT :size OFFSET :skip
     """),
