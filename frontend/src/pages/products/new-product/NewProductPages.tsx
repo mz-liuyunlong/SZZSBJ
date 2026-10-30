@@ -12,7 +12,7 @@ import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnCo
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import { ProductIdentityCell } from "@/components/report-table/cells";
 import type { NavigationPage } from "@/config/navigation";
-import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions,
+import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions, getNewProductWorkflowTab, type ProductWorkflowTab,
  type ProductSample, type NewProductConfig, type Grade, type Dimension } from "./newProductModel";
 import "./NewProductPages.css";
 type Mode="performance"|"tracking";
@@ -128,7 +128,7 @@ function ConfigPanel({mode,visible,onClose,canManage}:{mode:Mode;visible:boolean
 
 export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mode}){
  const state=useNewProductStore(),c=state.config;
- const [tab,setTab]=useState("list"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
+ const [tab,setTab]=useState("list"),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
  const [market,setMarket]=useState<ProductSample|null>(null),[purchase,setPurchase]=useState<ProductSample|null>(null);
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
@@ -140,7 +140,7 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  const rows=useMemo(()=>state.products.filter(p=>(!filter.category.length||filter.category.includes(p.category))&&
  (!filter.developer.length||filter.developer.includes(p.developer))&&(!filter.operator.length||filter.operator.includes(p.operator))&&
  (!filter.query||String(p[filter.field]).toLowerCase().includes(filter.query.toLowerCase()))),[state.products,filter]);
- const view=mode==="performance"?rows:rows.filter(p=>p.approval==="approved"||p.tracking!=="未进入打品池");
+ const view=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>p.approval==="approved"||p.tracking!=="未进入打品池");
  const allCols:ProColumns<ProductSample>[]=[
  {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
  {key:"category",title:"类目",dataIndex:"category",width:130},
@@ -173,6 +173,14 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
  {tab==="board"?<Board mode={mode} products={rows} c={c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={c}/></div>
+ {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
+ {key:"all",label:"全部新品 ("+rows.length+")"},
+ {key:"market",label:"待市场评分 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="market").length+")"},
+ {key:"purchase",label:"待确认采购 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="purchase").length+")"},
+ {key:"approval",label:"审核中 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="approval").length+")"},
+ {key:"approved",label:"已批准 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="approved").length+")"},
+ {key:"stopped",label:"停止推进 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="stopped").length+")"}
+ ]}/>}
  <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={allCols.filter(col=>keys.includes(String(col.key)))}/>
  {mode==="performance"&&<>
  <DataTable title="系统评分修正申请" data={state.corrections} columns={[
