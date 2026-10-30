@@ -27,6 +27,6 @@ describe("Listing sales-window contract", () => {
   it("labels the 30-day backend sales metric as 30-day sales", () => {
     const field = listingColumnFields.find((item) => item.key === "sales30Days");
     expect(field?.title).toBe("近30天销量");
-    expect(listingColumnFields.some((item) => item.key === "sales90Days")).toBe(false);
+    expect(listingColumnFields.map((item) => String(item.key))).not.toContain("sales90Days");
   });
 });
