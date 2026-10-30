@@ -328,6 +328,19 @@ const appendListingFilters = (search: URLSearchParams, params: ListingManagement
   }
 };
 
+const buildBatchSearchPayload = (
+  search: URLSearchParams,
+  params: ListingManagementParams,
+) => {
+  const filters = new URLSearchParams(search);
+  filters.delete("batch_values");
+  filters.set("search_field", backendSearchField(params.searchType));
+  return {
+    filters: Object.fromEntries(filters.entries()),
+    batch_values: (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean),
+  };
+};
+
 async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
 ): Promise<ListingManagementApiResult> {
@@ -343,9 +356,14 @@ async function fetchListingManagementRowsFromApi(
   }
   appendListingFilters(search, params);
 
-  const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
-    `/api/listings/walmart?${search.toString()}`,
-  );
+  const envelope = params.batchValues?.length
+    ? await backendRequest<BackendListingData, ListingManagementApiMeta>(
+        "/api/listings/walmart/search",
+        { method: "POST", body: JSON.stringify(buildBatchSearchPayload(search, params)) },
+      )
+    : await backendRequest<BackendListingData, ListingManagementApiMeta>(
+        `/api/listings/walmart?${search.toString()}`,
+      );
 
   return {
     rows: envelope.data.items.map(toListingRow),
@@ -359,9 +377,14 @@ async function fetchListingManagementSummaryFromApi(
   const search = new URLSearchParams();
   appendListingFilters(search, { ...params, summaryFilter: "total" });
 
-  const envelope = await backendRequest<BackendListingSummaryData>(
-    `/api/listings/walmart/summary?${search.toString()}`,
-  );
+  const envelope = params.batchValues?.length
+    ? await backendRequest<BackendListingSummaryData>(
+        "/api/listings/walmart/summary/search",
+        { method: "POST", body: JSON.stringify(buildBatchSearchPayload(search, params)) },
+      )
+    : await backendRequest<BackendListingSummaryData>(
+        `/api/listings/walmart/summary?${search.toString()}`,
+      );
 
   return {
     total: envelope.data.total,

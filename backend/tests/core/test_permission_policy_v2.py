@@ -168,6 +168,17 @@ def test_require_permission_uses_request_specific_permission() -> None:
     assert resolved is principal
 
 
+def test_listing_batch_search_uses_read_permission_not_archive_permission() -> None:
+    assert (
+        permission_for_request("POST", "/api/listings/walmart/search", "products:read")
+        == "page:products:listing-management:view"
+    )
+    assert (
+        permission_for_request("POST", "/api/listings/walmart/summary/search", "products:read")
+        == "page:products:listing-management:view"
+    )
+
+
 def test_listing_write_routes_require_action_permissions() -> None:
     examples = (
         (

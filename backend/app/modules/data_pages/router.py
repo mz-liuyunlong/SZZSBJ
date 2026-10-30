@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -40,6 +41,7 @@ from app.modules.data_pages.schemas import (
     ListingManagementFilterOptionsData,
     ListingManagementListData,
     ListingManagementQuery,
+    ListingManagementBatchSearchRequest,
     ListingManagementReadMeta,
     ListingManagementSummaryData,
     ListingTagBatchSetData,
@@ -627,6 +629,58 @@ def update_listing_gpt_analysis(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return success_response(request, data=data, meta=None)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/search",
+    response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
+    responses=ERRORS,
+)
+def search_walmart_listings(
+    request: Request,
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta]:
+    query = payload.filters.model_copy(
+        update={"batch_values": json.dumps(payload.batch_values, ensure_ascii=False)}
+    )
+    data, total, latest_calculated_at = ListingManagementService(session).list_listings(
+        query, account_refs
+    )
+    return success_response(
+        request,
+        data=data,
+        meta=_listing_meta(
+            latest_calculated_at=latest_calculated_at,
+            page=query.page,
+            page_size=query.page_size,
+            total=total,
+        ),
+    )
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/summary/search",
+    response_model=SuccessEnvelope[ListingManagementSummaryData, Any],
+    responses=ERRORS,
+)
+def search_walmart_listing_summary(
+    request: Request,
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementSummaryData, Any]:
+    query = payload.filters.model_copy(
+        update={"batch_values": json.dumps(payload.batch_values, ensure_ascii=False)}
+    )
+    return success_response(
+        request,
+        data=ListingManagementService(session).listing_summary(query, account_refs),
+        meta=None,
+    )
 
 
 @router.get(

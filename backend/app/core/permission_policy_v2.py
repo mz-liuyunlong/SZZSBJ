@@ -105,6 +105,18 @@ _RULES: tuple[RequestPermissionRule, ...] = (
     ),
     RequestPermissionRule(
         "POST",
+        "/api/listings/walmart/search",
+        "page:products:listing-management:view",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/walmart/summary/search",
+        "page:products:listing-management:view",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
         "/api/listings/walmart/",
         "action:products:listing-management:archive",
     ),

@@ -353,6 +353,15 @@ class ListingManagementQuery(StrictSchema):
     page_size: int = Field(default=50, ge=1, le=1000)
 
 
+class ListingManagementBatchSearchRequest(StrictSchema):
+    """POST body for account-scoped searches of at most 1,000 identifiers."""
+
+    filters: ListingManagementQuery
+    batch_values: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    ] = Field(min_length=1, max_length=1000)
+
+
 class ListingManagementItemRead(StrictSchema):
     id: str
     source_account_ref: str
