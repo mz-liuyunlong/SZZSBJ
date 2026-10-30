@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completedScore, getPeriodMetrics, evaluateTrack, defaultConfig, evaluatedTrack, trackingWorkflow, periodSales, useNewProductStore } from "./newProductModel";
+import { completedScore, getPeriodMetrics, evaluateTrack, productScore, defaultConfig, evaluatedTrack, trackingWorkflow, periodSales, useNewProductStore } from "./newProductModel";
 import { mockProducts } from "./newProductMockData";
 
 describe("new product rules with mock fixtures", () => {
@@ -62,6 +62,25 @@ describe("new product rules with mock fixtures", () => {
     store.resetMockData();
   });
   it("uses cumulative period metrics",()=>{const p=mockProducts.find(x=>x.id==="YC00901")!;expect(getPeriodMetrics(p,30).clicks).toBeLessThan(getPeriodMetrics(p,90).clicks);expect(evaluateTrack(p,defaultConfig,60)).toBe("达标");});
+  it("freezes purchase grading and stores versioned configuration history", () => {
+    const store=useNewProductStore.getState();store.resetMockData();
+    const initial=useNewProductStore.getState(),p=initial.products.find(x=>x.id==="YC00806")!;
+    const suggested=productScore(p,initial.config)?.suggested??0;
+    store.applyPurchase(p.id,suggested,"");
+    store.decidePurchase(p.id,"approved","同意按系统建议采购",true,"采购主管");
+    const approved=useNewProductStore.getState().products.find(x=>x.id===p.id)!;
+    expect(approved.purchaseSnapshot?.ruleVersion).toBe(1);
+    expect(approved.purchaseSnapshot?.approvedBy).toBe("采购主管");
+    const config=structuredClone(useNewProductStore.getState().config);
+    config.rules=config.rules.map(rule=>rule.grade==="A"?{...rule,min:7.5}:rule);
+    store.saveConfig(config,true,"运营主管","调整A级评估分数");
+    expect(useNewProductStore.getState().ruleHistory).toHaveLength(2);
+    expect(useNewProductStore.getState().ruleHistory[1].changedBy).toBe("运营主管");
+    const state=useNewProductStore.getState(),saved=state.products.find(x=>x.id===p.id)!;
+    expect(productScore(saved,state.config)?.grade).toBe(approved.purchaseSnapshot?.grade);
+    expect(state.plans.filter(plan=>plan.productId===p.id)).toHaveLength(1);
+    store.resetMockData();
+  });
   it("never treats unsellable products as completed launch evaluations", () => {
     expect(evaluatedTrack(mockProducts[1],defaultConfig)).toBe("未开始");
   });
