@@ -176,7 +176,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
  const [review,setReview]=useState<string|null>(null),[approval,setApproval]=useState<ProductSample|null>(null);
  const [score,setScore]=useState<number|null>(null),[quantity,setQuantity]=useState<number|null>(null),[reason,setReason]=useState("");
- const [keys,setKeys]=useState(stored?.keys??["name","category","developer","operator","days","market","score","suggested","approval","tracking","salesWindow","orders","clicks","adSpend","acos","margin","profit","requested","approved","inventory","action"]);
+ const [keys,setKeys]=useState(stored?.keys??["name","itemId","category","developer","operator","days","market","score","suggested","approval","tracking","salesWindow","orders","clicks","adSpend","acos","margin","profit","requested","approved","inventory","action"]);
  const [api,holder]=message.useMessage();
  const act=(fn:()=>void,done:()=>void)=>{try{fn();done();api.success("操作已更新");}catch(e){api.error((e as Error).message);}};
  const rows=useMemo(()=>state.products.filter(p=>(!filter.category.length||filter.category.includes(p.category))&&
@@ -186,6 +186,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  const view=primary.filter(p=>cardKey==="total"||(cardKey==="pass"||cardKey==="categories"?(mode==="performance"?gradePass(productScore(p,c)?.grade):evaluateTrack(p,c,period)==="达标"):mode==="performance"?p.market===null&&daysSince(p.listedAt)>=c.remindDays:trackingWorkflow(p,{...c,successWindow:period})==="review"));
  const allCols:ProColumns<ProductSample>[]=[
  {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><Space><ImageCell label="商品图片" image={p.image} /><Space direction="vertical" size={0}><CopyableTextCell label="SKU" text={p.sku}/><CopyableTextCell label="产品名称" text={p.name}/></Space></Space>},
+ {key:"itemId",title:"Item ID",width:140,render:(_,p)=><CopyableTextCell text={p.itemId} label="Item ID"/>},
  {key:"category",title:"类目",dataIndex:"category",width:130},
  {key:"developer",title:"开发人员",dataIndex:"developer",width:120},
  {key:"operator",title:"运营人员",dataIndex:"operator",width:120},
@@ -243,7 +244,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  key,label:label+" ("+rows.filter(p=>trackedProduct(p)&&(key==="all"||trackingWorkflow(p,{...c,successWindow:period})===key)).length+")"
  }))}/>
  </div>}
- <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={keys.map(key=>allCols.find(col=>String(col.key)===key)).filter((col):col is ProColumns<ProductSample>=>!!col).map(col=>({...col,width:widths[String(col.key)]??col.width,title:<ResizableColumnTitle label={String(col.title)} minWidth={90} width={widths[String(col.key)]??Number(col.width??120)} onWidthChange={width=>setWidths(w=>({...w,[String(col.key)]:width}))}/> }))}/>
+ <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={keys.map(key=>allCols.find(col=>String(col.key)===key)).filter((col):col is ProColumns<ProductSample>=>!!col).map(col=>({...col,width:widths[String(col.key)]??col.width,title:<ResizableColumnTitle label={String(col.title)} minWidth={90} width={widths[String(col.key)]??Number(col.width??120)} onWidthChange={width=>setWidths(w=>{const next={...w,[String(col.key)]:width};writeUserPreference(username,preferenceKey,1,{keys,widths:next});return next;})}/> }))}/>
  {mode==="performance"&&<>
  <DataTable title="系统评分修正申请" data={state.corrections} columns={[
  {key:"id",title:"申请编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
