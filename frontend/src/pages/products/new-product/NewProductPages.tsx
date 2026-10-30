@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { CheckCircleOutlined, AppstoreOutlined, HourglassOutlined } from "@ant-design/icons";
-import { Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
+import { Button, Card, DatePicker, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
+import dayjs from "dayjs";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import ReactECharts from "echarts-for-react";
 import PageShell from "@/components/page/PageShell";
@@ -234,7 +235,6 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  items={[["all","全部追踪"],["ready","待开售"],["observe","观察中"],["review","待复盘"],["optimize","需要优化"],["done","已完成"]].map(([key,label])=>({
  key,label:label+" ("+rows.filter(p=>trackedProduct(p)&&(key==="all"||trackingWorkflow(p,{...c,successWindow:period})===key)).length+")"
  }))}/>
- <Space><Typography.Text type="secondary">观察周期</Typography.Text><Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天"}))}/></Space>
  </div>}
  <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={keys.map(key=>allCols.find(col=>String(col.key)===key)).filter((col):col is ProColumns<ProductSample>=>!!col).map(col=>({...col,width:widths[String(col.key)]??col.width,title:<ResizableColumnTitle label={String(col.title)} minWidth={90} width={widths[String(col.key)]??Number(col.width??120)} onWidthChange={width=>setWidths(w=>({...w,[String(col.key)]:width}))}/> }))}/>
  {mode==="performance"&&<>
@@ -259,7 +259,7 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  <div className="npd-review-summary"><div>系统建议：{completedScore(reviewProduct,c)?.suggested??"—"} 件</div><div>运营申请：{reviewProduct.requestQty??"—"} 件</div><div>批准数量：{reviewProduct.approvedQty??"—"} 件</div>
  <div>{period}天销量：{periodSales(reviewProduct,period)}</div><div>利润率：{reviewProduct.margin.toFixed(1)}%</div><div>ACOS：{reviewProduct.acos.toFixed(1)}%</div><div>库存：{reviewProduct.inventory}</div></div>
  <Typography.Paragraph>复盘结果</Typography.Paragraph><Select value={reviewState} onChange={setReviewState} style={{width:"100%"}} options={["观察中","需要优化","打品成功","打品失败"].map(v=>({label:v,value:v}))}/>
- {reviewState==="需要优化"&&<><Typography.Paragraph style={{marginTop:12}}>下次复核日期（必填）</Typography.Paragraph><Input type="date" value={reviewDate} onChange={e=>setReviewDate(e.target.value)}/></>}
+ {reviewState==="需要优化"&&<><Typography.Paragraph style={{marginTop:12}}>下次复核日期（必填）</Typography.Paragraph><DatePicker value={reviewDate?dayjs(reviewDate):null} onChange={value=>setReviewDate(value?.format("YYYY-MM-DD")??"")} format="YYYY-MM-DD" style={{width:"100%"}}/></>}
  <Typography.Paragraph style={{marginTop:12}}>复盘说明（必填，至少5字）</Typography.Paragraph><Input.TextArea rows={4} value={reason} onChange={e=>setReason(e.target.value)}/></>}
  </Drawer>
  <ConfigPanel mode={mode} visible={setting} canManage={canManage} onClose={()=>setSetting(false)}/>
