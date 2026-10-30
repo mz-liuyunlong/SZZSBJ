@@ -41,6 +41,7 @@ export interface ListingManagementRow {
   monitorStatus?: string;
   monitorError?: string;
   monitorImageCount?: number;
+  monitorAgeHours?: number | null;
   rating: number;
   reviewCount: number;
   brand: string;
@@ -80,6 +81,7 @@ export const listingColumnFields = [
   { key: "checkedAt", title: "监控检查时间" },
   { key: "dataUpdatedAt", title: "数据更新时间" },
   { key: "monitorSource", title: "监控来源" },
+  { key: "monitorAgeHours", title: "监控时效" },
   { key: "monitorStatus", title: "监控状态" },
   { key: "monitorError", title: "监控错误码" },
   { key: "monitorImageCount", title: "监控图片数" },

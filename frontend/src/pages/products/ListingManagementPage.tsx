@@ -200,6 +200,7 @@ const defaultColumnWidths: Record<string, number> = {
   checkedAt: 160,
   dataUpdatedAt: 160,
   monitorSource: 140,
+  monitorAgeHours: 150,
   monitorStatus: 130,
   monitorError: 150,
   monitorImageCount: 120,

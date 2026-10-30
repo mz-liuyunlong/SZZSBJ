@@ -54,6 +54,7 @@ const minColumnWidths: Record<string, number> = {
   checkedAt: 160,
   dataUpdatedAt: 160,
   monitorSource: 140,
+  monitorAgeHours: 150,
   monitorStatus: 130,
   monitorError: 150,
   monitorImageCount: 120,
@@ -465,6 +466,18 @@ function ListingManagementTable({
       title: title("monitorSource", fieldTitle.monitorSource),
       width: columnWidths.monitorSource,
       onHeaderCell: headerCell,
+    },
+    monitorAgeHours: {
+      key: "monitorAgeHours",
+      dataIndex: "monitorAgeHours",
+      title: title("monitorAgeHours", fieldTitle.monitorAgeHours),
+      width: columnWidths.monitorAgeHours,
+      onHeaderCell: headerCell,
+      render: (_, row) => row.monitorAgeHours == null
+        ? <Tag>无监控记录</Tag>
+        : row.monitorAgeHours >= 48
+          ? <Tag color="orange">{row.monitorAgeHours}小时（超48小时）</Tag>
+          : <Tag color="green">{row.monitorAgeHours}小时</Tag>,
     },
     monitorStatus: {
       key: "monitorStatus",

@@ -266,6 +266,9 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   monitorStatus: item.monitor_outcome ?? "未监控",
   monitorError: item.monitor_error_code ?? "",
   monitorImageCount: item.monitor_image_urls?.length ?? 0,
+  monitorAgeHours: item.monitor_observed_at && Number.isFinite(Date.parse(item.monitor_observed_at))
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(item.monitor_observed_at)) / 3600000))
+    : null,
   rating: numberValue(item.average_rating),
   reviewCount: item.review_count ?? 0,
   brand: item.brand ?? "-",
