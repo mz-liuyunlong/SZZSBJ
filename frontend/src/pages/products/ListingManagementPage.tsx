@@ -264,25 +264,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
 
   const [rows, setRows] = useState<ListingManagementRow[]>([]);
-  const [archiveStateOverrides, setArchiveStateOverrides] = useState<Record<string, boolean>>({});
-  const applyArchiveStateOverrides = useCallback(
-    (currentRows: ListingManagementRow[]) =>
-      currentRows.map((currentRow) =>
-        Object.prototype.hasOwnProperty.call(archiveStateOverrides, currentRow.id)
-          ? {
-              ...currentRow,
-              isArchived: Boolean(archiveStateOverrides[currentRow.id]),
-            }
-          : currentRow,
-      ),
-    [archiveStateOverrides],
-  );
-
-  // Keep stable row and record references across unrelated dialog/filter state updates.
-  const displayedRows = useMemo(
-    () => applyArchiveStateOverrides(rows),
-    [rows, applyArchiveStateOverrides],
-  );
+  // Server response is authoritative; do not persist stale archive overrides.
+  const displayedRows = rows;
 
   const [totalRows, setTotalRows] = useState(0);
   const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
@@ -572,7 +555,6 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         archiveResult?.archive_reason ??
         reason;
 
-      setArchiveStateOverrides?.((current) => ({ ...current, [row.id]: Boolean(nextIsArchived) }));
       setRows((currentRows) =>
         currentRows.map((item) =>
           item.id === row.id
@@ -685,7 +667,6 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         restoreResult?.isArchived ??
         restoreResult?.is_archived ??
         false;
-      setArchiveStateOverrides((current) => ({ ...current, [row.id]: nextIsArchived }));
       setRows((current) => current.map((item) => (
         item.id === row.id ? { ...item, isArchived: nextIsArchived } : item
       )));
