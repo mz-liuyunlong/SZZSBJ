@@ -61,7 +61,7 @@ export const listingColumnFields = [
   { key: "store", title: "店铺" },
   { key: "owner", title: "负责人" },
   { key: "title", title: "平台标题" },
-  { key: "productType", title: "产品类型" },
+  { key: "productType", title: "平台类目" },
   { key: "listPrice", title: "划线价" },
   { key: "salePrice", title: "在售价" },
   { key: "productStatus", title: "产品状态" },

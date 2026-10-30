@@ -153,8 +153,8 @@ function ListingManagementToolbar({
     <div className="listing-management__toolbar" role="search" aria-label="Listing 管理筛选">
       <ReportFacetSelect
         mode="multiple"
-        ariaLabel="产品类型"
-        placeholder="产品类型"
+        ariaLabel="平台类目"
+        placeholder="平台类目"
         unit="个类型"
         value={normalizeSelected(filters.productTypes, filters.productType)}
         options={productTypes}
