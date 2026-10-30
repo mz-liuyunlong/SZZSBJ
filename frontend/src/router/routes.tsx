@@ -44,7 +44,7 @@ import BusinessConfigPage from "@/pages/settings/BusinessConfigPage";
 import { navigation, navigationRedirects } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
-import { isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
+import { hasPermission, isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
 
 interface AppRoutesProps {
   mockLoggedIn: boolean;
@@ -180,9 +180,9 @@ function BusinessRoute({
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
         ) : page.key === "products_new_product_analysis" ? (
-          <NewProductPages page={page} mode="performance" username={activeUser.username} canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
+          <NewProductPages page={page} mode="performance" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product:configure")} />
         ) : page.key === "products_launch_tracking" ? (
-          <NewProductPages page={page} mode="tracking" username={activeUser.username} canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
+          <NewProductPages page={page} mode="tracking" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product:configure")} />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
