@@ -31,6 +31,7 @@ export interface ListingManagementRow {
   inboundInventory: number;
   sales30Days: number;
   adSpend30Days: number;
+  adSpend30DaysKnown?: boolean;
   disabledReason: string;
   listingStatus: string;
   buyBoxStatus: string;

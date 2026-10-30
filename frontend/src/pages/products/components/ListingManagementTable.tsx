@@ -423,7 +423,7 @@ function ListingManagementTable({
       width: columnWidths.adSpend30Days,
       sorter: (a, b) => a.adSpend30Days - b.adSpend30Days,
       onHeaderCell: headerCell,
-      render: (_, row) => `$${row.adSpend30Days.toFixed(2)}`,
+      render: (_, row) => row.adSpend30DaysKnown === false ? "未同步" : `${row.adSpend30Days.toFixed(2)}`,
     },
     disabledReason: {
       key: "disabledReason",

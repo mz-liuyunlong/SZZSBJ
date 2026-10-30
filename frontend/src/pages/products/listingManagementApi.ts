@@ -262,6 +262,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   inboundInventory: numberValue(item.inbound_quantity),
   sales30Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
+  adSpend30DaysKnown: item.ad_spend_30d_amount !== null,
   disabledReason: item.disabled_reason ?? "",
   listingStatus: normalizeListingStatus(item.listing_status),
   buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
