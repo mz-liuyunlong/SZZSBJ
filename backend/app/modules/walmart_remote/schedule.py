@@ -73,10 +73,14 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
             LingxingStoreDimension.is_sync.is_(True),
         )
     ).all()
-    if len(existing) != len(REMOTE_COLLECTION_STORES) or len({item.store_id for item in existing}) != len(REMOTE_COLLECTION_STORES):
+    if (
+        len(existing) != len(REMOTE_COLLECTION_STORES)
+        or len({item.store_id for item in existing}) != len(REMOTE_COLLECTION_STORES)
+    ):
         return []
     if any(
-        not (item.store_name or "").startswith(active_mapping[item.store_id] + "-") for item in existing
+        not (item.store_name or "").startswith(active_mapping[item.store_id] + "-")
+        for item in existing
     ):
         return []
     jobs: list[WalmartRemoteJob] = []
