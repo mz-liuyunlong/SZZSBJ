@@ -6,9 +6,9 @@ Revises: 20261029_0068_walmart_remote_jobs
 
 from __future__ import annotations
 
-from alembic import op
 from sqlalchemy import text
 
+from alembic import op
 from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
 
 revision = "20261030_0069_new_product_rbac_catalog"
