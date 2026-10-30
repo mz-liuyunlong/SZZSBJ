@@ -1757,8 +1757,16 @@ class ListingTagRepository:
         self.session.refresh(tag)
         return tag
 
-    def delete_tag(self, *, tag_id: str) -> None:
+    def delete_tag(self, *, tag_id: str, account_refs: frozenset[str]) -> None:
         tag = self._get_tag_or_raise(tag_id)
+        foreign_assignment_count = self.session.scalar(
+            select(func.count()).select_from(ProductCustomTagAssignment).where(
+                ProductCustomTagAssignment.tag_id == tag.id,
+                ProductCustomTagAssignment.source_account_ref.not_in(account_refs),
+            )
+        )
+        if foreign_assignment_count:
+            raise PermissionError("此标签仍被其他账号使用，禁止跨账号删除")
         self.session.execute(
             delete(ProductCustomTagAssignment).where(ProductCustomTagAssignment.tag_id == tag.id)
         )

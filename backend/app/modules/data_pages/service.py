@@ -1040,8 +1040,8 @@ class ListingManagementService:
         )
         return self._to_tag_read(tag, 0)
 
-    def delete_tag(self, tag_id: str) -> None:
-        self.tag_repository.delete_tag(tag_id=tag_id)
+    def delete_tag(self, tag_id: str, account_refs: frozenset[str]) -> None:
+        self.tag_repository.delete_tag(tag_id=tag_id, account_refs=account_refs)
 
     def batch_set_tags(
         self,

@@ -459,11 +459,14 @@ def delete_listing_tag(
     tag_id: str,
     session: db_session,
     _: listing_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], Any]:
     try:
-        ListingManagementService(session).delete_tag(tag_id)
+        ListingManagementService(session).delete_tag(tag_id, account_refs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return success_response(request, data={"deleted": True}, meta=None)
 
 
