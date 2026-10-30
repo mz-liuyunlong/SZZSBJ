@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckCircleOutlined, ClockCircleOutlined, AppstoreOutlined, HourglassOutlined } from "@ant-design/icons";
+import { CheckCircleOutlined, AppstoreOutlined, HourglassOutlined } from "@ant-design/icons";
 import { Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import ReactECharts from "echarts-for-react";
@@ -11,7 +11,7 @@ import ReportFacetSelect from "@/shared/report-filters";
 import ResetButton from "@/components/report-table/ResetButton";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
-import { ProductIdentityCell, CopyableTextCell, ImageCell, StatusTagCell, TrendPreviewCell, PercentCell, MoneyCell } from "@/components/report-table/cells";
+import { CopyableTextCell, ImageCell, StatusTagCell, PercentCell, MoneyCell } from "@/components/report-table/cells";
 import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import type { NavigationPage } from "@/config/navigation";
 import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions, getNewProductWorkflowTab, trackedProduct, trackingWorkflow, periodSales, type TrackingWorkflowTab, type TrackState, type ProductWorkflowTab,
@@ -35,9 +35,9 @@ function DashboardCards({mode,products,c,onSelect,activeKey}:{mode:Mode;products
   ];
   return <ManagementStatCards ariaLabel={mode==="performance"?"新品表现指标":"打品跟踪指标"} cards={cards} activeKey={activeKey} onCardClick={onSelect}/>;
 }
-function DataTable<T extends object>({title,data,columns}:{title:string;data:T[];columns:ProColumns<T>[]}){return <div className="npd-panel"><strong>{title}</strong><ReportTableShell label={title}><ProTable<T> rowKey={r=>String((r as {id:string}).id)}
+function DataTable<T extends object>({title,data,columns}:{title:string;data:T[];columns:ProColumns<T>[]}){return <div className="npd-panel"><strong>{title}</strong><ReportTableShell label={title}><ProTable<T> rowKey={r=>String((r as {id?:string;sku?:string}).id??(r as {sku?:string}).sku??"unknown")}
  search={false} options={false} toolBarRender={false} dataSource={data} columns={columns} bordered size="small" scroll={{x:"max-content",y:350}}
- pagination={{pageSize:50,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),showSizeChanger:true,showTotal:n=>"共 "+n+" 条数据"}}/></ReportTableShell></div>;}
+ pagination={{defaultPageSize:50,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),showSizeChanger:true,showTotal:n=>"共 "+n+" 条数据"}}/></ReportTableShell></div>;}
 function group(products:ProductSample[],c:NewProductConfig,key:"category"|"developer"|"operator",launch:boolean){
  const pool=launch?products.filter(p=>p.approval==="approved"||p.tracking!=="未进入打品池"):products;
  return [...new Set(pool.map(p=>p[key]))].map(name=>{const list=pool.filter(p=>p[key]===name);
@@ -164,7 +164,7 @@ function ConfigPanel({mode,visible,onClose,canManage}:{mode:Mode;visible:boolean
 
 export default function NewProductPages({page,mode,canManage=false}:{page:NavigationPage;mode:Mode;canManage?:boolean}){
  const state=useNewProductStore(),c=state.config;
- const [cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
+ const [widths,setWidths]=useState<Record<string,number>>({}),[cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
  const [market,setMarket]=useState<ProductSample|null>(null),[purchase,setPurchase]=useState<ProductSample|null>(null);
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
@@ -179,22 +179,22 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  const primary=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>trackedProduct(p)&&(trackingTab==="all"||trackingWorkflow(p,{...c,successWindow:period})===trackingTab));
  const view=primary.filter(p=>cardKey==="total"||(cardKey==="pass"?(mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功"):cardKey==="categories"?(mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功"):mode==="performance"?p.market===null&&daysSince(p.listedAt)>=c.remindDays:trackingWorkflow(p,{...c,successWindow:period})==="review"));
  const allCols:ProColumns<ProductSample>[]=[
- {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
+ {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><Space><ImageCell label="商品图片" image={p.image} /><Space direction="vertical" size={0}><CopyableTextCell label="SKU" text={p.sku}/><CopyableTextCell label="产品名称" text={p.name}/></Space></Space>},
  {key:"category",title:"类目",dataIndex:"category",width:130},
  {key:"developer",title:"开发人员",dataIndex:"developer",width:120},
  {key:"operator",title:"运营人员",dataIndex:"operator",width:120},
  {key:"days",title:"上架天数",width:100,render:(_,p)=>daysSince(p.listedAt)+" 天"},
  {key:"score",title:"总分 / 评级",width:140,render:(_,p)=>{const s=completedScore(p,c);return s?<Space><strong>{s.score.toFixed(2)}</strong><Tag color={tone[s.grade]}>{s.grade}</Tag></Space>:"待评分";}},
  {key:"suggested",title:"建议量",width:115,render:(_,p)=>completedScore(p,c)?.suggested??"—"},
- {key:"approval",title:"采购状态",dataIndex:"approval",width:115},
- {key:"tracking",title:"打品结果",dataIndex:"tracking",width:125},
+ {key:"approval",title:"采购状态",width:115,render:(_,p)=><StatusTagCell label={p.approval==="none"?"未提交":p.approval==="pending"?"审核中":p.approval==="approved"?"已批准":"已驳回"} color={p.approval==="approved"?"success":p.approval==="rejected"?"error":"warning"}/>},
+ {key:"tracking",title:"打品结果",width:125,render:(_,p)=><StatusTagCell label={p.tracking} color={p.tracking==="打品成功"?"success":p.tracking==="打品失败"?"error":"processing"}/>},
  {key:"market",title:"市场竞争",width:100,render:(_,p)=>p.market===null?"待确认":p.market+"分"},
  {key:"clicks",title:"点击量",dataIndex:"clicks",width:100},
  {key:"orders",title:"订单量",dataIndex:"orders",width:100},
  {key:"salesWindow",title:period+"天销量",width:115,render:(_,p)=>periodSales(p,period)},
- {key:"adSpend",title:"广告费",dataIndex:"adSpend",width:105},
- {key:"acos",title:"ACOS",width:90,render:(_,p)=>p.acos.toFixed(1)+"%"},
- {key:"margin",title:"利润率",width:100,render:(_,p)=>p.margin.toFixed(1)+"%"},
+ {key:"adSpend",title:"广告费",width:105,render:(_,p)=><MoneyCell value={p.adSpend}/>},
+ {key:"acos",title:"ACOS",width:90,render:(_,p)=><PercentCell value={p.acos}/>},
+ {key:"margin",title:"利润率",width:100,render:(_,p)=><PercentCell value={p.margin}/>},
  {key:"requested",title:"申请数量",dataIndex:"requestQty",width:110},
  {key:"approved",title:"批准数量",dataIndex:"approvedQty",width:110},
  {key:"inventory",title:"剩余库存",dataIndex:"inventory",width:110},
@@ -236,7 +236,7 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  }))}/>
  <Space><Typography.Text type="secondary">观察周期</Typography.Text><Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天"}))}/></Space>
  </div>}
- <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={allCols.filter(col=>keys.includes(String(col.key)))}/>
+ <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={keys.map(key=>allCols.find(col=>String(col.key)===key)).filter((col):col is ProColumns<ProductSample>=>!!col).map(col=>({...col,width:widths[String(col.key)]??col.width,title:<ResizableColumnTitle label={String(col.title)} minWidth={90} width={widths[String(col.key)]??Number(col.width??120)} onWidthChange={width=>setWidths(w=>({...w,[String(col.key)]:width}))}/> }))}/>
  {mode==="performance"&&<>
  <DataTable title="系统评分修正申请" data={state.corrections} columns={[
  {key:"id",title:"申请编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
