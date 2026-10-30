@@ -52,6 +52,7 @@ def test_missing_extra_or_shared_routes_are_rejected():
     with pytest.raises(DispatchRejected, match="REMOTE_HOST_REUSED"):
         parse_routes(json.dumps(duplicate))
 
+
 def test_verifies_manifest_hash_and_detects_tamper(tmp_path):
     path = tmp_path / "run-123456"
     path.mkdir()
