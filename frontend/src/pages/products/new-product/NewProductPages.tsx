@@ -261,7 +261,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  {key:"grade",title:"评级",dataIndex:"grade"},{key:"suggestedQty",title:"建议量",dataIndex:"suggestedQty"},
  {key:"approvedQty",title:"批准量",dataIndex:"approvedQty"}]}/></>}</>}
  <Drawer title={reviewProduct?"打品复盘 · "+reviewProduct.sku:"打品复盘"} width={680} open={!!reviewProduct} onClose={()=>setReviewProduct(null)}
- footer={<Space><Button onClick={()=>setReviewProduct(null)}>取消</Button><Button type="primary" onClick={()=>act(()=>state.updateTrack(reviewProduct!.id,reviewState,reason,reviewDate),()=>setReviewProduct(null))}>保存复盘</Button></Space>}>
+ footer={<Space><Button onClick={()=>setReviewProduct(null)}>取消</Button><Button type="primary" onClick={()=>act(()=>state.updateTrack(reviewProduct!.id,reviewState,reason,reviewDate,period),()=>setReviewProduct(null))}>保存复盘</Button></Space>}>
  {reviewProduct&&<><Typography.Paragraph>{reviewProduct.name} · 运营：{reviewProduct.operator} · 初始评级：{completedScore(reviewProduct,c)?.grade??"—"}</Typography.Paragraph>
  <div className="npd-review-summary"><div>系统建议：{completedScore(reviewProduct,c)?.suggested??"—"} 件</div><div>运营申请：{reviewProduct.requestQty??"—"} 件</div><div>批准数量：{reviewProduct.approvedQty??"—"} 件</div>
  <div>{period}天销量：{periodSales(reviewProduct,period)}</div><div>点击：{getPeriodMetrics(reviewProduct,period).clicks}</div><div>订单：{getPeriodMetrics(reviewProduct,period).orders}</div><div>广告费：{getPeriodMetrics(reviewProduct,period).adSpend}</div><div>利润：{getPeriodMetrics(reviewProduct,period).profit}</div><div>利润率：{getPeriodMetrics(reviewProduct,period).margin.toFixed(1)}%</div><div>ACOS：{getPeriodMetrics(reviewProduct,period).acos.toFixed(1)}%</div><div>库存：{reviewProduct.inventory}</div></div>
