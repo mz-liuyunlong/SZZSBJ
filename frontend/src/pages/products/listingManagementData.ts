@@ -55,11 +55,11 @@ export interface ListingManagementRow {
 
 export const listingColumnFields = [
   { key: "image", title: "图片" },
-  { key: "productIdName", title: "商品ID/品名" },
+  { key: "productIdName", title: "商品ID/本地品名" },
   { key: "skuMsku", title: "SKU/MSKU" },
   { key: "store", title: "店铺" },
   { key: "owner", title: "负责人" },
-  { key: "title", title: "标题" },
+  { key: "title", title: "平台标题" },
   { key: "productType", title: "产品类型" },
   { key: "listPrice", title: "划线价" },
   { key: "salePrice", title: "在售价" },
