@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completedScore, defaultConfig, evaluatedTrack, useNewProductStore } from "./newProductModel";
+import { completedScore, defaultConfig, evaluatedTrack, trackingWorkflow, periodSales, useNewProductStore } from "./newProductModel";
 import { mockProducts } from "./newProductMockData";
 
 describe("new product rules with mock fixtures", () => {
@@ -30,6 +30,28 @@ describe("new product rules with mock fixtures", () => {
     store.applyPurchase("YC00806",450,"市场销售增长明显");
     expect(useNewProductStore.getState().products.find(p=>p.id==="YC00806")?.approval).toBe("pending");
     useNewProductStore.getState().resetMockData();
+  });
+  it("classifies launch follow-up before and after the review window", () => {
+    const pending=mockProducts.find(p=>p.id==="YC00831")!;
+    expect(trackingWorkflow(pending, defaultConfig)).toBe("ready");
+    const completed=mockProducts.find(p=>p.id==="YC00901")!;
+    expect(trackingWorkflow(completed, defaultConfig)).toBe("done");
+  });
+  it("switches sales metrics across 30, 60 and 90 days", () => {
+    const p=mockProducts.find(p=>p.id==="YC00901")!;
+    expect(periodSales(p,30)).toBe(245);
+    expect(periodSales(p,60)).toBe(422);
+    expect(periodSales(p,90)).toBe(508);
+  });
+  it("requires a reason and review date for an optimization follow-up", () => {
+    const store=useNewProductStore.getState();store.resetMockData();
+    expect(()=>store.updateTrack("YC00872","需要优化","原因")).toThrow();
+    expect(()=>store.updateTrack("YC00872","需要优化","广告花费异常")).toThrow();
+    store.updateTrack("YC00872","需要优化","广告花费异常","2026-11-10");
+    const p=useNewProductStore.getState().products.find(p=>p.id==="YC00872")!;
+    expect(p.tracking).toBe("需要优化");
+    expect(p.reviewDueAt).toBe("2026-11-10");
+    store.resetMockData();
   });
   it("never treats unsellable products as completed launch evaluations", () => {
     expect(evaluatedTrack(mockProducts[1],defaultConfig)).toBe("未开始");
