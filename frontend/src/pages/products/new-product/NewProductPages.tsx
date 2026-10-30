@@ -221,7 +221,7 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  <InputNumber min={1} precision={0} value={quantity} onChange={setQuantity} style={{width:"100%",marginBottom:12}}/>
  {purchase&&quantity!==null&&quantity>(completedScore(purchase,c)?.rule?.qtyMax??0)&&<Tag color="warning">超出等级采购区间</Tag>}
  <Input.TextArea rows={3} value={reason} onChange={e=>setReason(e.target.value)} placeholder="修改数量必须说明原因"/></Modal>
- <Modal open={!!approval} title="新品采购审核" onCancel={()=>setApproval(null)} footer={true?<Space>
+ <Modal open={!!approval} title="新品采购审核" onCancel={()=>setApproval(null)} footer={canManage?<Space>
  <Button onClick={()=>act(()=>state.decidePurchase(approval!.id,"rejected",reason,canManage),()=>setApproval(null))}>驳回</Button>
  <Button type="primary" onClick={()=>act(()=>state.decidePurchase(approval!.id,"approved",reason,canManage),()=>setApproval(null))}>审核通过并生成计划</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
  <Typography.Paragraph>商品：{approval?.sku} · 申请数量：{approval?.requestQty}</Typography.Paragraph>
