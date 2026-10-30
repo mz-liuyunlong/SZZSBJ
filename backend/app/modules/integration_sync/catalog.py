@@ -19,6 +19,7 @@ from app.modules.integration_sync.pmc_domestic_catalog import (
 from app.modules.integration_sync.pmc_purchase_catalog import (
     PMC_PURCHASE_SYNC_INTERFACE_SPECS,
 )
+from app.modules.integration_sync.pmc_wfs_catalog import PMC_WFS_SYNC_INTERFACE_SPECS
 from app.modules.integration_sync.repository import IntegrationSyncRepository
 from app.modules.integration_sync.wfs_catalog import WFS_SETTLEMENT_SYNC_SPEC
 
@@ -97,6 +98,7 @@ class DataPagesGovernanceBootstrapResult:
 PmcPurchaseGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
 PmcDomesticGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
 WfsGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
+PmcWfsBoardGovernanceBootstrapResult = DataPagesGovernanceBootstrapResult
 
 
 class IntegrationCatalogService:
@@ -424,6 +426,39 @@ class IntegrationCatalogService:
                 sync_config_statuses.append(sync_config_status)
             self.session.commit()
             return PmcDomesticGovernanceBootstrapResult(
+                interface_statuses=tuple(interface_statuses),
+                retention_policy_statuses=tuple(retention_policy_statuses),
+                sync_config_statuses=tuple(sync_config_statuses),
+            )
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def bootstrap_pmc_wfs_board_governance(
+        self,
+        source_account_ref: str,
+    ) -> PmcWfsBoardGovernanceBootstrapResult:
+        """Create disabled governance metadata for the WFS shipment-board Lingxing feeds."""
+
+        source_account_ref = validate_pmc_domestic_source_account_ref(source_account_ref)
+        interface_statuses: list[BootstrapStatus] = []
+        retention_policy_statuses: list[BootstrapStatus] = []
+        sync_config_statuses: list[BootstrapStatus] = []
+        try:
+            for spec in PMC_WFS_SYNC_INTERFACE_SPECS:
+                interface, interface_status = self._bootstrap_data_pages_interface(spec)
+                policy, retention_policy_status = self._bootstrap_data_pages_retention_policy(spec)
+                sync_config_status = self._bootstrap_data_pages_sync_config(
+                    interface,
+                    policy,
+                    spec,
+                    source_account_ref,
+                )
+                interface_statuses.append(interface_status)
+                retention_policy_statuses.append(retention_policy_status)
+                sync_config_statuses.append(sync_config_status)
+            self.session.commit()
+            return PmcWfsBoardGovernanceBootstrapResult(
                 interface_statuses=tuple(interface_statuses),
                 retention_policy_statuses=tuple(retention_policy_statuses),
                 sync_config_statuses=tuple(sync_config_statuses),

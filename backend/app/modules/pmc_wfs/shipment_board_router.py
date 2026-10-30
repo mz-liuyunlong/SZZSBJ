@@ -1,4 +1,4 @@
-"""Read-only shipment board; Lingxing fulfillment arrives in a later slice."""
+"""Read-only shipment board (M2): Lingxing-published cargos + linked creation facts."""
 
 from typing import Annotated
 
@@ -12,6 +12,7 @@ from app.db.session import get_db_session
 from app.modules.iam.rbac_repository import RbacRepository
 from app.modules.integration_sync.dependencies import require_source_account_scope
 from app.modules.pmc_wfs.shipment_board_schemas import (
+    ProductBoardList,
     ShipmentBoardDetail,
     ShipmentBoardFilter,
     ShipmentBoardList,
@@ -49,8 +50,11 @@ Service = Annotated[ShipmentBoardService, Depends(service)]
 def meta(extra: dict | None = None):
     base = {
         "source": "new_system_postgresql",
-        "lingxing_sync_enabled": False,
+        "lingxing_sync_enabled": True,
+        "lingxing_sync_mode": "manual_one_time_run",
         "source_tables": [
+            "mart_wfs_shipment_board",
+            "gov_wfs_board_publications",
             "ops_wfs_creation_operations",
             "ops_wfs_creation_tickets",
             "ops_domestic_packing_orders",
@@ -65,6 +69,14 @@ def meta(extra: dict | None = None):
 @router.get("/shipments", response_model=SuccessEnvelope[ShipmentBoardList, dict], responses=ERRORS)
 def shipments(request: Request, query: Annotated[ShipmentBoardQuery, Query()], svc: Service):
     data = svc.list(query)
+    return success_response(
+        request, data=data, meta=meta({"data_asof": data.data_asof.isoformat()})
+    )
+
+
+@router.get("/products", response_model=SuccessEnvelope[ProductBoardList, dict], responses=ERRORS)
+def products(request: Request, query: Annotated[ShipmentBoardQuery, Query()], svc: Service):
+    data = svc.products(query)
     return success_response(
         request, data=data, meta=meta({"data_asof": data.data_asof.isoformat()})
     )

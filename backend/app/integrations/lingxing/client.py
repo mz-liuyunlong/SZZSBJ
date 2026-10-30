@@ -26,6 +26,12 @@ from app.integrations.lingxing.pmc_purchase_contracts import (
     build_pmc_purchase_page_body,
     get_pmc_purchase_spec,
 )
+from app.integrations.lingxing.pmc_wfs_contracts import (
+    PMC_WFS_ENDPOINT_SPECS,
+    PmcWfsContractError,
+    build_pmc_wfs_page_body,
+    get_pmc_wfs_spec,
+)
 from app.integrations.lingxing.query_sign import LingxingQuerySignError, build_query_auth_params
 from app.integrations.lingxing.security import redact_json
 
@@ -48,6 +54,8 @@ type LingxingEndpoint = Literal[
     "/erp/sc/routing/data/local_inventory/inventoryDetails",
     "/erp/sc/routing/data/local_inventory/getBatchDetailList",
     "/erp/sc/routing/data/local_inventory/getBatchStatementList",
+    "/cepf/warehouse/api/openApi/queryWFSCargoPage",
+    "/cepf/warehouse/api/openApi/queryShippingListPage",
 ]
 type QueryValue = str | int | float | bool | None
 type SuccessEvaluator = Callable[[LingxingEndpoint, httpx.Response, JsonValue], bool]
@@ -322,6 +330,23 @@ _ENDPOINT_CONTRACTS: dict[LingxingEndpoint, LingxingEndpointContract] = {
             auth_strategy="query_sign",
         )
         for spec in PMC_DOMESTIC_ENDPOINT_SPECS.values()
+    },
+    # PMC WFS shipment board (read-only cargo / shipping-list pages, max 200 per page).
+    # Field sets mirror official_verified_interfaces.csv; see pmc_wfs_contracts.py.
+    **{
+        spec.api_path: LingxingEndpointContract(
+            method="POST",
+            outbound_enabled=True,
+            allow_query_parameters=False,
+            require_json_body=True,
+            allowed_body_fields=spec.allowed_body_fields,
+            required_body_fields=spec.required_body_fields,
+            store_field=None,
+            page_size_field="length",
+            offset_field="offset",
+            auth_strategy="query_sign",
+        )
+        for spec in PMC_WFS_ENDPOINT_SPECS.values()
     },
 }
 
@@ -749,6 +774,57 @@ class LingxingReadonlyClient:
             contract,
             page_size_limit=spec.max_page_size,
             first_page_only=False,
+        )
+        return self._fetch_page(capture, page, contract, max_attempts=1)
+
+    def fetch_pmc_wfs_page(
+        self,
+        *,
+        api_path: str,
+        offset: int,
+        length: int,
+        page_no: int,
+        start_date: date | None,
+        end_date: date | None,
+        extra: dict[str, JsonValue] | None,
+        source_account_ref: str,
+        run_id: str,
+        work_item_id: str,
+    ) -> LingxingRawEnvelope:
+        """WFS shipment-board page: account-wide (no store filter), creation-time window."""
+
+        if not self._settings.lingxing_enable_real_calls:
+            raise LingxingClientError("Lingxing calls are disabled")
+        if not source_account_ref or source_account_ref != source_account_ref.strip():
+            raise LingxingClientError("Lingxing source account scope is invalid")
+        _required_integer(page_no, minimum=1)
+        try:
+            spec = get_pmc_wfs_spec(api_path)
+            body = build_pmc_wfs_page_body(
+                api_path,
+                offset=offset,
+                length=length,
+                start_date=start_date,
+                end_date=end_date,
+                extra=cast(JsonValue, extra) if extra else None,
+            )
+        except PmcWfsContractError as exc:
+            raise LingxingClientError(str(exc)) from exc
+        page = LingxingPageRequest.model_construct(
+            page_no=page_no, page_size=length, params=None, body=body
+        )
+        capture = LingxingCaptureRequest(
+            api_path=spec.api_path,
+            pages=(page,),
+            store_ids=(source_account_ref,),
+            object_type=spec.object_type,
+            trace_id=run_id,
+            run_id=run_id,
+            batch_id=work_item_id,
+        )
+        contract = _ENDPOINT_CONTRACTS[capture.api_path]
+        self._validate_outbound_contract(
+            capture, page, contract, page_size_limit=spec.max_page_size, first_page_only=False
         )
         return self._fetch_page(capture, page, contract, max_attempts=1)
 

@@ -17,8 +17,9 @@ vi.mock("./pendingPackingQueries", () => ({ usePendingPacking: () => ({
 // The board and exception pages fetch through react-query; keep this frame test offline with empty results.
 const emptyList = { success: true, data: { items: [], total: 0 }, error: null, meta: {}, request_id: "r" };
 vi.mock("./shipmentBoardApi", () => ({
-  listShipments: vi.fn(() => Promise.resolve({ ...emptyList, data: { ...emptyList.data, data_asof: "2026-10-30T00:00:00Z" } })),
-  shipmentSummary: vi.fn(() => Promise.resolve({ ...emptyList, data: { total: 0, pending_lingxing_sync: 0, test: 0 } })),
+  listShipments: vi.fn(() => Promise.resolve({ ...emptyList, data: { ...emptyList.data, data_asof: "2026-10-30T00:00:00Z", freshness: { stale: true } } })),
+  listProducts: vi.fn(() => Promise.resolve({ ...emptyList, data: { ...emptyList.data, data_asof: "2026-10-30T00:00:00Z", freshness: { stale: true } } })),
+  shipmentSummary: vi.fn(() => Promise.resolve({ ...emptyList, data: { total: 0, by_status: {}, pending_lingxing_sync: 0, test: 0, received_short: 0, freshness: { stale: true } } })),
   boardOptions: vi.fn(() => Promise.resolve({ ...emptyList, data: { stores: [] } })),
   getShipment: vi.fn(() => Promise.reject(new Error("not used"))),
   boardPrefix: "/api/pmc/wfs/shipment-board",
