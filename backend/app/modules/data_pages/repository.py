@@ -899,6 +899,7 @@ class ListingManagementRepository:
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
+                ListingManagementCurrentMart.id.asc(),
             )
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -946,6 +947,7 @@ class ListingManagementRepository:
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
+                ListingManagementCurrentMart.id.asc(),
             ).limit(max_rows)
         ).all()
 
@@ -980,7 +982,9 @@ class ListingManagementRepository:
         )
         base = statement.order_by(None).subquery()
 
-        online_condition = func.coalesce(base.c.wfs_available_quantity, 0) > 0
+        online_condition = func.upper(func.coalesce(base.c.listing_status, "")).in_(
+            ("ONLINE", "PUBLISHED", "PUBLISH", "在售", "在线")
+        )
         buybox_exception_condition = base.c.effective_buybox_status.in_(
             ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
         )
@@ -1150,17 +1154,23 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.strike_price_amount,
             ListingManagementCurrentMart.strike_price_amount,
         )
-        effective_strike_currency = func.coalesce(
-            WalmartMonitorListingCurrent.strike_price_currency_code,
-            ListingManagementCurrentMart.strike_price_currency_code,
+        effective_strike_currency = case(
+            (
+                WalmartMonitorListingCurrent.strike_price_amount.is_not(None),
+                WalmartMonitorListingCurrent.strike_price_currency_code,
+            ),
+            else_=ListingManagementCurrentMart.strike_price_currency_code,
         )
         effective_sale_price = func.coalesce(
             WalmartMonitorListingCurrent.sale_price_amount,
             ListingManagementCurrentMart.sale_price_amount,
         )
-        effective_sale_currency = func.coalesce(
-            WalmartMonitorListingCurrent.sale_price_currency_code,
-            ListingManagementCurrentMart.sale_price_currency_code,
+        effective_sale_currency = case(
+            (
+                WalmartMonitorListingCurrent.sale_price_amount.is_not(None),
+                WalmartMonitorListingCurrent.sale_price_currency_code,
+            ),
+            else_=ListingManagementCurrentMart.sale_price_currency_code,
         )
         effective_category = func.coalesce(
             WalmartMonitorListingCurrent.category,
@@ -1358,7 +1368,9 @@ class ListingManagementRepository:
 
         if summary_filter == "online":
             statement = statement.where(
-                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0) > 0
+                func.upper(func.coalesce(ListingManagementCurrentMart.listing_status, "")).in_(
+                    ("ONLINE", "PUBLISHED", "PUBLISH", "在售", "在线")
+                )
             )
         elif summary_filter == "offline":
             statement = statement.where(
@@ -1729,7 +1741,7 @@ class ListingTagRepository:
             raise PermissionError("Listing 不存在或无权访问")
 
         tags = self._resolve_tags(tag_ids=tag_ids, tag_values=tag_values)
-        if not tags:
+        if not tags and mode != "replace":
             return len(listings), 0
 
         resolved_tag_ids = [tag.id for tag in tags]
@@ -1844,12 +1856,16 @@ class ListingTagRepository:
                 if tag.id not in seen:
                     seen.add(tag.id)
                     tags.append(tag)
+            if seen != set(uuid_values):
+                raise ValueError("LISTING_TAG_NOT_FOUND_OR_INACTIVE")
 
         for value in tag_values:
             name = value.strip()
             if not name:
                 continue
             tag = self._find_tag_by_name(name)
+            if tag is not None and not tag.is_active:
+                raise ValueError("LISTING_TAG_INACTIVE")
             if tag is None:
                 tag = ProductCustomTag(
                     name=name[:16],
