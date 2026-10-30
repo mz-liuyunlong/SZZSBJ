@@ -60,9 +60,9 @@ function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:
  </div>;
 }
 
-function ConfigPanel({mode,visible,onClose}:{mode:Mode;visible:boolean;onClose:()=>void}){
+function ConfigPanel({mode,visible,onClose,canManage}:{mode:Mode;visible:boolean;onClose:()=>void;canManage:boolean}){
  const c=useNewProductStore(s=>s.config);
- const canConfigure=true;
+ const canConfigure=canManage;
  const version=useNewProductStore(s=>s.ruleVersion);
  const save=useNewProductStore(s=>s.saveConfig);
  const [form]=Form.useForm();
@@ -190,7 +190,7 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  {key:"id",title:"计划编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
  {key:"grade",title:"评级",dataIndex:"grade"},{key:"suggestedQty",title:"建议量",dataIndex:"suggestedQty"},
  {key:"approvedQty",title:"批准量",dataIndex:"approvedQty"}]}/></>}</>}
- <ConfigPanel mode={mode} visible={setting} onClose={()=>setSetting(false)}/>
+ <ConfigPanel mode={mode} visible={setting} canManage={canManage} onClose={()=>setSetting(false)}/>
  <RuntimeColumnConfigDrawer open={columnsOpen} onClose={()=>setColumnsOpen(false)} fixedKeys={["name","action"]}
  appliedKeys={keys} defaultKeys={allCols.map(x=>String(x.key))} onApply={setKeys} onSaveTemplate={()=>api.info("列配置已应用")}
  groups={[{title:"新品明细",fields:allCols.map(x=>({key:String(x.key),title:String(x.title)}))}]}/>
@@ -213,8 +213,8 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  <InputNumber min={0} max={10} precision={0} value={score} onChange={setScore} style={{width:"100%",marginBottom:12}}/>
  <Input.TextArea value={reason} rows={3} placeholder="说明修正原因，至少5字" onChange={e=>setReason(e.target.value)}/></Modal>
  <Modal open={!!review} title="评分修正审核" onCancel={()=>setReview(null)} footer={true?<Space>
- <Button onClick={()=>act(()=>state.decideCorrection(review!,"rejected",reason,true),()=>setReview(null))}>驳回</Button>
- <Button type="primary" onClick={()=>act(()=>state.decideCorrection(review!,"approved",reason,true),()=>setReview(null))}>批准</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
+ <Button onClick={()=>act(()=>state.decideCorrection(review!,"rejected",reason,canManage),()=>setReview(null))}>驳回</Button>
+ <Button type="primary" onClick={()=>act(()=>state.decideCorrection(review!,"approved",reason,canManage),()=>setReview(null))}>批准</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
  <Typography.Paragraph>申请编号：{review}</Typography.Paragraph><Input.TextArea rows={3} value={reason} onChange={e=>setReason(e.target.value)} placeholder="审批说明"/></Modal>
  <Modal open={!!purchase} title="确认采购数量" onCancel={()=>setPurchase(null)} onOk={()=>act(()=>state.applyPurchase(purchase!.id,quantity!,reason),()=>setPurchase(null))}>
  <Typography.Paragraph>系统建议：{purchase?completedScore(purchase,c)?.suggested:"—"} 件</Typography.Paragraph>
@@ -222,11 +222,11 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  {purchase&&quantity!==null&&quantity>(completedScore(purchase,c)?.rule?.qtyMax??0)&&<Tag color="warning">超出等级采购区间</Tag>}
  <Input.TextArea rows={3} value={reason} onChange={e=>setReason(e.target.value)} placeholder="修改数量必须说明原因"/></Modal>
  <Modal open={!!approval} title="新品采购审核" onCancel={()=>setApproval(null)} footer={true?<Space>
- <Button onClick={()=>act(()=>state.decidePurchase(approval!.id,"rejected",reason,true),()=>setApproval(null))}>驳回</Button>
- <Button type="primary" onClick={()=>act(()=>state.decidePurchase(approval!.id,"approved",reason,true),()=>setApproval(null))}>审核通过并生成计划</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
+ <Button onClick={()=>act(()=>state.decidePurchase(approval!.id,"rejected",reason,canManage),()=>setApproval(null))}>驳回</Button>
+ <Button type="primary" onClick={()=>act(()=>state.decidePurchase(approval!.id,"approved",reason,canManage),()=>setApproval(null))}>审核通过并生成计划</Button></Space>:<Typography.Text>领导视角方可审批</Typography.Text>}>
  <Typography.Paragraph>商品：{approval?.sku} · 申请数量：{approval?.requestQty}</Typography.Paragraph>
  <Typography.Paragraph>原因：{approval?.requestReason}</Typography.Paragraph>
- {state.demoRole==="leader"&&approval&&<Typography.Paragraph>金额：¥{((approval.requestQty??0)*approval.unitCost).toFixed(2)}</Typography.Paragraph>}
+ {canManage&&approval&&<Typography.Paragraph>金额：¥{((approval.requestQty??0)*approval.unitCost).toFixed(2)}</Typography.Paragraph>}
  <Input.TextArea rows={3} value={reason} placeholder="审核理由" onChange={e=>setReason(e.target.value)}/></Modal>
  </div></PageShell>;
 }
