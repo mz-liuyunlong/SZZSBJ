@@ -180,9 +180,9 @@ function BusinessRoute({
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
         ) : page.key === "products_new_product_analysis" ? (
-          <NewProductPages page={page} mode="performance" canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
+          <NewProductPages page={page} mode="performance" username={activeUser.username} canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
         ) : page.key === "products_launch_tracking" ? (
-          <NewProductPages page={page} mode="tracking" canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
+          <NewProductPages page={page} mode="tracking" username={activeUser.username} canManage={activeUser.isSuperAdmin || activeUser.permissions.includes("*")} />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
