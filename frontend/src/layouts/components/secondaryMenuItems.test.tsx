@@ -11,6 +11,7 @@ const expected = {
     "products_listing_management",
     "products_clearance_center",
     "products_new_product_analysis",
+    "products_launch_tracking",
   ],
   sales: [
     "sales_daily_sales",
