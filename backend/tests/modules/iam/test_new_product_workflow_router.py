@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from app.core.api import ApiError
 from app.core.auth import Principal
 from app.core.permissions import require_permission
-from app.modules.new_product_workflow.router import router as new_product_router
 from app.modules.new_product_workflow.router import (
     APPROVE,
     MarketWrite,
@@ -16,6 +15,7 @@ from app.modules.new_product_workflow.router import (
     RuleWrite,
     _identity,
     list_workflows,
+    router as new_product_router,
 )
 
 
