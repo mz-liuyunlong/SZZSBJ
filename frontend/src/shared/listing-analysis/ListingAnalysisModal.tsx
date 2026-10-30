@@ -30,10 +30,20 @@ interface ListingAnalysisSourceLike {
   status?: string;
 }
 
+export interface VerifiedListingFacts {
+  sales30Days: number | null;
+  adSpend30Days: number | null;
+  salePrice: number | null;
+  priceCurrency: string;
+  wfsAvailableInventory: number | null;
+  monitorObservedAt: string | null;
+}
+
 interface ListingAnalysisModalProps {
   open: boolean;
   onClose: () => void;
   source?: ListingAnalysisSourceLike;
+  verifiedListing?: VerifiedListingFacts;
   initialPanel?: ListingAnalysisPanel;
 }
 
@@ -612,7 +622,7 @@ function lineOption(labels: string[], series: Array<{ name: string; data: number
   } as EChartsOption;
 }
 
-export function ListingAnalysisModal({ open, onClose, source, initialPanel = "overview" }: ListingAnalysisModalProps) {
+export function ListingAnalysisModal({ open, onClose, source, verifiedListing, initialPanel = "overview" }: ListingAnalysisModalProps) {
   const [period, setPeriod] = useState<ListingAnalysisPeriod>(7);
   const [activePanel, setActivePanel] = useState<ListingAnalysisPanel>(initialPanel);
 
@@ -643,6 +653,51 @@ export function ListingAnalysisModal({ open, onClose, source, initialPanel = "ov
   }, [onClose, open]);
 
   if (!open) return null;
+
+  // Listing management has no authenticated account-scoped trend/event/keyword
+  // API yet. Never render the shared demo dataset as business facts.
+  if (verifiedListing) {
+    const verifiedFields = [
+      ["近30天销量", verifiedListing.sales30Days == null ? "未同步" : String(verifiedListing.sales30Days)],
+      ["近30天广告费", verifiedListing.adSpend30Days == null ? "未同步" : String(verifiedListing.adSpend30Days)],
+      ["当前售价", verifiedListing.salePrice == null ? "未同步" : `${verifiedListing.priceCurrency || "USD"} ${verifiedListing.salePrice.toFixed(2)}`],
+      ["WFS可售库存", verifiedListing.wfsAvailableInventory == null ? "未同步" : String(verifiedListing.wfsAvailableInventory)],
+      ["监控采集时间", verifiedListing.monitorObservedAt || "未监控"],
+    ];
+    return (
+      <div className="listing-analysis-layer show entered">
+        <button className="modal-mask" type="button" aria-label="关闭分析弹框" onClick={onClose} />
+        <section className="modal" role="dialog" aria-modal="true" aria-label="Listing经营分析中心">
+          <header className="m-head">
+            <div className="listing-main">
+              <div className="listing-icon">LST</div>
+              <div className="listing-copy">
+                <div className="listing-title">{source?.title || "Listing"} · {source?.productId || source?.sku || "未识别商品"}</div>
+                <div className="listing-meta">{source?.store || "店铺未识别"} · 已核实字段概览</div>
+              </div>
+            </div>
+            <div className="head-right">
+              <button className="close-btn" type="button" onClick={onClose} aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+            </div>
+          </header>
+          <div className="content" style={{ padding: 24 }}>
+            <p role="status">以下仅展示来自该 Listing 现有后端接口的字段；未知数据不会视为零。</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 12 }}>
+              {verifiedFields.map(([label, value]) => (
+                <div key={label} style={{ padding: 16, border: "1px solid #e5e7eb", borderRadius: 8 }}>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>{label}</div>
+                  <strong style={{ display: "block", fontSize: 19, marginTop: 8 }}>{value}</strong>
+                </div>
+              ))}
+            </div>
+            <p style={{ marginTop: 20 }}>
+              流量转化、广告关键词、利润趋势、调价事件及补货建议尚未接通该账号与商品的可信数据源，暂不展示示例数字或模拟事件。
+            </p>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   const data = periodData[period];
   const titleName = source?.title || source?.productName || source?.itemName || "Multipurpose Storage Bags";

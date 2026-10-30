@@ -277,6 +277,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [summary, setSummary] = useState<ListingManagementSummary>(emptySummary);
   const [filterOptions, setFilterOptions] = useState<ListingManagementFilterOptions>(emptyFilterOptions);
   const [analysisSource, setAnalysisSource] = useState<ListingAnalysisSource | null>(null);
+  const [analysisListing, setAnalysisListing] = useState<ListingManagementRow | null>(null);
   const [detailListing, setDetailListing] = useState<ListingManagementRow | undefined>();
   const [gptAnalysisRow, setGptAnalysisRow] = useState<ListingManagementRow | null>(null);
   const [isGptAnalysisLoading, setIsGptAnalysisLoading] = useState(false);
@@ -737,6 +738,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   }, [isExporting]);
 
   const openListingAnalysis = (row: ListingManagementRow) => {
+    setAnalysisListing(row);
     setAnalysisSource({
       title: row.title || row.productName,
       sku: row.sku,
@@ -1048,7 +1050,18 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         <ListingAnalysisModal
           open={analysisSource !== null}
           source={analysisSource ?? undefined}
-          onClose={() => setAnalysisSource(null)}
+          verifiedListing={analysisListing ? {
+            sales30Days: analysisListing.sales30Days,
+            adSpend30Days: analysisListing.adSpend30DaysKnown === false ? null : analysisListing.adSpend30Days,
+            salePrice: analysisListing.salePriceKnown === false ? null : analysisListing.salePrice,
+            priceCurrency: analysisListing.salePriceCurrency || "USD",
+            wfsAvailableInventory: analysisListing.wfsAvailableInventoryKnown === false ? null : analysisListing.wfsAvailableInventory,
+            monitorObservedAt: analysisListing.checkedAt === "未监控" ? null : analysisListing.checkedAt,
+          } : undefined}
+          onClose={() => {
+            setAnalysisSource(null);
+            setAnalysisListing(null);
+          }}
         />
       </div>
         <ProductTagAssignmentModal
