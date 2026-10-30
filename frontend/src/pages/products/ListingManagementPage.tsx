@@ -181,7 +181,7 @@ const defaultColumnWidths: Record<string, number> = {
   category: 120,
   wfsAvailableInventory: 140,
   inboundInventory: 130,
-  sales90Days: 130,
+  sales30Days: 130,
   adSpend30Days: 140,
   disabledReason: 130,
   listingStatus: 130,
