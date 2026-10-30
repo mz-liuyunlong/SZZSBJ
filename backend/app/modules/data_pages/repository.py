@@ -1762,8 +1762,11 @@ class ListingTagRepository:
 
         resolved_tag_ids = [tag.id for tag in tags]
 
+        # Tag assignments are keyed by account + Item ID, not by store.
+        # Deduplicate identical identities selected from multiple stores.
+        unique_items = {(source_account_ref, item_id) for _, source_account_ref, item_id in listings}
         if mode == "replace":
-            for _, source_account_ref, item_id in listings:
+            for source_account_ref, item_id in unique_items:
                 self.session.execute(
                     delete(ProductCustomTagAssignment).where(
                         ProductCustomTagAssignment.source_account_ref == source_account_ref,
@@ -1780,7 +1783,7 @@ class ListingTagRepository:
                     )
 
         elif mode == "remove":
-            for _, source_account_ref, item_id in listings:
+            for source_account_ref, item_id in unique_items:
                 self.session.execute(
                     delete(ProductCustomTagAssignment).where(
                         ProductCustomTagAssignment.source_account_ref == source_account_ref,
@@ -1790,7 +1793,7 @@ class ListingTagRepository:
                 )
 
         else:
-            for _, source_account_ref, item_id in listings:
+            for source_account_ref, item_id in unique_items:
                 existing_tag_ids = set(
                     self.session.scalars(
                         select(ProductCustomTagAssignment.tag_id).where(
