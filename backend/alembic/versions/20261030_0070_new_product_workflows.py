@@ -42,11 +42,20 @@ def upgrade() -> None:
         sa.Column("reviewed_at", sa.DateTime(timezone=True)),
         sa.Column("score_snapshot_json", JSONB()),
         sa.Column("row_version", sa.Integer(), nullable=False, server_default="1"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.UniqueConstraint("sku_identity_id", name="uq_product_new_workflows_sku"),
-        sa.CheckConstraint("market_score IS NULL OR market_score BETWEEN 0 AND 10", name="ck_new_product_market"),
-        sa.CheckConstraint("purchase_request_qty IS NULL OR purchase_request_qty > 0", name="ck_new_product_purchase_qty"),
+        sa.CheckConstraint(
+            "market_score IS NULL OR market_score BETWEEN 0 AND 10", name="ck_new_product_market"
+        ),
+        sa.CheckConstraint(
+            "purchase_request_qty IS NULL OR purchase_request_qty > 0",
+            name="ck_new_product_purchase_qty",
+        ),
         sa.CheckConstraint(
             "status IN ('pending_market','scored','pending_purchase','approved_draft','rejected')",
             name="ck_new_product_status",
@@ -76,7 +85,9 @@ def upgrade() -> None:
         sa.Column("before_json", JSONB()),
         sa.Column("after_json", JSONB(), nullable=False),
         sa.Column("request_id", sa.String(128), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
     op.create_index(
         "ix_product_new_events_workflow",
@@ -89,7 +100,9 @@ def upgrade() -> None:
         sa.Column("rule_json", JSONB(), nullable=False),
         sa.Column("actor", sa.String(128), nullable=False),
         sa.Column("reason", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
     )
 
 
