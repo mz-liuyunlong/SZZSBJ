@@ -90,7 +90,7 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
               { label: "在售价", value: `$${row.salePrice.toFixed(2)}` },
               { label: "WFS可售库存", value: row.wfsAvailableInventory },
               { label: "在途库存", value: row.inboundInventory },
-              { label: "近90天销量", value: row.sales90Days },
+              { label: "近30天销量", value: row.sales30Days },
               { label: "近30天广告费", value: `$${row.adSpend30Days.toFixed(2)}` },
               { label: "评分", value: row.rating },
               { label: "评论数", value: row.reviewCount },
