@@ -288,7 +288,7 @@ const appendMultiParam = (
   values: string[] | undefined,
 ) => {
   const normalized = (values ?? []).map((value) => value.trim()).filter(Boolean);
-  if (normalized.length > 0) search.set(key, normalized.join(","));
+  if (normalized.length > 0) search.set(key, JSON.stringify(normalized));
 };
 
 const appendListingFilters = (search: URLSearchParams, params: ListingManagementParams) => {

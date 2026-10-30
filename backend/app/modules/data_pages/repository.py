@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -158,6 +159,13 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
 def _csv_values(value: str | None) -> list[str]:
     if value is None:
         return []
+    if value.startswith("["):
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            decoded = None
+        if isinstance(decoded, list) and all(isinstance(item, str) for item in decoded):
+            return [item.strip() for item in decoded if item.strip()]
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
