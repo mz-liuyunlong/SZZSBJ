@@ -179,6 +179,10 @@ function BusinessRoute({
           <ProductManagementPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
+        ) : page.key === "products_new_product_analysis" ? (
+          <NewProductDemoPages page={page} mode="performance" />
+        ) : page.key === "products_launch_tracking" ? (
+          <NewProductDemoPages page={page} mode="tracking" />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
