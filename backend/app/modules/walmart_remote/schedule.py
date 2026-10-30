@@ -1,8 +1,7 @@
-"""Explicitly gated twice-weekly nine-store scheduler, read-only jobs only."""
+"""Explicitly gated twice-weekly eight-store remote scheduler, read-only jobs only."""
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -10,9 +9,15 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.integrations.walmart.remote_dispatch import STORES, parse_routes
+from app.core.api import ApiError
+from app.integrations.walmart.remote_dispatch import (
+    REMOTE_COLLECTION_STORES,
+    DispatchRejected,
+    parse_routes,
+)
 from app.modules.data_pages.models import LingxingStoreDimension
 from app.modules.walmart_remote.models import WalmartRemoteJob
+from app.modules.walmart_remote.store_mapping import remote_store_mapping
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -31,8 +36,8 @@ def eligible_schedule(now: datetime) -> str | None:
 def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
     """Return pending job IDs, never secrets. Caller enqueues after commit.
 
-    All nine stores must resolve to distinct approved hosts and exact persisted
-    Walmart store identities. Missing CN2502 route blocks batch creation.
+    All eight selected stores must have distinct approved hosts and verified persisted
+    Walmart identities. CN2502 can remain in the legacy store map but is not scheduled.
     """
     date_key = eligible_schedule(now)
     if date_key is None:
@@ -43,33 +48,41 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
         return []
     try:
         routes = parse_routes(os.getenv("SZZSBJ_WALMART_REMOTE_ROUTES", ""))
-        mapping = json.loads(os.getenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", "{}"))
-    except (ValueError, TypeError):
+        mapping = remote_store_mapping()
+    except (ApiError, DispatchRejected):
         return []
+    approved = frozenset(
+        code.strip()
+        for code in os.getenv("SZZSBJ_WALMART_REMOTE_APPROVED_STORES", "").split(",")
+        if code.strip()
+    )
+    active_mapping = {
+        store_id: code for store_id, code in mapping.items() if code in REMOTE_COLLECTION_STORES
+    }
     if (
-        set(routes) != STORES
-        or not isinstance(mapping, dict)
-        or set(mapping.values()) != STORES
-        or len(mapping) != 9
+        set(routes) != REMOTE_COLLECTION_STORES
+        or approved != REMOTE_COLLECTION_STORES
+        or set(active_mapping.values()) != REMOTE_COLLECTION_STORES
+        or len(active_mapping) != len(REMOTE_COLLECTION_STORES)
     ):
         return []
     existing = session.scalars(
         select(LingxingStoreDimension).where(
-            LingxingStoreDimension.store_id.in_(list(mapping)),
+            LingxingStoreDimension.store_id.in_(list(active_mapping)),
             LingxingStoreDimension.platform_code == "walmart",
             LingxingStoreDimension.is_sync.is_(True),
         )
     ).all()
-    if len(existing) != 9 or len({item.store_id for item in existing}) != 9:
+    if len(existing) != len(REMOTE_COLLECTION_STORES) or len({item.store_id for item in existing}) != len(REMOTE_COLLECTION_STORES):
         return []
     if any(
-        not (item.store_name or "").startswith(mapping[item.store_id] + "-") for item in existing
+        not (item.store_name or "").startswith(active_mapping[item.store_id] + "-") for item in existing
     ):
         return []
     jobs: list[WalmartRemoteJob] = []
     queued_ids: list[str] = []
     for row in existing:
-        key = "scheduled-" + date_key + "-" + mapping[row.store_id]
+        key = "scheduled-" + date_key + "-" + active_mapping[row.store_id]
         prior = session.scalar(
             select(WalmartRemoteJob).where(
                 WalmartRemoteJob.source_account_ref == row.source_account_ref,
@@ -85,7 +98,7 @@ def queue_due_stores(session: Session, *, now: datetime) -> list[str]:
             WalmartRemoteJob(
                 source_account_ref=row.source_account_ref,
                 store_id=row.store_id,
-                store_code=mapping[row.store_id],
+                store_code=active_mapping[row.store_id],
                 requested_by="system:walmart-remote-schedule",
                 request_key=key,
                 operations=[
