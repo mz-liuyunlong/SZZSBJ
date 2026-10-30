@@ -183,7 +183,7 @@ export default function ListingRuleConfigDrawer({
       form.setFieldsValue(toForm(next.config));
       setDirty(false);
       setHistory(null);
-      messageApi.success("已保存规则新版本；配置引擎尚未接入生命周期和提醒自动执行");
+      messageApi.success("已保存规则新版本；诊断任务代码已安装，自动执行仍需单独启用并验证");
     } catch (error) {
       if (error instanceof BackendRequestError && error.status === 409) {
         messageApi.error("规则版本冲突或没有变更，请重新打开页面获取新版本");
@@ -321,7 +321,7 @@ export default function ListingRuleConfigDrawer({
       </Form.Item>
       <Alert type="info" showIcon
         message="默认每天北京时间22:30；保存后在下一次配置时间点生效。"
-        description="中国时区与洛杉矶业务日期T-2仍受保护；销售、广告、成本缺失不得视为0。目前仅保存执行计划，自动计算任务尚未接入，不会因修改时间而自动运行。"
+        description="中国时区与洛杉矶业务日期T-2仍受保护；销售、广告、成本缺失不得视为0。当前仅保存执行计划；后台诊断执行器已存在但默认关闭，修改时间不会自动启用任务，正式发布仍需单独授权。"
         style={{ marginBottom: 16 }} />
       {record?.can_edit && (
         <>
