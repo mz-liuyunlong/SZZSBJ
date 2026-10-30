@@ -28,6 +28,5 @@ def test_new_product_business_actions_and_sensitive_field_are_registered():
     assert definitions["action:products:new-product-analysis:configure"].risk_level == "high"
     assert definitions["field:products:new-product-analysis:unit-cost"].risk_level == "high"
     assert (
-        definitions["action:products:launch-tracking:review"].page_key
-        == "products_launch_tracking"
+        definitions["action:products:launch-tracking:review"].page_key == "products_launch_tracking"
     )
