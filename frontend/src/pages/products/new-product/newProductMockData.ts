@@ -12,7 +12,13 @@ const row = (sku: string, name: string, category: string, developer: string, ope
   acos: Math.max(12, 42 - system.ads * 3), clicks: Math.round(20 + system.order * 17),
   orders: Math.round(system.order * 2.2), sales30, sales60, sales90,
   adSpend: 30 + system.ads * 12, inventory: approvedQty === null ? 0 : Math.max(0, approvedQty - sales90),
-  unitCost: roi < .7 ? 9 : 6.8, demand, approval,
+  periodMetrics: Object.fromEntries(([30,60,90] as const).map((days,i)=>{
+    const sales=[sales30,sales60,sales90][i], clicks=Math.round((24+system.order*17)*days/30),
+    orders=Math.round((6+system.order*2)*days/30),adSpend=Math.round((32+system.ads*12)*days/30*100)/100,
+    acos=Math.max(12,42-system.ads*3),margin=roi<.7?15.3:roi*15+8;
+    return [String(days),{clicks,orders,sales,adSpend,acos,margin,profit:Math.round(sales*margin)/100,dataAvailable:approval==="approved"||tracking==="打品失败"}];
+  })) as ProductSample["periodMetrics"],
+  unitCost: roi < .7 ? 9 : 6.8, demand, actualPurchaseQty:approvedQty, approval,
   requestQty, requestReason: requestQty === null ? "" : "结合实际出单表现，申请调整采购数量。",
   approvedQty, arrivedAt: ["观察中", "打品成功", "打品失败"].includes(tracking) ? "2026-08-10" : null,
   sellableAt: ["观察中", "打品成功", "打品失败"].includes(tracking) ? "2026-08-12" : null,
@@ -26,7 +32,7 @@ export const mockProducts: ProductSample[] = [
   row("YC00831","办公打包标签纸","办公打包","赵敏","陈佳","2026-09-01",7,{order:7,ads:6,profit:8,trust:8},1.25,220,"pending","等待到货",0,0,0,null,"待领导审核",260),
   row("YC00872","硅胶防滑垫","厨房用品","陈佳","李倩","2026-08-24",9,{order:9,ads:8,profit:9,trust:9},1.42,520,"approved","观察中",162,283,370,500,"采购到货"),
   row("YC00901","真空压缩收纳袋","收纳用品","林晓","王宁","2026-07-28",8,{order:8,ads:7,profit:7,trust:8},1.08,360,"approved","打品成功",245,422,508,400,"采购到货"),
-  row("YC00914","厨房保鲜袋收纳架","厨房用品","赵敏","陈佳","2026-07-31",6,{order:5,ads:4,profit:6,trust:7},.72,180,"none","打品失败",39,71,86,350,"打品复盘"),
+  row("YC00914","厨房保鲜袋收纳架","厨房用品","赵敏","陈佳","2026-07-31",6,{order:5,ads:4,profit:6,trust:7},.72,180,"approved","打品失败",39,71,86,350,"打品复盘"),
   row("YC00930","可重复使用打包袋","办公打包","王宁","李倩","2026-08-15",8,{order:8,ads:8,profit:7,trust:8},1.18,310,"approved","观察中",128,190,250,310,"采购到货"),
   row("YC00955","多用途挂钩组合","家居耗材","林晓","陈佳","2026-08-05",9,{order:9,ads:9,profit:8,trust:9},1.55,560,"approved","打品成功",260,480,620,550,"采购到货"),
   row("YC01015","办公桌理线夹","办公打包","陈佳","王宁","2026-08-02",5,{order:4,ads:3,profit:5,trust:6},.67,180,"none","未进入打品池",0,0,0,null,"停止推进"),
