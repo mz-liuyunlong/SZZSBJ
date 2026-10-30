@@ -20,7 +20,7 @@ export interface ListingManagementRow {
   category: string;
   wfsAvailableInventory: number;
   inboundInventory: number;
-  sales90Days: number;
+  sales30Days: number;
   adSpend30Days: number;
   disabledReason: string;
   listingStatus: string;
@@ -56,7 +56,7 @@ export const listingColumnFields = [
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },
   { key: "inboundInventory", title: "在途库存" },
-  { key: "sales90Days", title: "近90天销量" },
+  { key: "sales30Days", title: "近30天销量" },
   { key: "adSpend30Days", title: "近30天广告费" },
   { key: "disabledReason", title: "停用原因" },
   { key: "listingStatus", title: "Listing状态" },
@@ -109,7 +109,7 @@ export const listingManagementMockData: ListingManagementRow[] = Array.from(
       category: categories[index % categories.length],
       wfsAvailableInventory: 40 + index * 3,
       inboundInventory: index % 5 * 12,
-      sales90Days: 180 + index * 7,
+      sales30Days: 180 + index * 7,
       adSpend30Days: Number((25 + index * 2.4).toFixed(2)),
       disabledReason: productStatus === "停用" ? "待复核" : "",
       listingStatus: index % 9 === 0 ? "离线" : "在线",
