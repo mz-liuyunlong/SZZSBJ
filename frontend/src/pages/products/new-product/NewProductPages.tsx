@@ -45,7 +45,28 @@ function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:
  <div className="npd-two"><Card title={mode==="performance"?"测评等级分布":"初始评级分布"} size="small"><ReactECharts style={{height:210}} option={{grid:{left:110,right:38,top:8,bottom:14},xAxis:{type:"value",min:0,max:100},yAxis:{type:"category",inverse:true,data:grades},series:[{type:"bar",data,barWidth:14,itemStyle:{color:"#1677ff"}}]}}/></Card>
  <Card size="small" title={mode==="performance"?"失败维度参考（示意）":"采购推进进度"}><ReactECharts style={{height:210}} option={{grid:{left:120,right:35,top:8,bottom:14},xAxis:{type:"value",min:0,max:100},
  yAxis:{type:"category",inverse:true,data:mode==="performance"?["出单速度","广告","利润","数据完整度"]:["待审核","待到货","观察中","成功","失败"]},
- series:[{type:"bar",barWidth:14,itemStyle:{color:"#1677ff"},data:mode==="performance"?[28,36,22,14]:["pending","等待到货","观察中","打品成功","打品失败"].map((v,i)=>Math.round(products.filter(p=>i===0?p.approval==="pending":p.tracking===v).length/Math.max(1,products.length)*100))}]}}/></Card></div>
+ series:[{type:"bar",barWidth:14,itemStyle:{color:"#1677ff"},data:mode==="performance"?["order","ads","profit","trust"].map(k=>{const rated=products.filter(p=>p.market!==null);return rated.length?Math.round(100*rated.filter(p=>p.system[k as "order"|"ads"|"profit"|"trust"]<=5).length/rated.length):0;}):["pending","等待到货","观察中","打品成功","打品失败"].map((v,i)=>Math.round(products.filter(p=>i===0?p.approval==="pending":p.tracking===v).length/Math.max(1,products.length)*100))}]}}/></Card></div>
+ {mode==="performance"?<div className="npd-two">
+ <Card size="small" title="高等级新品占比">
+ {(()=>{const rated=products.filter(p=>completedScore(p,c)!==null);const high=rated.filter(p=>["S","A"].includes(completedScore(p,c)?.grade??""));return <Space direction="vertical">
+ <Typography.Title level={3} style={{margin:0}}>{percentage(high.length,rated.length)}</Typography.Title>
+ <Typography.Text type="secondary">S/A级 {high.length} 款 / 已完成测评 {rated.length} 款</Typography.Text>
+ </Space>})()}</Card>
+ <DataTable title="开发人员等级分布" data={[...new Set(products.map(p=>p.developer))].map(name=>{
+ const list=products.filter(p=>p.developer===name&&p.market!==null);
+ return {id:name,name,total:list.length,...Object.fromEntries((["S","A","B","C","D","Pass"] as Grade[]).map(g=>[g,list.filter(p=>completedScore(p,c)?.grade===g).length]))};
+ })} columns={[{key:"name",title:"开发人员",dataIndex:"name"},{key:"total",title:"有效测评",dataIndex:"total"},...(["S","A","B","C","D","Pass"] as Grade[]).map(g=>({key:g,title:g+"级",dataIndex:g}))]}/>
+ </div>:<div className="npd-two">
+ <DataTable title="初始评级 × 打品成功率" data={(["S","A","B","C","D","Pass"] as Grade[]).map(g=>{
+ const list=pool.filter(p=>completedScore(p,c)?.grade===g);const valid=list.filter(p=>p.tracking==="打品成功"||p.tracking==="打品失败");
+ const ok=valid.filter(p=>p.tracking==="打品成功");
+ return {id:g,grade:g,tracked:list.length,valid:valid.length,success:ok.length,rate:percentage(ok.length,valid.length)};
+ })} columns={[{key:"grade",title:"初始评级",dataIndex:"grade"},{key:"tracked",title:"打品池",dataIndex:"tracked"},
+ {key:"valid",title:"有效样本",dataIndex:"valid"},{key:"success",title:"成功量",dataIndex:"success"},{key:"rate",title:"成功率",dataIndex:"rate"}]}/>
+ <DataTable title="采购建议准确性复盘" data={pool.map(p=>({id:p.id,sku:p.sku,suggest:completedScore(p,c)?.suggested??0,request:p.requestQty??0,approved:p.approvedQty??0,sold:p.sales90,remaining:p.inventory}))}
+ columns={[{key:"sku",title:"SKU",dataIndex:"sku"},{key:"suggest",title:"建议",dataIndex:"suggest"},{key:"request",title:"申请",dataIndex:"request"},
+ {key:"approved",title:"批准",dataIndex:"approved"},{key:"sold",title:"90天销量",dataIndex:"sold"},{key:"remaining",title:"剩余库存",dataIndex:"remaining"}]}/>
+ </div>}
  <div className="npd-two"><DataTable title={mode==="performance"?"类目测评表现":"类目打品表现与深挖建议"} data={group(products,c,"category",mode==="tracking")} columns={grouped}/>
  <DataTable title={mode==="performance"?"新品开发人员成功率":"运营人员打品成功率"} data={group(products,c,mode==="performance"?"developer":"operator",mode==="tracking")} columns={grouped}/></div>
  {mode==="performance"?<DataTable title="上架满30天待市场评分" data={products.filter(p=>p.market===null&&daysSince(p.listedAt)>=c.remindDays)} columns={[
