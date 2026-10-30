@@ -126,7 +126,7 @@ function ConfigPanel({mode,visible,onClose,canManage}:{mode:Mode;visible:boolean
  </Drawer>;
 }
 
-export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mode}){
+export default function NewProductPages({page,mode,canManage=false}:{page:NavigationPage;mode:Mode;canManage?:boolean}){
  const state=useNewProductStore(),c=state.config;
  const [tab,setTab]=useState("list"),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
