@@ -636,6 +636,7 @@ class ListingManagementService:
                             archive_states.get(str(row.id))
                             and archive_states[str(row.id)].is_archived
                         ),
+                        archive_state_known=str(row.id) in archive_states,
                         archive_reason=getattr(
                             archive_states.get(str(row.id)),
                             "archive_reason",
@@ -815,7 +816,13 @@ class ListingManagementService:
             (
                 "archive_status",
                 "归档状态",
-                lambda item: "已归档" if getattr(item, "is_archived", False) else "正常",
+                lambda item: (
+                    "状态未知"
+                    if not getattr(item, "archive_state_known", False)
+                    else "已归档"
+                    if item.is_archived
+                    else "未归档"
+                ),
             ),
             (
                 "archive_reason",
@@ -842,6 +849,7 @@ class ListingManagementService:
                 row,
                 custom_tags.get((str(row.source_account_ref), str(row.item_id))),
                 bool(archive_state and archive_state.is_archived),
+                archive_state_known=archive_state is not None,
                 archive_reason=getattr(archive_state, "archive_reason", None),
             )
 
@@ -1080,6 +1088,7 @@ class ListingManagementService:
         custom_tags: list[str] | None = None,
         is_archived: bool = False,
         archive_reason: str | None = None,
+        archive_state_known: bool = False,
     ) -> ListingManagementItemRead:
         listing = row.listing if isinstance(row, ListingManagementRowProjection) else row
         title = (
@@ -1197,5 +1206,6 @@ class ListingManagementService:
             upc=listing.upc,
             calculated_at=listing.calculated_at,
             is_archived=is_archived,
+            archive_state_known=archive_state_known,
             archive_reason=archive_reason,
         )

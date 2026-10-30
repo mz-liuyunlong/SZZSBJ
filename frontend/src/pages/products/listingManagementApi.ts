@@ -54,6 +54,7 @@ interface BackendListingItem {
   calculated_at: string;
   archive_reason?: string | null;
   is_archived?: boolean;
+  archive_state_known?: boolean;
 }
 
 interface BackendListingData {
@@ -284,6 +285,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   productGrade: item.product_grade ?? "未分级",
   archiveReason: item.archive_reason ?? null,
   isArchived: Boolean(item.is_archived ?? (item as { isArchived?: boolean }).isArchived ?? false),
+  archiveStateKnown: item.archive_state_known ?? false,
 });
 
 const backendSearchField = (field: ListingManagementParams["searchType"] | undefined) => {

@@ -210,6 +210,7 @@ const defaultColumnWidths: Record<string, number> = {
   tags: 130,
   gtin: 160,
   productGrade: 120,
+  archiveStatus: 130,
   archiveReason: 180,
   actions: 112,
 };

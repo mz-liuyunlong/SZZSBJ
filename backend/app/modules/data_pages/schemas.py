@@ -412,6 +412,7 @@ class ListingManagementItemRead(StrictSchema):
     upc: str | None
     calculated_at: datetime
     is_archived: bool = False
+    archive_state_known: bool = False
     archive_reason: str | None = None
 
 

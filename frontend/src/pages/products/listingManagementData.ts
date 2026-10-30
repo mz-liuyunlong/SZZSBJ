@@ -56,6 +56,7 @@ export interface ListingManagementRow {
   productGrade: string;
   archiveReason?: string | null;
   isArchived: boolean;
+  archiveStateKnown?: boolean;
 }
 
 export const listingColumnFields = [
@@ -97,6 +98,7 @@ export const listingColumnFields = [
   { key: "tags", title: "标签" },
   { key: "gtin", title: "GTIN" },
   { key: "productGrade", title: "产品等级" },
+  { key: "archiveStatus", title: "归档状态" },
   { key: "archiveReason", title: "归档原因" },
 ] as const;
 

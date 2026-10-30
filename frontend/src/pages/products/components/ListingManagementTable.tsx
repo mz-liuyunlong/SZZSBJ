@@ -566,6 +566,17 @@ function ListingManagementTable({
       width: columnWidths.gtin,
       onHeaderCell: headerCell,
     },
+    archiveStatus: {
+      key: "archiveStatus",
+      title: title("archiveStatus", fieldTitle.archiveStatus),
+      width: columnWidths.archiveStatus,
+      onHeaderCell: headerCell,
+      render: (_, row) => !row.archiveStateKnown
+        ? <Tag>状态未知</Tag>
+        : row.isArchived
+          ? <Tag color="orange">已归档</Tag>
+          : <Tag color="green">未归档</Tag>,
+    },
     archiveReason: {
       key: "archiveReason",
       dataIndex: "archiveReason",

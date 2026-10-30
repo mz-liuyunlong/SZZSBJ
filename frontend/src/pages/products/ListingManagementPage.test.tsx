@@ -99,7 +99,7 @@ describe("ListingManagementPage acceptance contract", () => {
       "在途库存", "近30天销量", "近30天广告费", "停用原因", "Listing状态", "购物车状态",
       "Walmart卖家", "是否被跟卖", "监控检查时间", "数据更新时间", "监控来源", "监控时效", "监控状态", "监控错误码", "监控图片数", "评分", "评论数", "品牌", "标签", "GTIN",
       "产品等级",
-      "归档原因",
+      "归档状态", "归档原因",
     ]);
     expect(fixedListingColumnKeys).toEqual(["image", "productIdName", "skuMsku"]);
   });
