@@ -21,9 +21,7 @@ def test_twice_weekly_pacific_schedule():
 
 
 @pytest.mark.parametrize("include_cn2502", [False, True])
-def test_schedules_eight_only_with_eight_or_nine_store_identity_map(
-    monkeypatch, include_cn2502
-):
+def test_schedules_eight_only_with_eight_or_nine_store_identity_map(monkeypatch, include_cn2502):
     stores = sorted(REMOTE_COLLECTION_STORES)
     mapping = {str(index): store for index, store in enumerate(stores, start=1)}
     if include_cn2502:
