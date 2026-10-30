@@ -1764,7 +1764,9 @@ class ListingTagRepository:
 
         # Tag assignments are keyed by account + Item ID, not by store.
         # Deduplicate identical identities selected from multiple stores.
-        unique_items = {(source_account_ref, item_id) for _, source_account_ref, item_id in listings}
+        unique_items = {
+            (source_account_ref, item_id) for _, source_account_ref, item_id in listings
+        }
         if mode == "replace":
             for source_account_ref, item_id in unique_items:
                 self.session.execute(
