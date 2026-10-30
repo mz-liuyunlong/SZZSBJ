@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { CheckCircleOutlined, ClockCircleOutlined, AppstoreOutlined, HourglassOutlined } from "@ant-design/icons";
 import { Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography, message } from "antd";
 import { ProTable, type ProColumns } from "@ant-design/pro-components";
 import ReactECharts from "echarts-for-react";
@@ -10,7 +11,8 @@ import ReportFacetSelect from "@/shared/report-filters";
 import ResetButton from "@/components/report-table/ResetButton";
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
-import { ProductIdentityCell } from "@/components/report-table/cells";
+import { ProductIdentityCell, CopyableTextCell, ImageCell, StatusTagCell, TrendPreviewCell, PercentCell, MoneyCell } from "@/components/report-table/cells";
+import ResizableColumnTitle from "@/components/report-table/ResizableColumnTitle";
 import type { NavigationPage } from "@/config/navigation";
 import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions, getNewProductWorkflowTab, trackedProduct, trackingWorkflow, periodSales, type TrackingWorkflowTab, type TrackState, type ProductWorkflowTab,
  type ProductSample, type NewProductConfig, type Grade, type Dimension } from "./newProductModel";
@@ -20,6 +22,19 @@ type Filter={category:string[];developer:string[];operator:string[];field:"sku"|
 const empty=():Filter=>({category:[],developer:[],operator:[],field:"sku",query:""});
 const opts=(a:string[])=>[...new Set(a)].map(x=>({label:x,value:x}));
 const tone:Record<Grade,string>={S:"purple",A:"blue",B:"green",C:"orange",D:"red",Pass:"default"};
+function DashboardCards({mode,products,c,onSelect,activeKey}:{mode:Mode;products:ProductSample[];c:NewProductConfig;onSelect:(key:string)=>void;activeKey:string}) {
+  const pool=mode==="performance"?products:products.filter(trackedProduct);
+  const assessed=mode==="performance"?pool.filter(p=>p.market!==null):pool.filter(p=>["打品成功","打品失败"].includes(p.tracking));
+  const passed=assessed.filter(p=>mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功");
+  const cards=[
+    {key:"total",title:mode==="performance"?"新品总数":"打品池产品",value:pool.length,subtitle:"当前筛选范围",tone:"normal" as const,icon:<AppstoreOutlined/>},
+    {key:"pass",title:mode==="performance"?"评估通过率":"打品成功率",value:percentage(passed.length,assessed.length),subtitle:`成功 ${passed.length} / 有效 ${assessed.length}`,tone:"success" as const,icon:<CheckCircleOutlined/>},
+    {key:"categories",title:"成功类目",value:new Set(passed.map(p=>p.category)).size,subtitle:"点击只看成功类目",tone:"normal" as const,icon:<AppstoreOutlined/>},
+    {key:"pending",title:mode==="performance"?"待市场评分":"待复盘",value:mode==="performance"?pool.filter(p=>p.market===null&&daysSince(p.listedAt)>=c.remindDays).length:
+      pool.filter(p=>trackingWorkflow(p,c)==="review").length,subtitle:"需要处理的商品",tone:"warning" as const,icon:<HourglassOutlined/>},
+  ];
+  return <ManagementStatCards ariaLabel={mode==="performance"?"新品表现指标":"打品跟踪指标"} cards={cards} activeKey={activeKey} onCardClick={onSelect}/>;
+}
 function DataTable<T extends object>({title,data,columns}:{title:string;data:T[];columns:ProColumns<T>[]}){return <div className="npd-panel"><strong>{title}</strong><ReportTableShell label={title}><ProTable<T> rowKey={r=>String((r as {id:string}).id)}
  search={false} options={false} toolBarRender={false} dataSource={data} columns={columns} bordered size="small" scroll={{x:"max-content",y:350}}
  pagination={{pageSize:50,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),showSizeChanger:true,showTotal:n=>"共 "+n+" 条数据"}}/></ReportTableShell></div>;}
@@ -149,7 +164,7 @@ function ConfigPanel({mode,visible,onClose,canManage}:{mode:Mode;visible:boolean
 
 export default function NewProductPages({page,mode,canManage=false}:{page:NavigationPage;mode:Mode;canManage?:boolean}){
  const state=useNewProductStore(),c=state.config;
- const [tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
+ const [cardKey,setCardKey]=useState("total"),[tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
  const [market,setMarket]=useState<ProductSample|null>(null),[purchase,setPurchase]=useState<ProductSample|null>(null);
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
@@ -161,7 +176,8 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  const rows=useMemo(()=>state.products.filter(p=>(!filter.category.length||filter.category.includes(p.category))&&
  (!filter.developer.length||filter.developer.includes(p.developer))&&(!filter.operator.length||filter.operator.includes(p.operator))&&
  (!filter.query||String(p[filter.field]).toLowerCase().includes(filter.query.toLowerCase()))),[state.products,filter]);
- const view=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>trackedProduct(p)&&(trackingTab==="all"||trackingWorkflow(p,{...c,successWindow:period})===trackingTab));
+ const primary=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>trackedProduct(p)&&(trackingTab==="all"||trackingWorkflow(p,{...c,successWindow:period})===trackingTab));
+ const view=primary.filter(p=>cardKey==="total"||(cardKey==="pass"?(mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功"):cardKey==="categories"?(mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功"):mode==="performance"?p.market===null&&daysSince(p.listedAt)>=c.remindDays:trackingWorkflow(p,{...c,successWindow:period})==="review"));
  const allCols:ProColumns<ProductSample>[]=[
  {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
  {key:"category",title:"类目",dataIndex:"category",width:130},
@@ -204,7 +220,7 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>api.info("页面已刷新")}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
  {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
- <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={c}/></div>
+ <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={{...c,successWindow:period}} activeKey={cardKey} onSelect={setCardKey}/></div>
  {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
  {key:"all",label:"全部新品 ("+rows.length+")"},
  {key:"market",label:"待市场评分 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="market").length+")"},
