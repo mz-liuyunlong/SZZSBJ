@@ -17,6 +17,7 @@ import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
 import LoginPage from "@/pages/auth/LoginPage";
 import NotFoundPage from "@/pages/errors/NotFoundPage";
 import ListingManagementPage from "@/pages/products/ListingManagementPage";
+import NewProductDemoPages from "@/pages/products/new-product/NewProductDemoPages";
 import ClearanceCenterPage from "@/pages/products/ClearanceCenterPage";
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
 import DailySalesPage from "@/pages/sales/DailySalesPage";
