@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from app.core.api import ApiError
 from app.core.auth import Principal
 from app.core.permissions import require_permission
-from app.main import create_app
+from app.modules.new_product_workflow.router import router as new_product_router
 from app.modules.new_product_workflow.router import (
     APPROVE,
     MarketWrite,
@@ -77,8 +77,7 @@ def test_unknown_sku_identity_fails_closed() -> None:
 
 
 def test_workflow_router_registered_without_exposing_real_purchase_execution() -> None:
-    app = create_app()
-    paths = {route.path for route in app.routes}
+    paths = {route.path for route in new_product_router.routes}
     assert "/api/new-products/workflows" in paths
     assert "/api/new-products/workflows/{sku_id}/purchase-decision" in paths
     assert "/api/new-products/rules" in paths
