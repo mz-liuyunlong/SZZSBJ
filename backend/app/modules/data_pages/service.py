@@ -787,7 +787,11 @@ class ListingManagementService:
                 "上架时间",
                 lambda item: self._listing_start_csv_value(item.listing_start_at_utc),
             ),
-            ("listing_start_source_raw", "ERP原始上架时间", lambda item: item.listing_start_source_raw),
+            (
+                "listing_start_source_raw",
+                "ERP原始上架时间",
+                lambda item: item.listing_start_source_raw,
+            ),
             ("first_wfs_available_at", "首次WFS有货日", lambda item: item.launch_date_cn),
             ("monitor_observed_at", "监控检查时间", lambda item: item.monitor_observed_at),
             ("monitor_source", "监控来源", lambda item: item.monitor_source),
