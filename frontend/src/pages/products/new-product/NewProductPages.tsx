@@ -162,9 +162,9 @@ export default function NewProductPages({page,mode}:{page:NavigationPage;mode:Mo
  <Space><Typography.Text type="secondary">新品测评与采购跟踪</Typography.Text></Space></div>
  <Tabs activeKey={tab} onChange={setTab} items={[{key:"list",label:mode==="performance"?"新品表现":"打品跟踪"},{key:"board",label:mode==="performance"?"新品表现看板":"打品跟踪看板"}]}/>
  <div className="npd-toolbar">
- <ReportFacetSelect mode="multiple" ariaLabel="类目" placeholder="全部类目" value={filter.category} options={opts(state.products.map(p=>p.category))} onChange={v=>setFilter(f=>({...f,category:v as string[]}))}/>
- <ReportFacetSelect mode="multiple" ariaLabel="开发人员" placeholder="开发人员" value={filter.developer} options={opts(state.products.map(p=>p.developer))} onChange={v=>setFilter(f=>({...f,developer:v as string[]}))}/>
- <ReportFacetSelect mode="multiple" ariaLabel="运营人员" placeholder="运营人员" value={filter.operator} options={opts(state.products.map(p=>p.operator))} onChange={v=>setFilter(f=>({...f,operator:v as string[]}))}/>
+ <ReportFacetSelect mode="multiple" ariaLabel="类目" placeholder="全部类目" value={filter.category} options={opts(state.products.map(p=>p.category))} onChange={v=>setFilter(f=>({...f,category:Array.isArray(v)?v:[]}))}/>
+ <ReportFacetSelect mode="multiple" ariaLabel="开发人员" placeholder="开发人员" value={filter.developer} options={opts(state.products.map(p=>p.developer))} onChange={v=>setFilter(f=>({...f,developer:Array.isArray(v)?v:[]}))}/>
+ <ReportFacetSelect mode="multiple" ariaLabel="运营人员" placeholder="运营人员" value={filter.operator} options={opts(state.products.map(p=>p.operator))} onChange={v=>setFilter(f=>({...f,operator:Array.isArray(v)?v:[]}))}/>
  <div className="npd-search"><ConnectedSearch typeAriaLabel="搜索类型" inputAriaLabel="搜索新品" typeOptions={[{label:"SKU",value:"sku"},{label:"Item ID",value:"itemId"},{label:"品名",value:"name"}]}
  typeValue={field} inputValue={query} inputPlaceholder="SKU / Item ID / 品名" onTypeChange={v=>setField(v as Filter["field"])} onInputChange={setQuery}
  onSearch={()=>setFilter(f=>({...f,query:query.trim(),field}))}/></div>
