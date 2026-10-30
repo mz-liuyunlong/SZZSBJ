@@ -73,7 +73,9 @@ def list_cases(request: Request, query: Annotated[ExceptionQuery, Query()], svc:
     return success_response(request, data=svc.list(query), meta=meta())
 
 
-@router.get("/cases/{case_id}", response_model=SuccessEnvelope[ExceptionDetail, dict], responses=ERRORS)
+@router.get(
+    "/cases/{case_id}", response_model=SuccessEnvelope[ExceptionDetail, dict], responses=ERRORS
+)
 def case_detail(request: Request, case_id: UUID, svc: Service):
     return success_response(request, data=svc.detail(case_id), meta=meta())
 
@@ -83,7 +85,9 @@ def summary(request: Request, query: Annotated[ExceptionFilter, Query()], svc: S
     return success_response(request, data=svc.summary(query), meta=meta())
 
 
-@router.get("/filter-options", response_model=SuccessEnvelope[ExceptionOptions, dict], responses=ERRORS)
+@router.get(
+    "/filter-options", response_model=SuccessEnvelope[ExceptionOptions, dict], responses=ERRORS
+)
 def filter_options(request: Request, svc: Service):
     return success_response(request, data=svc.options(), meta=meta())
 

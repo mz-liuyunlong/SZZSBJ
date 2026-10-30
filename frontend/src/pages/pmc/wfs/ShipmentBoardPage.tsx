@@ -151,7 +151,7 @@ export default function ShipmentBoardPage({ page, scope = "anonymous" }: { page:
         loadingLabel="正在加载WFS货件看板，请稍候"
         rows={isShipment ? rows : []}
         total={isShipment ? total : 0}
-        page={pagination.page}
+        current={pagination.page}
         pageSize={pagination.size}
         onPageChange={(page, size) => setPagination({ page, size })}
         onRowClick={isShipment ? (row) => setDrawerId((row as ShipmentBoardRow).id) : undefined}

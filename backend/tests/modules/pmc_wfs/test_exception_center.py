@@ -49,7 +49,9 @@ def test_assign_and_close(db):
     account, order, _, _ = seed_fn(db)
     case = _seed_case(db, account, order)
     svc = _svc(db, account)
-    updated = svc.assign(case.id, "user-a", AssignCommand(assignee_user_id="owner-1", expected_version=1))
+    updated = svc.assign(
+        case.id, "user-a", AssignCommand(assignee_user_id="owner-1", expected_version=1)
+    )
     assert updated.assignee_user_id == "owner-1"
     assert updated.status == "IN_PROGRESS"
     closed = svc.post_event(

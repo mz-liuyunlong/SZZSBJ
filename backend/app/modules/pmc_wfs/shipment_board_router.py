@@ -65,7 +65,9 @@ def meta(extra: dict | None = None):
 @router.get("/shipments", response_model=SuccessEnvelope[ShipmentBoardList, dict], responses=ERRORS)
 def shipments(request: Request, query: Annotated[ShipmentBoardQuery, Query()], svc: Service):
     data = svc.list(query)
-    return success_response(request, data=data, meta=meta({"data_asof": data.data_asof.isoformat()}))
+    return success_response(
+        request, data=data, meta=meta({"data_asof": data.data_asof.isoformat()})
+    )
 
 
 @router.get(
@@ -77,7 +79,9 @@ def shipment_detail(request: Request, row_id: str, svc: Service):
     return success_response(request, data=svc.detail(row_id), meta=meta())
 
 
-@router.get("/summary", response_model=SuccessEnvelope[ShipmentBoardSummary, dict], responses=ERRORS)
+@router.get(
+    "/summary", response_model=SuccessEnvelope[ShipmentBoardSummary, dict], responses=ERRORS
+)
 def summary(request: Request, query: Annotated[ShipmentBoardFilter, Query()], svc: Service):
     return success_response(request, data=svc.summary(query), meta=meta())
 

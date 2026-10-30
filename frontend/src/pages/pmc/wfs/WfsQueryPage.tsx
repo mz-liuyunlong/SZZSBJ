@@ -32,7 +32,7 @@ export interface WfsQueryPageProps<Row extends { id: string } = { id: string }> 
   loadingLabel?: string;
   rows?: Row[];
   total?: number;
-  page?: number;
+  current?: number;
   pageSize?: number;
   onPageChange?: (page: number, pageSize: number) => void;
   onRowClick?: (row: Row) => void;
@@ -43,7 +43,7 @@ export default function WfsQueryPage<Row extends { id: string } = { id: string }
   page, title, tableLabel, emptyText, searchAriaLabel, inputAriaLabel, inputPlaceholder,
   typeAriaLabel, typeOptions, searchType, columns, scrollX, keyword, onSearch, onReset, filters, headExtra,
   loading = false, loadingLabel = "正在加载数据，请稍候",
-  rows = [], total = 0, page: current = 1, pageSize = 20, onPageChange, onRowClick, aboveToolbar,
+  rows = [], total = 0, current = 1, pageSize = 20, onPageChange, onRowClick, aboveToolbar,
 }: WfsQueryPageProps<Row>) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(360);

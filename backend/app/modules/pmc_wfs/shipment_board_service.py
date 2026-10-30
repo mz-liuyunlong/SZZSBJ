@@ -92,7 +92,9 @@ class ShipmentBoardService:
                         gtin=snap_order.get("gtin"),
                         msku=snap_order.get("msku"),
                         business_test=business_test,
-                        its=bool(op.snapshot.get("its")) if isinstance(op.snapshot, dict) else False,
+                        its=(
+                            bool(op.snapshot.get("its")) if isinstance(op.snapshot, dict) else False
+                        ),
                         label_state=state,
                         creation_state=op.state,
                         ticket_state=ticket.state,
@@ -184,7 +186,11 @@ class ShipmentBoardService:
         except ValueError:
             missing()
         row = next(
-            (r for r in self._expand() if r.ticket_id == ticket_id and r.shipment_id == shipment_id),
+            (
+                r
+                for r in self._expand()
+                if r.ticket_id == ticket_id and r.shipment_id == shipment_id
+            ),
             None,
         )
         if row is None:

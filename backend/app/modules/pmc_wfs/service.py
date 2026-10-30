@@ -72,8 +72,11 @@ class WfsService:
 
         require_creation_schema(self.session)
         occupied = self.repo.occupied([o.id for o in orders])
-        held = list(self.session.scalars(select(WfsBoxHold).where(
-            WfsBoxHold.order_id.in_([o.id for o in orders]))))
+        held = list(
+            self.session.scalars(
+                select(WfsBoxHold).where(WfsBoxHold.order_id.in_([o.id for o in orders]))
+            )
+        )
         held_boxes = defaultdict(set)
         for hold in held:
             held_boxes[hold.box_line_id].add(hold.box_ordinal)
@@ -95,8 +98,10 @@ class WfsService:
             lines = box.lines if box else []
             used = [r.id for r in lines if r.id in occupied or held_boxes[r.id]]
             available = [r.id for r in lines if r.id not in used] if not reasons else []
-            counts = {r.id: 0 if r.id in occupied else max(0, r.boxes - len(held_boxes[r.id]))
-                      for r in lines}
+            counts = {
+                r.id: 0 if r.id in occupied else max(0, r.boxes - len(held_boxes[r.id]))
+                for r in lines
+            }
             if not lines:
                 reasons.append("BOXES_REQUIRED")
             result.append(
@@ -111,7 +116,8 @@ class WfsService:
                     occupied_boxes=sum(r.boxes - counts[r.id] for r in lines),
                     available_boxes=sum(counts.values()) if not reasons else 0,
                     available_units=sum(counts[r.id] * r.units_per_box for r in lines)
-                    if not reasons else 0,
+                    if not reasons
+                    else 0,
                 )
             )
         return result
@@ -218,9 +224,7 @@ class WfsService:
             store_id: (label if count == 1 and label else store_id)
             for store_id, count, label in self.session.execute(stmt).all()
         }
-        orders = self.session.scalars(
-            self.repo.query(PendingFilter(), self.accounts, self.stores)
-        )
+        orders = self.session.scalars(self.repo.query(PendingFilter(), self.accounts, self.stores))
         for row in orders:
             if row.store_id:
                 values.setdefault(

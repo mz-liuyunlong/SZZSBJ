@@ -118,7 +118,7 @@ export default function ExceptionCenterPage({ page, scope = "anonymous" }: { pag
         keyword={filters.keyword}
         rows={rows}
         total={total}
-        page={pagination.page}
+        current={pagination.page}
         pageSize={pagination.size}
         onPageChange={(page, size) => setPagination({ page, size })}
         onRowClick={(row) => setDrawerId(row.id)}

@@ -1,7 +1,5 @@
 """WFS exception center cases and event timelines."""
 
-import sqlalchemy as sa
-
 from alembic import op
 
 revision = "20261029_0069_wfs_exception_center"
@@ -79,7 +77,8 @@ def upgrade():
         """
     )
     op.execute(
-        "CREATE INDEX ix_evt_wfs_exception_detections_case ON evt_wfs_exception_detections (case_id)"
+        "CREATE INDEX ix_evt_wfs_exception_detections_case "
+        "ON evt_wfs_exception_detections (case_id)"
     )
     op.execute(
         """

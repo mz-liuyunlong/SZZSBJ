@@ -10,9 +10,9 @@ def register_productlist_sync_models() -> None:
     import app.modules.pmc_domestic.warehouse_models
     import app.modules.pmc_purchase.gate3_models
     import app.modules.pmc_purchase.models
-    import app.modules.pmc_wfs.models
     import app.modules.pmc_wfs.creation_models
     import app.modules.pmc_wfs.exception_models
+    import app.modules.pmc_wfs.models
     import app.modules.product_management.models
     import app.modules.products.models
     import app.modules.sku_detail.models

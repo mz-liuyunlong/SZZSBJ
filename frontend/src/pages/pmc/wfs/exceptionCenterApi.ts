@@ -38,12 +38,19 @@ export const getCase = (id: string, signal?: AbortSignal) =>
   backendRequest<ExceptionDetail>(`${exceptionPrefix}/cases/${id}`, { signal });
 
 export const assignCase = (id: string, body: { assignee_user_id: string; expected_version: number }) =>
-  backendRequest<ExceptionDetail>(`${exceptionPrefix}/cases/${id}/assign`, { method: "POST", body });
+  backendRequest<ExceptionDetail>(`${exceptionPrefix}/cases/${id}/assign`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 
 export const postCaseEvent = (
   id: string,
   body: { action: string; expected_version: number; note?: string; reason?: string; platform_case_ref?: string },
-) => backendRequest<ExceptionDetail>(`${exceptionPrefix}/cases/${id}/events`, { method: "POST", body });
+) =>
+  backendRequest<ExceptionDetail>(`${exceptionPrefix}/cases/${id}/events`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 
 export function exceptionError(error: unknown, kind: "list" | "detail" = "list"): string {
   if (error instanceof BackendRequestError) {

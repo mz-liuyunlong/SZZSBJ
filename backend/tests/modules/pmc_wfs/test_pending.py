@@ -543,7 +543,10 @@ def test_invalid_line_batch_rolls_back_and_business_test_is_independent(db):
     cmd.selections[0].box_line_ids.append(uuid4())
     with pytest.raises(ApiError):
         svc.submit(cmd, "fixture")
-    assert db.scalar(select(func.count()).select_from(WfsDraft).where(
-        WfsDraft.source_account_ref == account
-    )) == 0
+    assert (
+        db.scalar(
+            select(func.count()).select_from(WfsDraft).where(WfsDraft.source_account_ref == account)
+        )
+        == 0
+    )
     assert not svc.repo.occupied([order.id])

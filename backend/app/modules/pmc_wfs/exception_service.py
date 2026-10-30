@@ -156,24 +156,33 @@ class ExceptionCenterService:
     def summary(self, query: ExceptionFilter) -> ExceptionSummary:
         stmt = self._apply_filters(self._scoped(), query)
         sub = stmt.subquery()
-        open_cases = self.session.scalar(
-            select(func.count()).select_from(sub).where(sub.c.status.in_(tuple(OPEN_STATUSES)))
-        ) or 0
-        open_shipments = self.session.scalar(
-            select(func.count(func.distinct(sub.c.shipment_id))).select_from(sub).where(
-                sub.c.status.in_(tuple(OPEN_STATUSES))
+        open_cases = (
+            self.session.scalar(
+                select(func.count()).select_from(sub).where(sub.c.status.in_(tuple(OPEN_STATUSES)))
             )
-        ) or 0
+            or 0
+        )
+        open_shipments = (
+            self.session.scalar(
+                select(func.count(func.distinct(sub.c.shipment_id)))
+                .select_from(sub)
+                .where(sub.c.status.in_(tuple(OPEN_STATUSES)))
+            )
+            or 0
+        )
         horizon = _now() + timedelta(days=7)
-        due_soon = self.session.scalar(
-            select(func.count())
-            .select_from(sub)
-            .where(
-                sub.c.due_at.is_not(None),
-                sub.c.due_at <= horizon,
-                sub.c.status.in_(tuple(OPEN_STATUSES)),
+        due_soon = (
+            self.session.scalar(
+                select(func.count())
+                .select_from(sub)
+                .where(
+                    sub.c.due_at.is_not(None),
+                    sub.c.due_at <= horizon,
+                    sub.c.status.in_(tuple(OPEN_STATUSES)),
+                )
             )
-        ) or 0
+            or 0
+        )
         return ExceptionSummary(
             open_shipments=int(open_shipments),
             open_cases=int(open_cases),
@@ -228,11 +237,11 @@ class ExceptionCenterService:
         )
 
     def _get_case(self, case_id) -> WfsExceptionCase:
-        case = self.session.scalar(
-            self._scoped().where(WfsExceptionCase.id == case_id)
-        )
+        case = self.session.scalar(self._scoped().where(WfsExceptionCase.id == case_id))
         if case is None:
-            raise ApiError(code="NOT_FOUND", status_code=404, message="异常案件不存在或不在当前权限范围")
+            raise ApiError(
+                code="NOT_FOUND", status_code=404, message="异常案件不存在或不在当前权限范围"
+            )
         return case
 
     def detail(self, case_id) -> ExceptionDetail:
@@ -289,7 +298,9 @@ class ExceptionCenterService:
         case.version += 1
         case.updated_at = _now()
 
-    def _record_action(self, case: WfsExceptionCase, actor_uid: str, action_type: str, payload: dict):
+    def _record_action(
+        self, case: WfsExceptionCase, actor_uid: str, action_type: str, payload: dict
+    ):
         self.session.add(
             WfsExceptionAction(
                 case_id=case.id,
@@ -340,19 +351,29 @@ class ExceptionCenterService:
             )
         elif cmd.action == "mark_waiting":
             if case.status not in {"IN_PROGRESS", "OPEN"}:
-                raise ApiError(code="INVALID_STATE_TRANSITION", status_code=422, message="当前状态不可标记待外部反馈")
+                raise ApiError(
+                    code="INVALID_STATE_TRANSITION",
+                    status_code=422,
+                    message="当前状态不可标记待外部反馈",
+                )
             case.status = "WAITING_EXTERNAL"
             note = cmd.note.strip() or "等待外部反馈"
             self._record_action(case, actor_uid, "MARK_WAITING", {"message": note})
         elif cmd.action == "resolve":
             if case.status in {"CLOSED", "RESOLVED"}:
-                raise ApiError(code="INVALID_STATE_TRANSITION", status_code=422, message="当前状态不可标记已解决")
+                raise ApiError(
+                    code="INVALID_STATE_TRANSITION",
+                    status_code=422,
+                    message="当前状态不可标记已解决",
+                )
             case.status = "RESOLVED"
             note = cmd.note.strip() or "已解决"
             self._record_action(case, actor_uid, "RESOLVE", {"message": note})
         elif cmd.action == "close":
             if case.status == "CLOSED":
-                raise ApiError(code="INVALID_STATE_TRANSITION", status_code=422, message="案件已关闭")
+                raise ApiError(
+                    code="INVALID_STATE_TRANSITION", status_code=422, message="案件已关闭"
+                )
             if not cmd.reason.strip():
                 raise ApiError(code="VALIDATION_ERROR", status_code=422, message="关闭必须填写原因")
             case.status = "CLOSED"
@@ -364,7 +385,9 @@ class ExceptionCenterService:
             )
         elif cmd.action == "reopen":
             if case.status != "CLOSED":
-                raise ApiError(code="INVALID_STATE_TRANSITION", status_code=422, message="仅已关闭案件可重开")
+                raise ApiError(
+                    code="INVALID_STATE_TRANSITION", status_code=422, message="仅已关闭案件可重开"
+                )
             if not cmd.reason.strip():
                 raise ApiError(code="VALIDATION_ERROR", status_code=422, message="重开必须填写原因")
             case.status = "OPEN"

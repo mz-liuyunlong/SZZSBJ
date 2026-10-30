@@ -42,9 +42,9 @@ from app.modules.pmc_domestic.warehouse_router import (
     router as domestic_packing_warehouse_router,
 )
 from app.modules.pmc_purchase.router import router as pmc_purchase_router
-from app.modules.pmc_wfs.router import router as pmc_wfs_router
 from app.modules.pmc_wfs.creation_router import router as pmc_wfs_creation_router
 from app.modules.pmc_wfs.exception_router import router as pmc_wfs_exception_router
+from app.modules.pmc_wfs.router import router as pmc_wfs_router
 from app.modules.pmc_wfs.shipment_board_router import router as pmc_wfs_shipment_board_router
 from app.modules.product_management.router import router as product_management_router
 from app.modules.products.router import router as products_router

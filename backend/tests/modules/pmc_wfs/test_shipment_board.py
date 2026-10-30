@@ -2,8 +2,6 @@
 
 from uuid import uuid4
 
-import pytest
-
 from app.modules.pmc_wfs.creation_models import WfsCreation, WfsCreationTicket
 from app.modules.pmc_wfs.shipment_board_schemas import ShipmentBoardQuery
 from app.modules.pmc_wfs.shipment_board_service import ShipmentBoardService, row_id
