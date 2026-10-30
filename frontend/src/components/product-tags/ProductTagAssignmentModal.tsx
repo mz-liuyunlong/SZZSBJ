@@ -1,4 +1,4 @@
-import { Button, Empty, Modal, Spin } from "antd";
+import { Button, Empty, Modal, Spin, Radio } from "antd";
 import { useState, type CSSProperties } from "react";
 import type { CustomProductTag } from "@/components/product-tags/CustomTagManagerModal";
 import "@/components/product-tags/ProductTagAssignmentModal.css";
@@ -9,7 +9,7 @@ interface ProductTagAssignmentModalProps {
   tags: CustomProductTag[];
   loading?: boolean;
   onCancel: () => void;
-  onConfirm: (value: string[]) => void;
+  onConfirm: (value: string[], mode: "append" | "replace" | "remove") => void;
 }
 
 function ProductTagAssignmentModal({
@@ -21,6 +21,7 @@ function ProductTagAssignmentModal({
   onConfirm,
 }: ProductTagAssignmentModalProps) {
   const [value, setValue] = useState<string[]>([]);
+  const [mode, setMode] = useState<"append" | "replace" | "remove">("append");
   const selected = new Set(value);
 
   const toggleTag = (tagName: string) => {
@@ -53,8 +54,8 @@ function ProductTagAssignmentModal({
             <Button onClick={onCancel}>取消</Button>
             <Button
               type="primary"
-              disabled={loading || selectedProductCount === 0 || value.length === 0}
-              onClick={() => onConfirm(value)}
+              disabled={loading || selectedProductCount === 0 || (value.length === 0 && mode !== "replace")}
+              onClick={() => onConfirm(value, mode)}
             >
               确定
             </Button>
@@ -62,13 +63,21 @@ function ProductTagAssignmentModal({
         </div>
       )}
       afterOpenChange={(nextOpen) => {
-        if (!nextOpen) setValue([]);
+        if (!nextOpen) {
+          setValue([]);
+          setMode("append");
+        }
       }}
       onCancel={() => {
         setValue([]);
         onCancel();
       }}
     >
+      <Radio.Group
+        value={mode}
+        onChange={(event) => setMode(event.target.value as "append" | "replace" | "remove")}
+        options={[{ label: "追加", value: "append" }, { label: "替换（允许清空）", value: "replace" }, { label: "移除", value: "remove" }]}
+      />
       <div className="product-tag-assignment-modal__section-head">
         <span className="product-tag-assignment-modal__section-title">选择标签</span>
         <span className="product-tag-assignment-modal__section-hint">支持多选</span>

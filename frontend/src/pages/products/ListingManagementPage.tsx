@@ -1026,12 +1026,12 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           tags={assignmentTags}
           loading={isTagManagerLoading}
           onCancel={() => setBatchTagOpen(false)}
-          onConfirm={(selectedTags) => {
+          onConfirm={(selectedTags, mode) => {
             if (selectedRowKeys.length === 0) {
               void messageApi.warning("请先选择商品");
               return;
             }
-            if (selectedTags.length === 0) {
+            if (selectedTags.length === 0 && mode !== "replace") {
               void messageApi.warning("请选择标签");
               return;
             }
@@ -1039,7 +1039,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             void batchSetListingTags({
               listingIds: selectedRowKeys.map(String),
               tagValues: selectedTags,
-              mode: "append",
+              mode,
             })
               .then(() => {
                 void messageApi.success(`已给 ${selectedRowKeys.length} 个商品添加标签`);
