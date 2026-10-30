@@ -41,15 +41,15 @@ function DataTable<T extends object>({title,data,columns}:{title:string;data:T[]
  search={false} options={false} toolBarRender={false} dataSource={data} columns={columns} bordered size="small" scroll={{x:"max-content",y:350}}
  pagination={{defaultPageSize:50,pageSizeOptions:REPORT_TABLE_PAGE_SIZE_OPTIONS.map(String),showSizeChanger:true,showTotal:n=>"共 "+n+" 条数据"}}/></ReportTableShell></div>;}
 function group(products:ProductSample[],c:NewProductConfig,key:"category"|"developer"|"operator",launch:boolean){
- const pool=launch?products.filter(p=>p.approval==="approved"||p.tracking!=="未进入打品池"):products;
+ const pool=launch?products.filter(trackedProduct):products;
  return [...new Set(pool.map(p=>p[key]))].map(name=>{const list=pool.filter(p=>p[key]===name);
  const valid=launch?list.filter(p=>evaluateTrack(p,c)==="达标"||evaluateTrack(p,c)==="未达标"):list.filter(p=>p.market!==null);
- const ok=valid.filter(p=>launch?p.tracking==="打品成功":gradePass(completedScore(p,c)?.grade));
+ const ok=valid.filter(p=>launch?evaluateTrack(p,c)==="达标":gradePass(productScore(p,c)?.grade));
  return {id:name,name,total:list.length,valid:valid.length,passed:ok.length,rate:percentage(ok.length,valid.length),
  suggestion:valid.length<3?"样本不足":ok.length/valid.length>=.5?"重点拓展":"深入分析"};});
 }
-function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:NewProductConfig;onMarket:(p:ProductSample)=>void}){
- const pool=mode==="tracking"?products.filter(p=>p.approval==="approved"||p.tracking!=="未进入打品池"):products;
+function Board({mode,products,c,onMarket,onCardSelect}:{mode:Mode;products:ProductSample[];c:NewProductConfig;onMarket:(p:ProductSample)=>void;onCardSelect:(key:string)=>void}){
+ const pool=mode==="tracking"?products.filter(trackedProduct):products;
  const valid=mode==="tracking"?pool.filter(p=>["达标","未达标"].includes(evaluateTrack(p,c))):pool.filter(p=>p.market!==null);
  const passed=valid.filter(p=>mode==="tracking"?evaluateTrack(p,c)==="达标":gradePass(productScore(p,c)?.grade));
  const grades:Grade[]=["S","A","B","C","D","Pass"];const graded=pool.filter(p=>productScore(p,c)!==null);const data=grades.map(g=>graded.length?Math.round(graded.filter(p=>productScore(p,c)?.grade===g).length/graded.length*100):0);
@@ -58,31 +58,31 @@ function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:
  {key:"pass",title:mode==="performance"?"测评通过率":"打品成功率",value:percentage(passed.length,valid.length),subtitle:"通过 "+passed.length+" / 有效 "+valid.length,tone:"success" as const,icon:<span>✓</span>},
  {key:"categories",title:"通过类目数",value:new Set(passed.map(p=>p.category)).size,subtitle:"至少有一款成功",tone:"normal" as const,icon:<span>▦</span>},
  {key:"due",title:mode==="performance"?"满30天待评分":"待审批采购",value:mode==="performance"?products.filter(p=>p.market===null&&daysSince(p.listedAt)>=c.remindDays).length:products.filter(p=>p.approval==="pending").length,subtitle:"待处理任务",tone:"warning" as const,icon:<span>◷</span>}];
- return <div className="npd-board"><ManagementStatCards ariaLabel="看板统计" cards={cards} activeKey="total" onCardClick={()=>undefined}/>
+ return <div className="npd-board"><ManagementStatCards ariaLabel="看板统计" cards={cards} activeKey="total" onCardClick={key=>onCardSelect(key==="due"?"pending":key)}/>
  <div className="npd-two"><Card title={mode==="performance"?"测评等级分布":"初始评级分布"} size="small"><ReactECharts style={{height:210}} option={{grid:{left:110,right:38,top:8,bottom:14},xAxis:{type:"value",min:0,max:100},yAxis:{type:"category",inverse:true,data:grades},series:[{type:"bar",data,barWidth:14,itemStyle:{color:"#1677ff"}}]}}/></Card>
  <Card size="small" title={mode==="performance"?"失败维度参考（示意）":"采购推进进度"}><ReactECharts style={{height:210}} option={{grid:{left:120,right:35,top:8,bottom:14},xAxis:{type:"value",min:0,max:100},
  yAxis:{type:"category",inverse:true,data:mode==="performance"?["出单速度","广告","利润","数据完整度"]:["待审核","待到货","观察中","成功","失败"]},
  series:[{type:"bar",barWidth:14,itemStyle:{color:"#1677ff"},data:mode==="performance"?["order","ads","profit","trust"].map(k=>{const rated=products.filter(p=>p.market!==null);return rated.length?Math.round(100*rated.filter(p=>p.system[k as "order"|"ads"|"profit"|"trust"]<=5).length/rated.length):0;}):["pending","等待到货","观察中","打品成功","打品失败"].map((v,i)=>Math.round(products.filter(p=>i===0?p.approval==="pending":p.tracking===v).length/Math.max(1,products.length)*100))}]}}/></Card></div>
  {mode==="performance"?<div className="npd-two">
  <Card size="small" title="高等级新品占比">
- {(()=>{const rated=products.filter(p=>completedScore(p,c)!==null);const high=rated.filter(p=>["S","A"].includes(completedScore(p,c)?.grade??""));return <Space direction="vertical">
+ {(()=>{const rated=products.filter(p=>productScore(p,c)!==null);const high=rated.filter(p=>["S","A"].includes(productScore(p,c)?.grade??""));return <Space direction="vertical">
  <Typography.Title level={3} style={{margin:0}}>{percentage(high.length,rated.length)}</Typography.Title>
  <Typography.Text type="secondary">S/A级 {high.length} 款 / 已完成测评 {rated.length} 款</Typography.Text>
  </Space>})()}</Card>
  <DataTable title="开发人员等级分布" data={[...new Set(products.map(p=>p.developer))].map(name=>{
  const list=products.filter(p=>p.developer===name&&p.market!==null);
- return {id:name,name,total:list.length,...Object.fromEntries((["S","A","B","C","D","Pass"] as Grade[]).map(g=>[g,list.filter(p=>completedScore(p,c)?.grade===g).length]))};
+ return {id:name,name,total:list.length,...Object.fromEntries((["S","A","B","C","D","Pass"] as Grade[]).map(g=>[g,list.filter(p=>productScore(p,c)?.grade===g).length]))};
  })} columns={[{key:"name",title:"开发人员",dataIndex:"name"},{key:"total",title:"有效测评",dataIndex:"total"},...(["S","A","B","C","D","Pass"] as Grade[]).map(g=>({key:g,title:g+"级",dataIndex:g}))]}/>
  </div>:<div className="npd-two">
  <DataTable title="初始评级 × 打品成功率" data={(["S","A","B","C","D","Pass"] as Grade[]).map(g=>{
- const list=pool.filter(p=>completedScore(p,c)?.grade===g);const valid=list.filter(p=>p.tracking==="打品成功"||p.tracking==="打品失败");
- const ok=valid.filter(p=>p.tracking==="打品成功");
+ const list=pool.filter(p=>completedScore(p,c)?.grade===g);const valid=list.filter(p=>["达标","未达标"].includes(evaluateTrack(p,c)));
+ const ok=valid.filter(p=>evaluateTrack(p,c)==="达标");
  return {id:g,grade:g,tracked:list.length,valid:valid.length,success:ok.length,rate:percentage(ok.length,valid.length)};
  })} columns={[{key:"grade",title:"初始评级",dataIndex:"grade"},{key:"tracked",title:"打品池",dataIndex:"tracked"},
  {key:"valid",title:"有效样本",dataIndex:"valid"},{key:"success",title:"成功量",dataIndex:"success"},{key:"rate",title:"成功率",dataIndex:"rate"}]}/>
- <DataTable title="采购建议准确性复盘" data={pool.map(p=>({id:p.id,sku:p.sku,suggest:completedScore(p,c)?.suggested??0,request:p.requestQty??0,approved:p.approvedQty??0,sold:p.sales90,remaining:p.inventory}))}
+ <DataTable title="采购建议准确性复盘" data={pool.map(p=>({id:p.id,sku:p.sku,suggest:productScore(p,c)?.suggested??0,request:p.requestQty??0,approved:p.approvedQty??0,actual:p.actualPurchaseQty??0,sold:periodSales(p,c.successWindow),remaining:p.inventory}))}
  columns={[{key:"sku",title:"SKU",dataIndex:"sku"},{key:"suggest",title:"建议",dataIndex:"suggest"},{key:"request",title:"申请",dataIndex:"request"},
- {key:"approved",title:"批准",dataIndex:"approved"},{key:"sold",title:"90天销量",dataIndex:"sold"},{key:"remaining",title:"剩余库存",dataIndex:"remaining"}]}/>
+ {key:"approved",title:"批准",dataIndex:"approved"},{key:"actual",title:"实际采购",dataIndex:"actual"},{key:"sold",title:c.successWindow+"天销量",dataIndex:"sold"},{key:"remaining",title:"剩余库存",dataIndex:"remaining"}]}/>
  </div>}
  <div className="npd-two"><DataTable title={mode==="performance"?"类目测评表现":"类目打品表现与深挖建议"} data={group(products,c,"category",mode==="tracking")} columns={grouped}/>
  <DataTable title={mode==="performance"?"新品开发人员成功率":"运营人员打品成功率"} data={group(products,c,mode==="performance"?"developer":"operator",mode==="tracking")} columns={grouped}/></div>
@@ -183,14 +183,14 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  (!filter.developer.length||filter.developer.includes(p.developer))&&(!filter.operator.length||filter.operator.includes(p.operator))&&
  (!filter.query||String(p[filter.field]).toLowerCase().includes(filter.query.toLowerCase()))),[state.products,filter]);
  const primary=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>trackedProduct(p)&&(trackingTab==="all"||trackingWorkflow(p,{...c,successWindow:period})===trackingTab));
- const view=primary.filter(p=>cardKey==="total"||(cardKey==="pass"?(mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功"):cardKey==="categories"?(mode==="performance"?gradePass(completedScore(p,c)?.grade):p.tracking==="打品成功"):mode==="performance"?p.market===null&&daysSince(p.listedAt)>=c.remindDays:trackingWorkflow(p,{...c,successWindow:period})==="review"));
+ const view=primary.filter(p=>cardKey==="total"||(cardKey==="pass"||cardKey==="categories"?(mode==="performance"?gradePass(productScore(p,c)?.grade):evaluateTrack(p,c,period)==="达标"):mode==="performance"?p.market===null&&daysSince(p.listedAt)>=c.remindDays:trackingWorkflow(p,{...c,successWindow:period})==="review"));
  const allCols:ProColumns<ProductSample>[]=[
  {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><Space><ImageCell label="商品图片" image={p.image} /><Space direction="vertical" size={0}><CopyableTextCell label="SKU" text={p.sku}/><CopyableTextCell label="产品名称" text={p.name}/></Space></Space>},
  {key:"category",title:"类目",dataIndex:"category",width:130},
  {key:"developer",title:"开发人员",dataIndex:"developer",width:120},
  {key:"operator",title:"运营人员",dataIndex:"operator",width:120},
  {key:"days",title:"上架天数",width:100,render:(_,p)=>daysSince(p.listedAt)+" 天"},
- {key:"score",title:"总分 / 评级",width:140,render:(_,p)=>{const s=completedScore(p,c);return s?<Space><strong>{s.score.toFixed(2)}</strong><Tag color={tone[s.grade]}>{s.grade}</Tag></Space>:"待评分";}},
+ {key:"score",title:"总分 / 评级",width:140,render:(_,p)=>{const s=productScore(p,c);return s?<Space><strong>{s.score.toFixed(2)}</strong><Tag color={tone[s.grade]}>{s.grade}</Tag></Space>:"待评分";}},
  {key:"suggested",title:"建议量",width:115,render:(_,p)=>completedScore(p,c)?.suggested??"—"},
  {key:"approval",title:"采购状态",width:115,render:(_,p)=><StatusTagCell label={p.approval==="none"?"未提交":p.approval==="pending"?"审核中":p.approval==="approved"?"已批准":"已驳回"} color={p.approval==="approved"?"success":p.approval==="rejected"?"error":"warning"}/>},
  {key:"tracking",title:"打品结果",width:125,render:(_,p)=><StatusTagCell label={p.tracking} color={p.tracking==="打品成功"?"success":p.tracking==="打品失败"?"error":"processing"}/>},
@@ -227,7 +227,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
  <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>{setCardKey("total");setWorkflowTab("all");setTrackingTab("all");setFilter(empty());setQuery("");api.success("已刷新当前筛选视图");}}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
- {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
+ {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onCardSelect={key=>{setCardKey(key);setTab("list");}} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={{...c,successWindow:period}} activeKey={cardKey} onSelect={setCardKey}/></div>
  {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
  {key:"all",label:"全部新品 ("+rows.length+")"},
@@ -264,7 +264,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  footer={<Space><Button onClick={()=>setReviewProduct(null)}>取消</Button><Button type="primary" onClick={()=>act(()=>state.updateTrack(reviewProduct!.id,reviewState,reason,reviewDate),()=>setReviewProduct(null))}>保存复盘</Button></Space>}>
  {reviewProduct&&<><Typography.Paragraph>{reviewProduct.name} · 运营：{reviewProduct.operator} · 初始评级：{completedScore(reviewProduct,c)?.grade??"—"}</Typography.Paragraph>
  <div className="npd-review-summary"><div>系统建议：{completedScore(reviewProduct,c)?.suggested??"—"} 件</div><div>运营申请：{reviewProduct.requestQty??"—"} 件</div><div>批准数量：{reviewProduct.approvedQty??"—"} 件</div>
- <div>{period}天销量：{periodSales(reviewProduct,period)}</div><div>点击：{getPeriodMetrics(reviewProduct,period).clicks}</div><div>订单：{getPeriodMetrics(reviewProduct,period).orders}</div><div>广告费：{getPeriodMetrics(reviewProduct,period).adSpend}</div><div>利润：{getPeriodMetrics(reviewProduct,period).profit}</div><div>利润率：{reviewProduct.margin.toFixed(1)}%</div><div>ACOS：{reviewProduct.acos.toFixed(1)}%</div><div>库存：{reviewProduct.inventory}</div></div>
+ <div>{period}天销量：{periodSales(reviewProduct,period)}</div><div>点击：{getPeriodMetrics(reviewProduct,period).clicks}</div><div>订单：{getPeriodMetrics(reviewProduct,period).orders}</div><div>广告费：{getPeriodMetrics(reviewProduct,period).adSpend}</div><div>利润：{getPeriodMetrics(reviewProduct,period).profit}</div><div>利润率：{getPeriodMetrics(reviewProduct,period).margin.toFixed(1)}%</div><div>ACOS：{getPeriodMetrics(reviewProduct,period).acos.toFixed(1)}%</div><div>库存：{reviewProduct.inventory}</div></div>
  <Typography.Paragraph>复盘结果</Typography.Paragraph><Select value={reviewState} onChange={setReviewState} style={{width:"100%"}} options={["观察中","需要优化","打品成功","打品失败"].map(v=>({label:v,value:v}))}/>
  {reviewState==="需要优化"&&<><Typography.Paragraph style={{marginTop:12}}>下次复核日期（必填）</Typography.Paragraph><DatePicker value={reviewDate?dayjs(reviewDate):null} onChange={value=>setReviewDate(value?.format("YYYY-MM-DD")??"")} format="YYYY-MM-DD" style={{width:"100%"}}/></>}
  <Typography.Paragraph style={{marginTop:12}}>复盘说明（必填，至少5字）</Typography.Paragraph><Input.TextArea rows={4} value={reason} onChange={e=>setReason(e.target.value)}/></>}
@@ -279,7 +279,7 @@ export default function NewProductPages({page,mode,canManage=false,canConfigure=
  {(Object.keys(dimensions) as Dimension[]).map(d=><div className="npd-dimension" key={d}><b>{dimensions[d]}</b>
  <span>{d==="market"?detail.market??"待运营确认":detail.overrides[d]??detail.system[d]}</span>
  {d!=="market"&&detail.market!==null&&detail.approval!=="approved"&&<Button type="link" onClick={()=>{setCorrection({p:detail,d});setScore(detail.overrides[d]??detail.system[d]);setReason("");setDetail(null);}}>申请修正</Button>}</div>)}
- <Typography.Paragraph>最终得分：{completedScore(detail,c)?.score??"待市场评分"} · 评级：{completedScore(detail,c)?.grade??"—"}</Typography.Paragraph>
+ <Typography.Paragraph>最终得分：{productScore(detail,c)?.score??"待市场评分"} · 评级：{productScore(detail,c)?.grade??"—"}</Typography.Paragraph>
  <Typography.Paragraph>点击 {detail.clicks} · 订单 {detail.orders} · 利润率 {detail.margin}% · ACOS {detail.acos}%</Typography.Paragraph>
  {canManage&&<Typography.Paragraph>采购单价 ¥{detail.unitCost}</Typography.Paragraph>}</>}</Drawer>
  <Modal open={!!market} title="运营确认市场竞争评分" onCancel={()=>setMarket(null)} onOk={()=>act(()=>state.setMarket(market!.id,score!,reason),()=>setMarket(null))}>
