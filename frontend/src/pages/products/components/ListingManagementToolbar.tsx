@@ -65,6 +65,9 @@ const listingStatusOptions: ReportFilterOption[] = [
   "离线",
   "拥有",
   "未拥有",
+  "SYSTEM PROBLEM",
+  "IN REVIEW",
+  "ERROR",
 ].map((value) => ({ value, label: value }));
 
 function ListingManagementToolbar({
@@ -176,8 +179,8 @@ function ListingManagementToolbar({
       />
       <ReportFacetSelect
         mode="multiple"
-        ariaLabel="产品状态"
-        placeholder="产品状态"
+        ariaLabel="产品与Listing状态"
+        placeholder="产品与Listing状态"
         unit="个状态"
         value={normalizeSelected(filters.productStatuses, filters.productStatus)}
         options={listingStatusOptions}

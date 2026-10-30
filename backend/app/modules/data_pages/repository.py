@@ -1388,6 +1388,10 @@ class ListingManagementRepository:
                     status_conditions.append(
                         effective_buybox.in_(["未拥有", "LOST", "NOT_OWNED", "secondary", "other"])
                     )
+                else:
+                    status_conditions.append(
+                        func.upper(ListingManagementCurrentMart.listing_status) == item.upper()
+                    )
             if status_conditions:
                 statement = statement.where(or_(*status_conditions))
 
