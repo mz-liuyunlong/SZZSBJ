@@ -337,7 +337,9 @@ ACTIONS: tuple[ActionDefinition, ...] = (
 )
 
 FIELDS: tuple[FieldDefinition, ...] = (
-    FieldDefinition("products_new_product_analysis", "unit-cost", "查看新品采购单价和预计采购金额", 10, "high"),
+    FieldDefinition(
+        "products_new_product_analysis", "unit-cost", "查看新品采购单价和预计采购金额", 10, "high"
+    ),
     FieldDefinition("products_product_management", "purchase_cost", "采购成本", 10, "high"),
     FieldDefinition("products_product_management", "logistics_cost", "物流费用", 20, "high"),
     FieldDefinition("sales_order_profit", "gross_profit", "毛利润", 10, "high"),
