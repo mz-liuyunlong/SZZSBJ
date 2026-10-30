@@ -275,6 +275,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [isGptAnalysisLoading, setIsGptAnalysisLoading] = useState(false);
   const [isGptAnalysisSaving, setIsGptAnalysisSaving] = useState(false);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
+  const [listingLoadError, setListingLoadError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [archiveDialog, setArchiveDialog] = useState<ListingArchiveDialogState | null>(null);
@@ -457,7 +458,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       })
       .catch(() => {
         if (!active) return;
-        setSummary(emptySummary);
+        setListingLoadError(true);
+        void messageApi.error("Listing统计加载失败，已保留上次成功数据");
       });
 
     return () => {
@@ -482,11 +484,12 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         if (!active) return;
         setRows(nextRows);
         setTotalRows(meta.total);
+        setListingLoadError(false);
       })
       .catch(() => {
         if (!active) return;
-        setRows([]);
-        setTotalRows(0);
+        setListingLoadError(true);
+        void messageApi.error("Listing列表加载失败，已保留上次成功数据");
       })
       .finally(() => {
         if (active) setIsTableRequesting(false);
@@ -501,6 +504,15 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     clearResourceCache("listing-management:");
     setListingRefreshToken((current) => current + 1);
   }, []);
+
+  const runListingBatch = async <T,>(items: T[], action: (item: T) => Promise<unknown>) => {
+    const settled: PromiseSettledResult<unknown>[] = [];
+    for (let index = 0; index < items.length; index += 5) {
+      const group = await Promise.allSettled(items.slice(index, index + 5).map(action));
+      settled.push(...group);
+    }
+    return settled;
+  };
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -604,9 +616,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       if (archiveDialog?.mode === "single") {
         await runArchiveListing(targetRows[0], reason);
       } else {
-        const results = await Promise.allSettled(
-          targetRows.map((row) => archiveListingManagementRow(row.id, reason)),
-        );
+        const results = await runListingBatch(targetRows, (row) => archiveListingManagementRow(row.id, reason));
         const succeededIds = new Set(
           targetRows
             .filter((_, index) => results[index]?.status === "fulfilled")
@@ -668,7 +678,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         restoreResult?.is_archived ??
         false;
       setRows((current) => current.map((item) => (
-        item.id === row.id ? { ...item, isArchived: nextIsArchived } : item
+        item.id === row.id ? { ...item, isArchived: nextIsArchived, archiveReason: null } : item
       )));
       refreshListingData();
       void messageApi.success("已恢复");
@@ -817,9 +827,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     setRestoreSubmitting(true);
 
     try {
-      const results = await Promise.allSettled(
-        targetRows.map((row) => restoreListingManagementRow(row.id)),
-      );
+      const results = await runListingBatch(targetRows, (row) => restoreListingManagementRow(row.id));
       const succeededIds = new Set(
         targetRows
           .filter((_, index) => results[index]?.status === "fulfilled")
@@ -832,6 +840,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             ? {
                 ...row,
                 isArchived: false,
+                archiveReason: null,
               }
             : row,
         ),
@@ -865,6 +874,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
+          {listingLoadError && <Button onClick={refreshListingData}>数据加载失败，点击重试（已保留旧数据）</Button>}
           <div className="listing-management__title-row">
             <div>
               <h1>Listing管理</h1>
