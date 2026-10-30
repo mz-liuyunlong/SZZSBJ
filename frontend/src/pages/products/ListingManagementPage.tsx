@@ -59,7 +59,6 @@ import {
 
 import "@/pages/products/ListingManagementPage.css";
 
-const TEMPLATE_PENDING = "列模板接口待接入";
 
 
 
@@ -260,6 +259,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [columnConfigOpen, setColumnConfigOpen] = usePageStateCache(`${pageStateKey}:columnConfigOpen`, false);
   const [appliedColumnKeys, setAppliedColumnKeys] = usePageStateCache<string[]>(`${pageStateKey}:appliedColumnKeys`, defaultColumnKeys);
   const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths`, defaultColumnWidths);
+  const [savedTemplateKeys, setSavedTemplateKeys] = usePageStateCache<string[]>(`${pageStateKey}:savedTemplateKeys`, []);
   const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
@@ -984,7 +984,11 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           appliedKeys={appliedColumnKeys}
           onApply={setAppliedColumnKeys}
           onClose={() => setColumnConfigOpen(false)}
-          onSaveTemplate={() => void messageApi.info(TEMPLATE_PENDING)}
+          savedTemplateKeys={savedTemplateKeys}
+          onSaveTemplate={(keys) => {
+            setSavedTemplateKeys(keys);
+            void messageApi.success("已保存我的列模板（当前浏览器）");
+          }}
         />
         <Modal
           open={gptAnalysisRow !== null}
