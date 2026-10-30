@@ -1308,7 +1308,9 @@ class ListingManagementRepository:
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
 
-        archive_status_values = _csv_values(archive_status)
+        # Default operational views exclude archived listings. Users can explicitly
+        # select archived or both states through the archive status filter.
+        archive_status_values = _csv_values(archive_status) or ["active"]
         if archive_status_values:
             statement = statement.outerjoin(
                 ListingArchiveState,
