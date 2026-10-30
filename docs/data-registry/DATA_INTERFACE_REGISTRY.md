@@ -1,5 +1,13 @@
 # Data Interface Registry
 
+## PMC WFS 待发货打包单（2026-10-23，本地testing）
+
+- 决策：`docs/data-sources/decisions/pmc-wfs-pending-packing-decision.md`；批准PRP：`PRPs/pmc-wfs-pending-packing.md`；契约：`docs/api/pmc-wfs-pending-packing-api.md`。
+- NEW_SYSTEM_OWNED：ops_pmc_wfs_drafts、ops_pmc_wfs_draft_items、ops_pmc_wfs_box_allocations、evt_pmc_wfs_draft_events；来源国内仓PK/已完成装箱，已发布身份资料，不读旧库/RAW/外部API。
+- 前缀 `/api/pmc/wfs/pending-packing`；GET orders/summary/filter-options/detail/identity-options/draft；POST identity/drafts。page:pmc:wfs:view＋独立动作＋来源账号/店铺范围；不自动授权用户。
+- 整行占用唯一、预期版本、幂等、共享事务锁和事件不可变；改箱/报关复用国内仓并增加占用守卫。业务测试与环境标记分开，Q/T分开。
+- 本地加法建四表，不改既有记录/迁移版本；当前真实读0待发货、4待装箱。pytest/Vitest/Playwright及类型/lint/build证据见专属handoff。页面testing；未开放审批/外部执行，生产迁移另行批准。
+
 Registry Status: `draft; approved only after owner review and merge`
 
 ## 2026-10-28 打包审批增量登记（验收暂停）
@@ -290,3 +298,14 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 ## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
 
 状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。
+
+
+## PMC WFS V2 待发货增量（2026-10-29，testing）
+
+来源为本系统已完成装箱；新增 ops_wfs_creation_operations / ops_wfs_creation_tickets / ops_wfs_box_holds / evt_wfs_creation_events，分别为创建操作、计划票、逐箱占用、不可变事件。详细字段与接口见 docs/api/pmc-wfs-pending-packing-api.md 的 V2 章节。四张历史草稿表保留，页面使用 V2 创建入口。多 PK 同账号/店铺/测试标记分票、程序自动审批；新增动作定义不授予用户权限。真实适配器默认禁用，测试仅任务专属 PostgreSQL；未迁移业务数据库，未调用 Walmart。PRP：PRPs/pmc-wfs-pending-packing-v2-local.md。
+
+## PMC WFS 货件看板 M1（2026-10-29，testing）
+
+只读前缀 `/api/pmc/wfs/shipment-board`：GET shipments、shipments/{row_id}、summary、filter-options。行来源 ticket.result.labels 中的 shipment_id；领星履约 M1 不读，meta.lingxing_sync_enabled=false。决策 docs/data-sources/decisions/pmc-wfs-shipment-board-decision.md；PRP PRPs/pmc-wfs-shipment-board-m1-local.md；契约 docs/api/pmc-wfs-shipment-board-api.md。
+
+前缀 `/api/pmc/wfs/exception-center`：GET cases、cases/{id}、summary、filter-options；POST cases/{id}/assign、cases/{id}/events。案件表 NEW_SYSTEM_OWNED；规则引擎 M1 STUB，meta.rule_engine=M1_STUB。决策 docs/data-sources/decisions/pmc-wfs-exception-center-decision.md；PRP PRPs/pmc-wfs-exception-center-m1-local.md；契约 docs/api/pmc-wfs-exception-center-api.md。
