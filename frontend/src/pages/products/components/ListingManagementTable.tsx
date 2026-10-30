@@ -399,6 +399,7 @@ function ListingManagementTable({
       width: columnWidths.wfsAvailableInventory,
       sorter: (a, b) => a.wfsAvailableInventory - b.wfsAvailableInventory,
       onHeaderCell: headerCell,
+      render: (_, row) => row.wfsAvailableInventoryKnown === false ? "未同步" : row.wfsAvailableInventory,
     },
     inboundInventory: {
       key: "inboundInventory",
@@ -407,6 +408,7 @@ function ListingManagementTable({
       width: columnWidths.inboundInventory,
       sorter: (a, b) => a.inboundInventory - b.inboundInventory,
       onHeaderCell: headerCell,
+      render: (_, row) => row.inboundInventoryKnown === false ? "未同步" : row.inboundInventory,
     },
     sales30Days: {
       key: "sales30Days",
@@ -527,6 +529,7 @@ function ListingManagementTable({
       width: columnWidths.rating,
       sorter: (a, b) => a.rating - b.rating,
       onHeaderCell: headerCell,
+      render: (_, row) => row.ratingKnown === false ? "无评分" : row.rating,
     },
     reviewCount: {
       key: "reviewCount",
@@ -535,6 +538,7 @@ function ListingManagementTable({
       width: columnWidths.reviewCount,
       sorter: (a, b) => a.reviewCount - b.reviewCount,
       onHeaderCell: headerCell,
+      render: (_, row) => row.reviewCountKnown === false ? "未同步" : row.reviewCount,
     },
     brand: {
       key: "brand",

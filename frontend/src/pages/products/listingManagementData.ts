@@ -28,7 +28,9 @@ export interface ListingManagementRow {
   firstWfsObservedAt?: string;
   category: string;
   wfsAvailableInventory: number;
+  wfsAvailableInventoryKnown?: boolean;
   inboundInventory: number;
+  inboundInventoryKnown?: boolean;
   sales30Days: number;
   adSpend30Days: number;
   adSpend30DaysKnown?: boolean;
@@ -45,7 +47,9 @@ export interface ListingManagementRow {
   monitorImageCount?: number;
   monitorAgeHours?: number | null;
   rating: number;
+  ratingKnown?: boolean;
   reviewCount: number;
+  reviewCountKnown?: boolean;
   brand: string;
   tags: string[];
   gtin: string;
