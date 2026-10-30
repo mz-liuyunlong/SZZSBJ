@@ -76,7 +76,7 @@ function Board({mode,products,c,onMarket}:{mode:Mode;products:ProductSample[];c:
  <DataTable title="采购进度与打品明细" data={pool} columns={[
  {key:"name",title:"商品",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
  {key:"grade",title:"初始评级",render:(_,p)=>completedScore(p,c)?.grade??"—"},{key:"approvedQty",dataIndex:"approvedQty",title:"批准量"},
- {key:"sales30",dataIndex:"sales30",title:"30天销量"},{key:"sales60",dataIndex:"sales60",title:"60天销量"},{key:"inventory",dataIndex:"inventory",title:"库存"},
+ {key:"salesPeriod",title:c.successWindow+"天销量",render:(_,p)=>periodSales(p,c.successWindow)},{key:"inventory",dataIndex:"inventory",title:"库存"},
  {key:"tracking",dataIndex:"tracking",title:"打品结果"}]}/>}
  </div>;
 }
@@ -201,9 +201,9 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  typeValue={field} inputValue={query} inputPlaceholder="SKU / Item ID / 品名" onTypeChange={v=>setField(v as Filter["field"])} onInputChange={setQuery}
  onSearch={()=>setFilter(f=>({...f,query:query.trim(),field}))}/></div>
  <ResetButton onClick={()=>{setFilter(empty());setQuery("");setField("sku");}}/>
- <div className="npd-actions"><Space><Button onClick={()=>api.info("页面已刷新")}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
+ <div className="npd-actions"><Space>{mode==="tracking"&&<Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天观察"}))}/>}<Button onClick={()=>api.info("页面已刷新")}>刷新</Button><Button onClick={()=>setColumnsOpen(true)}>列配置</Button>
  <Button type="primary" onClick={()=>setSetting(true)}>{mode==="performance"?"新品表现配置":"打品跟踪配置"}</Button></Space></div></div>
- {tab==="board"?<Board mode={mode} products={rows} c={c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
+ {tab==="board"?<Board mode={mode} products={rows} c={mode==="tracking"?{...c,successWindow:period}:c} onMarket={p=>{setMarket(p);setScore(null);setReason("");}}/>:
  <><div className="npd-board"><DashboardCards mode={mode} products={rows} c={c}/></div>
  {mode==="performance"&&<Tabs className="npd-workflow-tabs" activeKey={workflowTab} onChange={x=>setWorkflowTab(x as ProductWorkflowTab)} items={[
  {key:"all",label:"全部新品 ("+rows.length+")"},
