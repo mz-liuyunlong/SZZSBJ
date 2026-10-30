@@ -12,7 +12,7 @@ import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnCo
 import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagination";
 import { ProductIdentityCell } from "@/components/report-table/cells";
 import type { NavigationPage } from "@/config/navigation";
-import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions, getNewProductWorkflowTab, type ProductWorkflowTab,
+import { useNewProductStore, completedScore, daysSince, gradePass, percentage, dimensions, getNewProductWorkflowTab, trackedProduct, trackingWorkflow, periodSales, type TrackingWorkflowTab, type TrackState, type ProductWorkflowTab,
  type ProductSample, type NewProductConfig, type Grade, type Dimension } from "./newProductModel";
 import "./NewProductPages.css";
 type Mode="performance"|"tracking";
@@ -128,19 +128,19 @@ function ConfigPanel({mode,visible,onClose,canManage}:{mode:Mode;visible:boolean
 
 export default function NewProductPages({page,mode,canManage=false}:{page:NavigationPage;mode:Mode;canManage?:boolean}){
  const state=useNewProductStore(),c=state.config;
- const [tab,setTab]=useState("list"),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
+ const [tab,setTab]=useState("list"),[trackingTab,setTrackingTab]=useState<TrackingWorkflowTab>("all"),[period,setPeriod]=useState<30|60|90>(60),[reviewProduct,setReviewProduct]=useState<ProductSample|null>(null),[reviewState,setReviewState]=useState<TrackState>("观察中"),[reviewDate,setReviewDate]=useState(""),[workflowTab,setWorkflowTab]=useState<ProductWorkflowTab>("all"),[filter,setFilter]=useState(empty),[field,setField]=useState<Filter["field"]>("sku"),[query,setQuery]=useState("");
  const [setting,setSetting]=useState(false),[columnsOpen,setColumnsOpen]=useState(false),[detail,setDetail]=useState<ProductSample|null>(null);
  const [market,setMarket]=useState<ProductSample|null>(null),[purchase,setPurchase]=useState<ProductSample|null>(null);
  const [correction,setCorrection]=useState<{p:ProductSample;d:Exclude<Dimension,"market">}|null>(null);
  const [review,setReview]=useState<string|null>(null),[approval,setApproval]=useState<ProductSample|null>(null);
  const [score,setScore]=useState<number|null>(null),[quantity,setQuantity]=useState<number|null>(null),[reason,setReason]=useState("");
- const [keys,setKeys]=useState(["name","category","developer","operator","days","score","suggested","approval","tracking","action"]);
+ const [keys,setKeys]=useState(["name","category","developer","operator","days","market","score","suggested","approval","tracking","salesWindow","orders","clicks","adSpend","acos","margin","requested","approved","inventory","action"]);
  const [api,holder]=message.useMessage();
  const act=(fn:()=>void,done:()=>void)=>{try{fn();done();api.success("操作已更新");}catch(e){api.error((e as Error).message);}};
  const rows=useMemo(()=>state.products.filter(p=>(!filter.category.length||filter.category.includes(p.category))&&
  (!filter.developer.length||filter.developer.includes(p.developer))&&(!filter.operator.length||filter.operator.includes(p.operator))&&
  (!filter.query||String(p[filter.field]).toLowerCase().includes(filter.query.toLowerCase()))),[state.products,filter]);
- const view=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>p.approval==="approved"||p.tracking!=="未进入打品池");
+ const view=mode==="performance"?rows.filter(p=>workflowTab==="all"||getNewProductWorkflowTab(p,c)===workflowTab):rows.filter(p=>trackedProduct(p)&&(trackingTab==="all"||trackingWorkflow(p,{...c,successWindow:period})===trackingTab));
  const allCols:ProColumns<ProductSample>[]=[
  {key:"name",title:"SKU / 商品",width:250,fixed:"left",render:(_,p)=><ProductIdentityCell productId={p.sku} productName={p.name}/>},
  {key:"category",title:"类目",dataIndex:"category",width:130},
@@ -151,8 +151,19 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  {key:"suggested",title:"建议量",width:115,render:(_,p)=>completedScore(p,c)?.suggested??"—"},
  {key:"approval",title:"采购状态",dataIndex:"approval",width:115},
  {key:"tracking",title:"打品结果",dataIndex:"tracking",width:125},
+ {key:"market",title:"市场竞争",width:100,render:(_,p)=>p.market===null?"待确认":p.market+"分"},
+ {key:"clicks",title:"点击量",dataIndex:"clicks",width:100},
+ {key:"orders",title:"订单量",dataIndex:"orders",width:100},
+ {key:"salesWindow",title:period+"天销量",width:115,render:(_,p)=>periodSales(p,period)},
+ {key:"adSpend",title:"广告费",dataIndex:"adSpend",width:105},
+ {key:"acos",title:"ACOS",width:90,render:(_,p)=>p.acos.toFixed(1)+"%"},
+ {key:"margin",title:"利润率",width:100,render:(_,p)=>p.margin.toFixed(1)+"%"},
+ {key:"requested",title:"申请数量",dataIndex:"requestQty",width:110},
+ {key:"approved",title:"批准数量",dataIndex:"approvedQty",width:110},
+ {key:"inventory",title:"剩余库存",dataIndex:"inventory",width:110},
  {key:"action",title:"操作",fixed:"right",width:170,render:(_,p)=><Space size={4}><Button type="link" onClick={()=>setDetail(p)}>详情</Button>
  {mode==="performance"&&p.market===null&&<Button type="link" onClick={()=>{setMarket(p);setScore(null);setReason("");}}>市场评分</Button>}
+ {mode==="tracking"&&<Button type="link" onClick={()=>{setReviewProduct(p);setReviewState(p.tracking);setReason(p.reviewReason??"");setReviewDate(p.reviewDueAt??"");}}>复盘</Button>}
  {mode==="performance"&&p.market!==null&&p.approval!=="approved"&&<Button type="link" onClick={()=>{setPurchase(p);setQuantity(completedScore(p,c)?.suggested??null);setReason("");}}>采购确认</Button>}</Space>}
  ];
 
@@ -181,6 +192,13 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  {key:"approved",label:"已批准 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="approved").length+")"},
  {key:"stopped",label:"停止推进 ("+rows.filter(p=>getNewProductWorkflowTab(p,c)==="stopped").length+")"}
  ]}/>}
+ {mode==="tracking"&&<div className="npd-tracking-controls">
+ <Tabs className="npd-workflow-tabs" activeKey={trackingTab} onChange={v=>setTrackingTab(v as TrackingWorkflowTab)}
+ items={[["all","全部追踪"],["ready","待开售"],["observe","观察中"],["review","待复盘"],["optimize","需要优化"],["done","已完成"]].map(([key,label])=>({
+ key,label:label+" ("+rows.filter(p=>trackedProduct(p)&&(key==="all"||trackingWorkflow(p,{...c,successWindow:period})===key)).length+")"
+ }))}/>
+ <Space><Typography.Text type="secondary">观察周期</Typography.Text><Select value={period} onChange={setPeriod} style={{width:115}} options={[30,60,90].map(n=>({value:n,label:n+"天"}))}/></Space>
+ </div>}
  <DataTable title={mode==="performance"?"新品表现明细":"打品跟踪明细"} data={view} columns={allCols.filter(col=>keys.includes(String(col.key)))}/>
  {mode==="performance"&&<>
  <DataTable title="系统评分修正申请" data={state.corrections} columns={[
@@ -198,6 +216,15 @@ export default function NewProductPages({page,mode,canManage=false}:{page:Naviga
  {key:"id",title:"计划编号",dataIndex:"id"},{key:"productId",title:"SKU",dataIndex:"productId"},
  {key:"grade",title:"评级",dataIndex:"grade"},{key:"suggestedQty",title:"建议量",dataIndex:"suggestedQty"},
  {key:"approvedQty",title:"批准量",dataIndex:"approvedQty"}]}/></>}</>}
+ <Drawer title={reviewProduct?"打品复盘 · "+reviewProduct.sku:"打品复盘"} width={680} open={!!reviewProduct} onClose={()=>setReviewProduct(null)}
+ footer={<Space><Button onClick={()=>setReviewProduct(null)}>取消</Button><Button type="primary" onClick={()=>act(()=>state.updateTrack(reviewProduct!.id,reviewState,reason,reviewDate),()=>setReviewProduct(null))}>保存复盘</Button></Space>}>
+ {reviewProduct&&<><Typography.Paragraph>{reviewProduct.name} · 运营：{reviewProduct.operator} · 初始评级：{completedScore(reviewProduct,c)?.grade??"—"}</Typography.Paragraph>
+ <div className="npd-review-summary"><div>系统建议：{completedScore(reviewProduct,c)?.suggested??"—"} 件</div><div>运营申请：{reviewProduct.requestQty??"—"} 件</div><div>批准数量：{reviewProduct.approvedQty??"—"} 件</div>
+ <div>{period}天销量：{periodSales(reviewProduct,period)}</div><div>利润率：{reviewProduct.margin.toFixed(1)}%</div><div>ACOS：{reviewProduct.acos.toFixed(1)}%</div><div>库存：{reviewProduct.inventory}</div></div>
+ <Typography.Paragraph>复盘结果</Typography.Paragraph><Select value={reviewState} onChange={setReviewState} style={{width:"100%"}} options={["观察中","需要优化","打品成功","打品失败"].map(v=>({label:v,value:v}))}/>
+ {reviewState==="需要优化"&&<><Typography.Paragraph style={{marginTop:12}}>下次复核日期（必填）</Typography.Paragraph><Input type="date" value={reviewDate} onChange={e=>setReviewDate(e.target.value)}/></>}
+ <Typography.Paragraph style={{marginTop:12}}>复盘说明（必填，至少5字）</Typography.Paragraph><Input.TextArea rows={4} value={reason} onChange={e=>setReason(e.target.value)}/></>}
+ </Drawer>
  <ConfigPanel mode={mode} visible={setting} canManage={canManage} onClose={()=>setSetting(false)}/>
  <RuntimeColumnConfigDrawer open={columnsOpen} onClose={()=>setColumnsOpen(false)} fixedKeys={["name","action"]}
  appliedKeys={keys} defaultKeys={allCols.map(x=>String(x.key))} onApply={setKeys} onSaveTemplate={()=>api.info("列配置已应用")}
