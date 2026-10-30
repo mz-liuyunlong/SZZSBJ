@@ -4,6 +4,7 @@ import {
   Space,
   Tag,
   Popconfirm,
+  Popover,
   Tooltip } from "antd"; import { ProTable,
   type ProColumns } from "@ant-design/pro-components"; import type { Key } from "react"; import ReportTableShell,
   {   ReportTableSelectionBar,
@@ -157,11 +158,27 @@ function ListingManagementTable({
       fixed: "left",
       onHeaderCell: headerCell,
       render: (_, row) => (
-        <ImageCell
-          image={row.image}
-          label={`Listing 图片：${row.productName}`}
-          placement="right"
-        />
+        <Space size={2}>
+          <ImageCell
+            image={row.image}
+            label={`Listing 图片：${row.productName}`}
+            placement="right"
+          />
+          {(row.monitorImages?.length ?? 0) > 1 && (
+            <Popover
+              title="监控商品图片"
+              content={
+                <Space wrap>
+                  {row.monitorImages?.map((image, index) => (
+                    <ImageCell key={`${row.id}-image-${index}`} image={image} label={`监控图片 ${index + 1}`} placement="right" />
+                  ))}
+                </Space>
+              }
+            >
+              <Button size="small" type="link">+{(row.monitorImages?.length ?? 1) - 1}</Button>
+            </Popover>
+          )}
+        </Space>
       ),
     },
     productIdName: {

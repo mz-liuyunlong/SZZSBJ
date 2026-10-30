@@ -3,6 +3,7 @@ export interface ListingManagementRow {
   id: string;
   sourceAccountRef?: string;
   image: string;
+  monitorImages?: string[];
   msku: string;
   productId: string;
   store: string;

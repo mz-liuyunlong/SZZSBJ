@@ -228,6 +228,7 @@ const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
   id: item.id,
   sourceAccountRef: item.source_account_ref,
   image: item.monitor_image_urls?.find((url) => /^https?:\/\//i.test(url)) ?? item.picture_url ?? "▤",
+  monitorImages: item.monitor_image_urls?.filter((url) => /^https?:\/\//i.test(url)) ?? [],
   msku: item.msku ?? "-",
   productId: item.item_id,
   store: item.store_name ?? item.store_id,
