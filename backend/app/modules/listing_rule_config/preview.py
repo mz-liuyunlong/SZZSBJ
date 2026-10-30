@@ -250,6 +250,14 @@ class ListingEvaluationPreviewService:
         )
         archive_state_known = archive is not None
         archived = bool(archive is not None and archive.is_archived)
+        # Current archive state is not proof of a prior historical cutoff.
+        archive_event_after_cutoff = bool(
+            archive is not None
+            and archive.archived_at is not None
+            and archive.archived_at.astimezone(LOS_ANGELES).date() > cutoff
+        )
+        if archive_event_after_cutoff:
+            archived = False
         monitor_start = datetime.combine(start, datetime.min.time(), LOS_ANGELES).astimezone(UTC)
         monitor_end = datetime.combine(
             cutoff + timedelta(days=1),
@@ -374,8 +382,8 @@ class ListingEvaluationPreviewService:
             missing.append("SALES_TREND_VALID_DAYS_INSUFFICIENT")
         if listing.lifecycle_status not in known_stages and stage not in known_stages:
             missing.append("LIFECYCLE_INITIAL_STATE_PENDING")
-        if not archive_state_known:
-            missing.append("ARCHIVE_STATE_UNVERIFIED")
+        if not archive_state_known or archive_event_after_cutoff:
+            missing.append("ARCHIVE_STATE_AS_OF_CUTOFF_UNVERIFIED")
         if not rule_version:
             missing.append("RULE_VERSION_NOT_PUBLISHED")
         if not lifecycle_allows_grade(
