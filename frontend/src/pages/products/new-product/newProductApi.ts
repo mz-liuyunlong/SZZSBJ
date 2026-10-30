@@ -6,6 +6,9 @@ export interface NewProductWorkflowRecord {
   sku: string | null;
   product_name: string | null;
   category: string | null;
+  developer?: string | null;
+  operator?: string | null;
+  product_observed_at?: string | null;
   status: "pending_market" | "scored" | "pending_purchase" | "approved_draft" | "rejected" | null;
   row_version: number | null;
   market_score: number | null;
