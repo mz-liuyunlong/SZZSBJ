@@ -8,40 +8,49 @@ import json
 import pytest
 
 from app.integrations.walmart.remote_dispatch import (
-    STORES,
+    REMOTE_COLLECTION_STORES,
     DispatchRejected,
     parse_routes,
     verify_result,
 )
 
 
-def test_all_nine_routes_including_cn2502():
+def test_all_eight_collection_routes_without_cn2502():
     raw = {
         store: {
             "ssh_host": "worker-" + store.lower(),
             "worker_path": "/opt/szzsbj/walmart/run_worker.py",
         }
-        for store in STORES
+        for store in REMOTE_COLLECTION_STORES
     }
-    assert set(parse_routes(json.dumps(raw))) == STORES
-    assert "CN2502" in raw
+    assert len(raw) == 8
+    assert "CN2502" not in raw
+    assert set(parse_routes(json.dumps(raw))) == REMOTE_COLLECTION_STORES
 
 
-def test_no_missing_or_shared_routes():
+def test_missing_extra_or_shared_routes_are_rejected():
     raw = {
         store: {
             "ssh_host": "worker-" + store.lower(),
             "worker_path": "/opt/szzsbj/walmart/run_worker.py",
         }
-        for store in STORES
+        for store in REMOTE_COLLECTION_STORES
     }
-    raw.pop("CN2502")
+    missing = dict(raw)
+    missing.pop("HK2612")
     with pytest.raises(DispatchRejected, match="REMOTE_ROUTES_INCOMPLETE"):
-        parse_routes(json.dumps(raw))
-    raw["CN2502"] = raw["CN2501"]
+        parse_routes(json.dumps(missing))
+    extra = dict(raw)
+    extra["CN2502"] = {
+        "ssh_host": "worker-cn2502",
+        "worker_path": "/opt/szzsbj/walmart/run_worker.py",
+    }
+    with pytest.raises(DispatchRejected, match="REMOTE_ROUTES_INCOMPLETE"):
+        parse_routes(json.dumps(extra))
+    duplicate = dict(raw)
+    duplicate["HK2612"] = raw["HK2613"]
     with pytest.raises(DispatchRejected, match="REMOTE_HOST_REUSED"):
-        parse_routes(json.dumps(raw))
-
+        parse_routes(json.dumps(duplicate))
 
 def test_verifies_manifest_hash_and_detects_tamper(tmp_path):
     path = tmp_path / "run-123456"
