@@ -94,7 +94,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     { title: "业务状态", dataIndex: "status", width: 130, render: v => <StatusTagCell label={({
       pending_market: "待市场评分", scored: "已评分", pending_purchase: "待审核",
       approved_draft: "草稿已批准", rejected: "已驳回",
-    } as Record<string, string>)[v || "pending_market"] ?? v}</Tag> },
+    } as Record<string, string>)[v || "pending_market"] ?? String(v ?? "待市场评分")} color={v === "approved_draft" ? "success" : v === "rejected" ? "error" : "processing"}/> },
     { title: "操作", key: "actions", width: 250, render: (_, row) => {
       const state = row.status ?? "pending_market";
       return <Space wrap size={0}>
