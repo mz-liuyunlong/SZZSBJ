@@ -94,6 +94,9 @@ def execute_remote_job(job_id: str) -> None:
             "REMOTE_CLEANUP_CONVERSION_MISSING",
             "REMOTE_RECOVERY_UNCONFIRMED",
             "REMOTE_CONVERSION_ALREADY_EXISTS",
+            "REMOTE_CONVERSION_FAILED",
+            "REMOTE_RESULT_VERIFICATION_FAILED",
+            "REMOTE_RESULT_INCOMPLETE",
         }
         job.status = "succeeded" if result else "needs_review" if uncertain else "failed"
         job.error_code = error_code
