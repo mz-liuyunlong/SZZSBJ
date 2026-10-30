@@ -7,8 +7,9 @@ Revises: 20261030_0069_new_product_rbac_catalog
 from __future__ import annotations
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision = "20261030_0070_new_product_workflows"
 down_revision = "20261030_0069_new_product_rbac_catalog"
