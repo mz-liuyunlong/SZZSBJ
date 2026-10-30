@@ -76,8 +76,14 @@ def test_alembic_scaffold_loads_offline_with_current_revision_chain() -> None:
     }
     assert script.get_heads() == [NEW_PRODUCT_WORKFLOW_HEAD_REVISION]
     assert script.get_revision(WALMART_REMOTE_HEAD_REVISION).down_revision == FINAL_HEAD_REVISION
-    assert script.get_revision(NEW_PRODUCT_RBAC_HEAD_REVISION).down_revision == WALMART_REMOTE_HEAD_REVISION
-    assert script.get_revision(NEW_PRODUCT_WORKFLOW_HEAD_REVISION).down_revision == NEW_PRODUCT_RBAC_HEAD_REVISION
+    assert (
+        script.get_revision(NEW_PRODUCT_RBAC_HEAD_REVISION).down_revision
+        == WALMART_REMOTE_HEAD_REVISION
+    )
+    assert (
+        script.get_revision(NEW_PRODUCT_WORKFLOW_HEAD_REVISION).down_revision
+        == NEW_PRODUCT_RBAC_HEAD_REVISION
+    )
     assert (
         script.get_revision(WALMART_MONITOR_PROJECTION_HEAD_REVISION).down_revision
         == LISTING_EVALUATION_REVISION
