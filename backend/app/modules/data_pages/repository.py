@@ -944,6 +944,7 @@ class ListingManagementRepository:
         keyword: str,
         batch_values: str = "",
         max_rows: int = 10000,
+        selected_ids: list[UUID] | None = None,
     ) -> Sequence[ListingManagementRowProjection]:
         statement = self._filtered_listing_statement(
             account_refs=account_refs,
@@ -959,6 +960,8 @@ class ListingManagementRepository:
             batch_values=batch_values,
         )
 
+        if selected_ids is not None:
+            statement = statement.where(ListingManagementCurrentMart.id.in_(selected_ids))
         rows = self.session.execute(
             statement.order_by(
                 func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),

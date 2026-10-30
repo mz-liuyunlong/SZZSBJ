@@ -700,6 +700,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           summaryFilter: summaryFilterKey || DEFAULT_LISTING_SUMMARY_FILTER_KEY,
         },
         columnKeys,
+        selectedRowKeys.map(String),
       );
       closeLoading();
       setExportModalOpen(false);

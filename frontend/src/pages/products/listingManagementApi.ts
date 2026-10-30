@@ -360,12 +360,14 @@ async function fetchListingManagementSummaryFromApi(
 export async function exportListingManagementRows(
   params: ListingManagementParams = {},
   columns?: string[],
+  selectedIds?: string[],
 ): Promise<void> {
   const search = new URLSearchParams();
   appendListingFilters(search, params);
   if (columns && columns.length > 0) {
     search.set("columns", columns.join(","));
   }
+  if (selectedIds?.length) search.set("selected_ids", selectedIds.join(","));
 
   await backendDownload(
     `/api/listings/walmart/export?${search.toString()}`,

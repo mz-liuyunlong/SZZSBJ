@@ -375,11 +375,13 @@ def export_listing_management(
     _: listing_principal,
     account_refs: source_scope,
     columns: Annotated[str | None, Query()] = None,
+    selected_ids: Annotated[str | None, Query(max_length=32768)] = None,
 ) -> Response:
     csv_text = ListingManagementService(session).export_listing_csv(
         query,
         account_refs,
         columns=columns,
+        selected_ids=selected_ids,
     )
     filename = f"listing-management-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
 

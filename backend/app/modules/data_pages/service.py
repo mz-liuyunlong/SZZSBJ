@@ -723,7 +723,15 @@ class ListingManagementService:
         account_refs: frozenset[str],
         *,
         columns: str | None = None,
+        selected_ids: str | None = None,
     ) -> str:
+        from uuid import UUID
+
+        requested_ids = (
+            [UUID(item.strip()) for item in selected_ids.split(",") if item.strip()]
+            if selected_ids
+            else None
+        )
         rows = self.repository.export_listings(
             account_refs=account_refs,
             store_id=query.store_id,
@@ -737,6 +745,7 @@ class ListingManagementService:
             keyword=query.keyword,
             batch_values=query.batch_values,
             max_rows=10001,
+            selected_ids=requested_ids,
         )
         if len(rows) > 10000:
             raise ValueError("Listing导出超过10000条，请缩小筛选范围后重试，避免静默丢失数据")
