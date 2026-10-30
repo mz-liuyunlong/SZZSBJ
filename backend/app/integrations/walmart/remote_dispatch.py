@@ -23,6 +23,8 @@ from app.integrations.walmart.legacy_worker_contract import (
 STORES = frozenset(
     {"HK2612", "HK2613", "HK2614", "HK2615", "CN2501", "CN2502", "CN2601", "CN2602", "CN2603"}
 )
+REMOTE_COLLECTION_STORES = STORES - frozenset({"CN2502"})
+
 RUN_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{8,80}$")
 HOST_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9.-]{0,127}$")
 ALLOWED_KEYS = frozenset(
@@ -42,12 +44,12 @@ class WorkerRoute:
 
 
 def parse_routes(raw: str) -> dict[str, WorkerRoute]:
-    """Explicit operator-reviewed JSON; all nine stores required, no IP inference."""
+    """Exactly eight approved remote collection routes; retain CN2502 as a known legacy store."""
     try:
         data = json.loads(raw)
     except (TypeError, ValueError):
         raise DispatchRejected("REMOTE_ROUTES_INVALID") from None
-    if not isinstance(data, dict) or set(data) != STORES:
+    if not isinstance(data, dict) or set(data) != REMOTE_COLLECTION_STORES:
         raise DispatchRejected("REMOTE_ROUTES_INCOMPLETE")
     routes = {}
     hosts = set()

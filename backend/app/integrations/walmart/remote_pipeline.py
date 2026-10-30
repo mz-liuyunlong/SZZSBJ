@@ -23,7 +23,7 @@ from app.integrations.walmart.legacy_execution import collect_with_legacy_worker
 from app.integrations.walmart.remote_daily import convert_verified_run
 from app.integrations.walmart.remote_dispatch import (
     ALLOWED_KEYS,
-    STORES,
+    REMOTE_COLLECTION_STORES,
     DispatchRejected,
     parse_routes,
 )
@@ -55,7 +55,7 @@ def collect_store_read_only(
         for store in os.getenv("SZZSBJ_WALMART_REMOTE_APPROVED_STORES", "").split(",")
         if store.strip()
     )
-    if not allowed or not allowed <= STORES or store_code not in allowed:
+    if not allowed or not allowed <= REMOTE_COLLECTION_STORES or store_code not in allowed:
         raise DispatchRejected("REMOTE_STORE_NOT_APPROVED")
     if not operations or not set(operations) <= ALLOWED_KEYS:
         raise DispatchRejected("REMOTE_OPERATION_DENIED")
