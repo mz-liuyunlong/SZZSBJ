@@ -7,7 +7,7 @@ export type Grade = "S" | "A" | "B" | "C" | "D" | "Pass";
 export type ApprovalState = "none" | "pending" | "approved" | "rejected";
 export type TrackState = "未进入打品池" | "等待到货" | "观察中" | "需要优化" | "打品成功" | "打品失败";
 export interface ProductSample {
-  id: string; sku: string; itemId: string; name: string; category: string;
+  id: string; sku: string; itemId: string; image?: string; name: string; category: string;
   developer: string; operator: string; listedAt: string;
   market: number | null; marketReason: string;
   system: Record<Exclude<Dimension, "market">, number>;
@@ -201,6 +201,10 @@ export const useNewProductStore = create<NewProductState>((set,get) => ({
     if (!get().products.some(p=>p.id===id&&trackedProduct(p))) throw Error("商品未进入打品跟踪");
     if (reason.trim().length<5) throw Error("复盘原因至少填写5字");
     if (tracking==="需要优化"&&!nextReview) throw Error("需要优化时必须填写下次复核日期");
+    if (["打品成功","打品失败"].includes(tracking)) {
+      const p=get().products.find(x=>x.id===id)!;
+      if (!p.arrivedAt || !p.sellableAt || daysSince(p.arrivedAt>p.sellableAt?p.arrivedAt:p.sellableAt)<get().config.successWindow) throw Error("观察期未结束，不允许确认最终打品结果");
+    }
     set(s=>({products:s.products.map(p=>p.id===id?
       {...p,tracking,failureReason:reason,reviewReason:reason,reviewedAt:new Date().toISOString(),reviewDueAt:nextReview??null}:p)}));
   },
