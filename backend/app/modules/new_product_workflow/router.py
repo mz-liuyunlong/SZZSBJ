@@ -185,6 +185,22 @@ def _edit(
             "purchase_review_note": reason,
             "status": payload.decision,
         }
+        if payload.decision == "approved_draft":
+            rule_version = session.execute(
+                text("SELECT COALESCE(MAX(version), 0) FROM product_new_rule_versions")
+            ).scalar_one()
+            evidence = {
+                "kind": "draft_evidence_only",
+                "sku_identity_id": str(sku_id),
+                "source_account_ref": identity["source_account_ref"],
+                "market_score": before["market_score"],
+                "purchase_request_qty": before["purchase_request_qty"],
+                "rule_version": int(rule_version),
+                "approved_by": principal.user_id,
+                "has_verified_ads_inventory_metrics": False,
+                "creates_pmc_order": False,
+            }
+            changes["score_snapshot_json"] = json.dumps(evidence)
     elif isinstance(payload, ReviewWrite):
         if status != "approved_draft":
             _block(409)
@@ -222,7 +238,12 @@ def _edit(
         if after["id"] != workflow_id:
             _block(409)
     else:
-        assignments = ", ".join(f"{key} = :{key}" for key in changes)
+        assignments = ", ".join(
+            f"{key} = CAST(:{key} AS jsonb)"
+            if key == "score_snapshot_json"
+            else f"{key} = :{key}"
+            for key in changes
+        )
         now_fields = []
         if isinstance(payload, DecisionWrite):
             now_fields.append("purchase_review_at = now()")
