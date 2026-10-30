@@ -43,7 +43,7 @@ const minColumnWidths: Record<string, number> = {
   category: 120,
   wfsAvailableInventory: 140,
   inboundInventory: 130,
-  sales90Days: 130,
+  sales30Days: 130,
   adSpend30Days: 140,
   disabledReason: 130,
   listingStatus: 130,
@@ -367,12 +367,12 @@ function ListingManagementTable({
       sorter: (a, b) => a.inboundInventory - b.inboundInventory,
       onHeaderCell: headerCell,
     },
-    sales90Days: {
-      key: "sales90Days",
-      dataIndex: "sales90Days",
-      title: title("sales90Days", fieldTitle.sales90Days),
-      width: columnWidths.sales90Days,
-      sorter: (a, b) => a.sales90Days - b.sales90Days,
+    sales30Days: {
+      key: "sales30Days",
+      dataIndex: "sales30Days",
+      title: title("sales30Days", fieldTitle.sales30Days),
+      width: columnWidths.sales30Days,
+      sorter: (a, b) => a.sales30Days - b.sales30Days,
       onHeaderCell: headerCell,
     },
     adSpend30Days: {
