@@ -150,7 +150,7 @@ interface NewProductState{
   submitCorrection:(id:string,dimension:SystemDimension,score:number,reason:string)=>void;
   decideCorrection:(id:string,decision:"approved"|"rejected",note:string,canApprove:boolean,reviewedBy:string)=>void;
   saveConfig:(next:NewProductConfig,canConfigure:boolean,changedBy:string,reason:string)=>void;
-  updateTrack:(id:string,tracking:TrackState,reason:string,nextReview?:string)=>void;
+  updateTrack:(id:string,tracking:TrackState,reason:string,nextReview?:string,period?:ObservationPeriod)=>void;
   resetMockData:()=>void;
 }
 const initial=()=>({products:mockProducts.map(p=>({...p,system:{...p.system},overrides:{...p.overrides},periodMetrics:{...p.periodMetrics}})),
@@ -229,13 +229,13 @@ export const useNewProductStore=create<NewProductState>((set,get)=>({
     const version=get().ruleVersion+1,now=new Date().toISOString(),snapshot=structuredClone(next);
     set(s=>({config:snapshot,ruleVersion:version,ruleHistory:[...s.ruleHistory,{version,changedAt:now,changedBy,reason:reason.trim(),config:structuredClone(snapshot)}]}));
   },
-  updateTrack:(id,tracking,reason,nextReview)=>{
+  updateTrack:(id,tracking,reason,nextReview,period)=>{
     const p=get().products.find(x=>x.id===id);
     if(!p||!trackedProduct(p))throw Error("商品未进入打品跟踪");
     if(reason.trim().length<5)throw Error("复盘原因至少填写5字");
     if(tracking==="需要优化"&&!nextReview)throw Error("需要优化时必须填写下次复核日期");
     if(tracking==="打品成功"||tracking==="打品失败"){
-      const result=evaluateTrack(p,get().config);
+      const result=evaluateTrack(p,get().config,period??get().config.successWindow);
       if(result==="观察中"||result==="未开始")throw Error("观察期未结束，不允许确认最终打品结果");
       if(result==="数据不足")throw Error("经营数据不完整，暂不能确认最终打品结果");
       if(tracking==="打品成功"&&result!=="达标")throw Error("未达到配置的销量、利润率和 ACOS 标准，不能标记打品成功");
