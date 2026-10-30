@@ -1956,6 +1956,11 @@ class ListingTagRepository:
         )
 
     def _raise_if_duplicate_name(self, name: str, except_id: UUID | None = None) -> None:
+        # Serialize name mutations in PostgreSQL before the uniqueness check.
+        # Prevents two concurrent requests both seeing the name as available.
+        self.session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(name.strip().lower())))
+        )
         statement = select(ProductCustomTag).where(
             func.lower(ProductCustomTag.name) == name.strip().lower(),
             ProductCustomTag.deleted_at.is_(None),
