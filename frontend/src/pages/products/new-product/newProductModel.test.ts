@@ -56,11 +56,12 @@ describe("new product rules with mock fixtures", () => {
   it("disallows final launch results before the observation window ends", () => {
     const store=useNewProductStore.getState();
     store.resetMockData();
-    const p=useNewProductStore.getState().products.find(x=>x.id==="YC00831")!;
+    const p=useNewProductStore.getState().products.find(x=>x.id==="YC00872")!;
+    useNewProductStore.setState(st=>({products:st.products.map(row=>row.id===p.id?{...row,arrivedAt:"2026-10-29",sellableAt:"2026-10-29"}:row)}));
     expect(()=>store.updateTrack(p.id,"打品失败","观察期表现不佳")).toThrow("观察期未结束");
     store.resetMockData();
   });
-  it("uses cumulative period metrics",()=>{const p=mockProducts.find(x=>x.id==="YC00901")!;expect(getPeriodMetrics(p,30).clicks).toBeLessThan(getPeriodMetrics(p,90).clicks);expect(evaluateTrack(p,defaultConfig,90)).toBe("达标");});
+  it("uses cumulative period metrics",()=>{const p=mockProducts.find(x=>x.id==="YC00901")!;expect(getPeriodMetrics(p,30).clicks).toBeLessThan(getPeriodMetrics(p,90).clicks);expect(evaluateTrack(p,defaultConfig,60)).toBe("达标");});
   it("never treats unsellable products as completed launch evaluations", () => {
     expect(evaluatedTrack(mockProducts[1],defaultConfig)).toBe("未开始");
   });
