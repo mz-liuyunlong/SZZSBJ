@@ -94,4 +94,3 @@ def test_file_only_recovery_validates_all_endpoint_csvs(tmp_path):
     (folder / "wfs_inventory.csv").write_bytes(b"sku\nTEST\nEXTRA\n")
     with pytest.raises(DispatchRejected, match="REMOTE_RECOVERY_OUTPUT_INVALID"):
         remote_recovery._converted_files(output, manifest, "11111111", "wmt-12345678")
-
