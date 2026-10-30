@@ -256,3 +256,29 @@ def test_listing_tag_repository_rejects_mixed_scope_before_any_write() -> None:
 
     session.add.assert_not_called()
     session.commit.assert_not_called()
+
+
+
+def test_listing_post_batch_search_validates_up_to_one_thousand_ids() -> None:
+    from pydantic import ValidationError
+
+    from app.modules.data_pages.schemas import (
+        ListingManagementBatchSearchRequest,
+        ListingManagementQuery,
+    )
+
+    request = ListingManagementBatchSearchRequest(
+        filters=ListingManagementQuery(search_field="item_id"),
+        batch_values=[f"{index:011d}" for index in range(1000)],
+    )
+    assert len(request.batch_values) == 1000
+    with pytest.raises(ValidationError):
+        ListingManagementBatchSearchRequest(
+            filters=ListingManagementQuery(),
+            batch_values=[f"{index:011d}" for index in range(1001)],
+        )
+    with pytest.raises(ValidationError):
+        ListingManagementBatchSearchRequest(
+            filters=ListingManagementQuery(),
+            batch_values=[""],
+        )
