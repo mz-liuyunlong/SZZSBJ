@@ -7,8 +7,16 @@ from unittest.mock import Mock
 import pytest
 
 from app.integrations.walmart.https_transport import ClientCredentials
-from app.integrations.walmart.token_broker import TokenBrokerRejected, issue_store_token
-from app.integrations.walmart.token_client import TokenClientRejected, request_store_token
+from app.integrations.walmart.token_broker import (
+    TokenBrokerRejected,
+    issue_store_token,
+    scf_token_handler,
+)
+from app.integrations.walmart.token_client import (
+    TokenClientRejected,
+    request_store_token,
+    store_token_invoker,
+)
 
 
 class Secrets:
@@ -121,3 +129,46 @@ def test_no_private_proxy_rejected_before_secret_read():
             secret_resolver=secrets,
         )
     assert secrets.calls == []
+
+
+def test_token_client_targets_dedicated_broker(monkeypatch):
+    from app.integrations.walmart import token_client
+
+    targets = []
+
+    class StubInvoker:
+        def __init__(self, cloud_api, *, function_name, qualifier):
+            targets.append((function_name, qualifier))
+
+        def invoke(self, payload):
+            return {
+                "success": True,
+                "operation": "issue_store_token",
+                "store_code": "HK2613",
+                "access_token": "dummy",
+                "expires_in": 900,
+            }
+
+    monkeypatch.setattr(token_client, "TencentScfInvoker", StubInvoker)
+    value = store_token_invoker(
+        cloud_api=object(),
+        store_code="HK2613",
+        authorized_stores=frozenset({"HK2613"}),
+    )
+    assert value.store_code == "HK2613"
+    assert targets == [("szzsbj-walmart-hk2613-token-broker", "stable")]
+
+
+def test_broker_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("SZZSBJ_WALMART_TOKEN_BROKER_ENABLED", raising=False)
+    assert scf_token_handler({}, None)["status"] == "TOKEN_BROKER_DISABLED"
+
+
+def test_broker_rejects_cross_store_and_wrong_operation(monkeypatch):
+    monkeypatch.setenv("SZZSBJ_WALMART_TOKEN_BROKER_ENABLED", "1")
+    monkeypatch.setenv("SZZSBJ_WALMART_BOUND_STORE", "HK2613")
+    for request in (
+        {"version": 1, "operation": "issue_store_token", "store_code": "HK2612"},
+        {"version": 1, "operation": "marketplace_call", "store_code": "HK2613"},
+    ):
+        assert scf_token_handler(request, None)["status"] == "TOKEN_REQUEST_DENIED"
