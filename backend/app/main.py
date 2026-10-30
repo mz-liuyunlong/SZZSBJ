@@ -30,6 +30,7 @@ from app.modules.keyword_planning.router import router as keyword_planning_route
 from app.modules.listing_rule_config.preview_router import router as listing_preview_router
 from app.modules.listing_rule_config.router import router as listing_rule_config_router
 from app.modules.media_assets.router import router as media_assets_router
+from app.modules.new_product_workflow.router import router as new_product_workflow_router
 from app.modules.operation_logs.router import router as operation_logs_router
 from app.modules.operation_logs.rows_router import router as operation_logs_rows_router
 from app.modules.operation_plans.router import router as operation_plans_router
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     application.include_router(keyword_planning_router)
     application.include_router(password_reset_router)
     application.include_router(media_assets_router)
+    application.include_router(new_product_workflow_router)
     application.include_router(listing_rule_config_router)
     application.include_router(listing_preview_router)
     application.include_router(operation_logs_rows_router)
