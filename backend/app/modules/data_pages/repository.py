@@ -1619,6 +1619,7 @@ class ListingManagementRepository:
             state.archived_at = now
             state.archived_by = actor_ref
         else:
+            state.archive_reason = None
             state.restored_at = now
             state.restored_by = actor_ref
         self.session.commit()
