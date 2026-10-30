@@ -142,7 +142,7 @@ def stockout_candidate(
     }
     observed = sum(row.wfs_available_quantity is not None for row in recent.values())
     low = sum(
-        row.wfs_available_quantity is not None and row.wfs_available_quantity <= low_limit
+        row.wfs_available_quantity is not None and row.wfs_available_quantity == 0
         for row in recent.values()
     )
     candidate = (
@@ -301,15 +301,11 @@ class ListingEvaluationPreviewService:
             "清货期",
             "已归档",
         }
-        if (
-            listing.fulfillment_type == "1"
-            and not archived
-            and listing.lifecycle_status in known_stages
-        ):
+        if not archived:
             sales_by_day = {row.business_date_la: row for row in sales}
             stock_by_day = {row.snapshot_date_la: row for row in stock}
             business_days = []
-            for business_date in sorted(set(stock_by_day) | set(monitor_by_day)):
+            for business_date in sorted(set(sales_by_day) | set(stock_by_day) | set(monitor_by_day)):
                 stock_row = stock_by_day.get(business_date)
                 monitor_row = monitor_by_day.get(business_date)
                 strike_abnormal = None
@@ -347,6 +343,7 @@ class ListingEvaluationPreviewService:
                             if business_date in sales_by_day
                             else None
                         ),
+                        available_qty=stock_row.available_quantity if stock_row else None,
                         strike_price_abnormal=strike_abnormal,
                         buybox_abnormal=buybox_abnormal,
                     )
@@ -357,6 +354,7 @@ class ListingEvaluationPreviewService:
                 days=business_days,
                 first_effective_stock=prior is not None,
                 config=config,
+                fulfillment_type=listing.fulfillment_type or "",
             )
             lifecycle_reason = lifecycle_result.reason
             stock_valid30 = lifecycle_result.valid_stock_days_30
@@ -368,16 +366,20 @@ class ListingEvaluationPreviewService:
             "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED",
             "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED",
         ]
-        if stock_valid30 < config.lifecycle.growth_min_valid_days_30:
-            missing.append("SALES_TREND_VALID_STOCK_DAYS_INSUFFICIENT")
-        if listing.lifecycle_status not in known_stages:
-            missing.append("PREVIOUS_LIFECYCLE_STAGE_UNVERIFIED")
+        sales_valid30 = sum(
+            row.sales_qty is not None and row.business_date_la >= cutoff - timedelta(days=29)
+            for row in sales
+        )
+        if sales_valid30 < config.lifecycle.growth_min_valid_days_30:
+            missing.append("SALES_TREND_VALID_DAYS_INSUFFICIENT")
+        if listing.lifecycle_status not in known_stages and stage not in known_stages:
+            missing.append("LIFECYCLE_INITIAL_STATE_PENDING")
         if not archive_state_known:
             missing.append("ARCHIVE_STATE_UNVERIFIED")
         if not rule_version:
             missing.append("RULE_VERSION_NOT_PUBLISHED")
         if not lifecycle_allows_grade(
-            listing.lifecycle_status,
+            stage if stage in known_stages else listing.lifecycle_status,
             archived=archived,
             config=config,
         ):
@@ -386,10 +388,10 @@ class ListingEvaluationPreviewService:
             missing.append("LIFECYCLE_EXCLUDED_FROM_GRADING")
         if grade is None and "LIFECYCLE_EXCLUDED_FROM_GRADING" not in missing:
             missing.append("BASIC_FINANCIAL_SAMPLE_INSUFFICIENT_OR_UNCALCULABLE")
-        if observed < 7:
+        if listing.fulfillment_type == "1" and observed < 7:
             missing.append("LATEST_WFS_SNAPSHOT_INCOMPLETE")
-        if listing.fulfillment_type == "0":
-            missing.append("WFS_ELIGIBLE_ACTIVE_FULFILLMENT_UNVERIFIED")
+        if listing.fulfillment_type == "0" and sales_valid30 == 0:
+            missing.append("FBM_SALES_EVIDENCE_MISSING")
         if listing.fulfillment_type not in {"0", "1"}:
             missing.append("NON_WFS_OR_UNKNOWN_FULFILLMENT")
         if archived:
