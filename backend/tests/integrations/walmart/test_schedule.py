@@ -21,7 +21,9 @@ def test_twice_weekly_pacific_schedule():
 
 
 @pytest.mark.parametrize("include_cn2502", [False, True])
-def test_schedules_eight_only_with_eight_or_nine_store_identity_map(monkeypatch, include_cn2502):
+def test_schedules_eight_only_with_eight_or_nine_store_identity_map(
+    monkeypatch, include_cn2502
+):
     stores = sorted(REMOTE_COLLECTION_STORES)
     mapping = {str(index): store for index, store in enumerate(stores, start=1)}
     if include_cn2502:
@@ -76,7 +78,10 @@ def test_does_not_schedule_with_missing_approved_store(monkeypatch):
     monkeypatch.setenv("SZZSBJ_WALMART_REMOTE_SCHEDULE_ENABLED", "1")
     monkeypatch.setenv("SZZSBJ_WALMART_REMOTE_APPROVED_STORES", "HK2613")
     monkeypatch.setenv("SZZSBJ_WALMART_REMOTE_ROUTES", json.dumps(routes))
-    monkeypatch.setenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", json.dumps({str(i): s for i, s in enumerate(stores, 1)}))
+    monkeypatch.setenv(
+        "SZZSBJ_WALMART_SCF_STORE_ID_MAP",
+        json.dumps({str(i): s for i, s in enumerate(stores, 1)}),
+    )
     session = MagicMock()
     assert queue_due_stores(session, now=datetime(2026, 10, 28, 16, 0, tzinfo=UTC)) == []
     session.scalars.assert_not_called()
