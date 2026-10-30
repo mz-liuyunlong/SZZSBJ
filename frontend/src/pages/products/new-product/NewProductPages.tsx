@@ -166,7 +166,7 @@ function ConfigPanel({mode,visible,onClose,canManage,username}:{mode:Mode;visibl
  </Drawer>;
 }
 
-export default function NewProductPages({page,mode,canManage=false,username="未知用户"}:{page:NavigationPage;mode:Mode;canManage?:boolean;username?:string}){
+export default function NewProductPages({page,mode,canManage=false,canConfigure=false,username="未知用户"}:{page:NavigationPage;mode:Mode;canManage?:boolean;canConfigure?:boolean;username?:string}){
  const state=useNewProductStore(),c=state.config;
  const preferenceKey=mode==="performance"?"products:new-product:columns":"products:launch-tracking:columns";
  const stored=useMemo(()=>readUserPreference<{keys:string[];widths:Record<string,number>}>(username,preferenceKey,1),[username,preferenceKey]);
@@ -269,7 +269,7 @@ export default function NewProductPages({page,mode,canManage=false,username="未
  {reviewState==="需要优化"&&<><Typography.Paragraph style={{marginTop:12}}>下次复核日期（必填）</Typography.Paragraph><DatePicker value={reviewDate?dayjs(reviewDate):null} onChange={value=>setReviewDate(value?.format("YYYY-MM-DD")??"")} format="YYYY-MM-DD" style={{width:"100%"}}/></>}
  <Typography.Paragraph style={{marginTop:12}}>复盘说明（必填，至少5字）</Typography.Paragraph><Input.TextArea rows={4} value={reason} onChange={e=>setReason(e.target.value)}/></>}
  </Drawer>
- <ConfigPanel mode={mode} visible={setting} canManage={canManage} username={username} onClose={()=>setSetting(false)}/>
+ <ConfigPanel mode={mode} visible={setting} canManage={canConfigure} username={username} onClose={()=>setSetting(false)}/>
  <RuntimeColumnConfigDrawer open={columnsOpen} onClose={()=>setColumnsOpen(false)} fixedKeys={["name","action"]}
  appliedKeys={keys} defaultKeys={allCols.map(x=>String(x.key))} onApply={next=>{setKeys(next);writeUserPreference(username,preferenceKey,1,{keys:next,widths});}} onSaveTemplate={()=>{writeUserPreference(username,preferenceKey,1,{keys,widths});api.success("列模板已保存在当前浏览器的账号偏好中");}}
  groups={[{title:"新品明细",fields:allCols.map(x=>({key:String(x.key),title:String(x.title)}))}]}/>
