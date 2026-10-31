@@ -13,7 +13,7 @@ import ManagementStatCards, { type ManagementStatCardItem } from "@/components/r
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import type { NavigationPage } from "@/config/navigation";
 import {
-  ANALYSIS_FIELDS, MANAGEMENT_FIELDS, ClearanceAnalysisTable, ClearanceManagementTable, integer, money, type TableState,
+  ANALYSIS_FIELDS, MANAGEMENT_FIELDS, ClearanceAnalysisTable, ClearanceManagementTable, money, type TableState,
 } from "./clearance/clearanceUi";
 import {
   CLEARANCE_PRODUCTS, activeTaskFor, chinaToday, coverage, evaluateProduct,
@@ -31,10 +31,8 @@ const statIcons={clock:<ClockCircleOutlined/>,file:<FileTextOutlined/>,chart:<Li
 const STAT_ICONS:Record<string,ReactNode>=statIcons;
 const analysisDefaults=ANALYSIS_FIELDS.map(([key])=>key);
 const managementDefaults=MANAGEMENT_FIELDS.map(([key])=>key);
-const reportPageSizeOptions=["50","100","200","500","1000"];
 const stores=Array.from(new Set(CLEARANCE_PRODUCTS.map(x=>x.store)));
 const owners=Array.from(new Set(CLEARANCE_PRODUCTS.map(x=>x.owner)));
-const filterOption=(list:string[])=>[{value:"all",label:"全部"},...list.map(value=>({value,label:value}))];
 function csvDownload(filename:string,text:string){
  const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
  const href=URL.createObjectURL(blob);
@@ -105,7 +103,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    {key:"manual",title:"人工申请 SKU",value:candidates.filter(x=>data.manual.includes(x.id)).length,subtitle:"运营发起，保留独立来源",icon:STAT_ICONS.file},
    {key:"value",title:"风险库存成本",value:money(candidates.filter(x=>evaluateProduct(x,data.rules).level!=="low").reduce((sum,x)=>sum+x.avail*x.cost,0)),subtitle:"高中风险 WFS 可售库存成本",icon:STAT_ICONS.money},
   ];
-  return rows.map(x=>({...x,tone:x.key==="high"?"danger":x.key==="pending"?"warning":"normal"}));
+  return rows.map(x=>({...x,tone:(x.key==="high"?"danger":x.key==="pending"?"warning":"normal") as ManagementStatCardItem["tone"]}));
  },[tab,candidates,data]);
  const changeFilter=(patch:Partial<FilterState>)=>{setFilters(old=>({...old,...patch}));setTables(old=>({...old,[tab==="rules"?"analysis":tab]:{...old[tab==="rules"?"analysis":tab],page:1}}));};
  const selectTab=(key:string)=>{
@@ -157,7 +155,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
       ["all","全部风险"],["untreated","待评估"],["auto","系统识别"],["manual","人工申请"],["age","库龄 ≥"+data.rules.mediumAge+"天"],["coverage","售罄 ≥"+data.rules.highCoverage+"天"],["decline","近期销量下滑"],
      ].map(([key,title])=><Button size="small" key={key} type={filters.quick===key?"primary":"default"} onClick={()=>changeFilter({quick:key})}>{title}</Button>)}</div>}
      <div className="clearance-table-tools"><Typography.Text type="secondary">{tab==="analysis"?"风险优先 · 经营风险辅助，不独立入池":"全部审批决策由独立审批工作台处理"}</Typography.Text><Space><Button size="small" icon={<FilterOutlined/>} onClick={()=>setColumnDrawer(true)}>列配置</Button><Button size="small" icon={<DownloadOutlined/>} onClick={exportCsv}>导出</Button></Space></div>
-     {tab==="analysis"?<ClearanceAnalysisTable rows={analysisRows} rules={data.rules} tasks={data.tasks} manual={data.manual} state={tables.analysis} onPage={(page,pageSize)=>setTableState({page,pageSize})} onInspect={setApplicant} onApply={id=>setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"})} onTask={setTaskId}/>:<ClearanceManagementTable rows={managementRows} state={tables.management} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
+     {tab==="analysis"?<ClearanceAnalysisTable rows={analysisRows} rules={data.rules} tasks={data.tasks} manual={data.manual} state={tables.analysis} onPage={(page,pageSize)=>setTableState({page,pageSize})} onInspect={setApplicant} onApply={id=>{const p=CLEARANCE_PRODUCTS.find(x=>x.id===id);if(!p||p.owner!==role||p.avail<=0||activeTaskFor(data.tasks,id)){void message.error("当前 SKU 不能申请清货");return;}setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"});}} onTask={setTaskId}/>:<ClearanceManagementTable rows={managementRows} state={tables.management} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
      <Typography.Paragraph className="clearance-footer-hint" type="secondary">所有商品、指标、申请及规则均为 Mock 演示数据。风险统计不代表真实经营数据。</Typography.Paragraph>
      <RuntimeColumnConfigDrawer open={columnDrawer} groups={[{title:"显示字段",fields:fields.map(([key,title])=>({key,title}))}]} fixedKeys={fixed} defaultKeys={[...fields.map(([key])=>key)]} appliedKeys={state.columns} onApply={columns=>setTableState({columns})} onClose={()=>setColumnDrawer(false)} onSaveTemplate={()=>{void message.info("Mock 模式不保存云端模板");}}/>
     </>}
