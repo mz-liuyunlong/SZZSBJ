@@ -55,6 +55,28 @@ describe("protected exports", () => {
     });
   });
 
+  it("sends large Listing batch exports in a POST body", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response("csv-content", {
+      status: 200,
+      headers: { "Content-Type": "text/csv; charset=utf-8" },
+    }));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn().mockReturnValue("blob:synthetic-batch-export"),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    const batchValues = Array.from({ length: 1000 }, (_, index) => `synthetic-${index}`);
+    await exportListingManagementRows({ batchValues, searchType: "sku" }, ["sku"]);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [path, init] = fetch.mock.calls[0];
+    expect(path).toBe("/api/listings/walmart/export/search");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body).batch_values).toEqual(batchValues);
+  });
+
   it("uses the same authenticated path for operation-plan downloads and binary import", async () => {
     const authToken = "synthetic-operation-session-that-must-not-be-logged";
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);

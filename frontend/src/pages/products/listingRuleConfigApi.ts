@@ -71,6 +71,9 @@ export interface ListingGradeRuleRead {
   source: "default" | "database";
   can_edit: boolean;
   storage_ready: boolean;
+  preview_enabled: boolean;
+  scheduler_enabled: boolean;
+  publish_enabled: boolean;
 }
 
 export interface ListingGradeRuleHistory {

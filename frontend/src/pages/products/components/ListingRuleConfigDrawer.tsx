@@ -183,7 +183,7 @@ export default function ListingRuleConfigDrawer({
       form.setFieldsValue(toForm(next.config));
       setDirty(false);
       setHistory(null);
-      messageApi.success("已保存规则新版本；诊断任务代码已安装，自动执行仍需单独启用并验证");
+      messageApi.success("已保存规则新版本；自动诊断状态以服务端配置和任务运行记录为准");
     } catch (error) {
       if (error instanceof BackendRequestError && error.status === 409) {
         messageApi.error("规则版本冲突或没有变更，请重新打开页面获取新版本");
@@ -241,10 +241,10 @@ export default function ListingRuleConfigDrawer({
     ) : null;
     const inventory = section === "inventory_repair" ? (
       <>
-        <Alert type="info" showIcon message="低库存阈值≤N、有效有货>N自动联动。首次有效入库、二次断货清零、清货审批及归档规则固定不变。" style={{ marginBottom: 16 }} />
+        <Alert type="info" showIcon message="低库存阈值用于有效有货证据；连续零库存才可能进入断货期。首次有效入库、二次断货清零、清货审批及归档规则固定不变。" style={{ marginBottom: 16 }} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: "0 16px" }}>
           {numberInput("low_stock_max_units", "WFS低库存阈值（件）", 0, 10000)}
-          {numberInput("stockout_consecutive_days", "连续低库存进入断货期（天）", 1, 90)}
+          {numberInput("stockout_consecutive_days", "连续零库存进入断货期（天）", 1, 90)}
           {numberInput("long_stockout_days", "长期断货门槛（超过N天）", 2, 365)}
           {numberInput("stockout_repair_valid_days", "长期断货修复有效有货日", 1, 180)}
           {numberInput("strike_price_abnormal_days", "划线价异常门槛（超过N天）", 1, 365)}
@@ -340,6 +340,11 @@ export default function ListingRuleConfigDrawer({
       )}
       {record?.storage_ready && !record?.can_edit && (
         <Alert type="warning" message="当前账号只有查看权限。请通过角色管理授予「配置Listing评级规则」动作权限。" showIcon/>
+      )}
+      {record && (
+        <Alert type="info" showIcon style={{ marginTop: 16 }}
+          message={`只读试算：${record.preview_enabled ? "已启用" : "未启用"}；自动诊断：${record.scheduler_enabled ? "配置开关已启用" : "配置开关未启用"}；正式发布：${record.publish_enabled ? "配置开关已启用" : "配置开关未启用"}`}
+          description="这里显示服务端配置开关；任务实际运行状态及正式发布证据仍需单独核验。" />
       )}
     </Form>
   );

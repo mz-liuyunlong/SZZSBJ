@@ -129,7 +129,6 @@ def stockout_candidate(
     inventory: list[WalmartListingInventoryDailyFact],
     *,
     cutoff: date,
-    low_limit: int,
     prior_effective_stock: bool,
     fulfillment_type: str | None,
     currently_archived: bool,
@@ -141,7 +140,7 @@ def stockout_candidate(
         row.snapshot_date_la: row for row in inventory if since <= row.snapshot_date_la <= cutoff
     }
     observed = sum(row.wfs_available_quantity is not None for row in recent.values())
-    low = sum(
+    zero_days = sum(
         row.wfs_available_quantity is not None and row.wfs_available_quantity == 0
         for row in recent.values()
     )
@@ -152,11 +151,11 @@ def stockout_candidate(
             and not currently_archived
             and prior_effective_stock
             and observed == consecutive_days
-            and low == consecutive_days
+            and zero_days == consecutive_days
         )
         else None
     )
-    return candidate, observed, low
+    return candidate, observed, zero_days
 
 
 def archive_has_post_cutoff_event(
@@ -302,7 +301,6 @@ class ListingEvaluationPreviewService:
         stage, observed, low = stockout_candidate(
             stock,
             cutoff=cutoff,
-            low_limit=config.inventory_repair.low_stock_max_units,
             prior_effective_stock=prior is not None,
             fulfillment_type=listing.fulfillment_type,
             currently_archived=archived,

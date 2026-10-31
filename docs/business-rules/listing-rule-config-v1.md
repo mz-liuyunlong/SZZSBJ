@@ -29,7 +29,7 @@ Listing 管理页面右上「规则配置」打开抽屉，V1.0 的「等级评�
 
 ## API（本地/测试环境）
 
-- `GET /api/listings/rule-config`：现有 Listing 页面查看权限；返回最新**已保存**版本、是否待生效、受保护项、can_edit。
+- `GET /api/listings/rule-config`：现有 Listing 页面查看权限；返回最新**已保存**版本、是否待生效、受保护项、can_edit，以及服务端只读 `preview_enabled`、`scheduler_enabled`、`publish_enabled` 开关状态。开关状态不证明任务运行或正式发布已完成。
 - `PUT /api/listings/rule-config`：需 `action:products:listing-management:configure-rules`；请求：
   `{"expected_version":0,"change_reason":"优化样本门槛","config":{"short_days":7,"medium_days":14,"short_weight_percent":60,"medium_weight_percent":40,"short_min_valid_days":4,"medium_min_valid_days":8,"c_min_percent":"5","b_min_percent":"10","a_above_percent":"15","included_stages":["打品期","启动期","上升期","稳定期","下滑期","修复期"]}}`
 - `GET /api/listings/rule-config/history?limit=20&offset=0`：查看历史列表。

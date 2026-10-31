@@ -67,7 +67,6 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
     result = stockout_candidate(
         rows,
         cutoff=CUTOFF,
-        low_limit=5,
         prior_effective_stock=True,
         fulfillment_type="1",
         currently_archived=False,
@@ -79,7 +78,7 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
         {"prior_effective_stock": False, "fulfillment_type": "1", "currently_archived": False},
         {"prior_effective_stock": True, "fulfillment_type": "1", "currently_archived": True},
     ):
-        assert stockout_candidate(rows, cutoff=CUTOFF, low_limit=5, **kwargs)[0] is None
+        assert stockout_candidate(rows, cutoff=CUTOFF, **kwargs)[0] is None
 
 
 def test_openapi_contains_preview_route():
@@ -120,7 +119,6 @@ def test_low_positive_stock_does_not_qualify_as_stockout() -> None:
     stage, observed, zero_days = stockout_candidate(
         rows,
         cutoff=CUTOFF,
-        low_limit=5,
         prior_effective_stock=True,
         fulfillment_type="1",
         currently_archived=False,

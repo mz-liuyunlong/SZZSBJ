@@ -188,7 +188,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (业务口径待确认): **低库存被用于断货期判定**
 - Recorded condition: 可配置为连续库存不高于阈值进入断货；低库存不等于零库存
 - Original acceptance: 确认“低库存”和“断货期”的命名及阈值业务口径
-- PR #277 review / Codex TODO: Recent evaluator changed <=low to ==0 for stockout. Business sign-off needed; distinguish low-stock warning from zero-stockout.
+- PR #277 evidence: `stockout_candidate` and `lifecycle_listing` require observed WFS zero stock; positive low stock does not trigger stockout. The rule drawer now labels the consecutive threshold as zero-stock days. Business sign-off for the wider lifecycle policy remains pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/preview.py
 
 ### LM-020 | 等级评级 | P0 | PARTIAL
@@ -307,7 +307,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **价格统一显示美元符号**
 - Recorded condition: 表格写死$，未使用返回币种
 - Original acceptance: 以金额+原币种成组展示，不跨源拼接
-- PR #277 review / Codex TODO: Currency fields displayed but frontend still falls back to USD on unknown currency. Never silently default currency for a priced field.
+- PR #277 evidence: table renders the amount with its source currency code or `币种未知`; it does not silently default a known price to USD. CSV/source parity still needs isolated API acceptance.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/listingManagementApi.ts
 
 ### LM-037 | 监控数据 | P1 | PATCHED_UNVERIFIED
@@ -331,18 +331,18 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - PR #277 review / Codex TODO: Raw problem statuses added inside combined product-state filter; dedicated raw/normalized Listing filter is not implemented.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/components/ListingManagementToolbar.tsx
 
-### LM-040 | 表格分页 | P1 | PARTIAL
+### LM-040 | 表格分页 | P1 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **列头排序只在当前页完成**
 - Recorded condition: 前端table sorter本地排序，后端固定排序分页
 - Original acceptance: 排序字段传API，由后端排序后分页
-- PR #277 review / Codex TODO: Backend sort mapping added, but frontend still contains local sorter callbacks and may sort effective monitor values differently from raw MART.
+- PR #277 evidence: all 16 sortable table keys use AntD remote `sorter: true` and have backend sort mappings before pagination. Price/rating/review/check-time mappings use the effective monitor projection. Cross-page browser sorting and null ordering still need E2E acceptance.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/components/ListingManagementTable.tsx
 
 ### LM-041 | 批量操作 | P1 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **跨页勾选的部分Listing被批量遗漏**
 - Recorded condition: selectedListingRows只从当前rows过滤选中ID
 - Original acceptance: 按全部选中ID跨页定位并执行，逐个报告结果
-- PR #277 review / Codex TODO: Cross-page selected row cache added; not keyed/cleared per account and filter. Stale selections may survive scope changes.
+- PR #277 evidence: selection is transient per mounted page, while filter changes clear both selected IDs and seen rows. Cross-page batch execution and partial-failure retry have targeted tests; browser/account-switch E2E remains pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/ListingManagementPage.tsx
 
 ### LM-042 | 导出 | P1 | PATCHED_UNVERIFIED
@@ -384,7 +384,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码风险待验收): **千行批量搜索与HTTP请求长度不匹配**
 - Recorded condition: 前端最多1000行，最终拼为GET查询参数
 - Original acceptance: 大批量查询采用POST体，覆盖超长及特殊字符
-- PR #277 review / Codex TODO: POST batch list/summary supports 1,000 exact values; GET export still serializes large batch values into query string and can exceed limits.
+- PR #277 evidence: batch list/summary and batch/selected export use POST bodies. A 1,000-value frontend regression test verifies the export path and body; isolated API size/permission testing remains pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/components/ListingManagementToolbar.tsx
 
 ### LM-048 | 标签管理 | P1 | PARTIAL
@@ -398,14 +398,14 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **页面批量标签入口只支持追加**
 - Recorded condition: 后端有replace/remove模式，主页面入口固定append
 - Original acceptance: 在界面安全暴露替换/移除，并提供预览
-- PR #277 review / Codex TODO: Append/replace/remove exposed in modal; missing preview of impacted listings and destructive replace/clear confirmation.
+- PR #277 evidence: append/replace/remove modes exist and the shared assignment modal requires explicit danger confirmation for replace/remove, including clear-all count. A per-Listing impact preview and browser acceptance remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/ListingManagementPage.tsx
 
 ### LM-050 | 页面状态 | P2 | PARTIAL
 - Original issue (源码风险待验收): **筛选、排序与页面恢复未完整端到端验收**
 - Recorded condition: 使用pageStateCache保留页面状态，跨账号及刷新情形需测试
 - Original acceptance: E2E覆盖导航返回、刷新、换账号及筛选复原
-- PR #277 review / Codex TODO: pageStateKey is static, selectedRowKeys persists across account/permission switches. Scope state by tenant/store and add navigation E2E.
+- PR #277 evidence: pageStateKey includes `preferenceScope`, while selected IDs are transient; filter changes clear selection. Navigation, refresh, and permission-change E2E remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/ListingManagementPage.tsx
 
 ### LM-051 | 经营分析 | P0 | PARTIAL
@@ -485,18 +485,18 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - PR #277 review / Codex TODO: published_count shown separately from candidate counters, but no official publishing workflow exists.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
-### LM-062 | 自动任务 | P1 | OPEN
+### LM-062 | 自动任务 | P1 | PARTIAL
 - Original issue (源码已确认): **同日成功/部分成功后不能重新执行**
 - Recorded condition: run_daily_diagnostic遇到succeeded或partial直接返回旧run
 - Original acceptance: 受控重算，保留规则版本和历史批次
-- PR #277 review / Codex TODO: run_daily_diagnostic exits if same-day status is succeeded or partial; implement controlled replay, attempts and frozen versions.
+- PR #277 evidence: failed/partial runs get new immutable attempts; succeeded runs require an explicit `replay_succeeded=True` caller. Retries freeze the original rule version and reject a changed cutoff. An authorized operator trigger and isolated DB replay acceptance remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
-### LM-063 | 自动任务 | P1 | OPEN
+### LM-063 | 自动任务 | P1 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **重试删除已有诊断快照**
 - Recorded condition: retry_existing会delete旧run的snapshots
 - Original acceptance: 快照不可变、按attempt留痕，支持增量重试
-- PR #277 review / Codex TODO: Retry executes DELETE ListingEvaluationSnapshot for the run. Must stop deleting evidence; immutable per-attempt snapshots.
+- PR #277 evidence: retry creates a new run ID and does not delete prior snapshots; targeted attempt tests pass and the unique `(schedule_date_cn, attempt_count)` migration was exercised in an isolated PostgreSQL run. Runtime replay/history E2E remains pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
 ### LM-064 | 自动任务 | P1 | OPEN
@@ -534,11 +534,11 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - PR #277 review / Codex TODO: No actual China-time notification and overdue job with audit/acknowledgement, despite config UI.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
-### LM-069 | 规则配置 | P2 | PARTIAL
+### LM-069 | 规则配置 | P2 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **配置页说明与真实功能状态不一致**
 - Recorded condition: 写着尚未接入/未来服务，Celery任务实际存在但关停
 - Original acceptance: 显示已安装、未启用、可试算及权限状态
-- PR #277 review / Codex TODO: Copy updated for installed-but-disabled scheduler; runtime feature flag/status is not dynamically shown from API.
+- PR #277 evidence: the existing rule-config read now reports live preview/scheduler/publish flags and the original drawer displays them separately from task execution evidence. The endpoint does not activate a scheduler; isolated browser acceptance remains pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/components/ListingRuleConfigDrawer.tsx
 
 ### LM-070 | 质量验收 | P1 | OPEN

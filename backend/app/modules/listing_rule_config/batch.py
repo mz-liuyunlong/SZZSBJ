@@ -36,8 +36,9 @@ class ListingEvaluationBatchService:
         schedule_date_cn: date,
         cutoff_date_la: date,
         batch_size: int = 50,
+        replay_succeeded: bool = False,
     ) -> UUID:
-        """Create a fresh attempt after a failed/partial run, preserving prior snapshots."""
+        """Preserve prior attempts; a successful day replays only when explicitly requested."""
         if not 1 <= batch_size <= 200:
             raise ValueError("batch_size must be between 1 and 200")
         existing = self.session.scalar(
@@ -46,7 +47,12 @@ class ListingEvaluationBatchService:
             .order_by(ListingEvaluationRun.attempt_count.desc())
             .limit(1)
         )
-        if existing is not None and existing.status in {"queued", "running", "succeeded"}:
+        if existing is not None and existing.cutoff_date_la != cutoff_date_la:
+            raise ValueError("Listing evaluation cutoff is fixed for each schedule date")
+        if existing is not None and (
+            existing.status in {"queued", "running"}
+            or (existing.status == "succeeded" and not replay_succeeded)
+        ):
             return existing.id
         selected_rule = self._latest_effective_rule() if existing is None else None
         total = (
