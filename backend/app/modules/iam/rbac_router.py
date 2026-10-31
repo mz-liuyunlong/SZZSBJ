@@ -307,13 +307,14 @@ def list_rbac_audit_events(
 
 @router.get("/api/settings/organization/preview")
 def preview_feishu_organization(
+    request: Request,
     _: Annotated[Principal, Depends(require_permission("page:settings:organization:view"))],
 ) -> dict:
     """Real-time Feishu read-only preview. Never writes a database or changes RBAC."""
     service = FeishuDirectoryService.from_settings(get_settings())
     departments = service.list_visible_departments()
     users = service.list_visible_users()
-    return {
+    return success_response(request, data={
         "departments": list(departments),
         "users": [
             {
@@ -327,4 +328,4 @@ def preview_feishu_organization(
             for user in users
         ],
         "read_only": True,
-    }
+    }, meta=None)

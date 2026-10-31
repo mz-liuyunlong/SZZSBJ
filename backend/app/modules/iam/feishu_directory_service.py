@@ -250,7 +250,6 @@ class FeishuDirectoryService:
                 "department_id": department_id,
                 "parent_department_id": str(
                     item.get("parent_department_id")
-                    or item.get("parent_department_id_type")
                     or "0"
                 ).strip(),
                 "name": str(item.get("name") or department_id).strip(),
