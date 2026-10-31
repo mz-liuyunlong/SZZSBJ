@@ -145,7 +145,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
    nextTasks[pos]={...old,lines,status:"pending",reason:values.reason,methods:values.methods,due:values.due.format("YYYY-MM-DD"),remark:values.remark.trim(),version:old.version+1,ruleVersion:data.ruleVersion,submitted:timestamp,history:[...old.history,{at:timestamp,who:role,text:"补充资料并重新提交审批"}]};
    nextTasks[pos].riskAtSubmission=taskRisk(nextTasks[pos],data.rules);
   }else{
-   const fresh:ClearanceTask={id:nextClearanceTaskId(nextTasks,timestamp),lines,status:"pending",reason:values.reason,methods:values.methods,owner:role,requester:role,approver:"李主管",date:now,due:values.due.format("YYYY-MM-DD"),submitted:now+" 18:52",remark:values.remark.trim(),source:apply.source,version:1,ruleVersion:data.ruleVersion,riskAtSubmission:"low",history:[{at:timestamp,who:role,text:"提交清货申请至统一审批工作台（本地演示）"}]};
+   const fresh:ClearanceTask={id:nextClearanceTaskId(nextTasks,timestamp),lines,status:"pending",reason:values.reason,methods:values.methods,owner:role,requester:role,approver:"李主管",date:now,due:values.due.format("YYYY-MM-DD"),submitted:timestamp,remark:values.remark.trim(),source:apply.source,version:1,ruleVersion:data.ruleVersion,riskAtSubmission:"low",history:[{at:timestamp,who:role,text:"提交清货申请至统一审批工作台（本地演示）"}]};
    fresh.riskAtSubmission=taskRisk(fresh,data.rules);nextTasks.unshift(fresh);
   }
   change({tasks:nextTasks,manual:apply.source==="manual"?[...new Set([...data.manual,...apply.ids])]:data.manual});
@@ -155,7 +155,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
   const transitions={start:["ready","running"],pause:["running","paused"],resume:["paused","running"],withdraw:["pending","cancelled"],finish:["running","done"]} as const;
   const [from,to]=transitions[command];
   if(t.owner!==role||t.status!==from||(command==="finish"&&!taskIsComplete(t))){void message.error("当前身份或任务状态不允许此操作");return;}
-  const tasks=data.tasks.map(row=>row.id!==t.id?row:{...row,status:to,history:[...row.history,{at:chinaToday(),who:role,text:"状态更新："+STATUS_NAMES[to]}]});
+  const tasks=data.tasks.map(row=>row.id!==t.id?row:{...row,status:to,history:[...row.history,{at:chinaNow(),who:role,text:"状态更新："+STATUS_NAMES[to]}]});
   change({tasks});void message.success("已更新模拟任务状态");
  };
  const taskProgressSave=(values:{lines:Record<string,{sold:number;removed:number;disposed:number}>})=>{
@@ -166,7 +166,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
    const nums=[line.sold,line.removed,line.disposed];
    if(nums.some((n,i)=>!Number.isInteger(n)||n<[before.sold,before.removed,before.disposed][i])||nums.reduce((a,b)=>a+b,0)>line.qty){void message.error("累计进度不得倒退、不得超过目标量，必须为整数");return;}
   }
-  change({tasks:data.tasks.map(x=>x.id===task.id?{...x,lines,history:[...x.history,{at:chinaToday(),who:role,text:"更新累计执行进度"}]}:x)});
+  change({tasks:data.tasks.map(x=>x.id===task.id?{...x,lines,history:[...x.history,{at:chinaNow(),who:role,text:"更新累计执行进度"}]}:x)});
   setProgressOpen(false);void message.success("执行进度已保存（Mock）");
  };
  const [progressOpen,setProgressOpen]=useState(false);
@@ -180,7 +180,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
   <Table rowKey="key" size="small" pagination={false} dataSource={([["units","销量"],["daily","日均销量"],["revenue","销售额"],["ads","广告费"],["adRate","广告占比"],["profit","利润"],["profitRate","利润率"]] as const).map(([key,label])=>({key,label}))} columns={[{title:"指标",dataIndex:"label"},...[7,14,30].map(days=>({title:days+"天",render:(_:unknown,row:{key:string})=>{const x=product.per[days as 7|14|30];return row.key==="units"?integer(x.units):row.key==="daily"?(x.units/days).toFixed(2):row.key==="revenue"?money(x.revenue):row.key==="ads"?money(x.ads):row.key==="adRate"?percent(x.adRate):row.key==="profit"?money(x.profit):percent(x.margin);}}))]}/>
   <Divider orientation="left">WFS 库存与商品资料</Divider><div className="clearance-detail-grid">{[["预留库存",product.res+" 件"],["不可售库存",product.bad+" 件"],["在途库存",product.inbound+" 件"],["单位库存成本",money(product.cost)],["在售天数",product.listingDays+" 天"],["超龄库存批次",product.ageLots.map(l=>l.ageDays+"天 / "+l.qty+"件").join("、")||"暂无"]].map(([label,value])=><Card key={label} size="small"><Typography.Text type="secondary">{label}</Typography.Text><strong>{value}</strong></Card>)}</div><Divider orientation="left">风险决策依据</Divider>{data.manual.includes(product.id)&&eligible(product)&&<Button danger size="small" onClick={()=>setRemoveTarget(product.id)}>移出人工清货候选</Button>}<RiskTag level={evaluateProduct(product,data.rules).level}/>{evaluateProduct(product,data.rules).reasons.map(x=><Typography.Paragraph key={x}>• {x}</Typography.Paragraph>)}{evaluateProduct(product,data.rules).business.map(x=><Tag color="warning" key={x}>{x}</Tag>)}
   <Divider orientation="left">当前申请与处理建议</Divider><Typography.Paragraph>{activeTaskFor(data.tasks,product.id)?("已有有效清货任务："+activeTaskFor(data.tasks,product.id)?.id+"，不能重复申请。"):"当前没有有效清货任务，可由负责人按实际库存提出申请。"}</Typography.Paragraph></>}</Drawer>
-  <Modal title="运营主动申请清货" width={900} open={manualOpen} onCancel={()=>setManualOpen(false)} onOk={()=>{begin(manualSelection,"manual");setManualOpen(false);}} okText="下一步 · 填写申请" okButtonProps={{disabled:!selected.length||new Set(selected.map(x=>x.store)).size!==1||!selected.every(eligible)}} destroyOnHidden>
+  <Modal title="运营主动申请清货" width={900} open={manualOpen} onCancel={()=>{setManualOpen(false);setManualSelection([]);setManualSearch("");setManualStore("all");}} onOk={()=>{begin(manualSelection,"manual");setManualOpen(false);}} okText="下一步 · 填写申请" okButtonProps={{disabled:!selected.length||new Set(selected.map(x=>x.store)).size!==1||!selected.every(eligible)}} destroyOnHidden>
    <Typography.Paragraph type="secondary">可搜索全部 WFS Mock 商品，包括未触发风险的正常 SKU。只能选择本人负责、同店铺且没有有效申请的商品。</Typography.Paragraph>
    <Space wrap><Input.Search placeholder="搜索 SKU / MSKU / 商品ID / 品名" value={manualSearch} onChange={e=>setManualSearch(e.target.value)}/><Select value={manualStore} onChange={setManualStore} options={[{value:"all",label:"全部店铺"},...Array.from(new Set(CLEARANCE_PRODUCTS.map(x=>x.store))).map(x=>({value:x,label:x}))]}/></Space>
    <Table rowKey="id" size="small" className="clearance-chooser-table" dataSource={selectables} rowSelection={{selectedRowKeys:manualSelection,onChange:keys=>setManualSelection(keys.map(String)),getCheckboxProps:x=>({disabled:!eligible(x)})}} columns={productColumns.map(c=>c.title==="风险"?{...c,render:(_:unknown,x:ClearanceProduct)=><RiskTag level={evaluateProduct(x,data.rules).level}/>} as typeof c:c)} pagination={{pageSize:8}}/>
