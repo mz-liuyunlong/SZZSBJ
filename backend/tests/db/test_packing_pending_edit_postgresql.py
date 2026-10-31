@@ -36,7 +36,7 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261031_0069_iam_permission_catalog"
+REVISION = "20261031_0070_feishu_org_snapshot"
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 
