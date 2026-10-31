@@ -25,9 +25,11 @@
 
 ### In scope
 
-- [ ] Alembic migration（接当前 head `20261029_0068_walmart_remote_jobs` 之后的最新 head）：`dim_finance_cash_accounts`（含种子 10 条）、`landing_finance_cashflow_imports`、`raw_finance_cashflow_files`、`std_finance_cashflow_lines`、`dq_run_finance_cashflow_import`。
+- [ ] Alembic migration（接当前 head `20261029_0068_walmart_remote_jobs` 之后的最新 head）：`dim_finance_cash_accounts`（含种子 11 条：中行 ×4、银座、派安盈 ×2、万里汇、PingPong ×3）、`landing_finance_cashflow_imports`、`raw_finance_cashflow_files`、`std_finance_cashflow_lines`、`dq_run_finance_cashflow_import`。
 - [ ] 新模块 `backend/app/modules/finance_cashflow/`：models / schemas / parsers（boc_xls、shenzhen_rural_bank_xlsx、payoneer_csv、worldfirst_xlsx、pingpong_xlsx）/ detector / service / repository / router。
-- [ ] 接口：`POST /api/finance/cashflow/imports`（multipart 多文件或多次单文件 + `X-File-Name`，与 operation_plans 一致的风格由实现者按现有 envelope 选一种并写进 API 文档）、`GET /api/finance/cashflow/imports`、`GET /api/finance/cashflow/imports/{import_id}`、`POST /api/finance/cashflow/imports/{import_id}/void`、`GET /api/finance/cashflow/lines`、`GET /api/finance/cashflow/accounts`。
+- [ ] 接口：`POST /api/finance/cashflow/imports`（请求体 + `X-File-Name`，多文件 = 多次调用归入同一 `X-Import-Id`，与 operation_plans 一致）、`GET /api/finance/cashflow/imports`、`GET /api/finance/cashflow/imports/{import_id}`、`POST /api/finance/cashflow/imports/{import_id}/void`、`GET /api/finance/cashflow/lines`、`GET /api/finance/cashflow/accounts`。
+- [ ] IAM：`rbac_schemas.ScopeType` 新增 `finance_cash_account`；角色数据范围界面（设置 → 角色管理 → 数据范围）增加「现金账户」资源的勾选；权限目录登记上述 action / field key。
+- [ ] 依赖清单：xlsx 沿用 `operation_plans` 的标准库解析方式（zipfile + ElementTree，不新增依赖）；csv 标准库；**xls（中行导出）需新增 `xlrd`（纯 Python，BSD）**——若负责人不接受新依赖，则改为要求财务把中行导出另存为 xlsx 上传，二选一在 PRP 批准时定；上传沿用 `operation_plans` 的请求体 + `X-File-Name` 方案（多文件 = 多次调用归入同一 `X-Import-Id`），不引入 multipart 依赖。
 - [ ] 权限：页面 `page:data-center:data-import:view`；功能 `action:data-center:data-import:finance-cashflow-upload`、`action:data-center:data-import:finance-cashflow-void`（high）；字段 `field:finance:settlement-reconciliation:counterparty`；data scope 资源 `finance_cash_account`（none → fail closed）；全部登记进 `permission_catalog_v2`。
 - [ ] 前端：`frontend/src/pages/data-center/DataImportPage.tsx` 把「现金流账户报表」来源从 mock 接成真实 API（上传多文件、每文件识别结果、覆盖区间、去重数、作废需二次确认）；其余来源保持 mock 不动。
 - [ ] 文档：`docs/api/finance-cashflow-import.md`、`docs/sop/data-center/finance-cashflow-import.md`、`DATA_INTERFACE_REGISTRY.md` 状态更新、`CODEX_HANDOFF.md`。
@@ -87,7 +89,7 @@ sensitive or critical domains: 财务 / 敏感数据（个人户名、卡号尾�
 
 ```text
 POST /api/finance/cashflow/imports
-  request: 文件字节（单文件 + X-File-Name，可多次调用归入同一 import_id 用 X-Import-Id；或 multipart 多文件，二选一由实现者定并记录）
+  request: 文件字节（单文件 + X-File-Name；多文件 = 多次调用，用 X-Import-Id 归入同一 import_id）
   response: { import_id, files:[{file_id, file_name, sha256, size, account_key|null, account_display, detected_note, rows_parsed, rows_new, rows_duplicate, declared_range_from, declared_range_to, dq:{balance_chain_ok, warnings[]}, status: received|parsed|rejected, reject_reason}] }
   errors: 401/403（权限 / scope）、413（超过大小上限，上限写进配置）、415（不支持的类型）、422（整批参数错）
 GET /api/finance/cashflow/imports?from&to&status&page
@@ -123,7 +125,7 @@ helpUrl: /help/data-center/finance-cashflow-import
 ## 10. Implementation Plan
 
 ```text
-Task 1: migration + models + 种子（dim_finance_cash_accounts 10 条）；scaffold 测试更新
+Task 1: migration + models + 种子（dim_finance_cash_accounts 11 条）；scaffold 测试更新
 Task 2: detector + 5 个 parser + 脱敏 + line_uid + 余额链；合成样本测试
 Task 3: service / repository / router + 权限 + 审计 + 幂等（同 sha256、同 line_uid）
 Task 4: 前端 DataImportPage 现金流来源接线 + 作废二次确认 + 测试
