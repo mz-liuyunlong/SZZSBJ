@@ -1726,6 +1726,16 @@ class ListingManagementRepository:
                 msku=listing.msku,
             )
             self.session.add(state)
+        elif (
+            state.is_archived is archived
+            and state.source_account_ref == listing.source_account_ref
+            and state.store_id == listing.store_id
+            and state.item_id == listing.item_id
+            and state.msku == listing.msku
+            and state.archive_reason == (archive_reason if archived else None)
+        ):
+            # Retried requests must not rewrite the actor or operation timestamp.
+            return state
 
         now = datetime.now(UTC)
         state.source_account_ref = listing.source_account_ref

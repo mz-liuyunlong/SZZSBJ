@@ -33,6 +33,7 @@ import ListingEvaluationPreviewModal from "@/pages/products/components/ListingEv
 import ListingManagementToolbar, {
   type ListingManagementFilters,
 } from "@/pages/products/components/ListingManagementToolbar";
+import { failedBatchIds, runListingBatch } from "@/pages/products/listingBatch";
 import {
   archiveListingManagementRow,
   batchSetListingTags,
@@ -286,6 +287,8 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
   const [isGptAnalysisSaving, setIsGptAnalysisSaving] = useState(false);
   const [isTableRequesting, setIsTableRequesting] = useState(false);
   const [listingLoadError, setListingLoadError] = useState(false);
+  const [summaryLoadError, setSummaryLoadError] = useState(false);
+  const [filterOptionsLoadError, setFilterOptionsLoadError] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [archiveDialog, setArchiveDialog] = useState<ListingArchiveDialogState | null>(null);
@@ -293,6 +296,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
   const [restoreDialog, setRestoreDialog] = useState<ListingRestoreDialogState | null>(null);
   const [restoreSubmitting, setRestoreSubmitting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
 
   const isLargeListingPage = pageSize >= 500;
   const listingTableWrapRef = useRef<HTMLDivElement | null>(null);
@@ -350,10 +354,8 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
       setManagedTags(catalog.items);
       setTagAccountRefs(catalog.sourceAccountRefs);
     } catch {
-      setManagedTags([]);
-      setTagAccountRefs([]);
       if (options.showError) {
-        void messageApi.warning("标签加载失败，暂时不影响 Listing 页面");
+        void messageApi.warning("标签加载失败，已保留上次成功数据");
       }
     } finally {
       setIsTagManagerLoading(false);
@@ -456,16 +458,17 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
       .then((options) => {
         if (!active) return;
         setFilterOptions(options);
+        setFilterOptionsLoadError(false);
       })
       .catch(() => {
         if (!active) return;
-        setFilterOptions(emptyFilterOptions);
+        setFilterOptionsLoadError(true);
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [listingRefreshToken]);
 
   useEffect(() => {
     let active = true;
@@ -474,10 +477,11 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
       .then((nextSummary) => {
         if (!active) return;
         setSummary(nextSummary);
+        setSummaryLoadError(false);
       })
       .catch(() => {
         if (!active) return;
-        setListingLoadError(true);
+        setSummaryLoadError(true);
         void messageApi.error("Listing统计加载失败，已保留上次成功数据");
       });
 
@@ -529,15 +533,6 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
     clearResourceCache("listing-management:");
     setListingRefreshToken((current) => current + 1);
   }, []);
-
-  const runListingBatch = async <T,>(items: T[], action: (item: T) => Promise<unknown>) => {
-    const settled: PromiseSettledResult<unknown>[] = [];
-    for (let index = 0; index < items.length; index += 5) {
-      const group = await Promise.allSettled(items.slice(index, index + 5).map(action));
-      settled.push(...group);
-    }
-    return settled;
-  };
 
   const resetPageAndSelection = () => {
     setCurrentPage(1);
@@ -603,11 +598,14 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
             : item,
         ),
       );
+      refreshListingData();
       void messageApi.success("已归档");
+      return true;
     } catch {
       void messageApi.error("归档失败，请稍后重试");
+      return false;
     }
-  }, [messageApi]);
+  }, [messageApi, refreshListingData]);
 
   const handleArchiveListing = useCallback((row: ListingManagementRow) => {
     setArchiveReason("");
@@ -636,12 +634,17 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
     }
 
     setArchiveSubmitting(true);
+    setBatchProgress(0);
 
     try {
       if (archiveDialog?.mode === "single") {
-        await runArchiveListing(targetRows[0], reason);
+        if (!await runArchiveListing(targetRows[0], reason)) return;
       } else {
-        const results = await runListingBatch(targetRows, (row) => archiveListingManagementRow(row.id, reason));
+        const results = await runListingBatch(
+          targetRows,
+          (row) => archiveListingManagementRow(row.id, reason),
+          (completed) => setBatchProgress(completed),
+        );
         const succeededIds = new Set(
           targetRows
             .filter((_, index) => results[index]?.status === "fulfilled")
@@ -660,12 +663,12 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
           ),
         );
 
-        setSelectedRowKeys([]);
+        const failedIds = failedBatchIds(targetRows, results);
+        setSelectedRowKeys(failedIds);
         refreshListingData();
 
-        const failed = results.length - succeededIds.size;
-        if (failed > 0) {
-          void messageApi.warning(`批量归档完成：成功 ${succeededIds.size} 个，失败 ${failed} 个`);
+        if (failedIds.length > 0) {
+          void messageApi.warning(`批量归档完成：成功 ${succeededIds.size} 个，失败 ${failedIds.length} 个；失败项仍保持勾选，可重试`);
         } else {
           void messageApi.success(`已归档 ${succeededIds.size} 个 Listing`);
         }
@@ -677,6 +680,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
       void messageApi.error("归档失败，请稍后重试");
     } finally {
       setArchiveSubmitting(false);
+      setBatchProgress(0);
     }
   }, [
     archiveDialog,
@@ -803,6 +807,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
         keywordAnalysisUrl: values.keywordAnalysisUrl ?? "",
         adAnalysisUrl: values.adAnalysisUrl ?? "",
       });
+      refreshListingData();
       void messageApi.success("GPT分析链接已保存");
       closeGptAnalysisModal();
     } catch (error) {
@@ -811,7 +816,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
     } finally {
       setIsGptAnalysisSaving(false);
     }
-  }, [closeGptAnalysisModal, gptAnalysisForm, gptAnalysisRow, messageApi]);
+  }, [closeGptAnalysisModal, gptAnalysisForm, gptAnalysisRow, messageApi, refreshListingData]);
 
 
   const selectedListingRows = useMemo(() => {
@@ -854,9 +859,14 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
     }
 
     setRestoreSubmitting(true);
+    setBatchProgress(0);
 
     try {
-      const results = await runListingBatch(targetRows, (row) => restoreListingManagementRow(row.id));
+      const results = await runListingBatch(
+        targetRows,
+        (row) => restoreListingManagementRow(row.id),
+        (completed) => setBatchProgress(completed),
+      );
       const succeededIds = new Set(
         targetRows
           .filter((_, index) => results[index]?.status === "fulfilled")
@@ -875,12 +885,12 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
         ),
       );
 
-      setSelectedRowKeys([]);
+      const failedIds = failedBatchIds(targetRows, results);
+      setSelectedRowKeys(failedIds);
       refreshListingData();
 
-      const failed = results.length - succeededIds.size;
-      if (failed > 0) {
-        void messageApi.warning(`批量恢复完成：成功 ${succeededIds.size} 个，失败 ${failed} 个`);
+      if (failedIds.length > 0) {
+        void messageApi.warning(`批量恢复完成：成功 ${succeededIds.size} 个，失败 ${failedIds.length} 个；失败项仍保持勾选，可重试`);
       } else {
         void messageApi.success(`已恢复 ${succeededIds.size} 个 Listing`);
       }
@@ -890,6 +900,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
       void messageApi.error("批量恢复失败，请稍后重试");
     } finally {
       setRestoreSubmitting(false);
+      setBatchProgress(0);
     }
   }, [messageApi, restoreDialog, refreshListingData, setSelectedRowKeys]);
 
@@ -903,7 +914,9 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
       <div ref={listingManagementPageRootRef} className="listing-management">
         <Card size="small" className="listing-management__page-card">
           <RequestLoadingOverlay spinning={isTableRequesting} label="正在加载Listing数据，请稍候" />
-          {listingLoadError && <Button onClick={refreshListingData}>数据加载失败，点击重试（已保留旧数据）</Button>}
+          {(listingLoadError || summaryLoadError || filterOptionsLoadError) && (
+            <Button onClick={refreshListingData}>数据加载失败，点击重试（当前数据可能不是最新）</Button>
+          )}
           <div className="listing-management__title-row">
             <div>
               <h1>Listing管理</h1>
@@ -1097,7 +1110,8 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
               mode,
             })
               .then(() => {
-                void messageApi.success(`已给 ${selectedRowKeys.length} 个商品添加标签`);
+                const actionText = mode === "append" ? "添加" : mode === "replace" ? "替换" : "移除";
+                void messageApi.success(`已给 ${selectedRowKeys.length} 个商品${actionText}标签`);
                 setBatchTagOpen(false);
                 setSelectedRowKeys([]);
                 refreshListingData();
@@ -1116,7 +1130,10 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
           onCreateTag={handleCreateListingTag}
           onUpdateTag={handleUpdateListingTag}
           onDeleteTag={handleDeleteListingTag}
-          onTagsChange={setManagedTags}
+          onTagsChange={(tags) => {
+            setManagedTags(tags);
+            refreshListingData();
+          }}
           onClose={() => setTagManagerOpen(false)}
         />
         <Modal
@@ -1133,6 +1150,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
           onOk={() => void handleArchiveDialogOk()}
         >
           <div className="listing-management__archive-modal">
+            {archiveSubmitting && archiveDialog?.mode === "batch" && <p>处理进度：{batchProgress}/{archiveDialog.rows.length}</p>}
             <div className="listing-management__archive-modal-label">归档原因</div>
             <Input.TextArea
               autoFocus
@@ -1158,6 +1176,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
           onOk={() => void handleRestoreDialogOk()}
         >
           <p>恢复后这些 Listing 会重新回到正常状态。</p>
+          {restoreSubmitting && <p>处理进度：{batchProgress}/{restoreDialog?.rows.length ?? 0}</p>}
         </Modal>
     </PageShell>
   );

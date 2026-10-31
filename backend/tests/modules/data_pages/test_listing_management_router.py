@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -15,7 +16,11 @@ from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.data_pages.models import ProductCustomTag
-from app.modules.data_pages.repository import ListingManagementRepository, ListingTagRepository
+from app.modules.data_pages.repository import (
+    ListingManagementRepository,
+    ListingTagRepository,
+    _csv_values,
+)
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
     ListingManagementListData,
@@ -102,6 +107,11 @@ def _listing_item() -> ListingManagementItemRead:
 def test_openapi_contains_listing_management_route() -> None:
     paths = create_app().openapi()["paths"]
     assert "/api/listings/walmart" in paths
+
+
+def test_listing_multi_select_preserves_commas_unicode_and_quotes() -> None:
+    values = ["Synthetic, Store", "合成, 店铺", 'Synthetic "Quoted" Store']
+    assert _csv_values(json.dumps(values, ensure_ascii=False)) == values
 
 
 def test_owner_lookup_uses_latest_source_snapshot_and_keeps_pairing() -> None:
@@ -274,6 +284,64 @@ def test_listing_view_permission_cannot_modify_account_tags(monkeypatch: Any) ->
     )
     assert allowed.status_code == 200
     create_call.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload", "service_method"),
+    [
+        (
+            "POST",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000003/archive",
+            {"reason": "synthetic reason"},
+            "archive_listing",
+        ),
+        (
+            "POST",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000003/restore",
+            None,
+            "restore_listing",
+        ),
+        (
+            "PUT",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000003/gpt-analysis",
+            {"keyword_analysis_url": "", "ad_analysis_url": ""},
+            "update_gpt_analysis_link",
+        ),
+        (
+            "POST",
+            "/api/listings/tags/batch-set",
+            {"listing_ids": ["00000000-0000-0000-0000-000000000003"], "mode": "replace"},
+            "batch_set_tags",
+        ),
+        (
+            "PATCH",
+            "/api/listings/tags/00000000-0000-0000-0000-000000000004",
+            {"name": "Synthetic"},
+            "update_tag",
+        ),
+        (
+            "DELETE",
+            "/api/listings/tags/00000000-0000-0000-0000-000000000004",
+            None,
+            "delete_tag",
+        ),
+    ],
+)
+def test_listing_view_permission_cannot_call_any_write_service(
+    monkeypatch: Any,
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None,
+    service_method: str,
+) -> None:
+    write_call = MagicMock()
+    monkeypatch.setattr(ListingManagementService, service_method, write_call)
+    response = TestClient(_app("page:products:listing-management:view")).request(
+        method, path, json=payload
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+    write_call.assert_not_called()
 
 
 def test_listing_tag_create_rejects_account_outside_authorized_scope() -> None:
