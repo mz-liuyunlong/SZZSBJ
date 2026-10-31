@@ -45,6 +45,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const [tab,setTab]=useState<Tab>("analysis");
  const [role,setRole]=useState("刘运营");
  const [filters,setFilters]=useState<FilterState>({...blankFilters});
+ const [searchDraft,setSearchDraft]=useState("");
  const [showStats,setShowStats]=useState(true);
  const [activeStat,setActiveStat]=useState("");
  const [tables,setTables]=useState<Record<"analysis"|"management",TableState>>({
@@ -108,7 +109,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const changeFilter=(patch:Partial<FilterState>)=>{setFilters(old=>({...old,...patch}));setTables(old=>({...old,[tab==="rules"?"analysis":tab]:{...old[tab==="rules"?"analysis":tab],page:1}}));};
  const selectTab=(key:string)=>{
   if(!["analysis","management","rules"].includes(key))return;
-  setTab(key as Tab);setFilters({...blankFilters});setActiveStat("");
+  setTab(key as Tab);setFilters({...blankFilters});setSearchDraft("");setActiveStat("");
  };
  const onStat=(key:string)=>{
   setActiveStat(old=>old===key?"":key);
@@ -121,7 +122,8 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
   setTables(old=>({...old,[current]:{...old[current],...patch}}));
  };
  const fields=tab==="management"?MANAGEMENT_FIELDS:ANALYSIS_FIELDS;
- const fixed=tab==="management"?["id","item","action"]:["identity","sku","action"];
+ const fixed=tab==="management"?["id","item"]:["identity","sku"];
+ const orderedColumns=(keys:string[])=>[...fixed,...keys.filter(k=>!fixed.includes(k)&&k!=="action"),"action"];
  const exportCsv=()=>{
   let csv:string;
   if(tab==="analysis"){
@@ -147,9 +149,9 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
       <Select aria-label="选择店铺" value={filters.store} onChange={v=>changeFilter({store:v})} options={[{value:"all",label:"全部店铺"},...stores.map(x=>({value:x,label:x}))]}/>
       <Select aria-label="选择负责人" value={filters.owner} onChange={v=>changeFilter({owner:v})} options={[{value:"all",label:"全部负责人"},...owners.map(x=>({value:x,label:x}))]}/>
       {tab==="analysis"?<><Select aria-label="风险等级" value={filters.risk} onChange={v=>changeFilter({risk:v})} options={[{value:"all",label:"全部风险"},{value:"high",label:"高风险"},{value:"medium",label:"中风险"},{value:"low",label:"低风险"}]}/><Select aria-label="排序方式" value={filters.sort} onChange={v=>changeFilter({sort:v})} options={[{value:"risk",label:"风险优先"},{value:"age",label:"库龄最高"},{value:"value",label:"库存成本最高"},{value:"sales",label:"销量最低"}]}/></>:<Select aria-label="清货状态" value={filters.status} onChange={v=>changeFilter({status:v})} options={[{value:"all",label:"全部状态"},...Object.entries({pending:"待审批",supplement:"待补资料",ready:"待执行",running:"执行中",paused:"已暂停",done:"已完成",rejected:"已驳回",cancelled:"已撤回"}).map(([value,label])=>({value,label}))]}/>}
-      <ConnectedSearch typeAriaLabel="清货搜索范围" typeOptions={[{value:"all",label:"全部"}]} typeValue="all" onTypeChange={()=>{}} inputAriaLabel="搜索清货记录" inputPlaceholder={tab==="analysis"?"搜索 SKU / MSKU / 商品ID / 品名":"搜索清货单号 / SKU / 申请说明"} inputValue={filters.query} onInputChange={query=>changeFilter({query})} onSearch={()=>{}}/>
+      <ConnectedSearch typeAriaLabel="清货搜索范围" typeOptions={[{value:"all",label:"全部"}]} typeValue="all" onTypeChange={()=>{}} inputAriaLabel="搜索清货记录" inputPlaceholder={tab==="analysis"?"搜索 SKU / MSKU / 商品ID / 品名":"搜索清货单号 / SKU / 申请说明"} inputValue={searchDraft} onInputChange={setSearchDraft} onSearch={()=>changeFilter({query:searchDraft})}/>
       <Button type="primary" icon={<FileAddOutlined/>} onClick={()=>setManualOpen(true)}>申请 SKU</Button>
-      <Button icon={<ReloadOutlined/>} onClick={()=>{setFilters({...blankFilters});setActiveStat("");setTableState({page:1});}}>刷新</Button>
+      <Button icon={<ReloadOutlined/>} onClick={()=>{setSearchDraft("");setFilters({...blankFilters});setActiveStat("");setTableState({page:1});void message.info("已刷新 Mock 视图");}}>刷新</Button>
      </div>
      {tab==="analysis"&&<div className="clearance-quick"><Typography.Text type="secondary">快速定位</Typography.Text>{[
       ["all","全部风险"],["untreated","待评估"],["auto","系统识别"],["manual","人工申请"],["age","库龄 ≥"+data.rules.mediumAge+"天"],["coverage","售罄 ≥"+data.rules.highCoverage+"天"],["decline","近期销量下滑"],
@@ -157,7 +159,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
      <div className="clearance-table-tools"><Typography.Text type="secondary">{tab==="analysis"?"风险优先 · 经营风险辅助，不独立入池":"全部审批决策由独立审批工作台处理"}</Typography.Text><Space><Button size="small" icon={<FilterOutlined/>} onClick={()=>setColumnDrawer(true)}>列配置</Button><Button size="small" icon={<DownloadOutlined/>} onClick={exportCsv}>导出</Button></Space></div>
      {tab==="analysis"?<ClearanceAnalysisTable rows={analysisRows} rules={data.rules} tasks={data.tasks} manual={data.manual} state={tables.analysis} onPage={(page,pageSize)=>setTableState({page,pageSize})} onInspect={setApplicant} onApply={id=>{const p=CLEARANCE_PRODUCTS.find(x=>x.id===id);if(!p||p.owner!==role||p.avail<=0||activeTaskFor(data.tasks,id)){void message.error("当前 SKU 不能申请清货");return;}setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"});}} onTask={setTaskId}/>:<ClearanceManagementTable rows={managementRows} state={tables.management} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
      <Typography.Paragraph className="clearance-footer-hint" type="secondary">所有商品、指标、申请及规则均为 Mock 演示数据。风险统计不代表真实经营数据。</Typography.Paragraph>
-     <RuntimeColumnConfigDrawer open={columnDrawer} groups={[{title:"显示字段",fields:fields.map(([key,title])=>({key,title}))}]} fixedKeys={fixed} defaultKeys={[...fields.map(([key])=>key)]} appliedKeys={state.columns} onApply={columns=>setTableState({columns})} onClose={()=>setColumnDrawer(false)} onSaveTemplate={()=>{void message.info("Mock 模式不保存云端模板");}}/>
+     <RuntimeColumnConfigDrawer open={columnDrawer} groups={[{title:"显示字段",fields:fields.map(([key,title])=>({key,title}))}]} fixedKeys={fixed} defaultKeys={[...fields.map(([key])=>key)]} appliedKeys={state.columns} onApply={columns=>setTableState({columns:orderedColumns(columns)})} onClose={()=>setColumnDrawer(false)} onSaveTemplate={()=>{void message.info("Mock 模式不保存云端模板");}}/>
     </>}
    </Card>
   </div>
