@@ -1,4 +1,5 @@
 import json
+from collections import namedtuple
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -504,6 +505,46 @@ def test_listing_tag_repository_rejects_mixed_scope_before_any_write() -> None:
     session.commit.assert_not_called()
 
 
+@pytest.mark.parametrize("inactive", [False, True])
+def test_listing_tag_batch_rejects_missing_or_inactive_id_before_any_write(
+    inactive: bool,
+) -> None:
+    session = MagicMock(spec=Session)
+    listing_id = UUID("00000000-0000-0000-0000-000000000001")
+    valid_tag_id = UUID("00000000-0000-0000-0000-000000000011")
+    invalid_tag_id = UUID("00000000-0000-0000-0000-000000000012")
+    listing_row = namedtuple("ListingRow", "id source_account_ref item_id")
+    session.execute.return_value.all.return_value = [
+        listing_row(listing_id, "synthetic-account", "synthetic-item")
+    ]
+    session.scalars.return_value = (
+        []
+        if inactive
+        else [
+            ProductCustomTag(
+                id=valid_tag_id,
+                source_account_ref="synthetic-account",
+                name="Synthetic valid",
+                color="#1677FF",
+                is_active=True,
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="LISTING_TAG_NOT_FOUND_OR_INACTIVE"):
+        ListingTagRepository(session).batch_set_tags(
+            account_refs=frozenset({"synthetic-account"}),
+            listing_ids=[str(listing_id)],
+            tag_ids=[str(valid_tag_id), str(invalid_tag_id)],
+            tag_values=[],
+            mode="replace",
+        )
+
+    session.execute.assert_called_once()
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
 def test_listing_tag_definition_cannot_cross_account_boundary() -> None:
     session = MagicMock(spec=Session)
     foreign_tag = ProductCustomTag(
@@ -581,6 +622,30 @@ def test_listing_tag_list_filters_definitions_by_account() -> None:
     ListingTagRepository(session).list_tags(account_refs=frozenset({"synthetic-account"}))
     sql = str(session.execute.call_args.args[0])
     assert "product_custom_tags.source_account_ref IN" in sql
+    assert (
+        "product_custom_tags.source_account_ref = product_custom_tag_assignments.source_account_ref"
+    ) in sql
+
+
+def test_listing_tag_filter_requires_assignment_and_definition_account_match() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 0
+    session.execute.return_value.all.return_value = []
+
+    ListingManagementRepository(session).list_listings(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        search_field="sku",
+        keyword="",
+        tag='["Synthetic"]',
+        page=1,
+        page_size=50,
+    )
+
+    sql = str(session.execute.call_args.args[0])
+    assert (
+        "product_custom_tags.source_account_ref = product_custom_tag_assignments.source_account_ref"
+    ) in sql
 
 
 def test_listing_server_sort_uses_monitor_projection() -> None:

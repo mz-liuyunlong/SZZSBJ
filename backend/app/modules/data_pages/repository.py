@@ -1486,6 +1486,8 @@ class ListingManagementRepository:
                     ProductCustomTagAssignment.source_account_ref
                     == ListingManagementCurrentMart.source_account_ref,
                     ProductCustomTagAssignment.item_id == ListingManagementCurrentMart.item_id,
+                    ProductCustomTag.source_account_ref
+                    == ProductCustomTagAssignment.source_account_ref,
                     ProductCustomTag.deleted_at.is_(None),
                     ProductCustomTag.is_active.is_(True),
                     ProductCustomTag.name.in_(tag_values),
@@ -1788,7 +1790,11 @@ class ListingTagRepository:
                 ProductCustomTagAssignment.tag_id.label("tag_id"),
                 func.count().label("usage"),
             )
+            .join(ProductCustomTag, ProductCustomTag.id == ProductCustomTagAssignment.tag_id)
             .where(ProductCustomTagAssignment.source_account_ref.in_(account_refs))
+            .where(
+                ProductCustomTag.source_account_ref == ProductCustomTagAssignment.source_account_ref
+            )
             .group_by(ProductCustomTagAssignment.tag_id)
             .subquery()
         )
