@@ -7,7 +7,7 @@ production writes formal records on the production database only.
 
 import hashlib
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, text
@@ -33,16 +33,30 @@ from app.modules.pmc_domestic.packing_rules import (
     listing_version,
 )
 from app.modules.pmc_domestic.packing_schemas import (
-    ApproveCommand,
     Candidate,
     CandidateList,
     EditDraftSaved,
     EditOptions,
     ListingChoice,
+    ListingHit,
+    ListingSearch,
     OrderList,
     OrderRead,
     PackingSummary,
+    SplitLine,
 )
+
+MAX_SPLIT_LINES = 10
+LISTING_SEARCH_LIMIT = 20
+
+
+def split_child_id(base, number):
+    """Deterministic id for split line ``number`` (>= 2): candidate or idempotency key.
+
+    Line 1 keeps the original value, so the active-candidate unique index, replay by
+    idempotency key and the pending list (which hides decided candidates) are unchanged.
+    """
+    return uuid5(NAMESPACE_URL, f"szzsbj:packing-split:{base}:{number}")
 
 
 def conflict(reason):
@@ -219,83 +233,28 @@ class PackingService:
 
                 draft = s.get(PackingManualRequest, candidate.id)
                 original_candidate = Candidate.model_validate(draft.source_snapshot_json)
+            if kind == "approve" and len(candidate.split_lines) > 1:
+                return self._approve_split(
+                    ident, cmd, candidate, original_candidate, actor, request, digest
+                )
             if kind == "approve":
                 candidate = self.final_candidate(candidate, cmd)
                 if not candidate.can_approve:
                     conflict("CANDIDATE_BLOCKED")
                 if candidate.available_quantity is None or cmd.qty > candidate.available_quantity:
                     conflict("INSUFFICIENT_STOCK")
-            identity_key = fingerprint(
-                [str(candidate.board_id), candidate.store_id, candidate.item_id]
-            )
-            if candidate.origin != "manual" and s.scalar(
-                select(PackingOrder.id).where(
-                    PackingOrder.source_account_ref == cmd.source_account_ref,
-                    PackingOrder.source_board_id == candidate.board_id,
-                    PackingOrder.store_id == candidate.store_id,
-                    PackingOrder.item_id == candidate.item_id,
-                    PackingOrder.status != "voided",
-                )
-            ):
-                conflict("FINAL_IDENTITY_ALREADY_DECIDED")
-            pk = None
-            if kind == "approve":
-                day = datetime.now(ZoneInfo("Asia/Shanghai")).date()
-                serial = s.scalar(
-                    text(
-                        "INSERT INTO ops_domestic_pk_sequences (business_date,last_value) "
-                        "VALUES (:day,1) ON CONFLICT (business_date) DO UPDATE "
-                        "SET last_value=ops_domestic_pk_sequences.last_value+1 "
-                        "WHERE ops_domestic_pk_sequences.last_value<999 RETURNING last_value"
-                    ),
-                    {"day": day},
-                )
-                if serial is None:
-                    conflict("PK_DAILY_LIMIT")
-                pk = f"PK{day:%y%m%d}-{serial:03d}"
-            customs = getattr(cmd, "customs", "default")
-            verify = verification_record(get_settings().app_env.value)
-            row = PackingOrder(
-                source_account_ref=cmd.source_account_ref,
-                warehouse_id=cmd.warehouse_id,
-                candidate_id=ident,
-                inbound_order_sn=candidate.inbound_order_sn,
-                sku=candidate.sku,
-                store_id=candidate.store_id,
-                item_id=candidate.item_id,
-                pk=pk,
+            row = self._create_order(
+                ident,
+                cmd,
+                kind,
+                candidate,
+                original_candidate,
+                actor,
                 qty=cmd.qty if kind == "approve" else None,
-                customs_value=candidate.customs_default
-                if customs == "default"
-                else customs == "declare",
-                customs_src=candidate.customs_default_src if customs == "default" else "manual",
-                rwh=getattr(cmd, "rwh", None),
-                is_test=verify,
-                status="approved" if kind == "approve" else "rejected",
-                version=1,
-                source_publication_id=candidate.publication_id,
-                source_board_id=candidate.board_id,
-                snapshot_json=candidate.model_dump(mode="json"),
-                source_snapshot_json=original_candidate.model_dump(mode="json"),
-                final_identity_key=identity_key if candidate.origin != "manual" else None,
-                business_test=verify,
-                actor_uid=actor,
-                note=getattr(cmd, "note", None),
             )
-            s.add(row)
-            s.flush()
-            if kind == "approve":
-                s.add(
-                    PackingAllocation(
-                        order_id=row.id,
-                        source_account_ref=row.source_account_ref,
-                        warehouse_id=row.warehouse_id,
-                        source_publication_id=row.source_publication_id,
-                        source_board_id=row.source_board_id,
-                        qty=cmd.qty,
-                    )
-                )
             result = order_read(row)
+            if row.pk:
+                result = result.model_copy(update={"split_pks": [row.pk]})
             s.add(
                 PackingEvent(
                     order_id=row.id,
@@ -319,6 +278,143 @@ class PackingService:
         except Exception:
             s.rollback()
             raise
+
+    def _next_pk(self):
+        day = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        serial = self.session.scalar(
+            text(
+                "INSERT INTO ops_domestic_pk_sequences (business_date,last_value) "
+                "VALUES (:day,1) ON CONFLICT (business_date) DO UPDATE "
+                "SET last_value=ops_domestic_pk_sequences.last_value+1 "
+                "WHERE ops_domestic_pk_sequences.last_value<999 RETURNING last_value"
+            ),
+            {"day": day},
+        )
+        if serial is None:
+            conflict("PK_DAILY_LIMIT")
+        return f"PK{day:%y%m%d}-{serial:03d}"
+
+    def _create_order(self, candidate_id, cmd, kind, candidate, original_candidate, actor, *, qty):
+        """Insert one decided packing order (+ stock allocation when approved)."""
+        s = self.session
+        identity_key = fingerprint([str(candidate.board_id), candidate.store_id, candidate.item_id])
+        if candidate.origin != "manual" and s.scalar(
+            select(PackingOrder.id).where(
+                PackingOrder.source_account_ref == cmd.source_account_ref,
+                PackingOrder.source_board_id == candidate.board_id,
+                PackingOrder.store_id == candidate.store_id,
+                PackingOrder.item_id == candidate.item_id,
+                PackingOrder.status != "voided",
+            )
+        ):
+            conflict("FINAL_IDENTITY_ALREADY_DECIDED")
+        pk = self._next_pk() if kind == "approve" else None
+        customs = getattr(cmd, "customs", "default")
+        verify = verification_record(get_settings().app_env.value)
+        row = PackingOrder(
+            source_account_ref=cmd.source_account_ref,
+            warehouse_id=cmd.warehouse_id,
+            candidate_id=candidate_id,
+            inbound_order_sn=candidate.inbound_order_sn,
+            sku=candidate.sku,
+            store_id=candidate.store_id,
+            item_id=candidate.item_id,
+            pk=pk,
+            qty=qty,
+            customs_value=candidate.customs_default
+            if customs == "default"
+            else customs == "declare",
+            customs_src=candidate.customs_default_src if customs == "default" else "manual",
+            rwh=getattr(cmd, "rwh", None),
+            is_test=verify,
+            status="approved" if kind == "approve" else "rejected",
+            version=1,
+            source_publication_id=candidate.publication_id,
+            source_board_id=candidate.board_id,
+            snapshot_json=candidate.model_dump(mode="json"),
+            source_snapshot_json=original_candidate.model_dump(mode="json"),
+            final_identity_key=identity_key if candidate.origin != "manual" else None,
+            business_test=verify,
+            actor_uid=actor,
+            note=getattr(cmd, "note", None),
+        )
+        s.add(row)
+        s.flush()
+        if kind == "approve":
+            s.add(
+                PackingAllocation(
+                    order_id=row.id,
+                    source_account_ref=row.source_account_ref,
+                    warehouse_id=row.warehouse_id,
+                    source_publication_id=row.source_publication_id,
+                    source_board_id=row.source_board_id,
+                    qty=qty,
+                )
+            )
+        return row
+
+    def _approve_split(self, ident, cmd, candidate, original_candidate, actor, request, digest):
+        """Saved split draft: one packing order (own PK and allocation) per line, atomically."""
+        s = self.session
+        if cmd.target_store_id or cmd.target_item_id:
+            conflict("SPLIT_DRAFT_TARGET_FIXED")
+        total = sum(line.qty for line in candidate.split_lines)
+        if cmd.qty != total:
+            conflict("SPLIT_QTY_MISMATCH")
+        if candidate.available_quantity is None or total > candidate.available_quantity:
+            conflict("INSUFFICIENT_STOCK")
+        stores = self._store_names(candidate.source_account_ref)
+        resolved = [
+            self._resolve_line(candidate, line.store_id, line.item_id, line.listing_version, stores)
+            for line in candidate.split_lines
+        ]
+        rows = []
+        for number, (line, (listing, blocked)) in enumerate(
+            zip(candidate.split_lines, resolved, strict=True), 1
+        ):
+            if blocked:
+                conflict(blocked[0])
+            line_candidate = self._with_target(candidate, listing, stores, blocked=[]).model_copy(
+                update={"default_quantity": line.qty}
+            )
+            if not line_candidate.can_approve:
+                conflict("CANDIDATE_BLOCKED")
+            rows.append(
+                self._create_order(
+                    ident if number == 1 else split_child_id(ident, number),
+                    cmd,
+                    "approve",
+                    line_candidate,
+                    original_candidate,
+                    actor,
+                    qty=line.qty,
+                )
+            )
+        pks = [row.pk for row in rows]
+        results = []
+        for number, row in enumerate(rows, 1):
+            result = order_read(row).model_copy(update={"split_pks": pks})
+            results.append(result)
+            s.add(
+                PackingEvent(
+                    order_id=row.id,
+                    source_account_ref=row.source_account_ref,
+                    idempotency_key=cmd.idempotency_key
+                    if number == 1
+                    else split_child_id(cmd.idempotency_key, number),
+                    actor_uid=actor,
+                    event_kind="approve",
+                    order_version=1,
+                    request_hash=digest,
+                    request_json={**request, "split_line": number, "split_pks": pks},
+                    response_json=result.model_dump(mode="json"),
+                )
+            )
+        pending_edit = s.get(PackingPendingEdit, ident)
+        if pending_edit is not None:
+            s.delete(pending_edit)
+        s.commit()
+        return results[0]
 
     def listing_rows(self, candidate):
         """Same eligibility as Listing 管理: published WFS rows with a product link."""
@@ -364,29 +460,53 @@ class PackingService:
             ],
         )
 
-    def final_candidate(self, candidate, cmd):
-        target_store = cmd.target_store_id or candidate.store_id
-        target_item = cmd.target_item_id or candidate.item_id
-        edited = target_store != candidate.store_id or target_item != candidate.item_id
-        if edited and len((cmd.edit_reason or "").strip()) < 2:
-            conflict("EDIT_REASON_REQUIRED")
-        # Owner decision 2026-10-21: the published inbound row is the allocation
-        # basis. A new target Listing never moves or duplicates source inventory.
-        rows = [
-            r
-            for r in self.listing_rows(candidate)
-            if r.store_id == target_store and r.item_id == target_item
-        ]
+    # --- target Listing resolution (modify form, approve) ---------------------------
+
+    def _store_names(self, account):
+        names: dict[str, set[str]] = {}
+        for row in self.session.scalars(select(Store).where(Store.source_account_ref == account)):
+            if row.store_name:
+                names.setdefault(row.store_id, set()).add(row.store_name)
+        return {k: next(iter(v)) for k, v in names.items() if len(v) == 1}
+
+    def _target_blocked(self, candidate, listing):
+        """Why a Listing may not be the target of this candidate (empty = usable).
+
+        Same proof as the pending list (published, product link, WFS converted, GTIN,
+        MSKU) plus: the Listing's own local SKU, when recorded, must be this SKU; a
+        cross-store target needs the shared-stock proof.
+        """
+        blocked = list(listing_blocked_reasons(listing))
+        local_sku = (listing.local_sku or "").strip()
+        if local_sku and local_sku != candidate.sku:
+            blocked.append("SKU_MISMATCH")
+        cross = candidate.store_id is not None and listing.store_id != candidate.store_id
+        if cross and candidate.available_quantity is None:
+            blocked.append("CROSS_STORE_PROOF_MISSING")
+        return blocked
+
+    def _listings_by_identity(self, account, store_id, item_id):
+        return list(
+            self.session.scalars(
+                select(Listing).where(
+                    Listing.source_account_ref == account,
+                    Listing.store_id == store_id,
+                    Listing.item_id == item_id,
+                )
+            )
+        )
+
+    def _resolve_line(self, candidate, store_id, item_id, version, stores):
+        rows = self._listings_by_identity(candidate.source_account_ref, store_id, item_id)
         if len(rows) != 1:
             conflict("LISTING_MISSING_OR_AMBIGUOUS")
         listing = rows[0]
-        if listing.fulfillment_type != "1":
-            conflict("WFS_NOT_CONVERTED")
-        if (edited and not cmd.listing_version) or (
-            cmd.listing_version and cmd.listing_version != listing_version(listing)
-        ):
+        if version and version != listing_version(listing):
             conflict("LISTING_CHANGED")
-        blocked = [
+        return listing, self._target_blocked(candidate, listing)
+
+    def _with_target(self, candidate, listing, stores, blocked):
+        other = [
             r
             for r in candidate.blocked_reasons
             if r
@@ -396,29 +516,95 @@ class PackingService:
                 "GTIN_INVALID",
                 "MSKU_MISSING",
                 "STORE_UNKNOWN",
+                "SKU_MISMATCH",
+                "CROSS_STORE_PROOF_MISSING",
             )
         ]
-        blocked.extend(listing_blocked_reasons(listing))
-        names = set(
-            self.session.scalars(
-                select(Store.store_name).where(
-                    Store.source_account_ref == candidate.source_account_ref,
-                    Store.store_id == target_store,
-                )
-            )
-        )
-        target_name = next(iter(names)) if len(names) == 1 else None
+        reasons = other + [r for r in blocked if r not in other]
         return candidate.model_copy(
             update={
                 "store_id": listing.store_id,
-                "store_name": target_name,
+                "store_name": stores.get(listing.store_id),
                 "item_id": listing.item_id,
                 "gtin": listing.gtin,
                 "msku": listing.msku,
-                "can_approve": not blocked,
-                "blocked_reasons": blocked,
+                "can_approve": not reasons,
+                "blocked_reasons": reasons,
             }
         )
+
+    def listing_search(self, ident, account, item_text, accounts):
+        """ItemID search over Listing 管理 (whole account), for the modify form."""
+        if account not in accounts:
+            raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
+        candidate = next(
+            (r for r in self.all_candidates(frozenset({account})) if r.id == ident), None
+        )
+        if candidate is None:
+            missing()
+        text_value = (item_text or "").strip()
+        if not text_value.isdigit() or not 4 <= len(text_value) <= 20:
+            return ListingSearch(items=[])
+        stores = self._store_names(account)
+        exact = list(
+            self.session.scalars(
+                select(Listing).where(
+                    Listing.source_account_ref == account, Listing.item_id == text_value
+                )
+            )
+        )
+        prefix = list(
+            self.session.scalars(
+                select(Listing)
+                .where(
+                    Listing.source_account_ref == account,
+                    Listing.item_id.like(f"{text_value}%"),
+                    Listing.item_id != text_value,
+                )
+                .order_by(Listing.item_id, Listing.store_id)
+                .limit(LISTING_SEARCH_LIMIT)
+            )
+        )
+        hits = []
+        for listing in (exact + prefix)[:LISTING_SEARCH_LIMIT]:
+            blocked = self._target_blocked(candidate, listing)
+            hits.append(
+                ListingHit(
+                    store_id=listing.store_id,
+                    store_name=stores.get(listing.store_id),
+                    item_id=listing.item_id,
+                    gtin=listing.gtin,
+                    msku=listing.msku,
+                    local_sku=listing.local_sku,
+                    listing_version=listing_version(listing),
+                    cross_store=candidate.store_id is not None
+                    and listing.store_id != candidate.store_id,
+                    wfs_converted=listing.fulfillment_type == "1",
+                    usable=not blocked,
+                    blocked_reasons=blocked,
+                )
+            )
+        return ListingSearch(items=hits)
+
+    def final_candidate(self, candidate, cmd):
+        target_store = cmd.target_store_id or candidate.store_id
+        target_item = cmd.target_item_id or candidate.item_id
+        edited = target_store != candidate.store_id or target_item != candidate.item_id
+        if edited and len((cmd.edit_reason or "").strip()) < 2:
+            conflict("EDIT_REASON_REQUIRED")
+        if edited and not cmd.listing_version:
+            conflict("LISTING_CHANGED")
+        # Owner decision 2026-10-21: the published inbound row is the allocation
+        # basis. A new target Listing never moves or duplicates source inventory.
+        stores = self._store_names(candidate.source_account_ref)
+        listing, blocked = self._resolve_line(
+            candidate, target_store, target_item, cmd.listing_version, stores
+        )
+        if "WFS_NOT_CONVERTED" in blocked:
+            conflict("WFS_NOT_CONVERTED")
+        if "SKU_MISMATCH" in blocked:
+            conflict("SKU_MISMATCH")
+        return self._with_target(candidate, listing, stores, blocked)
 
     def _base_candidates(self, accounts):
         from app.modules.pmc_domestic.draft_numbers import attach_draft_numbers
@@ -493,32 +679,54 @@ class PackingService:
             conflict("MANUAL_DRAFT_UNSUPPORTED")
         if candidate.candidate_version != cmd.candidate_version:
             conflict("SOURCE_CHANGED")
-        merged = self.final_candidate(
+        # Rocky 2026-11-01: every modification carries a reason.
+        if len((cmd.edit_reason or "").strip()) < 2:
+            conflict("EDIT_REASON_REQUIRED")
+        lines = cmd.lines or []
+        if len({(line.target_store_id, line.target_item_id) for line in lines}) != len(lines):
+            conflict("SPLIT_LINES_DUPLICATE")
+        stores = self._store_names(cmd.source_account_ref)
+        resolved = []
+        for line in lines:
+            listing, blocked = self._resolve_line(
+                candidate, line.target_store_id, line.target_item_id, line.listing_version, stores
+            )
+            for reason in ("WFS_NOT_CONVERTED", "SKU_MISMATCH", "CROSS_STORE_PROOF_MISSING"):
+                if reason in blocked:
+                    conflict(reason)
+            resolved.append((line, listing, blocked))
+        first_listing = resolved[0][1]
+        merged = self._with_target(
             candidate,
-            ApproveCommand(
-                source_account_ref=cmd.source_account_ref,
-                warehouse_id=cmd.warehouse_id,
-                candidate_version=cmd.candidate_version,
-                idempotency_key=uuid4(),
-                qty=cmd.qty,
-                customs=cmd.customs,
-                target_store_id=cmd.target_store_id,
-                target_item_id=cmd.target_item_id,
-                listing_version=cmd.listing_version,
-                edit_reason=cmd.edit_reason,
-            ),
+            first_listing,
+            stores,
+            sorted({r for _, _, blocked in resolved for r in blocked}),
         )
         if not merged.can_approve:
             conflict("CANDIDATE_BLOCKED")
-        if merged.available_quantity is None or cmd.qty > merged.available_quantity:
+        total = cmd.total_qty
+        if merged.available_quantity is None or total > merged.available_quantity:
             conflict("INSUFFICIENT_STOCK")
+        split = [
+            SplitLine(
+                store_id=listing.store_id,
+                store_name=stores.get(listing.store_id),
+                item_id=listing.item_id,
+                gtin=listing.gtin,
+                msku=listing.msku,
+                listing_version=listing_version(listing),
+                qty=line.qty,
+            )
+            for line, listing, _ in resolved
+        ]
+        merged = merged.model_copy(update={"split_lines": split if len(split) > 1 else []})
         s = self.session
         row = s.get(PackingPendingEdit, ident) or PackingPendingEdit(
             candidate_id=ident,
             source_account_ref=cmd.source_account_ref,
         )
         row.base_candidate_version = candidate.candidate_version
-        row.requested_qty = cmd.qty
+        row.requested_qty = total
         row.customs = cmd.customs
         row.edit_reason = cmd.edit_reason
         row.draft_snapshot_json = merged.model_dump(mode="json")
@@ -528,7 +736,7 @@ class PackingService:
         s.commit()
         snapshot = merged.model_copy(
             update={
-                "default_quantity": cmd.qty,
+                "default_quantity": total,
                 "manual_customs": cmd.customs,
                 "edit_draft_pending": True,
             }

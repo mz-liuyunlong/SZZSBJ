@@ -16,13 +16,18 @@ export interface ApprovalCandidate {
   customs_default?: boolean; customs_default_src?: "default" | "product_remark" | "purchase_remark" | "purchase_order"; customs_proof?: { value: boolean; source: string; rule: string; field: string | null; remark: string | null; ref: string | null; observed_at: string | null } | null; waiting_days?: number | null; history_complete?: boolean;
   edit_draft_pending?: boolean;
   edit_draft_stale?: boolean;
+  /** Saved split of one packing slip into several targets; empty when not split. */
+  split_lines?: SplitLine[];
 }
+export interface SplitLine { store_id: string; store_name: string | null; item_id: string; gtin: string | null; msku: string | null; listing_version: string; qty: number }
 export interface PackingOrder {
   id: string; candidate_id: string; pk: string | null; status: "approved" | "rejected" | "voided"; qty: number | null;
   version: number; is_test: boolean; customs_value: boolean | null; customs_src: string; rwh: string | null;
   actor_uid: string; note: string | null; created_at: string; snapshot: ApprovalCandidate;
   source_snapshot?: ApprovalCandidate | null;
   voided_at?: string | null; void_note?: string | null;
+  /** All PKs created by this approval, in line order (one entry when not split). */
+  split_pks?: string[];
 }
 export interface PackingSummary { pending: number; overdue: number; blocked: number; approved: number; rejected: number }
 export interface PackingEvent { id: string; event_kind: string; actor_uid: string; order_version: number; occurred_at: string; note: string | null }
@@ -49,10 +54,17 @@ export const getApprovalOptions = (signal?: AbortSignal) => backendRequest<{ sto
 export const listPackingOrders = (f: PackingApprovalFilters, page: number, signal?: AbortSignal) => backendRequest<{ items: PackingOrder[]; total: number }>(`${prefix}/orders?${approvalQuery(f, page, 20)}`, { signal });
 export const getPackingEvents = (id: string, signal?: AbortSignal) => backendRequest<{ items: PackingEvent[] }>(`${prefix}/orders/${encodeURIComponent(id)}/events`, { signal });
 export const decidePacking = (id: string, kind: DecisionKind, body: DecisionPayload) => backendRequest<PackingOrder>(`${prefix}/pending/${encodeURIComponent(id)}/${kind}`, { method: "POST", body: JSON.stringify(body) });
-const reasons: Record<string, string> = { STORE_UNKNOWN: "店铺归属未知", ELIGIBLE_LISTING_MISSING: "无符合条件的在线商品", WFS_NOT_CONVERTED: "尚未完成 WFS 转换", GTIN_INVALID: "GTIN缺失或格式无效", MSKU_MISSING: "MSKU缺失", STOCK_PROOF_UNKNOWN: "良品或锁定量未知", STOCK_FULLY_ALLOCATED: "可用库存已分配完", EDIT_DRAFT_STALE: "来源已变化，请重新打开修改并保存" };
+const reasons: Record<string, string> = {
+  STORE_UNKNOWN: "店铺归属未知", ELIGIBLE_LISTING_MISSING: "无符合条件的在线商品（未上架或缺商品链接）", WFS_NOT_CONVERTED: "该 ItemID 尚未完成 WFS 转换，需完成 WFS 转换才能使用",
+  GTIN_INVALID: "GTIN缺失或格式无效", MSKU_MISSING: "MSKU缺失", STOCK_PROOF_UNKNOWN: "良品或锁定量未知", STOCK_FULLY_ALLOCATED: "可用库存已分配完", EDIT_DRAFT_STALE: "来源已变化，请重新打开修改并保存",
+  EDIT_REASON_REQUIRED: "修改原因必填", SKU_MISMATCH: "该 ItemID 在 Listing 管理里属于其他 SKU，不能用于本打包单", SPLIT_LINES_DUPLICATE: "拆单的店铺 / ItemID 不能重复",
+  SPLIT_QTY_MISMATCH: "审批数量与拆单合计不一致，请重新打开修改并保存", CROSS_STORE_PROOF_MISSING: "可用库存未知，不能改到其他店铺", LISTING_MISSING_OR_AMBIGUOUS: "Listing 管理里找不到该店铺 / ItemID，或不唯一",
+  LISTING_CHANGED: "Listing 已变化，请重新搜索选择",
+};
 export const approvalBlockedText = (codes: string[]) => codes.map((code) => reasons[code] ?? code).join("；");
 export function approvalErrorText(error: unknown) {
   if (error instanceof BackendRequestError) {
+    if (error.code && reasons[error.code]) return reasons[error.code];
     if (error.code === "PASSCODE_REJECTED") return "口令不对";
     if (error.code === "PASSCODE_LOCKED") return "口令错误次数过多，请 10 分钟后再试";
     if (error.code === "PASSCODE_UNSET") return "服务器尚未设置国内仓口令";
@@ -69,16 +81,21 @@ export interface ListingChoice { store_id: string; store_name: string | null; it
 export interface PackingEditOptions { candidate: ApprovalCandidate; listings: ListingChoice[]; cross_store_proof_available: boolean }
 export const getPackingEditOptions = (row: ApprovalCandidate, signal?: AbortSignal) => backendRequest<PackingEditOptions>(`${prefix}/pending/${encodeURIComponent(row.id)}/edit-options?${new URLSearchParams({ source_account_ref: row.source_account_ref })}`, { signal });
 
+/** One Listing found by ItemID search; unusable hits are returned so the UI can explain why. */
+export interface ListingHit {
+  store_id: string; store_name: string | null; item_id: string; gtin: string | null; msku: string | null; local_sku: string | null;
+  listing_version: string; cross_store: boolean; wfs_converted: boolean; usable: boolean; blocked_reasons: string[];
+}
+export const searchPackingListings = (row: ApprovalCandidate, itemId: string, signal?: AbortSignal) => backendRequest<{ items: ListingHit[] }>(`${prefix}/pending/${encodeURIComponent(row.id)}/listing-search?${new URLSearchParams({ source_account_ref: row.source_account_ref, item_id: itemId })}`, { signal });
+
+export interface EditDraftLine { target_store_id: string; target_item_id: string; listing_version: string; qty: number }
 export interface EditDraftPayload {
   source_account_ref: string;
   warehouse_id: string;
   candidate_version: string;
-  target_store_id: string;
-  target_item_id: string;
-  listing_version: string;
-  qty: number;
+  lines: EditDraftLine[];
   customs: "default" | "declare" | "skip";
-  edit_reason?: string;
+  edit_reason: string;
 }
 export const savePendingEdit = (candidateId: string, body: EditDraftPayload) =>
   backendRequest<{ candidate_id: string; edit_draft_pending: boolean; snapshot: ApprovalCandidate }>(
