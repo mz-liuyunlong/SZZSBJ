@@ -38,6 +38,7 @@ import PurchaseBoardPage from "@/pages/pmc/purchase-board/PurchaseBoardPage";
 import DomesticWarehousePage from "@/pages/pmc/domestic-warehouse/DomesticWarehousePage";
 import UserManagementPage from "@/pages/settings/UserManagementPage";
 import RoleManagementPage from "@/pages/settings/RoleManagementPage";
+import OrganizationPage from "@/pages/settings/OrganizationPage";
 import FeeRulesPage from "@/pages/settings/FeeRulesPage";
 import BusinessConfigPage from "@/pages/settings/BusinessConfigPage";
 import { navigation, navigationRedirects } from "@/config/navigation";
@@ -217,6 +218,8 @@ function BusinessRoute({
           <SyncTaskPage page={page} />
         ) : page.key === "settings_user_management" ? (
           <UserManagementPage page={page} />
+        ) : page.key === "settings_organization" ? (
+          <OrganizationPage />
         ) : page.key === "settings_role_management" ? (
           <RoleManagementPage page={page} />
         ) : page.key === "settings_business_config" ? (

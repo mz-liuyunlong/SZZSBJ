@@ -227,6 +227,37 @@ class FeishuDirectoryService:
             is_resigned=old.is_resigned if old.is_resigned is not None else new.is_resigned,
         )
 
+    def list_visible_departments(self) -> tuple[dict[str, str], ...]:
+        """Read Feishu organizational hierarchy without mutating local users or roles."""
+        token = self._fetch_tenant_access_token()
+        raw = self._get_paged_items(
+            "/open-apis/contact/v3/departments/0/children",
+            {"user_id_type": "open_id", "department_id_type": "open_department_id",
+             "fetch_child": "true"},
+            token,
+            item_keys=("items", "departments"),
+        )
+        departments: dict[str, dict[str, str]] = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            department_id = str(
+                item.get("open_department_id") or item.get("department_id") or ""
+            ).strip()
+            if not department_id:
+                continue
+            departments[department_id] = {
+                "department_id": department_id,
+                "parent_department_id": str(
+                    item.get("parent_department_id")
+                    or item.get("parent_department_id_type")
+                    or "0"
+                ).strip(),
+                "name": str(item.get("name") or department_id).strip(),
+                "leader_user_id": str(item.get("leader_user_id") or "").strip(),
+            }
+        return tuple(sorted(departments.values(), key=lambda d: (d["name"], d["department_id"])))
+
     def _list_visible_department_ids(self, token: str) -> tuple[str, ...]:
         departments = self._get_paged_items(
             "/open-apis/contact/v3/departments/0/children",

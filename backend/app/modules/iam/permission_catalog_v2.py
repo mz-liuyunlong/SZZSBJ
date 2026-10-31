@@ -247,6 +247,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         140,
         (
             _page("settings", "user_management", "用户管理", 10),
+            _page("settings", "organization", "组织架构", 15),
             _page("settings", "fee_rules", "费用规则", 20),
             _page("settings", "role_management", "角色管理", 30),
             _page("settings", "business_config", "业务配置", 40),
