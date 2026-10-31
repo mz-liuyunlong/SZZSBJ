@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from app.integrations.walmart.contract_signing import ContractSigner
+from app.integrations.walmart.contract_signing import ContractSigner, risk_for
 from app.integrations.walmart.contracts import PreparedRequest, sha256_hex
 
 
@@ -48,15 +48,21 @@ class ProtectedScfBridge:
     """
 
     def __init__(
-        self, invoker: CloudInvoker, *, version: int = 1, signer: ContractSigner | None = None
+        self,
+        invoker: CloudInvoker,
+        *,
+        version: int = 1,
+        signer: ContractSigner | None = None,
+        function_name: str | None = None,
     ) -> None:
         if version not in (1, 2, 3):
             raise GatewayRejected("WALMART_BRIDGE_VERSION_INVALID")
-        if version == 3 and signer is None:
+        if version == 3 and (signer is None or not function_name):
             raise GatewayRejected("WALMART_SIGNER_REQUIRED")
         self._invoker = invoker
         self._version = version
         self._signer = signer
+        self._function_name = function_name
 
     def execute(
         self,
@@ -99,6 +105,7 @@ class ProtectedScfBridge:
         if self._version == 3 and (
             result.get("protocol") != 3
             or result.get("contract_sha256") != sha256_hex(request.contract)
+            or result.get("request_id") != event["auth"]["request_id"]
         ):
             raise GatewayRejected("WALMART_GATEWAY_SCOPE_MISMATCH")
         code = result.get("status_code")
@@ -135,7 +142,7 @@ class ProtectedScfBridge:
         approval_ref: str | None,
         actor: Mapping[str, str] | None,
     ) -> dict[str, Any]:
-        assert self._signer is not None
+        assert self._signer is not None and self._function_name is not None
         if request.contract is None:
             raise GatewayRejected("WALMART_CONTRACT_MISSING")
         if (
@@ -150,23 +157,27 @@ class ProtectedScfBridge:
         contract = dict(request.contract)
         auth = self._signer.sign(
             store_code=store_code,
+            function_name=self._function_name,
             contract=contract,
             method=request.method,
             path=request.path,
             params=params,
             body=request.body,
+            response_kind=request.response_kind,
             approval_ref=approval_ref,
         )
         return {
             "version": 3,
             "operation": "marketplace_call",
             "store_code": store_code,
+            "function_name": self._function_name,
             "contract": contract,
             "method": request.method,
             "path": request.path,
             "params": params,
             "body": request.body,
             "accept": request.response_kind,
+            "risk": risk_for(request.method, request.key),
             "approval_ref": approval_ref,
             "actor": {"kind": actor["kind"], "uid": actor["uid"]},
             "auth": auth,

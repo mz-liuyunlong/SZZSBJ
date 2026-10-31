@@ -40,6 +40,7 @@ class RoutedScfGateway:
                 ),
                 version=bridge_version,
                 signer=signer,
+                function_name=name,
             )
             for store, name in function_by_store.items()
         }

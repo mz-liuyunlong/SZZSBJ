@@ -15,6 +15,7 @@ from app.integrations.walmart.gateway import (
     Actor,
     CallRecord,
     GatewayError,
+    InMemoryWriteLedger,
     WalmartGateway,
     reviewed_store_id_map,
 )
@@ -75,11 +76,17 @@ class _Invoker:
 
 @pytest.fixture
 def world():
-    signer = ContractSigner.generate(kid="gw-test")
-    verifier = ContractVerifier.from_env_json(json.dumps({signer.kid: signer.public_key_b64()}))
+    signer = ContractSigner.generate(kid="gw-test", registry=reviewed_registry())
     transport = ScriptedTransport()
-    bridges = {
-        store: ProtectedScfBridge(
+    bridges = {}
+    for store in (STORE, OTHER):
+        function = f"szzsbj-walmart-{store.lower()}-executor"
+        verifier = ContractVerifier.from_env_json(
+            json.dumps({signer.kid: signer.public_key_b64()}),
+            bound_store=store,
+            bound_function=function,
+        )
+        bridges[store] = ProtectedScfBridge(
             _Invoker(
                 WalmartCloudExecutor(
                     registry=ContractRegistry(()),
@@ -92,9 +99,8 @@ def world():
             ),
             version=3,
             signer=signer,
+            function_name=function,
         )
-        for store in (STORE, OTHER)
-    }
     client = WalmartClient(
         reviewed_registry(),
         allowed_stores=frozenset({STORE, OTHER}),
@@ -178,15 +184,31 @@ def test_write_call_with_permission_and_approval(world):
     gateway, transport, records = world
     transport.push(STORE, "/v3/fulfillment/inbound-shipments/PMC-X", 200, {"status": "OK"})
     actor = _user(WFS_CANCEL_PERMISSION, stores={STORE})
+    cancel = {"params": {"inboundOrderId": "PMC-X"}, "approval_ref": "wfs-ticket:abc"}
+    with pytest.raises(GatewayError, match="WALMART_IDEMPOTENCY_KEY_REQUIRED"):
+        gateway.call(STORE, "wfs_inbound_shipment_cancel", actor=actor, **cancel)
     result = gateway.call(
         STORE,
         "wfs_inbound_shipment_cancel",
         actor=actor,
-        params={"inboundOrderId": "PMC-X"},
-        approval_ref="wfs-ticket:abc",
+        idempotency_key="cancel:PMC-X:1",
+        **cancel,
     )
     assert result.ok
+    # Audit before (attempt) and after (ok) the cloud call, both carrying the key.
+    assert [r.outcome for r in records[-2:]] == ["attempt", "ok"]
+    assert all(r.idempotency_key == "cancel:PMC-X:1" for r in records[-2:])
     assert records[-1].risk == "write" and records[-1].approval_ref == "wfs-ticket:abc"
+    assert gateway.ledger.status("cancel:PMC-X:1") == "ok"
+    # A finished key is never executed twice.
+    with pytest.raises(GatewayError, match="WALMART_WRITE_ALREADY_DONE"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-X:1",
+            **cancel,
+        )
     # Walmart rejecting the write is a result, not an exception.
     transport.push(
         STORE, "/v3/fulfillment/inbound-shipments/PMC-X", 404, {"errors": [{"code": "NF"}]}
@@ -195,11 +217,61 @@ def test_write_call_with_permission_and_approval(world):
         STORE,
         "wfs_inbound_shipment_cancel",
         actor=actor,
-        params={"inboundOrderId": "PMC-X"},
-        approval_ref="wfs-ticket:abc",
+        idempotency_key="cancel:PMC-X:2",
+        **cancel,
     )
     assert rejected.status_code == 404 and rejected.provider_error == {"errors": [{"code": "NF"}]}
     assert records[-1].outcome == "provider_error" and records[-1].status_code == 404
+    assert gateway.ledger.status("cancel:PMC-X:2") == "provider_error"
+
+
+def test_unknown_write_outcome_blocks_retry_until_reconciled(world):
+    gateway, transport, records = world
+    actor = _user(WFS_CANCEL_PERMISSION)
+    cancel = {"params": {"inboundOrderId": "PMC-Y"}, "approval_ref": "wfs-ticket:y"}
+    original = transport.execute
+
+    def crash(**_: Any):
+        raise RuntimeError("socket closed")
+
+    transport.execute = crash  # type: ignore[method-assign]
+    with pytest.raises(GatewayError):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-Y",
+            **cancel,
+        )
+    assert records[-1].outcome == "unknown" and gateway.ledger.status("cancel:PMC-Y") == "unknown"
+    transport.execute = original  # type: ignore[method-assign]
+    # Transport is healthy again, but the same business write is refused until reviewed.
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PENDING_REVIEW"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-Y",
+            **cancel,
+        )
+    assert transport.calls == []
+    # Reconcile (after a read-back) decides; "failed" allows one more identical attempt.
+    gateway.ledger.resolve("cancel:PMC-Y", outcome="failed", note="read-back: shipment still open")
+    assert gateway.call(
+        STORE, "wfs_inbound_shipment_cancel", actor=actor, idempotency_key="cancel:PMC-Y", **cancel
+    ).ok
+    # Same key with a different payload is not a retry.
+    gateway.ledger.resolve("cancel:PMC-Y", outcome="failed", note="test")
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PAYLOAD_CHANGED"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            params={"inboundOrderId": "PMC-Z"},
+            approval_ref="wfs-ticket:y",
+            idempotency_key="cancel:PMC-Y",
+        )
+    assert isinstance(gateway.ledger, InMemoryWriteLedger)
 
 
 def test_system_actor_is_limited_to_its_operation_allowlist(world):
@@ -311,7 +383,7 @@ class _Identity:
 
 
 def _env(tmp_path, protocol: str, **extra: str) -> dict[str, str]:
-    signer = ContractSigner.generate(kid="szzsbj-2026-10")
+    signer = ContractSigner.generate(kid="szzsbj-2026-10", registry=reviewed_registry())
     pem = tmp_path / "signing.pem"
     pem.write_bytes(signer.private_pem())
     env = {

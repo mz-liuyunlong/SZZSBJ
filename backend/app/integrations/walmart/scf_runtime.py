@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from app.integrations.walmart.cloud_executor import RISK_LEVELS, WalmartCloudExecutor
-from app.integrations.walmart.contract_signing import ContractVerifier
+from app.integrations.walmart.contract_signing import ContractVerifier, ReplayCache
 from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
@@ -42,11 +42,27 @@ LIVE_MODE_READ_ONLY = "owner-approved-read-only"
 LIVE_MODE_READ_WRITE = "owner-approved-read-write"
 PUBLIC_KEYS_ENV = "SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS"
 MAX_RISK_ENV = "SZZSBJ_WALMART_MAX_RISK"
+# Tencent SCF exports the function's own name; the owner may pin it explicitly instead.
+FUNCTION_NAME_ENV = "SZZSBJ_WALMART_FUNCTION_NAME"
+_SCF_FUNCTION_NAME_ENV = "SCF_FUNCTIONNAME"
+# One replay cache per warm instance (see contract_signing.ReplayCache).
+_REPLAY = ReplayCache()
 
 
-def _verifier_from_env() -> ContractVerifier | None:
+def _function_name_from_env() -> str:
+    return (
+        os.environ.get(FUNCTION_NAME_ENV, "").strip()
+        or os.environ.get(_SCF_FUNCTION_NAME_ENV, "").strip()
+    )
+
+
+def _verifier_from_env(store: str) -> ContractVerifier | None:
     raw = os.environ.get(PUBLIC_KEYS_ENV, "").strip()
-    return ContractVerifier.from_env_json(raw) if raw else None
+    if not raw:
+        return None
+    return ContractVerifier.from_env_json(
+        raw, bound_store=store, bound_function=_function_name_from_env(), replay=_REPLAY
+    )
 
 
 def _max_risk_from_env(write_mode: bool) -> str:
@@ -172,7 +188,7 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
         return {"success": False, "status": "WALMART_STORE_BINDING_MISSING"}
     signed = isinstance(event, dict) and event.get("version") == 3
     try:
-        verifier = _verifier_from_env()
+        verifier = _verifier_from_env(store)
         if signed and verifier is None:
             return {"success": False, "status": "WALMART_PROTOCOL_NOT_ENABLED"}
         approved = frozenset(

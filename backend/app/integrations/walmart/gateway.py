@@ -21,10 +21,10 @@ import re
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from app.integrations.walmart.client import WalmartClient, WalmartResult
-from app.integrations.walmart.contract_signing import ContractSigner, request_sha256
+from app.integrations.walmart.contract_signing import ContractSigner
 from app.integrations.walmart.contracts import (
     ContractError,
     ContractRegistry,
@@ -39,6 +39,7 @@ logger = logging.getLogger("szzsbj.walmart.gateway")
 
 _APPROVAL = re.compile(r"^[^\x00-\x1f]{1,128}$")
 _UID = re.compile(r"^[^\x00-\x1f]{1,128}$")
+_IDEMPOTENCY = re.compile(r"^[A-Za-z0-9:._-]{1,160}$")
 ALL = "*"
 
 # Environment (main server). The SCF variables already exist in /etc/szzsbj/walmart-scf.env.
@@ -128,9 +129,10 @@ class CallRecord:
     registry_version: str
     request_sha256: str | None
     status_code: int | None
-    outcome: str  # ok | provider_error | gateway_error | unknown | denied
+    outcome: str  # attempt | ok | provider_error | gateway_error | unknown | denied
     error_code: str | None
     duration_ms: int
+    idempotency_key: str | None = None
 
 
 AuditSink = Callable[[CallRecord], None]
@@ -140,7 +142,7 @@ def log_audit(record: CallRecord) -> None:
     """Default sink: structured log line (the database sink lives in the pmc_wfs module)."""
     logger.info(
         "walmart_call store=%s op=%s risk=%s actor=%s:%s approval=%s status=%s outcome=%s "
-        "error=%s ms=%d contract=%s registry=%s",
+        "error=%s ms=%d contract=%s registry=%s idem=%s",
         record.store_code,
         record.operation_key,
         record.risk,
@@ -153,6 +155,7 @@ def log_audit(record: CallRecord) -> None:
         record.duration_ms,
         record.contract_sha256,
         record.registry_version,
+        record.idempotency_key,
     )
 
 
@@ -168,18 +171,94 @@ class _ActorBoundClient:
         return self._client.call(store_code, operation, actor=self._actor.as_event(), **kwargs)
 
 
+class WriteLedger(Protocol):
+    """Persisted idempotency state for writes (reviewer requirements 1 and 4).
+
+    ``begin`` must refuse a key whose last attempt is still ``attempting`` or ended
+    ``unknown`` (``WALMART_WRITE_PENDING_REVIEW``) or already succeeded
+    (``WALMART_WRITE_ALREADY_DONE``); ``finish`` stores the outcome; ``resolve`` is the
+    reconcile hook that closes an unknown attempt after a read-back. The database-backed
+    implementation lives next to the audit table in the PMC WFS module; the in-memory one
+    below is for tests and single-process tools only.
+    """
+
+    def begin(
+        self,
+        key: str,
+        *,
+        store_code: str,
+        operation_key: str,
+        actor_uid: str,
+        approval_ref: str,
+        request_sha256: str,
+    ) -> None: ...
+
+    def finish(
+        self, key: str, *, outcome: str, status_code: int | None, error_code: str | None
+    ) -> None: ...
+
+    def status(self, key: str) -> str | None: ...
+
+    def resolve(self, key: str, *, outcome: str, note: str) -> None: ...
+
+
+class InMemoryWriteLedger:
+    """Reference implementation of ``WriteLedger`` (not persistent; tests and tools)."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, dict[str, Any]] = {}
+
+    def begin(self, key: str, **fields: Any) -> None:
+        current = self.entries.get(key)
+        if current is not None:
+            if current["outcome"] in ("attempting", "unknown"):
+                raise GatewayError("WALMART_WRITE_PENDING_REVIEW")
+            if current["outcome"] == "ok":
+                raise GatewayError("WALMART_WRITE_ALREADY_DONE")
+            if current["request_sha256"] != fields["request_sha256"]:
+                # Same business key, different payload: a retry must be the same request.
+                raise GatewayError("WALMART_WRITE_PAYLOAD_CHANGED")
+        self.entries[key] = {
+            **fields,
+            "outcome": "attempting",
+            "attempts": (current or {}).get("attempts", 0) + 1,
+        }
+
+    def finish(
+        self, key: str, *, outcome: str, status_code: int | None, error_code: str | None
+    ) -> None:
+        entry = self.entries[key]
+        entry.update(outcome=outcome, status_code=status_code, error_code=error_code)
+
+    def status(self, key: str) -> str | None:
+        entry = self.entries.get(key)
+        return None if entry is None else str(entry["outcome"])
+
+    def resolve(self, key: str, *, outcome: str, note: str) -> None:
+        if outcome not in ("ok", "provider_error", "failed"):
+            raise GatewayError("WALMART_LEDGER_RESOLUTION_INVALID")
+        entry = self.entries[key]
+        entry.update(outcome=outcome, note=note)
+
+
 class WalmartGateway:
     def __init__(
         self,
         client: WalmartClient,
         *,
         audit: AuditSink | None = None,
+        ledger: WriteLedger | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._client = client
         self._registry: ContractRegistry = client.registry
         self._audit = audit or log_audit
+        self._ledger: WriteLedger = ledger or InMemoryWriteLedger()
         self._clock = clock
+
+    @property
+    def ledger(self) -> WriteLedger:
+        return self._ledger
 
     @property
     def registry(self) -> ContractRegistry:
@@ -227,14 +306,22 @@ class WalmartGateway:
         params: Mapping[str, Any] | None = None,
         body: Any = None,
         approval_ref: str | None = None,
+        idempotency_key: str | None = None,
     ) -> WalmartResult:
         """Execute one operation. Non-2xx answers are returned (``provider_error`` set);
         anything that prevents a trustworthy answer raises ``GatewayError``.
+
+        A write needs ``approval_ref`` (audit reference, generated server-side) and an
+        ``idempotency_key`` (business identity of the write, e.g. ``create:<inboundOrderId>``).
+        The ledger records the attempt before the cloud call and the outcome after it; a
+        key whose last attempt is still open or unknown is refused until a reconcile step
+        resolves it, so an uncertain write is never repeated blindly.
         """
         started = self._clock()
         contract_hash: str | None = None
         request_hash: str | None = None
         operation: Operation | None = None
+        ledger_open = False
         try:
             operation = self.authorize(
                 actor=actor,
@@ -246,12 +333,40 @@ class WalmartGateway:
                 operation_key, params=params, body=body, allow_writes=True
             )
             contract_hash = sha256_hex(prepared.contract) if prepared.contract else None
-            request_hash = request_sha256(
-                method=prepared.method,
-                path=prepared.path,
-                params=prepared.params or {},
-                body=prepared.body,
+            request_hash = sha256_hex(
+                {
+                    "method": prepared.method,
+                    "path": prepared.path,
+                    "params": dict(prepared.params or {}),
+                    "body": prepared.body,
+                }
             )
+            if operation.is_write:
+                if idempotency_key is None or not _IDEMPOTENCY.fullmatch(idempotency_key):
+                    raise GatewayError("WALMART_IDEMPOTENCY_KEY_REQUIRED")
+                self._ledger.begin(
+                    idempotency_key,
+                    store_code=store_code,
+                    operation_key=operation_key,
+                    actor_uid=actor.uid,
+                    approval_ref=approval_ref or "",
+                    request_sha256=request_hash,
+                )
+                ledger_open = True
+                self._record(
+                    store_code,
+                    operation_key,
+                    operation,
+                    actor,
+                    approval_ref,
+                    contract_hash,
+                    request_hash,
+                    None,
+                    "attempt",
+                    None,
+                    started,
+                    idempotency_key,
+                )
             result = self._client.call(
                 store_code,
                 operation_key,
@@ -261,7 +376,7 @@ class WalmartGateway:
                 approval_ref=approval_ref,
                 actor=actor.as_event(),
             )
-        except GatewayError as error:  # only ``authorize`` raises this: a refusal
+        except GatewayError as error:  # authorize / ledger refusals
             self._record(
                 store_code,
                 operation_key,
@@ -274,6 +389,7 @@ class WalmartGateway:
                 "denied",
                 error.code,
                 started,
+                idempotency_key,
             )
             raise
         except ContractError as error:
@@ -289,11 +405,16 @@ class WalmartGateway:
                 "gateway_error",
                 str(error),
                 started,
+                idempotency_key,
             )
             raise GatewayError(str(error)) from None
         except Exception as error:  # transport, STS, SCF: the outcome is unknown
             code = str(error) if isinstance(error, (RuntimeError, ValueError)) else ""
             code = code if re.fullmatch(r"[A-Z0-9_]{4,64}", code) else "WALMART_GATEWAY_UNAVAILABLE"
+            if ledger_open and idempotency_key is not None:
+                self._ledger.finish(
+                    idempotency_key, outcome="unknown", status_code=None, error_code=code
+                )
             self._record(
                 store_code,
                 operation_key,
@@ -306,8 +427,14 @@ class WalmartGateway:
                 "unknown",
                 code,
                 started,
+                idempotency_key,
             )
             raise GatewayError(code) from None
+        outcome = "ok" if result.ok else "provider_error"
+        if ledger_open and idempotency_key is not None:
+            self._ledger.finish(
+                idempotency_key, outcome=outcome, status_code=result.status_code, error_code=None
+            )
         self._record(
             store_code,
             operation_key,
@@ -317,9 +444,10 @@ class WalmartGateway:
             contract_hash,
             request_hash,
             result.status_code,
-            "ok" if result.ok else "provider_error",
+            outcome,
             None,
             started,
+            idempotency_key,
         )
         return result
 
@@ -415,6 +543,7 @@ class WalmartGateway:
         outcome: str,
         error_code: str | None,
         started: float,
+        idempotency_key: str | None = None,
     ) -> None:
         record = CallRecord(
             store_code=store_code,
@@ -430,6 +559,7 @@ class WalmartGateway:
             outcome=outcome,
             error_code=error_code,
             duration_ms=max(0, int((self._clock() - started) * 1000)),
+            idempotency_key=idempotency_key,
         )
         try:
             self._audit(record)
@@ -444,6 +574,7 @@ class WalmartGateway:
         cls,
         *,
         audit: AuditSink | None = None,
+        ledger: WriteLedger | None = None,
         identity_provider: Any = None,
         environ: Mapping[str, str] | None = None,
     ) -> WalmartGateway:
@@ -476,7 +607,9 @@ class WalmartGateway:
             if not kid:
                 raise GatewayError("WALMART_GATEWAY_CONFIG_INVALID")
             try:
-                signer = ContractSigner.from_pem_file(key_file, kid=kid)
+                signer = ContractSigner.from_pem_file(
+                    key_file, kid=kid, registry=reviewed_registry()
+                )
             except ContractError as error:
                 raise GatewayError(str(error)) from None
             client = create_scoped_client(
@@ -487,7 +620,7 @@ class WalmartGateway:
                 bridge_version=3,
                 signer=signer,
             )
-            return cls(client, audit=audit)
+            return cls(client, audit=audit, ledger=ledger)
         # Legacy protocol: the registry only enables what the cloud allowlists enable.
         from app.integrations.walmart.unified_api import load_unified_registry
 
@@ -513,7 +646,7 @@ class WalmartGateway:
             cloud_api=RefreshingScfApi(provider),
             bridge_version=2 if write_keys else 1,
         )
-        return cls(client, audit=audit)
+        return cls(client, audit=audit, ledger=ledger)
 
 
 def _with_permission(operation: Operation, reviewed: ContractRegistry) -> Operation:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
-from app.integrations.walmart.contract_signing import ContractVerifier
+from app.integrations.walmart.contract_signing import RISK_WRITE, ContractVerifier
 from app.integrations.walmart.contracts import ContractError, ContractRegistry
 from app.integrations.walmart.https_transport import TransportRejected
 from app.integrations.walmart.scf_bridge import _contains_secret_key
@@ -171,12 +171,14 @@ class WalmartCloudExecutor:
             "version",
             "operation",
             "store_code",
+            "function_name",
             "contract",
             "method",
             "path",
             "params",
             "body",
             "accept",
+            "risk",
             "approval_ref",
             "actor",
             "auth",
@@ -200,8 +202,10 @@ class WalmartCloudExecutor:
         accept = event.get("accept", "json")
         if accept not in ("json", "pdf"):
             raise ContractError("WALMART_EVENT_INVALID")
-        # Signature, freshness, store, contract shape and request hash.
-        operation, contract_hash = self._verifier.verify(event)
+        # Signature, key, freshness, replay, store/function binding, contract shape,
+        # hashes and the method-derived risk level.
+        verified = self._verifier.verify(event)
+        operation = verified.operation
         registry = ContractRegistry((operation,))
         # Same contract code as the server: path/query values are re-validated against the
         # field schemas and the resolved path must equal what the caller claims to call.
@@ -213,7 +217,9 @@ class WalmartCloudExecutor:
         if accept != request.response_kind:
             raise ContractError("WALMART_OPERATION_MISMATCH")
         approval = event.get("approval_ref")
-        if request.is_write:
+        # Risk comes from the verifier (method-based, reviewer requirement 3), never from
+        # the contract's own ``mutating`` flag alone.
+        if verified.risk == RISK_WRITE or request.is_write:
             if self._max_risk != "write":
                 raise ContractError("WALMART_RISK_CEILING_DENIED")
             if not approval:
@@ -236,7 +242,9 @@ class WalmartCloudExecutor:
             "status_code": status,
             "store_code": store,
             "api_key": operation.key,
-            "contract_sha256": contract_hash,
+            "request_id": verified.request_id,
+            "risk": verified.risk,
+            "contract_sha256": verified.contract_sha256,
             "registry_version": str(event["contract"].get("registry_version", "")),
             "data": data if provider_ok else None,
             "provider_error": None if provider_ok else data,

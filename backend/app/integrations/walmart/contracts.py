@@ -432,6 +432,10 @@ class ContractRegistry:
         except KeyError:
             raise ContractError("WALMART_API_NOT_REGISTERED") from None
 
+    def contract_for(self, key: str) -> dict[str, Any]:
+        """The exact contract dict ``prepare`` attaches (and a signer may sign) for ``key``."""
+        return contract_dict(self.get(key), registry_version=self.version())
+
     def prepare(
         self,
         key: str,
@@ -501,7 +505,7 @@ class ContractRegistry:
             is_write=operation.is_write,
             content_type=operation.request_content_type,
             response_kind=operation.response_kind,
-            contract=contract_dict(operation, registry_version=self.version()),
+            contract=self.contract_for(key),
             params=dict(values),
         )
 
