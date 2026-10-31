@@ -202,8 +202,32 @@ class WriteLedger(Protocol):
     def resolve(self, key: str, *, outcome: str, note: str) -> None: ...
 
 
+class RefusingLedger:
+    """Default ledger: no persistence configured, so every write is refused.
+
+    Production wiring must pass a persistent ledger (``walmart_scf.persistence``); the
+    in-memory ledger below has to be chosen explicitly and is for tests only.
+    """
+
+    def begin(self, key: str, **fields: Any) -> None:
+        raise GatewayError("WALMART_LEDGER_REQUIRED")
+
+    def finish(self, key: str, **fields: Any) -> None:  # pragma: no cover - never opened
+        raise GatewayError("WALMART_LEDGER_REQUIRED")
+
+    def status(self, key: str) -> str | None:
+        return None
+
+    def resolve(self, key: str, **fields: Any) -> None:
+        raise GatewayError("WALMART_LEDGER_REQUIRED")
+
+
 class InMemoryWriteLedger:
-    """Reference implementation of ``WriteLedger`` (not persistent; tests and tools)."""
+    """Reference implementation of ``WriteLedger`` for tests and single-process tools.
+
+    It is never selected by default and ``from_env`` refuses it: a process restart would
+    forget an open write (reviewer requirement P0, persistent idempotency).
+    """
 
     def __init__(self) -> None:
         self.entries: dict[str, dict[str, Any]] = {}
@@ -253,8 +277,15 @@ class WalmartGateway:
         self._client = client
         self._registry: ContractRegistry = client.registry
         self._audit = audit or log_audit
-        self._ledger: WriteLedger = ledger or InMemoryWriteLedger()
+        self._ledger: WriteLedger = ledger or RefusingLedger()
         self._clock = clock
+        # Records the audit sink could not persist yet (transactional-outbox style):
+        # flushed before the next call; a write is refused while anything is pending.
+        self._outbox: list[CallRecord] = []
+
+    @property
+    def pending_audit(self) -> int:
+        return len(self._outbox)
 
     @property
     def ledger(self) -> WriteLedger:
@@ -344,16 +375,30 @@ class WalmartGateway:
             if operation.is_write:
                 if idempotency_key is None or not _IDEMPOTENCY.fullmatch(idempotency_key):
                     raise GatewayError("WALMART_IDEMPOTENCY_KEY_REQUIRED")
-                self._ledger.begin(
-                    idempotency_key,
-                    store_code=store_code,
-                    operation_key=operation_key,
-                    actor_uid=actor.uid,
-                    approval_ref=approval_ref or "",
-                    request_sha256=request_hash,
-                )
+                if not self._flush_outbox():
+                    # Earlier evidence is still unpersisted: no new write until it is.
+                    raise GatewayError("WALMART_AUDIT_UNAVAILABLE")
+                try:
+                    self._ledger.begin(
+                        idempotency_key,
+                        store_code=store_code,
+                        operation_key=operation_key,
+                        actor_uid=actor.uid,
+                        approval_ref=approval_ref or "",
+                        request_sha256=request_hash,
+                    )
+                except GatewayError:
+                    raise
+                except Exception as error:  # a persistent ledger's own stable codes
+                    code = getattr(error, "code", None)
+                    if not isinstance(code, str):
+                        code = str(error)
+                    if re.fullmatch(r"[A-Z0-9_]{4,64}", code):
+                        raise GatewayError(code) from None
+                    raise GatewayError("WALMART_LEDGER_UNAVAILABLE") from None
                 ledger_open = True
-                self._record(
+                # The intent must be on record before anything leaves the server.
+                persisted = self._record(
                     store_code,
                     operation_key,
                     operation,
@@ -367,6 +412,17 @@ class WalmartGateway:
                     started,
                     idempotency_key,
                 )
+                if not persisted:
+                    self._ledger.finish(
+                        idempotency_key,
+                        outcome="failed",
+                        status_code=None,
+                        error_code="WALMART_AUDIT_UNAVAILABLE",
+                    )
+                    ledger_open = False
+                    raise GatewayError("WALMART_AUDIT_UNAVAILABLE")
+            else:
+                self._flush_outbox()
             result = self._client.call(
                 store_code,
                 operation_key,
@@ -544,7 +600,7 @@ class WalmartGateway:
         error_code: str | None,
         started: float,
         idempotency_key: str | None = None,
-    ) -> None:
+    ) -> bool:
         record = CallRecord(
             store_code=store_code,
             operation_key=operation_key,
@@ -561,11 +617,30 @@ class WalmartGateway:
             duration_ms=max(0, int((self._clock() - started) * 1000)),
             idempotency_key=idempotency_key,
         )
+        return self._persist(record)
+
+    def _persist(self, record: CallRecord) -> bool:
+        """Hand a record to the sink; on failure keep it in the outbox (and in the log)."""
         try:
             self._audit(record)
-        except Exception:  # the audit sink must never break or mask the business call
-            logger.exception("walmart audit sink failed (record dropped from sink, logged here)")
+            return True
+        except Exception:
+            logger.exception("walmart audit sink failed; record kept in outbox")
             log_audit(record)
+            self._outbox.append(record)
+            return False
+
+    def _flush_outbox(self) -> bool:
+        """Retry pending records in order; True when nothing is pending afterwards."""
+        while self._outbox:
+            record = self._outbox[0]
+            try:
+                self._audit(record)
+            except Exception:
+                logger.warning("walmart audit outbox still pending (%d records)", len(self._outbox))
+                return False
+            self._outbox.pop(0)
+        return True
 
     # ----- construction -------------------------------------------------------------
 
@@ -583,6 +658,10 @@ class WalmartGateway:
         Protocol 3 needs the signing key file; protocol 1 keeps the legacy per-key
         approvals so a server can switch before or after the cloud functions are upgraded.
         """
+        if ledger is None or audit is None or isinstance(ledger, InMemoryWriteLedger):
+            # Production composition must supply the persistent ledger and the database
+            # audit sink (``app.modules.walmart_scf.persistence.build_production_gateway``).
+            raise GatewayError("WALMART_LEDGER_REQUIRED")
         env = os.environ if environ is None else environ
         store_map = reviewed_store_id_map(env)
         stores = frozenset(store_map.values())

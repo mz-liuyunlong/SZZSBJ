@@ -144,18 +144,19 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 
 ### 签名覆盖什么（`contract_signing.signing_payload`）
 
-协议版本 `v`、`kid`、目标店铺 `store_code`、目标云函数 `function_name`、`operation_key`、HTTP `method`、实际 `path`、`params_sha256`（路径+查询参数值）、`body_sha256`、`contract_sha256`、`response_kind`（json/pdf）、`risk`（read/write）、`request_id`、`issued_at`、`expires_at`、`approval_ref`。Ed25519，签名放在事件 `auth` 里（`kid / request_id / issued_at / expires_at / sig`）。
+协议版本 `v`、`kid`、目标店铺 `store_code`、目标云函数 `function_name`、`operation_key`、HTTP `method`、实际 `path`、`params_sha256`（路径+查询参数值）、`body_sha256`、`contract_sha256`、`response_kind`（json/pdf）、`risk`（read/write）、调用人 `actor_kind` / `actor_uid`、`request_id`、`issued_at`、`expires_at`、`approval_ref`。Ed25519，签名放在事件 `auth` 里（`kid / request_id / issued_at / expires_at / sig`）。调用人身份改一个字、approval_ref 改一个字，签名即失效。
 
 规范化 JSON（两端同一函数 `contracts.canonical_json`）：UTF-8、键排序、分隔符 `,` `:` 无空格、非 ASCII 原样、拒绝 NaN/Infinity、数字按 Python `json` 规则（整数精确，浮点 `repr`）。两端跑同一模块，同一请求算出同一摘要。
 
 ### 有效期、重放、轮换
 
 - 服务器默认签 120 秒有效（`ttl_seconds`，上限 300）；云函数拒绝 `expires_at` 已过、`issued_at` 超前 > 60 秒、TTL 不在 1–300 秒的签名。
-- `request_id`（uuid4）每次调用新生成；云函数每个热实例维护 `ReplayCache`（只记录验签通过的 id，直到过期），重复提交同一签名返回 `WALMART_SIGNATURE_REPLAYED`。冷启动后的跨实例重放靠服务器侧持久化幂等账本（见网关 `WriteLedger`）+ Walmart 自身 `inboundOrderId` 唯一性兜底，写操作不只靠签名防重复。
+- `request_id`（uuid4）每次调用新生成；云函数在验签通过后对 `(kid, request_id)` 做**原子首次领取**（`ReplayStore.claim`），领不到 → `WALMART_SIGNATURE_REPLAYED`。三种实现：`MemoryReplayStore`（本实例内存，只够读）、`FileReplayStore`（所有实例共同挂载的 CFS 目录，`open(O_CREAT|O_EXCL)` 原子建标记文件，`SZZSBJ_WALMART_REPLAY_DIR`）、`RedisReplayStore`（`SET NX PX`，`SZZSBJ_WALMART_REPLAY_REDIS_URL`）。**写操作只在共享存储（File/Redis）下执行**，否则 `WALMART_REPLAY_STORE_REQUIRED`——跨实例重放由云端自己挡住，不把主服务器账本当替代；账本和 Walmart `inboundOrderId` 唯一性是另外两层。
 - 轮换：云函数 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS` 可同时放最多 4 把 `{"kid": 公钥}`；先加新公钥 → 服务器切新 `kid` 与私钥 → 观察无 `WALMART_SIGNATURE_KEY_UNKNOWN` 后删旧公钥。
 
 ### 契约来源
 
+- 事件里的 `actor`（`{"kind": "user|system", "uid"}`）在签名之内，云函数验签时同时校验形状。
 - `ContractSigner` 构造时绑定一个注册中心（生产 = `unified_api.reviewed_registry()`），**只签该注册中心里的契约**（按契约摘要比对）；业务代码临时拼的 method/path/schema、或 `prepare()` 之后被改过的契约，一律 `WALMART_CONTRACT_NOT_REGISTERED`。
 - 云函数用事件里的契约 `operation_from_contract()` 重建 Operation（形状校验：方法集合、`/v3` 路径正则、字段结构、禁止 authorization/cookie 等受限参数名）再跑一遍 `prepare()`；调用方自报的 method/path/accept 只用来比对。
 - 传输层（`https_transport`）仍固定域名、HTTPS、`/v3` 路径、不跟随重定向、不接受任何调用方请求头、请求 ≤ 2MB、响应 ≤ 5MB。v3 事件没有 headers 字段，多余字段整体拒绝。
@@ -173,14 +174,14 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 ### 云函数首次升级与回滚
 
 1. 隔离环境（非 stable 的新版本号或独立测试函数）验证 v1 健康、v1 只读、v3 只读。
-2. 灰度：仅 HK2613 发布新版本 + 配 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS`、`SZZSBJ_WALMART_MAX_RISK=read`、（可选）`SZZSBJ_WALMART_FUNCTION_NAME`；切 `stable`；服务器 PROTOCOL=3 下跑库存、发货单、分页、4xx/5xx 错误处理；确认无异常。
+2. 灰度：仅 HK2613 发布新版本 + 配 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS`、`SZZSBJ_WALMART_MAX_RISK=read`、（可选）`SZZSBJ_WALMART_FUNCTION_NAME`；写入阶段再加 CFS 挂载 + `SZZSBJ_WALMART_REPLAY_DIR`（或 Redis）；切 `stable`；服务器 PROTOCOL=3 下跑库存、发货单、分页、4xx/5xx 错误处理；确认无异常。
 3. 其余七店同样步骤。
 4. 回滚：`stable` 别名指回旧版本号（环境变量多出的两项无害），服务器 PROTOCOL 改回 1。
 5. 生产写入：代码验收 + 业务权限 + 幂等账本 + 审计通过后，才把某店 `MAX_RISK` 改 `write`；开发期间不做真实写。
 
 仍需升级云函数的情况：协议版本、json/pdf 之外的响应类型、Walmart 域名或 `/v3` 基路径变化、运行时安全更新。密钥轮换和风险上限只改环境变量。**加接口、改契约、加业务模块不需要。**
 
-测试：`tests/integrations/walmart/test_protocol_v3.py`（契约往返与形状校验、签名覆盖项逐一篡改、过期/超前/TTL、重放、密钥轮换、未注册契约拒签、v3 读写执行、风险上限与 POST 读语义、跨店/跨函数、v1 白名单不变、桥接端到端、PDF、provider_error、运行时门禁）。
+测试：`tests/integrations/walmart/test_protocol_v3.py`（契约往返与形状校验、签名覆盖项逐一篡改含 actor、过期/超前/TTL、同实例与**跨实例**重放、Redis 实现、密钥轮换、未注册契约拒签、v3 读写执行、无共享存储拒写、风险上限与 POST 读语义、跨店/跨函数、v1 白名单不变、桥接端到端、PDF、provider_error、运行时门禁）；`tests/integrations/walmart/test_gateway.py`（授权矩阵、无账本拒写、审计失败拒写 + outbox 重放、账本稳定码）；`tests/modules/walmart_scf/test_persistence.py`（SQLite 生命周期、进程重启、插入竞争；设置 `SZZSBJ_PG_TEST_URL` 时跑 PostgreSQL 8 线程 FOR UPDATE / 唯一约束并发）。
 
 ## 统一网关 `gateway.WalmartGateway`（2026-10-31）
 
@@ -217,9 +218,9 @@ res = gw.call(
 
 RBAC 落点：权限 key 由注册中心定义（`Operation.permission`），不是调用方传的；`Actor.from_principal` 只接受服务端登录身份（`Principal`）和服务端解析出的店铺范围（来源账号 + 店铺数据范围 → 店铺代码映射），普通用户无法自己传 permission、store_code 或 approval_ref 来获得权限——这三样都在服务端生成或校验。Celery / worker 用 `Actor.system(uid, operations=...)`，允许的操作写死在该任务代码里。
 
-写操作幂等（`WriteLedger`）：`call()` 对写操作要求 `idempotency_key`（业务身份，如 `create:<inboundOrderId>`），调用前 `begin`（记 attempting，审计一条 `attempt`），调用后 `finish`（ok / provider_error / unknown）。上一次 attempting 或 unknown 的 key → `WALMART_WRITE_PENDING_REVIEW`，必须先回查（读 Walmart）再 `resolve`；已 ok 的 key → `WALMART_WRITE_ALREADY_DONE`；同 key 不同请求体 → `WALMART_WRITE_PAYLOAD_CHANGED`。未知结果不会被自动重发。`InMemoryWriteLedger` 仅供测试/单进程工具；持久化实现随 #284 的审计表一起落地。
+写操作幂等（`WriteLedger`，**持久化**）：`call()` 对写操作要求 `idempotency_key`（业务身份，如 `wfs-create:<inboundOrderId>`）。调用前 `begin` = 原子领取（PostgreSQL `SELECT … FOR UPDATE` + 唯一约束，并发只有一个赢家，输家得 `WALMART_WRITE_PENDING_REVIEW`），然后持久化一条 `attempt` 审计——**两者都成功，请求才会离开服务器**；调用后 `finish`（ok / provider_error / unknown）。上一次 attempting 或 unknown 的 key → `WALMART_WRITE_PENDING_REVIEW`，必须先回查（读 Walmart）再 `resolve`；已 ok 的 key → `WALMART_WRITE_ALREADY_DONE`；同 key 不同请求体 → `WALMART_WRITE_PAYLOAD_CHANGED`。进程重启后状态只在数据库里，新进程看到的就是真实状态（`open_keys()` 给对账任务）。实现：`app/modules/walmart_scf/persistence.py` 的 `DbWriteLedger`（表 `integration_walmart_write_ledger`，迁移 `20261031_0069_walmart_gateway_ledger`）。网关**默认不带账本**（`RefusingLedger`：任何写 → `WALMART_LEDGER_REQUIRED`，读不受影响）；`from_env()` 拒绝不传持久化账本/审计，也拒绝 `InMemoryWriteLedger`（它只能在测试里显式构造）。生产只用 `persistence.build_production_gateway(session_factory)`。
 
-审计：每次调用（含被拒绝的）产生一条 `CallRecord`（店、操作、风险、actor、approval_ref、契约与请求摘要、状态码、结果、耗时；不含参数/请求体/响应体），交给 `audit` sink。默认 sink 写结构化日志；数据库 sink（`integration_walmart_calls` 表 + 迁移）随 PMC WFS 分支（#284）落地，避免本 PR 引入迁移与 WFS 分支的迁移头冲突。
+审计（**数据库，可靠**）：每次调用（含被拒绝的）产生一条 `CallRecord`（店、操作、风险、actor、approval_ref、幂等 key、契约与请求摘要、状态码、结果、耗时；不含参数/请求体/响应体），由 `DbAuditSink` 写入 `integration_walmart_calls`（同一迁移）。sink 失败不再静默降级：记录进内存 outbox 并写日志；**写操作在 outbox 非空或 attempt 行写不进去时直接拒绝**（`WALMART_AUDIT_UNAVAILABLE`，并把刚领取的账本项 finish 为 failed）；下一次调用先重放 outbox。读操作照常返回结果，其证据在 outbox + 日志里等待重放。
 
 主服务器环境变量：
 
@@ -229,6 +230,8 @@ RBAC 落点：权限 key 由注册中心定义（`Operation.permission`），不
 | `SZZSBJ_WALMART_SCF_STORE_ID_MAP` / `_CVM_ROLE` / `_TARGET_ROLE_ARN` | 已有，不变 |
 | `SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_FILE` | 私钥 PEM（默认 `/etc/szzsbj/walmart-contract-signing.pem`，root:szzsbj 640，不进仓库） |
 | `SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_ID` | kid，与云函数 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS` 里的键一致 |
+
+云函数环境变量（v3 新增）：`SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS`（必需）、`SZZSBJ_WALMART_MAX_RISK=read|write`（默认 read）、`SZZSBJ_WALMART_REPLAY_DIR`（CFS 挂载目录）或 `SZZSBJ_WALMART_REPLAY_REDIS_URL`（二选一；**没有则该函数只能读**）、可选 `SZZSBJ_WALMART_FUNCTION_NAME`（默认取 Tencent 的 `SCF_FUNCTIONNAME`）。
 
 生成密钥（部署 AI，在主服务器上执行一次，私钥不离开服务器）：`python -c "from app.integrations.walmart.contract_signing import ContractSigner as S; from app.integrations.walmart.unified_api import reviewed_registry as R; s=S.generate(kid='szzsbj-2026-10', registry=R()); open('/etc/szzsbj/walmart-contract-signing.pem','wb').write(s.private_pem()); print(s.public_key_b64())"`，然后 `chmod 640` + `chown root:szzsbj`，输出的公钥交给云函数所有者。
 

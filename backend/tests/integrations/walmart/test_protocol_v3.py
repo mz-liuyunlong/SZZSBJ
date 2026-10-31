@@ -15,7 +15,9 @@ from app.integrations.walmart.contract_signing import (
     MAX_TTL_SECONDS,
     ContractSigner,
     ContractVerifier,
-    ReplayCache,
+    FileReplayStore,
+    MemoryReplayStore,
+    RedisReplayStore,
     risk_for,
 )
 from app.integrations.walmart.contracts import (
@@ -65,6 +67,7 @@ def signer() -> ContractSigner:
 
 
 def _verifier(signer: ContractSigner, *, clock=lambda: NOW, **kwargs: Any) -> ContractVerifier:
+    kwargs.setdefault("replay", FileReplayStore(_SHARED_DIR.path))
     return ContractVerifier.from_env_json(
         json.dumps({signer.kid: signer.public_key_b64()}),
         bound_store=STORE,
@@ -72,6 +75,23 @@ def _verifier(signer: ContractSigner, *, clock=lambda: NOW, **kwargs: Any) -> Co
         clock=clock,
         **kwargs,
     )
+
+
+class _SharedDir:
+    """A fresh shared replay directory per test (set by the autouse fixture)."""
+
+    path: Any = None
+
+
+_SHARED_DIR = _SharedDir()
+
+
+@pytest.fixture(autouse=True)
+def _shared_replay_dir(tmp_path):
+    _SHARED_DIR.path = tmp_path / "replay"
+    _SHARED_DIR.path.mkdir()
+    yield
+    _SHARED_DIR.path = None
 
 
 @pytest.fixture
@@ -124,6 +144,7 @@ def _event(
         params=request.params or {},
         body=request.body,
         response_kind=request.response_kind,
+        actor=dict(ACTOR),
         approval_ref=approval_ref,
         ttl_seconds=ttl,
         issued_at=issued_at,
@@ -280,6 +301,7 @@ def test_signer_only_signs_registered_contracts(signer):
             params={},
             body=None,
             response_kind="json",
+            actor=dict(ACTOR),
             approval_ref=None,
         )
     # A registered contract whose dict was edited after prepare() is refused too.
@@ -296,6 +318,7 @@ def test_signer_only_signs_registered_contracts(signer):
             params={},
             body=None,
             response_kind="json",
+            actor=dict(ACTOR),
             approval_ref=None,
         )
     with pytest.raises(ContractError, match="WALMART_SIGNATURE_TTL_INVALID"):
@@ -308,6 +331,7 @@ def test_signer_only_signs_registered_contracts(signer):
             params=good.params,
             body=None,
             response_kind="json",
+            actor=dict(ACTOR),
             approval_ref=None,
             ttl_seconds=MAX_TTL_SECONDS + 1,
         )
@@ -334,6 +358,9 @@ def test_signer_only_signs_registered_contracts(signer):
         (lambda e: e.__setitem__("approval_ref", "other"), "WALMART_SIGNATURE_INVALID"),
         (lambda e: e.__setitem__("accept", "pdf"), "WALMART_SIGNATURE_INVALID"),
         (lambda e: e.__setitem__("risk", "read"), "WALMART_RISK_MISMATCH"),
+        (lambda e: e["actor"].__setitem__("uid", "someone-else"), "WALMART_SIGNATURE_INVALID"),
+        (lambda e: e["actor"].__setitem__("kind", "user"), "WALMART_SIGNATURE_INVALID"),
+        (lambda e: e.__setitem__("actor", {"kind": "root", "uid": "x"}), "WALMART_ACTOR_INVALID"),
         (lambda e: e["contract"].__setitem__("mutating", False), "WALMART_SIGNATURE_INVALID"),
         (lambda e: e["auth"].__setitem__("kid", "someone-else"), "WALMART_SIGNATURE_KEY_UNKNOWN"),
         (lambda e: e["auth"].__setitem__("request_id", "f" * 32), "WALMART_SIGNATURE_INVALID"),
@@ -353,7 +380,7 @@ def test_tampering_is_detected(signer, verifier, change, code):
 
 
 def test_freshness_window_and_replay(signer):
-    replay = ReplayCache()
+    replay = MemoryReplayStore()
     clock = {"now": NOW}
     verifier = _verifier(signer, clock=lambda: clock["now"], replay=replay)
     event = _event(signer, "wfs_inventory", params={"limit": 1}, request_id="a" * 32)
@@ -389,6 +416,65 @@ def test_freshness_window_and_replay(signer):
     assert verifier.verify(
         _event(signer, "wfs_inventory", params={"limit": 1}, request_id="e" * 32)
     )
+
+
+def test_cross_instance_replay_is_refused_by_a_shared_store(signer, tmp_path):
+    """Two cold instances of the same function share one CFS directory: one winner."""
+    shared = tmp_path / "cfs"
+    shared.mkdir()
+    instance_a = _verifier(signer, replay=FileReplayStore(shared))
+    instance_b = _verifier(signer, replay=FileReplayStore(shared))
+    event = _event(signer, "wfs_inbound_preview", body=_preview_body(), approval_ref="t:1")
+    assert instance_a.verify(event).request_id == "0" * 32
+    with pytest.raises(ContractError, match="WALMART_SIGNATURE_REPLAYED"):
+        instance_b.verify(event)
+    # Memory stores in two instances would each accept it once: that is why the executor
+    # refuses writes unless the store is shared.
+    mem_a = _verifier(signer, replay=MemoryReplayStore())
+    mem_b = _verifier(signer, replay=MemoryReplayStore())
+    assert mem_a.verify(event) and mem_b.verify(event)
+    assert not mem_a.shared_replay and instance_a.shared_replay
+    body = _preview_body()
+    event2 = _event(
+        signer, "wfs_inbound_preview", body=body, approval_ref="t:1", request_id="5" * 32
+    )
+    denied = _executor(mem_a, FakeTransport(), max_risk="write").handle(event2)
+    assert denied == {"success": False, "status": "WALMART_REPLAY_STORE_REQUIRED"}
+    ok = _executor(
+        _verifier(signer, replay=FileReplayStore(shared)), FakeTransport(), max_risk="write"
+    )
+    assert ok.handle(event2)["success"] is True
+    # Reads keep working on a memory store (no cross-instance requirement).
+    read = _event(signer, "wfs_inventory", params={"limit": 1}, request_id="6" * 32)
+    assert _executor(mem_b, FakeTransport()).handle(read)["success"] is True
+    # Marker files hold the expiry; a missing directory is refused up front.
+    assert sorted(p.name for p in shared.iterdir())[0].startswith("szzsbj-test.")
+    with pytest.raises(ContractError, match="WALMART_REPLAY_STORE_UNAVAILABLE"):
+        FileReplayStore(tmp_path / "missing")
+
+
+def test_redis_replay_store_uses_set_nx():
+    class FakeRedis:
+        def __init__(self):
+            self.keys: dict[str, int] = {}
+
+        def set(self, key, value, nx=False, px=None):
+            if nx and key in self.keys:
+                return None
+            self.keys[key] = px
+            return True
+
+    store = RedisReplayStore(FakeRedis())
+    assert store.shared
+    assert store.claim("szzsbj-test", "a" * 32, NOW + 120, NOW) is True
+    assert store.claim("szzsbj-test", "a" * 32, NOW + 120, NOW) is False
+
+    class Broken:
+        def set(self, *a, **k):
+            raise ConnectionError("down")
+
+    with pytest.raises(ContractError, match="WALMART_REPLAY_STORE_UNAVAILABLE"):
+        RedisReplayStore(Broken()).claim("szzsbj-test", "b" * 32, NOW + 120, NOW)
 
 
 def test_public_key_env_parsing_and_rotation():
@@ -487,6 +573,7 @@ def test_v3_new_contract_needs_only_a_registry_entry():
         params={"limit": 500},
         body=None,
         response_kind="json",
+        actor=dict(ACTOR),
         approval_ref=None,
         issued_at=NOW,
         request_id="8" * 32,
@@ -504,14 +591,31 @@ def test_v3_write_needs_write_ceiling_and_approval(signer, verifier):
     )
     assert denied == {"success": False, "status": "WALMART_RISK_CEILING_DENIED"}
     no_approval = _executor(_verifier(signer), FakeTransport(), max_risk="write").handle(
-        _event(signer, "wfs_inbound_preview", body=body)
+        _event(signer, "wfs_inbound_preview", body=body, request_id="1" * 32)
     )
     assert no_approval["status"] == "WALMART_WRITE_APPROVAL_REQUIRED"
     transport = FakeTransport(data={"shipmentPlans": []})
     ok = _executor(_verifier(signer), transport, max_risk="write").handle(
-        _event(signer, "wfs_inbound_preview", body=body, approval_ref="wfs-ticket:1")
+        _event(
+            signer,
+            "wfs_inbound_preview",
+            body=body,
+            approval_ref="wfs-ticket:1",
+            request_id="2" * 32,
+        )
     )
     assert ok["success"] is True and ok["risk"] == "write" and transport.calls[0][1].body == body
+    # The very same signed request again (any instance): refused before any transport call.
+    replayed = _executor(_verifier(signer), FakeTransport(), max_risk="write").handle(
+        _event(
+            signer,
+            "wfs_inbound_preview",
+            body=body,
+            approval_ref="wfs-ticket:1",
+            request_id="2" * 32,
+        )
+    )
+    assert replayed == {"success": False, "status": "WALMART_SIGNATURE_REPLAYED"}
 
 
 def test_non_get_marked_read_only_is_still_a_write_in_the_cloud():
@@ -773,7 +877,13 @@ def test_runtime_env_helpers_and_v3_gate(monkeypatch, signer):
     monkeypatch.setenv(
         scf_runtime.PUBLIC_KEYS_ENV, json.dumps({signer.kid: signer.public_key_b64()})
     )
-    assert scf_runtime._verifier_from_env(STORE) is not None
+    monkeypatch.delenv(scf_runtime.REPLAY_DIR_ENV, raising=False)
+    monkeypatch.delenv(scf_runtime.REPLAY_REDIS_ENV, raising=False)
+    scf_runtime._REPLAY_CACHE.clear()
+    verifier = scf_runtime._verifier_from_env(STORE)
+    assert verifier is not None and not verifier.shared_replay  # memory only: reads only
+    monkeypatch.setenv(scf_runtime.REPLAY_DIR_ENV, str(_SHARED_DIR.path))
+    assert scf_runtime._verifier_from_env(STORE).shared_replay
     # Tencent's own SCF_FUNCTIONNAME is the fallback for the bound function name.
     monkeypatch.delenv(scf_runtime.FUNCTION_NAME_ENV)
     monkeypatch.setenv("SCF_FUNCTIONNAME", FUNCTION)

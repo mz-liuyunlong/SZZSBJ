@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Any
 
 from app.integrations.walmart.cloud_executor import RISK_LEVELS, WalmartCloudExecutor
-from app.integrations.walmart.contract_signing import ContractVerifier, ReplayCache
+from app.integrations.walmart.contract_signing import (
+    ContractVerifier,
+    FileReplayStore,
+    MemoryReplayStore,
+    RedisReplayStore,
+    ReplayStore,
+)
 from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
@@ -45,8 +51,32 @@ MAX_RISK_ENV = "SZZSBJ_WALMART_MAX_RISK"
 # Tencent SCF exports the function's own name; the owner may pin it explicitly instead.
 FUNCTION_NAME_ENV = "SZZSBJ_WALMART_FUNCTION_NAME"
 _SCF_FUNCTION_NAME_ENV = "SCF_FUNCTIONNAME"
-# One replay cache per warm instance (see contract_signing.ReplayCache).
-_REPLAY = ReplayCache()
+# Cross-instance replay store for writes: a CFS directory mounted into every instance
+# (SZZSBJ_WALMART_REPLAY_DIR) or a Redis URL (SZZSBJ_WALMART_REPLAY_REDIS_URL). Without
+# either, only the per-instance memory store exists and the executor refuses writes.
+REPLAY_DIR_ENV = "SZZSBJ_WALMART_REPLAY_DIR"
+REPLAY_REDIS_ENV = "SZZSBJ_WALMART_REPLAY_REDIS_URL"
+_MEMORY_REPLAY = MemoryReplayStore()
+_REPLAY_CACHE: dict[str, ReplayStore] = {}
+
+
+def _replay_store_from_env() -> ReplayStore:
+    directory = os.environ.get(REPLAY_DIR_ENV, "").strip()
+    redis_url = os.environ.get(REPLAY_REDIS_ENV, "").strip()
+    cache_key = f"dir={directory}|redis={bool(redis_url)}"
+    store = _REPLAY_CACHE.get(cache_key)
+    if store is not None:
+        return store
+    if directory:
+        store = FileReplayStore(directory)
+    elif redis_url:
+        import redis  # optional dependency of the cloud bundle only
+
+        store = RedisReplayStore(redis.Redis.from_url(redis_url, socket_timeout=2.0))
+    else:
+        store = _MEMORY_REPLAY
+    _REPLAY_CACHE[cache_key] = store
+    return store
 
 
 def _function_name_from_env() -> str:
@@ -61,7 +91,10 @@ def _verifier_from_env(store: str) -> ContractVerifier | None:
     if not raw:
         return None
     return ContractVerifier.from_env_json(
-        raw, bound_store=store, bound_function=_function_name_from_env(), replay=_REPLAY
+        raw,
+        bound_store=store,
+        bound_function=_function_name_from_env(),
+        replay=_replay_store_from_env(),
     )
 
 

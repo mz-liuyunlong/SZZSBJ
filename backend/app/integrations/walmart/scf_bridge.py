@@ -12,8 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from app.integrations.walmart.contract_signing import ContractSigner, risk_for
-from app.integrations.walmart.contracts import PreparedRequest, sha256_hex
+from app.integrations.walmart.contract_signing import ContractSigner, risk_for, validate_actor
+from app.integrations.walmart.contracts import ContractError, PreparedRequest, sha256_hex
 
 
 class GatewayRejected(RuntimeError):
@@ -145,14 +145,10 @@ class ProtectedScfBridge:
         assert self._signer is not None and self._function_name is not None
         if request.contract is None:
             raise GatewayRejected("WALMART_CONTRACT_MISSING")
-        if (
-            not isinstance(actor, Mapping)
-            or set(actor) != {"kind", "uid"}
-            or actor["kind"] not in ("user", "system")
-            or not isinstance(actor["uid"], str)
-            or not 1 <= len(actor["uid"]) <= 128
-        ):
-            raise GatewayRejected("WALMART_ACTOR_INVALID")
+        try:
+            actor_kind, actor_uid = validate_actor(actor)
+        except ContractError:
+            raise GatewayRejected("WALMART_ACTOR_INVALID") from None
         params = dict(request.params or {})
         contract = dict(request.contract)
         auth = self._signer.sign(
@@ -164,6 +160,7 @@ class ProtectedScfBridge:
             params=params,
             body=request.body,
             response_kind=request.response_kind,
+            actor={"kind": actor_kind, "uid": actor_uid},
             approval_ref=approval_ref,
         )
         return {
@@ -179,7 +176,7 @@ class ProtectedScfBridge:
             "accept": request.response_kind,
             "risk": risk_for(request.method, request.key),
             "approval_ref": approval_ref,
-            "actor": {"kind": actor["kind"], "uid": actor["uid"]},
+            "actor": {"kind": actor_kind, "uid": actor_uid},
             "auth": auth,
         }
 

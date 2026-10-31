@@ -5,7 +5,8 @@ server. The signature covers (handover chapter 76.3, reviewer requirement 1):
 
     protocol version, key id, target store, target cloud function, operation key,
     HTTP method, resolved path, params SHA-256, body SHA-256, contract SHA-256,
-    response kind, risk level, request_id, issued_at, expires_at, approval_ref.
+    response kind, risk level, actor kind + uid, request_id, issued_at, expires_at,
+    approval_ref.
 
 The cloud executor verifies the signature with public keys from its own environment,
 checks freshness and replay, rebuilds the operation from the contract and re-validates
@@ -29,12 +30,13 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import os
 import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 from cryptography.exceptions import InvalidSignature
@@ -61,6 +63,8 @@ _REQUEST_ID = re.compile(r"^[0-9a-f]{32}$")
 _APPROVAL = re.compile(r"^[^\x00-\x1f]{1,128}$")
 _STORE = re.compile(r"^(?:HK|CN)[0-9]{4}$")
 _FUNCTION = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_ACTOR_KINDS = frozenset({"user", "system"})
+_ACTOR_UID = re.compile(r"^[^\x00-\x1f]{1,128}$")
 _MAX_PUBLIC_KEYS = 4
 RISK_READ = "read"
 RISK_WRITE = "write"
@@ -93,6 +97,8 @@ def signing_payload(
     contract_sha256: str,
     response_kind: str,
     risk: str,
+    actor_kind: str,
+    actor_uid: str,
     request_id: str,
     issued_at: int,
     expires_at: int,
@@ -112,12 +118,27 @@ def signing_payload(
             "contract_sha256": contract_sha256,
             "response_kind": response_kind,
             "risk": risk,
+            "actor_kind": actor_kind,
+            "actor_uid": actor_uid,
             "request_id": request_id,
             "issued_at": issued_at,
             "expires_at": expires_at,
             "approval_ref": approval_ref,
         }
     )
+
+
+def validate_actor(actor: Any) -> tuple[str, str]:
+    """``{"kind": "user"|"system", "uid": str}`` — the only shape both sides accept."""
+    if (
+        not isinstance(actor, Mapping)
+        or set(actor) != {"kind", "uid"}
+        or actor["kind"] not in _ACTOR_KINDS
+        or not isinstance(actor["uid"], str)
+        or not _ACTOR_UID.fullmatch(actor["uid"])
+    ):
+        raise ContractError("WALMART_ACTOR_INVALID")
+    return str(actor["kind"]), str(actor["uid"])
 
 
 class ContractSigner:
@@ -184,11 +205,13 @@ class ContractSigner:
         params: Mapping[str, Any],
         body: Any,
         response_kind: str,
+        actor: Mapping[str, str],
         approval_ref: str | None,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         issued_at: int | None = None,
         request_id: str | None = None,
     ) -> dict[str, Any]:
+        actor_kind, actor_uid = validate_actor(actor)
         if not _STORE.fullmatch(store_code):
             raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
         if not _FUNCTION.fullmatch(function_name):
@@ -218,6 +241,8 @@ class ContractSigner:
             contract_sha256=contract_hash,
             response_kind=response_kind,
             risk=risk_for(method, operation_key),
+            actor_kind=actor_kind,
+            actor_uid=actor_uid,
             request_id=rid,
             issued_at=issued,
             expires_at=expires,
@@ -232,28 +257,115 @@ class ContractSigner:
         }
 
 
-class ReplayCache:
-    """Per-process memory of request ids until they expire (reviewer requirement 1).
+class ReplayStore(Protocol):
+    """Atomic first-use claim of a (kid, request_id) until ``expires_at``.
 
-    A cloud function instance is stateless across cold starts, so this stops replays
-    against a warm instance within the signature's lifetime; cross-instance replay of a
-    write is additionally blocked by the server's persisted idempotency ledger
-    (``gateway.WriteLedger``) and Walmart's own ``inboundOrderId`` uniqueness.
+    ``claim`` returns True exactly once per key across every holder of the same store.
+    ``shared`` says whether the store is visible to other cloud-function instances; a
+    write is only executed when it is (reviewer requirement: cross-instance replay).
     """
+
+    shared: bool
+
+    def claim(self, kid: str, request_id: str, expires_at: int, now: float) -> bool: ...
+
+
+class MemoryReplayStore:
+    """Per-process memory (one warm instance). Enough for reads; never for writes."""
+
+    shared = False
 
     def __init__(self, *, max_entries: int = 20_000) -> None:
         self._seen: dict[tuple[str, str], int] = {}
         self._max = max_entries
 
-    def check_and_store(self, kid: str, request_id: str, expires_at: int, now: float) -> None:
+    def claim(self, kid: str, request_id: str, expires_at: int, now: float) -> bool:
         if len(self._seen) >= self._max or len(self._seen) % 512 == 0:
             self._seen = {k: exp for k, exp in self._seen.items() if exp >= now}
         if len(self._seen) >= self._max:
             raise ContractError("WALMART_REPLAY_CACHE_FULL")
         key = (kid, request_id)
         if key in self._seen:
-            raise ContractError("WALMART_SIGNATURE_REPLAYED")
+            return False
         self._seen[key] = expires_at
+        return True
+
+
+class FileReplayStore:
+    """Shared-filesystem claim (Tencent CFS mounted into every instance of a function).
+
+    ``open(..., O_CREAT | O_EXCL)`` is atomic on a POSIX / NFS mount, so two instances
+    racing on the same request_id get exactly one winner. Marker files older than their
+    ``expires_at`` are swept opportunistically; the signature itself is already invalid
+    by then, so a late sweep cannot re-open a replay window.
+    """
+
+    shared = True
+
+    def __init__(self, directory: str | Path, *, sweep_every: int = 256) -> None:
+        self._dir = Path(directory)
+        if not self._dir.is_dir():
+            raise ContractError("WALMART_REPLAY_STORE_UNAVAILABLE")
+        self._sweep_every = sweep_every
+        self._claims = 0
+
+    def _path(self, kid: str, request_id: str) -> Path:
+        if not _KID.fullmatch(kid) or not _REQUEST_ID.fullmatch(request_id):
+            raise ContractError("WALMART_SIGNATURE_INVALID")
+        return self._dir / f"{kid}.{request_id}.claim"
+
+    def claim(self, kid: str, request_id: str, expires_at: int, now: float) -> bool:
+        self._claims += 1
+        if self._claims % self._sweep_every == 0:
+            self._sweep(now)
+        path = self._path(kid, request_id)
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            return False
+        except OSError:
+            raise ContractError("WALMART_REPLAY_STORE_UNAVAILABLE") from None
+        try:
+            os.write(fd, str(expires_at).encode("ascii"))
+        finally:
+            os.close(fd)
+        return True
+
+    def _sweep(self, now: float) -> None:
+        try:
+            for marker in self._dir.glob("*.claim"):
+                try:
+                    expires_at = int(marker.read_text(encoding="ascii") or "0")
+                except (OSError, ValueError):
+                    continue
+                if expires_at < now - MAX_TTL_SECONDS:
+                    marker.unlink(missing_ok=True)
+        except OSError:
+            return
+
+
+class RedisReplayStore:
+    """Shared claim on Redis (``SET key 1 NX PX ttl``). The client is injected so this
+    module stays dependency-free; the runtime builds it from ``SZZSBJ_WALMART_REPLAY_REDIS_URL``.
+    """
+
+    shared = True
+
+    def __init__(self, client: Any, *, prefix: str = "szzsbj:walmart:replay:") -> None:
+        self._client = client
+        self._prefix = prefix
+
+    def claim(self, kid: str, request_id: str, expires_at: int, now: float) -> bool:
+        ttl_ms = max(1000, int((expires_at - now + MAX_TTL_SECONDS) * 1000))
+        try:
+            result = self._client.set(f"{self._prefix}{kid}:{request_id}", "1", nx=True, px=ttl_ms)
+        except Exception:
+            raise ContractError("WALMART_REPLAY_STORE_UNAVAILABLE") from None
+        return bool(result)
+
+
+# Backwards-compatible name used by the first v3 iteration.
+ReplayCache = MemoryReplayStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,6 +375,8 @@ class VerifiedCall:
     risk: str
     request_id: str
     kid: str
+    actor_kind: str
+    actor_uid: str
 
 
 class ContractVerifier:
@@ -275,7 +389,7 @@ class ContractVerifier:
         bound_store: str,
         bound_function: str,
         clock: Callable[[], float] = time.time,
-        replay: ReplayCache | None = None,
+        replay: ReplayStore | None = None,
     ) -> None:
         if not public_keys or len(public_keys) > _MAX_PUBLIC_KEYS:
             raise ContractError("WALMART_VERIFY_KEYS_INVALID")
@@ -287,7 +401,12 @@ class ContractVerifier:
         self._store = bound_store
         self._function = bound_function
         self._clock = clock
-        self._replay = replay or ReplayCache()
+        self._replay: ReplayStore = replay or MemoryReplayStore()
+
+    @property
+    def shared_replay(self) -> bool:
+        """True when replays are refused across instances, not only within this one."""
+        return bool(self._replay.shared)
 
     @classmethod
     def from_env_json(cls, raw: str, **kwargs: Any) -> ContractVerifier:
@@ -338,6 +457,7 @@ class ContractVerifier:
             not isinstance(approval, str) or not _APPROVAL.fullmatch(approval)
         ):
             raise ContractError("WALMART_APPROVAL_INVALID")
+        actor_kind, actor_uid = validate_actor(event.get("actor"))
         contract = event.get("contract")
         operation = operation_from_contract(contract)
         method, path, params, body = (
@@ -370,6 +490,8 @@ class ContractVerifier:
             contract_sha256=contract_hash,
             response_kind=response_kind,
             risk=risk,
+            actor_kind=actor_kind,
+            actor_uid=actor_uid,
             request_id=request_id,
             issued_at=issued_at,
             expires_at=expires_at,
@@ -381,12 +503,15 @@ class ContractVerifier:
             self._keys[kid].verify(base64.b64decode(sig, validate=True), payload)
         except (InvalidSignature, ValueError, binascii.Error):
             raise ContractError("WALMART_SIGNATURE_INVALID") from None
-        # Only a request that verified is remembered; a forged one must not fill the cache.
-        self._replay.check_and_store(kid, request_id, expires_at, now)
+        # Only a request that verified is claimed; a forged one must not fill the store.
+        if not self._replay.claim(kid, request_id, expires_at, now):
+            raise ContractError("WALMART_SIGNATURE_REPLAYED")
         return VerifiedCall(
             operation=operation,
             contract_sha256=contract_hash,
             risk=risk,
             request_id=request_id,
             kid=kid,
+            actor_kind=actor_kind,
+            actor_uid=actor_uid,
         )

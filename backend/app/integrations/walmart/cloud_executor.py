@@ -16,7 +16,6 @@ from app.integrations.walmart.https_transport import TransportRejected
 from app.integrations.walmart.scf_bridge import _contains_secret_key
 
 RISK_LEVELS = ("read", "write")
-_ACTOR_KINDS = frozenset({"user", "system"})
 
 
 class CallPolicy(Protocol):
@@ -190,15 +189,7 @@ class WalmartCloudExecutor:
         store = event.get("store_code")
         if not isinstance(store, str) or store not in self._stores:
             raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
-        actor = event.get("actor")
-        if (
-            not isinstance(actor, dict)
-            or set(actor) != {"kind", "uid"}
-            or actor["kind"] not in _ACTOR_KINDS
-            or not isinstance(actor["uid"], str)
-            or not 1 <= len(actor["uid"]) <= 128
-        ):
-            raise ContractError("WALMART_ACTOR_INVALID")
+        # Actor shape is validated (and signed) inside the verifier.
         accept = event.get("accept", "json")
         if accept not in ("json", "pdf"):
             raise ContractError("WALMART_EVENT_INVALID")
@@ -224,6 +215,10 @@ class WalmartCloudExecutor:
                 raise ContractError("WALMART_RISK_CEILING_DENIED")
             if not approval:
                 raise ContractError("WALMART_WRITE_APPROVAL_REQUIRED")
+            if not self._verifier.shared_replay:
+                # A write may only run where a replayed request is refused by every
+                # instance of this function, not just by the one that saw it first.
+                raise ContractError("WALMART_REPLAY_STORE_REQUIRED")
         status, data = self._transport.execute(store_code=store, request=request)
         if type(status) is not int or not 100 <= status <= 599:
             raise ContractError("WALMART_PROVIDER_ERROR")
