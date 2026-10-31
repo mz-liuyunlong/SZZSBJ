@@ -2,7 +2,7 @@ export const AUTH_TOKEN_STORAGE_KEY = "szzsbj_auth_token";
 const AUTH_SESSION_CHANNEL = "szzsbj_auth_session";
 
 export type AuthSessionEvent = {
-  type: "token-changed" | "logged-out";
+  type: "token-changed" | "logged-out" | "permissions-changed";
   token: string;
 };
 
@@ -13,6 +13,17 @@ function publishAuthSessionEvent(event: AuthSessionEvent): void {
   const channel = new BroadcastChannel(AUTH_SESSION_CHANNEL);
   channel.postMessage(event);
   channel.close();
+}
+
+/** Refresh the current principal after RBAC changes, without resetting open tabs. */
+export function notifyPermissionsChanged(): void {
+  const token = readAuthToken();
+  if (!token) return;
+  publishAuthSessionEvent({ type: "permissions-changed", token });
+  window.dispatchEvent(new CustomEvent<AuthSessionEvent>(
+    "szzsbj:permissions-changed",
+    { detail: { type: "permissions-changed", token } },
+  ));
 }
 
 export function readAuthToken(): string | null {
@@ -60,6 +71,7 @@ export function clearAuthTokenIfCurrent(expectedToken: string): boolean {
 export function isCurrentAuthSessionEvent(event: AuthSessionEvent): boolean {
   const currentToken = readAuthToken();
   const previousToken = observedAuthToken === undefined ? currentToken : observedAuthToken;
+  if (event.type === "permissions-changed") return currentToken === event.token;
   if (event.type === "token-changed") {
     if (currentToken !== event.token || previousToken === event.token) return false;
     observedAuthToken = event.token;
@@ -83,6 +95,9 @@ export function subscribeAuthSession(
     }
   };
   window.addEventListener("storage", onStorage);
+  const onPermissionChange = (event: Event) =>
+    listener((event as CustomEvent<AuthSessionEvent>).detail);
+  window.addEventListener("szzsbj:permissions-changed", onPermissionChange);
 
   const channel = typeof BroadcastChannel === "undefined"
     ? undefined
@@ -92,6 +107,7 @@ export function subscribeAuthSession(
 
   return () => {
     window.removeEventListener("storage", onStorage);
+    window.removeEventListener("szzsbj:permissions-changed", onPermissionChange);
     channel?.removeEventListener("message", onMessage);
     channel?.close();
   };

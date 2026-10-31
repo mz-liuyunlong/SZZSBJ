@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.api import SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
-from app.core.permissions import require_any_permission, require_permission
+from app.core.config import get_settings
+from app.core.permissions import require_any_permission, require_permission, require_super_admin
 from app.db.session import get_db_session
+from app.modules.iam.feishu_directory_service import FeishuDirectoryService
 from app.modules.iam.field_access import filter_user_read
 from app.modules.iam.rbac_schemas import (
     AuditEventRead,
@@ -299,5 +301,35 @@ def list_rbac_audit_events(
     return success_response(
         request,
         data=RbacService(session).audit_events(limit=limit),
+        meta=None,
+    )
+
+
+@router.get("/api/settings/organization/preview")
+def preview_feishu_organization(
+    request: Request,
+    _: Annotated[Principal, Depends(require_super_admin)],
+) -> dict:
+    """Real-time Feishu read-only preview. Never writes a database or changes RBAC."""
+    service = FeishuDirectoryService.from_settings(get_settings())
+    departments = service.list_visible_departments()
+    users = service.list_visible_users()
+    return success_response(
+        request,
+        data={
+            "departments": list(departments),
+            "users": [
+                {
+                    "name": user.name,
+                    "open_id": user.open_id,
+                    "department_ids": list(user.department_ids),
+                    "is_active": user.is_active,
+                    "is_resigned": user.is_resigned,
+                    "is_frozen": user.is_frozen,
+                }
+                for user in users
+            ],
+            "read_only": True,
+        },
         meta=None,
     )

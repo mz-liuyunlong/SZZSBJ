@@ -222,6 +222,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
             _page("data_center", "data_import", "数据导入", 40),
             _page("data_center", "data_export", "数据导出", 50),
             _page("data_center", "task_center", "任务中心", 60),
+            _page("data_center", "walmart_remote", "沃尔玛采集", 65),
             _page("data_center", "api_docs", "API文档", 70),
         ),
     ),
@@ -246,6 +247,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         140,
         (
             _page("settings", "user_management", "用户管理", 10),
+            _page("settings", "organization", "组织架构", 15),
             _page("settings", "fee_rules", "费用规则", 20),
             _page("settings", "role_management", "角色管理", 30),
             _page("settings", "business_config", "业务配置", 40),
@@ -289,13 +291,34 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ),
     ActionDefinition("sales_daily_sales", "export", "导出每日销售", 10),
     ActionDefinition("sales_order_profit", "export", "导出订单利润", 10),
+    ActionDefinition("warehouse_wfs_fee_alert", "follow", "跟进WFS Case", 10),
+    ActionDefinition("warehouse_wfs_fee_alert", "archive-request", "申请归档WFS Case", 20, "high"),
+    ActionDefinition("warehouse_wfs_fee_alert", "archive-review", "审核归档WFS Case", 25, "high"),
     ActionDefinition("warehouse_wfs_fee_alert", "mark-recovered", "确认WFS费用已追回", 30, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-manual-create", "手工提交打包审批", 30, "high"
+    ),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-boxes-save", "保存仓库装箱", 40),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-done", "确认打包完成", 41),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-customs", "修改打包报关", 42),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-note", "填写打包延迟备注", 43),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-unpacked-dispose", "处置未装数量", 44, "high"
+    ),
+    ActionDefinition("pmc_domestic_warehouse_board", "packing-rebox", "修改已完成装箱", 45, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-supplement-ib", "登记超发补入库单", 46, "high"
+    ),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-supplement-sync", "校验超发补入库数据", 47, "high"
+    ),
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),
     ActionDefinition("operations_plan", "edit", "编辑运营计划", 20),
     ActionDefinition("operations_plan", "import", "导入运营计划", 30),
     ActionDefinition("pmc_purchase_board", "override", "维护采购周期覆盖", 10, "high"),
     ActionDefinition("data_center_task_center", "configure", "维护同步配置", 10),
     ActionDefinition("data_center_task_center", "execute", "执行同步任务", 20, "high"),
+    ActionDefinition("data_center_walmart_remote", "execute", "执行沃尔玛采集", 10, "high"),
     ActionDefinition("settings_fee_rules", "edit", "维护费用规则", 10),
     ActionDefinition("settings_fee_rules", "recalculate", "执行规则重算", 20, "high"),
     ActionDefinition("settings_user_management", "create", "新增用户", 10),
