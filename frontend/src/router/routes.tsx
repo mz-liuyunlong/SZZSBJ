@@ -17,6 +17,7 @@ import OnboardingGuidePage from "@/pages/help/OnboardingGuidePage";
 import LoginPage from "@/pages/auth/LoginPage";
 import NotFoundPage from "@/pages/errors/NotFoundPage";
 import ListingManagementPage from "@/pages/products/ListingManagementPage";
+import NewProductPages from "@/pages/products/new-product/NewProductPages";
 import ClearanceCenterPage from "@/pages/products/ClearanceCenterPage";
 import ProductManagementPage from "@/pages/products/ProductManagementPage";
 import DailySalesPage from "@/pages/sales/DailySalesPage";
@@ -43,7 +44,7 @@ import BusinessConfigPage from "@/pages/settings/BusinessConfigPage";
 import { navigation, navigationRedirects } from "@/config/navigation";
 import { DEFAULT_BUSINESS_PATH, resolveRoute } from "@/router/routeResolver";
 import { DEFAULT_AUTH_USER, type AuthUser } from "@/pages/auth/authTypes";
-import { isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
+import { hasPermission, isMockPageAccessibleForRole } from "@/shared/permissions/mockAccess";
 
 interface AppRoutesProps {
   mockLoggedIn: boolean;
@@ -178,6 +179,10 @@ function BusinessRoute({
           <ProductManagementPage page={page} preferenceScope={activeUser.username} />
         ) : page.key === "products_listing_management" ? (
           <ListingManagementPage page={page} />
+        ) : page.key === "products_new_product_analysis" ? (
+          <NewProductPages page={page} mode="performance" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product-analysis:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product-analysis:configure")} canScore={hasPermission(activeUser.permissions,"action:products:new-product-analysis:score")} canRequest={hasPermission(activeUser.permissions,"action:products:new-product-analysis:request-purchase")} canReview={hasPermission(activeUser.permissions,"action:products:launch-tracking:review")} canViewCost={hasPermission(activeUser.permissions,"field:products:new-product-analysis:unit-cost")} />
+        ) : page.key === "products_launch_tracking" ? (
+          <NewProductPages page={page} mode="tracking" username={activeUser.username} canManage={hasPermission(activeUser.permissions,"action:products:new-product:approve")} canConfigure={hasPermission(activeUser.permissions,"action:products:new-product:configure")} />
         ) : page.key === "products_clearance_center" ? (
           <ClearanceCenterPage page={page} />
         ) : page.key === "sales_daily_sales" ? (
