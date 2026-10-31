@@ -4,6 +4,8 @@ async function prepare(page:Page){
  await page.addInitScript(()=>localStorage.setItem("szzsbj_auth_token","synthetic-clearance-layout"));
  await page.route("**/api/**",async route=>{
   const pathname=new URL(route.request().url()).pathname;
+  // Vite modules under /src/api/ must never be returned as mock JSON.
+  if(!pathname.startsWith("/api/"))return route.fallback();
   const data=pathname==="/api/auth/me"
    ? {id:16,username:"clearance-layout",display_name:"清货测试",is_super_admin:true,role_keys:[],role_names:[],permissions:["*"]}
    : {items:[],total:0};
