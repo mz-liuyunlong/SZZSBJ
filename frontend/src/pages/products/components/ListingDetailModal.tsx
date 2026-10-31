@@ -66,6 +66,7 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
 
   const renderContent = () => {
     if (!row) return null;
+    const monitorStale = row.monitorAgeHours != null && row.monitorAgeHours >= 48;
 
     if (activeSection === "status") {
       return (
@@ -109,6 +110,7 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
       return (
         <section className="listing-management__detail-main-card">
           <Typography.Title level={4}>治理记录</Typography.Title>
+          {monitorStale && <Tag color="orange">监控结果已超过48小时，需重新检查</Tag>}
           <div className="listing-management__governance-list">
             <div>
               <Typography.Text strong>最近检查时间</Typography.Text>
@@ -116,11 +118,11 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
             </div>
             <div>
               <Typography.Text strong>购物车监控</Typography.Text>
-              <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : row.buyBoxStatus === "拥有" ? "当前正常" : "待确认"}</Typography.Text>
+              <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : row.buyBoxStatus === "拥有" ? monitorStale ? "上次监控正常，需重新检查" : "当前正常" : "待确认"}</Typography.Text>
             </div>
             <div>
               <Typography.Text strong>跟卖监控</Typography.Text>
-              <Typography.Text>{row.resold === "是" ? "发现跟卖，建议复核价格与卖家" : row.resold === "否" ? "暂无跟卖" : "待确认"}</Typography.Text>
+              <Typography.Text>{row.resold === "是" ? "发现跟卖，建议复核价格与卖家" : row.resold === "否" ? monitorStale ? "上次未发现跟卖，需重新检查" : "暂无跟卖" : "待确认"}</Typography.Text>
             </div>
             <div>
               <Typography.Text strong>治理状态</Typography.Text>

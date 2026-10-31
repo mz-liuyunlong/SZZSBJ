@@ -67,3 +67,20 @@ it("shows observed zero inventory instead of a missing-value marker", () => {
     .map((element) => element.textContent);
   expect(values.slice(2, 4)).toEqual(["0", "0"]);
 });
+
+it("does not describe stale monitor observations as current normal results", () => {
+  const row = {
+    ...listingManagementMockData[0],
+    monitorAgeHours: 49,
+    buyBoxStatus: "拥有",
+    resold: "否",
+  };
+  render(<ListingDetailModal row={row} onClose={() => undefined} />);
+  fireEvent.click(screen.getByRole("button", { name: "治理记录" }));
+
+  expect(screen.getByText("监控结果已超过48小时，需重新检查")).toBeInTheDocument();
+  expect(screen.getByText("上次监控正常，需重新检查")).toBeInTheDocument();
+  expect(screen.getByText("上次未发现跟卖，需重新检查")).toBeInTheDocument();
+  expect(screen.queryByText("当前正常")).not.toBeInTheDocument();
+  expect(screen.queryByText("暂无跟卖")).not.toBeInTheDocument();
+});
