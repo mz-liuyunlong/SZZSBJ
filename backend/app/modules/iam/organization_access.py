@@ -50,8 +50,7 @@ def authorized_department_ids(
         """
     ).bindparams(bindparam("grant_ids", expanding=True))
     department_ids = frozenset(
-        str(value)
-        for value in session.execute(query, {"grant_ids": sorted(granted)}).scalars()
+        str(value) for value in session.execute(query, {"grant_ids": sorted(granted)}).scalars()
     )
     if not department_ids:
         raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403)
