@@ -56,17 +56,17 @@
 
 - 后端13项通过（含缺表明确503）、Ruff通过；前端4项待发货单元测试、10项WFS导航/页面回归通过；tsc、定向ESLint、Vite构建通过。构建有既有大包警告；jsdom有伪元素样式提示。
 - 实际隔离链路Playwright 2项通过：30箱发20拆12+8、自动审批、箱唛下载、刷新后剩10箱、占用禁止改箱；另一PK改装箱弹窗、添加尾箱行、取消不写入。真实Broker、真实Walmart、改装箱提交未验证。
-- 用户报告 localhost:5173 页面请求失败后，只读检查本地 szzsbj_dev：版本20261028_0062_packing_pending_edit，四张V2表均不存在。新版列表查逐箱占用表导致失败；不能视为无数据。
+- 用户报告 localhost:5173 页面请求失败后，只读检查本地 本地开发库 LOCAL_DATABASE_NAME：版本20261028_0062_packing_pending_edit，四张V2表均不存在。新版列表查逐箱占用表导致失败；不能视为无数据。
 - 已补WFS_SCHEMA_NOT_READY（503）和中文缺迁移提示，并以本地只读查询确认。没有创建表、写业务数据或修改Alembic版本。
 - 0068依赖0067合并头，直接upgrade将引入另一迁移链（AI运行、Listing评估、Monitor投影等），不能在本任务默认授权下执行。必须先确认本地迁移范围；页面尚未恢复可用。
-- 风险记录更新：除隔离测试库外，为排查用户故障只读连接本地szzsbj_dev检查表名和版本；没有读取业务明细、生产数据或显示密钥。
+- 风险记录更新：除隔离测试库外，为排查用户故障只读连接本地本地开发库 LOCAL_DATABASE_NAME检查表名和版本；没有读取业务明细、生产数据或显示密钥。
 
 
 ## 本地完整迁移执行结果（2026-10-29，覆盖前述待批准状态）
 
 ### Done
 
-用户明确授权“允许在本地开发库执行这条完整迁移链”。已核对127.0.0.1:55432/szzsbj_dev，执行8个既有迁移步骤：费用检测证据0061、同步异常0062、AI运行0063、Skill上下文0064、Listing评估0065、Monitor投影0066、合并头0067、WFS创建0068。当前唯一版本为20261029_0068_wfs_creation，四张WFS表存在。未改写历史迁移、未stamp跳过步骤。
+用户明确授权“允许在本地开发库执行这条完整迁移链”。已核对127.0.0.1:55432/LOCAL_DATABASE_NAME，执行8个既有迁移步骤：费用检测证据0061、同步异常0062、AI运行0063、Skill上下文0064、Listing评估0065、Monitor投影0066、合并头0067、WFS创建0068。当前唯一版本为20261029_0068_wfs_creation，四张WFS表存在。未改写历史迁移、未stamp跳过步骤。
 
 ### Files changed
 
@@ -76,7 +76,7 @@
 
 local_url严格身份检查；pg_dump --no-password --format=custom；pg_restore --list；alembic.command.upgrade(Config('alembic.ini'), '20261029_0068_wfs_creation')，设置10秒锁等待、120秒语句超时；迁移前后只读检查版本、四张表及来源表数量。
 
-备份：C:/Users/treas/.codex/backups/wfs-local-20261029-113312/szzsbj_dev_before_wfs.dump（8,869,186 bytes），归档目录校验通过；manifest.json保存前后版本和表数量。未做恢复演练。此前两次未完成备份未用于迁移；成功备份后才执行DDL。
+备份：C:/Users/treas/.codex/backups/wfs-local-20261029-113312/本地开发库 LOCAL_DATABASE_NAME_before_wfs.dump（8,869,186 bytes），归档目录校验通过；manifest.json保存前后版本和表数量。未做恢复演练。此前两次未完成备份未用于迁移；成功备份后才执行DDL。
 
 ### Tests run
 

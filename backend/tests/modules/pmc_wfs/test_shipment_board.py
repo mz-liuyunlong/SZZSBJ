@@ -5,6 +5,7 @@ tables this board reads. It does not depend on the WFS draft tables, which exist
 ``scripts/wfs_pending_local_schema.py`` and are not part of the Alembic chain.
 """
 
+import os
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
@@ -41,6 +42,10 @@ CLONED_TABLES = (
 
 @pytest.fixture(scope="module")
 def engine():
+    # Same opt-in pattern as PACKING_LOCAL_INTEGRATION: these tests create a throwaway
+    # schema inside the verified local development database, which CI does not have.
+    if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
+        pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
     url = local_url()
     get_settings.cache_clear()
     schema = "wfsboard_test_" + uuid4().hex

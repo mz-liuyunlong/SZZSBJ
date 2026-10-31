@@ -5,6 +5,8 @@ import { join } from "node:path";
 export default defineConfig({
   outputDir: join(tmpdir(), "szzsbj-playwright-test-results"),
   testDir: "./e2e",
+  // Runs only through e2e/wfs-v2.config.ts (own backend + isolated database).
+  testIgnore: ["wfs-v2-live.spec.ts"],
   use: {
     baseURL: "http://127.0.0.1:4173",
   },

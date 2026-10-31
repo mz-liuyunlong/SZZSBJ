@@ -26,7 +26,7 @@
 
 ## 门禁与风险
 
-本地代码需新 PRP 批准；新表/约束通过 Alembic 文件评审，不修改历史版本，不执行现有库 DDL。测试使用专属新建隔离数据库，不能复用旧 fixture 对 szzsbj_dev 的连接。完整外部创建/箱唛验收不能由本切片完成替代。
+本地代码需新 PRP 批准；新表/约束通过 Alembic 文件评审，不修改历史版本，不执行现有库 DDL。测试使用专属新建隔离数据库，不能复用旧 fixture 对 本地开发库 LOCAL_DATABASE_NAME 的连接。完整外部创建/箱唛验收不能由本切片完成替代。
 
 关联 PRP：`PRPs/pmc-wfs-pending-packing-v2-local.md`。
 

@@ -1,5 +1,6 @@
 """Real local PostgreSQL tests in a process-owned schema; existing data never touched."""
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from uuid import uuid4
@@ -31,6 +32,10 @@ from scripts.wfs_pending_local_schema import local_url
 
 @pytest.fixture(scope="module")
 def engine():
+    # Same opt-in pattern as PACKING_LOCAL_INTEGRATION: these tests create a throwaway
+    # schema inside the verified local development database, which CI does not have.
+    if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
+        pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
     url = local_url()
     get_settings.cache_clear()
     schema = "wfs_test_" + uuid4().hex
