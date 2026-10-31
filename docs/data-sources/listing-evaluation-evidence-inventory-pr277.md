@@ -22,7 +22,7 @@
 | E07 / 011,015,016 | WFS 每日零库存、有库存及缺快照可区分；账号＋店铺＋Item ID＋日期 | `WalmartListingInventoryDailyFact.snapshot_date_la/wfs_available_quantity/captured_at`；`preview.py::stockout_candidate` 要求连续观察到零 | 结构与诊断规则存在；历史覆盖率和采集成功水位未核实 | 缺快照不判为零库存，也不判连续断货 |
 | E08 / 005,009,011,012 | FBM 等非 WFS 的可售量及断货依据 | 库存 FACT 有 `available_quantity`，`evaluation.py` 可处理 FBM 候选 | `available_quantity` 的 FBM 权威来源与历史覆盖待负责人决定 | 不用 WFS 零库存判 FBM 断货；阶段待确认 |
 | E09 / 015,016,017,018 | 断货前阶段、恢复过程、清货和归档在指定截止日的历史状态 | `ListingArchiveState` 只有当前归档状态及最近归档／恢复时间；`preview.py::archive_has_post_cutoff_event` 只做保守阻断 | 不可变事件序列未找到，历史 as-of 无法完整回放 | 后续事件发生过的历史日不反推当前状态；保留 `ARCHIVE_STATE_AS_OF_CUTOFF_UNVERIFIED` |
-| E10 / 014,080 | 划线价和购物车异常的具体成功观察及采集时间 | `StandardizedWalmartMonitorListingObservation` 的成功结果和 `captured_at`；`preview.py` 按 LA 日期读取 | 已批准作诊断观察；生产 RAW 投递覆盖和字段质量未核实 | 没观察就未知；不推断连续异常或正式阶段 |
+| E10 / 014,080 | 划线价和购物车异常的具体成功观察及采集时间 | `StandardizedWalmartMonitorListingObservation` 的成功结果和 `captured_at`；`preview.py` 按 LA 日期读取 | 已批准作诊断观察；只读聚合确认现有观察可关联当前 Listing，但 RAW 投递覆盖和字段质量未认证 | 没观察就未知；不推断连续异常或正式阶段 |
 | E11 / 007,020,024 | 每次计算使用的规则版本、截止日与结果快照 | `ListingGradeRuleVersion`、`ListingEvaluationRun/Snapshot`、诊断输出中的 `rule_version/cutoff_la/published` | 诊断快照存在；正式发布及回滚链路未获批准 | `published=false`；保留候选，不覆盖 MART 正式字段 |
 | E12 / 059,060,065,067,068 | 批次逐 Listing 错误、正式发布后跟进和提醒的权限与运行证据 | `listing_rule_config/batch.py/tasks.py`、`ListingEvaluationRun/Snapshot` | 诊断任务部分存在；正式发布与运营动作依赖 E01–E11 | 只显示诊断状态和可见错误；不启用正式调度或自动 C/D 跟进 |
 
@@ -46,6 +46,7 @@
 - 最近业务日的销售、广告和库存数据存在，但库存日覆盖有缺口；销售日出现不完整信号，缺少足以认证真实零销量的采集水位。
 - 广告事实存在未归属店铺的记录；相关同步任务有失败记录。费用字段或计算状态不能代替完整性和归因证明。
 - 退款数据分布在不同来源表；退款同步的近期成功水位不足，不能据单个来源表判断退款已经完整结算。
+- 监控标准化观察可用稳定业务键关联当前 Listing，但目前只覆盖部分 Listing 和业务日；尚未完成 RAW 投递及历史采集范围对账。
 - 归档表主要反映当前状态，缺少可完整回放的历史事件；规则版本虽存在，正式计算运行和结果快照仍为空，不能证明发布链路已经闭环。
 - 因此 E02–E09、E11–E12 仍未达到正式评级、历史生命周期写回或生产调度启用门槛；继续保持诊断和未发布状态。具体聚合数字仅在本次私有会话中提供，不进入 Git 文档或 PR 正文。
 
