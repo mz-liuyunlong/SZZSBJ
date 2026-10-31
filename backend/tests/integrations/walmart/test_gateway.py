@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
 import pytest
@@ -710,6 +711,138 @@ def test_file_outbox_survives_a_process_restart(world, tmp_path):
     assert [r.operation_key for r in replayed] == ["wfs_inventory", "wfs_inbound_shipment_cancel"]
     assert replayed[0].outcome == "ok" and replayed[1].outcome == "denied"
     assert replayed[1].idempotency_key == "cancel:PMC-R"
+
+
+def test_transport_failure_plus_ledger_failure_is_a_stable_code_and_audited(world):
+    """P3 (round 5): the cloud call blew up and finish(unknown) could not be recorded. The
+    caller still gets a stable code, the unknown audit row is written with the ledger
+    failure, and the key stays attempting (a retry is refused until reconciliation)."""
+    gateway, transport, records = world
+    actor = _user(WFS_CANCEL_PERMISSION, stores={STORE})
+    cancel = {"params": {"inboundOrderId": "PMC-TL"}, "approval_ref": "wfs-ticket:tl"}
+    inner = gateway.ledger
+
+    class FinishBreaks:
+        def begin(self, key, **fields):
+            inner.begin(key, **fields)
+
+        def finish(self, key, **fields):
+            raise ConnectionError("database went away")
+
+        def status(self, key):
+            return inner.status(key)
+
+        def resolve(self, key, **fields):
+            inner.resolve(key, **fields)
+
+    def crash(**_: Any):
+        raise RuntimeError("socket closed")
+
+    gateway._ledger = FinishBreaks()  # noqa: SLF001
+    transport.execute = crash  # type: ignore[method-assign]
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_UNAVAILABLE"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-TL",
+            **cancel,
+        )
+    assert records[-1].outcome == "unknown"
+    assert records[-1].error_code == "WALMART_LEDGER_UNAVAILABLE"
+    assert records[-1].idempotency_key == "cancel:PMC-TL" and records[-2].outcome == "attempt"
+    assert inner.status("cancel:PMC-TL") == "attempting"
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PENDING_REVIEW"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-TL",
+            **cancel,
+        )
+
+
+def _record(n: int) -> CallRecord:
+    return CallRecord(
+        store_code=STORE,
+        operation_key="wfs_inventory",
+        risk="read",
+        actor_kind="user",
+        actor_uid=str(n),
+        approval_ref=None,
+        idempotency_key=None,
+        contract_sha256=None,
+        registry_version="v",
+        request_sha256="a" * 64,
+        status_code=200,
+        outcome="ok",
+        error_code=None,
+        duration_ms=n,
+    )
+
+
+def test_two_workers_draining_one_outbox_deliver_each_record_once(tmp_path):
+    """P3 (round 5): drain claims a file by rename before handing it to the sink, so two
+    processes sharing the directory never persist the same record twice."""
+    import threading
+
+    directory = tmp_path / "shared-outbox"
+    producer = FileOutbox(directory)
+    for n in range(40):
+        producer.append(_record(n))
+    assert producer.pending() == 40
+    delivered: list[int] = []
+    lock = threading.Lock()
+    barrier = threading.Barrier(2)
+
+    def slow_sink(record: CallRecord) -> None:
+        time.sleep(0.002)  # widen the window in which both workers look at the same file
+        with lock:
+            delivered.append(record.duration_ms)
+
+    results: list[bool] = []
+    workers = [FileOutbox(directory), FileOutbox(directory)]  # two "processes", one directory
+
+    def worker(outbox: FileOutbox) -> None:
+        try:
+            barrier.wait(timeout=5)
+            results.append(outbox.drain(slow_sink))
+        except Exception as error:  # never leave the other thread parked on the barrier
+            barrier.abort()
+            results.append(error)  # type: ignore[arg-type]
+
+    threads = [threading.Thread(target=worker, args=(w,), daemon=True) for w in workers]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(delivered) == list(range(40)), "a record was delivered twice or lost"
+    assert results == [True, True] and producer.pending() == 0
+    assert list(directory.iterdir()) == []  # no .json, .claimed or .tmp left behind
+
+
+def test_outbox_releases_claims_on_sink_failure_and_reclaims_stale_ones(tmp_path):
+    directory = tmp_path / "ob"
+    outbox = FileOutbox(directory)
+    outbox.append(_record(1))
+
+    def refusing(_: CallRecord) -> None:
+        raise OSError("still down")
+
+    assert outbox.drain(refusing) is False
+    assert [p.suffix for p in directory.iterdir()] == [".json"]  # released, still pending
+    # A worker that died mid-drain leaves a .claimed file; after the stale window it is retried.
+    (claimed,) = directory.iterdir()
+    stale = claimed.with_suffix(".claimed")
+    claimed.rename(stale)
+    old = time.time() - FileOutbox.STALE_CLAIM_SECONDS - 5
+    import os
+
+    os.utime(stale, (old, old))
+    assert outbox.pending() == 1
+    taken: list[CallRecord] = []
+    assert outbox.drain(taken.append) is True and len(taken) == 1
+    assert list(directory.iterdir()) == []
 
 
 def test_file_outbox_keeps_records_the_sink_rejects(tmp_path):

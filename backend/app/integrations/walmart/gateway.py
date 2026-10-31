@@ -366,41 +366,100 @@ class FileOutbox:
     """One JSON file per pending record in a local directory (oldest first on drain).
 
     The directory is on the server's own disk, so it is available exactly when the
-    database is not. A file is removed only after the sink accepted the record.
+    database is not. ``append`` writes a temp file, fsyncs it and renames it into place.
+    ``drain`` first *claims* a record by renaming ``<name>.json`` to ``<name>.claimed``
+    (atomic on one filesystem), so several workers draining the same directory never
+    hand the same record to the sink twice; a claim that fails was won by another
+    worker and is skipped. A claimed file is deleted only after the sink accepted the
+    record; on sink failure it is renamed back to ``.json``. A claim left behind by a
+    crashed worker is reclaimed after ``STALE_CLAIM_SECONDS``.
+
+    An unreadable file is renamed back and left in place: ``drain`` returns False, so
+    every write is refused (``WALMART_AUDIT_UNAVAILABLE``) until an operator moves the
+    file out of the directory and records it by hand (see INTEGRATION.md).
     """
+
+    STALE_CLAIM_SECONDS = 300
 
     def __init__(self, directory: str | Path) -> None:
         self._dir = Path(directory)
         self._dir.mkdir(parents=True, exist_ok=True)
-        probe = self._dir / ".write-test"
+        # Unique probe name: two processes may start against the same directory at once.
+        probe = self._dir / f".write-test-{uuid4().hex}"
         probe.write_text("ok")
-        probe.unlink()
+        probe.unlink(missing_ok=True)
 
     def append(self, record: CallRecord) -> None:
         name = f"{time.time_ns():020d}-{uuid4().hex}.json"
         tmp = self._dir / (name + ".tmp")
-        tmp.write_text(json.dumps(asdict(record), ensure_ascii=False, sort_keys=True))
+        with tmp.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(asdict(record), ensure_ascii=False, sort_keys=True))
+            handle.flush()
+            os.fsync(handle.fileno())
         tmp.replace(self._dir / name)
 
     def _files(self) -> list[Path]:
         return sorted(p for p in self._dir.glob("*.json") if p.is_file())
 
+    def _stale_claims(self) -> list[Path]:
+        cutoff = time.time() - self.STALE_CLAIM_SECONDS
+        stale = []
+        for path in self._dir.glob("*.claimed"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    stale.append(path)
+            except OSError:
+                continue
+        return stale
+
     def pending(self) -> int:
-        return len(self._files())
+        return len(self._files()) + len(list(self._dir.glob("*.claimed")))
+
+    def _claim(self, path: Path) -> Path | None:
+        claimed = path.with_suffix(".claimed")
+        try:
+            path.rename(claimed)  # atomic; loses cleanly to a concurrent worker
+        except OSError:
+            return None
+        try:
+            os.utime(claimed, None)  # claim time, for stale-claim recovery
+        except OSError:
+            pass
+        return claimed
+
+    @staticmethod
+    def _release(claimed: Path) -> None:
+        try:
+            claimed.rename(claimed.with_suffix(".json"))
+        except OSError:
+            logger.exception("walmart audit outbox: could not release %s", claimed.name)
 
     def drain(self, sink: AuditSink) -> bool:
+        for stale in self._stale_claims():
+            self._release(stale)
         for path in self._files():
+            claimed = self._claim(path)
+            if claimed is None:
+                continue  # another worker has it
             try:
-                record = CallRecord(**json.loads(path.read_text()))
+                record = CallRecord(**json.loads(claimed.read_text(encoding="utf-8")))
             except (OSError, ValueError, TypeError):
-                logger.error("walmart audit outbox: unreadable record %s left in place", path.name)
+                logger.error(
+                    "walmart audit outbox: unreadable record %s left in place; move it out of"
+                    " the directory and record it by hand",
+                    path.name,
+                )
+                self._release(claimed)
                 return False
             try:
                 sink(record)
             except Exception:
+                self._release(claimed)
                 return False
-            path.unlink(missing_ok=True)
-        return True
+            claimed.unlink(missing_ok=True)
+        # Files another worker holds a live claim on are being persisted by that worker;
+        # from this side nothing unclaimed is left, so writes may proceed.
+        return not self._files()
 
 
 class WalmartGateway:
@@ -603,9 +662,20 @@ class WalmartGateway:
             code = str(error) if isinstance(error, (RuntimeError, ValueError)) else ""
             code = code if re.fullmatch(r"[A-Z0-9_]{4,64}", code) else "WALMART_GATEWAY_UNAVAILABLE"
             if ledger_open and idempotency_key is not None:
-                self._ledger.finish(
-                    idempotency_key, outcome="unknown", status_code=None, error_code=code
-                )
+                try:
+                    self._ledger.finish(
+                        idempotency_key, outcome="unknown", status_code=None, error_code=code
+                    )
+                except Exception as ledger_error:
+                    # Transport failed *and* the ledger could not record it: the key stays
+                    # attempting (still refuses a retry), the audit row carries the ledger
+                    # failure, and the caller gets that stable code.
+                    code = _ledger_error_code(ledger_error)
+                    logger.exception(
+                        "walmart ledger finish failed after a transport error: key=%s code=%s",
+                        idempotency_key,
+                        code,
+                    )
             self._record(
                 store_code,
                 operation_key,
