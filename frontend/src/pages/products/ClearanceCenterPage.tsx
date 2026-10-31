@@ -46,6 +46,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const [role,setRole]=useState("刘运营");
  const [filters,setFilters]=useState<FilterState>({...blankFilters});
  const [searchDraft,setSearchDraft]=useState("");
+ const [searchType,setSearchType]=useState("all");
  const [showStats,setShowStats]=useState(true);
  const [activeStat,setActiveStat]=useState("");
  const [tables,setTables]=useState<Record<"analysis"|"management",TableState>>({
@@ -76,7 +77,9 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    if(filters.quick==="age"&&x.age<data.rules.mediumAge)return false;
    if(filters.quick==="coverage"&&(cov===null||cov<data.rules.highCoverage))return false;
    if(filters.quick==="decline"&&!risk.business.some(s=>s.includes("下滑")))return false;
-   return !q||[x.sku,x.msku,x.item,x.name,x.store,x.owner].some(v=>v.toLowerCase().includes(q));
+   if(!q)return true;
+   const searchFields:Record<string,string>={sku:x.sku,msku:x.msku,item:x.item,name:x.name};
+   return searchType==="all"?[x.sku,x.msku,x.item,x.name,x.store,x.owner].some(v=>v.toLowerCase().includes(q)):(searchFields[searchType]??"").toLowerCase().includes(q);
   }).sort((a,b)=>{
    if(filters.sort==="age")return b.age-a.age;
    if(filters.sort==="value")return b.avail*b.cost-a.avail*a.cost;
@@ -84,13 +87,16 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    const ranks:Record<RiskLevel,number>={high:3,medium:2,low:1};
    return ranks[evaluateProduct(b,data.rules).level]-ranks[evaluateProduct(a,data.rules).level]||b.avail*b.cost-a.avail*a.cost;
   });
- },[candidates,filters,data]);
+ },[candidates,filters,data,searchType]);
  const managementRows=useMemo(()=>data.tasks.filter(t=>{
    const q=filters.query.trim().toLowerCase();
    if(filters.store!=="all"&&taskStore(t)!==filters.store)return false;
    if(filters.owner!=="all"&&t.owner!==filters.owner)return false;
    if(filters.status!=="all"&&t.status!==filters.status)return false;
-   return !q||[t.id,t.reason,t.remark,t.requester,...t.lines.flatMap(l=>[CLEARANCE_PRODUCTS.find(x=>x.id===l.id)?.sku??""])].some(v=>v.toLowerCase().includes(q));
+   if(!q)return true;
+   const products=t.lines.map(l=>CLEARANCE_PRODUCTS.find(x=>x.id===l.id));
+   if(searchType==="sku"||searchType==="msku"||searchType==="item"||searchType==="name")return products.some(x=>(String(x?.[searchType]??"")).toLowerCase().includes(q));
+   return [t.id,t.reason,t.remark,t.requester,...products.map(x=>x?.sku??"")].some(v=>v.toLowerCase().includes(q));
  }).sort((a,b)=>b.submitted.localeCompare(a.submitted)),[data.tasks,filters]);
  const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
   const rows=tab==="management"?[
@@ -109,7 +115,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const changeFilter=(patch:Partial<FilterState>)=>{setFilters(old=>({...old,...patch}));setTables(old=>({...old,[tab==="rules"?"analysis":tab]:{...old[tab==="rules"?"analysis":tab],page:1}}));};
  const selectTab=(key:string)=>{
   if(!["analysis","management","rules"].includes(key))return;
-  setTab(key as Tab);setFilters({...blankFilters});setSearchDraft("");setActiveStat("");
+  setTab(key as Tab);setFilters({...blankFilters});setSearchDraft("");setSearchType("all");setActiveStat("");
  };
  const onStat=(key:string)=>{
   setActiveStat(old=>old===key?"":key);
@@ -149,9 +155,9 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
       <Select aria-label="选择店铺" value={filters.store} onChange={v=>changeFilter({store:v})} options={[{value:"all",label:"全部店铺"},...stores.map(x=>({value:x,label:x}))]}/>
       <Select aria-label="选择负责人" value={filters.owner} onChange={v=>changeFilter({owner:v})} options={[{value:"all",label:"全部负责人"},...owners.map(x=>({value:x,label:x}))]}/>
       {tab==="analysis"?<><Select aria-label="风险等级" value={filters.risk} onChange={v=>changeFilter({risk:v})} options={[{value:"all",label:"全部风险"},{value:"high",label:"高风险"},{value:"medium",label:"中风险"},{value:"low",label:"低风险"}]}/><Select aria-label="排序方式" value={filters.sort} onChange={v=>changeFilter({sort:v})} options={[{value:"risk",label:"风险优先"},{value:"age",label:"库龄最高"},{value:"value",label:"库存成本最高"},{value:"sales",label:"销量最低"}]}/></>:<Select aria-label="清货状态" value={filters.status} onChange={v=>changeFilter({status:v})} options={[{value:"all",label:"全部状态"},...Object.entries({pending:"待审批",supplement:"待补资料",ready:"待执行",running:"执行中",paused:"已暂停",done:"已完成",rejected:"已驳回",cancelled:"已撤回"}).map(([value,label])=>({value,label}))]}/>}
-      <ConnectedSearch typeAriaLabel="清货搜索范围" typeOptions={[{value:"all",label:"全部"}]} typeValue="all" onTypeChange={()=>{}} inputAriaLabel="搜索清货记录" inputPlaceholder={tab==="analysis"?"搜索 SKU / MSKU / 商品ID / 品名":"搜索清货单号 / SKU / 申请说明"} inputValue={searchDraft} onInputChange={setSearchDraft} onSearch={()=>changeFilter({query:searchDraft})}/>
+      <ConnectedSearch typeAriaLabel="清货搜索范围" typeOptions={[{value:"all",label:"全部"},{value:"sku",label:"SKU"},{value:"msku",label:"MSKU"},{value:"item",label:"商品 ID"},{value:"name",label:"品名"}]} typeValue={searchType} onTypeChange={value=>{setSearchType(value);changeFilter({query:searchDraft});}} inputAriaLabel="搜索清货记录" inputPlaceholder={tab==="analysis"?"搜索 SKU / MSKU / 商品ID / 品名":"搜索清货单号 / SKU / 申请说明"} inputValue={searchDraft} onInputChange={setSearchDraft} onSearch={()=>changeFilter({query:searchDraft})}/>
       <Button type="primary" icon={<FileAddOutlined/>} onClick={()=>setManualOpen(true)}>申请 SKU</Button>
-      <Button icon={<ReloadOutlined/>} onClick={()=>{setSearchDraft("");setFilters({...blankFilters});setActiveStat("");setTableState({page:1});void message.info("已刷新 Mock 视图");}}>刷新</Button>
+      <Button icon={<ReloadOutlined/>} onClick={()=>{setSearchDraft("");setSearchType("all");setFilters({...blankFilters});setActiveStat("");setTableState({page:1});void message.info("已刷新 Mock 视图");}}>刷新</Button>
      </div>
      {tab==="analysis"&&<div className="clearance-quick"><Typography.Text type="secondary">快速定位</Typography.Text>{[
       ["all","全部风险"],["untreated","待评估"],["auto","系统识别"],["manual","人工申请"],["age","库龄 ≥"+data.rules.mediumAge+"天"],["coverage","售罄 ≥"+data.rules.highCoverage+"天"],["decline","近期销量下滑"],
