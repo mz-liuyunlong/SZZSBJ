@@ -59,6 +59,9 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [dataLoadComplete, setDataLoadComplete] = useState(false);
+  const [runLoaded, setRunLoaded] = useState(false);
+  const [followUpLoaded, setFollowUpLoaded] = useState(false);
   const [activeFollowUp, setActiveFollowUp] = useState<FollowUp | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
   const [savingFollowUp, setSavingFollowUp] = useState(false);
@@ -70,17 +73,27 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
       if (!active) return;
       setLoading(true);
       setError("");
+      setDataLoadComplete(false);
+      setRunLoaded(false);
+      setFollowUpLoaded(false);
+      setRuns([]);
+      setFollowUps([]);
       try {
-        const [runResponse, followUpResponse] = await Promise.all([
+        const [runResult, followUpResult] = await Promise.allSettled([
           backendRequest<{ items: EvaluationRun[]; total: number }>("/api/listings/evaluation-runs?limit=20"),
           backendRequest<{ items: FollowUp[]; total: number }>("/api/listings/evaluation-followups?limit=100"),
         ]);
         if (active) {
-          setRuns(runResponse.data.items);
-          setFollowUps(followUpResponse.data.items);
+          if (runResult.status === "fulfilled") setRuns(runResult.value.data.items);
+          if (followUpResult.status === "fulfilled") setFollowUps(followUpResult.value.data.items);
+          setRunLoaded(runResult.status === "fulfilled");
+          setFollowUpLoaded(followUpResult.status === "fulfilled");
+          setDataLoadComplete(runResult.status === "fulfilled" && followUpResult.status === "fulfilled");
+          setError([
+            runResult.status === "rejected" ? "计算记录加载失败。" : "",
+            followUpResult.status === "rejected" ? "C/D跟进加载失败。" : "",
+          ].filter(Boolean).join(" "));
         }
-      } catch {
-        if (active) setError("计算记录接口暂不可用或当前账号无权查看。");
       } finally {
         if (active) setLoading(false);
       }
@@ -109,17 +122,23 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
   return (
     <Drawer title="Listing 计算记录与C/D跟进" open={open} onClose={onClose} width={1080}>
       <Alert type="warning" showIcon style={{ marginBottom: 16 }}
-        message="当前运行只保存未发布的诊断快照"
-        description="广告费用完整性与历史业务事件证据通过审核之前，不会覆盖正式Listing等级，也不会生成正式C/D运营任务。" />
+        message="诊断结果与正式发布状态分开显示"
+        description="诊断候选不等于正式评级。正式结果及C/D跟进仅以已发布记录为准；缺少经审核的广告费用或历史事件证据时不得发布。" />
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
       <Spin spinning={loading}>
         <Typography.Title level={5}>最近计算批次</Typography.Title>
         {runs.length ? <Table<EvaluationRun> rowKey="id" size="small" columns={runColumns}
-          dataSource={runs} pagination={false} scroll={{ x: 850 }} /> : <Empty description="暂无计算批次记录" />}
+          dataSource={runs} pagination={false} scroll={{ x: 850 }} /> : <Empty description={runLoaded ? "暂无计算批次记录" : "计算记录尚未加载"} />}
         <Typography.Title level={5} style={{ marginTop: 28 }}>C/D级每日跟进</Typography.Title>
         <Descriptions size="small" column={1} style={{ marginBottom: 12 }}>
           <Descriptions.Item label="生成条件">仅从已正式发布、证据完整的C/D级快照生成</Descriptions.Item>
-          <Descriptions.Item label="当前状态">没有已发布评级，因此不会创建或虚构跟进任务</Descriptions.Item>
+          <Descriptions.Item label="当前状态">{
+            (runLoaded && runs.some((run) => (run.published_count ?? 0) > 0)) || (followUpLoaded && followUps.length > 0)
+              ? "已查询到正式发布记录或C/D跟进任务"
+              : dataLoadComplete
+                ? "本次查询未发现已发布评级或正式跟进任务"
+                : "数据未全部加载，发布状态暂不能确认"
+          }</Descriptions.Item>
         </Descriptions>
         {followUps.length ? <Table<FollowUp> rowKey="id" size="small" columns={[
           ...followUpColumns,
@@ -127,7 +146,7 @@ export default function ListingEvaluationMonitor({ open, onClose }: Props) {
             <Button size="small" disabled={row.status === "completed" || row.status === "canceled"}
               onClick={() => { setActiveFollowUp(row); setResolutionNote(""); }}>完成检查</Button>
           ) },
-        ]} dataSource={followUps} pagination={{ pageSize: 10 }} scroll={{ x: 950 }} /> : <Empty description="暂无正式C/D跟进任务" />}
+        ]} dataSource={followUps} pagination={{ pageSize: 10 }} scroll={{ x: 950 }} /> : <Empty description={followUpLoaded ? "暂无正式C/D跟进任务" : "C/D跟进尚未加载"} />}
       </Spin>
       <Modal title="完成C/D每日检查" open={activeFollowUp !== null}
         confirmLoading={savingFollowUp} okText="保存完成记录" cancelText="取消"
