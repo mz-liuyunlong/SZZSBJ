@@ -1,7 +1,9 @@
+import csv
 import json
 from collections import namedtuple
 from datetime import UTC, datetime
 from decimal import Decimal
+from io import StringIO
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -129,6 +131,33 @@ def test_listing_csv_preserves_unknown_resell_status(hijacked: bool | None, expe
     )
 
     assert csv_text.splitlines() == ["是否跟卖", expected]
+
+
+@pytest.mark.parametrize(
+    ("ad_spend", "expected"),
+    [(None, ""), (Decimal("0.0000"), "0.0000")],
+)
+def test_listing_csv_distinguishes_missing_ad_spend_from_real_zero(
+    ad_spend: Decimal | None, expected: str
+) -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    service._to_read = MagicMock(
+        return_value=_listing_item().model_copy(update={"ad_spend_30d_amount": ad_spend})
+    )
+    row = SimpleNamespace(
+        id=UUID(int=1), source_account_ref="synthetic-account", item_id="synthetic-item"
+    )
+
+    csv_text = service.export_listing_csv(
+        ListingManagementQuery(),
+        frozenset({"synthetic-account"}),
+        columns="ad_spend_30d",
+        _rows=[row],
+    )
+
+    assert list(csv.reader(StringIO(csv_text))) == [["近30天广告费"], [expected]]
 
 
 def test_listing_streaming_export_does_not_truncate_after_ten_thousand_rows() -> None:
