@@ -503,7 +503,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码风险待验收): **批次逐Listing独立查询成本高**
 - Recorded condition: 循环evaluator.evaluate逐条查询多张表
 - Original acceptance: 批量预取、游标分页、吞吐与资源基准测试
-- PR #277 evidence: each keyset page now prefetches sales, inventory, prior-stock identity, archive, and monitor evidence in five bounded queries; the shared calculator preserves the single-item formula. Synthetic tests cover two accounts, NULL/MSKU identity, duplicate/oversized pages and query count. Isolated PostgreSQL throughput and index-plan benchmark remain pending.
+- PR #277 evidence: each keyset page now prefetches sales, inventory, prior-stock identity, archive, and monitor evidence in five bounded queries; the shared calculator preserves the single-item formula. Synthetic tests cover two accounts, NULL/MSKU identity, duplicate/oversized pages and query count. An isolated PostgreSQL database at migration 0070 confirmed batch/single output equivalence for two synthetic accounts; the transaction was rolled back and the database was empty afterward. Throughput and index-plan benchmarks remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
 ### LM-065 | 自动任务 | P1 | PARTIAL
@@ -629,14 +629,14 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **删除共享标签可能删除跨账号关联**
 - Recorded condition: 全局标签表删除时delete assignment where tag_id，无账号条件
 - Original acceptance: 标签所有权/管理权限独立；跨账号删除受控
-- PR #277 review / Codex TODO: Delete-tag rejects if foreign usage exists, but global definition owner is absent; update/delete/list may still affect or disclose other tenants.
+- PR #277 evidence: tag definitions and assignments now carry account scope, writes require matching account, and delete remains soft-delete; migration 0070 splits historically shared definitions by account. Active definitions with no assignment have no provable account owner, so migration stops instead of silently hiding them. Isolated PostgreSQL confirmed the error leaves revision 0069 and the tag intact; a two-account shared-tag fixture upgraded to 0070 with two distinct definitions and zero cross-account assignments. Production preflight and account mapping remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/repository.py
 
-### LM-083 | 权限安全 | P1 | OPEN
+### LM-083 | 权限安全 | P1 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **可见标签列表可能跨账号**
 - Recorded condition: list_tags无定义级账号过滤，仅usage对账号筛选
 - Original acceptance: 标签定义按租户/账号作用域显示或明确公用标签策略
-- PR #277 review / Codex TODO: list_tags queries ALL active ProductCustomTag definitions and scopes only usage counts. Must enforce tenant ownership or explicit shared/global policy.
+- PR #277 evidence: list_tags filters definition account as well as usage account. Migration 0070 refuses active definitions without assignment provenance. Multi-account API and migration acceptance remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/repository.py
 
 ### LM-084 | 导出 | P1 | PATCHED_UNVERIFIED
@@ -650,7 +650,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码风险待验收): **负责人多列MAX可能组成错误配对**
 - Recorded condition: owner_lookup对owner_uid/name等字段分别max聚合
 - Original acceptance: 以同一可信产品记录联动关联负责人和开发人
-- PR #277 review / Codex TODO: owner_lookup now selects UID/name from a single row using row_number, but lexicographic order is not latest/most trusted source.
+- PR #277 evidence: owner_lookup now ranks by `source_observed_at`, then `updated_at` and snapshot ID, and selects owner/developer from the same row. A two-account synthetic test verifies latest-snapshot pairing. The product-info authority contract and isolated PostgreSQL behavior remain to be verified.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/repository.py
 
 ### LM-086 | 数据关联 | P1 | PARTIAL
@@ -699,7 +699,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码风险待验收): **标签名称缺少DB唯一约束**
 - Recorded condition: 代码校验重名，但表级没有唯一索引
 - Original acceptance: 增加数据库安全唯一约束，处理并发创建
-- PR #277 review / Codex TODO: Advisory transaction lock added to duplicate-name checks, but DB has no UNIQUE INDEX and auto-creation in _resolve_tags bypasses the lock.
+- PR #277 evidence: migration 0070 adds a partial unique index on `(source_account_ref, lower(name))` for non-deleted account tags; auto-creation also acquires an account/name transaction lock. Duplicate-name and migration-conflict tests on populated PostgreSQL remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/models.py
 
 ### LM-093 | 标签管理 | P2 | PATCHED_UNVERIFIED

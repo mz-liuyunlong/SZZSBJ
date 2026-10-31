@@ -32,6 +32,24 @@ def upgrade() -> None:
         ) ranked_accounts
         """
     )
+    # An unused active definition has no account provenance. Scoping it to an
+    # arbitrary account would leak it; leaving it NULL would silently hide it.
+    op.execute(
+        """
+        DO $$ BEGIN
+          IF EXISTS (
+            SELECT 1 FROM product_custom_tags AS tag
+            WHERE tag.deleted_at IS NULL AND tag.is_active = true
+              AND NOT EXISTS (
+                SELECT 1 FROM product_custom_tag_assignments AS assignment
+                WHERE assignment.tag_id = tag.id
+              )
+          ) THEN
+            RAISE EXCEPTION 'LISTING_TAG_UNOWNED_DEFINITION_REQUIRES_OWNER_MAPPING';
+          END IF;
+        END $$
+        """
+    )
     # Conflicting definitions cannot be merged safely when colors or semantics
     # differ. Stop the migration before changing any persistent row.
     op.execute(
