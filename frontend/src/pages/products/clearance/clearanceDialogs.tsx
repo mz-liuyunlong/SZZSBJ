@@ -110,6 +110,8 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
  const [manualSelection,setManualSelection]=useState<string[]>([]);
  const [manualSearch,setManualSearch]=useState("");
  const [manualStore,setManualStore]=useState("all");
+ const [removeTarget,setRemoveTarget]=useState<string|null>(null);
+ const [removeNote,setRemoveNote]=useState("");
  const [form]=Form.useForm<ApplyValues>();
  const [progressForm]=Form.useForm<{lines:Record<string,{sold:number;removed:number;disposed:number}>}>();
  const product=applicant?findProduct(applicant):undefined;
@@ -175,7 +177,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
   {product&&<><div className="clearance-detail-grid">{[["商品ID",product.item],["SKU",product.sku],["MSKU",product.msku],["店铺",product.store],["负责人",product.owner],["当前售价",money(product.price)],["可售库存",integer(product.avail)],["售罄天数",coverage(product)==null?"无法估算":coverage(product)+"天"],["库存成本",money(product.avail*product.cost)],["平均库龄",product.age+"天"],["评分",product.rating+" / 5"],["30天退货",product.returns+" 次"]].map(([label,value])=><Card key={label} size="small"><Typography.Text type="secondary">{label}</Typography.Text><strong>{value}</strong></Card>)}</div>
   <Divider orientation="left">7 / 14 / 30 天经营指标对比</Divider>
   <Table rowKey="key" size="small" pagination={false} dataSource={([["units","销量"],["daily","日均销量"],["revenue","销售额"],["ads","广告费"],["adRate","广告占比"],["profit","利润"],["profitRate","利润率"]] as const).map(([key,label])=>({key,label}))} columns={[{title:"指标",dataIndex:"label"},...[7,14,30].map(days=>({title:days+"天",render:(_:unknown,row:{key:string})=>{const x=product.per[days as 7|14|30];return row.key==="units"?integer(x.units):row.key==="daily"?(x.units/days).toFixed(2):row.key==="revenue"?money(x.revenue):row.key==="ads"?money(x.ads):row.key==="adRate"?percent(x.adRate):row.key==="profit"?money(x.profit):percent(x.margin);}}))]}/>
-  <Divider orientation="left">风险决策依据</Divider><RiskTag level={evaluateProduct(product,data.rules).level}/>{evaluateProduct(product,data.rules).reasons.map(x=><Typography.Paragraph key={x}>• {x}</Typography.Paragraph>)}{evaluateProduct(product,data.rules).business.map(x=><Tag color="warning" key={x}>{x}</Tag>)}
+  <Divider orientation="left">风险决策依据</Divider>{data.manual.includes(product.id)&&eligible(product)&&<Button danger size="small" onClick={()=>setRemoveTarget(product.id)}>移出人工清货候选</Button>}<RiskTag level={evaluateProduct(product,data.rules).level}/>{evaluateProduct(product,data.rules).reasons.map(x=><Typography.Paragraph key={x}>• {x}</Typography.Paragraph>)}{evaluateProduct(product,data.rules).business.map(x=><Tag color="warning" key={x}>{x}</Tag>)}
   </>}</Drawer>
   <Modal title="运营主动申请清货" width={900} open={manualOpen} onCancel={()=>setManualOpen(false)} onOk={()=>{begin(manualSelection,"manual");setManualOpen(false);}} okText="下一步 · 填写申请" okButtonProps={{disabled:!selected.length||new Set(selected.map(x=>x.store)).size!==1||!selected.every(eligible)}} destroyOnHidden>
    <Typography.Paragraph type="secondary">可搜索全部 WFS Mock 商品，包括未触发风险的正常 SKU。只能选择本人负责、同店铺且没有有效申请的商品。</Typography.Paragraph>
@@ -211,5 +213,13 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
    <Typography.Paragraph type="secondary">只记录 Mock 进度；各 SKU 的销售、移除、弃置总和不可超过目标，累计数值不得回退。</Typography.Paragraph>
    <Form form={progressForm} onFinish={taskProgressSave} layout="vertical">{task?.lines.map(l=><Card size="small" key={l.id} title={findProduct(l.id)?.sku+" · 目标 "+l.qty+"件"}><div className="clearance-progress-fields">{(["sold","removed","disposed"] as const).map((k,i)=><Form.Item key={k} label={["已销售","已移除","已弃置"][i]} name={["lines",l.id,k]}><InputNumber min={l[k]} max={l.qty} precision={0}/></Form.Item>)}</div></Card>)}</Form>
   </Modal>
+  <Modal title="移出人工清货候选" open={Boolean(removeTarget)} onCancel={()=>{setRemoveTarget(null);setRemoveNote("");}} okText="确认移出" okButtonProps={{danger:true}} onOk={()=>{
+    const x=removeTarget?findProduct(removeTarget):undefined;
+    if(!x||!removeNote.trim()||x.owner!==role||activeTaskFor(data.tasks,x.id)){
+      void message.error("原因必填，且只能移出本人无有效任务的 SKU");return;
+    }
+    change({manual:data.manual.filter(id=>id!==removeTarget)});
+    setRemoveTarget(null);setRemoveNote("");void message.success("已移出人工候选（仅 Mock，不删除申请历史）");
+  }}><Typography.Paragraph type="secondary">不会删除申请历史或改变库存；有有效清货任务的 SKU 不可移出。</Typography.Paragraph><Input.TextArea value={removeNote} onChange={e=>setRemoveNote(e.target.value)} placeholder="请填写移出原因" rows={3}/></Modal>
  </>;
 }
