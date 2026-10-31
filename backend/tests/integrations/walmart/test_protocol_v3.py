@@ -98,7 +98,7 @@ def _event(
         contract=request.contract,
         method=request.method,
         path=request.path,
-        query=request.query,
+        params=request.params or {},
         body=request.body,
         approval_ref=approval_ref,
         issued_at=issued_at,
@@ -111,7 +111,7 @@ def _event(
         "contract": dict(request.contract),
         "method": request.method,
         "path": request.path,
-        "query": dict(request.query),
+        "params": dict(request.params or {}),
         "body": request.body,
         "accept": request.response_kind,
         "approval_ref": approval_ref,
@@ -332,7 +332,7 @@ def test_v3_new_read_contract_needs_no_cloud_env_change(signer, verifier):
         contract=request.contract,
         method=request.method,
         path=request.path,
-        query=request.query,
+        params=request.params or {},
         body=None,
         approval_ref=None,
         issued_at=NOW,
@@ -344,7 +344,7 @@ def test_v3_new_read_contract_needs_no_cloud_env_change(signer, verifier):
         "contract": dict(request.contract),
         "method": "GET",
         "path": "/v3/reports/brand-new",
-        "query": {"limit": 5},
+        "params": {"limit": 5},
         "body": None,
         "accept": "json",
         "approval_ref": None,
@@ -354,13 +354,13 @@ def test_v3_new_read_contract_needs_no_cloud_env_change(signer, verifier):
     transport = FakeTransport()
     assert _executor(verifier, transport).handle(event)["success"] is True
     # ...but the contract's own schema is still enforced on the cloud side.
-    event["query"] = {"limit": 500}
+    event["params"] = {"limit": 500}
     event["auth"] = signer.sign(
         store_code=STORE,
         contract=request.contract,
         method="GET",
         path="/v3/reports/brand-new",
-        query={"limit": 500},
+        params={"limit": 500},
         body=None,
         approval_ref=None,
         issued_at=NOW,

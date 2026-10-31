@@ -174,7 +174,7 @@ class WalmartCloudExecutor:
             "contract",
             "method",
             "path",
-            "query",
+            "params",
             "body",
             "accept",
             "approval_ref",
@@ -203,8 +203,10 @@ class WalmartCloudExecutor:
         # Signature, freshness, store, contract shape and request hash.
         operation, contract_hash = self._verifier.verify(event)
         registry = ContractRegistry((operation,))
+        # Same contract code as the server: path/query values are re-validated against the
+        # field schemas and the resolved path must equal what the caller claims to call.
         request = registry.prepare(
-            operation.key, params=event.get("query"), body=event.get("body"), allow_writes=True
+            operation.key, params=event.get("params"), body=event.get("body"), allow_writes=True
         )
         if request.method != event.get("method") or request.path != event.get("path"):
             raise ContractError("WALMART_OPERATION_MISMATCH")

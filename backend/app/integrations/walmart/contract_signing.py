@@ -44,8 +44,8 @@ _STORE = re.compile(r"^(?:HK|CN)[0-9]{4}$")
 _MAX_PUBLIC_KEYS = 4
 
 
-def request_sha256(*, method: str, path: str, query: Mapping[str, Any], body: Any) -> str:
-    return sha256_hex({"method": method, "path": path, "query": dict(query), "body": body})
+def request_sha256(*, method: str, path: str, params: Mapping[str, Any], body: Any) -> str:
+    return sha256_hex({"method": method, "path": path, "params": dict(params), "body": body})
 
 
 def signing_payload(
@@ -123,7 +123,7 @@ class ContractSigner:
         contract: Mapping[str, Any],
         method: str,
         path: str,
-        query: Mapping[str, Any],
+        params: Mapping[str, Any],
         body: Any,
         approval_ref: str | None,
         issued_at: int | None = None,
@@ -141,7 +141,7 @@ class ContractSigner:
             issued_at=issued,
             nonce=use_nonce,
             contract_sha256=sha256_hex(contract),
-            request_sha256=request_sha256(method=method, path=path, query=query, body=body),
+            request_sha256=request_sha256(method=method, path=path, params=params, body=body),
             approval_ref=approval_ref,
         )
         return {
@@ -212,17 +212,17 @@ class ContractVerifier:
             raise ContractError("WALMART_APPROVAL_INVALID")
         contract = event.get("contract")
         operation = operation_from_contract(contract)
-        method, path, query, body = (
+        method, path, params, body = (
             event.get("method"),
             event.get("path"),
-            event.get("query"),
+            event.get("params"),
             event.get("body"),
         )
         if not isinstance(method, str) or not isinstance(path, str):
             raise ContractError("WALMART_EVENT_INVALID")
-        if query is None:
-            query = {}
-        if not isinstance(query, Mapping):
+        if params is None:
+            params = {}
+        if not isinstance(params, Mapping):
             raise ContractError("WALMART_EVENT_INVALID")
         contract_hash = sha256_hex(contract)
         payload = signing_payload(
@@ -231,7 +231,7 @@ class ContractVerifier:
             issued_at=issued_at,
             nonce=nonce,
             contract_sha256=contract_hash,
-            request_sha256=request_sha256(method=method, path=path, query=query, body=body),
+            request_sha256=request_sha256(method=method, path=path, params=params, body=body),
             approval_ref=approval,
         )
         if not isinstance(sig, str) or len(sig) > 128:

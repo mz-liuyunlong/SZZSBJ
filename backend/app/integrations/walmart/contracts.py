@@ -87,8 +87,11 @@ class PreparedRequest:
     is_write: bool
     content_type: str = "application/json"
     response_kind: str = "json"
-    # Protocol v3: the signed contract this request was prepared from (see contract_dict).
+    # Protocol v3: the signed contract this request was prepared from (see contract_dict)
+    # and the caller's original parameter values (path + query), which the cloud side
+    # feeds into the same ``prepare`` to recompute and compare the resolved path.
     contract: Mapping[str, Any] | None = None
+    params: Mapping[str, Any] | None = None
 
 
 def canonical_json(value: Any) -> bytes:
@@ -499,6 +502,7 @@ class ContractRegistry:
             content_type=operation.request_content_type,
             response_kind=operation.response_kind,
             contract=contract_dict(operation, registry_version=self.version()),
+            params=dict(values),
         )
 
     @classmethod

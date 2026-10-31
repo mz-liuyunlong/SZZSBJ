@@ -150,3 +150,37 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 云函数首次升级（一次）：发布含本协议的新版本 → 每店加 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS` 和 `SZZSBJ_WALMART_MAX_RISK=read` → 切 `stable`。之后加接口只改主服务器。仍需升级云函数的情况：协议版本、json/pdf 之外的响应类型、Walmart 域名或 `/v3` 基路径变化、密钥轮换或风险上限调整（只改环境变量）、运行时安全更新。
 
 测试：`tests/integrations/walmart/test_protocol_v3.py`（契约往返与形状校验、签名篡改/过期/未知 key、v3 读写执行、风险上限、跨店、v1 兼容、桥接端到端、PDF、provider_error、运行时门禁）。
+
+## 统一网关 `gateway.WalmartGateway`（2026-10-31）
+
+业务模块只用这一个入口，不再各自包一层读/写客户端：
+
+```python
+from app.integrations.walmart.gateway import Actor, WalmartGateway
+
+gw = WalmartGateway.from_env()                     # 读 SZZSBJ_WALMART_SCF_*；PROTOCOL=3 时加载签名私钥
+actor = Actor.from_principal(principal, store_codes=verified_store_codes)   # 用户：RBAC 权限 + 店铺范围
+worker = Actor.system("pmc-wfs-creation", operations={"inbound_shipments", "wfs_inbound_shipment_create"})
+
+res = gw.call("HK2614", "inbound_shipments", actor=actor, params={"fromCreatedDate": a, "toCreatedDate": b})
+rows = gw.pages("HK2614", actor=actor, contract=PageContract(...), params={"shipmentId": sid}, page_size=50)
+many = gw.call_many(["HK2614", "HK2613"], "wfs_inventory", actor=actor, params={"limit": 50})
+res = gw.call("HK2614", "wfs_inbound_shipment_create", actor=worker, body=payload, approval_ref=f"wfs-ticket:{tid}")
+```
+
+授权在服务器侧 `authorize()`：操作必须在注册中心；店铺必须在服务器映射且在 actor 的店铺范围内；actor 必须有该操作的 `permission`（`action:walmart:<family>:read` / `action:walmart:wfs:shipments:write` / `action:walmart:wfs:shipments:cancel`，`*` 表示全部）；system actor 只能用自己代码里列出的 operations；写操作必须带 `approval_ref`（审计引用，不是权限）。失败抛 `GatewayError(code)`；Walmart 4xx/5xx 作为结果返回（`provider_error`），传输/云函数异常抛 `WALMART_GATEWAY_UNAVAILABLE` 等稳定码，业务侧按 UNKNOWN 处理、不得重发。
+
+审计：每次调用（含被拒绝的）产生一条 `CallRecord`（店、操作、风险、actor、approval_ref、契约与请求摘要、状态码、结果、耗时；不含参数/请求体/响应体），交给 `audit` sink。默认 sink 写结构化日志；数据库 sink（`integration_walmart_calls` 表 + 迁移）随 PMC WFS 分支（#284）落地，避免本 PR 引入迁移与 WFS 分支的迁移头冲突。
+
+主服务器环境变量：
+
+| 变量 | 说明 |
+|---|---|
+| `SZZSBJ_WALMART_SCF_PROTOCOL` | `1`（默认，沿用 APPROVED_*_KEYS 白名单）或 `3`（签名契约；云函数升级后再切） |
+| `SZZSBJ_WALMART_SCF_STORE_ID_MAP` / `_CVM_ROLE` / `_TARGET_ROLE_ARN` | 已有，不变 |
+| `SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_FILE` | 私钥 PEM（默认 `/etc/szzsbj/walmart-contract-signing.pem`，root:szzsbj 640，不进仓库） |
+| `SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_ID` | kid，与云函数 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS` 里的键一致 |
+
+生成密钥（部署 AI，在主服务器上执行一次，私钥不离开服务器）：`python -c "from app.integrations.walmart.contract_signing import ContractSigner as S; s=S.generate(kid='szzsbj-2026-10'); open('/etc/szzsbj/walmart-contract-signing.pem','wb').write(s.private_pem()); print(s.public_key_b64())"`，输出的公钥交给云函数所有者。
+
+新增一个 Walmart 接口的步骤：在对应 catalog 加 `Operation`（方法、路径、字段 schema、`mutating`、`response_kind`）→ `reviewed_registry()` 自动带上权限 → 写契约测试（参数校验、v3 事件往返）→ 业务模块通过 `gw.call` 使用 → 合并即生效，云函数不变。

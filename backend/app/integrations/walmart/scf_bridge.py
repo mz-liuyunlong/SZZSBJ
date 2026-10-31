@@ -146,14 +146,14 @@ class ProtectedScfBridge:
             or not 1 <= len(actor["uid"]) <= 128
         ):
             raise GatewayRejected("WALMART_ACTOR_INVALID")
-        query = dict(request.query)
+        params = dict(request.params or {})
         contract = dict(request.contract)
         auth = self._signer.sign(
             store_code=store_code,
             contract=contract,
             method=request.method,
             path=request.path,
-            query=query,
+            params=params,
             body=request.body,
             approval_ref=approval_ref,
         )
@@ -164,7 +164,7 @@ class ProtectedScfBridge:
             "contract": contract,
             "method": request.method,
             "path": request.path,
-            "query": query,
+            "params": params,
             "body": request.body,
             "accept": request.response_kind,
             "approval_ref": approval_ref,
