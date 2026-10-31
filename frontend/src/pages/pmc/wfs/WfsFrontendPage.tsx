@@ -3,7 +3,7 @@ import type { NavigationPage } from "@/config/navigation";
 import PendingPackingPage from "./PendingPackingPage";
 import ShipmentBoardPage from "./ShipmentBoardPage";
 import ExceptionCenterPage from "./ExceptionCenterPage";
-import { WfsSettingsPage } from "./WfsSupportPages";
+import WfsStoreSettingsPage from "./WfsStoreSettingsPage";
 
 export default function WfsFrontendPage({ page, scope, permissions }: { page: NavigationPage; scope?: string; permissions?: string[] }) {
   switch (page.key) {
@@ -14,7 +14,7 @@ export default function WfsFrontendPage({ page, scope, permissions }: { page: Na
     case "pmc_wfs_exceptions":
       return <ExceptionCenterPage page={page} scope={scope} />;
     case "pmc_wfs_settings":
-      return <WfsSettingsPage page={page} />;
+      return <WfsStoreSettingsPage page={page} canManage={!permissions || permissions.includes("*") || permissions.includes("action:pmc:wfs-settings:manage")} />;
     default:
       return null;
   }

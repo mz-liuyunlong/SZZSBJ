@@ -86,7 +86,7 @@ order复用仓库WarehouseOrderRead（含原Q、实装T、UUID行、尺寸cm/重
 动作权限前缀 `action:pmc:wfs-pending-packing:`；所有接口验证 `page:pmc:wfs:view` 和来源账号/店铺范围。旧 draft-submit 权限不自动授予 create。
 
 分箱请求：`order_id`、`expected_version`、`expected_box_version`；其他 PK 放 `additional_selections`，每项同样三个字段；`shipping_boxes`、`shipment_count`、`shipment_boxes` 为严格正整数，票数匹配数组长度，箱数和必须一致，上限9999。所有 PK 账号、店铺、测试标记一致；相同 SKU 身份一致。响应返回 `tickets`、每票 `ranges` 的 PK/SKU/行/箱序/实际件数，以及 `preview_hash`、可用和剩余箱数。
-创建在上述字段基础增加 `source_account_ref`、`preview_hash`、UUID `idempotency_key`、`return_address`、`its`、带时区 `expected_delivery_at`。地址详细结构沿用原 ReturnAddress schema，精确必填项以 OpenAPI 为准。不传 OWS。表单重试复用同键；改变请求不得复用。
+创建在上述字段基础增加 `source_account_ref`、`preview_hash`、UUID `idempotency_key`、`its`（默认 true），可选 `return_address`（不传 = Walmart 回填店铺默认退货地址）、可选带时区 `expected_delivery_at`（不传 = 北京时间今天 +30 天）。地址详细结构沿用原 ReturnAddress schema。不传 OWS。表单重试复用同键；改变请求不得复用。（2026-10-31 负责人决定；前端创建弹窗已去掉地址与日期输入。）
 
 创建响应包含 `id`、`order_id`、`state`、`created_at`、`approval_mode=automatic`、`automatically_approved_at`、`tickets`。票包含 allocation、state、error_code、shipments；shipment 包含 shipment_id 和 label_state。标签二进制和凭据不出现在 JSON。自动审批和创建结果分别表达。
 
@@ -96,3 +96,18 @@ order复用仓库WarehouseOrderRead（含原Q、实装T、UUID行、尺寸cm/重
 Worker 复用既有 Celery，显式加载 app.modules.pmc_wfs.tasks、消费 integration 队列；任务名 integration_sync.wfs_creation。本次未改变公共调度，真实 Gateway 默认禁用。
 
 缺少V2表时返回503 `WFS_SCHEMA_NOT_READY`；页面显示数据库结构尚未更新，不再以通用服务错误或空列表掩盖。
+
+
+## Walmart 适配器（2026-10-31；同日按 76 章改接统一网关）
+
+`get_creation_gateway()` 按环境变量选择：`SZZSBJ_WFS_CREATION_GATEWAY=scf` 且 `SZZSBJ_WALMART_SCF_STORE_ID_MAP`（审核过的 store_id→店铺码）非空时，用 `app.integrations.walmart.gateway.WalmartGateway.from_env()` 构造统一网关（它自己读 `/etc/szzsbj/walmart-scf.env` 里已有的 `SZZSBJ_WALMART_SCF_CVM_ROLE` / `_TARGET_ROLE_ARN`，以及 `SZZSBJ_WALMART_SCF_PROTOCOL=1|3`；协议 3 需要签名私钥 `SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_FILE` + `_KEY_ID`），再包成 `WalmartScfCreationGateway`。任一缺失、或网关构造失败、或共享网关模块不存在（#283 未合并的检出）→ 仍为 Disabled（503 `WFS_EXECUTION_DISABLED`）。适配器只能在 company-ai 进程里真正发起调用（CVM 身份）。不再使用 `SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS`（协议 1 下由网关自己读旧白名单）。
+
+创建 worker 是系统身份 `pmc-wfs-creation`，允许的操作写死在 `WORKER_OPERATIONS`（inbound_shipments / inbound_shipment_items / 建单 / 箱唛 / 预览），店铺范围 = 审核映射里的店铺。人的授权发生在提交创建的接口（RBAC），worker 只执行已授权的票。
+
+店铺前置：`ops_wfs_store_settings`（迁移 0072，维护入口见 pmc-wfs-settings-api.md）必须有该店铺行，`creation_enabled=true`，用 ITS 时 `its_enabled=true`，且与服务器审核映射一致。否则 409：`WFS_STORE_NOT_CONFIGURED` / `WFS_STORE_CREATION_DISABLED` / `WFS_ITS_NOT_AVAILABLE` / `WFS_STORE_MAPPING_CONFLICT`；SKU 缺 14 位 GTIN → 409 `WFS_ITEM_IDENTITY_MISSING`。这些在「确认创建」前校验，不占用箱子。
+
+执行：计划号 `PMC-[TEST-]<店铺码>-<票号前12位hex>`，建前按计划号回读查重（幂等）→ POST 建单（`approval_ref=wfs-ticket:<票号>`，`idempotency_key=wfs-create:<计划号>`）→ 回读得 shipmentId（**只接受 inboundOrderId 等于计划号的记录**，否则 `WFS_READBACK_MISMATCH` → UNKNOWN）→ 逐张货件全量翻页读明细，按 GTIN 核对件数与箱数之和等于申报（`WFS_SHIPMENT_GTIN_MISMATCH` / `WFS_SHIPMENT_QUANTITY_MISMATCH` → UNKNOWN）→ 每张货件取箱唛 PDF（箱数 = 明细 vendorPackQty 之和，全量翻页）。Walmart 4xx 且回读无货件 → 票 FAILED（`WFS_PLATFORM_REJECTED`，Walmart 错误体记在 `walmart_call` 事件里）；5xx、超时、建成后回读为空 → 票 UNKNOWN，箱子保留，等「重新核对」（先到领星看是否已出现，再到 Seller Center 核对，不自动取消）。
+
+幂等账本：网关对每个写 key 在 `integration_walmart_write_ledger` 记录 attempting → ok / provider_error / unknown。上次 attempting/unknown 的计划号再来 → 适配器只回读：找到 → 账本 resolve 为 ok 并沿用；没找到 → `WFS_CREATE_PENDING_REVIEW`，票保持 UNKNOWN 给人处理，**不会自动第二次 POST**。「重新核对」找到货件时也会把账本 resolve 为 ok。
+
+审计：每次 Walmart 调用两处留痕——`evt_wfs_creation_events(kind=walmart_call)`（票相关：操作键、状态码、引用、去敏错误体）和网关的 `integration_walmart_calls`（所有调用含被拒绝的：店、操作、风险、actor、approval_ref、幂等 key、契约/请求摘要、状态码、结果、耗时；迁移 0073）。两者都不含令牌和请求/响应正文。

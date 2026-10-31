@@ -27,6 +27,13 @@ class DisabledGateway:
 
 
 def get_creation_gateway() -> CreationGateway:
-    # A reviewed production adapter must replace this dependency explicitly.
-    # The existing shared Walmart read SDK must not be widened to allow writes.
-    return DisabledGateway()
+    """Disabled unless the owner-configured Walmart SCF adapter is switched on by env.
+
+    See ``walmart_gateway.build_gateway_from_env`` (WFS_WALMART_GATEWAY=scf plus the
+    WALMART_SCF_* / WALMART_*_KEYS variables). Writes still go through the reviewed
+    ``WalmartWriteAPI`` with an approval_ref per call; the read SDK is not widened.
+    """
+    from app.db.session import get_session_factory
+    from app.modules.pmc_wfs.walmart_gateway import build_gateway_from_env
+
+    return build_gateway_from_env(get_session_factory())

@@ -25,6 +25,12 @@ vi.mock("./shipmentBoardApi", () => ({
   boardPrefix: "/api/pmc/wfs/shipment-board",
   boardError: () => "",
 }));
+vi.mock("./storeSettingsApi", () => ({
+  settingsPrefix: "/api/pmc/wfs/settings",
+  listStoreSettings: vi.fn(() => Promise.resolve({ ...emptyList, data: { items: [{ source_account_ref: "primary", store_id: "110711149920800256", store_name: "HK2614-测试店", suggested_code: "HK2614", walmart_store_code: "HK2614", reviewed_code: null, mapping_state: "unreviewed", its_enabled: true, creation_enabled: true, note: null, actor_uid: "rocky", updated_at: "2026-10-31T00:00:00Z" }], total: 1 } })),
+  saveStoreSetting: vi.fn(),
+  settingsError: () => "",
+}));
 vi.mock("./exceptionCenterApi", () => ({
   exceptionPrefix: "/api/pmc/wfs/exception-center",
   listCases: vi.fn(() => Promise.resolve(emptyList)),
@@ -70,17 +76,17 @@ describe("WFS frontend pages", () => {
       pmc_wfs_pending_packing: { text: "当前条件下暂无已打包完成单据", header: "系统打包单", search: "搜索待发货打包单" },
       pmc_wfs_board: { text: /^当前条件下暂无货件/, header: "货件号", search: "搜索WFS货件看板" },
       pmc_wfs_exceptions: { text: "当前条件下暂无异常货件", header: "货件号", search: "搜索异常中心" },
-      pmc_wfs_settings: { text: "上架缓冲天数" },
+      pmc_wfs_settings: { text: "店铺 Walmart 创建设置", header: "Walmart 店铺代码" },
     };
     const sample = samples[page.key];
     renderWithQuery(<WfsFrontendPage page={page} />);
     expect(screen.getByRole("region", { name: page.title })).toBeInTheDocument();
     expect(await screen.findByText(sample.text)).toBeInTheDocument();
-    if (sample.header && sample.search) {
-      expect(screen.getByRole("columnheader", { name: sample.header })).toBeInTheDocument();
+    if (sample.header) {
+      expect(await screen.findByRole("columnheader", { name: sample.header })).toBeInTheDocument();
+    }
+    if (sample.search) {
       expect(screen.getByRole("button", { name: sample.search })).toBeInTheDocument();
-    } else {
-      expect(screen.getByText(/不请求接口/)).toBeInTheDocument();
     }
   });
 
