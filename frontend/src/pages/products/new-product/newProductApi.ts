@@ -56,3 +56,7 @@ export const reviewNewProductLaunch = (id: string, expectedVersion: number, resu
 export async function getNewProductRules() {
   return (await backendRequest<Record<string, unknown>>("/api/new-products/rules")).data;
 }
+
+export async function getNewProductMetrics(skuId: string): Promise<Record<string, unknown>> {
+  return (await backendRequest<Record<string, unknown>>(apiPath(skuId, "/metrics"))).data;
+}
