@@ -3,7 +3,7 @@
 import importlib.util
 import os
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -55,6 +55,46 @@ def module_from(path, name):
     return module
 
 
+V2_MIGRATIONS = (
+    "20261029_0068_wfs_creation.py",
+    "20261101_0073_wfs_creation_manual_approval.py",
+)
+
+
+def install_v2_schema(conn):
+    """Synthetic source tables (no source FKs) + the real V2 migrations, in order."""
+    register_productlist_sync_models()
+    # These are freshly generated synthetic source tables, not clones of a business schema.
+    # Add no source FKs here: unrelated modules may have cyclic metadata. V2 itself is
+    # installed using its real migrations and retains all declared FK/unique/check constraints.
+    existing = set(
+        conn.scalars(text("SELECT tablename FROM pg_tables WHERE schemaname = current_schema()"))
+    )
+    if "ops_wfs_creation_operations" in existing:
+        return
+    for table in Base.metadata.tables.values():
+        if not table.name.startswith(
+            (
+                "ops_domestic_",
+                "evt_domestic_",
+                "dwd_domestic_",
+                "gov_domestic_",
+                "mart_domestic_",
+                "dwd_lingxing_sku_",
+                "ops_pmc_wfs_",
+                "evt_pmc_wfs_",
+            )
+        ):
+            continue
+        if table.name not in existing:
+            conn.execute(CreateTable(table, include_foreign_key_constraints=[]))
+    versions = Path(__file__).parents[3] / "alembic" / "versions"
+    for index, name in enumerate(V2_MIGRATIONS):
+        migration = module_from(versions / name, f"v2_test_migration_{index}")
+        with Operations.context(MigrationContext.configure(conn)):
+            migration.upgrade()
+
+
 def engine_and_schema():
     url = os.environ["WFS_V2_TEST_DATABASE_URL"]
     engine = create_engine(url, hide_parameters=True)
@@ -63,37 +103,44 @@ def engine_and_schema():
     with engine.connect() as conn:
         directory = conn.scalar(text("SHOW data_directory"))
         assert "/wfs-v2-" in directory.replace("\\", "/")
-    register_productlist_sync_models()
-    # These are freshly generated synthetic source tables, not clones of a business schema.
-    # Add no source FKs here: unrelated modules may have cyclic metadata. V2 itself is
-    # installed using its real migration and retains all declared FK/unique/check constraints.
     with engine.begin() as conn:
-        existing = set(
-            conn.scalars(text("SELECT tablename FROM pg_tables WHERE schemaname='public'"))
-        )
-        if "ops_wfs_creation_operations" in existing:
-            return engine
-        for table in Base.metadata.tables.values():
-            if not table.name.startswith(
-                (
-                    "ops_domestic_",
-                    "evt_domestic_",
-                    "dwd_domestic_",
-                    "gov_domestic_",
-                    "mart_domestic_",
-                    "dwd_lingxing_sku_",
-                    "ops_pmc_wfs_",
-                    "evt_pmc_wfs_",
-                )
-            ):
-                continue
-            if table.name not in existing:
-                conn.execute(CreateTable(table, include_foreign_key_constraints=[]))
-        path = Path(__file__).parents[3] / "alembic/versions/20261029_0068_wfs_creation.py"
-        migration = module_from(path, "v2_test_migration")
-        with Operations.context(MigrationContext.configure(conn)):
-            migration.upgrade()
+        install_v2_schema(conn)
     return engine
+
+
+def engine_and_local_schema():
+    """Same V2 schema inside a throwaway schema of the verified local development DB
+    (opt-in ``WFS_LOCAL_INTEGRATION=1``). Returns (engine, drop) where drop() removes it."""
+    from sqlalchemy import event
+
+    from scripts.wfs_pending_local_schema import local_url
+
+    url = local_url()
+    schema = "wfs_v2_local_" + uuid4().hex
+    admin = create_engine(url, hide_parameters=True)
+    with admin.begin() as conn:
+        assert conn.scalar(text("select current_database()")) == "szzsbj_dev"
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_engine(url, hide_parameters=True)
+
+    @event.listens_for(engine, "connect")
+    def set_path(dbapi_connection, _):
+        # No public fallback: a table the fixture did not create must fail loudly.
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute(f'SET search_path TO "{schema}"')
+        dbapi_connection.commit()
+
+    with engine.begin() as conn:
+        install_v2_schema(conn)
+
+    def drop():
+        engine.dispose()
+        assert schema.startswith("wfs_v2_local_") and len(schema) == 45
+        with admin.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
+
+    return engine, drop
 
 
 def seed_fixture(session, boxes=30, per=4):

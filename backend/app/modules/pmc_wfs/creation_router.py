@@ -11,6 +11,7 @@ from app.core.permissions import require_permission
 from app.modules.pmc_wfs.creation_schemas import (
     AllocationCommand,
     AllocationPreview,
+    ApprovalCommand,
     Capabilities,
     CreationCommand,
     OperationList,
@@ -29,6 +30,9 @@ Preview = Annotated[
 ]
 Reconcile = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:reconcile"))
+]
+Approve = Annotated[
+    Principal, Depends(require_permission("action:pmc:wfs-pending-packing:approve"))
 ]
 Label = Annotated[
     Principal, Depends(require_permission("action:pmc:wfs-pending-packing:label-retry"))
@@ -79,6 +83,15 @@ def allocation(request: Request, body: AllocationCommand, svc: Creation, actor: 
 )
 def create(request: Request, body: CreationCommand, svc: Creation, actor: Create):
     return response(request, svc.submit(body, actor.user_id))
+
+
+@router.post(
+    "/creation-operations/{ident}/approve",
+    response_model=SuccessEnvelope[OperationRead, dict],
+    responses=V2_ERRORS,
+)
+def approve(request: Request, ident: UUID, body: ApprovalCommand, svc: Creation, actor: Approve):
+    return response(request, svc.approve(ident, body, actor.user_id))
 
 
 @router.get(

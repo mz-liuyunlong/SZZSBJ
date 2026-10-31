@@ -29,7 +29,11 @@ from app.modules.pmc_domestic.warehouse_models import (
 from app.modules.pmc_domestic.warehouse_service import WarehouseService
 from app.modules.pmc_wfs.creation_models import WfsBoxHold
 from app.modules.pmc_wfs.models import WfsBoxAllocation, WfsDraft, WfsDraftItem, WfsEvent
-from app.modules.pmc_wfs.repository import WfsRepository, assert_not_occupied
+from app.modules.pmc_wfs.repository import (
+    WfsRepository,
+    assert_not_occupied,
+    domestic_packing_lock_key,
+)
 from app.modules.pmc_wfs.schemas import (
     DraftRead,
     DraftResult,
@@ -139,7 +143,8 @@ class WfsService:
         if kind == "none":
             return state is None
         if kind == "in_progress":
-            return state in {"QUEUED", "RUNNING"}
+            # Boxes are held from submission on; awaiting the written approval counts.
+            return state in {"AWAITING_APPROVAL", "QUEUED", "RUNNING"}
         mapping = {
             "succeeded": "SUCCEEDED",
             "failed": "FAILED",
@@ -250,7 +255,7 @@ class WfsService:
         self.base.guard_local()
         self.session.execute(text("SET LOCAL lock_timeout='5s'"))
         self.base.lock(f"wfs-command:{command.source_account_ref}:{command.idempotency_key}")
-        self.base.lock(f"{command.source_account_ref}\0{16168}")
+        self.base.lock(domestic_packing_lock_key(command.source_account_ref))
         request = {"actor_uid": actor, "kind": kind, **command.model_dump(mode="json")}
         digest = fingerprint(request)
         prior = self.repo.prior(command.source_account_ref, command.idempotency_key)

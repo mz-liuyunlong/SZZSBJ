@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("checkbox", { name: /选择PK-E2E-MAIN/ })).toBeVisible();
 });
 
-test("partial shipment auto-approves and persists through browser reload", async ({ page }, info) => {
+test("partial shipment waits for written approval, then persists through browser reload", async ({ page }, info) => {
   await page.getByRole("checkbox", { name: /选择PK-E2E-MAIN/ }).check();
   await page.getByRole("button", { name: "创建 WFS 货件", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: /创建 WFS 货件/ });
@@ -26,7 +26,13 @@ test("partial shipment auto-approves and persists through browser reload", async
   await expect(dialog.getByRole("button", { name: /审批/ })).toHaveCount(0);
   await dialog.getByRole("button", { name: "确认创建", exact: true }).click();
   const records = page.getByRole("dialog", { name: "创建记录", exact: true });
-  await expect(records.getByText("程序自动审批通过")).toBeVisible();
+  await expect(records.getByText("程序检查已通过，待人工批准")).toBeVisible();
+  await expect(records.getByText("待人工批准", { exact: true })).toBeVisible();
+  await records.getByRole("button", { name: "批准执行" }).click();
+  const approval = page.getByRole("dialog", { name: /批准执行/ });
+  await approval.getByLabel("书面批准编号").fill("rocky-written:e2e#1");
+  await approval.getByRole("button", { name: "确认批准" }).click();
+  await expect(records.getByText(/已批准 · .* · rocky-written:e2e#1/)).toBeVisible();
   await expect(records.getByText("创建成功").first()).toBeVisible();
   await expect(records.getByText("2 / 2", { exact: true })).toBeVisible();
   const expand = records.getByRole("button", { name: /展开行|Expand row/ });
@@ -41,7 +47,7 @@ test("partial shipment auto-approves and persists through browser reload", async
   await expect(row.getByText(/剩余 10 箱/)).toBeVisible();
   await expect(row.getByRole("button", { name: "改装箱" })).toBeDisabled();
   await row.getByRole("button", { name: "创建记录" }).click();
-  await expect(page.getByText("程序自动审批通过")).toBeVisible();
+  await expect(page.getByText(/已批准 · .* · rocky-written:e2e#1/)).toBeVisible();
 });
 
 test("rebox popup retains box editing and tail row; cancel does not mutate", async ({ page }, info) => {

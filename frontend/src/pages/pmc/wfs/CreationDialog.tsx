@@ -42,7 +42,7 @@ export default function CreationDialog({ rows, scope, canProbe, onCancel, onCrea
     {canProbe && <Button disabled={!preview || !capabilities.data?.data.preview_enabled} loading={busy} onClick={() => void perform(async () => { const result = await optionalPreview(await body()); setProbe(`探测时间 ${new Date().toLocaleString("zh-CN", { timeZone: "Asia/Taipei" })}：${JSON.stringify(result.data.result)}`); })}>按需探测</Button>}
     <Button aria-label="确认创建" type="primary" disabled={busy || !valid || !preview || !capabilities.data?.data.creation_enabled} loading={busy} onClick={() => void perform(async () => { const result = await createShipments(await body()); onCreated(result.data); })}>确认创建</Button>
   </Space>}>
-    <Typography.Paragraph>选择本次发货箱数和分票方式，核对每票实际箱子后确认创建。无需 OWS，程序校验通过后自动审批并执行，探测可选。</Typography.Paragraph>
+    <Typography.Paragraph>选择本次发货箱数和分票方式，核对每票实际箱子后确认创建。无需 OWS。确认创建后程序先做自动检查并占用箱子，状态为“待人工批准”；有书面批准的人在创建记录里点“批准执行”后才会调用 Walmart。探测可选。</Typography.Paragraph>
     {capabilities.data?.data.reason && <Alert type="info" showIcon message={capabilities.data.data.reason} />}
     {(error || capabilities.error) && <Alert type="error" showIcon message={error ?? pendingError(capabilities.error)} />}
     <Space wrap style={{ marginBlock: 16 }}>

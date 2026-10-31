@@ -14,7 +14,11 @@ from sqlalchemy.orm import Session
 from app.core.api import ApiError
 from app.core.config import get_settings
 from app.modules.pmc_wfs.creation_models import WfsBoxHold, WfsCreationEvent
-from app.modules.pmc_wfs.creation_schemas import AllocationCommand, CreationCommand
+from app.modules.pmc_wfs.creation_schemas import (
+    AllocationCommand,
+    ApprovalCommand,
+    CreationCommand,
+)
 from app.modules.pmc_wfs.creation_service import CreationService
 from app.modules.pmc_wfs.creation_worker import run_operation
 from app.modules.pmc_wfs.gateway import DisabledGateway
@@ -23,6 +27,7 @@ from app.modules.pmc_wfs.service import WfsService
 from tests.modules.pmc_wfs.v2_support import (
     SyntheticGateway,
     app_for,
+    engine_and_local_schema,
     engine_and_schema,
     factory_for,
     seed_fixture,
@@ -31,12 +36,21 @@ from tests.modules.pmc_wfs.v2_support import (
 
 @pytest.fixture(scope="module")
 def engine():
-    if not os.environ.get("WFS_V2_TEST_DATABASE_URL"):
-        pytest.skip("requires an explicitly configured task-owned PostgreSQL instance")
-    get_settings.cache_clear()
-    value = engine_and_schema()
-    yield value
-    value.dispose()
+    if os.environ.get("WFS_V2_TEST_DATABASE_URL"):
+        get_settings.cache_clear()
+        value = engine_and_schema()
+        yield value
+        value.dispose()
+        return
+    if os.environ.get("WFS_LOCAL_INTEGRATION") == "1":
+        get_settings.cache_clear()
+        value, drop = engine_and_local_schema()
+        try:
+            yield value
+        finally:
+            drop()
+        return
+    pytest.skip("requires WFS_V2_TEST_DATABASE_URL or WFS_LOCAL_INTEGRATION=1")
 
 
 @pytest.fixture
@@ -73,6 +87,11 @@ def command(svc, account, order, counts=(12, 8)):
     )
 
 
+def approved(svc, op, ref="rocky-written:wfs-test"):
+    """The written human approval every creation needs before execution (red line)."""
+    return svc.approve(op.id, ApprovalCommand(approval_ref=ref), "approver-1")
+
+
 def test_partial_boxes_no_ows_and_replay(case):
     session, svc, gateway, account, order, box, line = case
     cmd = command(svc, account, order)
@@ -80,18 +99,15 @@ def test_partial_boxes_no_ows_and_replay(case):
     assert [t.allocation.boxes for t in op.tickets] == [12, 8]
     assert svc.base.detail(order.id).available_boxes == 10
     assert svc.submit(cmd, "fixture").id == op.id
-    assert op.automatically_approved_at is not None
-    assert (
-        session.scalar(
-            select(func.count())
-            .select_from(WfsCreationEvent)
-            .where(
-                WfsCreationEvent.operation_id == op.id,
-                WfsCreationEvent.kind == "automatically_approved",
-            )
-        )
-        == 1
+    # Machine checks are recorded, but nothing is approved and nothing is queued.
+    assert op.state == "AWAITING_APPROVAL" and op.approval_mode == "manual"
+    assert op.automatic_checks_at is not None
+    assert op.approved_at is None and op.approval_ref is None and op.approved_by is None
+    kinds = set(
+        session.scalars(select(WfsCreationEvent.kind).where(WfsCreationEvent.operation_id == op.id))
     )
+    assert "automatic_checks_passed" in kinds
+    assert not any("approv" in kind and kind != "automatic_checks_passed" for kind in kinds)
     assert (
         session.scalar(
             select(func.count()).select_from(WfsBoxHold).where(WfsBoxHold.order_id == order.id)
@@ -118,7 +134,7 @@ def test_disabled_gateway_leaves_no_hold(case):
 def test_unknown_then_reconcile_does_not_recreate(case, engine):
     session, svc, gateway, account, order, *_ = case
     gateway.unknown = True
-    op = svc.submit(command(svc, account, order), "fixture")
+    op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
     factory = factory_for(engine)
     run_operation(factory, gateway, op.id)
     session.expire_all()
@@ -135,7 +151,7 @@ def test_unknown_then_reconcile_does_not_recreate(case, engine):
 def test_labels_retry_only_and_scope(case, engine):
     session, svc, gateway, account, order, *_ = case
     gateway.fail_label = True
-    op = svc.submit(command(svc, account, order), "fixture")
+    op = approved(svc, svc.submit(command(svc, account, order), "fixture"))
     run_operation(factory_for(engine), gateway, op.id)
     session.expire_all()
     result = svc.read(op.id)
@@ -202,7 +218,15 @@ def test_real_http_contract(case, engine):
         prefix = "/api/pmc/wfs/pending-packing"
         response = client.post(prefix + "/creation-operations", json=cmd.model_dump(mode="json"))
         assert response.status_code == 200, response.text
+        created = response.json()["data"]
+        assert created["state"] == "AWAITING_APPROVAL" and gateway.creates == []
+        assert created["approval_mode"] == "manual" and created["approved_at"] is None
+        approve = prefix + f"/creation-operations/{created['id']}/approve"
+        assert client.post(approve, json={"approval_ref": "bad ref"}).status_code == 422
+        response = client.post(approve, json={"approval_ref": "rocky-written:http#1"})
+        assert response.status_code == 200, response.text
         assert response.json()["data"]["state"] == "SUCCEEDED"
+        assert response.json()["data"]["approved_by"] == "16"
         assert client.get(prefix + "/orders").json()["data"]["items"][0]["available_boxes"] == 10
         assert (
             client.get(prefix + "/creation-operations", params={"order_id": str(order.id)}).json()[
@@ -284,6 +308,24 @@ def test_create_action_permission_is_not_draft_permission(case, engine):
         )
         assert result.status_code == 403
         assert gateway.creates == []
+    # Creating (holding boxes) and approving the Walmart write are separate permissions.
+    app.dependency_overrides[get_optional_principal] = lambda: Principal(
+        user_id="16",
+        permissions=frozenset({"page:pmc:wfs:view", "action:pmc:wfs-pending-packing:create"}),
+    )
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/pmc/wfs/pending-packing/creation-operations",
+            json=command(svc, account, order).model_dump(mode="json"),
+        )
+        assert created.status_code == 200, created.text
+        denied = client.post(
+            f"/api/pmc/wfs/pending-packing/creation-operations/{created.json()['data']['id']}"
+            "/approve",
+            json={"approval_ref": "rocky-written:perm#1"},
+        )
+        assert denied.status_code == 403
+        assert gateway.creates == []
 
 
 def test_old_occupancy(case):
@@ -353,3 +395,68 @@ def test_missing_creation_schema_is_explicit():
         require_creation_schema(session)
     assert raised.value.code == "WFS_SCHEMA_NOT_READY"
     assert raised.value.status_code == 503
+
+
+def test_worker_never_calls_walmart_without_human_approval(case, engine):
+    """Red line: no create / reconcile / label call while the operation is unapproved."""
+    session, svc, gateway, account, order, *_ = case
+    dispatched = []
+    svc.dispatch = lambda ident, action: dispatched.append((ident, action))
+    op = svc.submit(command(svc, account, order), "fixture")
+    assert dispatched == []  # submit holds boxes but dispatches nothing
+    factory = factory_for(engine)
+    for action in ("execute", "reconcile", "labels"):
+        run_operation(factory, gateway, op.id, action)
+    assert gateway.creates == []
+    session.expire_all()
+    current = svc.read(op.id)
+    assert current.state == "AWAITING_APPROVAL"
+    assert all(t.state == "QUEUED" for t in current.tickets)
+    refusals = session.scalar(
+        select(func.count())
+        .select_from(WfsCreationEvent)
+        .where(
+            WfsCreationEvent.operation_id == op.id,
+            WfsCreationEvent.kind == "refused_unapproved",
+        )
+    )
+    assert refusals == 3
+    with pytest.raises(ApiError) as err:
+        svc.recover(op.id, "fixture", "reconcile")
+    assert err.value.details["reason"] == "WFS_APPROVAL_REQUIRED"
+    session.rollback()
+    # The written approval is recorded with who and when, and only then is it dispatched.
+    result = approved(svc, op, "rocky-written:2026-11-01#1")
+    assert result.state == "QUEUED" and result.approval_ref == "rocky-written:2026-11-01#1"
+    assert result.approved_by == "approver-1" and result.approved_at is not None
+    assert dispatched == [(str(op.id), "execute")]
+    with pytest.raises(ApiError) as err:
+        approved(svc, op)
+    assert err.value.details["reason"] == "WFS_APPROVAL_NOT_PENDING"
+    session.rollback()
+    run_operation(factory, gateway, op.id)
+    assert len(gateway.creates) == 2
+    session.expire_all()
+    assert svc.read(op.id).state == "SUCCEEDED"
+
+
+def test_database_refuses_leaving_awaiting_approval_without_a_record(case):
+    from sqlalchemy import update
+    from sqlalchemy.exc import IntegrityError
+
+    from app.modules.pmc_wfs.creation_models import WfsCreation
+
+    session, svc, gateway, account, order, *_ = case
+    op = svc.submit(command(svc, account, order), "fixture")
+    with pytest.raises(IntegrityError):
+        session.execute(update(WfsCreation).where(WfsCreation.id == op.id).values(state="QUEUED"))
+        session.flush()
+    session.rollback()
+
+
+def test_approval_ref_is_validated():
+    with pytest.raises(ValidationError):
+        ApprovalCommand(approval_ref="")
+    with pytest.raises(ValidationError):
+        ApprovalCommand(approval_ref="has space")
+    assert ApprovalCommand(approval_ref="rocky-written:2026-11-01#1").approval_ref

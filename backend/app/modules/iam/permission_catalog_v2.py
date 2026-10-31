@@ -267,7 +267,12 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("ai_center_keyword_rules", "publish", "发布关键词规则", 30, "high"),
     ActionDefinition("pmc_wfs_pending_packing", "draft-submit", "生成待审批货件草稿", 10),
     ActionDefinition("pmc_wfs_pending_packing", "identity-switch", "换店铺或商品链接", 20),
-    ActionDefinition("pmc_wfs_pending_packing", "create", "创建 WFS 货件", 30),
+    ActionDefinition(
+        "pmc_wfs_pending_packing", "create", "提交 WFS 创建（自动检查并占用箱子）", 30
+    ),
+    ActionDefinition(
+        "pmc_wfs_pending_packing", "approve", "人工书面批准 WFS 创建（调用 Walmart）", 35, "high"
+    ),
     ActionDefinition("pmc_wfs_pending_packing", "preview", "按需探测分仓", 40),
     ActionDefinition("pmc_wfs_pending_packing", "reconcile", "核实创建结果", 50),
     ActionDefinition("pmc_wfs_pending_packing", "label-retry", "补取箱唛", 60),

@@ -33,6 +33,7 @@ from app.modules.pmc_wfs.router import service as dependency
 from app.modules.pmc_wfs.schemas import DraftCommand, IdentityCommand, PendingFilter, PendingQuery
 from app.modules.pmc_wfs.service import WfsService
 from scripts.wfs_pending_local_schema import local_url
+from tests.modules.pmc_wfs.schema_support import bring_wfs_schema_to_head
 
 MIGRATION_0072 = (
     Path(__file__).resolve().parents[3]
@@ -100,10 +101,10 @@ def engine():
                 assert name.replace("_", "").isalnum()
                 definition = definition.replace("public.", f'"{schema}".')
                 c.execute(text(f'ALTER TABLE "{table}" ADD CONSTRAINT "{name}" {definition}'))
-            # A development database built by Alembic alone has no WFS draft tables in
-            # public (they used to come from a local script); create them in this test
-            # schema through migration 0072 itself.
-            _run_0072(c)
+            # The development DB may lack WFS tables/columns of this branch (draft tables
+            # used to come from a local script; 0073 adds approval columns). Apply the real
+            # migrations inside this throwaway schema.
+            bring_wfs_schema_to_head(c)
         with db_engine.begin() as c:
             c.execute(
                 text("""CREATE FUNCTION prevent_wfs_test_events() RETURNS trigger AS $$
@@ -320,6 +321,9 @@ def test_creation_result_filter(db):
             snapshot={"order_id": str(order.id)},
             actor_uid="fixture",
             state="FAILED",
+            approval_ref="fixture-approval:filter",
+            approved_by="fixture-approver",
+            approved_at=now(),
         )
     )
     db.flush()
@@ -546,6 +550,51 @@ def test_rebox_before_submit_and_block_after_submit(db):
             scope,
         )
     assert err.value.details["reason"] == "WFS_BOXES_OCCUPIED"
+
+
+@pytest.mark.parametrize("kind", ["done", "unpacked"])
+def test_domestic_done_and_unpacked_refused_while_wfs_holds_boxes(db, kind):
+    """done bumps the box version; unpacked rewrites allocation.qty. Both are refused
+    with WFS_BOXES_OCCUPIED once a WFS draft holds the order's boxes."""
+    from app.modules.pmc_domestic.warehouse_schemas import (
+        DoneCommand,
+        UnpackedDispositionCommand,
+    )
+
+    account, order, box, lines = seed(db)
+    scope = frozenset({account})
+    WfsService(db, scope, None).submit(
+        DraftCommand(
+            source_account_ref=account,
+            idempotency_key=uuid4(),
+            selections=[
+                dict(
+                    order_id=order.id,
+                    expected_version=order.version,
+                    expected_box_version=box.version,
+                    box_line_ids=[line.id for line in lines],
+                )
+            ],
+            return_address=dict(
+                address_line1="Test street", city="Katy", state_code="TX", postal_code="77449"
+            ),
+        ),
+        "fixture",
+    )
+    db.expire_all()
+    current = db.get(PackingOrder, order.id)
+    common = dict(
+        source_account_ref=account, expected_version=current.version, idempotency_key=uuid4()
+    )
+    cmd = (
+        DoneCommand(**common, expected_box_version=box.version, requirement_version="a" * 64)
+        if kind == "done"
+        else UnpackedDispositionCommand(**common, action="resend")
+    )
+    with pytest.raises(ApiError) as err:
+        WarehouseService(db).command(order.id, kind, cmd, "fixture", scope)
+    assert err.value.details["reason"] == "WFS_BOXES_OCCUPIED"
+    db.rollback()
 
 
 def test_actor_scope_and_immutable_audit(db):

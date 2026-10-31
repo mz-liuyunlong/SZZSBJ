@@ -75,7 +75,8 @@ order复用仓库WarehouseOrderRead（含原Q、实装T、UUID行、尺寸cm/重
 |---|---|---|
 | GET | /capabilities | 创建/探测能力及禁用原因 |
 | POST | /allocation-preview | 整箱分票核对 / create |
-| POST | /creation-operations | 幂等提交、自动审批、异步创建 / create |
+| POST | /creation-operations | 幂等提交、自动检查、占用箱子，状态 AWAITING_APPROVAL，不派发 / create |
+| POST | /creation-operations/{ident}/approve | 人工书面批准（body `approval_ref`），记录批准人与时间后派发创建 / approve |
 | GET | /creation-operations?order_id=UUID&page=1&page_size=10 | PK 创建记录，含合并来源 PK；分页最大100 |
 | GET | /creation-operations/{ident} | 逐票状态、实际货件与箱唛状态 |
 | POST | /creation-operations/{ident}/reconcile | 核实结果 / reconcile |
@@ -88,7 +89,7 @@ order复用仓库WarehouseOrderRead（含原Q、实装T、UUID行、尺寸cm/重
 分箱请求：`order_id`、`expected_version`、`expected_box_version`；其他 PK 放 `additional_selections`，每项同样三个字段；`shipping_boxes`、`shipment_count`、`shipment_boxes` 为严格正整数，票数匹配数组长度，箱数和必须一致，上限9999。所有 PK 账号、店铺、测试标记一致；相同 SKU 身份一致。响应返回 `tickets`、每票 `ranges` 的 PK/SKU/行/箱序/实际件数，以及 `preview_hash`、可用和剩余箱数。
 创建在上述字段基础增加 `source_account_ref`、`preview_hash`、UUID `idempotency_key`、`return_address`、`its`、带时区 `expected_delivery_at`。地址详细结构沿用原 ReturnAddress schema，精确必填项以 OpenAPI 为准。不传 OWS。表单重试复用同键；改变请求不得复用。
 
-创建响应包含 `id`、`order_id`、`state`、`created_at`、`approval_mode=automatic`、`automatically_approved_at`、`tickets`。票包含 allocation、state、error_code、shipments；shipment 包含 shipment_id 和 label_state。标签二进制和凭据不出现在 JSON。自动审批和创建结果分别表达。
+创建响应包含 `id`、`order_id`、`state`（新建为 `AWAITING_APPROVAL`）、`created_at`、`approval_mode=manual`、`automatic_checks_at`、`approval_ref`、`approved_by`、`approved_at`、`tickets`。未批准时 reconcile / labels/retry 返回 `WFS_APPROVAL_REQUIRED`，重复批准返回 `WFS_APPROVAL_NOT_PENDING`，worker 不调用网关并记 `refused_unapproved` 事件。票包含 allocation、state、error_code、shipments；shipment 包含 shipment_id 和 label_state。标签二进制和凭据不出现在 JSON。自动检查、人工批准和创建结果分别表达。
 
 状态：QUEUED/RUNNING/SUCCEEDED/FAILED/UNKNOWN/PARTIAL；票不使用PARTIAL。标签 PENDING/READY/FAILED。超时视 UNKNOWN，禁止盲目重发。按已知货件补标签不会重建。未启用平台适配器返回503 WFS_EXECUTION_DISABLED且不占用；403权限/环境，404不可见，409版本/占用/幂等冲突，422字段校验。
 

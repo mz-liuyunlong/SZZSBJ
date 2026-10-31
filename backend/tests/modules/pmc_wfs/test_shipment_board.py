@@ -22,6 +22,7 @@ from app.modules.pmc_wfs.lingxing_models import WfsBoardPublication, WfsShipment
 from app.modules.pmc_wfs.shipment_board_schemas import ShipmentBoardQuery
 from app.modules.pmc_wfs.shipment_board_service import ShipmentBoardService
 from scripts.wfs_pending_local_schema import local_url
+from tests.modules.pmc_wfs.schema_support import ensure_manual_approval_columns
 
 T0 = datetime(2026, 10, 16, 7, 23, 28, tzinfo=UTC)
 
@@ -68,6 +69,9 @@ def engine():
             for name in CLONED_TABLES:
                 assert c.scalar(text("select to_regclass(:n)"), {"n": f"public.{name}"}), name
                 c.execute(text(f'CREATE TABLE "{name}" (LIKE public."{name}" INCLUDING ALL)'))
+            # The board reads whole WfsCreation rows; add 0073's columns if the
+            # development DB predates them.
+            ensure_manual_approval_columns(c)
         yield db_engine
     finally:
         db_engine.dispose()
@@ -185,6 +189,10 @@ def _seed_shipment(db, account, order, shipment_id="WFS-TEST-001"):
             snapshot=snap,
             actor_uid="fixture",
             state="SUCCEEDED",
+            # Any state past AWAITING_APPROVAL carries the written approval (0073 CHECK).
+            approval_ref="fixture-approval:board",
+            approved_by="fixture-approver",
+            approved_at=now(),
         )
     )
     db.add(

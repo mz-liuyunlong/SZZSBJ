@@ -403,7 +403,10 @@ class WarehouseService:
                 conflict("ORDER_STATE_CHANGED")
             if order.version != cmd.expected_version:
                 conflict("ORDER_VERSION_CHANGED")
-            if kind in {"boxes", "rebox", "customs"}:
+            # Commands that change boxes, box version, customs or the stock hold quantity
+            # must not touch boxes a WFS draft/creation holds. note / ib / sync only change
+            # the note projection or the overpack case, never boxes or allocation.qty.
+            if kind in {"boxes", "rebox", "customs", "done", "unpacked"}:
                 from app.modules.pmc_wfs.repository import assert_not_occupied
 
                 assert_not_occupied(s, ident)

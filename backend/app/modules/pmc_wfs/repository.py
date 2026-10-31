@@ -6,6 +6,23 @@ from app.modules.pmc_domestic.packing_models import PackingOrder
 from app.modules.pmc_domestic.warehouse_models import PackingBoxSet
 from app.modules.pmc_wfs.models import WfsBoxAllocation, WfsDraft, WfsDraftItem, WfsEvent
 
+# The only domestic warehouse whose packing orders feed WFS (same literal as
+# pmc_domestic.packing_schemas.warehouse_id).
+DOMESTIC_PACKING_WAREHOUSE_ID = "16168"
+
+
+def domestic_packing_lock_key(source_account_ref: str) -> str:
+    """Advisory-lock key shared with the domestic packing module.
+
+    ``PackingService.decide`` (approve / reject) and ``WarehouseService.command`` (boxes,
+    rebox, done, unpacked, customs, ...) take ``pg_advisory_xact_lock`` on exactly
+    ``f"{source_account_ref}\\0{warehouse_id}"`` (a NUL separator). WFS commands take
+    the same lock so a WFS draft or creation never interleaves with a domestic change to
+    the same account's packing orders, boxes or stock holds in warehouse 16168. Do not
+    change the format without changing the domestic side in the same commit.
+    """
+    return f"{source_account_ref}\0{DOMESTIC_PACKING_WAREHOUSE_ID}"
+
 
 class WfsRepository:
     def __init__(self, session):

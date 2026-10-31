@@ -22,20 +22,23 @@ export interface CreationInput extends AllocationInput {
   source_account_ref: string; preview_hash: string; idempotency_key: string;
   return_address: ReturnAddress; its: boolean; expected_delivery_at: string;
 }
-export type CreationState = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "PARTIAL";
+export type CreationState = "AWAITING_APPROVAL" | "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "PARTIAL";
 export interface CreationOperation {
   id: string; order_id: string; state: CreationState; created_at: string;
-  approval_mode: "automatic"; automatically_approved_at: string | null;
+  // Every Walmart write needs a written human approval; automatic checks are evidence only.
+  approval_mode: "manual"; automatic_checks_at: string | null;
+  approval_ref: string | null; approved_by: string | null; approved_at: string | null;
   tickets: { id: string; number: number; state: CreationState; allocation: AllocationTicket;
     error_code: string | null; shipments: { shipment_id: string; label_state: "PENDING" | "READY" | "FAILED" }[] }[];
 }
 export const creationLabels: Record<CreationState, string> = {
-  QUEUED: "待执行", RUNNING: "创建中", SUCCEEDED: "创建成功", FAILED: "创建失败", UNKNOWN: "结果待确认", PARTIAL: "部分成功",
+  AWAITING_APPROVAL: "待人工批准", QUEUED: "已批准待执行", RUNNING: "创建中", SUCCEEDED: "创建成功", FAILED: "创建失败", UNKNOWN: "结果待确认", PARTIAL: "部分成功",
 };
 export const getCreationCapabilities = (signal?: AbortSignal) => backendRequest<{ creation_enabled: boolean; preview_enabled: boolean; reason: string | null }>(`${pendingPrefix}/capabilities`, { signal });
 export const allocationPreview = (body: AllocationInput) => backendRequest<AllocationPreview>(`${pendingPrefix}/allocation-preview`, { method: "POST", body: JSON.stringify(body) });
 export const createShipments = (body: CreationInput) => backendRequest<CreationOperation>(`${pendingPrefix}/creation-operations`, { method: "POST", body: JSON.stringify(body) });
 export const listCreationOperations = (id: string, page = 1, signal?: AbortSignal) => backendRequest<{ items: CreationOperation[]; total: number }>(`${pendingPrefix}/creation-operations?order_id=${encodeURIComponent(id)}&page=${page}&page_size=10`, { signal });
+export const approveCreation = (id: string, approvalRef: string) => backendRequest<CreationOperation>(`${pendingPrefix}/creation-operations/${encodeURIComponent(id)}/approve`, { method: "POST", body: JSON.stringify({ approval_ref: approvalRef }) });
 export const recoverCreation = (id: string, action: "reconcile" | "labels/retry") => backendRequest<CreationOperation>(`${pendingPrefix}/creation-operations/${encodeURIComponent(id)}/${action}`, { method: "POST" });
 export const optionalPreview = (body: CreationInput) => backendRequest<{ preview_hash: string; result: unknown }>(`${pendingPrefix}/optional-previews`, { method: "POST", body: JSON.stringify(body) });
 export const downloadCreationLabel = (id: string, shipmentId: string) => backendDownload(`${pendingPrefix}/creation-operations/${encodeURIComponent(id)}/labels/${encodeURIComponent(shipmentId)}`, "wfs-label.pdf");

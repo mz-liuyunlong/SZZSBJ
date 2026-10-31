@@ -15,8 +15,16 @@ class WfsCreation(Base):
     __table_args__ = (
         UniqueConstraint("source_account_ref", "idempotency_key"),
         CheckConstraint(
-            "state IN ('QUEUED','RUNNING','SUCCEEDED','FAILED','UNKNOWN','PARTIAL')",
+            "state IN ('AWAITING_APPROVAL','QUEUED','RUNNING','SUCCEEDED','FAILED','UNKNOWN',"
+            "'PARTIAL')",
             name="wfs_creation_state",
+        ),
+        # Red line: every Walmart write needs a written, per-operation human approval.
+        # Nothing leaves AWAITING_APPROVAL without approval_ref + approver + time.
+        CheckConstraint(
+            "state = 'AWAITING_APPROVAL' OR (approval_ref IS NOT NULL AND approved_by IS NOT NULL"
+            " AND approved_at IS NOT NULL)",
+            name="wfs_creation_manual_approval",
         ),
     )
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -29,8 +37,11 @@ class WfsCreation(Base):
     request_hash: Mapped[str] = mapped_column(String(64))
     snapshot: Mapped[dict] = mapped_column(J)
     actor_uid: Mapped[str] = mapped_column(String(128))
-    state: Mapped[str] = mapped_column(String(16), default="QUEUED")
+    state: Mapped[str] = mapped_column(String(24), default="AWAITING_APPROVAL")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    approval_ref: Mapped[str | None] = mapped_column(String(128))
+    approved_by: Mapped[str | None] = mapped_column(String(128))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class WfsCreationTicket(Base):

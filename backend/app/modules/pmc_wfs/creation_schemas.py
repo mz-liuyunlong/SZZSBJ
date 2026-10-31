@@ -10,7 +10,9 @@ from app.modules.pmc_domestic.warehouse_schemas import Strict
 from app.modules.pmc_wfs.schemas import ReturnAddress
 
 Count = Annotated[int, Field(strict=True, ge=1, le=9999)]
-State = Literal["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "UNKNOWN", "PARTIAL"]
+State = Literal[
+    "AWAITING_APPROVAL", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "UNKNOWN", "PARTIAL"
+]
 
 
 class OrderSelection(Strict):
@@ -73,6 +75,12 @@ class AllocationPreview(Strict):
     preview_hash: str
 
 
+class ApprovalCommand(Strict):
+    """Human approval of one creation operation (red line: written, per operation)."""
+
+    approval_ref: str = Field(min_length=3, max_length=128, pattern=r"^[A-Za-z0-9][\w.:/#-]*$")
+
+
 class CreationCommand(AllocationCommand):
     source_account_ref: str = Field(min_length=1, max_length=128)
     preview_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -102,8 +110,11 @@ class OperationRead(Strict):
     state: State
     created_at: datetime
     tickets: list[TicketRead]
-    approval_mode: Literal["automatic"] = "automatic"
-    automatically_approved_at: datetime | None = None
+    approval_mode: Literal["manual"] = "manual"
+    automatic_checks_at: datetime | None = None
+    approval_ref: str | None = None
+    approved_by: str | None = None
+    approved_at: datetime | None = None
 
 
 class OperationList(Strict):

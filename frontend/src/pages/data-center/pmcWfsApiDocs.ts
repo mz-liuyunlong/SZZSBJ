@@ -7,7 +7,8 @@ const endpoints: [ApiMethod, string, string][] = [
   ["POST", "/orders/{id}/identity", "换店铺或链接并生成新 PK"],
   ["GET", "/capabilities", "创建能力"],
   ["POST", "/allocation-preview", "按箱数分票核对"],
-  ["POST", "/creation-operations", "自动审批并提交创建"],
+  ["POST", "/creation-operations", "提交创建：自动检查并占用箱子，待人工批准"],
+  ["POST", "/creation-operations/{ident}/approve", "人工书面批准后执行创建（approval_ref）"],
   ["GET", "/creation-operations", "查询创建记录"],
   ["GET", "/creation-operations/{ident}", "创建结果详情"],
   ["POST", "/creation-operations/{ident}/reconcile", "核实结果"],
@@ -37,7 +38,7 @@ const apis: ApiDocItem[] = endpoints.map(([method, suffix, title]) => ({
   requestExample: { method, url: `/api/pmc/wfs/pending-packing${suffix}` },
   responseExample: { success: true, data: suffix === "/orders" ? { items: [], total: 0 } : {}, error: null, meta: { source: "new_system_postgresql", execution_enabled: false }, request_id: "example" },
 }));
-export const wfsPendingApiDocs: ApiDocModule = { key: "pmc-wfs", name: "PMC WFS", icon: "📦", desc: "待发货打包单真实接口", levels: [{ name: "待发货打包单", desc: "本系统装箱、分票与自动审批", apis }] };
+export const wfsPendingApiDocs: ApiDocModule = { key: "pmc-wfs", name: "PMC WFS", icon: "📦", desc: "待发货打包单真实接口", levels: [{ name: "待发货打包单", desc: "本系统装箱、分票，人工书面批准后创建", apis }] };
 
 const boardEndpoints: [ApiMethod, string, string][] = [
   ["GET", "/shipments", "货件看板列表"],

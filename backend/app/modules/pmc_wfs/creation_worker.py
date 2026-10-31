@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 
 from app.modules.pmc_wfs.creation_models import WfsCreation, WfsCreationEvent, WfsCreationTicket
-from app.modules.pmc_wfs.creation_service import guard_write
+from app.modules.pmc_wfs.creation_service import guard_write, manually_approved
 
 
 class DefinitiveRejection(Exception):
@@ -33,6 +33,19 @@ def run_operation(factory, gateway, ident, action="execute"):
         guard_write(session)
         op = session.get(WfsCreation, ident)
         if op is None:
+            return
+        if not manually_approved(op):
+            # Red line: no Walmart call (create, reconcile or label) without a written
+            # human approval for this operation. Record the refusal, touch nothing else.
+            session.add(
+                WfsCreationEvent(
+                    operation_id=ident,
+                    actor_uid="wfs-worker",
+                    kind="refused_unapproved",
+                    evidence={"action": action, "state": op.state},
+                )
+            )
+            session.commit()
             return
         gateway.validate(op.snapshot)
         ticket_ids = list(
@@ -60,7 +73,7 @@ def run_operation(factory, gateway, ident, action="execute"):
         elif "RUNNING" in states:
             op.state = "RUNNING"
         elif "QUEUED" in states:
-            op.state = "QUEUED"
+            op.state = "QUEUED"  # approved, not yet executed
         else:
             op.state = "FAILED"
         session.commit()
@@ -72,6 +85,8 @@ def execute_ticket(factory, gateway, ident, ticket_id, action):
             select(WfsCreationTicket).where(WfsCreationTicket.id == ticket_id).with_for_update()
         )
         op = session.get(WfsCreation, ident)
+        if not manually_approved(op):
+            return  # defence in depth; run_operation already refused
         snapshot, allocation = op.snapshot, ticket.allocation
         mode = None
         if ticket.state == "QUEUED" and action in {"execute", "reconcile"}:

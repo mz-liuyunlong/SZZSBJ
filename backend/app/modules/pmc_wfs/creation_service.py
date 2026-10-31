@@ -23,6 +23,7 @@ from app.modules.pmc_wfs.creation_schemas import (
     ShipmentRead,
     TicketRead,
 )
+from app.modules.pmc_wfs.repository import domestic_packing_lock_key
 
 
 def guard_write(session):
@@ -35,6 +36,14 @@ def guard_write(session):
         raise ApiError(code="WFS_ISOLATED_TEST_DATABASE_REQUIRED", status_code=403)
     if env == "local" and (url.database != "szzsbj_dev" or url.port != 55432):
         raise ApiError(code="WFS_LOCAL_ONLY", status_code=403)
+
+
+AUTOMATIC_CHECKS_RULE_VERSION = "wfs-v2-20261029"
+
+
+def manually_approved(op) -> bool:
+    """True only when a human approval record exists (approval_ref, approver, time)."""
+    return bool(op.approval_ref and op.approved_by and op.approved_at)
 
 
 def holds(session, orders):
@@ -102,7 +111,10 @@ class CreationService:
             order_id=op.order_id,
             state=op.state,
             created_at=op.created_at,
-            automatically_approved_at=op.snapshot.get("automatic_approval", {}).get("at"),
+            automatic_checks_at=op.snapshot.get("automatic_checks", {}).get("at"),
+            approval_ref=op.approval_ref,
+            approved_by=op.approved_by,
+            approved_at=op.approved_at,
             tickets=[
                 TicketRead(
                     id=t.id,
@@ -153,7 +165,8 @@ class CreationService:
         try:
             self.s.execute(text("SET LOCAL lock_timeout='5s'"))
             self.base.base.lock(f"wfs-v2:{cmd.source_account_ref}:{cmd.idempotency_key}")
-            self.base.base.lock(f"{cmd.source_account_ref}\0{16168}")
+            # Same lock as the domestic packing/warehouse commands (see repository docstring).
+            self.base.base.lock(domestic_packing_lock_key(cmd.source_account_ref))
             prior = self.s.scalar(
                 select(WfsCreation).where(
                     WfsCreation.source_account_ref == cmd.source_account_ref,
@@ -182,10 +195,12 @@ class CreationService:
                 ],
             }
             self.gateway.validate(snapshot)  # Reject before any persistent hold when disabled.
-            snapshot["automatic_approval"] = {
+            # Machine checks only. They are evidence for the human approver, never an
+            # approval: the operation waits in AWAITING_APPROVAL until approve() runs.
+            snapshot["automatic_checks"] = {
                 "at": datetime.now(UTC).isoformat(),
                 "actor": "system:wfs-validation",
-                "rule_version": "wfs-v2-20261029",
+                "rule_version": AUTOMATIC_CHECKS_RULE_VERSION,
                 "checks": [
                     "permission",
                     "scope",
@@ -206,7 +221,7 @@ class CreationService:
                 request_hash=digest,
                 snapshot=snapshot,
                 actor_uid=actor,
-                state="QUEUED",
+                state="AWAITING_APPROVAL",
             )
             self.s.add(op)
             self.s.flush()
@@ -246,8 +261,8 @@ class CreationService:
                 WfsCreationEvent(
                     operation_id=op.id,
                     actor_uid="system:wfs-validation",
-                    kind="automatically_approved",
-                    evidence=snapshot["automatic_approval"],
+                    kind="automatic_checks_passed",
+                    evidence=snapshot["automatic_checks"],
                 )
             )
             self.s.commit()
@@ -258,7 +273,41 @@ class CreationService:
         except Exception:
             self.s.rollback()
             raise
-        # The committed QUEUED record is recoverable if broker delivery fails.
+        # Boxes are held, nothing is dispatched: execution starts only from approve().
+        self.s.expire_all()
+        return self.read(ident)
+
+    def approve(self, ident, cmd, actor):
+        """Record the written human approval for one operation, then dispatch it."""
+        guard_write(self.s)
+        try:
+            self.s.execute(text("SET LOCAL lock_timeout='5s'"))
+            op = self.operation(ident, lock=True)
+            if op.state != "AWAITING_APPROVAL" or manually_approved(op):
+                conflict("WFS_APPROVAL_NOT_PENDING")
+            self.gateway.validate(op.snapshot)
+            op.approval_ref = cmd.approval_ref
+            op.approved_by = actor
+            op.approved_at = datetime.now(UTC)
+            op.state = "QUEUED"
+            self.s.add(
+                WfsCreationEvent(
+                    operation_id=op.id,
+                    actor_uid=actor,
+                    kind="manually_approved",
+                    evidence={
+                        "approval_ref": cmd.approval_ref,
+                        "approved_by": actor,
+                        "approved_at": op.approved_at.isoformat(),
+                        "automatic_checks": op.snapshot.get("automatic_checks"),
+                    },
+                )
+            )
+            self.s.commit()
+        except Exception:
+            self.s.rollback()
+            raise
+        # The committed QUEUED (approved) record is recoverable if broker delivery fails.
         try:
             self.dispatch(str(ident), "execute")
         except Exception:
@@ -277,6 +326,8 @@ class CreationService:
     def recover(self, ident, actor, action):
         guard_write(self.s)
         op = self.operation(ident)
+        if not manually_approved(op):
+            conflict("WFS_APPROVAL_REQUIRED")
         self.gateway.validate(op.snapshot)
         self.s.add(
             WfsCreationEvent(

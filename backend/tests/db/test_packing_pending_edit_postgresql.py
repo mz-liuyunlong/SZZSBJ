@@ -36,7 +36,7 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261101_0072_wfs_pending_drafts"
+REVISION = "20261101_0073_wfs_creation_manual_approval"
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 

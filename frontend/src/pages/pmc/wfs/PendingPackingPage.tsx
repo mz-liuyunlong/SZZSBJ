@@ -100,7 +100,7 @@ export default function PendingPackingPage({ page, scope = "anonymous", permissi
   return <PageShell page={page}>
     {context}<div className="wfs-pending">
       <RequestLoadingOverlay spinning={pageLoading} label="正在加载待发货打包单，请稍候" />
-      <Typography.Paragraph className="wfs-pending__flow">国内仓打包完成 → 选择发货箱数及分票 → 确认提交 → 程序自动审批并创建 → 查看结果和箱唛。OWS 非必填，探测按需使用。</Typography.Paragraph>
+      <Typography.Paragraph className="wfs-pending__flow">国内仓打包完成 → 选择发货箱数及分票 → 确认提交（程序自动检查）→ 人工书面批准 → 程序创建 → 查看结果和箱唛。OWS 非必填，探测按需使用。</Typography.Paragraph>
       {loadError && <Alert type="error" showIcon message={pendingError(loadError)} action={<Button onClick={() => void refresh()}>重试</Button>} />}
       <ManagementStatCards ariaLabel="待发货打包单统计" cards={[
         { key: "ready", title: "已打包完成 · 可建货件", value: summary?.ready ?? "—", unit: "张", tone: "normal", icon: <span>单</span>, subtitle: `已完成 ${summary?.completed ?? "—"} 张 · 测试 ${summary?.test ?? "—"} · 可用 ${summary?.available_boxes ?? "—"} 箱` },
