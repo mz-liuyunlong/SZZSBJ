@@ -655,6 +655,21 @@ class RbacService:
                     message="包含未在同步治理配置中登记的数据源账号",
                     details={"invalid_source_account_refs": invalid_source_accounts},
                 )
+        requested_departments = {
+            scope_value
+            for scope_type, scope_value in scopes
+            if scope_type == "org_department" and scope_value != "*"
+        }
+        if requested_departments:
+            valid_departments = self.repository.list_active_feishu_department_ids()
+            invalid = sorted(requested_departments - valid_departments)
+            if invalid:
+                raise ApiError(
+                    code=ErrorCode.VALIDATION_ERROR,
+                    status_code=422,
+                    message="组织部门不存在于最新飞书快照中",
+                    details={"invalid_department_ids": invalid},
+                )
         if self._is_super_admin(actor):
             return
         if any(scope_value == "*" for _scope_type, scope_value in scopes):

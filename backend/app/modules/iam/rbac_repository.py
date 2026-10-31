@@ -434,6 +434,24 @@ class RbacRepository:
                 },
             )
 
+    def list_active_feishu_department_ids(self) -> set[str]:
+        """Only departments in the latest successful snapshot are grantable."""
+        return {
+            str(row)
+            for row in self.session.execute(
+                text(
+                    """
+                    select department_id
+                    from iam_feishu_departments
+                    where last_seen_run_id = (
+                        select id from iam_feishu_org_sync_runs
+                        order by applied_at desc, id desc limit 1
+                    )
+                    """
+                )
+            ).scalars()
+        }
+
     def resolve_user_data_scope(self, *, user_id: int, scope_type: str) -> set[str]:
         user_values = {
             str(item)

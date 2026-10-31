@@ -79,9 +79,9 @@ export default function OrganizationPage({ canSync }: OrganizationPageProps) {
 
   useEffect(() => {
     let alive = true;
-    void backendRequest<DirectoryPreview>("/api/settings/organization/preview")
+    void backendRequest<DirectoryPreview>("/api/settings/organization/snapshot")
       .then(response => { if (alive) setData(response.data); })
-      .catch(() => { if (alive) setError("飞书通讯录读取失败。请检查飞书授权范围和应用配置。"); })
+      .catch(() => { if (alive) setError("组织架构读取失败：请确认已授权部门数据范围，并检查组织同步状态。"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);

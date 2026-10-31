@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.api import SuccessEnvelope, get_request_id, success_response
 from app.core.auth import Principal
 from app.core.config import get_settings
-from app.core.permissions import require_any_permission, require_permission
+from app.core.permissions import require_any_permission, require_permission, require_super_admin
 from app.db.session import get_db_session
 from app.modules.iam.feishu_directory_service import FeishuDirectoryService
 from app.modules.iam.field_access import filter_user_read
@@ -308,7 +308,7 @@ def list_rbac_audit_events(
 @router.get("/api/settings/organization/preview")
 def preview_feishu_organization(
     request: Request,
-    _: Annotated[Principal, Depends(require_permission("page:settings:organization:view"))],
+    _: Annotated[Principal, Depends(require_super_admin)],
 ) -> dict:
     """Real-time Feishu read-only preview. Never writes a database or changes RBAC."""
     service = FeishuDirectoryService.from_settings(get_settings())

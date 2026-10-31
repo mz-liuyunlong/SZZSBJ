@@ -12,6 +12,7 @@ const scopeTypeOptions: { value: RoleDataScopeType; label: string }[] = [
   { value: "owner", label: "负责人" },
   { value: "sku", label: "SKU" },
   { value: "product", label: "产品" },
+  { value: "org_department", label: "组织部门（含下级）" },
 ];
 
 interface RoleDataScopeEditorProps {
@@ -49,7 +50,7 @@ function RoleDataScopeEditor({
         type="info"
         showIcon
         message="数据权限与页面、功能权限相互独立"
-        description="每行代表一个可访问范围；同类型多值按并集处理。值为 * 表示该类型全部范围。当前业务接口严格执行数据源账号范围；其他维度仅登记，接入服务端过滤前不得视为已生效隔离。"
+        description="每行代表一个可访问范围；同类型多值按并集处理。值为 * 表示该类型全部范围。当前业务接口严格执行数据源账号范围；组织部门权限已在组织架构接口执行服务端过滤；其他非数据源账号维度仍在逐页接入，未接入前不得视为已生效隔离。"
       />
       <Spin spinning={loading}>
         <div className="role-management__data-scope-toolbar">

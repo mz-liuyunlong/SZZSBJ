@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, success_response
@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.core.permissions import require_permission, require_super_admin
 from app.db.session import get_db_session
 from app.modules.iam.feishu_directory_service import FeishuDirectoryService
+from app.modules.iam.organization_access import authorized_department_ids
 from app.modules.iam.organization_snapshot import apply_snapshot, canonical_snapshot
 
 router = APIRouter(tags=["iam-organization"])
@@ -117,36 +118,50 @@ def list_organization_sync_runs(
 @router.get("/api/settings/organization/snapshot")
 def read_organization_snapshot(
     request: Request,
-    _: org_view,
+    principal: org_view,
     session: db_session,
 ):
-    """Return persisted organization data; never infer missing staff are resigned."""
-    department_rows = (
-        session.execute(
-            text("""
+    """Return latest-snapshot departments and employees, restricted by SQL scopes."""
+    authorized = authorized_department_ids(session, principal)
+    department_sql = """
         SELECT department_id, parent_department_id, name, leader_user_id
-        FROM iam_feishu_departments ORDER BY name, department_id
-        """)
+        FROM iam_feishu_departments
+        WHERE last_seen_run_id = (
+            SELECT id FROM iam_feishu_org_sync_runs
+            ORDER BY applied_at DESC, id DESC LIMIT 1
         )
-        .mappings()
-        .all()
-    )
-    user_rows = (
-        session.execute(
-            text("""
+    """
+    employee_sql = """
         SELECT open_id, name, department_ids, is_active, is_resigned, is_frozen
-        FROM iam_feishu_employees ORDER BY name, open_id
-        """)
+        FROM iam_feishu_employees e
+        WHERE e.last_seen_run_id = (
+            SELECT id FROM iam_feishu_org_sync_runs
+            ORDER BY applied_at DESC, id DESC LIMIT 1
         )
-        .mappings()
-        .all()
-    )
+    """
+    params: dict[str, object] = {}
+    if authorized is not None:
+        params["allowed_ids"] = sorted(authorized)
+        department_sql += " AND department_id IN :allowed_ids"
+        employee_sql += """
+            AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements_text(e.department_ids) AS d(id)
+                WHERE d.id IN :allowed_ids
+            )
+        """
+    department_query = text(department_sql + " ORDER BY name, department_id")
+    employee_query = text(employee_sql + " ORDER BY name, open_id")
+    if authorized is not None:
+        department_query = department_query.bindparams(bindparam("allowed_ids", expanding=True))
+        employee_query = employee_query.bindparams(bindparam("allowed_ids", expanding=True))
+    department_rows = session.execute(department_query, params).mappings().all()
+    user_rows = session.execute(employee_query, params).mappings().all()
     last_run = (
         session.execute(
             text("""
-        SELECT applied_at, snapshot_hash FROM iam_feishu_org_sync_runs
-        ORDER BY applied_at DESC, id DESC LIMIT 1
-        """)
+            SELECT applied_at, snapshot_hash FROM iam_feishu_org_sync_runs
+            ORDER BY applied_at DESC, id DESC LIMIT 1
+            """)
         )
         .mappings()
         .first()
