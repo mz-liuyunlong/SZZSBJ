@@ -7,12 +7,12 @@ import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
 import {
  CLEARANCE_PRODUCTS, DEFAULT_RULES, METHODS, REASONS, STATUS_NAMES, activeTaskFor,
- chinaToday, coverage, evaluateProduct, findProduct, initialClearance, persistClearance,
+ chinaToday, coverage, evaluateProduct, findProduct,
  taskCost, taskProgress, taskQty, taskRemoved, taskRisk, taskSold, taskStore, validateRules,
  type ClearanceProduct, type ClearanceRules, type ClearanceTask, type ClearanceTaskLine,
  type RulesHistory, type StoredClearance,
 } from "./clearanceModel";
-import { integer, money, percent, PeriodStack, RiskTag, StatusTag } from "./clearanceUi";
+import { integer, money, percent, RiskTag, StatusTag } from "./clearanceUi";
 
 const ruleNumbers: {key:keyof ClearanceRules;label:string;unit:string}[]=[
  {key:"highCoverage",label:"高风险：预计售罄≥",unit:"天"},
@@ -110,8 +110,6 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
  const [manualSelection,setManualSelection]=useState<string[]>([]);
  const [manualSearch,setManualSearch]=useState("");
  const [manualStore,setManualStore]=useState("all");
- const [removeTarget,setRemoveTarget]=useState<string|null>(null);
- const [removeNote,setRemoveNote]=useState("");
  const [form]=Form.useForm<ApplyValues>();
  const [progressForm]=Form.useForm<{lines:Record<string,{sold:number;removed:number;disposed:number}>}>();
  const product=applicant?findProduct(applicant):undefined;
@@ -130,6 +128,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
  const submit=(values:ApplyValues)=>{
   if(!apply)return;
   const quantities=values.quantities||{};
+  if(applyProducts.some(x=>x.owner!==role||x.avail<=0)||(!old&&applyProducts.some(x=>activeTaskFor(data.tasks,x.id)))||new Set(applyProducts.map(x=>x.store)).size!==1){void message.error("SKU 权限、库存、重复申请或店铺校验失败");return;}
   if(applyProducts.some(x=>!Number.isInteger(quantities[x.id])||quantities[x.id]<1||quantities[x.id]>x.avail)){void message.error("每个 SKU 的申请数量必须为正整数且不超过可售库存");return;}
   const now=chinaToday();
   if(!values.remark.trim()){void message.error("申请说明不能为空");return;}
@@ -212,6 +211,5 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
    <Typography.Paragraph type="secondary">只记录 Mock 进度；各 SKU 的销售、移除、弃置总和不可超过目标，累计数值不得回退。</Typography.Paragraph>
    <Form form={progressForm} onFinish={taskProgressSave} layout="vertical">{task?.lines.map(l=><Card size="small" key={l.id} title={findProduct(l.id)?.sku+" · 目标 "+l.qty+"件"}><div className="clearance-progress-fields">{(["sold","removed","disposed"] as const).map((k,i)=><Form.Item key={k} label={["已销售","已移除","已弃置"][i]} name={["lines",l.id,k]}><InputNumber min={l[k]} max={l.qty} precision={0}/></Form.Item>)}</div></Card>)}</Form>
   </Modal>
-  <Modal title="移出人工清货候选" open={Boolean(removeTarget)} onCancel={()=>setRemoveTarget(null)} onOk={()=>{const x=removeTarget?findProduct(removeTarget):undefined;if(!x||!removeNote.trim()||x.owner!==role||activeTaskFor(data.tasks,x.id)){void message.error("原因必填，且只能移出本人无有效任务的 SKU");return;}change({manual:data.manual.filter(id=>id!==removeTarget)});setRemoveTarget(null);setRemoveNote("");void message.success("已移出人工候选（Mock）");}}><Input.TextArea value={removeNote} onChange={e=>setRemoveNote(e.target.value)} placeholder="请填写移出原因" rows={3}/></Modal>
  </>;
 }
