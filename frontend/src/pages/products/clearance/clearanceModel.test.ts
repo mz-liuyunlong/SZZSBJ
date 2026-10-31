@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
  CLEARANCE_PRODUCTS, DEFAULT_RULES, activeTaskFor, chinaToday, coverage,
- evaluateProduct, findProduct, seedTasks, taskProgress, toCsv, validateRules,
+ evaluateProduct, findProduct, seedTasks, taskProgress, taskIsComplete, nextClearanceTaskId, chinaNow, toCsv, validateRules,
 } from "./clearanceModel";
 
 describe("WFS clearance native mock domain",()=>{
@@ -34,6 +34,19 @@ describe("WFS clearance native mock domain",()=>{
   const tasks=seedTasks(),t=tasks.find(x=>x.status==="running")!;
   expect(taskProgress(t)).toBeLessThan(100);
   expect(activeTaskFor(tasks,t.lines[0].id)?.id).toBe(t.id);
+ });
+ it("does not display or authorize premature completion",()=>{
+  const task=seedTasks().find(t=>t.status==="running")!;
+  task.lines=[{id:"WFS-108",qty:300,sold:299,removed:0,disposed:0}];
+  expect(taskProgress(task)).toBe(99);
+  expect(taskIsComplete(task)).toBe(false);
+  task.lines[0].sold=300;
+  expect(taskProgress(task)).toBe(100);
+  expect(taskIsComplete(task)).toBe(true);
+ });
+ it("uses current China business time and noncolliding mock task IDs",()=>{
+  expect(chinaNow(new Date("2026-10-31T04:05:00Z"))).toBe("2026-10-31 12:05");
+  expect(nextClearanceTaskId(seedTasks(),"2026-10-31 12:05")).toBe("CH-1031-001");
  });
  it("exports UTF-8 BOM CSV and protects spreadsheet formula cells",()=>{
   const csv=toCsv(["SKU","Value"],[["=HYPERLINK(\"https://invalid\")","ok"]]);
