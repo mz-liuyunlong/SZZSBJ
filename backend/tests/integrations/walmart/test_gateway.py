@@ -18,10 +18,13 @@ from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.gateway import (
     Actor,
     CallRecord,
+    FileOutbox,
     GatewayError,
     InMemoryWriteLedger,
+    MemoryOutbox,
     WalmartGateway,
     reviewed_store_id_map,
+    write_outcome,
 )
 from app.integrations.walmart.pagination import PageContract
 from app.integrations.walmart.scf_bridge import ProtectedScfBridge
@@ -267,16 +270,28 @@ def test_unknown_write_outcome_blocks_retry_until_reconciled(world):
     assert gateway.call(
         STORE, "wfs_inbound_shipment_cancel", actor=actor, idempotency_key="cancel:PMC-Y", **cancel
     ).ok
+    # ok is terminal: a reconcile job can never reopen a finished write (round 3).
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        gateway.ledger.resolve("cancel:PMC-Y", outcome="failed", note="test")
     # Same key with a different payload is not a retry.
-    gateway.ledger.resolve("cancel:PMC-Y", outcome="failed", note="test")
+    transport.push(STORE, "/v3/fulfillment/inbound-shipments/PMC-W", 400, {"errors": []})
+    gateway.call(
+        STORE,
+        "wfs_inbound_shipment_cancel",
+        actor=actor,
+        params={"inboundOrderId": "PMC-W"},
+        approval_ref="wfs-ticket:w",
+        idempotency_key="cancel:PMC-W",
+    )
+    assert gateway.ledger.status("cancel:PMC-W") == "provider_error"
     with pytest.raises(GatewayError, match="WALMART_WRITE_PAYLOAD_CHANGED"):
         gateway.call(
             STORE,
             "wfs_inbound_shipment_cancel",
             actor=actor,
             params={"inboundOrderId": "PMC-Z"},
-            approval_ref="wfs-ticket:y",
-            idempotency_key="cancel:PMC-Y",
+            approval_ref="wfs-ticket:w",
+            idempotency_key="cancel:PMC-W",
         )
     assert isinstance(gateway.ledger, InMemoryWriteLedger)
 
@@ -497,6 +512,173 @@ class _Identity:
         raise AssertionError("no network in tests")
 
 
+@pytest.mark.parametrize(
+    ("status", "outcome"),
+    [
+        (200, "ok"),
+        (201, "ok"),
+        (400, "provider_error"),
+        (404, "provider_error"),
+        (408, "unknown"),
+        (429, "unknown"),
+        (500, "unknown"),
+        (502, "unknown"),
+        (503, "unknown"),
+    ],
+)
+def test_write_outcome_classification(status, outcome):
+    assert write_outcome(status) == outcome
+
+
+@pytest.mark.parametrize("status", [500, 503, 429])
+def test_http_5xx_on_a_write_is_unknown_until_read_back(world, status):
+    """Round 3 (reviewer P0): a 5xx/429 answer may still have been applied by Walmart.
+
+    The key must stay open (``unknown``) and refuse a second POST until reconciliation
+    resolves it; it must never be recorded as a definitive ``provider_error``.
+    """
+    gateway, transport, records = world
+    actor = _user(WFS_CANCEL_PERMISSION, stores={STORE})
+    cancel = {"params": {"inboundOrderId": "PMC-5XX"}, "approval_ref": "wfs-ticket:5xx"}
+    key = f"cancel:PMC-5XX:{status}"
+    transport.push(
+        STORE, "/v3/fulfillment/inbound-shipments/PMC-5XX", status, {"errors": [{"code": "X"}]}
+    )
+    result = gateway.call(
+        STORE, "wfs_inbound_shipment_cancel", actor=actor, idempotency_key=key, **cancel
+    )
+    assert result.status_code == status and not result.ok
+    assert records[-1].outcome == "unknown" and records[-1].error_code == f"WALMART_HTTP_{status}"
+    assert gateway.ledger.status(key) == "unknown"
+    sent = len(transport.calls)
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PENDING_REVIEW"):
+        gateway.call(
+            STORE, "wfs_inbound_shipment_cancel", actor=actor, idempotency_key=key, **cancel
+        )
+    assert len(transport.calls) == sent  # nothing left the server
+    # Read-back says it was applied: ok, terminal.
+    gateway.ledger.resolve(key, outcome="ok", note="read-back: shipment cancelled")
+    with pytest.raises(GatewayError, match="WALMART_WRITE_ALREADY_DONE"):
+        gateway.call(
+            STORE, "wfs_inbound_shipment_cancel", actor=actor, idempotency_key=key, **cancel
+        )
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        gateway.ledger.resolve(key, outcome="failed", note="never from ok")
+
+
+def test_ledger_state_machine_is_enforced():
+    ledger = InMemoryWriteLedger()
+    fields = {
+        "store_code": STORE,
+        "operation_key": "wfs_inbound_shipment_cancel",
+        "actor_uid": "42",
+        "approval_ref": "t:1",
+        "request_sha256": "a" * 64,
+    }
+    ledger.begin("k", **fields)
+    # finish only accepts known outcomes and only from attempting
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        ledger.finish("k", outcome="done", status_code=200, error_code=None)
+    ledger.finish("k", outcome="failed", status_code=None, error_code="X")
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        ledger.finish("k", outcome="ok", status_code=200, error_code=None)
+    # re-claim must be the same store / operation / payload
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_KEY_REUSED"):
+        ledger.begin("k", **{**fields, "store_code": OTHER})
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_KEY_REUSED"):
+        ledger.begin("k", **{**fields, "operation_key": "wfs_inbound_shipment_create"})
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PAYLOAD_CHANGED"):
+        ledger.begin("k", **{**fields, "request_sha256": "b" * 64})
+    ledger.begin("k", **fields)
+    assert ledger.entries["k"]["attempts"] == 2
+    ledger.finish("k", outcome="ok", status_code=201, error_code=None)
+    # ok is terminal for every path
+    for outcome in ("failed", "provider_error", "ok"):
+        with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+            ledger.resolve("k", outcome=outcome, note="x")
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_RESOLUTION_INVALID"):
+        ledger.resolve("k", outcome="attempting", note="x")
+    with pytest.raises(GatewayError, match="WALMART_WRITE_ALREADY_DONE"):
+        ledger.begin("k", **fields)
+
+
+def test_file_outbox_survives_a_process_restart(world, tmp_path):
+    """Round 3 (reviewer P0): audit evidence that could not reach the database must be
+    replayed by the *next* process, not lost with the one that produced it."""
+    gateway, transport, records = world
+    outbox_dir = tmp_path / "audit-outbox"
+    state = {"fail": True}
+
+    def flaky(record: CallRecord) -> None:
+        if state["fail"]:
+            raise OSError("database down")
+        records.append(record)
+
+    first = WalmartGateway(
+        gateway._client,  # noqa: SLF001
+        audit=flaky,
+        ledger=InMemoryWriteLedger(),
+        outbox=FileOutbox(outbox_dir),
+    )
+    transport.push(STORE, "/v3/wfs/inventory", 200, {"elements": {"inventory": []}})
+    assert first.call(STORE, "wfs_inventory", actor=_user("*"), params={"limit": 1}).ok
+    with pytest.raises(GatewayError, match="WALMART_AUDIT_UNAVAILABLE"):
+        first.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=_user("*"),
+            params={"inboundOrderId": "PMC-R"},
+            approval_ref="wfs-ticket:r",
+            idempotency_key="cancel:PMC-R",
+        )
+    assert first.pending_audit == 2 and len(list(outbox_dir.glob("*.json"))) == 2
+    del first  # process gone; only the directory remembers
+    state["fail"] = False
+    before = len(records)
+    second = WalmartGateway(
+        gateway._client,  # noqa: SLF001
+        audit=flaky,
+        ledger=InMemoryWriteLedger(),
+        outbox=FileOutbox(outbox_dir),
+    )
+    # Drained on construction, oldest first, and the files are gone only after the sink took them.
+    assert second.pending_audit == 0 and list(outbox_dir.glob("*.json")) == []
+    replayed = records[before:]
+    assert [r.operation_key for r in replayed] == ["wfs_inventory", "wfs_inbound_shipment_cancel"]
+    assert replayed[0].outcome == "ok" and replayed[1].outcome == "denied"
+    assert replayed[1].idempotency_key == "cancel:PMC-R"
+
+
+def test_file_outbox_keeps_records_the_sink_rejects(tmp_path):
+    outbox = FileOutbox(tmp_path / "ob")
+    record = CallRecord(
+        store_code=STORE,
+        operation_key="wfs_inventory",
+        risk="read",
+        actor_kind="user",
+        actor_uid="42",
+        approval_ref=None,
+        idempotency_key=None,
+        contract_sha256=None,
+        registry_version="v",
+        request_sha256="a" * 64,
+        status_code=200,
+        outcome="ok",
+        error_code=None,
+        duration_ms=1,
+    )
+    outbox.append(record)
+    outbox.append(record)
+
+    def refusing(_: CallRecord) -> None:
+        raise OSError("still down")
+
+    assert outbox.drain(refusing) is False and outbox.pending() == 2
+    taken: list[CallRecord] = []
+    assert outbox.drain(taken.append) is True and outbox.pending() == 0
+    assert taken == [record, record]
+
+
 def _env(tmp_path, protocol: str, **extra: str) -> dict[str, str]:
     signer = ContractSigner.generate(kid="szzsbj-2026-10", registry=reviewed_registry())
     pem = tmp_path / "signing.pem"
@@ -515,8 +697,12 @@ def _env(tmp_path, protocol: str, **extra: str) -> dict[str, str]:
     return env
 
 
-def _persistent():
-    return {"audit": lambda record: None, "ledger": _FakePersistentLedger()}
+def _persistent(tmp_path):
+    return {
+        "audit": lambda record: None,
+        "ledger": _FakePersistentLedger(),
+        "outbox": FileOutbox(tmp_path / "outbox"),
+    }
 
 
 class _FakePersistentLedger:
@@ -548,11 +734,27 @@ def test_from_env_requires_persistent_ledger_and_audit(tmp_path):
         WalmartGateway.from_env(
             environ=env, identity_provider=_Identity(), ledger=_FakePersistentLedger()
         )
+    # Round 3: the audit outbox must be durable too (in-memory evidence dies with the process).
+    with pytest.raises(GatewayError, match="WALMART_AUDIT_OUTBOX_REQUIRED"):
+        WalmartGateway.from_env(
+            environ=env,
+            identity_provider=_Identity(),
+            audit=lambda r: None,
+            ledger=_FakePersistentLedger(),
+        )
+    with pytest.raises(GatewayError, match="WALMART_AUDIT_OUTBOX_REQUIRED"):
+        WalmartGateway.from_env(
+            environ=env,
+            identity_provider=_Identity(),
+            audit=lambda r: None,
+            ledger=_FakePersistentLedger(),
+            outbox=MemoryOutbox(),
+        )
 
 
 def test_from_env_protocol_3_uses_reviewed_registry_and_signer(tmp_path):
     gateway = WalmartGateway.from_env(
-        environ=_env(tmp_path, "3"), identity_provider=_Identity(), **_persistent()
+        environ=_env(tmp_path, "3"), identity_provider=_Identity(), **_persistent(tmp_path)
     )
     assert gateway.stores == {STORE, OTHER}
     assert set(gateway.registry.keys()) == set(reviewed_registry().keys())
@@ -560,14 +762,18 @@ def test_from_env_protocol_3_uses_reviewed_registry_and_signer(tmp_path):
     missing_key = _env(tmp_path, "3")
     missing_key["SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_FILE"] = str(tmp_path / "nope.pem")
     with pytest.raises(GatewayError, match="WALMART_SIGNING_KEY_UNAVAILABLE"):
-        WalmartGateway.from_env(environ=missing_key, identity_provider=_Identity(), **_persistent())
+        WalmartGateway.from_env(
+            environ=missing_key, identity_provider=_Identity(), **_persistent(tmp_path)
+        )
 
 
 def test_from_env_protocol_1_keeps_legacy_allowlists(tmp_path):
     env = _env(
         tmp_path, "1", SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS="wfs_inventory,inbound_shipments"
     )
-    gateway = WalmartGateway.from_env(environ=env, identity_provider=_Identity(), **_persistent())
+    gateway = WalmartGateway.from_env(
+        environ=env, identity_provider=_Identity(), **_persistent(tmp_path)
+    )
     assert set(gateway.registry.keys()) == {"wfs_inventory", "inbound_shipments"}
     assert gateway.registry.get("wfs_inventory").permission == "action:walmart:wfs:read"
     with pytest.raises(GatewayError, match="WALMART_API_NOT_REGISTERED"):
@@ -576,7 +782,7 @@ def test_from_env_protocol_1_keeps_legacy_allowlists(tmp_path):
         )
     bad = _env(tmp_path, "1")
     with pytest.raises(GatewayError, match="WALMART_GATEWAY_CONFIG_INVALID"):
-        WalmartGateway.from_env(environ=bad, identity_provider=_Identity(), **_persistent())
+        WalmartGateway.from_env(environ=bad, identity_provider=_Identity(), **_persistent(tmp_path))
 
 
 def test_store_id_map_validation():

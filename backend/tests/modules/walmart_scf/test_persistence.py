@@ -1,9 +1,11 @@
 """Persistent Walmart audit + write ledger: lifecycle, process restart, races, PostgreSQL.
 
-SQLite covers lifecycle, restart (a second ledger object on the same file is a "new
-process") and the insert race through the unique constraint. The PostgreSQL section runs
-only when ``SZZSBJ_PG_TEST_URL`` points at a database (the Mac dev DB in CI tickets) and
-exercises ``SELECT ... FOR UPDATE`` with real concurrent connections.
+SQLite covers lifecycle, the state machine, restart (a second ledger object on the same
+file is a "new process"), the file outbox replay into the audit table and the insert race
+through the unique constraint. The PostgreSQL section runs when ``SZZSBJ_PG_TEST_URL``
+points at a database — in GitHub CI (job "Walmart gateway ledger PostgreSQL") and in Mac
+tickets — and exercises ``SELECT ... FOR UPDATE`` with real concurrent connections for
+``begin``, ``finish`` and ``resolve``.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
-from app.integrations.walmart.gateway import GatewayError, WalmartGateway
+from app.integrations.walmart.gateway import FileOutbox, GatewayError, WalmartGateway
 from app.modules.walmart_scf.persistence import (
     DbAuditSink,
     DbWriteLedger,
@@ -119,6 +121,42 @@ def test_ledger_lifecycle_blocks_open_and_done_keys(sqlite_factory) -> None:
         ledger.finish("nope", outcome="ok", status_code=200, error_code=None)
 
 
+def test_ledger_state_machine_in_the_database(sqlite_factory) -> None:
+    """Round 3: legal transitions only; ok is terminal; a key belongs to one write."""
+    ledger = DbWriteLedger(sqlite_factory)
+    key = "wfs-create:PMC-FSM"
+    ledger.begin(key, **FIELDS)
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        ledger.finish(key, outcome="done", status_code=200, error_code=None)  # unknown outcome
+    ledger.finish(key, outcome="unknown", status_code=503, error_code="WALMART_HTTP_503")
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        ledger.finish(
+            key, outcome="ok", status_code=200, error_code=None
+        )  # finish only from attempting
+    assert ledger.status(key) == "unknown"
+    # The business key may not be reused for another store / operation, even when retryable.
+    ledger.resolve(key, outcome="failed", note="read-back: nothing created")
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_KEY_REUSED"):
+        ledger.begin(key, **{**FIELDS, "store_code": "HK9999"})
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_KEY_REUSED"):
+        ledger.begin(key, **{**FIELDS, "operation_key": "wfs_inbound_shipment_cancel"})
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PAYLOAD_CHANGED"):
+        ledger.begin(key, **{**FIELDS, "request_sha256": "c" * 64})
+    assert ledger.status(key) == "failed"  # refusals never mutate the row
+    ledger.resolve(key, outcome="ok", note="read-back: found it after all")
+    for outcome in ("failed", "provider_error", "ok"):
+        with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+            ledger.resolve(key, outcome=outcome, note="ok must never go back")
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_RESOLUTION_INVALID"):
+        ledger.resolve(key, outcome="unknown", note="not a resolution")
+    with pytest.raises(GatewayError, match="WALMART_WRITE_ALREADY_DONE"):
+        ledger.begin(key, **FIELDS)
+    with sqlite_factory() as s:
+        entry = s.scalar(select(WalmartWriteLedgerEntry))
+    assert entry is not None and entry.outcome == "ok" and entry.attempts == 1
+    assert entry.note == "read-back: found it after all"
+
+
 def test_open_attempt_survives_a_process_restart(sqlite_factory, tmp_path) -> None:
     """Worker A claims a key and dies mid-call; worker B (new process) must not redo it."""
     worker_a = DbWriteLedger(sqlite_factory)
@@ -163,7 +201,7 @@ def test_insert_race_has_exactly_one_winner(sqlite_factory) -> None:
         assert s.scalar(text("select count(*) from integration_walmart_write_ledger")) == 1
 
 
-def test_build_production_gateway_wires_persistence(monkeypatch, sqlite_factory, tmp_path):
+def _production_env(monkeypatch, tmp_path) -> None:
     from app.integrations.walmart.contract_signing import ContractSigner
     from app.integrations.walmart.unified_api import reviewed_registry
 
@@ -177,17 +215,49 @@ def test_build_production_gateway_wires_persistence(monkeypatch, sqlite_factory,
     monkeypatch.setenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", "qcs::cam::uin/1:roleName/x")
     monkeypatch.setenv("SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_FILE", str(pem))
     monkeypatch.setenv("SZZSBJ_WALMART_CONTRACT_SIGNING_KEY_ID", "szzsbj-2026-10")
+    monkeypatch.setenv("SZZSBJ_WALMART_AUDIT_OUTBOX_DIR", str(tmp_path / "outbox"))
 
-    class NoNetwork:
-        def get_identity(self):  # pragma: no cover
-            raise AssertionError("no network in tests")
 
+class NoNetwork:
+    def get_identity(self):  # pragma: no cover
+        raise AssertionError("no network in tests")
+
+
+def test_build_production_gateway_wires_persistence(monkeypatch, sqlite_factory, tmp_path):
+    _production_env(monkeypatch, tmp_path)
     gateway = build_production_gateway(sqlite_factory, identity_provider=NoNetwork())
     assert isinstance(gateway, WalmartGateway)
     assert isinstance(gateway.ledger, DbWriteLedger)
+    assert (tmp_path / "outbox").is_dir() and gateway.pending_audit == 0
     # The default (no ledger passed) is refused by from_env itself.
     with pytest.raises(GatewayError, match="WALMART_LEDGER_REQUIRED"):
         WalmartGateway.from_env(identity_provider=NoNetwork())
+    # An outbox directory that cannot be created is a hard refusal, not a silent fallback.
+    (tmp_path / "not-a-dir").write_text("x")
+    with pytest.raises(GatewayError, match="WALMART_AUDIT_OUTBOX_REQUIRED"):
+        build_production_gateway(
+            sqlite_factory, identity_provider=NoNetwork(), outbox_dir=str(tmp_path / "not-a-dir")
+        )
+
+
+def test_restarted_production_gateway_replays_the_outbox_into_the_audit_table(
+    monkeypatch, sqlite_factory, tmp_path
+):
+    """Round 3 (reviewer P0): evidence left in the file outbox by a crashed process lands
+    in ``integration_walmart_calls`` the moment the next process builds the gateway."""
+    _production_env(monkeypatch, tmp_path)
+    stranded = FileOutbox(tmp_path / "outbox")  # what the previous process left behind
+    from app.integrations.walmart.gateway import CallRecord
+
+    stranded.append(CallRecord(**{**Record().__dict__, "outcome": "attempt", "status_code": None}))
+    stranded.append(CallRecord(**Record().__dict__))
+    assert stranded.pending() == 2
+    gateway = build_production_gateway(sqlite_factory, identity_provider=NoNetwork())
+    assert gateway.pending_audit == 0 and stranded.pending() == 0
+    with sqlite_factory() as s:
+        rows = list(s.scalars(select(WalmartCallAudit).order_by(WalmartCallAudit.created_at)))
+    assert [r.outcome for r in rows] == ["attempt", "ok"]
+    assert all(r.idempotency_key == "wfs-create:PMC-TEST-HK2614-ABC" for r in rows)
 
 
 # --- PostgreSQL (opt-in) -------------------------------------------------------------------
@@ -225,7 +295,7 @@ def test_postgres_concurrent_claims_serialize_on_the_row(pg_factory) -> None:
     ledger = DbWriteLedger(pg_factory)
     key = "wfs-create:PMC-PG"
     ledger.begin(key, **FIELDS)
-    ledger.finish(key, outcome="failed", status_code=503, error_code="WALMART_HTTP_503")
+    ledger.finish(key, outcome="failed", status_code=None, error_code="WALMART_AUDIT_UNAVAILABLE")
     # Eight workers retry the same failed key at once: FOR UPDATE lets exactly one re-open it.
     results: list[str] = []
     lock = threading.Lock()
@@ -271,3 +341,59 @@ def test_postgres_concurrent_claims_serialize_on_the_row(pg_factory) -> None:
     for t in threads:
         t.join()
     assert results.count("won") == 1 and set(results) <= {"won", "WALMART_WRITE_PENDING_REVIEW"}
+
+
+def _race(n: int, fn) -> list[str]:
+    results: list[str] = []
+    lock = threading.Lock()
+    barrier = threading.Barrier(n)
+
+    def worker() -> None:
+        barrier.wait()
+        try:
+            fn()
+            outcome = "won"
+        except GatewayError as error:
+            outcome = error.code
+        with lock:
+            results.append(outcome)
+
+    threads = [threading.Thread(target=worker) for _ in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return results
+
+
+def test_postgres_concurrent_finish_and_resolve_apply_exactly_once(pg_factory) -> None:
+    """Round 3: ``finish`` and ``resolve`` also lock the row, so eight reconcile workers
+    closing the same open key produce one transition and seven stable refusals."""
+    ledger = DbWriteLedger(pg_factory)
+    key = "wfs-create:PMC-PG-RESOLVE"
+    ledger.begin(key, **FIELDS)
+    results = _race(
+        8,
+        lambda: ledger.finish(
+            key, outcome="unknown", status_code=503, error_code="WALMART_HTTP_503"
+        ),
+    )
+    assert results.count("won") == 1 and set(results) <= {
+        "won",
+        "WALMART_LEDGER_TRANSITION_INVALID",
+    }
+    assert ledger.status(key) == "unknown" and ledger.open_keys() == [key]
+    results = _race(8, lambda: ledger.resolve(key, outcome="ok", note="read-back: exists"))
+    assert results.count("won") == 1 and set(results) <= {
+        "won",
+        "WALMART_LEDGER_TRANSITION_INVALID",
+    }
+    assert ledger.status(key) == "ok" and ledger.open_keys() == []
+    # ok is terminal under concurrency too: nobody can reopen or re-claim it.
+    results = _race(8, lambda: ledger.resolve(key, outcome="failed", note="never"))
+    assert set(results) == {"WALMART_LEDGER_TRANSITION_INVALID"}
+    results = _race(8, lambda: ledger.begin(key, **FIELDS))
+    assert set(results) == {"WALMART_WRITE_ALREADY_DONE"}
+    with pg_factory() as s:
+        entry = s.scalar(select(WalmartWriteLedgerEntry))
+    assert entry is not None and entry.attempts == 1 and entry.outcome == "ok"

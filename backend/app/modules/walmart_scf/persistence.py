@@ -25,10 +25,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.integrations.walmart.gateway import GatewayError, WalmartGateway
+from app.integrations.walmart.gateway import (
+    LEDGER_OPEN,
+    FileOutbox,
+    GatewayError,
+    WalmartGateway,
+    ledger_begin_check,
+    ledger_transition_check,
+)
 
-OPEN_OUTCOMES = frozenset({"attempting", "unknown"})
-RESOLVABLE_OUTCOMES = frozenset({"ok", "provider_error", "failed"})
+OPEN_OUTCOMES = LEDGER_OPEN
+DEFAULT_OUTBOX_DIR = "/var/lib/szzsbj/walmart-audit-outbox"
+OUTBOX_DIR_ENV = "SZZSBJ_WALMART_AUDIT_OUTBOX_DIR"
 
 
 def _now() -> datetime:
@@ -122,10 +130,22 @@ class DbWriteLedger:
     serialize on the key; a brand-new key is inserted under the unique constraint and a
     losing inserter sees ``IntegrityError`` -> ``WALMART_WRITE_PENDING_REVIEW``. Nothing
     here is cached in memory, so a restarted process sees exactly the persisted state.
+
+    State machine (``gateway.ledger_transition_check``): ``finish`` only from
+    ``attempting``; ``resolve`` never from ``ok``; a re-claim must match store, operation
+    and request digest of the earlier attempt (``WALMART_LEDGER_KEY_REUSED`` /
+    ``WALMART_WRITE_PAYLOAD_CHANGED``). ``finish`` and ``resolve`` also lock the row.
     """
 
     def __init__(self, session_factory: Callable[[], Any]) -> None:
         self._factory = session_factory
+
+    @staticmethod
+    def _locked(session: Any, key: str):
+        stmt = select(WalmartWriteLedgerEntry).where(WalmartWriteLedgerEntry.idempotency_key == key)
+        if session.get_bind().dialect.name == "postgresql":
+            stmt = stmt.with_for_update()
+        return session.scalar(stmt)
 
     def begin(
         self,
@@ -138,12 +158,7 @@ class DbWriteLedger:
         request_sha256: str,
     ) -> None:
         with self._factory() as session:
-            stmt = select(WalmartWriteLedgerEntry).where(
-                WalmartWriteLedgerEntry.idempotency_key == key
-            )
-            if session.get_bind().dialect.name == "postgresql":
-                stmt = stmt.with_for_update()
-            entry = session.scalar(stmt)
+            entry = self._locked(session, key)
             if entry is None:
                 session.add(
                     WalmartWriteLedgerEntry(
@@ -163,12 +178,17 @@ class DbWriteLedger:
                     session.rollback()
                     raise GatewayError("WALMART_WRITE_PENDING_REVIEW") from None
                 return
-            if entry.outcome in OPEN_OUTCOMES:
-                raise GatewayError("WALMART_WRITE_PENDING_REVIEW")
-            if entry.outcome == "ok":
-                raise GatewayError("WALMART_WRITE_ALREADY_DONE")
-            if entry.request_sha256 != request_sha256:
-                raise GatewayError("WALMART_WRITE_PAYLOAD_CHANGED")
+            ledger_begin_check(
+                {
+                    "outcome": entry.outcome,
+                    "store_code": entry.store_code,
+                    "operation_key": entry.operation_key,
+                    "request_sha256": entry.request_sha256,
+                },
+                store_code=store_code,
+                operation_key=operation_key,
+                request_sha256=request_sha256,
+            )
             entry.outcome = "attempting"
             entry.actor_uid = actor_uid
             entry.approval_ref = approval_ref
@@ -182,13 +202,10 @@ class DbWriteLedger:
         self, key: str, *, outcome: str, status_code: int | None, error_code: str | None
     ) -> None:
         with self._factory() as session:
-            entry = session.scalar(
-                select(WalmartWriteLedgerEntry).where(
-                    WalmartWriteLedgerEntry.idempotency_key == key
-                )
-            )
+            entry = self._locked(session, key)
             if entry is None:
                 raise GatewayError("WALMART_LEDGER_ENTRY_MISSING")
+            ledger_transition_check(entry.outcome, to=outcome, via="finish")
             entry.outcome = outcome
             entry.status_code = status_code
             entry.error_code = error_code
@@ -204,17 +221,15 @@ class DbWriteLedger:
             )
 
     def resolve(self, key: str, *, outcome: str, note: str) -> None:
-        """Reconcile hook: close an open/unknown attempt after a Walmart read-back."""
-        if outcome not in RESOLVABLE_OUTCOMES:
-            raise GatewayError("WALMART_LEDGER_RESOLUTION_INVALID")
+        """Reconcile hook: close an open/unknown attempt after a Walmart read-back.
+
+        ``ok`` is terminal; anything else may move to ok / failed / provider_error.
+        """
         with self._factory() as session:
-            entry = session.scalar(
-                select(WalmartWriteLedgerEntry).where(
-                    WalmartWriteLedgerEntry.idempotency_key == key
-                )
-            )
+            entry = self._locked(session, key)
             if entry is None:
                 raise GatewayError("WALMART_LEDGER_ENTRY_MISSING")
+            ledger_transition_check(entry.outcome, to=outcome, via="resolve")
             entry.outcome = outcome
             entry.note = note[:500]
             entry.updated_at = _now()
@@ -234,11 +249,23 @@ class DbWriteLedger:
 
 
 def build_production_gateway(
-    session_factory: Callable[[], Any], *, identity_provider: Any = None
+    session_factory: Callable[[], Any],
+    *,
+    identity_provider: Any = None,
+    outbox_dir: str | None = None,
 ) -> WalmartGateway:
-    """The production gateway: environment configuration + persistent audit and ledger."""
+    """The production gateway: environment configuration + persistent audit, ledger and
+    a durable file outbox (``SZZSBJ_WALMART_AUDIT_OUTBOX_DIR``) drained on start."""
+    import os
+
+    directory = outbox_dir or os.environ.get(OUTBOX_DIR_ENV, "").strip() or DEFAULT_OUTBOX_DIR
+    try:
+        outbox = FileOutbox(directory)
+    except OSError:
+        raise GatewayError("WALMART_AUDIT_OUTBOX_REQUIRED") from None
     return WalmartGateway.from_env(
         audit=DbAuditSink(session_factory),
         ledger=DbWriteLedger(session_factory),
+        outbox=outbox,
         identity_provider=identity_provider,
     )

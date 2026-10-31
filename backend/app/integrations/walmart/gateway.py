@@ -15,13 +15,16 @@ sink as a ``CallRecord`` without request or response bodies.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import time
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Protocol
+from uuid import uuid4
 
 from app.integrations.walmart.client import WalmartClient, WalmartResult
 from app.integrations.walmart.contract_signing import ContractSigner
@@ -222,6 +225,58 @@ class RefusingLedger:
         raise GatewayError("WALMART_LEDGER_REQUIRED")
 
 
+# Ledger state machine (shared by every WriteLedger implementation):
+#   begin:   (none) | failed | provider_error  -> attempting      (same store/op/payload)
+#   finish:  attempting -> ok | provider_error | unknown | failed
+#   resolve: attempting | unknown | failed | provider_error -> ok | failed | provider_error
+#   ok is terminal: nothing may move it back to a retryable state.
+LEDGER_OPEN = frozenset({"attempting", "unknown"})
+LEDGER_RETRYABLE = frozenset({"failed", "provider_error"})
+LEDGER_FINISH_OUTCOMES = frozenset({"ok", "provider_error", "unknown", "failed"})
+LEDGER_RESOLVE_OUTCOMES = frozenset({"ok", "failed", "provider_error"})
+
+
+def ledger_begin_check(current: Mapping[str, Any] | None, **fields: Any) -> None:
+    """Decide whether a key may be (re)claimed; raises the stable refusal code."""
+    if current is None:
+        return
+    if current["outcome"] in LEDGER_OPEN:
+        raise GatewayError("WALMART_WRITE_PENDING_REVIEW")
+    if current["outcome"] == "ok":
+        raise GatewayError("WALMART_WRITE_ALREADY_DONE")
+    if (
+        current["store_code"] != fields["store_code"]
+        or current["operation_key"] != fields["operation_key"]
+    ):
+        # The business key is being reused for a different write: never silently accept.
+        raise GatewayError("WALMART_LEDGER_KEY_REUSED")
+    if current["request_sha256"] != fields["request_sha256"]:
+        # Same business key, different payload: a retry must be the same request.
+        raise GatewayError("WALMART_WRITE_PAYLOAD_CHANGED")
+
+
+def ledger_transition_check(current_outcome: str, *, to: str, via: str) -> None:
+    if via == "finish":
+        if to not in LEDGER_FINISH_OUTCOMES or current_outcome != "attempting":
+            raise GatewayError("WALMART_LEDGER_TRANSITION_INVALID")
+        return
+    if to not in LEDGER_RESOLVE_OUTCOMES:
+        raise GatewayError("WALMART_LEDGER_RESOLUTION_INVALID")
+    if current_outcome == "ok":
+        raise GatewayError("WALMART_LEDGER_TRANSITION_INVALID")
+
+
+def write_outcome(status_code: int) -> str:
+    """How a provider answer closes a write: 2xx ok; 4xx a definitive rejection
+    (retryable with the same payload); 408/429/5xx unknown — the request may have been
+    applied, so the key stays open until a read-back resolves it."""
+    if 200 <= status_code < 300:
+        return "ok"
+    if status_code >= 500 or status_code in (408, 429):
+        return "unknown"
+    return "provider_error"
+
+
 class InMemoryWriteLedger:
     """Reference implementation of ``WriteLedger`` for tests and single-process tools.
 
@@ -234,14 +289,7 @@ class InMemoryWriteLedger:
 
     def begin(self, key: str, **fields: Any) -> None:
         current = self.entries.get(key)
-        if current is not None:
-            if current["outcome"] in ("attempting", "unknown"):
-                raise GatewayError("WALMART_WRITE_PENDING_REVIEW")
-            if current["outcome"] == "ok":
-                raise GatewayError("WALMART_WRITE_ALREADY_DONE")
-            if current["request_sha256"] != fields["request_sha256"]:
-                # Same business key, different payload: a retry must be the same request.
-                raise GatewayError("WALMART_WRITE_PAYLOAD_CHANGED")
+        ledger_begin_check(current, **fields)
         self.entries[key] = {
             **fields,
             "outcome": "attempting",
@@ -251,7 +299,10 @@ class InMemoryWriteLedger:
     def finish(
         self, key: str, *, outcome: str, status_code: int | None, error_code: str | None
     ) -> None:
-        entry = self.entries[key]
+        entry = self.entries.get(key)
+        if entry is None:
+            raise GatewayError("WALMART_LEDGER_ENTRY_MISSING")
+        ledger_transition_check(entry["outcome"], to=outcome, via="finish")
         entry.update(outcome=outcome, status_code=status_code, error_code=error_code)
 
     def status(self, key: str) -> str | None:
@@ -259,10 +310,86 @@ class InMemoryWriteLedger:
         return None if entry is None else str(entry["outcome"])
 
     def resolve(self, key: str, *, outcome: str, note: str) -> None:
-        if outcome not in ("ok", "provider_error", "failed"):
-            raise GatewayError("WALMART_LEDGER_RESOLUTION_INVALID")
-        entry = self.entries[key]
+        entry = self.entries.get(key)
+        if entry is None:
+            raise GatewayError("WALMART_LEDGER_ENTRY_MISSING")
+        ledger_transition_check(entry["outcome"], to=outcome, via="resolve")
         entry.update(outcome=outcome, note=note)
+
+
+class AuditOutbox(Protocol):
+    """Where audit records wait when the sink is unavailable (transactional-outbox style).
+
+    Production uses ``FileOutbox`` (survives a process restart; drained on start and before
+    every call); ``MemoryOutbox`` is for tests and is refused by ``from_env``.
+    """
+
+    def append(self, record: CallRecord) -> None: ...
+
+    def pending(self) -> int: ...
+
+    def drain(self, sink: AuditSink) -> bool: ...
+
+
+class MemoryOutbox:
+    def __init__(self) -> None:
+        self.records: list[CallRecord] = []
+
+    def append(self, record: CallRecord) -> None:
+        self.records.append(record)
+
+    def pending(self) -> int:
+        return len(self.records)
+
+    def drain(self, sink: AuditSink) -> bool:
+        while self.records:
+            try:
+                sink(self.records[0])
+            except Exception:
+                return False
+            self.records.pop(0)
+        return True
+
+
+class FileOutbox:
+    """One JSON file per pending record in a local directory (oldest first on drain).
+
+    The directory is on the server's own disk, so it is available exactly when the
+    database is not. A file is removed only after the sink accepted the record.
+    """
+
+    def __init__(self, directory: str | Path) -> None:
+        self._dir = Path(directory)
+        self._dir.mkdir(parents=True, exist_ok=True)
+        probe = self._dir / ".write-test"
+        probe.write_text("ok")
+        probe.unlink()
+
+    def append(self, record: CallRecord) -> None:
+        name = f"{time.time_ns():020d}-{uuid4().hex}.json"
+        tmp = self._dir / (name + ".tmp")
+        tmp.write_text(json.dumps(asdict(record), ensure_ascii=False, sort_keys=True))
+        tmp.replace(self._dir / name)
+
+    def _files(self) -> list[Path]:
+        return sorted(p for p in self._dir.glob("*.json") if p.is_file())
+
+    def pending(self) -> int:
+        return len(self._files())
+
+    def drain(self, sink: AuditSink) -> bool:
+        for path in self._files():
+            try:
+                record = CallRecord(**json.loads(path.read_text()))
+            except (OSError, ValueError, TypeError):
+                logger.error("walmart audit outbox: unreadable record %s left in place", path.name)
+                return False
+            try:
+                sink(record)
+            except Exception:
+                return False
+            path.unlink(missing_ok=True)
+        return True
 
 
 class WalmartGateway:
@@ -272,6 +399,7 @@ class WalmartGateway:
         *,
         audit: AuditSink | None = None,
         ledger: WriteLedger | None = None,
+        outbox: AuditOutbox | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._client = client
@@ -279,13 +407,14 @@ class WalmartGateway:
         self._audit = audit or log_audit
         self._ledger: WriteLedger = ledger or RefusingLedger()
         self._clock = clock
-        # Records the audit sink could not persist yet (transactional-outbox style):
-        # flushed before the next call; a write is refused while anything is pending.
-        self._outbox: list[CallRecord] = []
+        # Records the audit sink could not persist yet: drained on start and before every
+        # call; a write is refused while anything is pending.
+        self._outbox: AuditOutbox = outbox or MemoryOutbox()
+        self._flush_outbox()
 
     @property
     def pending_audit(self) -> int:
-        return len(self._outbox)
+        return self._outbox.pending()
 
     @property
     def ledger(self) -> WriteLedger:
@@ -486,11 +615,20 @@ class WalmartGateway:
                 idempotency_key,
             )
             raise GatewayError(code) from None
-        outcome = "ok" if result.ok else "provider_error"
         if ledger_open and idempotency_key is not None:
+            # 5xx / 408 / 429 may have been applied upstream: the key stays open
+            # ("unknown") until a read-back resolves it; a second POST is refused meanwhile.
+            outcome = write_outcome(result.status_code)
+            error_code = None if outcome != "unknown" else f"WALMART_HTTP_{result.status_code}"
             self._ledger.finish(
-                idempotency_key, outcome=outcome, status_code=result.status_code, error_code=None
+                idempotency_key,
+                outcome=outcome,
+                status_code=result.status_code,
+                error_code=error_code,
             )
+        else:
+            outcome = "ok" if result.ok else "provider_error"
+            error_code = None
         self._record(
             store_code,
             operation_key,
@@ -501,7 +639,7 @@ class WalmartGateway:
             request_hash,
             result.status_code,
             outcome,
-            None,
+            error_code,
             started,
             idempotency_key,
         )
@@ -632,15 +770,16 @@ class WalmartGateway:
 
     def _flush_outbox(self) -> bool:
         """Retry pending records in order; True when nothing is pending afterwards."""
-        while self._outbox:
-            record = self._outbox[0]
-            try:
-                self._audit(record)
-            except Exception:
-                logger.warning("walmart audit outbox still pending (%d records)", len(self._outbox))
-                return False
-            self._outbox.pop(0)
-        return True
+        try:
+            drained = self._outbox.drain(self._audit)
+        except Exception:
+            logger.exception("walmart audit outbox drain failed")
+            return False
+        if not drained:
+            logger.warning(
+                "walmart audit outbox still pending (%d records)", self._outbox.pending()
+            )
+        return drained
 
     # ----- construction -------------------------------------------------------------
 
@@ -650,6 +789,7 @@ class WalmartGateway:
         *,
         audit: AuditSink | None = None,
         ledger: WriteLedger | None = None,
+        outbox: AuditOutbox | None = None,
         identity_provider: Any = None,
         environ: Mapping[str, str] | None = None,
     ) -> WalmartGateway:
@@ -662,6 +802,9 @@ class WalmartGateway:
             # Production composition must supply the persistent ledger and the database
             # audit sink (``app.modules.walmart_scf.persistence.build_production_gateway``).
             raise GatewayError("WALMART_LEDGER_REQUIRED")
+        if outbox is None or isinstance(outbox, MemoryOutbox):
+            # ...and a durable outbox so unpersisted audit results survive a restart.
+            raise GatewayError("WALMART_AUDIT_OUTBOX_REQUIRED")
         env = os.environ if environ is None else environ
         store_map = reviewed_store_id_map(env)
         stores = frozenset(store_map.values())
@@ -699,7 +842,7 @@ class WalmartGateway:
                 bridge_version=3,
                 signer=signer,
             )
-            return cls(client, audit=audit, ledger=ledger)
+            return cls(client, audit=audit, ledger=ledger, outbox=outbox)
         # Legacy protocol: the registry only enables what the cloud allowlists enable.
         from app.integrations.walmart.unified_api import load_unified_registry
 
@@ -725,7 +868,7 @@ class WalmartGateway:
             cloud_api=RefreshingScfApi(provider),
             bridge_version=2 if write_keys else 1,
         )
-        return cls(client, audit=audit, ledger=ledger)
+        return cls(client, audit=audit, ledger=ledger, outbox=outbox)
 
 
 def _with_permission(operation: Operation, reviewed: ContractRegistry) -> Operation:
