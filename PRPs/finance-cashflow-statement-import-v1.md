@@ -19,7 +19,7 @@
 - 它是财务板块正式上线第一刀：「结算对账」（PR-C）的到账侧、「现金状况」的底座都只依赖这份流水。
 - 不需要任何外部接口授权，可与领星结算账单同步（PR-B）并行推进。
 - Rocky 2026-10-31 已否决 PingPong / 派安盈 / 万里汇 API 接入，文件导入即长期方案。
-- 业务原型（Demo v5.3.0 ~ v5.5.0）已在财务手上跑了三轮（7 份文件 / 160 行 / 10 账户），口径稳定。
+- 业务原型（Demo v5.3.0 ~ v5.5.0）已在财务手上跑了三轮，口径稳定；control totals 明细按 Demo 归档保存在 Rocky 侧工作区。
 
 ## 3. Scope
 
@@ -28,10 +28,11 @@
 - [ ] Alembic migration（接当前 head `20261029_0068_walmart_remote_jobs` 之后的最新 head）：`dim_finance_cash_accounts`（含种子 10 条）、`landing_finance_cashflow_imports`、`raw_finance_cashflow_files`、`std_finance_cashflow_lines`、`dq_run_finance_cashflow_import`。
 - [ ] 新模块 `backend/app/modules/finance_cashflow/`：models / schemas / parsers（boc_xls、shenzhen_rural_bank_xlsx、payoneer_csv、worldfirst_xlsx、pingpong_xlsx）/ detector / service / repository / router。
 - [ ] 接口：`POST /api/finance/cashflow/imports`（multipart 多文件或多次单文件 + `X-File-Name`，与 operation_plans 一致的风格由实现者按现有 envelope 选一种并写进 API 文档）、`GET /api/finance/cashflow/imports`、`GET /api/finance/cashflow/imports/{import_id}`、`POST /api/finance/cashflow/imports/{import_id}/void`、`GET /api/finance/cashflow/lines`、`GET /api/finance/cashflow/accounts`。
-- [ ] 权限：页面 `page:data_center:data_import:view`；功能 `action:data_center:data_import:finance_cashflow_upload`、`action:data_center:data_import:finance_cashflow_void`（high）；字段 `field:finance:settlement_reconciliation:counterparty`；data scope 资源 `finance_cash_account`（none → fail closed）；全部登记进 `permission_catalog_v2`。
+- [ ] 权限：页面 `page:data-center:data-import:view`；功能 `action:data-center:data-import:finance-cashflow-upload`、`action:data-center:data-import:finance-cashflow-void`（high）；字段 `field:finance:settlement-reconciliation:counterparty`；data scope 资源 `finance_cash_account`（none → fail closed）；全部登记进 `permission_catalog_v2`。
 - [ ] 前端：`frontend/src/pages/data-center/DataImportPage.tsx` 把「现金流账户报表」来源从 mock 接成真实 API（上传多文件、每文件识别结果、覆盖区间、去重数、作废需二次确认）；其余来源保持 mock 不动。
 - [ ] 文档：`docs/api/finance-cashflow-import.md`、`docs/sop/data-center/finance-cashflow-import.md`、`DATA_INTERFACE_REGISTRY.md` 状态更新、`CODEX_HANDOFF.md`。
 - [ ] 测试：合成样本文件（不含真实户名 / 账号 / 金额）覆盖 5 种格式 × 识别 / 解析 / 去重 / 拒绝 / 余额链 / 脱敏；权限 fail-closed；重复上传幂等；PostgreSQL 隔离测试库下 migration up / down。
+- [ ] **门禁**：派安盈 CSV 的 UTC → Asia/Shanghai 业务日期折算、PingPong「专用账户入账」拆成回款全额 + 归集手续费两行的规则，须先用合成样本 + 一份脱敏真实样本在本地验证并记录，对应 parser 才允许进入实现；金额列 `numeric(18,4)`，解析按字符串转 Decimal。
 
 ### Out of scope
 
@@ -57,10 +58,10 @@
 ## 5. Permissions
 
 ```text
-page permissionKey: page:data_center:data_import:view
-action permissionKeys: action:data_center:data_import:finance_cashflow_upload；action:data_center:data_import:finance_cashflow_void (high-risk)
+page permissionKey: page:data-center:data-import:view
+action permissionKeys: action:data-center:data-import:finance-cashflow-upload；action:data-center:data-import:finance-cashflow-void (high-risk)
 data scope resource: finance_cash_account（按账户 / 法人主体；默认 none，fail closed；超管 *）
-field permissions: field:finance:settlement_reconciliation:counterparty（对方户名、卡号尾号；未授权不返回该字段）
+field permissions: field:finance:settlement-reconciliation:counterparty（对方户名、卡号尾号；未授权不返回该字段）
 high-risk actions: void（二次确认 + 审计事件 + 幂等）
 ```
 
@@ -134,14 +135,14 @@ Task 5: API 文档 / SOP / registry / CODEX_HANDOFF；完成报告八段
 ```bash
 # backend
 uv run ruff check . && uv run ruff format --check .
-uv run pytest tests/finance_cashflow -q
+uv run pytest backend/tests/modules/finance_cashflow -q
 uv run alembic check
 # frontend
 npm run lint && npm run typecheck && npm run test -- data-center
 npm run build
 # CI
 bash scripts/ci-preflight.sh
-# control totals（本地，用 Rocky 侧 2026-10 真实导出，文件不进 Git）：7 文件 → 10 账户 160 行，各账户行数见决策 §6
+# control totals（本地，用 Rocky 侧 2026-10 真实导出，文件不进 Git）：按 Demo 归档的 control totals 核对，PR 只贴是否一致
 ```
 
 ## 12. Forbidden Actions
@@ -156,7 +157,7 @@ bash scripts/ci-preflight.sh
 
 - 代码：revert PR。
 - 数据库：migration down（五张新表均为新建，无既有数据）。
-- 配置 / feature flag：上传入口受 `action:...:finance_cashflow_upload` 控制，撤权限即关闭；无 Celery / schedule。
+- 配置 / feature flag：上传入口受 `action:...:finance-cashflow-upload` 控制，撤权限即关闭；无 Celery / schedule。
 
 ## 14. Acceptance Checklist
 
