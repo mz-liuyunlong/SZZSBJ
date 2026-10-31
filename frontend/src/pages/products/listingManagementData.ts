@@ -3,6 +3,7 @@ export interface ListingManagementRow {
   id: string;
   sourceAccountRef?: string;
   image: string;
+  monitorImages?: string[];
   msku: string;
   productId: string;
   store: string;
@@ -13,63 +14,91 @@ export interface ListingManagementRow {
   productType: string;
   listPrice: number;
   salePrice: number;
+  listPriceCurrency?: string;
+  salePriceCurrency?: string;
+  listPriceKnown?: boolean;
+  salePriceKnown?: boolean;
   productStatus: string;
   lifecycle: string;
   fulfillmentMethod: string;
   listedAt: string;
+  listingDateSource?: string;
+  listingStartRaw?: string;
+  firstWfsAvailableAt?: string;
+  firstWfsObservedAt?: string;
   category: string;
   wfsAvailableInventory: number;
+  wfsAvailableInventoryKnown?: boolean;
   inboundInventory: number;
-  sales90Days: number;
+  inboundInventoryKnown?: boolean;
+  sales30Days: number;
   adSpend30Days: number;
+  adSpend30DaysKnown?: boolean;
   disabledReason: string;
   listingStatus: string;
   buyBoxStatus: string;
   walmartSeller: string;
   resold: string;
   checkedAt: string;
+  dataUpdatedAt?: string;
+  monitorSource?: string;
+  monitorStatus?: string;
+  monitorError?: string;
+  monitorImageCount?: number;
+  monitorAgeHours?: number | null;
   rating: number;
+  ratingKnown?: boolean;
   reviewCount: number;
+  reviewCountKnown?: boolean;
   brand: string;
   tags: string[];
   gtin: string;
   productGrade: string;
   archiveReason?: string | null;
   isArchived: boolean;
+  archiveStateKnown?: boolean;
 }
 
 export const listingColumnFields = [
   { key: "image", title: "图片" },
-  { key: "productIdName", title: "商品ID/品名" },
+  { key: "productIdName", title: "商品ID/本地品名" },
   { key: "skuMsku", title: "SKU/MSKU" },
   { key: "store", title: "店铺" },
   { key: "owner", title: "负责人" },
-  { key: "title", title: "标题" },
-  { key: "productType", title: "产品类型" },
+  { key: "title", title: "平台标题" },
+  { key: "productType", title: "平台类目" },
   { key: "listPrice", title: "划线价" },
   { key: "salePrice", title: "在售价" },
   { key: "productStatus", title: "产品状态" },
   { key: "lifecycle", title: "生命周期" },
   { key: "fulfillmentMethod", title: "发货方式" },
   { key: "gptAnalysis", title: "GPT分析" },
-  { key: "listedAt", title: "上架时间" },
+  { key: "listedAt", title: "平台上架时间" },
+  { key: "firstWfsAvailableAt", title: "首次WFS有货日" },
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },
   { key: "inboundInventory", title: "在途库存" },
-  { key: "sales90Days", title: "近90天销量" },
+  { key: "sales30Days", title: "近30天销量" },
   { key: "adSpend30Days", title: "近30天广告费" },
   { key: "disabledReason", title: "停用原因" },
   { key: "listingStatus", title: "Listing状态" },
   { key: "buyBoxStatus", title: "购物车状态" },
   { key: "walmartSeller", title: "Walmart卖家" },
   { key: "resold", title: "是否被跟卖" },
-  { key: "checkedAt", title: "检查时间" },
+  { key: "checkedAt", title: "监控检查时间" },
+  { key: "dataUpdatedAt", title: "数据更新时间" },
+  { key: "monitorSource", title: "监控来源" },
+  { key: "monitorAgeHours", title: "监控时效" },
+  { key: "monitorStatus", title: "监控状态" },
+  { key: "monitorError", title: "监控错误码" },
+  { key: "monitorImageCount", title: "监控图片数" },
   { key: "rating", title: "评分" },
   { key: "reviewCount", title: "评论数" },
   { key: "brand", title: "品牌" },
   { key: "tags", title: "标签" },
   { key: "gtin", title: "GTIN" },
   { key: "productGrade", title: "产品等级" },
+  { key: "archiveStatus", title: "归档状态" },
   { key: "archiveReason", title: "归档原因" },
 ] as const;
 
@@ -109,7 +138,7 @@ export const listingManagementMockData: ListingManagementRow[] = Array.from(
       category: categories[index % categories.length],
       wfsAvailableInventory: 40 + index * 3,
       inboundInventory: index % 5 * 12,
-      sales90Days: 180 + index * 7,
+      sales30Days: 180 + index * 7,
       adSpend30Days: Number((25 + index * 2.4).toFixed(2)),
       disabledReason: productStatus === "停用" ? "待复核" : "",
       listingStatus: index % 9 === 0 ? "离线" : "在线",

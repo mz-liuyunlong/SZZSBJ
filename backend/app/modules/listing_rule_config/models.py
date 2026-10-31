@@ -43,11 +43,13 @@ def utc_now() -> datetime:
 
 
 class ListingEvaluationRun(Base):
-    """One idempotent diagnostic run per China calendar date."""
+    """An immutable diagnostic attempt for a China calendar date."""
 
     __tablename__ = "biz_listing_evaluation_runs"
     __table_args__ = (
-        UniqueConstraint("schedule_date_cn", name="uq_listing_evaluation_run_schedule_date"),
+        UniqueConstraint(
+            "schedule_date_cn", "attempt_count", name="uq_listing_evaluation_run_date_attempt"
+        ),
         CheckConstraint(
             "status IN ('queued', 'running', 'succeeded', 'partial', 'failed')",
             name="status",

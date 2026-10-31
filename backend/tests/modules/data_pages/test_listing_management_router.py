@@ -1,5 +1,9 @@
+import csv
+import json
+from collections import namedtuple
 from datetime import UTC, datetime
 from decimal import Decimal
+from io import StringIO
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
@@ -8,15 +12,22 @@ from uuid import UUID
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, get_optional_principal
 from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.data_pages.repository import ListingManagementRepository, ListingTagRepository
+from app.modules.data_pages.models import ProductCustomTag
+from app.modules.data_pages.repository import (
+    ListingManagementRepository,
+    ListingTagRepository,
+    _csv_values,
+)
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
     ListingManagementListData,
+    ListingManagementQuery,
     ListingTagBatchSetData,
     ListingTagRead,
 )
@@ -97,9 +108,139 @@ def _listing_item() -> ListingManagementItemRead:
     )
 
 
+@pytest.mark.parametrize(
+    ("hijacked", "expected"),
+    [(None, "待确认"), (False, "否"), (True, "是")],
+)
+def test_listing_csv_preserves_unknown_resell_status(hijacked: bool | None, expected: str) -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    service._to_read = MagicMock(
+        return_value=_listing_item().model_copy(update={"is_hijacked": hijacked})
+    )
+    row = SimpleNamespace(
+        id=UUID(int=1), source_account_ref="synthetic-account", item_id="synthetic-item"
+    )
+
+    csv_text = service.export_listing_csv(
+        ListingManagementQuery(),
+        frozenset({"synthetic-account"}),
+        columns="is_hijacked",
+        _rows=[row],
+    )
+
+    assert csv_text.splitlines() == ["是否跟卖", expected]
+
+
+@pytest.mark.parametrize(
+    ("ad_spend", "expected"),
+    [(None, ""), (Decimal("0.0000"), "0.0000")],
+)
+def test_listing_csv_distinguishes_missing_ad_spend_from_real_zero(
+    ad_spend: Decimal | None, expected: str
+) -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    service._to_read = MagicMock(
+        return_value=_listing_item().model_copy(update={"ad_spend_30d_amount": ad_spend})
+    )
+    row = SimpleNamespace(
+        id=UUID(int=1), source_account_ref="synthetic-account", item_id="synthetic-item"
+    )
+
+    csv_text = service.export_listing_csv(
+        ListingManagementQuery(),
+        frozenset({"synthetic-account"}),
+        columns="ad_spend_30d",
+        _rows=[row],
+    )
+
+    assert list(csv.reader(StringIO(csv_text))) == [["近30天广告费"], [expected]]
+
+
+def test_listing_streaming_export_does_not_truncate_after_ten_thousand_rows() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    service._to_read = MagicMock(return_value=_listing_item())
+    row = SimpleNamespace(
+        id=UUID(int=1), source_account_ref="synthetic-account", item_id="synthetic-item"
+    )
+
+    def batches():
+        for _ in range(20):
+            yield [row] * 500
+        yield [row]
+
+    service.repository.iter_export_listing_batches = MagicMock(return_value=batches())
+    chunks = service.iter_export_listing_csv(
+        ListingManagementQuery(),
+        frozenset({"synthetic-account"}),
+        columns="is_hijacked",
+    )
+
+    lines = b"".join(chunks).decode("utf-8-sig").splitlines()
+    assert lines[0] == "是否跟卖"
+    assert len(lines) == 10_002
+    assert lines[-1] == "否"
+
+
+@pytest.mark.parametrize(
+    "untrusted",
+    ["=1+1", "+cmd", "-cmd", "@cmd", "\t=cmd", "\r=cmd", "\n=cmd", ["=cmd", "safe"]],
+)
+def test_listing_csv_escapes_formula_prefix_after_flattening(untrusted: object) -> None:
+    rendered = ListingManagementService._csv_value(untrusted)
+    assert rendered.startswith("'")
+    assert rendered[1:].lstrip()[0] in "=+-@"
+
+
 def test_openapi_contains_listing_management_route() -> None:
     paths = create_app().openapi()["paths"]
     assert "/api/listings/walmart" in paths
+
+
+def test_listing_multi_select_preserves_commas_unicode_and_quotes() -> None:
+    values = ["Synthetic, Store", "合成, 店铺", 'Synthetic "Quoted" Store']
+    assert _csv_values(json.dumps(values, ensure_ascii=False)) == values
+
+
+def test_owner_lookup_uses_latest_source_snapshot_and_keeps_pairing() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(
+            text("""
+            CREATE TABLE dwd_lingxing_sku_product_info_current (
+                source_account_ref TEXT, lingxing_sku_code TEXT,
+                source_observed_at TIMESTAMP, updated_at TIMESTAMP,
+                source_snapshot_id TEXT, owner_uid TEXT, owner_name TEXT,
+                product_developer_uid TEXT, product_developer_name TEXT
+            )
+        """)
+        )
+        connection.execute(
+            text("""
+            INSERT INTO dwd_lingxing_sku_product_info_current VALUES
+            ('account-a', 'sku-a', '2026-01-01', '2026-01-01', 'snapshot-a',
+             'a', 'Old owner', 'a', 'Old developer'),
+            ('account-a', 'sku-a', '2026-01-02', '2026-01-02', 'snapshot-b',
+             'z', 'New owner', 'z', 'New developer'),
+            ('account-b', 'sku-a', '2026-01-03', '2026-01-03', 'snapshot-c',
+             'b', 'Other account', 'b', 'Other developer')
+        """)
+        )
+    with Session(engine) as session:
+        lookup = ListingManagementRepository(session)._owner_lookup()
+        rows = session.execute(lookup.select()).mappings().all()
+    assert [
+        (row["source_account_ref"], row["owner_name"], row["product_developer_name"])
+        for row in rows
+    ] == [
+        ("account-a", "New owner", "New developer"),
+        ("account-b", "Other account", "Other developer"),
+    ]
 
 
 def test_listing_query_reads_raw_start_time_by_stable_business_key() -> None:
@@ -122,6 +263,66 @@ def test_listing_query_reads_raw_start_time_by_stable_business_key() -> None:
     assert "dim_walmart_listings.source_account_ref =" in sql
     assert "dim_walmart_listings.store_id =" in sql
     assert "dim_walmart_listings.item_id =" in sql
+
+
+def test_listing_archive_unknown_is_visible_by_default_but_not_explicitly_active() -> None:
+    session = MagicMock(spec=Session)
+    repository = ListingManagementRepository(session)
+    kwargs = dict(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        owner_ref="",
+        product_type="",
+        status="",
+        tag="",
+        summary_filter="total",
+        search_field="sku",
+        keyword="",
+        batch_values="",
+    )
+    active_sql = str(repository._filtered_listing_statement(**kwargs).compile())
+    unknown_sql = str(
+        repository._filtered_listing_statement(**kwargs, archive_status="unknown").compile()
+    )
+    explicit_active_sql = str(
+        repository._filtered_listing_statement(**kwargs, archive_status="active").compile()
+    )
+    assert "listing_archive_states.is_archived IS false" in active_sql
+    assert "listing_archive_states.listing_id IS NULL" in active_sql
+    assert "listing_archive_states.listing_id IS NULL" not in explicit_active_sql
+    assert "listing_archive_states.listing_id IS NULL" in unknown_sql
+
+    session.execute.return_value.mappings.return_value.one.return_value = {
+        "active_count": 2,
+        "archived_count": 3,
+        "unknown_count": 4,
+    }
+    assert repository.archive_status_filter_options(frozenset({"synthetic-account"})) == [
+        {"value": "active", "label": "未归档", "count": 2},
+        {"value": "archived", "label": "已归档", "count": 3},
+        {"value": "unknown", "label": "状态未确认", "count": 4},
+    ]
+
+
+def test_restored_listing_does_not_expose_stale_archive_reason() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    listing = SimpleNamespace(**{**_listing_item().model_dump(), "tags_json": []})
+    restored = service._to_read(
+        listing,
+        custom_tags=[],
+        is_archived=False,
+        archive_state_known=True,
+        archive_reason="historical synthetic reason",
+    )
+    archived = service._to_read(
+        listing,
+        custom_tags=[],
+        is_archived=True,
+        archive_state_known=True,
+        archive_reason="current synthetic reason",
+    )
+    assert restored.archive_reason is None
+    assert archived.archive_reason == "current synthetic reason"
 
 
 def test_listing_management_route_fails_closed_for_auth_permission_and_scope() -> None:
@@ -180,8 +381,12 @@ def test_listing_management_route_returns_envelope_and_meta(monkeypatch: Any) ->
     assert body["meta"]["total"] == 1
 
 
-def test_listing_view_permission_cannot_modify_global_tags(monkeypatch: Any) -> None:
-    create_call = MagicMock(return_value=ListingTagRead(id="tag-1", name="Synthetic", color="blue"))
+def test_listing_view_permission_cannot_modify_account_tags(monkeypatch: Any) -> None:
+    create_call = MagicMock(
+        return_value=ListingTagRead(
+            id="tag-1", source_account_ref="synthetic-account", name="Synthetic", color="blue"
+        )
+    )
     monkeypatch.setattr(ListingManagementService, "create_tag", create_call)
 
     denied = TestClient(_app("page:products:listing-management:view")).post(
@@ -197,6 +402,77 @@ def test_listing_view_permission_cannot_modify_global_tags(monkeypatch: Any) -> 
     )
     assert allowed.status_code == 200
     create_call.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "payload", "service_method"),
+    [
+        (
+            "POST",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000003/archive",
+            {"reason": "synthetic reason"},
+            "archive_listing",
+        ),
+        (
+            "POST",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000003/restore",
+            None,
+            "restore_listing",
+        ),
+        (
+            "PUT",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000003/gpt-analysis",
+            {"keyword_analysis_url": "", "ad_analysis_url": ""},
+            "update_gpt_analysis_link",
+        ),
+        (
+            "POST",
+            "/api/listings/tags/batch-set",
+            {"listing_ids": ["00000000-0000-0000-0000-000000000003"], "mode": "replace"},
+            "batch_set_tags",
+        ),
+        (
+            "PATCH",
+            "/api/listings/tags/00000000-0000-0000-0000-000000000004",
+            {"name": "Synthetic"},
+            "update_tag",
+        ),
+        (
+            "DELETE",
+            "/api/listings/tags/00000000-0000-0000-0000-000000000004",
+            None,
+            "delete_tag",
+        ),
+    ],
+)
+def test_listing_view_permission_cannot_call_any_write_service(
+    monkeypatch: Any,
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None,
+    service_method: str,
+) -> None:
+    write_call = MagicMock()
+    monkeypatch.setattr(ListingManagementService, service_method, write_call)
+    response = TestClient(_app("page:products:listing-management:view")).request(
+        method, path, json=payload
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "FORBIDDEN"
+    write_call.assert_not_called()
+
+
+def test_listing_tag_create_rejects_account_outside_authorized_scope() -> None:
+    response = TestClient(_app("action:products:listing-management:manage-tags")).post(
+        "/api/listings/tags",
+        json={
+            "name": "Synthetic",
+            "color": "#1677FF",
+            "source_account_ref": "synthetic-other-account",
+        },
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "DATA_SCOPE_DENIED"
 
 
 def test_listing_tag_batch_scope_failure_is_all_or_nothing(monkeypatch: Any) -> None:
@@ -256,3 +532,284 @@ def test_listing_tag_repository_rejects_mixed_scope_before_any_write() -> None:
 
     session.add.assert_not_called()
     session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("inactive", [False, True])
+def test_listing_tag_batch_rejects_missing_or_inactive_id_before_any_write(
+    inactive: bool,
+) -> None:
+    session = MagicMock(spec=Session)
+    listing_id = UUID("00000000-0000-0000-0000-000000000001")
+    valid_tag_id = UUID("00000000-0000-0000-0000-000000000011")
+    invalid_tag_id = UUID("00000000-0000-0000-0000-000000000012")
+    listing_row = namedtuple("ListingRow", "id source_account_ref item_id")
+    session.execute.return_value.all.return_value = [
+        listing_row(listing_id, "synthetic-account", "synthetic-item")
+    ]
+    session.scalars.return_value = (
+        []
+        if inactive
+        else [
+            ProductCustomTag(
+                id=valid_tag_id,
+                source_account_ref="synthetic-account",
+                name="Synthetic valid",
+                color="#1677FF",
+                is_active=True,
+            )
+        ]
+    )
+
+    with pytest.raises(ValueError, match="LISTING_TAG_NOT_FOUND_OR_INACTIVE"):
+        ListingTagRepository(session).batch_set_tags(
+            account_refs=frozenset({"synthetic-account"}),
+            listing_ids=[str(listing_id)],
+            tag_ids=[str(valid_tag_id), str(invalid_tag_id)],
+            tag_values=[],
+            mode="replace",
+        )
+
+    session.execute.assert_called_once()
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
+def test_listing_tag_definition_cannot_cross_account_boundary() -> None:
+    session = MagicMock(spec=Session)
+    foreign_tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000041"),
+        source_account_ref="synthetic-other-account",
+        name="Synthetic",
+        color="#1677FF",
+    )
+    session.get.return_value = foreign_tag
+    repository = ListingTagRepository(session)
+
+    with pytest.raises(ValueError, match="LISTING_TAG_NOT_FOUND"):
+        repository.update_tag(
+            tag_id=str(foreign_tag.id),
+            account_refs=frozenset({"synthetic-account"}),
+            name="changed",
+            color=None,
+            sort_order=None,
+            is_active=None,
+        )
+    with pytest.raises(ValueError, match="LISTING_TAG_NOT_FOUND"):
+        repository.delete_tag(
+            tag_id=str(foreign_tag.id),
+            account_refs=frozenset({"synthetic-account"}),
+        )
+    session.commit.assert_not_called()
+
+
+def test_listing_tag_delete_preserves_assignments_for_audit() -> None:
+    tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000051"),
+        source_account_ref="synthetic-account",
+        name="Synthetic",
+        color="#1677FF",
+        is_active=True,
+    )
+    session = MagicMock(spec=Session)
+    session.get.return_value = tag
+    session.scalar.return_value = 0
+
+    ListingTagRepository(session).delete_tag(
+        tag_id=str(tag.id), account_refs=frozenset({"synthetic-account"})
+    )
+
+    assert tag.deleted_at is not None
+    assert tag.is_active is False
+    session.delete.assert_not_called()
+    session.execute.assert_not_called()
+    session.commit.assert_called_once()
+
+
+def test_listing_tag_value_reuses_concurrent_same_account_definition() -> None:
+    tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000052"),
+        source_account_ref="synthetic-account",
+        name="Synthetic",
+        color="#1677FF",
+        is_active=True,
+    )
+    session = MagicMock(spec=Session)
+    session.scalar.side_effect = [None, tag]
+
+    resolved = ListingTagRepository(session)._resolve_tags(
+        account_ref="synthetic-account", tag_ids=[], tag_values=["Synthetic"]
+    )
+
+    assert resolved == [tag]
+    session.execute.assert_called_once()
+    session.add.assert_not_called()
+
+
+def test_listing_tag_list_filters_definitions_by_account() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.all.return_value = []
+    ListingTagRepository(session).list_tags(account_refs=frozenset({"synthetic-account"}))
+    sql = str(session.execute.call_args.args[0])
+    assert "product_custom_tags.source_account_ref IN" in sql
+    assert "product_custom_tags.is_active IS true" in sql
+    assert (
+        "product_custom_tags.source_account_ref = product_custom_tag_assignments.source_account_ref"
+    ) in sql
+
+
+def test_listing_tag_manager_can_read_inactive_tags_for_reactivation() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.all.return_value = []
+    ListingTagRepository(session).list_tags(
+        account_refs=frozenset({"synthetic-account"}), include_inactive=True
+    )
+    sql = str(session.execute.call_args.args[0])
+    assert "product_custom_tags.source_account_ref IN" in sql
+    assert "product_custom_tags.deleted_at IS NULL" in sql
+    assert "product_custom_tags.is_active IS true" not in sql
+
+
+def test_listing_tag_catalog_exposes_inactive_status_without_cross_account_rows() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    inactive_tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000054"),
+        source_account_ref="synthetic-account",
+        name="Synthetic",
+        color="#1677FF",
+        is_active=False,
+        sort_order=0,
+    )
+    service.tag_repository.list_tags = MagicMock(return_value=[(inactive_tag, 1)])
+
+    catalog = service.list_tags(frozenset({"synthetic-account"}))
+
+    service.tag_repository.list_tags.assert_called_once_with(
+        account_refs=frozenset({"synthetic-account"}), include_inactive=True
+    )
+    assert len(catalog.items) == 1
+    assert catalog.items[0].is_active is False
+
+
+def test_listing_inactive_tag_can_be_reactivated_without_recreating_it() -> None:
+    tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000053"),
+        source_account_ref="synthetic-account",
+        name="Synthetic",
+        color="#1677FF",
+        is_active=False,
+    )
+    session = MagicMock(spec=Session)
+    session.get.return_value = tag
+
+    updated = ListingTagRepository(session).update_tag(
+        tag_id=str(tag.id),
+        account_refs=frozenset({"synthetic-account"}),
+        name=None,
+        color=None,
+        sort_order=None,
+        is_active=True,
+    )
+
+    assert updated is tag
+    assert tag.is_active is True
+    session.commit.assert_called_once()
+    session.add.assert_not_called()
+
+
+def test_listing_tag_filter_requires_assignment_and_definition_account_match() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 0
+    session.execute.return_value.all.return_value = []
+
+    ListingManagementRepository(session).list_listings(
+        account_refs=frozenset({"synthetic-account"}),
+        store_id=None,
+        search_field="sku",
+        keyword="",
+        tag=json.dumps(['Synthetic %, "quoted"'], ensure_ascii=False),
+        page=1,
+        page_size=50,
+    )
+
+    sql = str(session.execute.call_args.args[0])
+    assert "@>" in sql
+    assert "ILIKE" not in sql
+    assert (
+        "product_custom_tags.source_account_ref = product_custom_tag_assignments.source_account_ref"
+    ) in sql
+
+
+def test_listing_server_sort_uses_monitor_projection() -> None:
+    session = MagicMock(spec=Session)
+    session.scalar.return_value = 0
+    session.execute.return_value.all.return_value = []
+    repository = ListingManagementRepository(session)
+    for sort_field, expected_order in (
+        ("salePrice", "effective_sale_price_amount"),
+        ("listPrice", "effective_strike_price_amount"),
+        ("rating", "effective_average_rating"),
+        ("checkedAt", "monitor_observed_at"),
+    ):
+        repository.list_listings(
+            account_refs=frozenset({"synthetic-account"}),
+            store_id=None,
+            search_field="sku",
+            keyword="",
+            page=1,
+            page_size=50,
+            sort_field=sort_field,
+        )
+        order_by = str(session.execute.call_args.args[0]).split("ORDER BY")[-1]
+        assert expected_order in order_by
+        assert "mart_listing_management_current.id ASC" in order_by
+
+
+def test_listing_post_export_keeps_batch_ids_out_of_url_and_requires_action_permission(
+    monkeypatch: Any,
+) -> None:
+    export = MagicMock(return_value=iter([b"SKU\nSynthetic\n"]))
+    monkeypatch.setattr(ListingManagementService, "iter_export_listing_csv", export)
+    payload = {
+        "filters": {"search_field": "item_id"},
+        "batch_values": ["synthetic-item"],
+        "selected_ids": ["00000000-0000-0000-0000-000000000003"],
+        "columns": ["sku"],
+    }
+    denied = TestClient(_app("page:products:listing-management:view")).post(
+        "/api/listings/walmart/export/search", json=payload
+    )
+    assert denied.status_code == 403
+    export.assert_not_called()
+
+    allowed = TestClient(_app("action:products:listing-management:export")).post(
+        "/api/listings/walmart/export/search", json=payload
+    )
+    assert allowed.status_code == 200
+    assert "Synthetic" in allowed.text
+    assert export.call_args.args[0].batch_values == '["synthetic-item"]'
+    assert export.call_args.kwargs["selected_ids"] == payload["selected_ids"][0]
+
+
+def test_listing_post_batch_search_validates_up_to_one_thousand_ids() -> None:
+    from pydantic import ValidationError
+
+    from app.modules.data_pages.schemas import (
+        ListingManagementBatchSearchRequest,
+        ListingManagementQuery,
+    )
+
+    request = ListingManagementBatchSearchRequest(
+        filters=ListingManagementQuery(search_field="item_id"),
+        batch_values=[f"{index:011d}" for index in range(1000)],
+    )
+    assert len(request.batch_values) == 1000
+    with pytest.raises(ValidationError):
+        ListingManagementBatchSearchRequest(
+            filters=ListingManagementQuery(),
+            batch_values=[f"{index:011d}" for index in range(1001)],
+        )
+    with pytest.raises(ValidationError):
+        ListingManagementBatchSearchRequest(
+            filters=ListingManagementQuery(),
+            batch_values=[""],
+        )

@@ -261,7 +261,11 @@ def _category(value: object) -> str | None:
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [item for raw in value if (item := _text(raw)) is not None]
+    return [
+        item
+        for raw in value
+        if (item := _text(raw)) is not None and item.lower().startswith("https://")
+    ]
 
 
 def _explicit_hijack(parsed: dict[str, Any]) -> bool | None:

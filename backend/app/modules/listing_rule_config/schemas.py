@@ -193,6 +193,9 @@ class ListingGradeRuleRead(BaseModel):
     source: Literal["default", "database"]
     can_edit: bool = False
     storage_ready: bool = True
+    preview_enabled: bool = False
+    scheduler_enabled: bool = False
+    publish_enabled: bool = False
 
 
 class ListingGradeRuleHistoryItem(BaseModel):

@@ -166,3 +166,42 @@ def test_require_permission_uses_request_specific_permission() -> None:
         _request("GET", "/api/listings/walmart"),
     )
     assert resolved is principal
+
+
+def test_listing_batch_search_uses_read_permission_not_archive_permission() -> None:
+    assert (
+        permission_for_request("POST", "/api/listings/walmart/search", "products:read")
+        == "page:products:listing-management:view"
+    )
+    assert (
+        permission_for_request("POST", "/api/listings/walmart/summary/search", "products:read")
+        == "page:products:listing-management:view"
+    )
+
+
+def test_listing_write_routes_require_action_permissions() -> None:
+    examples = (
+        (
+            "POST",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000001/archive",
+            "action:products:listing-management:archive",
+        ),
+        (
+            "POST",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000001/restore",
+            "action:products:listing-management:restore",
+        ),
+        ("POST", "/api/listings/tags/batch-set", "action:products:listing-management:manage-tags"),
+        (
+            "DELETE",
+            "/api/listings/tags/00000000-0000-0000-0000-000000000001",
+            "action:products:listing-management:manage-tags",
+        ),
+        (
+            "PUT",
+            "/api/listings/walmart/00000000-0000-0000-0000-000000000001/gpt-analysis",
+            "action:products:listing-management:edit-analysis-link",
+        ),
+    )
+    for method, path, required in examples:
+        assert permission_for_request(method, path, "products:read") == required

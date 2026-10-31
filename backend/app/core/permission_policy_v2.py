@@ -83,6 +83,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
     ),
     RequestPermissionRule(
         "POST",
+        "/api/listings/walmart/export/search",
+        "action:products:listing-management:export",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
         "/api/listings/tags/batch-set",
         "action:products:listing-management:manage-tags",
         True,
@@ -102,6 +108,18 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "DELETE",
         "/api/listings/tags/",
         "action:products:listing-management:manage-tags",
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/walmart/search",
+        "page:products:listing-management:view",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
+        "/api/listings/walmart/summary/search",
+        "page:products:listing-management:view",
+        True,
     ),
     RequestPermissionRule(
         "POST",

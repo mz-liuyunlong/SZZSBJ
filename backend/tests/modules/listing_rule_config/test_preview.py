@@ -1,16 +1,22 @@
 """Safety checks for the provisional financial and stockout candidates."""
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
+from fastapi import Request
+from sqlalchemy.orm import Session
 
 from app.modules.listing_rule_config.preview import (
+    archive_has_post_cutoff_event,
     basic_financial_candidate,
     lifecycle_allows_grade,
     stockout_candidate,
 )
+from app.modules.listing_rule_config.preview_router import list_evaluation_runs
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 
 CUTOFF = date(2026, 10, 24)
@@ -66,7 +72,6 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
     result = stockout_candidate(
         rows,
         cutoff=CUTOFF,
-        low_limit=5,
         prior_effective_stock=True,
         fulfillment_type="1",
         currently_archived=False,
@@ -78,7 +83,7 @@ def test_stockout_requires_prior_stock_and_wfs_fulfillment():
         {"prior_effective_stock": False, "fulfillment_type": "1", "currently_archived": False},
         {"prior_effective_stock": True, "fulfillment_type": "1", "currently_archived": True},
     ):
-        assert stockout_candidate(rows, cutoff=CUTOFF, low_limit=5, **kwargs)[0] is None
+        assert stockout_candidate(rows, cutoff=CUTOFF, **kwargs)[0] is None
 
 
 def test_openapi_contains_preview_route():
@@ -106,3 +111,84 @@ def test_openapi_contains_batch_preview_route() -> None:
     from app.main import create_app
 
     assert "/api/listings/evaluation-preview/batch" in create_app().openapi()["paths"]
+
+
+def test_run_list_does_not_expose_global_attempt_state_to_scoped_viewer() -> None:
+    run_id = UUID("00000000-0000-0000-0000-000000000066")
+    started_at = datetime(2026, 1, 15, tzinfo=UTC)
+    run = SimpleNamespace(
+        id=run_id,
+        schedule_date_cn=date(2026, 1, 15),
+        cutoff_date_la=date(2026, 1, 14),
+        status="failed",
+        rule_version=7,
+        total_listings=20,
+        processed_listings=19,
+        grade_candidate_count=10,
+        lifecycle_candidate_count=10,
+        blocked_count=9,
+        published_count=0,
+        attempt_count=3,
+        started_at=started_at,
+        finished_at=started_at,
+        error_code="GLOBAL_SYNTHETIC_FAILURE",
+    )
+    session = MagicMock(spec=Session)
+    session.scalars.return_value.all.return_value = [run]
+    session.scalar.return_value = 1
+    session.execute.return_value.all.return_value = [(run_id, 1, 0, 1, 1, 0)]
+    request = Request(
+        {"type": "http", "method": "GET", "path": "/api/listings/evaluation-runs", "headers": []}
+    )
+
+    response = list_evaluation_runs(
+        request=request,
+        session=session,
+        account_refs=frozenset({"synthetic-visible-account"}),
+        limit=20,
+    )
+
+    item = response.data.items[0]
+    assert response.data.total == 1
+    assert (item.total_listings, item.processed_listings) == (1, 1)
+    assert (item.grade_candidate_count, item.lifecycle_candidate_count, item.blocked_count) == (
+        0,
+        1,
+        1,
+    )
+    assert item.status == "scoped_snapshots"
+    assert item.attempt_count is None
+    assert item.started_at is None and item.finished_at is None
+    assert item.error_code is None
+    assert "source_account_ref IN" in str(session.execute.call_args.args[0])
+
+
+def test_low_positive_stock_does_not_qualify_as_stockout() -> None:
+    rows = [
+        SimpleNamespace(
+            snapshot_date_la=CUTOFF - timedelta(days=i),
+            wfs_available_quantity=Decimal("3"),
+        )
+        for i in range(7)
+    ]
+    stage, observed, zero_days = stockout_candidate(
+        rows,
+        cutoff=CUTOFF,
+        prior_effective_stock=True,
+        fulfillment_type="1",
+        currently_archived=False,
+    )
+    assert (stage, observed, zero_days) == (None, 7, 0)
+
+
+def test_restore_after_historical_cutoff_requires_archive_evidence() -> None:
+    cutoff = date(2026, 1, 15)
+    archived_at = datetime(2026, 1, 14, 8, tzinfo=UTC)
+    restored_at = datetime(2026, 1, 17, 8, tzinfo=UTC)
+
+    assert archive_has_post_cutoff_event(
+        archived_at=archived_at, restored_at=restored_at, cutoff=cutoff
+    )
+    assert not archive_has_post_cutoff_event(
+        archived_at=archived_at, restored_at=None, cutoff=cutoff
+    )

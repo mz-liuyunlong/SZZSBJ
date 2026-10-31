@@ -1,7 +1,10 @@
+import json
 from datetime import datetime
+from itertools import chain
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
@@ -37,6 +40,8 @@ from app.modules.data_pages.schemas import (
     ListingArchiveRequest,
     ListingGptAnalysisLinkRead,
     ListingGptAnalysisLinkUpdateRequest,
+    ListingManagementBatchSearchRequest,
+    ListingManagementExportRequest,
     ListingManagementFilterOptionsData,
     ListingManagementListData,
     ListingManagementQuery,
@@ -375,20 +380,50 @@ def export_listing_management(
     _: listing_principal,
     account_refs: source_scope,
     columns: Annotated[str | None, Query()] = None,
-) -> Response:
-    csv_text = ListingManagementService(session).export_listing_csv(
-        query,
-        account_refs,
-        columns=columns,
-    )
+    selected_ids: Annotated[str | None, Query(max_length=32768)] = None,
+) -> StreamingResponse:
+    try:
+        chunks = ListingManagementService(session).iter_export_listing_csv(
+            query,
+            account_refs,
+            columns=columns,
+            selected_ids=selected_ids,
+        )
+        first_chunk = next(chunks)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     filename = f"listing-management-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
 
-    return Response(
-        content=csv_text.encode("utf-8-sig"),
+    return StreamingResponse(
+        chain((first_chunk,), chunks),
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
+    )
+
+
+@router.post(
+    "/api/listings/walmart/export/search",
+    response_class=Response,
+    responses=ERRORS,
+)
+def export_listing_management_search(
+    payload: ListingManagementExportRequest,
+    session: db_session,
+    principal: listing_principal,
+    account_refs: source_scope,
+) -> StreamingResponse:
+    query = payload.filters.model_copy(
+        update={"batch_values": json.dumps(payload.batch_values, ensure_ascii=False)}
+    )
+    return export_listing_management(
+        query,
+        session,
+        principal,
+        account_refs,
+        columns=",".join(payload.columns) or None,
+        selected_ids=",".join(payload.selected_ids) or None,
     )
 
 
@@ -420,11 +455,14 @@ def create_listing_tag(
     payload: ListingTagCreateRequest,
     session: db_session,
     _: listing_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[ListingTagRead, Any]:
     try:
-        data = ListingManagementService(session).create_tag(payload)
+        data = ListingManagementService(session).create_tag(payload, account_refs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise ApiError(code=ErrorCode.DATA_SCOPE_DENIED, status_code=403) from exc
     return success_response(request, data=data, meta=None)
 
 
@@ -439,9 +477,10 @@ def update_listing_tag(
     payload: ListingTagUpdateRequest,
     session: db_session,
     _: listing_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[ListingTagRead, Any]:
     try:
-        data = ListingManagementService(session).update_tag(tag_id, payload)
+        data = ListingManagementService(session).update_tag(tag_id, payload, account_refs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return success_response(request, data=data, meta=None)
@@ -457,11 +496,14 @@ def delete_listing_tag(
     tag_id: str,
     session: db_session,
     _: listing_principal,
+    account_refs: source_scope,
 ) -> SuccessEnvelope[dict[str, bool], Any]:
     try:
-        ListingManagementService(session).delete_tag(tag_id)
+        ListingManagementService(session).delete_tag(tag_id, account_refs)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     return success_response(request, data={"deleted": True}, meta=None)
 
 
@@ -619,6 +661,58 @@ def update_listing_gpt_analysis(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return success_response(request, data=data, meta=None)
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/search",
+    response_model=SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta],
+    responses=ERRORS,
+)
+def search_walmart_listings(
+    request: Request,
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementListData, ListingManagementReadMeta]:
+    query = payload.filters.model_copy(
+        update={"batch_values": json.dumps(payload.batch_values, ensure_ascii=False)}
+    )
+    data, total, latest_calculated_at = ListingManagementService(session).list_listings(
+        query, account_refs
+    )
+    return success_response(
+        request,
+        data=data,
+        meta=_listing_meta(
+            latest_calculated_at=latest_calculated_at,
+            page=query.page,
+            page_size=query.page_size,
+            total=total,
+        ),
+    )
+
+
+@router.post(
+    f"{_LISTING_REGISTRY.route_path}/summary/search",
+    response_model=SuccessEnvelope[ListingManagementSummaryData, Any],
+    responses=ERRORS,
+)
+def search_walmart_listing_summary(
+    request: Request,
+    payload: ListingManagementBatchSearchRequest,
+    session: db_session,
+    _: listing_principal,
+    account_refs: source_scope,
+) -> SuccessEnvelope[ListingManagementSummaryData, Any]:
+    query = payload.filters.model_copy(
+        update={"batch_values": json.dumps(payload.batch_values, ensure_ascii=False)}
+    )
+    return success_response(
+        request,
+        data=ListingManagementService(session).listing_summary(query, account_refs),
+        meta=None,
+    )
 
 
 @router.get(

@@ -6,13 +6,15 @@ advertising, publish grades, or persist any calculation.
 
 from __future__ import annotations
 
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
@@ -129,7 +131,6 @@ def stockout_candidate(
     inventory: list[WalmartListingInventoryDailyFact],
     *,
     cutoff: date,
-    low_limit: int,
     prior_effective_stock: bool,
     fulfillment_type: str | None,
     currently_archived: bool,
@@ -141,8 +142,8 @@ def stockout_candidate(
         row.snapshot_date_la: row for row in inventory if since <= row.snapshot_date_la <= cutoff
     }
     observed = sum(row.wfs_available_quantity is not None for row in recent.values())
-    low = sum(
-        row.wfs_available_quantity is not None and row.wfs_available_quantity <= low_limit
+    zero_days = sum(
+        row.wfs_available_quantity is not None and row.wfs_available_quantity == 0
         for row in recent.values()
     )
     candidate = (
@@ -152,11 +153,21 @@ def stockout_candidate(
             and not currently_archived
             and prior_effective_stock
             and observed == consecutive_days
-            and low == consecutive_days
+            and zero_days == consecutive_days
         )
         else None
     )
-    return candidate, observed, low
+    return candidate, observed, zero_days
+
+
+def archive_has_post_cutoff_event(
+    *, archived_at: datetime | None, restored_at: datetime | None, cutoff: date
+) -> bool:
+    """Current archive state cannot prove a historical cutoff after a later transition."""
+    return any(
+        timestamp is not None and timestamp.astimezone(LOS_ANGELES).date() > cutoff
+        for timestamp in (archived_at, restored_at)
+    )
 
 
 class ListingEvaluationPreviewService:
@@ -248,8 +259,6 @@ class ListingEvaluationPreviewService:
         archive = self.session.scalar(
             select(ListingArchiveState).where(ListingArchiveState.listing_id == listing.id)
         )
-        archive_state_known = archive is not None
-        archived = bool(archive is not None and archive.is_archived)
         monitor_start = datetime.combine(start, datetime.min.time(), LOS_ANGELES).astimezone(UTC)
         monitor_end = datetime.combine(
             cutoff + timedelta(days=1),
@@ -272,6 +281,182 @@ class ListingEvaluationPreviewService:
                 .order_by(StandardizedWalmartMonitorListingObservation.captured_at)
             ).all()
         )
+        return self._from_evidence(
+            listing=listing,
+            cutoff=cutoff,
+            config=config,
+            rule_version=rule_version,
+            sales=sales,
+            stock=stock,
+            prior=prior,
+            archive=archive,
+            monitor_rows=monitor_rows,
+        )
+
+    def evaluate_page(
+        self,
+        *,
+        listings: Sequence[ListingManagementCurrentMart],
+        cutoff: date,
+        config: ListingGradeRuleConfig,
+        rule_version: int,
+    ) -> dict[UUID, ListingEvaluationPreview]:
+        """Read one bounded page of exact-identity evidence in five database queries."""
+        if not listings:
+            return {}
+        if len(listings) > 200 or len({row.id for row in listings}) != len(listings):
+            raise ValueError("Listing evaluation page must contain 1-200 distinct listings")
+
+        keys = {(row.source_account_ref, row.store_id, row.item_id, row.msku) for row in listings}
+        monitor_keys = {(key[0], key[1], key[2]) for key in keys}
+
+        def matching_facts(model):
+            return or_(
+                *(
+                    and_(
+                        model.source_account_ref == account,
+                        model.store_id == store,
+                        model.item_id == item,
+                        model.msku.is_not_distinct_from(msku),
+                    )
+                    for account, store, item, msku in keys
+                )
+            )
+
+        start = cutoff - timedelta(days=max(30, config.medium_days) - 1)
+        stock_start = cutoff - timedelta(
+            days=max(30, config.inventory_repair.stockout_consecutive_days) - 1
+        )
+        prior_cutoff = cutoff - timedelta(
+            days=config.inventory_repair.stockout_consecutive_days - 1
+        )
+        sales_rows = self.session.scalars(
+            select(DailySalesItemDayMart).where(
+                matching_facts(DailySalesItemDayMart),
+                DailySalesItemDayMart.business_date_la.between(start, cutoff),
+            )
+        ).all()
+        stock_rows = self.session.scalars(
+            select(WalmartListingInventoryDailyFact).where(
+                matching_facts(WalmartListingInventoryDailyFact),
+                WalmartListingInventoryDailyFact.snapshot_date_la.between(stock_start, cutoff),
+            )
+        ).all()
+        prior_rows = self.session.execute(
+            select(
+                WalmartListingInventoryDailyFact.source_account_ref,
+                WalmartListingInventoryDailyFact.store_id,
+                WalmartListingInventoryDailyFact.item_id,
+                WalmartListingInventoryDailyFact.msku,
+                func.max(WalmartListingInventoryDailyFact.snapshot_date_la),
+            )
+            .where(
+                matching_facts(WalmartListingInventoryDailyFact),
+                WalmartListingInventoryDailyFact.snapshot_date_la < prior_cutoff,
+                WalmartListingInventoryDailyFact.wfs_available_quantity
+                > config.inventory_repair.low_stock_max_units,
+            )
+            .group_by(
+                WalmartListingInventoryDailyFact.source_account_ref,
+                WalmartListingInventoryDailyFact.store_id,
+                WalmartListingInventoryDailyFact.item_id,
+                WalmartListingInventoryDailyFact.msku,
+            )
+        ).all()
+        archive_rows = self.session.scalars(
+            select(ListingArchiveState).where(
+                ListingArchiveState.listing_id.in_([row.id for row in listings])
+            )
+        ).all()
+        monitor_start = datetime.combine(start, datetime.min.time(), LOS_ANGELES).astimezone(UTC)
+        monitor_end = datetime.combine(
+            cutoff + timedelta(days=1), datetime.min.time(), LOS_ANGELES
+        ).astimezone(UTC)
+        monitor_rows = self.session.scalars(
+            select(StandardizedWalmartMonitorListingObservation)
+            .where(
+                or_(
+                    *(
+                        and_(
+                            StandardizedWalmartMonitorListingObservation.source_account_ref
+                            == account,
+                            StandardizedWalmartMonitorListingObservation.store_id == store,
+                            StandardizedWalmartMonitorListingObservation.item_id == item,
+                        )
+                        for account, store, item in monitor_keys
+                    )
+                ),
+                func.lower(StandardizedWalmartMonitorListingObservation.monitor_outcome)
+                == "success",
+                StandardizedWalmartMonitorListingObservation.captured_at >= monitor_start,
+                StandardizedWalmartMonitorListingObservation.captured_at < monitor_end,
+            )
+            .order_by(StandardizedWalmartMonitorListingObservation.captured_at)
+        ).all()
+
+        sales_by_key = defaultdict(list)
+        for row in sales_rows:
+            sales_by_key[(row.source_account_ref, row.store_id, row.item_id, row.msku)].append(row)
+        stock_by_key = defaultdict(list)
+        for row in stock_rows:
+            stock_by_key[(row.source_account_ref, row.store_id, row.item_id, row.msku)].append(row)
+        prior_by_key = {(row[0], row[1], row[2], row[3]): row[4] for row in prior_rows}
+        archive_by_id = {row.listing_id: row for row in archive_rows}
+        monitor_by_key = defaultdict(list)
+        for row in monitor_rows:
+            monitor_by_key[(row.source_account_ref, row.store_id, row.item_id)].append(row)
+
+        return {
+            listing.id: self._from_evidence(
+                listing=listing,
+                cutoff=cutoff,
+                config=config,
+                rule_version=rule_version,
+                sales=sales_by_key.get(
+                    (listing.source_account_ref, listing.store_id, listing.item_id, listing.msku),
+                    [],
+                ),
+                stock=stock_by_key.get(
+                    (listing.source_account_ref, listing.store_id, listing.item_id, listing.msku),
+                    [],
+                ),
+                prior=prior_by_key.get(
+                    (listing.source_account_ref, listing.store_id, listing.item_id, listing.msku)
+                ),
+                archive=archive_by_id.get(listing.id),
+                monitor_rows=monitor_by_key.get(
+                    (listing.source_account_ref, listing.store_id, listing.item_id), []
+                ),
+            )
+            for listing in listings
+        }
+
+    @staticmethod
+    def _from_evidence(
+        *,
+        listing: ListingManagementCurrentMart,
+        cutoff: date,
+        config: ListingGradeRuleConfig,
+        rule_version: int | None,
+        sales: list[DailySalesItemDayMart],
+        stock: list[WalmartListingInventoryDailyFact],
+        prior: date | None,
+        archive: ListingArchiveState | None,
+        monitor_rows: list[StandardizedWalmartMonitorListingObservation],
+    ) -> ListingEvaluationPreview:
+        archive_state_known = archive is not None
+        archived = bool(archive is not None and archive.is_archived)
+        # Current archive state is not proof of a prior historical cutoff.
+        archive_event_after_cutoff = bool(
+            archive is not None
+            and archive_has_post_cutoff_event(
+                archived_at=archive.archived_at,
+                restored_at=archive.restored_at,
+                cutoff=cutoff,
+            )
+        )
+        if archive_event_after_cutoff:
+            archived = False
         monitor_by_day = {
             row.captured_at.astimezone(LOS_ANGELES).date(): row for row in monitor_rows
         }
@@ -281,7 +466,6 @@ class ListingEvaluationPreviewService:
         stage, observed, low = stockout_candidate(
             stock,
             cutoff=cutoff,
-            low_limit=config.inventory_repair.low_stock_max_units,
             prior_effective_stock=prior is not None,
             fulfillment_type=listing.fulfillment_type,
             currently_archived=archived,
@@ -301,15 +485,13 @@ class ListingEvaluationPreviewService:
             "清货期",
             "已归档",
         }
-        if (
-            listing.fulfillment_type == "1"
-            and not archived
-            and listing.lifecycle_status in known_stages
-        ):
+        if not archived:
             sales_by_day = {row.business_date_la: row for row in sales}
             stock_by_day = {row.snapshot_date_la: row for row in stock}
             business_days = []
-            for business_date in sorted(set(stock_by_day) | set(monitor_by_day)):
+            for business_date in sorted(
+                set(sales_by_day) | set(stock_by_day) | set(monitor_by_day)
+            ):
                 stock_row = stock_by_day.get(business_date)
                 monitor_row = monitor_by_day.get(business_date)
                 strike_abnormal = None
@@ -347,6 +529,7 @@ class ListingEvaluationPreviewService:
                             if business_date in sales_by_day
                             else None
                         ),
+                        available_qty=stock_row.available_quantity if stock_row else None,
                         strike_price_abnormal=strike_abnormal,
                         buybox_abnormal=buybox_abnormal,
                     )
@@ -357,6 +540,7 @@ class ListingEvaluationPreviewService:
                 days=business_days,
                 first_effective_stock=prior is not None,
                 config=config,
+                fulfillment_type=listing.fulfillment_type or "",
             )
             lifecycle_reason = lifecycle_result.reason
             stock_valid30 = lifecycle_result.valid_stock_days_30
@@ -368,16 +552,20 @@ class ListingEvaluationPreviewService:
             "HISTORICAL_LIFECYCLE_APPROVAL_EVENTS_UNVERIFIED",
             "ZERO_SALES_DAY_COMPLETENESS_UNVERIFIED",
         ]
-        if stock_valid30 < config.lifecycle.growth_min_valid_days_30:
-            missing.append("SALES_TREND_VALID_STOCK_DAYS_INSUFFICIENT")
-        if listing.lifecycle_status not in known_stages:
-            missing.append("PREVIOUS_LIFECYCLE_STAGE_UNVERIFIED")
-        if not archive_state_known:
-            missing.append("ARCHIVE_STATE_UNVERIFIED")
+        sales_valid30 = sum(
+            row.sales_qty is not None and row.business_date_la >= cutoff - timedelta(days=29)
+            for row in sales
+        )
+        if sales_valid30 < config.lifecycle.growth_min_valid_days_30:
+            missing.append("SALES_TREND_VALID_DAYS_INSUFFICIENT")
+        if listing.lifecycle_status not in known_stages and stage not in known_stages:
+            missing.append("LIFECYCLE_INITIAL_STATE_PENDING")
+        if not archive_state_known or archive_event_after_cutoff:
+            missing.append("ARCHIVE_STATE_AS_OF_CUTOFF_UNVERIFIED")
         if not rule_version:
             missing.append("RULE_VERSION_NOT_PUBLISHED")
         if not lifecycle_allows_grade(
-            listing.lifecycle_status,
+            stage if stage in known_stages else listing.lifecycle_status,
             archived=archived,
             config=config,
         ):
@@ -386,10 +574,10 @@ class ListingEvaluationPreviewService:
             missing.append("LIFECYCLE_EXCLUDED_FROM_GRADING")
         if grade is None and "LIFECYCLE_EXCLUDED_FROM_GRADING" not in missing:
             missing.append("BASIC_FINANCIAL_SAMPLE_INSUFFICIENT_OR_UNCALCULABLE")
-        if observed < 7:
+        if listing.fulfillment_type == "1" and observed < 7:
             missing.append("LATEST_WFS_SNAPSHOT_INCOMPLETE")
-        if listing.fulfillment_type == "0":
-            missing.append("WFS_ELIGIBLE_ACTIVE_FULFILLMENT_UNVERIFIED")
+        if listing.fulfillment_type == "0" and sales_valid30 == 0:
+            missing.append("FBM_SALES_EVIDENCE_MISSING")
         if listing.fulfillment_type not in {"0", "1"}:
             missing.append("NON_WFS_OR_UNKNOWN_FULFILLMENT")
         if archived:

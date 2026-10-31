@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -8,6 +9,7 @@ from typing import cast as type_cast
 from uuid import UUID
 
 from sqlalchemy import (
+    DateTime,
     Select,
     String,
     and_,
@@ -66,6 +68,9 @@ PRODUCT_INFO_CURRENT = table(
     "dwd_lingxing_sku_product_info_current",
     column("source_account_ref", String()),
     column("lingxing_sku_code", String()),
+    column("source_observed_at", DateTime(timezone=True)),
+    column("updated_at", DateTime(timezone=True)),
+    column("source_snapshot_id", String()),
     column("owner_uid", String()),
     column("owner_name", String()),
     column("product_developer_uid", String()),
@@ -97,6 +102,11 @@ class ListingManagementRowProjection:
     effective_average_rating: Decimal | None = None
     effective_review_count: int | None = None
     effective_brand: str | None = None
+    monitor_observed_at: datetime | None = None
+    monitor_source: str | None = None
+    monitor_outcome: str | None = None
+    monitor_error_code: str | None = None
+    monitor_image_urls: list[str] | None = None
 
     def __getattr__(self, name: str) -> object:
         effective = f"effective_{name}"
@@ -142,12 +152,24 @@ def _listing_projection(row: Sequence[object]) -> ListingManagementRowProjection
         effective_average_rating=row[17],  # type: ignore[arg-type]
         effective_review_count=row[18],  # type: ignore[arg-type]
         effective_brand=row[19],  # type: ignore[arg-type]
+        monitor_observed_at=row[20],  # type: ignore[arg-type]
+        monitor_source=row[21],  # type: ignore[arg-type]
+        monitor_outcome=row[22],  # type: ignore[arg-type]
+        monitor_error_code=row[23],  # type: ignore[arg-type]
+        monitor_image_urls=row[24],  # type: ignore[arg-type]
     )
 
 
 def _csv_values(value: str | None) -> list[str]:
     if value is None:
         return []
+    if value.startswith("["):
+        try:
+            decoded = json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            decoded = None
+        if isinstance(decoded, list) and all(isinstance(item, str) for item in decoded):
+            return [item.strip() for item in decoded if item.strip()]
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
@@ -874,6 +896,8 @@ class ListingManagementRepository:
         batch_values: str = "",
         page: int,
         page_size: int,
+        sort_field: str = "",
+        sort_order: str = "asc",
     ) -> tuple[Sequence[ListingManagementRowProjection], int, datetime | None]:
         statement = self._filtered_listing_statement(
             account_refs=account_refs,
@@ -893,13 +917,47 @@ class ListingManagementRepository:
         total = self.session.scalar(select(func.count()).select_from(base))
         latest_calculated_at = self.session.scalar(select(func.max(base.c.calculated_at)))
 
-        rows = self.session.execute(
-            statement.order_by(
+        projection = statement.selected_columns
+        sort_columns = {
+            "skuMsku": ListingManagementCurrentMart.local_sku,
+            "productIdName": ListingManagementCurrentMart.item_id,
+            "sku": ListingManagementCurrentMart.local_sku,
+            "msku": ListingManagementCurrentMart.msku,
+            "productId": ListingManagementCurrentMart.item_id,
+            "productName": ListingManagementCurrentMart.local_name,
+            "sales30Days": ListingManagementCurrentMart.sales_30d,
+            "listPrice": projection.effective_strike_price_amount,
+            "salePrice": projection.effective_sale_price_amount,
+            "listedAt": func.coalesce(
+                func.to_char(
+                    func.timezone("UTC", ListingManagementCurrentMart.listing_start_at_utc),
+                    "YYYY-MM-DD",
+                ),
+                func.substring(WalmartListingDimension.listing_start_source_raw, 1, 10),
+            ),
+            "rating": projection.effective_average_rating,
+            "reviewCount": projection.effective_review_count,
+            "wfsAvailableInventory": ListingManagementCurrentMart.wfs_available_quantity,
+            "inboundInventory": ListingManagementCurrentMart.inbound_quantity,
+            "adSpend30Days": ListingManagementCurrentMart.ad_spend_30d_amount,
+            "checkedAt": projection.monitor_observed_at,
+        }
+        selected_sort = sort_columns.get(sort_field)
+        if selected_sort is not None:
+            order_columns = [
+                selected_sort.desc().nulls_last()
+                if sort_order == "desc"
+                else selected_sort.asc().nulls_last()
+            ]
+        else:
+            order_columns = [
                 func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
-            )
+            ]
+        rows = self.session.execute(
+            statement.order_by(*order_columns, ListingManagementCurrentMart.id.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).all()
@@ -925,6 +983,7 @@ class ListingManagementRepository:
         keyword: str,
         batch_values: str = "",
         max_rows: int = 10000,
+        selected_ids: list[UUID] | None = None,
     ) -> Sequence[ListingManagementRowProjection]:
         statement = self._filtered_listing_statement(
             account_refs=account_refs,
@@ -940,16 +999,61 @@ class ListingManagementRepository:
             batch_values=batch_values,
         )
 
+        if selected_ids is not None:
+            statement = statement.where(ListingManagementCurrentMart.id.in_(selected_ids))
         rows = self.session.execute(
             statement.order_by(
                 func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
                 ListingManagementCurrentMart.store_name.asc(),
                 ListingManagementCurrentMart.local_sku.asc(),
                 ListingManagementCurrentMart.item_id.asc(),
+                ListingManagementCurrentMart.id.asc(),
             ).limit(max_rows)
         ).all()
 
         return [_listing_projection(row) for row in rows]
+
+    def iter_export_listing_batches(
+        self,
+        *,
+        account_refs: frozenset[str],
+        store_id: str | None,
+        owner_ref: str | None = "",
+        product_type: str | None = "",
+        status: str | None = "",
+        tag: str | None = "",
+        archive_status: str | None = "",
+        summary_filter: str = "total",
+        search_field: str,
+        keyword: str,
+        batch_values: str = "",
+        selected_ids: list[UUID] | None = None,
+        batch_size: int = 500,
+    ):
+        statement = self._filtered_listing_statement(
+            account_refs=account_refs,
+            store_id=store_id,
+            owner_ref=owner_ref,
+            product_type=product_type,
+            status=status,
+            tag=tag,
+            archive_status=archive_status,
+            summary_filter=summary_filter,
+            search_field=search_field,
+            keyword=keyword,
+            batch_values=batch_values,
+        )
+        if selected_ids is not None:
+            statement = statement.where(ListingManagementCurrentMart.id.in_(selected_ids))
+        statement = statement.order_by(
+            func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0).desc(),
+            ListingManagementCurrentMart.store_name.asc(),
+            ListingManagementCurrentMart.local_sku.asc(),
+            ListingManagementCurrentMart.item_id.asc(),
+            ListingManagementCurrentMart.id.asc(),
+        ).execution_options(yield_per=batch_size)
+        for partition in self.session.execute(statement).partitions(batch_size):
+            yield [_listing_projection(row) for row in partition]
 
     def listing_summary(
         self,
@@ -980,7 +1084,9 @@ class ListingManagementRepository:
         )
         base = statement.order_by(None).subquery()
 
-        online_condition = func.coalesce(base.c.wfs_available_quantity, 0) > 0
+        online_condition = func.upper(func.coalesce(base.c.listing_status, "")).in_(
+            ("ONLINE", "PUBLISHED", "PUBLISH", "在售", "在线")
+        )
         buybox_exception_condition = base.c.effective_buybox_status.in_(
             ["未拥有", "LOST", "NOT_OWNED", "secondary", "other"]
         )
@@ -1105,24 +1211,42 @@ class ListingManagementRepository:
         }
 
     def _owner_lookup(self):
-        return (
+        # Keep owner/developer fields from the same latest source snapshot.
+        ranked = (
             select(
                 PRODUCT_INFO_CURRENT.c.source_account_ref.label("source_account_ref"),
                 PRODUCT_INFO_CURRENT.c.lingxing_sku_code.label("lingxing_sku_code"),
-                func.max(PRODUCT_INFO_CURRENT.c.owner_uid).label("owner_uid"),
-                func.max(PRODUCT_INFO_CURRENT.c.owner_name).label("owner_name"),
-                func.max(PRODUCT_INFO_CURRENT.c.product_developer_uid).label(
-                    "product_developer_uid"
-                ),
-                func.max(PRODUCT_INFO_CURRENT.c.product_developer_name).label(
-                    "product_developer_name"
-                ),
+                PRODUCT_INFO_CURRENT.c.owner_uid.label("owner_uid"),
+                PRODUCT_INFO_CURRENT.c.owner_name.label("owner_name"),
+                PRODUCT_INFO_CURRENT.c.product_developer_uid.label("product_developer_uid"),
+                PRODUCT_INFO_CURRENT.c.product_developer_name.label("product_developer_name"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        PRODUCT_INFO_CURRENT.c.source_account_ref,
+                        PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+                    ),
+                    order_by=(
+                        PRODUCT_INFO_CURRENT.c.source_observed_at.desc(),
+                        PRODUCT_INFO_CURRENT.c.updated_at.desc(),
+                        PRODUCT_INFO_CURRENT.c.source_snapshot_id.desc(),
+                    ),
+                )
+                .label("row_rank"),
             )
             .where(PRODUCT_INFO_CURRENT.c.lingxing_sku_code.is_not(None))
-            .group_by(
-                PRODUCT_INFO_CURRENT.c.source_account_ref,
-                PRODUCT_INFO_CURRENT.c.lingxing_sku_code,
+            .subquery()
+        )
+        return (
+            select(
+                ranked.c.source_account_ref,
+                ranked.c.lingxing_sku_code,
+                ranked.c.owner_uid,
+                ranked.c.owner_name,
+                ranked.c.product_developer_uid,
+                ranked.c.product_developer_name,
             )
+            .where(ranked.c.row_rank == 1)
             .subquery()
         )
 
@@ -1150,17 +1274,23 @@ class ListingManagementRepository:
             WalmartMonitorListingCurrent.strike_price_amount,
             ListingManagementCurrentMart.strike_price_amount,
         )
-        effective_strike_currency = func.coalesce(
-            WalmartMonitorListingCurrent.strike_price_currency_code,
-            ListingManagementCurrentMart.strike_price_currency_code,
+        effective_strike_currency = case(
+            (
+                WalmartMonitorListingCurrent.strike_price_amount.is_not(None),
+                WalmartMonitorListingCurrent.strike_price_currency_code,
+            ),
+            else_=ListingManagementCurrentMart.strike_price_currency_code,
         )
         effective_sale_price = func.coalesce(
             WalmartMonitorListingCurrent.sale_price_amount,
             ListingManagementCurrentMart.sale_price_amount,
         )
-        effective_sale_currency = func.coalesce(
-            WalmartMonitorListingCurrent.sale_price_currency_code,
-            ListingManagementCurrentMart.sale_price_currency_code,
+        effective_sale_currency = case(
+            (
+                WalmartMonitorListingCurrent.sale_price_amount.is_not(None),
+                WalmartMonitorListingCurrent.sale_price_currency_code,
+            ),
+            else_=ListingManagementCurrentMart.sale_price_currency_code,
         )
         effective_category = func.coalesce(
             WalmartMonitorListingCurrent.category,
@@ -1212,6 +1342,11 @@ class ListingManagementRepository:
                 effective_rating.label("effective_average_rating"),
                 effective_review_count.label("effective_review_count"),
                 effective_brand.label("effective_brand"),
+                WalmartMonitorListingCurrent.observed_at.label("monitor_observed_at"),
+                WalmartMonitorListingCurrent.monitor_source.label("monitor_source"),
+                WalmartMonitorListingCurrent.monitor_outcome.label("monitor_outcome"),
+                WalmartMonitorListingCurrent.monitor_error_code.label("monitor_error_code"),
+                WalmartMonitorListingCurrent.image_urls_json.label("monitor_image_urls"),
             )
             .outerjoin(
                 WalmartListingDimension,
@@ -1252,7 +1387,9 @@ class ListingManagementRepository:
             .where(ListingManagementCurrentMart.source_account_ref.in_(account_refs))
         )
 
-        archive_status_values = _csv_values(archive_status)
+        # Default operational views exclude archived listings. Users can explicitly
+        # select archived or both states through the archive status filter.
+        archive_status_values = _csv_values(archive_status) or ["active", "unknown"]
         if archive_status_values:
             statement = statement.outerjoin(
                 ListingArchiveState,
@@ -1263,12 +1400,9 @@ class ListingManagementRepository:
             if "archived" in archive_status_values:
                 archive_status_conditions.append(ListingArchiveState.is_archived.is_(True))
             if "active" in archive_status_values:
-                archive_status_conditions.append(
-                    or_(
-                        ListingArchiveState.listing_id.is_(None),
-                        ListingArchiveState.is_archived.is_(False),
-                    )
-                )
+                archive_status_conditions.append(ListingArchiveState.is_archived.is_(False))
+            if "unknown" in archive_status_values:
+                archive_status_conditions.append(ListingArchiveState.listing_id.is_(None))
 
             if archive_status_conditions:
                 statement = statement.where(or_(*archive_status_conditions))
@@ -1332,13 +1466,20 @@ class ListingManagementRepository:
                     status_conditions.append(
                         effective_buybox.in_(["未拥有", "LOST", "NOT_OWNED", "secondary", "other"])
                     )
+                else:
+                    status_conditions.append(
+                        func.upper(ListingManagementCurrentMart.listing_status) == item.upper()
+                    )
             if status_conditions:
                 statement = statement.where(or_(*status_conditions))
 
         tag_values = _csv_values(tag)
         if tag_values:
-            tag_text = cast(ListingManagementCurrentMart.tags_json, String)
-            legacy_tag_conditions = [tag_text.ilike(f'%"{value}"%') for value in tag_values]
+            legacy_tag_conditions = [
+                ListingManagementCurrentMart.tags_json.contains([candidate])
+                for value in tag_values
+                for candidate in (value, {"name": value}, {"label": value}, {"title": value})
+            ]
 
             db_tag_exists = exists(
                 select(1)
@@ -1348,6 +1489,8 @@ class ListingManagementRepository:
                     ProductCustomTagAssignment.source_account_ref
                     == ListingManagementCurrentMart.source_account_ref,
                     ProductCustomTagAssignment.item_id == ListingManagementCurrentMart.item_id,
+                    ProductCustomTag.source_account_ref
+                    == ProductCustomTagAssignment.source_account_ref,
                     ProductCustomTag.deleted_at.is_(None),
                     ProductCustomTag.is_active.is_(True),
                     ProductCustomTag.name.in_(tag_values),
@@ -1358,7 +1501,9 @@ class ListingManagementRepository:
 
         if summary_filter == "online":
             statement = statement.where(
-                func.coalesce(ListingManagementCurrentMart.wfs_available_quantity, 0) > 0
+                func.upper(func.coalesce(ListingManagementCurrentMart.listing_status, "")).in_(
+                    ("ONLINE", "PUBLISHED", "PUBLISH", "在售", "在线")
+                )
             )
         elif summary_filter == "offline":
             statement = statement.where(
@@ -1498,7 +1643,7 @@ class ListingManagementRepository:
                     coalesce(
                         sum(
                             case
-                                when coalesce(s.is_archived, false) = false
+                                when s.is_archived = false
                                 then 1
                                 else 0
                             end
@@ -1508,13 +1653,15 @@ class ListingManagementRepository:
                     coalesce(
                         sum(
                             case
-                                when coalesce(s.is_archived, false) = true
+                                when s.is_archived = true
                                 then 1
                                 else 0
                             end
                         ),
                         0
-                    ) as archived_count
+                    ) as archived_count,
+                    coalesce(sum(case when s.listing_id is null then 1 else 0 end), 0)
+                        as unknown_count
                 from {table_name} m
                 left join listing_archive_states s on s.listing_id = m.id
                 {account_filter_sql}
@@ -1536,6 +1683,11 @@ class ListingManagementRepository:
                 "value": "archived",
                 "label": "已归档",
                 "count": int(row["archived_count"] or 0),
+            },
+            {
+                "value": "unknown",
+                "label": "状态未确认",
+                "count": int(row["unknown_count"] or 0),
             },
         ]
 
@@ -1579,6 +1731,16 @@ class ListingManagementRepository:
                 msku=listing.msku,
             )
             self.session.add(state)
+        elif (
+            state.is_archived is archived
+            and state.source_account_ref == listing.source_account_ref
+            and state.store_id == listing.store_id
+            and state.item_id == listing.item_id
+            and state.msku == listing.msku
+            and state.archive_reason == (archive_reason if archived else None)
+        ):
+            # Retried requests must not rewrite the actor or operation timestamp.
+            return state
 
         now = datetime.now(UTC)
         state.source_account_ref = listing.source_account_ref
@@ -1592,6 +1754,7 @@ class ListingManagementRepository:
             state.archived_at = now
             state.archived_by = actor_ref
         else:
+            state.archive_reason = None
             state.restored_at = now
             state.restored_by = actor_ref
         self.session.commit()
@@ -1621,7 +1784,9 @@ class ListingTagRepository:
             return True
         return False
 
-    def list_tags(self, *, account_refs: frozenset[str]) -> list[tuple[ProductCustomTag, int]]:
+    def list_tags(
+        self, *, account_refs: frozenset[str], include_inactive: bool = False
+    ) -> list[tuple[ProductCustomTag, int]]:
         if not account_refs:
             return []
 
@@ -1630,20 +1795,30 @@ class ListingTagRepository:
                 ProductCustomTagAssignment.tag_id.label("tag_id"),
                 func.count().label("usage"),
             )
+            .join(ProductCustomTag, ProductCustomTag.id == ProductCustomTagAssignment.tag_id)
             .where(ProductCustomTagAssignment.source_account_ref.in_(account_refs))
+            .where(
+                ProductCustomTag.source_account_ref == ProductCustomTagAssignment.source_account_ref
+            )
             .group_by(ProductCustomTagAssignment.tag_id)
             .subquery()
         )
 
         try:
-            rows = self.session.execute(
+            statement = (
                 select(ProductCustomTag, func.coalesce(usage.c.usage, 0))
                 .outerjoin(usage, usage.c.tag_id == ProductCustomTag.id)
                 .where(
+                    ProductCustomTag.source_account_ref.in_(account_refs),
                     ProductCustomTag.deleted_at.is_(None),
-                    ProductCustomTag.is_active.is_(True),
                 )
-                .order_by(ProductCustomTag.sort_order.asc(), ProductCustomTag.created_at.asc())
+            )
+            if not include_inactive:
+                statement = statement.where(ProductCustomTag.is_active.is_(True))
+            rows = self.session.execute(
+                statement.order_by(
+                    ProductCustomTag.sort_order.asc(), ProductCustomTag.created_at.asc()
+                )
             ).all()
         except ProgrammingError as exc:
             if self._rollback_if_tag_table_missing(exc):
@@ -1652,11 +1827,14 @@ class ListingTagRepository:
 
         return [(tag, int(count or 0)) for tag, count in rows]
 
-    def create_tag(self, *, name: str, color: str, sort_order: int = 0) -> ProductCustomTag:
+    def create_tag(
+        self, *, account_ref: str, name: str, color: str, sort_order: int = 0
+    ) -> ProductCustomTag:
         normalized_name = name.strip()
-        self._raise_if_duplicate_name(normalized_name)
+        self._raise_if_duplicate_name(normalized_name, account_ref=account_ref)
 
         tag = ProductCustomTag(
+            source_account_ref=account_ref,
             name=normalized_name,
             color=color.strip(),
             sort_order=sort_order,
@@ -1671,16 +1849,19 @@ class ListingTagRepository:
         self,
         *,
         tag_id: str,
+        account_refs: frozenset[str],
         name: str | None,
         color: str | None,
         sort_order: int | None,
         is_active: bool | None,
     ) -> ProductCustomTag:
-        tag = self._get_tag_or_raise(tag_id)
+        tag = self._get_tag_or_raise(tag_id, account_refs=account_refs)
 
         if name is not None:
             normalized_name = name.strip()
-            self._raise_if_duplicate_name(normalized_name, except_id=tag.id)
+            self._raise_if_duplicate_name(
+                normalized_name, account_ref=tag.source_account_ref, except_id=tag.id
+            )
             tag.name = normalized_name
         if color is not None:
             tag.color = color.strip()
@@ -1689,17 +1870,28 @@ class ListingTagRepository:
         if is_active is not None:
             tag.is_active = is_active
 
-        tag.updated_at = datetime.now()
+        tag.updated_at = datetime.now(UTC)
         self.session.commit()
         self.session.refresh(tag)
         return tag
 
-    def delete_tag(self, *, tag_id: str) -> None:
-        tag = self._get_tag_or_raise(tag_id)
-        self.session.execute(
-            delete(ProductCustomTagAssignment).where(ProductCustomTagAssignment.tag_id == tag.id)
+    def delete_tag(self, *, tag_id: str, account_refs: frozenset[str]) -> None:
+        tag = self._get_tag_or_raise(tag_id, account_refs=account_refs)
+        foreign_assignment_count = self.session.scalar(
+            select(func.count())
+            .select_from(ProductCustomTagAssignment)
+            .where(
+                ProductCustomTagAssignment.tag_id == tag.id,
+                ProductCustomTagAssignment.source_account_ref.not_in(account_refs),
+            )
         )
-        self.session.delete(tag)
+        if foreign_assignment_count:
+            raise PermissionError("此标签仍被其他账号使用，禁止跨账号删除")
+        # Keep historical assignments and definition metadata for audit.
+        # Active reads exclude soft-deleted definitions and their assignments.
+        tag.deleted_at = datetime.now(UTC)
+        tag.updated_at = tag.deleted_at
+        tag.is_active = False
         self.session.commit()
 
     def batch_set_tags(
@@ -1728,14 +1920,25 @@ class ListingTagRepository:
         if {listing.id for listing in listings} != requested_listing_ids:
             raise PermissionError("Listing 不存在或无权访问")
 
-        tags = self._resolve_tags(tag_ids=tag_ids, tag_values=tag_values)
-        if not tags:
+        # Tag assignments are keyed by account + Item ID, not by store.
+        # Deduplicate identical identities selected from multiple stores.
+        unique_items = {
+            (source_account_ref, item_id) for _, source_account_ref, item_id in listings
+        }
+        selected_accounts = {account_ref for account_ref, _ in unique_items}
+        if tag_ids and len(selected_accounts) != 1:
+            raise ValueError("LISTING_TAG_IDS_REQUIRE_ONE_ACCOUNT")
+        tags_by_account = {
+            account_ref: self._resolve_tags(
+                account_ref=account_ref, tag_ids=tag_ids, tag_values=tag_values
+            )
+            for account_ref in selected_accounts
+        }
+        if not any(tags_by_account.values()) and mode != "replace":
             return len(listings), 0
-
-        resolved_tag_ids = [tag.id for tag in tags]
-
         if mode == "replace":
-            for _, source_account_ref, item_id in listings:
+            for source_account_ref, item_id in unique_items:
+                resolved_tag_ids = [tag.id for tag in tags_by_account[source_account_ref]]
                 self.session.execute(
                     delete(ProductCustomTagAssignment).where(
                         ProductCustomTagAssignment.source_account_ref == source_account_ref,
@@ -1752,7 +1955,8 @@ class ListingTagRepository:
                     )
 
         elif mode == "remove":
-            for _, source_account_ref, item_id in listings:
+            for source_account_ref, item_id in unique_items:
+                resolved_tag_ids = [tag.id for tag in tags_by_account[source_account_ref]]
                 self.session.execute(
                     delete(ProductCustomTagAssignment).where(
                         ProductCustomTagAssignment.source_account_ref == source_account_ref,
@@ -1762,7 +1966,8 @@ class ListingTagRepository:
                 )
 
         else:
-            for _, source_account_ref, item_id in listings:
+            for source_account_ref, item_id in unique_items:
+                resolved_tag_ids = [tag.id for tag in tags_by_account[source_account_ref]]
                 existing_tag_ids = set(
                     self.session.scalars(
                         select(ProductCustomTagAssignment.tag_id).where(
@@ -1784,7 +1989,7 @@ class ListingTagRepository:
                     )
 
         self.session.commit()
-        return len(listings), len(tags)
+        return len(listings), sum(len(tags) for tags in tags_by_account.values())
 
     def tags_for_listing_rows(self, rows: Sequence[object]) -> dict[tuple[str, str], list[str]]:
         identities = {
@@ -1811,6 +2016,8 @@ class ListingTagRepository:
                 .where(
                     ProductCustomTagAssignment.source_account_ref.in_(account_refs),
                     ProductCustomTagAssignment.item_id.in_(item_ids),
+                    ProductCustomTag.source_account_ref
+                    == ProductCustomTagAssignment.source_account_ref,
                     ProductCustomTag.deleted_at.is_(None),
                     ProductCustomTag.is_active.is_(True),
                 )
@@ -1828,7 +2035,9 @@ class ListingTagRepository:
 
         return result
 
-    def _resolve_tags(self, *, tag_ids: list[str], tag_values: list[str]) -> list[ProductCustomTag]:
+    def _resolve_tags(
+        self, *, account_ref: str, tag_ids: list[str], tag_values: list[str]
+    ) -> list[ProductCustomTag]:
         tags: list[ProductCustomTag] = []
         seen: set[UUID] = set()
 
@@ -1837,6 +2046,7 @@ class ListingTagRepository:
             for tag in self.session.scalars(
                 select(ProductCustomTag).where(
                     ProductCustomTag.id.in_(uuid_values),
+                    ProductCustomTag.source_account_ref == account_ref,
                     ProductCustomTag.deleted_at.is_(None),
                     ProductCustomTag.is_active.is_(True),
                 )
@@ -1844,38 +2054,64 @@ class ListingTagRepository:
                 if tag.id not in seen:
                     seen.add(tag.id)
                     tags.append(tag)
+            if seen != set(uuid_values):
+                raise ValueError("LISTING_TAG_NOT_FOUND_OR_INACTIVE")
 
         for value in tag_values:
             name = value.strip()
             if not name:
                 continue
-            tag = self._find_tag_by_name(name)
+            tag = self._find_tag_by_name(name, account_ref=account_ref)
+            if tag is not None and not tag.is_active:
+                raise ValueError("LISTING_TAG_INACTIVE")
             if tag is None:
-                tag = ProductCustomTag(
-                    name=name[:16],
-                    color="#1677FF",
-                    sort_order=0,
-                    is_active=True,
+                self.session.execute(
+                    select(
+                        func.pg_advisory_xact_lock(func.hashtext(account_ref + ":" + name.lower()))
+                    )
                 )
-                self.session.add(tag)
-                self.session.flush()
+                # Another request may have created it while this one waited.
+                tag = self._find_tag_by_name(name, account_ref=account_ref)
+                if tag is None:
+                    tag = ProductCustomTag(
+                        source_account_ref=account_ref,
+                        name=name,
+                        color="#1677FF",
+                        sort_order=0,
+                        is_active=True,
+                    )
+                    self.session.add(tag)
+                    self.session.flush()
+                elif not tag.is_active:
+                    raise ValueError("LISTING_TAG_INACTIVE")
             if tag.id not in seen:
                 seen.add(tag.id)
                 tags.append(tag)
 
         return tags
 
-    def _find_tag_by_name(self, name: str) -> ProductCustomTag | None:
+    def _find_tag_by_name(self, name: str, *, account_ref: str) -> ProductCustomTag | None:
         return self.session.scalar(
             select(ProductCustomTag).where(
                 func.lower(ProductCustomTag.name) == name.strip().lower(),
+                ProductCustomTag.source_account_ref == account_ref,
                 ProductCustomTag.deleted_at.is_(None),
             )
         )
 
-    def _raise_if_duplicate_name(self, name: str, except_id: UUID | None = None) -> None:
+    def _raise_if_duplicate_name(
+        self, name: str, *, account_ref: str, except_id: UUID | None = None
+    ) -> None:
+        # Serialize name mutations in PostgreSQL before the uniqueness check.
+        # Prevents two concurrent requests both seeing the name as available.
+        self.session.execute(
+            select(
+                func.pg_advisory_xact_lock(func.hashtext(account_ref + ":" + name.strip().lower()))
+            )
+        )
         statement = select(ProductCustomTag).where(
             func.lower(ProductCustomTag.name) == name.strip().lower(),
+            ProductCustomTag.source_account_ref == account_ref,
             ProductCustomTag.deleted_at.is_(None),
         )
         if except_id is not None:
@@ -1884,9 +2120,9 @@ class ListingTagRepository:
         if self.session.scalar(statement) is not None:
             raise ValueError("LISTING_TAG_NAME_DUPLICATED")
 
-    def _get_tag_or_raise(self, tag_id: str) -> ProductCustomTag:
+    def _get_tag_or_raise(self, tag_id: str, *, account_refs: frozenset[str]) -> ProductCustomTag:
         tag = self.session.get(ProductCustomTag, self._uuid(tag_id))
-        if tag is None or tag.deleted_at is not None:
+        if tag is None or tag.deleted_at is not None or tag.source_account_ref not in account_refs:
             raise ValueError("LISTING_TAG_NOT_FOUND")
         return tag
 

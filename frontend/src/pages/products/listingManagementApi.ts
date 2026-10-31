@@ -22,7 +22,9 @@ interface BackendListingItem {
   product_grade: string | null;
   tags: string[];
   strike_price_amount: string | null;
+  strike_price_currency_code?: string | null;
   sale_price_amount: string | null;
+  sale_price_currency_code?: string | null;
   listing_status: string | null;
   lifecycle_status: string | null;
   fulfillment_type: string | null;
@@ -30,6 +32,12 @@ interface BackendListingItem {
   listing_start_at_utc: string | null;
   listing_start_source_raw?: string | null;
   launch_date_cn?: string | null;
+  first_wfs_seen_at_utc?: string | null;
+  monitor_observed_at?: string | null;
+  monitor_source?: string | null;
+  monitor_outcome?: string | null;
+  monitor_error_code?: string | null;
+  monitor_image_urls?: string[];
   category: string | null;
   wfs_available_quantity: string | null;
   inbound_quantity: string | null;
@@ -46,6 +54,7 @@ interface BackendListingItem {
   calculated_at: string;
   archive_reason?: string | null;
   is_archived?: boolean;
+  archive_state_known?: boolean;
 }
 
 interface BackendListingData {
@@ -81,6 +90,7 @@ interface BackendListingFilterOptionsData {
 
 interface BackendListingTag {
   id: string;
+  source_account_ref: string;
   name: string;
   color: string;
   usage: number;
@@ -90,25 +100,32 @@ interface BackendListingTag {
 
 interface BackendListingTagListData {
   items: BackendListingTag[];
+  source_account_refs: string[];
 }
 
 export interface ListingCustomTag {
   id: string;
+  sourceAccountRef: string;
   name: string;
   color: string;
   usage: number;
+  isActive: boolean;
 }
 
 export interface ListingTagMutationPayload {
   name: string;
   color: string;
+  sourceAccountRef?: string;
+  isActive?: boolean;
 }
 
 const toListingCustomTag = (tag: BackendListingTag): ListingCustomTag => ({
   id: tag.id,
+  sourceAccountRef: tag.source_account_ref,
   name: tag.name,
   color: tag.color,
   usage: tag.usage,
+  isActive: tag.is_active,
 });
 
 export interface ListingManagementApiMeta {
@@ -182,18 +199,22 @@ export interface ListingManagementParams {
   summaryFilter?: string;
   page?: number;
   pageSize?: number;
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
 }
 
 const numberValue = (value: string | null | undefined) => Number(value ?? 0);
 
-const toDateText = (value: string | null): string => {
-  if (!value) return "";
-  return value.slice(0, 10);
-};
-
-export const toListingStartText = (normalizedValue: string | null): string => {
-  if (normalizedValue) return toDateText(normalizedValue);
-  return "";
+export const toListingStartText = (normalizedValue: string | null, sourceRawValue: string | null = null): string => {
+  if (!normalizedValue) {
+    const raw = sourceRawValue?.trim() ?? "";
+    return /^(\d{4}-\d{2}-\d{2})/.exec(raw)?.[1] ?? raw;
+  }
+  // The API field is explicitly UTC. Normalize offset-aware timestamps to UTC;
+  // preserve date-only payloads instead of guessing their original timezone.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) return normalizedValue;
+  const parsed = new Date(normalizedValue);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 };
 
 const toCheckedText = (value: string): string => value.replace("T", " ").slice(0, 16);
@@ -216,44 +237,73 @@ const normalizeBuyBoxStatus = (value: string | null) => {
   return raw;
 };
 
-const toListingRow = (item: BackendListingItem): ListingManagementRow => ({
+export const safeListingImageUrls = (urls: Array<string | null | undefined>): string[] =>
+  urls.filter((url): url is string => typeof url === "string" && /^https:\/\//i.test(url));
+
+const toListingRow = (item: BackendListingItem): ListingManagementRow => {
+  const monitorImages = safeListingImageUrls(item.monitor_image_urls ?? []);
+  return {
   id: item.id,
   sourceAccountRef: item.source_account_ref,
-  image: item.picture_url ?? "▤",
+  image: monitorImages[0] ?? safeListingImageUrls([item.picture_url])[0] ?? "▤",
+  monitorImages,
   msku: item.msku ?? "-",
   productId: item.item_id,
   store: item.store_name ?? item.store_id,
   owner: item.owner_name ?? item.owner_ref ?? "未分配",
   sku: item.local_sku ?? "-",
-  productName: item.local_name ?? item.title ?? "-",
-  title: item.title ?? item.local_name ?? "-",
+  productName: item.local_name ?? "未设置本地品名",
+  title: item.title ?? "暂无平台标题",
   productType: item.category ?? "待分类",
   listPrice: numberValue(item.strike_price_amount),
   salePrice: numberValue(item.sale_price_amount),
+  listPriceKnown: item.strike_price_amount !== null,
+  salePriceKnown: item.sale_price_amount !== null,
+  listPriceCurrency: item.strike_price_currency_code ?? "",
+  salePriceCurrency: item.sale_price_currency_code ?? "",
   productStatus: item.disabled_reason ? "停用" : "启用",
   lifecycle: item.lifecycle_status ?? "待计算",
   fulfillmentMethod: item.fulfillment_type_name?.trim() || item.fulfillment_type?.trim() || "待确认",
-  listedAt: toListingStartText(item.listing_start_at_utc),
+  listedAt: toListingStartText(item.listing_start_at_utc, item.listing_start_source_raw),
+  listingDateSource: item.listing_start_at_utc ? "平台标准化日期" : item.listing_start_source_raw ? "原始日期待核实" : "未知",
+  listingStartRaw: item.listing_start_source_raw ?? "",
+  firstWfsAvailableAt: item.launch_date_cn ?? "",
+  firstWfsObservedAt: item.first_wfs_seen_at_utc ?? "",
   category: item.category ?? "-",
   wfsAvailableInventory: numberValue(item.wfs_available_quantity),
+  wfsAvailableInventoryKnown: item.wfs_available_quantity != null,
   inboundInventory: numberValue(item.inbound_quantity),
-  sales90Days: numberValue(item.sales_30d),
+  inboundInventoryKnown: item.inbound_quantity != null,
+  sales30Days: numberValue(item.sales_30d),
   adSpend30Days: numberValue(item.ad_spend_30d_amount),
+  adSpend30DaysKnown: item.ad_spend_30d_amount !== null,
   disabledReason: item.disabled_reason ?? "",
   listingStatus: normalizeListingStatus(item.listing_status),
   buyBoxStatus: normalizeBuyBoxStatus(item.buybox_status),
   walmartSeller: item.walmart_seller ?? "待确认",
-  resold: item.is_hijacked ? "是" : "否",
-  checkedAt: toCheckedText(item.calculated_at),
+  resold: item.is_hijacked == null ? "待确认" : item.is_hijacked ? "是" : "否",
+  checkedAt: item.monitor_observed_at ? toCheckedText(item.monitor_observed_at) : "未监控",
+  dataUpdatedAt: toCheckedText(item.calculated_at),
+  monitorSource: item.monitor_source ?? "未监控",
+  monitorStatus: item.monitor_outcome ?? "未监控",
+  monitorError: item.monitor_error_code ?? "",
+  monitorImageCount: monitorImages.length,
+  monitorAgeHours: item.monitor_observed_at && Number.isFinite(Date.parse(item.monitor_observed_at))
+    ? Math.max(0, Math.floor((Date.now() - Date.parse(item.monitor_observed_at)) / 3600000))
+    : null,
   rating: numberValue(item.average_rating),
+  ratingKnown: item.average_rating != null,
   reviewCount: item.review_count ?? 0,
+  reviewCountKnown: item.review_count != null,
   brand: item.brand ?? "-",
   tags: item.tags,
   gtin: item.gtin ?? "-",
   productGrade: item.product_grade ?? "未分级",
   archiveReason: item.archive_reason ?? null,
   isArchived: Boolean(item.is_archived ?? (item as { isArchived?: boolean }).isArchived ?? false),
-});
+  archiveStateKnown: item.archive_state_known ?? false,
+  };
+};
 
 const backendSearchField = (field: ListingManagementParams["searchType"] | undefined) => {
   if (field === "productId") return "item_id";
@@ -267,7 +317,7 @@ const appendMultiParam = (
   values: string[] | undefined,
 ) => {
   const normalized = (values ?? []).map((value) => value.trim()).filter(Boolean);
-  if (normalized.length > 0) search.set(key, normalized.join(","));
+  if (normalized.length > 0) search.set(key, JSON.stringify(normalized));
 };
 
 const appendListingFilters = (search: URLSearchParams, params: ListingManagementParams) => {
@@ -295,6 +345,21 @@ const appendListingFilters = (search: URLSearchParams, params: ListingManagement
   }
 };
 
+const buildBatchSearchPayload = (
+  search: URLSearchParams,
+  params: ListingManagementParams,
+) => {
+  const filters = new URLSearchParams(search);
+  filters.delete("batch_values");
+  filters.delete("selected_ids");
+  filters.delete("columns");
+  filters.set("search_field", backendSearchField(params.searchType));
+  return {
+    filters: Object.fromEntries(filters.entries()),
+    batch_values: (params.batchValues ?? []).map((value) => value.trim()).filter(Boolean),
+  };
+};
+
 async function fetchListingManagementRowsFromApi(
   params: ListingManagementParams = {},
 ): Promise<ListingManagementApiResult> {
@@ -304,11 +369,20 @@ async function fetchListingManagementRowsFromApi(
   const search = new URLSearchParams();
   search.set("page", String(page));
   search.set("page_size", String(pageSize));
+  if (params.sortField) {
+    search.set("sort_field", params.sortField);
+    search.set("sort_order", params.sortOrder ?? "asc");
+  }
   appendListingFilters(search, params);
 
-  const envelope = await backendRequest<BackendListingData, ListingManagementApiMeta>(
-    `/api/listings/walmart?${search.toString()}`,
-  );
+  const envelope = params.batchValues?.length
+    ? await backendRequest<BackendListingData, ListingManagementApiMeta>(
+        "/api/listings/walmart/search",
+        { method: "POST", body: JSON.stringify(buildBatchSearchPayload(search, params)) },
+      )
+    : await backendRequest<BackendListingData, ListingManagementApiMeta>(
+        `/api/listings/walmart?${search.toString()}`,
+      );
 
   return {
     rows: envelope.data.items.map(toListingRow),
@@ -322,9 +396,14 @@ async function fetchListingManagementSummaryFromApi(
   const search = new URLSearchParams();
   appendListingFilters(search, { ...params, summaryFilter: "total" });
 
-  const envelope = await backendRequest<BackendListingSummaryData>(
-    `/api/listings/walmart/summary?${search.toString()}`,
-  );
+  const envelope = params.batchValues?.length
+    ? await backendRequest<BackendListingSummaryData>(
+        "/api/listings/walmart/summary/search",
+        { method: "POST", body: JSON.stringify(buildBatchSearchPayload(search, params)) },
+      )
+    : await backendRequest<BackendListingSummaryData>(
+        `/api/listings/walmart/summary?${search.toString()}`,
+      );
 
   return {
     total: envelope.data.total,
@@ -339,11 +418,30 @@ async function fetchListingManagementSummaryFromApi(
 export async function exportListingManagementRows(
   params: ListingManagementParams = {},
   columns?: string[],
+  selectedIds?: string[],
 ): Promise<void> {
   const search = new URLSearchParams();
   appendListingFilters(search, params);
   if (columns && columns.length > 0) {
     search.set("columns", columns.join(","));
+  }
+  if (selectedIds?.length) search.set("selected_ids", selectedIds.join(","));
+
+  if (params.batchValues?.length || selectedIds?.length) {
+    const payload = buildBatchSearchPayload(search, params);
+    await backendDownload(
+      "/api/listings/walmart/export/search",
+      "listing-management-export.csv",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          selected_ids: selectedIds ?? [],
+          columns: columns ?? [],
+        }),
+      },
+    );
+    return;
   }
 
   await backendDownload(
@@ -367,9 +465,12 @@ async function fetchListingManagementFilterOptionsFromApi(): Promise<ListingMana
 }
 
 
-export async function fetchListingTags(): Promise<ListingCustomTag[]> {
+export async function fetchListingTags(): Promise<{ items: ListingCustomTag[]; sourceAccountRefs: string[] }> {
   const envelope = await backendRequest<BackendListingTagListData>("/api/listings/tags");
-  return envelope.data.items.map(toListingCustomTag);
+  return {
+    items: envelope.data.items.map(toListingCustomTag),
+    sourceAccountRefs: envelope.data.source_account_refs,
+  };
 }
 
 export async function createListingTag(payload: ListingTagMutationPayload): Promise<ListingCustomTag> {
@@ -378,6 +479,7 @@ export async function createListingTag(payload: ListingTagMutationPayload): Prom
     body: JSON.stringify({
       name: payload.name,
       color: payload.color,
+      source_account_ref: payload.sourceAccountRef,
     }),
   });
 
@@ -393,6 +495,7 @@ export async function updateListingTag(
     body: JSON.stringify({
       name: payload.name,
       color: payload.color,
+      is_active: payload.isActive,
     }),
   });
 

@@ -5,6 +5,7 @@ import type { ListingManagementRow } from "@/pages/products/listingManagementDat
 interface ListingDetailModalProps {
   row?: ListingManagementRow;
   onClose: () => void;
+  onOpenAnalysis?: (row: ListingManagementRow) => void;
 }
 
 type ListingDetailSection = "basic" | "status" | "inventory" | "governance";
@@ -32,20 +33,24 @@ interface ListingFieldItem {
   value: string | number;
 }
 
+function priceText(value: number, known: boolean | undefined, currency: string | undefined) {
+  return known === false ? "未同步" : `${currency || "币种未知"} ${value.toFixed(2)}`;
+}
+
 function ListingFieldGrid({ items }: { items: ListingFieldItem[] }) {
   return (
     <div className="listing-management__detail-field-grid">
       {items.map((item) => (
         <div key={item.label} className="listing-management__detail-field">
           <div className="listing-management__detail-field-label">{item.label}</div>
-          <div className="listing-management__detail-field-value">{item.value || "-"}</div>
+          <div className="listing-management__detail-field-value">{item.value === "" ? "-" : item.value}</div>
         </div>
       ))}
     </div>
   );
 }
 
-function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
+function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModalProps) {
   const [sectionOverride, setSectionOverride] = useState<{
     rowId: string;
     section: ListingDetailSection;
@@ -61,6 +66,7 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
 
   const renderContent = () => {
     if (!row) return null;
+    const monitorStale = row.monitorAgeHours != null && row.monitorAgeHours >= 48;
 
     if (activeSection === "status") {
       return (
@@ -86,14 +92,14 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
           <Typography.Title level={4}>销售库存</Typography.Title>
           <ListingFieldGrid
             items={[
-              { label: "划线价", value: `$${row.listPrice.toFixed(2)}` },
-              { label: "在售价", value: `$${row.salePrice.toFixed(2)}` },
-              { label: "WFS可售库存", value: row.wfsAvailableInventory },
-              { label: "在途库存", value: row.inboundInventory },
-              { label: "近90天销量", value: row.sales90Days },
-              { label: "近30天广告费", value: `$${row.adSpend30Days.toFixed(2)}` },
-              { label: "评分", value: row.rating },
-              { label: "评论数", value: row.reviewCount },
+              { label: "划线价", value: priceText(row.listPrice, row.listPriceKnown, row.listPriceCurrency) },
+              { label: "在售价", value: priceText(row.salePrice, row.salePriceKnown, row.salePriceCurrency) },
+              { label: "WFS可售库存", value: row.wfsAvailableInventoryKnown === false ? "未同步" : row.wfsAvailableInventory },
+              { label: "在途库存", value: row.inboundInventoryKnown === false ? "未同步" : row.inboundInventory },
+              { label: "近30天销量", value: row.sales30Days },
+              { label: "近30天广告费", value: row.adSpend30DaysKnown === false ? "未同步" : `${row.adSpend30Days.toFixed(2)}（币种待核实）` },
+              { label: "评分", value: row.ratingKnown === false ? "无评分" : row.rating },
+              { label: "评论数", value: row.reviewCountKnown === false ? "未同步" : row.reviewCount },
             ]}
           />
         </section>
@@ -104,6 +110,7 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
       return (
         <section className="listing-management__detail-main-card">
           <Typography.Title level={4}>治理记录</Typography.Title>
+          {monitorStale && <Tag color="orange">监控结果已超过48小时，需重新检查</Tag>}
           <div className="listing-management__governance-list">
             <div>
               <Typography.Text strong>最近检查时间</Typography.Text>
@@ -111,11 +118,11 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
             </div>
             <div>
               <Typography.Text strong>购物车监控</Typography.Text>
-              <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : "当前正常"}</Typography.Text>
+              <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : row.buyBoxStatus === "拥有" ? monitorStale ? "上次监控正常，需重新检查" : "当前正常" : "待确认"}</Typography.Text>
             </div>
             <div>
               <Typography.Text strong>跟卖监控</Typography.Text>
-              <Typography.Text>{row.resold === "是" ? "发现跟卖，建议复核价格与卖家" : "暂无跟卖"}</Typography.Text>
+              <Typography.Text>{row.resold === "是" ? "发现跟卖，建议复核价格与卖家" : row.resold === "否" ? monitorStale ? "上次未发现跟卖，需重新检查" : "暂无跟卖" : "待确认"}</Typography.Text>
             </div>
             <div>
               <Typography.Text strong>治理状态</Typography.Text>
@@ -159,6 +166,12 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
       destroyOnHidden
       footer={(
         <div className="listing-management__detail-footer">
+          {row && onOpenAnalysis && (
+            <Button onClick={() => {
+              closeModal();
+              onOpenAnalysis(row);
+            }}>经营分析</Button>
+          )}
           <Button onClick={closeModal}>关闭</Button>
         </div>
       )}
@@ -180,7 +193,7 @@ function ListingDetailModal({ row, onClose }: ListingDetailModalProps) {
             <div className="listing-management__detail-stat-pills">
               <div><strong>{row.msku}</strong><span>MSKU</span></div>
               <div><strong>{row.productId}</strong><span>商品ID</span></div>
-              <div><strong>{row.rating}</strong><span>评分</span></div>
+              <div><strong>{row.ratingKnown === false ? "无评分" : row.rating}</strong><span>评分</span></div>
             </div>
           </section>
           <div className="listing-management__detail-layout">

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
-from datetime import date, datetime
+import re
+from collections.abc import Iterator, Sequence
+from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from io import StringIO
 
@@ -607,6 +609,8 @@ class ListingManagementService:
         account_refs: frozenset[str],
     ) -> tuple[ListingManagementListData, int, object | None]:
         rows, total, latest_calculated_at = self.repository.list_listings(
+            sort_field=query.sort_field,
+            sort_order=query.sort_order,
             account_refs=account_refs,
             store_id=query.store_id,
             owner_ref=query.owner_ref,
@@ -634,6 +638,7 @@ class ListingManagementService:
                             archive_states.get(str(row.id))
                             and archive_states[str(row.id)].is_archived
                         ),
+                        archive_state_known=str(row.id) in archive_states,
                         archive_reason=getattr(
                             archive_states.get(str(row.id)),
                             "archive_reason",
@@ -723,21 +728,38 @@ class ListingManagementService:
         account_refs: frozenset[str],
         *,
         columns: str | None = None,
+        selected_ids: str | None = None,
+        _rows: Sequence[ListingManagementRowProjection] | None = None,
+        _include_header: bool = True,
     ) -> str:
-        rows = self.repository.export_listings(
-            account_refs=account_refs,
-            store_id=query.store_id,
-            owner_ref=query.owner_ref,
-            product_type=query.product_type,
-            status=query.status,
-            tag=query.tag,
-            archive_status=query.archive_status,
-            summary_filter=query.summary_filter,
-            search_field=query.search_field,
-            keyword=query.keyword,
-            batch_values=query.batch_values,
-            max_rows=10000,
+        from uuid import UUID
+
+        requested_ids = (
+            [UUID(item.strip()) for item in selected_ids.split(",") if item.strip()]
+            if selected_ids
+            else None
         )
+        rows = (
+            _rows
+            if _rows is not None
+            else self.repository.export_listings(
+                account_refs=account_refs,
+                store_id=query.store_id,
+                owner_ref=query.owner_ref,
+                product_type=query.product_type,
+                status=query.status,
+                tag=query.tag,
+                archive_status=query.archive_status,
+                summary_filter=query.summary_filter,
+                search_field=query.search_field,
+                keyword=query.keyword,
+                batch_values=query.batch_values,
+                max_rows=10001,
+                selected_ids=requested_ids,
+            )
+        )
+        if _rows is None and len(rows) > 10000:
+            raise ValueError("Listing导出超过10000条，请缩小筛选范围后重试，避免静默丢失数据")
         custom_tags = self.tag_repository.tags_for_listing_rows(rows)
         archive_states = self.repository.archive_states_for_listing_rows(rows)
         archive_states = self._normalize_listing_archive_state_keys(archive_states)
@@ -767,7 +789,13 @@ class ListingManagementService:
             ),
             ("buybox_status", "购物车状态", lambda item: item.buybox_status),
             ("walmart_seller", "Walmart卖家", lambda item: item.walmart_seller),
-            ("is_hijacked", "是否跟卖", lambda item: "是" if item.is_hijacked else "否"),
+            (
+                "is_hijacked",
+                "是否跟卖",
+                lambda item: (
+                    "待确认" if item.is_hijacked is None else "是" if item.is_hijacked else "否"
+                ),
+            ),
             ("average_rating", "评分", lambda item: item.average_rating),
             ("review_count", "评论数", lambda item: item.review_count),
             ("wfs_available_quantity", "WFS可售库存", lambda item: item.wfs_available_quantity),
@@ -785,13 +813,32 @@ class ListingManagementService:
             (
                 "listed_at",
                 "上架时间",
-                lambda item: self._listing_start_csv_value(item.listing_start_at_utc),
+                lambda item: self._listing_start_csv_value(
+                    item.listing_start_at_utc, item.listing_start_source_raw
+                ),
             ),
-            ("checked_at", "检查时间", lambda item: item.calculated_at),
+            (
+                "listing_start_source_raw",
+                "ERP原始上架时间",
+                lambda item: item.listing_start_source_raw,
+            ),
+            ("first_wfs_available_at", "首次WFS有货日", lambda item: item.launch_date_cn),
+            ("monitor_observed_at", "监控检查时间", lambda item: item.monitor_observed_at),
+            ("monitor_source", "监控来源", lambda item: item.monitor_source),
+            ("monitor_outcome", "监控状态", lambda item: item.monitor_outcome),
+            ("monitor_error_code", "监控错误码", lambda item: item.monitor_error_code),
+            ("monitor_image_count", "监控图片数", lambda item: len(item.monitor_image_urls)),
+            ("checked_at", "数据更新时间", lambda item: item.calculated_at),
             (
                 "archive_status",
                 "归档状态",
-                lambda item: "已归档" if getattr(item, "is_archived", False) else "正常",
+                lambda item: (
+                    "状态未知"
+                    if not getattr(item, "archive_state_known", False)
+                    else "已归档"
+                    if item.is_archived
+                    else "未归档"
+                ),
             ),
             (
                 "archive_reason",
@@ -810,7 +857,8 @@ class ListingManagementService:
             column for column in column_definitions if column[0] in selected_key_set
         ]
 
-        writer.writerow([column[1] for column in selected_columns])
+        if _include_header:
+            writer.writerow([column[1] for column in selected_columns])
 
         for row in rows:
             archive_state = archive_states.get(str(row.id))
@@ -818,6 +866,7 @@ class ListingManagementService:
                 row,
                 custom_tags.get((str(row.source_account_ref), str(row.item_id))),
                 bool(archive_state and archive_state.is_archived),
+                archive_state_known=archive_state is not None,
                 archive_reason=getattr(archive_state, "archive_reason", None),
             )
 
@@ -830,14 +879,63 @@ class ListingManagementService:
 
         return output.getvalue()
 
+    def iter_export_listing_csv(
+        self,
+        query: ListingManagementQuery,
+        account_refs: frozenset[str],
+        *,
+        columns: str | None = None,
+        selected_ids: str | None = None,
+    ) -> Iterator[bytes]:
+        from uuid import UUID
+
+        requested_ids = (
+            [UUID(item.strip()) for item in selected_ids.split(",") if item.strip()]
+            if selected_ids
+            else None
+        )
+        first = True
+        for rows in self.repository.iter_export_listing_batches(
+            account_refs=account_refs,
+            store_id=query.store_id,
+            owner_ref=query.owner_ref,
+            product_type=query.product_type,
+            status=query.status,
+            tag=query.tag,
+            archive_status=query.archive_status,
+            summary_filter=query.summary_filter,
+            search_field=query.search_field,
+            keyword=query.keyword,
+            batch_values=query.batch_values,
+            selected_ids=requested_ids,
+        ):
+            text_chunk = self.export_listing_csv(
+                query, account_refs, columns=columns, _rows=rows, _include_header=first
+            )
+            yield ("\ufeff" if first else "").encode("utf-8") + text_chunk.encode("utf-8")
+            first = False
+        if first:
+            yield (
+                "\ufeff" + self.export_listing_csv(query, account_refs, columns=columns, _rows=[])
+            ).encode("utf-8")
+
     @staticmethod
-    def _listing_start_csv_value(normalized_value: object) -> object:
+    def _listing_start_csv_value(normalized_value: object, source_raw: object = None) -> object:
         if isinstance(normalized_value, datetime):
-            return normalized_value.date().isoformat()
+            aware_value = (
+                normalized_value.astimezone(UTC)
+                if normalized_value.tzinfo is not None
+                else normalized_value
+            )
+            return aware_value.date().isoformat()
         if isinstance(normalized_value, date):
             return normalized_value.isoformat()
         if normalized_value is not None and str(normalized_value).strip():
             return str(normalized_value).strip()[:10]
+        if source_raw is not None:
+            raw = str(source_raw).strip()
+            match = re.match(r"^(\d{4}-\d{2}-\d{2})", raw)
+            return match.group(1) if match else raw
         return ""
 
     @staticmethod
@@ -849,8 +947,14 @@ class ListingManagementService:
         if isinstance(value, datetime):
             return value.isoformat()
         if isinstance(value, list):
-            return "、".join(str(item) for item in value if item is not None)
-        return str(value)
+            value = "、".join(str(item) for item in value if item is not None)
+        result = str(value)
+        # Prevent spreadsheet formula execution in untrusted textual CSV fields.
+        if result.lstrip().startswith(("=", "+", "-", "@")) or (
+            result and result[0] in ("\t", "\r", "\n")
+        ):
+            return "'" + result
+        return result
 
     @staticmethod
     def _normalize_listing_archive_state_keys(archive_states):
@@ -926,7 +1030,7 @@ class ListingManagementService:
         return ListingArchiveActionData(
             listing_id=listing_id,
             is_archived=bool(state.is_archived),
-            archive_reason=getattr(state, "archive_reason", None),
+            archive_reason=getattr(state, "archive_reason", None) if state.is_archived else None,
             archived_at=getattr(state, "archived_at", None),
             archived_by=getattr(state, "archived_by", None),
             restored_at=getattr(state, "restored_at", None),
@@ -990,21 +1094,37 @@ class ListingManagementService:
         return ListingTagListData(
             items=[
                 self._to_tag_read(tag, usage)
-                for tag, usage in self.tag_repository.list_tags(account_refs=account_refs)
+                for tag, usage in self.tag_repository.list_tags(
+                    account_refs=account_refs, include_inactive=True
+                )
             ],
+            source_account_refs=sorted(account_refs),
         )
 
-    def create_tag(self, payload: ListingTagCreateRequest) -> ListingTagRead:
+    def create_tag(
+        self, payload: ListingTagCreateRequest, account_refs: frozenset[str]
+    ) -> ListingTagRead:
+        account_ref = payload.source_account_ref
+        if account_ref is None and len(account_refs) == 1:
+            account_ref = next(iter(account_refs))
+        if account_ref is None:
+            raise ValueError("LISTING_TAG_ACCOUNT_REQUIRED")
+        if account_ref not in account_refs:
+            raise PermissionError("LISTING_TAG_ACCOUNT_SCOPE_DENIED")
         tag = self.tag_repository.create_tag(
+            account_ref=account_ref,
             name=payload.name,
             color=payload.color,
             sort_order=payload.sort_order,
         )
         return self._to_tag_read(tag, 0)
 
-    def update_tag(self, tag_id: str, payload: ListingTagUpdateRequest) -> ListingTagRead:
+    def update_tag(
+        self, tag_id: str, payload: ListingTagUpdateRequest, account_refs: frozenset[str]
+    ) -> ListingTagRead:
         tag = self.tag_repository.update_tag(
             tag_id=tag_id,
+            account_refs=account_refs,
             name=payload.name,
             color=payload.color,
             sort_order=payload.sort_order,
@@ -1012,8 +1132,8 @@ class ListingManagementService:
         )
         return self._to_tag_read(tag, 0)
 
-    def delete_tag(self, tag_id: str) -> None:
-        self.tag_repository.delete_tag(tag_id=tag_id)
+    def delete_tag(self, tag_id: str, account_refs: frozenset[str]) -> None:
+        self.tag_repository.delete_tag(tag_id=tag_id, account_refs=account_refs)
 
     def batch_set_tags(
         self,
@@ -1037,6 +1157,7 @@ class ListingManagementService:
     def _to_tag_read(self, tag: object, usage: int) -> ListingTagRead:
         return ListingTagRead(
             id=str(tag.id),
+            source_account_ref=str(tag.source_account_ref),
             name=str(tag.name),
             color=str(tag.color),
             usage=usage,
@@ -1050,6 +1171,7 @@ class ListingManagementService:
         custom_tags: list[str] | None = None,
         is_archived: bool = False,
         archive_reason: str | None = None,
+        archive_state_known: bool = False,
     ) -> ListingManagementItemRead:
         listing = row.listing if isinstance(row, ListingManagementRowProjection) else row
         title = (
@@ -1140,6 +1262,11 @@ class ListingManagementService:
             listing_start_source_raw=getattr(row, "listing_start_source_raw", None),
             launch_date_cn=getattr(row, "launch_date_cn", None),
             first_wfs_seen_at_utc=getattr(row, "first_wfs_seen_at_utc", None),
+            monitor_observed_at=getattr(row, "monitor_observed_at", None),
+            monitor_source=getattr(row, "monitor_source", None),
+            monitor_outcome=getattr(row, "monitor_outcome", None),
+            monitor_error_code=getattr(row, "monitor_error_code", None),
+            monitor_image_urls=getattr(row, "monitor_image_urls", None) or [],
             category=category,
             wfs_available_quantity=listing.wfs_available_quantity,
             available_quantity=listing.available_quantity,
@@ -1162,5 +1289,6 @@ class ListingManagementService:
             upc=listing.upc,
             calculated_at=listing.calculated_at,
             is_archived=is_archived,
-            archive_reason=archive_reason,
+            archive_state_known=archive_state_known,
+            archive_reason=archive_reason if is_archived else None,
         )
