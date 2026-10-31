@@ -1024,7 +1024,7 @@ class ListingManagementService:
         return ListingArchiveActionData(
             listing_id=listing_id,
             is_archived=bool(state.is_archived),
-            archive_reason=getattr(state, "archive_reason", None),
+            archive_reason=getattr(state, "archive_reason", None) if state.is_archived else None,
             archived_at=getattr(state, "archived_at", None),
             archived_by=getattr(state, "archived_by", None),
             restored_at=getattr(state, "restored_at", None),
@@ -1282,5 +1282,5 @@ class ListingManagementService:
             calculated_at=listing.calculated_at,
             is_archived=is_archived,
             archive_state_known=archive_state_known,
-            archive_reason=archive_reason,
+            archive_reason=archive_reason if is_archived else None,
         )

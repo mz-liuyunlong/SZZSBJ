@@ -172,7 +172,7 @@ def test_listing_query_reads_raw_start_time_by_stable_business_key() -> None:
     assert "dim_walmart_listings.item_id =" in sql
 
 
-def test_listing_archive_unknown_is_not_treated_as_active() -> None:
+def test_listing_archive_unknown_is_visible_by_default_but_not_explicitly_active() -> None:
     session = MagicMock(spec=Session)
     repository = ListingManagementRepository(session)
     kwargs = dict(
@@ -191,8 +191,12 @@ def test_listing_archive_unknown_is_not_treated_as_active() -> None:
     unknown_sql = str(
         repository._filtered_listing_statement(**kwargs, archive_status="unknown").compile()
     )
+    explicit_active_sql = str(
+        repository._filtered_listing_statement(**kwargs, archive_status="active").compile()
+    )
     assert "listing_archive_states.is_archived IS false" in active_sql
-    assert "listing_archive_states.listing_id IS NULL" not in active_sql
+    assert "listing_archive_states.listing_id IS NULL" in active_sql
+    assert "listing_archive_states.listing_id IS NULL" not in explicit_active_sql
     assert "listing_archive_states.listing_id IS NULL" in unknown_sql
 
     session.execute.return_value.mappings.return_value.one.return_value = {
@@ -205,6 +209,27 @@ def test_listing_archive_unknown_is_not_treated_as_active() -> None:
         {"value": "archived", "label": "已归档", "count": 3},
         {"value": "unknown", "label": "状态未确认", "count": 4},
     ]
+
+
+def test_restored_listing_does_not_expose_stale_archive_reason() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    listing = SimpleNamespace(**{**_listing_item().model_dump(), "tags_json": []})
+    restored = service._to_read(
+        listing,
+        custom_tags=[],
+        is_archived=False,
+        archive_state_known=True,
+        archive_reason="historical synthetic reason",
+    )
+    archived = service._to_read(
+        listing,
+        custom_tags=[],
+        is_archived=True,
+        archive_state_known=True,
+        archive_reason="current synthetic reason",
+    )
+    assert restored.archive_reason is None
+    assert archived.archive_reason == "current synthetic reason"
 
 
 def test_listing_management_route_fails_closed_for_auth_permission_and_scope() -> None:

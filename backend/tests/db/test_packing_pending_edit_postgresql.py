@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.orm import Session
 
 from app.core.api import ApiError
@@ -27,6 +29,7 @@ from app.modules.pmc_domestic.packing_schemas import (
 from app.modules.pmc_domestic.packing_service import PackingService
 from tests.db.domestic_postgresql_support import admin_url, create_database, drop_database
 from tests.db.test_domestic_chain_postgresql import (
+    BACKEND_ROOT,
     DOMESTIC_0049,
     DOMESTIC_TABLES,
     _alembic,
@@ -36,7 +39,6 @@ from tests.db.test_domestic_chain_postgresql import (
     _version,
 )
 
-REVISION = "20261029_0068_walmart_remote_jobs"
 PREVIOUS = "20261027_0061_merge_purchase_main"
 
 
@@ -54,7 +56,9 @@ def test_0062_preserves_data_and_supports_atomic_draft_approval(start):
             before = _snapshot_0049(url, database)
         upgraded = _alembic(url, database, "head")
         assert upgraded.returncode == 0, upgraded.stderr
-        assert _version(url, database) == [REVISION]
+        heads = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini"))).get_heads()
+        assert len(heads) == 1
+        assert _version(url, database) == list(heads)
         if start:
             assert _snapshot_0049(url, database) == before
             assert _marker_unchanged(url, database, marker)

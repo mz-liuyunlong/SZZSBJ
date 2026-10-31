@@ -269,7 +269,8 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
   const [sortField, setSortField] = usePageStateCache(`${pageStateKey}:sortField`, "");
   const [sortOrder, setSortOrder] = usePageStateCache<"asc" | "desc">(`${pageStateKey}:sortOrder`, "asc");
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
-  const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
+  // Selection is only valid for the current mounted account scope and filter.
+  const [selectedRowKeys, setSelectedRowKeys] = useState<Key[]>([]);
 
   const [rows, setRows] = useState<ListingManagementRow[]>([]);
   const [seenListingRows, setSeenListingRows] = useState<Record<string, ListingManagementRow>>({});
@@ -541,6 +542,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
 
   const updateFilters = (nextFilters: ListingManagementFilters) => {
     setFilters(nextFilters);
+    setSeenListingRows({});
     setSummaryFilterKey(DEFAULT_LISTING_SUMMARY_FILTER_KEY);
     refreshListingData();
     resetPageAndSelection();

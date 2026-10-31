@@ -104,8 +104,12 @@ def test_la_t_minus_two_in_summer_and_winter() -> None:
 def test_fbm_lifecycle_with_valid_sales_and_no_wfs_inventory() -> None:
     days = [BusinessDay(_day(i), None, Decimal("2")) for i in range(30)]
     result = lifecycle_listing(
-        cutoff=CUTOFF, previous_stage=None, days=days,
-        first_effective_stock=False, config=CFG, fulfillment_type="0",
+        cutoff=CUTOFF,
+        previous_stage=None,
+        days=days,
+        first_effective_stock=False,
+        config=CFG,
+        fulfillment_type="0",
     )
     assert result.stage in {"启动期", "稳定期"}
     assert result.stage != "断货期"
@@ -114,8 +118,12 @@ def test_fbm_lifecycle_with_valid_sales_and_no_wfs_inventory() -> None:
 def test_initial_lifecycle_missing_sales_stays_pending() -> None:
     days = [BusinessDay(_day(i), None, None) for i in range(14)]
     result = lifecycle_listing(
-        cutoff=CUTOFF, previous_stage=None, days=days,
-        first_effective_stock=False, config=CFG, fulfillment_type="0",
+        cutoff=CUTOFF,
+        previous_stage=None,
+        days=days,
+        first_effective_stock=False,
+        config=CFG,
+        fulfillment_type="0",
     )
     assert result.stage == "待确认"
     assert not result.evidence_complete
@@ -124,8 +132,12 @@ def test_initial_lifecycle_missing_sales_stays_pending() -> None:
 def test_low_positive_wfs_stock_does_not_mean_stockout() -> None:
     days = [BusinessDay(_day(i), Decimal("1"), Decimal("0")) for i in range(7)]
     result = lifecycle_listing(
-        cutoff=CUTOFF, previous_stage="稳定期", days=days,
-        first_effective_stock=True, config=CFG, fulfillment_type="1",
+        cutoff=CUTOFF,
+        previous_stage="稳定期",
+        days=days,
+        first_effective_stock=True,
+        config=CFG,
+        fulfillment_type="1",
     )
     assert result.stage != "断货期"
 
@@ -134,12 +146,20 @@ def test_explicit_zero_sales_is_not_equivalent_to_missing_sales() -> None:
     zero = [BusinessDay(_day(i), Decimal("3"), Decimal("0")) for i in range(7)]
     missing = [BusinessDay(_day(i), Decimal("3"), None) for i in range(7)]
     zero_result = lifecycle_listing(
-        cutoff=CUTOFF, previous_stage=None, days=zero,
-        first_effective_stock=True, config=CFG, fulfillment_type="1",
+        cutoff=CUTOFF,
+        previous_stage=None,
+        days=zero,
+        first_effective_stock=True,
+        config=CFG,
+        fulfillment_type="1",
     )
     missing_result = lifecycle_listing(
-        cutoff=CUTOFF, previous_stage=None, days=missing,
-        first_effective_stock=True, config=CFG, fulfillment_type="1",
+        cutoff=CUTOFF,
+        previous_stage=None,
+        days=missing,
+        first_effective_stock=True,
+        config=CFG,
+        fulfillment_type="1",
     )
     assert zero_result.stage == "启动期"
     assert missing_result.stage == "待确认"
