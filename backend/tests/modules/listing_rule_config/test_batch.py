@@ -50,9 +50,9 @@ def test_batch_uses_keyset_pagination_and_one_fixed_rule(monkeypatch) -> None:
         def __init__(self, _session) -> None:
             pass
 
-        def evaluate(self, **kwargs):
+        def evaluate_page(self, **kwargs):
             calls.append(kwargs)
-            return SimpleNamespace(
+            value = SimpleNamespace(
                 missing_evidence=[],
                 current_lifecycle="启动期",
                 current_grade=None,
@@ -69,6 +69,7 @@ def test_batch_uses_keyset_pagination_and_one_fixed_rule(monkeypatch) -> None:
                 rule_version=7,
                 rule_source="database",
             )
+            return {listing.id: value for listing in kwargs["listings"]}
 
     monkeypatch.setattr(batch_module, "ListingEvaluationPreviewService", FakeEvaluator)
     config = ListingGradeRuleConfig()

@@ -155,14 +155,14 @@ class ListingEvaluationBatchService:
             listings = list(self.session.scalars(statement.limit(batch_size)).all())
             if not listings:
                 break
+            evaluations = evaluator.evaluate_page(
+                listings=listings,
+                cutoff=cutoff,
+                config=config,
+                rule_version=rule_version,
+            )
             for listing in listings:
-                result = evaluator.evaluate(
-                    listing_id=listing.id,
-                    account_refs=frozenset({listing.source_account_ref}),
-                    cutoff=cutoff,
-                    config=config,
-                    rule_version=rule_version,
-                )
+                result = evaluations[listing.id]
                 evidence = list(result.missing_evidence)
                 # This run is deliberately diagnostic-only until upstream ad/cost
                 # completeness and historical workflow contracts are approved.

@@ -24,6 +24,7 @@ from app.modules.data_pages.repository import (
 from app.modules.data_pages.schemas import (
     ListingManagementItemRead,
     ListingManagementListData,
+    ListingManagementQuery,
     ListingTagBatchSetData,
     ListingTagRead,
 )
@@ -102,6 +103,58 @@ def _listing_item() -> ListingManagementItemRead:
         upc="85000100001",
         calculated_at=NOW,
     )
+
+
+@pytest.mark.parametrize(
+    ("hijacked", "expected"),
+    [(None, "待确认"), (False, "否"), (True, "是")],
+)
+def test_listing_csv_preserves_unknown_resell_status(hijacked: bool | None, expected: str) -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    service._to_read = MagicMock(
+        return_value=_listing_item().model_copy(update={"is_hijacked": hijacked})
+    )
+    row = SimpleNamespace(
+        id=UUID(int=1), source_account_ref="synthetic-account", item_id="synthetic-item"
+    )
+
+    csv_text = service.export_listing_csv(
+        ListingManagementQuery(),
+        frozenset({"synthetic-account"}),
+        columns="is_hijacked",
+        _rows=[row],
+    )
+
+    assert csv_text.splitlines() == ["是否跟卖", expected]
+
+
+def test_listing_streaming_export_does_not_truncate_after_ten_thousand_rows() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    service.tag_repository.tags_for_listing_rows = MagicMock(return_value={})
+    service.repository.archive_states_for_listing_rows = MagicMock(return_value={})
+    service._to_read = MagicMock(return_value=_listing_item())
+    row = SimpleNamespace(
+        id=UUID(int=1), source_account_ref="synthetic-account", item_id="synthetic-item"
+    )
+
+    def batches():
+        for _ in range(20):
+            yield [row] * 500
+        yield [row]
+
+    service.repository.iter_export_listing_batches = MagicMock(return_value=batches())
+    chunks = service.iter_export_listing_csv(
+        ListingManagementQuery(),
+        frozenset({"synthetic-account"}),
+        columns="is_hijacked",
+    )
+
+    lines = b"".join(chunks).decode("utf-8-sig").splitlines()
+    assert lines[0] == "是否跟卖"
+    assert len(lines) == 10_002
+    assert lines[-1] == "否"
 
 
 def test_openapi_contains_listing_management_route() -> None:

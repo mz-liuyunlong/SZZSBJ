@@ -789,7 +789,13 @@ class ListingManagementService:
             ),
             ("buybox_status", "购物车状态", lambda item: item.buybox_status),
             ("walmart_seller", "Walmart卖家", lambda item: item.walmart_seller),
-            ("is_hijacked", "是否跟卖", lambda item: "是" if item.is_hijacked else "否"),
+            (
+                "is_hijacked",
+                "是否跟卖",
+                lambda item: (
+                    "待确认" if item.is_hijacked is None else "是" if item.is_hijacked else "否"
+                ),
+            ),
             ("average_rating", "评分", lambda item: item.average_rating),
             ("review_count", "评论数", lambda item: item.review_count),
             ("wfs_available_quantity", "WFS可售库存", lambda item: item.wfs_available_quantity),

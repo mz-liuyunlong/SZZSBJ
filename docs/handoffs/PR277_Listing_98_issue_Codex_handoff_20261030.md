@@ -279,7 +279,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **跟卖状态未知显示为“否”**
 - Recorded condition: 前端is_hijacked ? 是 : 否；null被视作false
 - Original acceptance: 增加“待确认”，导出与表格一致
-- PR #277 review / Codex TODO: Frontend resold maps null to pending. Verify CSV, monitoring fallback and UI with true/false/null.
+- PR #277 evidence: frontend and CSV both distinguish true/false/null as 是/否/待确认; targeted CSV tests cover all three states. Monitoring fallback and browser acceptance remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/listingManagementApi.ts
 
 ### LM-033 | 列表字段 | P1 | PARTIAL
@@ -352,11 +352,11 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - PR #277 review / Codex TODO: selected_ids now passed to scoped export query. Test selected-only, unauthorized IDs, pagination, large selection and partial-scoped sets.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/listingManagementApi.ts
 
-### LM-043 | 导出 | P1 | PARTIAL
+### LM-043 | 导出 | P1 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **导出超过1万条可能静默截断**
 - Recorded condition: export_listings固定limit(max_rows=10000)
 - Original acceptance: 超限告警/分批任务导出，提供准确总数
-- PR #277 review / Codex TODO: Export now returns 422 instead of silent truncation above 10,000; segmented async/full export remains unimplemented.
+- PR #277 evidence: production route uses `iter_export_listing_csv` with 500-row partitions; a synthetic 10,001-row test confirms no truncation. The non-streaming helper still guards its own 10,000-row limit. Live large-export throughput and browser download remain unverified.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/repository.py
 
 ### LM-044 | 数据缓存 | P1 | PATCHED_UNVERIFIED
@@ -499,11 +499,11 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - PR #277 evidence: retry creates a new run ID and does not delete prior snapshots; targeted attempt tests pass and the unique `(schedule_date_cn, attempt_count)` migration was exercised in an isolated PostgreSQL run. Runtime replay/history E2E remains pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
-### LM-064 | 自动任务 | P1 | OPEN
+### LM-064 | 自动任务 | P1 | PARTIAL
 - Original issue (源码风险待验收): **批次逐Listing独立查询成本高**
 - Recorded condition: 循环evaluator.evaluate逐条查询多张表
 - Original acceptance: 批量预取、游标分页、吞吐与资源基准测试
-- PR #277 review / Codex TODO: _evaluate_pages calls evaluator.evaluate per row with multiple DB reads. Need bulk prefetch, bounded query count and benchmark.
+- PR #277 evidence: each keyset page now prefetches sales, inventory, prior-stock identity, archive, and monitor evidence in five bounded queries; the shared calculator preserves the single-item formula. Synthetic tests cover two accounts, NULL/MSKU identity, duplicate/oversized pages and query count. Isolated PostgreSQL throughput and index-plan benchmark remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/listing_rule_config/batch.py
 
 ### LM-065 | 自动任务 | P1 | PARTIAL
