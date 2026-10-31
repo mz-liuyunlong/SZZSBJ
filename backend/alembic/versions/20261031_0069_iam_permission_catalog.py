@@ -4,8 +4,11 @@ This is a reviewed, explicit migration only; never execute it on application boo
 """
 
 from __future__ import annotations
+
 from collections.abc import Sequence
+
 from sqlalchemy import text
+
 from alembic import op
 from app.modules.iam.permission_catalog_v2 import PERMISSION_DEFINITIONS
 

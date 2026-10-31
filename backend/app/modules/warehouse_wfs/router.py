@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.api import ApiError, ErrorCode, ErrorEnvelope, SuccessEnvelope, success_response
 from app.core.auth import Principal
 from app.core.config import get_settings
-from app.core.permissions import require_permission, require_super_admin
+from app.core.permissions import require_permission
 from app.db.session import get_db_session
 from app.modules.approvals.service import ApprovalService
 from app.modules.integration_sync.dependencies import require_source_account_scope
