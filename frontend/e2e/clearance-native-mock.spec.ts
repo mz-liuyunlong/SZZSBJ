@@ -12,8 +12,17 @@ async function prepare(page:Page){
 }
 test("clearance uses one native page, shared table and mock only",async({page})=>{
  await prepare(page);
+ const pageErrors:string[]=[];
+ const authRequests:string[]=[];
+ page.on("pageerror",error=>pageErrors.push(error.message+" "+error.stack));
+ page.on("response",response=>{if(new URL(response.url()).pathname==="/api/auth/me")authRequests.push(String(response.status()));});
  await page.goto("/#/products/clearance-center");
- await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
+ try {
+  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible({timeout:15000});
+ } catch {
+  const body=(await page.locator("body").innerText().catch(()=>"<body unavailable>")).slice(0,1800);
+  throw new Error("Clearance route failed: "+JSON.stringify({url:page.url(),body,pageErrors,authRequests,token:await page.evaluate(()=>Boolean(localStorage.getItem("szzsbj_auth_token")))}));
+ }
  await expect(page.locator("iframe")).toHaveCount(0);
  await expect(page.locator(".clearance-main-card .ant-pro-table")).toHaveCount(1);
  await expect(page.getByText("数据周期：",{exact:true})).toBeVisible();
