@@ -7,6 +7,7 @@ import { StatusTagCell } from "@/components/report-table/cells";
 import {
   decideNewProductPurchase,
   getNewProductWorkflows,
+  getNewProductMetrics,
   requestNewProductPurchase,
   reviewNewProductLaunch,
   saveMarketScore,
@@ -24,6 +25,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
   const [data, setData] = useState<NewProductWorkflowList | null>(null);
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [metricData, setMetricData] = useState<Record<string, unknown> | null>(null);
   const [record, setRecord] = useState<NewProductWorkflowRecord | null>(null);
   const [action, setAction] = useState<Action>("market");
   const [draft, setDraft] = useState<Draft>({ reason: "" });
@@ -37,6 +39,17 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
       setPage(next);
     } catch (error) {
       api.error(error instanceof Error ? error.message : "读取真实数据失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function inspectMetrics(row: NewProductWorkflowRecord) {
+    setBusy(true);
+    try {
+      setMetricData(await getNewProductMetrics(row.sku_identity_id));
+    } catch (error) {
+      api.error(error instanceof Error ? error.message : "经营数据读取失败");
     } finally {
       setBusy(false);
     }
@@ -97,7 +110,7 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
     } as Record<string, string>)[String(v ?? "pending_market")] ?? String(v ?? "待市场评分")} color={v === "approved_draft" ? "success" : v === "rejected" ? "error" : "processing"}/> },
     { title: "操作", key: "actions", width: 250, render: (_, row) => {
       const state = row.status ?? "pending_market";
-      return <Space wrap size={0}>
+      return <Space wrap size={0}><Button type="link" onClick={() => void inspectMetrics(row)}>经营指标</Button>
         {canScore && state === "pending_market" && <Button type="link" onClick={() => open(row, "market")}>市场评分</Button>}
         {canRequest && (state === "scored" || state === "rejected") && <Button type="link" onClick={() => open(row, "request")}>采购申请</Button>}
         {canApprove && state === "pending_purchase" && <Button type="link" onClick={() => open(row, "decision")}>草稿审批</Button>}
@@ -119,6 +132,13 @@ export default function NewProductLivePanel({ canScore, canRequest, canApprove, 
         options={false} search={false} tableAlertRender={false} scroll={{ x: 1450 }} pagination={{ current: page, pageSize: 50, total: data?.total ?? 0,
           onChange: next => void load(next), showSizeChanger: false }} />
     </ReportTableShell>
+    <Modal title="真实经营数据及评分依据" open={metricData !== null} footer={null}
+      onCancel={() => setMetricData(null)} width={760}>
+      <Typography.Paragraph type="secondary">基于当前系统已发布业务表；数据不足不会自动判为失败，且不关联 PMC。</Typography.Paragraph>
+      <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 460, overflow: "auto" }}>
+        {JSON.stringify(metricData, null, 2)}
+      </pre>
+    </Modal>
     <Modal title={action === "market" ? "市场评分" : action === "request" ? "申请采购" :
       action === "decision" ? "审批采购草稿" : "打品复盘"} open={!!record} confirmLoading={busy}
       onCancel={() => setRecord(null)} onOk={() => void submit()} okText="保存">
