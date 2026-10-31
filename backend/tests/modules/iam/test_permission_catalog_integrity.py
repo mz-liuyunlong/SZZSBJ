@@ -9,11 +9,7 @@ from app.modules.iam.permission_catalog_v2 import (
 def test_permission_catalog_keys_are_unique_and_children_have_pages() -> None:
     keys = [item.permission_key for item in PERMISSION_DEFINITIONS]
     assert len(keys) == len(set(keys))
-    pages = {
-        item.page_key
-        for item in PERMISSION_DEFINITIONS
-        if item.permission_type == "page"
-    }
+    pages = {item.page_key for item in PERMISSION_DEFINITIONS if item.permission_type == "page"}
     for item in PERMISSION_DEFINITIONS:
         assert item.permission_key
         assert item.page_key in pages
