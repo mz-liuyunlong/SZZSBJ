@@ -12,12 +12,18 @@ import json
 import re
 from collections import Counter
 from collections.abc import Mapping
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from app.integrations.walmart.client import WalmartClient, WalmartResult
 from app.integrations.walmart.collector import CollectorConfig, WalmartReadCollector
-from app.integrations.walmart.contracts import ContractRegistry, Operation, PreparedRequest
+from app.integrations.walmart.contracts import (
+    ContractRegistry,
+    Operation,
+    PreparedRequest,
+    with_authorization,
+)
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.marketplace_catalog import marketplace_read_registry
 from app.integrations.walmart.operations_catalog import operations_read_registry
@@ -32,6 +38,46 @@ MAX_CONTRACT_BYTES = 2 * 1024 * 1024
 
 class WalmartIntegrationError(ValueError):
     """Stable failure codes only; never include contract contents or secrets."""
+
+
+# Catalog family -> business permission for its read operations (protocol v3).
+_READ_FAMILIES: tuple[tuple[Any, str], ...] = (
+    (wfs_registry, "wfs"),
+    (feed_monitor_registry, "feeds"),
+    (marketplace_read_registry, "marketplace"),
+    (returns_read_registry, "returns"),
+    (operations_read_registry, "operations"),
+)
+WFS_WRITE_PERMISSION = "action:walmart:wfs:shipments:write"
+WFS_CANCEL_PERMISSION = "action:walmart:wfs:shipments:cancel"
+_WRITE_PERMISSIONS = {"wfs_inbound_shipment_cancel": WFS_CANCEL_PERMISSION}
+
+
+@lru_cache(maxsize=1)
+def reviewed_registry() -> ContractRegistry:
+    """Every reviewed built-in contract, enabled, with family and business permission.
+
+    This is the protocol-v3 registry: being in it means "implemented and contract-checked";
+    whether a caller may use an operation is decided by the server-side authorizer (its
+    ``permission`` plus store scope), not by per-operation environment allowlists. The
+    historical capability catalog stays discovery-only and never becomes an operation.
+    """
+    operations: dict[str, Operation] = {}
+    for factory, family in _READ_FAMILIES:
+        keys = frozenset(factory().keys())
+        for key, operation in factory(approved_keys=keys)._operations.items():
+            if key in operations or operation.is_write:
+                raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+            operations[key] = with_authorization(
+                operation, family=family, permission=f"action:walmart:{family}:read"
+            )
+    for key, operation in wfs_write_registry(approved_keys=WFS_WRITE_KEYS)._operations.items():
+        if key in operations or not operation.is_write:
+            raise WalmartIntegrationError("WALMART_OPERATION_COLLISION")
+        operations[key] = with_authorization(
+            operation, family="wfs", permission=_WRITE_PERMISSIONS.get(key, WFS_WRITE_PERMISSION)
+        )
+    return ContractRegistry(tuple(operations.values()))
 
 
 def _builtins(

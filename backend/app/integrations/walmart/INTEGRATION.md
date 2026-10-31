@@ -135,3 +135,18 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 - `SZZSBJ_WALMART_APPROVED_WRITE_KEYS=wfs_inbound_shipment_create,wfs_shipment_label,...`（只能是上表的 key）。
 - 读 key 仍走 `SZZSBJ_WALMART_APPROVED_READ_KEYS`；WFS 看板需要加 `inbound_shipments,inbound_shipment_items`（2026-10-31 实测当前只批了 `wfs_inventory`，调 `inbound_shipments` 返回 `WALMART_OPERATION_NOT_APPROVED`）。
 - 写模式下传输超时 90 秒、透传 Walmart 错误体；策略 `StoreWritePolicy` 要求写事件带 `approval_ref`。
+
+## 协议 v3：签名契约（2026-10-31，回应云函数所有者的架构要求）
+
+目标：新增一个 Walmart 接口不再需要修改八个云函数的 `APPROVED_READ_KEYS` / `APPROVED_WRITE_KEYS` 并重新发布。设计全文见 `features/pmc-handover/chapters/76_walmart_unified_gateway_design.md`。
+
+- `contract_signing.py`：`ContractSigner`（主服务器，Ed25519 私钥只在内存）对 `{契约 sha256, 请求 sha256(method/path/query/body), store_code, issued_at, nonce, approval_ref}` 签名；`ContractVerifier`（云函数，公钥来自环境变量 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS`，JSON `{"kid": "<base64 公钥>"}`，最多 4 把用于轮换）验签、±300 秒时间窗、店铺一致、哈希一致。
+- `contracts.py`：`contract_dict()` / `operation_from_contract()` 两端共用，云函数用事件里的契约**重建 Operation 再跑一遍 `prepare()`**（同一套 schema 校验），调用方自报的 method/path/accept 只用来比对。`ContractRegistry.version()` 是全部契约的 16 位摘要。`Operation` 新增 `family` / `permission` / `risk`。
+- `unified_api.reviewed_registry()`：全部内置契约（读 + WFS 写）启用并带业务权限 key；能不能调由主服务器授权层决定。历史 192 项目录仍只做发现。
+- `cloud_executor.py`：`version == 3` 分支，需要 `verifier`；每店只有一个风险上限 `max_risk`（`read` 拒绝一切 mutating 契约；`write` 还要 `approval_ref`）。不再查 keyed policy。返回多 `protocol: 3`、`contract_sha256`、`registry_version`；4xx/5xx 按 v2 语义回 `provider_error`。
+- `scf_runtime.py`：配置了 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS` 才接受 v3；`SZZSBJ_WALMART_MAX_RISK=read|write`（`write` 还需 `LIVE_MODE=owner-approved-read-write`）。v1/v2 事件和原有环境变量行为不变。
+- `scf_bridge.py` v3 / `routed_scf.create_scoped_client(..., bridge_version=3, signer=...)`：事件带契约、actor（`{"kind": "user|system", "uid"}`）、签名；校验云函数回显的 `contract_sha256`。
+
+云函数首次升级（一次）：发布含本协议的新版本 → 每店加 `SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS` 和 `SZZSBJ_WALMART_MAX_RISK=read` → 切 `stable`。之后加接口只改主服务器。仍需升级云函数的情况：协议版本、json/pdf 之外的响应类型、Walmart 域名或 `/v3` 基路径变化、密钥轮换或风险上限调整（只改环境变量）、运行时安全更新。
+
+测试：`tests/integrations/walmart/test_protocol_v3.py`（契约往返与形状校验、签名篡改/过期/未知 key、v3 读写执行、风险上限、跨店、v1 兼容、桥接端到端、PDF、provider_error、运行时门禁）。

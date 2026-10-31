@@ -6,6 +6,12 @@ Writes stay disabled unless the owner deploys the function with
 ``SZZSBJ_WALMART_LIVE_MODE=owner-approved-read-write`` and lists the reviewed
 WFS write keys in ``SZZSBJ_WALMART_APPROVED_WRITE_KEYS``; every write event must
 also carry a non-empty ``approval_ref`` (the caller's audit reference).
+
+Protocol v3 (signed contracts) is enabled by ``SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS``
+(JSON ``{"kid": "<base64 Ed25519 public key>"}``). In that mode the per-operation
+allowlists above are not consulted; the only per-store switch is
+``SZZSBJ_WALMART_MAX_RISK`` ("read" by default, "write" only together with the
+read-write live mode). v1/v2 events keep working unchanged.
 """
 
 from __future__ import annotations
@@ -17,7 +23,8 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.integrations.walmart.cloud_executor import WalmartCloudExecutor
+from app.integrations.walmart.cloud_executor import RISK_LEVELS, WalmartCloudExecutor
+from app.integrations.walmart.contract_signing import ContractVerifier
 from app.integrations.walmart.contracts import ContractRegistry
 from app.integrations.walmart.feeds_catalog import feed_monitor_registry
 from app.integrations.walmart.https_transport import WalmartHttpsTransport
@@ -33,6 +40,21 @@ MAX_CONTRACT_BYTES = 2 * 1024 * 1024
 _STORE_PATTERN = re.compile(r"^(?:HK|CN)[0-9]{4}$")
 LIVE_MODE_READ_ONLY = "owner-approved-read-only"
 LIVE_MODE_READ_WRITE = "owner-approved-read-write"
+PUBLIC_KEYS_ENV = "SZZSBJ_WALMART_CONTRACT_PUBLIC_KEYS"
+MAX_RISK_ENV = "SZZSBJ_WALMART_MAX_RISK"
+
+
+def _verifier_from_env() -> ContractVerifier | None:
+    raw = os.environ.get(PUBLIC_KEYS_ENV, "").strip()
+    return ContractVerifier.from_env_json(raw) if raw else None
+
+
+def _max_risk_from_env(write_mode: bool) -> str:
+    """Per-store ceiling; "write" needs the read-write live mode as well (defense in depth)."""
+    value = os.environ.get(MAX_RISK_ENV, "read").strip() or "read"
+    if value not in RISK_LEVELS:
+        raise ValueError("WALMART_RISK_CEILING_INVALID")
+    return "write" if value == "write" and write_mode else "read"
 
 
 class ReadOnlyStorePolicy:
@@ -148,13 +170,17 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
     store = os.environ.get("SZZSBJ_WALMART_BOUND_STORE", "")
     if not _STORE_PATTERN.fullmatch(store):
         return {"success": False, "status": "WALMART_STORE_BINDING_MISSING"}
+    signed = isinstance(event, dict) and event.get("version") == 3
     try:
+        verifier = _verifier_from_env()
+        if signed and verifier is None:
+            return {"success": False, "status": "WALMART_PROTOCOL_NOT_ENABLED"}
         approved = frozenset(
             item.strip()
             for item in os.environ.get("SZZSBJ_WALMART_APPROVED_READ_KEYS", "").split(",")
             if item.strip()
         )
-        if not approved:
+        if not approved and not signed:
             raise ValueError("WALMART_APPROVAL_MISSING")
         approved_write: frozenset[str] = frozenset()
         if write_mode:
@@ -166,7 +192,9 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
         mapping = json.loads(os.environ.get("SZZSBJ_WALMART_PRIVATE_PROXIES", "{}"))
         if not isinstance(mapping, dict) or set(mapping) != {store}:
             raise ValueError("WALMART_EGRESS_MISSING")
-        registry = _load_registry(approved, approved_write)
+        # v3 rebuilds the operation from the signed contract; the legacy registry is only
+        # needed for v1/v2 events.
+        registry = ContractRegistry(()) if signed else _load_registry(approved, approved_write)
         secrets = TencentSsmResolver(
             TencentApiClient(TemporaryTencentIdentity.from_environment()),
             approved_stores=frozenset({store}),
@@ -175,8 +203,8 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
         transport = WalmartHttpsTransport(
             proxy_by_store=mapping,
             secret_resolver=secrets,
-            timeout=90.0 if write_mode else 12.0,
-            pass_provider_errors=write_mode,
+            timeout=90.0 if (write_mode or signed) else 12.0,
+            pass_provider_errors=write_mode or signed,
         )
         policy: ReadOnlyStorePolicy | StoreWritePolicy
         if write_mode:
@@ -188,6 +216,8 @@ def main_handler(event: object, context: object) -> dict[str, Any]:
             store_allowlist=frozenset({store}),
             policy=policy,
             transport=transport,
+            verifier=verifier,
+            max_risk=_max_risk_from_env(write_mode),
         )
         return executor.handle(event)
     except Exception:

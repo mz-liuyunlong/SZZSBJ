@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.integrations.walmart.client import WalmartClient, WalmartResult
+from app.integrations.walmart.contract_signing import ContractSigner
 from app.integrations.walmart.contracts import ContractRegistry, PreparedRequest
 from app.integrations.walmart.planner import STORE_ROUTES, WalmartPlanError
 from app.integrations.walmart.scf_bridge import ProtectedScfBridge
@@ -24,6 +25,7 @@ class RoutedScfGateway:
         function_by_store: Mapping[str, str],
         function_qualifier: str = "stable",
         bridge_version: int = 1,
+        signer: ContractSigner | None = None,
     ) -> None:
         if not function_by_store or any(store not in STORE_ROUTES for store in function_by_store):
             raise WalmartPlanError("WALMART_ROUTE_CONFIG_INVALID")
@@ -37,6 +39,7 @@ class RoutedScfGateway:
                     qualifier=function_qualifier,
                 ),
                 version=bridge_version,
+                signer=signer,
             )
             for store, name in function_by_store.items()
         }
@@ -47,6 +50,7 @@ class RoutedScfGateway:
         store_code: str,
         request: PreparedRequest,
         approval_ref: str | None,
+        actor: Mapping[str, str] | None = None,
     ) -> WalmartResult:
         gateway = self._gateways.get(store_code)
         if gateway is None:
@@ -55,6 +59,7 @@ class RoutedScfGateway:
             store_code=store_code,
             request=request,
             approval_ref=approval_ref,
+            actor=actor,
         )
         return WalmartResult(
             status_code=reply.status_code,
@@ -73,6 +78,7 @@ def create_scoped_client(
     cloud_api: TencentApiClient,
     function_qualifier: str = "stable",
     bridge_version: int = 1,
+    signer: ContractSigner | None = None,
 ) -> WalmartClient:
     """Caller must pass an independently verified trusted principal store scope."""
     gateway = RoutedScfGateway(
@@ -80,6 +86,7 @@ def create_scoped_client(
         function_by_store=function_by_store,
         function_qualifier=function_qualifier,
         bridge_version=bridge_version,
+        signer=signer,
     )
     return WalmartClient(
         registry,

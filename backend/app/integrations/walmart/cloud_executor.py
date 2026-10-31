@@ -10,9 +10,13 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
+from app.integrations.walmart.contract_signing import ContractVerifier
 from app.integrations.walmart.contracts import ContractError, ContractRegistry
 from app.integrations.walmart.https_transport import TransportRejected
 from app.integrations.walmart.scf_bridge import _contains_secret_key
+
+RISK_LEVELS = ("read", "write")
+_ACTOR_KINDS = frozenset({"user", "system"})
 
 
 class CallPolicy(Protocol):
@@ -41,6 +45,10 @@ class WalmartCloudExecutor:
     Event protocol v1: read-only contract (non-2xx is an error, JSON only).
     Event protocol v2: adds ``accept`` ("json" | "pdf"); a provider 4xx/5xx comes back as
     ``success=True`` with ``provider_error`` so the caller can show Walmart's reason.
+    Event protocol v3: the event carries the signed contract itself. The executor verifies
+    the signature (``verifier``), rebuilds the operation from the contract, re-validates
+    the request with the same contract code, and applies a per-store risk ceiling
+    (``max_risk``: "read" rejects every mutating contract) instead of per-key allowlists.
     """
 
     def __init__(
@@ -50,11 +58,17 @@ class WalmartCloudExecutor:
         store_allowlist: frozenset[str],
         policy: CallPolicy,
         transport: CloudTransport,
+        verifier: ContractVerifier | None = None,
+        max_risk: str = "read",
     ) -> None:
+        if max_risk not in RISK_LEVELS:
+            raise ContractError("WALMART_RISK_CEILING_INVALID")
         self._registry = registry
         self._stores = store_allowlist
         self._policy = policy
         self._transport = transport
+        self._verifier = verifier
+        self._max_risk = max_risk
 
     def handle(self, event: object) -> dict[str, Any]:
         try:
@@ -67,6 +81,8 @@ class WalmartCloudExecutor:
     def _handle_approved(self, event: object) -> dict[str, Any]:
         if not isinstance(event, dict):
             raise ContractError("WALMART_EVENT_INVALID")
+        if event.get("version") == 3:
+            return self._handle_signed(event)
         allowed_fields = {
             "version",
             "operation",
@@ -146,4 +162,80 @@ class WalmartCloudExecutor:
             "store_code": store,
             "api_key": key,
             "data": data,
+        }
+
+    # ----- protocol v3 -------------------------------------------------------------
+
+    def _handle_signed(self, event: dict[str, Any]) -> dict[str, Any]:
+        allowed_fields = {
+            "version",
+            "operation",
+            "store_code",
+            "contract",
+            "method",
+            "path",
+            "query",
+            "body",
+            "accept",
+            "approval_ref",
+            "actor",
+            "auth",
+        }
+        if set(event) - allowed_fields or event.get("operation") != "marketplace_call":
+            raise ContractError("WALMART_EVENT_INVALID")
+        if self._verifier is None:
+            raise ContractError("WALMART_PROTOCOL_NOT_ENABLED")
+        store = event.get("store_code")
+        if not isinstance(store, str) or store not in self._stores:
+            raise ContractError("WALMART_STORE_NOT_AUTHORIZED")
+        actor = event.get("actor")
+        if (
+            not isinstance(actor, dict)
+            or set(actor) != {"kind", "uid"}
+            or actor["kind"] not in _ACTOR_KINDS
+            or not isinstance(actor["uid"], str)
+            or not 1 <= len(actor["uid"]) <= 128
+        ):
+            raise ContractError("WALMART_ACTOR_INVALID")
+        accept = event.get("accept", "json")
+        if accept not in ("json", "pdf"):
+            raise ContractError("WALMART_EVENT_INVALID")
+        # Signature, freshness, store, contract shape and request hash.
+        operation, contract_hash = self._verifier.verify(event)
+        registry = ContractRegistry((operation,))
+        request = registry.prepare(
+            operation.key, params=event.get("query"), body=event.get("body"), allow_writes=True
+        )
+        if request.method != event.get("method") or request.path != event.get("path"):
+            raise ContractError("WALMART_OPERATION_MISMATCH")
+        if accept != request.response_kind:
+            raise ContractError("WALMART_OPERATION_MISMATCH")
+        approval = event.get("approval_ref")
+        if request.is_write:
+            if self._max_risk != "write":
+                raise ContractError("WALMART_RISK_CEILING_DENIED")
+            if not approval:
+                raise ContractError("WALMART_WRITE_APPROVAL_REQUIRED")
+        status, data = self._transport.execute(store_code=store, request=request)
+        if type(status) is not int or not 100 <= status <= 599:
+            raise ContractError("WALMART_PROVIDER_ERROR")
+        if _contains_secret_key(data):
+            raise ContractError("WALMART_PROVIDER_SENSITIVE_RESPONSE")
+        try:
+            serialized = json.dumps(data, separators=(",", ":"))
+        except (TypeError, ValueError):
+            raise ContractError("WALMART_PROVIDER_RESPONSE_INVALID") from None
+        if len(serialized.encode("utf-8")) > MAX_RESULT_BYTES_V2:
+            raise ContractError("WALMART_PROVIDER_RESPONSE_TOO_LARGE")
+        provider_ok = 200 <= status < 300
+        return {
+            "success": True,
+            "protocol": 3,
+            "status_code": status,
+            "store_code": store,
+            "api_key": operation.key,
+            "contract_sha256": contract_hash,
+            "registry_version": str(event["contract"].get("registry_version", "")),
+            "data": data if provider_ok else None,
+            "provider_error": None if provider_ok else data,
         }

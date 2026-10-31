@@ -6,10 +6,11 @@ authorize the caller, store, endpoint, and any write approval.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from typing import Any
 from urllib.parse import quote
@@ -22,6 +23,11 @@ _RESTRICTED = frozenset({"authorization", "wm_sec.access_token", "host", "cookie
 _SUPPORTED_BODY_TYPES = frozenset(
     {"application/json", "application/xml", "text/xml", "application/x-www-form-urlencoded"}
 )
+_PERMISSION = re.compile(r"^action:walmart:[a-z0-9:_-]{1,96}$")
+_FAMILY = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+_LOCATIONS = frozenset({"path", "query"})
+_KINDS = frozenset({"string", "integer", "number", "boolean", "array", "object", "null", "union"})
+MAX_CONTRACT_DICT_BYTES = 256 * 1024
 
 
 class ContractError(ValueError):
@@ -57,10 +63,18 @@ class Operation:
     mutating: bool | None = None
     # "json" (default) or "pdf": how the provider answers a successful call.
     response_kind: str = "json"
+    # Catalog family (wfs, feeds, ...) and the SZZSBJ business permission a caller needs.
+    # Both are filled by the unified registry; the cloud verifier treats them as data.
+    family: str = ""
+    permission: str | None = None
 
     @property
     def is_write(self) -> bool:
         return self.method != "GET" if self.mutating is None else self.mutating
+
+    @property
+    def risk(self) -> str:
+        return "write" if self.is_write else "read"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +87,149 @@ class PreparedRequest:
     is_write: bool
     content_type: str = "application/json"
     response_kind: str = "json"
+    # Protocol v3: the signed contract this request was prepared from (see contract_dict).
+    contract: Mapping[str, Any] | None = None
+
+
+def canonical_json(value: Any) -> bytes:
+    """Deterministic UTF-8 JSON used for hashing and signing on both sides."""
+    try:
+        return json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        raise ContractError("WALMART_CANONICAL_JSON_INVALID") from None
+
+
+def sha256_hex(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value)).hexdigest()
+
+
+def _field_dict(field: Field) -> dict[str, Any]:
+    return {
+        "name": field.name,
+        "location": field.location,
+        "required": field.required,
+        "kind": field.kind,
+        "enum": list(field.enum),
+        "maximum": field.maximum,
+        "schema": field.schema,
+        "style": field.style,
+        "explode": field.explode,
+    }
+
+
+def contract_dict(operation: Operation, *, registry_version: str = "") -> dict[str, Any]:
+    """Serialize an operation into the data the cloud side re-validates and executes."""
+    return {
+        "key": operation.key,
+        "method": operation.method,
+        "path": operation.path,
+        "fields": [_field_dict(field) for field in operation.fields],
+        "has_body": operation.has_body,
+        "body_required": operation.body_required,
+        "request_content_type": operation.request_content_type,
+        "request_schema": operation.request_schema,
+        "media_supported": operation.media_supported,
+        "mutating": operation.is_write,
+        "response_kind": operation.response_kind,
+        "source": operation.source,
+        "family": operation.family,
+        "permission": operation.permission,
+        "registry_version": registry_version,
+    }
+
+
+def _expect(condition: bool) -> None:
+    if not condition:
+        raise ContractError("WALMART_CONTRACT_INVALID")
+
+
+def operation_from_contract(contract: Any) -> Operation:
+    """Rebuild an Operation from a (verified) contract dict; every shape is checked."""
+    _expect(isinstance(contract, Mapping))
+    _expect(len(canonical_json(contract)) <= MAX_CONTRACT_DICT_BYTES)
+    allowed = {
+        "key",
+        "method",
+        "path",
+        "fields",
+        "has_body",
+        "body_required",
+        "request_content_type",
+        "request_schema",
+        "media_supported",
+        "mutating",
+        "response_kind",
+        "source",
+        "family",
+        "permission",
+        "registry_version",
+    }
+    _expect(set(contract) == allowed)
+    key, method, path = contract["key"], contract["method"], contract["path"]
+    _expect(isinstance(key, str) and bool(_IDENTIFIER.fullmatch(key)))
+    _expect(method in {"GET", "POST", "PUT", "PATCH", "DELETE"})
+    _expect(isinstance(path, str) and _path_valid(path))
+    raw_fields = contract["fields"]
+    _expect(isinstance(raw_fields, list) and len(raw_fields) <= 80)
+    fields: list[Field] = []
+    for raw in raw_fields:
+        _expect(isinstance(raw, Mapping) and set(raw) == set(_field_dict(Field("x", "query"))))
+        _expect(isinstance(raw["name"], str) and 1 <= len(raw["name"]) <= 128)
+        _expect(raw["name"].lower() not in _RESTRICTED)
+        _expect(raw["location"] in _LOCATIONS and raw["kind"] in _KINDS)
+        _expect(type(raw["required"]) is bool and type(raw["explode"]) is bool)
+        _expect(isinstance(raw["style"], str) and len(raw["style"]) <= 16)
+        _expect(isinstance(raw["enum"], list) and all(isinstance(x, str) for x in raw["enum"]))
+        _expect(raw["maximum"] is None or type(raw["maximum"]) is int)
+        _expect(raw["schema"] is None or isinstance(raw["schema"], Mapping))
+        fields.append(
+            Field(
+                name=raw["name"],
+                location=raw["location"],
+                required=raw["required"],
+                kind=raw["kind"],
+                enum=tuple(raw["enum"]),
+                maximum=raw["maximum"],
+                schema=raw["schema"],
+                style=raw["style"],
+                explode=raw["explode"],
+            )
+        )
+    for name in ("has_body", "body_required", "media_supported", "mutating"):
+        _expect(type(contract[name]) is bool)
+    _expect(contract["request_content_type"] in _SUPPORTED_BODY_TYPES | {"multipart/form-data"})
+    _expect(contract["request_schema"] is None or isinstance(contract["request_schema"], Mapping))
+    _expect(contract["response_kind"] in {"json", "pdf"})
+    for name in ("source", "family", "registry_version"):
+        _expect(isinstance(contract[name], str) and len(contract[name]) <= 128)
+    _expect(contract["family"] == "" or bool(_FAMILY.fullmatch(contract["family"])))
+    permission = contract["permission"]
+    _expect(permission is None or isinstance(permission, str) and _PERMISSION.fullmatch(permission))
+    return Operation(
+        key=key,
+        method=method,
+        path=path,
+        fields=tuple(fields),
+        has_body=contract["has_body"],
+        source=contract["source"],
+        enabled=True,
+        request_schema=contract["request_schema"],
+        request_content_type=contract["request_content_type"],
+        body_required=contract["body_required"],
+        media_supported=contract["media_supported"],
+        mutating=contract["mutating"],
+        response_kind=contract["response_kind"],
+        family=contract["family"],
+        permission=permission,
+    )
+
+
+def with_authorization(operation: Operation, *, family: str, permission: str) -> Operation:
+    if not _FAMILY.fullmatch(family) or not _PERMISSION.fullmatch(permission):
+        raise ContractError("WALMART_CONTRACT_INVALID")
+    return replace(operation, family=family, permission=permission)
 
 
 def _path_valid(path: str) -> bool:
@@ -234,6 +391,7 @@ def _validate_field(field: Field, value: Any) -> Any:
 class ContractRegistry:
     def __init__(self, operations: tuple[Operation, ...]) -> None:
         self._operations: dict[str, Operation] = {}
+        self._version: str | None = None
         for operation in operations:
             if (
                 not _IDENTIFIER.fullmatch(operation.key)
@@ -254,6 +412,16 @@ class ContractRegistry:
 
     def keys(self) -> tuple[str, ...]:
         return tuple(sorted(self._operations))
+
+    def version(self) -> str:
+        """16 hex chars over every contract (sorted by key); changes whenever a contract does."""
+        if self._version is None:
+            digest = hashlib.sha256()
+            for key in self.keys():
+                digest.update(canonical_json(contract_dict(self._operations[key])))
+                digest.update(b"\n")
+            self._version = digest.hexdigest()[:16]
+        return self._version
 
     def get(self, key: str) -> Operation:
         try:
@@ -330,6 +498,7 @@ class ContractRegistry:
             is_write=operation.is_write,
             content_type=operation.request_content_type,
             response_kind=operation.response_kind,
+            contract=contract_dict(operation, registry_version=self.version()),
         )
 
     @classmethod
