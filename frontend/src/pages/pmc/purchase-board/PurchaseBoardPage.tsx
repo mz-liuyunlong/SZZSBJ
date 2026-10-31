@@ -157,10 +157,13 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
   };
 
   const listErrorText = listQuery.error ? purchaseBoardErrorText(listQuery.error) : undefined;
+  const overduePlans = summaryQuery.data?.purchaseOverduePlans ?? 0;
   const emptyText = listErrorText
-    ?? (filters.keyword || filters.batchValues?.length
-      ? "当前搜索条件下没有匹配的采购单明细。"
-      : "当前筛选下没有采购单明细；若刚接入，请等待 DWS 刷新完成。");
+    ?? (activeCard === "purchase_overdue"
+      ? `没有超时的待下单采购单；${overduePlans} 条已审批未转单的计划不进主表，见右上角「待采购计划」（已为你打开，仅看超时）。`
+      : filters.keyword || filters.batchValues?.length
+        ? "当前搜索条件下没有匹配的采购单明细。"
+        : "当前筛选下没有采购单明细；若刚接入，请等待 DWS 刷新完成。");
 
   return (
     <PageShell
@@ -201,9 +204,17 @@ function PurchaseBoardPage({ page, preferenceScope = "anonymous" }: PurchaseBoar
             summary={summaryQuery.data}
             activeKey={activeCard}
             onCardClick={(key) => {
-              setActiveCard(activeCard === key ? undefined : key);
+              const turningOn = activeCard !== key;
+              setActiveCard(turningOn ? key : undefined);
               setCurrentPage(1);
               setCardRequest((current) => current + 1);
+              if (key === "purchase_overdue" && turningOn) {
+                // The card counts S2-overdue orders *and* approved-but-unconverted plans;
+                // the latter never appear in the main table, so open their drill-down.
+                setPendingOverdueOnly(true);
+                setPendingPage(1);
+                setPendingOpen(true);
+              }
             }}
           />
 
