@@ -21,6 +21,8 @@ from app.core.auth import Principal
 from app.core.permissions import require_any_permission, require_permission
 from app.db.session import get_db_session
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.new_product_workflow.metrics import read_sku_metrics
+from app.modules.new_product_workflow.rules import DEFAULT_RULES
 
 VIEW = "page:products:new-product-analysis:view"
 TRACK_VIEW = "page:products:launch-tracking:view"
@@ -344,6 +346,35 @@ def get_workflow(
 ) -> SuccessEnvelope[dict[str, Any], None]:
     identity = _identity(session, sku_id, accounts)
     return success_response(request, data={**identity, **_state(session, sku_id, lock=False)})
+
+
+@router.get("/workflows/{sku_id}/metrics", response_model=SuccessEnvelope[dict[str, Any], None])
+def get_workflow_metrics(
+    request: Request,
+    sku_id: UUID,
+    session: db_session,
+    _: view_principal,
+    accounts: account_scope,
+) -> SuccessEnvelope[dict[str, Any], None]:
+    identity = _identity(session, sku_id, accounts)
+    sku = identity["lingxing_sku_code"]
+    if not sku:
+        _block(422)
+    state = _state(session, sku_id, lock=False)
+    rule = session.execute(
+        text("SELECT version, rule_json FROM product_new_rule_versions ORDER BY version DESC LIMIT 1")
+    ).mappings().first()
+    return success_response(
+        request,
+        data=read_sku_metrics(
+            session,
+            account=identity["source_account_ref"],
+            sku=sku,
+            market_score=state["market_score"],
+            rule_version=int(rule["version"]) if rule else 0,
+            rules=dict(rule["rule_json"]) if rule else DEFAULT_RULES,
+        ),
+    )
 
 
 @router.post(
