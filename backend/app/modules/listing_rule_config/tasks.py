@@ -62,17 +62,26 @@ def scheduler_tick() -> None:
             if not rule_is_due(row, now):
                 return
             existing_run = session.scalar(
-                select(ListingEvaluationRun).where(
-                    ListingEvaluationRun.schedule_date_cn == local.date()
-                )
+                select(ListingEvaluationRun)
+                .where(ListingEvaluationRun.schedule_date_cn == local.date())
+                .order_by(ListingEvaluationRun.attempt_count.desc())
+                .limit(1)
             )
-            if existing_run is not None and existing_run.status in {
-                "queued",
-                "running",
-                "succeeded",
-                "partial",
-            }:
+            if existing_run is not None and existing_run.status == "succeeded":
                 return
+            if existing_run is not None and existing_run.status in {"queued", "running"}:
+                # The advisory lock is held for the entire run. Reaching this
+                # point with an old in-progress row means its process exited.
+                # Keep its snapshots and record an explicit failed attempt.
+                if (
+                    existing_run.last_dispatch_at is None
+                    or existing_run.last_dispatch_at > now - timedelta(minutes=15)
+                ):
+                    return
+                existing_run.status = "failed"
+                existing_run.error_code = "LISTING_EVALUATION_INTERRUPTED"
+                existing_run.finished_at = now
+                session.commit()
             if existing_run is not None:
                 if existing_run.attempt_count >= 3:
                     return
@@ -81,7 +90,7 @@ def scheduler_tick() -> None:
                     and existing_run.last_dispatch_at > now - timedelta(minutes=15)
                 ):
                     return
-            # The run has a unique China date; failed attempts are rate-limited.
+            # Each failed/partial attempt is retained; retries are rate-limited.
             ListingEvaluationBatchService(session).run_daily_diagnostic(
                 schedule_date_cn=local.date(),
                 cutoff_date_la=rating_cutoff_la(now),

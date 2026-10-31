@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,63 +37,50 @@ class ListingEvaluationBatchService:
         cutoff_date_la: date,
         batch_size: int = 50,
     ) -> UUID:
-        """Create/reuse one run per China date and persist unpublished snapshots."""
+        """Create a fresh attempt after a failed/partial run, preserving prior snapshots."""
         if not 1 <= batch_size <= 200:
             raise ValueError("batch_size must be between 1 and 200")
         existing = self.session.scalar(
-            select(ListingEvaluationRun).where(
-                ListingEvaluationRun.schedule_date_cn == schedule_date_cn
-            )
+            select(ListingEvaluationRun)
+            .where(ListingEvaluationRun.schedule_date_cn == schedule_date_cn)
+            .order_by(ListingEvaluationRun.attempt_count.desc())
+            .limit(1)
         )
-        if existing is not None and existing.status in {"succeeded", "partial"}:
+        if existing is not None and existing.status in {"queued", "running", "succeeded"}:
             return existing.id
-        retry_existing = existing is not None
-        if existing is None:
-            selected_rule = self._latest_effective_rule()
-            latest_rule_version = selected_rule.version if selected_rule is not None else 0
-            total = (
-                self.session.scalar(select(func.count()).select_from(ListingManagementCurrentMart))
-                or 0
+        selected_rule = self._latest_effective_rule() if existing is None else None
+        total = (
+            self.session.scalar(select(func.count()).select_from(ListingManagementCurrentMart)) or 0
+        )
+        run = ListingEvaluationRun(
+            schedule_date_cn=schedule_date_cn,
+            cutoff_date_la=cutoff_date_la,
+            status="queued",
+            rule_version=(
+                existing.rule_version
+                if existing is not None
+                else selected_rule.version
+                if selected_rule is not None
+                else 0
+            ),
+            total_listings=total,
+            attempt_count=(existing.attempt_count + 1 if existing is not None else 1),
+            last_dispatch_at=datetime.now(UTC),
+        )
+        self.session.add(run)
+        try:
+            self.session.commit()
+        except IntegrityError:
+            self.session.rollback()
+            concurrent = self.session.scalar(
+                select(ListingEvaluationRun)
+                .where(ListingEvaluationRun.schedule_date_cn == schedule_date_cn)
+                .order_by(ListingEvaluationRun.attempt_count.desc())
+                .limit(1)
             )
-            run = ListingEvaluationRun(
-                schedule_date_cn=schedule_date_cn,
-                cutoff_date_la=cutoff_date_la,
-                status="queued",
-                rule_version=latest_rule_version,
-                total_listings=total,
-                attempt_count=1,
-                last_dispatch_at=datetime.now(UTC),
-            )
-            self.session.add(run)
-            try:
-                self.session.commit()
-            except IntegrityError:
-                self.session.rollback()
-                existing = self.session.scalar(
-                    select(ListingEvaluationRun).where(
-                        ListingEvaluationRun.schedule_date_cn == schedule_date_cn
-                    )
-                )
-                if existing is None:
-                    raise
-                if existing.status in {"succeeded", "partial"}:
-                    return existing.id
-                run = existing
-                retry_existing = True
-        else:
-            run = existing
-            run.attempt_count += 1
-            run.last_dispatch_at = datetime.now(UTC)
-            run.error_code = None
-
-        if retry_existing:
-            self.session.execute(
-                delete(ListingEvaluationSnapshot).where(ListingEvaluationSnapshot.run_id == run.id)
-            )
-            run.processed_listings = 0
-            run.grade_candidate_count = 0
-            run.lifecycle_candidate_count = 0
-            run.blocked_count = 0
+            if concurrent is None or concurrent.attempt_count < run.attempt_count:
+                raise
+            return concurrent.id
         run.status = "running"
         run.started_at = datetime.now(UTC)
         self.session.commit()

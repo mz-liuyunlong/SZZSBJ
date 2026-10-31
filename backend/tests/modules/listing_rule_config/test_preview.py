@@ -1,12 +1,13 @@
 """Safety checks for the provisional financial and stockout candidates."""
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 
 from app.modules.listing_rule_config.preview import (
+    archive_has_post_cutoff_event,
     basic_financial_candidate,
     lifecycle_allows_grade,
     stockout_candidate,
@@ -125,3 +126,16 @@ def test_low_positive_stock_does_not_qualify_as_stockout() -> None:
         currently_archived=False,
     )
     assert (stage, observed, zero_days) == (None, 7, 0)
+
+
+def test_restore_after_historical_cutoff_requires_archive_evidence() -> None:
+    cutoff = date(2026, 1, 15)
+    archived_at = datetime(2026, 1, 14, 8, tzinfo=UTC)
+    restored_at = datetime(2026, 1, 17, 8, tzinfo=UTC)
+
+    assert archive_has_post_cutoff_event(
+        archived_at=archived_at, restored_at=restored_at, cutoff=cutoff
+    )
+    assert not archive_has_post_cutoff_event(
+        archived_at=archived_at, restored_at=None, cutoff=cutoff
+    )

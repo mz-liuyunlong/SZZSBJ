@@ -17,13 +17,15 @@ interface CapturedTableProps {
   columns: Array<{
     key?: string;
     fixed?: "left" | "right" | boolean;
-    sorter?: (left: ListingManagementRow, right: ListingManagementRow) => number;
+    sorter?: boolean;
+    render?: (_: unknown, row: ListingManagementRow) => ReactNode;
   }>;
   pagination: { pageSizeOptions: string[] };
   scroll?: { x?: number; y?: number | string };
   virtual?: boolean;
   listItemHeight?: number;
   rowSelection?: { fixed?: boolean };
+  onChange?: (_pagination: unknown, _filters: unknown, sorter: { columnKey: string; order: "ascend" | "descend" | null }) => void;
   summary?: () => ReactNode;
 }
 
@@ -85,8 +87,11 @@ afterEach(() => {
 });
 
 describe("ListingManagementPage acceptance contract", () => {
-  it("shows listing start values from MART only and never falls back to raw source dates", () => {
+  it("shows the raw Listing date only when normalized time is missing", () => {
     expect(toListingStartText("2026-09-08T16:31:47Z")).toBe("2026-09-08");
+    expect(toListingStartText(null, "2026-09-08 09:31:47")).toBe("2026-09-08");
+    expect(toListingStartText(null, "2026-09-08")).toBe("2026-09-08");
+    expect(toListingStartText(null, "unverified")).toBe("unverified");
     expect(toListingStartText(null)).toBe("");
   });
 
@@ -126,8 +131,9 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(onCardClick).toHaveBeenCalledWith("online");
   });
 
-  it("uses Ant table sorters without changing pagination options", () => {
+  it("requests remote sorting without sorting only the loaded page", () => {
     const rows = listingManagementMockData.slice(0, 2);
+    const onSortChange = vi.fn();
     render(
       <ListingManagementTable
         rows={rows}
@@ -141,6 +147,7 @@ describe("ListingManagementPage acceptance contract", () => {
         onCurrentPageChange={() => undefined}
         onPageSizeChange={() => undefined}
         onSelectionChange={() => undefined}
+        onSortChange={onSortChange}
         onOpenDetail={() => undefined}
         onBatchSetTags={() => undefined}
         onBulkExport={() => undefined}
@@ -151,15 +158,47 @@ describe("ListingManagementPage acceptance contract", () => {
     const skuSorter = sorterFor("skuMsku");
     const priceSorter = sorterFor("salePrice");
     const dateSorter = sorterFor("checkedAt");
-    expect(skuSorter).toBeTypeOf("function");
-    expect(priceSorter).toBeTypeOf("function");
-    expect(dateSorter).toBeTypeOf("function");
-    expect(skuSorter?.(rows[0], rows[1])).toBeLessThan(0);
-    expect(priceSorter?.(rows[0], rows[1])).toBeLessThan(0);
-    expect(dateSorter?.(rows[0], rows[1])).toBeLessThan(0);
+    expect(skuSorter).toBe(true);
+    expect(priceSorter).toBe(true);
+    expect(dateSorter).toBe(true);
+    capturedTableProps?.onChange?.({}, {}, { columnKey: "salePrice", order: "descend" });
+    expect(onSortChange).toHaveBeenCalledWith("salePrice", "desc");
 
     expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
       .map((option) => option.textContent)).toEqual(["50", "100", "200", "500", "1000"]);
+  });
+
+  it("does not invent USD when a Listing price has no currency evidence", () => {
+    render(
+      <ListingManagementTable
+        rows={listingManagementMockData.slice(0, 1)}
+        total={1}
+        appliedColumnKeys={["listPrice", "salePrice"]}
+        columnWidths={{}}
+        currentPage={1}
+        pageSize={50}
+        selectedRowKeys={[]}
+        onColumnWidthChange={() => undefined}
+        onCurrentPageChange={() => undefined}
+        onPageSizeChange={() => undefined}
+        onSelectionChange={() => undefined}
+        onOpenDetail={() => undefined}
+        onBatchSetTags={() => undefined}
+        onBulkExport={() => undefined}
+      />,
+    );
+    const row = {
+      ...listingManagementMockData[0],
+      listPriceKnown: true,
+      salePriceKnown: true,
+      listPriceCurrency: "",
+      salePriceCurrency: "",
+    };
+    for (const key of ["listPrice", "salePrice"]) {
+      const value = capturedTableProps?.columns.find((column) => column.key === key)?.render?.(null, row);
+      expect(value).toContain("币种未知");
+      expect(value).not.toContain("USD");
+    }
   });
 
   it("keeps pinned columns, sorting, selection and actions at 1000 rows with virtual scroll", () => {
@@ -190,7 +229,7 @@ describe("ListingManagementPage acceptance contract", () => {
     expect(capturedTableProps?.rowSelection?.fixed).toBe(true);
     expect(capturedTableProps?.columns.find((col) => col.key === "productIdName")?.fixed).toBe("left");
     expect(capturedTableProps?.columns.find((col) => col.key === "actions")?.fixed).toBe("right");
-    expect(typeof capturedTableProps?.columns.find((col) => col.key === "skuMsku")?.sorter).toBe("function");
+    expect(capturedTableProps?.columns.find((col) => col.key === "skuMsku")?.sorter).toBe(true);
     expect(Array.from(screen.getByLabelText("每页条数").querySelectorAll("option"))
       .map((option) => option.textContent)).toEqual(["50", "100", "200", "500", "1000"]);
   });

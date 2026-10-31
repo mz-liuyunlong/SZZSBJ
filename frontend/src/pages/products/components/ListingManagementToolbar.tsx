@@ -56,6 +56,7 @@ const normalizeSelected = (values?: string[], legacyValue?: string) => (
 const archiveStatusOptions: ReportFilterOption[] = [
   { value: "active", label: "未归档" },
   { value: "archived", label: "已归档" },
+  { value: "unknown", label: "状态未确认" },
 ];
 
 const listingStatusOptions: ReportFilterOption[] = [

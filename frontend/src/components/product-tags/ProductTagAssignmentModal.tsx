@@ -30,6 +30,23 @@ function ProductTagAssignmentModal({
       : [...current, tagName]);
   };
 
+  const confirmAssignment = () => {
+    if (mode === "append") {
+      onConfirm(value, mode);
+      return;
+    }
+    Modal.confirm({
+      title: mode === "replace" ? "确认替换标签" : "确认移除标签",
+      content: mode === "replace" && value.length === 0
+        ? `即将清空已选 ${selectedProductCount} 条 Listing 的全部自定义标签。`
+        : `即将对已选 ${selectedProductCount} 条 Listing ${mode === "replace" ? "替换为" : "移除"} ${value.length} 个标签。`,
+      okText: "确认执行",
+      okType: "danger",
+      cancelText: "返回检查",
+      onOk: () => onConfirm(value, mode),
+    });
+  };
+
   return (
     <Modal
       rootClassName="product-tag-assignment-modal"
@@ -55,7 +72,7 @@ function ProductTagAssignmentModal({
             <Button
               type="primary"
               disabled={loading || selectedProductCount === 0 || (value.length === 0 && mode !== "replace")}
-              onClick={() => onConfirm(value, mode)}
+              onClick={confirmAssignment}
             >
               确定
             </Button>

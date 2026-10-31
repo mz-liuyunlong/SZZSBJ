@@ -188,7 +188,7 @@ function ListingManagementTable({
       title: title("productIdName", fieldTitle.productIdName ?? "商品ID/品名"),
       width: columnWidths.productIdName,
       fixed: "left",
-      sorter: (a, b) => a.productId.localeCompare(b.productId),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <ProductIdentityCell
@@ -202,10 +202,7 @@ function ListingManagementTable({
       title: title("skuMsku", fieldTitle.skuMsku ?? "SKU/MSKU"),
       width: columnWidths.skuMsku,
       fixed: "left",
-      sorter: (a, b) => (
-        a.sku.localeCompare(b.sku)
-        || a.msku.localeCompare(b.msku)
-      ),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <SkuMskuIdentityCell
@@ -220,7 +217,7 @@ function ListingManagementTable({
       title: title("msku", fieldTitle.msku),
       width: columnWidths.msku,
       fixed: "left",
-      sorter: (a, b) => a.msku.localeCompare(b.msku),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -237,7 +234,7 @@ function ListingManagementTable({
       title: title("productId", fieldTitle.productId),
       width: columnWidths.productId,
       fixed: "left",
-      sorter: (a, b) => a.productId.localeCompare(b.productId),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -265,7 +262,7 @@ function ListingManagementTable({
       dataIndex: "sku",
       title: title("sku", fieldTitle.sku),
       width: columnWidths.sku,
-      sorter: (a, b) => a.sku.localeCompare(b.sku),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -280,7 +277,7 @@ function ListingManagementTable({
       title: title("productName", fieldTitle.productName),
       width: columnWidths.productName,
       ellipsis: true,
-      sorter: (a, b) => a.productName.localeCompare(b.productName),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <CopyableTextCell
@@ -311,18 +308,18 @@ function ListingManagementTable({
       dataIndex: "listPrice",
       title: title("listPrice", fieldTitle.listPrice),
       width: columnWidths.listPrice,
-      sorter: (a, b) => a.listPrice - b.listPrice,
+      sorter: true,
       onHeaderCell: headerCell,
-      render: (_, row) => row.listPriceKnown === false ? "-" : `${row.listPriceCurrency || "USD"} ${row.listPrice.toFixed(2)}`,
+      render: (_, row) => row.listPriceKnown === false ? "-" : `${row.listPriceCurrency || "币种未知"} ${row.listPrice.toFixed(2)}`,
     },
     salePrice: {
       key: "salePrice",
       dataIndex: "salePrice",
       title: title("salePrice", fieldTitle.salePrice),
       width: columnWidths.salePrice,
-      sorter: (a, b) => a.salePrice - b.salePrice,
+      sorter: true,
       onHeaderCell: headerCell,
-      render: (_, row) => row.salePriceKnown === false ? "-" : `${row.salePriceCurrency || "USD"} ${row.salePrice.toFixed(2)}`,
+      render: (_, row) => row.salePriceKnown === false ? "-" : `${row.salePriceCurrency || "币种未知"} ${row.salePrice.toFixed(2)}`,
     },
     productStatus: {
       key: "productStatus",
@@ -369,7 +366,7 @@ function ListingManagementTable({
       dataIndex: "listedAt",
       title: title("listedAt", fieldTitle.listedAt),
       width: columnWidths.listedAt,
-      sorter: (a, b) => a.listedAt.localeCompare(b.listedAt),
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => (
         <Tooltip title={`日期来源：${row.listingDateSource || "未知"}${row.listingStartRaw ? `；ERP原始值：${row.listingStartRaw}` : ""}`}>
@@ -397,7 +394,7 @@ function ListingManagementTable({
       dataIndex: "wfsAvailableInventory",
       title: title("wfsAvailableInventory", fieldTitle.wfsAvailableInventory),
       width: columnWidths.wfsAvailableInventory,
-      sorter: (a, b) => a.wfsAvailableInventory - b.wfsAvailableInventory,
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => row.wfsAvailableInventoryKnown === false ? "未同步" : row.wfsAvailableInventory,
     },
@@ -406,7 +403,7 @@ function ListingManagementTable({
       dataIndex: "inboundInventory",
       title: title("inboundInventory", fieldTitle.inboundInventory),
       width: columnWidths.inboundInventory,
-      sorter: (a, b) => a.inboundInventory - b.inboundInventory,
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => row.inboundInventoryKnown === false ? "未同步" : row.inboundInventory,
     },
@@ -415,7 +412,7 @@ function ListingManagementTable({
       dataIndex: "sales30Days",
       title: title("sales30Days", fieldTitle.sales30Days),
       width: columnWidths.sales30Days,
-      sorter: (a, b) => a.sales30Days - b.sales30Days,
+      sorter: true,
       onHeaderCell: headerCell,
     },
     adSpend30Days: {
@@ -423,7 +420,7 @@ function ListingManagementTable({
       dataIndex: "adSpend30Days",
       title: title("adSpend30Days", fieldTitle.adSpend30Days),
       width: columnWidths.adSpend30Days,
-      sorter: (a, b) => a.adSpend30Days - b.adSpend30Days,
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => row.adSpend30DaysKnown === false ? "未同步" : `${row.adSpend30Days.toFixed(2)}`,
     },
@@ -471,7 +468,7 @@ function ListingManagementTable({
       dataIndex: "checkedAt",
       title: title("checkedAt", fieldTitle.checkedAt),
       width: columnWidths.checkedAt,
-      sorter: (a, b) => a.checkedAt.localeCompare(b.checkedAt),
+      sorter: true,
       onHeaderCell: headerCell,
     },
     dataUpdatedAt: {
@@ -527,7 +524,7 @@ function ListingManagementTable({
       dataIndex: "rating",
       title: title("rating", fieldTitle.rating),
       width: columnWidths.rating,
-      sorter: (a, b) => a.rating - b.rating,
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => row.ratingKnown === false ? "无评分" : row.rating,
     },
@@ -536,7 +533,7 @@ function ListingManagementTable({
       dataIndex: "reviewCount",
       title: title("reviewCount", fieldTitle.reviewCount),
       width: columnWidths.reviewCount,
-      sorter: (a, b) => a.reviewCount - b.reviewCount,
+      sorter: true,
       onHeaderCell: headerCell,
       render: (_, row) => row.reviewCountKnown === false ? "未同步" : row.reviewCount,
     },
@@ -555,7 +552,7 @@ function ListingManagementTable({
       onHeaderCell: headerCell,
       render: (_, row) => (
         <Space size={4} wrap>
-          {row.tags.map((tag) => <Tag key={tag} color={tagColors[tag] || "blue"}>{tag}</Tag>)}
+          {row.tags.map((tag) => <Tag key={tag} color={tagColors[`${row.sourceAccountRef}:${tag}`] || "blue"}>{tag}</Tag>)}
         </Space>
       ),
     },

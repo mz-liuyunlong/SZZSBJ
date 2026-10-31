@@ -83,6 +83,12 @@ _RULES: tuple[RequestPermissionRule, ...] = (
     ),
     RequestPermissionRule(
         "POST",
+        "/api/listings/walmart/export/search",
+        "action:products:listing-management:export",
+        True,
+    ),
+    RequestPermissionRule(
+        "POST",
         "/api/listings/tags/batch-set",
         "action:products:listing-management:manage-tags",
         True,

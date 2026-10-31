@@ -159,6 +159,16 @@ def stockout_candidate(
     return candidate, observed, low
 
 
+def archive_has_post_cutoff_event(
+    *, archived_at: datetime | None, restored_at: datetime | None, cutoff: date
+) -> bool:
+    """Current archive state cannot prove a historical cutoff after a later transition."""
+    return any(
+        timestamp is not None and timestamp.astimezone(LOS_ANGELES).date() > cutoff
+        for timestamp in (archived_at, restored_at)
+    )
+
+
 class ListingEvaluationPreviewService:
     """Account-scoped, exact-identity, read-only diagnostic for one Listing."""
 
@@ -253,8 +263,11 @@ class ListingEvaluationPreviewService:
         # Current archive state is not proof of a prior historical cutoff.
         archive_event_after_cutoff = bool(
             archive is not None
-            and archive.archived_at is not None
-            and archive.archived_at.astimezone(LOS_ANGELES).date() > cutoff
+            and archive_has_post_cutoff_event(
+                archived_at=archive.archived_at,
+                restored_at=archive.restored_at,
+                cutoff=cutoff,
+            )
         )
         if archive_event_after_cutoff:
             archived = False
@@ -313,7 +326,9 @@ class ListingEvaluationPreviewService:
             sales_by_day = {row.business_date_la: row for row in sales}
             stock_by_day = {row.snapshot_date_la: row for row in stock}
             business_days = []
-            for business_date in sorted(set(sales_by_day) | set(stock_by_day) | set(monitor_by_day)):
+            for business_date in sorted(
+                set(sales_by_day) | set(stock_by_day) | set(monitor_by_day)
+            ):
                 stock_row = stock_by_day.get(business_date)
                 monitor_row = monitor_by_day.get(business_date)
                 strike_abnormal = None

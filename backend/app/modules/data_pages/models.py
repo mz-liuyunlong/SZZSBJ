@@ -10,6 +10,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -915,10 +916,23 @@ class ProductCustomTag(Base):
     __table_args__ = (
         CheckConstraint("name <> ''", name="product_custom_tag_name_not_blank"),
         CheckConstraint("color <> ''", name="product_custom_tag_color_not_blank"),
+        CheckConstraint(
+            "source_account_ref IS NULL OR source_account_ref <> ''",
+            name="ck_product_custom_tag_account_not_blank",
+        ),
+        UniqueConstraint("id", "source_account_ref", name="uq_product_custom_tag_id_account"),
+        Index(
+            "uq_product_custom_tags_account_active_name",
+            "source_account_ref",
+            text("lower(name)"),
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND source_account_ref IS NOT NULL"),
+        ),
         Index("ix_product_custom_tags_active_sort", "is_active", "sort_order", "name"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    source_account_ref: Mapped[str | None] = mapped_column(String(128))
     name: Mapped[str] = mapped_column(String(16), nullable=False)
     color: Mapped[str] = mapped_column(String(32), nullable=False)
     sort_order: Mapped[int] = mapped_column(
@@ -944,6 +958,11 @@ class ProductCustomTagAssignment(Base):
             "item_id",
             "tag_id",
             name="uq_product_custom_tag_assignment_item_tag",
+        ),
+        ForeignKeyConstraint(
+            ["tag_id", "source_account_ref"],
+            ["product_custom_tags.id", "product_custom_tags.source_account_ref"],
+            name="fk_product_custom_tag_assignment_account",
         ),
         CheckConstraint("source_account_ref <> ''", name="tag_assignment_account_not_blank"),
         CheckConstraint("item_id <> ''", name="tag_assignment_item_not_blank"),

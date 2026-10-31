@@ -99,7 +99,12 @@ def test_parser_maps_monitor_fields_without_inferring_hijack() -> None:
             "ratingSummary": {"rating": "4.6", "reviewCount": 27},
             "productBrand": "Synthetic Brand",
             "walmartCategory": {"path": [{"name": "Home"}, {"name": "Storage"}]},
-            "productImageUrls": ["https://example.invalid/one.jpg", ""],
+            "productImageUrls": [
+                "https://example.invalid/one.jpg",
+                "javascript:alert(1)",
+                "http://example.invalid/insecure.jpg",
+                "",
+            ],
         },
         target=_target(),
     )

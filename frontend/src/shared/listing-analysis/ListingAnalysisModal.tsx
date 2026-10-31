@@ -34,7 +34,7 @@ export interface VerifiedListingFacts {
   sales30Days: number | null;
   adSpend30Days: number | null;
   salePrice: number | null;
-  priceCurrency: string;
+  priceCurrency: string | undefined;
   wfsAvailableInventory: number | null;
   monitorObservedAt: string | null;
 }
@@ -45,6 +45,13 @@ interface ListingAnalysisModalProps {
   source?: ListingAnalysisSourceLike;
   verifiedListing?: VerifiedListingFacts;
   initialPanel?: ListingAnalysisPanel;
+}
+
+function isBusinessEntryPoint(
+  source: ListingAnalysisSourceLike | undefined,
+  verifiedListing: VerifiedListingFacts | undefined,
+): boolean {
+  return Boolean(source || verifiedListing || import.meta.env.PROD);
 }
 
 
@@ -654,16 +661,16 @@ export function ListingAnalysisModal({ open, onClose, source, verifiedListing, i
 
   if (!open) return null;
 
-  // Listing management has no authenticated account-scoped trend/event/keyword
-  // API yet. Never render the shared demo dataset as business facts.
-  if (verifiedListing) {
-    const verifiedFields = [
+  // Real business entry points must never present synthetic trends or events.
+  // Keep the prototype reachable only without a product in development.
+  if (isBusinessEntryPoint(source, verifiedListing)) {
+    const verifiedFields = verifiedListing ? [
       ["近30天销量", verifiedListing.sales30Days == null ? "未同步" : String(verifiedListing.sales30Days)],
       ["近30天广告费", verifiedListing.adSpend30Days == null ? "未同步" : String(verifiedListing.adSpend30Days)],
-      ["当前售价", verifiedListing.salePrice == null ? "未同步" : `${verifiedListing.priceCurrency || "USD"} ${verifiedListing.salePrice.toFixed(2)}`],
+      ["当前售价", verifiedListing.salePrice == null ? "未同步" : `${verifiedListing.priceCurrency || "币种未知"} ${verifiedListing.salePrice.toFixed(2)}`],
       ["WFS可售库存", verifiedListing.wfsAvailableInventory == null ? "未同步" : String(verifiedListing.wfsAvailableInventory)],
       ["监控采集时间", verifiedListing.monitorObservedAt || "未监控"],
-    ];
+    ] : [];
     return (
       <div className="listing-analysis-layer show entered">
         <button className="modal-mask" type="button" aria-label="关闭分析弹框" onClick={onClose} />
@@ -672,7 +679,7 @@ export function ListingAnalysisModal({ open, onClose, source, verifiedListing, i
             <div className="listing-main">
               <div className="listing-icon">LST</div>
               <div className="listing-copy">
-                <div className="listing-title">{source?.title || "Listing"} · {source?.productId || source?.sku || "未识别商品"}</div>
+                <div className="listing-title">Listing #{source?.productId || source?.sku || "未识别商品"} · {source?.title || source?.productName || source?.itemName || "商品名称未同步"}</div>
                 <div className="listing-meta">{source?.store || "店铺未识别"} · 已核实字段概览</div>
               </div>
             </div>
@@ -681,7 +688,7 @@ export function ListingAnalysisModal({ open, onClose, source, verifiedListing, i
             </div>
           </header>
           <div className="content" style={{ padding: 24 }}>
-            <p role="status">以下仅展示来自该 Listing 现有后端接口的字段；未知数据不会视为零。</p>
+            <p role="status">{verifiedListing ? "以下仅展示来自该 Listing 现有后端接口的字段；未知数据不会视为零。" : "该商品尚无经过核实的经营分析数据；不展示示例数字或模拟事件。"}</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(175px,1fr))", gap: 12 }}>
               {verifiedFields.map(([label, value]) => (
                 <div key={label} style={{ padding: 16, border: "1px solid #e5e7eb", borderRadius: 8 }}>

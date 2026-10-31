@@ -216,26 +216,32 @@ def lifecycle_listing(
         cursor -= timedelta(days=1)
     recent = [by_day.get(cutoff - timedelta(days=i)) for i in range(30)]
     valid_stock30 = sum(
-        1 for row in recent
-        if row is not None
-        and (row.wfs_qty if is_wfs else row.available_qty) is not None
+        1
+        for row in recent
+        if row is not None and (row.wfs_qty if is_wfs else row.available_qty) is not None
     )
-    valid_sales30 = sum(
-        1 for row in recent if row is not None and row.sales_qty is not None
-    )
+    valid_sales30 = sum(1 for row in recent if row is not None and row.sales_qty is not None)
     if is_wfs and (today is None or today.wfs_qty is None):
         return LifecycleResult(
             previous_stage or "待确认",
             "WFS当日库存快照缺失，不能当作零库存",
-            valid_stock30, consecutive, False,
+            valid_stock30,
+            consecutive,
+            False,
         )
     if not is_wfs and (today is None or today.sales_qty is None):
         return LifecycleResult(
             previous_stage or "待确认",
             "FBM当日经营记录缺失，不使用WFS库存推断",
-            valid_stock30, 0, False,
+            valid_stock30,
+            0,
+            False,
         )
-    if is_wfs and first_effective_stock and consecutive >= config.inventory_repair.stockout_consecutive_days:
+    if (
+        is_wfs
+        and first_effective_stock
+        and consecutive >= config.inventory_repair.stockout_consecutive_days
+    ):
         return LifecycleResult(
             "断货期", "连续WFS零库存达到断货门槛", valid_stock30, consecutive, True
         )
@@ -244,32 +250,45 @@ def lifecycle_listing(
             previous_stage = "启动期"
         else:
             return LifecycleResult(
-                "待确认", "首次阶段缺少7天经营记录或首批入库证据",
-                valid_stock30, consecutive, False,
+                "待确认",
+                "首次阶段缺少7天经营记录或首批入库证据",
+                valid_stock30,
+                consecutive,
+                False,
             )
 
     if previous_stage == "断货期":
         if not first_effective_stock or (is_wfs and today.wfs_qty == ZERO):
-            return LifecycleResult("断货期", "历史断货尚未证实恢复", valid_stock30, consecutive, False)
+            return LifecycleResult(
+                "断货期", "历史断货尚未证实恢复", valid_stock30, consecutive, False
+            )
         if stockout_days_before_recovery is None:
-            return LifecycleResult("断货期", "缺少本轮断货持续天数", valid_stock30, consecutive, False)
+            return LifecycleResult(
+                "断货期", "缺少本轮断货持续天数", valid_stock30, consecutive, False
+            )
         if stockout_days_before_recovery > config.inventory_repair.long_stockout_days:
             return LifecycleResult(
                 "修复期", "长期断货恢复，进入修复验收", valid_stock30, consecutive, True
             )
         if stockout_previous_stage is None:
-            return LifecycleResult("断货期", "缺少断货前阶段快照", valid_stock30, consecutive, False)
+            return LifecycleResult(
+                "断货期", "缺少断货前阶段快照", valid_stock30, consecutive, False
+            )
         previous_stage = stockout_previous_stage
 
     if previous_stage == "修复期":
         if repair_stock_valid_days is None and "stockout" in repair_reasons:
-            return LifecycleResult("修复期", "缺少修复累计有效有货日", valid_stock30, consecutive, False)
+            return LifecycleResult(
+                "修复期", "缺少修复累计有效有货日", valid_stock30, consecutive, False
+            )
         if "stockout" in repair_reasons and (
             repair_stock_valid_days is None
             or repair_stock_valid_days < config.inventory_repair.stockout_repair_valid_days
             or (is_wfs and today.wfs_qty == ZERO)
         ):
-            return LifecycleResult("修复期", "库存修复验收尚未完成", valid_stock30, consecutive, True)
+            return LifecycleResult(
+                "修复期", "库存修复验收尚未完成", valid_stock30, consecutive, True
+            )
         for field, reason in (("strike_price_abnormal", "划线价"), ("buybox_abnormal", "购物车")):
             if field in repair_reasons:
                 if (
@@ -287,7 +306,9 @@ def lifecycle_listing(
         ("buybox_abnormal", "购物车", config.inventory_repair.buybox_abnormal_days),
     ):
         if _streak(days, cutoff, field, True) > threshold:
-            return LifecycleResult("修复期", label + "异常持续超过门槛", valid_stock30, consecutive, True)
+            return LifecycleResult(
+                "修复期", label + "异常持续超过门槛", valid_stock30, consecutive, True
+            )
 
     # A stage cannot be inferred from a single latest sales/stock snapshot.
     recent28 = [by_day.get(cutoff - timedelta(days=i)) for i in range(27, -1, -1)]
@@ -295,25 +316,13 @@ def lifecycle_listing(
     counts = []
     means = []
     for week in weeks:
-        valid = [
-            r
-            for r in week
-            if r is not None and r.sales_qty is not None
-        ]
+        valid = [r for r in week if r is not None and r.sales_qty is not None]
         counts.append(len(valid))
         means.append(sum((r.sales_qty for r in valid), ZERO) / len(valid) if valid else ZERO)
 
     t = config.lifecycle
-    first14 = [
-        r
-        for r in recent28[:14]
-        if r is not None and r.sales_qty is not None
-    ]
-    last14 = [
-        r
-        for r in recent28[14:]
-        if r is not None and r.sales_qty is not None
-    ]
+    first14 = [r for r in recent28[:14] if r is not None and r.sales_qty is not None]
+    last14 = [r for r in recent28[14:] if r is not None and r.sales_qty is not None]
     avg1 = sum((r.sales_qty for r in first14), ZERO) / len(first14) if first14 else ZERO
     avg2 = sum((r.sales_qty for r in last14), ZERO) / len(last14) if last14 else ZERO
     valid3 = all(counts[i] >= t.min_week_valid_days for i in (1, 2, 3))
@@ -347,7 +356,9 @@ def lifecycle_listing(
     if growth:
         return LifecycleResult("上升期", "有效销量连续增长", valid_stock30, consecutive, True)
     if stable:
-        return LifecycleResult("稳定期", "四周有效销量处于稳定区间", valid_stock30, consecutive, True)
+        return LifecycleResult(
+            "稳定期", "四周有效销量处于稳定区间", valid_stock30, consecutive, True
+        )
     if previous_stage not in {"启动期", "上升期", "稳定期", "下滑期"}:
         return LifecycleResult(
             "启动期", "修复验收后重新判断，趋势证据不足", valid_stock30, consecutive, False

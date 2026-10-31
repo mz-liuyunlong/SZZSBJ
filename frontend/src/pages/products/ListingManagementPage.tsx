@@ -221,6 +221,7 @@ const columnGroups: RuntimeColumnGroup[] = [
 
 interface ListingManagementPageProps {
   page: NavigationPage;
+  preferenceScope?: string;
 }
 
 
@@ -238,10 +239,11 @@ interface ListingGptAnalysisFormValues {
   adAnalysisUrl: string;
 }
 
-function ListingManagementPage({ page }: ListingManagementPageProps) {
+function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingManagementPageProps) {
   const [messageApi, messageContextHolder] = message.useMessage();
   const [gptAnalysisForm] = Form.useForm<ListingGptAnalysisFormValues>();
   const [managedTags, setManagedTags] = useState<CustomProductTag[]>([]);
+  const [tagAccountRefs, setTagAccountRefs] = useState<string[]>([]);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [listingRefreshToken, setListingRefreshToken] = useState(0);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
@@ -249,7 +251,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [evaluationMonitorOpen, setEvaluationMonitorOpen] = useState(false);
   const [evaluationListing, setEvaluationListing] = useState<ListingManagementRow | null>(null);
   const [isTagManagerLoading, setIsTagManagerLoading] = useState(false);
-  const pageStateKey = "listing-management";
+  const pageStateKey = `listing-management:${preferenceScope}`;
   const listingManagementPageRootRef = useRef<HTMLDivElement | null>(null);
 
   const [filters, setFilters] = usePageStateCache<ListingManagementFilters>(`${pageStateKey}:filters`, createInitialFilters);
@@ -263,8 +265,8 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
   const [columnWidths, setColumnWidths] = usePageStateCache<Record<string, number>>(`${pageStateKey}:columnWidths`, defaultColumnWidths);
   const [savedTemplateKeys, setSavedTemplateKeys] = usePageStateCache<string[]>(`${pageStateKey}:savedTemplateKeys`, []);
   const [currentPage, setCurrentPage] = usePageStateCache(`${pageStateKey}:currentPage`, 1);
-  const [sortField, setSortField] = useState("");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortField, setSortField] = usePageStateCache(`${pageStateKey}:sortField`, "");
+  const [sortOrder, setSortOrder] = usePageStateCache<"asc" | "desc">(`${pageStateKey}:sortOrder`, "asc");
   const [pageSize, setPageSize] = usePageStateCache(`${pageStateKey}:pageSize`, REPORT_TABLE_DEFAULT_PAGE_SIZE);
   const [selectedRowKeys, setSelectedRowKeys] = usePageStateCache<Key[]>(`${pageStateKey}:selectedRowKeys`, []);
 
@@ -344,10 +346,12 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     setIsTagManagerLoading(true);
 
     try {
-      const tags = await fetchListingTags();
-      setManagedTags(tags);
+      const catalog = await fetchListingTags();
+      setManagedTags(catalog.items);
+      setTagAccountRefs(catalog.sourceAccountRefs);
     } catch {
       setManagedTags([]);
+      setTagAccountRefs([]);
       if (options.showError) {
         void messageApi.warning("标签加载失败，暂时不影响 Listing 页面");
       }
@@ -402,6 +406,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     }
 
     for (const tag of managedTags) {
+      if (optionMap.has(tag.name)) continue;
       optionMap.set(tag.name, {
         value: tag.name,
         label: tag.name,
@@ -412,7 +417,13 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
     return Array.from(optionMap.values());
   }, [filterOptions.tags, managedTags]);
 
-  const assignmentTags = useMemo(() => managedTags, [managedTags]);
+  const assignmentTags = useMemo(() => {
+    const accounts = new Set(selectedRowKeys.map((key) => seenListingRows[String(key)]?.sourceAccountRef).filter(Boolean));
+    const scoped = accounts.size === 1
+      ? managedTags.filter((tag) => accounts.has(tag.sourceAccountRef))
+      : managedTags;
+    return Array.from(new Map(scoped.map((tag) => [tag.name, tag])).values());
+  }, [managedTags, seenListingRows, selectedRowKeys]);
 
   const normalizedFilters = useMemo(() => {
     const owners = filters.owners && filters.owners.length > 0
@@ -939,7 +950,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
           >
             <ListingManagementTable
               rows={displayedRows}
-              tagColors={Object.fromEntries(managedTags.map((tag) => [tag.name, tag.color]))}
+              tagColors={Object.fromEntries(managedTags.map((tag) => [`${tag.sourceAccountRef}:${tag.name}`, tag.color]))}
               virtualScrollY={virtualScrollY}
               total={totalRows}
               appliedColumnKeys={appliedColumnKeys}
@@ -1054,7 +1065,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
             sales30Days: analysisListing.sales30Days,
             adSpend30Days: analysisListing.adSpend30DaysKnown === false ? null : analysisListing.adSpend30Days,
             salePrice: analysisListing.salePriceKnown === false ? null : analysisListing.salePrice,
-            priceCurrency: analysisListing.salePriceCurrency || "USD",
+            priceCurrency: analysisListing.salePriceCurrency,
             wfsAvailableInventory: analysisListing.wfsAvailableInventoryKnown === false ? null : analysisListing.wfsAvailableInventory,
             monitorObservedAt: analysisListing.checkedAt === "未监控" ? null : analysisListing.checkedAt,
           } : undefined}
@@ -1100,6 +1111,7 @@ function ListingManagementPage({ page }: ListingManagementPageProps) {
         <CustomTagManagerModal
           open={tagManagerOpen}
           initialTags={managedTags}
+          accountRefs={tagAccountRefs}
           loading={isTagManagerLoading}
           onCreateTag={handleCreateListingTag}
           onUpdateTag={handleUpdateListingTag}

@@ -328,7 +328,7 @@ class ListingManagementQuery(StrictSchema):
     status: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     archive_status: str | None = Field(
         default=None,
-        description="Archive status csv: active,archived",
+        description="Archive status csv: active,archived,unknown",
     )
     tag: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32768)] = ""
     summary_filter: Literal[
@@ -360,6 +360,17 @@ class ListingManagementBatchSearchRequest(StrictSchema):
     batch_values: list[
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
     ] = Field(min_length=1, max_length=1000)
+
+
+class ListingManagementExportRequest(StrictSchema):
+    """POST export body keeps selected IDs and batch search out of the URL."""
+
+    filters: ListingManagementQuery
+    batch_values: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=128)]
+    ] = Field(default_factory=list, max_length=1000)
+    selected_ids: list[Nonblank128] = Field(default_factory=list, max_length=1000)
+    columns: list[Nonblank128] = Field(default_factory=list, max_length=100)
 
 
 class ListingManagementItemRead(StrictSchema):
@@ -459,6 +470,7 @@ class ListingManagementReadMeta(StrictSchema):
 
 class ListingTagRead(StrictSchema):
     id: str
+    source_account_ref: str
     name: str
     color: str
     usage: int = 0
@@ -468,9 +480,11 @@ class ListingTagRead(StrictSchema):
 
 class ListingTagListData(StrictSchema):
     items: list[ListingTagRead] = Field(default_factory=list)
+    source_account_refs: list[str] = Field(default_factory=list)
 
 
 class ListingTagCreateRequest(StrictSchema):
+    source_account_ref: Nonblank128 | None = None
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16)]
     color: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=32)]
     sort_order: int = 0
