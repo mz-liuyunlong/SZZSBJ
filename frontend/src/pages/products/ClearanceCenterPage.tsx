@@ -72,6 +72,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    if(filters.owner!=="all"&&x.owner!==filters.owner)return false;
    if(filters.risk!=="all"&&risk.level!==filters.risk)return false;
    if(filters.quick==="manual"&&!data.manual.includes(x.id))return false;
+   if(filters.quick==="value"&&risk.level==="low")return false;
    if(filters.quick==="untreated"&&active)return false;
    if(filters.quick==="auto"&&!risk.auto)return false;
    if(filters.quick==="age"&&x.age<data.rules.mediumAge)return false;
@@ -120,7 +121,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const onStat=(key:string)=>{
   setActiveStat(old=>old===key?"":key);
   if(tab==="management")changeFilter({status:activeStat===key?"all":key});
-  else changeFilter({quick:key==="value"?"all":activeStat===key?"all":key,risk:key==="high"&&activeStat!==key?"high":"all"});
+  else changeFilter({quick:activeStat===key?"all":key==="high"?"all":key,risk:key==="high"&&activeStat!==key?"high":"all"});
  };
  const state=tab==="management"?tables.management:tables.analysis;
  const setTableState=(patch:Partial<TableState>)=>{
