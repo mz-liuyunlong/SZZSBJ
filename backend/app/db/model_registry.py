@@ -14,4 +14,5 @@ def register_productlist_sync_models() -> None:
     import app.modules.products.models
     import app.modules.sku_detail.models
     import app.modules.walmart_remote.models
+    import app.modules.walmart_scf.persistence
     import app.modules.warehouse_wfs.models  # noqa: F401

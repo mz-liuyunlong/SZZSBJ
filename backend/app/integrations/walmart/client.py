@@ -18,13 +18,27 @@ from app.integrations.walmart.planner import STORE_ROUTES, WalmartPlanError
 class WalmartResult:
     status_code: int
     data: Any
+    # Write path (bridge protocol v2): Walmart's error body on a non-2xx answer, and the
+    # decoded PDF for label operations. Read callers never see these populated.
+    provider_error: Any = None
+    content_type: str = "application/json"
+    pdf: bytes | None = None
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 300
 
 
 class ProtectedGateway(Protocol):
     """Protected remote execution contract; no credential or token response."""
 
     def execute(
-        self, *, store_code: str, request: PreparedRequest, approval_ref: str | None
+        self,
+        *,
+        store_code: str,
+        request: PreparedRequest,
+        approval_ref: str | None,
+        actor: Mapping[str, str] | None = None,
     ) -> WalmartResult: ...
 
 
@@ -65,6 +79,7 @@ class WalmartClient:
         body: Any = None,
         allow_writes: bool = False,
         approval_ref: str | None = None,
+        actor: Mapping[str, str] | None = None,
     ) -> WalmartResult:
         self._validate_store(store_code)
         request = self.registry.prepare(
@@ -74,8 +89,13 @@ class WalmartClient:
             raise WalmartPlanError("WALMART_WRITE_APPROVAL_REQUIRED")
         if self.gateway is None:
             raise WalmartPlanError("WALMART_PROTECTED_GATEWAY_UNAVAILABLE")
+        if actor is None:
+            # Legacy gateways (protocol v1/v2) do not take an actor.
+            return self.gateway.execute(
+                store_code=store_code, request=request, approval_ref=approval_ref
+            )
         return self.gateway.execute(
-            store_code=store_code, request=request, approval_ref=approval_ref
+            store_code=store_code, request=request, approval_ref=approval_ref, actor=actor
         )
 
     def _validate_store(self, store_code: str) -> None:
