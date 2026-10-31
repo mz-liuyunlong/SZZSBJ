@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 
 from app.core.api import ApiError, ErrorCode
 from app.core.config import get_settings
@@ -321,12 +321,20 @@ class PackingService:
             raise
 
     def listing_rows(self, candidate):
-        """Same eligibility as Listing 管理: published WFS rows with a product link."""
+        """Same eligibility as Listing 管理: published WFS rows with a product link.
+
+        Rows are found by local SKU or by the ItemID the resolver attributed to the
+        candidate (its listing may have no local SKU yet; owner decision 2026-10-31).
+        """
+        identity = or_(Listing.local_sku == candidate.sku)
+        attributed = getattr(candidate, "item_id", None)
+        if attributed:
+            identity = or_(Listing.local_sku == candidate.sku, Listing.item_id == attributed)
         return list(
             self.session.scalars(
                 select(Listing).where(
                     Listing.source_account_ref == candidate.source_account_ref,
-                    Listing.local_sku == candidate.sku,
+                    identity,
                     Listing.standard_status == "PUBLISHED",
                     Listing.fulfillment_type == "1",
                     Listing.item_url.isnot(None),

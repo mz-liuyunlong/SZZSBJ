@@ -9,6 +9,7 @@ from app.modules.pmc_domestic.board_item_ids import (
     attach_board_item_ids,
     extract_remark_item_ids,
     resolve_store_item_ids,
+    sku_mismatch_ids,
 )
 from app.modules.pmc_purchase.calculations import parse_itemid_remark
 
@@ -37,10 +38,46 @@ def test_store_row_uses_its_own_remark_then_listing_gtin():
     found = resolve_store_item_ids(
         store_id="S1", sku="YC1", lines=lines, plans=plans, listings=listings
     )
+    # Owner decision 2026-10-31: a remark id listed on this store is kept even when that
+    # listing's local SKU differs (it is flagged, see sku_mismatch_ids), so the plan's
+    # 11111111111 now counts alongside the line's two ids.
     assert found == [
         ("20403609913", "00465313943732"),
         ("20347351964", None),
+        ("11111111111", "000"),
     ]
+    assert sku_mismatch_ids(
+        store_id="S1", sku="YC1", item_ids=[item for item, _ in found], listings=listings
+    ) == ["11111111111"]
+
+
+def test_remark_item_id_is_trusted_when_the_listing_has_no_local_sku():
+    """PO261016006 case: Lingxing never paired the listing; the remark still wins."""
+    lines = [("HK2613", ["10.14已分配采购", "21139862520"], [])]
+    listings = [("HK2613", "21139862520", None, "00046001636422", "YC01291-1A")]
+    assert resolve_store_item_ids(
+        store_id="HK2613", sku="YC01291", lines=lines, plans={}, listings=listings
+    ) == [("21139862520", "00046001636422")]
+    # Without the remark the same listing is found through the purchase line MSKU.
+    assert resolve_store_item_ids(
+        store_id="HK2613",
+        sku="YC01291",
+        lines=[("HK2613", [None], [])],
+        plans={},
+        listings=listings,
+        line_mskus=["YC01291-1A"],
+    ) == [("21139862520", "00046001636422")]
+    # ...and not without an MSKU to go on.
+    assert (
+        resolve_store_item_ids(
+            store_id="HK2613",
+            sku="YC01291",
+            lines=[("HK2613", [None], [])],
+            plans={},
+            listings=listings,
+        )
+        == []
+    )
 
 
 def test_same_purchase_order_keeps_each_store_on_its_own_row():
@@ -102,7 +139,7 @@ def test_attach_reads_current_remarks_for_the_row_store():
             text(
                 "create table dim_walmart_listings ("
                 "source_account_ref varchar, store_id varchar, item_id varchar, "
-                "local_sku varchar, gtin varchar)"
+                "local_sku varchar, gtin varchar, msku varchar)"
             )
         )
         old_payload = json.dumps(
@@ -134,10 +171,10 @@ def test_attach_reads_current_remarks_for_the_row_store():
         conn.execute(
             text(
                 "insert into dim_walmart_listings values "
-                "('primary','S1','20403609913','YC1','004'),"
-                "('primary','S1','20347351964','YC1',null),"
-                "('primary','S1','22222222222','YC1','005'),"
-                "('primary','S2','20067107122','YC1','006')"
+                "('primary','S1','20403609913','YC1','004','YC1-1A'),"
+                "('primary','S1','20347351964','YC1',null,'YC1-1B'),"
+                "('primary','S1','22222222222','YC1','005','YC1-1C'),"
+                "('primary','S2','20067107122','YC1','006','YC1-1D')"
             )
         )
     row = type("Row", (), {})()

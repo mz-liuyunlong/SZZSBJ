@@ -290,3 +290,12 @@ Owner：项目负责人。PRP：PRPs/pmc-domestic-inbound-board-m1.md。来源�
 ## PMC-PURCHASE-UNIFIED-SYNC（2026-10-27）
 
 状态：已撤回（2026-10-28）。按负责人要求，任务中心、采购父子接管及统一调度变更恢复 main；不注册或启用采购父任务。原同步入口保持 main 行为。当前整改证据见 `docs/delivery/pmc-scope-rectification-20261028.md`。
+
+
+## PMC 采购看板 / 国内入库 · ItemID 归属规则 v2（2026-10-31，local）
+
+- 触发：PO261016006 采购备注有 ItemID、Listing 管理能搜到，看板却「待打包单」。探查：`dim_walmart_listings` 该行 `local_sku` 为空，旧规则要求「同店铺 + 本地 SKU 相等」才采信备注号码。
+- 规则 v2（负责人决定）：备注 ItemID 以**店铺**验证（同店铺 Listing 存在即采信）；Listing 本地 SKU 非空且 ≠ 采购 SKU → 标 `sku_mismatch`（lineage `item_identities[].sku_mismatch`、`item_id_evidence.sku_mismatch`，证据规则号 `purchase.remark.store.v2`）；无备注时第 2 档在 Listing 本地 SKU 为空时按采购明细 `payload.msku` 匹配（`OdsRemarkTexts.line_msku_by_key`）。
+- 规则只有一份：`pmc_purchase/item_id_resolution.py`（纯函数 `resolve_item_identities`），采购看板 DWS（`pmc_purchase/refresh.py`）与入库看板 / 打包单候选（`pmc_domestic/board_item_ids.py`）都调用它，各自只负责收集输入（哪些备注、哪些候选 Listing）和存放结果；打包单候选的 Listing 查找与编辑选项同时按归属到的 ItemID 查（`packing_repository.py` / `packing_service.listing_rows`）。存储是否也合并（统一归属表）待运行一段后再定。
+- 不改表结构；生效需重跑采购 DWS 刷新（`scripts/refresh_pmc_purchase_dws.py`）。
+- 待办：`dim_walmart_listings.local_sku` 为空的根因（领星配对 / 接口字段）与同步侧回填，另行处理。

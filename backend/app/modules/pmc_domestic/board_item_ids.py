@@ -1,4 +1,10 @@
-"""ItemID for one inbound row: remark digits for that store, then the store listing."""
+"""ItemID for one inbound row: remark digits for that store, then the store listing.
+
+The rule itself lives in ``pmc_purchase.item_id_resolution`` and is shared with the purchase
+board (owner decision 2026-10-31). This module only gathers the inputs for an inbound row
+(which purchase lines and plans belong to it, which listings are candidates) and keeps the
+inbound-only behaviour for rows without a store (a SKU listed on exactly one store decides).
+"""
 
 from __future__ import annotations
 
@@ -10,15 +16,14 @@ from sqlalchemy import bindparam, inspect, text
 from sqlalchemy.orm import Session
 
 from app.modules.pmc_domestic.inbound_schemas import ItemIdentity
-from app.modules.pmc_purchase.remark_item_ids import (
-    extract_remark_item_ids,
-    validated_remark_item_ids,
-)
+from app.modules.pmc_purchase.item_id_resolution import ListingCandidate, resolve_item_identities
+from app.modules.pmc_purchase.remark_item_ids import extract_remark_item_ids
 
 LINE_TABLE = "ods_lingxing_purchase_order_items"
 PLAN_TABLE = "ods_lingxing_purchase_plans"
 LISTING_TABLE = "dim_walmart_listings"
-type Listing = tuple[str, str, str | None, str | None]
+# (store_id, item_id, local_sku, gtin[, msku]) — the fifth element is optional for callers.
+type Listing = tuple[str, ...]
 
 
 class BoardItemRow(Protocol):
@@ -37,37 +42,69 @@ def resolve_store_item_ids(
     lines: Sequence[tuple[str | None, Sequence[str | None], Sequence[str]]],
     plans: dict[str, tuple[str | None, Sequence[str | None]]],
     listings: Sequence[Listing],
+    line_mskus: Sequence[str] = (),
 ) -> list[tuple[str, str | None]]:
     """ItemIDs for one inbound row.
 
     ``lines`` are ``(store_id, remark_texts, plan_sns)`` for this purchase order and SKU.
     ``plans`` map a plan number to ``(store_id, remark_texts)``.
-    ``listings`` are ``(store_id, item_id, local_sku, gtin)`` for this SKU.
+    ``listings`` are ``(store_id, item_id, local_sku, gtin[, msku])`` candidates: every
+    listing of this SKU, plus listings named by the remarks or carrying the line's MSKU.
+    ``line_mskus`` are the purchase lines' MSKUs (fallback key when a listing has no local SKU).
     A known store keeps only that store. An empty store is filled only when the SKU is listed
     on exactly one store.
     """
 
     row_store = _store(store_id)
-    same_sku = [item for item in listings if (item[2] or "").strip() == sku]
+    mskus = {m.strip() for m in line_mskus if isinstance(m, str) and m.strip()}
     remark_ids = _remark_ids(row_store, lines, plans)
     if row_store:
-        remark_ids = validated_remark_item_ids([], remark_ids, _ids_for_store(same_sku, row_store))
-        if remark_ids:
-            return [
-                (
-                    item_id,
-                    _gtin(same_sku, row_store, item_id)
-                    if _listed(same_sku, row_store, item_id)
-                    else None,
-                )
-                for item_id in remark_ids
-            ]
-        chosen = _ids_for_store(same_sku, row_store)
-        return [(item_id, _gtin(same_sku, row_store, item_id)) for item_id in chosen]
-    remark_hits = [item for item_id in remark_ids for item in same_sku if item[1] == item_id]
+        # The shared rule: remark ids verified by store, else store listing by local SKU,
+        # else by purchase-line MSKU. The remark texts were already narrowed to this
+        # store's lines/plans above, so they are handed over as one synthetic text.
+        resolution = resolve_item_identities(
+            store_id=row_store,
+            sku=sku,
+            remark_texts=[" ".join(remark_ids)],
+            line_mskus=mskus,
+            listings=[_candidate(item) for item in listings],
+        )
+        return [(found.item_id, found.gtin) for found in resolution.identities]
+    # No store on the row (inbound-only): a remark id or the SKU listed on exactly one
+    # store decides the store.
+    same_sku = [
+        item
+        for item in listings
+        if (item[2] or "").strip() == sku or (not (item[2] or "").strip() and _msku(item) in mskus)
+    ]
+    remark_hits = [item for item_id in remark_ids for item in listings if item[1] == item_id]
     if remark_hits:
-        return _single_store(remark_hits, same_sku)
+        return _single_store(remark_hits, listings)
     return _single_store(same_sku, same_sku)
+
+
+def _candidate(item: Listing) -> ListingCandidate:
+    return ListingCandidate(
+        store_id=_store(item[0]) or "",
+        item_id=str(item[1]),
+        local_sku=item[2] if isinstance(item[2], str) else None,
+        gtin=item[3] if isinstance(item[3], str) else None,
+        msku=_msku(item) or None,
+    )
+
+
+def sku_mismatch_ids(
+    *, store_id: str | None, sku: str, item_ids: Sequence[str], listings: Sequence[Listing]
+) -> list[str]:
+    """Attributed ItemIDs whose listing has a local SKU that differs from the row SKU."""
+    row_store = _store(store_id)
+    out: list[str] = []
+    for item in listings:
+        local = (item[2] or "").strip()
+        if item[1] in item_ids and (row_store is None or _store(item[0]) == row_store):
+            if local and local != sku:
+                _append(out, item[1])
+    return out
 
 
 def attach_board_item_ids(
@@ -82,14 +119,26 @@ def attach_board_item_ids(
         for sn in row.purchase_order_sns or []
         if sn
     }
-    lines_by_key, plans_by_key = _load_remarks(session, pairs)
+    lines_by_key, plans_by_key, mskus_by_key = _load_remarks(session, pairs)
+    remark_candidates: set[str] = set()
+    for key, entries in lines_by_key.items():
+        for _store_id, texts, plan_sns in entries:
+            parts: list[str | None] = list(texts)
+            for plan_sn in plan_sns:
+                plan = plans_by_key.get(key[0], {}).get(plan_sn)
+                if plan is not None:
+                    parts.extend(plan[1])
+            remark_candidates.update(extract_remark_item_ids(parts))
     listings = _load_listings(
         session,
         {account for account, _, _ in pairs},
         {sku for _, _, sku in pairs},
+        remark_candidates,
+        {m for values in mskus_by_key.values() for m in values},
     )
     for row in rows:
         found: list[tuple[str, str | None]] = []
+        candidates = listings.get(row.source_account_ref, ())
         if row.source_account_ref in accounts and row.sku:
             for sn in row.purchase_order_sns or []:
                 key = (row.source_account_ref, sn, row.sku)
@@ -98,11 +147,23 @@ def attach_board_item_ids(
                     sku=row.sku,
                     lines=lines_by_key.get(key, ()),
                     plans=plans_by_key.get(row.source_account_ref, {}),
-                    listings=listings.get((row.source_account_ref, row.sku), ()),
+                    listings=candidates,
+                    line_mskus=sorted(mskus_by_key.get(key, set())),
                 ):
                     if item_id not in {item for item, _gtin in found}:
                         found.append((item_id, gtin))
-        row.item_identities = [ItemIdentity(item_id=item_id, gtin=gtin) for item_id, gtin in found]
+        mismatch = set(
+            sku_mismatch_ids(
+                store_id=row.store_id,
+                sku=row.sku or "",
+                item_ids=[item for item, _ in found],
+                listings=candidates,
+            )
+        )
+        row.item_identities = [
+            ItemIdentity(item_id=item_id, gtin=gtin, sku_mismatch=item_id in mismatch)
+            for item_id, gtin in found
+        ]
         row.identity_status = "resolved" if len(found) == 1 else "multiple" if found else "missing"
 
 
@@ -159,11 +220,12 @@ def _load_remarks(
 ) -> tuple[
     dict[tuple[str, str, str], list[tuple[str | None, list[str | None], list[str]]]],
     dict[str, dict[str, tuple[str | None, list[str | None]]]],
+    dict[tuple[str, str, str], set[str]],
 ]:
     bind = session.get_bind()
     inspector = inspect(bind)
     if not pairs or not inspector.has_table(LINE_TABLE):
-        return {}, {}
+        return {}, {}, {}
     accounts = list({account for account, _, _ in pairs})
     order_sns = list({sn for _, sn, _ in pairs})
     skus = list({sku for _, _, sku in pairs})
@@ -189,6 +251,7 @@ def _load_remarks(
         if current is None or version > current[0]:
             latest_lines[key] = (version, row, payload)
     grouped: dict[tuple[str, str, str], list[tuple[str | None, list[str | None], list[str]]]] = {}
+    mskus: dict[tuple[str, str, str], set[str]] = {}
     plan_sns: set[tuple[str, str]] = set()
     for (account, order_sn, _), (_, row, payload) in latest_lines.items():
         if _deleted(row.is_delete):
@@ -200,9 +263,12 @@ def _load_remarks(
         grouped.setdefault(key, []).append(
             (row.sid, [row.remark, _text(payload, "item_purchase_remark")], linked)
         )
+        msku = _text(payload, "msku")
+        if msku:
+            mskus.setdefault(key, set()).add(msku.strip())
         plan_sns.update((account, plan_sn) for plan_sn in linked)
     plans = _load_plans(session, inspector, plan_sns)
-    return grouped, plans
+    return grouped, plans, mskus
 
 
 def _load_plans(
@@ -241,25 +307,43 @@ def _load_plans(
 
 
 def _load_listings(
-    session: Session, accounts: set[str], skus: set[str]
-) -> dict[tuple[str, str], list[Listing]]:
+    session: Session,
+    accounts: set[str],
+    skus: set[str],
+    item_ids: set[str] = frozenset(),
+    mskus: set[str] = frozenset(),
+) -> dict[str, list[Listing]]:
+    """Candidate listings per account: by local SKU, by remark item id, or by line MSKU."""
     bind = session.get_bind()
-    if not accounts or not skus or not inspect(bind).has_table(LISTING_TABLE):
+    if not accounts or not inspect(bind).has_table(LISTING_TABLE):
+        return {}
+    if not skus and not item_ids and not mskus:
         return {}
     rows = session.execute(
         text(
-            "select source_account_ref, store_id, item_id, local_sku, gtin "
+            "select source_account_ref, store_id, item_id, local_sku, gtin, msku "
             f"from {LISTING_TABLE} "
-            "where source_account_ref in :accounts and local_sku in :skus"
-        ).bindparams(bindparam("accounts", expanding=True), bindparam("skus", expanding=True)),
-        {"accounts": list(accounts), "skus": list(skus)},
+            "where source_account_ref in :accounts and "
+            "(local_sku in :skus or item_id in :item_ids or msku in :mskus)"
+        ).bindparams(
+            bindparam("accounts", expanding=True),
+            bindparam("skus", expanding=True),
+            bindparam("item_ids", expanding=True),
+            bindparam("mskus", expanding=True),
+        ),
+        {
+            "accounts": list(accounts),
+            "skus": list(skus) or [""],
+            "item_ids": list(item_ids) or [""],
+            "mskus": list(mskus) or [""],
+        },
     ).all()
-    found: dict[tuple[str, str], list[Listing]] = {}
+    found: dict[str, list[Listing]] = {}
     for row in rows:
-        if not row.local_sku or not row.store_id or not row.item_id:
+        if not row.store_id or not row.item_id:
             continue
-        found.setdefault((row.source_account_ref, row.local_sku), []).append(
-            (str(row.store_id), str(row.item_id), row.local_sku, row.gtin)
+        found.setdefault(row.source_account_ref, []).append(
+            (str(row.store_id), str(row.item_id), row.local_sku, row.gtin, row.msku)
         )
     return found
 
@@ -281,20 +365,13 @@ def _plan_sns(plan_sn: object, payload: dict) -> list[str]:
     return found
 
 
-def _listed(listings: Sequence[Listing], store_id: str, item_id: str) -> bool:
-    return any(_store(item[0]) == store_id and item[1] == item_id for item in listings)
-
-
-def _ids_for_store(listings: Sequence[Listing], store_id: str) -> list[str]:
-    seen: list[str] = []
-    for store, item_id, _, _gtin in listings:
-        if _store(store) == store_id:
-            _append(seen, item_id)
-    return seen
+def _msku(item: Listing) -> str:
+    return (item[4] or "").strip() if len(item) > 4 and isinstance(item[4], str) else ""
 
 
 def _gtin(listings: Sequence[Listing], store_id: str, item_id: str) -> str | None:
-    for store, listed_id, _, gtin in listings:
+    for item in listings:
+        store, listed_id, gtin = item[0], item[1], item[3]
         if _store(store) != store_id or listed_id != item_id:
             continue
         if isinstance(gtin, str) and gtin.strip():
