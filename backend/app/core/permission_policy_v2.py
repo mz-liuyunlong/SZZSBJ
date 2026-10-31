@@ -220,6 +220,16 @@ _RULES: tuple[RequestPermissionRule, ...] = (
         "action:data-center:task-center:execute",
     ),
     RequestPermissionRule(
+        "POST",
+        "/api/integrations/walmart-remote/",
+        "action:data-center:walmart-remote:execute",
+    ),
+    RequestPermissionRule(
+        "GET",
+        "/api/integrations/walmart-remote/",
+        "page:data-center:walmart-remote:view",
+    ),
+    RequestPermissionRule(
         "GET",
         "/api/integrations/walmart-monitor/targets",
         "integrations:walmart-monitor:read",
