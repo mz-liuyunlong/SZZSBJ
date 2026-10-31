@@ -58,7 +58,7 @@ recover_principal = Annotated[
 ]
 sync_principal = Annotated[
     Principal,
-    Depends(require_super_admin),
+    Depends(require_permission("action:warehouse:wfs-fee-alert:sync-legacy")),
 ]
 ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorEnvelope},

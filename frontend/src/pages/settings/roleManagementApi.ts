@@ -286,6 +286,11 @@ export async function saveRolePermissions(
   permissions: RolePermissionState,
   catalog: RolePermissionCatalog,
 ): Promise<RoleManagementRow> {
+  const knownKeys = catalogPermissionKeys(catalog);
+  const hiddenKeys = role.permissionKeys.filter((key) => !knownKeys.has(key));
+  if (hiddenKeys.length) {
+    throw new Error("权限目录不完整；为避免撤销隐藏权限，已阻止保存。请先修复权限登记。");
+  }
   const response = await backendRequest<BackendRole>(
     `/api/settings/rbac/roles/${role.roleKey}`,
     {

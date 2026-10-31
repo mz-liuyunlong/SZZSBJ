@@ -8,6 +8,7 @@ import {
 } from "@/components/report-table/pagination";
 import type { NavigationPage } from "@/config/navigation";
 import { fetchCurrentUser } from "@/pages/auth/authApi";
+import { notifyPermissionsChanged } from "@/pages/auth/authSession";
 import type { AuthUser } from "@/pages/auth/authTypes";
 import UserFormModal from "@/pages/settings/components/UserFormModal";
 import UserDataScopeModal, {

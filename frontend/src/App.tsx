@@ -80,6 +80,10 @@ function App() {
 
   useEffect(() => subscribeAuthSession((event) => {
     if (!isCurrentAuthSessionEvent(event)) return;
+    if (event.type === "permissions-changed") {
+      void restoreCurrentUser();
+      return;
+    }
     clearServerState();
     clearTabWorkspaceStorage();
     if (event.type === "logged-out") {
