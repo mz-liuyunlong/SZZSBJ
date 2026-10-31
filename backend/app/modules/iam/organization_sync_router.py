@@ -20,9 +20,7 @@ from app.modules.iam.organization_snapshot import apply_snapshot, canonical_snap
 router = APIRouter(tags=["iam-organization"])
 db_session = Annotated[Session, Depends(get_db_session)]
 admin_principal = Annotated[Principal, Depends(require_super_admin)]
-org_view = Annotated[
-    Principal, Depends(require_permission("page:settings:organization:view"))
-]
+org_view = Annotated[Principal, Depends(require_permission("page:settings:organization:view"))]
 
 
 class ApplySnapshotRequest(BaseModel):
@@ -123,24 +121,36 @@ def read_organization_snapshot(
     session: db_session,
 ):
     """Return persisted organization data; never infer missing staff are resigned."""
-    department_rows = session.execute(
-        text("""
+    department_rows = (
+        session.execute(
+            text("""
         SELECT department_id, parent_department_id, name, leader_user_id
         FROM iam_feishu_departments ORDER BY name, department_id
         """)
-    ).mappings().all()
-    user_rows = session.execute(
-        text("""
+        )
+        .mappings()
+        .all()
+    )
+    user_rows = (
+        session.execute(
+            text("""
         SELECT open_id, name, department_ids, is_active, is_resigned, is_frozen
         FROM iam_feishu_employees ORDER BY name, open_id
         """)
-    ).mappings().all()
-    last_run = session.execute(
-        text("""
+        )
+        .mappings()
+        .all()
+    )
+    last_run = (
+        session.execute(
+            text("""
         SELECT applied_at, snapshot_hash FROM iam_feishu_org_sync_runs
         ORDER BY applied_at DESC, id DESC LIMIT 1
         """)
-    ).mappings().first()
+        )
+        .mappings()
+        .first()
+    )
     return success_response(
         request,
         data={
