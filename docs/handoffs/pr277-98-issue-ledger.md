@@ -110,6 +110,7 @@
 - 迁移 0069／0070 仅在隔离 PostgreSQL 执行过；隔离库验证双账号标签列表各只见本账号定义、JSONB 精确匹配逗号／引号／`%`，以及历史同账号重名时迁移原子失败、解除合成冲突后无损成功。生产数据库未连接、未迁移。
 - 完整页面 E2E（含真实 IAM 权限矩阵、所有写操作和性能）与生产只读验收仍未完成。
 - 新增 Listing 页面 opt-in E2E 已在隔离 PostgreSQL 16 的空库升级至 0070 后实际运行，1 项通过；前端 Listing API 连接真实本地 FastAPI，`/api/auth/me` 使用合成身份以避免连接生产 IAM。运行需要 `APP_ENV=test`、`LISTING_LIVE_TEST_DATABASE_URL` 指向新建的 `pr277_listing_*` 本地 Unix-socket 库，并提供 Node 24 + Playwright。此证据不覆盖完整 IAM/性能/生产只读验收。
+- Node 24 全量 Playwright：28 项通过、8 项隔离环境未配置而跳过；Listing 的真实 FastAPI + 隔离 PostgreSQL opt-in 项已另外单独执行并通过，跳过项不计为通过。
 - Rule pack 当前因既有交接文档中的项目专名而失败；不得把此失败标为通过。
 
 ## 安全边界
