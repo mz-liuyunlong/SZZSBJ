@@ -16,7 +16,7 @@ interface EvaluationRun {
   lifecycle_candidate_count: number;
   blocked_count: number;
   published_count?: number;
-  attempt_count: number;
+  attempt_count: number | null;
   started_at: string | null;
   finished_at: string | null;
   error_code: string | null;
@@ -37,7 +37,7 @@ interface Props { open: boolean; onClose: () => void; }
 const runColumns: ColumnsType<EvaluationRun> = [
   { title: "执行日期（中国）", dataIndex: "schedule_date_cn", width: 135 },
   { title: "LA截止日期", dataIndex: "cutoff_date_la", width: 125 },
-  { title: "状态", dataIndex: "status", width: 95, render: (value: string) => <Tag>{value}</Tag> },
+  { title: "状态", dataIndex: "status", width: 95, render: (value: string) => <Tag>{value === "scoped_snapshots" ? "可见诊断快照" : value}</Tag> },
   { title: "已处理", dataIndex: "processed_listings", width: 90 },
   { title: "等级候选", dataIndex: "grade_candidate_count", width: 90 },
   { title: "生命周期候选", dataIndex: "lifecycle_candidate_count", width: 105 },

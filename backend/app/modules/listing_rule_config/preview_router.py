@@ -150,7 +150,7 @@ class ListingEvaluationRunItem(BaseModel):
     lifecycle_candidate_count: int
     blocked_count: int
     published_count: int = 0
-    attempt_count: int
+    attempt_count: int | None
     started_at: datetime | None
     finished_at: datetime | None
     error_code: str | None
@@ -242,6 +242,14 @@ def list_evaluation_runs(
             items=[
                 ListingEvaluationRunItem.model_validate(row).model_copy(
                     update={
+                        # The run is global. Its execution status, attempts, timing,
+                        # and error can describe other accounts, so a scoped viewer
+                        # only receives facts derived from visible snapshots.
+                        "status": "scoped_snapshots",
+                        "attempt_count": None,
+                        "started_at": None,
+                        "finished_at": None,
+                        "error_code": None,
                         "total_listings": int(scoped_stats.get(row.id, (0, 0, 0, 0))[0]),
                         "processed_listings": int(scoped_stats.get(row.id, (0, 0, 0, 0))[0]),
                         "grade_candidate_count": int(scoped_stats.get(row.id, (0, 0, 0, 0))[1]),
