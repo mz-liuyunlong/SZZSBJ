@@ -15,7 +15,7 @@ from app.modules.new_product_workflow.router import (
     RuleWrite,
     _identity,
     list_workflows,
-    router as new_product_router,
+    router,
 )
 
 
@@ -77,7 +77,7 @@ def test_unknown_sku_identity_fails_closed() -> None:
 
 
 def test_workflow_router_registered_without_exposing_real_purchase_execution() -> None:
-    paths = {route.path for route in new_product_router.routes}
+    paths = {route.path for route in router.routes}
     assert "/api/new-products/workflows" in paths
     assert "/api/new-products/workflows/{sku_id}/purchase-decision" in paths
     assert "/api/new-products/rules" in paths
