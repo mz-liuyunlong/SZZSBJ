@@ -157,6 +157,16 @@ def test_listing_streaming_export_does_not_truncate_after_ten_thousand_rows() ->
     assert lines[-1] == "否"
 
 
+@pytest.mark.parametrize(
+    "untrusted",
+    ["=1+1", "+cmd", "-cmd", "@cmd", "\t=cmd", "\r=cmd", "\n=cmd", ["=cmd", "safe"]],
+)
+def test_listing_csv_escapes_formula_prefix_after_flattening(untrusted: object) -> None:
+    rendered = ListingManagementService._csv_value(untrusted)
+    assert rendered.startswith("'")
+    assert rendered[1:].lstrip()[0] in "=+-@"
+
+
 def test_openapi_contains_listing_management_route() -> None:
     paths = create_app().openapi()["paths"]
     assert "/api/listings/walmart" in paths

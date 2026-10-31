@@ -33,13 +33,17 @@ interface ListingFieldItem {
   value: string | number;
 }
 
+function priceText(value: number, known: boolean | undefined, currency: string | undefined) {
+  return known === false ? "未同步" : `${currency || "币种未知"} ${value.toFixed(2)}`;
+}
+
 function ListingFieldGrid({ items }: { items: ListingFieldItem[] }) {
   return (
     <div className="listing-management__detail-field-grid">
       {items.map((item) => (
         <div key={item.label} className="listing-management__detail-field">
           <div className="listing-management__detail-field-label">{item.label}</div>
-          <div className="listing-management__detail-field-value">{item.value || "-"}</div>
+          <div className="listing-management__detail-field-value">{item.value === "" ? "-" : item.value}</div>
         </div>
       ))}
     </div>
@@ -87,14 +91,14 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
           <Typography.Title level={4}>销售库存</Typography.Title>
           <ListingFieldGrid
             items={[
-              { label: "划线价", value: `$${row.listPrice.toFixed(2)}` },
-              { label: "在售价", value: `$${row.salePrice.toFixed(2)}` },
-              { label: "WFS可售库存", value: row.wfsAvailableInventory },
-              { label: "在途库存", value: row.inboundInventory },
+              { label: "划线价", value: priceText(row.listPrice, row.listPriceKnown, row.listPriceCurrency) },
+              { label: "在售价", value: priceText(row.salePrice, row.salePriceKnown, row.salePriceCurrency) },
+              { label: "WFS可售库存", value: row.wfsAvailableInventoryKnown === false ? "未同步" : row.wfsAvailableInventory },
+              { label: "在途库存", value: row.inboundInventoryKnown === false ? "未同步" : row.inboundInventory },
               { label: "近30天销量", value: row.sales30Days },
-              { label: "近30天广告费", value: `$${row.adSpend30Days.toFixed(2)}` },
-              { label: "评分", value: row.rating },
-              { label: "评论数", value: row.reviewCount },
+              { label: "近30天广告费", value: row.adSpend30DaysKnown === false ? "未同步" : `${row.adSpend30Days.toFixed(2)}（币种待核实）` },
+              { label: "评分", value: row.ratingKnown === false ? "无评分" : row.rating },
+              { label: "评论数", value: row.reviewCountKnown === false ? "未同步" : row.reviewCount },
             ]}
           />
         </section>
@@ -112,11 +116,11 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
             </div>
             <div>
               <Typography.Text strong>购物车监控</Typography.Text>
-              <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : "当前正常"}</Typography.Text>
+              <Typography.Text>{row.buyBoxStatus === "未拥有" ? "需要跟进 Buy Box 风险" : row.buyBoxStatus === "拥有" ? "当前正常" : "待确认"}</Typography.Text>
             </div>
             <div>
               <Typography.Text strong>跟卖监控</Typography.Text>
-              <Typography.Text>{row.resold === "是" ? "发现跟卖，建议复核价格与卖家" : "暂无跟卖"}</Typography.Text>
+              <Typography.Text>{row.resold === "是" ? "发现跟卖，建议复核价格与卖家" : row.resold === "否" ? "暂无跟卖" : "待确认"}</Typography.Text>
             </div>
             <div>
               <Typography.Text strong>治理状态</Typography.Text>
@@ -187,7 +191,7 @@ function ListingDetailModal({ row, onClose, onOpenAnalysis }: ListingDetailModal
             <div className="listing-management__detail-stat-pills">
               <div><strong>{row.msku}</strong><span>MSKU</span></div>
               <div><strong>{row.productId}</strong><span>商品ID</span></div>
-              <div><strong>{row.rating}</strong><span>评分</span></div>
+              <div><strong>{row.ratingKnown === false ? "无评分" : row.rating}</strong><span>评分</span></div>
             </div>
           </section>
           <div className="listing-management__detail-layout">

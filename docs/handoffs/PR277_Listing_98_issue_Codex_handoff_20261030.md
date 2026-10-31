@@ -265,7 +265,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **空金额、评分、库存默认显示0**
 - Recorded condition: numberValue(value??0)把未知值变成0
 - Original acceptance: null显示—/待同步；真实零单独显示0
-- PR #277 review / Codex TODO: Known flags added for price, inventory, rating and reviews. Verify all render paths and sorting; numberValue still stores 0 as internal fallback.
+- PR #277 evidence: list and detail now respect known flags for price, inventory, rating and reviews; detail preserves observed zero inventory rather than a missing-value marker. Sorting and browser acceptance remain pending; numberValue still stores 0 as internal fallback.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/listingManagementApi.ts
 
 ### LM-031 | 列表字段 | P1 | PARTIAL
@@ -279,7 +279,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **跟卖状态未知显示为“否”**
 - Recorded condition: 前端is_hijacked ? 是 : 否；null被视作false
 - Original acceptance: 增加“待确认”，导出与表格一致
-- PR #277 evidence: frontend and CSV both distinguish true/false/null as 是/否/待确认; targeted CSV tests cover all three states. Monitoring fallback and browser acceptance remain pending.
+- PR #277 evidence: frontend, detail, and CSV distinguish true/false/null as 是/否/待确认; targeted CSV and detail tests cover the unknown state. Monitoring fallback and browser acceptance remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/listingManagementApi.ts
 
 ### LM-033 | 列表字段 | P1 | PARTIAL
@@ -307,7 +307,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码已确认): **价格统一显示美元符号**
 - Recorded condition: 表格写死$，未使用返回币种
 - Original acceptance: 以金额+原币种成组展示，不跨源拼接
-- PR #277 evidence: table renders the amount with its source currency code or `币种未知`; it does not silently default a known price to USD. CSV/source parity still needs isolated API acceptance.
+- PR #277 evidence: table and detail render a known price with its source currency code or `币种未知`; neither silently defaults to USD. Detail no longer labels the unverified ad-spend currency as dollars. CSV/source parity still needs isolated API acceptance.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/frontend/src/pages/products/listingManagementApi.ts
 
 ### LM-037 | 监控数据 | P1 | PATCHED_UNVERIFIED
@@ -639,11 +639,11 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - PR #277 review / Codex TODO: list_tags queries ALL active ProductCustomTag definitions and scopes only usage counts. Must enforce tenant ownership or explicit shared/global policy.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/repository.py
 
-### LM-084 | 导出 | P1 | PARTIAL
+### LM-084 | 导出 | P1 | PATCHED_UNVERIFIED
 - Original issue (源码已确认): **CSV外部文本未防公式注入**
 - Recorded condition: _csv_value对标题、SKU、卖家等字符串直接输出
 - Original acceptance: 危险前缀字符进行CSV公式安全防护并测试
-- PR #277 review / Codex TODO: _csv_value escapes scalar dangerous prefixes, but its list branch joins and returns without rechecking formula-prefix safety.
+- PR #277 evidence: `_csv_value` flattens list cells before checking formula prefixes; synthetic tests cover =, +, -, @, TAB, CR, LF and a list-valued cell. Spreadsheet application behavior remains unverified.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/service.py
 
 ### LM-085 | 数据关联 | P1 | PARTIAL
@@ -657,7 +657,7 @@ State legend: `PATCHED_UNVERIFIED` = targeted edits, NOT accepted; `PARTIAL` = n
 - Original issue (源码风险待验收): **监控金额与币种可能来自不同来源**
 - Recorded condition: effective_price与effective_currency各自coalesce
 - Original acceptance: 金额币种原子成组回退，不允许跨来源拼接
-- PR #277 review / Codex TODO: Monitor price/currency fallback paired via CASE; UI still renders USD when currency unknown. Validate atomic provenance for all price fields.
+- PR #277 evidence: monitor price/currency fallback is paired via CASE, and list/detail no longer claim USD when currency is unknown. End-to-end source provenance and CSV parity remain pending.
 - Original source at old baseline: https://github.com/mz-liuyunlong/SZZSBJ/blob/9bff308dcb9a82dc6039763defa03c414fbfef14/backend/app/modules/data_pages/repository.py
 
 ### LM-087 | 归档恢复 | P1 | PATCHED_UNVERIFIED
