@@ -13,8 +13,9 @@ import ManagementStatCards, { type ManagementStatCardItem } from "@/components/r
 import RuntimeColumnConfigDrawer from "@/components/report-table/RuntimeColumnConfigDrawer";
 import type { NavigationPage } from "@/config/navigation";
 import {
-  ANALYSIS_FIELDS, MANAGEMENT_FIELDS, ClearanceAnalysisTable, ClearanceManagementTable, money, type TableState,
+  ClearanceAnalysisTable, ClearanceManagementTable, type TableState,
 } from "./clearance/clearanceUi";
+import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, money } from "./clearance/clearanceUiConfig";
 import {
   CLEARANCE_PRODUCTS, activeTaskFor, chinaToday, coverage, evaluateProduct,
   initialClearance, persistClearance, taskCost, taskProgress, taskQty,
@@ -98,7 +99,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
    const products=t.lines.map(l=>CLEARANCE_PRODUCTS.find(x=>x.id===l.id));
    if(searchType==="sku"||searchType==="msku"||searchType==="item"||searchType==="name")return products.some(x=>(String(x?.[searchType]??"")).toLowerCase().includes(q));
    return [t.id,t.reason,t.remark,t.requester,...products.map(x=>x?.sku??"")].some(v=>v.toLowerCase().includes(q));
- }).sort((a,b)=>b.submitted.localeCompare(a.submitted)),[data.tasks,filters]);
+ }).sort((a,b)=>b.submitted.localeCompare(a.submitted)),[data.tasks,filters,searchType]);
  const metrics=useMemo(():ManagementStatCardItem<string>[]=>{
   const rows=tab==="management"?[
    {key:"pending",title:"待审批申请",value:data.tasks.filter(t=>t.status==="pending").length,subtitle:"审批由独立工作台处理",icon:STAT_ICONS.clock},
