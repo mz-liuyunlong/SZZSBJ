@@ -7,7 +7,7 @@ import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
 import {
  CLEARANCE_PRODUCTS, DEFAULT_RULES, METHODS, REASONS, STATUS_NAMES, activeTaskFor,
- chinaToday, coverage, evaluateProduct, findProduct,
+ chinaToday, chinaNow, nextClearanceTaskId, taskIsComplete, coverage, evaluateProduct, findProduct,
  taskCost, taskProgress, taskQty, taskRemoved, taskRisk, taskSold, taskStore, validateRules,
  type ClearanceProduct, type ClearanceRules, type ClearanceTask, type ClearanceTaskLine,
  type RulesHistory, type StoredClearance,
@@ -133,6 +133,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
   if(applyProducts.some(x=>x.owner!==role||x.avail<=0)||(!old&&applyProducts.some(x=>activeTaskFor(data.tasks,x.id)))||new Set(applyProducts.map(x=>x.store)).size!==1){void message.error("SKU 权限、库存、重复申请或店铺校验失败");return;}
   if(applyProducts.some(x=>!Number.isInteger(quantities[x.id])||quantities[x.id]<1||quantities[x.id]>x.avail)){void message.error("每个 SKU 的申请数量必须为正整数且不超过可售库存");return;}
   const now=chinaToday();
+  const timestamp=chinaNow();
   if(!values.remark.trim()){void message.error("申请说明不能为空");return;}
   if(values.due.format("YYYY-MM-DD")<now){void message.error("计划完成日期不得早于今天");return;}
   const lines:ClearanceTaskLine[]=applyProducts.map(x=>({id:x.id,qty:quantities[x.id],sold:old?.lines.find(l=>l.id===x.id)?.sold??0,removed:old?.lines.find(l=>l.id===x.id)?.removed??0,disposed:old?.lines.find(l=>l.id===x.id)?.disposed??0}));
@@ -140,11 +141,10 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
   if(old){
    const pos=nextTasks.findIndex(t=>t.id===old.id);
    if(!["supplement","rejected"].includes(old.status)){void message.error("当前状态不允许重提");return;}
-   nextTasks[pos]={...old,lines,status:"pending",reason:values.reason,methods:values.methods,due:values.due.format("YYYY-MM-DD"),remark:values.remark.trim(),version:old.version+1,ruleVersion:data.ruleVersion,submitted:now+" 18:52",history:[...old.history,{at:now+" 18:52",who:role,text:"补充资料并重新提交审批"}]};
+   nextTasks[pos]={...old,lines,status:"pending",reason:values.reason,methods:values.methods,due:values.due.format("YYYY-MM-DD"),remark:values.remark.trim(),version:old.version+1,ruleVersion:data.ruleVersion,submitted:timestamp,history:[...old.history,{at:timestamp,who:role,text:"补充资料并重新提交审批"}]};
    nextTasks[pos].riskAtSubmission=taskRisk(nextTasks[pos],data.rules);
   }else{
-   const n=Math.max(6,...nextTasks.map(t=>Number(t.id.split("-").pop())||0))+1;
-   const fresh:ClearanceTask={id:"CH-1024-"+String(n).padStart(3,"0"),lines,status:"pending",reason:values.reason,methods:values.methods,owner:role,requester:role,approver:"李主管",date:now,due:values.due.format("YYYY-MM-DD"),submitted:now+" 18:52",remark:values.remark.trim(),source:apply.source,version:1,ruleVersion:data.ruleVersion,riskAtSubmission:"low",history:[{at:now+" 18:52",who:role,text:"提交清货申请至统一审批工作台（本地演示）"}]};
+   const fresh:ClearanceTask={id:nextClearanceTaskId(nextTasks,timestamp),lines,status:"pending",reason:values.reason,methods:values.methods,owner:role,requester:role,approver:"李主管",date:now,due:values.due.format("YYYY-MM-DD"),submitted:now+" 18:52",remark:values.remark.trim(),source:apply.source,version:1,ruleVersion:data.ruleVersion,riskAtSubmission:"low",history:[{at:timestamp,who:role,text:"提交清货申请至统一审批工作台（本地演示）"}]};
    fresh.riskAtSubmission=taskRisk(fresh,data.rules);nextTasks.unshift(fresh);
   }
   change({tasks:nextTasks,manual:apply.source==="manual"?[...new Set([...data.manual,...apply.ids])]:data.manual});
@@ -153,7 +153,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
  const updateStatus=(t:ClearanceTask,command:"start"|"pause"|"resume"|"withdraw"|"finish")=>{
   const transitions={start:["ready","running"],pause:["running","paused"],resume:["paused","running"],withdraw:["pending","cancelled"],finish:["running","done"]} as const;
   const [from,to]=transitions[command];
-  if(t.owner!==role||t.status!==from||(command==="finish"&&taskProgress(t)!==100)){void message.error("当前身份或任务状态不允许此操作");return;}
+  if(t.owner!==role||t.status!==from||(command==="finish"&&!taskIsComplete(t))){void message.error("当前身份或任务状态不允许此操作");return;}
   const tasks=data.tasks.map(row=>row.id!==t.id?row:{...row,status:to,history:[...row.history,{at:chinaToday(),who:role,text:"状态更新："+STATUS_NAMES[to]}]});
   change({tasks});void message.success("已更新模拟任务状态");
  };
@@ -177,8 +177,8 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
   {product&&<><div className="clearance-detail-grid">{[["商品ID",product.item],["SKU",product.sku],["MSKU",product.msku],["店铺",product.store],["负责人",product.owner],["当前售价",money(product.price)],["可售库存",integer(product.avail)],["售罄天数",coverage(product)==null?"无法估算":coverage(product)+"天"],["库存成本",money(product.avail*product.cost)],["平均库龄",product.age+"天"],["评分",product.rating+" / 5"],["30天退货",product.returns+" 次"]].map(([label,value])=><Card key={label} size="small"><Typography.Text type="secondary">{label}</Typography.Text><strong>{value}</strong></Card>)}</div>
   <Divider orientation="left">7 / 14 / 30 天经营指标对比</Divider>
   <Table rowKey="key" size="small" pagination={false} dataSource={([["units","销量"],["daily","日均销量"],["revenue","销售额"],["ads","广告费"],["adRate","广告占比"],["profit","利润"],["profitRate","利润率"]] as const).map(([key,label])=>({key,label}))} columns={[{title:"指标",dataIndex:"label"},...[7,14,30].map(days=>({title:days+"天",render:(_:unknown,row:{key:string})=>{const x=product.per[days as 7|14|30];return row.key==="units"?integer(x.units):row.key==="daily"?(x.units/days).toFixed(2):row.key==="revenue"?money(x.revenue):row.key==="ads"?money(x.ads):row.key==="adRate"?percent(x.adRate):row.key==="profit"?money(x.profit):percent(x.margin);}}))]}/>
-  <Divider orientation="left">风险决策依据</Divider>{data.manual.includes(product.id)&&eligible(product)&&<Button danger size="small" onClick={()=>setRemoveTarget(product.id)}>移出人工清货候选</Button>}<RiskTag level={evaluateProduct(product,data.rules).level}/>{evaluateProduct(product,data.rules).reasons.map(x=><Typography.Paragraph key={x}>• {x}</Typography.Paragraph>)}{evaluateProduct(product,data.rules).business.map(x=><Tag color="warning" key={x}>{x}</Tag>)}
-  </>}</Drawer>
+  <Divider orientation="left">WFS 库存与商品资料</Divider><div className="clearance-detail-grid">{[["预留库存",product.res+" 件"],["不可售库存",product.bad+" 件"],["在途库存",product.inbound+" 件"],["单位库存成本",money(product.cost)],["在售天数",product.listingDays+" 天"],["超龄库存批次",product.ageLots.map(l=>l.ageDays+"天 / "+l.qty+"件").join("、")||"暂无"]].map(([label,value])=><Card key={label} size="small"><Typography.Text type="secondary">{label}</Typography.Text><strong>{value}</strong></Card>)}</div><Divider orientation="left">风险决策依据</Divider>{data.manual.includes(product.id)&&eligible(product)&&<Button danger size="small" onClick={()=>setRemoveTarget(product.id)}>移出人工清货候选</Button>}<RiskTag level={evaluateProduct(product,data.rules).level}/>{evaluateProduct(product,data.rules).reasons.map(x=><Typography.Paragraph key={x}>• {x}</Typography.Paragraph>)}{evaluateProduct(product,data.rules).business.map(x=><Tag color="warning" key={x}>{x}</Tag>)}
+  <Divider orientation="left">当前申请与处理建议</Divider><Typography.Paragraph>{activeTaskFor(data.tasks,product.id)?("已有有效清货任务："+activeTaskFor(data.tasks,product.id)?.id+"，不能重复申请。"):"当前没有有效清货任务，可由负责人按实际库存提出申请。"}</Typography.Paragraph></>}</Drawer>
   <Modal title="运营主动申请清货" width={900} open={manualOpen} onCancel={()=>setManualOpen(false)} onOk={()=>{begin(manualSelection,"manual");setManualOpen(false);}} okText="下一步 · 填写申请" okButtonProps={{disabled:!selected.length||new Set(selected.map(x=>x.store)).size!==1||!selected.every(eligible)}} destroyOnHidden>
    <Typography.Paragraph type="secondary">可搜索全部 WFS Mock 商品，包括未触发风险的正常 SKU。只能选择本人负责、同店铺且没有有效申请的商品。</Typography.Paragraph>
    <Space wrap><Input.Search placeholder="搜索 SKU / MSKU / 商品ID / 品名" value={manualSearch} onChange={e=>setManualSearch(e.target.value)}/><Select value={manualStore} onChange={setManualStore} options={[{value:"all",label:"全部店铺"},...Array.from(new Set(CLEARANCE_PRODUCTS.map(x=>x.store))).map(x=>({value:x,label:x}))]}/></Space>
@@ -203,7 +203,7 @@ export function ClearanceDialogs({data,onChange,role,applicant,setApplicant,manu
    <Divider orientation="left">操作留痕</Divider><Timeline items={task.history.slice().reverse().map(h=>({children:<>{h.text}<div className="clearance-subline">{h.at} · {h.who}</div></>}))}/>
    <Divider orientation="left">清货执行（模拟）</Divider><Typography.Paragraph type="secondary">审批在独立工作台处理；此处仅演示已存在的审批结果。执行进度不会修改真实库存。</Typography.Paragraph>
    <Space wrap>{task.status==="ready"&&<Button type="primary" disabled={task.owner!==role} onClick={()=>updateStatus(task,"start")}>开始执行</Button>}
-   {task.status==="running"&&<><Button type="primary" disabled={task.owner!==role} onClick={()=>{progressForm.setFieldsValue({lines:Object.fromEntries(task.lines.map(x=>[x.id,{sold:x.sold,removed:x.removed,disposed:x.disposed}]))});setProgressOpen(true);}}>更新进度</Button><Button disabled={task.owner!==role} onClick={()=>updateStatus(task,"pause")}>暂停执行</Button><Button disabled={task.owner!==role||taskProgress(task)!==100} onClick={()=>updateStatus(task,"finish")}>确认完成</Button></>}
+   {task.status==="running"&&<><Button type="primary" disabled={task.owner!==role} onClick={()=>{progressForm.setFieldsValue({lines:Object.fromEntries(task.lines.map(x=>[x.id,{sold:x.sold,removed:x.removed,disposed:x.disposed}]))});setProgressOpen(true);}}>更新进度</Button><Button disabled={task.owner!==role} onClick={()=>updateStatus(task,"pause")}>暂停执行</Button><Button disabled={task.owner!==role||!taskIsComplete(task)} onClick={()=>updateStatus(task,"finish")}>确认完成</Button></>}
    {task.status==="paused"&&<Button disabled={task.owner!==role} type="primary" onClick={()=>updateStatus(task,"resume")}>恢复执行</Button>}
    {task.status==="pending"&&<Button danger disabled={task.owner!==role} onClick={()=>updateStatus(task,"withdraw")}>撤回申请</Button>}
    {["supplement","rejected"].includes(task.status)&&<Button type="primary" disabled={task.owner!==role} onClick={()=>begin(task.lines.map(l=>l.id),task.source,task.id)}>补充资料并重新提交</Button>}</Space>
