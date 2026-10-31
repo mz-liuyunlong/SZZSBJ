@@ -97,7 +97,7 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,state,onPage,onI
     default:return "—";
     }
   };
-  const fields=ANALYSIS_FIELDS.filter(([key])=>state.columns.includes(key));
+  const fields=state.columns.flatMap(key=>ANALYSIS_FIELDS.filter(([name])=>name===key));
   const columns=fields.map(([key,label,width])=>makeColumn<ClearanceProduct>(key,label,width,widths,onWidth,row=>cell(row,key),"analysis"));
   return <ReportTableShell label="清货分析表格"><ProTable<ClearanceProduct>
     rowKey="id" search={false} options={false} toolBarRender={false} columns={columns} dataSource={rows}
@@ -132,7 +132,7 @@ export function ClearanceManagementTable({rows,state,onPage,onTask}:TableCommon&
     default:return "—";
     }
   };
-  const fields=MANAGEMENT_FIELDS.filter(([key])=>state.columns.includes(key));
+  const fields=state.columns.flatMap(key=>MANAGEMENT_FIELDS.filter(([name])=>name===key));
   const columns=fields.map(([key,label,width])=>makeColumn<ClearanceTask>(key,label,width,widths,onWidth,row=>cell(row,key),"management"));
   return <ReportTableShell label="清货管理表格"><ProTable<ClearanceTask>
     rowKey="id" search={false} options={false} toolBarRender={false} dataSource={rows} columns={columns}
