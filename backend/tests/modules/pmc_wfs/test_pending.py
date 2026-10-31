@@ -1,11 +1,16 @@
 """Real local PostgreSQL tests in a process-owned schema; existing data never touched."""
 
+import importlib.util
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import Session
@@ -28,6 +33,26 @@ from app.modules.pmc_wfs.router import service as dependency
 from app.modules.pmc_wfs.schemas import DraftCommand, IdentityCommand, PendingFilter, PendingQuery
 from app.modules.pmc_wfs.service import WfsService
 from scripts.wfs_pending_local_schema import local_url
+
+MIGRATION_0072 = (
+    Path(__file__).resolve().parents[3]
+    / "alembic"
+    / "versions"
+    / "20261101_0072_wfs_pending_drafts.py"
+)
+
+
+def _migration_0072():
+    spec = importlib.util.spec_from_file_location("migration_0072_under_test", MIGRATION_0072)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_0072(conn, direction="upgrade"):
+    with Operations.context(MigrationContext.configure(conn)):
+        getattr(_migration_0072(), direction)()
 
 
 @pytest.fixture(scope="module")
@@ -75,6 +100,10 @@ def engine():
                 assert name.replace("_", "").isalnum()
                 definition = definition.replace("public.", f'"{schema}".')
                 c.execute(text(f'ALTER TABLE "{table}" ADD CONSTRAINT "{name}" {definition}'))
+            # A development database built by Alembic alone has no WFS draft tables in
+            # public (they used to come from a local script); create them in this test
+            # schema through migration 0072 itself.
+            _run_0072(c)
         with db_engine.begin() as c:
             c.execute(
                 text("""CREATE FUNCTION prevent_wfs_test_events() RETURNS trigger AS $$
@@ -555,3 +584,86 @@ def test_invalid_line_batch_rolls_back_and_business_test_is_independent(db):
         == 0
     )
     assert not svc.repo.occupied([order.id])
+
+
+def _structure(conn, schema: str) -> dict:
+    inspector = sa.inspect(conn)
+    out = {}
+    for name in sorted(_migration_0072().TABLES):
+        out[name] = {
+            "columns": {
+                c["name"]: (str(c["type"]), bool(c["nullable"]))
+                for c in inspector.get_columns(name, schema=schema)
+            },
+            "pk": inspector.get_pk_constraint(name, schema=schema)["name"],
+            "unique": sorted(
+                (u["name"], tuple(u["column_names"]))
+                for u in inspector.get_unique_constraints(name, schema=schema)
+            ),
+            "fk": sorted(
+                (f["name"], tuple(f["constrained_columns"]), f["referred_table"])
+                for f in inspector.get_foreign_keys(name, schema=schema)
+            ),
+            "check": sorted(
+                (k["name"], k["sqltext"])
+                for k in inspector.get_check_constraints(name, schema=schema)
+            ),
+            "indexes": sorted(
+                (i["name"], tuple(i["column_names"]), bool(i["unique"]))
+                for i in inspector.get_indexes(name, schema=schema)
+            ),
+        }
+    return out
+
+
+def test_migration_0072_matches_orm_metadata():
+    """Migration 0072 (explicit tables, no model import) must produce exactly what the
+    ORM models declare: columns, types, nullability, PK/unique/FK/check names, indexes;
+    re-running it on a database that already has the four tables adopts them; downgrade
+    refuses while rows exist."""
+    if os.environ.get("WFS_LOCAL_INTEGRATION") != "1":
+        pytest.skip("explicit local integration opt-in required (WFS_LOCAL_INTEGRATION=1)")
+    from app.db.base import Base
+    from app.modules.pmc_wfs.repository import WFS_TABLES
+
+    url = local_url()
+    token = uuid4().hex[:12]
+    mig, orm = f"wfs_mig0072_{token}", f"wfs_orm0072_{token}"
+    admin = create_engine(url, hide_parameters=True)
+    try:
+        with admin.begin() as c:
+            assert c.scalar(text("select current_database()")) == "szzsbj_dev"
+            for schema in (mig, orm):
+                c.execute(text(f'CREATE SCHEMA "{schema}"'))
+                c.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+                for ref in ("ops_domestic_packing_orders", "ops_domestic_packing_box_lines"):
+                    c.execute(text(f'CREATE TABLE "{ref}" (id uuid PRIMARY KEY)'))
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+            _run_0072(c)
+            _run_0072(c)  # second run adopts the complete set unchanged
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{orm}"'))
+            Base.metadata.create_all(c, tables=list(WFS_TABLES))
+        with admin.connect() as c:
+            migrated, declared = _structure(c, mig), _structure(c, orm)
+        assert migrated == declared
+        with admin.begin() as c:
+            c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+            c.execute(
+                text(
+                    "INSERT INTO ops_pmc_wfs_drafts (id, number, source_account_ref, store_id,"
+                    " status, business_test, payload, actor_uid, created_at) VALUES"
+                    " (gen_random_uuid(), 'D1', 'acct', 's', 'pending', true, '{}', 'u', now())"
+                )
+            )
+        with pytest.raises(RuntimeError, match="refusing to drop evidence"):
+            with admin.begin() as c:
+                c.execute(text(f'SET LOCAL search_path TO "{mig}"'))
+                _run_0072(c, "downgrade")
+    finally:
+        with admin.begin() as c:
+            for schema in (mig, orm):
+                assert schema.startswith("wfs_") and token in schema
+                c.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        admin.dispose()
