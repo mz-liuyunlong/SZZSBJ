@@ -232,8 +232,11 @@ class FeishuDirectoryService:
         token = self._fetch_tenant_access_token()
         raw = self._get_paged_items(
             "/open-apis/contact/v3/departments/0/children",
-            {"user_id_type": "open_id", "department_id_type": "open_department_id",
-             "fetch_child": "true"},
+            {
+                "user_id_type": "open_id",
+                "department_id_type": "open_department_id",
+                "fetch_child": "true",
+            },
             token,
             item_keys=("items", "departments"),
         )
@@ -248,10 +251,7 @@ class FeishuDirectoryService:
                 continue
             departments[department_id] = {
                 "department_id": department_id,
-                "parent_department_id": str(
-                    item.get("parent_department_id")
-                    or "0"
-                ).strip(),
+                "parent_department_id": str(item.get("parent_department_id") or "0").strip(),
                 "name": str(item.get("name") or department_id).strip(),
                 "leader_user_id": str(item.get("leader_user_id") or "").strip(),
             }

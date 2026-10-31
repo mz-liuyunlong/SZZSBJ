@@ -2,6 +2,7 @@
 
 This is a reviewed, explicit migration only; never execute it on application boot.
 """
+
 from __future__ import annotations
 from collections.abc import Sequence
 from sqlalchemy import text
@@ -17,7 +18,8 @@ depends_on = None
 def upgrade() -> None:
     connection = op.get_bind()
     for item in PERMISSION_DEFINITIONS:
-        connection.execute(text("""
+        connection.execute(
+            text("""
             INSERT INTO app_permissions (
                 permission_key, name, group_key, description,
                 permission_type, module_key, page_key, action_key, field_key,
@@ -30,19 +32,21 @@ def upgrade() -> None:
             ON CONFLICT (permission_key) DO UPDATE SET
                 name = EXCLUDED.name, description = EXCLUDED.description,
                 is_active = true, updated_at = now()
-        """), {
-            "permission_key": item.permission_key,
-            "name": item.name,
-            "group_key": item.module_key,
-            "description": item.description,
-            "permission_type": item.permission_type,
-            "module_key": item.module_key,
-            "page_key": item.page_key,
-            "action_key": item.action_key,
-            "field_key": item.field_key,
-            "risk_level": item.risk_level,
-            "sort_order": item.sort_order,
-        })
+        """),
+            {
+                "permission_key": item.permission_key,
+                "name": item.name,
+                "group_key": item.module_key,
+                "description": item.description,
+                "permission_type": item.permission_type,
+                "module_key": item.module_key,
+                "page_key": item.page_key,
+                "action_key": item.action_key,
+                "field_key": item.field_key,
+                "risk_level": item.risk_level,
+                "sort_order": item.sort_order,
+            },
+        )
 
 
 def downgrade() -> None:

@@ -296,15 +296,23 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("warehouse_wfs_fee_alert", "archive-review", "审核归档WFS Case", 25, "high"),
     ActionDefinition("warehouse_wfs_fee_alert", "mark-recovered", "确认WFS费用已追回", 30, "high"),
     ActionDefinition("warehouse_wfs_fee_alert", "sync-legacy", "同步历史WFS Case", 40, "high"),
-    ActionDefinition("pmc_domestic_warehouse_board", "packing-manual-create", "手工提交打包审批", 30, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-manual-create", "手工提交打包审批", 30, "high"
+    ),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-boxes-save", "保存仓库装箱", 40),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-done", "确认打包完成", 41),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-customs", "修改打包报关", 42),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-note", "填写打包延迟备注", 43),
-    ActionDefinition("pmc_domestic_warehouse_board", "packing-unpacked-dispose", "处置未装数量", 44, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-unpacked-dispose", "处置未装数量", 44, "high"
+    ),
     ActionDefinition("pmc_domestic_warehouse_board", "packing-rebox", "修改已完成装箱", 45, "high"),
-    ActionDefinition("pmc_domestic_warehouse_board", "packing-supplement-ib", "登记超发补入库单", 46, "high"),
-    ActionDefinition("pmc_domestic_warehouse_board", "packing-supplement-sync", "校验超发补入库数据", 47, "high"),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-supplement-ib", "登记超发补入库单", 46, "high"
+    ),
+    ActionDefinition(
+        "pmc_domestic_warehouse_board", "packing-supplement-sync", "校验超发补入库数据", 47, "high"
+    ),
     ActionDefinition("operations_plan", "create", "新增运营计划", 10),
     ActionDefinition("operations_plan", "edit", "编辑运营计划", 20),
     ActionDefinition("operations_plan", "import", "导入运营计划", 30),

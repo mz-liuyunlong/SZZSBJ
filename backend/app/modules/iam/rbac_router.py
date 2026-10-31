@@ -314,18 +314,22 @@ def preview_feishu_organization(
     service = FeishuDirectoryService.from_settings(get_settings())
     departments = service.list_visible_departments()
     users = service.list_visible_users()
-    return success_response(request, data={
-        "departments": list(departments),
-        "users": [
-            {
-                "name": user.name,
-                "open_id": user.open_id,
-                "department_ids": list(user.department_ids),
-                "is_active": user.is_active,
-                "is_resigned": user.is_resigned,
-                "is_frozen": user.is_frozen,
-            }
-            for user in users
-        ],
-        "read_only": True,
-    }, meta=None)
+    return success_response(
+        request,
+        data={
+            "departments": list(departments),
+            "users": [
+                {
+                    "name": user.name,
+                    "open_id": user.open_id,
+                    "department_ids": list(user.department_ids),
+                    "is_active": user.is_active,
+                    "is_resigned": user.is_resigned,
+                    "is_frozen": user.is_frozen,
+                }
+                for user in users
+            ],
+            "read_only": True,
+        },
+        meta=None,
+    )
