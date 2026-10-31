@@ -50,4 +50,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("IAM permission migration is forward-only; never erase user grants.")
+    """Keep permission records and grants intact on downgrade.
+
+    Permission catalog rows can preexist this migration or have active role
+    associations. Deleting or deactivating them would silently revoke access.
+    Reapplying this migration is idempotent, so preserving them is safe.
+    """
+    pass
