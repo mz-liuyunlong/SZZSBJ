@@ -19,16 +19,20 @@
 .clearance-quick>.ant-typography{font-size:11px;margin-right:3px}
 .clearance-quick>.ant-btn{border-color:#e2eaf5;background:#f9fbff;color:#687993;font-size:11px}
 .clearance-quick>.ant-btn-primary{background:#eaf3ff;border-color:#bad6ff;color:#0e70f4}
-.clearance-table-tools{height:46px;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:0 16px}
+.clearance-table-tools{min-height:54px;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 16px;flex-wrap:wrap}
+.clearance-table-tools__left{display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0}
+.clearance-period-control{display:flex;align-items:center;gap:12px}
+.clearance-period-label{color:#667b96;font-size:13px;font-weight:600;white-space:nowrap}
+.clearance-period-segmented.ant-segmented{padding:3px;border:1px solid #dce6f3;border-radius:9px;background:#f7f9fd;box-shadow:0 1px 2px rgba(21,50,95,.04)}
+.clearance-period-segmented .ant-segmented-item{min-width:76px;text-align:center;font-size:13px;font-weight:600;line-height:29px}
+.clearance-period-segmented .ant-segmented-item-selected{background:#1677ff;color:#fff;box-shadow:0 2px 5px rgba(22,119,255,.22)}
+.clearance-period-note.ant-typography{font-size:11px}
+.clearance-period-value{font-size:12px;font-weight:650;white-space:nowrap;font-variant-numeric:tabular-nums}
+.clearance-period-value.is-negative{color:#d95357}
 .clearance-table-tools>.ant-typography{font-size:11px}
 .clearance-main-card .report-table-shell{height:572px;min-height:0;border:0;border-radius:0}
 .clearance-main-card .ant-pro-card-body{padding:0}
 .clearance-main-card .ant-pro-table{width:100%}
-.clearance-period-stack{display:grid;gap:4px;min-width:100px}
-.clearance-period-stack__row{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:8px;line-height:19px;font-size:11px}
-.clearance-period-stack__row span{color:#92a1b2}
-.clearance-period-stack__row strong{font-weight:650;font-variant-numeric:tabular-nums;text-align:right}
-.clearance-period-stack__row .is-negative{color:#d95357}
 .clearance-subline{display:block!important;font-size:11px;color:#95a3b6;line-height:18px}
 .clearance-table-link.ant-btn{padding:0;height:auto;font-weight:650}
 .clearance-star{color:#edb45b}

@@ -1,6 +1,6 @@
 /** WFS clearance center: native React/AntD mock acceptance, no production API. */
 import { useMemo, useState, type ReactNode } from "react";
-import { Alert, Button, Card, Select, Space, Tabs, Typography, message } from "antd";
+import { Alert, Button, Card, Segmented, Select, Space, Tabs, Tag, Typography, message } from "antd";
 import {
   DownloadOutlined, EyeInvisibleOutlined, EyeOutlined, FileAddOutlined,
   FilterOutlined, ReloadOutlined, SettingOutlined,
@@ -15,12 +15,12 @@ import type { NavigationPage } from "@/config/navigation";
 import {
   ClearanceAnalysisTable, ClearanceManagementTable, type TableState,
 } from "./clearance/clearanceUi";
-import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, money } from "./clearance/clearanceUiConfig";
+import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, PERIODS, getClearancePeriodMetrics, money } from "./clearance/clearanceUiConfig";
 import {
   CLEARANCE_PRODUCTS, activeTaskFor, chinaToday, coverage, evaluateProduct,
   initialClearance, persistClearance, taskCost, taskProgress, taskQty,
   taskRemoved, taskSold, taskStore, toCsv,
-  type RiskLevel, type StoredClearance,
+  type RiskLevel, type StoredClearance, type PeriodDays,
 } from "./clearance/clearanceModel";
 import { ClearanceDialogs, ClearanceRulesPanel } from "./clearance/clearanceDialogs";
 import "./ClearanceCenterPage.css";
@@ -44,6 +44,7 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const [data,setData]=useState<StoredClearance>(initialClearance);
  const update=(next:StoredClearance)=>{setData(next);persistClearance(next);};
  const [tab,setTab]=useState<Tab>("analysis");
+ const [period,setPeriod]=useState<PeriodDays>(30);
  const [role,setRole]=useState("刘运营");
  const [filters,setFilters]=useState<FilterState>({...blankFilters});
  const [searchDraft,setSearchDraft]=useState("");
@@ -85,11 +86,11 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
   }).sort((a,b)=>{
    if(filters.sort==="age")return b.age-a.age;
    if(filters.sort==="value")return b.avail*b.cost-a.avail*a.cost;
-   if(filters.sort==="sales")return a.per[30].units-b.per[30].units;
+   if(filters.sort==="sales")return a.per[period].units-b.per[period].units;
    const ranks:Record<RiskLevel,number>={high:3,medium:2,low:1};
    return ranks[evaluateProduct(b,data.rules).level]-ranks[evaluateProduct(a,data.rules).level]||b.avail*b.cost-a.avail*a.cost;
   });
- },[candidates,filters,data,searchType]);
+ },[candidates,filters,data,searchType,period]);
  const managementRows=useMemo(()=>data.tasks.filter(t=>{
    const q=filters.query.trim().toLowerCase();
    if(filters.store!=="all"&&taskStore(t)!==filters.store)return false;
@@ -135,14 +136,14 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
  const exportCsv=()=>{
   let csv:string;
   if(tab==="analysis"){
-   const headers=["商品ID","品名","SKU","MSKU","店铺","负责人","风险","来源","WFS可售","库龄","售罄天数","库存成本","售价",...[7,14,30].flatMap(n=>[n+"天日均销量",n+"天销售额",n+"天广告费",n+"天广告占比",n+"天利润",n+"天利润率",n+"天销量"]),"30天退货率","评分"];
-   const rows=analysisRows.map(x=>[x.item,x.name,x.sku,x.msku,x.store,x.owner,evaluateProduct(x,data.rules).level,data.manual.includes(x.id)?"运营主动申请":"系统识别",x.avail,x.age,coverage(x)??"",x.avail*x.cost,x.price,...([7,14,30] as const).flatMap(n=>{const p=x.per[n];return [Number((p.units/n).toFixed(2)),p.revenue,p.ads,p.adRate??"",p.profit,p.margin??"",p.units]}),x.per[30].units>0?x.returns/x.per[30].units*100:"",x.rating]);
+   const headers=["商品ID","品名","SKU","MSKU","店铺","负责人","风险","来源","WFS可售","库龄","售罄天数","库存成本","售价",...["日均销量","销售额","广告费","广告占比","利润","利润率","销量"].map(name=>name+"（"+period+"天）"),"30天退货率","评分"];
+   const rows=analysisRows.map(x=>{const m=getClearancePeriodMetrics(x,period);return [x.item,x.name,x.sku,x.msku,x.store,x.owner,evaluateProduct(x,data.rules).level,data.manual.includes(x.id)?"运营主动申请":"系统识别",x.avail,x.age,coverage(x)??"",x.avail*x.cost,x.price,Number(m.daily.toFixed(2)),m.revenue,m.ads,m.adRate??"",m.profit,m.profitRate??"",m.units,x.per[30].units>0?x.returns/x.per[30].units*100:"",x.rating];});
    csv=toCsv(headers,rows);
   }else{
    const headers=["单号","店铺","申请人","申请来源","清货原因","方式","SKU数量","目标件数","已销售","移除弃置","完成率","库存成本","状态","申请说明"];
    csv=toCsv(headers,managementRows.map(t=>[t.id,taskStore(t),t.requester,t.source,t.reason,t.methods.join("/"),t.lines.length,taskQty(t),taskSold(t),taskRemoved(t),taskProgress(t)+"%",taskCost(t),t.status,t.remark]));
   }
-  csvDownload("WFS清货"+(tab==="analysis"?"分析":"管理")+"_Demo_"+chinaToday()+".csv",csv);
+  csvDownload("WFS清货"+(tab==="analysis"?"分析_"+period+"天":"管理")+"_Demo_"+chinaToday()+".csv",csv);
   void message.success("已导出当前筛选数据（Mock）");
  };
  return <PageShell page={page}>
@@ -164,8 +165,8 @@ export default function ClearanceCenterPage({page}:{page:NavigationPage}){
      {tab==="analysis"&&<div className="clearance-quick"><Typography.Text type="secondary">快速定位</Typography.Text>{[
       ["all","全部风险"],["untreated","待评估"],["auto","系统识别"],["manual","人工申请"],["age","库龄 ≥"+data.rules.mediumAge+"天"],["coverage","售罄 ≥"+data.rules.highCoverage+"天"],["decline","近期销量下滑"],
      ].map(([key,title])=><Button size="small" key={key} type={filters.quick===key?"primary":"default"} onClick={()=>changeFilter({quick:key})}>{title}</Button>)}</div>}
-     <div className="clearance-table-tools"><Typography.Text type="secondary">{tab==="analysis"?"风险优先 · 经营风险辅助，不独立入池":"全部审批决策由独立审批工作台处理"}</Typography.Text><Space><Button size="small" icon={<FilterOutlined/>} onClick={()=>setColumnDrawer(true)}>列配置</Button><Button size="small" icon={<DownloadOutlined/>} onClick={exportCsv}>导出</Button></Space></div>
-     {tab==="analysis"?<ClearanceAnalysisTable rows={analysisRows} rules={data.rules} tasks={data.tasks} manual={data.manual} state={tables.analysis} onPage={(page,pageSize)=>setTableState({page,pageSize})} onInspect={setApplicant} onApply={id=>{const p=CLEARANCE_PRODUCTS.find(x=>x.id===id);if(!p||p.owner!==role||p.avail<=0||activeTaskFor(data.tasks,id)){void message.error("当前 SKU 不能申请清货");return;}setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"});}} onTask={setTaskId}/>:<ClearanceManagementTable rows={managementRows} state={tables.management} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
+     <div className="clearance-table-tools"><div className="clearance-table-tools__left">{tab==="analysis"?<div className="clearance-period-control"><span className="clearance-period-label">数据周期：</span><Segmented aria-label="数据周期" className="clearance-period-segmented" value={period} options={PERIODS.map(n=>({label:n+"天",value:n}))} onChange={value=>setPeriod(value as PeriodDays)}/></div>:<Typography.Text type="secondary">全部审批决策由独立审批工作台处理</Typography.Text>}{tab==="analysis"&&<Typography.Text type="secondary" className="clearance-period-note">风险识别与售罄天数仍按原规则计算</Typography.Text>}</div><Space><Button size="small" icon={<FilterOutlined/>} onClick={()=>setColumnDrawer(true)}>列配置</Button><Button size="small" icon={<DownloadOutlined/>} onClick={exportCsv}>导出</Button></Space></div>
+     {tab==="analysis"?<ClearanceAnalysisTable rows={analysisRows} rules={data.rules} tasks={data.tasks} manual={data.manual} period={period} state={tables.analysis} onPage={(page,pageSize)=>setTableState({page,pageSize})} onInspect={setApplicant} onApply={id=>{const p=CLEARANCE_PRODUCTS.find(x=>x.id===id);if(!p||p.owner!==role||p.avail<=0||activeTaskFor(data.tasks,id)){void message.error("当前 SKU 不能申请清货");return;}setApply({ids:[id],source:data.manual.includes(id)?"manual":"auto"});}} onTask={setTaskId}/>:<ClearanceManagementTable rows={managementRows} state={tables.management} onPage={(page,pageSize)=>setTableState({page,pageSize})} onTask={setTaskId}/>}
      <Typography.Paragraph className="clearance-footer-hint" type="secondary">所有商品、指标、申请及规则均为 Mock 演示数据。风险统计不代表真实经营数据。</Typography.Paragraph>
      <RuntimeColumnConfigDrawer open={columnDrawer} groups={[{title:"显示字段",fields:fields.map(([key,title])=>({key,title}))}]} fixedKeys={fixed} defaultKeys={[...fields.map(([key])=>key)]} appliedKeys={state.columns} onApply={columns=>setTableState({columns:orderedColumns(columns)})} onClose={()=>setColumnDrawer(false)} onSaveTemplate={()=>{void message.info("Mock 模式不保存云端模板");}}/>
     </>}

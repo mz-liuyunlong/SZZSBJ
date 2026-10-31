@@ -7,30 +7,15 @@ import { REPORT_TABLE_PAGE_SIZE_OPTIONS } from "@/components/report-table/pagina
 import {
   activeTaskFor, coverage, evaluateProduct, findProduct, latestTaskFor,
   RISK_NAMES, STATUS_NAMES, taskCost, taskProgress, taskQty, taskRemoved, taskSold, taskStore,
-  type ClearanceProduct, type ClearanceRules, type ClearanceTask, type RiskLevel,
+  type ClearanceProduct, type ClearanceRules, type ClearanceTask, type RiskLevel, type PeriodDays,
 } from "./clearanceModel";
 
-import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, PERIODS, money, integer, percent } from "./clearanceUiConfig";
+import { ANALYSIS_FIELDS, MANAGEMENT_FIELDS, getClearancePeriodMetrics, money, integer, percent } from "./clearanceUiConfig";
 const riskColor:Record<RiskLevel,string>={high:"error",medium:"warning",low:"default"};
 export function RiskTag({level}:{level:RiskLevel}){return <Tag color={riskColor[level]}>{RISK_NAMES[level]}</Tag>;}
 export function StatusTag({status}:{status:ClearanceTask["status"]}){
   const color:Record<ClearanceTask["status"],string>={pending:"gold",supplement:"orange",ready:"processing",running:"blue",paused:"default",done:"success",rejected:"error",cancelled:"default"};
   return <Tag color={color[status]}>{STATUS_NAMES[status]}</Tag>;
-}
-export type StackKey="daily"|"revenue"|"ads"|"adRate"|"profit"|"profitRate"|"units";
-export function PeriodStack({product,metric}:{product:ClearanceProduct;metric:StackKey}){
-  return <div className="clearance-period-stack">{PERIODS.map(days=>{
-    const x=product.per[days];
-    const value=metric==="daily"?(x.units/days).toFixed(2)
-      :metric==="revenue"?money(x.revenue)
-      :metric==="ads"?money(x.ads)
-      :metric==="adRate"?percent(x.adRate)
-      :metric==="profit"?money(x.profit)
-      :metric==="profitRate"?percent(x.margin):integer(x.units);
-    return <div className="clearance-period-stack__row" key={days}>
-      <span>{days}天</span><strong className={(metric==="profit"&&x.profit<0)||(metric==="profitRate"&&x.margin!==null&&x.margin<0)?"is-negative":undefined}>{value}</strong>
-    </div>;
-  })}</div>;
 }
 export interface TableState {page:number;pageSize:number;columns:string[]}
 interface TableCommon {
@@ -50,8 +35,8 @@ function makeColumn<T>(
     render:(_,row)=>render(row),
   };
 }
-export function ClearanceAnalysisTable({rows,rules,tasks,manual,state,onPage,onInspect,onApply,onTask}:TableCommon&{
-  rows:ClearanceProduct[];rules:ClearanceRules;tasks:ClearanceTask[];manual:string[];
+export function ClearanceAnalysisTable({rows,rules,tasks,manual,period,state,onPage,onInspect,onApply,onTask}:TableCommon&{
+  rows:ClearanceProduct[];rules:ClearanceRules;tasks:ClearanceTask[];manual:string[];period:PeriodDays;
   onInspect:(id:string)=>void;onApply:(id:string)=>void;onTask:(id:string)=>void;
 }){
   const [widths,setWidths]=useState<Record<string,number>>({});
@@ -69,7 +54,17 @@ export function ClearanceAnalysisTable({rows,rules,tasks,manual,state,onPage,onI
     case "coverage":return coverage(x)==null?"无法估算":integer(coverage(x)??0)+"天";
     case "stockCost":return <strong>{money(x.avail*x.cost)}</strong>;
     case "price":return money(x.price);
-    case "daily":case "revenue":case "ads":case "adRate":case "profit":case "profitRate":case "units":return <PeriodStack product={x} metric={key}/>;
+    case "daily":case "revenue":case "ads":case "adRate":case "profit":case "profitRate":case "units":{
+      const m=getClearancePeriodMetrics(x,period);
+      const value=key==="daily"?m.daily.toFixed(2)
+        :key==="revenue"?money(m.revenue)
+        :key==="ads"?money(m.ads)
+        :key==="adRate"?percent(m.adRate)
+        :key==="profit"?money(m.profit)
+        :key==="profitRate"?percent(m.profitRate):integer(m.units);
+      const negative=(key==="profit"&&m.profit<0)||(key==="profitRate"&&m.profitRate!==null&&m.profitRate<0);
+      return <strong className={negative?"clearance-period-value is-negative":"clearance-period-value"}>{value}</strong>;
+    }
     case "returns":return <><strong>{percent(x.per[30].units>0?x.returns/x.per[30].units*100:null)}</strong><Typography.Text type="secondary" className="clearance-subline">{x.returns} 次 / {x.per[30].units} 单</Typography.Text></>;
     case "rating":return <><span className="clearance-star">★</span> <strong>{x.rating.toFixed(1)}</strong><Typography.Text type="secondary" className="clearance-subline">{x.reviewCount} 条评价</Typography.Text></>;
     case "status":return active?<StatusTag status={active.status}/>:recent?.status==="done"?<StatusTag status="done"/>:<Tag>待评估</Tag>;

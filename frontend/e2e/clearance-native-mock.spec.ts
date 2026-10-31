@@ -16,6 +16,16 @@ test("clearance uses one native page, shared table and mock only",async({page})=
  await expect(page.getByRole("heading",{name:"WFS 清货中心"})).toBeVisible();
  await expect(page.locator("iframe")).toHaveCount(0);
  await expect(page.locator(".clearance-main-card .ant-pro-table")).toHaveCount(1);
+ await expect(page.getByText("数据周期：",{exact:true})).toBeVisible();
+ await expect(page.locator(".clearance-period-segmented .ant-segmented-item-selected")).toContainText("30天");
+ await expect(page.getByText("7 / 14 / 30 日均销量")).toHaveCount(0);
+ const item=page.locator(".clearance-main-card .ant-table-row").filter({hasText:"DEMO-SKU-101"});
+ await expect(item).toContainText("$223.86");
+ await page.getByText("7天",{exact:true}).click();
+ await expect(page.locator(".clearance-period-segmented .ant-segmented-item-selected")).toContainText("7天");
+ await expect(item).toContainText("$31.98");
+ await page.getByText("30天",{exact:true}).click();
+ await expect(item).toContainText("$223.86");
  await expect(page.getByText("仅 Mock 数据")).toBeVisible();
  await page.getByRole("button",{name:"规则配置"}).click();
  await expect(page.getByRole("heading",{name:"清货规则配置"})).toBeVisible();

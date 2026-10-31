@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { ANALYSIS_FIELDS, getClearancePeriodMetrics } from "./clearanceUiConfig";
 import {
  CLEARANCE_PRODUCTS, DEFAULT_RULES, activeTaskFor, chinaToday, coverage,
  evaluateProduct, findProduct, seedTasks, taskProgress, taskIsComplete, nextClearanceTaskId, chinaNow, toCsv, validateRules,
 } from "./clearanceModel";
 
 describe("WFS clearance native mock domain",()=>{
+ it("selects one display window without changing WFS risk eligibility",()=>{
+  const p=findProduct("WFS-101")!;
+  expect(ANALYSIS_FIELDS.find(([k])=>k==="daily")?.[1]).toBe("日均销量");
+  expect(ANALYSIS_FIELDS.some(([,label])=>label.includes("7 / 14 / 30"))).toBe(false);
+  const seven=getClearancePeriodMetrics(p,7),fourteen=getClearancePeriodMetrics(p,14),thirty=getClearancePeriodMetrics(p,30);
+  expect(seven.units).toBe(p.per[7].units);
+  expect(seven.daily).toBe(p.per[7].units/7);
+  expect(fourteen.revenue).toBe(p.per[14].revenue);
+  expect(thirty.revenue).toBe(p.per[30].revenue);
+  expect(seven.revenue).not.toBe(thirty.revenue);
+  expect(coverage(p)).toBe(Math.ceil(p.avail/(p.per[30].units/30)));
+ });
  it("preserves all 14 existing mock products and approval examples",()=>{
   expect(CLEARANCE_PRODUCTS).toHaveLength(14);
   expect(seedTasks()).toHaveLength(6);
