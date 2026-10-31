@@ -602,6 +602,69 @@ def test_ledger_state_machine_is_enforced():
         ledger.begin("k", **fields)
 
 
+def test_ledger_failure_after_walmart_answered_is_a_stable_code_and_still_audited(world):
+    """Round 4 (P3): Walmart already applied the write but ``finish`` blew up. The result
+    row must still be written (carrying the ledger failure), the key stays attempting so a
+    retry is refused until reconciliation, and the caller gets a stable code."""
+    gateway, transport, records = world
+    actor = _user(WFS_CANCEL_PERMISSION, stores={STORE})
+    cancel = {"params": {"inboundOrderId": "PMC-LF"}, "approval_ref": "wfs-ticket:lf"}
+    inner = gateway.ledger
+
+    class FinishBreaks:
+        def begin(self, key, **fields):
+            inner.begin(key, **fields)
+
+        def finish(self, key, **fields):
+            raise ConnectionError("database went away")
+
+        def status(self, key):
+            return inner.status(key)
+
+        def resolve(self, key, **fields):
+            inner.resolve(key, **fields)
+
+    gateway._ledger = FinishBreaks()  # noqa: SLF001
+    transport.push(STORE, "/v3/fulfillment/inbound-shipments/PMC-LF", 200, {"status": "OK"})
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_UNAVAILABLE"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-LF",
+            **cancel,
+        )
+    assert transport.calls[-1][1] == "/v3/fulfillment/inbound-shipments/PMC-LF"  # it was sent
+    assert [r.outcome for r in records[-2:]] == ["attempt", "ok"]
+    assert records[-1].status_code == 200 and records[-1].error_code == "WALMART_LEDGER_UNAVAILABLE"
+    assert inner.status("cancel:PMC-LF") == "attempting"
+    with pytest.raises(GatewayError, match="WALMART_WRITE_PENDING_REVIEW"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-LF",
+            **cancel,
+        )
+
+    # A ledger that raises its own stable code passes it through unchanged.
+    class FinishRefuses(FinishBreaks):
+        def finish(self, key, **fields):
+            raise RuntimeError("WALMART_LEDGER_TRANSITION_INVALID")
+
+    gateway._ledger = FinishRefuses()  # noqa: SLF001
+    transport.push(STORE, "/v3/fulfillment/inbound-shipments/PMC-LG", 200, {"status": "OK"})
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        gateway.call(
+            STORE,
+            "wfs_inbound_shipment_cancel",
+            actor=actor,
+            idempotency_key="cancel:PMC-LG",
+            params={"inboundOrderId": "PMC-LG"},
+            approval_ref="wfs-ticket:lg",
+        )
+
+
 def test_file_outbox_survives_a_process_restart(world, tmp_path):
     """Round 3 (reviewer P0): audit evidence that could not reach the database must be
     replayed by the *next* process, not lost with the one that produced it."""

@@ -181,7 +181,7 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 
 仍需升级云函数的情况：协议版本、json/pdf 之外的响应类型、Walmart 域名或 `/v3` 基路径变化、运行时安全更新。密钥轮换和风险上限只改环境变量。**加接口、改契约、加业务模块不需要。**
 
-测试：`tests/integrations/walmart/test_protocol_v3.py`（契约往返与形状校验、签名覆盖项逐一篡改含 actor、过期/超前/TTL、同实例与**跨实例**重放、Redis 实现、密钥轮换、未注册契约拒签、v3 读写执行、无共享存储拒写、风险上限与 POST 读语义、跨店/跨函数、v1 白名单不变、桥接端到端、PDF、provider_error、运行时门禁）；`tests/integrations/walmart/test_gateway.py`（授权矩阵、无账本拒写、审计失败拒写 + outbox 重放、账本稳定码、写结果分类 5xx/429→unknown 并阻止重发、账本状态机、`FileOutbox` 跨进程重放、`from_env` 要求持久 outbox）；`tests/modules/walmart_scf/test_persistence.py`（SQLite 生命周期、数据库里的状态机与 key 复用拒绝、进程重启、文件 outbox 重放进审计表、插入竞争；设置 `SZZSBJ_PG_TEST_URL` 时跑 PostgreSQL 8 线程 `begin`/`finish`/`resolve` FOR UPDATE 与唯一约束并发）。PostgreSQL 部分**在 GitHub CI 必跑**：job `walmart-gateway-ledger-postgresql`（postgres:14 服务，`alembic upgrade head` 后运行该文件，junit 里出现 skipped 即失败）。
+测试：`tests/integrations/walmart/test_protocol_v3.py`（契约往返与形状校验、签名覆盖项逐一篡改含 actor、过期/超前/TTL、同实例与**跨实例**重放、Redis 实现、密钥轮换、未注册契约拒签、v3 读写执行、无共享存储拒写、风险上限与 POST 读语义、跨店/跨函数、v1 白名单不变、桥接端到端、PDF、provider_error、运行时门禁）；`tests/integrations/walmart/test_gateway.py`（授权矩阵、无账本拒写、审计失败拒写 + outbox 重放、账本稳定码、写结果分类 5xx/429→unknown 并阻止重发、账本状态机、`FileOutbox` 跨进程重放、`from_env` 要求持久 outbox）；`tests/modules/walmart_scf/test_persistence.py`（SQLite 生命周期、数据库里的状态机与 key 复用拒绝、进程重启、文件 outbox 重放进审计表、插入竞争、**迁移 0069 的显式 DDL 与 ORM 元数据逐项一致 + downgrade 有数据拒删**；设置 `SZZSBJ_PG_TEST_URL`（CI 用 `WALMART_LEDGER_PG_TESTS=1` + `TEST_DATABASE_URL`）时在 PostgreSQL 上跑 8 线程 `begin`/`finish`/`resolve` FOR UPDATE 与唯一约束并发，以及同一迁移比对）。PostgreSQL 部分**在 GitHub CI 必跑**：job `walmart-gateway-ledger-postgresql`（postgres:14 服务，`alembic upgrade head` 后运行该文件，junit 里出现 skipped 或三条 PG 用例缺席即失败）。
 
 ## 统一网关 `gateway.WalmartGateway`（2026-10-31）
 
@@ -190,7 +190,12 @@ PMC「WFS 货件创建」需要 6 个写调用，契约在 `wfs_write_catalog.py
 ```python
 from app.integrations.walmart.gateway import Actor, WalmartGateway
 
-gw = WalmartGateway.from_env()  # 读 SZZSBJ_WALMART_SCF_*；PROTOCOL=3 时加载签名私钥
+from app.modules.walmart_scf.persistence import build_production_gateway
+
+gw = build_production_gateway(
+    session_factory
+)  # 读 SZZSBJ_WALMART_SCF_*；PROTOCOL=3 时加载签名私钥；
+# 自带数据库审计 + 持久化账本 + 文件 outbox（裸 from_env() 会以 WALMART_LEDGER_REQUIRED 拒绝）
 actor = Actor.from_principal(
     principal, store_codes=verified_store_codes
 )  # 用户：RBAC 权限 + 店铺范围
@@ -218,7 +223,7 @@ res = gw.call(
 
 RBAC 落点：权限 key 由注册中心定义（`Operation.permission`），不是调用方传的；`Actor.from_principal` 只接受服务端登录身份（`Principal`）和服务端解析出的店铺范围（来源账号 + 店铺数据范围 → 店铺代码映射），普通用户无法自己传 permission、store_code 或 approval_ref 来获得权限——这三样都在服务端生成或校验。Celery / worker 用 `Actor.system(uid, operations=...)`，允许的操作写死在该任务代码里。
 
-写操作幂等（`WriteLedger`，**持久化**）：`call()` 对写操作要求 `idempotency_key`（业务身份，如 `wfs-create:<inboundOrderId>`）。调用前 `begin` = 原子领取（PostgreSQL `SELECT … FOR UPDATE` + 唯一约束，并发只有一个赢家，输家得 `WALMART_WRITE_PENDING_REVIEW`），然后持久化一条 `attempt` 审计——**两者都成功，请求才会离开服务器**；调用后 `finish`（ok / provider_error / unknown / failed）。上一次 attempting 或 unknown 的 key → `WALMART_WRITE_PENDING_REVIEW`，必须先回查（读 Walmart）再 `resolve`；已 ok 的 key → `WALMART_WRITE_ALREADY_DONE`；同 key 不同请求体 → `WALMART_WRITE_PAYLOAD_CHANGED`；同 key 换店铺或换操作 → `WALMART_LEDGER_KEY_REUSED`。**状态机**（`ledger_transition_check`，内存与数据库实现共用）：`finish` 只能从 attempting 出发且目标必须是上述四种之一，`resolve` 目标只能是 ok / failed / provider_error，**ok 是终态**，任何路径都不能把 ok 改回可重试状态（违反 → `WALMART_LEDGER_TRANSITION_INVALID` / `WALMART_LEDGER_RESOLUTION_INVALID`）；`begin`/`finish`/`resolve` 在 PostgreSQL 上都对该行 `FOR UPDATE`，八个对账进程同时关闭同一 key 只有一个成功。进程重启后状态只在数据库里，新进程看到的就是真实状态（`open_keys()` 给对账任务）。实现：`app/modules/walmart_scf/persistence.py` 的 `DbWriteLedger`（表 `integration_walmart_write_ledger`，迁移 `20261031_0069_walmart_gateway_ledger`）。网关**默认不带账本**（`RefusingLedger`：任何写 → `WALMART_LEDGER_REQUIRED`，读不受影响）；`from_env()` 拒绝不传持久化账本/审计，也拒绝 `InMemoryWriteLedger`（它只能在测试里显式构造）。生产只用 `persistence.build_production_gateway(session_factory)`。
+写操作幂等（`WriteLedger`，**持久化**）：`call()` 对写操作要求 `idempotency_key`（业务身份，如 `wfs-create:<inboundOrderId>`）。调用前 `begin` = 原子领取（PostgreSQL `SELECT … FOR UPDATE` + 唯一约束，并发只有一个赢家，输家得 `WALMART_WRITE_PENDING_REVIEW`），然后持久化一条 `attempt` 审计——**两者都成功，请求才会离开服务器**；调用后 `finish`（ok / provider_error / unknown / failed；finish 本身失败时审计行照写、key 保持 attempting、调用方得 `WALMART_LEDGER_UNAVAILABLE` 等稳定码）。上一次 attempting 或 unknown 的 key → `WALMART_WRITE_PENDING_REVIEW`，必须先回查（读 Walmart）再 `resolve`；已 ok 的 key → `WALMART_WRITE_ALREADY_DONE`；同 key 不同请求体 → `WALMART_WRITE_PAYLOAD_CHANGED`；同 key 换店铺或换操作 → `WALMART_LEDGER_KEY_REUSED`。**状态机**（`ledger_transition_check`，内存与数据库实现共用）：`finish` 只能从 attempting 出发且目标必须是上述四种之一，`resolve` 只能作用于打开的 key（attempting / unknown）且目标只能是 ok / failed / provider_error，**ok 是终态**，任何路径都不能把 ok 改回可重试状态；已关闭的 failed / provider_error 只能由 `begin` 重新领取（违反 → `WALMART_LEDGER_TRANSITION_INVALID` / `WALMART_LEDGER_RESOLUTION_INVALID`）；`begin`/`finish`/`resolve` 在 PostgreSQL 上都对该行 `FOR UPDATE`，八个对账进程同时关闭同一 key 只有一个成功。进程重启后状态只在数据库里，新进程看到的就是真实状态（`open_keys()` 给对账任务）。实现：`app/modules/walmart_scf/persistence.py` 的 `DbWriteLedger`（表 `integration_walmart_write_ledger`，迁移 `20261031_0069_walmart_gateway_ledger`）。网关**默认不带账本**（`RefusingLedger`：任何写 → `WALMART_LEDGER_REQUIRED`，读不受影响）；`from_env()` 拒绝不传持久化账本/审计，也拒绝 `InMemoryWriteLedger`（它只能在测试里显式构造）。生产只用 `persistence.build_production_gateway(session_factory)`。
 
 审计（**数据库，可靠**）：每次调用（含被拒绝的）产生一条 `CallRecord`（店、操作、风险、actor、approval_ref、幂等 key、契约与请求摘要、状态码、结果、耗时；不含参数/请求体/响应体），由 `DbAuditSink` 写入 `integration_walmart_calls`（同一迁移）。sink 失败不再静默降级：记录进 **outbox**（`AuditOutbox`）并写日志；**写操作在 outbox 非空或 attempt 行写不进去时直接拒绝**（`WALMART_AUDIT_UNAVAILABLE`，并把刚领取的账本项 finish 为 failed）；下一次调用先重放 outbox。读操作照常返回结果，其证据在 outbox + 日志里等待重放。outbox 是**持久化的**：生产用 `FileOutbox`（目录 `SZZSBJ_WALMART_AUDIT_OUTBOX_DIR`，默认 `/var/lib/szzsbj/walmart-audit-outbox`，每条记录一个 JSON 文件，先写临时文件再 rename，sink 接收后才删除），网关构造时先 drain，所以上一个进程没来得及落库的审计结果在重启后进入 `integration_walmart_calls`；`MemoryOutbox` 只给测试，`from_env()` 不传 outbox 或传 `MemoryOutbox` → `WALMART_AUDIT_OUTBOX_REQUIRED`，目录建不出来 → 同码拒绝启动。
 

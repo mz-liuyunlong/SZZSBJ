@@ -10,14 +10,20 @@ tickets — and exercises ``SELECT ... FOR UPDATE`` with real concurrent connect
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import create_engine, event, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
@@ -143,7 +149,11 @@ def test_ledger_state_machine_in_the_database(sqlite_factory) -> None:
     with pytest.raises(GatewayError, match="WALMART_WRITE_PAYLOAD_CHANGED"):
         ledger.begin(key, **{**FIELDS, "request_sha256": "c" * 64})
     assert ledger.status(key) == "failed"  # refusals never mutate the row
-    ledger.resolve(key, outcome="ok", note="read-back: found it after all")
+    # A closed retryable key is not "open": resolve may not rewrite it, only begin reopens it.
+    with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
+        ledger.resolve(key, outcome="ok", note="failed is closed; retry through begin")
+    ledger.begin(key, **FIELDS)
+    ledger.finish(key, outcome="ok", status_code=201, error_code=None)
     for outcome in ("failed", "provider_error", "ok"):
         with pytest.raises(GatewayError, match="WALMART_LEDGER_TRANSITION_INVALID"):
             ledger.resolve(key, outcome=outcome, note="ok must never go back")
@@ -153,8 +163,8 @@ def test_ledger_state_machine_in_the_database(sqlite_factory) -> None:
         ledger.begin(key, **FIELDS)
     with sqlite_factory() as s:
         entry = s.scalar(select(WalmartWriteLedgerEntry))
-    assert entry is not None and entry.outcome == "ok" and entry.attempts == 1
-    assert entry.note == "read-back: found it after all"
+    assert entry is not None and entry.outcome == "ok" and entry.attempts == 2
+    assert entry.note == "read-back: nothing created"
 
 
 def test_open_attempt_survives_a_process_restart(sqlite_factory, tmp_path) -> None:
@@ -262,7 +272,31 @@ def test_restarted_production_gateway_replays_the_outbox_into_the_audit_table(
 
 # --- PostgreSQL (opt-in) -------------------------------------------------------------------
 
-PG_URL = os.environ.get("SZZSBJ_PG_TEST_URL", "")
+
+def _pg_url() -> str:
+    """``SZZSBJ_PG_TEST_URL`` (Mac tickets) or, in CI, ``TEST_DATABASE_URL`` when the job
+    opts in with ``WALMART_LEDGER_PG_TESTS=1`` (rule-pack forbids the project prefix in
+    ``.github``)."""
+    url = os.environ.get("SZZSBJ_PG_TEST_URL", "")
+    if not url and os.environ.get("WALMART_LEDGER_PG_TESTS") == "1":
+        url = os.environ.get("TEST_DATABASE_URL", "")
+    return url
+
+
+PG_URL = _pg_url()
+
+
+def _schema_engine(schema: str, **kwargs) -> Engine:
+    """A PostgreSQL engine whose connections live in ``schema`` (created by the caller)."""
+    engine = create_engine(PG_URL, **kwargs)
+
+    @event.listens_for(engine, "connect")
+    def set_path(conn, _):
+        with conn.cursor() as cursor:
+            cursor.execute(f'SET search_path TO "{schema}"')
+        conn.commit()
+
+    return engine
 
 
 @pytest.fixture
@@ -273,14 +307,7 @@ def pg_factory() -> Iterator[sessionmaker[Session]]:
     admin = create_engine(PG_URL)
     with admin.begin() as c:
         c.execute(text(f'CREATE SCHEMA "{schema}"'))
-    engine = create_engine(PG_URL, pool_size=8, max_overflow=8)
-
-    @event.listens_for(engine, "connect")
-    def set_path(conn, _):
-        with conn.cursor() as cursor:
-            cursor.execute(f'SET search_path TO "{schema}"')
-        conn.commit()
-
+    engine = _schema_engine(schema, pool_size=8, max_overflow=8)
     Base.metadata.create_all(engine, tables=TABLES)
     try:
         yield sessionmaker(bind=engine, expire_on_commit=False)
@@ -397,3 +424,114 @@ def test_postgres_concurrent_finish_and_resolve_apply_exactly_once(pg_factory) -
     with pg_factory() as s:
         entry = s.scalar(select(WalmartWriteLedgerEntry))
     assert entry is not None and entry.attempts == 1 and entry.outcome == "ok"
+
+
+# --- migration 0069 vs ORM metadata (reviewer round 4, item 4) ---------------------------
+
+MIGRATION_0069 = (
+    Path(__file__).resolve().parents[3]
+    / "alembic"
+    / "versions"
+    / "20261031_0069_walmart_gateway_ledger.py"
+)
+
+
+def _load_migration_0069():
+    spec = importlib.util.spec_from_file_location("migration_0069_under_test", MIGRATION_0069)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_migration(engine: Engine, direction: str) -> None:
+    module = _load_migration_0069()
+    with engine.begin() as conn:
+        context = MigrationContext.configure(conn)
+        with Operations.context(context):
+            getattr(module, direction)()
+
+
+def _describe(engine: Engine) -> dict[str, dict]:
+    """Dialect-independent structural fingerprint of the two gateway tables."""
+    inspector = sa.inspect(engine)
+    out: dict[str, dict] = {}
+    for table in TABLES:
+        name = table.name
+        columns = {
+            c["name"]: (c["type"].compile(engine.dialect), bool(c["nullable"]))
+            for c in inspector.get_columns(name)
+        }
+        out[name] = {
+            "columns": columns,
+            "primary_key": tuple(inspector.get_pk_constraint(name)["constrained_columns"]),
+            "unique": {
+                u["name"]: tuple(u["column_names"]) for u in inspector.get_unique_constraints(name)
+            },
+            "indexes": {
+                i["name"]: (tuple(i["column_names"]), bool(i["unique"]))
+                for i in inspector.get_indexes(name)
+                # SQLite reports the UNIQUE constraint as an autoindex; PostgreSQL does not.
+                if not str(i["name"]).startswith("sqlite_autoindex")
+            },
+        }
+    return out
+
+
+@pytest.fixture(params=["sqlite", "postgresql"])
+def migration_engines(request, tmp_path) -> Iterator[tuple[Engine, Engine]]:
+    """(engine for the migration, engine for ORM create_all), isolated from each other."""
+    if request.param == "sqlite":
+        mig = create_engine(f"sqlite+pysqlite:///{tmp_path / 'mig.db'}")
+        orm = create_engine(f"sqlite+pysqlite:///{tmp_path / 'orm.db'}")
+        try:
+            yield mig, orm
+        finally:
+            mig.dispose()
+            orm.dispose()
+        return
+    if not PG_URL:
+        pytest.skip("SZZSBJ_PG_TEST_URL / WALMART_LEDGER_PG_TESTS not set")
+    token = uuid4().hex
+    schemas = (f"walmart_mig_{token}", f"walmart_orm_{token}")
+    admin = create_engine(PG_URL)
+    with admin.begin() as c:
+        for schema in schemas:
+            c.execute(text(f'CREATE SCHEMA "{schema}"'))
+    mig, orm = (_schema_engine(schema) for schema in schemas)
+    try:
+        yield mig, orm
+    finally:
+        mig.dispose()
+        orm.dispose()
+        with admin.begin() as c:
+            for schema in schemas:
+                c.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        admin.dispose()
+
+
+def test_migration_0069_matches_orm_metadata(migration_engines) -> None:
+    """The explicit DDL in 0069 must produce exactly what the ORM models describe:
+    same columns/types/nullability, primary keys, the unique key and every index."""
+    mig, orm = migration_engines
+    _run_migration(mig, "upgrade")
+    Base.metadata.create_all(orm, tables=TABLES)
+    migrated, declared = _describe(mig), _describe(orm)
+    assert migrated == declared
+    assert set(migrated) == {"integration_walmart_calls", "integration_walmart_write_ledger"}
+    assert migrated["integration_walmart_write_ledger"]["unique"] == {
+        "uq_walmart_write_ledger_key": ("idempotency_key",)
+    }
+    assert set(migrated["integration_walmart_calls"]["indexes"]) == {
+        f"ix_integration_walmart_calls_{c}"
+        for c in ("store_code", "operation_key", "idempotency_key", "outcome", "created_at")
+    }
+    # Downgrade refuses while evidence exists, and only then drops both tables.
+    DbWriteLedger(sessionmaker(bind=mig, expire_on_commit=False)).begin("wfs-create:X", **FIELDS)
+    with pytest.raises(RuntimeError, match="refusing to drop evidence"):
+        _run_migration(mig, "downgrade")
+    assert set(sa.inspect(mig).get_table_names()) >= set(migrated)
+    with mig.begin() as c:
+        c.execute(text("DELETE FROM integration_walmart_write_ledger"))
+    _run_migration(mig, "downgrade")
+    assert not set(sa.inspect(mig).get_table_names()) & set(migrated)

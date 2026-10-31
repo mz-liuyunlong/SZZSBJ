@@ -142,7 +142,8 @@ AuditSink = Callable[[CallRecord], None]
 
 
 def log_audit(record: CallRecord) -> None:
-    """Default sink: structured log line (the database sink lives in the pmc_wfs module)."""
+    """Default sink: structured log line (the database sink is
+    ``app.modules.walmart_scf.persistence.DbAuditSink``)."""
     logger.info(
         "walmart_call store=%s op=%s risk=%s actor=%s:%s approval=%s status=%s outcome=%s "
         "error=%s ms=%d contract=%s registry=%s idem=%s",
@@ -228,8 +229,9 @@ class RefusingLedger:
 # Ledger state machine (shared by every WriteLedger implementation):
 #   begin:   (none) | failed | provider_error  -> attempting      (same store/op/payload)
 #   finish:  attempting -> ok | provider_error | unknown | failed
-#   resolve: attempting | unknown | failed | provider_error -> ok | failed | provider_error
-#   ok is terminal: nothing may move it back to a retryable state.
+#   resolve: attempting | unknown -> ok | failed | provider_error   (open keys only)
+#   ok is terminal: nothing may move it back to a retryable state; a closed retryable
+#   key (failed / provider_error) is retried through begin, never rewritten by resolve.
 LEDGER_OPEN = frozenset({"attempting", "unknown"})
 LEDGER_RETRYABLE = frozenset({"failed", "provider_error"})
 LEDGER_FINISH_OUTCOMES = frozenset({"ok", "provider_error", "unknown", "failed"})
@@ -262,8 +264,17 @@ def ledger_transition_check(current_outcome: str, *, to: str, via: str) -> None:
         return
     if to not in LEDGER_RESOLVE_OUTCOMES:
         raise GatewayError("WALMART_LEDGER_RESOLUTION_INVALID")
-    if current_outcome == "ok":
+    if current_outcome not in LEDGER_OPEN:
+        # ok is terminal; failed / provider_error are closed and only begin may reopen them.
         raise GatewayError("WALMART_LEDGER_TRANSITION_INVALID")
+
+
+def _ledger_error_code(error: Exception) -> str:
+    """Map a ledger implementation's failure to a stable gateway code."""
+    code = getattr(error, "code", None)
+    if not isinstance(code, str):
+        code = str(error) if isinstance(error, (RuntimeError, ValueError)) else ""
+    return code if re.fullmatch(r"[A-Z0-9_]{4,64}", code) else "WALMART_LEDGER_UNAVAILABLE"
 
 
 def write_outcome(status_code: int) -> str:
@@ -519,12 +530,7 @@ class WalmartGateway:
                 except GatewayError:
                     raise
                 except Exception as error:  # a persistent ledger's own stable codes
-                    code = getattr(error, "code", None)
-                    if not isinstance(code, str):
-                        code = str(error)
-                    if re.fullmatch(r"[A-Z0-9_]{4,64}", code):
-                        raise GatewayError(code) from None
-                    raise GatewayError("WALMART_LEDGER_UNAVAILABLE") from None
+                    raise GatewayError(_ledger_error_code(error)) from None
                 ledger_open = True
                 # The intent must be on record before anything leaves the server.
                 persisted = self._record(
@@ -620,15 +626,29 @@ class WalmartGateway:
             # ("unknown") until a read-back resolves it; a second POST is refused meanwhile.
             outcome = write_outcome(result.status_code)
             error_code = None if outcome != "unknown" else f"WALMART_HTTP_{result.status_code}"
-            self._ledger.finish(
-                idempotency_key,
-                outcome=outcome,
-                status_code=result.status_code,
-                error_code=error_code,
-            )
+            ledger_failure: str | None = None
+            try:
+                self._ledger.finish(
+                    idempotency_key,
+                    outcome=outcome,
+                    status_code=result.status_code,
+                    error_code=error_code,
+                )
+            except Exception as error:
+                # Walmart already answered; the ledger could not record it. The audit row
+                # still goes out (with the ledger failure), the key stays "attempting" so
+                # the next attempt is refused until reconciliation, and the caller gets a
+                # stable code instead of a half-truth success.
+                ledger_failure = _ledger_error_code(error)
+                logger.exception(
+                    "walmart ledger finish failed after the call: key=%s code=%s",
+                    idempotency_key,
+                    ledger_failure,
+                )
         else:
             outcome = "ok" if result.ok else "provider_error"
             error_code = None
+            ledger_failure = None
         self._record(
             store_code,
             operation_key,
@@ -639,10 +659,12 @@ class WalmartGateway:
             request_hash,
             result.status_code,
             outcome,
-            error_code,
+            ledger_failure or error_code,
             started,
             idempotency_key,
         )
+        if ledger_failure is not None:
+            raise GatewayError(ledger_failure)
         return result
 
     def pages(

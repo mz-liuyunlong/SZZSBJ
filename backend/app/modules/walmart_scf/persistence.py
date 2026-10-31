@@ -132,7 +132,8 @@ class DbWriteLedger:
     here is cached in memory, so a restarted process sees exactly the persisted state.
 
     State machine (``gateway.ledger_transition_check``): ``finish`` only from
-    ``attempting``; ``resolve`` never from ``ok``; a re-claim must match store, operation
+    ``attempting``; ``resolve`` only from an open key (attempting / unknown), never from
+    ``ok``; a re-claim must match store, operation
     and request digest of the earlier attempt (``WALMART_LEDGER_KEY_REUSED`` /
     ``WALMART_WRITE_PAYLOAD_CHANGED``). ``finish`` and ``resolve`` also lock the row.
     """
@@ -221,9 +222,10 @@ class DbWriteLedger:
             )
 
     def resolve(self, key: str, *, outcome: str, note: str) -> None:
-        """Reconcile hook: close an open/unknown attempt after a Walmart read-back.
+        """Reconcile hook: close an open (attempting / unknown) key after a Walmart read-back.
 
-        ``ok`` is terminal; anything else may move to ok / failed / provider_error.
+        Targets: ok / failed / provider_error. ``ok`` is terminal; a closed retryable key is
+        reopened only through ``begin``.
         """
         with self._factory() as session:
             entry = self._locked(session, key)
