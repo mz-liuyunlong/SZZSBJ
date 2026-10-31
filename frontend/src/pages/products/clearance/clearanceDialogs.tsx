@@ -12,7 +12,8 @@ import {
  type ClearanceProduct, type ClearanceRules, type ClearanceTask, type ClearanceTaskLine,
  type RulesHistory, type StoredClearance,
 } from "./clearanceModel";
-import { integer, money, percent, RiskTag, StatusTag } from "./clearanceUi";
+import { RiskTag, StatusTag } from "./clearanceUi";
+import { integer, money, percent } from "./clearanceUiConfig";
 
 const ruleNumbers: {key:keyof ClearanceRules;label:string;unit:string}[]=[
  {key:"highCoverage",label:"高风险：预计售罄≥",unit:"天"},
