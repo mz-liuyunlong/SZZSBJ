@@ -1475,8 +1475,11 @@ class ListingManagementRepository:
 
         tag_values = _csv_values(tag)
         if tag_values:
-            tag_text = cast(ListingManagementCurrentMart.tags_json, String)
-            legacy_tag_conditions = [tag_text.ilike(f'%"{value}"%') for value in tag_values]
+            legacy_tag_conditions = [
+                ListingManagementCurrentMart.tags_json.contains([candidate])
+                for value in tag_values
+                for candidate in (value, {"name": value}, {"label": value}, {"title": value})
+            ]
 
             db_tag_exists = exists(
                 select(1)

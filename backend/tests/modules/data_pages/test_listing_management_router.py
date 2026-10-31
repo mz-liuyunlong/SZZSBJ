@@ -637,12 +637,14 @@ def test_listing_tag_filter_requires_assignment_and_definition_account_match() -
         store_id=None,
         search_field="sku",
         keyword="",
-        tag='["Synthetic"]',
+        tag=json.dumps(['Synthetic %, "quoted"'], ensure_ascii=False),
         page=1,
         page_size=50,
     )
 
     sql = str(session.execute.call_args.args[0])
+    assert "@>" in sql
+    assert "ILIKE" not in sql
     assert (
         "product_custom_tags.source_account_ref = product_custom_tag_assignments.source_account_ref"
     ) in sql
