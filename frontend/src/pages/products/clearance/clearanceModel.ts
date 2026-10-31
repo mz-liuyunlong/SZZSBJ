@@ -173,7 +173,10 @@ export const latestTaskFor=(tasks:ClearanceTask[],id:string)=>tasks.filter(t=>t.
 export const taskQty=(t:ClearanceTask)=>t.lines.reduce((v,l)=>v+l.qty,0);
 export const taskSold=(t:ClearanceTask)=>t.lines.reduce((v,l)=>v+l.sold,0);
 export const taskRemoved=(t:ClearanceTask)=>t.lines.reduce((v,l)=>v+l.removed+l.disposed,0);
-export const taskProgress=(t:ClearanceTask)=>Math.round((taskSold(t)+taskRemoved(t))*100/Math.max(1,taskQty(t)));
+export const taskProcessed=(t:ClearanceTask)=>taskSold(t)+taskRemoved(t);
+export const taskIsComplete=(t:ClearanceTask)=>taskQty(t)>0&&taskProcessed(t)===taskQty(t);
+/** Round down for display; never round an incomplete task up to 100%. */
+export const taskProgress=(t:ClearanceTask)=>Math.floor(taskProcessed(t)*100/Math.max(1,taskQty(t)));
 export const taskCost=(t:ClearanceTask)=>t.lines.reduce((v,l)=>v+l.qty*(findProduct(l.id)?.cost??0),0);
 export const taskStore=(t:ClearanceTask)=>findProduct(t.lines[0]?.id)?.store??"";
 export const taskRisk=(t:ClearanceTask,r:ClearanceRules):RiskLevel=>{
@@ -224,6 +227,21 @@ export function initialClearance():StoredClearance{
 }
 export function persistClearance(data:StoredClearance):void{
  try{if(typeof window!=="undefined")localStorage.setItem(CLEARANCE_STORAGE_KEY,JSON.stringify(data));}catch{/* Demo works without storage. */}
+}
+/** China business time for mock audit and task IDs (not a backend timestamp). */
+export function chinaNow(now:Date=new Date()):string{
+ const parts=new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now);
+ const get=(type:string)=>parts.find(p=>p.type===type)?.value??"";
+ return get("year")+"-"+get("month")+"-"+get("day")+" "+get("hour")+":"+get("minute");
+}
+export function nextClearanceTaskId(tasks:ClearanceTask[],at:string):string{
+ const day=at.slice(5,10).replace("-","");
+ const prefix="CH-"+day+"-";
+ const last=tasks.reduce((max,t)=>{
+   const number=t.id.startsWith(prefix)?Number(t.id.slice(prefix.length)):0;
+   return Number.isInteger(number)?Math.max(max,number):max;
+ },0);
+ return prefix+String(last+1).padStart(3,"0");
 }
 export function chinaToday():string{
  const parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
