@@ -29,6 +29,5 @@ def test_wfs_case_actions_are_assignable() -> None:
         "archive-request",
         "archive-review",
         "mark-recovered",
-        "sync-legacy",
     ):
         assert f"action:warehouse:wfs-fee-alert:{action}" in PERMISSION_KEYS

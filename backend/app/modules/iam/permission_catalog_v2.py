@@ -295,7 +295,6 @@ ACTIONS: tuple[ActionDefinition, ...] = (
     ActionDefinition("warehouse_wfs_fee_alert", "archive-request", "申请归档WFS Case", 20, "high"),
     ActionDefinition("warehouse_wfs_fee_alert", "archive-review", "审核归档WFS Case", 25, "high"),
     ActionDefinition("warehouse_wfs_fee_alert", "mark-recovered", "确认WFS费用已追回", 30, "high"),
-    ActionDefinition("warehouse_wfs_fee_alert", "sync-legacy", "同步历史WFS Case", 40, "high"),
     ActionDefinition(
         "pmc_domestic_warehouse_board", "packing-manual-create", "手工提交打包审批", 30, "high"
     ),

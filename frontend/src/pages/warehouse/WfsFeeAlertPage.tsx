@@ -91,7 +91,7 @@ function WfsFeeAlertPage({ page, permissions }: WfsFeeAlertPageProps) {
     permissions,
     "action:warehouse:wfs-fee-alert:archive-request",
   );
-  const canPreviewDetection = hasPermission(permissions, "action:warehouse:wfs-fee-alert:sync-legacy");
+  const canPreviewDetection = hasPermission(permissions, "*");
 
   const handleDetectionPreview = async () => {
     if (!canPreviewDetection || previewLoading) return;
