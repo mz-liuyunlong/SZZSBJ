@@ -21,6 +21,7 @@ TASK_IMPORTS = (
     "app.modules.media_assets.tasks",
     "app.modules.integration_sync.tasks",
     "app.modules.walmart_scf.tasks",
+    "app.modules.walmart_remote.tasks",
     "app.modules.operation_logs.tasks",
     "app.modules.business_connectors.tasks",
     "app.modules.listing_rule_config.tasks",
@@ -34,6 +35,7 @@ TASK_ROUTES = {
     "listing_evaluation.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "ai_runtime.*": {"queue": AI_QUEUE, "routing_key": AI_QUEUE},
     "walmart_scf.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
+    "walmart_remote.*": {"queue": INTEGRATION_QUEUE, "routing_key": INTEGRATION_QUEUE},
     "integration_sync.*": {
         "queue": INTEGRATION_QUEUE,
         "routing_key": INTEGRATION_QUEUE,
@@ -117,6 +119,14 @@ def create_celery_app(
             "ai-keyword-recovery": {
                 "task": "ai_runtime.recover_keyword_jobs",
                 "schedule": 60.0,
+            },
+            "walmart-remote-recovery": {
+                "task": "walmart_remote.recovery_tick",
+                "schedule": 600.0,
+            },
+            "walmart-remote-scheduler": {
+                "task": "walmart_remote.scheduler_tick",
+                "schedule": 600.0,
             },
             "integration-sync-scheduler": {
                 "task": "integration_sync.scheduler_tick",
