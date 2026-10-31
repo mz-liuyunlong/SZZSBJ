@@ -1,6 +1,7 @@
-"""Walmart WFS creation adapter (handover chapter 74, part B).
+"""Walmart WFS creation adapter (handover chapter 74, part B; chapter 76.7 revision).
 
-Implements ``CreationGateway`` on top of the shared Walmart SCF read/write APIs:
+Implements ``CreationGateway`` on top of the unified ``WalmartGateway`` (one entry point,
+server-side authorization, signed contracts, audit + write ledger):
 
     validate  -> store mapping + ITS capability + item identities (no network)
     create    -> precheck by inboundOrderId -> POST inbound-shipments -> read back shipments
@@ -12,7 +13,13 @@ Owner decisions applied: ITS defaults to Y but the store must be marked ITS-capa
 return address is omitted unless the operator supplied one (Walmart fills the store
 default); expected delivery = Beijing today + 30 days; a created shipment whose read-back
 fails is left UNKNOWN (never auto-cancelled). Every Walmart call is recorded as an
-immutable ``walmart_call`` event with status code and sanitized provider error only.
+immutable ``walmart_call`` event with status code and sanitized provider error only, and
+by the gateway itself in ``integration_walmart_calls``.
+
+Reviewer requirements folded in (76.13): read-back only accepts shipments whose
+``inboundOrderId`` equals the plan id; shipment items are read with full pagination; a
+created plan is verified (GTIN set, quantities, cartons) against the request; writes carry
+business idempotency keys so an uncertain create is never repeated blindly.
 """
 
 from __future__ import annotations
@@ -52,22 +59,39 @@ class WalmartResultLike(Protocol):
     pdf: bytes | None
 
 
-class ReadApiLike(Protocol):
-    def call(
-        self, store_code: str, operation: str, *, params: Mapping[str, Any] | None = None
-    ) -> WalmartResultLike: ...
+class GatewayLike(Protocol):
+    """The unified ``app.integrations.walmart.gateway.WalmartGateway`` surface we use."""
 
-
-class WriteApiLike(Protocol):
     def call(
         self,
         store_code: str,
-        operation: str,
+        operation_key: str,
         *,
-        approval_ref: str,
+        actor: Any,
         params: Mapping[str, Any] | None = None,
         body: Any = None,
+        approval_ref: str | None = None,
+        idempotency_key: str | None = None,
     ) -> WalmartResultLike: ...
+
+    @property
+    def ledger(self) -> Any: ...
+
+
+WORKER_ACTOR_UID = "pmc-wfs-creation"
+# The only operations the creation worker may ever issue (system actor allowlist).
+WORKER_OPERATIONS = frozenset(
+    {
+        "inbound_shipments",
+        "inbound_shipment_items",
+        "wfs_inbound_shipment_create",
+        "wfs_shipment_label",
+        "wfs_inbound_preview",
+    }
+)
+ITEMS_PAGE_SIZE = 50
+ITEMS_MAX_PAGES = 40
+_LEDGER_BLOCKED = frozenset({"WALMART_WRITE_PENDING_REVIEW", "WALMART_WRITE_ALREADY_DONE"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,17 +194,46 @@ def _order_items(
     return items
 
 
-def _shipment_ids(payload: Any) -> list[str]:
+def _shipment_ids(payload: Any, order_id: str) -> list[str]:
+    """Shipment ids of records whose inboundOrderId is exactly ``order_id``.
+
+    Walmart filters by inboundOrderId, but the read-back must not trust the filter: a
+    record for another plan (or a record without the id) means the answer is not ours.
+    """
     records = payload.get("payload") if isinstance(payload, Mapping) else None
     if isinstance(records, Mapping):
         records = records.get("inboundShipments") or records.get("shipments")
     ids: list[str] = []
     for record in records or []:
-        if isinstance(record, Mapping):
-            sid = record.get("shipmentId")
-            if isinstance(sid, str) and sid.strip() and sid not in ids:
-                ids.append(sid.strip())
+        if not isinstance(record, Mapping):
+            continue
+        if str(record.get("inboundOrderId") or "") != order_id:
+            raise RuntimeError("WFS_READBACK_MISMATCH")
+        sid = record.get("shipmentId")
+        if isinstance(sid, str) and sid.strip() and sid not in ids:
+            ids.append(sid.strip())
     return ids
+
+
+def _items_of(payload: Any) -> list[Mapping[str, Any]]:
+    items = payload.get("payload") if isinstance(payload, Mapping) else None
+    if isinstance(items, Mapping):
+        items = items.get("inboundShipmentItems") or items.get("items")
+    return [item for item in items or [] if isinstance(item, Mapping)]
+
+
+def _total_count(payload: Any) -> int | None:
+    headers = payload.get("headers") if isinstance(payload, Mapping) else None
+    total = headers.get("totalCount") if isinstance(headers, Mapping) else None
+    return total if type(total) is int and total >= 0 else None
+
+
+def _error_code(error: BaseException) -> str:
+    code = getattr(error, "code", None)
+    if isinstance(code, str) and code:
+        return code
+    text = str(error)
+    return text if re.fullmatch(r"[A-Z0-9_]{4,64}", text) else "WALMART_GATEWAY_UNAVAILABLE"
 
 
 class WalmartScfCreationGateway:
@@ -190,16 +243,16 @@ class WalmartScfCreationGateway:
         self,
         *,
         session_factory: Callable[[], Any],
-        read_api: ReadApiLike,
-        write_api: WriteApiLike,
+        gateway: GatewayLike,
+        actor: Any,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         sleeper: Callable[[float], None] = time.sleep,
         pace_seconds: float = 1.3,
         store_code_map: Mapping[str, str] | None = None,
     ) -> None:
         self._factory = session_factory
-        self._read = read_api
-        self._write = write_api
+        self._gateway = gateway
+        self._actor = actor
         self._clock = clock
         self._sleep = sleeper
         self._pace = pace_seconds
@@ -279,12 +332,29 @@ class WalmartScfCreationGateway:
         if address:
             body["returnAddress"] = address
         self._sleep(self._pace)
-        result = self._write.call(
-            store.store_code,
-            "wfs_inbound_shipment_create",
-            approval_ref=f"wfs-ticket:{ticket_id}",
-            body=body,
-        )
+        key = f"wfs-create:{order_id}"
+        try:
+            result = self._gateway.call(
+                store.store_code,
+                "wfs_inbound_shipment_create",
+                actor=self._actor,
+                body=body,
+                approval_ref=f"wfs-ticket:{ticket_id}",
+                idempotency_key=key,
+            )
+        except Exception as error:
+            code = _error_code(error)
+            if code in _LEDGER_BLOCKED:
+                # An earlier attempt is open/unknown or already succeeded: only a read-back
+                # may decide. Found -> resolve the ledger and use it; not found -> stay
+                # UNKNOWN for a human (never a second POST on our own).
+                ids = self._readback(store.store_code, order_id, ticket_id)
+                if ids:
+                    self._resolve(key, "ok", f"read-back found {len(ids)} shipment(s)")
+                    return ids
+                raise RuntimeError("WFS_CREATE_PENDING_REVIEW") from None
+            # Gateway refusal or transport failure before/while posting: holds stay.
+            raise RuntimeError(code) from None
         self._record(ticket_id, "wfs_inbound_shipment_create", result, order_id)
         if 200 <= result.status_code < 300:
             self._sleep(self._pace)
@@ -292,6 +362,7 @@ class WalmartScfCreationGateway:
             if not ids:
                 # Walmart accepted but nothing is visible yet: keep holds, let reconcile retry.
                 raise RuntimeError("WFS_READBACK_EMPTY_AFTER_CREATE")
+            self._verify_created(store.store_code, ids, body["orderItems"])
             return ids
         if 400 <= result.status_code < 500:
             # A client-side rejection may still mean "already exists": read back once more.
@@ -307,16 +378,20 @@ class WalmartScfCreationGateway:
         test = bool(snapshot.get("order", {}).get("business_test", snapshot.get("business_test")))
         order_id = inbound_order_id(store.store_code, ticket_id, test=test)
         ids = self._readback(store.store_code, order_id, ticket_id)
+        key = f"wfs-create:{order_id}"
+        if ids:
+            self._resolve(key, "ok", f"reconcile found {len(ids)} shipment(s)")
         return ids or None
 
     def label(self, shipment_id: str, snapshot: dict) -> bytes:
         store = self._store(snapshot)
         count = self._carton_count(store.store_code, shipment_id)
         self._sleep(self._pace)
-        result = self._write.call(
+        result = self._call(
             store.store_code,
             "wfs_shipment_label",
             approval_ref=f"wfs-label:{shipment_id}",
+            idempotency_key=f"wfs-label:{shipment_id}:{int(self._clock().timestamp())}",
             body={
                 "shipmentId": shipment_id,
                 "labelSize": "X4_6",
@@ -347,8 +422,13 @@ class WalmartScfCreationGateway:
             },
         }
         self._sleep(self._pace)
-        result = self._write.call(
-            store.store_code, "wfs_inbound_preview", approval_ref="wfs-preview", body=body
+        stamp = int(self._clock().timestamp() * 1000)
+        result = self._call(
+            store.store_code,
+            "wfs_inbound_preview",
+            approval_ref=f"wfs-preview:{store.store_code}",
+            idempotency_key=f"wfs-preview:{store.store_code}:{stamp}",
+            body=body,
         )
         if not 200 <= result.status_code < 300:
             raise ApiError(
@@ -373,34 +453,119 @@ class WalmartScfCreationGateway:
             "limit": 50,
             "offset": 0,
         }
-        result = self._read.call(store_code, "inbound_shipments", params=params)
+        result = self._call(store_code, "inbound_shipments", params=params)
         self._record(ticket_id, "inbound_shipments", result, order_id)
         if not 200 <= result.status_code < 300:
             raise RuntimeError(f"WALMART_READBACK_HTTP_{result.status_code}")
-        return _shipment_ids(result.data)
+        return _shipment_ids(result.data, order_id)
+
+    def _call(
+        self,
+        store_code: str,
+        operation: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        body: Any = None,
+        approval_ref: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> WalmartResultLike:
+        """One gateway call; refusals and transport failures surface as stable codes."""
+        try:
+            return self._gateway.call(
+                store_code,
+                operation,
+                actor=self._actor,
+                params=params,
+                body=body,
+                approval_ref=approval_ref,
+                idempotency_key=idempotency_key,
+            )
+        except Exception as error:
+            raise RuntimeError(_error_code(error)) from None
+
+    def _items(self, store_code: str, shipment_id: str) -> list[Mapping[str, Any]]:
+        """Every item row of a shipment (offset pagination, all-or-nothing)."""
+        collected: list[Mapping[str, Any]] = []
+        offset = 0
+        for _ in range(ITEMS_MAX_PAGES):
+            result = self._call(
+                store_code,
+                "inbound_shipment_items",
+                params={"shipmentId": shipment_id, "limit": ITEMS_PAGE_SIZE, "offset": offset},
+            )
+            self._record(None, "inbound_shipment_items", result, shipment_id)
+            if not 200 <= result.status_code < 300:
+                raise RuntimeError(f"WALMART_ITEMS_HTTP_{result.status_code}")
+            page = _items_of(result.data)
+            collected.extend(page)
+            total = _total_count(result.data)
+            offset += len(page)
+            if total is not None:
+                if len(collected) >= total:
+                    return collected
+                if not page:
+                    raise RuntimeError("WALMART_ITEMS_PAGE_INCOMPLETE")
+            elif len(page) < ITEMS_PAGE_SIZE:
+                return collected
+            self._sleep(self._pace)
+        raise RuntimeError("WALMART_ITEMS_PAGE_LIMIT")
 
     def _carton_count(self, store_code: str, shipment_id: str) -> int:
-        result = self._read.call(
-            store_code,
-            "inbound_shipment_items",
-            params={"shipmentId": shipment_id, "limit": 50, "offset": 0},
-        )
-        self._record(None, "inbound_shipment_items", result, shipment_id)
-        if not 200 <= result.status_code < 300:
-            raise RuntimeError(f"WALMART_ITEMS_HTTP_{result.status_code}")
-        items = result.data.get("payload") if isinstance(result.data, Mapping) else None
-        if isinstance(items, Mapping):
-            items = items.get("inboundShipmentItems") or items.get("items")
         total = 0
-        for item in items or []:
-            if isinstance(item, Mapping):
-                try:
-                    total += int(item.get("vendorPackQty") or 0)
-                except (TypeError, ValueError):
-                    continue
+        for item in self._items(store_code, shipment_id):
+            try:
+                total += int(item.get("vendorPackQty") or 0)
+            except (TypeError, ValueError):
+                continue
         if total <= 0:
             raise RuntimeError("WALMART_CARTON_COUNT_UNKNOWN")
         return total
+
+    def _verify_created(
+        self, store_code: str, shipment_ids: list[str], order_items: list[dict[str, Any]]
+    ) -> None:
+        """Walmart's shipments must add up to what we asked for (GTIN, units, cartons).
+
+        Walmart may split one plan into several shipments; the sums across them are
+        compared per GTIN. Any difference leaves the ticket UNKNOWN for a human.
+        """
+        planned = {
+            item["productId"]: (int(item["itemQty"]), int(item["vendorPackQty"]))
+            for item in order_items
+        }
+        seen: dict[str, list[int]] = {}
+        for shipment_id in shipment_ids:
+            for item in self._items(store_code, shipment_id):
+                gtin = str(item.get("gtin") or item.get("productId") or "")
+                sku = str(item.get("sku") or item.get("vendorSku") or "")
+                if not gtin:
+                    gtin = next(
+                        (g for g, _ in planned.items() if _sku_of(order_items, g) == sku), ""
+                    )
+                try:
+                    qty = int(item.get("itemQty") or 0)
+                    cartons = int(item.get("vendorPackQty") or 0)
+                except (TypeError, ValueError):
+                    raise RuntimeError("WFS_SHIPMENT_ITEM_INVALID") from None
+                totals = seen.setdefault(gtin, [0, 0])
+                totals[0] += qty
+                totals[1] += cartons
+        if set(seen) != set(planned):
+            raise RuntimeError("WFS_SHIPMENT_GTIN_MISMATCH")
+        for gtin, (qty, cartons) in planned.items():
+            if seen[gtin][0] != qty or seen[gtin][1] != cartons:
+                raise RuntimeError("WFS_SHIPMENT_QUANTITY_MISMATCH")
+
+    def _resolve(self, key: str, outcome: str, note: str) -> None:
+        ledger = getattr(self._gateway, "ledger", None)
+        if ledger is None:
+            return
+        try:
+            if ledger.status(key) in ("attempting", "unknown"):
+                ledger.resolve(key, outcome=outcome, note=note)
+        except Exception:
+            # The ledger is evidence; failing to annotate it must not hide a found shipment.
+            return
 
     def _record(
         self, ticket_id: str | None, operation: str, result: WalmartResultLike, ref: str
@@ -440,6 +605,10 @@ class WalmartScfCreationGateway:
             return
 
 
+def _sku_of(order_items: list[dict[str, Any]], gtin: str) -> str:
+    return next((str(i["sku"]) for i in order_items if i["productId"] == gtin), "")
+
+
 def _preview_plans(data: Any) -> list[dict[str, Any]]:
     plans: list[dict[str, Any]] = []
     payload = data.get("payload") if isinstance(data, Mapping) else None
@@ -466,17 +635,8 @@ def _preview_plans(data: Any) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------- configuration
 
 
-def _env_set(name: str) -> frozenset[str]:
-    return frozenset(x.strip() for x in os.environ.get(name, "").split(",") if x.strip())
-
-
 GATEWAY_SWITCH = "SZZSBJ_WFS_CREATION_GATEWAY"
 STORE_MAP = "SZZSBJ_WALMART_SCF_STORE_ID_MAP"
-CVM_ROLE = "SZZSBJ_WALMART_SCF_CVM_ROLE"
-TARGET_ARN = "SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN"
-READ_KEYS = "SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS"
-WRITE_KEYS = "SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS"
-REQUIRED_READ_KEYS = frozenset({"inbound_shipments", "inbound_shipment_items"})
 
 
 def reviewed_store_map() -> dict[str, str]:
@@ -498,57 +658,43 @@ def reviewed_store_map() -> dict[str, str]:
 def build_gateway_from_env(session_factory: Callable[[], Any]) -> Any:
     """Select the adapter from environment; anything incomplete falls back to Disabled.
 
-    Reuses the server's existing Walmart SCF variables (``/etc/szzsbj/walmart-scf.env``,
-    loaded by the celery service) instead of introducing a second set:
+    The unified gateway reads the server's existing Walmart SCF variables itself
+    (``/etc/szzsbj/walmart-scf.env``: STORE_ID_MAP / CVM_ROLE / TARGET_ROLE_ARN, plus
+    ``SZZSBJ_WALMART_SCF_PROTOCOL`` and the signing key for protocol 3). This module adds:
 
-      SZZSBJ_WFS_CREATION_GATEWAY=scf               the switch (anything else = disabled)
-      SZZSBJ_WALMART_SCF_STORE_ID_MAP               reviewed store_id -> store code JSON
-      SZZSBJ_WALMART_SCF_CVM_ROLE / _TARGET_ROLE_ARN identity (already present)
-      SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS         must include inbound_shipments,
-                                                    inbound_shipment_items
-      SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS        reviewed WFS write keys (new)
+      SZZSBJ_WFS_CREATION_GATEWAY=scf   the switch (anything else = disabled)
+
+    Audit rows and the write ledger go to ``integration_walmart_calls`` /
+    ``integration_walmart_write_ledger`` (``walmart_audit``). The creation worker is a
+    system actor limited to ``WORKER_OPERATIONS``.
     """
     if os.environ.get(GATEWAY_SWITCH, "disabled").strip().lower() != "scf":
         return DisabledGateway()
     store_map = reviewed_store_map()
-    read_keys = _env_set(READ_KEYS)
-    write_keys = _env_set(WRITE_KEYS)
-    cvm_role = os.environ.get(CVM_ROLE, "").strip()
-    role_arn = os.environ.get(TARGET_ARN, "").strip()
-    if (
-        not store_map
-        or not write_keys
-        or not REQUIRED_READ_KEYS <= read_keys
-        or not cvm_role
-        or not role_arn
-    ):
+    if not store_map:
         return DisabledGateway()
-    stores = frozenset(store_map.values())
-    functions = {store: f"szzsbj-walmart-{store.lower()}-executor" for store in stores}
-    # Imported lazily: the Tencent identity helpers are only needed when the adapter is on.
-    from app.integrations.walmart.scf_write_factory import make_walmart_write_api
+    try:
+        # Lazy: the shared gateway (PR #283) and the Tencent identity helpers are only
+        # needed when the adapter is on; an older checkout without them stays disabled.
+        from app.integrations.walmart.gateway import Actor, WalmartGateway
+    except ImportError:
+        return DisabledGateway()
+    from app.modules.pmc_wfs.walmart_audit import DbAuditSink, DbWriteLedger
 
-    from app.integrations.walmart.scf_read_factory import make_walmart_read_api
-
-    read_api = make_walmart_read_api(
-        allowed_stores=stores,
-        approved_read_keys=read_keys,
-        function_by_store=functions,
-        cvm_role=cvm_role,
-        target_role_arn=role_arn,
-        function_qualifier="stable",
-    )
-    write_api = make_walmart_write_api(
-        allowed_stores=stores,
-        approved_write_keys=write_keys,
-        function_by_store=functions,
-        cvm_role=cvm_role,
-        target_role_arn=role_arn,
-        function_qualifier="stable",
+    try:
+        gateway = WalmartGateway.from_env(
+            audit=DbAuditSink(session_factory), ledger=DbWriteLedger(session_factory)
+        )
+    except Exception:
+        return DisabledGateway()
+    actor = Actor.system(
+        WORKER_ACTOR_UID,
+        operations=WORKER_OPERATIONS,
+        store_codes=frozenset(store_map.values()),
     )
     return WalmartScfCreationGateway(
         session_factory=session_factory,
-        read_api=read_api,
-        write_api=write_api,
+        gateway=gateway,
+        actor=actor,
         store_code_map=store_map,
     )

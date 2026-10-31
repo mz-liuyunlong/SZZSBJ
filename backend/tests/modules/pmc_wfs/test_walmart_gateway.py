@@ -1,4 +1,4 @@
-"""Walmart creation adapter: offline, fake read/write APIs, SQLite for settings + events."""
+"""Walmart creation adapter: offline, fake unified gateway, SQLite for settings + events."""
 
 from __future__ import annotations
 
@@ -56,63 +56,103 @@ class FakeResult:
     pdf: bytes | None = None
 
 
+class FakeLedger:
+    def __init__(self) -> None:
+        self.entries: dict[str, dict[str, Any]] = {}
+
+    def begin(self, key: str, **fields: Any) -> None:
+        current = self.entries.get(key)
+        if current is not None:
+            if current["outcome"] in ("attempting", "unknown"):
+                raise LedgerBlocked("WALMART_WRITE_PENDING_REVIEW")
+            if current["outcome"] == "ok":
+                raise LedgerBlocked("WALMART_WRITE_ALREADY_DONE")
+        self.entries[key] = {**fields, "outcome": "attempting"}
+
+    def finish(self, key: str, *, outcome: str, status_code: int | None, error_code: str | None):
+        self.entries[key].update(outcome=outcome, status_code=status_code, error_code=error_code)
+
+    def status(self, key: str) -> str | None:
+        entry = self.entries.get(key)
+        return None if entry is None else entry["outcome"]
+
+    def resolve(self, key: str, *, outcome: str, note: str) -> None:
+        self.entries[key].update(outcome=outcome, note=note)
+
+
+class LedgerBlocked(RuntimeError):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
 @dataclass
-class FakeReadApi:
+class FakeGateway:
+    """Scripted stand-in for ``WalmartGateway``: reads answer from state, writes mutate it."""
+
     shipments: dict[str, list[str]] = field(default_factory=dict)  # inboundOrderId -> ids
-    cartons: dict[str, int] = field(default_factory=dict)  # shipmentId -> vendorPackQty sum
-    calls: list[tuple[str, str, dict[str, Any]]] = field(default_factory=list)
-    fail_status: int | None = None
-
-    def call(self, store_code: str, operation: str, *, params: dict[str, Any] | None = None):
-        params = dict(params or {})
-        self.calls.append((store_code, operation, params))
-        if self.fail_status:
-            return FakeResult(self.fail_status, provider_error={"errors": ["read down"]})
-        if operation == "inbound_shipments":
-            ids = self.shipments.get(str(params.get("inboundOrderId")), [])
-            return FakeResult(
-                200,
-                {
-                    "headers": {"totalCount": len(ids)},
-                    "payload": [
-                        {"shipmentId": s, "status": "PENDING_SHIPMENT_DETAILS"} for s in ids
-                    ],
-                },
-            )
-        if operation == "inbound_shipment_items":
-            qty = self.cartons.get(str(params.get("shipmentId")), 0)
-            return FakeResult(
-                200, {"payload": [{"sku": "YC00064-1U", "vendorPackQty": qty, "itemQty": qty * 6}]}
-            )
-        raise AssertionError(operation)
-
-
-@dataclass
-class FakeWriteApi:
-    read: FakeReadApi
+    items: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # shipmentId -> rows
+    calls: list[tuple[str, str, dict[str, Any] | None, Any, str | None, str | None]] = field(
+        default_factory=list
+    )
     create_status: int = 201
     create_error: Any = None
-    calls: list[tuple[str, str, str, Any]] = field(default_factory=list)
+    read_fail_status: int | None = None
+    foreign_record: bool = False
+    ledger: FakeLedger = field(default_factory=FakeLedger)
+    page_size: int = 50
 
     def call(
         self,
         store_code: str,
-        operation: str,
+        operation_key: str,
         *,
-        approval_ref: str,
+        actor: Any,
         params: dict[str, Any] | None = None,
         body: Any = None,
+        approval_ref: str | None = None,
+        idempotency_key: str | None = None,
     ):
-        self.calls.append((store_code, operation, approval_ref, body))
-        if operation == "wfs_inbound_shipment_create":
-            if 200 <= self.create_status < 300:
-                # Walmart "creates" one shipment per plan; read-back will see it.
-                self.read.shipments[body["inboundOrderId"]] = [f"{len(self.calls):07d}WFB"]
-            return FakeResult(self.create_status, {"status": "OK"}, self.create_error)
-        if operation == "wfs_shipment_label":
-            return FakeResult(200, None, pdf=PDF)
-        if operation == "wfs_inbound_preview":
+        assert actor is ACTOR
+        self.calls.append((store_code, operation_key, params, body, approval_ref, idempotency_key))
+        if operation_key == "inbound_shipments":
+            if self.read_fail_status:
+                return FakeResult(self.read_fail_status, provider_error={"errors": ["read down"]})
+            order_id = str(params["inboundOrderId"])
+            records = [
+                {"shipmentId": s, "inboundOrderId": order_id, "status": "PENDING_SHIPMENT_DETAILS"}
+                for s in self.shipments.get(order_id, [])
+            ]
+            if self.foreign_record:
+                records.append({"shipmentId": "9999999WFB", "inboundOrderId": "PMC-OTHER"})
+            return FakeResult(200, {"headers": {"totalCount": len(records)}, "payload": records})
+        if operation_key == "inbound_shipment_items":
+            rows = self.items.get(str(params["shipmentId"]), [])
+            offset, limit = int(params["offset"]), int(params["limit"])
             return FakeResult(
+                200,
+                {"headers": {"totalCount": len(rows)}, "payload": rows[offset : offset + limit]},
+            )
+        assert approval_ref and idempotency_key, operation_key  # every write carries both
+        self.ledger.begin(idempotency_key, store_code=store_code, operation_key=operation_key)
+        if operation_key == "wfs_inbound_shipment_create":
+            if 200 <= self.create_status < 300:
+                sid = f"{len(self.calls):07d}WFB"
+                self.shipments[body["inboundOrderId"]] = [sid]
+                self.items[sid] = [
+                    {
+                        "sku": item["sku"],
+                        "gtin": item["productId"],
+                        "itemQty": item["itemQty"],
+                        "vendorPackQty": item["vendorPackQty"],
+                    }
+                    for item in body["orderItems"]
+                ]
+            result = FakeResult(self.create_status, {"status": "OK"}, self.create_error)
+        elif operation_key == "wfs_shipment_label":
+            result = FakeResult(200, None, pdf=PDF)
+        elif operation_key == "wfs_inbound_preview":
+            result = FakeResult(
                 200,
                 {
                     "payload": [
@@ -136,7 +176,24 @@ class FakeWriteApi:
                     ]
                 },
             )
-        raise AssertionError(operation)
+        else:
+            raise AssertionError(operation_key)
+        self.ledger.finish(
+            idempotency_key,
+            outcome="ok" if 200 <= result.status_code < 300 else "provider_error",
+            status_code=result.status_code,
+            error_code=None,
+        )
+        return result
+
+    def writes(self) -> list[tuple[str, str, str, Any]]:
+        return [(c[0], c[1], c[4], c[3]) for c in self.calls if c[4] is not None]
+
+    def reads(self) -> list[str]:
+        return [c[1] for c in self.calls if c[4] is None]
+
+
+ACTOR = object()
 
 
 @pytest.fixture
@@ -227,17 +284,17 @@ ALLOCATION = {
 }
 
 
-def _gateway(factory, read: FakeReadApi | None = None, write: FakeWriteApi | None = None):
-    read = read or FakeReadApi()
-    write = write or FakeWriteApi(read)
+def _gateway(factory, fake: FakeGateway | None = None, **over: Any):
+    fake = fake or FakeGateway()
     gw = WalmartScfCreationGateway(
         session_factory=factory,
-        read_api=read,
-        write_api=write,
+        gateway=fake,
+        actor=ACTOR,
         clock=lambda: T0,
         sleeper=lambda _s: None,
+        **over,
     )
-    return gw, read, write
+    return gw, fake
 
 
 def test_helpers_are_deterministic() -> None:
@@ -252,7 +309,7 @@ def test_helpers_are_deterministic() -> None:
 
 
 def test_validate_enforces_store_mapping_its_and_identity(factory) -> None:
-    gw, *_ = _gateway(factory)
+    gw, _ = _gateway(factory)
     with pytest.raises(ApiError, match="WFS_STORE_NOT_CONFIGURED"):
         gw.validate(_snapshot())
     _seed(factory, its=False)
@@ -265,15 +322,17 @@ def test_validate_enforces_store_mapping_its_and_identity(factory) -> None:
         gw.validate(bad)
 
 
-def test_create_prechecks_posts_and_reads_back_with_audit(factory) -> None:
+def test_create_prechecks_posts_reads_back_verifies_with_audit(factory) -> None:
     ticket = _seed(factory)
-    gw, read, write = _gateway(factory)
+    gw, fake = _gateway(factory)
     ids = gw.create(ticket, _snapshot(), ALLOCATION)
-    assert ids == ["0000001WFB"]
-    # precheck -> create -> readback
-    assert [c[1] for c in read.calls] == ["inbound_shipments", "inbound_shipments"]
-    store, op, approval, body = write.calls[0]
+    assert ids == ["0000002WFB"]
+    # precheck -> create -> readback -> verify items of the created shipment
+    assert fake.reads() == ["inbound_shipments", "inbound_shipments", "inbound_shipment_items"]
+    store, op, approval, body = fake.writes()[0]
     assert (store, op, approval) == (CODE, "wfs_inbound_shipment_create", f"wfs-ticket:{ticket}")
+    assert fake.calls[1][5] == "wfs-create:" + body["inboundOrderId"]
+    assert fake.ledger.status("wfs-create:" + body["inboundOrderId"]) == "ok"
     assert body["inboundOrderId"].startswith("PMC-TEST-HK2614-")
     assert body["inboundServices"] == {"inventoryTransferService": "Y"}
     assert "returnAddress" not in body  # store default unless the operator supplied one
@@ -292,7 +351,7 @@ def test_create_prechecks_posts_and_reads_back_with_audit(factory) -> None:
     with factory() as s:
         kinds = list(s.scalars(select(WfsCreationEvent.kind)))
         evidence = list(s.scalars(select(WfsCreationEvent.evidence)))
-    assert kinds == ["walmart_call"] * 3
+    assert kinds == ["walmart_call"] * 3  # item reads are not ticket-linked events
     assert [e["operation"] for e in evidence] == [
         "inbound_shipments",
         "wfs_inbound_shipment_create",
@@ -303,19 +362,66 @@ def test_create_prechecks_posts_and_reads_back_with_audit(factory) -> None:
 
 def test_create_is_idempotent_when_plan_already_exists(factory) -> None:
     ticket = _seed(factory)
-    read = FakeReadApi()
-    read.shipments[inbound_order_id(CODE, ticket, test=True)] = ["3190698WFB"]
-    gw, read, write = _gateway(factory, read)
+    fake = FakeGateway()
+    order_id = inbound_order_id(CODE, ticket, test=True)
+    fake.shipments[order_id] = ["3190698WFB"]
+    gw, fake = _gateway(factory, fake)
     assert gw.create(ticket, _snapshot(), ALLOCATION) == ["3190698WFB"]
-    assert write.calls == []
+    assert fake.writes() == []
     assert gw.reconcile(ticket, _snapshot()) == ["3190698WFB"]
+
+
+def test_readback_refuses_records_of_another_plan(factory) -> None:
+    ticket = _seed(factory)
+    gw, fake = _gateway(factory, FakeGateway(foreign_record=True))
+    with pytest.raises(RuntimeError, match="WFS_READBACK_MISMATCH"):
+        gw.create(ticket, _snapshot(), ALLOCATION)
+    assert fake.writes() == []  # nothing was posted on an untrustworthy read-back
+
+
+def test_open_ledger_entry_blocks_second_post_until_readback_decides(factory) -> None:
+    ticket = _seed(factory)
+    fake = FakeGateway()
+    order_id = inbound_order_id(CODE, ticket, test=True)
+    key = f"wfs-create:{order_id}"
+    fake.ledger.entries[key] = {"outcome": "unknown"}
+    gw, fake = _gateway(factory, fake)
+    # Nothing visible at Walmart: stay UNKNOWN for a human, no second POST.
+    with pytest.raises(RuntimeError, match="WFS_CREATE_PENDING_REVIEW"):
+        gw.create(ticket, _snapshot(), ALLOCATION)
+    assert [c[1] for c in fake.calls] == [
+        "inbound_shipments",
+        "wfs_inbound_shipment_create",
+        "inbound_shipments",
+    ]
+    assert fake.ledger.status(key) == "unknown"
+    # The shipment shows up later: reconcile resolves the ledger and returns it.
+    fake.shipments[order_id] = ["7777777WFB"]
+    assert gw.reconcile(ticket, _snapshot()) == ["7777777WFB"]
+    assert fake.ledger.entries[key]["outcome"] == "ok"
+
+
+def test_created_shipment_must_match_the_request(factory) -> None:
+    ticket = _seed(factory)
+
+    class ShortGateway(FakeGateway):
+        def call(self, store_code, operation_key, **kwargs):
+            result = super().call(store_code, operation_key, **kwargs)
+            if operation_key == "wfs_inbound_shipment_create":
+                for rows in self.items.values():
+                    rows[0]["itemQty"] -= 1  # Walmart "lost" a unit
+            return result
+
+    gw, _ = _gateway(factory, ShortGateway())
+    with pytest.raises(RuntimeError, match="WFS_SHIPMENT_QUANTITY_MISMATCH"):
+        gw.create(ticket, _snapshot(), ALLOCATION)
 
 
 def test_create_rejection_and_ambiguity_map_to_worker_semantics(factory) -> None:
     ticket = _seed(factory)
-    read = FakeReadApi()
-    write = FakeWriteApi(read, create_status=400, create_error={"errors": [{"code": "X"}]})
-    gw, *_ = _gateway(factory, read, write)
+    gw, _ = _gateway(
+        factory, FakeGateway(create_status=400, create_error={"errors": [{"code": "X"}]})
+    )
     with pytest.raises(DefinitiveRejection, match="WALMART_HTTP_400"):
         gw.create(ticket, _snapshot(), ALLOCATION)
     with factory() as s:
@@ -326,34 +432,50 @@ def test_create_rejection_and_ambiguity_map_to_worker_semantics(factory) -> None
         ]
     assert errors == [{"errors": [{"code": "X"}]}]
     # 5xx is ambiguous: no DefinitiveRejection, holds stay.
-    write5 = FakeWriteApi(FakeReadApi(), create_status=503)
-    gw5, *_ = _gateway(factory, write5.read, write5)
+    gw5, _ = _gateway(factory, FakeGateway(create_status=503))
     with pytest.raises(RuntimeError, match="WALMART_HTTP_503"):
         gw5.create(ticket, _snapshot(), ALLOCATION)
+    # A gateway refusal (permission, config, transport) is UNKNOWN with its stable code.
+
+    class Refusing(FakeGateway):
+        def call(self, store_code, operation_key, **kwargs):
+            if operation_key == "wfs_inbound_shipment_create":
+                raise LedgerBlocked("WALMART_PERMISSION_DENIED")
+            return super().call(store_code, operation_key, **kwargs)
+
+    gw_r, _ = _gateway(factory, Refusing())
+    with pytest.raises(RuntimeError, match="WALMART_PERMISSION_DENIED"):
+        gw_r.create(ticket, _snapshot(), ALLOCATION)
     # Mixed pack sizes inside one ticket never reach Walmart.
-    gw_ok, read_ok, write_ok = _gateway(factory)
+    gw_ok, fake_ok = _gateway(factory)
     mixed = {
         **ALLOCATION,
         "ranges": [{**ALLOCATION["ranges"][0], "units_per_box": 5}, ALLOCATION["ranges"][1]],
     }
     with pytest.raises(DefinitiveRejection, match="WFS_MIXED_PACK_SIZE_IN_TICKET"):
         gw_ok.create(ticket, _snapshot(), mixed)
-    assert write_ok.calls == []
+    assert fake_ok.writes() == []
 
 
-def test_label_uses_carton_count_and_returns_pdf(factory) -> None:
+def test_label_pages_through_all_items_and_returns_pdf(factory) -> None:
     _seed(factory)
-    read = FakeReadApi(cartons={"3190698WFB": 3})
-    gw, read, write = _gateway(factory, read)
+    rows = [
+        {"sku": f"S{i}", "gtin": f"{i:014d}", "itemQty": 6, "vendorPackQty": 1} for i in range(120)
+    ]
+    gw, fake = _gateway(factory, FakeGateway(items={"3190698WFB": rows}))
     assert gw.label("3190698WFB", _snapshot()) == PDF
-    assert write.calls[0][3]["loadTypes"] == [{"loadType": "SINGLE SKU", "count": "3"}]
+    item_calls = [c for c in fake.calls if c[1] == "inbound_shipment_items"]
+    assert [c[2]["offset"] for c in item_calls] == [0, 50, 100]  # 120 rows = 3 pages
+    store, op, approval, body = fake.writes()[0]
+    assert body["loadTypes"] == [{"loadType": "SINGLE SKU", "count": "120"}]
+    assert approval == "wfs-label:3190698WFB"
     with pytest.raises(RuntimeError, match="WALMART_CARTON_COUNT_UNKNOWN"):
         gw.label("UNKNOWN1WFB", _snapshot())
 
 
 def test_preview_parses_plans(factory) -> None:
     _seed(factory)
-    gw, *_ = _gateway(factory)
+    gw, _ = _gateway(factory)
     out = gw.preview(_snapshot(allocation={"tickets": [ALLOCATION]}))
     assert out["plans"] == [
         {
@@ -371,31 +493,26 @@ def test_env_builder_defaults_to_disabled(monkeypatch: pytest.MonkeyPatch, facto
     for name in (
         "SZZSBJ_WFS_CREATION_GATEWAY",
         "SZZSBJ_WALMART_SCF_STORE_ID_MAP",
+        "SZZSBJ_WALMART_SCF_PROTOCOL",
         "SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS",
         "SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS",
     ):
         monkeypatch.delenv(name, raising=False)
     assert isinstance(build_gateway_from_env(factory), DisabledGateway)
     monkeypatch.setenv("SZZSBJ_WFS_CREATION_GATEWAY", "scf")
+    # Switch on but no reviewed store map -> disabled.
+    assert isinstance(build_gateway_from_env(factory), DisabledGateway)
     monkeypatch.setenv("SZZSBJ_WALMART_SCF_STORE_ID_MAP", json.dumps({STORE_ID: CODE}))
-    monkeypatch.setenv("SZZSBJ_WALMART_SCF_CVM_ROLE", "role")
-    monkeypatch.setenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", "qcs::cam::uin/1:roleName/x")
-    monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_WRITE_KEYS", "wfs_inbound_shipment_create")
-    # Read keys missing the two WFS reads -> still disabled (adapter needs read-back).
-    monkeypatch.setenv("SZZSBJ_WALMART_SCF_APPROVED_READ_KEYS", "wfs_inventory")
+    # Store map present but the shared gateway cannot be configured (no identity, no
+    # protocol-3 signing key, no legacy keys) -> disabled, never a half-configured adapter.
+    monkeypatch.delenv("SZZSBJ_WALMART_SCF_CVM_ROLE", raising=False)
+    monkeypatch.delenv("SZZSBJ_WALMART_SCF_TARGET_ROLE_ARN", raising=False)
     assert isinstance(build_gateway_from_env(factory), DisabledGateway)
     assert reviewed_store_map() == {STORE_ID: CODE}
 
 
 def test_store_mapping_conflict_is_refused(factory) -> None:
     _seed(factory)
-    gw = WalmartScfCreationGateway(
-        session_factory=factory,
-        read_api=FakeReadApi(),
-        write_api=FakeWriteApi(FakeReadApi()),
-        clock=lambda: T0,
-        sleeper=lambda _s: None,
-        store_code_map={STORE_ID: "HK2615"},
-    )
+    gw, _ = _gateway(factory, store_code_map={STORE_ID: "HK2615"})
     with pytest.raises(ApiError, match="WFS_STORE_MAPPING_CONFLICT"):
         gw.validate(_snapshot())
