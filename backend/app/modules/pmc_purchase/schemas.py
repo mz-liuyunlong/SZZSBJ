@@ -140,6 +140,9 @@ class ItemIdIdentity(StrictSchema):
     msku: str | None = None
     gtin: str | None = None
     fulfillment_type: str | None = None
+    # Rule v2 (2026-10-31): the listing's local SKU and whether it differs from the line SKU.
+    local_sku: str | None = None
+    sku_mismatch: bool = False
 
 
 class ItemIdRef(StrictSchema):

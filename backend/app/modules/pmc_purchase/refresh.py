@@ -18,9 +18,13 @@ Scope (rules v4, PRP §7, gate3-plan G3-D, Rocky 2026-09-23 "按之前的来"):
   ``quantity_total × arrival_ratio`` (§3.2, ratio from the rule table, default 0.5).
 * Two overdue notions stay apart through ``stage_code``: ``S2`` = purchase overdue
   (order still 待下单), ``S3``/``S4`` = arrival overdue (ordered, not arrived).
-* ItemID: merge plan and line remarks and verify against same-account/store/SKU listings.
-  Keep every verified identity. Multiple values do not duplicate quantities or imply conflict.
-  Without verified remarks, show same-store/SKU listings; preserve existing packing fallback.
+* ItemID: merge plan and line remarks and verify against the **same store's** listings
+  (owner decision 2026-10-31: a buyer-written ItemID is trusted as soon as the listing
+  exists for that store; a listing local SKU that is present and differs from the line SKU
+  is flagged ``sku_mismatch``, never a reason to drop the id). Keep every verified
+  identity. Multiple values do not duplicate quantities or imply conflict. Without
+  verified remarks, show the same-store listing found by local SKU, or by the purchase
+  line's MSKU when the listing's local SKU is blank; preserve existing packing fallback.
 * ``sid = 0`` rows keep ``store_attributed = False``: no overdue, no cycle sample.
 * Manual layer is read, never written; DWD is never written.
 
@@ -71,18 +75,22 @@ from app.modules.pmc_purchase.gate3_models import (
     ManualPurchaseCycleOverride,
     RulePurchaseThresholds,
 )
+from app.modules.pmc_purchase.item_id_resolution import (
+    RULE_VERSION,
+    ListingCandidate,
+    resolve_item_identities,
+)
 from app.modules.pmc_purchase.models import (
     LingxingReceiptOrderItemOds,
     LingxingReceiptOrderOds,
 )
 from app.modules.pmc_purchase.remark_item_ids import (
     OdsRemarkTexts,
-    extract_remark_item_ids,
+    line_msku_for,
     line_texts_for,
     load_ods_remark_texts,
     plan_texts_for,
     resolve_purchase_board_item_id,
-    validated_remark_item_ids,
 )
 from app.modules.sku_detail.models import LingxingSkuProductInfoCurrent
 
@@ -184,12 +192,40 @@ class _Listing:
 class _ListingIndex:
     by_item: dict[tuple[str, str], _Listing]
     by_store_sku: dict[tuple[str, str], _Listing]
+    # (store_id, msku) -> listing, for lines whose listing has no local SKU yet.
+    by_store_msku: dict[tuple[str, str], _Listing] = field(default_factory=dict)
 
+    def candidates_for(self, store_id: str | None) -> list[ListingCandidate]:
+        """Every listing of one store, in the shape the shared rule consumes."""
+        if not store_id:
+            return []
+        return [
+            ListingCandidate(
+                store_id=store,
+                item_id=listing.item_id,
+                local_sku=listing.local_sku,
+                gtin=listing.gtin,
+                msku=listing.msku,
+                fulfillment_type=listing.fulfillment_type,
+            )
+            for (store, _item), listing in self.by_item.items()
+            if store == store_id
+        ]
 
-@dataclass(frozen=True, slots=True)
-class _ListingIndex:
-    by_item: dict[tuple[str, str], _Listing]
-    by_store_sku: dict[tuple[str, str], _Listing]
+    def for_line(self, store_id: str | None, sku: str | None, msku: str | None) -> _Listing | None:
+        """Scalar fallback for the pre-attribution pass: a unique store listing by local
+        SKU, else by purchase-line MSKU (blank local SKU)."""
+        if not store_id:
+            return None
+        key_sku = (sku or "").strip()
+        if key_sku:
+            found = self.by_store_sku.get((store_id, key_sku))
+            if found is not None:
+                return found
+        key_msku = (msku or "").strip()
+        if key_msku:
+            return self.by_store_msku.get((store_id, key_msku))
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,6 +468,7 @@ class PmcPurchaseDwsRefresher:
 
         by_item: dict[tuple[str, str], _Listing] = {}
         grouped: dict[tuple[str, str], dict[str, _Listing]] = defaultdict(dict)
+        grouped_msku: dict[tuple[str, str], dict[str, _Listing]] = defaultdict(dict)
         rows = self.session.scalars(
             select(WalmartListingDimension).where(
                 WalmartListingDimension.source_account_ref == account
@@ -446,12 +483,20 @@ class PmcPurchaseDwsRefresher:
             local_sku = (row.local_sku or "").strip()
             if local_sku:
                 grouped[(row.store_id, local_sku)][item_id] = listing
+            msku = (row.msku or "").strip()
+            if msku:
+                grouped_msku[(row.store_id, msku)][item_id] = listing
         by_store_sku = {
             key: next(iter(matches.values()))
             for key, matches in grouped.items()
             if len(matches) == 1
         }
-        return _ListingIndex(by_item, by_store_sku)
+        by_store_msku = {
+            key: next(iter(matches.values()))
+            for key, matches in grouped_msku.items()
+            if len(matches) == 1
+        }
+        return _ListingIndex(by_item, by_store_sku, by_store_msku)
 
     def _products(self, account: str) -> dict[str, _Product]:
         out: dict[str, _Product] = {}
@@ -639,21 +684,30 @@ class PmcPurchaseDwsRefresher:
         )
         line_texts = line_texts_for(ods_remarks, line, fallback_item_id=line.remark_item_id)
         store_id = line.store_id or (plan.store_id if plan else None)
-        verified = {
-            item: value
-            for (store, item), value in listings.by_item.items()
-            if store == store_id and (value.local_sku or "").strip() == (line.sku or "").strip()
-        }
-        remark_ids = validated_remark_item_ids(plan_texts, line_texts, list(verified))
-        selected_ids = remark_ids or list(verified)
+        line_msku = line_msku_for(ods_remarks, line)
+        # One shared rule with the domestic boards (item_id_resolution): remark ids are
+        # verified by store, a differing listing local SKU is flagged, blank local SKUs
+        # fall back to the purchase line's MSKU. Legacy order: line texts, then plan texts.
+        resolution = resolve_item_identities(
+            store_id=store_id,
+            sku=line.sku,
+            remark_texts=[*line_texts, *plan_texts],
+            line_mskus=[line_msku] if line_msku else (),
+            listings=listings.candidates_for(store_id),
+        )
+        remark_ids = resolution.item_ids if resolution.source == "remark" else []
+        selected_ids = resolution.item_ids
+        sku_mismatch = sorted(resolution.sku_mismatch_ids)
         identities = [
             {
-                "item_id": item,
-                "msku": verified[item].msku,
-                "gtin": verified[item].gtin,
-                "fulfillment_type": verified[item].fulfillment_type,
+                "item_id": found.item_id,
+                "msku": found.msku,
+                "gtin": found.gtin,
+                "fulfillment_type": found.fulfillment_type,
+                "local_sku": found.local_sku,
+                "sku_mismatch": found.sku_mismatch,
             }
-            for item in selected_ids
+            for found in resolution.identities
         ]
         if identities:
             attribution = ItemIdAttribution(
@@ -694,15 +748,13 @@ class PmcPurchaseDwsRefresher:
                 for field in ("item_id", "gtin", "msku")
             },
             "item_id_evidence": {
-                "rule": "purchase.remark.merge.v1",
+                "rule": RULE_VERSION,
                 "plan_sn": line.plan_sn,
                 "order_sn": line.order_sn,
                 "order_item_id": line.order_item_id,
-                "unverified_ids": [
-                    item
-                    for item in extract_remark_item_ids([*line_texts, *plan_texts])
-                    if item not in verified
-                ],
+                "line_msku": line_msku,
+                "sku_mismatch": sku_mismatch,
+                "unverified_ids": list(resolution.unverified_remark_ids),
             },
         }
         row = DwsPurchaseBoard(
@@ -856,9 +908,7 @@ class PmcPurchaseDwsRefresher:
     ) -> tuple[ItemIdAttribution, str | None, datetime | None, bool]:
         sku = (line.sku or "").strip()
         store_id = line.store_id or (plan.store_id if plan else None)
-        sku_listing = None
-        if store_id and sku:
-            sku_listing = listings.by_store_sku.get((store_id, sku))
+        sku_listing = listings.for_line(store_id, sku, line_msku_for(ods_remarks, line))
         slip = self.packing_slips.lookup(
             order_sn=line.order_sn,
             order_item_id=line.order_item_id,

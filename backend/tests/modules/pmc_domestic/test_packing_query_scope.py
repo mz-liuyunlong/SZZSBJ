@@ -123,8 +123,9 @@ def test_candidate_queries_are_batched_and_preserve_full_plan_denominator(monkey
     result = module.PackingRepository(session).candidates({"account-0", "account-1"})
     assert len(result) == count
     assert all(r.quantity_suggestion.plan_weights == {"11111111111": 40.0} for r in result)
-    # Fixed number of batch queries, independent of candidate/SKU count.
-    assert len(session.queries) == 14
+    # Fixed number of batch queries, independent of candidate/SKU count (the second
+    # listing query, by attributed item id, was added by ItemID rule v2 on 2026-10-31).
+    assert len(session.queries) == 15
     dwd = next(q for q in session.queries if q.column_descriptions[0]["expr"] is Line)
     assert (
         "(dwd_purchase_order_line_item.source_account_ref, "

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
@@ -92,6 +92,9 @@ def resolve_purchase_board_item_id(
 class OdsRemarkTexts:
     plan_by_sn: Mapping[str, tuple[str | None, ...]]
     line_by_key: Mapping[tuple[str, str], tuple[str | None, ...]]
+    # Purchase line MSKU (``payload.msku``) by (order_sn, order_item_id): used to find the
+    # listing when its local SKU is blank (owner decision 2026-10-31, rule 2).
+    line_msku_by_key: Mapping[tuple[str, str], str] = field(default_factory=dict)
 
 
 def load_ods_remark_texts(session: Session, account: str) -> OdsRemarkTexts | None:
@@ -106,8 +109,18 @@ def load_ods_remark_texts(session: Session, account: str) -> OdsRemarkTexts | No
         return None
 
     plan_by_sn = _latest_plan_texts(session, account)
-    line_by_key = _latest_line_texts(session, account)
-    return OdsRemarkTexts(plan_by_sn=plan_by_sn, line_by_key=line_by_key)
+    line_by_key, line_msku_by_key = _latest_line_texts(session, account)
+    return OdsRemarkTexts(
+        plan_by_sn=plan_by_sn, line_by_key=line_by_key, line_msku_by_key=line_msku_by_key
+    )
+
+
+def line_msku_for(ods: OdsRemarkTexts | None, line: object) -> str | None:
+    if ods is None:
+        return None
+    key = (str(line.order_sn), str(line.order_item_id))
+    value = ods.line_msku_by_key.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 def plan_texts_for(
@@ -199,7 +212,7 @@ def _latest_plan_texts(session: Session, account: str) -> dict[str, tuple[str | 
 
 def _latest_line_texts(
     session: Session, account: str
-) -> dict[tuple[str, str], tuple[str | None, ...]]:
+) -> tuple[dict[tuple[str, str], tuple[str | None, ...]], dict[tuple[str, str], str]]:
     rows = session.scalars(
         select(LingxingPurchaseOrderItemOds).where(
             LingxingPurchaseOrderItemOds.source_account_ref == account
@@ -216,10 +229,14 @@ def _latest_line_texts(
         if current is None or version > current[0]:
             latest[key] = (version, row)
     out: dict[tuple[str, str], tuple[str | None, ...]] = {}
+    mskus: dict[tuple[str, str], str] = {}
     for key, (_, row) in latest.items():
         payload = _payload(row.payload_json)
         out[key] = (row.remark, _payload_text(payload, "item_purchase_remark"))
-    return out
+        msku = _payload_text(payload, "msku")
+        if msku:
+            mskus[key] = msku.strip()
+    return out, mskus
 
 
 def _payload(raw: object) -> dict[str, object]:
