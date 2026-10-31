@@ -22,6 +22,7 @@ from app.modules.decodo.router import (
 from app.modules.decodo.router import (
     settings_router as decodo_settings_router,
 )
+from app.modules.iam.organization_sync_router import router as organization_sync_router
 from app.modules.iam.password_reset_router import router as password_reset_router
 from app.modules.iam.rbac_router import router as rbac_router
 from app.modules.iam.router import router as iam_router
@@ -84,6 +85,7 @@ def create_app() -> FastAPI:
     application.include_router(data_pages_router)
     application.include_router(iam_router)
     application.include_router(rbac_router)
+    application.include_router(organization_sync_router)
     application.include_router(integration_sync_router)
     application.include_router(keyword_planning_router)
     application.include_router(password_reset_router)

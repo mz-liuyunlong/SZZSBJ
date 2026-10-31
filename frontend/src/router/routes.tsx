@@ -219,7 +219,7 @@ function BusinessRoute({
         ) : page.key === "settings_user_management" ? (
           <UserManagementPage page={page} />
         ) : page.key === "settings_organization" ? (
-          <OrganizationPage />
+          <OrganizationPage canSync={activeUser.permissions.includes("*")} />
         ) : page.key === "settings_role_management" ? (
           <RoleManagementPage page={page} />
         ) : page.key === "settings_business_config" ? (

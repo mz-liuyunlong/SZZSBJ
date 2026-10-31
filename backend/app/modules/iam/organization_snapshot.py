@@ -24,12 +24,14 @@ def canonical_snapshot(
         if not department_id or department_id in seen_depts:
             raise ValueError("Invalid or duplicate Feishu department identity")
         seen_depts.add(department_id)
-        dept_rows.append({
-            "department_id": department_id,
-            "parent_department_id": str(item.get("parent_department_id") or "0"),
-            "name": str(item.get("name") or department_id),
-            "leader_user_id": str(item.get("leader_user_id") or ""),
-        })
+        dept_rows.append(
+            {
+                "department_id": department_id,
+                "parent_department_id": str(item.get("parent_department_id") or "0"),
+                "name": str(item.get("name") or department_id),
+                "leader_user_id": str(item.get("leader_user_id") or ""),
+            }
+        )
     users_by_id: dict[str, dict[str, object]] = {}
     for user in users:
         if not user.open_id or user.open_id in users_by_id:
@@ -70,8 +72,13 @@ def apply_snapshot(
             (id, snapshot_hash, department_count, employee_count, requested_by)
         VALUES (:id, :hash, :departments, :employees, :requested_by)
         """),
-        {"id": run_id, "hash": digest, "departments": len(dept_rows),
-         "employees": len(user_rows), "requested_by": requested_by},
+        {
+            "id": run_id,
+            "hash": digest,
+            "departments": len(dept_rows),
+            "employees": len(user_rows),
+            "requested_by": requested_by,
+        },
     )
     for dept in dept_rows:
         session.execute(
@@ -105,7 +112,6 @@ def apply_snapshot(
                 last_seen_run_id = excluded.last_seen_run_id,
                 updated_at = now()
             """),
-            {**user, "department_ids": json.dumps(user["department_ids"]),
-             "run_id": run_id},
+            {**user, "department_ids": json.dumps(user["department_ids"]), "run_id": run_id},
         )
     return str(run_id)

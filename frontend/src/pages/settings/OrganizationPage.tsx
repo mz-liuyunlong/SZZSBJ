@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Card, Empty, Input, Spin, Table, Tree, Typography } from "antd";
+import { Alert, Button, Card, Empty, Input, Modal, Space, Spin, Table, Tree, Typography, message } from "antd";
 import type { DataNode } from "antd/es/tree";
 import { backendRequest } from "@/api/backendApi";
 
@@ -21,14 +21,61 @@ interface DirectoryPreview {
   departments: Department[];
   users: Employee[];
   read_only: boolean;
+  last_synced_at?: string | null;
+}
+interface SyncPreview {
+  snapshot_hash: string;
+  department_count: number;
+  employee_count: number;
+}
+interface OrganizationPageProps {
+  canSync: boolean;
 }
 
-export default function OrganizationPage() {
+export default function OrganizationPage({ canSync }: OrganizationPageProps) {
   const [data, setData] = useState<DirectoryPreview>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [department, setDepartment] = useState<string>();
   const [search, setSearch] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [notice, noticeContext] = message.useMessage();
+
+  const confirmSync = async () => {
+    if (!canSync || syncing) return;
+    setSyncing(true);
+    try {
+      const result = await backendRequest<SyncPreview>(
+        "/api/settings/organization/sync-preview",
+      );
+      const preview = result.data;
+      Modal.confirm({
+        title: "确认同步飞书组织架构？",
+        content: `本次包含 ${preview.department_count} 个部门、${preview.employee_count} 名员工。仅更新组织快照，不创建账号或更改角色权限。`,
+        okText: "确认写入",
+        cancelText: "取消",
+        onOk: async () => {
+          try {
+            await backendRequest("/api/settings/organization/sync-apply", {
+              method: "POST",
+              body: JSON.stringify({ expected_hash: preview.snapshot_hash }),
+            });
+            const saved = await backendRequest<DirectoryPreview>(
+              "/api/settings/organization/snapshot",
+            );
+            setData(saved.data);
+            void notice.success("飞书组织架构已同步到快照");
+          } catch {
+            void notice.error("同步失败或数据已变化，请重新预览。");
+          }
+        },
+      });
+    } catch {
+      void notice.error("无法预览飞书组织，请检查授权和应用配置。");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -60,10 +107,16 @@ export default function OrganizationPage() {
   ), [data, department, search]);
 
   return <div style={{ padding: 20 }}>
-    <Typography.Title level={4}>组织架构 · 飞书</Typography.Title>
+    {noticeContext}
+    <Space style={{ marginBottom: 16 }}>
+      <Typography.Title level={4} style={{ margin: 0 }}>组织架构 · 飞书</Typography.Title>
+      {canSync && <Button loading={syncing} onClick={() => void confirmSync()}>
+        预览并同步
+      </Button>}
+    </Space>
     <Alert type="info" showIcon style={{ marginBottom: 16 }}
-      message="当前为飞书实时只读预览"
-      description="部门和人员来自飞书应用可见的通讯录；这里不自动创建账号、不调整角色，也不扩大任何数据权限。" />
+      message="飞书组织架构"
+      description="页面展示飞书应用可见的组织信息；只有超级管理员可以预览并确认同步快照。同步不会创建账号、更改角色或扩大数据权限。" />
     {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
     <Spin spinning={loading}>
       <div style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 1fr)", gap: 16 }}>
