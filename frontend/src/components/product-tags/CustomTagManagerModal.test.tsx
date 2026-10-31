@@ -30,4 +30,30 @@ describe("Listing tag account ownership", () => {
       name: "Review", color: "#1677FF", sourceAccountRef: "synthetic-b",
     }));
   });
+
+  it("reactivates an inactive tag through the existing update API", async () => {
+    const inactiveTag = {
+      id: "synthetic-tag", sourceAccountRef: "synthetic-a", name: "Review",
+      color: "#1677FF", usage: 1, isActive: false,
+    };
+    const update = vi.fn().mockResolvedValue({ ...inactiveTag, isActive: true });
+    const onTagsChange = vi.fn();
+    render(
+      <CustomTagManagerModal
+        open
+        onClose={() => undefined}
+        accountRefs={["synthetic-a"]}
+        initialTags={[inactiveTag]}
+        onUpdateTag={update}
+        onTagsChange={onTagsChange}
+      />,
+    );
+
+    expect(screen.getByText("已停用")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "启用" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith("synthetic-tag", {
+      name: "Review", color: "#1677FF", isActive: true,
+    }));
+    await waitFor(() => expect(onTagsChange).toHaveBeenCalledWith([{ ...inactiveTag, isActive: true }]));
+  });
 });

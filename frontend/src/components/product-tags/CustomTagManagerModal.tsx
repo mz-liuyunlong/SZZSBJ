@@ -15,12 +15,14 @@ export interface CustomProductTag {
   name: string;
   color: string;
   usage: number;
+  isActive?: boolean;
 }
 
 export interface CustomProductTagMutation {
   name: string;
   color: string;
   sourceAccountRef?: string;
+  isActive?: boolean;
 }
 
 interface CustomTagManagerModalProps {
@@ -260,7 +262,7 @@ function CustomTagManagerModal({
 
       commitTags((current) => current.map((tag) => (
         tag.id === editingId
-          ? updatedTag ?? { ...tag, name: normalizedEditName, color: editColor }
+          ? updatedTag ? { ...updatedTag, usage: tag.usage } : { ...tag, name: normalizedEditName, color: editColor }
           : tag
       )));
 
@@ -300,6 +302,28 @@ function CustomTagManagerModal({
       setToast(`已删除「${tagName}」`);
     } catch {
       setToast("标签删除失败，请稍后重试");
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const toggleActive = async (tag: CustomProductTag) => {
+    const nextActive = tag.isActive === false;
+    setIsMutating(true);
+    try {
+      const updatedTag = onUpdateTag
+        ? await onUpdateTag(String(tag.id), {
+          name: tag.name,
+          color: tag.color,
+          isActive: nextActive,
+        })
+        : { ...tag, isActive: nextActive };
+      commitTags((current) => current.map((item) => item.id === tag.id
+        ? { ...updatedTag, usage: item.usage }
+        : item));
+      setToast(nextActive ? "标签已启用" : "标签已停用");
+    } catch {
+      setToast("标签状态更新失败，请稍后重试");
     } finally {
       setIsMutating(false);
     }
@@ -489,12 +513,21 @@ function CustomTagManagerModal({
                       style={{ background: tag.color }}
                     />
                     <span className="custom-tag-manager__tag-name">{tag.name}</span>
+                    {tag.isActive === false && <span className="custom-tag-manager__usage">已停用</span>}
                     {accountRefs.length > 1 && tag.sourceAccountRef && (
                       <span className="custom-tag-manager__usage">{tag.sourceAccountRef}</span>
                     )}
                   </div>
                   <div className="custom-tag-manager__usage">{tag.usage} 个产品</div>
                   <div className="custom-tag-manager__actions">
+                    <button
+                      type="button"
+                      className="custom-tag-manager__text-btn"
+                      disabled={busy}
+                      onClick={() => { void toggleActive(tag); }}
+                    >
+                      {tag.isActive === false ? "启用" : "停用"}
+                    </button>
                     <button
                       type="button"
                       className="custom-tag-manager__text-btn"

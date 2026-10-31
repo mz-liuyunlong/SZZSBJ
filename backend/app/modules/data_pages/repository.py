@@ -1784,7 +1784,9 @@ class ListingTagRepository:
             return True
         return False
 
-    def list_tags(self, *, account_refs: frozenset[str]) -> list[tuple[ProductCustomTag, int]]:
+    def list_tags(
+        self, *, account_refs: frozenset[str], include_inactive: bool = False
+    ) -> list[tuple[ProductCustomTag, int]]:
         if not account_refs:
             return []
 
@@ -1803,15 +1805,20 @@ class ListingTagRepository:
         )
 
         try:
-            rows = self.session.execute(
+            statement = (
                 select(ProductCustomTag, func.coalesce(usage.c.usage, 0))
                 .outerjoin(usage, usage.c.tag_id == ProductCustomTag.id)
                 .where(
                     ProductCustomTag.source_account_ref.in_(account_refs),
                     ProductCustomTag.deleted_at.is_(None),
-                    ProductCustomTag.is_active.is_(True),
                 )
-                .order_by(ProductCustomTag.sort_order.asc(), ProductCustomTag.created_at.asc())
+            )
+            if not include_inactive:
+                statement = statement.where(ProductCustomTag.is_active.is_(True))
+            rows = self.session.execute(
+                statement.order_by(
+                    ProductCustomTag.sort_order.asc(), ProductCustomTag.created_at.asc()
+                )
             ).all()
         except ProgrammingError as exc:
             if self._rollback_if_tag_table_missing(exc):

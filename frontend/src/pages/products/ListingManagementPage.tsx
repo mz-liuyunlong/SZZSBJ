@@ -409,6 +409,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
     }
 
     for (const tag of managedTags) {
+      if (tag.isActive === false) continue;
       if (optionMap.has(tag.name)) continue;
       optionMap.set(tag.name, {
         value: tag.name,
@@ -423,8 +424,8 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
   const assignmentTags = useMemo(() => {
     const accounts = new Set(selectedRowKeys.map((key) => seenListingRows[String(key)]?.sourceAccountRef).filter(Boolean));
     const scoped = accounts.size === 1
-      ? managedTags.filter((tag) => accounts.has(tag.sourceAccountRef))
-      : managedTags;
+      ? managedTags.filter((tag) => tag.isActive !== false && accounts.has(tag.sourceAccountRef))
+      : managedTags.filter((tag) => tag.isActive !== false);
     return Array.from(new Map(scoped.map((tag) => [tag.name, tag])).values());
   }, [managedTags, seenListingRows, selectedRowKeys]);
 

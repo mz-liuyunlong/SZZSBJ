@@ -1094,7 +1094,9 @@ class ListingManagementService:
         return ListingTagListData(
             items=[
                 self._to_tag_read(tag, usage)
-                for tag, usage in self.tag_repository.list_tags(account_refs=account_refs)
+                for tag, usage in self.tag_repository.list_tags(
+                    account_refs=account_refs, include_inactive=True
+                )
             ],
             source_account_refs=sorted(account_refs),
         )

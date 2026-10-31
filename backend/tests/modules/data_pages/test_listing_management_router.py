@@ -651,9 +651,69 @@ def test_listing_tag_list_filters_definitions_by_account() -> None:
     ListingTagRepository(session).list_tags(account_refs=frozenset({"synthetic-account"}))
     sql = str(session.execute.call_args.args[0])
     assert "product_custom_tags.source_account_ref IN" in sql
+    assert "product_custom_tags.is_active IS true" in sql
     assert (
         "product_custom_tags.source_account_ref = product_custom_tag_assignments.source_account_ref"
     ) in sql
+
+
+def test_listing_tag_manager_can_read_inactive_tags_for_reactivation() -> None:
+    session = MagicMock(spec=Session)
+    session.execute.return_value.all.return_value = []
+    ListingTagRepository(session).list_tags(
+        account_refs=frozenset({"synthetic-account"}), include_inactive=True
+    )
+    sql = str(session.execute.call_args.args[0])
+    assert "product_custom_tags.source_account_ref IN" in sql
+    assert "product_custom_tags.deleted_at IS NULL" in sql
+    assert "product_custom_tags.is_active IS true" not in sql
+
+
+def test_listing_tag_catalog_exposes_inactive_status_without_cross_account_rows() -> None:
+    service = ListingManagementService(MagicMock(spec=Session))
+    inactive_tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000054"),
+        source_account_ref="synthetic-account",
+        name="Synthetic",
+        color="#1677FF",
+        is_active=False,
+        sort_order=0,
+    )
+    service.tag_repository.list_tags = MagicMock(return_value=[(inactive_tag, 1)])
+
+    catalog = service.list_tags(frozenset({"synthetic-account"}))
+
+    service.tag_repository.list_tags.assert_called_once_with(
+        account_refs=frozenset({"synthetic-account"}), include_inactive=True
+    )
+    assert len(catalog.items) == 1
+    assert catalog.items[0].is_active is False
+
+
+def test_listing_inactive_tag_can_be_reactivated_without_recreating_it() -> None:
+    tag = ProductCustomTag(
+        id=UUID("00000000-0000-0000-0000-000000000053"),
+        source_account_ref="synthetic-account",
+        name="Synthetic",
+        color="#1677FF",
+        is_active=False,
+    )
+    session = MagicMock(spec=Session)
+    session.get.return_value = tag
+
+    updated = ListingTagRepository(session).update_tag(
+        tag_id=str(tag.id),
+        account_refs=frozenset({"synthetic-account"}),
+        name=None,
+        color=None,
+        sort_order=None,
+        is_active=True,
+    )
+
+    assert updated is tag
+    assert tag.is_active is True
+    session.commit.assert_called_once()
+    session.add.assert_not_called()
 
 
 def test_listing_tag_filter_requires_assignment_and_definition_account_match() -> None:

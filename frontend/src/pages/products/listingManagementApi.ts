@@ -109,12 +109,14 @@ export interface ListingCustomTag {
   name: string;
   color: string;
   usage: number;
+  isActive: boolean;
 }
 
 export interface ListingTagMutationPayload {
   name: string;
   color: string;
   sourceAccountRef?: string;
+  isActive?: boolean;
 }
 
 const toListingCustomTag = (tag: BackendListingTag): ListingCustomTag => ({
@@ -123,6 +125,7 @@ const toListingCustomTag = (tag: BackendListingTag): ListingCustomTag => ({
   name: tag.name,
   color: tag.color,
   usage: tag.usage,
+  isActive: tag.is_active,
 });
 
 export interface ListingManagementApiMeta {
@@ -492,6 +495,7 @@ export async function updateListingTag(
     body: JSON.stringify({
       name: payload.name,
       color: payload.color,
+      is_active: payload.isActive,
     }),
   });
 
