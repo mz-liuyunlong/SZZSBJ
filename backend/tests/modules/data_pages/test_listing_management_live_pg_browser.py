@@ -95,6 +95,9 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
                 "page:products:listing-management:view",
                 "action:products:listing-management:manage-tags",
                 "action:products:listing-management:export",
+                "action:products:listing-management:archive",
+                "action:products:listing-management:restore",
+                "action:products:listing-management:edit-analysis-link",
             }
         ),
     )
@@ -322,6 +325,46 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
             assert all(
                 row["tags"] == [] for row in cleared_rows if row["item_id"] == "SYNTHETIC-LISTING-A"
             )
+
+            archived = client.post(
+                f"/api/listings/walmart/{active_listing_id}/archive",
+                json={"reason": "Synthetic archived reason"},
+            )
+            assert archived.status_code == 200, archived.text
+            assert archived.json()["data"]["is_archived"] is True
+            assert archived.json()["data"]["archive_reason"] == "Synthetic archived reason"
+            archived_rows = client.get(
+                "/api/listings/walmart", params={"archive_status": "archived"}
+            ).json()["data"]["items"]
+            assert [row["id"] for row in archived_rows] == [str(active_listing_id)]
+            restored = client.post(f"/api/listings/walmart/{active_listing_id}/restore")
+            assert restored.status_code == 200, restored.text
+            assert restored.json()["data"]["is_archived"] is False
+            assert restored.json()["data"]["archive_reason"] is None
+            current_row = next(
+                row
+                for row in client.get("/api/listings/walmart").json()["data"]["items"]
+                if row["id"] == str(active_listing_id)
+            )
+            assert current_row["archive_reason"] is None
+
+            link_payload = {
+                "keyword_analysis_url": "https://example.invalid/synthetic-keyword",
+                "ad_analysis_url": "https://example.invalid/synthetic-ad",
+            }
+            saved_link = client.put(
+                f"/api/listings/walmart/{active_listing_id}/gpt-analysis",
+                json=link_payload,
+            )
+            assert saved_link.status_code == 200, saved_link.text
+            link_read = client.get(f"/api/listings/walmart/{active_listing_id}/gpt-analysis")
+            assert link_read.status_code == 200, link_read.text
+            assert {key: link_read.json()["data"][key] for key in link_payload} == link_payload
+            foreign_read = client.get(
+                f"/api/listings/walmart/{active_listing_id}/gpt-analysis",
+                headers={"authorization": "Bearer synthetic-listing-b"},
+            )
+            assert foreign_read.status_code == 404
     finally:
         server.should_exit = True
         thread.join(timeout=10)
