@@ -28,6 +28,7 @@ Scope (rules v4, PRP §7, gate3-plan G3-D, Rocky 2026-09-23 "按之前的来"):
 * ``sid = 0`` rows (no store in Lingxing): owner decision 2026-11-02 (R-9) — a remark ItemID
   that the listing dimension carries on **exactly one** store attributes both the ItemID and
   that store (the board row then gets a store, and overdue is computed); on several stores
+  only the published + WFS-converted listings count (R-9a), and if that still leaves several
   the ids are shown with ``conflict`` and the store stays blank; with no listing (or no
   remark id) the row stays unattributed as before. Cycle samples still follow the DWD flag.
 * Manual layer is read, never written; DWD is never written.
@@ -191,6 +192,12 @@ class _Listing:
     gtin: str | None
     fulfillment_type: str | None
     local_sku: str | None = None
+    standard_status: str | None = None
+
+    @property
+    def sellable(self) -> bool:
+        """Published and WFS-converted: the only kind a packing slip may target."""
+        return (self.standard_status or "").upper() == "PUBLISHED" and self.fulfillment_type == "1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,9 +214,24 @@ class _ListingIndex:
         return list(self.by_store.get(store_id, ()))
 
     def stores_for_items(self, item_ids: Iterable[str]) -> list[str]:
-        """Every store that lists any of ``item_ids`` (sorted, unique)."""
+        """Stores that list any of ``item_ids`` (sorted, unique).
+
+        R-9a (owner 2026-11-02): when several stores carry the id, only the stores where it
+        is published and WFS-converted count — the same listing a packing slip may target.
+        If none is sellable, every store counts (conflict for a human to settle).
+        """
         wanted = {item_id for item_id in item_ids if item_id}
-        return sorted({store for (store, item_id) in self.by_item if item_id in wanted})
+        hits = [
+            (store, listing)
+            for (store, item_id), listing in self.by_item.items()
+            if item_id in wanted
+        ]
+        stores = sorted({store for store, _ in hits})
+        if len(stores) > 1:
+            sellable = sorted({store for store, listing in hits if listing.sellable})
+            if sellable:
+                return sellable
+        return stores
 
     def for_line(self, store_id: str | None, sku: str | None, msku: str | None) -> _Listing | None:
         """Scalar fallback for the pre-attribution pass.
@@ -484,7 +506,14 @@ class PmcPurchaseDwsRefresher:
             item_id = row.item_id.strip()
             if not item_id:
                 continue
-            listing = _Listing(item_id, row.msku, row.gtin, row.fulfillment_type, row.local_sku)
+            listing = _Listing(
+                item_id,
+                row.msku,
+                row.gtin,
+                row.fulfillment_type,
+                row.local_sku,
+                row.standard_status,
+            )
             by_item[(row.store_id, item_id)] = listing
             local_sku = (row.local_sku or "").strip()
             if local_sku:
