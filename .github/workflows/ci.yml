@@ -114,6 +114,37 @@ jobs:
         run: |
           bash scripts/ci-preflight.sh backend
 
+  ad-sp-recovery-postgresql:
+    name: SP ad recovery PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ad_sp_recovery_ci
+          POSTGRES_USER: ad_sp_recovery_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ad_sp_recovery_ci -d ad_sp_recovery_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AD_SP_RECOVERY_TEST_POSTGRES_URL: postgresql+psycopg://ad_sp_recovery_ci:local_ci_only@127.0.0.1:5432/ad_sp_recovery_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Run SP cost recovery in isolated PostgreSQL transaction
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run pytest -q tests/test_data_pages_ad_spend_recovery_postgres.py
+
   iam-auth-postgresql:
     name: IAM auth PostgreSQL integration
     runs-on: ubuntu-latest
@@ -613,9 +644,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Build isolated 3.10 cloud ZIP (pinned dependencies)
+      - name: Build isolated 3.10 cloud ZIP (manylinux2014 wheels)
         run: |
-          python -m pip install --disable-pip-version-check --target "$RUNNER_TEMP/walmart-scf-stage" -r backend/scf-direct-readonly-requirements.txt
+          python -m pip install --disable-pip-version-check --only-binary=:all: --platform manylinux2014_x86_64 --implementation cp --python-version 310 --target "$RUNNER_TEMP/walmart-scf-stage" -r backend/scf-direct-readonly-requirements.txt
+          python backend/scripts/check_walmart_scf_glibc.py --stage "$RUNNER_TEMP/walmart-scf-stage" --max-glibc 2.17
           python backend/scripts/build_walmart_scf_direct_bundle.py --stage "$RUNNER_TEMP/walmart-scf-stage" --output backend/dist/walmart-scf-v3-py310.zip
       - name: Smoke test extracted ZIP (v1 plus four signed v3 read contracts)
         run: |
