@@ -308,3 +308,66 @@ def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_roll
     finally:
         with psycopg.connect(**admin, autocommit=True) as cx:
             cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
+
+
+def test_publishing_updates_only_existing_bindings_and_keeps_old_grants(
+    db, monkeypatch
+) -> None:
+    from contextlib import nullcontext
+
+    from app.modules.ai_runtime import skill_library_routes
+
+    first = _connector(db, "Subscribed A")
+    second = _connector(db, "Subscribed B")
+    unbound = _connector(db, "Unsubscribed C")
+    sid, old, new = uuid4(), uuid4(), uuid4()
+    db.execute(
+        text("""INSERT INTO ai_skill_library(id,slug,name,scene,description,created_by)
+          VALUES (:id,:slug,'Published','keyword_launch','synthetic','synthetic')"""),
+        {"id": sid, "slug": "publication-" + sid.hex},
+    )
+    for rid, version, status in ((old, 1, "published"), (new, 2, "draft")):
+        db.execute(
+            text("""INSERT INTO ai_skill_revisions
+              (id,skill_id,version,status,instructions,runtime_instructions,created_by)
+              VALUES (:id,:sid,:version,:status,'instructions','short','test')"""),
+            {"id": rid, "sid": sid, "version": version, "status": status},
+        )
+    for connector in (first, second):
+        db.execute(
+            text("""INSERT INTO ai_skill_bindings(connector_id,scene,revision_id)
+              VALUES (:connector,'keyword_launch',:revision)"""),
+            {"connector": connector, "revision": old},
+        )
+        db.execute(
+            text("""INSERT INTO ai_skill_revision_grants(revision_id,connector_id)
+              VALUES (:revision,:connector)"""),
+            {"revision": old, "connector": connector},
+        )
+    monkeypatch.setattr(
+        skill_library_routes, "get_session_factory",
+        lambda: lambda: nullcontext(db),
+    )
+    monkeypatch.setattr(
+        skill_library_routes, "success_response",
+        lambda request, data: data,
+    )
+    skill_library_routes.publish(
+        sid, new, request=None, principal=SimpleNamespace(user_id="synthetic")
+    )
+    for connector in (first, second):
+        assert db.scalar(
+            text("""SELECT revision_id FROM ai_skill_bindings
+              WHERE connector_id=:connector AND scene='keyword_launch'"""),
+            {"connector": connector},
+        ) == new
+        for rid in (old, new):
+            assert select_pinned_skill(db, str(rid), "keyword_launch", connector)
+    assert db.scalar(
+        text("SELECT count(*) FROM ai_skill_bindings WHERE connector_id=:id"),
+        {"id": unbound},
+    ) == 0
+    from app.modules.ai_runtime.provider import AIUnavailable
+
+    with pytest.raises(AIUnavailable):
+        select_pinned_skill(db, str(new), "keyword_launch", unbound)
