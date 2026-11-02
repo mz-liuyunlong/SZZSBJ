@@ -79,7 +79,11 @@ test("batch approval approves each selected row in turn and skips blocked rows",
   expect(calls[1][2]).toMatchObject({ qty: 6, customs: "declare", candidate_version: "v-b", passcode: "secret", rwh: "美中1号仓TX" });
   expect(calls[0][2].idempotency_key).not.toBe(calls[1][2].idempotency_key);
 
-  const result = await screen.findByRole("dialog", { name: "批量审批结果" });
+  // In jsdom every antd modal gets aria-labelledby="test-id", so the closing confirm dialog
+  // would win a name lookup; find the result dialog through its own title instead.
+  const resultTitle = await screen.findByText("批量审批结果");
+  const result = resultTitle.closest<HTMLElement>('[role="dialog"]')!;
+  expect(result).not.toBeNull();
   expect(within(result).getByText(/成功 2 张：PK261101-001、PK261101-002、PK261101-003/)).toBeInTheDocument();
   expect(within(result).getByText(/跳过 1 张：IB-c \/ YC00236（待补资料：该 ItemID 尚未完成 WFS 转换/)).toBeInTheDocument();
   expect(refresh).toHaveBeenCalled();
