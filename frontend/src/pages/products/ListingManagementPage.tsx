@@ -986,6 +986,8 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
                 resetPageAndSelection();
               }}
               onSelectionChange={setSelectedRowKeys}
+              sortField={sortField}
+              sortOrder={sortOrder}
               onSortChange={(key, order) => {
                 setSortField(order ? key : "");
                 setSortOrder(order ?? "asc");

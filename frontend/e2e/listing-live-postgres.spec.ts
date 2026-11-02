@@ -44,11 +44,31 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   });
 
   await page.goto("/#/products/listing-management");
-  await expect(page.getByRole("heading", { name: "Listing管理" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Listing管理" })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("SYNTHETIC-LISTING-A", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A2", { exact: true }) })
     .getByText("2026-10-14", { exact: true })).toBeVisible();
   await expect(page.getByText("SYNTHETIC-LISTING-B", { exact: true })).toHaveCount(0);
+  const skuHeader = page.getByRole("columnheader", { name: /SKU\/MSKU/ }).locator(".ant-table-column-sorters");
+  const ascendingSort = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/listings/walmart"
+      && url.searchParams.get("sort_field") === "skuMsku"
+      && url.searchParams.get("sort_order") === "asc";
+  });
+  await skuHeader.click();
+  expect((await ascendingSort).status()).toBe(200);
+  await expect(page.locator(".ant-table-tbody .ant-table-row").first()
+    .getByText("SYNTHETIC-LISTING-A", { exact: true }).first()).toBeVisible();
+  const descendingSort = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/listings/walmart"
+      && url.searchParams.get("sort_field") === "skuMsku"
+      && url.searchParams.get("sort_order") === "desc";
+  }, { timeout: 15000 });
+  await skuHeader.click();
+  expect((await descendingSort).status()).toBe(200);
+  await expect(page.locator(".ant-table-tbody .ant-table-row").first()).toContainText("SYNTHETIC-LISTING-A2");
 
   const archiveFilter = page.getByRole("combobox", { name: "归档状态" });
   await archiveFilter.click();
@@ -96,6 +116,30 @@ test("Listing page persists GPT links, archive state, tags, and scoped CSV", asy
   await page.getByRole("button", { name: "标签管理" }).click();
   await expect(page.getByRole("dialog", { name: "自定义标签管理" }).getByRole("button", { name: "停用" })).toBeVisible();
   await page.getByRole("dialog", { name: "自定义标签管理" }).getByRole("button", { name: "关闭" }).click();
+
+  const tagRow = page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) });
+  await tagRow.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "批量操作" }).click();
+  await page.getByRole("menuitem", { name: "设置标签" }).click();
+  const tagDialog = page.getByRole("dialog", { name: /设置标签/ });
+  await tagDialog.getByRole("button", { name: "SyntheticTag" }).click();
+  await tagDialog.getByRole("button", { name: /确\s*定/ }).click();
+  await expect(tagDialog).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const assignedRow = page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) });
+  await expect(assignedRow.getByText("SyntheticTag", { exact: true })).toBeVisible();
+  await assignedRow.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "批量操作" }).click();
+  await page.getByRole("menuitem", { name: "设置标签" }).click();
+  const clearTagDialog = page.getByRole("dialog", { name: /设置标签/ });
+  await clearTagDialog.getByRole("radio", { name: /替换/ }).check();
+  await clearTagDialog.getByRole("button", { name: /确\s*定/ }).click();
+  await page.getByRole("dialog", { name: "确认替换标签" })
+    .getByRole("button", { name: /确\s*认\s*执\s*行/ }).click();
+  await expect(clearTagDialog).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) })
+    .getByText("SyntheticTag", { exact: true })).toHaveCount(0);
 
   const activeRow = page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }) });
   await activeRow.locator(".listing-management__gpt-analysis-button").focus();

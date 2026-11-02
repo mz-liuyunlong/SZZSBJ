@@ -93,6 +93,8 @@ interface ListingManagementTableProps {
   onCurrentPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onSelectionChange: (keys: Key[]) => void;
+  sortField?: string;
+  sortOrder?: "asc" | "desc";
   onSortChange?: (key: string, order: "asc" | "desc" | null) => void;
   onOpenDetail: (row: ListingManagementRow) => void;
   onOpenGptAnalysis?: (row: ListingManagementRow) => void;
@@ -120,6 +122,8 @@ function ListingManagementTable({
   onCurrentPageChange,
   onPageSizeChange,
   onSelectionChange,
+  sortField,
+  sortOrder,
   onSortChange,
   onOpenDetail,
   onOpenGptAnalysis,
@@ -641,6 +645,11 @@ function ListingManagementTable({
   // changes. Updated records are replaced immutably by the page's mutation handlers.
   const optimizedColumns = columns.map((column) => ({
     ...column,
+    sortOrder: sortField !== undefined && column.sorter
+      ? column.key === sortField
+        ? sortOrder === "desc" ? "descend" as const : "ascend" as const
+        : null
+      : column.sortOrder,
     shouldCellUpdate: (record: ListingManagementRow, previous: ListingManagementRow) => (
       record !== previous
     ),
@@ -659,7 +668,12 @@ function ListingManagementTable({
         onChange={(_, __, sorter) => {
           if (Array.isArray(sorter)) return;
           const field = String(sorter.columnKey ?? "");
-          onSortChange?.(field, sorter.order === "ascend" ? "asc" : sorter.order === "descend" ? "desc" : null);
+          // ProTable can report `ascend` again after dataSource refresh; use the
+          // controlled page state to advance the same column's sort direction.
+          const nextOrder = field && field === sortField
+            ? sortOrder === "asc" ? "desc" : null
+            : sorter.order === "ascend" ? "asc" : sorter.order === "descend" ? "desc" : null;
+          onSortChange?.(field, nextOrder);
         }}
         search={false}
         options={false}

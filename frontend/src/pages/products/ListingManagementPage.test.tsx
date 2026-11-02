@@ -20,6 +20,7 @@ interface CapturedTableProps {
     key?: string;
     fixed?: "left" | "right" | boolean;
     sorter?: boolean;
+    sortOrder?: "ascend" | "descend" | null;
     render?: (_: unknown, row: ListingManagementRow) => ReactNode;
   }>;
   pagination: { pageSizeOptions: string[] };
@@ -156,6 +157,8 @@ describe("ListingManagementPage acceptance contract", () => {
         onCurrentPageChange={() => undefined}
         onPageSizeChange={() => undefined}
         onSelectionChange={() => undefined}
+        sortField="skuMsku"
+        sortOrder="asc"
         onSortChange={onSortChange}
         onOpenDetail={() => undefined}
         onBatchSetTags={() => undefined}
@@ -168,8 +171,12 @@ describe("ListingManagementPage acceptance contract", () => {
     const priceSorter = sorterFor("salePrice");
     const dateSorter = sorterFor("checkedAt");
     expect(skuSorter).toBe(true);
+    expect(capturedTableProps?.columns.find((column) => column.key === "skuMsku")?.sortOrder).toBe("ascend");
+    expect(capturedTableProps?.columns.find((column) => column.key === "salePrice")?.sortOrder).toBeNull();
     expect(priceSorter).toBe(true);
     expect(dateSorter).toBe(true);
+    capturedTableProps?.onChange?.({}, {}, { columnKey: "skuMsku", order: "ascend" });
+    expect(onSortChange).toHaveBeenCalledWith("skuMsku", "desc");
     capturedTableProps?.onChange?.({}, {}, { columnKey: "salePrice", order: "descend" });
     expect(onSortChange).toHaveBeenCalledWith("salePrice", "desc");
 
