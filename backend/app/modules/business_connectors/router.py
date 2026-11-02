@@ -455,7 +455,13 @@ def save_route(
 def list_templates(request: Request, _: read_perm) -> SuccessEnvelope[list[dict[str, Any]], None]:
     with get_session_factory()() as session:
         rows = (
-            session.execute(text("SELECT * FROM biz_notification_templates ORDER BY event_key"))
+            session.execute(
+                text(
+                    "SELECT * FROM biz_notification_templates "
+                    "WHERE left(event_key,4) NOT IN ('nr2_','nc2_') "
+                    "ORDER BY event_key"
+                )
+            )
             .mappings()
             .all()
         )

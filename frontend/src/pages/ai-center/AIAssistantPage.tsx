@@ -1,8 +1,8 @@
-/** V7 conversation workspace in the existing SZZSBJ MainLayout. */
+/** V8 assistant: live web-search status, streamed answer, safe Markdown. */
 import {
   ArrowUpOutlined, BarChartOutlined, DeleteOutlined, EditOutlined, FileImageOutlined,
   FileOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MoreOutlined, PaperClipOutlined,
-  PlusOutlined, RobotOutlined, SearchOutlined, UploadOutlined,
+  PlusOutlined, RobotOutlined, SearchOutlined, UploadOutlined, UserOutlined,
 } from '@ant-design/icons';
 import { Button, Dropdown, Input, Modal, Tooltip, message as antMessage } from 'antd';
 import {
@@ -10,15 +10,17 @@ import {
   type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent,
 } from 'react';
 import PageShell from '@/components/page/PageShell';
-import { backendRequest } from '@/api/backendApi';
+import AssistantMarkdown from './AssistantMarkdown';
+import { requestAssistantStream, type AssistantSource } from './assistantStream';
 import type { NavigationPage } from '@/config/navigation';
 import './AIAssistantPage.css';
+import './AIAssistantPage.v8.css';
 
 type Attachment = { id: string; name: string; size: number; image: boolean };
-type ChatMessage = { id: string; role: 'user' | 'assistant'; text: string; files?: Attachment[]; analysis?: boolean };
+type ChatMessage = { id: string; role: 'user' | 'assistant'; text: string; files?: Attachment[]; analysis?: boolean; stage?: 'thinking' | 'searching' | 'writing' | 'done'; searched?: boolean; sources?: AssistantSource[] };
 type Thread = { id: string; title: string; note: string; draft: string; updatedAt: number; messages: ChatMessage[] };
 type UploadItem = Attachment & { file: File; url?: string };
-type Props = { page: NavigationPage; preferenceScope?: string };
+type Props = { page: NavigationPage; preferenceScope?: string; userAvatar?: string; userDisplayName?: string };
 const MAX_FILES = 10;
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024;
@@ -64,7 +66,7 @@ function FileCard({ file, url, remove }: { file: Attachment; url?: string; remov
     {remove && <button type="button" aria-label={'移除 ' + file.name} onClick={remove}>×</button>}
   </div>;
 }
-function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
+function AIAssistantPage({ page, preferenceScope='anonymous', userAvatar='/default-avatar.png', userDisplayName='当前用户' }: Props) {
   const [msgApi, msgContext] = antMessage.useMessage();
   const [threads, setThreads] = useState<Thread[]>(() => restore(preferenceScope));
   const [activeId, setActiveId] = useState(() => threads[threads.length-1].id);
@@ -133,9 +135,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
       attachments=await Promise.all(uploads.map(async u=>{
         const bytes=new Uint8Array(await u.file.arrayBuffer());
         let binary='';
-        for(let i=0;i<bytes.length;i+=32768){
-          binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
-        }
+        for(let i=0;i<bytes.length;i+=32768)binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
         return {name:u.name,content_base64:btoa(binary)};
       }));
     } catch {
@@ -143,22 +143,39 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
       return;
     }
     const target=chat.id;
+    const assistantId=id();
+    const sentFiles=uploads.map(({id,name,size,image})=>({id,name,size,image}));
     setSending(true);
+    // Move outgoing attachments into the sent message immediately; do not leave
+    // stale file chips in the composer after pressing Send.
+    setPending(before=>({...before,[target]:[]}));
     setThreads(before=>before.map(t=>t.id!==target?t:{...t,
       title:t.messages.length===0 && t.title==='新聊天'?text.slice(0,40):t.title,
-      draft:'',updatedAt:Date.now(),messages:[...t.messages,{id:id(),role:'user',text}]}));
-    void backendRequest<{chat_id:string;response:string}>('/api/ai-runtime/assistant/ask',{
-      method:'POST',body:JSON.stringify({chat_id:serverChats[target]??null,message:text,attachments}),
-    }).then(({data})=>{
-      setServerChats(before=>({...before,[target]:data.chat_id}));
+      draft:'',updatedAt:Date.now(),messages:[...t.messages,
+        {id:id(),role:'user',text,files:sentFiles},
+        {id:assistantId,role:'assistant',text:'',stage:'thinking'},
+      ]}));
+    const updateAnswer=(patch:Partial<ChatMessage>,delta?:string)=>{
       setThreads(before=>before.map(t=>t.id!==target?t:{...t,updatedAt:Date.now(),
-        messages:[...t.messages,{id:id(),role:'assistant',text:data.response}]}));
-    }).catch(()=>{
-      void msgApi.error('AI 服务暂时无法回应，请检查模型服务、账户权限和额度');
-      setThreads(before=>before.map(t=>t.id!==target?t:{...t,
-        messages:[...t.messages,{id:id(),role:'assistant',text:'AI 请求失败；没有生成模拟经营数据。请在业务配置中检查 OpenAI 服务。'}]}));
-    }).finally(()=>setSending(false));
-    setAttachmentMenu(false);
+        messages:t.messages.map(m=>m.id!==assistantId?m:{...m,...patch,text:delta!==undefined?m.text+delta:(patch.text??m.text)})}));
+    };
+    try {
+      await requestAssistantStream({chat_id:serverChats[target]??null,message:text,attachments},signal=>{
+        if(signal.type==='thinking')updateAnswer({stage:'thinking'});
+        if(signal.type==='searching')updateAnswer({stage:'searching',searched:true});
+        if(signal.type==='delta')updateAnswer({stage:'writing'},signal.text);
+        if(signal.type==='done'){
+          setServerChats(before=>({...before,[target]:signal.data.chat_id}));
+          updateAnswer({text:signal.data.response,stage:'done',searched:signal.data.searched,sources:signal.data.sources});
+        }
+      });
+    } catch {
+      updateAnswer({stage:'done',text:'本次请求未能完成，请检查 AI 模型、联网工具权限或账户额度后重试。'});
+      void msgApi.error('AI 请求失败，未生成完整回答');
+    } finally {
+      setSending(false);
+      setAttachmentMenu(false);
+    }
   };
   const onKeys=(e:KeyboardEvent<HTMLTextAreaElement>)=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send();}};
   const onPaste=(e:ClipboardEvent<HTMLTextAreaElement>)=>{
@@ -214,7 +231,26 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
         <header className="ai7-toolbar"><Button type="text" icon={expanded?<MenuFoldOutlined/>:<MenuUnfoldOutlined/>} aria-label="切换聊天列表" onClick={()=>{setExpanded(!expanded);setMobileOpen(!mobileOpen);}}/><div className="ai7-thread-heading"><strong>{chat.title}</strong><small>{chat.note||'智能经营分析与连续追问'}</small></div></header>
         <div className="ai7-scroll" ref={scroller}>
           {!chat.messages.length?<div className="ai7-welcome"><div className="ai7-hero"><RobotOutlined/></div><h1>今天想分析什么？</h1><p>从单个 SKU 到整体经营，直接提问。<br/>分析数据与结论只在对话中按需显示。</p><div className="ai7-suggestions">{QUESTIONS.map(q=><button type="button" key={q[0]} onClick={()=>send(q[1])}><span><BarChartOutlined/></span><strong>{q[0]}</strong><small>{q[1]}</small></button>)}</div></div>:
-          <div className="ai7-messages">{chat.messages.map(m=>m.role==='user'?<div className="ai7-user-row" key={m.id}><div>{!!m.files?.length&&<div className="ai7-file-list">{m.files?.map(f=><FileCard key={f.id} file={f} url={imageUrls[f.id]}/>)}</div>}{m.text&&<p>{m.text}</p>}</div></div>:<div className="ai7-assistant-row" key={m.id}><div className="ai7-bot"><RobotOutlined/></div><p>{m.text}</p></div>)}</div>}
+          <div className="ai7-messages">{chat.messages.map(m=>m.role==='user'
+            ? <div className="ai7-user-row" key={m.id}>
+                <div>{!!m.files?.length&&<div className="ai7-file-list">{m.files?.map(f=><FileCard key={f.id} file={f} url={imageUrls[f.id]}/>)}</div>}{m.text&&<p>{m.text}</p>}</div>
+                <div className="ai7-user-avatar" title={userDisplayName}><img src={userAvatar} alt={userDisplayName} onError={e=>{e.currentTarget.style.display='none';}}/><UserOutlined/></div>
+              </div>
+            : <div className="ai7-assistant-row" key={m.id}>
+                <div className="ai7-bot"><RobotOutlined/></div>
+                <div className="ai7-answer" aria-live="polite">
+                  {m.stage&&m.stage!=='done'&&<div className="ai7-stage" role="status">
+                    {m.stage==='thinking'?'正在分析问题…':m.stage==='searching'?'正在联网搜索…':'正在生成回答…'}
+                  </div>}
+                  {m.text&&<AssistantMarkdown value={m.text}/>}
+                  {m.stage==='done'&&m.searched&&<div className="ai7-search-result">
+                    <strong>联网搜索 {m.sources?.length?`· ${m.sources.length} 个引用来源`:'· 已完成'}</strong>
+                    {!!m.sources?.length&&<ul>{m.sources.map(source=><li key={source.url}>
+                      <a href={source.url} target="_blank" rel="noopener noreferrer nofollow">{source.title}</a>
+                    </li>)}</ul>}
+                  </div>}
+                </div>
+              </div>)}</div>}
         </div>
         <footer className="ai7-bottom"><div className={'ai7-composer'+(dragging?' ai7-dragging':'')}
           onDragEnter={e=>{e.preventDefault();setDragging(true);}}
@@ -225,7 +261,7 @@ function AIAssistantPage({ page, preferenceScope='anonymous' }: Props) {
           {!!uploads.length&&<div className="ai7-file-list">{uploads.map(f=><FileCard key={f.id} file={f} url={f.url} remove={()=>removeFile(f.id)}/>)}</div>}
           <textarea ref={editor} value={chat.draft} onChange={e=>changeChat(chat.id,{draft:e.target.value})}
             onKeyDown={onKeys} onPaste={onPaste} rows={2} placeholder="向 AI 提问，或添加图片与文件……" aria-label="输入问题"/>
-          <div className="ai7-composer-actions"><Dropdown trigger={['click']} placement="topLeft" open={attachmentMenu} onOpenChange={setAttachmentMenu}
+          <div className="ai7-composer-actions"><span className="ai7-network-note">智能联网 · 按需搜索{uploads.length?"（附件模式保护隐私）":""}</span><Dropdown trigger={['click']} placement="topLeft" open={attachmentMenu} onOpenChange={setAttachmentMenu}
             menu={{items:[
               {key:'images',label:'上传图片',icon:<FileImageOutlined/>,onClick:()=>images.current?.click()},
               {key:'files',label:'上传文件（PDF、Excel、Word 等）',icon:<PaperClipOutlined/>,onClick:()=>files.current?.click()},

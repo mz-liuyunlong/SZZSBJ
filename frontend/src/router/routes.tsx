@@ -185,7 +185,7 @@ function BusinessRoute({
         ) : page.key === "sales_order_profit" ? (
           <OrderProfitPage page={page} />
         ) : page.key === "ai_center_assistant" ? (
-          <AIAssistantPage page={page} preferenceScope={activeUser.username} />
+          <AIAssistantPage page={page} preferenceScope={activeUser.username} userAvatar={activeUser.avatarSrc} userDisplayName={activeUser.displayName} />
         ) : page.key === "ai_center_keyword_launch" ? (
           <KeywordLaunchPage page={page} />
         ) : page.key === "ads_keyword_library" ? (
