@@ -61,6 +61,21 @@ test("Listing page reads scoped MART, restores tags, and exports scoped CSV", as
   await page.getByRole("button", { name: "确定" }).click();
   await expect(page.getByText("SYNTHETIC-LISTING-A", { exact: true }).first()).toBeVisible();
 
+  const selectedRow = page.getByRole("row").filter({
+    has: page.getByText("SYNTHETIC-LISTING-A", { exact: true }),
+  });
+  await selectedRow.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "批量操作" }).click();
+  await page.getByRole("menuitem", { name: "导出已选" }).click();
+  const selectedExportDialog = page.getByRole("dialog", { name: /导出数据/ });
+  const selectedDownload = page.waitForEvent("download");
+  await selectedExportDialog.getByRole("button", { name: /导\s*出/ }).click();
+  const selectedCsv = await readFile(await (await selectedDownload).path(), "utf-8");
+  expect(selectedCsv).toContain("SYNTHETIC-LISTING-A");
+  expect(selectedCsv).not.toContain("SYNTHETIC-LISTING-A2");
+  expect(selectedCsv).not.toContain("SYNTHETIC-LISTING-B");
+  await selectedRow.getByRole("checkbox").uncheck();
+
   await page.getByRole("button", { name: "标签管理" }).click();
   const dialog = page.getByRole("dialog", { name: "自定义标签管理" });
   await expect(dialog.getByText("SyntheticTag")).toBeVisible();
