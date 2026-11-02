@@ -69,7 +69,7 @@ export const listingColumnFields = [
   { key: "productStatus", title: "产品状态" },
   { key: "lifecycle", title: "生命周期" },
   { key: "fulfillmentMethod", title: "发货方式" },
-  { key: "gptAnalysis", title: "GPT分析" },
+  { key: "gptAnalysis", title: "GPT分析链接" },
   { key: "listedAt", title: "上架时间" },
   { key: "category", title: "类目" },
   { key: "wfsAvailableInventory", title: "WFS可售库存" },

@@ -344,7 +344,7 @@ function ListingManagementTable({
     },
     gptAnalysis: {
       key: "gptAnalysis",
-      title: title("gptAnalysis", fieldTitle.gptAnalysis ?? "GPT分析"),
+      title: title("gptAnalysis", fieldTitle.gptAnalysis ?? "GPT分析链接"),
       width: columnWidths.gptAnalysis,
       align: "center",
       onHeaderCell: headerCell,

@@ -1038,7 +1038,7 @@ function ListingManagementPage({ page, preferenceScope = "anonymous" }: ListingM
         />
         <Modal
           open={gptAnalysisRow !== null}
-          title={gptAnalysisRow ? `GPT分析：${gptAnalysisRow.productId}` : "GPT分析"}
+          title={gptAnalysisRow ? `GPT分析链接：${gptAnalysisRow.productId}` : "GPT分析链接"}
           okText="保存"
           cancelText="取消"
           confirmLoading={isGptAnalysisSaving}
