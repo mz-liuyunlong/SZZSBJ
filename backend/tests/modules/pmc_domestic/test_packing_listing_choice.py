@@ -1,8 +1,11 @@
-"""Edit-dialog Listing options flag a local SKU that differs from the row SKU (#288 P2-2)."""
+"""Edit-dialog Listing options flag a local SKU that differs from the row SKU (#288 P2-2).
+
+Owner decision 2026-11-02: such a Listing is shown but can never be the target.
+"""
 
 from types import SimpleNamespace
 
-from app.modules.pmc_domestic.packing_service import listing_choice
+from app.modules.pmc_domestic.packing_service import listing_choice, listing_sku_mismatch
 
 
 def _listing(item_id: str, local_sku: str | None, store_id: str = "S1"):
@@ -38,3 +41,10 @@ def test_cross_store_flag_is_unchanged():
     candidate = SimpleNamespace(sku="YC1", store_id="S1")
     choice = listing_choice(_listing("11111111111", "YC1", store_id="S2"), candidate, {})
     assert choice.cross_store is True and choice.store_name is None
+
+
+def test_sku_mismatch_ignores_blank_local_sku_and_whitespace():
+    assert listing_sku_mismatch(SimpleNamespace(local_sku="YC9"), "YC1") is True
+    assert listing_sku_mismatch(SimpleNamespace(local_sku=" YC1 "), "YC1") is False
+    assert listing_sku_mismatch(SimpleNamespace(local_sku=""), "YC1") is False
+    assert listing_sku_mismatch(SimpleNamespace(local_sku=None), "YC1") is False

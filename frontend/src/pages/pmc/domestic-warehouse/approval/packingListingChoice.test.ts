@@ -19,7 +19,9 @@ describe("target Listing options (#288 P2-2)", () => {
     expect(listingChoiceLabel(choice({ cross_store: true, sku_mismatch: true }))).toBe("Store One / 11111111111（跨店铺）（SKU 不一致）");
   });
 
-  it("names both SKUs in the warning", () => {
-    expect(listingSkuMismatchText(choice({ sku_mismatch: true, local_sku: "YC9" }), "YC1")).toContain("本地 SKU（YC9）与本行 SKU（YC1）不一致");
+  it("says why the Listing cannot be used and names both SKUs", () => {
+    const text = listingSkuMismatchText(choice({ sku_mismatch: true, local_sku: "YC9" }), "YC1");
+    expect(text).toContain("本地 SKU 是 YC9，不是本行 SKU YC1");
+    expect(text).toContain("不能用于本打包单");
   });
 });

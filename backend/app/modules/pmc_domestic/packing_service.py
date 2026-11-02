@@ -379,6 +379,10 @@ class PackingService:
         listing = rows[0]
         if listing.fulfillment_type != "1":
             conflict("WFS_NOT_CONVERTED")
+        # Owner decision 2026-11-02: a Listing whose own local SKU is recorded and differs
+        # from this SKU may be shown (flagged) but never used as the target.
+        if listing_sku_mismatch(listing, candidate.sku):
+            conflict("SKU_MISMATCH")
         if (edited and not cmd.listing_version) or (
             cmd.listing_version and cmd.listing_version != listing_version(listing)
         ):
@@ -541,10 +545,12 @@ def listing_choice(row, candidate, stores) -> ListingChoice:
 
     ``sku_mismatch``: the listing has its own local SKU and it is not the row SKU. Such a
     listing only appears because its ItemID is the one attributed to the row
-    (``listing_rows`` matches local SKU *or* the attributed ItemID); it stays selectable
-    and the dialog shows a warning.
+    (``listing_rows`` matches local SKU *or* the attributed ItemID). It is listed
+    and the dialog shows it disabled with the reason; ``final_candidate`` refuses it with
+    ``SKU_MISMATCH`` (owner decision 2026-11-02).
     """
     local = (row.local_sku or "").strip() if isinstance(row.local_sku, str) else ""
+    mismatch = listing_sku_mismatch(row, candidate.sku)
     return ListingChoice(
         store_id=row.store_id,
         store_name=stores.get(row.store_id),
@@ -554,5 +560,11 @@ def listing_choice(row, candidate, stores) -> ListingChoice:
         listing_version=listing_version(row),
         cross_store=row.store_id != candidate.store_id,
         local_sku=local or None,
-        sku_mismatch=bool(local) and local != (candidate.sku or "").strip(),
+        sku_mismatch=mismatch,
     )
+
+
+def listing_sku_mismatch(listing, sku) -> bool:
+    """The Listing records its own local SKU and it is not ``sku`` (blank = no opinion)."""
+    local = (listing.local_sku or "").strip() if isinstance(listing.local_sku, str) else ""
+    return bool(local) and local != (sku or "").strip()

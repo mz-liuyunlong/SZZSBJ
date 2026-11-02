@@ -49,7 +49,7 @@ export const getApprovalOptions = (signal?: AbortSignal) => backendRequest<{ sto
 export const listPackingOrders = (f: PackingApprovalFilters, page: number, signal?: AbortSignal) => backendRequest<{ items: PackingOrder[]; total: number }>(`${prefix}/orders?${approvalQuery(f, page, 20)}`, { signal });
 export const getPackingEvents = (id: string, signal?: AbortSignal) => backendRequest<{ items: PackingEvent[] }>(`${prefix}/orders/${encodeURIComponent(id)}/events`, { signal });
 export const decidePacking = (id: string, kind: DecisionKind, body: DecisionPayload) => backendRequest<PackingOrder>(`${prefix}/pending/${encodeURIComponent(id)}/${kind}`, { method: "POST", body: JSON.stringify(body) });
-const reasons: Record<string, string> = { STORE_UNKNOWN: "店铺归属未知", ELIGIBLE_LISTING_MISSING: "无符合条件的在线商品", WFS_NOT_CONVERTED: "尚未完成 WFS 转换", GTIN_INVALID: "GTIN缺失或格式无效", MSKU_MISSING: "MSKU缺失", STOCK_PROOF_UNKNOWN: "良品或锁定量未知", STOCK_FULLY_ALLOCATED: "可用库存已分配完", EDIT_DRAFT_STALE: "来源已变化，请重新打开修改并保存" };
+const reasons: Record<string, string> = { STORE_UNKNOWN: "店铺归属未知", ELIGIBLE_LISTING_MISSING: "无符合条件的在线商品", WFS_NOT_CONVERTED: "尚未完成 WFS 转换", GTIN_INVALID: "GTIN缺失或格式无效", MSKU_MISSING: "MSKU缺失", STOCK_PROOF_UNKNOWN: "良品或锁定量未知", STOCK_FULLY_ALLOCATED: "可用库存已分配完", EDIT_DRAFT_STALE: "来源已变化，请重新打开修改并保存", SKU_MISMATCH: "该 ItemID 在 Listing 管理里属于其他 SKU，不能用于本打包单" };
 export const approvalBlockedText = (codes: string[]) => codes.map((code) => reasons[code] ?? code).join("；");
 export function approvalErrorText(error: unknown) {
   if (error instanceof BackendRequestError) {
@@ -57,6 +57,7 @@ export function approvalErrorText(error: unknown) {
     if (error.code === "PASSCODE_LOCKED") return "口令错误次数过多，请 10 分钟后再试";
     if (error.code === "PASSCODE_UNSET") return "服务器尚未设置国内仓口令";
     if (error.code === "OPERATOR_NOT_ALLOWED") return "国内仓打包单目前只能由吴贤玲提交";
+    if (error.code === "SKU_MISMATCH") return reasons.SKU_MISMATCH;
     if (error.status === 401) return "登录已失效，请重新登录";
     if (error.status === 403) return "没有审批权限、数据范围，或当前连接不允许本地审批";
     if (error.status === 409) return "审批状态、库存或来源已变化；请刷新后核对。重试不会重复生成打包单。";
@@ -69,9 +70,9 @@ export interface ListingChoice { store_id: string; store_name: string | null; it
 /** Option label in the target-Listing select; flags cross-store and a differing local SKU. */
 export const listingChoiceLabel = (r: ListingChoice) =>
   `${r.store_name ?? r.store_id} / ${r.item_id}${r.cross_store ? "（跨店铺）" : ""}${r.sku_mismatch ? "（SKU 不一致）" : ""}`;
-/** Warning shown when the chosen Listing's own local SKU differs from the row SKU. */
+/** Why a flagged Listing cannot be chosen (owner decision 2026-11-02: never a target). */
 export const listingSkuMismatchText = (r: ListingChoice, sku: string | null | undefined) =>
-  `所选 Listing 的本地 SKU（${r.local_sku ?? "—"}）与本行 SKU（${sku ?? "—"}）不一致：它是按备注 ItemID 带出的，请确认后再保存。`;
+  `该 ItemID 在 Listing 管理里的本地 SKU 是 ${r.local_sku ?? "—"}，不是本行 SKU ${sku ?? "—"}，不能用于本打包单；如确属本 SKU，请先在 Listing 管理更正本地 SKU。`;
 export interface PackingEditOptions { candidate: ApprovalCandidate; listings: ListingChoice[]; cross_store_proof_available: boolean }
 export const getPackingEditOptions = (row: ApprovalCandidate, signal?: AbortSignal) => backendRequest<PackingEditOptions>(`${prefix}/pending/${encodeURIComponent(row.id)}/edit-options?${new URLSearchParams({ source_account_ref: row.source_account_ref })}`, { signal });
 
