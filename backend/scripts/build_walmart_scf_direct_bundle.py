@@ -88,16 +88,17 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     if stage == out or stage in out.parents:
         raise SystemExit("SCF_ZIP_MUST_BE_OUTSIDE_STAGE")
-    banned = (".env", ".key", ".pyc", ".p12", ".pfx")
+    banned = (".env", ".key", ".p12", ".pfx")
     allowed_ca = pathlib.PurePosixPath("certifi/cacert.pem")
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(stage.rglob("*")):
             if not path.is_file():
                 continue
             relative = path.relative_to(stage)
+            if "__pycache__" in relative.parts or relative.suffix == ".pyc":
+                continue
             if (
-                "__pycache__" in relative.parts
-                or any(str(relative).endswith(x) for x in banned)
+                any(str(relative).endswith(suffix) for suffix in banned)
                 or (relative.suffix.lower() == ".pem" and relative != allowed_ca)
             ):
                 raise SystemExit("SCF_UNEXPECTED_SENSITIVE_FILE")

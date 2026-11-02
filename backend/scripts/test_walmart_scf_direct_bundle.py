@@ -132,7 +132,8 @@ for op in wfs_write_registry(approved_keys=WFS_WRITE_KEYS).values():
     break
 assert len([p for p in requests if p[0] == "GET"]) == 5  # v1 + four v3
 print("SCF_PY310_ZIP_SMOKE_OK: v1 + v3 four reads, signature replay/store checks, no writes")
-'''
+"""
+
 
 def main() -> None:
     if sys.version_info[:2] != (3, 10):
