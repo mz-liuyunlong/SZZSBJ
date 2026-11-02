@@ -201,3 +201,110 @@ def test_library_revision_pins_never_cross_connector(db) -> None:
     with pytest.raises(AIUnavailable) as denied:
         select_pinned_skill(db, str(revision_id), "keyword_launch", second)
     assert denied.value.code == "AI_SKILL_VERSION_INVALID"
+
+
+def test_0071_real_historical_migration_preserves_jobs_and_blocks_populated_rollback() -> None:
+    """Upgrade an owned disposable PostgreSQL DB seeded at 0070, not a mocked session."""
+    import subprocess
+    import sys
+
+    import psycopg
+    from psycopg import sql
+
+    parsed = make_url(os.environ["TEST_DATABASE_URL"])
+    assert os.environ.get("APP_ENV") == "test"
+    assert parsed.drivername == "postgresql+psycopg"
+    assert parsed.host in ("127.0.0.1", "localhost")
+    assert parsed.database == "ai_runtime_ci"
+    assert parsed.username == "ai_runtime_ci"
+    name = "szzsbj_ai_hist_" + uuid4().hex[:18]
+    admin = dict(host=parsed.host, port=parsed.port, user=parsed.username,
+                 password=parsed.password, dbname=parsed.database)
+    with psycopg.connect(**admin, autocommit=True) as cx:
+        cx.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+
+    target = parsed.set(database=name)
+    env = os.environ.copy()
+    env["APP_ENV"] = "test"
+    env["TEST_DATABASE_URL"] = target.render_as_string(hide_password=False)
+    env.pop("PRODUCTION_MIGRATIONS_AUTHORIZED", None)
+    root = Path(__file__).resolve().parents[3]
+
+    def migrate(operation: str, revision: str) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", operation, revision],
+            cwd=root, env=env, text=True, capture_output=True, check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    try:
+        migrate("upgrade", "20261102_0070_ai_skill_soft_delete")
+        engine = create_engine(target, hide_parameters=True)
+        connector = uuid4()
+        other = uuid4()
+        job_id = uuid4()
+        ids = [uuid4() for _ in range(4)]
+        statuses = ["published", "draft", "retired", "published"]
+        with engine.begin() as cx:
+            for cid in (connector, other):
+                cx.execute(
+                    text("""INSERT INTO biz_connectors
+                      (id,kind,name,enabled,config,created_by,updated_by)
+                      VALUES (:id,'openai','synthetic',true,'{}'::jsonb,'test','test')"""),
+                    {"id": cid},
+                )
+            for n, (ident, status) in enumerate(zip(ids, statuses, strict=True), 1):
+                cx.execute(
+                    text("""INSERT INTO ai_runtime_skill_versions
+                      (id,connector_id,scene,version,status,instructions,
+                       runtime_instructions,created_by,deleted_at)
+                      VALUES (:id,:connector,'keyword_launch',:v,:status,
+                       :instructions,:runtime,'test',:deleted)"""),
+                    {
+                        "id": ident, "connector": connector, "v": n,
+                        "status": status, "instructions": "historical " + str(n),
+                        "runtime": "execute " + str(n),
+                        "deleted": "2026-10-30 00:00:00+00" if n == 4 else None,
+                    },
+                )
+            cx.execute(
+                text("""INSERT INTO ai_runtime_jobs
+                  (id,source_account_ref,product_id,requested_by,request_key,input_json)
+                  VALUES (:id,'synthetic',:product,'test','historical-queued',
+                    CAST(:payload AS jsonb))"""),
+                {
+                    "id": job_id, "product": uuid4(),
+                    "payload": json.dumps({
+                        "connector_id": str(connector), "skill_version_id": str(ids[0]),
+                    }),
+                },
+            )
+        migrate("upgrade", "head")
+        with engine.begin() as cx:
+            rows = cx.execute(text("""SELECT v.version,v.status
+              FROM ai_skill_revisions v JOIN ai_skill_library s ON v.skill_id=s.id
+              WHERE s.scene='keyword_launch' ORDER BY v.version""")).all()
+            assert rows == [(1, "published"), (2, "draft"), (3, "retired")]
+            assert cx.scalar(text("SELECT count(*) FROM ai_skill_revision_grants")) == 2
+            assert cx.scalar(text("SELECT count(*) FROM ai_skill_bindings")) == 1
+            assert cx.scalar(text("SELECT count(*) FROM ai_runtime_skill_versions")) == 4
+            job = cx.execute(text("SELECT status,input_json FROM ai_runtime_jobs WHERE id=:id"),
+                             {"id": job_id}).one()
+            assert job.status == "queued"
+            assert job.input_json["skill_version_id"] == str(ids[0])
+            assert job.input_json["connector_id"] == str(connector)
+            pinned = cx.execute(text("""SELECT count(*) FROM ai_skill_revision_grants
+              WHERE connector_id=:connector"""), {"connector": other}).scalar_one()
+            assert pinned == 0
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "downgrade", "20261102_0070_ai_skill_soft_delete"],
+            cwd=root, env=env, capture_output=True, text=True, check=False,
+        )
+        assert result.returncode != 0
+        with engine.begin() as cx:
+            assert cx.scalar(text("SELECT version_num FROM alembic_version")) == "20261102_0071_skill_lib"
+            assert cx.scalar(text("SELECT count(*) FROM ai_skill_revisions")) == 3
+        engine.dispose()
+    finally:
+        with psycopg.connect(**admin, autocommit=True) as cx:
+            cx.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
