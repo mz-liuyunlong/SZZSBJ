@@ -28,7 +28,8 @@ test("PMC has expanded groups and three independent pages without internal tabs"
   await page.getByRole("menuitem", { name: "PMC", exact: true }).click();
   const menu = page.getByRole("menu", { name: "PMC二级导航" });
   await expect(menu.getByRole("menuitem", { name: "批次看板", exact: true })).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /系统货件/ })).toHaveAttribute("aria-disabled", "true");
+  await expect(menu.getByRole("menuitem", { name: /系统货件/ })).toHaveCount(0);
+  await expect(menu.getByRole("menuitem", { name: "待发货打包单", exact: true })).toBeVisible();
   await expect(menu).not.toContainText("28");
   await expect(menu).not.toContainText("国内仓看板");
   const before = page.url();

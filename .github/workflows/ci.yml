@@ -419,6 +419,70 @@ jobs:
           print(f"ok: {len(ran)} tests ran against PostgreSQL, 0 skipped")
           PY
 
+  wfs-integration-postgresql:
+    name: WFS PostgreSQL integration (migrate empty DB to head, no skipped core tests)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: wfs_integration_ci
+          POSTGRES_USER: wfs_integration_ci
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wfs_integration_ci -d wfs_integration_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql+psycopg://wfs_integration_ci:local_ci_only@127.0.0.1:5432/wfs_integration_ci
+      WFS_CI_DATABASE_URL: postgresql+psycopg://wfs_integration_ci:local_ci_only@127.0.0.1:5432/wfs_integration_ci
+      WFS_LOCAL_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - name: Migrate an empty database to head and run the WFS integration suite
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run alembic upgrade head
+          uv run pytest -q -rs --junitxml=wfs-integration-junit.xml tests/modules/pmc_wfs
+      - name: Report run / skip counts and fail if a core WFS test was skipped
+        working-directory: backend
+        run: |
+          uv run python - <<'PY'
+          import collections
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("wfs-integration-junit.xml").getroot()
+          ran, skipped = collections.Counter(), collections.Counter()
+          names = set()
+          for case in root.iter("testcase"):
+              module = (case.get("classname") or "").rsplit(".", 1)[-1]
+              names.add(case.get("name"))
+              (skipped if case.find("skipped") is not None else ran)[module] += 1
+          for module in sorted(set(ran) | set(skipped)):
+              print(f"{module}: ran {ran[module]}, skipped {skipped[module]}")
+          print(f"total: ran {sum(ran.values())}, skipped {sum(skipped.values())}")
+          core = {"test_pending", "test_creation_v2", "test_shipment_board", "test_exception_center"}
+          core_skipped = {m: skipped[m] for m in core if skipped[m]}
+          assert not core_skipped, f"core WFS tests skipped in CI: {core_skipped}"
+          assert all(ran[m] for m in core), f"core WFS module did not run: {[m for m in core if not ran[m]]}"
+          required = {
+              "test_worker_never_calls_walmart_without_human_approval",
+              "test_migration_0072_matches_orm_metadata",
+              "test_migration_0071_matches_orm_metadata",
+              "test_migration_0069_downgrade_refuses_data_and_allows_empty",
+          }
+          assert required <= names, f"missing WFS acceptance tests: {sorted(required - names)}"
+          PY
+
   pmc-0043-postgresql-14:
     name: PMC 0043 PostgreSQL 14 compatibility
     runs-on: ubuntu-latest

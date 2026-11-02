@@ -17,7 +17,7 @@ describe("PMC placeholder pages", () => {
     expect(pmc?.children.map((page) => page.key)).toEqual([
       "pmc_purchase_board",
       "pmc_logistics", "pmc_domestic_batches", "pmc_packing_approval", "pmc_packing_warehouse",
-      "pmc_wfs_pending_packing", "pmc_wfs_shipments",
+      "pmc_wfs_pending_packing", "pmc_wfs_board", "pmc_wfs_exceptions", "pmc_wfs_settings",
     ]);
     for (const item of placeholders) {
       expect(pmc?.children.find((page) => page.key === item.key)).toMatchObject({

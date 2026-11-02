@@ -2,6 +2,7 @@
 
 ```text
 状态：草案（待项目负责人确认 PRP / M1 范围）
+前端预览：2026-10-23 已在 PMC 侧栏放七个建设中页面，数据为本地示例，未接接口
 版本：2026-10-20
 页面路径：/pmc/wfs（navigation key: pmc / wfs）
 参考：PMC 交接文档 2026-10-19 §5.3；old-walmar-flie/features/pmc-wfs-shipment/
