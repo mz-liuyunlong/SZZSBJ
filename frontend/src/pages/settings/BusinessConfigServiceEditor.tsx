@@ -92,7 +92,7 @@ export default function BusinessConfigServiceEditor({
       model_allowlist: [OPENAI_FIXED_MODEL],
       application_scenes: connector?.config.application_scenes ?? [...OPENAI_DEFAULT_SCENES],
       daily_limit: connector?.config.daily_limit ?? 100,
-      monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 50),
+      monthly_budget_usd: Number(connector?.config.monthly_budget_usd ?? 0),
       max_output_tokens: connector?.config.max_output_tokens ?? 1024,
       input_price_per_million: resolveOpenAIBillingRates(connector?.config).input_price_per_million,
       output_price_per_million: resolveOpenAIBillingRates(connector?.config).output_price_per_million,
