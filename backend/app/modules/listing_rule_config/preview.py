@@ -25,7 +25,12 @@ from app.modules.data_pages.models import (
     WalmartListingInventoryDailyFact,
 )
 from app.modules.integration_sync.models import IntegrationSyncRun, IntegrationSyncRunEvent
-from app.modules.listing_rule_config.evaluation import BusinessDay, lifecycle_listing
+from app.modules.listing_rule_config.evaluation import (
+    BusinessDay,
+    FinancialDay,
+    grade_listing,
+    lifecycle_listing,
+)
 from app.modules.listing_rule_config.models import ListingGradeRuleVersion
 from app.modules.listing_rule_config.schemas import ListingGradeRuleConfig
 from app.modules.walmart_monitor.models import StandardizedWalmartMonitorListingObservation
@@ -80,57 +85,30 @@ def basic_financial_candidate(
     The MART contains no trusted zero-business-day publication marker: absent
     rows do not become zero dates. Missing currency is excluded, not assumed USD.
     """
-    start_medium = cutoff - timedelta(days=config.medium_days - 1)
-    start_short = cutoff - timedelta(days=config.short_days - 1)
-    qualified: dict[date, DailySalesItemDayMart] = {}
-    for day in days:
-        if not start_medium <= day.business_date_la <= cutoff:
-            continue
-        if (
-            day.cost_status != "complete"
-            or day.gross_profit_amount is None
-            or day.sales_amount is None
-            or day.sales_amount < ZERO
-            or day.missing_cost_codes_json
-            or day.sales_currency_code != "USD"
-            or day.gross_profit_currency_code != "USD"
-        ):
-            continue
-        qualified[day.business_date_la] = day
-
-    medium = list(qualified.values())
-    short = [row for row in medium if row.business_date_la >= start_short]
-    n_short, n_medium = len(short), len(medium)
-    if unconfirmed_account_ad_days.intersection(
-        start_medium + timedelta(days=offset) for offset in range(config.medium_days)
-    ):
-        return None, n_short, n_medium, None
-    if n_short < config.short_min_valid_days or n_medium < config.medium_min_valid_days:
-        return None, n_short, n_medium, None
-
-    sales_short = sum((row.sales_amount or ZERO for row in short), ZERO)
-    profit_short = sum((row.gross_profit_amount or ZERO for row in short), ZERO)
-    sales_medium = sum((row.sales_amount or ZERO for row in medium), ZERO)
-    profit_medium = sum((row.gross_profit_amount or ZERO for row in medium), ZERO)
-
-    if sales_short == ZERO and profit_short < ZERO:
-        return "D", n_short, n_medium, None
-    if sales_short <= ZERO or sales_medium <= ZERO:
-        return None, n_short, n_medium, None
-
-    margin = (
-        (profit_short / sales_short * 100) * Decimal(config.short_weight_percent)
-        + (profit_medium / sales_medium * 100) * Decimal(config.medium_weight_percent)
-    ) / 100
-    if margin > config.a_above_percent:
-        grade = "A"
-    elif margin >= config.b_min_percent:
-        grade = "B"
-    elif margin >= config.c_min_percent:
-        grade = "C"
-    else:
-        grade = "D"
-    return grade, n_short, n_medium, margin
+    result = grade_listing(
+        cutoff=cutoff,
+        stage=None,
+        days=[
+            FinancialDay(
+                day=day.business_date_la,
+                sales=day.sales_amount if day.sales_amount is not None else ZERO,
+                profit=day.gross_profit_amount,
+                cost_status=day.cost_status,
+                missing_cost_codes=tuple(day.missing_cost_codes_json or ()),
+                upstream_confirmed=(
+                    day.sales_amount is not None
+                    and day.sales_currency_code == "USD"
+                    and day.gross_profit_currency_code == "USD"
+                ),
+            )
+            for day in days
+        ],
+        unconfirmed_account_ad_days=unconfirmed_account_ad_days,
+        config=config,
+        ignore_stage=True,
+    )
+    grade = result.grade if result.grade in {"A", "B", "C", "D"} else None
+    return grade, result.valid_short, result.valid_medium, result.weighted_margin
 
 
 def stockout_candidate(

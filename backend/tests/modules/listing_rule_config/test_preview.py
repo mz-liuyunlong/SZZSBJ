@@ -11,6 +11,7 @@ from fastapi import Request
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from app.modules.listing_rule_config.evaluation import FinancialDay, grade_listing
 from app.modules.listing_rule_config.preview import (
     ListingEvaluationPreviewService,
     archive_has_post_cutoff_event,
@@ -66,7 +67,41 @@ def test_account_day_zero_ad_spend_blocks_diagnostic_grade() -> None:
         config=ListingGradeRuleConfig(),
         unconfirmed_account_ad_days=frozenset({CUTOFF - timedelta(days=3)}),
     )
-    assert (grade, short, medium, margin) == (None, 7, 14, None)
+    assert (grade, short, medium, margin) == (None, 6, 13, None)
+
+
+def test_diagnostic_financial_grade_matches_pure_evaluator() -> None:
+    rows = [_financial(i, profit="15") for i in range(14)]
+    config = ListingGradeRuleConfig()
+    diagnostic = basic_financial_candidate(
+        rows,
+        cutoff=CUTOFF,
+        config=config,
+        unconfirmed_account_ad_days=frozenset(),
+    )
+    formal = grade_listing(
+        cutoff=CUTOFF,
+        stage="稳定期",
+        days=[
+            FinancialDay(
+                row.business_date_la,
+                row.sales_amount,
+                row.gross_profit_amount,
+                row.cost_status,
+                upstream_confirmed=True,
+            )
+            for row in rows
+        ],
+        unconfirmed_account_ad_days=frozenset(),
+        config=config,
+    )
+    assert diagnostic == (
+        formal.grade,
+        formal.valid_short,
+        formal.valid_medium,
+        formal.weighted_margin,
+    )
+    assert formal.grade == "B"
 
 
 def test_wfs_preview_reports_account_day_ad_blocker() -> None:

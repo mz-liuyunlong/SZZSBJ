@@ -85,8 +85,9 @@ def grade_listing(
     days: list[FinancialDay],
     unconfirmed_account_ad_days: frozenset[date],
     config: ListingGradeRuleConfig,
+    ignore_stage: bool = False,
 ) -> GradeResult:
-    """Calculate only when each account business day has positive total ad spend."""
+    """Calculate only with confirmed account days; diagnostics may check stage later."""
     window_start = cutoff - timedelta(days=config.medium_days - 1)
     by_day = {d.day: d for d in days if window_start <= d.day <= cutoff}
     medium_dates = [window_start + timedelta(days=i) for i in range(config.medium_days)]
@@ -110,7 +111,7 @@ def grade_listing(
     grade: Grade = "待评级"
     reason = "有效财务日期不足或利润率不可计算"
     weighted = None
-    if stage in {"清货期", "已归档"} or stage not in config.included_stages:
+    if not ignore_stage and (stage in {"清货期", "已归档"} or stage not in config.included_stages):
         grade, reason = "不参与评级", "生命周期未纳入评级范围"
     elif unconfirmed_ad_dates:
         reason = "账号业务日广告费为零或缺少当日数据：每日销售广告数据待同步"
