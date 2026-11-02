@@ -65,8 +65,11 @@ test("manual SKU application creates an auditable mock task without backend writ
  await chooser.getByRole("button",{name:"下一步 · 填写申请"}).click();
  const application=page.getByRole("dialog",{name:"提交 WFS 清货申请"});
  await expect(application).toBeVisible();
- await application.locator(".ant-form-item").filter({hasText:"清货原因"}).locator(".ant-select").click();
- await page.getByRole("option",{name:"库存滞销"}).click();
+ const reasonSelect=application.locator(".ant-form-item").filter({hasText:"清货原因"}).locator(".ant-select");
+ await reasonSelect.click();
+ // Drive rc-select with a real keyboard event: popup options may animate away during pointer hit testing.
+ await reasonSelect.locator('input[role="combobox"]').press("Enter");
+ await expect(reasonSelect).toContainText("库存滞销");
  await application.getByRole("checkbox",{name:"促销"}).check();
  await application.getByRole("textbox",{name:"申请说明"}).fill("清货 Mock 申请闭环测试：确认无真实审批写入");
  await application.getByRole("button",{name:"提交申请"}).click();
