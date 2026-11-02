@@ -426,7 +426,7 @@ class DataPagesRealSyncRunner:
         self.max_advertisers = max(1, max_advertisers)
         self.heartbeat = heartbeat
         self.summary = DataPagesRealSyncSummary(source_account_ref, business_date)
-        self._listing_capture_by_identity: dict[tuple[str, str, str], datetime] = {}
+        self._listing_capture_by_row_id: dict[int, datetime] = {}
         self.store_ids: tuple[str, ...] = ()
         self.advertiser_ids: tuple[str, ...] = ()
 
@@ -540,7 +540,7 @@ class DataPagesRealSyncRunner:
     ) -> list[dict[str, Any]]:
         spec = DATA_PAGES_SYNC_INTERFACE_SPECS_BY_KEY[parser_key]
         if parser_key == "walmart_listing_list":
-            self._listing_capture_by_identity.clear()
+            self._listing_capture_by_row_id.clear()
         size = max(self.page_size, minimum_page_size)
         offset = 0
         page_no = 1
@@ -559,17 +559,10 @@ class DataPagesRealSyncRunner:
                 raise DataPagesRealSyncError(f"DATA_PAGES_PAGINATION_STALLED:{spec.interface_key}")
             previous_signature = signature
             if parser_key == "walmart_listing_list":
+                # A Listing may occur on more than one page while stock changes.
+                # Keep each row's actual capture time, not the first page's time.
                 for listing_row in current:
-                    identity = listing_identity(
-                        _field(listing_row, "store_id", "sid"),
-                        _field(listing_row, "item_id", "itemId"),
-                        _field(listing_row, "msku"),
-                    )
-                    if identity is None:
-                        continue
-                    earlier = self._listing_capture_by_identity.get(identity)
-                    if earlier is None or response.pulled_at < earlier:
-                        self._listing_capture_by_identity[identity] = response.pulled_at
+                    self._listing_capture_by_row_id[id(listing_row)] = response.pulled_at
             rows.extend(current)
             total = _total_of(response.response_json)
             if (
@@ -858,7 +851,7 @@ class DataPagesRealSyncRunner:
                 continue
             identity = listing_identity(store_id, item_id, _field(row, "msku"))
             captured_listing_at = (
-                self._listing_capture_by_identity.get(identity) if identity is not None else None
+                self._listing_capture_by_row_id.get(id(row)) if identity is not None else None
             )
             if captured_listing_at is not None:
                 observe_first_wfs_stock(

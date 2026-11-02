@@ -6,6 +6,7 @@ import subprocess
 import threading
 import time
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -22,10 +23,12 @@ from app.main import create_app
 from app.modules.data_pages.models import (
     ListingArchiveState,
     ListingManagementCurrentMart,
+    ListingWfsFirstStock,
     ProductCustomTag,
     ProductCustomTagAssignment,
 )
 from app.modules.integration_sync.dependencies import require_source_account_scope
+from app.modules.integration_sync.wfs_first_stock import observe_first_wfs_stock
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("LISTING_LIVE_TEST_DATABASE_URL"),
@@ -43,6 +46,36 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
         assert not session.scalar(select(ListingManagementCurrentMart.id).limit(1)), (
             "Use a fresh disposable DB"
         )
+        # A newly observed Listing starts without a date, then records only the
+        # first fresh WFS-positive observation. Existing Listings stay unknown.
+        first_identity = {
+            "source_account_ref": "synthetic-a",
+            "store_id": "synthetic-store",
+            "item_id": "SYNTHETIC-LISTING-A2",
+            "msku": "SYNTHETIC-LISTING-A2-MSKU",
+        }
+        observe_first_wfs_stock(
+            session,
+            **first_identity,
+            wfs_quantity=Decimal("0"),
+            observed_at_utc=datetime(2026, 10, 13, 15, 50, tzinfo=UTC),
+        )
+        observe_first_wfs_stock(
+            session,
+            **first_identity,
+            wfs_quantity=Decimal("1"),
+            observed_at_utc=datetime(2026, 10, 13, 16, 5, tzinfo=UTC),
+        )
+        observe_first_wfs_stock(
+            session,
+            **first_identity,
+            wfs_quantity=Decimal("9"),
+            observed_at_utc=datetime(2026, 10, 14, 16, 5, tzinfo=UTC),
+        )
+        first_stock = session.scalar(select(ListingWfsFirstStock))
+        assert first_stock is not None
+        assert first_stock.launch_date_cn.isoformat() == "2026-10-14"
+        assert first_stock.first_wfs_seen_at_utc == datetime(2026, 10, 13, 16, 5, tzinfo=UTC)
         for account, sku in (
             ("synthetic-a", "SYNTHETIC-LISTING-A"),
             ("synthetic-a", "SYNTHETIC-LISTING-A2"),
@@ -54,6 +87,7 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
                     store_id="synthetic-store",
                     item_id=sku,
                     local_sku=sku,
+                    msku="SYNTHETIC-LISTING-A2-MSKU" if sku.endswith("A2") else None,
                     listing_status="离线" if sku.endswith("A2") else "在线",
                     wfs_available_quantity=9 if sku.endswith("A2") else 0,
                     calculated_at=datetime.now(UTC),
@@ -124,6 +158,13 @@ def test_listing_page_and_real_api_with_isolated_postgres() -> None:
         assert {row["local_sku"] for row in listing.json()["data"]["items"]} == {
             "SYNTHETIC-LISTING-A",
             "SYNTHETIC-LISTING-A2",
+        }
+        listed_dates = {
+            row["local_sku"]: row["launch_date_cn"] for row in listing.json()["data"]["items"]
+        }
+        assert listed_dates == {
+            "SYNTHETIC-LISTING-A": None,
+            "SYNTHETIC-LISTING-A2": "2026-10-14",
         }
         assert client.get("/api/listings/walmart/summary").json()["data"]["online"] == 1
         assert (

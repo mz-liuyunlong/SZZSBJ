@@ -42,6 +42,8 @@ test("Listing page reads scoped MART, restores tags, and exports scoped CSV", as
   await page.goto("/#/products/listing-management");
   await expect(page.getByRole("heading", { name: "Listing管理" })).toBeVisible();
   await expect(page.getByText("SYNTHETIC-LISTING-A", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("row").filter({ has: page.getByText("SYNTHETIC-LISTING-A2", { exact: true }) })
+    .getByText("2026-10-14", { exact: true })).toBeVisible();
   await expect(page.getByText("SYNTHETIC-LISTING-B", { exact: true })).toHaveCount(0);
 
   const archiveFilter = page.getByRole("combobox", { name: "归档状态" });
