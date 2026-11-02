@@ -193,6 +193,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
         100,
         (
             _page("pmc", "purchase_board", "采购看板", 10),
+            _page("pmc", "logistics", "物流", 15),
             _page("pmc", "domestic_warehouse_board", "国内仓看板", 20),
         ),
     ),
