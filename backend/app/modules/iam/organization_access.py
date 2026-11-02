@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api import ApiError, ErrorCode
 from app.core.auth import Principal
+from app.core.permissions import has_permission
 from app.modules.iam.rbac_repository import RbacRepository
 
 
@@ -15,7 +16,7 @@ def authorized_department_ids(
     principal: Principal,
 ) -> frozenset[str] | None:
     """Return latest-snapshot descendants. None means an explicitly global grant."""
-    if "*" in principal.permissions:
+    if has_permission(principal, "*"):
         return None
     try:
         user_id = int(principal.user_id)
